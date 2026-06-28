@@ -34,6 +34,15 @@ type Session struct {
 	Revoked   bool
 }
 
+// MagicToken is a one-time email login token. Only its hash is stored.
+type MagicToken struct {
+	TokenHash string
+	Email     string
+	CreatedAt int64
+	ExpiresAt int64
+	UsedAt    int64 // 0 = unused
+}
+
 // Store is the only abstraction that touches persistent storage. Implemented by
 // SQLiteStore today; a Postgres impl could replace it without changing callers.
 type Store interface {
@@ -46,4 +55,7 @@ type Store interface {
 	CreateSession(ctx context.Context, s Session) error
 	GetSession(ctx context.Context, id string) (Session, bool, error)
 	RevokeSession(ctx context.Context, id string) error
+	// magic tokens
+	CreateMagicToken(ctx context.Context, t MagicToken) error
+	UseMagicToken(ctx context.Context, tokenHash string, now int64) (MagicToken, bool, error)
 }

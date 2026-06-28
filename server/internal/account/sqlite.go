@@ -154,3 +154,29 @@ func (s *SQLiteStore) RevokeSession(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE sessions SET revoked = 1 WHERE id = ?`, id)
 	return err
 }
+
+func (s *SQLiteStore) CreateMagicToken(ctx context.Context, t MagicToken) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO magic_tokens (token_hash, email, created_at, expires_at, used_at) VALUES (?, ?, ?, ?, 0)`,
+		t.TokenHash, normEmail(t.Email), t.CreatedAt, t.ExpiresAt)
+	return err
+}
+
+func (s *SQLiteStore) UseMagicToken(ctx context.Context, tokenHash string, now int64) (MagicToken, bool, error) {
+	// Atomically claim the token: only succeeds if unused and unexpired.
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE magic_tokens SET used_at = ? WHERE token_hash = ? AND used_at = 0 AND expires_at > ?`,
+		now, tokenHash, now)
+	if err != nil {
+		return MagicToken{}, false, err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return MagicToken{}, false, nil
+	}
+	var t MagicToken
+	err = s.db.QueryRowContext(ctx,
+		`SELECT token_hash, email, created_at, expires_at, used_at FROM magic_tokens WHERE token_hash = ?`, tokenHash,
+	).Scan(&t.TokenHash, &t.Email, &t.CreatedAt, &t.ExpiresAt, &t.UsedAt)
+	return t, err == nil, err
+}
