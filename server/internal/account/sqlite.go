@@ -66,7 +66,9 @@ func (s *SQLiteStore) Close() error { return s.db.Close() }
 
 func newID() string {
 	b := make([]byte, 16)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("account: crypto/rand failed: " + err.Error())
+	}
 	return hex.EncodeToString(b)
 }
 
