@@ -78,3 +78,27 @@ func TestSessionLifecycle(t *testing.T) {
 		t.Fatalf("missing session must return ok=false")
 	}
 }
+
+func TestMagicTokenOneTimeAndExpiry(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	tok := MagicToken{TokenHash: "h1", Email: "d@example.com", CreatedAt: 10, ExpiresAt: 100}
+	if err := s.CreateMagicToken(ctx, tok); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	// First use within window succeeds.
+	got, ok, err := s.UseMagicToken(ctx, "h1", 50)
+	if err != nil || !ok || got.Email != "d@example.com" {
+		t.Fatalf("first use: ok=%v err=%v", ok, err)
+	}
+	// Second use of the same token fails (one-time).
+	if _, ok, _ := s.UseMagicToken(ctx, "h1", 51); ok {
+		t.Fatalf("token must be single-use")
+	}
+	// Expired token fails.
+	exp := MagicToken{TokenHash: "h2", Email: "e@example.com", CreatedAt: 10, ExpiresAt: 100}
+	_ = s.CreateMagicToken(ctx, exp)
+	if _, ok, _ := s.UseMagicToken(ctx, "h2", 200); ok {
+		t.Fatalf("expired token must fail")
+	}
+}
