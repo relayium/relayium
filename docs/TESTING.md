@@ -65,20 +65,21 @@ To use a different port (e.g. to avoid conflicts): `-addr :8095`
 
 ## 2a. Server smoke test `[AUTOMATED]`
 
-With the server running on `:8095`:
+With the server running (substitute the port you started it on — `:8080` below):
 
 ```bash
-curl -s localhost:8095/healthz
+curl -s localhost:8080/healthz
 # → ok
 
-curl -s -o /dev/null -w "%{http_code}" localhost:8095/
+curl -s -o /dev/null -w "%{http_code}" localhost:8080/
 # → 200
 
-curl -s localhost:8095/ | grep -o '<title>[^<]*'
-# → <title>web
+curl -s localhost:8080/ | grep -o '<title>[^<]*'
+# → <title>web   (template title; cosmetic — see Known limitations)
 ```
 
-All three checks passed in the automated run on 2026-06-28.
+All three checks passed in the automated run on 2026-06-28 (which used `:8095`
+to avoid a local port conflict; the port is the only difference).
 
 ---
 
@@ -232,6 +233,7 @@ These are explicitly out of scope for the first milestone and are **not** defect
 | Same-LAN / same-public-IP only | No TURN relay is implemented. Peers behind different NATs (different public IPs) will fail ICE. Use a TURN server or run on the same LAN. |
 | Same-origin WebSocket only | `websocket.Accept` defaults to same-origin enforcement. Both browsers must open the app from the Go server's own origin (e.g. `http://192.168.1.10:8080`), not from the Vite dev server (`http://localhost:5173`), otherwise the WebSocket upgrade is rejected. |
 | Chrome recommended for large files | Firefox and Safari fall back to in-memory Blob buffering. Files above ~200 MB may exhaust memory on these browsers. |
-| No peer pruning | `activePeers` on the server is not pruned when a peer disconnects. If you try to send to a peer that reconnected under a new ID, the old entry lingers in the UI until page reload. Workaround: reload both tabs after a disconnect. |
+| No client-side peer pruning | The server hub *does* drop a peer from the room roster on disconnect, but the client's in-page `activePeers` guard (App.svelte) is never cleared. After a failed/closed transfer to a peer, re-sending to that same peer in the same session is blocked until you reload the tab. |
+| Cosmetic page title | The browser tab title is still the Vite template default (`web`) rather than `Relayium`. Harmless; fix by editing `<title>` in `web/index.html` and rebuilding. |
 | No cross-origin CORS | The Go server does not set CORS headers. API calls from a different origin will fail. |
 | No HTTPS / WSS | M0 uses plain HTTP and WS. For production use, place behind a TLS-terminating reverse proxy (nginx, Caddy). WebRTC will still use DTLS-SRTP internally regardless. |
