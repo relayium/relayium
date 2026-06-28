@@ -21,29 +21,30 @@ func (s *Service) googleConfig() *oauth2.Config {
 }
 
 // realFetchGoogleUser exchanges the code and reads the userinfo endpoint.
-func (s *Service) realFetchGoogleUser(ctx context.Context, code string) (sub, email, name string, err error) {
+func (s *Service) realFetchGoogleUser(ctx context.Context, code string) (sub, email, name string, verified bool, err error) {
 	tok, err := s.googleConfig().Exchange(ctx, code)
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", false, err
 	}
 	client := s.googleConfig().Client(ctx, tok)
 	resp, err := client.Get("https://openidconnect.googleapis.com/v1/userinfo")
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", false, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", "", "", fmt.Errorf("userinfo status %d", resp.StatusCode)
+		return "", "", "", false, fmt.Errorf("userinfo status %d", resp.StatusCode)
 	}
 	var info struct {
-		Sub   string `json:"sub"`
-		Email string `json:"email"`
-		Name  string `json:"name"`
+		Sub           string `json:"sub"`
+		Email         string `json:"email"`
+		Name          string `json:"name"`
+		EmailVerified bool   `json:"email_verified"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-		return "", "", "", err
+		return "", "", "", false, err
 	}
-	return info.Sub, info.Email, info.Name, nil
+	return info.Sub, info.Email, info.Name, info.EmailVerified, nil
 }
 
 const oauthStateCookie = "relayium_oauth_state"
@@ -63,8 +64,12 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/?login=error", http.StatusFound)
 		return
 	}
-	sub, email, name, err := s.fetchGoogleUser(r.Context(), r.URL.Query().Get("code"))
+	sub, email, name, verified, err := s.fetchGoogleUser(r.Context(), r.URL.Query().Get("code"))
 	if err != nil {
+		http.Redirect(w, r, "/?login=error", http.StatusFound)
+		return
+	}
+	if !verified {
 		http.Redirect(w, r, "/?login=error", http.StatusFound)
 		return
 	}

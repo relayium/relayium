@@ -24,7 +24,7 @@ type Service struct {
 	mailer          Mailer
 	cfg             Config
 	now             func() time.Time
-	fetchGoogleUser func(ctx context.Context, code string) (sub, email, name string, err error)
+	fetchGoogleUser func(ctx context.Context, code string) (sub, email, name string, verified bool, err error)
 }
 
 func NewService(store Store, mailer Mailer, cfg Config) *Service {
@@ -35,7 +35,9 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 
 func randToken() string {
 	b := make([]byte, 32)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("account: crypto/rand failed: " + err.Error())
+	}
 	return hex.EncodeToString(b)
 }
 
