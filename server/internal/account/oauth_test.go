@@ -59,10 +59,11 @@ func TestGoogleCallbackRejectsBadState(t *testing.T) {
 	req, _ := http.NewRequest("GET", ts.URL+"/api/auth/google/callback?code=abc&state=evil", nil)
 	req.AddCookie(&http.Cookie{Name: "relayium_oauth_state", Value: "real"})
 	resp, _ := client.Do(req)
-	if resp.StatusCode == http.StatusFound {
-		if hasSessionCookie(resp.Cookies()) {
-			t.Fatalf("state mismatch must not create a session")
-		}
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("expected redirect, got %d", resp.StatusCode)
+	}
+	if hasSessionCookie(resp.Cookies()) {
+		t.Fatalf("state mismatch must not create a session")
 	}
 }
 
