@@ -96,6 +96,9 @@ func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (User, error) 
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, email, display_name, created_at FROM users WHERE id = ?`, id,
 	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt)
+	if err == sql.ErrNoRows {
+		return User{}, ErrNotFound
+	}
 	return u, err
 }
 

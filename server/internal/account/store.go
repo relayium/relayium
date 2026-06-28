@@ -1,6 +1,14 @@
 package account
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// ErrNotFound is returned by Store methods when a requested row does not exist.
+// Callers depend on this sentinel rather than any storage-specific error, so a
+// Postgres swap need only touch sqlite.go.
+var ErrNotFound = errors.New("account: not found")
 
 // User is an account holder. PII is limited to email + display name.
 type User struct {
