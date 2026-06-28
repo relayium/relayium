@@ -1,0 +1,45 @@
+# Relayium
+
+> Relayium is an open-source, end-to-end encrypted, peer-to-peer (P2P) file transfer tool that runs entirely in the browser. Files stream directly from one device to another over a WebRTC DataChannel and never pass through any server. No account, no installation, and no file-size cap imposed by a server. Live at https://relayium.com.
+
+## What it is
+
+- **Category:** Secure file transfer / file sharing between devices (web app).
+- **How it works:** Open https://relayium.com on two devices on the same network. They discover each other automatically (grouped into a "room" by shared public IP). Pick a file (or drag-and-drop, up to 10 at once), the receiver accepts, both sides compare a short verification code, and the file streams device-to-device.
+- **Encryption:** Per-transfer ephemeral X25519 key exchange (ECDH) deriving an AES-256-GCM key; every chunk is encrypted with a unique nonce. Keys exist only on the sender and receiver — never on the server.
+- **Anti man-in-the-middle:** A 6-digit Short Authentication String (SAS) is derived from the session keys and shown on both screens; comparing it out of band detects a key-swapping signaling server. This is a layer *on top of* WebRTC's built-in DTLS, whose fingerprints pass through the signaling server and could otherwise be MITM'd.
+- **Integrity:** Per-chunk AES-GCM authentication tag plus a per-file SHA-256 hash verified end-to-end on the receiver.
+- **Privacy:** The signaling server only ever sees room membership (public IP), a device nickname, presence, and signaling envelopes. It never sees file contents or file names.
+
+## Key facts
+
+- License: MIT (free and open source).
+- Price: free. No account, no sign-up, no install.
+- Platforms: any modern browser with WebRTC over HTTPS — Chrome, Edge, Firefox, Safari, on desktop and mobile.
+- Large files: Chrome/Edge stream straight to disk (no memory cap); Firefox/Safari buffer in memory (keep files under ~200 MB).
+- Multi-file: up to 10 files per batch, streamed to disk.
+- Languages: English, Chinese (中文), Japanese (日本語), Korean (한국어), German (Deutsch), French (Français) — auto-detected.
+- Network scope (current milestone, M0): same-network / same-public-IP only; cross-network relay (TURN) is on the roadmap.
+- Tech stack: Svelte single-page app + a single Go signaling server; libsodium for crypto.
+
+## How Relayium compares
+
+- **vs AirDrop:** Relayium is cross-platform and browser-based (not Apple-only) — it works between, e.g., a Windows PC and an iPhone, or Android and a Mac.
+- **vs WeTransfer / Google Drive / email:** files are not uploaded to a server; they go directly device-to-device and are end-to-end encrypted, so there is no server copy and no server-imposed size limit.
+- **vs Snapdrop / PairDrop:** same browser+WebRTC+LAN idea, but Relayium adds an application-layer end-to-end encryption layer (X25519 + AES-256-GCM) and a SAS verification code on top of WebRTC's DTLS, so a malicious signaling server cannot read or MITM the transfer undetected.
+
+## FAQ
+
+- **Is Relayium free?** Yes — free and open source under the MIT license.
+- **Do I need an account or to install anything?** No. Open the URL in a browser on both devices.
+- **Do my files get uploaded to a server?** No. Files stream directly between the two devices over WebRTC and never touch the server.
+- **Is it end-to-end encrypted?** Yes — X25519 key exchange and AES-256-GCM, with keys that never leave the two devices, plus a 6-digit code to verify against man-in-the-middle attacks.
+- **Can I send files between different operating systems?** Yes — it is browser-based, so Windows ↔ iPhone, Android ↔ Mac, Linux ↔ anything all work.
+- **What is the file-size limit?** No server-imposed limit. In Chrome/Edge files stream to disk; in Firefox/Safari keep files under ~200 MB because they buffer in memory.
+- **Can I send between two different networks / over the internet?** Not yet — the current milestone works on the same network (same public IP). Cross-network relay is on the roadmap.
+
+## Links
+
+- Live app: https://relayium.com/
+- Source code (GitHub): https://github.com/relayium/relayium
+- License: MIT
