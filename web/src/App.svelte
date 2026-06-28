@@ -10,7 +10,7 @@
   } from "./lib/crypto";
   import { SignalingClient } from "./lib/signaling";
   import { connect, type InboundSignal } from "./lib/webrtc";
-  import { Sender, Receiver, CHUNK_SIZE } from "./lib/transfer";
+  import { Sender, Receiver } from "./lib/transfer";
   import { createFileSink } from "./lib/filesink";
   import type { Peer } from "./lib/protocol";
 
@@ -73,28 +73,15 @@
 
       const receiver = new Receiver();
       let sink: Awaited<ReturnType<typeof createFileSink>> | undefined;
-      let total = 0;
-      let got = 0;
-
-      channel.onmessage = async (ev) => {
-        const out = await receiver.feed(
-          new Uint8Array(ev.data as ArrayBuffer),
-          keys!,
-        );
-        if (out.meta) {
-          sink = await createFileSink(out.meta.name, out.meta.size);
-          total = out.meta.size;
-        }
-        if (out.chunk && sink) {
-          await sink.write(out.chunk);
-          got += out.chunk.length;
-          progress = total ? Math.round((got / total) * 100) : 0;
-        }
-        if (out.done && sink) {
-          await sink.close();
-          status = out.done.ok ? "received ✓" : "INTEGRITY FAILED ✗";
-        }
+      let total = 0, got = 0;
+      let pending: Promise<void> = Promise.resolve();
+      const handleMessage = async (data: ArrayBuffer) => {
+        const out = await receiver.feed(new Uint8Array(data), keys!);
+        if (out.meta) { sink = await createFileSink(out.meta.name, out.meta.size); total = out.meta.size; }
+        if (out.chunk && sink) { await sink.write(out.chunk); got += out.chunk.length; progress = total ? Math.round((got / total) * 100) : 0; }
+        if (out.done && sink) { await sink.close(); status = out.done.ok ? "received ✓" : "INTEGRITY FAILED ✗"; }
       };
+      channel.onmessage = (ev) => { pending = pending.then(() => handleMessage(ev.data as ArrayBuffer)); };
     });
   }
 
@@ -129,9 +116,12 @@
 
   // Helpers
   async function backpressure(ch: RTCDataChannel) {
-    if (ch.bufferedAmount > 8 * CHUNK_SIZE) {
-      await new Promise<void>((r) => {
-        ch.onbufferedamountlow = () => r();
+    if (ch.bufferedAmount > ch.bufferedAmountLowThreshold) {
+      await new Promise<void>((resolve) => {
+        ch.onbufferedamountlow = () => {
+          ch.onbufferedamountlow = null;
+          resolve();
+        };
       });
     }
   }

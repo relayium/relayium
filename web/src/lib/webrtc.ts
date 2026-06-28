@@ -78,7 +78,7 @@ export async function connect(opts: ConnectOpts): Promise<RTCDataChannel> {
   }
 
   signaling.onSignal((from, data) => {
-    if (from === peerId) void handleSignal(data as InboundSignal);
+    if (from === peerId) handleSignal(data as InboundSignal).catch((err) => console.error("relayium signal error", err));
   });
 
   if (role === "initiator") {
