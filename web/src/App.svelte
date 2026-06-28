@@ -24,6 +24,7 @@
   import { pickSaveTarget, type SaveTarget, type FileSink } from "./lib/filesink";
   import type { Peer } from "./lib/protocol";
   import { lang, setLang, LANGS, messages, type Lang, type Messages, type StatusKey } from "./lib/i18n.svelte";
+  import Account from "./lib/Account.svelte";
 
   interface Incoming { from: string; files: FileMeta[]; total: number }
   interface Xfer {
@@ -344,6 +345,7 @@
 </script>
 
 <main>
+  <Account />
   <select
     class="lang"
     aria-label={t.langLabel}

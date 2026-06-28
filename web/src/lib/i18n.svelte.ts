@@ -57,6 +57,16 @@ export interface Messages {
     noSave: string;
     connectFail: string;
   };
+  account: {
+    signIn: string;
+    signOut: string;
+    email: string;
+    sendLink: string;
+    linkSent: string;
+    continueGoogle: string;
+    or: string;
+    signedInAs: (email: string) => string;
+  };
 }
 
 export type StatusKey = keyof Messages["status"];
@@ -105,6 +115,16 @@ const zh: Messages = {
     noSave: "未选择保存位置，已取消",
     connectFail: "建立连接失败 ✗",
   },
+  account: {
+    signIn: "登录",
+    signOut: "退出登录",
+    email: "邮箱地址",
+    sendLink: "给我发送登录链接",
+    linkSent: "登录链接已发送，请查收邮箱。",
+    continueGoogle: "用 Google 继续",
+    or: "或",
+    signedInAs: (e) => `已登录：${e}`,
+  },
 };
 
 const en: Messages = {
@@ -150,6 +170,16 @@ const en: Messages = {
     recvFail: "Receive failed ✗",
     noSave: "No save location chosen — cancelled",
     connectFail: "Connection failed ✗",
+  },
+  account: {
+    signIn: "Sign in",
+    signOut: "Sign out",
+    email: "Email address",
+    sendLink: "Email me a sign-in link",
+    linkSent: "Check your email for a sign-in link.",
+    continueGoogle: "Continue with Google",
+    or: "or",
+    signedInAs: (e) => `Signed in as ${e}`,
   },
 };
 
@@ -197,6 +227,16 @@ const ja: Messages = {
     noSave: "保存先が選択されなかったため、キャンセルしました",
     connectFail: "接続の確立に失敗しました ✗",
   },
+  account: {
+    signIn: "ログイン",
+    signOut: "ログアウト",
+    email: "メールアドレス",
+    sendLink: "ログインリンクを送る",
+    linkSent: "メールにログインリンクを送りました。ご確認ください。",
+    continueGoogle: "Google で続ける",
+    or: "または",
+    signedInAs: (e) => `ログイン中：${e}`,
+  },
 };
 
 const ko: Messages = {
@@ -242,6 +282,16 @@ const ko: Messages = {
     recvFail: "받기 실패 ✗",
     noSave: "저장 위치를 선택하지 않아 취소되었습니다",
     connectFail: "연결 실패 ✗",
+  },
+  account: {
+    signIn: "로그인",
+    signOut: "로그아웃",
+    email: "이메일 주소",
+    sendLink: "로그인 링크 보내기",
+    linkSent: "이메일로 로그인 링크를 보냈습니다. 확인해 주세요.",
+    continueGoogle: "Google로 계속",
+    or: "또는",
+    signedInAs: (e) => `로그인됨: ${e}`,
   },
 };
 
@@ -289,6 +339,16 @@ const de: Messages = {
     noSave: "Kein Speicherort gewählt – abgebrochen",
     connectFail: "Verbindung fehlgeschlagen ✗",
   },
+  account: {
+    signIn: "Anmelden",
+    signOut: "Abmelden",
+    email: "E-Mail-Adresse",
+    sendLink: "Anmelde-Link senden",
+    linkSent: "Prüfen Sie Ihr E-Mail-Postfach nach dem Anmelde-Link.",
+    continueGoogle: "Mit Google fortfahren",
+    or: "oder",
+    signedInAs: (e) => `Angemeldet als ${e}`,
+  },
 };
 
 const fr: Messages = {
@@ -334,6 +394,16 @@ const fr: Messages = {
     recvFail: "Échec de la réception ✗",
     noSave: "Aucun emplacement de sauvegarde choisi — annulé",
     connectFail: "Échec de la connexion ✗",
+  },
+  account: {
+    signIn: "Se connecter",
+    signOut: "Se déconnecter",
+    email: "Adresse e-mail",
+    sendLink: "M'envoyer un lien de connexion",
+    linkSent: "Vérifiez votre boîte mail pour le lien de connexion.",
+    continueGoogle: "Continuer avec Google",
+    or: "ou",
+    signedInAs: (e) => `Connecté en tant que ${e}`,
   },
 };
 
