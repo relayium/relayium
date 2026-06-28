@@ -20,14 +20,17 @@ type Config struct {
 }
 
 type Service struct {
-	store  Store
-	mailer Mailer
-	cfg    Config
-	now    func() time.Time
+	store           Store
+	mailer          Mailer
+	cfg             Config
+	now             func() time.Time
+	fetchGoogleUser func(ctx context.Context, code string) (sub, email, name string, err error)
 }
 
 func NewService(store Store, mailer Mailer, cfg Config) *Service {
-	return &Service{store: store, mailer: mailer, cfg: cfg, now: time.Now}
+	svc := &Service{store: store, mailer: mailer, cfg: cfg, now: time.Now}
+	svc.fetchGoogleUser = svc.realFetchGoogleUser
+	return svc
 }
 
 func randToken() string {
