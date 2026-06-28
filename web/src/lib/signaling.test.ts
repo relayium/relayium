@@ -34,6 +34,17 @@ describe("SignalingClient", () => {
     expect(signalFrom).toBe("def");
   });
 
+  it("delivers a signal to all registered onSignal listeners", () => {
+    const sock = new FakeSocket();
+    const c = new SignalingClient("ws://x", "Alice", () => sock);
+    const got: string[] = [];
+    c.onSignal((from) => got.push("a:" + from));
+    c.onSignal((from) => got.push("b:" + from));
+    sock.onopen?.();
+    sock.emit({ type: "signal", from: "peer9", data: { sdp: "x" } });
+    expect(got).toEqual(["a:peer9", "b:peer9"]);
+  });
+
   it("stamps the target on sendSignal", () => {
     const sock = new FakeSocket();
     const c = new SignalingClient("ws://x", "Alice", () => sock);

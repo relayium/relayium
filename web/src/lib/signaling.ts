@@ -14,7 +14,7 @@ export class SignalingClient {
   private sock: WebSocketLike;
   private selfCb: ((id: string) => void) | null = null;
   private peersCb: ((p: Peer[]) => void) | null = null;
-  private signalCb: ((from: string, data: unknown) => void) | null = null;
+  private signalCbs: ((from: string, data: unknown) => void)[] = [];
 
   constructor(
     url: string,
@@ -28,7 +28,7 @@ export class SignalingClient {
 
   onSelfId(cb: (id: string) => void) { this.selfCb = cb; }
   onPeers(cb: (p: Peer[]) => void) { this.peersCb = cb; }
-  onSignal(cb: (from: string, data: unknown) => void) { this.signalCb = cb; }
+  onSignal(cb: (from: string, data: unknown) => void) { this.signalCbs.push(cb); }
 
   sendSignal(to: string, data: unknown) {
     this.send({ type: "signal", to, data });
@@ -39,6 +39,6 @@ export class SignalingClient {
   private handle(e: Envelope) {
     if (e.type === "welcome" && e.name) this.selfCb?.(e.name);
     else if (e.type === "peers" && e.peers) this.peersCb?.(e.peers);
-    else if (e.type === "signal" && e.from) this.signalCb?.(e.from, e.data);
+    else if (e.type === "signal" && e.from) { const from = e.from; this.signalCbs.forEach((cb) => cb(from, e.data)); }
   }
 }
