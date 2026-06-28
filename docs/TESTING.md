@@ -100,8 +100,9 @@ to avoid a local port conflict; the port is the only difference).
    shasum -a 256 testfile.bin
    ```
 7. Drag `testfile.bin` from the Finder / file picker onto device B's entry in device A's UI.
-8. Device B shows a transfer-request dialog. Compare the SAS code shown on A with the SAS code
-   shown on B — they must match. Click **Accept** on B.
+8. Device B begins receiving automatically (no confirm dialog). Both devices display a SAS code
+   next to their status line — compare the code on A with the code on B; they must match.
+   If they differ, abort by closing or reloading the tab (possible MITM; see criterion 5).
 9. Device B downloads the file (browser save dialog or automatic download).
 10. On **device B**, verify integrity:
     ```bash
