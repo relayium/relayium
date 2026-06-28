@@ -14,6 +14,7 @@
     Receiver,
     ACCEPT,
     REJECT,
+    COMPLETE,
     controlKind,
     FRAME,
     CHUNK_OVERHEAD,
@@ -194,7 +195,10 @@
             status: allOk ? "recvDone" : "integrityFail",
             done: true, ok: allOk, speed: 0,
           };
-          conn.close();
+          // Tell the sender we have the whole batch so it can close without dropping
+          // any still-buffered tail. Delay our own close so the ack actually flushes.
+          try { conn.channel.send(COMPLETE); } catch { /* gone */ }
+          setTimeout(() => conn.close(), 1500);
         }
         return;
       }
@@ -231,6 +235,8 @@
     let keys: SessionKeys | undefined;
     let resolveAccept!: (ok: boolean) => void;
     const accepted = new Promise<boolean>((r) => (resolveAccept = r));
+    let resolveComplete!: () => void;
+    const completed = new Promise<void>((r) => (resolveComplete = r));
     let conn: Conn | undefined;
 
     try {
@@ -242,6 +248,7 @@
         const k = controlKind(ev.data as ArrayBuffer);
         if (k === "accept") resolveAccept(true);
         else if (k === "reject") resolveAccept(false);
+        else if (k === "complete") resolveComplete();
       };
       conn.channel.onclose = () => resolveAccept(false);
 
@@ -267,7 +274,12 @@
         const elapsed = (Date.now() - start) / 1000;
         send = s = { ...s, sent: Math.min(total, sent), index: Math.min(idx, files.length - 1), speed: elapsed > 0 ? sent / elapsed : 0 };
       }
-      send = s = { ...s, sent: total, index: files.length - 1, status: "sendDone", done: true, ok: true, speed: 0 };
+      // All frames are queued, but channel.send() only buffers them. Closing now would
+      // drop whatever is still in flight (the receiver would stall short of 100%), so
+      // wait for the receiver's completion ack — or our buffer to drain — before closing.
+      send = s = { ...s, sent: total, index: files.length - 1, status: "finishing", speed: 0 };
+      await flush(conn.channel, completed);
+      send = s = { ...s, status: "sendDone", done: true, ok: true };
     } catch (err) {
       console.error("relayium send error", err);
       send = s = { ...s, status: "sendFail", done: true, ok: false };
@@ -284,6 +296,18 @@
       });
     }
   }
+
+  // Wait until it is safe to close: ideally the receiver's explicit completion ack,
+  // otherwise our send buffer draining plus a grace period for in-flight delivery
+  // (bounded so a dead peer can't hang the sender forever).
+  async function flush(ch: RTCDataChannel, completed: Promise<void>) {
+    const fallback = (async () => {
+      for (let i = 0; i < 600 && ch.bufferedAmount > 0; i++) await sleep(50); // up to ~30s
+      await sleep(1000);
+    })();
+    await Promise.race([completed, fallback]);
+  }
+
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   function pct(x: Xfer): number {
