@@ -193,7 +193,8 @@ func (s *SQLiteStore) UpsertDevice(ctx context.Context, d Device) (Device, error
 	}
 	var out Device
 	err = s.db.QueryRowContext(ctx,
-		`SELECT id, user_id, name, created_at, last_seen_at FROM devices WHERE id = ?`, d.ID,
+		`SELECT id, user_id, name, created_at, last_seen_at FROM devices WHERE id = ? AND user_id = ?`,
+		d.ID, d.UserID,
 	).Scan(&out.ID, &out.UserID, &out.Name, &out.CreatedAt, &out.LastSeenAt)
 	return out, err
 }

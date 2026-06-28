@@ -121,6 +121,18 @@ func TestDeviceRegistryScopedToUser(t *testing.T) {
 	if len(list) != 1 || list[0].Name != "Laptop 2" {
 		t.Fatalf("list after re-upsert: %+v", list)
 	}
+	// u2 cannot claim u1's device id; the upsert is rejected and leaks nothing.
+	hijack, err := s.UpsertDevice(ctx, Device{ID: "dev1", UserID: u2.ID, Name: "hijack", CreatedAt: 2})
+	if err == nil {
+		t.Fatalf("u2 upsert of u1's device id must be rejected, got device %+v", hijack)
+	}
+	if hijack.UserID == u1.ID {
+		t.Fatalf("UpsertDevice leaked u1's device row to u2: %+v", hijack)
+	}
+	// u1's device is unchanged.
+	if l, _ := s.ListDevices(ctx, u1.ID); len(l) != 1 || l[0].Name != "Laptop 2" {
+		t.Fatalf("u1 device mutated by u2 hijack attempt: %+v", l)
+	}
 	// u2 cannot rename or delete u1's device.
 	if err := s.RenameDevice(ctx, "dev1", u2.ID, "hacked"); err == nil {
 		if l, _ := s.ListDevices(ctx, u1.ID); l[0].Name == "hacked" {
