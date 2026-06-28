@@ -123,3 +123,34 @@ func (s *SQLiteStore) GetUserByIdentity(ctx context.Context, provider, subject s
 	u, err := s.GetUserByID(ctx, uid)
 	return u, err == nil, err
 }
+
+func (s *SQLiteStore) CreateSession(ctx context.Context, sess Session) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO sessions (id, user_id, created_at, expires_at, revoked) VALUES (?, ?, ?, ?, 0)`,
+		sess.ID, sess.UserID, sess.CreatedAt, sess.ExpiresAt)
+	return err
+}
+
+func (s *SQLiteStore) GetSession(ctx context.Context, id string) (Session, bool, error) {
+	var sess Session
+	var revoked int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, user_id, created_at, expires_at, revoked FROM sessions WHERE id = ?`, id,
+	).Scan(&sess.ID, &sess.UserID, &sess.CreatedAt, &sess.ExpiresAt, &revoked)
+	if err == sql.ErrNoRows {
+		return Session{}, false, nil
+	}
+	if err != nil {
+		return Session{}, false, err
+	}
+	if revoked != 0 {
+		return sess, false, nil
+	}
+	sess.Revoked = false
+	return sess, true, nil
+}
+
+func (s *SQLiteStore) RevokeSession(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE sessions SET revoked = 1 WHERE id = ?`, id)
+	return err
+}

@@ -55,3 +55,26 @@ func TestIdentityLinkAndLookup(t *testing.T) {
 		t.Fatalf("expected no user for missing subject")
 	}
 }
+
+func TestSessionLifecycle(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u, _ := s.UpsertUserByEmail(ctx, "c@example.com", "C")
+	sess := Session{ID: "sess1", UserID: u.ID, CreatedAt: 100, ExpiresAt: 200}
+	if err := s.CreateSession(ctx, sess); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	got, ok, err := s.GetSession(ctx, "sess1")
+	if err != nil || !ok || got.UserID != u.ID {
+		t.Fatalf("get: ok=%v err=%v got=%+v", ok, err, got)
+	}
+	if err := s.RevokeSession(ctx, "sess1"); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+	if _, ok, _ := s.GetSession(ctx, "sess1"); ok {
+		t.Fatalf("revoked session must return ok=false")
+	}
+	if _, ok, _ := s.GetSession(ctx, "missing"); ok {
+		t.Fatalf("missing session must return ok=false")
+	}
+}
