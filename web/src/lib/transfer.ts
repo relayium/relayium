@@ -16,6 +16,23 @@ const KIND_META = 0;
 const KIND_CHUNK = 1;
 const KIND_DONE = 2;
 
+// Control frames travel receiver -> sender on the same DataChannel (the opposite
+// direction from file frames, so there is no collision). They are a single byte.
+const CTRL_ACCEPT = 0xfe;
+const CTRL_REJECT = 0xff;
+
+export const ACCEPT = new Uint8Array([CTRL_ACCEPT]);
+export const REJECT = new Uint8Array([CTRL_REJECT]);
+
+/** Decode a receiver->sender control frame; returns null for anything else. */
+export function controlKind(buf: ArrayBuffer): "accept" | "reject" | null {
+  const b = new Uint8Array(buf);
+  if (b.length !== 1) return null;
+  if (b[0] === CTRL_ACCEPT) return "accept";
+  if (b[0] === CTRL_REJECT) return "reject";
+  return null;
+}
+
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
@@ -42,10 +59,14 @@ function toHex(b: Uint8Array): string {
 }
 
 export class Sender {
-  async *frames(file: File, keys: SessionKeys): AsyncGenerator<Uint8Array> {
+  /** The unencrypted file-metadata frame; sent first so the receiver can prompt. */
+  metaFrame(file: File): Uint8Array {
     const meta: FileMeta = { name: file.name, size: file.size };
-    yield frame(KIND_META, 0, enc.encode(JSON.stringify(meta)));
+    return frame(KIND_META, 0, enc.encode(JSON.stringify(meta)));
+  }
 
+  /** Encrypted chunk frames followed by the integrity (done) frame. */
+  async *dataFrames(file: File, keys: SessionKeys): AsyncGenerator<Uint8Array> {
     let seq = 0;
     let hash = new Uint8Array(32);
     for (let offset = 0; offset < file.size; offset += CHUNK_SIZE) {
@@ -57,6 +78,12 @@ export class Sender {
       seq++;
     }
     yield frame(KIND_DONE, seq, enc.encode(JSON.stringify({ sha256: toHex(hash) })));
+  }
+
+  /** Full stream (meta + data) — used by tests and any no-handshake path. */
+  async *frames(file: File, keys: SessionKeys): AsyncGenerator<Uint8Array> {
+    yield this.metaFrame(file);
+    yield* this.dataFrames(file, keys);
   }
 }
 
