@@ -22,6 +22,7 @@
   } from "./lib/transfer";
   import { pickSaveTarget, type SaveTarget, type FileSink } from "./lib/filesink";
   import type { Peer } from "./lib/protocol";
+  import { lang, setLang, LANGS, messages, type Lang, type Messages, type StatusKey } from "./lib/i18n.svelte";
 
   interface Incoming { from: string; files: FileMeta[]; total: number }
   interface Xfer {
@@ -31,7 +32,7 @@
     index: number; // current file (0-based)
     sent: number; // plaintext bytes done across the batch
     total: number; // plaintext bytes total
-    status: string;
+    status: StatusKey; // translated at render time so it follows the language switch
     done: boolean;
     ok: boolean;
     speed: number; // bytes/sec
@@ -39,7 +40,7 @@
 
   // Reactive state
   let connState = $state<"connecting" | "ready">("connecting");
-  let unsupported = $state<string | null>(null);
+  let unsupported = $state(false);
   let selfName = $state("");
   let selfId = $state("");
   let peers = $state<Peer[]>([]);
@@ -55,22 +56,24 @@
   let acceptFn: (() => void) | null = null;
   let rejectFn: (() => void) | null = null;
 
+  const t = $derived<Messages>(messages[lang()]);
   const visiblePeers = $derived(peers.filter((p) => p.id !== selfId));
   const busy = $derived(
     !!incoming || !!(recv && !recv.done) || !!(send && !send.done),
   );
 
-  // Reflect transfer progress in the tab title.
+  // Reflect transfer progress in the tab title (follows the language switch).
   $effect(() => {
     const x = (send && !send.done && send) || (recv && !recv.done && recv);
     document.title = x
       ? `${pct(x)}% ${x.dir === "send" ? "↑" : "↓"} · Relayium`
-      : "Relayium — 端到端加密文件传输";
+      : messages[lang()].titleDefault;
   });
 
   onMount(async () => {
+    document.documentElement.lang = lang();
     if (!window.isSecureContext || !crypto.subtle) {
-      unsupported = "需要 HTTPS（或 localhost）才能进行加密传输。请通过 https:// 访问本页面。";
+      unsupported = true;
       return;
     }
     await ready();
@@ -84,7 +87,7 @@
   });
 
   function deviceName(): string {
-    const base = navigator.platform || "设备";
+    const base = navigator.platform || "device";
     return `${base}-${Math.floor(Math.random() * 1000)}`;
   }
   function nameOf(peerId: string): string {
@@ -105,7 +108,7 @@
         await beginReceive(from, msg);
       } catch (err) {
         console.error("relayium receive setup error", err);
-        recv = { peer: from, dir: "recv", files: [], index: 0, sent: 0, total: 0, status: "建立连接失败 ✗", done: true, ok: false, speed: 0 };
+        recv = { peer: from, dir: "recv", files: [], index: 0, sent: 0, total: 0, status: "connectFail", done: true, ok: false, speed: 0 };
       }
     });
   }
@@ -120,7 +123,7 @@
     let total = 0, got = 0, fileIndex = 0, start = 0;
     let allOk = true;
 
-    let r: Xfer = { peer: from, dir: "recv", files: [], index: 0, sent: 0, total: 0, status: "正在建立加密连接…", done: false, ok: false, speed: 0 };
+    let r: Xfer = { peer: from, dir: "recv", files: [], index: 0, sent: 0, total: 0, status: "connecting", done: false, ok: false, speed: 0 };
     recv = r;
 
     const conn: Conn = await connect({
@@ -142,7 +145,7 @@
         target = await pickSaveTarget(req.files);
       } catch (err) {
         console.error("relayium save-target error", err);
-        recv = r = { ...r, status: "未选择保存位置，已取消", done: true, ok: false };
+        recv = r = { ...r, status: "noSave", done: true, ok: false };
         incoming = null;
         try { conn.channel.send(REJECT); } catch { /* gone */ }
         conn.close();
@@ -150,7 +153,7 @@
       }
       fileIndex = 0; got = 0; start = Date.now();
       await openSink(); // prepare file 0 (also covers a leading zero-byte file)
-      recv = r = { peer: from, dir: "recv", files: req.files, index: 0, sent: 0, total: req.total, status: "接收中…", done: false, ok: false, speed: 0 };
+      recv = r = { peer: from, dir: "recv", files: req.files, index: 0, sent: 0, total: req.total, status: "receiving", done: false, ok: false, speed: 0 };
       incoming = null;
       conn.channel.send(ACCEPT);
     };
@@ -188,7 +191,7 @@
           const n = manifest.length;
           recv = r = {
             ...r, sent: total, index: n - 1,
-            status: allOk ? `接收完成 ✓（${n} 个文件）` : "完整性校验失败 ✗",
+            status: allOk ? "recvDone" : "integrityFail",
             done: true, ok: allOk, speed: 0,
           };
           conn.close();
@@ -203,7 +206,7 @@
         .then(() => handleFrame(ev.data as ArrayBuffer))
         .catch((err) => {
           console.error("relayium receive error", err);
-          recv = r = { ...r, status: "接收失败 ✗", done: true, ok: false };
+          recv = r = { ...r, status: "recvFail", done: true, ok: false };
           incoming = null;
           conn.close();
         });
@@ -212,7 +215,7 @@
 
   // ── SEND ───────────────────────────────────────────────────────────────────────
   async function sendFiles(peerId: string, picked: FileList | File[]) {
-    if (busy) { flash("已有传输进行中，请等待完成"); return; }
+    if (busy) { flash(messages[lang()].busy); return; }
     const all = Array.from(picked);
     const files = all.slice(0, MAX_FILES);
     if (files.length === 0) return;
@@ -220,9 +223,9 @@
 
     const metas: FileMeta[] = files.map((f) => ({ name: f.name, size: f.size }));
     const total = metas.reduce((n, m) => n + m.size, 0);
-    let s: Xfer = { peer: peerId, dir: "send", files: metas, index: 0, sent: 0, total, status: "正在建立加密连接…", done: false, ok: false, speed: 0 };
+    let s: Xfer = { peer: peerId, dir: "send", files: metas, index: 0, sent: 0, total, status: "connecting", done: false, ok: false, speed: 0 };
     send = s;
-    if (dropped > 0) flash(`一次最多 ${MAX_FILES} 个文件，已忽略多余的 ${dropped} 个`);
+    if (dropped > 0) flash(messages[lang()].tooMany(MAX_FILES, dropped));
 
     const selfKey = generateKeyPair();
     let keys: SessionKeys | undefined;
@@ -246,14 +249,14 @@
 
       const sender = new Sender();
       conn.channel.send(sender.batchFrame(metas)); // announce the batch; wait for the decision
-      send = s = { ...s, status: "等待对方确认接收…" };
+      send = s = { ...s, status: "waitingAccept" };
 
       if (!(await accepted)) {
-        send = s = { ...s, status: "对方已拒绝 ✗", done: true, ok: false };
+        send = s = { ...s, status: "rejected", done: true, ok: false };
         return;
       }
 
-      send = s = { ...s, status: "发送中…" };
+      send = s = { ...s, status: "sending" };
       const start = Date.now();
       let sent = 0, idx = 0;
       for await (const frame of sender.dataFrames(files, keys)) {
@@ -264,10 +267,10 @@
         const elapsed = (Date.now() - start) / 1000;
         send = s = { ...s, sent: Math.min(total, sent), index: Math.min(idx, files.length - 1), speed: elapsed > 0 ? sent / elapsed : 0 };
       }
-      send = s = { ...s, sent: total, index: files.length - 1, status: `发送完成 ✓（${files.length} 个文件）`, done: true, ok: true, speed: 0 };
+      send = s = { ...s, sent: total, index: files.length - 1, status: "sendDone", done: true, ok: true, speed: 0 };
     } catch (err) {
       console.error("relayium send error", err);
-      send = s = { ...s, status: "发送失败 ✗", done: true, ok: false };
+      send = s = { ...s, status: "sendFail", done: true, ok: false };
     } finally {
       conn?.close();
     }
@@ -285,6 +288,12 @@
 
   function pct(x: Xfer): number {
     return x.total ? Math.min(100, Math.round((x.sent / x.total) * 100)) : (x.done ? 100 : 0);
+  }
+  // Resolve a status key against the active language at render time.
+  function statusText(m: Messages, x: Xfer): string {
+    if (x.status === "sendDone") return m.status.sendDone(x.files.length);
+    if (x.status === "recvDone") return m.status.recvDone(x.files.length);
+    return m.status[x.status] as string;
   }
   function formatSize(n: number): string {
     if (n < 1024) return `${n} B`;
@@ -311,18 +320,29 @@
 </script>
 
 <main>
+  <select
+    class="lang"
+    aria-label={t.langLabel}
+    value={lang()}
+    onchange={(e) => setLang((e.currentTarget as HTMLSelectElement).value as Lang)}
+  >
+    {#each LANGS as l (l.code)}
+      <option value={l.code}>{l.label}</option>
+    {/each}
+  </select>
+
   <header>
     <div class="logo">⇌</div>
     <h1>Relayium</h1>
-    <p class="tagline">端到端加密的点对点文件传输 · 文件不经过服务器</p>
+    <p class="tagline">{t.tagline}</p>
     <div class="statusbar">
       <span class="dot" class:on={connState === "ready"}></span>
       {#if unsupported}
-        无法使用
+        {t.unavailable}
       {:else if connState === "ready"}
-        已连接 · 本机 <b>{selfName}</b>
+        {t.connected(selfName)}
       {:else}
-        正在连接信令服务器…
+        {t.connecting}
       {/if}
     </div>
   </header>
@@ -332,33 +352,33 @@
   {/if}
 
   {#if unsupported}
-    <div class="banner error">{unsupported}</div>
+    <div class="banner error">{t.unsupported}</div>
   {:else}
     <section class="guide">
-      <h2>如何使用</h2>
+      <h2>{t.guideTitle}</h2>
       <ol>
-        <li>在<b>同一网络</b>下的另一台设备或浏览器打开本页面（同一公网 IP 归为同一「房间」）。</li>
-        <li>双方会出现在下方「附近的设备」列表中。</li>
-        <li>点击对方卡片选择文件，或把文件<b>拖到</b>对方卡片上（一次最多 {MAX_FILES} 个）。</li>
-        <li>对方点「接收」，<b>核对两边校验码一致</b>后开始传输。</li>
+        <li>{t.step1}</li>
+        <li>{t.step2}</li>
+        <li>{t.step3(MAX_FILES)}</li>
+        <li>{t.step4}</li>
       </ol>
-      <p class="hint">推荐 Chrome（大文件流式落盘、多文件可直接选目标文件夹，不占内存）。若同一路由器下互相看不到设备，请关闭路由器的「AP 隔离 / 客户端隔离」。</p>
+      <p class="hint">{t.hint}</p>
     </section>
 
     {#if incoming}
       <section class="card request">
-        <div class="req-head">📥 <b>{nameOf(incoming.from)}</b> 想发送 {incoming.files.length} 个文件 · 共 {formatSize(incoming.total)}</div>
+        <div class="req-head">{t.requestHead(nameOf(incoming.from), incoming.files.length, formatSize(incoming.total))}</div>
         <ul class="filelist">
           {#each incoming.files as f}
             <li><span class="fname">{f.name}</span><span class="fsize">{formatSize(f.size)}</span></li>
           {/each}
         </ul>
         {#if sasCode}
-          <div class="sas">校验码 <code>{sasCode}</code> — 请与发送方屏幕核对一致后再接收</div>
+          <div class="sas">{t.codeLabel} <code>{sasCode}</code> — {t.codeCompare}</div>
         {/if}
         <div class="actions">
-          <button class="primary" onclick={() => acceptFn?.()}>接收</button>
-          <button class="ghost" onclick={() => rejectFn?.()}>拒绝</button>
+          <button class="primary" onclick={() => acceptFn?.()}>{t.accept}</button>
+          <button class="ghost" onclick={() => rejectFn?.()}>{t.decline}</button>
         </div>
       </section>
     {/if}
@@ -367,13 +387,13 @@
       {@const xf = x as Xfer}
       <section class="card xfer" class:ok={xf.done && xf.ok} class:bad={xf.done && !xf.ok}>
         <div class="xfer-head">
-          <span class="label">{xf.dir === "send" ? `发送 → ${nameOf(xf.peer)}` : `接收 ← ${nameOf(xf.peer)}`}</span>
-          {#if xf.files.length}<span class="count">{xf.files.length > 1 ? `文件 ${xf.index + 1}/${xf.files.length}` : xf.files[0].name}</span>{/if}
-          {#if xf.done}<button class="x" onclick={() => (xf.dir === "send" ? (send = null) : (recv = null))} aria-label="关闭">✕</button>{/if}
+          <span class="label">{xf.dir === "send" ? t.sendTo(nameOf(xf.peer)) : t.recvFrom(nameOf(xf.peer))}</span>
+          {#if xf.files.length}<span class="count">{xf.files.length > 1 ? t.fileCounter(xf.index + 1, xf.files.length) : xf.files[0].name}</span>{/if}
+          {#if xf.done}<button class="x" onclick={() => (xf.dir === "send" ? (send = null) : (recv = null))} aria-label={t.close}>✕</button>{/if}
         </div>
         <div class="status">
-          {xf.status}
-          {#if sasCode && !xf.done} · 校验码 <code>{sasCode}</code>{/if}
+          {statusText(t, xf)}
+          {#if sasCode && !xf.done} · {t.codeLabel} <code>{sasCode}</code>{/if}
         </div>
         {#if !xf.done}
           <div class="bar"><div class="fill" style:width="{pct(xf)}%"></div></div>
@@ -386,9 +406,9 @@
     {/each}
 
     <section class="peers">
-      <h2>附近的设备</h2>
+      <h2>{t.peersTitle}</h2>
       {#if visiblePeers.length === 0}
-        <p class="empty">还没有其它设备。请在同一网络下的另一台设备 / 另一个浏览器窗口打开本页面。</p>
+        <p class="empty">{t.emptyPeers}</p>
       {:else}
         <ul>
           {#each visiblePeers as p (p.id)}
@@ -397,13 +417,13 @@
               class:disabled={busy}
               ondragover={(e) => { e.preventDefault(); if (!busy) (e.currentTarget as HTMLElement).classList.add("drag"); }}
               ondragleave={(e) => (e.currentTarget as HTMLElement).classList.remove("drag")}
-              ondrop={(e) => { if (busy) { e.preventDefault(); flash("已有传输进行中，请等待完成"); return; } onDrop(e, p.id); }}
+              ondrop={(e) => { if (busy) { e.preventDefault(); flash(messages[lang()].busy); return; } onDrop(e, p.id); }}
             >
               <label>
                 <span class="pavatar">{p.name.slice(0, 1).toUpperCase()}</span>
                 <span class="ptext">
                   <span class="pname">{p.name}</span>
-                  <span class="pick">点击选择文件 · 或拖放到此处（最多 {MAX_FILES} 个）</span>
+                  <span class="pick">{t.pickHint(MAX_FILES)}</span>
                 </span>
                 <input type="file" multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
               </label>
@@ -413,12 +433,13 @@
       {/if}
     </section>
 
-    <footer>端到端加密（X25519 + AES-256-GCM）· 信令服务器只转发连接信息，看不到文件内容</footer>
+    <footer>{t.footer}</footer>
   {/if}
 </main>
 
 <style>
   main {
+    position: relative;
     width: 660px;
     max-width: 100%;
     margin: 0 auto;
@@ -426,6 +447,22 @@
     box-sizing: border-box;
     text-align: left;
   }
+
+  .lang {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    font: inherit;
+    font-size: 13px;
+    padding: 5px 28px 5px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--social-bg);
+    color: var(--text-h);
+    cursor: pointer;
+  }
+  .lang:hover { border-color: var(--accent-border); }
+  @media (max-width: 1024px) { .lang { top: 10px; right: 12px; } }
 
   header { text-align: center; padding-top: 40px; }
   .logo {
