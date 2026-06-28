@@ -1,0 +1,237 @@
+# Relayium Web MVP — Manual Acceptance Procedure
+
+This document is the repeatable acceptance script for spec §7 criteria 1–6.
+
+**Execution status key:**
+- `[AUTOMATED]` — actually executed in CI / this session; output captured.
+- `[MANUAL]` — requires two real browsers/devices and a real network; cannot run headless.
+
+---
+
+## 0. Prerequisites
+
+- Go 1.22+ and Node 20+ installed.
+- Two machines (or two browser windows for intra-machine tests) on the same LAN, or two tabs
+  pointing at `http://localhost:<port>` for a quick sanity check of the UI only.
+- Chrome 114+ recommended for criterion 2 (streaming-to-disk via `showSaveFilePicker`).
+- Firefox and Safari available for criterion 6 (browser matrix).
+
+---
+
+## 1. Build both halves `[AUTOMATED]`
+
+```bash
+# Web client
+cd web
+npm run build
+# Expected output: "built in <Xms", creates web/dist/
+
+# Server
+cd ../server
+go build -o relayium-server .
+# Expected: binary ./relayium-server created, no errors
+```
+
+Verified output (captured 2026-06-28):
+
+```
+> web@0.0.0 build
+> vite build
+
+vite v8.1.0 building client environment for production...
+✓ 117 modules transformed.
+dist/index.html                   0.45 kB │ gzip:   0.28 kB
+dist/assets/index-CsUDhMuy.css    4.10 kB │ gzip:   1.46 kB
+dist/assets/index-DMwganuR.js   476.09 kB │ gzip: 169.44 kB
+✓ built in 80ms
+
+server/relayium-server: Mach-O 64-bit executable arm64  (go build OK)
+```
+
+---
+
+## 2. Run the server `[MANUAL — start before each acceptance step]`
+
+```bash
+cd server
+./relayium-server -addr :8080 -static ../web/dist
+```
+
+Expected log line: `relayium signaling server listening on :8080`
+
+To use a different port (e.g. to avoid conflicts): `-addr :8095`
+
+---
+
+## 2a. Server smoke test `[AUTOMATED]`
+
+With the server running on `:8095`:
+
+```bash
+curl -s localhost:8095/healthz
+# → ok
+
+curl -s -o /dev/null -w "%{http_code}" localhost:8095/
+# → 200
+
+curl -s localhost:8095/ | grep -o '<title>[^<]*'
+# → <title>web
+```
+
+All three checks passed in the automated run on 2026-06-28.
+
+---
+
+## 3. Criterion 1 & 3 — Two-device discovery and file transfer `[MANUAL]`
+
+**Criterion 1:** Peer roster populates within a few seconds.
+**Criterion 3:** File arrives intact (SHA-256 matches).
+
+### Procedure
+
+1. Determine the server machine's LAN IP: `ipconfig getifaddr en0` (macOS) or `hostname -I` (Linux).
+2. Start the server on the LAN machine: `./relayium-server -addr :8080 -static ../web/dist`
+3. On **device A**, open `http://<LAN-IP>:8080` in Chrome.
+4. On **device B**, open `http://<LAN-IP>:8080` in Chrome.
+5. Both pages should display each other in "Devices on your network" within ~2 seconds.
+6. On **device A**, note the SHA-256 of a small test file (~10 MB):
+   ```bash
+   shasum -a 256 testfile.bin
+   ```
+7. Drag `testfile.bin` from the Finder / file picker onto device B's entry in device A's UI.
+8. Device B shows a transfer-request dialog. Compare the SAS code shown on A with the SAS code
+   shown on B — they must match. Click **Accept** on B.
+9. Device B downloads the file (browser save dialog or automatic download).
+10. On **device B**, verify integrity:
+    ```bash
+    shasum -a 256 ~/Downloads/testfile.bin
+    ```
+
+**Expected:** SHA-256 output matches step 6. Transfer completes without errors.
+
+---
+
+## 4. Criterion 2 — 1 GB file without OOM `[MANUAL]`
+
+**Criterion 2:** Streaming write to disk; receiver tab memory stays well under file size.
+
+### Procedure
+
+1. Create a 1 GB test file on device A:
+   ```bash
+   # macOS
+   mkfile 1g big.bin
+   # Linux
+   head -c 1G /dev/urandom > big.bin
+   ```
+2. Open **Chrome** on both A and B (Chrome supports `showSaveFilePicker` for streaming-to-disk).
+3. Start a transfer of `big.bin` from A to B following the steps in §3.
+4. On B, open **Chrome Task Manager** (Shift+Esc) and watch the receiving tab's memory column
+   during the transfer.
+5. Let the transfer complete.
+
+**Expected:** The receiving tab's memory stays well below 1 GB throughout; Chrome streams the
+chunks directly to disk via `showSaveFilePicker` without buffering the whole file. Browsers
+without `showSaveFilePicker` (Firefox, Safari) will accumulate the file in memory — use a smaller
+file there (see §6).
+
+---
+
+## 5. Criterion 4 — Server sees no file content `[MANUAL]`
+
+**Criterion 4:** Only signaling (SDP/ICE/key-exchange envelopes) traverses the server; file bytes
+go peer-to-peer over the WebRTC DataChannel.
+
+### Procedure — log inspection
+
+1. Run the server with its default logging in a terminal window.
+2. Perform a transfer (§3).
+3. Observe the server's stdout during the transfer.
+
+**Expected:** The server logs only WebSocket connect/disconnect events and per-message envelope
+routing. No large binary blobs appear in logs.
+
+### Procedure — tcpdump (optional, stronger evidence)
+
+```bash
+# On the server machine, capture port 8080 traffic to a file
+sudo tcpdump -i any -w /tmp/relay-capture.pcap port 8080
+
+# Run a transfer, then stop tcpdump (Ctrl-C)
+# Inspect the capture
+tcpdump -r /tmp/relay-capture.pcap -A | wc -c
+```
+
+Compare the capture size against the file size transferred. Signaling-only traffic will be many
+orders of magnitude smaller than the file itself (a few KB of JSON envelopes vs. hundreds of MB
+of file data).
+
+**Expected:** Capture is tiny — confirming the relay carries no file content.
+
+---
+
+## 6. Criterion 5 — SAS detects MITM `[MANUAL]`
+
+**Criterion 5:** Short Authentication String (SAS) allows users to detect a key-swapping
+man-in-the-middle.
+
+### Procedure
+
+This test simulates a compromised server that swaps public keys.
+
+1. In `web/src/lib/webrtc.ts`, locate the `onPeerKey` handler (the function that processes the
+   peer's X25519 public key received over the signaling channel).
+2. Add a temporary one-line debug shim that replaces the incoming peer key bytes with random bytes
+   before passing them to `deriveSession`:
+   ```ts
+   // DEBUG ONLY — simulate key-swapping MITM
+   peerKeyBytes = crypto.getRandomValues(new Uint8Array(32));
+   ```
+3. Rebuild the web client (`npm run build`) and restart the server.
+4. Open A and B; initiate a transfer.
+5. Compare the SAS displayed on **device A** with the SAS displayed on **device B**.
+
+**Expected:** The SAS codes differ between A and B. A human comparing them out-of-band (verbally,
+or side-by-side) would detect the mismatch and abort the transfer.
+
+6. Revert the debug change and rebuild before any real use.
+
+---
+
+## 7. Criterion 6 — Browser matrix `[MANUAL]`
+
+**Criterion 6:** Transfer works across Chrome, Firefox, and Safari (with noted degradation for
+the latter two).
+
+### Procedure
+
+Use a smaller file (~50 MB) for Firefox and Safari to avoid exhausting browser memory.
+
+| Step | Browser pair        | File size | Expected outcome                                           |
+|------|--------------------|-----------|------------------------------------------------------------|
+| 7a   | Chrome A → Chrome B  | up to 1 GB | Streams to disk via `showSaveFilePicker`; low memory.    |
+| 7b   | Firefox A → Firefox B | ~50 MB  | Transfer completes; file buffered in memory (Blob fallback). |
+| 7c   | Safari A → Safari B  | ~50 MB   | Transfer completes; file buffered in memory (Blob fallback). |
+| 7d   | Chrome A → Firefox B | ~50 MB   | Cross-browser transfer completes.                         |
+
+For each combination, repeat the procedure in §3 (discovery, drag, SAS compare, download,
+shasum check).
+
+**Note on degradation:** Firefox and Safari do not implement `showSaveFilePicker`, so the
+receiving side accumulates chunks in a `Blob` and triggers a standard download link at completion.
+For large files this exhausts tab memory. Stick to files ≤ 50 MB on these browsers at M0.
+
+---
+
+## 8. Known limitations (M0)
+
+These are explicitly out of scope for the first milestone and are **not** defects:
+
+| Limitation | Details |
+|---|---|
+| Same-LAN / same-public-IP only | No TURN relay is implemented. Peers behind different NATs (different public IPs) will fail ICE. Use a TURN server or run on the same LAN. |
+| Same-origin WebSocket only | `websocket.Accept` defaults to same-origin enforcement. Both browsers must open the app from the Go server's own origin (e.g. `http://192.168.1.10:8080`), not from the Vite dev server (`http://localhost:5173`), otherwise the WebSocket upgrade is rejected. |
+| Chrome recommended for large files | Firefox and Safari fall back to in-memory Blob buffering. Files above ~200 MB may exhaust memory on these browsers. |
+| No peer pruning | `activePeers` on the server is not pruned when a peer disconnects. If you try to send to a peer that reconnected under a new ID, the old entry lingers in the UI until page reload. Workaround: reload both tabs after a disconnect. |
+| No cross-origin CORS | The Go server does not set CORS headers. API calls from a different origin will fail. |
+| No HTTPS / WSS | M0 uses plain HTTP and WS. For production use, place behind a TLS-terminating reverse proxy (nginx, Caddy). WebRTC will still use DTLS-SRTP internally regardless. |
