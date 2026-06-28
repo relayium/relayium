@@ -14,6 +14,8 @@ func (s *Service) Routes() *http.ServeMux {
 	mux.HandleFunc("GET /api/auth/magic/verify", s.handleMagicVerify)
 	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/me", s.RequireSession(s.handleMe))
+	mux.HandleFunc("GET /api/auth/google/start", s.handleGoogleStart)
+	mux.HandleFunc("GET /api/auth/google/callback", s.handleGoogleCallback)
 	return mux
 }
 
