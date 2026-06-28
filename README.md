@@ -53,6 +53,23 @@ is **how seriously we take end-to-end encryption**:
 - ⚡ **No account, no install** — just open a URL.
 - 🪶 **Tiny footprint** — one static SPA + a single Go binary for signaling.
 
+## How does Relayium compare?
+
+|                          | **Relayium**            | AirDrop          | WeTransfer / Drive | Snapdrop / PairDrop |
+| ------------------------ | :---------------------: | :--------------: | :----------------: | :-----------------: |
+| Cross-platform           | ✅ any browser          | ❌ Apple only    | ✅                 | ✅                  |
+| Files never hit a server | ✅ true P2P             | ✅               | ❌ uploaded        | ✅                  |
+| End-to-end encrypted     | ✅ X25519 + AES-256-GCM | ✅               | ❌ / at rest only  | ⚠️ DTLS only        |
+| MITM verification (SAS)  | ✅ 6-digit code         | n/a              | n/a                | ❌                  |
+| No account / no install  | ✅                      | ✅               | ⚠️ size limits      | ✅                  |
+| Server-imposed size cap  | ❌ none                 | ❌ none          | ✅ (e.g. 2 GB free) | ❌ none             |
+| Open source              | ✅ MIT                  | ❌               | ❌                 | ✅                  |
+
+The gap from Snapdrop/PairDrop is the **application-layer E2E + SAS**: WebRTC's DTLS fingerprints are
+exchanged *through the signaling server*, so a malicious server could MITM them. Relayium adds an
+X25519 + AES-256-GCM layer **on top of** the DataChannel (keys never reach the server) plus a short code
+two humans can compare out of band.
+
 ## How it works
 
 ```
@@ -159,6 +176,35 @@ relayium/
 │   └── internal/signal/        #   hub (rooms by public IP), envelopes
 └── docs/                      # design spec + manual test procedure
 ```
+
+## FAQ
+
+**Is Relayium free?**
+Yes — free and open source under the MIT license. No account, no sign-up, no install.
+
+**Do my files get uploaded to a server?**
+No. File bytes stream directly between the two devices over the WebRTC DataChannel and never pass through
+the server. The signaling server only helps the devices find each other — it never sees file contents or names.
+
+**Is it really end-to-end encrypted?**
+Yes. A per-transfer X25519 key exchange derives an AES-256-GCM key; keys exist only on the sender and
+receiver. A 6-digit SAS code shown on both screens lets you detect a man-in-the-middle.
+
+**Can I send files between different operating systems — say a Windows PC and an iPhone?**
+Yes. Relayium runs in the browser, so it's fully cross-platform: Windows ↔ iPhone, Android ↔ Mac,
+Linux ↔ anything. Unlike AirDrop it isn't limited to Apple devices.
+
+**What's the file-size limit?**
+No server-imposed limit. In Chrome/Edge files stream straight to disk (size bound only by free space).
+In Firefox/Safari they're buffered in memory, so keep them under ~200 MB.
+
+**Can I send across different networks / over the internet?**
+Not yet — M0 works on the same network (same public IP). Cross-network relay (TURN) is on the [roadmap](#roadmap).
+
+**How is this different from Snapdrop or PairDrop?**
+Same browser + WebRTC + LAN idea, but Relayium adds an application-layer E2E encryption layer
+(X25519 + AES-256-GCM) and a SAS verification code on top of WebRTC's DTLS — so a malicious signaling
+server can't read or MITM the transfer undetected. See the [comparison table](#how-does-relayium-compare).
 
 ## Contributing
 

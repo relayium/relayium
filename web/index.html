@@ -51,29 +51,148 @@
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "WebApplication",
-        "name": "Relayium",
-        "url": "https://relayium.com/",
-        "description": "Open-source, end-to-end encrypted peer-to-peer file transfer in your browser. Files stream device-to-device over WebRTC and never touch the server.",
-        "applicationCategory": "UtilitiesApplication",
-        "operatingSystem": "Web (Chrome, Edge, Firefox, Safari)",
-        "browserRequirements": "Requires a modern browser with WebRTC over HTTPS",
-        "softwareVersion": "M0",
-        "isAccessibleForFree": true,
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-        "inLanguage": ["en", "zh", "ja", "ko", "de", "fr"],
-        "featureList": [
-          "End-to-end encryption (X25519 + AES-256-GCM)",
-          "Peer-to-peer transfer over WebRTC — files never touch the server",
-          "Short verification code (SAS) to detect man-in-the-middle",
-          "Multi-file transfer with streaming to disk",
-          "No account and no install"
+        "@graph": [
+          {
+            "@type": ["WebApplication", "SoftwareApplication"],
+            "@id": "https://relayium.com/#app",
+            "name": "Relayium",
+            "alternateName": "Relayium — secure P2P file transfer",
+            "url": "https://relayium.com/",
+            "description": "Open-source, end-to-end encrypted peer-to-peer file transfer in your browser. Files stream device-to-device over WebRTC and never touch the server.",
+            "abstract": "Send files directly between two devices in the browser — end-to-end encrypted, peer-to-peer, with no account, no install, and no file ever stored on a server.",
+            "applicationCategory": "UtilitiesApplication",
+            "applicationSubCategory": "File transfer",
+            "operatingSystem": "Web (Chrome, Edge, Firefox, Safari; desktop and mobile)",
+            "browserRequirements": "Requires a modern browser with WebRTC over HTTPS",
+            "softwareVersion": "M0",
+            "isAccessibleForFree": true,
+            "license": "https://opensource.org/licenses/MIT",
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+            "inLanguage": ["en", "zh", "ja", "ko", "de", "fr"],
+            "author": { "@id": "https://relayium.com/#org" },
+            "publisher": { "@id": "https://relayium.com/#org" },
+            "sameAs": ["https://github.com/relayium/relayium"],
+            "featureList": [
+              "End-to-end encryption (X25519 + AES-256-GCM)",
+              "Peer-to-peer transfer over WebRTC — files never touch the server",
+              "Short verification code (SAS) to detect man-in-the-middle",
+              "Multi-file transfer (up to 10) with streaming to disk",
+              "Per-file SHA-256 integrity check",
+              "No account and no install",
+              "Cross-platform: Windows, macOS, Linux, Android, iOS via the browser"
+            ]
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://relayium.com/#org",
+            "name": "Relayium",
+            "url": "https://relayium.com/",
+            "logo": "https://relayium.com/icon-512.png",
+            "sameAs": ["https://github.com/relayium/relayium"]
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://relayium.com/#faq",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Is Relayium free?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Yes. Relayium is free and open source under the MIT license. There is no account, no sign-up, and no installation." }
+              },
+              {
+                "@type": "Question",
+                "name": "Do my files get uploaded to a server?",
+                "acceptedAnswer": { "@type": "Answer", "text": "No. Files stream directly between the two devices over a WebRTC DataChannel and never pass through the server. The signaling server only helps the two devices find each other and never sees file contents or names." }
+              },
+              {
+                "@type": "Question",
+                "name": "Is Relayium end-to-end encrypted?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Yes. Relayium uses a per-transfer X25519 key exchange to derive an AES-256-GCM key; the keys never leave the two devices. A 6-digit verification code (SAS) shown on both screens lets users detect a man-in-the-middle." }
+              },
+              {
+                "@type": "Question",
+                "name": "Can I send files between different operating systems, like a PC and an iPhone?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Yes. Relayium runs in the browser, so it works cross-platform — for example Windows to iPhone, or Android to Mac. Unlike AirDrop it is not limited to Apple devices." }
+              },
+              {
+                "@type": "Question",
+                "name": "What is the file-size limit?",
+                "acceptedAnswer": { "@type": "Answer", "text": "There is no server-imposed limit. In Chrome and Edge, files stream directly to disk so size is not constrained by memory. In Firefox and Safari, files are buffered in memory, so keep them under about 200 MB." }
+              },
+              {
+                "@type": "Question",
+                "name": "How is Relayium different from Snapdrop or PairDrop?",
+                "acceptedAnswer": { "@type": "Answer", "text": "It starts from the same browser + WebRTC + local-network idea, but adds an application-layer end-to-end encryption layer (X25519 + AES-256-GCM) and a SAS verification code on top of WebRTC's DTLS, so a malicious signaling server cannot read or man-in-the-middle the transfer undetected." }
+              }
+            ]
+          }
         ]
       }
     </script>
   </head>
   <body>
     <div id="app"></div>
+
+    <!--
+      Static, crawlable content for search engines and AI / answer engines (GEO).
+      The interactive app mounts into #app via JavaScript; this <noscript> block
+      gives crawlers (and no-JS visitors) the real prose, facts, and FAQ to cite.
+    -->
+    <noscript>
+      <main>
+        <h1>Relayium — End-to-end encrypted peer-to-peer file transfer</h1>
+        <p>
+          <strong>Relayium</strong> is an open-source, end-to-end encrypted,
+          peer-to-peer (P2P) file transfer tool that runs entirely in your
+          browser. Files stream directly from one device to another over a
+          WebRTC DataChannel and <strong>never touch any server</strong>. There
+          is no account, no installation, and no server-imposed file-size limit.
+        </p>
+
+        <h2>How it works</h2>
+        <ol>
+          <li>Open <a href="https://relayium.com/">relayium.com</a> on two devices on the same network — they discover each other automatically.</li>
+          <li>Pick a file or drag and drop (up to 10 at once); the receiver accepts.</li>
+          <li>Both screens show a 6-digit verification code — compare it to rule out a man-in-the-middle.</li>
+          <li>The file streams device-to-device, end-to-end encrypted, and is verified with a per-file SHA-256 hash.</li>
+        </ol>
+
+        <h2>Why Relayium</h2>
+        <ul>
+          <li><strong>End-to-end encrypted</strong> — per-transfer X25519 key exchange and AES-256-GCM; keys never leave the two devices.</li>
+          <li><strong>Truly peer-to-peer</strong> — file bytes flow over WebRTC and never pass through the server, which only helps the devices find each other.</li>
+          <li><strong>Man-in-the-middle protection</strong> — a 6-digit Short Authentication String (SAS) on top of WebRTC's DTLS.</li>
+          <li><strong>Cross-platform</strong> — works between Windows, macOS, Linux, Android and iOS through any modern browser (Chrome, Edge, Firefox, Safari).</li>
+          <li><strong>Free and open source</strong> — MIT licensed, no account, no install.</li>
+        </ul>
+
+        <h2>How Relayium compares</h2>
+        <ul>
+          <li><strong>vs AirDrop:</strong> cross-platform and browser-based, not limited to Apple devices — works between, e.g., a Windows PC and an iPhone.</li>
+          <li><strong>vs WeTransfer or Google Drive:</strong> files are not uploaded to a server; they go directly device-to-device, end-to-end encrypted, with no server copy and no server size cap.</li>
+          <li><strong>vs Snapdrop / PairDrop:</strong> adds an application-layer end-to-end encryption layer (X25519 + AES-256-GCM) and a SAS verification code, so a malicious signaling server cannot read or MITM the transfer undetected.</li>
+        </ul>
+
+        <h2>Frequently asked questions</h2>
+        <h3>Is Relayium free?</h3>
+        <p>Yes — free and open source under the MIT license, with no account or installation.</p>
+        <h3>Do my files get uploaded to a server?</h3>
+        <p>No. Files stream directly between the two devices over WebRTC and never touch the server.</p>
+        <h3>Is it end-to-end encrypted?</h3>
+        <p>Yes — X25519 key exchange and AES-256-GCM, with keys that never leave the two devices, plus a 6-digit code to detect man-in-the-middle attacks.</p>
+        <h3>Can I send files between different operating systems?</h3>
+        <p>Yes — it is browser-based, so Windows ↔ iPhone, Android ↔ Mac, and Linux ↔ anything all work.</p>
+        <h3>What is the file-size limit?</h3>
+        <p>No server-imposed limit. Chrome and Edge stream files to disk; in Firefox and Safari keep files under about 200 MB because they buffer in memory.</p>
+
+        <p>
+          Source code on <a href="https://github.com/relayium/relayium">GitHub</a>.
+          A machine-readable summary for AI engines is at
+          <a href="https://relayium.com/llms.txt">/llms.txt</a>.
+        </p>
+      </main>
+    </noscript>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
