@@ -25,6 +25,15 @@ type Identity struct {
 	UserID   string
 }
 
+// Session is a server-side login session referenced by an httpOnly cookie.
+type Session struct {
+	ID        string
+	UserID    string
+	CreatedAt int64
+	ExpiresAt int64
+	Revoked   bool
+}
+
 // Store is the only abstraction that touches persistent storage. Implemented by
 // SQLiteStore today; a Postgres impl could replace it without changing callers.
 type Store interface {
@@ -33,4 +42,8 @@ type Store interface {
 	GetUserByID(ctx context.Context, id string) (User, error)
 	LinkIdentity(ctx context.Context, provider, subject, userID string) error
 	GetUserByIdentity(ctx context.Context, provider, subject string) (User, bool, error)
+	// sessions
+	CreateSession(ctx context.Context, s Session) error
+	GetSession(ctx context.Context, id string) (Session, bool, error)
+	RevokeSession(ctx context.Context, id string) error
 }
