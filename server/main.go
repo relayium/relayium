@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"flag"
 	"log"
+	"mime"
 	"net/http"
 
 	"github.com/coder/websocket"
@@ -21,6 +22,9 @@ func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	static := flag.String("static", "../web/dist", "static files directory")
 	flag.Parse()
+
+	// Not in Go's built-in MIME table; the PWA manifest should be served as JSON.
+	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
 
 	hub := signal.NewHub()
 	handle := signal.ServeWS(hub, newID)
