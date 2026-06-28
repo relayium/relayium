@@ -75,7 +75,7 @@ curl -s -o /dev/null -w "%{http_code}" localhost:8080/
 # → 200
 
 curl -s localhost:8080/ | grep -o '<title>[^<]*'
-# → <title>Relayium — 端到端加密文件传输
+# → <title>Relayium   (JS then sets a localized title; the tab title also follows the language switch)
 ```
 
 All three checks passed in the automated run on 2026-06-28 (which used `:8095`
