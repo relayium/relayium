@@ -1,6 +1,10 @@
 import { seal, open, type SessionKeys } from "./crypto";
 
-export const CHUNK_SIZE = 64 * 1024;
+// Larger chunks mean fewer encrypt/send/event-loop iterations per MB → higher
+// throughput. The on-wire message is CHUNK_SIZE + CHUNK_OVERHEAD (21 B); keep it
+// well under the DataChannel max-message-size (256 KiB on Chrome) so sends never
+// fail with "Message too large".
+export const CHUNK_SIZE = 192 * 1024;
 export const MAX_FILES = 10;
 
 export interface FileMeta {
