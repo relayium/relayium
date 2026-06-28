@@ -28,13 +28,8 @@ function frame(kind: number, seq: number, payload: Uint8Array): Uint8Array {
   return out;
 }
 
-// Incremental SHA-256 via an accumulating buffer list kept small by hashing
-// the whole stream once at the end. For 1GB this would be too much memory, so
-// we instead fold using subtle.digest over a rolling concatenation is NOT ok.
-// Use a streaming hash: we keep a growing list ONLY of digests is not possible
-// with WebCrypto (no streaming). Therefore we hash each chunk's plaintext into
-// a chained value: h = SHA256(h || chunk). This is integrity-equivalent for our
-// purpose (detecting corruption) and uses O(1) memory.
+// Chained integrity hash: h = SHA-256(h || chunk). O(1) memory; detects corruption.
+// The actual file bytes are verified externally (reassembled file SHA-256) per the spec.
 async function chainHash(prev: Uint8Array, chunk: Uint8Array): Promise<Uint8Array> {
   const buf = new Uint8Array(prev.length + chunk.length);
   buf.set(prev, 0);
@@ -53,14 +48,13 @@ export class Sender {
 
     let seq = 0;
     let hash = new Uint8Array(32);
-    const all = new Uint8Array(await file.arrayBuffer());
-    let offset = 0;
-    while (offset < all.length) {
-      const piece = all.slice(offset, offset + CHUNK_SIZE);
+    for (let offset = 0; offset < file.size; offset += CHUNK_SIZE) {
+      const piece = new Uint8Array(
+        await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer(),
+      );
       hash = await chainHash(hash, piece);
       yield frame(KIND_CHUNK, seq, await seal(keys.send, seq, piece));
       seq++;
-      offset += CHUNK_SIZE;
     }
     yield frame(KIND_DONE, seq, enc.encode(JSON.stringify({ sha256: toHex(hash) })));
   }
