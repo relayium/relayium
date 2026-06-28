@@ -5,7 +5,6 @@
     generateKeyPair,
     deriveSession,
     sas,
-    type KeyPair,
     type SessionKeys,
   } from "./lib/crypto";
   import { SignalingClient } from "./lib/signaling";
@@ -22,7 +21,6 @@
   let selfId: string = $state("");
 
   // Non-reactive locals — set once in onMount, used in callbacks
-  let selfKey: KeyPair;
   let signaling: SignalingClient;
   const activePeers = new Set<string>();
 
@@ -31,7 +29,6 @@
 
   onMount(async () => {
     await ready();
-    selfKey = generateKeyPair();
     const proto = location.protocol === "https:" ? "wss" : "ws";
     signaling = new SignalingClient(
       `${proto}://${location.host}/ws`,
@@ -55,8 +52,19 @@
       if (msg.sdp?.type !== "offer") return; // only act on offers
       if (activePeers.has(from)) return;      // already connecting to this peer
       activePeers.add(from);
-
+      const selfKey = generateKeyPair();      // FIX 1: per-transfer ephemeral keypair
       let keys: SessionKeys | undefined;
+      const receiver = new Receiver();
+      let sink: Awaited<ReturnType<typeof createFileSink>> | undefined;
+      let total = 0, got = 0;
+      let pending: Promise<void> = Promise.resolve();
+      const handleMessage = async (buf: ArrayBuffer) => {
+        while (!keys) await sleep(5);         // wait for keys; frames are queued, not dropped
+        const out = await receiver.feed(new Uint8Array(buf), keys);
+        if (out.meta) { sink = await createFileSink(out.meta.name, out.meta.size); total = out.meta.size; }
+        if (out.chunk && sink) { await sink.write(out.chunk); got += out.chunk.length; progress = total ? Math.round((got / total) * 100) : 0; }
+        if (out.done && sink) { await sink.close(); status = out.done.ok ? "received ✓" : "INTEGRITY FAILED ✗"; }
+      };
       const channel = await connect({
         signaling,
         peerId: from,
@@ -68,26 +76,19 @@
           sasCode = sas(selfKey.publicKey, pk);
         },
       });
-
-      while (!keys) await sleep(20);
-
-      const receiver = new Receiver();
-      let sink: Awaited<ReturnType<typeof createFileSink>> | undefined;
-      let total = 0, got = 0;
-      let pending: Promise<void> = Promise.resolve();
-      const handleMessage = async (data: ArrayBuffer) => {
-        const out = await receiver.feed(new Uint8Array(data), keys!);
-        if (out.meta) { sink = await createFileSink(out.meta.name, out.meta.size); total = out.meta.size; }
-        if (out.chunk && sink) { await sink.write(out.chunk); got += out.chunk.length; progress = total ? Math.round((got / total) * 100) : 0; }
-        if (out.done && sink) { await sink.close(); status = out.done.ok ? "received ✓" : "INTEGRITY FAILED ✗"; }
+      // FIX 2: onmessage attached synchronously after connect resolves — no awaitable gap
+      channel.onmessage = (ev) => {
+        pending = pending
+          .then(() => handleMessage(ev.data as ArrayBuffer))
+          .catch((err) => { status = "transfer failed ✗"; console.error("relayium receive error", err); });
       };
-      channel.onmessage = (ev) => { pending = pending.then(() => handleMessage(ev.data as ArrayBuffer)); };
     });
   }
 
   // SEND — initiator path
   async function sendTo(peerId: string, file: File) {
     activePeers.add(peerId);
+    const selfKey = generateKeyPair();  // FIX 1: per-transfer ephemeral keypair
     let keys: SessionKeys | undefined;
     const channel = await connect({
       signaling,
