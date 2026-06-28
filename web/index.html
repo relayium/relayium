@@ -2,9 +2,75 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Relayium</title>
+
+    <title>Relayium — End-to-end encrypted P2P file transfer</title>
+    <meta name="description" content="Open-source, end-to-end encrypted peer-to-peer file transfer in your browser. Files stream device-to-device over WebRTC and never touch the server." />
+    <meta name="keywords" content="file transfer, end-to-end encryption, peer-to-peer, P2P, WebRTC, secure file sharing, send files between devices, open source, AirDrop alternative, Snapdrop alternative, Pairdrop alternative" />
+    <meta name="author" content="Relayium" />
+    <meta name="application-name" content="Relayium" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <link rel="canonical" href="https://relayium.com/" />
+
+    <!-- Icons & PWA -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Relayium" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Open Graph (Facebook, WeChat, LinkedIn, Slack, Telegram, …) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Relayium" />
+    <meta property="og:title" content="Relayium — End-to-end encrypted P2P file transfer" />
+    <meta property="og:description" content="Open-source, end-to-end encrypted peer-to-peer file transfer in your browser. Files stream device-to-device over WebRTC and never touch the server." />
+    <meta property="og:url" content="https://relayium.com/" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="zh_CN" />
+    <meta property="og:locale:alternate" content="ja_JP" />
+    <meta property="og:locale:alternate" content="ko_KR" />
+    <meta property="og:locale:alternate" content="de_DE" />
+    <meta property="og:locale:alternate" content="fr_FR" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium — End-to-end encrypted P2P file transfer" />
+    <meta name="twitter:description" content="Open-source, end-to-end encrypted peer-to-peer file transfer in your browser. Files stream device-to-device over WebRTC and never touch the server." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <meta name="twitter:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Relayium",
+        "url": "https://relayium.com/",
+        "description": "Open-source, end-to-end encrypted peer-to-peer file transfer in your browser. Files stream device-to-device over WebRTC and never touch the server.",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Web (Chrome, Edge, Firefox, Safari)",
+        "browserRequirements": "Requires a modern browser with WebRTC over HTTPS",
+        "softwareVersion": "M0",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "inLanguage": ["en", "zh", "ja", "ko", "de", "fr"],
+        "featureList": [
+          "End-to-end encryption (X25519 + AES-256-GCM)",
+          "Peer-to-peer transfer over WebRTC — files never touch the server",
+          "Short verification code (SAS) to detect man-in-the-middle",
+          "Multi-file transfer with streaming to disk",
+          "No account and no install"
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="app"></div>
