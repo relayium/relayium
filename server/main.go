@@ -7,8 +7,10 @@ import (
 	"log"
 	"mime"
 	"net/http"
+	"time"
 
 	"github.com/coder/websocket"
+	"github.com/relayium/relayium/internal/account"
 	"github.com/relayium/relayium/internal/signal"
 )
 
@@ -21,6 +23,12 @@ func newID() string {
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	static := flag.String("static", "../web/dist", "static files directory")
+	dbPath := flag.String("db", "relayium.db", "SQLite database path (':memory:' for ephemeral)")
+	baseURL := flag.String("base-url", "http://localhost:8080", "public base URL for links/redirects")
+	googleID := flag.String("google-id", "", "Google OAuth client ID")
+	googleSecret := flag.String("google-secret", "", "Google OAuth client secret")
+	smtpAddr := flag.String("smtp-addr", "", "SMTP host:port (empty = log magic links instead of emailing)")
+	smtpFrom := flag.String("smtp-from", "no-reply@relayium.com", "magic link From address")
 	flag.Parse()
 
 	// Not in Go's built-in MIME table; the PWA manifest should be served as JSON.
@@ -28,6 +36,23 @@ func main() {
 
 	hub := signal.NewHub()
 	handle := signal.ServeWS(hub, newID)
+
+	store, err := account.OpenSQLite(*dbPath)
+	if err != nil {
+		log.Fatalf("open db: %v", err)
+	}
+	var mailer account.Mailer = &account.LogMailer{Log: log.Default()}
+	if *smtpAddr != "" {
+		mailer = &account.SMTPMailer{Addr: *smtpAddr, From: *smtpFrom}
+	}
+	acct := account.NewService(store, mailer, account.Config{
+		BaseURL:        *baseURL,
+		SessionTTL:     720 * time.Hour, // 30 days
+		MagicTTL:       15 * time.Minute,
+		GoogleClientID: *googleID,
+		GoogleSecret:   *googleSecret,
+		GoogleRedirect: *baseURL + "/api/auth/google/callback",
+	})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +69,7 @@ func main() {
 		handle(ctx, c, room)
 		_ = c.Close(websocket.StatusNormalClosure, "")
 	})
+	mux.Handle("/api/", acct.Routes())
 	mux.Handle("/", http.FileServer(http.Dir(*static)))
 
 	log.Printf("relayium signaling server listening on %s", *addr)
