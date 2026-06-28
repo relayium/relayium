@@ -1,23 +1,29 @@
 import { seal, open, type SessionKeys } from "./crypto";
 
 export const CHUNK_SIZE = 64 * 1024;
+export const MAX_FILES = 10;
 
 export interface FileMeta {
   name: string;
   size: number;
 }
 
-export type Frame =
-  | { kind: "meta"; meta: FileMeta }
-  | { kind: "chunk"; seq: number; data: Uint8Array }
-  | { kind: "done"; sha256: string };
+export interface Manifest {
+  files: FileMeta[];
+}
 
-const KIND_META = 0;
-const KIND_CHUNK = 1;
-const KIND_DONE = 2;
+// Frame wire format: [1 byte kind][4 byte big-endian seq][payload].
+const KIND_BATCH = 3; // manifest (plaintext): the whole batch's file list
+const KIND_CHUNK = 1; // one encrypted file slice
+const KIND_DONE = 2; // end-of-file integrity hash (plaintext)
+
+/** Frame kinds, exported so the UI can read a frame's type for progress tracking. */
+export const FRAME = { CHUNK: KIND_CHUNK, DONE: KIND_DONE, BATCH: KIND_BATCH } as const;
+/** Per-chunk wire overhead: 5-byte header + 16-byte AES-GCM tag. plaintext = byteLength - this. */
+export const CHUNK_OVERHEAD = 5 + 16;
 
 // Control frames travel receiver -> sender on the same DataChannel (the opposite
-// direction from file frames, so there is no collision). They are a single byte.
+// direction from file frames, so there is no collision). Each is a single byte.
 const CTRL_ACCEPT = 0xfe;
 const CTRL_REJECT = 0xff;
 
@@ -37,7 +43,6 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 function frame(kind: number, seq: number, payload: Uint8Array): Uint8Array {
-  // [1 byte kind][4 byte big-endian seq][payload]
   const out = new Uint8Array(5 + payload.length);
   out[0] = kind;
   new DataView(out.buffer).setUint32(1, seq);
@@ -45,8 +50,7 @@ function frame(kind: number, seq: number, payload: Uint8Array): Uint8Array {
   return out;
 }
 
-// Chained integrity hash: h = SHA-256(h || chunk). O(1) memory; detects corruption.
-// The actual file bytes are verified externally (reassembled file SHA-256) per the spec.
+// Chained integrity hash: h = SHA-256(h || chunk). O(1) memory; one chain per file.
 async function chainHash(prev: Uint8Array, chunk: Uint8Array): Promise<Uint8Array> {
   const buf = new Uint8Array(prev.length + chunk.length);
   buf.set(prev, 0);
@@ -59,47 +63,48 @@ function toHex(b: Uint8Array): string {
 }
 
 export class Sender {
-  /** The unencrypted file-metadata frame; sent first so the receiver can prompt. */
-  metaFrame(file: File): Uint8Array {
-    const meta: FileMeta = { name: file.name, size: file.size };
-    return frame(KIND_META, 0, enc.encode(JSON.stringify(meta)));
+  /** The plaintext manifest frame; sent first so the receiver can prompt once for the batch. */
+  batchFrame(files: FileMeta[]): Uint8Array {
+    const manifest: Manifest = { files };
+    return frame(KIND_BATCH, 0, enc.encode(JSON.stringify(manifest)));
   }
 
-  /** Encrypted chunk frames followed by the integrity (done) frame. */
-  async *dataFrames(file: File, keys: SessionKeys): AsyncGenerator<Uint8Array> {
+  /**
+   * Encrypted chunk frames for every file, each followed by its integrity frame.
+   * The AES-GCM nonce counter `seq` is GLOBAL across the whole batch — it never
+   * resets per file — so no nonce is ever reused under the session key.
+   */
+  async *dataFrames(files: File[], keys: SessionKeys): AsyncGenerator<Uint8Array> {
     let seq = 0;
-    let hash = new Uint8Array(32);
-    for (let offset = 0; offset < file.size; offset += CHUNK_SIZE) {
-      const piece = new Uint8Array(
-        await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer(),
-      );
-      hash = await chainHash(hash, piece);
-      yield frame(KIND_CHUNK, seq, await seal(keys.send, seq, piece));
-      seq++;
+    for (const file of files) {
+      let hash = new Uint8Array(32);
+      for (let offset = 0; offset < file.size; offset += CHUNK_SIZE) {
+        const piece = new Uint8Array(
+          await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer(),
+        );
+        hash = await chainHash(hash, piece);
+        yield frame(KIND_CHUNK, seq, await seal(keys.send, seq, piece));
+        seq++;
+      }
+      // DONE is unencrypted and does not consume a nonce slot.
+      yield frame(KIND_DONE, seq, enc.encode(JSON.stringify({ sha256: toHex(hash) })));
     }
-    yield frame(KIND_DONE, seq, enc.encode(JSON.stringify({ sha256: toHex(hash) })));
-  }
-
-  /** Full stream (meta + data) — used by tests and any no-handshake path. */
-  async *frames(file: File, keys: SessionKeys): AsyncGenerator<Uint8Array> {
-    yield this.metaFrame(file);
-    yield* this.dataFrames(file, keys);
   }
 }
 
 export class Receiver {
-  private expectedSeq = 0;
-  private hash = new Uint8Array(32);
+  private expectedSeq = 0; // global nonce counter, mirrors the sender
+  private hash = new Uint8Array(32); // chained hash of the file currently arriving
 
   async feed(
     encoded: Uint8Array,
     keys: SessionKeys,
-  ): Promise<{ meta?: FileMeta; chunk?: Uint8Array; done?: { ok: boolean } }> {
+  ): Promise<{ batch?: Manifest; chunk?: Uint8Array; done?: { ok: boolean } }> {
     const kind = encoded[0];
     const seq = new DataView(encoded.buffer, encoded.byteOffset).getUint32(1);
     const payload = encoded.slice(5);
-    if (kind === KIND_META) {
-      return { meta: JSON.parse(dec.decode(payload)) as FileMeta };
+    if (kind === KIND_BATCH) {
+      return { batch: JSON.parse(dec.decode(payload)) as Manifest };
     }
     if (kind === KIND_CHUNK) {
       if (seq !== this.expectedSeq) throw new Error("out-of-order chunk");
@@ -110,7 +115,9 @@ export class Receiver {
     }
     if (kind === KIND_DONE) {
       const { sha256 } = JSON.parse(dec.decode(payload)) as { sha256: string };
-      return { done: { ok: sha256 === toHex(this.hash) } };
+      const ok = sha256 === toHex(this.hash);
+      this.hash = new Uint8Array(32); // reset chain for the next file in the batch
+      return { done: { ok } };
     }
     throw new Error("unknown frame kind " + kind);
   }

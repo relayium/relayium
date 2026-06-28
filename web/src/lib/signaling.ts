@@ -28,7 +28,14 @@ export class SignalingClient {
 
   onSelfId(cb: (id: string) => void) { this.selfCb = cb; }
   onPeers(cb: (p: Peer[]) => void) { this.peersCb = cb; }
-  onSignal(cb: (from: string, data: unknown) => void) { this.signalCbs.push(cb); }
+  /** Register a signal listener; returns an unsubscribe function. */
+  onSignal(cb: (from: string, data: unknown) => void): () => void {
+    this.signalCbs.push(cb);
+    return () => {
+      const i = this.signalCbs.indexOf(cb);
+      if (i >= 0) this.signalCbs.splice(i, 1);
+    };
+  }
 
   sendSignal(to: string, data: unknown) {
     this.send({ type: "signal", to, data });

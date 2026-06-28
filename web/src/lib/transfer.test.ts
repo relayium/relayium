@@ -12,31 +12,63 @@ async function session() {
   return { ka, kb };
 }
 
-describe("transfer", () => {
-  it("round-trips a multi-chunk file with integrity check", async () => {
-    const { ka, kb } = await session();
-    const bytes = new Uint8Array(200_000).map((_, i) => i % 251);
-    const file = new File([bytes], "build.tar.gz");
+// Drive a whole batch through Sender -> Receiver, reconstructing each file and
+// collecting the per-file integrity verdicts. Returns one Uint8Array per file.
+async function roundTrip(
+  files: File[],
+  ka: Awaited<ReturnType<typeof session>>["ka"],
+  kb: Awaited<ReturnType<typeof session>>["kb"],
+) {
+  const sender = new Sender();
+  const receiver = new Receiver();
 
-    const sender = new Sender();
-    const receiver = new Receiver();
-    let meta: { name: string; size: number } | undefined;
-    const received: Uint8Array[] = [];
-    let ok = false;
+  const manifestOut = await receiver.feed(
+    sender.batchFrame(files.map((f) => ({ name: f.name, size: f.size }))),
+    kb,
+  );
 
-    for await (const frame of sender.frames(file, ka)) {
-      const out = await receiver.feed(frame, kb);
-      if (out.meta) meta = out.meta;
-      if (out.chunk) received.push(out.chunk);
-      if (out.done) ok = out.done.ok;
-    }
+  const parts: Uint8Array[][] = [[]];
+  const oks: boolean[] = [];
+  let idx = 0;
+  for await (const frame of sender.dataFrames(files, ka)) {
+    const out = await receiver.feed(frame, kb);
+    if (out.chunk) (parts[idx] ??= []).push(out.chunk);
+    if (out.done) { oks.push(out.done.ok); idx++; }
+  }
 
-    expect(meta).toEqual({ name: "build.tar.gz", size: 200_000 });
-    expect(ok).toBe(true);
-    const joined = new Uint8Array(received.reduce((n, c) => n + c.length, 0));
+  const joined = parts.map((chunks) => {
+    const total = chunks.reduce((n, c) => n + c.length, 0);
+    const buf = new Uint8Array(total);
     let off = 0;
-    for (const c of received) { joined.set(c, off); off += c.length; }
-    expect(joined).toEqual(bytes);
+    for (const c of chunks) { buf.set(c, off); off += c.length; }
+    return buf;
+  });
+  return { manifest: manifestOut.batch!, oks, joined };
+}
+
+describe("transfer", () => {
+  it("round-trips a multi-file batch with per-file integrity", async () => {
+    const { ka, kb } = await session();
+    const a = new Uint8Array(200_000).map((_, i) => i % 251);
+    const b = new Uint8Array(5_000).map((_, i) => (i * 7) % 256);
+    const files = [new File([a], "build.tar.gz"), new File([b], "notes.txt")];
+
+    const { manifest, oks, joined } = await roundTrip(files, ka, kb);
+
+    expect(manifest.files).toEqual([
+      { name: "build.tar.gz", size: 200_000 },
+      { name: "notes.txt", size: 5_000 },
+    ]);
+    expect(oks).toEqual([true, true]);
+    expect(joined[0]).toEqual(a);
+    expect(joined[1]).toEqual(b);
+  });
+
+  it("handles a zero-byte file in the batch", async () => {
+    const { ka, kb } = await session();
+    const files = [new File([], "empty.bin"), new File([new Uint8Array(100)], "x.bin")];
+    const { oks } = await roundTrip(files, ka, kb);
+    expect(oks).toEqual([true, true]);
   });
 
   it("reports integrity failure when a chunk is corrupted", async () => {
@@ -44,16 +76,18 @@ describe("transfer", () => {
     const file = new File([new Uint8Array(100_000)], "x.bin");
     const sender = new Sender();
     const receiver = new Receiver();
+    await receiver.feed(sender.batchFrame([{ name: file.name, size: file.size }]), kb);
+
     let ok: boolean | undefined;
     let first = true;
-    for await (const frame of sender.frames(file, ka)) {
-      // Flip a byte in the first chunk frame's ciphertext region (after the type byte).
-      if (first && frame[0] === 1 /* chunk */) { frame[10] ^= 0xff; first = false; }
+    for await (const frame of sender.dataFrames([file], ka)) {
+      // Flip a byte in the first chunk frame's ciphertext (after the 5-byte header).
+      if (first && frame[0] === 1) { frame[10] ^= 0xff; first = false; }
       try {
         const out = await receiver.feed(frame, kb);
         if (out.done) ok = out.done.ok;
       } catch {
-        ok = false; // AEAD open throws on tamper — that is a detected failure.
+        ok = false; // AEAD open throws on tamper — a detected failure
       }
     }
     expect(ok).toBe(false);
