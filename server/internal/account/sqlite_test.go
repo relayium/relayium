@@ -102,3 +102,40 @@ func TestMagicTokenOneTimeAndExpiry(t *testing.T) {
 		t.Fatalf("expired token must fail")
 	}
 }
+
+func TestDeviceRegistryScopedToUser(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u1, _ := s.UpsertUserByEmail(ctx, "u1@example.com", "U1")
+	u2, _ := s.UpsertUserByEmail(ctx, "u2@example.com", "U2")
+
+	d, err := s.UpsertDevice(ctx, Device{ID: "dev1", UserID: u1.ID, Name: "Laptop", CreatedAt: 1})
+	if err != nil || d.Name != "Laptop" {
+		t.Fatalf("upsert: %v %+v", err, d)
+	}
+	// Re-claiming the same device id by the same user updates the name.
+	if _, err := s.UpsertDevice(ctx, Device{ID: "dev1", UserID: u1.ID, Name: "Laptop 2", CreatedAt: 1}); err != nil {
+		t.Fatalf("re-upsert: %v", err)
+	}
+	list, _ := s.ListDevices(ctx, u1.ID)
+	if len(list) != 1 || list[0].Name != "Laptop 2" {
+		t.Fatalf("list after re-upsert: %+v", list)
+	}
+	// u2 cannot rename or delete u1's device.
+	if err := s.RenameDevice(ctx, "dev1", u2.ID, "hacked"); err == nil {
+		if l, _ := s.ListDevices(ctx, u1.ID); l[0].Name == "hacked" {
+			t.Fatalf("u2 renamed u1's device")
+		}
+	}
+	_ = s.DeleteDevice(ctx, "dev1", u2.ID)
+	if l, _ := s.ListDevices(ctx, u1.ID); len(l) != 1 {
+		t.Fatalf("u2 deleted u1's device")
+	}
+	// Owner can delete.
+	if err := s.DeleteDevice(ctx, "dev1", u1.ID); err != nil {
+		t.Fatalf("owner delete: %v", err)
+	}
+	if l, _ := s.ListDevices(ctx, u1.ID); len(l) != 0 {
+		t.Fatalf("device not deleted: %+v", l)
+	}
+}

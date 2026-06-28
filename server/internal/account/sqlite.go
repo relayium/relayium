@@ -180,3 +180,50 @@ func (s *SQLiteStore) UseMagicToken(ctx context.Context, tokenHash string, now i
 	).Scan(&t.TokenHash, &t.Email, &t.CreatedAt, &t.ExpiresAt, &t.UsedAt)
 	return t, err == nil, err
 }
+
+func (s *SQLiteStore) UpsertDevice(ctx context.Context, d Device) (Device, error) {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO devices (id, user_id, name, created_at, last_seen_at)
+		 VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET name = excluded.name
+		 WHERE devices.user_id = excluded.user_id`,
+		d.ID, d.UserID, d.Name, d.CreatedAt, d.LastSeenAt)
+	if err != nil {
+		return Device{}, err
+	}
+	var out Device
+	err = s.db.QueryRowContext(ctx,
+		`SELECT id, user_id, name, created_at, last_seen_at FROM devices WHERE id = ?`, d.ID,
+	).Scan(&out.ID, &out.UserID, &out.Name, &out.CreatedAt, &out.LastSeenAt)
+	return out, err
+}
+
+func (s *SQLiteStore) ListDevices(ctx context.Context, userID string) ([]Device, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, user_id, name, created_at, last_seen_at FROM devices WHERE user_id = ? ORDER BY created_at`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Device
+	for rows.Next() {
+		var d Device
+		if err := rows.Scan(&d.ID, &d.UserID, &d.Name, &d.CreatedAt, &d.LastSeenAt); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) RenameDevice(ctx context.Context, id, userID, name string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE devices SET name = ? WHERE id = ? AND user_id = ?`, name, id, userID)
+	return err
+}
+
+func (s *SQLiteStore) DeleteDevice(ctx context.Context, id, userID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM devices WHERE id = ? AND user_id = ?`, id, userID)
+	return err
+}
