@@ -16,7 +16,65 @@ func (s *Service) Routes() *http.ServeMux {
 	mux.HandleFunc("GET /api/me", s.RequireSession(s.handleMe))
 	mux.HandleFunc("GET /api/auth/google/start", s.handleGoogleStart)
 	mux.HandleFunc("GET /api/auth/google/callback", s.handleGoogleCallback)
+	mux.HandleFunc("GET /api/devices", s.RequireSession(s.handleListDevices))
+	mux.HandleFunc("POST /api/devices", s.RequireSession(s.handleUpsertDevice))
+	mux.HandleFunc("PATCH /api/devices/{id}", s.RequireSession(s.handleRenameDevice))
+	mux.HandleFunc("DELETE /api/devices/{id}", s.RequireSession(s.handleDeleteDevice))
 	return mux
+}
+
+func (s *Service) handleListDevices(w http.ResponseWriter, r *http.Request, u User) {
+	ds, err := s.store.ListDevices(r.Context(), u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"devices": ds})
+}
+
+func (s *Service) handleUpsertDevice(w http.ResponseWriter, r *http.Request, u User) {
+	var in struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Name == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if in.ID == "" {
+		in.ID = newID()
+	}
+	d, err := s.store.UpsertDevice(r.Context(), Device{
+		ID: in.ID, UserID: u.ID, Name: in.Name, CreatedAt: s.now().Unix(),
+	})
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"device": d})
+}
+
+func (s *Service) handleRenameDevice(w http.ResponseWriter, r *http.Request, u User) {
+	var in struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Name == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if err := s.store.RenameDevice(r.Context(), r.PathValue("id"), u.ID, in.Name); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Service) handleDeleteDevice(w http.ResponseWriter, r *http.Request, u User) {
+	if err := s.store.DeleteDevice(r.Context(), r.PathValue("id"), u.ID); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *Service) setSessionCookie(w http.ResponseWriter, sess Session) {
