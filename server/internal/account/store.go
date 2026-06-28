@@ -43,6 +43,16 @@ type MagicToken struct {
 	UsedAt    int64 // 0 = unused
 }
 
+// Device is a browser (later: a CLI) registered under a user. Static registry only;
+// online presence/rendezvous belongs to the cross-network spec, not here.
+type Device struct {
+	ID         string
+	UserID     string
+	Name       string
+	CreatedAt  int64
+	LastSeenAt int64
+}
+
 // Store is the only abstraction that touches persistent storage. Implemented by
 // SQLiteStore today; a Postgres impl could replace it without changing callers.
 type Store interface {
@@ -58,4 +68,9 @@ type Store interface {
 	// magic tokens
 	CreateMagicToken(ctx context.Context, t MagicToken) error
 	UseMagicToken(ctx context.Context, tokenHash string, now int64) (MagicToken, bool, error)
+	// devices
+	UpsertDevice(ctx context.Context, d Device) (Device, error)
+	ListDevices(ctx context.Context, userID string) ([]Device, error)
+	RenameDevice(ctx context.Context, id, userID, name string) error
+	DeleteDevice(ctx context.Context, id, userID string) error
 }
