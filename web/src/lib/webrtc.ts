@@ -50,13 +50,13 @@ export async function connect(opts: ConnectOpts): Promise<Conn> {
     if (role === "initiator") {
       channel = pc.createDataChannel("relayium");
       channel.binaryType = "arraybuffer";
-      channel.bufferedAmountLowThreshold = 1 << 20;
+      channel.bufferedAmountLowThreshold = 8 << 20; // 8 MB in-flight window keeps the pipe full
       channel.onopen = () => resolve(channel);
     } else {
       pc.ondatachannel = (ev) => {
         channel = ev.channel;
         channel.binaryType = "arraybuffer";
-        channel.bufferedAmountLowThreshold = 1 << 20;
+        channel.bufferedAmountLowThreshold = 8 << 20; // 8 MB in-flight window keeps the pipe full
         if (channel.readyState === "open") resolve(channel);
         else channel.onopen = () => resolve(channel);
       };
