@@ -47,6 +47,7 @@ export interface Messages {
     waitingAccept: string;
     rejected: string;
     sending: string;
+    finishing: string;
     sendDone: (n: number) => string;
     sendFail: string;
     receiving: string;
@@ -94,6 +95,7 @@ const zh: Messages = {
     waitingAccept: "等待对方确认接收…",
     rejected: "对方已拒绝 ✗",
     sending: "发送中…",
+    finishing: "正在完成…",
     sendDone: (n) => `发送完成 ✓（${n} 个文件）`,
     sendFail: "发送失败 ✗",
     receiving: "接收中…",
@@ -139,6 +141,7 @@ const en: Messages = {
     waitingAccept: "Waiting for the recipient to accept…",
     rejected: "Declined by the recipient ✗",
     sending: "Sending…",
+    finishing: "Finishing…",
     sendDone: (n) => `Sent ✓ (${n} file${n === 1 ? "" : "s"})`,
     sendFail: "Send failed ✗",
     receiving: "Receiving…",
@@ -184,6 +187,7 @@ const ja: Messages = {
     waitingAccept: "相手の受信確認を待っています…",
     rejected: "相手に拒否されました ✗",
     sending: "送信中…",
+    finishing: "完了処理中…",
     sendDone: (n) => `送信完了 ✓（${n} 個のファイル）`,
     sendFail: "送信に失敗しました ✗",
     receiving: "受信中…",
@@ -229,6 +233,7 @@ const ko: Messages = {
     waitingAccept: "상대의 수락을 기다리는 중…",
     rejected: "상대가 거부했습니다 ✗",
     sending: "보내는 중…",
+    finishing: "마무리 중…",
     sendDone: (n) => `보내기 완료 ✓ (파일 ${n}개)`,
     sendFail: "보내기 실패 ✗",
     receiving: "받는 중…",
@@ -274,6 +279,7 @@ const de: Messages = {
     waitingAccept: "Warten auf die Annahme des Empfängers…",
     rejected: "Vom Empfänger abgelehnt ✗",
     sending: "Senden…",
+    finishing: "Wird abgeschlossen…",
     sendDone: (n) => `Gesendet ✓ (${n} Datei${n === 1 ? "" : "en"})`,
     sendFail: "Senden fehlgeschlagen ✗",
     receiving: "Empfangen…",
@@ -319,6 +325,7 @@ const fr: Messages = {
     waitingAccept: "En attente de l’acceptation du destinataire…",
     rejected: "Refusé par le destinataire ✗",
     sending: "Envoi…",
+    finishing: "Finalisation…",
     sendDone: (n) => `Envoyé ✓ (${n} fichier${n === 1 ? "" : "s"})`,
     sendFail: "Échec de l’envoi ✗",
     receiving: "Réception…",
