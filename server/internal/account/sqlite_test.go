@@ -37,7 +37,10 @@ func TestUpsertUserByEmailIsIdempotentAndNormalizes(t *testing.T) {
 func TestIdentityLinkAndLookup(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
-	u, _ := s.UpsertUserByEmail(ctx, "bob@example.com", "Bob")
+	u, err := s.UpsertUserByEmail(ctx, "bob@example.com", "Bob")
+	if err != nil {
+		t.Fatalf("setup upsert: %v", err)
+	}
 	if err := s.LinkIdentity(ctx, "google", "sub-123", u.ID); err != nil {
 		t.Fatalf("link: %v", err)
 	}
