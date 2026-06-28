@@ -75,7 +75,7 @@ curl -s -o /dev/null -w "%{http_code}" localhost:8080/
 # → 200
 
 curl -s localhost:8080/ | grep -o '<title>[^<]*'
-# → <title>web   (template title; cosmetic — see Known limitations)
+# → <title>Relayium — 端到端加密文件传输
 ```
 
 All three checks passed in the automated run on 2026-06-28 (which used `:8095`
@@ -94,22 +94,40 @@ to avoid a local port conflict; the port is the only difference).
 2. Start the server on the LAN machine: `./relayium-server -addr :8080 -static ../web/dist`
 3. On **device A**, open `http://<LAN-IP>:8080` in Chrome.
 4. On **device B**, open `http://<LAN-IP>:8080` in Chrome.
-5. Both pages should display each other in "Devices on your network" within ~2 seconds.
+5. Both pages should display each other under "附近的设备 / Devices on your network" within ~2 seconds.
 6. On **device A**, note the SHA-256 of a small test file (~10 MB):
    ```bash
    shasum -a 256 testfile.bin
    ```
-7. Drag `testfile.bin` from the Finder / file picker onto device B's entry in device A's UI.
-8. Device B begins receiving automatically (no confirm dialog). Both devices display a SAS code
-   next to their status line — compare the code on A with the code on B; they must match.
-   If they differ, abort by closing or reloading the tab (possible MITM; see criterion 5).
-9. Device B downloads the file (browser save dialog or automatic download).
+7. On **device A**, drag `testfile.bin` onto device B's card, or click the card and pick it.
+   You may select up to 10 files at once (see §3a).
+8. **Device B shows an accept card** ("X 想发送 N 个文件 … 校验码 NNNNNN") with a SAS code.
+   Compare it against the SAS shown in device A's send panel — they must match. If they differ,
+   click **拒绝 / Decline** (possible MITM; see criterion 5).
+9. On **device B**, click **接收 / Accept** — this user gesture opens the save target:
+   - a single file → a "Save As" dialog (streamed to disk on Chrome);
+   - multiple files → a directory picker; files stream into the chosen folder;
+   - Firefox/Safari → each file is buffered and downloaded automatically.
 10. On **device B**, verify integrity:
     ```bash
-    shasum -a 256 ~/Downloads/testfile.bin
+    shasum -a 256 ~/Downloads/testfile.bin   # or the folder you chose
     ```
 
 **Expected:** SHA-256 output matches step 6. Transfer completes without errors.
+
+> **Why the accept step exists:** `showSaveFilePicker` / `showDirectoryPicker` require a user
+> gesture. Auto-receiving threw a `SecurityError` on Chrome and the transfer died silently, so
+> receiving is now gated behind an explicit click — which also realizes the spec's SAS check.
+
+## 3a. Multi-file batch `[MANUAL]`
+
+1. On **device A**, drag 2–10 files onto device B's card (or click and multi-select).
+2. Device B's accept card lists every file and the combined size. Click **接收**.
+3. For >1 file device B picks a **destination folder**; all files stream into it.
+4. Each file is integrity-checked independently; the panel shows `文件 i/N` and overall progress.
+
+**Expected:** All files arrive intact. Selecting >10 files sends only the first 10 (a notice says so).
+The AES-GCM nonce counter runs globally across the batch, so no nonce is reused under one session key.
 
 ---
 
@@ -234,7 +252,7 @@ These are explicitly out of scope for the first milestone and are **not** defect
 | Same-LAN / same-public-IP only | No TURN relay is implemented. Peers behind different NATs (different public IPs) will fail ICE. Use a TURN server or run on the same LAN. |
 | Same-origin WebSocket only | `websocket.Accept` defaults to same-origin enforcement. Both browsers must open the app from the Go server's own origin (e.g. `http://192.168.1.10:8080`), not from the Vite dev server (`http://localhost:5173`), otherwise the WebSocket upgrade is rejected. |
 | Chrome recommended for large files | Firefox and Safari fall back to in-memory Blob buffering. Files above ~200 MB may exhaust memory on these browsers. |
-| No client-side peer pruning | The server hub *does* drop a peer from the room roster on disconnect, but the client's in-page `activePeers` guard (App.svelte) is never cleared. After a failed/closed transfer to a peer, re-sending to that same peer in the same session is blocked until you reload the tab. |
-| Cosmetic page title | The browser tab title is still the Vite template default (`web`) rather than `Relayium`. Harmless; fix by editing `<title>` in `web/index.html` and rebuilding. |
+| One transfer at a time | The client handles a single active transfer (send *or* receive). While one is in flight, peer cards are disabled and new incoming offers are ignored until it finishes. Repeated transfers to the same peer now work (the peer connection is torn down and signal listeners unsubscribed on completion). |
+| Filename E2E | File names travel in the (plaintext) batch manifest over the DataChannel, which is DTLS-encrypted peer-to-peer — the signaling server never sees them — but they are not under the app-layer AEAD. Encrypting the manifest is a later refinement. |
 | No cross-origin CORS | The Go server does not set CORS headers. API calls from a different origin will fail. |
 | No HTTPS / WSS | M0 uses plain HTTP and WS. For production use, place behind a TLS-terminating reverse proxy (nginx, Caddy). WebRTC will still use DTLS-SRTP internally regardless. |

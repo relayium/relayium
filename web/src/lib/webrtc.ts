@@ -24,6 +24,12 @@ interface ConnectOpts {
   initialSignal?: InboundSignal;
 }
 
+export interface Conn {
+  channel: RTCDataChannel;
+  /** Tear down the peer connection and stop listening for this peer's signals. */
+  close(): void;
+}
+
 function b64(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes));
 }
@@ -31,7 +37,7 @@ function unb64(s: string): Uint8Array {
   return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 }
 
-export async function connect(opts: ConnectOpts): Promise<RTCDataChannel> {
+export async function connect(opts: ConnectOpts): Promise<Conn> {
   const pc = new RTCPeerConnection(opts.config ?? DEFAULT_ICE);
   const { signaling, peerId, selfKey, role, onPeerKey } = opts;
 
@@ -77,9 +83,20 @@ export async function connect(opts: ConnectOpts): Promise<RTCDataChannel> {
     }
   }
 
-  signaling.onSignal((from, data) => {
+  const off = signaling.onSignal((from, data) => {
     if (from === peerId) handleSignal(data as InboundSignal).catch((err) => console.error("relayium signal error", err));
   });
+
+  // Once the connection reaches a terminal state, stop routing this peer's
+  // signals so listeners don't pile up across repeated transfers.
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === "closed" || pc.connectionState === "failed") off();
+  };
+
+  function close() {
+    off();
+    try { pc.close(); } catch { /* already closed */ }
+  }
 
   if (role === "initiator") {
     const offer = await pc.createOffer();
@@ -89,5 +106,6 @@ export async function connect(opts: ConnectOpts): Promise<RTCDataChannel> {
     await handleSignal(opts.initialSignal);
   }
 
-  return ready;
+  const openChannel = await ready;
+  return { channel: openChannel, close };
 }
