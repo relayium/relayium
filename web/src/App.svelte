@@ -25,9 +25,11 @@
   import { pickSaveTarget, type SaveTarget, type FileSink } from "./lib/filesink";
   import { fetchIceServers } from "./lib/ice";
   import type { Peer } from "./lib/protocol";
-  import { lang, setLang, LANGS, messages, type Lang, type Messages, type StatusKey } from "./lib/i18n.svelte";
+  import { lang, setLang, LANGS, messages, legalUrl, type Lang, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import Account from "./lib/Account.svelte";
   import CrossNetwork from "./lib/CrossNetwork.svelte";
+  import Hero from "./lib/Hero.svelte";
+  import FeatureStrip from "./lib/FeatureStrip.svelte";
 
   interface Incoming { from: string; files: FileMeta[]; total: number }
   interface Xfer {
@@ -376,21 +378,7 @@
     {/each}
   </select>
 
-  <header>
-    <div class="logo">⇌</div>
-    <h1>Relayium</h1>
-    <p class="tagline">{t.tagline}</p>
-    <div class="statusbar">
-      <span class="dot" class:on={connState === "ready"}></span>
-      {#if unsupported}
-        {t.unavailable}
-      {:else if connState === "ready"}
-        {t.connected(selfName)}
-      {:else}
-        {t.connecting}
-      {/if}
-    </div>
-  </header>
+  <Hero {connState} {unsupported} {selfName} />
 
   {#if notice}
     <div class="toast">{notice}</div>
@@ -399,6 +387,7 @@
   {#if unsupported}
     <div class="banner error">{t.unsupported}</div>
   {:else}
+    <FeatureStrip />
     <section class="guide">
       <h2>{t.guideTitle}</h2>
       <ol>
@@ -479,21 +468,12 @@
     </section>
 
     <footer>
-      <span>{t.footer}</span>
-      <a
-        class="gh"
-        href="https://github.com/relayium/relayium"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-          <path
-            fill="currentColor"
-            d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
-          />
-        </svg>
-        GitHub
-      </a>
+      <nav class="legal">
+        <a href={legalUrl("privacy", lang())}>{t.legal.privacy}</a>
+        <a href={legalUrl("terms", lang())}>{t.legal.terms}</a>
+        <a href="https://github.com/relayium/relayium" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </nav>
+      <span class="fineprint">{t.footer}</span>
     </footer>
   {/if}
 </main>
@@ -501,7 +481,7 @@
 <style>
   main {
     position: relative;
-    width: 660px;
+    width: 820px;
     max-width: 100%;
     margin: 0 auto;
     padding: 0 20px 48px;
@@ -524,27 +504,6 @@
   }
   .lang:hover { border-color: var(--accent-border); }
   @media (max-width: 1024px) { .lang { top: 10px; right: 12px; } }
-
-  header { text-align: center; padding-top: 40px; }
-  .logo {
-    width: 56px; height: 56px; line-height: 56px;
-    margin: 0 auto 10px;
-    font-size: 30px; color: #fff;
-    border-radius: 16px;
-    background: linear-gradient(135deg, var(--accent), #6d28d9);
-    box-shadow: var(--shadow);
-  }
-  h1 { font-size: 44px; margin: 0 0 6px; letter-spacing: -1.2px; }
-  .tagline { color: var(--text); font-size: 15px; }
-
-  .statusbar {
-    display: inline-flex; align-items: center; gap: 8px;
-    font-size: 14px; margin-top: 16px;
-    padding: 6px 14px; border-radius: 999px;
-    border: 1px solid var(--border); background: var(--social-bg);
-  }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
-  .dot.on { background: #2ecc71; box-shadow: 0 0 0 3px rgba(46, 204, 113, .18); }
 
   h2 { font-size: 18px; margin: 0 0 12px; }
 
@@ -607,7 +566,11 @@
   .meta { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 12.5px; color: var(--text); }
 
   .peers { margin-top: 8px; }
-  .peers ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+  .peers ul {
+    list-style: none; padding: 0; margin: 0;
+    display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
   .peer {
     border: 1.5px dashed var(--border); border-radius: 14px;
     transition: border-color .15s, background .15s;
@@ -629,19 +592,12 @@
   .empty { color: var(--text); font-size: 14px; }
 
   footer {
-    margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--border);
-    display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
-    gap: 4px 12px; font-size: 12.5px; color: var(--text);
+    margin-top: 32px; padding-top: 18px; border-top: 1px solid var(--border);
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    font-size: 12.5px; color: var(--text); text-align: center;
   }
-  .gh {
-    display: inline-flex; align-items: center; gap: 6px;
-    color: var(--text-h); text-decoration: none;
-  }
-  .gh:hover { color: var(--accent); }
-  .gh svg { display: block; }
-
-  @media (max-width: 1024px) {
-    h1 { font-size: 34px; }
-    header { padding-top: 28px; }
-  }
+  footer .legal { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
+  footer .legal a { color: var(--text-h); text-decoration: none; }
+  footer .legal a:hover { color: var(--accent); }
+  footer .fineprint { max-width: 60ch; }
 </style>
