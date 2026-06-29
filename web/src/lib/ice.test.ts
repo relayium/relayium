@@ -38,4 +38,24 @@ describe("fetchIceServers", () => {
     const out = await fetchIceServers("tok");
     expect(out).toEqual(STUN);
   });
+
+  it("falls back to STUN when a 200 body isn't JSON (e.g. nginx serves index.html)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => {
+          throw new SyntaxError("Unexpected token < in JSON");
+        },
+      }),
+    );
+    const out = await fetchIceServers("tok");
+    expect(out).toEqual(STUN);
+  });
+
+  it("falls back to STUN when the fetch itself rejects (network error)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    const out = await fetchIceServers("tok");
+    expect(out).toEqual(STUN);
+  });
 });
