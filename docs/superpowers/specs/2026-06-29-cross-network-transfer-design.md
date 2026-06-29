@@ -146,9 +146,14 @@ no #t=  → existing LAN mode, unchanged
 
 ## Security
 
-- **Token = capability:** 32 random bytes, non-enumerable; carried in the URL
-  fragment so it never reaches server logs or the `Referer` header; short
-  expiry (1h); single-use per transfer.
+- **Token = capability:** 32 random bytes (256-bit, non-enumerable); carried in
+  the URL fragment so it never reaches server logs or the `Referer` header;
+  short expiry (1h). Validation in ②a is existence + non-expiry only, so the
+  link is a TTL-bounded bearer capability — it stays usable (by the holder, for
+  one logically-single transfer session) until it expires, rather than being
+  consumed on first use. Strict consume-on-completion is deferred to ②b, which
+  already rewrites this table for relayed-byte metering. The 2-peer cap + SAS
+  (below) are what bound exposure regardless of reuse.
 - **2-peer cap + SAS:** even if a third party intercepts the link and joins
   first, the sender aborts on SAS mismatch and no file content leaks.
 - **Login gate** only at token creation; DB outage → cross-network refused, LAN
