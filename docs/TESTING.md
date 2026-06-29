@@ -279,3 +279,23 @@ fail to connect — that fallback is ②b (TURN), out of scope here.
 7. **LAN regression:** open the app on two devices on the SAME network with NO
    `#t=` in the URL. Confirm they still discover each other and transfer
    (login-free), proving the LAN path is unaffected.
+
+## Cross-network TURN relay (②b-1)
+
+Prerequisites: a running coturn (see `docs/coturn.md`) and the Go server started
+with matching `-turn-secret` / `-turn-urls`.
+
+1. **STUN-only regression (no TURN configured):** start the server WITHOUT
+   `-turn-secret`. `GET /api/ice?room=<valid token>` returns STUN only; an
+   easy-NAT cross-network transfer still works (②a behavior).
+2. **Credentials served:** with TURN configured, sign in, mint a link, and in
+   the browser devtools confirm `GET /api/ice?room=<token>` returns a `turn:`
+   entry with a `username` (`<expiry>:<token>`) and a `credential`. The
+   login-free receiver opening the link gets the same TURN entry.
+3. **Forced-relay transfer:** to prove the coturn path end-to-end, temporarily
+   set `iceTransportPolicy: "relay"` in `RTCPeerConnection` (or test between two
+   genuinely symmetric-NAT networks). Complete a transfer; confirm SAS matches
+   and the per-file SHA-256 integrity check passes — proving relayed bytes are
+   still end-to-end encrypted.
+4. **Expiry:** an `/api/ice` credential older than the TTL is rejected by coturn
+   (the relay allocation fails); a fresh link/credential succeeds.
