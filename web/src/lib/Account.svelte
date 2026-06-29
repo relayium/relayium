@@ -69,7 +69,7 @@
 </div>
 
 <style>
-  .account { position: absolute; top: 16px; right: 110px; font-size: 13px; }
+  .account { position: relative; font-size: 13px; }
   .acct-btn {
     padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border);
     background: var(--social-bg); color: var(--text-h); cursor: pointer; font: inherit; font-size: 13px;
@@ -85,5 +85,4 @@
   .menu .sep { text-align: center; color: var(--text); font-size: 12px; }
   .menu .who { color: var(--text); }
   .menu .hint { color: var(--text); font-size: 13px; margin: 0; }
-  @media (max-width: 1024px) { .account { right: 96px; top: 10px; } }
 </style>

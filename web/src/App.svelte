@@ -363,21 +363,23 @@
 </script>
 
 <main>
-  <Account />
+  <div class="topbar">
+    <Account />
+    <select
+      class="lang"
+      aria-label={t.langLabel}
+      value={lang()}
+      onchange={(e) => setLang((e.currentTarget as HTMLSelectElement).value as Lang)}
+    >
+      {#each LANGS as l (l.code)}
+        <option value={l.code}>{l.label}</option>
+      {/each}
+    </select>
+  </div>
   <CrossNetwork {roomToken} />
   {#if linkDead}
     <p class="notice error">{t.crossnet.linkDead}</p>
   {/if}
-  <select
-    class="lang"
-    aria-label={t.langLabel}
-    value={lang()}
-    onchange={(e) => setLang((e.currentTarget as HTMLSelectElement).value as Lang)}
-  >
-    {#each LANGS as l (l.code)}
-      <option value={l.code}>{l.label}</option>
-    {/each}
-  </select>
 
   <Hero {connState} {unsupported} {selfName} {selfIP} />
 
@@ -490,10 +492,18 @@
     text-align: left;
   }
 
-  .lang {
+  .topbar {
     position: absolute;
     top: 16px;
     right: 16px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  @media (max-width: 1024px) { .topbar { top: 10px; right: 12px; } }
+
+  .lang {
     font: inherit;
     font-size: 13px;
     padding: 5px 28px 5px 10px;
@@ -504,7 +514,6 @@
     cursor: pointer;
   }
   .lang:hover { border-color: var(--accent-border); }
-  @media (max-width: 1024px) { .lang { top: 10px; right: 12px; } }
 
   h2 { font-size: 18px; margin: 0 0 12px; }
 
