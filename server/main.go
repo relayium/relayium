@@ -8,6 +8,7 @@ import (
 	"log"
 	"mime"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/coder/websocket"
@@ -21,6 +22,17 @@ func newID() string {
 	return hex.EncodeToString(b)
 }
 
+// splitURLs parses a comma-separated URL flag, trimming spaces and dropping empties.
+func splitURLs(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	static := flag.String("static", "../web/dist", "static files directory")
@@ -30,6 +42,9 @@ func main() {
 	googleSecret := flag.String("google-secret", "", "Google OAuth client secret")
 	smtpAddr := flag.String("smtp-addr", "", "SMTP host:port (empty = log magic links instead of emailing)")
 	smtpFrom := flag.String("smtp-from", "no-reply@relayium.com", "magic link From address")
+	turnSecret := flag.String("turn-secret", "", "coturn static-auth-secret (empty disables TURN)")
+	turnURLs := flag.String("turn-urls", "", "comma-separated TURN URLs (e.g. turn:host:3478,turns:host:5349)")
+	stunURLs := flag.String("stun-urls", "stun:stun.l.google.com:19302", "comma-separated STUN URLs")
 	flag.Parse()
 
 	// Not in Go's built-in MIME table; the PWA manifest should be served as JSON.
@@ -87,6 +102,10 @@ func main() {
 			GoogleClientID: *googleID,
 			GoogleSecret:   *googleSecret,
 			GoogleRedirect: *baseURL + "/api/auth/google/callback",
+			STUNURLs:       splitURLs(*stunURLs),
+			TURNURLs:       splitURLs(*turnURLs),
+			TURNSecret:     *turnSecret,
+			TURNCredTTL:    time.Hour,
 		})
 		validateRoom = acct.ValidateTransferToken
 		mux.Handle("/api/", acct.Routes())
