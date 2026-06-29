@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"flag"
@@ -39,19 +40,35 @@ func main() {
 
 	store, dbErr := account.OpenSQLite(*dbPath)
 
+	// validateRoom gates token-rooms. Nil (DB unavailable) => token-rooms are
+	// rejected, but LAN rooms (no ?room=) are unaffected.
+	var validateRoom func(context.Context, string) bool
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		var room string
+		var maxPeers int
+		if token := r.URL.Query().Get("room"); token != "" {
+			if validateRoom == nil || !validateRoom(r.Context(), token) {
+				http.Error(w, "invalid or expired transfer link", http.StatusForbidden)
+				return
+			}
+			room = "t:" + token
+			maxPeers = 2 // sender + receiver
+		} else {
+			room = signal.RoomKey(r)
+			maxPeers = 0 // LAN: unlimited
+		}
 		c, err := websocket.Accept(w, r, nil)
 		if err != nil {
 			return
 		}
 		ctx := r.Context()
-		room := signal.RoomKey(r)
-		handle(ctx, c, room)
+		handle(ctx, c, room, maxPeers)
 		_ = c.Close(websocket.StatusNormalClosure, "")
 	})
 
@@ -66,10 +83,12 @@ func main() {
 			BaseURL:        *baseURL,
 			SessionTTL:     720 * time.Hour, // 30 days
 			MagicTTL:       15 * time.Minute,
+			TransferTTL:    time.Hour,
 			GoogleClientID: *googleID,
 			GoogleSecret:   *googleSecret,
 			GoogleRedirect: *baseURL + "/api/auth/google/callback",
 		})
+		validateRoom = acct.ValidateTransferToken
 		mux.Handle("/api/", acct.Routes())
 	}
 
