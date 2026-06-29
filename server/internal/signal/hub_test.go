@@ -37,6 +37,31 @@ func TestJoinSendsWelcomeAndRoster(t *testing.T) {
 	}
 }
 
+func TestJoinLimitedStampsWelcomeWithClientIP(t *testing.T) {
+	h := NewHub()
+	a := &fakeConn{}
+	h.JoinLimited("t:room", "a", "Alice", a, 2, "198.51.100.9")
+	if got := a.sent[0]; got.Type != TypeWelcome || got.IP != "198.51.100.9" {
+		t.Fatalf("welcome should carry the client IP, got %+v", got)
+	}
+}
+
+func TestWelcomeIPNotInRoster(t *testing.T) {
+	h := NewHub()
+	a, b := &fakeConn{}, &fakeConn{}
+	h.JoinLimited("t:room", "a", "Alice", a, 0, "198.51.100.9")
+	h.JoinLimited("t:room", "b", "Bob", b, 0, "203.0.113.7")
+	// The roster must never leak any peer's IP to other peers.
+	for _, p := range b.last().Peers {
+		if p.ID == "" {
+			t.Fatalf("unexpected empty peer id")
+		}
+	}
+	if b.last().IP != "" {
+		t.Fatalf("roster envelope must not carry an IP, got %q", b.last().IP)
+	}
+}
+
 func TestRelayGoesOnlyToTarget(t *testing.T) {
 	h := NewHub()
 	a, b, c := &fakeConn{}, &fakeConn{}, &fakeConn{}
@@ -78,13 +103,13 @@ func TestRoomsAreIsolated(t *testing.T) {
 func TestJoinLimitedEnforcesCapacity(t *testing.T) {
 	h := NewHub()
 	a, b, c := &fakeConn{}, &fakeConn{}, &fakeConn{}
-	if !h.JoinLimited("t:room", "a", "A", a, 2) {
+	if !h.JoinLimited("t:room", "a", "A", a, 2, "") {
 		t.Fatalf("first join should be admitted")
 	}
-	if !h.JoinLimited("t:room", "b", "B", b, 2) {
+	if !h.JoinLimited("t:room", "b", "B", b, 2, "") {
 		t.Fatalf("second join should be admitted")
 	}
-	if h.JoinLimited("t:room", "c", "C", c, 2) {
+	if h.JoinLimited("t:room", "c", "C", c, 2, "") {
 		t.Fatalf("third join must be rejected at capacity 2")
 	}
 	// The rejected peer received no welcome.
@@ -100,7 +125,7 @@ func TestJoinLimitedEnforcesCapacity(t *testing.T) {
 func TestJoinUnlimitedAllowsMany(t *testing.T) {
 	h := NewHub()
 	for _, id := range []string{"a", "b", "c", "d"} {
-		if !h.JoinLimited("ip1", id, id, &fakeConn{}, 0) {
+		if !h.JoinLimited("ip1", id, id, &fakeConn{}, 0, "") {
 			t.Fatalf("max=0 must allow %s", id)
 		}
 	}

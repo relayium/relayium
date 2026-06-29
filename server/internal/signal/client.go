@@ -24,8 +24,8 @@ func (w *wsConn) Send(e Envelope) {
 }
 
 // ServeWS handles one websocket client for its whole lifetime.
-func ServeWS(h *Hub, idgen func() string) func(ctx context.Context, c *websocket.Conn, room string, maxPeers int) {
-	return func(ctx context.Context, c *websocket.Conn, room string, maxPeers int) {
+func ServeWS(h *Hub, idgen func() string) func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, clientIP string) {
+	return func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, clientIP string) {
 		id := idgen()
 		conn := &wsConn{ctx: ctx, c: c}
 		joined := false
@@ -46,7 +46,7 @@ func ServeWS(h *Hub, idgen func() string) func(ctx context.Context, c *websocket
 			switch e.Type {
 			case TypeJoin:
 				if !joined {
-					if h.JoinLimited(room, id, e.Name, conn, maxPeers) {
+					if h.JoinLimited(room, id, e.Name, conn, maxPeers, clientIP) {
 						joined = true
 					} else {
 						return // room full — close the connection

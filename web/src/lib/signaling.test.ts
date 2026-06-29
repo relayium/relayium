@@ -34,6 +34,26 @@ describe("SignalingClient", () => {
     expect(signalFrom).toBe("def");
   });
 
+  it("surfaces the server-observed public IP from the welcome", () => {
+    const sock = new FakeSocket();
+    const c = new SignalingClient("ws://x", "Alice", () => sock);
+    let selfIP = "";
+    c.onSelfId((_id, ip) => (selfIP = ip));
+    sock.onopen?.();
+    sock.emit({ type: "welcome", name: "abc123", ip: "198.51.100.9" });
+    expect(selfIP).toBe("198.51.100.9");
+  });
+
+  it("reports an empty IP when the welcome omits it", () => {
+    const sock = new FakeSocket();
+    const c = new SignalingClient("ws://x", "Alice", () => sock);
+    let selfIP = "unset";
+    c.onSelfId((_id, ip) => (selfIP = ip));
+    sock.onopen?.();
+    sock.emit({ type: "welcome", name: "abc123" });
+    expect(selfIP).toBe("");
+  });
+
   it("delivers a signal to all registered onSignal listeners", () => {
     const sock = new FakeSocket();
     const c = new SignalingClient("ws://x", "Alice", () => sock);

@@ -12,7 +12,7 @@ type WsFactory = (url: string) => WebSocketLike;
 
 export class SignalingClient {
   private sock: WebSocketLike;
-  private selfCb: ((id: string) => void) | null = null;
+  private selfCb: ((id: string, ip: string) => void) | null = null;
   private peersCb: ((p: Peer[]) => void) | null = null;
   private signalCbs: ((from: string, data: unknown) => void)[] = [];
   private closeCb: (() => void) | null = null;
@@ -28,7 +28,8 @@ export class SignalingClient {
     this.sock.onclose = () => this.closeCb?.();
   }
 
-  onSelfId(cb: (id: string) => void) { this.selfCb = cb; }
+  /** Fires on welcome with the self peer id and the server-observed public IP ("" if none). */
+  onSelfId(cb: (id: string, ip: string) => void) { this.selfCb = cb; }
   onPeers(cb: (p: Peer[]) => void) { this.peersCb = cb; }
   onClose(cb: () => void) { this.closeCb = cb; }
   /** Register a signal listener; returns an unsubscribe function. */
@@ -47,7 +48,7 @@ export class SignalingClient {
   private send(e: Envelope) { this.sock.send(JSON.stringify(e)); }
 
   private handle(e: Envelope) {
-    if (e.type === "welcome" && e.name) this.selfCb?.(e.name);
+    if (e.type === "welcome" && e.name) this.selfCb?.(e.name, e.ip ?? "");
     else if (e.type === "peers" && e.peers) this.peersCb?.(e.peers);
     else if (e.type === "signal" && e.from) { const from = e.from; this.signalCbs.forEach((cb) => cb(from, e.data)); }
   }
