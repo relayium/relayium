@@ -106,7 +106,11 @@ Top-to-bottom composition in `App.svelte`:
 - Footer links from the app point to the file matching the current UI language.
 
 ### B4. Document content (drafted here, engineer-honest, NOT lawyer-reviewed)
-Both documents carry a visible note: *draft, review before relying on it.*
+Each page shows a normal **"Last updated: 2026-06-29"** line and uses confident,
+final-sounding prose — **no "draft" wording is visible to visitors** (a published
+"draft" stamp would look unprofessional and weaken the trust/SEO value). The
+"engineer-drafted, not lawyer-reviewed, review before relying on it" caveat lives
+**only in this spec and in code comments**, for the maintainer — never on the page.
 
 **Privacy Policy** — grounded in the verified facts below:
 - LAN transfers collect nothing server-side; files stream peer-to-peer.
@@ -154,6 +158,7 @@ Both documents carry a visible note: *draft, review before relying on it.*
   still updates all copy including the new feature strip.
 
 ## Open items for the user (post-implementation)
-- Replace the "draft / not legal advice" note and review the legal copy before
-  production.
+- Review the legal copy (engineer-drafted, not lawyer-reviewed) before relying
+  on it in production. No public "draft" note exists to remove; just update the
+  "Last updated" date if you revise the text.
 - Governing law / jurisdiction can be added later if desired.
