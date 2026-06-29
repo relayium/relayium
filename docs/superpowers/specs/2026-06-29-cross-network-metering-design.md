@@ -37,7 +37,7 @@ coturn relay session ends (allocation closed)
     payload {rcvb, sentb, ...}   (username = "<expiryUnix>:<token>", the ②b-1 anchor)
   → server metering worker (goroutine) psubscribes the channel pattern
   → parse token from username → GetTransfer(token) → user_id
-  → RecordUsage(allocId, token, user_id, rcvb+sentb)   (idempotent insert)
+  → RecordUsage(allocId, token, user_id, rcvb+sentb)   (keep-max upsert)
 ```
 
 Why Redis: coturn's `--redis-statsdb` publishes structured per-allocation totals
@@ -70,8 +70,10 @@ CREATE TABLE usage_events (
 CREATE INDEX idx_usage_user ON usage_events(user_id);
 ```
 
-- `RecordUsage` uses **INSERT OR IGNORE on `alloc_id`** — a Redis redelivery or a
-  worker restart cannot double-count. **Idempotency is the correctness core.**
+- `RecordUsage` uses a **keep-max upsert on `alloc_id`**: coturn reports a
+  cumulative total (possibly periodically during a session); `RecordUsage` keeps
+  the largest `relayed_bytes` seen per `alloc_id`, which is redelivery-safe,
+  periodic-safe, and stale-report-safe. **Idempotency is the correctness core.**
 - `UserUsageTotal(userID)` = `SUM(relayed_bytes) WHERE user_id = ?`.
 - Append-only and independent of the `transfers` lifecycle, so billing history
   survives transfer-row cleanup. **Constraint:** the token→user mapping is read
@@ -90,7 +92,7 @@ each allocation's traffic is counted — reflecting true bandwidth cost.
 ### `account` additions
 
 - `account.UsageEvent{ AllocID, Token, UserID string; RelayedBytes, RecordedAt int64 }`.
-- `Store.RecordUsage(ctx, UsageEvent) error` — INSERT OR IGNORE on `alloc_id`.
+- `Store.RecordUsage(ctx, UsageEvent) error` — keep-max upsert on `alloc_id`.
 - `Store.UserUsageTotal(ctx, userID string) (int64, error)`.
 - `GET /api/usage` (session-gated via `RequireSession`) → `{"relayedBytes": <total>}`.
 
@@ -148,10 +150,10 @@ func Run(ctx context.Context, src StatsSource, sink Sink, log *log.Logger) error
 
 - **metering:** `Run` driven by a fake `StatsSource` + a fake/real `Sink`:
   verifies token extraction, user resolution, `rcvb+sentb` summing, unknown-token
-  skip, and **idempotency** (feeding the same `AllocID` twice adds the bytes once).
+  skip, and **keep-max** (feeding the same `AllocID` twice keeps the larger total).
   Redis channel-path → `allocId` and payload → bytes are pure-function unit tests,
   no real Redis.
-- **account:** `RecordUsage` INSERT-OR-IGNORE idempotency + `UserUsageTotal` sum
+- **account:** `RecordUsage` keep-max upsert + `UserUsageTotal` sum
   (`sqlite_test`); `GET /api/usage` session-gated + returns the total
   (`handlers_test`).
 - **Manual** (`docs/TESTING.md`): run Redis + coturn (`--redis-statsdb`), force a
