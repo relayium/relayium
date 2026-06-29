@@ -66,6 +66,8 @@ go build -o relayium .
 | `-google-secret` | `""` | Google OAuth client secret. |
 | `-smtp-addr` | `""` | SMTP `host:port`. **Empty ⇒ magic links are only printed to the server log, never emailed.** See [Step 5](#step-5--email-magic-links). |
 | `-smtp-from` | `no-reply@relayium.com` | From / envelope sender for magic-link mail. |
+| `-smtp-user` | `""` | SMTP username. Set with `-smtp-pass` for authenticated providers (Gmail/SES/…). Empty = unauthenticated relay. |
+| `-smtp-pass` | `""` | SMTP password (used with `-smtp-user`). |
 | `-turn-secret` | `""` | coturn `static-auth-secret`. Empty disables TURN (cross-network relay). |
 | `-turn-urls` | `""` | Comma-separated TURN URLs, e.g. `turn:relay.relayium.com:3478,turns:relay.relayium.com:5349`. |
 | `-stun-urls` | `stun:stun.l.google.com:19302` | Comma-separated STUN URLs. |
@@ -219,12 +221,22 @@ out (optionally to a smarthost that does the authenticating). Then:
 Example with Postfix using an authenticated smarthost (Gmail/SES/etc.) lives in the
 MTA config, not in Relayium — Relayium just hands the message to `127.0.0.1:25`.
 
-### Option B — authenticated SMTP provider directly (needs a small code change)
+### Option B — authenticated SMTP provider directly
 
-To point `-smtp-addr` straight at `smtp.gmail.com:587`, SES, SendGrid, Mailgun, etc.,
-the server must send SMTP AUTH credentials. That requires adding `-smtp-user` /
-`-smtp-pass` flags and setting `SMTPMailer.Auth = smtp.PlainAuth(...)`. Ask and this
-can be added (~10 lines in `main.go` + `mailer.go`).
+To use `smtp.gmail.com:587`, SES, SendGrid, Mailgun, etc., pass credentials with the
+`-smtp-user` / `-smtp-pass` flags:
+
+```
+-smtp-addr smtp.gmail.com:587 \
+-smtp-user apikey-or-username \
+-smtp-pass YOUR_SMTP_PASSWORD \
+-smtp-from "no-reply@relayium.com"
+```
+
+When `-smtp-user` is set the server attaches SMTP `PlainAuth` bound to the host from
+`-smtp-addr`. Go's `smtp.SendMail` performs STARTTLS before sending the credentials, so
+use a STARTTLS port (commonly `587`). Leave `-smtp-user` empty for an unauthenticated
+local relay (Option A).
 
 ### Verifying without email (any option)
 

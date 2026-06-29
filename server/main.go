@@ -43,6 +43,8 @@ func main() {
 	googleSecret := flag.String("google-secret", "", "Google OAuth client secret")
 	smtpAddr := flag.String("smtp-addr", "", "SMTP host:port (empty = log magic links instead of emailing)")
 	smtpFrom := flag.String("smtp-from", "no-reply@relayium.com", "magic link From address")
+	smtpUser := flag.String("smtp-user", "", "SMTP username (set with -smtp-pass for authenticated providers; empty = unauthenticated relay)")
+	smtpPass := flag.String("smtp-pass", "", "SMTP password (used with -smtp-user)")
 	turnSecret := flag.String("turn-secret", "", "coturn static-auth-secret (empty disables TURN)")
 	turnURLs := flag.String("turn-urls", "", "comma-separated TURN URLs (e.g. turn:host:3478,turns:host:5349)")
 	stunURLs := flag.String("stun-urls", "stun:stun.l.google.com:19302", "comma-separated STUN URLs")
@@ -94,7 +96,7 @@ func main() {
 	} else {
 		var mailer account.Mailer = &account.LogMailer{Log: log.Default()}
 		if *smtpAddr != "" {
-			mailer = &account.SMTPMailer{Addr: *smtpAddr, From: *smtpFrom}
+			mailer = account.NewSMTPMailer(*smtpAddr, *smtpFrom, *smtpUser, *smtpPass)
 		}
 		acct := account.NewService(store, mailer, account.Config{
 			BaseURL:        *baseURL,
