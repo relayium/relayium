@@ -71,6 +71,25 @@ func TestMagicRequestAlwaysOKAndLoginFlow(t *testing.T) {
 	}
 }
 
+func TestCookieSecureDerivedFromBaseURL(t *testing.T) {
+	cases := []struct {
+		baseURL string
+		want    bool
+	}{
+		{"https://relayium.app", true},
+		{"https://example.test:8443", true},
+		{"http://localhost:8080", false},
+		{"http://127.0.0.1:8080", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		svc := &Service{cfg: Config{BaseURL: c.baseURL}}
+		if got := svc.cookieSecure(); got != c.want {
+			t.Errorf("cookieSecure(%q) = %v, want %v", c.baseURL, got, c.want)
+		}
+	}
+}
+
 // placeholder to ensure context import is used if the file is trimmed during edits
 var _ = context.Background
 

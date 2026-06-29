@@ -3,10 +3,18 @@ package account
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 )
 
 const sessionCookie = "relayium_session"
+
+// cookieSecure reports whether auth cookies should carry the Secure attribute.
+// Derived from the base URL scheme: production (https) gets Secure cookies,
+// while plain http://localhost development keeps real-browser login working.
+func (s *Service) cookieSecure() bool {
+	return strings.HasPrefix(s.cfg.BaseURL, "https://")
+}
 
 func (s *Service) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
@@ -84,7 +92,7 @@ func (s *Service) setSessionCookie(w http.ResponseWriter, sess Session) {
 		Path:     "/",
 		Expires:  time.Unix(sess.ExpiresAt, 0),
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   s.cookieSecure(),
 		SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -96,7 +104,7 @@ func (s *Service) clearSessionCookie(w http.ResponseWriter) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   s.cookieSecure(),
 		SameSite: http.SameSiteLaxMode,
 	})
 }
