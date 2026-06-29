@@ -30,6 +30,7 @@ func (s *Service) Routes() *http.ServeMux {
 	mux.HandleFunc("DELETE /api/devices/{id}", s.RequireSession(s.handleDeleteDevice))
 	mux.HandleFunc("POST /api/transfers", s.RequireSession(s.handleCreateTransfer))
 	mux.HandleFunc("GET /api/ice", s.handleICE)
+	mux.HandleFunc("GET /api/usage", s.RequireSession(s.handleUsage))
 	return mux
 }
 
@@ -177,6 +178,15 @@ func (s *Service) handleCreateTransfer(w http.ResponseWriter, r *http.Request, u
 		"token":     t.Token,
 		"expiresAt": t.ExpiresAt,
 	})
+}
+
+func (s *Service) handleUsage(w http.ResponseWriter, r *http.Request, u User) {
+	total, err := s.store.UserUsageTotal(r.Context(), u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"relayedBytes": total})
 }
 
 func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {
