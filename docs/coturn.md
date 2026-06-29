@@ -21,6 +21,8 @@ min-port=49152
 max-port=65535
 fingerprint
 no-multicast-peers
+# Publish per-allocation relay accounting to Redis for metering (②b-2):
+redis-statsdb="ip=127.0.0.1 dbname=0 port=6379"
 ```
 
 ## Run the Go server pointing at it
@@ -34,6 +36,15 @@ relayium \
 
 If `-turn-secret` is empty, TURN is disabled and the app uses STUN only
 (cross-network still works for easy NATs).
+
+## Relay-byte metering (②b-2)
+
+With `redis-statsdb` set, coturn publishes per-allocation `total_traffic`
+(rcvb/sentb) to Redis on the channel
+`turn/realm/<realm>/user/<username>/allocation/<id>/total_traffic`. Run the Go
+server with `-redis-addr <host:port>` (the same Redis) to ingest those bytes and
+attribute them to the transfer's owning user. If `-redis-addr` is empty, metering
+is off and transfers/TURN are unaffected.
 
 ## Firewall
 
