@@ -53,4 +53,13 @@ describe("SignalingClient", () => {
     const last = JSON.parse(sock.sent[sock.sent.length - 1]);
     expect(last).toMatchObject({ type: "signal", to: "def", data: { ice: "candidate" } });
   });
+
+  it("invokes onClose when the socket closes", () => {
+    const sock = new FakeSocket();
+    const c = new SignalingClient("ws://x", "Alice", () => sock);
+    let closed = false;
+    c.onClose(() => (closed = true));
+    sock.onclose?.();
+    expect(closed).toBe(true);
+  });
 });
