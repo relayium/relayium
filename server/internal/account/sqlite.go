@@ -54,6 +54,14 @@ CREATE TABLE IF NOT EXISTS transfers (
   expires_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_transfers_user ON transfers(user_id);
+CREATE TABLE IF NOT EXISTS usage_events (
+  alloc_id      TEXT PRIMARY KEY,
+  token         TEXT NOT NULL,
+  user_id       TEXT NOT NULL REFERENCES users(id),
+  relayed_bytes INTEGER NOT NULL,
+  recorded_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_usage_user ON usage_events(user_id);
 `
 
 func OpenSQLite(dsn string) (*SQLiteStore, error) {
@@ -254,4 +262,23 @@ func (s *SQLiteStore) GetTransfer(ctx context.Context, token string) (Transfer, 
 		return Transfer{}, ErrNotFound
 	}
 	return t, err
+}
+
+func (s *SQLiteStore) RecordUsage(ctx context.Context, e UsageEvent) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO usage_events (alloc_id, token, user_id, relayed_bytes, recorded_at)
+		 VALUES (?, ?, ?, ?, ?)`,
+		e.AllocID, e.Token, e.UserID, e.RelayedBytes, e.RecordedAt)
+	return err
+}
+
+func (s *SQLiteStore) UserUsageTotal(ctx context.Context, userID string) (int64, error) {
+	var total sql.NullInt64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT SUM(relayed_bytes) FROM usage_events WHERE user_id = ?`, userID,
+	).Scan(&total)
+	if err != nil {
+		return 0, err
+	}
+	return total.Int64, nil // SUM over no rows is NULL → 0
 }

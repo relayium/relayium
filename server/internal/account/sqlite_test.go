@@ -179,3 +179,45 @@ func TestGetTransferMissingReturnsErrNotFound(t *testing.T) {
 		t.Fatalf("want ErrNotFound, got %v", err)
 	}
 }
+
+func TestRecordUsageIsIdempotent(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u, err := s.UpsertUserByEmail(ctx, "o@example.com", "O")
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	first := UsageEvent{AllocID: "alloc1", Token: "tok", UserID: u.ID, RelayedBytes: 100, RecordedAt: 1000}
+	if err := s.RecordUsage(ctx, first); err != nil {
+		t.Fatalf("record 1: %v", err)
+	}
+	// Same alloc_id, different bytes — must be ignored, not overwrite or add.
+	dup := UsageEvent{AllocID: "alloc1", Token: "tok", UserID: u.ID, RelayedBytes: 999, RecordedAt: 2000}
+	if err := s.RecordUsage(ctx, dup); err != nil {
+		t.Fatalf("record dup: %v", err)
+	}
+	total, err := s.UserUsageTotal(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("total: %v", err)
+	}
+	if total != 100 {
+		t.Fatalf("idempotent total = %d, want 100", total)
+	}
+}
+
+func TestUserUsageTotalSumsAndDefaultsZero(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u, _ := s.UpsertUserByEmail(ctx, "o@example.com", "O")
+	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a", Token: "t", UserID: u.ID, RelayedBytes: 100, RecordedAt: 1})
+	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "b", Token: "t", UserID: u.ID, RelayedBytes: 250, RecordedAt: 2})
+	total, err := s.UserUsageTotal(ctx, u.ID)
+	if err != nil || total != 350 {
+		t.Fatalf("sum total = %d (err %v), want 350", total, err)
+	}
+	// Unknown user → 0, no error.
+	zero, err := s.UserUsageTotal(ctx, "nobody")
+	if err != nil || zero != 0 {
+		t.Fatalf("unknown user total = %d (err %v), want 0", zero, err)
+	}
+}

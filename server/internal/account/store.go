@@ -64,6 +64,17 @@ type Transfer struct {
 	ExpiresAt int64
 }
 
+// UsageEvent is one coturn allocation's relay accounting, attributed to the
+// user who owns the transfer token. Recorded only for billing/metering; the
+// server never inspects relayed content.
+type UsageEvent struct {
+	AllocID      string
+	Token        string
+	UserID       string
+	RelayedBytes int64
+	RecordedAt   int64
+}
+
 // Store is the only abstraction that touches persistent storage. Implemented by
 // SQLiteStore today; a Postgres impl could replace it without changing callers.
 type Store interface {
@@ -87,4 +98,7 @@ type Store interface {
 	// transfers (cross-network rendezvous)
 	CreateTransfer(ctx context.Context, t Transfer) error
 	GetTransfer(ctx context.Context, token string) (Transfer, error)
+	// usage (cross-network relay metering)
+	RecordUsage(ctx context.Context, e UsageEvent) error
+	UserUsageTotal(ctx context.Context, userID string) (int64, error)
 }
