@@ -299,3 +299,22 @@ with matching `-turn-secret` / `-turn-urls`.
    still end-to-end encrypted.
 4. **Expiry:** an `/api/ice` credential older than the TTL is rejected by coturn
    (the relay allocation fails); a fresh link/credential succeeds.
+
+## Cross-network relay-byte metering (②b-2)
+
+Prerequisites: Redis running; coturn with `redis-statsdb=...` (see `docs/coturn.md`);
+the Go server started with `-redis-addr <host:port>` and matching TURN flags.
+
+1. **Metering off (regression):** start the server WITHOUT `-redis-addr`. A
+   relayed transfer still works; `/api/usage` for a logged-in user stays at 0
+   (no ingestion). The server logs no metering worker.
+2. **Ingestion:** with Redis + coturn + `-redis-addr` set, sign in, mint a link,
+   and force a relayed transfer (`iceTransportPolicy: "relay"` or symmetric NATs).
+   After the transfer completes, `GET /api/usage` returns a non-zero
+   `relayedBytes` for the sender, and the value is consistent with coturn's
+   reported `rcvb+sentb` for that session (check `redis-cli psubscribe
+   'turn/realm/*/user/*/allocation/*/total_traffic'` while transferring).
+3. **Idempotency:** restarting the Go server (re-subscribing) does not change an
+   already-recorded session's contribution to `/api/usage` (alloc_id dedup).
+4. **Unknown token:** a relay session whose credential token no longer maps to a
+   transfer row is logged and skipped (no `/api/usage` change, no crash).
