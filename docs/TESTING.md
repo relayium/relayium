@@ -256,3 +256,26 @@ These are explicitly out of scope for the first milestone and are **not** defect
 | Filename E2E | File names travel in the (plaintext) batch manifest over the DataChannel, which is DTLS-encrypted peer-to-peer — the signaling server never sees them — but they are not under the app-layer AEAD. Encrypting the manifest is a later refinement. |
 | No cross-origin CORS | The Go server does not set CORS headers. API calls from a different origin will fail. |
 | No HTTPS / WSS | M0 uses plain HTTP and WS. For production use, place behind a TLS-terminating reverse proxy (nginx, Caddy). WebRTC will still use DTLS-SRTP internally regardless. |
+
+## Cross-network transfer (②a: token-room + STUN P2P)
+
+Prerequisites: server running with a working DB and a logged-in sender. For a
+real cross-network test, the two machines must be on different networks (e.g.
+laptop on Wi-Fi, phone on cellular). STUN-only means symmetric-NAT pairs may
+fail to connect — that fallback is ②b (TURN), out of scope here.
+
+1. **Mint a link (sender, logged in):** open the app, sign in, click
+   "Send to someone on another network". A share link (and QR) appears; the page
+   reloads into token-room mode.
+2. **Open the link (receiver, different network):** open the link (or scan the
+   QR). The receiver connects to the same room.
+3. **Verify SAS:** both sides see the 6-digit code; confirm they match.
+4. **Transfer:** sender picks files and sends; receiver accepts and downloads.
+   Confirm the per-file SHA-256 integrity check passes.
+5. **Dead-link check:** open `https://<host>/#t=deadbeef` (a bogus token). Expect
+   the "link invalid or in use" banner and no connection.
+6. **Capacity check:** with a sender + receiver already in a room, open the same
+   link in a third tab. Expect it to be refused (room full).
+7. **LAN regression:** open the app on two devices on the SAME network with NO
+   `#t=` in the URL. Confirm they still discover each other and transfer
+   (login-free), proving the LAN path is unaffected.
