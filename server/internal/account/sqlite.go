@@ -47,6 +47,13 @@ CREATE TABLE IF NOT EXISTS devices (
   created_at   INTEGER NOT NULL,
   last_seen_at INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS transfers (
+  token      TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id),
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_transfers_user ON transfers(user_id);
 `
 
 func OpenSQLite(dsn string) (*SQLiteStore, error) {
@@ -229,4 +236,22 @@ func (s *SQLiteStore) DeleteDevice(ctx context.Context, id, userID string) error
 	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM devices WHERE id = ? AND user_id = ?`, id, userID)
 	return err
+}
+
+func (s *SQLiteStore) CreateTransfer(ctx context.Context, t Transfer) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO transfers (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`,
+		t.Token, t.UserID, t.CreatedAt, t.ExpiresAt)
+	return err
+}
+
+func (s *SQLiteStore) GetTransfer(ctx context.Context, token string) (Transfer, error) {
+	var t Transfer
+	err := s.db.QueryRowContext(ctx,
+		`SELECT token, user_id, created_at, expires_at FROM transfers WHERE token = ?`, token,
+	).Scan(&t.Token, &t.UserID, &t.CreatedAt, &t.ExpiresAt)
+	if err == sql.ErrNoRows {
+		return Transfer{}, ErrNotFound
+	}
+	return t, err
 }

@@ -53,6 +53,17 @@ type Device struct {
 	LastSeenAt int64
 }
 
+// Transfer is a one-time cross-network rendezvous room token bound to its
+// originating (logged-in) user. Possession of the token is the room capability;
+// the server stores it only to gate creation on login and (later) to anchor
+// relayed-byte metering. It never holds file content or keys.
+type Transfer struct {
+	Token     string
+	UserID    string
+	CreatedAt int64
+	ExpiresAt int64
+}
+
 // Store is the only abstraction that touches persistent storage. Implemented by
 // SQLiteStore today; a Postgres impl could replace it without changing callers.
 type Store interface {
@@ -73,4 +84,7 @@ type Store interface {
 	ListDevices(ctx context.Context, userID string) ([]Device, error)
 	RenameDevice(ctx context.Context, id, userID, name string) error
 	DeleteDevice(ctx context.Context, id, userID string) error
+	// transfers (cross-network rendezvous)
+	CreateTransfer(ctx context.Context, t Transfer) error
+	GetTransfer(ctx context.Context, token string) (Transfer, error)
 }
