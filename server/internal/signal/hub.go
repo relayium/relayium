@@ -23,15 +23,26 @@ func NewHub() *Hub {
 }
 
 func (h *Hub) Join(room, id, name string, c Conn) {
+	h.JoinLimited(room, id, name, c, 0)
+}
+
+// JoinLimited admits a peer unless the room already holds max peers (max <= 0
+// means unlimited). Returns false without joining when the room is full.
+func (h *Hub) JoinLimited(room, id, name string, c Conn, max int) bool {
 	h.mu.Lock()
 	if h.rooms[room] == nil {
 		h.rooms[room] = make(map[string]*peer)
+	}
+	if max > 0 && len(h.rooms[room]) >= max {
+		h.mu.Unlock()
+		return false
 	}
 	h.rooms[room][id] = &peer{id: id, name: name, conn: c}
 	h.mu.Unlock()
 
 	c.Send(Envelope{Type: TypeWelcome, Name: id})
 	h.broadcastRoster(room)
+	return true
 }
 
 func (h *Hub) Leave(room, id string) {
