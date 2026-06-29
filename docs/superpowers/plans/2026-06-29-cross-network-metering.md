@@ -4,7 +4,7 @@
 
 **Goal:** Ingest coturn's per-allocation relay accounting from Redis into a durable, idempotent `usage_events` table keyed to the transfer token → its owning user, and surface a user's cumulative relayed bytes at `GET /api/usage`.
 
-**Architecture:** A new `internal/metering` package isolates the Redis dependency: a `StatsSource` (Redis `PSubscribe` impl + a test fake) yields `UsageEvent`s, and a `Worker` parses the token from the coturn credential username (`"<expiry>:<token>"`), resolves the user via `account.Store.GetTransfer`, and records usage (INSERT OR IGNORE on the coturn allocation id, so redeliveries don't double-count). The `account` package gains the `usage_events` storage and a session-gated read endpoint.
+**Architecture:** A new `internal/metering` package isolates the Redis dependency: a `StatsSource` (Redis `PSubscribe` impl + a test fake) yields `UsageEvent`s, and a `Worker` parses the token from the coturn credential username (`"<expiry>:<token>"`), resolves the user via `account.Store.GetTransfer`, and records usage (keep-max upsert on the coturn allocation id — correct for both one-shot and periodic cumulative `total_traffic` reports). The `account` package gains the `usage_events` storage and a session-gated read endpoint.
 
 **Tech Stack:** Go 1.26 (`github.com/redis/go-redis/v9` — new dep, `database/sql`, `net/http`), self-hosted coturn with `--redis-statsdb`.
 
@@ -13,7 +13,7 @@
 - Module path: `github.com/relayium/relayium`; Go directive `go 1.26.3`.
 - SQLite only via the `account.Store` interface; a Postgres swap touches only `sqlite.go`. Only `account.ErrNotFound` crosses the Store boundary (never `sql.ErrNoRows`).
 - The `internal/metering` package is the ONLY place that imports Redis. The `account` package must NOT import Redis.
-- Idempotency is correctness-critical: `RecordUsage` is `INSERT OR IGNORE` on `alloc_id`, so a Redis redelivery or worker restart never double-counts.
+- Idempotency is correctness-critical: `RecordUsage` is a keep-max upsert on `alloc_id` — coturn may publish a cumulative `total_traffic` periodically; keeping the largest value per `alloc_id` is correct for one-shot, periodic, and redelivered reports.
 - Token extraction from a coturn username is the substring after the FIRST `:` (`strings.SplitN(username, ":", 2)`); a username without a `:` is malformed → skip.
 - Relayed bytes counted = `rcvb + sentb` (both directions; reflects true relay bandwidth).
 - The metering worker is OPTIONAL: it starts only when `-redis-addr` is non-empty AND the account DB is available. Its absence never affects signaling, TURN, or transfers.
@@ -36,7 +36,7 @@
 **Interfaces:**
 - Produces:
   - `account.UsageEvent{ AllocID, Token, UserID string; RelayedBytes, RecordedAt int64 }`.
-  - `Store.RecordUsage(ctx context.Context, e UsageEvent) error` — INSERT OR IGNORE on `alloc_id`.
+  - `Store.RecordUsage(ctx context.Context, e UsageEvent) error` — keep-max upsert on `alloc_id`.
   - `Store.UserUsageTotal(ctx context.Context, userID string) (int64, error)` — SUM, 0 when none.
 
 - [ ] **Step 1: Write the failing tests**

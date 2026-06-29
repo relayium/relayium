@@ -180,28 +180,32 @@ func TestGetTransferMissingReturnsErrNotFound(t *testing.T) {
 	}
 }
 
-func TestRecordUsageIsIdempotent(t *testing.T) {
+func TestRecordUsageKeepsMaxPerAlloc(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	u, err := s.UpsertUserByEmail(ctx, "o@example.com", "O")
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	first := UsageEvent{AllocID: "alloc1", Token: "tok", UserID: u.ID, RelayedBytes: 100, RecordedAt: 1000}
-	if err := s.RecordUsage(ctx, first); err != nil {
-		t.Fatalf("record 1: %v", err)
+	rec := func(b int64) {
+		if err := s.RecordUsage(ctx, UsageEvent{AllocID: "a1", Token: "tok", UserID: u.ID, RelayedBytes: b, RecordedAt: 1}); err != nil {
+			t.Fatalf("record %d: %v", b, err)
+		}
 	}
-	// Same alloc_id, different bytes — must be ignored, not overwrite or add.
-	dup := UsageEvent{AllocID: "alloc1", Token: "tok", UserID: u.ID, RelayedBytes: 999, RecordedAt: 2000}
-	if err := s.RecordUsage(ctx, dup); err != nil {
-		t.Fatalf("record dup: %v", err)
+	total := func() int64 { v, _ := s.UserUsageTotal(ctx, u.ID); return v }
+
+	rec(100) // first cumulative report
+	rec(100) // redelivery of same total → no double-count
+	if total() != 100 {
+		t.Fatalf("redelivery total = %d, want 100", total())
 	}
-	total, err := s.UserUsageTotal(ctx, u.ID)
-	if err != nil {
-		t.Fatalf("total: %v", err)
+	rec(250) // later periodic cumulative report (grew) → keep the larger
+	if total() != 250 {
+		t.Fatalf("growth total = %d, want 250", total())
 	}
-	if total != 100 {
-		t.Fatalf("idempotent total = %d, want 100", total)
+	rec(200) // stale/out-of-order smaller report → still keep the max
+	if total() != 250 {
+		t.Fatalf("stale total = %d, want 250", total())
 	}
 }
 

@@ -19,7 +19,9 @@ type UsageEvent struct {
 	RelayedBytes int64  // rcvb + sentb
 }
 
-// StatsSource yields one UsageEvent per closed coturn allocation.
+// StatsSource yields one UsageEvent per coturn total_traffic report (coturn may
+// report a cumulative total more than once per allocation; the store keeps the
+// max per alloc_id).
 type StatsSource interface {
 	Events(ctx context.Context) (<-chan UsageEvent, error)
 }

@@ -266,8 +266,11 @@ func (s *SQLiteStore) GetTransfer(ctx context.Context, token string) (Transfer, 
 
 func (s *SQLiteStore) RecordUsage(ctx context.Context, e UsageEvent) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT OR IGNORE INTO usage_events (alloc_id, token, user_id, relayed_bytes, recorded_at)
-		 VALUES (?, ?, ?, ?, ?)`,
+		`INSERT INTO usage_events (alloc_id, token, user_id, relayed_bytes, recorded_at)
+		 VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(alloc_id) DO UPDATE SET
+		   relayed_bytes = MAX(relayed_bytes, excluded.relayed_bytes),
+		   recorded_at = excluded.recorded_at`,
 		e.AllocID, e.Token, e.UserID, e.RelayedBytes, e.RecordedAt)
 	return err
 }

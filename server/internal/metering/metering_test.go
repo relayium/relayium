@@ -22,7 +22,7 @@ func (f *fakeSource) Events(ctx context.Context) (<-chan UsageEvent, error) {
 
 type fakeSink struct {
 	transfers map[string]account.Transfer   // token → transfer
-	recorded  map[string]account.UsageEvent // alloc_id → event (mimics INSERT OR IGNORE)
+	recorded  map[string]account.UsageEvent // alloc_id → event (mimics keep-max upsert)
 }
 
 func (f *fakeSink) GetTransfer(ctx context.Context, token string) (account.Transfer, error) {
@@ -34,8 +34,11 @@ func (f *fakeSink) GetTransfer(ctx context.Context, token string) (account.Trans
 }
 
 func (f *fakeSink) RecordUsage(ctx context.Context, e account.UsageEvent) error {
-	if _, exists := f.recorded[e.AllocID]; exists {
-		return nil // idempotent, like the real store
+	if cur, ok := f.recorded[e.AllocID]; ok {
+		if e.RelayedBytes > cur.RelayedBytes {
+			f.recorded[e.AllocID] = e
+		}
+		return nil
 	}
 	f.recorded[e.AllocID] = e
 	return nil
@@ -92,7 +95,7 @@ func TestWorkerSkipsMalformedUsername(t *testing.T) {
 	}
 }
 
-func TestWorkerIdempotentOnAllocID(t *testing.T) {
+func TestWorkerKeepsMaxPerAlloc(t *testing.T) {
 	sink := &fakeSink{
 		transfers: map[string]account.Transfer{"tok": {Token: "tok", UserID: "u1"}},
 		recorded:  map[string]account.UsageEvent{},
@@ -101,7 +104,7 @@ func TestWorkerIdempotentOnAllocID(t *testing.T) {
 		{AllocID: "a1", Username: "1000:tok", RelayedBytes: 100},
 		{AllocID: "a1", Username: "1000:tok", RelayedBytes: 999},
 	})
-	if got := sink.total("u1"); got != 100 {
-		t.Fatalf("idempotent total = %d, want 100", got)
+	if got := sink.total("u1"); got != 999 {
+		t.Fatalf("keep-max total = %d, want 999", got)
 	}
 }
