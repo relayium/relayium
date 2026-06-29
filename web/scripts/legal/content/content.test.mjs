@@ -30,6 +30,22 @@ describe("legal content", () => {
       expect(new Set(counts).size).toBe(1);
     });
 
+    it(`${name} translations are not identical to English`, () => {
+      for (const lang of ["ja", "ko", "de", "fr"]) {
+        expect(doc.langs[lang].title, `${name}.${lang}.title`).not.toBe(doc.langs.en.title);
+        expect(doc.langs[lang].sections[0].heading).not.toBe(doc.langs.en.sections[0].heading);
+      }
+    });
+
+    it(`${name} keeps bullets count per section across languages`, () => {
+      for (let i = 0; i < doc.langs.en.sections.length; i++) {
+        const en = (doc.langs.en.sections[i].bullets || []).length;
+        for (const lang of LANGS) {
+          expect((doc.langs[lang].sections[i].bullets || []).length, `${name}.${lang}.s${i}`).toBe(en);
+        }
+      }
+    });
+
     it(`${name} contains no 'draft' wording`, () => {
       const blob = JSON.stringify(doc).toLowerCase();
       expect(blob).not.toContain("draft");
