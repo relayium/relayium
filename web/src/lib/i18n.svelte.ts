@@ -76,6 +76,12 @@ export interface Messages {
     connecting: string;
     linkDead: string;
   };
+  features: { items: { title: string; desc: string }[] };
+  legal: { privacy: string; terms: string };
+}
+
+export function legalUrl(slug: "privacy" | "terms", l: Lang): string {
+  return l === "en" ? `/${slug}` : `/${l}/${slug}`;
 }
 
 export type StatusKey = keyof Messages["status"];
@@ -143,6 +149,15 @@ const zh: Messages = {
     connecting: "正在通过跨网络链接连接…",
     linkDead: "链接已失效或正在被使用，请向发送方索要新链接",
   },
+  features: {
+    items: [
+      { title: "端到端加密", desc: "X25519 + AES-256-GCM,密钥只在两台设备间,服务器无法解密。" },
+      { title: "文件不经服务器", desc: "文件通过 WebRTC 在设备间直接流动,绝不上传到任何服务器。" },
+      { title: "防中间人", desc: "两边屏幕显示同一段校验码(SAS),核对一致即可排除中间人。" },
+      { title: "跨平台", desc: "Windows、macOS、Linux、Android、iOS,任意现代浏览器都能用。" },
+    ],
+  },
+  legal: { privacy: "隐私政策", terms: "服务条款" },
 };
 
 const en: Messages = {
@@ -208,6 +223,15 @@ const en: Messages = {
     connecting: "Connecting over the cross-network link…",
     linkDead: "This link is invalid or already in use — ask the sender for a new one",
   },
+  features: {
+    items: [
+      { title: "End-to-end encrypted", desc: "X25519 + AES-256-GCM; keys stay on the two devices and the server can't decrypt." },
+      { title: "Files never touch the server", desc: "Bytes flow device-to-device over WebRTC and are never uploaded anywhere." },
+      { title: "Man-in-the-middle check", desc: "Both screens show the same code (SAS); match it to rule out a MITM." },
+      { title: "Cross-platform", desc: "Windows, macOS, Linux, Android, iOS — any modern browser." },
+    ],
+  },
+  legal: { privacy: "Privacy Policy", terms: "Terms of Service" },
 };
 
 const ja: Messages = {
@@ -273,6 +297,15 @@ const ja: Messages = {
     connecting: "ネットワーク間リンクで接続中…",
     linkDead: "リンクが無効か使用中です。送信者に新しいリンクを依頼してください",
   },
+  features: {
+    items: [
+      { title: "エンドツーエンド暗号化", desc: "X25519 + AES-256-GCM。鍵は2台の端末だけに留まり、サーバーは復号できません。" },
+      { title: "ファイルはサーバーを経由しない", desc: "データはWebRTCで端末間を直接流れ、どこにもアップロードされません。" },
+      { title: "中間者攻撃の検知", desc: "両方の画面に同じコード(SAS)が表示されます。一致を確認して中間者を排除。" },
+      { title: "クロスプラットフォーム", desc: "Windows、macOS、Linux、Android、iOS — 最新のブラウザならどれでも。" },
+    ],
+  },
+  legal: { privacy: "プライバシーポリシー", terms: "利用規約" },
 };
 
 const ko: Messages = {
@@ -338,6 +371,15 @@ const ko: Messages = {
     connecting: "네트워크 간 링크로 연결 중…",
     linkDead: "링크가 유효하지 않거나 사용 중입니다. 보낸 사람에게 새 링크를 요청하세요",
   },
+  features: {
+    items: [
+      { title: "종단 간 암호화", desc: "X25519 + AES-256-GCM. 키는 두 기기에만 있고 서버는 복호화할 수 없습니다." },
+      { title: "파일은 서버를 거치지 않음", desc: "데이터는 WebRTC로 기기 간 직접 전송되며 어디에도 업로드되지 않습니다." },
+      { title: "중간자 공격 확인", desc: "양쪽 화면에 같은 코드(SAS)가 표시됩니다. 일치를 확인해 중간자를 배제하세요." },
+      { title: "크로스 플랫폼", desc: "Windows, macOS, Linux, Android, iOS — 최신 브라우저면 모두 가능." },
+    ],
+  },
+  legal: { privacy: "개인정보 처리방침", terms: "이용약관" },
 };
 
 const de: Messages = {
@@ -403,6 +445,15 @@ const de: Messages = {
     connecting: "Verbindung über den netzwerkübergreifenden Link…",
     linkDead: "Dieser Link ist ungültig oder bereits in Gebrauch — bitte den Absender um einen neuen",
   },
+  features: {
+    items: [
+      { title: "Ende-zu-Ende-verschlüsselt", desc: "X25519 + AES-256-GCM; Schlüssel bleiben auf den beiden Geräten, der Server kann nicht entschlüsseln." },
+      { title: "Dateien berühren den Server nie", desc: "Bytes fließen per WebRTC direkt zwischen den Geräten und werden nirgends hochgeladen." },
+      { title: "Schutz vor Man-in-the-Middle", desc: "Beide Bildschirme zeigen denselben Code (SAS); stimmt er überein, ist ein MITM ausgeschlossen." },
+      { title: "Plattformübergreifend", desc: "Windows, macOS, Linux, Android, iOS — jeder moderne Browser." },
+    ],
+  },
+  legal: { privacy: "Datenschutzerklärung", terms: "Nutzungsbedingungen" },
 };
 
 const fr: Messages = {
@@ -468,6 +519,15 @@ const fr: Messages = {
     connecting: "Connexion via le lien inter-réseaux…",
     linkDead: "Ce lien est invalide ou déjà utilisé — demandez-en un nouveau à l'expéditeur",
   },
+  features: {
+    items: [
+      { title: "Chiffrement de bout en bout", desc: "X25519 + AES-256-GCM ; les clés restent sur les deux appareils, le serveur ne peut pas déchiffrer." },
+      { title: "Les fichiers ne touchent jamais le serveur", desc: "Les octets circulent d'appareil à appareil via WebRTC et ne sont jamais téléversés." },
+      { title: "Détection de l'homme du milieu", desc: "Les deux écrans affichent le même code (SAS) ; vérifiez-le pour écarter un MITM." },
+      { title: "Multiplateforme", desc: "Windows, macOS, Linux, Android, iOS — tout navigateur moderne." },
+    ],
+  },
+  legal: { privacy: "Politique de confidentialité", terms: "Conditions d'utilisation" },
 };
 
 export const messages: Record<Lang, Messages> = { zh, en, ja, ko, de, fr };
