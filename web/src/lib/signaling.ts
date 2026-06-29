@@ -15,6 +15,7 @@ export class SignalingClient {
   private selfCb: ((id: string) => void) | null = null;
   private peersCb: ((p: Peer[]) => void) | null = null;
   private signalCbs: ((from: string, data: unknown) => void)[] = [];
+  private closeCb: (() => void) | null = null;
 
   constructor(
     url: string,
@@ -24,10 +25,12 @@ export class SignalingClient {
     this.sock = wsFactory(url);
     this.sock.onopen = () => this.send({ type: "join", name: this.name });
     this.sock.onmessage = (ev) => this.handle(JSON.parse(ev.data) as Envelope);
+    this.sock.onclose = () => this.closeCb?.();
   }
 
   onSelfId(cb: (id: string) => void) { this.selfCb = cb; }
   onPeers(cb: (p: Peer[]) => void) { this.peersCb = cb; }
+  onClose(cb: () => void) { this.closeCb = cb; }
   /** Register a signal listener; returns an unsubscribe function. */
   onSignal(cb: (from: string, data: unknown) => void): () => void {
     this.signalCbs.push(cb);

@@ -8,6 +8,7 @@
     type SessionKeys,
   } from "./lib/crypto";
   import { SignalingClient } from "./lib/signaling";
+  import { parseTransferToken, wsURL } from "./lib/transfer-link";
   import { connect, type InboundSignal, type Conn } from "./lib/webrtc";
   import {
     Sender,
@@ -52,6 +53,9 @@
   let recv = $state<Xfer | null>(null);
   let send = $state<Xfer | null>(null);
   let notice = $state(""); // transient hint (e.g. "busy", "too many files")
+  let roomToken = $state("");
+  let joinedRoom = $state(false);
+  let linkDead = $state(false);
 
   // Non-reactive locals
   let signaling: SignalingClient;
@@ -80,10 +84,15 @@
     }
     await ready();
     selfName = deviceName();
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    signaling = new SignalingClient(`${proto}://${location.host}/ws`, selfName);
-    signaling.onSelfId((id) => (selfId = id));
+    roomToken = parseTransferToken(location.hash);
+    signaling = new SignalingClient(wsURL(location, roomToken), selfName);
+    signaling.onSelfId((id) => { selfId = id; joinedRoom = true; });
     signaling.onPeers((p) => (peers = p));
+    signaling.onClose(() => {
+      // In a token-room, a close before we ever joined means the link was
+      // invalid/expired or the room was full.
+      if (roomToken && !joinedRoom) linkDead = true;
+    });
     listenForIncoming();
     connState = "ready";
   });
@@ -346,6 +355,9 @@
 
 <main>
   <Account />
+  {#if linkDead}
+    <p class="notice error">{t.crossnet.linkDead}</p>
+  {/if}
   <select
     class="lang"
     aria-label={t.langLabel}

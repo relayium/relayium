@@ -67,6 +67,15 @@ export interface Messages {
     or: string;
     signedInAs: (email: string) => string;
   };
+  crossnet: {
+    sendAcross: string;
+    loginFirst: string;
+    shareHint: string;
+    copy: string;
+    copied: string;
+    connecting: string;
+    linkDead: string;
+  };
 }
 
 export type StatusKey = keyof Messages["status"];
@@ -125,6 +134,15 @@ const zh: Messages = {
     or: "或",
     signedInAs: (e) => `已登录：${e}`,
   },
+  crossnet: {
+    sendAcross: "发送到其他网络的人",
+    loginFirst: "请先登录后再发起跨网络传输",
+    shareHint: "把下面的链接发给对方；对方打开后，在下方核对 6 位校验码即可传输",
+    copy: "复制链接",
+    copied: "已复制",
+    connecting: "正在通过跨网络链接连接…",
+    linkDead: "链接已失效或正在被使用，请向发送方索要新链接",
+  },
 };
 
 const en: Messages = {
@@ -180,6 +198,15 @@ const en: Messages = {
     continueGoogle: "Continue with Google",
     or: "or",
     signedInAs: (e) => `Signed in as ${e}`,
+  },
+  crossnet: {
+    sendAcross: "Send to someone on another network",
+    loginFirst: "Please sign in before starting a cross-network transfer",
+    shareHint: "Send this link to the other person; once they open it, verify the 6-digit code below to transfer",
+    copy: "Copy link",
+    copied: "Copied",
+    connecting: "Connecting over the cross-network link…",
+    linkDead: "This link is invalid or already in use — ask the sender for a new one",
   },
 };
 
@@ -237,6 +264,15 @@ const ja: Messages = {
     or: "または",
     signedInAs: (e) => `ログイン中：${e}`,
   },
+  crossnet: {
+    sendAcross: "別のネットワークの相手に送る",
+    loginFirst: "ネットワーク間転送を始める前にサインインしてください",
+    shareHint: "このリンクを相手に送ってください。相手が開いたら、下の6桁コードを確認して転送します",
+    copy: "リンクをコピー",
+    copied: "コピーしました",
+    connecting: "ネットワーク間リンクで接続中…",
+    linkDead: "リンクが無効か使用中です。送信者に新しいリンクを依頼してください",
+  },
 };
 
 const ko: Messages = {
@@ -292,6 +328,15 @@ const ko: Messages = {
     continueGoogle: "Google로 계속",
     or: "또는",
     signedInAs: (e) => `로그인됨: ${e}`,
+  },
+  crossnet: {
+    sendAcross: "다른 네트워크의 상대에게 보내기",
+    loginFirst: "네트워크 간 전송을 시작하려면 먼저 로그인하세요",
+    shareHint: "이 링크를 상대에게 보내세요. 상대가 열면 아래 6자리 코드를 확인하여 전송합니다",
+    copy: "링크 복사",
+    copied: "복사됨",
+    connecting: "네트워크 간 링크로 연결 중…",
+    linkDead: "링크가 유효하지 않거나 사용 중입니다. 보낸 사람에게 새 링크를 요청하세요",
   },
 };
 
@@ -349,6 +394,15 @@ const de: Messages = {
     or: "oder",
     signedInAs: (e) => `Angemeldet als ${e}`,
   },
+  crossnet: {
+    sendAcross: "An jemanden in einem anderen Netzwerk senden",
+    loginFirst: "Bitte melde dich an, bevor du eine netzwerkübergreifende Übertragung startest",
+    shareHint: "Sende diesen Link an die andere Person; sobald sie ihn öffnet, bestätige den 6-stelligen Code unten zur Übertragung",
+    copy: "Link kopieren",
+    copied: "Kopiert",
+    connecting: "Verbindung über den netzwerkübergreifenden Link…",
+    linkDead: "Dieser Link ist ungültig oder bereits in Gebrauch — bitte den Absender um einen neuen",
+  },
 };
 
 const fr: Messages = {
@@ -404,6 +458,15 @@ const fr: Messages = {
     continueGoogle: "Continuer avec Google",
     or: "ou",
     signedInAs: (e) => `Connecté en tant que ${e}`,
+  },
+  crossnet: {
+    sendAcross: "Envoyer à quelqu'un sur un autre réseau",
+    loginFirst: "Veuillez vous connecter avant de lancer un transfert inter-réseaux",
+    shareHint: "Envoyez ce lien à l'autre personne ; une fois ouvert, vérifiez le code à 6 chiffres ci-dessous pour transférer",
+    copy: "Copier le lien",
+    copied: "Copié",
+    connecting: "Connexion via le lien inter-réseaux…",
+    linkDead: "Ce lien est invalide ou déjà utilisé — demandez-en un nouveau à l'expéditeur",
   },
 };
 
