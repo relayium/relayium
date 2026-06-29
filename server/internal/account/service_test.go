@@ -78,3 +78,49 @@ func indexOf(s, sub string) int {
 	}
 	return -1
 }
+
+func TestCreateAndValidateTransferToken(t *testing.T) {
+	store := newTestStore(t)
+	svc := NewService(store, &capturingMailer{}, Config{TransferTTL: time.Hour})
+	base := time.Unix(1_000_000, 0)
+	svc.now = func() time.Time { return base }
+
+	u, err := store.UpsertUserByEmail(context.Background(), "o@example.com", "O")
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	tr, err := svc.CreateTransfer(context.Background(), u.ID)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if tr.Token == "" || tr.UserID != u.ID {
+		t.Fatalf("bad transfer: %+v", tr)
+	}
+	if tr.ExpiresAt != base.Add(time.Hour).Unix() {
+		t.Fatalf("expiry not derived from now+TTL: %d", tr.ExpiresAt)
+	}
+	if !svc.ValidateTransferToken(context.Background(), tr.Token) {
+		t.Fatalf("fresh token should validate")
+	}
+}
+
+func TestValidateTransferTokenRejectsExpiredEmptyAndUnknown(t *testing.T) {
+	store := newTestStore(t)
+	svc := NewService(store, &capturingMailer{}, Config{TransferTTL: time.Hour})
+	base := time.Unix(1_000_000, 0)
+	svc.now = func() time.Time { return base }
+	u, _ := store.UpsertUserByEmail(context.Background(), "o@example.com", "O")
+	tr, _ := svc.CreateTransfer(context.Background(), u.ID)
+
+	if svc.ValidateTransferToken(context.Background(), "") {
+		t.Fatalf("empty token must be invalid")
+	}
+	if svc.ValidateTransferToken(context.Background(), "unknown") {
+		t.Fatalf("unknown token must be invalid")
+	}
+	// Advance past expiry.
+	svc.now = func() time.Time { return base.Add(2 * time.Hour) }
+	if svc.ValidateTransferToken(context.Background(), tr.Token) {
+		t.Fatalf("expired token must be invalid")
+	}
+}
