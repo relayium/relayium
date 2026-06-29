@@ -770,16 +770,19 @@ git commit -m "feat(web): transfer-link module (parse/build/wsURL/createTransfer
 
 ---
 
-### Task 7: SignalingClient close callback + App token-room wiring
+### Task 7: SignalingClient close callback + i18n + App token-room wiring
 
 **Files:**
 - Modify: `web/src/lib/signaling.ts` (add `onClose`)
 - Test: `web/src/lib/signaling.test.ts` (append test)
+- Modify: `web/src/lib/i18n.svelte.ts` (add `crossnet` block to interface + all 6 languages)
 - Modify: `web/src/App.svelte` (build ws URL via `wsURL`, detect token, surface close-before-join as an error)
 
 **Interfaces:**
 - Consumes: `wsURL`, `parseTransferToken` (Task 6).
-- Produces: `(SignalingClient).onClose(cb: () => void): void` — invoked when the socket closes.
+- Produces: `(SignalingClient).onClose(cb: () => void): void` — invoked when the socket closes; the `crossnet` i18n block (consumed by Task 8's component).
+
+**Ordering note:** i18n is added here, before any consumer, so both the App dead-link banner (this task) and the CrossNetwork component (Task 8) can reference `t.crossnet.*` and keep `npm run check` green.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -828,76 +831,7 @@ Add the method (near `onSelfId`):
 Run: `cd web && npx vitest run src/lib/signaling.test.ts`
 Expected: PASS (existing + new).
 
-- [ ] **Step 5: Wire token-room into App.svelte**
-
-In `web/src/App.svelte`:
-
-Add imports near the top script:
-
-```ts
-  import { parseTransferToken, wsURL } from "./lib/transfer-link";
-```
-
-Add a reactive token + connection-failure state with the other `let` declarations:
-
-```ts
-  let roomToken = $state("");
-  let joinedRoom = $state(false);
-  let linkDead = $state(false);
-```
-
-In `onMount`, replace the two ws-URL lines:
-
-```ts
-    roomToken = parseTransferToken(location.hash);
-    signaling = new SignalingClient(wsURL(location, roomToken), selfName);
-    signaling.onSelfId((id) => { selfId = id; joinedRoom = true; });
-    signaling.onPeers((p) => (peers = p));
-    signaling.onClose(() => {
-      // In a token-room, a close before we ever joined means the link was
-      // invalid/expired or the room was full.
-      if (roomToken && !joinedRoom) linkDead = true;
-    });
-    listenForIncoming();
-    connState = "ready";
-```
-
-Add a `linkDead` banner near the top of the template (above the main UI), using an i18n string added in Task 8:
-
-```svelte
-  {#if linkDead}
-    <p class="notice error">{t.crossnet.linkDead}</p>
-  {/if}
-```
-
-(If `t.crossnet` is not yet defined at this point, Task 8 adds it; implement Task 8 immediately after so `npm run check` passes. To keep this task self-contained and green, you may temporarily reference an existing string and switch it to `t.crossnet.linkDead` in Task 8 — but prefer doing Task 8's i18n additions first if working out of order.)
-
-- [ ] **Step 6: Verify check + tests**
-
-Run: `cd web && npx vitest run && npm run check`
-Expected: tests PASS; check reports 0 errors (after Task 8's i18n string exists; if doing strictly in order, complete Task 8 then re-run).
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add web/src/lib/signaling.ts web/src/lib/signaling.test.ts web/src/App.svelte
-git commit -m "feat(web): connect to token-room from #t= and surface dead links"
-```
-
----
-
-### Task 8: CrossNetwork component + i18n
-
-**Files:**
-- Create: `web/src/lib/CrossNetwork.svelte`
-- Modify: `web/src/lib/i18n.svelte.ts` (add `crossnet` block to interface + all 6 languages)
-- Modify: `web/src/App.svelte` (render `<CrossNetwork {roomToken} />`)
-
-**Interfaces:**
-- Consumes: `session()` from `auth.svelte.ts`, `createTransfer`/`buildTransferLink` from `transfer-link.ts`, `t.crossnet.*` strings.
-- Produces: a self-contained UI unit; no exports consumed by other tasks.
-
-- [ ] **Step 1: Add i18n strings**
+- [ ] **Step 5: Add crossnet i18n strings**
 
 In `web/src/lib/i18n.svelte.ts`, add to the `Messages` interface (after the `account` block):
 
@@ -978,12 +912,73 @@ Add a matching `crossnet` object to EACH of `zh`, `en`, `ja`, `ko`, `de`, `fr` (
   },
 ```
 
-- [ ] **Step 2: Verify the type-checker is happy with the new block**
+- [ ] **Step 6: Wire token-room into App.svelte**
 
-Run: `cd web && npm run check`
-Expected: 0 errors (every language now satisfies the `crossnet` shape; `t.crossnet.linkDead` from Task 7 now resolves).
+In `web/src/App.svelte`:
 
-- [ ] **Step 3: Create the CrossNetwork component**
+Add imports near the top script:
+
+```ts
+  import { parseTransferToken, wsURL } from "./lib/transfer-link";
+```
+
+Add a reactive token + connection-failure state with the other `let` declarations:
+
+```ts
+  let roomToken = $state("");
+  let joinedRoom = $state(false);
+  let linkDead = $state(false);
+```
+
+In `onMount`, replace the two ws-URL lines:
+
+```ts
+    roomToken = parseTransferToken(location.hash);
+    signaling = new SignalingClient(wsURL(location, roomToken), selfName);
+    signaling.onSelfId((id) => { selfId = id; joinedRoom = true; });
+    signaling.onPeers((p) => (peers = p));
+    signaling.onClose(() => {
+      // In a token-room, a close before we ever joined means the link was
+      // invalid/expired or the room was full.
+      if (roomToken && !joinedRoom) linkDead = true;
+    });
+    listenForIncoming();
+    connState = "ready";
+```
+
+Add a `linkDead` banner near the top of the template (above the main UI). The `t.crossnet.linkDead` string exists from Step 5:
+
+```svelte
+  {#if linkDead}
+    <p class="notice error">{t.crossnet.linkDead}</p>
+  {/if}
+```
+
+- [ ] **Step 7: Verify check + tests**
+
+Run: `cd web && npx vitest run && npm run check`
+Expected: tests PASS; check reports 0 errors.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add web/src/lib/signaling.ts web/src/lib/signaling.test.ts web/src/lib/i18n.svelte.ts web/src/App.svelte
+git commit -m "feat(web): token-room wiring, crossnet i18n, dead-link banner"
+```
+
+---
+
+### Task 8: CrossNetwork component (share-link UI)
+
+**Files:**
+- Create: `web/src/lib/CrossNetwork.svelte`
+- Modify: `web/src/App.svelte` (render `<CrossNetwork {roomToken} />`)
+
+**Interfaces:**
+- Consumes: `session()` from `auth.svelte.ts`, `createTransfer`/`buildTransferLink` from `transfer-link.ts`, `t.crossnet.*` strings (added in Task 7), `roomToken` state (Task 7).
+- Produces: a self-contained UI unit; no exports consumed by other tasks.
+
+- [ ] **Step 1: Create the CrossNetwork component**
 
 Create `web/src/lib/CrossNetwork.svelte`. It marks the originator via `sessionStorage` keyed by the token, then reloads into token-room mode so all the existing mount wiring is reused:
 
@@ -1049,7 +1044,7 @@ Create `web/src/lib/CrossNetwork.svelte`. It marks the originator via `sessionSt
 </section>
 ```
 
-- [ ] **Step 4: Render it in App.svelte**
+- [ ] **Step 2: Render it in App.svelte**
 
 In `web/src/App.svelte`, add the import:
 
@@ -1063,16 +1058,16 @@ Render it just after `<Account />` (or near the main panel), passing the token:
   <CrossNetwork {roomToken} />
 ```
 
-- [ ] **Step 5: Verify check, tests, build**
+- [ ] **Step 3: Verify check, tests, build**
 
 Run: `cd web && npm run check && npx vitest run && npm run build`
 Expected: check 0 errors; tests PASS; build OK.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add web/src/lib/CrossNetwork.svelte web/src/lib/i18n.svelte.ts web/src/App.svelte
-git commit -m "feat(web): cross-network send UI (share link) + i18n (6 langs)"
+git add web/src/lib/CrossNetwork.svelte web/src/App.svelte
+git commit -m "feat(web): cross-network send share-link UI component"
 ```
 
 ---
@@ -1192,13 +1187,13 @@ git commit -m "docs(testing): cross-network transfer manual acceptance steps"
 - Receiver auto-join from `#t=` + dead-link UX → Tasks 6, 7, 8. ✅
 - LAN path untouched & DB-decoupled → enforced in Task 5 (no `?room=` ⇒ no Store call) + Task 10 regression step. ✅
 - SAS/crypto/transfer unchanged → no task touches `crypto.ts`/`transfer.ts`; confirmed by omission. ✅
-- i18n 6 languages → Task 8. ✅
+- i18n 6 languages → Task 7 (added before any consumer). ✅
 - Testing (Go store/service/handler/hub; web unit; manual acceptance) → Tasks 1–4, 6, 7, 10. ✅
 - Deferred (TURN/metering ②b, trusted-device ②c, billing) → out of scope, stated in plan header + Task 10 note. ✅
 - `DeleteExpiredTransfers` intentionally trimmed → flagged in Global Constraints note. ✅
 
 **2. Placeholder scan:** No TBD/TODO; every code step shows full code; every command shows expected output. ✅
 
-**3. Type consistency:** `Transfer{Token,UserID,CreatedAt,ExpiresAt}` used identically in Tasks 1–3. `JoinLimited(room,id,name,c,max) bool` consistent across Tasks 4–5. `ValidateTransferToken(ctx,token) bool` consistent Tasks 2 & 5. `wsURL`/`parseTransferToken`/`createTransfer`/`buildTransferLink` signatures consistent across Tasks 6–9. `crossnet` i18n keys used in Tasks 7–9 all defined in Task 8. ✅
+**3. Type consistency:** `Transfer{Token,UserID,CreatedAt,ExpiresAt}` used identically in Tasks 1–3. `JoinLimited(room,id,name,c,max) bool` consistent across Tasks 4–5. `ValidateTransferToken(ctx,token) bool` consistent Tasks 2 & 5. `wsURL`/`parseTransferToken`/`createTransfer`/`buildTransferLink` signatures consistent across Tasks 6–9. `crossnet` i18n keys used in Tasks 7–9 all defined in Task 7. ✅
 ```
 
