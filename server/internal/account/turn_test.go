@@ -1,12 +1,112 @@
 package account
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 )
+
+func newICEServer(t *testing.T, secret string) (*httptest.Server, *Service, *SQLiteStore) {
+	t.Helper()
+	store := newTestStore(t)
+	svc := NewService(store, &capturingMailer{}, Config{
+		TransferTTL: time.Hour,
+		TURNCredTTL: time.Hour,
+		STUNURLs:    []string{"stun:stun.example.com:3478"},
+		TURNURLs:    []string{"turn:turn.example.com:3478"},
+		TURNSecret:  secret,
+	})
+	ts := httptest.NewServer(svc.Routes())
+	t.Cleanup(ts.Close)
+	return ts, svc, store
+}
+
+func iceServersFromBody(t *testing.T, resp *http.Response) []ICEServer {
+	t.Helper()
+	var out struct {
+		ICEServers []ICEServer `json:"iceServers"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	return out.ICEServers
+}
+
+func hasTURN(servers []ICEServer) bool {
+	for _, s := range servers {
+		for _, u := range s.URLs {
+			if strings.HasPrefix(u, "turn:") || strings.HasPrefix(u, "turns:") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func TestICENoTokenReturnsStunOnly(t *testing.T) {
+	ts, _, _ := newICEServer(t, "secret")
+	resp, err := ts.Client().Get(ts.URL + "/api/ice")
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("get: err=%v status=%v", err, resp.StatusCode)
+	}
+	servers := iceServersFromBody(t, resp)
+	if len(servers) == 0 || hasTURN(servers) {
+		t.Fatalf("expected STUN-only, got %+v", servers)
+	}
+}
+
+func TestICEValidTokenIncludesTurn(t *testing.T) {
+	ts, svc, store := newICEServer(t, "secret")
+	u, _ := store.UpsertUserByEmail(context.Background(), "o@example.com", "O")
+	tr, _ := svc.CreateTransfer(context.Background(), u.ID)
+
+	resp, _ := ts.Client().Get(ts.URL + "/api/ice?room=" + tr.Token)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	servers := iceServersFromBody(t, resp)
+	if !hasTURN(servers) {
+		t.Fatalf("expected a TURN entry, got %+v", servers)
+	}
+	for _, s := range servers {
+		if len(s.URLs) > 0 && (s.URLs[0] == "turn:turn.example.com:3478") {
+			if s.Username == "" || s.Credential == "" {
+				t.Fatalf("TURN entry missing username/credential: %+v", s)
+			}
+			if !strings.HasSuffix(s.Username, ":"+tr.Token) {
+				t.Fatalf("username should embed token, got %q", s.Username)
+			}
+		}
+	}
+}
+
+func TestICEInvalidTokenReturnsStunOnly(t *testing.T) {
+	ts, _, _ := newICEServer(t, "secret")
+	resp, _ := ts.Client().Get(ts.URL + "/api/ice?room=bogus")
+	servers := iceServersFromBody(t, resp)
+	if hasTURN(servers) {
+		t.Fatalf("invalid token must not yield TURN, got %+v", servers)
+	}
+}
+
+func TestICENoSecretReturnsStunOnly(t *testing.T) {
+	ts, svc, store := newICEServer(t, "") // TURN disabled
+	u, _ := store.UpsertUserByEmail(context.Background(), "o@example.com", "O")
+	tr, _ := svc.CreateTransfer(context.Background(), u.ID)
+	resp, _ := ts.Client().Get(ts.URL + "/api/ice?room=" + tr.Token)
+	servers := iceServersFromBody(t, resp)
+	if hasTURN(servers) {
+		t.Fatalf("no secret must mean no TURN, got %+v", servers)
+	}
+}
 
 func TestTurnCredentials(t *testing.T) {
 	secret := "s3cr3t"

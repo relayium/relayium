@@ -15,6 +15,10 @@ type Config struct {
 	SessionTTL     time.Duration
 	MagicTTL       time.Duration
 	TransferTTL    time.Duration
+	STUNURLs       []string
+	TURNURLs       []string
+	TURNSecret     string
+	TURNCredTTL    time.Duration
 	GoogleClientID string
 	GoogleSecret   string
 	GoogleRedirect string
