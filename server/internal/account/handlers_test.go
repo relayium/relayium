@@ -142,6 +142,57 @@ func TestDeviceCRUDOverHTTP(t *testing.T) {
 	}
 }
 
+func TestUsageEndpointRequiresSessionAndReturnsTotal(t *testing.T) {
+	store := newTestStore(t)
+	mail := &capturingMailer{}
+	svc := NewService(store, mail, Config{BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute, TransferTTL: time.Hour})
+	ts := httptest.NewServer(svc.Routes())
+	t.Cleanup(ts.Close)
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	// No session → 401.
+	resp, err := client.Get(ts.URL + "/api/usage")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("no session should be 401, got %d", resp.StatusCode)
+	}
+
+	// Log in via magic link → cookie + a known user.
+	_, _ = client.PostForm(ts.URL+"/api/auth/magic/request", url.Values{"email": {"u@example.com"}})
+	i := strings.Index(mail.lastLink, "token=")
+	verify, _ := client.Get(ts.URL + "/api/auth/magic/verify?token=" + mail.lastLink[i+len("token="):])
+	var cookie *http.Cookie
+	for _, c := range verify.Cookies() {
+		if c.Name == sessionCookie {
+			cookie = c
+		}
+	}
+	if cookie == nil {
+		t.Fatalf("no session cookie")
+	}
+	u, _ := store.UpsertUserByEmail(context.Background(), "u@example.com", "")
+	_ = store.RecordUsage(context.Background(), UsageEvent{AllocID: "a", Token: "t", UserID: u.ID, RelayedBytes: 500, RecordedAt: 1})
+
+	req, _ := http.NewRequest("GET", ts.URL+"/api/usage", nil)
+	req.AddCookie(cookie)
+	resp, err = client.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("usage: err=%v status=%v", err, resp.StatusCode)
+	}
+	var out struct {
+		RelayedBytes int64 `json:"relayedBytes"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if out.RelayedBytes != 500 {
+		t.Fatalf("relayedBytes = %d, want 500", out.RelayedBytes)
+	}
+}
+
 func bodyContains(resp *http.Response, sub string) bool {
 	buf := make([]byte, 4096)
 	n, _ := resp.Body.Read(buf)
