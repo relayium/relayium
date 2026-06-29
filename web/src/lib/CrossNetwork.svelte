@@ -18,6 +18,18 @@
   let copied = $state(false);
   let err = $state("");
 
+  let qrDataUrl = $state("");
+  $effect(() => {
+    if (isOriginator && shareLink) {
+      // Lazy-load qrcode so it stays out of the main bundle path.
+      import("qrcode").then((m) =>
+        m.toDataURL(shareLink, { margin: 1, width: 192 }).then((u) => (qrDataUrl = u)),
+      );
+    } else {
+      qrDataUrl = "";
+    }
+  });
+
   async function start() {
     err = "";
     if (!session()) {
@@ -50,6 +62,9 @@
       <input readonly value={shareLink} />
       <button onclick={copy}>{copied ? t.crossnet.copied : t.crossnet.copy}</button>
     </div>
+    {#if qrDataUrl}
+      <img class="qr" src={qrDataUrl} alt="QR" width="192" height="192" />
+    {/if}
   {:else if roomToken}
     <p>{t.crossnet.connecting}</p>
   {:else}
