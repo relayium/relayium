@@ -23,6 +23,7 @@
     type FileMeta,
   } from "./lib/transfer";
   import { pickSaveTarget, type SaveTarget, type FileSink } from "./lib/filesink";
+  import { fetchIceServers } from "./lib/ice";
   import type { Peer } from "./lib/protocol";
   import { lang, setLang, LANGS, messages, type Lang, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import Account from "./lib/Account.svelte";
@@ -60,6 +61,7 @@
 
   // Non-reactive locals
   let signaling: SignalingClient;
+  let iceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
   let acceptFn: (() => void) | null = null;
   let rejectFn: (() => void) | null = null;
 
@@ -86,6 +88,7 @@
     await ready();
     selfName = deviceName();
     roomToken = parseTransferToken(location.hash);
+    iceServers = await fetchIceServers(roomToken);
     signaling = new SignalingClient(wsURL(location, roomToken), selfName);
     signaling.onSelfId((id) => { selfId = id; joinedRoom = true; });
     signaling.onPeers((p) => (peers = p));
@@ -142,6 +145,7 @@
       signaling, peerId: from, selfKey: selfKey.publicKey, role: "responder",
       initialSignal: offer,
       onPeerKey: async (pk) => { keys = await deriveSession("responder", selfKey, pk); sasCode = sas(selfKey.publicKey, pk); },
+      config: { iceServers },
     });
 
     const openSink = async () => {
@@ -254,6 +258,7 @@
       conn = await connect({
         signaling, peerId, selfKey: selfKey.publicKey, role: "initiator",
         onPeerKey: async (pk) => { keys = await deriveSession("initiator", selfKey, pk); sasCode = sas(selfKey.publicKey, pk); },
+        config: { iceServers },
       });
       conn.channel.onmessage = (ev) => {
         const k = controlKind(ev.data as ArrayBuffer);
