@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>隐私政策 · Relayium</title>
+    <meta name="description" content="Relayium 如何处理你的数据:文件点对点传输,绝不经过我们的服务器。账号是可选的,仅存储邮箱与显示名。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/zh/privacy" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/privacy" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/privacy" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/privacy" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/privacy" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/privacy" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/privacy" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/privacy" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"隐私政策 · Relayium","description":"Relayium 如何处理你的数据:文件点对点传输,绝不经过我们的服务器。账号是可选的,仅存储邮箱与显示名。","url":"https://relayium.com/zh/privacy","inLanguage":"zh-Hans","dateModified":"2026-06-29","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:21px;margin:34px 0 10px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>隐私政策</h1>
+      <p class="updated">最后更新: 2026-06-29</p>
+      <nav class="langbar" aria-label="Language"><a href="/privacy">English</a><a href="/zh/privacy" aria-current="true">中文</a><a href="/ja/privacy">日本語</a><a href="/ko/privacy">한국어</a><a href="/de/privacy">Deutsch</a><a href="/fr/privacy">Français</a></nav>
+      <p>Relayium 的设计宗旨是让你的文件始终属于你。文件传输在两台设备之间直接进行,端到端加密,绝不经过我们的服务器。</p>
+      <p>本页说明本服务确实会处理的少量数据,以及它刻意从不接触的数据。</p>
+      <h2>局域网传输不收集任何数据</h2><p>在同一网络下的设备之间传输文件时,无需账号,服务也不会存储任何关于你的信息。信令服务器只帮助两台设备相互发现;文件字节通过加密的 WebRTC 通道在设备之间直接流动。</p>
+      <h2>账号会存储什么(仅在你登录时)</h2><p>登录是可选的,仅用于解锁跨网络传输。如果你登录,我们只存储运行账号所必需的最少信息:</p><ul><li>你的邮箱地址和一个显示名。</li><li>你使用的登录方式(Google,或邮箱魔法链接)。魔法链接令牌只以哈希形式存储,绝不明文保存。</li><li>登录会话,保存在安全的 httpOnly cookie 中。</li><li>你注册的设备,以一个随机设备 id 和设备名(例如你的平台名称)的形式。</li></ul>
+      <h2>我们绝不收集什么</h2><p>本服务的设计确保以下内容绝不会到达我们的服务器:</p><ul><li>你的文件内容。</li><li>你的文件名。</li><li>你的加密密钥。</li></ul>
+      <h2>跨网络中继(TURN)</h2><p>当两台设备无法跨网络直接连接时,加密流会通过 TURN 服务器中继。中继依然无法读取你的文件——它们始终保持端到端加密。出于运营目的,我们仅记录某次传输中继的字节数,并归属到创建该传输的登录用户。我们绝不检查中继内容。</p>
+      <h2>Cookie 与本地存储</h2><p>我们使用一个会话 cookie 来保持你的登录状态。在你浏览器的本地存储中,我们保存一个随机设备 id,以便识别你注册过的设备。我们不使用广告或追踪 cookie。</p>
+      <h2>第三方服务</h2><p>只有在你选择使用时,才会涉及少数第三方:</p><ul><li>Google——如果你用 Google 登录,我们会获取你的邮箱和基本资料以创建账号。</li><li>邮件发送服务商——用于发送魔法链接登录邮件。</li></ul>
+      <h2>数据保留与删除</h2><p>账号数据在你的账号存在期间保留。你可以随时通过 support@relayium.com 联系我们,要求删除你的账号及其数据。</p>
+      <h2>本政策的变更</h2><p>随着服务演进,我们可能会更新本政策。届时我们会更新上方的「最后更新」日期。</p>
+      <h2>联系我们</h2><p>有隐私方面的疑问?请发邮件至 support@relayium.com。</p>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/zh/terms">服务条款</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>
