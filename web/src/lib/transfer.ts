@@ -1,5 +1,10 @@
 import { seal, open, type SessionKeys } from "./crypto";
 
+// Frames flow into DataChannel.send() and Web Crypto, which require an
+// explicitly ArrayBuffer-backed `Uint8Array` rather than the generic
+// `Uint8Array<ArrayBufferLike>`. Every buffer here is ArrayBuffer-backed.
+type Bytes = Uint8Array<ArrayBuffer>;
+
 // Larger chunks mean fewer encrypt/send/event-loop iterations per MB → higher
 // throughput. The on-wire message is CHUNK_SIZE + CHUNK_OVERHEAD (21 B); keep it
 // well under the DataChannel max-message-size (256 KiB on Chrome) so sends never
@@ -49,7 +54,7 @@ export function controlKind(buf: ArrayBuffer): "accept" | "reject" | "complete" 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-function frame(kind: number, seq: number, payload: Uint8Array): Uint8Array {
+function frame(kind: number, seq: number, payload: Uint8Array): Bytes {
   const out = new Uint8Array(5 + payload.length);
   out[0] = kind;
   new DataView(out.buffer).setUint32(1, seq);
@@ -58,7 +63,7 @@ function frame(kind: number, seq: number, payload: Uint8Array): Uint8Array {
 }
 
 // Chained integrity hash: h = SHA-256(h || chunk). O(1) memory; one chain per file.
-async function chainHash(prev: Uint8Array, chunk: Uint8Array): Promise<Uint8Array> {
+async function chainHash(prev: Uint8Array, chunk: Uint8Array): Promise<Bytes> {
   const buf = new Uint8Array(prev.length + chunk.length);
   buf.set(prev, 0);
   buf.set(chunk, prev.length);
@@ -71,7 +76,7 @@ function toHex(b: Uint8Array): string {
 
 export class Sender {
   /** The plaintext manifest frame; sent first so the receiver can prompt once for the batch. */
-  batchFrame(files: FileMeta[]): Uint8Array {
+  batchFrame(files: FileMeta[]): Bytes {
     const manifest: Manifest = { files };
     return frame(KIND_BATCH, 0, enc.encode(JSON.stringify(manifest)));
   }
@@ -81,7 +86,7 @@ export class Sender {
    * The AES-GCM nonce counter `seq` is GLOBAL across the whole batch — it never
    * resets per file — so no nonce is ever reused under the session key.
    */
-  async *dataFrames(files: File[], keys: SessionKeys): AsyncGenerator<Uint8Array> {
+  async *dataFrames(files: File[], keys: SessionKeys): AsyncGenerator<Bytes> {
     let seq = 0;
     for (const file of files) {
       let hash = new Uint8Array(32);
@@ -104,7 +109,7 @@ export class Receiver {
   private hash = new Uint8Array(32); // chained hash of the file currently arriving
 
   async feed(
-    encoded: Uint8Array,
+    encoded: Bytes,
     keys: SessionKeys,
   ): Promise<{ batch?: Manifest; chunk?: Uint8Array; done?: { ok: boolean } }> {
     const kind = encoded[0];
