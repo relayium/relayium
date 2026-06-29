@@ -4,10 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "node scripts/gen-legal.mjs && vite",
+    "build": "node scripts/gen-legal.mjs && vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
+    "gen:legal": "node scripts/gen-legal.mjs",
     "test": "vitest"
   },
   "devDependencies": {
