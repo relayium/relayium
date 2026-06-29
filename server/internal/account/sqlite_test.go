@@ -151,3 +151,31 @@ func TestDeviceRegistryScopedToUser(t *testing.T) {
 		t.Fatalf("device not deleted: %+v", l)
 	}
 }
+
+func TestCreateAndGetTransfer(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u, err := s.UpsertUserByEmail(ctx, "owner@example.com", "Owner")
+	if err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	want := Transfer{Token: "tok123", UserID: u.ID, CreatedAt: 1000, ExpiresAt: 4600}
+	if err := s.CreateTransfer(ctx, want); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	got, err := s.GetTransfer(ctx, "tok123")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got != want {
+		t.Fatalf("roundtrip mismatch: got %+v want %+v", got, want)
+	}
+}
+
+func TestGetTransferMissingReturnsErrNotFound(t *testing.T) {
+	s := newTestStore(t)
+	_, err := s.GetTransfer(context.Background(), "nope")
+	if err != ErrNotFound {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
