@@ -281,7 +281,7 @@ const de = {
     {
       heading: "Keine Gewährleistung",
       body: [
-        "Der Dienst wird „wie besehen\" und „wie verfügbar\" ohne jegliche ausdrückliche oder stillschweigende Gewährleistung bereitgestellt. Wir garantieren nicht, dass Übertragungen stets erfolgreich sind oder dass der Dienst unterbrechungs- und fehlerfrei verfügbar ist.",
+        "Der Dienst wird „wie besehen“ und „wie verfügbar“ ohne jegliche ausdrückliche oder stillschweigende Gewährleistung bereitgestellt. Wir garantieren nicht, dass Übertragungen stets erfolgreich sind oder dass der Dienst unterbrechungs- und fehlerfrei verfügbar ist.",
       ],
     },
     {
@@ -299,7 +299,7 @@ const de = {
     {
       heading: "Änderungen dieser Bedingungen",
       body: [
-        "Wir können diese Bedingungen aktualisieren, wenn sich der Dienst weiterentwickelt. In diesem Fall ändern wir das oben genannte Datum „Zuletzt aktualisiert\". Die fortgesetzte Nutzung nach einer Änderung bedeutet, dass Sie die aktualisierten Bedingungen akzeptieren.",
+        "Wir können diese Bedingungen aktualisieren, wenn sich der Dienst weiterentwickelt. In diesem Fall ändern wir das oben genannte Datum „Zuletzt aktualisiert“. Die fortgesetzte Nutzung nach einer Änderung bedeutet, dass Sie die aktualisierten Bedingungen akzeptieren.",
       ],
     },
     {

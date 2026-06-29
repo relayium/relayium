@@ -71,7 +71,7 @@ export function renderLegalPage({ slug, lang, doc }) {
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
-    <script type="application/ld+json">${JSON.stringify(ld)}</script>
+    <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
     <style>${STYLE}</style>
   </head>
   <body>

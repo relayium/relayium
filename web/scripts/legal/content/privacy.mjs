@@ -371,7 +371,7 @@ const de = {
     {
       heading: "Änderungen dieser Richtlinie",
       body: [
-        "Wir können diese Richtlinie aktualisieren, wenn sich der Dienst weiterentwickelt. In diesem Fall ändern wir das oben genannte Datum „Zuletzt aktualisiert\".",
+        "Wir können diese Richtlinie aktualisieren, wenn sich der Dienst weiterentwickelt. In diesem Fall ändern wir das oben genannte Datum „Zuletzt aktualisiert“.",
       ],
     },
     {
