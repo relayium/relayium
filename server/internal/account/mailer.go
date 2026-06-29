@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/smtp"
 	"strings"
 )
@@ -26,6 +27,23 @@ type SMTPMailer struct {
 	Addr string    // host:port
 	From string    // From header / envelope sender
 	Auth smtp.Auth // nil for unauthenticated relays
+}
+
+// NewSMTPMailer builds an SMTPMailer. When user is non-empty it attaches
+// PlainAuth bound to the SMTP host (parsed from addr); otherwise Auth stays nil,
+// suitable for an unauthenticated local relay (e.g. 127.0.0.1:25). Go's
+// smtp.SendMail upgrades the connection with STARTTLS before sending
+// credentials, so authenticated providers on :587 (Gmail, SES, …) work.
+func NewSMTPMailer(addr, from, user, pass string) *SMTPMailer {
+	m := &SMTPMailer{Addr: addr, From: from}
+	if user != "" {
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil {
+			host = addr
+		}
+		m.Auth = smtp.PlainAuth("", user, pass, host)
+	}
+	return m
 }
 
 func (m *SMTPMailer) SendMagicLink(_ context.Context, email, link string) error {
