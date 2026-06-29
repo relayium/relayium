@@ -388,16 +388,32 @@
   {#if unsupported}
     <div class="banner error">{t.unsupported}</div>
   {:else}
-    <FeatureStrip />
-    <section class="guide">
-      <h2>{t.guideTitle}</h2>
-      <ol>
-        <li>{t.step1}</li>
-        <li>{t.step2}</li>
-        <li>{t.step3(MAX_FILES)}</li>
-        <li>{t.step4}</li>
-      </ol>
-      <p class="hint">{t.hint}</p>
+    <section class="peers">
+      <h2>{t.peersTitle}</h2>
+      {#if visiblePeers.length === 0}
+        <p class="empty">{t.emptyPeers}</p>
+      {:else}
+        <ul>
+          {#each visiblePeers as p (p.id)}
+            <li
+              class="peer"
+              class:disabled={busy}
+              ondragover={(e) => { e.preventDefault(); if (!busy) (e.currentTarget as HTMLElement).classList.add("drag"); }}
+              ondragleave={(e) => (e.currentTarget as HTMLElement).classList.remove("drag")}
+              ondrop={(e) => { if (busy) { e.preventDefault(); flash(messages[lang()].busy); return; } onDrop(e, p.id); }}
+            >
+              <label>
+                <span class="pavatar">{p.name.slice(0, 1).toUpperCase()}</span>
+                <span class="ptext">
+                  <span class="pname">{p.name}</span>
+                  <span class="pick">{t.pickHint(MAX_FILES)}</span>
+                </span>
+                <input type="file" multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
+              </label>
+            </li>
+          {/each}
+        </ul>
+      {/if}
     </section>
 
     {#if incoming}
@@ -440,32 +456,16 @@
       </section>
     {/each}
 
-    <section class="peers">
-      <h2>{t.peersTitle}</h2>
-      {#if visiblePeers.length === 0}
-        <p class="empty">{t.emptyPeers}</p>
-      {:else}
-        <ul>
-          {#each visiblePeers as p (p.id)}
-            <li
-              class="peer"
-              class:disabled={busy}
-              ondragover={(e) => { e.preventDefault(); if (!busy) (e.currentTarget as HTMLElement).classList.add("drag"); }}
-              ondragleave={(e) => (e.currentTarget as HTMLElement).classList.remove("drag")}
-              ondrop={(e) => { if (busy) { e.preventDefault(); flash(messages[lang()].busy); return; } onDrop(e, p.id); }}
-            >
-              <label>
-                <span class="pavatar">{p.name.slice(0, 1).toUpperCase()}</span>
-                <span class="ptext">
-                  <span class="pname">{p.name}</span>
-                  <span class="pick">{t.pickHint(MAX_FILES)}</span>
-                </span>
-                <input type="file" multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
-              </label>
-            </li>
-          {/each}
-        </ul>
-      {/if}
+    <FeatureStrip />
+    <section class="guide">
+      <h2>{t.guideTitle}</h2>
+      <ol>
+        <li>{t.step1}</li>
+        <li>{t.step2}</li>
+        <li>{t.step3(MAX_FILES)}</li>
+        <li>{t.step4}</li>
+      </ol>
+      <p class="hint">{t.hint}</p>
     </section>
 
     <footer>
@@ -566,7 +566,8 @@
   .fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), #6d28d9); transition: width .2s ease; }
   .meta { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 12.5px; color: var(--text); }
 
-  .peers { margin-top: 8px; }
+  .peers { margin-top: 30px; }
+  .peers h2 { font-size: 20px; }
   .peers ul {
     list-style: none; padding: 0; margin: 0;
     display: grid; gap: 12px;
@@ -590,7 +591,11 @@
   .pick { color: var(--text); font-size: 13px; }
   .peer input[type="file"] { display: none; }
 
-  .empty { color: var(--text); font-size: 14px; }
+  .empty {
+    color: var(--text); font-size: 14px; text-align: center;
+    padding: 28px 20px; border: 1.5px dashed var(--border); border-radius: 14px;
+    background: var(--surface-2);
+  }
 
   footer {
     margin-top: 32px; padding-top: 18px; border-top: 1px solid var(--border);
