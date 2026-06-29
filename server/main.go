@@ -13,6 +13,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/relayium/relayium/internal/account"
+	"github.com/relayium/relayium/internal/metering"
 	"github.com/relayium/relayium/internal/signal"
 )
 
@@ -45,6 +46,7 @@ func main() {
 	turnSecret := flag.String("turn-secret", "", "coturn static-auth-secret (empty disables TURN)")
 	turnURLs := flag.String("turn-urls", "", "comma-separated TURN URLs (e.g. turn:host:3478,turns:host:5349)")
 	stunURLs := flag.String("stun-urls", "stun:stun.l.google.com:19302", "comma-separated STUN URLs")
+	redisAddr := flag.String("redis-addr", "", "Redis host:port for coturn relay-byte metering (empty disables)")
 	flag.Parse()
 
 	// Not in Go's built-in MIME table; the PWA manifest should be served as JSON.
@@ -108,6 +110,20 @@ func main() {
 			TURNCredTTL:    time.Hour,
 		})
 		validateRoom = acct.ValidateTransferToken
+		if *redisAddr != "" {
+			worker := &metering.Worker{
+				Sink: store,
+				Now:  func() int64 { return time.Now().Unix() },
+				Log:  log.Default(),
+			}
+			src := metering.NewRedisSource(*redisAddr)
+			go func() {
+				if err := worker.Run(context.Background(), src); err != nil {
+					log.Printf("metering worker stopped: %v", err)
+				}
+			}()
+			log.Printf("metering: ingesting coturn relay stats from redis %s", *redisAddr)
+		}
 		mux.Handle("/api/", acct.Routes())
 	}
 
