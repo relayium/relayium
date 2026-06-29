@@ -23,12 +23,14 @@ func NewHub() *Hub {
 }
 
 func (h *Hub) Join(room, id, name string, c Conn) {
-	h.JoinLimited(room, id, name, c, 0)
+	h.JoinLimited(room, id, name, c, 0, "")
 }
 
 // JoinLimited admits a peer unless the room already holds max peers (max <= 0
-// means unlimited). Returns false without joining when the room is full.
-func (h *Hub) JoinLimited(room, id, name string, c Conn, max int) bool {
+// means unlimited). Returns false without joining when the room is full. The
+// welcome carries clientIP back to the joining peer only — it is never put in
+// the roster broadcast to other peers.
+func (h *Hub) JoinLimited(room, id, name string, c Conn, max int, clientIP string) bool {
 	h.mu.Lock()
 	if h.rooms[room] == nil {
 		h.rooms[room] = make(map[string]*peer)
@@ -40,7 +42,7 @@ func (h *Hub) JoinLimited(room, id, name string, c Conn, max int) bool {
 	h.rooms[room][id] = &peer{id: id, name: name, conn: c}
 	h.mu.Unlock()
 
-	c.Send(Envelope{Type: TypeWelcome, Name: id})
+	c.Send(Envelope{Type: TypeWelcome, Name: id, IP: clientIP})
 	h.broadcastRoster(room)
 	return true
 }

@@ -87,7 +87,7 @@ func main() {
 			return
 		}
 		ctx := r.Context()
-		handle(ctx, c, room, maxPeers)
+		handle(ctx, c, room, maxPeers, signal.ClientIP(r))
 		_ = c.Close(websocket.StatusNormalClosure, "")
 	})
 

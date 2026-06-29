@@ -50,6 +50,7 @@
   let unsupported = $state(false);
   let selfName = $state("");
   let selfId = $state("");
+  let selfIP = $state("");
   let peers = $state<Peer[]>([]);
   let sasCode = $state("");
 
@@ -92,7 +93,7 @@
     roomToken = parseTransferToken(location.hash);
     iceServers = await fetchIceServers(roomToken);
     signaling = new SignalingClient(wsURL(location, roomToken), selfName);
-    signaling.onSelfId((id) => { selfId = id; joinedRoom = true; });
+    signaling.onSelfId((id, ip) => { selfId = id; selfIP = ip; joinedRoom = true; });
     signaling.onPeers((p) => (peers = p));
     signaling.onClose(() => {
       // In a token-room, a close before we ever joined means the link was
@@ -378,7 +379,7 @@
     {/each}
   </select>
 
-  <Hero {connState} {unsupported} {selfName} />
+  <Hero {connState} {unsupported} {selfName} {selfIP} />
 
   {#if notice}
     <div class="toast">{notice}</div>

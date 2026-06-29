@@ -1,7 +1,7 @@
 <script lang="ts">
   import { lang, messages, type Messages } from "./i18n.svelte";
-  let { connState, unsupported, selfName }:
-    { connState: "connecting" | "ready"; unsupported: boolean; selfName: string } = $props();
+  let { connState, unsupported, selfName, selfIP }:
+    { connState: "connecting" | "ready"; unsupported: boolean; selfName: string; selfIP: string } = $props();
   const t = $derived<Messages>(messages[lang()]);
 </script>
 
@@ -15,6 +15,10 @@
       {t.unavailable}
     {:else if connState === "ready"}
       {t.connected(selfName)}
+      {#if selfIP}
+        <span class="sep">·</span>
+        <span class="ip">{t.ipLabel} {selfIP}</span>
+      {/if}
     {:else}
       {t.connecting}
     {/if}
@@ -39,6 +43,8 @@
     padding: 6px 14px; border-radius: 999px;
     border: 1px solid var(--border); background: var(--surface-2);
   }
+  .sep { color: var(--border); }
+  .ip { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
   .dot.on { background: #2ecc71; box-shadow: 0 0 0 3px rgba(46, 204, 113, .18); }
   @media (max-width: 1024px) { .hero { padding-top: 30px; } h1 { font-size: 36px; } }

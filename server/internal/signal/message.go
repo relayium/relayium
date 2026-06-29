@@ -15,6 +15,7 @@ type Envelope struct {
 	From  string          `json:"from,omitempty"`  // server-stamped sender peer id
 	To    string          `json:"to,omitempty"`    // target peer id for TypeSignal
 	Name  string          `json:"name,omitempty"`  // device nickname on join / self on welcome
+	IP    string          `json:"ip,omitempty"`    // server-observed public IP, self-only on welcome
 	Peers []Peer          `json:"peers,omitempty"` // room roster on TypePeers
 	Data  json.RawMessage `json:"data,omitempty"`  // opaque WebRTC/crypto payload
 }

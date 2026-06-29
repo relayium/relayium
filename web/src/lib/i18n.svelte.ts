@@ -17,6 +17,7 @@ export interface Messages {
   langLabel: string;
   tagline: string;
   connected: (name: string) => string;
+  ipLabel: string; // prefix shown before the device's server-observed public IP
   connecting: string;
   unavailable: string;
   unsupported: string;
@@ -90,6 +91,7 @@ const zh: Messages = {
   langLabel: "语言",
   tagline: "端到端加密的点对点文件传输 · 文件不经过服务器",
   connected: (n) => `已连接 · 本机 ${n}`,
+  ipLabel: "公网 IP",
   connecting: "正在连接信令服务器…",
   unavailable: "无法使用",
   unsupported: "需要 HTTPS（或 localhost）才能进行加密传输。请通过 https:// 访问本页面。",
@@ -164,6 +166,7 @@ const en: Messages = {
   langLabel: "Language",
   tagline: "End-to-end encrypted peer-to-peer file transfer · files never touch the server",
   connected: (n) => `Connected · this device ${n}`,
+  ipLabel: "public IP",
   connecting: "Connecting to the signaling server…",
   unavailable: "Unavailable",
   unsupported: "Encrypted transfer requires HTTPS (or localhost). Please open this page over https://.",
@@ -238,6 +241,7 @@ const ja: Messages = {
   langLabel: "言語",
   tagline: "エンドツーエンド暗号化のP2Pファイル転送 · ファイルはサーバーを経由しません",
   connected: (n) => `接続済み · このデバイス ${n}`,
+  ipLabel: "グローバル IP",
   connecting: "シグナリングサーバーに接続中…",
   unavailable: "利用不可",
   unsupported: "暗号化転送には HTTPS（または localhost）が必要です。https:// でこのページを開いてください。",
@@ -312,6 +316,7 @@ const ko: Messages = {
   langLabel: "언어",
   tagline: "종단간 암호화 P2P 파일 전송 · 파일은 서버를 거치지 않습니다",
   connected: (n) => `연결됨 · 내 기기 ${n}`,
+  ipLabel: "공인 IP",
   connecting: "시그널링 서버에 연결 중…",
   unavailable: "사용 불가",
   unsupported: "암호화 전송에는 HTTPS(또는 localhost)가 필요합니다. https:// 로 이 페이지를 열어 주세요.",
@@ -386,6 +391,7 @@ const de: Messages = {
   langLabel: "Sprache",
   tagline: "Ende-zu-Ende-verschlüsselte Peer-to-Peer-Dateiübertragung · Dateien erreichen nie den Server",
   connected: (n) => `Verbunden · dieses Gerät ${n}`,
+  ipLabel: "öffentliche IP",
   connecting: "Verbindung zum Signalisierungsserver…",
   unavailable: "Nicht verfügbar",
   unsupported: "Verschlüsselte Übertragung erfordert HTTPS (oder localhost). Bitte öffnen Sie diese Seite über https://.",
@@ -460,6 +466,7 @@ const fr: Messages = {
   langLabel: "Langue",
   tagline: "Transfert de fichiers pair-à-pair chiffré de bout en bout · les fichiers ne passent jamais par le serveur",
   connected: (n) => `Connecté · cet appareil ${n}`,
+  ipLabel: "IP publique",
   connecting: "Connexion au serveur de signalisation…",
   unavailable: "Indisponible",
   unsupported: "Le transfert chiffré nécessite HTTPS (ou localhost). Veuillez ouvrir cette page via https://.",
