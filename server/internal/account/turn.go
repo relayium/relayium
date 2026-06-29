@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"fmt"
+	"net/http"
 )
 
 // ICEServer is one entry of an RTCConfiguration.iceServers list, serialized to
@@ -13,6 +14,29 @@ type ICEServer struct {
 	URLs       []string `json:"urls"`
 	Username   string   `json:"username,omitempty"`
 	Credential string   `json:"credential,omitempty"`
+}
+
+// stunServers returns the configured STUN entries (always offered, no credentials).
+func (s *Service) stunServers() []ICEServer {
+	if len(s.cfg.STUNURLs) == 0 {
+		return nil
+	}
+	return []ICEServer{{URLs: s.cfg.STUNURLs}}
+}
+
+// handleICE serves the RTCConfiguration.iceServers list. STUN is always
+// included; a TURN entry with an ephemeral credential is added only when the
+// request carries a valid transfer token AND a TURN secret is configured. It
+// always returns 200 and never reveals token validity.
+func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
+	servers := s.stunServers()
+	token := r.URL.Query().Get("room")
+	if token != "" && s.cfg.TURNSecret != "" && len(s.cfg.TURNURLs) > 0 &&
+		s.ValidateTransferToken(r.Context(), token) {
+		expiry := s.now().Add(s.cfg.TURNCredTTL).Unix()
+		servers = append(servers, turnCredentials(s.cfg.TURNSecret, token, expiry, s.cfg.TURNURLs))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"iceServers": servers})
 }
 
 // turnCredentials builds a coturn TURN-REST ephemeral credential. The shared

@@ -29,6 +29,7 @@ func (s *Service) Routes() *http.ServeMux {
 	mux.HandleFunc("PATCH /api/devices/{id}", s.RequireSession(s.handleRenameDevice))
 	mux.HandleFunc("DELETE /api/devices/{id}", s.RequireSession(s.handleDeleteDevice))
 	mux.HandleFunc("POST /api/transfers", s.RequireSession(s.handleCreateTransfer))
+	mux.HandleFunc("GET /api/ice", s.handleICE)
 	return mux
 }
 
