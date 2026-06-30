@@ -27,6 +27,11 @@ type Config struct {
 	EnableMagic    bool
 	AdminUser      string
 	AdminPassword  string
+	// Stored-transfer limits (env/flag defaults; DB settings table overrides these live).
+	MaxFileSize int64 // bytes
+	DailyQuota  int64 // bytes per rolling 24h
+	DefaultTTL  int64 // seconds
+	MaxTTL      int64 // seconds
 }
 
 type Service struct {
