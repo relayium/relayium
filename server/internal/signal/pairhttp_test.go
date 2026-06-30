@@ -39,6 +39,20 @@ func TestPairHandlerMints(t *testing.T) {
 	}
 }
 
+func TestRateLimiterReapEvictsIdleKeys(t *testing.T) {
+	clock := int64(1000)
+	rl := NewRateLimiter(5, time.Minute, func() int64 { return clock })
+	rl.Allow("203.0.113.7")
+	clock = 1000 + 61 // past the 60s window
+	rl.reap()
+	rl.mu.Lock()
+	_, present := rl.hits["203.0.113.7"]
+	rl.mu.Unlock()
+	if present {
+		t.Fatal("reap should evict a key whose hits all aged out")
+	}
+}
+
 func TestPairHandlerRateLimitsPerIP(t *testing.T) {
 	clock := int64(1000)
 	now := func() int64 { return clock }

@@ -2,6 +2,7 @@
 package signal
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"sync"
@@ -41,6 +42,41 @@ func (rl *RateLimiter) Allow(key string) bool {
 	}
 	rl.hits[key] = append(kept, now)
 	return true
+}
+
+// reap prunes hits that have aged out of the window, then deletes any key
+// whose slice is now empty, keeping the per-IP map from growing unbounded.
+func (rl *RateLimiter) reap() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	cutoff := rl.now() - rl.window
+	for key, hits := range rl.hits {
+		kept := hits[:0]
+		for _, t := range hits {
+			if t > cutoff {
+				kept = append(kept, t)
+			}
+		}
+		if len(kept) == 0 {
+			delete(rl.hits, key)
+		} else {
+			rl.hits[key] = kept
+		}
+	}
+}
+
+// Run reaps idle IP entries every interval until ctx is cancelled.
+func (rl *RateLimiter) Run(ctx context.Context, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			rl.reap()
+		}
+	}
 }
 
 // PairHandler serves the anonymous POST /api/pair endpoint: it rate-limits by

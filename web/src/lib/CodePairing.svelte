@@ -15,6 +15,10 @@
   let err = $state("");
   let copied = $state(false);
 
+  // isMinter: true on the device that minted the code (EXP_KEY written to
+  // sessionStorage); false on the recipient who typed in a code.
+  const isMinter = sessionStorage.getItem(EXP_KEY) !== null;
+
   // Countdown (only the minting device has the expiry stashed).
   let remaining = $state(""); // "m:ss" or ""
   $effect(() => {
@@ -65,12 +69,14 @@
     <p class="error">{t.pair.expired}</p>
     <button onclick={() => enterRoom("")}>{t.pair.sendCode}</button>
   {:else if roomCode}
-    <p class="lead">{t.pair.yourCode}</p>
-    <div class="code">{roomCode}</div>
-    <div class="row">
-      <button onclick={copy}>{copied ? t.pair.copied : t.pair.copy}</button>
-      {#if remaining}<span class="ttl">{t.pair.expiresIn(remaining)}</span>{/if}
-    </div>
+    {#if isMinter}
+      <p class="lead">{t.pair.yourCode}</p>
+      <div class="code">{roomCode}</div>
+      <div class="row">
+        <button onclick={copy}>{copied ? t.pair.copied : t.pair.copy}</button>
+        {#if remaining}<span class="ttl">{t.pair.expiresIn(remaining)}</span>{/if}
+      </div>
+    {/if}
     <p class="waiting">{t.pair.waiting}</p>
   {:else if mode === "receive"}
     <p class="lead">{t.pair.enterHint}</p>
