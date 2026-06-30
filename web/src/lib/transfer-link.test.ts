@@ -19,9 +19,9 @@ describe("parseTransferToken", () => {
 });
 
 describe("buildTransferLink", () => {
-  it("puts the token in the fragment", () => {
+  it("puts the token in the fragment of the cross-network path", () => {
     expect(buildTransferLink("https://relayium.app", "tok")).toBe(
-      "https://relayium.app/#t=tok",
+      "https://relayium.app/cross-network#t=tok",
     );
   });
 });

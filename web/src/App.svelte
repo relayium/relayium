@@ -25,9 +25,10 @@
   import { pickSaveTarget, type SaveTarget, type FileSink } from "./lib/filesink";
   import { fetchIceServers } from "./lib/ice";
   import type { Peer } from "./lib/protocol";
-  import { lang, setLang, LANGS, messages, legalUrl, type Lang, type Messages, type StatusKey } from "./lib/i18n.svelte";
-  import Account from "./lib/Account.svelte";
-  import CrossNetwork from "./lib/CrossNetwork.svelte";
+  import { lang, messages, legalUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
+  import CrossPage from "./lib/CrossPage.svelte";
+  import Nav from "./lib/Nav.svelte";
+  import { currentRoute, syncRouteFromLocation } from "./lib/router.svelte";
   import Hero from "./lib/Hero.svelte";
   import FeatureStrip from "./lib/FeatureStrip.svelte";
 
@@ -84,13 +85,15 @@
 
   onMount(async () => {
     document.documentElement.lang = lang();
+    syncRouteFromLocation();
+    window.addEventListener("popstate", syncRouteFromLocation);
+    roomToken = parseTransferToken(location.hash);
     if (!window.isSecureContext || !crypto.subtle) {
       unsupported = true;
       return;
     }
     await ready();
     selfName = deviceName();
-    roomToken = parseTransferToken(location.hash);
     iceServers = await fetchIceServers(roomToken);
     signaling = new SignalingClient(wsURL(location, roomToken), selfName);
     signaling.onSelfId((id, ip) => { selfId = id; selfIP = ip; joinedRoom = true; });
@@ -363,25 +366,12 @@
 </script>
 
 <main>
-  <div class="topbar">
-    <Account />
-    <select
-      class="lang"
-      aria-label={t.langLabel}
-      value={lang()}
-      onchange={(e) => setLang((e.currentTarget as HTMLSelectElement).value as Lang)}
-    >
-      {#each LANGS as l (l.code)}
-        <option value={l.code}>{l.label}</option>
-      {/each}
-    </select>
-  </div>
-  <CrossNetwork {roomToken} />
-  {#if linkDead}
-    <p class="notice error">{t.crossnet.linkDead}</p>
-  {/if}
+  <Nav />
 
-  <Hero {connState} {unsupported} {selfName} {selfIP} />
+  {#if currentRoute() === "cross"}
+    <CrossPage {roomToken} {linkDead} />
+  {:else}
+    <Hero {connState} {unsupported} {selfName} {selfIP} />
 
   {#if notice}
     <div class="toast">{notice}</div>
@@ -479,6 +469,7 @@
       <span class="fineprint">{t.footer}</span>
     </footer>
   {/if}
+  {/if}
 </main>
 
 <style>
@@ -491,29 +482,6 @@
     box-sizing: border-box;
     text-align: left;
   }
-
-  .topbar {
-    position: absolute;
-    top: 16px;
-    right: 16px;
-    z-index: 10;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  @media (max-width: 1024px) { .topbar { top: 10px; right: 12px; } }
-
-  .lang {
-    font: inherit;
-    font-size: 13px;
-    padding: 5px 28px 5px 10px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: var(--social-bg);
-    color: var(--text-h);
-    cursor: pointer;
-  }
-  .lang:hover { border-color: var(--accent-border); }
 
   h2 { font-size: 18px; margin: 0 0 12px; }
 

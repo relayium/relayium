@@ -9,9 +9,12 @@ export function parseTransferToken(hash: string): string {
   return m ? m[1] : "";
 }
 
+/** Path of the cross-network page; shared links and the originator both target it. */
+export const CROSS_PATH = "/cross-network";
+
 /** Build the shareable link for a token against the given origin. */
 export function buildTransferLink(origin: string, token: string): string {
-  return `${origin}/#t=${token}`;
+  return `${origin}${CROSS_PATH}#t=${token}`;
 }
 
 /** Construct the signaling websocket URL, appending ?room= for a token-room. */

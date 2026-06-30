@@ -76,9 +76,11 @@ export interface Messages {
     errEmailTaken: string;
     errLogin: string;
   };
+  nav: { lanTab: string; crossTab: string };
   crossnet: {
     sendAcross: string;
     loginFirst: string;
+    loginRequired: string;
     shareHint: string;
     copy: string;
     copied: string;
@@ -158,9 +160,11 @@ const zh: Messages = {
     errEmailTaken: "该邮箱已注册，请直接登录。",
     errLogin: "邮箱或密码错误。",
   },
+  nav: { lanTab: "局域网传输", crossTab: "跨网络传输" },
   crossnet: {
     sendAcross: "发送到其他网络的人",
     loginFirst: "请先登录后再发起跨网络传输",
+    loginRequired: "跨网络传输需要登录后才能发起。请登录后再继续。",
     shareHint: "把下面的链接发给对方；对方打开后，在下方核对 6 位校验码即可传输",
     copy: "复制链接",
     copied: "已复制",
@@ -241,9 +245,11 @@ const en: Messages = {
     errEmailTaken: "That email is already registered — please log in.",
     errLogin: "Wrong email or password.",
   },
+  nav: { lanTab: "LAN transfer", crossTab: "Cross-network" },
   crossnet: {
     sendAcross: "Send to someone on another network",
     loginFirst: "Please sign in before starting a cross-network transfer",
+    loginRequired: "Starting a cross-network transfer requires signing in. Please sign in to continue.",
     shareHint: "Send this link to the other person; once they open it, verify the 6-digit code below to transfer",
     copy: "Copy link",
     copied: "Copied",
@@ -324,9 +330,11 @@ const ja: Messages = {
     errEmailTaken: "このメールは登録済みです。ログインしてください。",
     errLogin: "メールアドレスまたはパスワードが違います。",
   },
+  nav: { lanTab: "LAN 転送", crossTab: "ネットワーク間転送" },
   crossnet: {
     sendAcross: "別のネットワークの相手に送る",
     loginFirst: "ネットワーク間転送を始める前にサインインしてください",
+    loginRequired: "ネットワーク間転送を開始するにはログインが必要です。ログインして続行してください。",
     shareHint: "このリンクを相手に送ってください。相手が開いたら、下の6桁コードを確認して転送します",
     copy: "リンクをコピー",
     copied: "コピーしました",
@@ -407,9 +415,11 @@ const ko: Messages = {
     errEmailTaken: "이미 가입된 이메일입니다. 로그인해 주세요.",
     errLogin: "이메일 또는 비밀번호가 올바르지 않습니다.",
   },
+  nav: { lanTab: "LAN 전송", crossTab: "네트워크 간 전송" },
   crossnet: {
     sendAcross: "다른 네트워크의 상대에게 보내기",
     loginFirst: "네트워크 간 전송을 시작하려면 먼저 로그인하세요",
+    loginRequired: "네트워크 간 전송을 시작하려면 로그인이 필요합니다. 로그인 후 계속하세요.",
     shareHint: "이 링크를 상대에게 보내세요. 상대가 열면 아래 6자리 코드를 확인하여 전송합니다",
     copy: "링크 복사",
     copied: "복사됨",
@@ -490,9 +500,11 @@ const de: Messages = {
     errEmailTaken: "Diese E-Mail ist bereits registriert — bitte anmelden.",
     errLogin: "Falsche E-Mail oder falsches Passwort.",
   },
+  nav: { lanTab: "LAN-Übertragung", crossTab: "Netzübergreifend" },
   crossnet: {
     sendAcross: "An jemanden in einem anderen Netzwerk senden",
     loginFirst: "Bitte melde dich an, bevor du eine netzwerkübergreifende Übertragung startest",
+    loginRequired: "Für eine netzübergreifende Übertragung ist eine Anmeldung erforderlich. Bitte melde dich an, um fortzufahren.",
     shareHint: "Sende diesen Link an die andere Person; sobald sie ihn öffnet, bestätige den 6-stelligen Code unten zur Übertragung",
     copy: "Link kopieren",
     copied: "Kopiert",
@@ -573,9 +585,11 @@ const fr: Messages = {
     errEmailTaken: "Cet e-mail est déjà enregistré — veuillez vous connecter.",
     errLogin: "E-mail ou mot de passe incorrect.",
   },
+  nav: { lanTab: "Transfert LAN", crossTab: "Inter-réseaux" },
   crossnet: {
     sendAcross: "Envoyer à quelqu'un sur un autre réseau",
     loginFirst: "Veuillez vous connecter avant de lancer un transfert inter-réseaux",
+    loginRequired: "Lancer un transfert inter-réseaux nécessite une connexion. Veuillez vous connecter pour continuer.",
     shareHint: "Envoyez ce lien à l'autre personne ; une fois ouvert, vérifiez le code à 6 chiffres ci-dessous pour transférer",
     copy: "Copier le lien",
     copied: "Copié",
