@@ -8,7 +8,7 @@
     type SessionKeys,
   } from "./lib/crypto";
   import { SignalingClient } from "./lib/signaling";
-  import { parseTransferToken, wsURL } from "./lib/transfer-link";
+  import { parseTransferToken, parseCodeParam, wsURL } from "./lib/transfer-link";
   import { connect, type InboundSignal, type Conn } from "./lib/webrtc";
   import {
     Sender,
@@ -61,6 +61,7 @@
   let send = $state<Xfer | null>(null);
   let notice = $state(""); // transient hint (e.g. "busy", "too many files")
   let roomToken = $state("");
+  let roomCode = $state("");
   let joinedRoom = $state(false);
   let linkDead = $state(false);
 
@@ -75,6 +76,7 @@
   const busy = $derived(
     !!incoming || !!(recv && !recv.done) || !!(send && !send.done),
   );
+  const showTransfer = $derived(visiblePeers.length > 0 || busy);
 
   // Reflect transfer progress in the tab title (follows the language switch).
   $effect(() => {
@@ -89,6 +91,7 @@
     syncRouteFromLocation();
     window.addEventListener("popstate", syncRouteFromLocation);
     roomToken = parseTransferToken(location.hash);
+    roomCode = parseCodeParam(location.hash);
     if (!window.isSecureContext || !crypto.subtle) {
       unsupported = true;
       return;
@@ -96,13 +99,13 @@
     await ready();
     selfName = deviceName();
     iceServers = await fetchIceServers(roomToken);
-    signaling = new SignalingClient(wsURL(location, roomToken), selfName);
+    signaling = new SignalingClient(wsURL(location, roomToken, roomCode), selfName);
     signaling.onSelfId((id, ip) => { selfId = id; selfIP = ip; joinedRoom = true; });
     signaling.onPeers((p) => (peers = p));
     signaling.onClose(() => {
       // In a token-room, a close before we ever joined means the link was
       // invalid/expired or the room was full.
-      if (roomToken && !joinedRoom) linkDead = true;
+      if ((roomToken || roomCode) && !joinedRoom) linkDead = true;
     });
     listenForIncoming();
     connState = "ready";
@@ -367,13 +370,83 @@
 </script>
 
 <main>
+{#snippet transferSurface()}
+  <section class="peers">
+    <h2>{t.peersTitle}</h2>
+    {#if visiblePeers.length === 0}
+      <p class="empty">{t.emptyPeers}</p>
+    {:else}
+      <ul>
+        {#each visiblePeers as p (p.id)}
+          <li
+            class="peer"
+            class:disabled={busy}
+            ondragover={(e) => { e.preventDefault(); if (!busy) (e.currentTarget as HTMLElement).classList.add("drag"); }}
+            ondragleave={(e) => (e.currentTarget as HTMLElement).classList.remove("drag")}
+            ondrop={(e) => { if (busy) { e.preventDefault(); flash(messages[lang()].busy); return; } onDrop(e, p.id); }}
+          >
+            <label>
+              <span class="pavatar">{p.name.slice(0, 1).toUpperCase()}</span>
+              <span class="ptext">
+                <span class="pname">{p.name}</span>
+                <span class="pick">{t.pickHint(MAX_FILES)}</span>
+              </span>
+              <input type="file" multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
+            </label>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </section>
+
+  {#if incoming}
+    <section class="card request">
+      <div class="req-head">{t.requestHead(nameOf(incoming.from), incoming.files.length, formatSize(incoming.total))}</div>
+      <ul class="filelist">
+        {#each incoming.files as f}
+          <li><span class="fname">{f.name}</span><span class="fsize">{formatSize(f.size)}</span></li>
+        {/each}
+      </ul>
+      {#if sasCode}
+        <div class="sas">{t.codeLabel} <code>{sasCode}</code> — {t.codeCompare}</div>
+      {/if}
+      <div class="actions">
+        <button class="primary" onclick={() => acceptFn?.()}>{t.accept}</button>
+        <button class="ghost" onclick={() => rejectFn?.()}>{t.decline}</button>
+      </div>
+    </section>
+  {/if}
+
+  {#each [send, recv].filter(Boolean) as x (x!.dir)}
+    {@const xf = x as Xfer}
+    <section class="card xfer" class:ok={xf.done && xf.ok} class:bad={xf.done && !xf.ok}>
+      <div class="xfer-head">
+        <span class="label">{xf.dir === "send" ? t.sendTo(nameOf(xf.peer)) : t.recvFrom(nameOf(xf.peer))}</span>
+        {#if xf.files.length}<span class="count">{xf.files.length > 1 ? t.fileCounter(xf.index + 1, xf.files.length) : xf.files[0].name}</span>{/if}
+        {#if xf.done}<button class="x" onclick={() => (xf.dir === "send" ? (send = null) : (recv = null))} aria-label={t.close}>✕</button>{/if}
+      </div>
+      <div class="status">
+        {statusText(t, xf)}
+        {#if sasCode && !xf.done} · {t.codeLabel} <code>{sasCode}</code>{/if}
+      </div>
+      {#if !xf.done}
+        <div class="bar"><div class="fill" style:width="{pct(xf)}%"></div></div>
+        <div class="meta">
+          <span>{pct(xf)}% · {formatSize(xf.sent)} / {formatSize(xf.total)}</span>
+          {#if xf.speed > 0}<span>{formatSpeed(xf.speed)}</span>{/if}
+        </div>
+      {/if}
+    </section>
+  {/each}
+{/snippet}
+
   {#if currentRoute() === "download"}
     <DownloadPage id={downloadId(location.pathname)} />
   {:else}
   <Nav />
 
   {#if currentRoute() === "cross"}
-    <CrossPage {roomToken} {linkDead} />
+    <CrossPage {roomToken} {roomCode} {linkDead} {showTransfer} {transferSurface} />
   {:else}
     <Hero {connState} {unsupported} {selfName} {selfIP} />
 
@@ -384,73 +457,7 @@
   {#if unsupported}
     <div class="banner error">{t.unsupported}</div>
   {:else}
-    <section class="peers">
-      <h2>{t.peersTitle}</h2>
-      {#if visiblePeers.length === 0}
-        <p class="empty">{t.emptyPeers}</p>
-      {:else}
-        <ul>
-          {#each visiblePeers as p (p.id)}
-            <li
-              class="peer"
-              class:disabled={busy}
-              ondragover={(e) => { e.preventDefault(); if (!busy) (e.currentTarget as HTMLElement).classList.add("drag"); }}
-              ondragleave={(e) => (e.currentTarget as HTMLElement).classList.remove("drag")}
-              ondrop={(e) => { if (busy) { e.preventDefault(); flash(messages[lang()].busy); return; } onDrop(e, p.id); }}
-            >
-              <label>
-                <span class="pavatar">{p.name.slice(0, 1).toUpperCase()}</span>
-                <span class="ptext">
-                  <span class="pname">{p.name}</span>
-                  <span class="pick">{t.pickHint(MAX_FILES)}</span>
-                </span>
-                <input type="file" multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
-              </label>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    </section>
-
-    {#if incoming}
-      <section class="card request">
-        <div class="req-head">{t.requestHead(nameOf(incoming.from), incoming.files.length, formatSize(incoming.total))}</div>
-        <ul class="filelist">
-          {#each incoming.files as f}
-            <li><span class="fname">{f.name}</span><span class="fsize">{formatSize(f.size)}</span></li>
-          {/each}
-        </ul>
-        {#if sasCode}
-          <div class="sas">{t.codeLabel} <code>{sasCode}</code> — {t.codeCompare}</div>
-        {/if}
-        <div class="actions">
-          <button class="primary" onclick={() => acceptFn?.()}>{t.accept}</button>
-          <button class="ghost" onclick={() => rejectFn?.()}>{t.decline}</button>
-        </div>
-      </section>
-    {/if}
-
-    {#each [send, recv].filter(Boolean) as x (x!.dir)}
-      {@const xf = x as Xfer}
-      <section class="card xfer" class:ok={xf.done && xf.ok} class:bad={xf.done && !xf.ok}>
-        <div class="xfer-head">
-          <span class="label">{xf.dir === "send" ? t.sendTo(nameOf(xf.peer)) : t.recvFrom(nameOf(xf.peer))}</span>
-          {#if xf.files.length}<span class="count">{xf.files.length > 1 ? t.fileCounter(xf.index + 1, xf.files.length) : xf.files[0].name}</span>{/if}
-          {#if xf.done}<button class="x" onclick={() => (xf.dir === "send" ? (send = null) : (recv = null))} aria-label={t.close}>✕</button>{/if}
-        </div>
-        <div class="status">
-          {statusText(t, xf)}
-          {#if sasCode && !xf.done} · {t.codeLabel} <code>{sasCode}</code>{/if}
-        </div>
-        {#if !xf.done}
-          <div class="bar"><div class="fill" style:width="{pct(xf)}%"></div></div>
-          <div class="meta">
-            <span>{pct(xf)}% · {formatSize(xf.sent)} / {formatSize(xf.total)}</span>
-            {#if xf.speed > 0}<span>{formatSpeed(xf.speed)}</span>{/if}
-          </div>
-        {/if}
-      </section>
-    {/each}
+    {@render transferSurface()}
 
     <FeatureStrip />
     <section class="guide">
