@@ -2,13 +2,12 @@ package account
 
 import (
 	"bufio"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"io"
 	"net/http"
 	"strconv"
-
-	"github.com/relayium/relayium/internal/storage"
 )
 
 const (
@@ -120,7 +119,50 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	writeJSON(w, http.StatusOK, map[string]any{"id": id, "expiresAt": sf.ExpiresAt})
 }
 
-// Stub handlers for routes registered above; full implementations land in Task 5.
+func (s *Service) handleFileMeta(w http.ResponseWriter, r *http.Request) {
+	sf, ok := s.liveFile(r, r.PathValue("id"))
+	if !ok {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"encManifest":   base64.StdEncoding.EncodeToString(sf.EncManifest),
+		"size":          sf.Size,
+		"burnAfterRead": sf.BurnAfterRead,
+		"expiresAt":     sf.ExpiresAt,
+	})
+}
+
+func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
+	if s.blobs == nil {
+		http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	sf, ok := s.liveFile(r, r.PathValue("id"))
+	if !ok {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	rc, err := s.blobs.Get(r.Context(), sf.BlobKey)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	defer rc.Close()
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Length", strconv.FormatInt(sf.Size, 10))
+	n, err := io.Copy(w, rc)
+	if err != nil {
+		return // client hung up mid-stream; leave the file intact
+	}
+	// Burn-after-read: only after the whole blob streamed out. Row-state delete
+	// is idempotent so a double download can't 500.
+	if sf.BurnAfterRead && n == sf.Size {
+		_ = s.store.MarkDownloaded(r.Context(), sf.ID, s.now().Unix())
+		_ = s.blobs.Delete(r.Context(), sf.BlobKey)
+		_ = s.store.DeleteStoredFile(r.Context(), sf.ID)
+	}
+}
 
 func (s *Service) handleListFiles(w http.ResponseWriter, r *http.Request, u User) {
 	files, err := s.store.ListStoredFilesByUser(r.Context(), u.ID)
@@ -128,20 +170,43 @@ func (s *Service) handleListFiles(w http.ResponseWriter, r *http.Request, u User
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"files": files})
+	out := make([]map[string]any, 0, len(files))
+	for _, f := range files {
+		out = append(out, map[string]any{
+			"id":            f.ID,
+			"size":          f.Size,
+			"createdAt":     f.CreatedAt,
+			"expiresAt":     f.ExpiresAt,
+			"burnAfterRead": f.BurnAfterRead,
+			"downloaded":    f.DownloadedAt > 0,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"files": out})
 }
 
 func (s *Service) handleDeleteFile(w http.ResponseWriter, r *http.Request, u User) {
-	http.Error(w, "not implemented", http.StatusNotImplemented)
+	sf, err := s.store.GetStoredFile(r.Context(), r.PathValue("id"))
+	if err != nil || sf.UserID != u.ID {
+		// Non-owner and missing are indistinguishable: no existence leak.
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if s.blobs != nil {
+		_ = s.blobs.Delete(r.Context(), sf.BlobKey)
+	}
+	if err := s.store.DeleteStoredFile(r.Context(), sf.ID); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (s *Service) handleFileMeta(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "not implemented", http.StatusNotImplemented)
+// liveFile fetches a stored file that exists and has not expired; ok=false maps
+// to a 404 for missing, expired, or store errors (fail closed).
+func (s *Service) liveFile(r *http.Request, id string) (StoredFile, bool) {
+	sf, err := s.store.GetStoredFile(r.Context(), id)
+	if err != nil || s.now().Unix() >= sf.ExpiresAt {
+		return StoredFile{}, false
+	}
+	return sf, true
 }
-
-func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "not implemented", http.StatusNotImplemented)
-}
-
-// ensure storage import is used even before Task 5 adds blob streaming.
-var _ = storage.ErrNotFound
