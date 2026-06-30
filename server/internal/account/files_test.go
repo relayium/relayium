@@ -3,8 +3,10 @@ package account
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -135,5 +137,113 @@ func TestUploadUnauthIs401(t *testing.T) {
 	resp := postUpload(t, ts, nil, "?ttl=0", uploadBody([]byte("m"), []byte("c")))
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("unauth: want 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestFileMetaOKAnd404(t *testing.T) {
+	ts, _, _, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "m@example.com")
+	resp := postUpload(t, ts, cookie, "?ttl=0", uploadBody([]byte("MANIFEST"), []byte("blobby")))
+	var up struct{ ID string `json:"id"` }
+	decodeJSON(t, resp, &up)
+
+	// Public meta — no cookie needed.
+	mresp, _ := ts.Client().Get(ts.URL + "/api/files/" + up.ID + "/meta")
+	if mresp.StatusCode != http.StatusOK {
+		t.Fatalf("meta: %d", mresp.StatusCode)
+	}
+	var meta struct {
+		EncManifest   string `json:"encManifest"`
+		Size          int64  `json:"size"`
+		BurnAfterRead bool   `json:"burnAfterRead"`
+		ExpiresAt     int64  `json:"expiresAt"`
+	}
+	decodeJSON(t, mresp, &meta)
+	if meta.Size != int64(len("blobby")) {
+		t.Fatalf("meta size = %d", meta.Size)
+	}
+	dec, _ := base64.StdEncoding.DecodeString(meta.EncManifest)
+	if string(dec) != "MANIFEST" {
+		t.Fatalf("encManifest decode = %q", dec)
+	}
+	// Missing id → 404.
+	r404, _ := ts.Client().Get(ts.URL + "/api/files/deadbeef/meta")
+	if r404.StatusCode != http.StatusNotFound {
+		t.Fatalf("missing meta: want 404, got %d", r404.StatusCode)
+	}
+}
+
+func TestBlobStreamsAndBurnDeletes(t *testing.T) {
+	ts, _, store, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "b@example.com")
+	resp := postUpload(t, ts, cookie, "?burnAfterRead=1&ttl=0", uploadBody([]byte("m"), []byte("CIPHERTEXT")))
+	var up struct{ ID string `json:"id"` }
+	decodeJSON(t, resp, &up)
+
+	bresp, _ := ts.Client().Get(ts.URL + "/api/files/" + up.ID + "/blob")
+	if bresp.StatusCode != http.StatusOK {
+		t.Fatalf("blob: %d", bresp.StatusCode)
+	}
+	body, _ := io.ReadAll(bresp.Body)
+	if string(body) != "CIPHERTEXT" {
+		t.Fatalf("blob body = %q", body)
+	}
+	// Burn-after-read: the row is gone and a second fetch 404s.
+	if _, err := store.GetStoredFile(context.Background(), up.ID); err != ErrNotFound {
+		t.Fatalf("burned file should be deleted, got err=%v", err)
+	}
+	again, _ := ts.Client().Get(ts.URL + "/api/files/" + up.ID + "/blob")
+	if again.StatusCode != http.StatusNotFound {
+		t.Fatalf("second blob fetch: want 404, got %d", again.StatusCode)
+	}
+}
+
+func TestListOwnFilesNoPlaintextNames(t *testing.T) {
+	ts, _, _, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "l@example.com")
+	_ = postUpload(t, ts, cookie, "?ttl=0", uploadBody([]byte("m"), []byte("c1")))
+	req, _ := http.NewRequest("GET", ts.URL+"/api/files", nil)
+	req.AddCookie(cookie)
+	resp, _ := ts.Client().Do(req)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("list: %d", resp.StatusCode)
+	}
+	var out struct {
+		Files []map[string]any `json:"files"`
+	}
+	decodeJSON(t, resp, &out)
+	if len(out.Files) != 1 {
+		t.Fatalf("want 1 file, got %d", len(out.Files))
+	}
+	if _, hasName := out.Files[0]["name"]; hasName {
+		t.Fatalf("list must not expose plaintext names")
+	}
+}
+
+func TestDeleteFileOwnerGate(t *testing.T) {
+	ts, _, _, mail := newFileServer(t)
+	owner := loginCookie(t, ts, mail, "owner@example.com")
+	resp := postUpload(t, ts, owner, "?ttl=0", uploadBody([]byte("m"), []byte("c")))
+	var up struct{ ID string `json:"id"` }
+	decodeJSON(t, resp, &up)
+
+	// A different user cannot see/delete it → 404 (no existence leak).
+	other := loginCookie(t, ts, mail, "other@example.com")
+	req, _ := http.NewRequest("DELETE", ts.URL+"/api/files/"+up.ID, nil)
+	req.AddCookie(other)
+	r, _ := ts.Client().Do(req)
+	if r.StatusCode != http.StatusNotFound {
+		t.Fatalf("non-owner delete: want 404, got %d", r.StatusCode)
+	}
+	// Owner deletes → 200, then meta 404.
+	req, _ = http.NewRequest("DELETE", ts.URL+"/api/files/"+up.ID, nil)
+	req.AddCookie(owner)
+	r, _ = ts.Client().Do(req)
+	if r.StatusCode != http.StatusOK {
+		t.Fatalf("owner delete: %d", r.StatusCode)
+	}
+	m, _ := ts.Client().Get(ts.URL + "/api/files/" + up.ID + "/meta")
+	if m.StatusCode != http.StatusNotFound {
+		t.Fatalf("meta after delete: want 404, got %d", m.StatusCode)
 	}
 }
