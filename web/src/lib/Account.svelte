@@ -26,6 +26,16 @@
   let pwError = $state("");
   let pwDone = $state(false);
 
+  $effect(() => {
+    if (!open) {
+      pwOpen = false;
+      pwError = "";
+      curPw = "";
+      newPw = "";
+      confirmPw = "";
+    }
+  });
+
   function mapPwError(code?: string): string {
     if (code === "current password incorrect") return t.account.errCurrentWrong;
     if (code === "password too short") return t.account.errTooShort;
@@ -117,7 +127,7 @@
           <button class="primary" onclick={onChangePassword}>
             {session().user!.hasPassword ? t.account.changePassword : t.account.setPassword}
           </button>
-          <button class="link" onclick={() => { pwOpen = false; pwError = ""; }}>{t.close}</button>
+          <button class="link" onclick={() => { pwOpen = false; pwError = ""; curPw = ""; newPw = ""; confirmPw = ""; }}>{t.close}</button>
         {:else}
           {#if pwDone}<p class="hint">{t.account.pwChanged}</p>{/if}
           <button class="ghost" onclick={() => { pwOpen = true; pwDone = false; }}>
