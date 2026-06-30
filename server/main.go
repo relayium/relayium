@@ -80,6 +80,11 @@ func main() {
 	pairReg := signal.NewPairRegistry(300, func() int64 { return time.Now().Unix() }) // 5 min
 	go pairReg.Run(context.Background(), time.Minute)
 	pairLimiter := signal.NewRateLimiter(10, time.Minute, func() int64 { return time.Now().Unix() })
+	go pairLimiter.Run(context.Background(), time.Minute)
+	// Separate limiter for /ws code-join attempts: 30/min/IP caps brute-force of
+	// the 10^6 code space while allowing a real recipient to reload a few times.
+	wsCodeLimiter := signal.NewRateLimiter(30, time.Minute, func() int64 { return time.Now().Unix() })
+	go wsCodeLimiter.Run(context.Background(), time.Minute)
 
 	store, dbErr := account.OpenSQLite(*dbPath)
 
@@ -94,6 +99,10 @@ func main() {
 	})
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		code := r.URL.Query().Get("code")
+		if code != "" && !wsCodeLimiter.Allow(signal.ClientIP(r)) {
+			http.Error(w, "too many pairing attempts", http.StatusTooManyRequests)
+			return
+		}
 		token := r.URL.Query().Get("room")
 		room, maxPeers, lan, ok := signal.RoomFor(code, token,
 			pairReg.Validate,
