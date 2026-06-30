@@ -86,6 +86,9 @@ export interface Messages {
     copied: string;
     connecting: string;
     linkDead: string;
+    realtimeTitle: string;
+    realtimeSub: string;
+    realtimeFoot: string;
   };
   pair: {
     sendCode: string;
@@ -212,6 +215,9 @@ const zh: Messages = {
     copied: "已复制",
     connecting: "正在通过跨网络链接连接…",
     linkDead: "链接已失效或正在被使用，请向发送方索要新链接",
+    realtimeTitle: "实时直传",
+    realtimeSub: "对方此刻在线 · 点对点直连 · 文件不经服务器",
+    realtimeFoot: "免登录 · 登录可提升连通性",
   },
   pair: {
     sendCode: "生成配对码",
@@ -339,6 +345,9 @@ const en: Messages = {
     copied: "Copied",
     connecting: "Connecting over the cross-network link…",
     linkDead: "This link is invalid or already in use — ask the sender for a new one",
+    realtimeTitle: "Realtime direct",
+    realtimeSub: "Both online now · peer-to-peer · files never touch the server",
+    realtimeFoot: "No sign-in needed · sign in for better connectivity",
   },
   pair: {
     sendCode: "Create a pairing code",
@@ -466,6 +475,9 @@ const ja: Messages = {
     copied: "コピーしました",
     connecting: "ネットワーク間リンクで接続中…",
     linkDead: "リンクが無効か使用中です。送信者に新しいリンクを依頼してください",
+    realtimeTitle: "リアルタイム直接転送",
+    realtimeSub: "両者が今オンライン · P2P · ファイルはサーバーを経由しません",
+    realtimeFoot: "ログイン不要 · ログインで接続性が向上",
   },
   pair: {
     sendCode: "ペアリングコードを生成",
@@ -593,6 +605,9 @@ const ko: Messages = {
     copied: "복사됨",
     connecting: "네트워크 간 링크로 연결 중…",
     linkDead: "링크가 유효하지 않거나 사용 중입니다. 보낸 사람에게 새 링크를 요청하세요",
+    realtimeTitle: "실시간 직접 전송",
+    realtimeSub: "양쪽 모두 온라인 · P2P · 파일은 서버를 거치지 않습니다",
+    realtimeFoot: "로그인 불필요 · 로그인 시 연결성 향상",
   },
   pair: {
     sendCode: "페어링 코드 생성",
@@ -720,6 +735,9 @@ const de: Messages = {
     copied: "Kopiert",
     connecting: "Verbindung über den netzwerkübergreifenden Link…",
     linkDead: "Dieser Link ist ungültig oder bereits in Gebrauch — bitte den Absender um einen neuen",
+    realtimeTitle: "Echtzeit-Direktübertragung",
+    realtimeSub: "Beide jetzt online · Peer-to-Peer · Dateien berühren nie den Server",
+    realtimeFoot: "Keine Anmeldung nötig · angemeldet bessere Verbindung",
   },
   pair: {
     sendCode: "Kopplungscode erstellen",
@@ -847,6 +865,9 @@ const fr: Messages = {
     copied: "Copié",
     connecting: "Connexion via le lien inter-réseaux…",
     linkDead: "Ce lien est invalide ou déjà utilisé — demandez-en un nouveau à l'expéditeur",
+    realtimeTitle: "Transfert direct en temps réel",
+    realtimeSub: "Les deux en ligne · pair-à-pair · les fichiers ne passent jamais par le serveur",
+    realtimeFoot: "Sans connexion · connectez-vous pour une meilleure connectivité",
   },
   pair: {
     sendCode: "Créer un code d'appairage",
