@@ -22,6 +22,9 @@ type Config struct {
 	GoogleClientID string
 	GoogleSecret   string
 	GoogleRedirect string
+	EnableGoogle   bool
+	EnableMagic    bool
+	AdminPassword  string
 }
 
 type Service struct {

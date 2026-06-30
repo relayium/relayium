@@ -13,6 +13,7 @@ func TestGoogleCallbackCreatesSession(t *testing.T) {
 	svc := NewService(store, &capturingMailer{}, Config{
 		BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: time.Minute,
 		GoogleClientID: "cid", GoogleSecret: "sec", GoogleRedirect: "http://example.test/api/auth/google/callback",
+		EnableGoogle: true,
 	})
 	svc.fetchGoogleUser = func(_ context.Context, code string) (string, string, string, bool, error) {
 		return "google-sub-1", "Gmail@Example.com", "Gee", true, nil
@@ -50,7 +51,7 @@ func TestGoogleCallbackCreatesSession(t *testing.T) {
 
 func TestGoogleCallbackRejectsBadState(t *testing.T) {
 	store := newTestStore(t)
-	svc := NewService(store, &capturingMailer{}, Config{BaseURL: "http://example.test", SessionTTL: time.Hour})
+	svc := NewService(store, &capturingMailer{}, Config{BaseURL: "http://example.test", SessionTTL: time.Hour, EnableGoogle: true})
 	svc.fetchGoogleUser = func(context.Context, string) (string, string, string, bool, error) {
 		return "s", "e@x.com", "n", true, nil
 	}
@@ -71,7 +72,7 @@ func TestGoogleCallbackRejectsBadState(t *testing.T) {
 
 func TestGoogleCallbackRejectsUnverifiedEmail(t *testing.T) {
 	store := newTestStore(t)
-	svc := NewService(store, &capturingMailer{}, Config{BaseURL: "http://example.test", SessionTTL: time.Hour})
+	svc := NewService(store, &capturingMailer{}, Config{BaseURL: "http://example.test", SessionTTL: time.Hour, EnableGoogle: true})
 	const unverifiedSub = "google-sub-unverified"
 	svc.fetchGoogleUser = func(context.Context, string) (string, string, string, bool, error) {
 		return unverifiedSub, "unverified@example.com", "Unverified User", false, nil
