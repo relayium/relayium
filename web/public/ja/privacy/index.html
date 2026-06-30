@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>プライバシーポリシー · Relayium</title>
-    <meta name="description" content="Relayiumがあなたのデータを扱う方法：ファイルはピアツーピアで転送され、当社のサーバーを通過しません。アカウントは任意で、メールアドレスと表示名のみを保存します。" />
+    <meta name="description" content="Relayiumがあなたのデータを扱う方法：リアルタイム直接転送はピアツーピアかつエンドツーエンド暗号化で行われ、当社のサーバーを通過しません。一時保存ダウンロードリンク機能はファイルをゼロ知識暗号化で保護します。アカウントは任意で、メールアドレスと表示名のみを保存します。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/privacy" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/privacy" />
@@ -17,7 +17,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"プライバシーポリシー · Relayium","description":"Relayiumがあなたのデータを扱う方法：ファイルはピアツーピアで転送され、当社のサーバーを通過しません。アカウントは任意で、メールアドレスと表示名のみを保存します。","url":"https://relayium.com/ja/privacy","inLanguage":"ja","dateModified":"2026-06-29","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"プライバシーポリシー · Relayium","description":"Relayiumがあなたのデータを扱う方法：リアルタイム直接転送はピアツーピアかつエンドツーエンド暗号化で行われ、当社のサーバーを通過しません。一時保存ダウンロードリンク機能はファイルをゼロ知識暗号化で保護します。アカウントは任意で、メールアドレスと表示名のみを保存します。","url":"https://relayium.com/ja/privacy","inLanguage":"ja","dateModified":"2026-06-29","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -43,7 +43,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h1>プライバシーポリシー</h1>
       <p class="updated">最終更新: 2026-06-29</p>
       <nav class="langbar" aria-label="Language"><a href="/privacy">English</a><a href="/zh/privacy">中文</a><a href="/ja/privacy" aria-current="true">日本語</a><a href="/ko/privacy">한국어</a><a href="/de/privacy">Deutsch</a><a href="/fr/privacy">Français</a></nav>
-      <p>Relayiumはあなたのファイルが常にあなたのものであるよう設計されています。ファイル転送は2台のデバイス間で直接行われ、エンドツーエンドで暗号化され、当社のサーバーを通過しません。</p>
+      <p>Relayiumはあなたのファイルが常にあなたのものであるよう設計されています。リアルタイムの直接転送はピアツーピアかつエンドツーエンド暗号化で行われ、当社のサーバーを通過しません——オプションの一時保存ダウンロードリンク機能はゼロ知識暗号化を使用するため、サーバーには解読不能な暗号文のみが保存されます。</p>
       <p>このページでは、本サービスが実際に扱う少量のデータと、意図的に取得しないデータについて説明します。</p>
       <h2>ローカルネットワーク転送ではデータを収集しません</h2><p>同じネットワーク上のデバイス間でファイルを転送する場合、アカウントは不要で、サービスはあなたに関する情報を一切保存しません。シグナリングサーバーは2台のデバイスが互いを見つけるのを助けるだけで、ファイルの実体は暗号化されたWebRTCチャネルを通じてデバイス間で直接やり取りされます。</p>
       <h2>アカウントに保存される情報（サインインした場合のみ）</h2><p>サインインは任意で、クロスネットワーク転送を有効にするためだけに必要です。サインインした場合、アカウントの運用に必要な最小限の情報のみを保存します：</p><ul><li>メールアドレスと表示名。</li><li>使用したサインイン方法（Google、またはメールマジックリンク）。マジックリンクのトークンはハッシュ値のみ保存され、平文では保存されません。</li><li>ログインセッション。安全なhttpOnlyクッキーに保存されます。</li><li>登録したデバイス。ランダムなデバイスIDとデバイス名（例：プラットフォーム名）で管理されます。</li></ul>

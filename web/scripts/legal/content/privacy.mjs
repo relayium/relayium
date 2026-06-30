@@ -2,12 +2,12 @@
 const en = {
   title: "Privacy Policy",
   description:
-    "How Relayium handles your data: files transfer peer-to-peer and never touch our servers. Accounts are optional and store only an email and display name.",
+    "How Relayium handles your data: realtime direct transfers go peer-to-peer and never touch our servers; the stored download-link mode keeps files zero-knowledge encrypted. Accounts are optional and store only an email and display name.",
   updatedLabel: "Last updated",
   updated: "2026-06-29",
   otherDocLabel: "Terms of Service",
   lead: [
-    "Relayium is built so that your files stay yours. File transfers happen directly between two devices, end-to-end encrypted, and never pass through our servers.",
+    "Relayium is built so that your files stay yours. Realtime direct transfers go peer-to-peer, end-to-end encrypted, and never pass through our servers; the optional stored download-link mode uses zero-knowledge encryption — the server holds only ciphertext it cannot read.",
     "This page explains the little data the service does handle, and the data it deliberately never sees.",
   ],
   sections: [
@@ -92,12 +92,12 @@ const en = {
 const zh = {
   title: "隐私政策",
   description:
-    "Relayium 如何处理你的数据:文件点对点传输,绝不经过我们的服务器。账号是可选的,仅存储邮箱与显示名。",
+    "Relayium 如何处理你的数据：实时直连传输以点对点方式进行，绝不经过我们的服务器；暂存下载链接模式保持文件零知识加密。账号是可选的，仅存储邮箱与显示名。",
   updatedLabel: "最后更新",
   updated: "2026-06-29",
   otherDocLabel: "服务条款",
   lead: [
-    "Relayium 的设计宗旨是让你的文件始终属于你。文件传输在两台设备之间直接进行,端到端加密,绝不经过我们的服务器。",
+    "Relayium 的设计宗旨是让你的文件始终属于你。实时直连传输以点对点方式进行，端到端加密，绝不经过我们的服务器；可选的暂存下载链接模式采用零知识加密——服务器仅存储无法解读的密文。",
     "本页说明本服务确实会处理的少量数据,以及它刻意从不接触的数据。",
   ],
   sections: [
@@ -174,12 +174,12 @@ const zh = {
 const ja = {
   title: "プライバシーポリシー",
   description:
-    "Relayiumがあなたのデータを扱う方法：ファイルはピアツーピアで転送され、当社のサーバーを通過しません。アカウントは任意で、メールアドレスと表示名のみを保存します。",
+    "Relayiumがあなたのデータを扱う方法：リアルタイム直接転送はピアツーピアかつエンドツーエンド暗号化で行われ、当社のサーバーを通過しません。一時保存ダウンロードリンク機能はファイルをゼロ知識暗号化で保護します。アカウントは任意で、メールアドレスと表示名のみを保存します。",
   updatedLabel: "最終更新",
   updated: "2026-06-29",
   otherDocLabel: "利用規約",
   lead: [
-    "Relayiumはあなたのファイルが常にあなたのものであるよう設計されています。ファイル転送は2台のデバイス間で直接行われ、エンドツーエンドで暗号化され、当社のサーバーを通過しません。",
+    "Relayiumはあなたのファイルが常にあなたのものであるよう設計されています。リアルタイムの直接転送はピアツーピアかつエンドツーエンド暗号化で行われ、当社のサーバーを通過しません——オプションの一時保存ダウンロードリンク機能はゼロ知識暗号化を使用するため、サーバーには解読不能な暗号文のみが保存されます。",
     "このページでは、本サービスが実際に扱う少量のデータと、意図的に取得しないデータについて説明します。",
   ],
   sections: [
@@ -264,12 +264,12 @@ const ja = {
 const ko = {
   title: "개인정보 처리방침",
   description:
-    "Relayium이 데이터를 처리하는 방식: 파일은 피어 투 피어로 전송되며 당사 서버를 거치지 않습니다. 계정은 선택 사항이며 이메일 주소와 표시 이름만 저장합니다.",
+    "Relayium이 데이터를 처리하는 방식: 실시간 직접 전송은 피어 투 피어로 이루어지며 당사 서버를 거치지 않습니다. 임시 보관 다운로드 링크 기능은 파일을 영지식 암호화로 보호합니다. 계정은 선택 사항이며 이메일 주소와 표시 이름만 저장합니다.",
   updatedLabel: "최종 업데이트",
   updated: "2026-06-29",
   otherDocLabel: "이용약관",
   lead: [
-    "Relayium은 파일이 항상 사용자의 것으로 남도록 설계되었습니다. 파일 전송은 두 장치 간에 직접 이루어지며, 엔드 투 엔드로 암호화되어 당사 서버를 통과하지 않습니다.",
+    "Relayium은 파일이 항상 사용자의 것으로 남도록 설계되었습니다. 실시간 직접 전송은 피어 투 피어로 이루어지며, 엔드 투 엔드로 암호화되어 당사 서버를 통과하지 않습니다——선택적 임시 보관 다운로드 링크 기능은 영지식 암호화를 사용하여 서버에는 해독할 수 없는 암호문만 저장됩니다.",
     "이 페이지에서는 서비스가 실제로 처리하는 소량의 데이터와 의도적으로 수집하지 않는 데이터를 설명합니다.",
   ],
   sections: [
@@ -354,12 +354,12 @@ const ko = {
 const de = {
   title: "Datenschutzrichtlinie",
   description:
-    "Wie Relayium mit Ihren Daten umgeht: Dateien werden Peer-to-Peer übertragen und berühren nie unsere Server. Konten sind optional und speichern nur eine E-Mail-Adresse und einen Anzeigenamen.",
+    "Wie Relayium mit Ihren Daten umgeht: Echtzeit-Direktübertragungen werden Peer-to-Peer übertragen und berühren nie unsere Server; der Modus für zwischengespeicherte Download-Links hält Dateien Zero-Knowledge-verschlüsselt. Konten sind optional und speichern nur eine E-Mail-Adresse und einen Anzeigenamen.",
   updatedLabel: "Zuletzt aktualisiert",
   updated: "2026-06-29",
   otherDocLabel: "Nutzungsbedingungen",
   lead: [
-    "Relayium ist so konzipiert, dass Ihre Dateien Ihnen gehören. Dateiübertragungen erfolgen direkt zwischen zwei Geräten, Ende-zu-Ende-verschlüsselt, und passieren nie unsere Server.",
+    "Relayium ist so konzipiert, dass Ihre Dateien Ihnen gehören. Echtzeit-Direktübertragungen erfolgen Peer-to-Peer, Ende-zu-Ende-verschlüsselt, und passieren nie unsere Server – der optionale Modus für zwischengespeicherte Download-Links verwendet Zero-Knowledge-Verschlüsselung, sodass der Server nur Chiffretext speichert, den er nicht lesen kann.",
     "Diese Seite erläutert, mit welchen wenigen Daten der Dienst tatsächlich umgeht und welche Daten er bewusst nie einsieht.",
   ],
   sections: [
@@ -389,7 +389,7 @@ const de = {
       bullets: [
         "Der Server speichert ausschließlich Chiffretext. Er kann Ihre Dateiinhalte, Dateinamen oder Schlüssel nicht lesen.",
         "Wir erfassen die Chiffretextgröße und Zeitstempel (Upload-Zeitpunkt, Ablaufzeit) für Kontingentverwaltung und Bereinigung.",
-        "Der Chiffretext wird automatisch gelöscht, wenn er abläuft oder beim ersten vollständigen Download (Burn-after-read) — je nachdem, was zuerst eintritt.",
+        "Der Chiffretext wird automatisch gelöscht, wenn er abläuft oder beim ersten vollständigen Download (einmaliges Lesen) — je nachdem, was zuerst eintritt.",
         "Die Liste \"Was wir niemals erfassen\" bleibt weiterhin korrekt: Alles, was der Server bei einer zwischengespeicherten Übertragung empfängt, ist Chiffretext — Klartext, Dateinamen und Schlüssel gelangen nie zum Server.",
       ],
     },
@@ -444,12 +444,12 @@ const de = {
 const fr = {
   title: "Politique de confidentialité",
   description:
-    "Comment Relayium traite vos données : les fichiers sont transférés de pair à pair et ne passent jamais par nos serveurs. Les comptes sont facultatifs et ne stockent qu'une adresse e-mail et un nom d'affichage.",
+    "Comment Relayium traite vos données : les transferts directs en temps réel s'effectuent de pair à pair et ne passent jamais par nos serveurs ; le mode de liens de téléchargement stockés maintient les fichiers chiffrés à connaissance nulle. Les comptes sont facultatifs et ne stockent qu'une adresse e-mail et un nom d'affichage.",
   updatedLabel: "Dernière mise à jour",
   updated: "2026-06-29",
   otherDocLabel: "Conditions d'utilisation",
   lead: [
-    "Relayium est conçu pour que vos fichiers restent les vôtres. Les transferts de fichiers s'effectuent directement entre deux appareils, chiffrés de bout en bout, et ne passent jamais par nos serveurs.",
+    "Relayium est conçu pour que vos fichiers restent les vôtres. Les transferts directs en temps réel s'effectuent de pair à pair, chiffrés de bout en bout, et ne passent jamais par nos serveurs ; le mode optionnel de liens de téléchargement stockés utilise un chiffrement à connaissance nulle — le serveur ne conserve que du chiffré qu'il ne peut pas lire.",
     "Cette page explique les quelques données que le service traite effectivement, et celles qu'il ne voit délibérément jamais.",
   ],
   sections: [

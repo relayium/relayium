@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Privacy Policy · Relayium</title>
-    <meta name="description" content="How Relayium handles your data: files transfer peer-to-peer and never touch our servers. Accounts are optional and store only an email and display name." />
+    <meta name="description" content="How Relayium handles your data: realtime direct transfers go peer-to-peer and never touch our servers; the stored download-link mode keeps files zero-knowledge encrypted. Accounts are optional and store only an email and display name." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/privacy" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/privacy" />
@@ -17,7 +17,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Privacy Policy · Relayium","description":"How Relayium handles your data: files transfer peer-to-peer and never touch our servers. Accounts are optional and store only an email and display name.","url":"https://relayium.com/privacy","inLanguage":"en","dateModified":"2026-06-29","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Privacy Policy · Relayium","description":"How Relayium handles your data: realtime direct transfers go peer-to-peer and never touch our servers; the stored download-link mode keeps files zero-knowledge encrypted. Accounts are optional and store only an email and display name.","url":"https://relayium.com/privacy","inLanguage":"en","dateModified":"2026-06-29","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -43,7 +43,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h1>Privacy Policy</h1>
       <p class="updated">Last updated: 2026-06-29</p>
       <nav class="langbar" aria-label="Language"><a href="/privacy" aria-current="true">English</a><a href="/zh/privacy">中文</a><a href="/ja/privacy">日本語</a><a href="/ko/privacy">한국어</a><a href="/de/privacy">Deutsch</a><a href="/fr/privacy">Français</a></nav>
-      <p>Relayium is built so that your files stay yours. File transfers happen directly between two devices, end-to-end encrypted, and never pass through our servers.</p>
+      <p>Relayium is built so that your files stay yours. Realtime direct transfers go peer-to-peer, end-to-end encrypted, and never pass through our servers; the optional stored download-link mode uses zero-knowledge encryption — the server holds only ciphertext it cannot read.</p>
       <p>This page explains the little data the service does handle, and the data it deliberately never sees.</p>
       <h2>Local-network transfers collect nothing</h2><p>When you transfer files between devices on the same network, no account is needed and the service stores nothing about you. The signaling server only helps the two devices find each other; the file bytes flow device-to-device over an encrypted WebRTC channel.</p>
       <h2>What an account stores (only if you sign in)</h2><p>Signing in is optional and only unlocks cross-network transfers. If you sign in, we store the minimum needed to run an account:</p><ul><li>Your email address and a display name.</li><li>Which sign-in method you used (Google, or an email magic link). Magic-link tokens are stored only as a hash, never in clear text.</li><li>A login session, kept in a secure, httpOnly cookie.</li><li>Devices you register, as a random device id and a device name (e.g. your platform name).</li></ul>
