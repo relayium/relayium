@@ -10,4 +10,14 @@ describe("i18n completeness", () => {
       expect(m.crossnet.loginRequired, `${code}.crossnet.loginRequired`).toBeTruthy();
     }
   });
+
+  it("every language has the stored-transfer + download strings", () => {
+    for (const { code } of LANGS) {
+      const m = messages[code];
+      expect(m.stored.title, `${code}.stored.title`).toBeTruthy();
+      expect(m.stored.errQuota, `${code}.stored.errQuota`).toBeTruthy();
+      expect(m.download.downloadBtn, `${code}.download.downloadBtn`).toBeTruthy();
+      expect(m.download.notFound, `${code}.download.notFound`).toBeTruthy();
+    }
+  });
 });
