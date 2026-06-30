@@ -3,7 +3,7 @@
 // ("/cross-network"). A transfer token in the URL fragment (#t=<token>) always
 // implies the cross-network page so a shared link lands the recipient correctly.
 
-import { parseTransferToken, CROSS_PATH, DOWNLOAD_PREFIX } from "./transfer-link";
+import { parseTransferToken, parseCodeParam, CROSS_PATH, DOWNLOAD_PREFIX } from "./transfer-link";
 
 export type Route = "lan" | "cross" | "download";
 
@@ -12,7 +12,7 @@ export { CROSS_PATH };
 /** Pure mapping from a location to a route. Safe to unit-test without a DOM. */
 export function routeFromLocation(pathname: string, hash: string): Route {
   if (downloadId(pathname)) return "download";
-  if (parseTransferToken(hash)) return "cross";
+  if (parseTransferToken(hash) || parseCodeParam(hash)) return "cross";
   return pathname === CROSS_PATH ? "cross" : "lan";
 }
 
@@ -44,8 +44,8 @@ export function navigate(r: Route): void {
   // If a transfer token is in the URL, the signaling socket is bound to the
   // 2-peer token room. Leaving it must fully reload so the socket reconnects
   // into the correct room (LAN, or a fresh token-less cross page).
-  if (parseTransferToken(location.hash)) {
-    location.href = pathname; // full navigation + reload; drops the token
+  if (parseTransferToken(location.hash) || parseCodeParam(location.hash)) {
+    location.href = pathname; // full navigation + reload; drops the token/code
     return;
   }
   history.pushState({}, "", pathname);

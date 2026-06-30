@@ -86,6 +86,23 @@ export interface Messages {
     copied: string;
     connecting: string;
     linkDead: string;
+    realtimeTitle: string;
+    realtimeSub: string;
+    realtimeFoot: string;
+  };
+  pair: {
+    sendCode: string;
+    enterCode: string;
+    enterHint: string;
+    joinBtn: string;
+    yourCode: string;
+    waiting: string;
+    expiresIn: (s: string) => string;
+    expired: string;
+    copy: string;
+    copied: string;
+    loginEnhance: string;
+    errExpired: string;
   };
   stored: {
     title: string;
@@ -198,6 +215,23 @@ const zh: Messages = {
     copied: "已复制",
     connecting: "正在通过跨网络链接连接…",
     linkDead: "链接已失效或正在被使用，请向发送方索要新链接",
+    realtimeTitle: "实时直传",
+    realtimeSub: "对方此刻在线 · 点对点直连 · 文件不经服务器",
+    realtimeFoot: "免登录 · 登录可提升连通性",
+  },
+  pair: {
+    sendCode: "生成配对码",
+    enterCode: "输入配对码",
+    enterHint: "向对方索取 6 位配对码",
+    joinBtn: "连接",
+    yourCode: "你的配对码 —— 念给对方",
+    waiting: "等待对方加入…",
+    expiresIn: (s) => `${s} 后失效`,
+    expired: "配对码已失效，请重新生成",
+    copy: "复制",
+    copied: "已复制",
+    loginEnhance: "登录后可生成带中继的分享链接，提升连通性",
+    errExpired: "配对码无效或已过期",
   },
   stored: {
     title: "生成下载链接（暂存传输）",
@@ -311,6 +345,23 @@ const en: Messages = {
     copied: "Copied",
     connecting: "Connecting over the cross-network link…",
     linkDead: "This link is invalid or already in use — ask the sender for a new one",
+    realtimeTitle: "Realtime direct",
+    realtimeSub: "Both online now · peer-to-peer · files never touch the server",
+    realtimeFoot: "No sign-in needed · sign in for better connectivity",
+  },
+  pair: {
+    sendCode: "Create a pairing code",
+    enterCode: "Enter a pairing code",
+    enterHint: "Ask the sender for their 6-digit code",
+    joinBtn: "Connect",
+    yourCode: "Your pairing code — read it to the other person",
+    waiting: "Waiting for the other device to join…",
+    expiresIn: (s) => `expires in ${s}`,
+    expired: "Pairing code expired — generate a new one",
+    copy: "Copy",
+    copied: "Copied",
+    loginEnhance: "Sign in to also get a relayed share link for better connectivity",
+    errExpired: "Pairing code is invalid or expired",
   },
   stored: {
     title: "Create a download link (stored transfer)",
@@ -424,6 +475,23 @@ const ja: Messages = {
     copied: "コピーしました",
     connecting: "ネットワーク間リンクで接続中…",
     linkDead: "リンクが無効か使用中です。送信者に新しいリンクを依頼してください",
+    realtimeTitle: "リアルタイム直接転送",
+    realtimeSub: "両者が今オンライン · P2P · ファイルはサーバーを経由しません",
+    realtimeFoot: "ログイン不要 · ログインで接続性が向上",
+  },
+  pair: {
+    sendCode: "ペアリングコードを生成",
+    enterCode: "ペアリングコードを入力",
+    enterHint: "送信者に 6 桁のコードを尋ねてください",
+    joinBtn: "接続",
+    yourCode: "あなたのペアリングコード — 相手に伝えてください",
+    waiting: "相手の参加を待っています…",
+    expiresIn: (s) => `${s} で失効`,
+    expired: "ペアリングコードが失効しました。再生成してください",
+    copy: "コピー",
+    copied: "コピーしました",
+    loginEnhance: "ログインすると中継付き共有リンクも作成でき、接続性が向上します",
+    errExpired: "ペアリングコードが無効か期限切れです",
   },
   stored: {
     title: "ダウンロードリンクを作成（一時保存転送）",
@@ -537,6 +605,23 @@ const ko: Messages = {
     copied: "복사됨",
     connecting: "네트워크 간 링크로 연결 중…",
     linkDead: "링크가 유효하지 않거나 사용 중입니다. 보낸 사람에게 새 링크를 요청하세요",
+    realtimeTitle: "실시간 직접 전송",
+    realtimeSub: "양쪽 모두 온라인 · P2P · 파일은 서버를 거치지 않습니다",
+    realtimeFoot: "로그인 불필요 · 로그인 시 연결성 향상",
+  },
+  pair: {
+    sendCode: "페어링 코드 생성",
+    enterCode: "페어링 코드 입력",
+    enterHint: "보내는 사람에게 6자리 코드를 요청하세요",
+    joinBtn: "연결",
+    yourCode: "내 페어링 코드 — 상대에게 알려주세요",
+    waiting: "상대 기기의 참여를 기다리는 중…",
+    expiresIn: (s) => `${s} 후 만료`,
+    expired: "페어링 코드가 만료되었습니다. 다시 생성하세요",
+    copy: "복사",
+    copied: "복사됨",
+    loginEnhance: "로그인하면 릴레이 공유 링크도 만들어 연결성을 높일 수 있습니다",
+    errExpired: "페어링 코드가 잘못되었거나 만료되었습니다",
   },
   stored: {
     title: "다운로드 링크 생성 (임시 보관 전송)",
@@ -650,6 +735,23 @@ const de: Messages = {
     copied: "Kopiert",
     connecting: "Verbindung über den netzwerkübergreifenden Link…",
     linkDead: "Dieser Link ist ungültig oder bereits in Gebrauch — bitte den Absender um einen neuen",
+    realtimeTitle: "Echtzeit-Direktübertragung",
+    realtimeSub: "Beide jetzt online · Peer-to-Peer · Dateien berühren nie den Server",
+    realtimeFoot: "Keine Anmeldung nötig · angemeldet bessere Verbindung",
+  },
+  pair: {
+    sendCode: "Kopplungscode erstellen",
+    enterCode: "Kopplungscode eingeben",
+    enterHint: "Frag den Absender nach seinem 6-stelligen Code",
+    joinBtn: "Verbinden",
+    yourCode: "Dein Kopplungscode — sag ihn der anderen Person",
+    waiting: "Warte darauf, dass das andere Gerät beitritt…",
+    expiresIn: (s) => `läuft in ${s} ab`,
+    expired: "Kopplungscode abgelaufen — bitte neu erzeugen",
+    copy: "Kopieren",
+    copied: "Kopiert",
+    loginEnhance: "Melde dich an, um zusätzlich einen weitergeleiteten Link für bessere Verbindung zu erhalten",
+    errExpired: "Kopplungscode ist ungültig oder abgelaufen",
   },
   stored: {
     title: "Download-Link erstellen (zwischengespeicherte Übertragung)",
@@ -763,6 +865,23 @@ const fr: Messages = {
     copied: "Copié",
     connecting: "Connexion via le lien inter-réseaux…",
     linkDead: "Ce lien est invalide ou déjà utilisé — demandez-en un nouveau à l'expéditeur",
+    realtimeTitle: "Transfert direct en temps réel",
+    realtimeSub: "Les deux en ligne · pair-à-pair · les fichiers ne passent jamais par le serveur",
+    realtimeFoot: "Sans connexion · connectez-vous pour une meilleure connectivité",
+  },
+  pair: {
+    sendCode: "Créer un code d'appairage",
+    enterCode: "Saisir un code d'appairage",
+    enterHint: "Demandez à l'expéditeur son code à 6 chiffres",
+    joinBtn: "Connecter",
+    yourCode: "Votre code d'appairage — communiquez-le à l'autre personne",
+    waiting: "En attente de l'autre appareil…",
+    expiresIn: (s) => `expire dans ${s}`,
+    expired: "Code d'appairage expiré — générez-en un nouveau",
+    copy: "Copier",
+    copied: "Copié",
+    loginEnhance: "Connectez-vous pour obtenir aussi un lien relayé, plus fiable",
+    errExpired: "Code d'appairage invalide ou expiré",
   },
   stored: {
     title: "Créer un lien de téléchargement (transfert stocké)",

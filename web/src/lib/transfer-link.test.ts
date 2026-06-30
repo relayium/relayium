@@ -4,6 +4,7 @@ import {
   buildTransferLink,
   wsURL,
   createTransfer,
+  parseCodeParam,
 } from "./transfer-link";
 
 describe("parseTransferToken", () => {
@@ -57,5 +58,33 @@ describe("createTransfer", () => {
   it("throws on non-ok response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 401 }));
     await expect(createTransfer()).rejects.toThrow("401");
+  });
+});
+
+describe("parseCodeParam", () => {
+  it("extracts a 6-digit code, leading zeros allowed", () => {
+    expect(parseCodeParam("#c=424242")).toBe("424242");
+    expect(parseCodeParam("#c=042424")).toBe("042424");
+  });
+  it("rejects non-6-digit or malformed fragments", () => {
+    expect(parseCodeParam("#c=12345")).toBe("");
+    expect(parseCodeParam("#c=1234567")).toBe("");
+    expect(parseCodeParam("#c=abcdef")).toBe("");
+    expect(parseCodeParam("#t=abc")).toBe("");
+    expect(parseCodeParam("")).toBe("");
+  });
+});
+
+describe("wsURL with a pairing code", () => {
+  const loc = { protocol: "https:", host: "relayium.com" };
+  it("uses ?code= when a code is given", () => {
+    expect(wsURL(loc, "", "424242")).toBe("wss://relayium.com/ws?code=424242");
+  });
+  it("ignores token when code is present (code wins)", () => {
+    expect(wsURL(loc, "tok", "424242")).toBe("wss://relayium.com/ws?code=424242");
+  });
+  it("falls back to token/LAN when no code", () => {
+    expect(wsURL(loc, "tok")).toBe("wss://relayium.com/ws?room=tok");
+    expect(wsURL(loc, "")).toBe("wss://relayium.com/ws");
   });
 });
