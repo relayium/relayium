@@ -12,7 +12,7 @@
   const t = $derived<Messages>(messages[lang()]);
   // The login notice is only for someone trying to *start* a transfer:
   // a recipient (roomToken present) never needs to log in.
-  const needsLogin = $derived(!session().user && !roomToken);
+  const needsLogin = $derived(!session().user && !roomToken && !roomCode);
 
   let loginOpen = $state(false);
 </script>
