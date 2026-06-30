@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <title>Relayium — End-to-end encrypted P2P file transfer</title>
-    <meta name="description" content="Open-source, end-to-end encrypted peer-to-peer file transfer in your browser. Files stream device-to-device over WebRTC and never touch the server." />
+    <meta name="description" content="Open-source, end-to-end encrypted peer-to-peer file transfer in your browser. In realtime mode, files stream device-to-device over WebRTC and never touch the server; the optional stored download-link mode keeps them as zero-knowledge ciphertext only you can decrypt." />
     <meta name="keywords" content="file transfer, end-to-end encryption, peer-to-peer, P2P, WebRTC, secure file sharing, send files between devices, open source, AirDrop alternative, Snapdrop alternative, Pairdrop alternative" />
     <meta name="author" content="Relayium" />
     <meta name="application-name" content="Relayium" />
@@ -26,7 +26,7 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Relayium — End-to-end encrypted P2P file transfer" />
-    <meta property="og:description" content="Open-source, end-to-end encrypted peer-to-peer file transfer in your browser. Files stream device-to-device over WebRTC and never touch the server." />
+    <meta property="og:description" content="Open-source, end-to-end encrypted peer-to-peer file transfer in your browser. In realtime mode, files stream device-to-device over WebRTC and never touch the server; the optional stored download-link mode keeps them as zero-knowledge ciphertext only you can decrypt." />
     <meta property="og:url" content="https://relayium.com/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -43,7 +43,7 @@
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Relayium — End-to-end encrypted P2P file transfer" />
-    <meta name="twitter:description" content="Open-source, end-to-end encrypted peer-to-peer file transfer in your browser. Files stream device-to-device over WebRTC and never touch the server." />
+    <meta name="twitter:description" content="Open-source, end-to-end encrypted peer-to-peer file transfer in your browser. In realtime mode, files stream device-to-device over WebRTC and never touch the server; the optional stored download-link mode keeps them as zero-knowledge ciphertext only you can decrypt." />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <meta name="twitter:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />
 
@@ -58,8 +58,8 @@
             "name": "Relayium",
             "alternateName": "Relayium — secure P2P file transfer",
             "url": "https://relayium.com/",
-            "description": "Open-source, end-to-end encrypted peer-to-peer file transfer in your browser. Files stream device-to-device over WebRTC and never touch the server.",
-            "abstract": "Send files directly between two devices in the browser — end-to-end encrypted, peer-to-peer, with no account, no install, and no file ever stored on a server.",
+            "description": "Open-source, end-to-end encrypted peer-to-peer file transfer in your browser. In realtime mode, files stream device-to-device over WebRTC and never touch the server; the optional stored download-link mode keeps them as zero-knowledge ciphertext only you can decrypt.",
+            "abstract": "Send files directly between two devices in the browser — end-to-end encrypted, peer-to-peer, with no account, no install, and no file stored on a server in realtime mode; an optional stored download-link mode keeps them as zero-knowledge ciphertext until expiry or first download.",
             "applicationCategory": "UtilitiesApplication",
             "applicationSubCategory": "File transfer",
             "operatingSystem": "Web (Chrome, Edge, Firefox, Safari; desktop and mobile)",
@@ -74,7 +74,7 @@
             "sameAs": ["https://github.com/relayium/relayium"],
             "featureList": [
               "End-to-end encryption (X25519 + AES-256-GCM)",
-              "Peer-to-peer transfer over WebRTC — files never touch the server",
+              "Realtime peer-to-peer transfer over WebRTC — files never touch the server; optional stored download links are zero-knowledge encrypted (AES-256-GCM, key only in URL fragment)",
               "Short verification code (SAS) to detect man-in-the-middle",
               "Multi-file transfer (up to 10) with streaming to disk",
               "Per-file SHA-256 integrity check",
@@ -102,7 +102,7 @@
               {
                 "@type": "Question",
                 "name": "Do my files get uploaded to a server?",
-                "acceptedAnswer": { "@type": "Answer", "text": "No. Files stream directly between the two devices over a WebRTC DataChannel and never pass through the server. The signaling server only helps the two devices find each other and never sees file contents or names." }
+                "acceptedAnswer": { "@type": "Answer", "text": "In realtime mode: no — files stream directly between the two devices over a WebRTC DataChannel and never pass through the server. The signaling server only helps the two devices find each other and never sees file contents or names. There is also an optional stored download-link mode where your browser encrypts files with AES-256-GCM before upload; the server stores only ciphertext and cannot read content, filenames, or the key." }
               },
               {
                 "@type": "Question",
@@ -144,9 +144,12 @@
         <p>
           <strong>Relayium</strong> is an open-source, end-to-end encrypted,
           peer-to-peer (P2P) file transfer tool that runs entirely in your
-          browser. Files stream directly from one device to another over a
-          WebRTC DataChannel and <strong>never touch any server</strong>. There
-          is no account, no installation, and no server-imposed file-size limit.
+          browser. In realtime mode, files stream directly from one device to
+          another over a WebRTC DataChannel and <strong>never touch any
+          server</strong>. An optional stored download-link mode encrypts files
+          in your browser (AES-256-GCM) before any upload, so the server holds
+          only zero-knowledge ciphertext. There is no account, no installation,
+          and no server-imposed file-size limit in realtime mode.
         </p>
 
         <h2>How it works</h2>
@@ -160,7 +163,7 @@
         <h2>Why Relayium</h2>
         <ul>
           <li><strong>End-to-end encrypted</strong> — per-transfer X25519 key exchange and AES-256-GCM; keys never leave the two devices.</li>
-          <li><strong>Truly peer-to-peer</strong> — file bytes flow over WebRTC and never pass through the server, which only helps the devices find each other.</li>
+          <li><strong>Truly peer-to-peer (realtime mode)</strong> — file bytes flow over WebRTC and never pass through the server, which only helps the devices find each other. An optional stored download-link mode keeps files as zero-knowledge ciphertext only you can decrypt.</li>
           <li><strong>Man-in-the-middle protection</strong> — a 6-digit Short Authentication String (SAS) on top of WebRTC's DTLS.</li>
           <li><strong>Cross-platform</strong> — works between Windows, macOS, Linux, Android and iOS through any modern browser (Chrome, Edge, Firefox, Safari).</li>
           <li><strong>Free and open source</strong> — MIT licensed, no account, no install.</li>
@@ -169,7 +172,7 @@
         <h2>How Relayium compares</h2>
         <ul>
           <li><strong>vs AirDrop:</strong> cross-platform and browser-based, not limited to Apple devices — works between, e.g., a Windows PC and an iPhone.</li>
-          <li><strong>vs WeTransfer or Google Drive:</strong> files are not uploaded to a server; they go directly device-to-device, end-to-end encrypted, with no server copy and no server size cap.</li>
+          <li><strong>vs WeTransfer or Google Drive:</strong> in realtime mode, files go directly device-to-device, end-to-end encrypted, with no server copy and no server size cap; the optional stored download-link mode encrypts files zero-knowledge before any upload so the server never sees plaintext.</li>
           <li><strong>vs Snapdrop / PairDrop:</strong> adds an application-layer end-to-end encryption layer (X25519 + AES-256-GCM) and a SAS verification code, so a malicious signaling server cannot read or MITM the transfer undetected.</li>
         </ul>
 
@@ -177,7 +180,7 @@
         <h3>Is Relayium free?</h3>
         <p>Yes — free and open source under the MIT license, with no account or installation.</p>
         <h3>Do my files get uploaded to a server?</h3>
-        <p>No. Files stream directly between the two devices over WebRTC and never touch the server.</p>
+        <p>In realtime mode: no — files stream directly between the two devices over WebRTC and never touch the server. There is also an optional stored download-link mode where your browser encrypts files before upload and the server stores only zero-knowledge ciphertext (AES-256-GCM, key only in the URL fragment).</p>
         <h3>Is it end-to-end encrypted?</h3>
         <p>Yes — X25519 key exchange and AES-256-GCM, with keys that never leave the two devices, plus a 6-digit code to detect man-in-the-middle attacks.</p>
         <h3>Can I send files between different operating systems?</h3>

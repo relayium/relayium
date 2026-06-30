@@ -32,6 +32,17 @@ const en = {
       ],
     },
     {
+      heading: "Stored content",
+      body: [
+        "When you use the optional stored download-link mode, your browser encrypts files before upload and the server stores only ciphertext. Because we cannot decrypt stored content (zero-knowledge), we cannot pre-screen it. You agree to use stored transfers only for content you have the right to share and that does not violate applicable law.",
+      ],
+      bullets: [
+        "You may request removal of a specific download link by reporting the file id to support@relayium.com.",
+        "Stored ciphertext is automatically deleted at expiry or on the first complete download (burn-after-read), whichever comes first.",
+        "We reserve the right to suspend or remove stored content that is credibly reported as illegal.",
+      ],
+    },
+    {
       heading: "No warranty",
       body: [
         "The service is provided \"as is\" and \"as available\", without warranties of any kind, express or implied. We do not guarantee that transfers will always succeed or that the service will be uninterrupted or error-free.",
@@ -89,6 +100,17 @@ const zh = {
       heading: "账号",
       body: [
         "账号是可选的,仅跨网络传输时需要。你有责任妥善保管你的邮箱和账号访问权限。你可以随时删除你的账号。",
+      ],
+    },
+    {
+      heading: "暂存内容",
+      body: [
+        "使用可选的暂存下载链接功能时，浏览器在上传前加密文件，服务器仅存储密文。由于我们无法解密暂存内容（零知识），因此无法预审其内容。你同意暂存传输仅用于你有权分享且不违反适用法律的内容。",
+      ],
+      bullets: [
+        "你可以通过向 support@relayium.com 举报文件 id 来申请删除特定下载链接。",
+        "暂存密文在到期或首次完整下载（阅后即焚）时自动删除，以先到者为准。",
+        "我们保留暂停或删除被可信举报为违法内容的权利。",
       ],
     },
     {
@@ -150,6 +172,17 @@ const ja = {
       heading: "アカウント",
       body: [
         "アカウントは任意で、クロスネットワーク転送にのみ必要です。メールアドレスとアカウントへのアクセスを安全に保つ責任はあなたにあります。アカウントはいつでも削除できます。",
+      ],
+    },
+    {
+      heading: "保存コンテンツ",
+      body: [
+        "オプションの一時保存ダウンロードリンク機能を使用する場合、ブラウザがアップロード前にファイルを暗号化し、サーバーは暗号文のみを保存します。保存コンテンツを復号できない（ゼロ知識）ため、当社は事前にコンテンツを審査することができません。あなたは一時保存転送を、共有する権利を持ちかつ適用法に違反しないコンテンツのためにのみ使用することに同意します。",
+      ],
+      bullets: [
+        "ファイルの id を support@relayium.com に報告することで、特定のダウンロードリンクの削除を要求できます。",
+        "保存された暗号文は有効期限切れまたは最初の完全なダウンロード（閲覧後削除）のいずれか早い方で自動削除されます。",
+        "当社は、違法であると信頼できる形で報告された保存コンテンツを停止または削除する権利を留保します。",
       ],
     },
     {
@@ -216,6 +249,17 @@ const ko = {
       ],
     },
     {
+      heading: "임시 보관 콘텐츠",
+      body: [
+        "선택적 임시 보관 다운로드 링크 기능을 사용하면 브라우저가 업로드 전에 파일을 암호화하고 서버는 암호문만 저장합니다. 저장된 콘텐츠를 복호화할 수 없기 때문에(제로 지식) 사전에 콘텐츠를 심사할 수 없습니다. 귀하는 임시 보관 전송을 공유할 권리가 있고 적용 법률을 위반하지 않는 콘텐츠에만 사용하는 것에 동의합니다.",
+      ],
+      bullets: [
+        "파일 id를 support@relayium.com에 신고하여 특정 다운로드 링크 삭제를 요청할 수 있습니다.",
+        "저장된 암호문은 만료 시 또는 첫 번째 완전한 다운로드(열람 후 삭제) 중 먼저 발생하는 시점에 자동 삭제됩니다.",
+        "당사는 불법으로 신뢰할 수 있게 신고된 저장 콘텐츠를 정지 또는 삭제할 권리를 보유합니다.",
+      ],
+    },
+    {
       heading: "무보증",
       body: [
         "본 서비스는 명시적 또는 묵시적 보증 없이 '있는 그대로' 및 '이용 가능한 상태로' 제공됩니다. 전송이 항상 성공하거나 서비스가 중단 없이 오류 없이 제공될 것을 보장하지 않습니다.",
@@ -279,6 +323,17 @@ const de = {
       ],
     },
     {
+      heading: "Zwischengespeicherte Inhalte",
+      body: [
+        "Beim optionalen Modus für zwischengespeicherte Download-Links verschlüsselt Ihr Browser die Dateien vor dem Hochladen und der Server speichert nur Chiffretext. Da wir zwischengespeicherte Inhalte nicht entschlüsseln können (Zero-Knowledge), ist eine Vorabprüfung der Inhalte nicht möglich. Sie stimmen zu, zwischengespeicherte Übertragungen ausschließlich für Inhalte zu nutzen, zu deren Weitergabe Sie berechtigt sind und die nicht gegen geltendes Recht verstoßen.",
+      ],
+      bullets: [
+        "Sie können die Entfernung eines bestimmten Download-Links beantragen, indem Sie die Datei-id an support@relayium.com melden.",
+        "Zwischengespeicherter Chiffretext wird automatisch gelöscht, wenn er abläuft oder beim ersten vollständigen Download (Burn-after-read) — je nachdem, was zuerst eintritt.",
+        "Wir behalten uns das Recht vor, zwischengespeicherte Inhalte, die glaubhaft als illegal gemeldet wurden, zu sperren oder zu entfernen.",
+      ],
+    },
+    {
       heading: "Keine Gewährleistung",
       body: [
         "Der Dienst wird „wie besehen“ und „wie verfügbar“ ohne jegliche ausdrückliche oder stillschweigende Gewährleistung bereitgestellt. Wir garantieren nicht, dass Übertragungen stets erfolgreich sind oder dass der Dienst unterbrechungs- und fehlerfrei verfügbar ist.",
@@ -339,6 +394,17 @@ const fr = {
       heading: "Comptes",
       body: [
         "Un compte est facultatif et n'est nécessaire que pour les transferts inter-réseaux. Vous êtes responsable de la sécurisation de l'accès à votre adresse e-mail et à votre compte. Vous pouvez supprimer votre compte à tout moment.",
+      ],
+    },
+    {
+      heading: "Contenu stocké",
+      body: [
+        "Lorsque vous utilisez le mode optionnel de liens de téléchargement stockés, votre navigateur chiffre les fichiers avant l'envoi et le serveur ne stocke que du chiffré. Comme nous ne pouvons pas déchiffrer le contenu stocké (zéro-connaissance), nous ne pouvons pas en faire une présélection. Vous acceptez d'utiliser les transferts stockés uniquement pour du contenu que vous avez le droit de partager et qui ne viole pas la loi applicable.",
+      ],
+      bullets: [
+        "Vous pouvez demander la suppression d'un lien de téléchargement spécifique en signalant l'id du fichier à support@relayium.com.",
+        "Le chiffré stocké est automatiquement supprimé à l'expiration ou lors du premier téléchargement complet (lecture unique), selon ce qui survient en premier.",
+        "Nous nous réservons le droit de suspendre ou de supprimer du contenu stocké qui est signalé de manière crédible comme illégal.",
       ],
     },
     {
