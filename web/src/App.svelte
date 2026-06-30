@@ -87,13 +87,13 @@
     document.documentElement.lang = lang();
     syncRouteFromLocation();
     window.addEventListener("popstate", syncRouteFromLocation);
+    roomToken = parseTransferToken(location.hash);
     if (!window.isSecureContext || !crypto.subtle) {
       unsupported = true;
       return;
     }
     await ready();
     selfName = deviceName();
-    roomToken = parseTransferToken(location.hash);
     iceServers = await fetchIceServers(roomToken);
     signaling = new SignalingClient(wsURL(location, roomToken), selfName);
     signaling.onSelfId((id, ip) => { selfId = id; selfIP = ip; joinedRoom = true; });
