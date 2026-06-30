@@ -75,6 +75,12 @@ func main() {
 	hub := signal.NewHub()
 	handle := signal.ServeWS(hub, newID)
 
+	// Anonymous, login-free pairing: short numeric codes for cross-network
+	// realtime rendezvous. Pure in-memory — works even if the DB is unavailable.
+	pairReg := signal.NewPairRegistry(300, func() int64 { return time.Now().Unix() }) // 5 min
+	go pairReg.Run(context.Background(), time.Minute)
+	pairLimiter := signal.NewRateLimiter(10, time.Minute, func() int64 { return time.Now().Unix() })
+
 	store, dbErr := account.OpenSQLite(*dbPath)
 
 	// validateRoom gates token-rooms. Nil (DB unavailable) => token-rooms are
@@ -87,16 +93,17 @@ func main() {
 		_, _ = w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		var room string
-		var maxPeers int
-		if token := r.URL.Query().Get("room"); token != "" {
-			if validateRoom == nil || !validateRoom(r.Context(), token) {
-				http.Error(w, "invalid or expired transfer link", http.StatusForbidden)
-				return
-			}
-			room = "t:" + token
-			maxPeers = 2 // sender + receiver
-		} else {
+		code := r.URL.Query().Get("code")
+		token := r.URL.Query().Get("room")
+		room, maxPeers, lan, ok := signal.RoomFor(code, token,
+			pairReg.Validate,
+			func(t string) bool { return validateRoom != nil && validateRoom(r.Context(), t) },
+		)
+		if !ok {
+			http.Error(w, "invalid or expired pairing code or transfer link", http.StatusForbidden)
+			return
+		}
+		if lan {
 			room = signal.RoomKey(r)
 			maxPeers = 0 // LAN: unlimited
 		}
@@ -108,6 +115,7 @@ func main() {
 		handle(ctx, c, room, maxPeers, signal.ClientIP(r))
 		_ = c.Close(websocket.StatusNormalClosure, "")
 	})
+	mux.HandleFunc("POST /api/pair", signal.PairHandler(pairReg, pairLimiter))
 
 	if dbErr != nil {
 		log.Printf("WARNING: open db: %v — account features disabled; LAN transfer unaffected", dbErr)
