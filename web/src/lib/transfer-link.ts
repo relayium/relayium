@@ -9,6 +9,12 @@ export function parseTransferToken(hash: string): string {
   return m ? m[1] : "";
 }
 
+/** Extract a 6-digit pairing code from a hash like "#c=424242". "" if none. */
+export function parseCodeParam(hash: string): string {
+  const m = /^#c=(\d{6})$/.exec(hash);
+  return m ? m[1] : "";
+}
+
 /** Path of the cross-network page; shared links and the originator both target it. */
 export const CROSS_PATH = "/cross-network";
 
@@ -20,13 +26,16 @@ export function buildTransferLink(origin: string, token: string): string {
   return `${origin}${CROSS_PATH}#t=${token}`;
 }
 
-/** Construct the signaling websocket URL, appending ?room= for a token-room. */
+/** Construct the signaling websocket URL. A pairing code wins over a token; with
+ *  neither, it is the LAN (IP-grouped) socket. */
 export function wsURL(
   loc: { protocol: string; host: string },
   token: string,
+  code = "",
 ): string {
   const proto = loc.protocol === "https:" ? "wss" : "ws";
   const base = `${proto}://${loc.host}/ws`;
+  if (code) return `${base}?code=${encodeURIComponent(code)}`;
   return token ? `${base}?room=${encodeURIComponent(token)}` : base;
 }
 
@@ -40,5 +49,12 @@ export async function createTransfer(): Promise<{
     credentials: "include",
   });
   if (!res.ok) throw new Error(`createTransfer failed: ${res.status}`);
+  return res.json();
+}
+
+/** Mint an anonymous short pairing code. No session required. */
+export async function createPair(): Promise<{ code: string; expiresAt: number }> {
+  const res = await fetch("/api/pair", { method: "POST" });
+  if (!res.ok) throw new Error(`createPair failed: ${res.status}`);
   return res.json();
 }
