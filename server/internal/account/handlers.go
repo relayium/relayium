@@ -2,6 +2,7 @@ package account
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -18,12 +19,19 @@ func (s *Service) cookieSecure() bool {
 
 func (s *Service) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/auth/magic/request", s.handleMagicRequest)
-	mux.HandleFunc("GET /api/auth/magic/verify", s.handleMagicVerify)
+	mux.HandleFunc("POST /api/auth/register", s.handleRegister)
+	mux.HandleFunc("POST /api/auth/password/login", s.handlePasswordLogin)
+	mux.HandleFunc("GET /api/auth/methods", s.handleAuthMethods)
+	if s.cfg.EnableMagic {
+		mux.HandleFunc("POST /api/auth/magic/request", s.handleMagicRequest)
+		mux.HandleFunc("GET /api/auth/magic/verify", s.handleMagicVerify)
+	}
+	if s.cfg.EnableGoogle {
+		mux.HandleFunc("GET /api/auth/google/start", s.handleGoogleStart)
+		mux.HandleFunc("GET /api/auth/google/callback", s.handleGoogleCallback)
+	}
 	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/me", s.RequireSession(s.handleMe))
-	mux.HandleFunc("GET /api/auth/google/start", s.handleGoogleStart)
-	mux.HandleFunc("GET /api/auth/google/callback", s.handleGoogleCallback)
 	mux.HandleFunc("GET /api/devices", s.RequireSession(s.handleListDevices))
 	mux.HandleFunc("POST /api/devices", s.RequireSession(s.handleUpsertDevice))
 	mux.HandleFunc("PATCH /api/devices/{id}", s.RequireSession(s.handleRenameDevice))
@@ -193,4 +201,76 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user": map[string]string{"id": u.ID, "email": u.Email, "displayName": u.DisplayName},
 	})
+}
+
+func (s *Service) handleAuthMethods(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]bool{
+		"password": true,
+		"google":   s.cfg.EnableGoogle,
+		"magic":    s.cfg.EnableMagic,
+	})
+}
+
+func (s *Service) writeUser(w http.ResponseWriter, code int, u User) {
+	writeJSON(w, code, map[string]any{
+		"user": map[string]string{"id": u.ID, "email": u.Email, "displayName": u.DisplayName},
+	})
+}
+
+func (s *Service) handleRegister(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Email       string `json:"email"`
+		Password    string `json:"password"`
+		DisplayName string `json:"displayName"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	sess, err := s.Register(r.Context(), in.Email, in.Password, in.DisplayName)
+	switch {
+	case errors.Is(err, ErrWeakPassword):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})
+		return
+	case errors.Is(err, ErrEmailTaken):
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "email already registered"})
+		return
+	case err != nil:
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	u, err := s.store.GetUserByID(r.Context(), sess.UserID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	s.setSessionCookie(w, sess)
+	s.writeUser(w, http.StatusOK, u)
+}
+
+func (s *Service) handlePasswordLogin(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	sess, err := s.Login(r.Context(), in.Email, in.Password)
+	if errors.Is(err, ErrBadCredentials) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
+		return
+	}
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	u, err := s.store.GetUserByID(r.Context(), sess.UserID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	s.setSessionCookie(w, sess)
+	s.writeUser(w, http.StatusOK, u)
 }

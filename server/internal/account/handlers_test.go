@@ -15,7 +15,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *capturingMailer) {
 	t.Helper()
 	store := newTestStore(t)
 	mail := &capturingMailer{}
-	svc := NewService(store, mail, Config{BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute, TransferTTL: time.Hour})
+	svc := NewService(store, mail, Config{BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute, TransferTTL: time.Hour, EnableMagic: true})
 	ts := httptest.NewServer(svc.Routes())
 	t.Cleanup(ts.Close)
 	return ts, mail
@@ -145,7 +145,7 @@ func TestDeviceCRUDOverHTTP(t *testing.T) {
 func TestUsageEndpointRequiresSessionAndReturnsTotal(t *testing.T) {
 	store := newTestStore(t)
 	mail := &capturingMailer{}
-	svc := NewService(store, mail, Config{BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute, TransferTTL: time.Hour})
+	svc := NewService(store, mail, Config{BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute, TransferTTL: time.Hour, EnableMagic: true})
 	ts := httptest.NewServer(svc.Routes())
 	t.Cleanup(ts.Close)
 	client := ts.Client()
@@ -197,6 +197,88 @@ func bodyContains(resp *http.Response, sub string) bool {
 	buf := make([]byte, 4096)
 	n, _ := resp.Body.Read(buf)
 	return strings.Contains(string(buf[:n]), sub)
+}
+
+func TestPasswordRegisterLoginAndMethods(t *testing.T) {
+	store := newTestStore(t)
+	svc := NewService(store, &capturingMailer{}, Config{
+		BaseURL: "http://example.test", SessionTTL: time.Hour,
+		EnableGoogle: false, EnableMagic: false,
+	})
+	ts := httptest.NewServer(svc.Routes())
+	t.Cleanup(ts.Close)
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	// methods 反映开关：password 恒 true，google/magic 关。
+	resp, _ := client.Get(ts.URL + "/api/auth/methods")
+	var m struct{ Password, Google, Magic bool }
+	_ = json.NewDecoder(resp.Body).Decode(&m)
+	if !m.Password || m.Google || m.Magic {
+		t.Fatalf("methods = %+v, want password-only", m)
+	}
+
+	// magic 关闭 => 路由不存在（404）。
+	resp, _ = client.Post(ts.URL+"/api/auth/magic/request", "application/x-www-form-urlencoded", strings.NewReader("email=x@example.com"))
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("disabled magic should 404, got %d", resp.StatusCode)
+	}
+
+	// 注册成功 => 200 + session cookie。
+	resp, _ = client.Post(ts.URL+"/api/auth/register", "application/json",
+		strings.NewReader(`{"email":"u@example.com","password":"longenough1"}`))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("register: %d", resp.StatusCode)
+	}
+	var cookie *http.Cookie
+	for _, c := range resp.Cookies() {
+		if c.Name == sessionCookie {
+			cookie = c
+		}
+	}
+	if cookie == nil {
+		t.Fatalf("register set no session cookie")
+	}
+
+	// 重复注册 => 409。
+	resp, _ = client.Post(ts.URL+"/api/auth/register", "application/json",
+		strings.NewReader(`{"email":"u@example.com","password":"longenough2"}`))
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("duplicate register: want 409, got %d", resp.StatusCode)
+	}
+
+	// 密码过短 => 400。
+	resp, _ = client.Post(ts.URL+"/api/auth/register", "application/json",
+		strings.NewReader(`{"email":"v@example.com","password":"short"}`))
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("weak password: want 400, got %d", resp.StatusCode)
+	}
+
+	// 正确密码登录 => 200；错误密码 => 401。
+	resp, _ = client.Post(ts.URL+"/api/auth/password/login", "application/json",
+		strings.NewReader(`{"email":"u@example.com","password":"longenough1"}`))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("login: %d", resp.StatusCode)
+	}
+	resp, _ = client.Post(ts.URL+"/api/auth/password/login", "application/json",
+		strings.NewReader(`{"email":"u@example.com","password":"nope"}`))
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("bad login: want 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestMethodsReflectsEnabledFlags(t *testing.T) {
+	svc := NewService(newTestStore(t), &capturingMailer{}, Config{
+		BaseURL: "http://example.test", EnableGoogle: true, EnableMagic: true,
+	})
+	ts := httptest.NewServer(svc.Routes())
+	t.Cleanup(ts.Close)
+	resp, _ := ts.Client().Get(ts.URL + "/api/auth/methods")
+	var m struct{ Password, Google, Magic bool }
+	_ = json.NewDecoder(resp.Body).Decode(&m)
+	if !(m.Password && m.Google && m.Magic) {
+		t.Fatalf("all enabled: methods = %+v", m)
+	}
 }
 
 func TestCreateTransferRequiresSessionAndReturnsToken(t *testing.T) {
