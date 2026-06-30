@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>개인정보 처리방침 · Relayium</title>
-    <meta name="description" content="Relayium이 데이터를 처리하는 방식: 파일은 피어 투 피어로 전송되며 당사 서버를 거치지 않습니다. 계정은 선택 사항이며 이메일 주소와 표시 이름만 저장합니다." />
+    <meta name="description" content="Relayium이 데이터를 처리하는 방식: 실시간 직접 전송은 피어 투 피어로 이루어지며 당사 서버를 거치지 않습니다. 임시 보관 다운로드 링크 기능은 파일을 영지식 암호화로 보호합니다. 계정은 선택 사항이며 이메일 주소와 표시 이름만 저장합니다." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ko/privacy" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/privacy" />
@@ -17,7 +17,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"개인정보 처리방침 · Relayium","description":"Relayium이 데이터를 처리하는 방식: 파일은 피어 투 피어로 전송되며 당사 서버를 거치지 않습니다. 계정은 선택 사항이며 이메일 주소와 표시 이름만 저장합니다.","url":"https://relayium.com/ko/privacy","inLanguage":"ko","dateModified":"2026-06-29","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"개인정보 처리방침 · Relayium","description":"Relayium이 데이터를 처리하는 방식: 실시간 직접 전송은 피어 투 피어로 이루어지며 당사 서버를 거치지 않습니다. 임시 보관 다운로드 링크 기능은 파일을 영지식 암호화로 보호합니다. 계정은 선택 사항이며 이메일 주소와 표시 이름만 저장합니다.","url":"https://relayium.com/ko/privacy","inLanguage":"ko","dateModified":"2026-06-29","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -43,10 +43,11 @@ footer a{color:var(--text-h);text-decoration:none}
       <h1>개인정보 처리방침</h1>
       <p class="updated">최종 업데이트: 2026-06-29</p>
       <nav class="langbar" aria-label="Language"><a href="/privacy">English</a><a href="/zh/privacy">中文</a><a href="/ja/privacy">日本語</a><a href="/ko/privacy" aria-current="true">한국어</a><a href="/de/privacy">Deutsch</a><a href="/fr/privacy">Français</a></nav>
-      <p>Relayium은 파일이 항상 사용자의 것으로 남도록 설계되었습니다. 파일 전송은 두 장치 간에 직접 이루어지며, 엔드 투 엔드로 암호화되어 당사 서버를 통과하지 않습니다.</p>
+      <p>Relayium은 파일이 항상 사용자의 것으로 남도록 설계되었습니다. 실시간 직접 전송은 피어 투 피어로 이루어지며, 엔드 투 엔드로 암호화되어 당사 서버를 통과하지 않습니다——선택적 임시 보관 다운로드 링크 기능은 영지식 암호화를 사용하여 서버에는 해독할 수 없는 암호문만 저장됩니다.</p>
       <p>이 페이지에서는 서비스가 실제로 처리하는 소량의 데이터와 의도적으로 수집하지 않는 데이터를 설명합니다.</p>
       <h2>로컬 네트워크 전송은 아무것도 수집하지 않습니다</h2><p>동일한 네트워크상의 장치 간에 파일을 전송할 때는 계정이 필요하지 않으며 서비스는 사용자에 관한 어떤 정보도 저장하지 않습니다. 시그널링 서버는 두 장치가 서로를 찾도록 도울 뿐이며, 파일 데이터는 암호화된 WebRTC 채널을 통해 장치 간에 직접 전송됩니다.</p>
       <h2>계정에 저장되는 정보(로그인한 경우에만)</h2><p>로그인은 선택 사항이며 크로스 네트워크 전송 기능을 사용할 때만 필요합니다. 로그인하면 계정 운영에 필요한 최소한의 정보만 저장합니다:</p><ul><li>이메일 주소와 표시 이름.</li><li>사용한 로그인 방식(Google 또는 이메일 매직 링크). 매직 링크 토큰은 해시값으로만 저장되며 평문으로는 저장되지 않습니다.</li><li>로그인 세션. 안전한 httpOnly 쿠키에 보관됩니다.</li><li>등록한 장치. 임의 장치 ID와 장치 이름(예: 플랫폼 이름)으로 관리됩니다.</li></ul>
+      <h2>임시 보관 전송(다운로드 링크)</h2><p>선택적 임시 보관 다운로드 링크 기능을 사용하면 파일이 기기를 떠나기 전에 브라우저에서 AES-256-GCM으로 암호화됩니다. 복호화 키는 URL 프래그먼트(# 부분)에만 존재하며 서버로 전송되지 않습니다. 이는 다음을 의미합니다:</p><ul><li>서버는 암호문만 저장합니다. 파일 내용, 파일 이름, 키를 읽을 수 없습니다.</li><li>할당량 관리 및 정리를 위해 암호문 크기와 타임스탬프(업로드 시간, 만료 시간)를 기록합니다.</li><li>암호문은 만료 시 또는 첫 번째 완전한 다운로드(열람 후 삭제) 중 먼저 발생하는 시점에 자동 삭제됩니다.</li><li>아래의 &#39;절대 수집하지 않는 정보&#39; 목록은 여전히 정확합니다: 서버가 임시 보관 전송에서 받는 모든 것은 암호문이며 평문 내용, 파일 이름, 키는 서버에 도달하지 않습니다.</li></ul>
       <h2>절대 수집하지 않는 정보</h2><p>서비스는 다음 정보가 당사 서버에 도달하지 않도록 설계되어 있습니다:</p><ul><li>파일 내용.</li><li>파일 이름.</li><li>암호화 키.</li></ul>
       <h2>크로스 네트워크 릴레이(TURN)</h2><p>두 장치가 네트워크를 가로질러 직접 연결할 수 없는 경우, 암호화된 스트림이 TURN 서버를 통해 중계됩니다. 릴레이 서버는 여전히 파일을 읽을 수 없습니다——엔드 투 엔드 암호화가 유지됩니다. 서비스 운영을 위해 전송별 릴레이 바이트 수만 기록하며, 이를 전송을 생성한 로그인 사용자에게 귀속시킵니다. 중계된 콘텐츠를 검사하지 않습니다.</p>
       <h2>쿠키 및 로컬 스토리지</h2><p>로그인 상태를 유지하기 위해 세션 쿠키 하나를 사용합니다. 브라우저의 로컬 스토리지에는 등록된 장치를 식별하기 위한 임의 장치 ID를 저장합니다. 광고 또는 추적 쿠키는 사용하지 않습니다.</p>

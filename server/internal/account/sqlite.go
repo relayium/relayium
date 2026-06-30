@@ -63,6 +63,31 @@ CREATE TABLE IF NOT EXISTS usage_events (
   recorded_at   INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_usage_user ON usage_events(user_id);
+CREATE TABLE IF NOT EXISTS stored_files (
+  id              TEXT PRIMARY KEY,
+  user_id         TEXT NOT NULL REFERENCES users(id),
+  blob_key        TEXT NOT NULL,
+  enc_manifest    BLOB NOT NULL,
+  size            INTEGER NOT NULL,
+  burn_after_read INTEGER NOT NULL DEFAULT 0,
+  created_at      INTEGER NOT NULL,
+  expires_at      INTEGER NOT NULL,
+  downloaded_at   INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_stored_files_user ON stored_files(user_id);
+CREATE INDEX IF NOT EXISTS idx_stored_files_expires ON stored_files(expires_at);
+CREATE TABLE IF NOT EXISTS upload_events (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL REFERENCES users(id),
+  bytes       INTEGER NOT NULL,
+  uploaded_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_upload_events_user ON upload_events(user_id, uploaded_at);
+CREATE TABLE IF NOT EXISTS settings (
+  key        TEXT PRIMARY KEY,
+  value      INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 `
 
 func OpenSQLite(dsn string) (*SQLiteStore, error) {
@@ -378,4 +403,149 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context) ([]AdminUserRow, error
 		sort.Strings(out[i].Methods)
 	}
 	return out, nil
+}
+
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+type rowScanner interface{ Scan(dest ...any) error }
+
+func scanStoredFile(sc rowScanner) (StoredFile, error) {
+	var f StoredFile
+	var burn int
+	err := sc.Scan(&f.ID, &f.UserID, &f.BlobKey, &f.EncManifest, &f.Size,
+		&burn, &f.CreatedAt, &f.ExpiresAt, &f.DownloadedAt)
+	f.BurnAfterRead = burn != 0
+	return f, err
+}
+
+const storedFileCols = `id, user_id, blob_key, enc_manifest, size, burn_after_read, created_at, expires_at, downloaded_at`
+
+func (s *SQLiteStore) CreateStoredFile(ctx context.Context, f StoredFile) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO stored_files (`+storedFileCols+`)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		f.ID, f.UserID, f.BlobKey, f.EncManifest, f.Size,
+		b2i(f.BurnAfterRead), f.CreatedAt, f.ExpiresAt, f.DownloadedAt)
+	return err
+}
+
+func (s *SQLiteStore) GetStoredFile(ctx context.Context, id string) (StoredFile, error) {
+	f, err := scanStoredFile(s.db.QueryRowContext(ctx,
+		`SELECT `+storedFileCols+` FROM stored_files WHERE id = ?`, id))
+	if err == sql.ErrNoRows {
+		return StoredFile{}, ErrNotFound
+	}
+	return f, err
+}
+
+func (s *SQLiteStore) ListStoredFilesByUser(ctx context.Context, userID string) ([]StoredFile, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+storedFileCols+` FROM stored_files WHERE user_id = ? ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []StoredFile
+	for rows.Next() {
+		f, err := scanStoredFile(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) MarkDownloaded(ctx context.Context, id string, at int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE stored_files SET downloaded_at = ? WHERE id = ?`, at, id)
+	return err
+}
+
+func (s *SQLiteStore) DeleteStoredFile(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM stored_files WHERE id = ?`, id)
+	return err
+}
+
+func (s *SQLiteStore) ListExpiredStoredFiles(ctx context.Context, now int64) ([]StoredFile, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+storedFileCols+` FROM stored_files WHERE expires_at < ?`, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []StoredFile
+	for rows.Next() {
+		f, err := scanStoredFile(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) RecordUpload(ctx context.Context, e UploadEvent) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO upload_events (id, user_id, bytes, uploaded_at) VALUES (?, ?, ?, ?)`,
+		e.ID, e.UserID, e.Bytes, e.UploadedAt)
+	return err
+}
+
+func (s *SQLiteStore) UserUploadedSince(ctx context.Context, userID string, since int64) (int64, error) {
+	var total sql.NullInt64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT SUM(bytes) FROM upload_events WHERE user_id = ? AND uploaded_at >= ?`,
+		userID, since).Scan(&total)
+	if err != nil {
+		return 0, err
+	}
+	return total.Int64, nil // SUM over no rows is NULL → 0
+}
+
+func (s *SQLiteStore) PruneUploadEvents(ctx context.Context, before int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM upload_events WHERE uploaded_at < ?`, before)
+	return err
+}
+
+func (s *SQLiteStore) GetSetting(ctx context.Context, key string) (int64, bool, error) {
+	var v int64
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, key).Scan(&v)
+	if err == sql.ErrNoRows {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return v, true, nil
+}
+
+func (s *SQLiteStore) SetSetting(ctx context.Context, key string, value, at int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+		key, value, at)
+	return err
+}
+
+func (s *SQLiteStore) ListSettings(ctx context.Context) ([]Setting, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT key, value, updated_at FROM settings ORDER BY key`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Setting
+	for rows.Next() {
+		var st Setting
+		if err := rows.Scan(&st.Key, &st.Value, &st.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, st)
+	}
+	return out, rows.Err()
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/relayium/relayium/internal/account"
 	"github.com/relayium/relayium/internal/metering"
 	"github.com/relayium/relayium/internal/signal"
+	"github.com/relayium/relayium/internal/storage"
 )
 
 func newID() string {
@@ -61,6 +62,11 @@ func main() {
 	enableMagic := flag.Bool("enable-magic", envBool("RELAYIUM_ENABLE_MAGIC", false), "enable email magic-link login (disabled by default)")
 	adminUser := flag.String("admin-user", envStr("RELAYIUM_ADMIN_USER", "admin"), "admin dashboard username at /admin (defaults to 'admin')")
 	adminPass := flag.String("admin-pass", envStr("RELAYIUM_ADMIN_PASS", ""), "admin dashboard password at /admin (empty disables the dashboard)")
+	blobDir := flag.String("blob-dir", envStr("RELAYIUM_BLOB_DIR", "./blobs"), "directory for stored-transfer ciphertext blobs")
+	maxFileSize := flag.Int64("max-file-size", envInt64("RELAYIUM_MAX_FILE_SIZE", 50<<20), "stored-transfer max single-file size in bytes (default 50 MiB)")
+	dailyQuota := flag.Int64("daily-quota", envInt64("RELAYIUM_DAILY_QUOTA", 200<<20), "stored-transfer per-account upload quota per 24h in bytes (default 200 MiB)")
+	fileTTL := flag.Int64("file-ttl", envInt64("RELAYIUM_FILE_TTL", 86400), "stored-transfer default link TTL in seconds (default 1 day)")
+	fileTTLMax := flag.Int64("file-ttl-max", envInt64("RELAYIUM_FILE_TTL_MAX", 604800), "stored-transfer max link TTL in seconds (default 7 days)")
 	flag.Parse()
 
 	// Not in Go's built-in MIME table; the PWA manifest should be served as JSON.
@@ -126,8 +132,28 @@ func main() {
 			EnableMagic:    *enableMagic,
 			AdminUser:      *adminUser,
 			AdminPassword:  *adminPass,
+			MaxFileSize:    *maxFileSize,
+			DailyQuota:     *dailyQuota,
+			DefaultTTL:     *fileTTL,
+			MaxTTL:         *fileTTLMax,
 		})
 		validateRoom = acct.ValidateTransferToken
+		if disk, derr := storage.NewDiskStore(*blobDir); derr != nil {
+			log.Printf("WARNING: open blob dir %q: %v — stored transfers disabled", *blobDir, derr)
+		} else {
+			acct.SetBlobStore(disk)
+			if err := acct.SeedSettings(context.Background()); err != nil {
+				log.Printf("WARNING: seed settings: %v", err)
+			}
+			gc := &account.GC{
+				Store: store,
+				Blobs: disk,
+				Now:   func() int64 { return time.Now().Unix() },
+				Log:   log.Default(),
+			}
+			go gc.Run(context.Background(), 10*time.Minute)
+			log.Printf("stored transfers enabled: blobs in %s", *blobDir)
+		}
 		if *redisAddr != "" {
 			worker := &metering.Worker{
 				Sink: store,

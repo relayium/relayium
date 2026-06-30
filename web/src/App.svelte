@@ -28,8 +28,9 @@
   import { lang, messages, legalUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import CrossPage from "./lib/CrossPage.svelte";
   import Nav from "./lib/Nav.svelte";
-  import { currentRoute, syncRouteFromLocation } from "./lib/router.svelte";
+  import { currentRoute, syncRouteFromLocation, downloadId } from "./lib/router.svelte";
   import Hero from "./lib/Hero.svelte";
+  import DownloadPage from "./lib/DownloadPage.svelte";
   import FeatureStrip from "./lib/FeatureStrip.svelte";
 
   interface Incoming { from: string; files: FileMeta[]; total: number }
@@ -366,6 +367,9 @@
 </script>
 
 <main>
+  {#if currentRoute() === "download"}
+    <DownloadPage id={downloadId(location.pathname)} />
+  {:else}
   <Nav />
 
   {#if currentRoute() === "cross"}
@@ -468,6 +472,7 @@
       </nav>
       <span class="fineprint">{t.footer}</span>
     </footer>
+  {/if}
   {/if}
   {/if}
 </main>

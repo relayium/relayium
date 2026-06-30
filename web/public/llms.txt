@@ -1,6 +1,6 @@
 # Relayium
 
-> Relayium is an open-source, end-to-end encrypted, peer-to-peer (P2P) file transfer tool that runs entirely in the browser. Files stream directly from one device to another over a WebRTC DataChannel and never pass through any server. No account, no installation, and no file-size cap imposed by a server. Live at https://relayium.com.
+> Relayium is an open-source, end-to-end encrypted file transfer tool that runs entirely in the browser. In realtime mode, files stream directly from one device to another over a WebRTC DataChannel and never pass through any server. An optional stored download-link mode encrypts files in the browser (AES-256-GCM) before upload; the server stores only ciphertext and cannot read content, filenames, or the key. No account, no installation. Live at https://relayium.com.
 
 ## What it is
 
@@ -9,7 +9,8 @@
 - **Encryption:** Per-transfer ephemeral X25519 key exchange (ECDH) deriving an AES-256-GCM key; every chunk is encrypted with a unique nonce. Keys exist only on the sender and receiver — never on the server.
 - **Anti man-in-the-middle:** A 6-digit Short Authentication String (SAS) is derived from the session keys and shown on both screens; comparing it out of band detects a key-swapping signaling server. This is a layer *on top of* WebRTC's built-in DTLS, whose fingerprints pass through the signaling server and could otherwise be MITM'd.
 - **Integrity:** Per-chunk AES-GCM authentication tag plus a per-file SHA-256 hash verified end-to-end on the receiver.
-- **Privacy:** The signaling server only ever sees room membership (public IP), a device nickname, presence, and signaling envelopes. It never sees file contents or file names.
+- **Privacy:** The signaling server only ever sees room membership (public IP), a device nickname, presence, and signaling envelopes. It never sees file contents or file names. In realtime mode, no file bytes touch the server at all.
+- **Optional stored download links:** for asynchronous transfer, the sender may upload zero-knowledge ciphertext (AES-256-GCM, key only in the URL fragment); the server stores ciphertext + ciphertext size + timestamps, never plaintext, filenames, or keys; auto-deleted at expiry or first download.
 
 ## Key facts
 
@@ -25,14 +26,14 @@
 ## How Relayium compares
 
 - **vs AirDrop:** Relayium is cross-platform and browser-based (not Apple-only) — it works between, e.g., a Windows PC and an iPhone, or Android and a Mac.
-- **vs WeTransfer / Google Drive / email:** files are not uploaded to a server; they go directly device-to-device and are end-to-end encrypted, so there is no server copy and no server-imposed size limit.
+- **vs WeTransfer / Google Drive / email:** in realtime mode, files go directly device-to-device and are end-to-end encrypted, so there is no server copy and no server-imposed size limit; the optional stored download-link mode encrypts files zero-knowledge before any server upload.
 - **vs Snapdrop / PairDrop:** same browser+WebRTC+LAN idea, but Relayium adds an application-layer end-to-end encryption layer (X25519 + AES-256-GCM) and a SAS verification code on top of WebRTC's DTLS, so a malicious signaling server cannot read or MITM the transfer undetected.
 
 ## FAQ
 
 - **Is Relayium free?** Yes — free and open source under the MIT license.
 - **Do I need an account or to install anything?** No. Open the URL in a browser on both devices.
-- **Do my files get uploaded to a server?** No. Files stream directly between the two devices over WebRTC and never touch the server.
+- **Do my files get uploaded to a server?** In realtime mode: no — files stream directly between the two devices over WebRTC and never touch the server. The optional stored download-link mode uploads only zero-knowledge ciphertext (AES-256-GCM); the server cannot read content, filenames, or the key.
 - **Is it end-to-end encrypted?** Yes — X25519 key exchange and AES-256-GCM, with keys that never leave the two devices, plus a 6-digit code to verify against man-in-the-middle attacks.
 - **Can I send files between different operating systems?** Yes — it is browser-based, so Windows ↔ iPhone, Android ↔ Mac, Linux ↔ anything all work.
 - **What is the file-size limit?** No server-imposed limit. In Chrome/Edge files stream to disk; in Firefox/Safari keep files under ~200 MB because they buffer in memory.
