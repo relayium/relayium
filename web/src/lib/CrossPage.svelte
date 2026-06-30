@@ -1,6 +1,7 @@
 <script lang="ts">
   import Account from "./Account.svelte";
   import CrossNetwork from "./CrossNetwork.svelte";
+  import StoredUpload from "./StoredUpload.svelte";
   import { session } from "./auth.svelte";
   import { lang, messages, legalUrl, type Messages } from "./i18n.svelte";
 
@@ -31,6 +32,10 @@
   {/if}
 
   <CrossNetwork {roomToken} />
+
+  {#if session().user && !roomToken}
+    <StoredUpload />
+  {/if}
 
   {#if linkDead}
     <p class="notice error">{t.crossnet.linkDead}</p>
