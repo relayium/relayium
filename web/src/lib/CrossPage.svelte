@@ -1,12 +1,13 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import Account from "./Account.svelte";
   import CrossNetwork from "./CrossNetwork.svelte";
   import StoredUpload from "./StoredUpload.svelte";
   import { session } from "./auth.svelte";
   import { lang, messages, legalUrl, type Messages } from "./i18n.svelte";
 
-  let { roomToken = "", linkDead = false }:
-    { roomToken?: string; linkDead?: boolean } = $props();
+  let { roomToken = "", roomCode = "", linkDead = false, showTransfer = false, transferSurface }:
+    { roomToken?: string; roomCode?: string; linkDead?: boolean; showTransfer?: boolean; transferSurface?: Snippet } = $props();
 
   const t = $derived<Messages>(messages[lang()]);
   // The login notice is only for someone trying to *start* a transfer:
@@ -31,7 +32,11 @@
     </section>
   {/if}
 
-  <CrossNetwork {roomToken} />
+  {#if showTransfer && transferSurface}
+    {@render transferSurface()}
+  {:else}
+    <CrossNetwork {roomToken} />
+  {/if}
 
   {#if session().user && !roomToken}
     <StoredUpload />
