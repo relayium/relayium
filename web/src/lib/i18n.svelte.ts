@@ -230,7 +230,7 @@ const zh: Messages = {
   features: {
     items: [
       { title: "端到端加密", desc: "X25519 + AES-256-GCM,密钥只在两台设备间,服务器无法解密。" },
-      { title: "文件不经服务器", desc: "文件通过 WebRTC 在设备间直接流动,绝不上传到任何服务器。" },
+      { title: "文件不经服务器", desc: "实时直传通过 WebRTC 在设备间直接流动，绝不经过服务器；可选的下载链接为零知识加密暂存。" },
       { title: "防中间人", desc: "两边屏幕显示同一段校验码(SAS),核对一致即可排除中间人。" },
       { title: "跨平台", desc: "Windows、macOS、Linux、Android、iOS,任意现代浏览器都能用。" },
     ],
@@ -343,7 +343,7 @@ const en: Messages = {
   features: {
     items: [
       { title: "End-to-end encrypted", desc: "X25519 + AES-256-GCM; keys stay on the two devices and the server can't decrypt." },
-      { title: "Files never touch the server", desc: "Bytes flow device-to-device over WebRTC and are never uploaded anywhere." },
+      { title: "Files never touch the server", desc: "In realtime mode, bytes flow device-to-device over WebRTC and never touch the server; the optional download-link mode stores only zero-knowledge ciphertext." },
       { title: "Man-in-the-middle check", desc: "Both screens show the same code (SAS); match it to rule out a MITM." },
       { title: "Cross-platform", desc: "Windows, macOS, Linux, Android, iOS — any modern browser." },
     ],
@@ -456,7 +456,7 @@ const ja: Messages = {
   features: {
     items: [
       { title: "エンドツーエンド暗号化", desc: "X25519 + AES-256-GCM。鍵は2台の端末だけに留まり、サーバーは復号できません。" },
-      { title: "ファイルはサーバーを経由しない", desc: "データはWebRTCで端末間を直接流れ、どこにもアップロードされません。" },
+      { title: "ファイルはサーバーを経由しない", desc: "リアルタイムモードではデータが WebRTC で端末間を直接流れサーバーを経由しません。オプションのダウンロードリンクモードはゼロ知識暗号文のみを保存します。" },
       { title: "中間者攻撃の検知", desc: "両方の画面に同じコード(SAS)が表示されます。一致を確認して中間者を排除。" },
       { title: "クロスプラットフォーム", desc: "Windows、macOS、Linux、Android、iOS — 最新のブラウザならどれでも。" },
     ],
@@ -569,7 +569,7 @@ const ko: Messages = {
   features: {
     items: [
       { title: "종단 간 암호화", desc: "X25519 + AES-256-GCM. 키는 두 기기에만 있고 서버는 복호화할 수 없습니다." },
-      { title: "파일은 서버를 거치지 않음", desc: "데이터는 WebRTC로 기기 간 직접 전송되며 어디에도 업로드되지 않습니다." },
+      { title: "파일은 서버를 거치지 않음", desc: "실시간 모드에서는 데이터가 WebRTC로 기기 간 직접 전송되며 서버를 거치지 않습니다. 선택적 다운로드 링크 모드는 제로 지식 암호문만 저장합니다." },
       { title: "중간자 공격 확인", desc: "양쪽 화면에 같은 코드(SAS)가 표시됩니다. 일치를 확인해 중간자를 배제하세요." },
       { title: "크로스 플랫폼", desc: "Windows, macOS, Linux, Android, iOS — 최신 브라우저면 모두 가능." },
     ],
@@ -682,7 +682,7 @@ const de: Messages = {
   features: {
     items: [
       { title: "Ende-zu-Ende-verschlüsselt", desc: "X25519 + AES-256-GCM; Schlüssel bleiben auf den beiden Geräten, der Server kann nicht entschlüsseln." },
-      { title: "Dateien berühren den Server nie", desc: "Bytes fließen per WebRTC direkt zwischen den Geräten und werden nirgends hochgeladen." },
+      { title: "Dateien berühren den Server nie", desc: "Im Echtzeitmodus fließen Bytes per WebRTC direkt zwischen den Geräten und berühren nie den Server; der optionale Download-Link-Modus speichert nur Zero-Knowledge-Chiffretext." },
       { title: "Schutz vor Man-in-the-Middle", desc: "Beide Bildschirme zeigen denselben Code (SAS); stimmt er überein, ist ein MITM ausgeschlossen." },
       { title: "Plattformübergreifend", desc: "Windows, macOS, Linux, Android, iOS — jeder moderne Browser." },
     ],
@@ -795,7 +795,7 @@ const fr: Messages = {
   features: {
     items: [
       { title: "Chiffrement de bout en bout", desc: "X25519 + AES-256-GCM ; les clés restent sur les deux appareils, le serveur ne peut pas déchiffrer." },
-      { title: "Les fichiers ne touchent jamais le serveur", desc: "Les octets circulent d'appareil à appareil via WebRTC et ne sont jamais téléversés." },
+      { title: "Les fichiers ne touchent jamais le serveur", desc: "En mode temps réel, les octets circulent d'appareil à appareil via WebRTC sans jamais toucher le serveur ; le mode lien de téléchargement optionnel ne stocke que du chiffré zéro-connaissance." },
       { title: "Détection de l'homme du milieu", desc: "Les deux écrans affichent le même code (SAS) ; vérifiez-le pour écarter un MITM." },
       { title: "Multiplateforme", desc: "Windows, macOS, Linux, Android, iOS — tout navigateur moderne." },
     ],

@@ -30,6 +30,18 @@ const en = {
       ],
     },
     {
+      heading: "Stored transfer (download links)",
+      body: [
+        "When you use the optional stored download-link mode, your browser encrypts your files with AES-256-GCM before they leave your device. The decryption key exists only in the URL fragment — it is never sent to the server. This means:",
+      ],
+      bullets: [
+        "The server stores only ciphertext. It cannot read your file contents, filenames, or keys.",
+        "We record the ciphertext size and timestamps (upload time, expiry) for quota management and cleanup.",
+        "Ciphertext is automatically deleted at expiry or on the first complete download (burn-after-read), whichever comes first.",
+        "The \"What we never collect\" section below remains accurate: everything the server receives from a stored transfer is ciphertext — plaintext content, filenames, and keys never reach the server.",
+      ],
+    },
+    {
       heading: "What we never collect",
       body: ["The service is designed so that the following never reach our servers:"],
       bullets: [
@@ -106,6 +118,18 @@ const zh = {
       ],
     },
     {
+      heading: "暂存传输（下载链接）",
+      body: [
+        "使用可选的暂存下载链接功能时，你的浏览器在文件离开设备前即以 AES-256-GCM 加密。解密密钥仅存在于链接的 URL 片段（# 部分）中，绝不发送至服务器。这意味着：",
+      ],
+      bullets: [
+        "服务器仅存储密文，无法读取你的文件内容、文件名或密钥。",
+        "我们记录密文大小和时间戳（上传时间、有效期）用于配额管理和清理。",
+        "密文在到期或首次完整下载（阅后即焚）时自动删除，以先到者为准。",
+        "下方「我们绝不收集什么」一节依然准确：服务器从暂存传输中收到的一切均为密文——明文内容、文件名和密钥永远不会到达服务器。",
+      ],
+    },
+    {
       heading: "我们绝不收集什么",
       body: ["本服务的设计确保以下内容绝不会到达我们的服务器:"],
       bullets: ["你的文件内容。", "你的文件名。", "你的加密密钥。"],
@@ -175,6 +199,18 @@ const ja = {
         "使用したサインイン方法（Google、またはメールマジックリンク）。マジックリンクのトークンはハッシュ値のみ保存され、平文では保存されません。",
         "ログインセッション。安全なhttpOnlyクッキーに保存されます。",
         "登録したデバイス。ランダムなデバイスIDとデバイス名（例：プラットフォーム名）で管理されます。",
+      ],
+    },
+    {
+      heading: "一時保存転送（ダウンロードリンク）",
+      body: [
+        "オプションの一時保存ダウンロードリンク機能を使用する場合、ファイルはデバイスから送信される前にブラウザで AES-256-GCM 暗号化されます。復号キーは URL フラグメント（# 部分）にのみ存在し、サーバーには送信されません。これは以下を意味します：",
+      ],
+      bullets: [
+        "サーバーは暗号文のみを保存します。ファイルの内容、ファイル名、キーを読み取ることはできません。",
+        "クォータ管理とクリーンアップのために、暗号文サイズとタイムスタンプ（アップロード時刻、有効期限）を記録します。",
+        "暗号文は有効期限切れまたは最初の完全なダウンロード（閲覧後削除）のいずれか早い方で自動削除されます。",
+        "下記の「収集しない情報」は引き続き正確です：サーバーが一時保存転送から受け取るものはすべて暗号文であり、平文コンテンツ、ファイル名、キーはサーバーに届きません。",
       ],
     },
     {
@@ -256,6 +292,18 @@ const ko = {
       ],
     },
     {
+      heading: "임시 보관 전송(다운로드 링크)",
+      body: [
+        "선택적 임시 보관 다운로드 링크 기능을 사용하면 파일이 기기를 떠나기 전에 브라우저에서 AES-256-GCM으로 암호화됩니다. 복호화 키는 URL 프래그먼트(# 부분)에만 존재하며 서버로 전송되지 않습니다. 이는 다음을 의미합니다:",
+      ],
+      bullets: [
+        "서버는 암호문만 저장합니다. 파일 내용, 파일 이름, 키를 읽을 수 없습니다.",
+        "할당량 관리 및 정리를 위해 암호문 크기와 타임스탬프(업로드 시간, 만료 시간)를 기록합니다.",
+        "암호문은 만료 시 또는 첫 번째 완전한 다운로드(열람 후 삭제) 중 먼저 발생하는 시점에 자동 삭제됩니다.",
+        "아래의 '절대 수집하지 않는 정보' 목록은 여전히 정확합니다: 서버가 임시 보관 전송에서 받는 모든 것은 암호문이며 평문 내용, 파일 이름, 키는 서버에 도달하지 않습니다.",
+      ],
+    },
+    {
       heading: "절대 수집하지 않는 정보",
       body: ["서비스는 다음 정보가 당사 서버에 도달하지 않도록 설계되어 있습니다:"],
       bullets: [
@@ -334,6 +382,18 @@ const de = {
       ],
     },
     {
+      heading: "Zwischengespeicherte Übertragung (Download-Links)",
+      body: [
+        "Wenn Sie den optionalen Modus für zwischengespeicherte Download-Links nutzen, verschlüsselt Ihr Browser die Dateien mit AES-256-GCM, bevor sie Ihr Gerät verlassen. Der Entschlüsselungsschlüssel befindet sich ausschließlich im URL-Fragment (nach dem #) und wird nie an den Server gesendet. Das bedeutet:",
+      ],
+      bullets: [
+        "Der Server speichert ausschließlich Chiffretext. Er kann Ihre Dateiinhalte, Dateinamen oder Schlüssel nicht lesen.",
+        "Wir erfassen die Chiffretextgröße und Zeitstempel (Upload-Zeitpunkt, Ablaufzeit) für Kontingentverwaltung und Bereinigung.",
+        "Der Chiffretext wird automatisch gelöscht, wenn er abläuft oder beim ersten vollständigen Download (Burn-after-read) — je nachdem, was zuerst eintritt.",
+        "Die Liste \"Was wir niemals erfassen\" bleibt weiterhin korrekt: Alles, was der Server bei einer zwischengespeicherten Übertragung empfängt, ist Chiffretext — Klartext, Dateinamen und Schlüssel gelangen nie zum Server.",
+      ],
+    },
+    {
       heading: "Was wir niemals erfassen",
       body: ["Der Dienst ist so gestaltet, dass Folgendes unsere Server nie erreicht:"],
       bullets: [
@@ -409,6 +469,18 @@ const fr = {
         "La méthode de connexion utilisée (Google ou un lien magique par e-mail). Les jetons de lien magique sont stockés uniquement sous forme de hachage, jamais en clair.",
         "Une session de connexion, conservée dans un cookie sécurisé httpOnly.",
         "Les appareils que vous enregistrez, sous la forme d'un identifiant d'appareil aléatoire et d'un nom d'appareil (par ex. le nom de votre plateforme).",
+      ],
+    },
+    {
+      heading: "Transfert stocké (liens de téléchargement)",
+      body: [
+        "Lorsque vous utilisez le mode optionnel de liens de téléchargement stockés, votre navigateur chiffre vos fichiers avec AES-256-GCM avant qu'ils ne quittent votre appareil. La clé de déchiffrement n'existe que dans le fragment d'URL (après le #) et n'est jamais envoyée au serveur. Cela signifie :",
+      ],
+      bullets: [
+        "Le serveur ne stocke que du chiffré. Il ne peut pas lire le contenu de vos fichiers, leurs noms ni les clés.",
+        "Nous enregistrons la taille du chiffré et les horodatages (heure d'envoi, expiration) pour la gestion des quotas et le nettoyage.",
+        "Le chiffré est automatiquement supprimé à l'expiration ou lors du premier téléchargement complet (lecture unique), selon ce qui survient en premier.",
+        "La liste « Ce que nous ne collectons jamais » ci-dessous reste exacte : tout ce que le serveur reçoit d'un transfert stocké est du chiffré — le contenu en clair, les noms de fichiers et les clés n'atteignent jamais le serveur.",
       ],
     },
     {
