@@ -5,6 +5,7 @@ export interface SessionUser {
   id: string;
   email: string;
   displayName: string;
+  hasPassword: boolean;
 }
 
 let user = $state<SessionUser | null>(null);
@@ -89,6 +90,29 @@ export function register(email: string, password: string) {
 
 export function passwordLogin(email: string, password: string) {
   return postCredentials("/api/auth/password/login", email, password);
+}
+
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch("/api/auth/password/change", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  if (res.ok) {
+    if (user) user = { ...user, hasPassword: true };
+    return { ok: true };
+  }
+  let error = "error";
+  try {
+    error = ((await res.json()) as { error?: string }).error ?? error;
+  } catch {
+    /* non-JSON body */
+  }
+  return { ok: false, error };
 }
 
 const DEVICE_KEY = "relayium_device_id";
