@@ -67,6 +67,14 @@ export interface Messages {
     continueGoogle: string;
     or: string;
     signedInAs: (email: string) => string;
+    password: string;
+    createAccount: string;
+    logInBtn: string;
+    toRegister: string;
+    toLogin: string;
+    errTooShort: string;
+    errEmailTaken: string;
+    errLogin: string;
   };
   crossnet: {
     sendAcross: string;
@@ -141,6 +149,14 @@ const zh: Messages = {
     continueGoogle: "用 Google 继续",
     or: "或",
     signedInAs: (e) => `已登录：${e}`,
+    password: "密码",
+    createAccount: "注册",
+    logInBtn: "登录",
+    toRegister: "没有账号？去注册",
+    toLogin: "已有账号？去登录",
+    errTooShort: "密码至少 8 位。",
+    errEmailTaken: "该邮箱已注册，请直接登录。",
+    errLogin: "邮箱或密码错误。",
   },
   crossnet: {
     sendAcross: "发送到其他网络的人",
@@ -216,6 +232,14 @@ const en: Messages = {
     continueGoogle: "Continue with Google",
     or: "or",
     signedInAs: (e) => `Signed in as ${e}`,
+    password: "Password",
+    createAccount: "Create account",
+    logInBtn: "Log in",
+    toRegister: "No account? Sign up",
+    toLogin: "Have an account? Log in",
+    errTooShort: "Password must be at least 8 characters.",
+    errEmailTaken: "That email is already registered — please log in.",
+    errLogin: "Wrong email or password.",
   },
   crossnet: {
     sendAcross: "Send to someone on another network",
@@ -291,6 +315,14 @@ const ja: Messages = {
     continueGoogle: "Google で続ける",
     or: "または",
     signedInAs: (e) => `ログイン中：${e}`,
+    password: "パスワード",
+    createAccount: "登録",
+    logInBtn: "ログイン",
+    toRegister: "アカウントがない？新規登録",
+    toLogin: "アカウントをお持ちの方はログイン",
+    errTooShort: "パスワードは8文字以上にしてください。",
+    errEmailTaken: "このメールは登録済みです。ログインしてください。",
+    errLogin: "メールアドレスまたはパスワードが違います。",
   },
   crossnet: {
     sendAcross: "別のネットワークの相手に送る",
@@ -366,6 +398,14 @@ const ko: Messages = {
     continueGoogle: "Google로 계속",
     or: "또는",
     signedInAs: (e) => `로그인됨: ${e}`,
+    password: "비밀번호",
+    createAccount: "회원가입",
+    logInBtn: "로그인",
+    toRegister: "계정이 없으신가요? 가입하기",
+    toLogin: "이미 계정이 있으신가요? 로그인",
+    errTooShort: "비밀번호는 8자 이상이어야 합니다.",
+    errEmailTaken: "이미 가입된 이메일입니다. 로그인해 주세요.",
+    errLogin: "이메일 또는 비밀번호가 올바르지 않습니다.",
   },
   crossnet: {
     sendAcross: "다른 네트워크의 상대에게 보내기",
@@ -441,6 +481,14 @@ const de: Messages = {
     continueGoogle: "Mit Google fortfahren",
     or: "oder",
     signedInAs: (e) => `Angemeldet als ${e}`,
+    password: "Passwort",
+    createAccount: "Registrieren",
+    logInBtn: "Anmelden",
+    toRegister: "Kein Konto? Registrieren",
+    toLogin: "Schon ein Konto? Anmelden",
+    errTooShort: "Das Passwort muss mindestens 8 Zeichen haben.",
+    errEmailTaken: "Diese E-Mail ist bereits registriert — bitte anmelden.",
+    errLogin: "Falsche E-Mail oder falsches Passwort.",
   },
   crossnet: {
     sendAcross: "An jemanden in einem anderen Netzwerk senden",
@@ -516,6 +564,14 @@ const fr: Messages = {
     continueGoogle: "Continuer avec Google",
     or: "ou",
     signedInAs: (e) => `Connecté en tant que ${e}`,
+    password: "Mot de passe",
+    createAccount: "Créer un compte",
+    logInBtn: "Se connecter",
+    toRegister: "Pas de compte ? S'inscrire",
+    toLogin: "Déjà un compte ? Se connecter",
+    errTooShort: "Le mot de passe doit comporter au moins 8 caractères.",
+    errEmailTaken: "Cet e-mail est déjà enregistré — veuillez vous connecter.",
+    errLogin: "E-mail ou mot de passe incorrect.",
   },
   crossnet: {
     sendAcross: "Envoyer à quelqu'un sur un autre réseau",
