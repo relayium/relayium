@@ -88,3 +88,19 @@ func TestEnvBoolFallback(t *testing.T) {
 		t.Error("garbage should fall back to default true")
 	}
 }
+
+func TestEnvInt64Fallback(t *testing.T) {
+	os.Unsetenv("RELAYIUM_TEST_INT")
+	if got := envInt64("RELAYIUM_TEST_INT", 42); got != 42 {
+		t.Errorf("unset: got %d, want 42", got)
+	}
+	t.Setenv("RELAYIUM_TEST_INT", "100")
+	if got := envInt64("RELAYIUM_TEST_INT", 42); got != 100 {
+		t.Errorf("set: got %d, want 100", got)
+	}
+	// Unparseable → default.
+	t.Setenv("RELAYIUM_TEST_INT", "notanumber")
+	if got := envInt64("RELAYIUM_TEST_INT", 42); got != 42 {
+		t.Errorf("garbage: got %d, want 42", got)
+	}
+}
