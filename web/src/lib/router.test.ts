@@ -32,3 +32,13 @@ describe("download route", () => {
     expect(rfl(CROSS_PATH, "")).toBe("cross");
   });
 });
+
+describe("routeFromLocation with a pairing code", () => {
+  it("treats #c=<code> as the cross-network route", () => {
+    expect(rfl("/", "#c=424242")).toBe("cross");
+    expect(rfl("/cross-network", "#c=042424")).toBe("cross");
+  });
+  it("does not treat a malformed #c= as cross", () => {
+    expect(rfl("/", "#c=123")).toBe("lan");
+  });
+});
