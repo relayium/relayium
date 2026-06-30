@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/relayium/relayium/internal/storage"
 )
 
 type Config struct {
@@ -42,6 +44,7 @@ type Service struct {
 	fetchGoogleUser func(ctx context.Context, code string) (sub, email, name string, verified bool, err error)
 	adminSessions   map[string]int64 // token -> 过期 unix 秒
 	adminMu         sync.Mutex
+	blobs           storage.BlobStore // nil until SetBlobStore; stored-transfer disabled when nil
 }
 
 func NewService(store Store, mailer Mailer, cfg Config) *Service {
@@ -49,6 +52,10 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
 	return svc
 }
+
+// SetBlobStore wires the ciphertext blob backend for stored transfers. Called
+// once at startup when the DB (and thus account features) are available.
+func (s *Service) SetBlobStore(b storage.BlobStore) { s.blobs = b }
 
 func randToken() string {
 	b := make([]byte, 32)
