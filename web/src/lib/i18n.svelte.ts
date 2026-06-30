@@ -75,6 +75,14 @@ export interface Messages {
     errTooShort: string;
     errEmailTaken: string;
     errLogin: string;
+    changePassword: string;
+    setPassword: string;
+    currentPassword: string;
+    newPassword: string;
+    confirmPassword: string;
+    pwChanged: string;
+    errCurrentWrong: string;
+    errMismatch: string;
   };
   nav: { lanTab: string; crossTab: string };
   crossnet: {
@@ -204,6 +212,14 @@ const zh: Messages = {
     errTooShort: "密码至少 8 位。",
     errEmailTaken: "该邮箱已注册，请直接登录。",
     errLogin: "邮箱或密码错误。",
+    changePassword: "修改密码",
+    setPassword: "设置密码",
+    currentPassword: "当前密码",
+    newPassword: "新密码",
+    confirmPassword: "确认新密码",
+    pwChanged: "密码已更新，其他设备已登出。",
+    errCurrentWrong: "当前密码不正确。",
+    errMismatch: "两次输入的新密码不一致。",
   },
   nav: { lanTab: "局域网传输", crossTab: "跨网络传输" },
   crossnet: {
@@ -334,6 +350,14 @@ const en: Messages = {
     errTooShort: "Password must be at least 8 characters.",
     errEmailTaken: "That email is already registered — please log in.",
     errLogin: "Wrong email or password.",
+    changePassword: "Change password",
+    setPassword: "Set a password",
+    currentPassword: "Current password",
+    newPassword: "New password",
+    confirmPassword: "Confirm new password",
+    pwChanged: "Password updated. Other devices have been signed out.",
+    errCurrentWrong: "Current password is incorrect.",
+    errMismatch: "The new passwords do not match.",
   },
   nav: { lanTab: "LAN transfer", crossTab: "Cross-network" },
   crossnet: {
@@ -464,6 +488,14 @@ const ja: Messages = {
     errTooShort: "パスワードは8文字以上にしてください。",
     errEmailTaken: "このメールは登録済みです。ログインしてください。",
     errLogin: "メールアドレスまたはパスワードが違います。",
+    changePassword: "パスワードを変更",
+    setPassword: "パスワードを設定",
+    currentPassword: "現在のパスワード",
+    newPassword: "新しいパスワード",
+    confirmPassword: "新しいパスワード（確認）",
+    pwChanged: "パスワードを更新しました。他の端末はログアウトされました。",
+    errCurrentWrong: "現在のパスワードが正しくありません。",
+    errMismatch: "新しいパスワードが一致しません。",
   },
   nav: { lanTab: "LAN 転送", crossTab: "ネットワーク間転送" },
   crossnet: {
@@ -594,6 +626,14 @@ const ko: Messages = {
     errTooShort: "비밀번호는 8자 이상이어야 합니다.",
     errEmailTaken: "이미 가입된 이메일입니다. 로그인해 주세요.",
     errLogin: "이메일 또는 비밀번호가 올바르지 않습니다.",
+    changePassword: "비밀번호 변경",
+    setPassword: "비밀번호 설정",
+    currentPassword: "현재 비밀번호",
+    newPassword: "새 비밀번호",
+    confirmPassword: "새 비밀번호 확인",
+    pwChanged: "비밀번호가 변경되었습니다. 다른 기기는 로그아웃되었습니다.",
+    errCurrentWrong: "현재 비밀번호가 올바르지 않습니다.",
+    errMismatch: "새 비밀번호가 일치하지 않습니다.",
   },
   nav: { lanTab: "LAN 전송", crossTab: "네트워크 간 전송" },
   crossnet: {
@@ -724,6 +764,14 @@ const de: Messages = {
     errTooShort: "Das Passwort muss mindestens 8 Zeichen haben.",
     errEmailTaken: "Diese E-Mail ist bereits registriert — bitte anmelden.",
     errLogin: "Falsche E-Mail oder falsches Passwort.",
+    changePassword: "Passwort ändern",
+    setPassword: "Passwort festlegen",
+    currentPassword: "Aktuelles Passwort",
+    newPassword: "Neues Passwort",
+    confirmPassword: "Neues Passwort bestätigen",
+    pwChanged: "Passwort aktualisiert. Andere Geräte wurden abgemeldet.",
+    errCurrentWrong: "Aktuelles Passwort ist falsch.",
+    errMismatch: "Die neuen Passwörter stimmen nicht überein.",
   },
   nav: { lanTab: "LAN-Übertragung", crossTab: "Netzübergreifend" },
   crossnet: {
@@ -854,6 +902,14 @@ const fr: Messages = {
     errTooShort: "Le mot de passe doit comporter au moins 8 caractères.",
     errEmailTaken: "Cet e-mail est déjà enregistré — veuillez vous connecter.",
     errLogin: "E-mail ou mot de passe incorrect.",
+    changePassword: "Changer le mot de passe",
+    setPassword: "Définir un mot de passe",
+    currentPassword: "Mot de passe actuel",
+    newPassword: "Nouveau mot de passe",
+    confirmPassword: "Confirmer le nouveau mot de passe",
+    pwChanged: "Mot de passe mis à jour. Les autres appareils ont été déconnectés.",
+    errCurrentWrong: "Le mot de passe actuel est incorrect.",
+    errMismatch: "Les nouveaux mots de passe ne correspondent pas.",
   },
   nav: { lanTab: "Transfert LAN", crossTab: "Inter-réseaux" },
   crossnet: {
