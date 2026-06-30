@@ -6,6 +6,7 @@ This guide describes a single-host production deployment:
             ┌──────────────────────── your server ────────────────────────┐
   browser → │  nginx (TLS :443)                                            │
             │    ├─ location /api/    → proxy → Go server 127.0.0.1:8080   │  accounts, auth, ice, transfers
+            │    ├─ location /admin   → proxy → Go server 127.0.0.1:8080   │  read-only admin dashboard
             │    ├─ location /ws      → proxy → Go server 127.0.0.1:8080   │  WebRTC signaling
             │    ├─ location /healthz → proxy → Go server 127.0.0.1:8080   │  health check
             │    └─ location /        → static files in web/dist           │  SPA + the 12 legal pages
@@ -72,6 +73,16 @@ go build -o relayium .
 | `-turn-urls` | `""` | Comma-separated TURN URLs, e.g. `turn:relay.relayium.com:3478,turns:relay.relayium.com:5349`. |
 | `-stun-urls` | `stun:stun.l.google.com:19302` | Comma-separated STUN URLs. |
 | `-redis-addr` | `""` | Redis `host:port` for coturn relay-byte metering. Empty disables. See [coturn.md](coturn.md). |
+| `-admin-user` | `admin` | Username for the read-only `/admin` dashboard. |
+| `-admin-pass` | `""` | Password for `/admin`. **Empty ⇒ the dashboard is disabled and `/admin` 404s** (falls through to the SPA). Set it to enable the admin user list. |
+| `-enable-google` | `false` | Enable Google OAuth login. Off by default; needs `-google-id`/`-google-secret`. |
+| `-enable-magic` | `false` | Enable email magic-link login. Off by default; needs SMTP (Step 5). |
+
+> Every flag also reads a `RELAYIUM_*` environment variable (e.g.
+> `RELAYIUM_ADMIN_PASS`), and the server loads an optional `.env` file from its
+> working directory at startup. Precedence: **CLI flag > env var > `.env` file >
+> default**. Keep secrets in `.env` (mode 0600, git-ignored) or the systemd unit,
+> not in shell history. See `server/.env.example`.
 
 ### systemd unit
 
@@ -93,8 +104,12 @@ ExecStart=/opt/relayium/server/relayium \
   -google-secret YOUR_GOOGLE_CLIENT_SECRET \
   -smtp-addr 127.0.0.1:25 \
   -smtp-from "no-reply@relayium.com" \
-  -stun-urls stun:stun.l.google.com:19302
+  -stun-urls stun:stun.l.google.com:19302 \
+  -admin-user admin \
+  -admin-pass YOUR_ADMIN_PASSWORD
 # add -turn-secret / -turn-urls / -redis-addr if you run coturn (see coturn.md)
+# omit -admin-pass to keep the /admin dashboard disabled
+# add -enable-google / -enable-magic to turn those login methods back on
 WorkingDirectory=/opt/relayium/server
 Restart=on-failure
 RestartSec=2
@@ -155,6 +170,19 @@ server {
     # THIS is the block whose absence breaks login. A prefix location like
     # /api/ takes precedence over the static `location /` below.
     location /api/ {
+        proxy_pass         http://127.0.0.1:8080;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+    }
+
+    # ── Admin dashboard → Go backend ────────────────────────────────────
+    # Read-only /admin user list. Without this block /admin matches the static
+    # `location /` below and try_files falls back to /index.html — so you get
+    # the SPA homepage instead of the admin login form. A prefix location
+    # /admin also covers /admin/login and /admin/logout.
+    location /admin {
         proxy_pass         http://127.0.0.1:8080;
         proxy_set_header   Host              $host;
         proxy_set_header   X-Real-IP         $remote_addr;
@@ -294,6 +322,12 @@ curl -s https://relayium.com/api/ice | head -c 80          # → {"iceServers":[
 # A legal page (static): slash-less URL serves the page, no 301
 curl -s -o /dev/null -w "%{http_code} %{content_type}\n" https://relayium.com/privacy
 #   200 text/html
+
+# Admin dashboard (Go): the login form, NOT the SPA homepage.
+# If this prints "Relayium — End-to-end…" the /admin proxy block is missing
+# (nginx served index.html); if it 404s, -admin-pass isn't set on the server.
+curl -s https://relayium.com/admin | grep -o '管理员账号\|Relayium 后台'
+#   管理员账号
 ```
 
 ---
@@ -308,6 +342,8 @@ curl -s -o /dev/null -w "%{http_code} %{content_type}\n" https://relayium.com/pr
 | Logs in, but reload shows logged-out | Session cookie not `Secure`/`SameSite` viable, usually because `-base-url` is `http://…` while the site is https | Set `-base-url https://relayium.com` and restart |
 | Cross-network transfer can't connect; LAN works | `/api/ice` not proxied (returns HTML) or TURN not configured | Fix `/api/` proxy; configure `-turn-*` (see coturn.md) |
 | `/privacy` 301-redirects to `/privacy/` | a stricter location forces trailing slash | Rely on `try_files $uri $uri/ /index.html`; don't add a trailing-slash redirect for legal paths (their canonical is slash-less) |
+| `/admin` shows the normal homepage instead of a login form | nginx not proxying `/admin` — it matched `location /` and `try_files` served `index.html`. `curl -s https://…/admin \| grep -o 'End-to-end'` matches | Add the `location /admin` proxy block (Step 4), `nginx -t && systemctl reload nginx` |
+| `/admin` returns 404 | `-admin-pass` not set, so the dashboard is disabled, **or** the running binary predates the admin feature | Set `-admin-pass` (and optionally `-admin-user`) in the systemd unit or `.env`, rebuild, `systemctl restart relayium` |
 
 ---
 
