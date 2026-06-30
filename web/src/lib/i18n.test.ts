@@ -39,4 +39,12 @@ describe("i18n completeness", () => {
       expect(m.account.errCurrentWrong, `${code}.account.errCurrentWrong`).toBeTruthy();
     }
   });
+
+  it("every language has the window-drag strings", () => {
+    for (const { code } of LANGS) {
+      const m = messages[code];
+      expect(m.dragSendOne("Dev"), `${code}.dragSendOne`).toContain("Dev");
+      expect(m.dragSendMany, `${code}.dragSendMany`).toBeTruthy();
+    }
+  });
 });
