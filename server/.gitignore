@@ -1,2 +1,5 @@
 relayium.db
 *.db
+.env
+.env.*
+!.env.example
