@@ -74,6 +74,14 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
+	// password_hash 是初版之后新增的列。新库与老库都靠这一句补齐；
+	// 列已存在时 SQLite 报 "duplicate column name"，幂等忽略。
+	if _, err := db.ExecContext(context.Background(),
+		`ALTER TABLE users ADD COLUMN password_hash TEXT`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column name") {
+		db.Close()
+		return nil, err
+	}
 	return &SQLiteStore{db: db}, nil
 }
 
@@ -284,4 +292,29 @@ func (s *SQLiteStore) UserUsageTotal(ctx context.Context, userID string) (int64,
 		return 0, err
 	}
 	return total.Int64, nil // SUM over no rows is NULL → 0
+}
+
+func (s *SQLiteStore) SetPassword(ctx context.Context, userID, passwordHash string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET password_hash = ? WHERE id = ?`, passwordHash, userID)
+	return err
+}
+
+func (s *SQLiteStore) GetCredentials(ctx context.Context, email string) (string, string, bool, error) {
+	email = normEmail(email)
+	var uid string
+	var hash sql.NullString
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, password_hash FROM users WHERE email = ?`, email,
+	).Scan(&uid, &hash)
+	if err == sql.ErrNoRows {
+		return "", "", false, nil
+	}
+	if err != nil {
+		return "", "", false, err
+	}
+	if !hash.Valid || hash.String == "" {
+		return uid, "", false, nil
+	}
+	return uid, hash.String, true, nil
 }
