@@ -87,6 +87,34 @@ export interface Messages {
     connecting: string;
     linkDead: string;
   };
+  stored: {
+    title: string;
+    desc: string;
+    pick: string;
+    uploading: string;
+    burnLabel: string;
+    ttlLabel: string;
+    ttl1d: string;
+    ttl3d: string;
+    ttl7d: string;
+    linkReady: string;
+    copy: string;
+    copied: string;
+    errTooLarge: string;
+    errQuota: string;
+    errUpload: string;
+  };
+  download: {
+    loading: string;
+    files: string;
+    downloadBtn: string;
+    downloading: string;
+    done: string;
+    notFound: string;
+    noKey: string;
+    decryptFail: string;
+    unsupported: string;
+  };
   features: { items: { title: string; desc: string }[] };
   legal: { privacy: string; terms: string };
 }
@@ -170,6 +198,34 @@ const zh: Messages = {
     copied: "已复制",
     connecting: "正在通过跨网络链接连接…",
     linkDead: "链接已失效或正在被使用，请向发送方索要新链接",
+  },
+  stored: {
+    title: "生成下载链接（暂存传输）",
+    desc: "浏览器先加密再上传，服务器只存密文；把链接发给对方，对方无需登录即可下载。",
+    pick: "选择文件上传",
+    uploading: "正在加密并上传…",
+    burnLabel: "阅后即焚（首次下载后删除）",
+    ttlLabel: "有效期",
+    ttl1d: "1 天",
+    ttl3d: "3 天",
+    ttl7d: "7 天",
+    linkReady: "链接已生成，发给对方即可下载：",
+    copy: "复制链接",
+    copied: "已复制",
+    errTooLarge: "文件超过单文件大小上限。",
+    errQuota: "已超过今日上传额度，请稍后再试。",
+    errUpload: "上传失败，请重试。",
+  },
+  download: {
+    loading: "正在读取链接…",
+    files: "待下载文件",
+    downloadBtn: "下载并解密",
+    downloading: "正在下载并解密…",
+    done: "下载完成 ✓",
+    notFound: "链接无效、已过期或已被下载删除。",
+    noKey: "链接不完整：缺少解密密钥（#k=）。",
+    decryptFail: "解密失败：密钥错误或文件已损坏。",
+    unsupported: "需要 HTTPS（或 localhost）才能解密下载。",
   },
   features: {
     items: [
@@ -256,6 +312,34 @@ const en: Messages = {
     connecting: "Connecting over the cross-network link…",
     linkDead: "This link is invalid or already in use — ask the sender for a new one",
   },
+  stored: {
+    title: "Create a download link (stored transfer)",
+    desc: "Your browser encrypts files before upload; the server stores only ciphertext. Share the link — the recipient downloads without signing in.",
+    pick: "Choose files to upload",
+    uploading: "Encrypting and uploading…",
+    burnLabel: "Burn after reading (delete on first download)",
+    ttlLabel: "Expires in",
+    ttl1d: "1 day",
+    ttl3d: "3 days",
+    ttl7d: "7 days",
+    linkReady: "Link ready — send it to the recipient to download:",
+    copy: "Copy link",
+    copied: "Copied",
+    errTooLarge: "The file exceeds the single-file size limit.",
+    errQuota: "You've exceeded today's upload quota — please try again later.",
+    errUpload: "Upload failed, please try again.",
+  },
+  download: {
+    loading: "Reading the link…",
+    files: "Files to download",
+    downloadBtn: "Download & decrypt",
+    downloading: "Downloading and decrypting…",
+    done: "Download complete ✓",
+    notFound: "This link is invalid, expired, or already downloaded and deleted.",
+    noKey: "Incomplete link: the decryption key (#k=) is missing.",
+    decryptFail: "Decryption failed: wrong key or corrupted file.",
+    unsupported: "Decryption requires HTTPS (or localhost).",
+  },
   features: {
     items: [
       { title: "End-to-end encrypted", desc: "X25519 + AES-256-GCM; keys stay on the two devices and the server can't decrypt." },
@@ -340,6 +424,34 @@ const ja: Messages = {
     copied: "コピーしました",
     connecting: "ネットワーク間リンクで接続中…",
     linkDead: "リンクが無効か使用中です。送信者に新しいリンクを依頼してください",
+  },
+  stored: {
+    title: "ダウンロードリンクを作成（一時保存転送）",
+    desc: "ブラウザが暗号化してからアップロードし、サーバーは暗号文のみを保存します。リンクを送れば、相手はログインせずにダウンロードできます。",
+    pick: "アップロードするファイルを選択",
+    uploading: "暗号化してアップロード中…",
+    burnLabel: "閲覧後に削除（最初のダウンロードで削除）",
+    ttlLabel: "有効期限",
+    ttl1d: "1 日",
+    ttl3d: "3 日",
+    ttl7d: "7 日",
+    linkReady: "リンクを作成しました。相手に送ってダウンロードしてもらえます：",
+    copy: "リンクをコピー",
+    copied: "コピーしました",
+    errTooLarge: "ファイルが単一ファイルの上限を超えています。",
+    errQuota: "本日のアップロード上限を超えました。後でもう一度お試しください。",
+    errUpload: "アップロードに失敗しました。もう一度お試しください。",
+  },
+  download: {
+    loading: "リンクを読み込み中…",
+    files: "ダウンロードするファイル",
+    downloadBtn: "ダウンロードして復号",
+    downloading: "ダウンロードして復号中…",
+    done: "ダウンロード完了 ✓",
+    notFound: "このリンクは無効、期限切れ、またはダウンロード済みで削除されています。",
+    noKey: "リンクが不完全です：復号キー（#k=）がありません。",
+    decryptFail: "復号に失敗しました：キーが違うかファイルが破損しています。",
+    unsupported: "復号ダウンロードには HTTPS（または localhost）が必要です。",
   },
   features: {
     items: [
@@ -426,6 +538,34 @@ const ko: Messages = {
     connecting: "네트워크 간 링크로 연결 중…",
     linkDead: "링크가 유효하지 않거나 사용 중입니다. 보낸 사람에게 새 링크를 요청하세요",
   },
+  stored: {
+    title: "다운로드 링크 생성 (임시 보관 전송)",
+    desc: "브라우저가 먼저 암호화한 뒤 업로드하며 서버는 암호문만 저장합니다. 링크를 보내면 상대는 로그인 없이 다운로드할 수 있습니다.",
+    pick: "업로드할 파일 선택",
+    uploading: "암호화 후 업로드 중…",
+    burnLabel: "열람 후 삭제 (첫 다운로드 시 삭제)",
+    ttlLabel: "유효 기간",
+    ttl1d: "1일",
+    ttl3d: "3일",
+    ttl7d: "7일",
+    linkReady: "링크가 생성되었습니다. 상대에게 보내 다운로드하세요:",
+    copy: "링크 복사",
+    copied: "복사됨",
+    errTooLarge: "파일이 단일 파일 크기 한도를 초과했습니다.",
+    errQuota: "오늘 업로드 한도를 초과했습니다. 나중에 다시 시도하세요.",
+    errUpload: "업로드에 실패했습니다. 다시 시도하세요.",
+  },
+  download: {
+    loading: "링크를 읽는 중…",
+    files: "다운로드할 파일",
+    downloadBtn: "다운로드 및 복호화",
+    downloading: "다운로드 및 복호화 중…",
+    done: "다운로드 완료 ✓",
+    notFound: "유효하지 않거나 만료되었거나 이미 다운로드되어 삭제된 링크입니다.",
+    noKey: "불완전한 링크: 복호화 키(#k=)가 없습니다.",
+    decryptFail: "복호화 실패: 키가 틀리거나 파일이 손상되었습니다.",
+    unsupported: "복호화 다운로드에는 HTTPS(또는 localhost)가 필요합니다.",
+  },
   features: {
     items: [
       { title: "종단 간 암호화", desc: "X25519 + AES-256-GCM. 키는 두 기기에만 있고 서버는 복호화할 수 없습니다." },
@@ -511,6 +651,34 @@ const de: Messages = {
     connecting: "Verbindung über den netzwerkübergreifenden Link…",
     linkDead: "Dieser Link ist ungültig oder bereits in Gebrauch — bitte den Absender um einen neuen",
   },
+  stored: {
+    title: "Download-Link erstellen (zwischengespeicherte Übertragung)",
+    desc: "Ihr Browser verschlüsselt die Dateien vor dem Upload; der Server speichert nur Chiffretext. Teilen Sie den Link — der Empfänger lädt ohne Anmeldung herunter.",
+    pick: "Dateien zum Hochladen wählen",
+    uploading: "Verschlüsseln und hochladen…",
+    burnLabel: "Nach dem Lesen löschen (beim ersten Download)",
+    ttlLabel: "Gültig für",
+    ttl1d: "1 Tag",
+    ttl3d: "3 Tage",
+    ttl7d: "7 Tage",
+    linkReady: "Link bereit — senden Sie ihn dem Empfänger zum Herunterladen:",
+    copy: "Link kopieren",
+    copied: "Kopiert",
+    errTooLarge: "Die Datei überschreitet das Einzeldatei-Limit.",
+    errQuota: "Das heutige Upload-Kontingent ist erschöpft — bitte später erneut versuchen.",
+    errUpload: "Upload fehlgeschlagen, bitte erneut versuchen.",
+  },
+  download: {
+    loading: "Link wird gelesen…",
+    files: "Herunterzuladende Dateien",
+    downloadBtn: "Herunterladen & entschlüsseln",
+    downloading: "Herunterladen und entschlüsseln…",
+    done: "Download abgeschlossen ✓",
+    notFound: "Dieser Link ist ungültig, abgelaufen oder bereits heruntergeladen und gelöscht.",
+    noKey: "Unvollständiger Link: Der Entschlüsselungsschlüssel (#k=) fehlt.",
+    decryptFail: "Entschlüsselung fehlgeschlagen: falscher Schlüssel oder beschädigte Datei.",
+    unsupported: "Für den entschlüsselten Download ist HTTPS (oder localhost) erforderlich.",
+  },
   features: {
     items: [
       { title: "Ende-zu-Ende-verschlüsselt", desc: "X25519 + AES-256-GCM; Schlüssel bleiben auf den beiden Geräten, der Server kann nicht entschlüsseln." },
@@ -595,6 +763,34 @@ const fr: Messages = {
     copied: "Copié",
     connecting: "Connexion via le lien inter-réseaux…",
     linkDead: "Ce lien est invalide ou déjà utilisé — demandez-en un nouveau à l'expéditeur",
+  },
+  stored: {
+    title: "Créer un lien de téléchargement (transfert stocké)",
+    desc: "Votre navigateur chiffre les fichiers avant l'envoi ; le serveur ne stocke que du chiffré. Partagez le lien — le destinataire télécharge sans se connecter.",
+    pick: "Choisir des fichiers à envoyer",
+    uploading: "Chiffrement et envoi…",
+    burnLabel: "Détruire après lecture (supprimé au premier téléchargement)",
+    ttlLabel: "Expire dans",
+    ttl1d: "1 jour",
+    ttl3d: "3 jours",
+    ttl7d: "7 jours",
+    linkReady: "Lien prêt — envoyez-le au destinataire pour télécharger :",
+    copy: "Copier le lien",
+    copied: "Copié",
+    errTooLarge: "Le fichier dépasse la taille maximale par fichier.",
+    errQuota: "Quota d'envoi du jour dépassé — réessayez plus tard.",
+    errUpload: "Échec de l'envoi, veuillez réessayer.",
+  },
+  download: {
+    loading: "Lecture du lien…",
+    files: "Fichiers à télécharger",
+    downloadBtn: "Télécharger et déchiffrer",
+    downloading: "Téléchargement et déchiffrement…",
+    done: "Téléchargement terminé ✓",
+    notFound: "Ce lien est invalide, expiré, ou déjà téléchargé puis supprimé.",
+    noKey: "Lien incomplet : la clé de déchiffrement (#k=) est absente.",
+    decryptFail: "Échec du déchiffrement : mauvaise clé ou fichier corrompu.",
+    unsupported: "Le téléchargement déchiffré nécessite HTTPS (ou localhost).",
   },
   features: {
     items: [
