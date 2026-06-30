@@ -2,6 +2,7 @@
   import type { Snippet } from "svelte";
   import Account from "./Account.svelte";
   import CrossNetwork from "./CrossNetwork.svelte";
+  import CodePairing from "./CodePairing.svelte";
   import StoredUpload from "./StoredUpload.svelte";
   import { session } from "./auth.svelte";
   import { lang, messages, legalUrl, type Messages } from "./i18n.svelte";
@@ -10,10 +11,7 @@
     { roomToken?: string; roomCode?: string; linkDead?: boolean; showTransfer?: boolean; transferSurface?: Snippet } = $props();
 
   const t = $derived<Messages>(messages[lang()]);
-  // The login notice is only for someone trying to *start* a transfer:
-  // a recipient (roomToken present) never needs to log in.
-  const needsLogin = $derived(!session().user && !roomToken && !roomCode);
-
+  const inRoom = $derived(!!roomToken || !!roomCode);
   let loginOpen = $state(false);
 </script>
 
@@ -25,26 +23,47 @@
     <p class="tagline">{t.tagline}</p>
   </header>
 
-  {#if needsLogin}
-    <section class="login-required">
-      <p>{t.crossnet.loginRequired}</p>
-      <button class="primary" onclick={() => (loginOpen = true)}>{t.account.signIn}</button>
+  <div class="cards">
+    <!-- ⚡ Realtime direct — code pairing (login-free), files never touch the server -->
+    <section class="card realtime">
+      <h2>⚡ {t.crossnet.realtimeTitle}</h2>
+      <p class="cardsub">{t.crossnet.realtimeSub}</p>
+
+      {#if showTransfer && transferSurface}
+        {@render transferSurface()}
+      {:else if roomToken}
+        <CrossNetwork {roomToken} />
+      {:else if roomCode}
+        <CodePairing {roomCode} expired={linkDead} />
+      {:else}
+        <CodePairing />
+        {#if session().user}
+          <div class="enhance">
+            <CrossNetwork />
+            <p class="hint">{t.pair.loginEnhance}</p>
+          </div>
+        {/if}
+      {/if}
+
+      {#if linkDead && !roomCode}
+        <p class="error">{t.crossnet.linkDead}</p>
+      {/if}
+      <p class="foot">{t.crossnet.realtimeFoot}</p>
     </section>
-  {/if}
 
-  {#if showTransfer && transferSurface}
-    {@render transferSurface()}
-  {:else}
-    <CrossNetwork {roomToken} />
-  {/if}
-
-  {#if session().user && !roomToken}
-    <StoredUpload />
-  {/if}
-
-  {#if linkDead}
-    <p class="notice error">{t.crossnet.linkDead}</p>
-  {/if}
+    <!-- 📦 Stored link — encrypted-at-rest, async download (login required) -->
+    {#if !inRoom}
+      <section class="card stored">
+        <h2>📦 {t.stored.title}</h2>
+        <p class="cardsub">{t.stored.desc}</p>
+        {#if session().user}
+          <StoredUpload />
+        {:else}
+          <button class="primary" onclick={() => (loginOpen = true)}>{t.account.signIn}</button>
+        {/if}
+      </section>
+    {/if}
+  </div>
 
   <footer>
     <nav class="legal">
@@ -64,24 +83,25 @@
   .cn-head h1 { font-size: 34px; margin: 0 0 8px; letter-spacing: -1px; }
   .cn-head .tagline { color: var(--text); font-size: 15px; max-width: 44ch; margin: 0 auto; }
 
-  .login-required {
-    display: flex; flex-direction: column; align-items: center; gap: 12px;
-    text-align: center; margin: 0 auto 22px; max-width: 520px;
-    padding: 18px; border-radius: 14px;
+  .cards { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start; }
+  .card {
+    border: 1px solid var(--border); border-radius: 16px; padding: 20px;
+    background: var(--social-bg); display: flex; flex-direction: column; gap: 12px;
+  }
+  .card h2 { font-size: 18px; margin: 0; }
+  .cardsub { margin: 0; font-size: 13.5px; color: var(--text); }
+  .enhance { display: flex; flex-direction: column; gap: 8px; border-top: 1px dashed var(--border); padding-top: 12px; }
+  .enhance .hint { margin: 0; font-size: 12.5px; color: var(--text); text-align: center; }
+  .foot { margin: 0; font-size: 12px; color: var(--text); text-align: center; }
+  .error {
+    margin: 6px 0 0; text-align: center; padding: 10px 12px; border-radius: 10px; font-size: 13.5px;
     color: var(--text-h); background: var(--accent-bg); border: 1px solid var(--accent-border);
   }
-  .login-required p { margin: 0; font-size: 14.5px; }
-  .login-required .primary {
+  .primary {
     font: inherit; font-size: 15px; padding: 9px 22px; border-radius: 9px; cursor: pointer;
-    background: var(--accent); border: 1px solid var(--accent); color: #fff;
+    background: var(--accent); border: 1px solid var(--accent); color: #fff; align-self: center;
   }
-  .login-required .primary:hover { filter: brightness(1.08); }
-
-  .notice.error {
-    margin: 14px auto 0; max-width: 520px; text-align: center;
-    padding: 12px 14px; border-radius: 10px;
-    color: var(--text-h); background: var(--accent-bg); border: 1px solid var(--accent-border);
-  }
+  .primary:hover { filter: brightness(1.08); }
 
   footer {
     margin-top: 32px; padding-top: 18px; border-top: 1px solid var(--border);
