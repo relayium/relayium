@@ -27,9 +27,19 @@ export function syncRouteFromLocation(): void {
 }
 
 /** Switch tabs without reloading: rewrite the URL and update the route. Drops any
- *  stale token fragment so a plain tab switch never re-enters a transfer room. */
+ *  stale token fragment so a plain tab switch never re-enters a transfer room.
+ *  If a transfer token is in the current URL, the signaling socket is bound to the
+ *  2-peer token room. Leaving it must fully reload so the socket reconnects
+ *  into the correct room (LAN, or a fresh token-less cross page). */
 export function navigate(r: Route): void {
   const pathname = r === "cross" ? CROSS_PATH : "/";
+  // If a transfer token is in the URL, the signaling socket is bound to the
+  // 2-peer token room. Leaving it must fully reload so the socket reconnects
+  // into the correct room (LAN, or a fresh token-less cross page).
+  if (parseTransferToken(location.hash)) {
+    location.href = pathname; // full navigation + reload; drops the token
+    return;
+  }
   history.pushState({}, "", pathname);
   route = r;
 }

@@ -32,7 +32,7 @@
 
   async function start() {
     err = "";
-    if (!session()) {
+    if (!session().user) {
       err = t.crossnet.loginFirst;
       return;
     }
