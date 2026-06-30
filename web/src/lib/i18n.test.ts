@@ -30,4 +30,13 @@ describe("i18n completeness", () => {
       expect(m.pair.expiresIn("5:00"), `${code}.pair.expiresIn`).toContain("5:00");
     }
   });
+
+  it("every language has the change-password strings", () => {
+    for (const { code } of LANGS) {
+      const m = messages[code];
+      expect(m.account.changePassword, `${code}.account.changePassword`).toBeTruthy();
+      expect(m.account.confirmPassword, `${code}.account.confirmPassword`).toBeTruthy();
+      expect(m.account.errCurrentWrong, `${code}.account.errCurrentWrong`).toBeTruthy();
+    }
+  });
 });
