@@ -38,6 +38,8 @@ export interface Messages {
   close: string;
   peersTitle: string;
   emptyPeers: string;
+  dragSendOne: (name: string) => string;
+  dragSendMany: string;
   pickHint: (max: number) => string;
   footer: string;
   busy: string;
@@ -175,6 +177,8 @@ const zh: Messages = {
   close: "关闭",
   peersTitle: "附近的设备",
   emptyPeers: "还没有其它设备。请在同一网络下的另一台设备 / 另一个浏览器窗口打开本页面。",
+  dragSendOne: (name) => `松手发送给 ${name}`,
+  dragSendMany: "拖到某台设备上发送",
   pickHint: (m) => `点击选择文件 · 或拖放到此处（最多 ${m} 个）`,
   footer: "端到端加密（X25519 + AES-256-GCM）· 信令服务器只转发连接信息，看不到文件内容",
   busy: "已有传输进行中，请等待完成",
@@ -313,6 +317,8 @@ const en: Messages = {
   close: "Close",
   peersTitle: "Nearby devices",
   emptyPeers: "No other devices yet. Open this page on another device or browser window on the same network.",
+  dragSendOne: (name) => `Release to send to ${name}`,
+  dragSendMany: "Drop onto a device to send",
   pickHint: (m) => `Click to choose files · or drop them here (up to ${m})`,
   footer: "End-to-end encrypted (X25519 + AES-256-GCM) · the signaling server only relays connection info and never sees file contents",
   busy: "A transfer is already in progress — please wait for it to finish",
@@ -451,6 +457,8 @@ const ja: Messages = {
   close: "閉じる",
   peersTitle: "近くのデバイス",
   emptyPeers: "他のデバイスはまだありません。同じネットワーク上の別のデバイスやブラウザウィンドウでこのページを開いてください。",
+  dragSendOne: (name) => `${name} に送信するには離してください`,
+  dragSendMany: "送信先のデバイスにドロップしてください",
   pickHint: (m) => `クリックしてファイルを選択 · またはここにドロップ（最大 ${m} 個）`,
   footer: "エンドツーエンド暗号化（X25519 + AES-256-GCM）· シグナリングサーバーは接続情報のみを中継し、ファイルの内容は見えません",
   busy: "すでに転送が進行中です。完了するまでお待ちください",
@@ -589,6 +597,8 @@ const ko: Messages = {
   close: "닫기",
   peersTitle: "주변 기기",
   emptyPeers: "아직 다른 기기가 없습니다. 같은 네트워크의 다른 기기나 브라우저 창에서 이 페이지를 여세요.",
+  dragSendOne: (name) => `놓으면 ${name}에게 전송`,
+  dragSendMany: "보낼 기기 위에 놓으세요",
   pickHint: (m) => `클릭하여 파일 선택 · 또는 여기에 드롭(최대 ${m}개)`,
   footer: "종단간 암호화(X25519 + AES-256-GCM) · 시그널링 서버는 연결 정보만 중계하며 파일 내용은 보지 못합니다",
   busy: "이미 전송이 진행 중입니다. 완료될 때까지 기다려 주세요",
@@ -727,6 +737,8 @@ const de: Messages = {
   close: "Schließen",
   peersTitle: "Geräte in der Nähe",
   emptyPeers: "Noch keine anderen Geräte. Öffnen Sie diese Seite auf einem anderen Gerät oder Browserfenster im selben Netzwerk.",
+  dragSendOne: (name) => `Loslassen, um an ${name} zu senden`,
+  dragSendMany: "Zum Senden auf ein Gerät ziehen",
   pickHint: (m) => `Zum Auswählen klicken · oder hierher ziehen (bis zu ${m})`,
   footer: "Ende-zu-Ende-verschlüsselt (X25519 + AES-256-GCM) · der Signalisierungsserver leitet nur Verbindungsdaten weiter und sieht nie Dateiinhalte",
   busy: "Eine Übertragung läuft bereits – bitte warten Sie, bis sie abgeschlossen ist",
@@ -865,6 +877,8 @@ const fr: Messages = {
   close: "Fermer",
   peersTitle: "Appareils à proximité",
   emptyPeers: "Aucun autre appareil pour l’instant. Ouvrez cette page sur un autre appareil ou une autre fenêtre du même réseau.",
+  dragSendOne: (name) => `Relâchez pour envoyer à ${name}`,
+  dragSendMany: "Déposez sur un appareil pour envoyer",
   pickHint: (m) => `Cliquez pour choisir · ou déposez ici (jusqu’à ${m})`,
   footer: "Chiffré de bout en bout (X25519 + AES-256-GCM) · le serveur de signalisation ne relaie que les infos de connexion et ne voit jamais le contenu des fichiers",
   busy: "Un transfert est déjà en cours — veuillez attendre qu’il se termine",
