@@ -272,6 +272,110 @@ func TestPasswordColumnMigrationIsIdempotent(t *testing.T) {
 	s2.Close()
 }
 
+func TestStoredFileCRUDAndExpiry(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u, _ := s.UpsertUserByEmail(ctx, "sf@example.com", "SF")
+	f := StoredFile{
+		ID: "file1", UserID: u.ID, BlobKey: "blobkey1",
+		EncManifest: []byte{0xde, 0xad, 0xbe, 0xef}, Size: 1234,
+		BurnAfterRead: true, CreatedAt: 100, ExpiresAt: 200,
+	}
+	if err := s.CreateStoredFile(ctx, f); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	got, err := s.GetStoredFile(ctx, "file1")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.UserID != u.ID || got.BlobKey != "blobkey1" || got.Size != 1234 ||
+		!got.BurnAfterRead || got.ExpiresAt != 200 || got.DownloadedAt != 0 ||
+		string(got.EncManifest) != string(f.EncManifest) {
+		t.Fatalf("roundtrip mismatch: %+v", got)
+	}
+	list, _ := s.ListStoredFilesByUser(ctx, u.ID)
+	if len(list) != 1 || list[0].ID != "file1" {
+		t.Fatalf("list: %+v", list)
+	}
+	if err := s.MarkDownloaded(ctx, "file1", 150); err != nil {
+		t.Fatalf("mark: %v", err)
+	}
+	if g, _ := s.GetStoredFile(ctx, "file1"); g.DownloadedAt != 150 {
+		t.Fatalf("downloaded_at = %d, want 150", g.DownloadedAt)
+	}
+	if err := s.DeleteStoredFile(ctx, "file1"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := s.GetStoredFile(ctx, "file1"); err != ErrNotFound {
+		t.Fatalf("get after delete: want ErrNotFound, got %v", err)
+	}
+}
+
+func TestListExpiredStoredFiles(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u, _ := s.UpsertUserByEmail(ctx, "e@example.com", "E")
+	_ = s.CreateStoredFile(ctx, StoredFile{ID: "old", UserID: u.ID, BlobKey: "k1", EncManifest: []byte{1}, Size: 1, CreatedAt: 1, ExpiresAt: 100})
+	_ = s.CreateStoredFile(ctx, StoredFile{ID: "fresh", UserID: u.ID, BlobKey: "k2", EncManifest: []byte{1}, Size: 1, CreatedAt: 1, ExpiresAt: 5000})
+	exp, err := s.ListExpiredStoredFiles(ctx, 1000)
+	if err != nil {
+		t.Fatalf("list expired: %v", err)
+	}
+	if len(exp) != 1 || exp[0].ID != "old" {
+		t.Fatalf("expired = %+v, want only [old]", exp)
+	}
+}
+
+func TestUserUploadedSinceRollingWindow(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u, _ := s.UpsertUserByEmail(ctx, "q@example.com", "Q")
+	// now = 100000; window start = now - 86400 = 13600.
+	_ = s.RecordUpload(ctx, UploadEvent{ID: "e1", UserID: u.ID, Bytes: 1000, UploadedAt: 10000}) // before window
+	_ = s.RecordUpload(ctx, UploadEvent{ID: "e2", UserID: u.ID, Bytes: 2000, UploadedAt: 50000}) // in window
+	_ = s.RecordUpload(ctx, UploadEvent{ID: "e3", UserID: u.ID, Bytes: 3000, UploadedAt: 90000}) // in window
+	total, err := s.UserUploadedSince(ctx, u.ID, 13600)
+	if err != nil || total != 5000 {
+		t.Fatalf("uploaded since = %d (err %v), want 5000", total, err)
+	}
+	// Unknown user → 0, no error.
+	if z, err := s.UserUploadedSince(ctx, "nobody", 0); err != nil || z != 0 {
+		t.Fatalf("unknown user = %d (err %v), want 0", z, err)
+	}
+	// PruneUploadEvents drops rows strictly older than the cutoff.
+	if err := s.PruneUploadEvents(ctx, 13600); err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+	if total, _ := s.UserUploadedSince(ctx, u.ID, 0); total != 5000 {
+		t.Fatalf("after prune total = %d, want 5000 (only e1 pruned)", total)
+	}
+}
+
+func TestSettingsGetSetList(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	if _, ok, err := s.GetSetting(ctx, "max_file_size"); err != nil || ok {
+		t.Fatalf("unset key: ok=%v err=%v", ok, err)
+	}
+	if err := s.SetSetting(ctx, "max_file_size", 52428800, 1); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	v, ok, err := s.GetSetting(ctx, "max_file_size")
+	if err != nil || !ok || v != 52428800 {
+		t.Fatalf("get: v=%d ok=%v err=%v", v, ok, err)
+	}
+	// Upsert overwrites.
+	_ = s.SetSetting(ctx, "max_file_size", 99, 2)
+	if v, _, _ := s.GetSetting(ctx, "max_file_size"); v != 99 {
+		t.Fatalf("after upsert v = %d, want 99", v)
+	}
+	_ = s.SetSetting(ctx, "daily_quota", 200, 3)
+	all, err := s.ListSettings(ctx)
+	if err != nil || len(all) != 2 {
+		t.Fatalf("list: %+v err=%v", all, err)
+	}
+}
+
 func TestAdminListUsersAggregates(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

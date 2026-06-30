@@ -39,6 +39,7 @@ func (s *Service) Routes() *http.ServeMux {
 	mux.HandleFunc("POST /api/transfers", s.RequireSession(s.handleCreateTransfer))
 	mux.HandleFunc("GET /api/ice", s.handleICE)
 	mux.HandleFunc("GET /api/usage", s.RequireSession(s.handleUsage))
+	s.registerFileRoutes(mux)
 	return mux
 }
 

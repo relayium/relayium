@@ -75,3 +75,14 @@ func envBool(key string, def bool) bool {
 	}
 	return def
 }
+
+// envInt64 parses the env var key as a base-10 int64; on an unset or unparseable
+// value it returns def.
+func envInt64(key string, def int64) int64 {
+	if v, ok := os.LookupEnv(key); ok {
+		if n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64); err == nil {
+			return n
+		}
+	}
+	return def
+}
