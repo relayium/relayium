@@ -1,6 +1,6 @@
 <script lang="ts">
   import { session } from "./auth.svelte";
-  import { createTransfer, buildTransferLink } from "./transfer-link";
+  import { createTransfer, buildTransferLink, CROSS_PATH } from "./transfer-link";
   import { messages, lang, type Messages } from "./i18n.svelte";
 
   let { roomToken = "" }: { roomToken?: string } = $props();
@@ -40,7 +40,9 @@
     try {
       const { token } = await createTransfer();
       sessionStorage.setItem(ORIGIN_KEY, token);
-      location.hash = `t=${token}`;
+      // Rewrite to the cross-network path + token, then reload so the signaling
+      // socket reconnects into the 2-peer token room (works from either tab).
+      history.replaceState({}, "", `${CROSS_PATH}#t=${token}`);
       location.reload();
     } catch {
       busy = false;
