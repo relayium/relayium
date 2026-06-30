@@ -1,6 +1,7 @@
 package account
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -246,9 +247,12 @@ func (s *Service) handleAuthMethods(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Service) writeUser(w http.ResponseWriter, code int, u User) {
+func (s *Service) writeUser(ctx context.Context, w http.ResponseWriter, code int, u User) {
+	hasPass, _ := s.store.HasPassword(ctx, u.ID)
 	writeJSON(w, code, map[string]any{
-		"user": map[string]string{"id": u.ID, "email": u.Email, "displayName": u.DisplayName},
+		"user": map[string]any{
+			"id": u.ID, "email": u.Email, "displayName": u.DisplayName, "hasPassword": hasPass,
+		},
 	})
 }
 
@@ -280,7 +284,7 @@ func (s *Service) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.setSessionCookie(w, sess)
-	s.writeUser(w, http.StatusOK, u)
+	s.writeUser(r.Context(), w, http.StatusOK, u)
 }
 
 func (s *Service) handlePasswordLogin(w http.ResponseWriter, r *http.Request) {
@@ -307,5 +311,5 @@ func (s *Service) handlePasswordLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.setSessionCookie(w, sess)
-	s.writeUser(w, http.StatusOK, u)
+	s.writeUser(r.Context(), w, http.StatusOK, u)
 }

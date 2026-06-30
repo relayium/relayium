@@ -331,13 +331,26 @@ func TestChangePasswordEndpoint(t *testing.T) {
 		t.Fatal("me.hasPassword: want true for a password user")
 	}
 
-	// 旧密码错 => 401。
-	if got := do(`{"currentPassword":"wrongold12","newPassword":"newpassword1"}`); got != http.StatusUnauthorized {
-		t.Fatalf("wrong current: want 401, got %d", got)
+	doBody := func(body string) (int, string) {
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/password/change", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(cookie)
+		r, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("do: %v", err)
+		}
+		defer r.Body.Close()
+		var b struct{ Error string `json:"error"` }
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		return r.StatusCode, b.Error
 	}
-	// 新密码太短 => 400。
-	if got := do(`{"currentPassword":"oldpassword1","newPassword":"short"}`); got != http.StatusBadRequest {
-		t.Fatalf("weak new: want 400, got %d", got)
+	// 旧密码错 => 401 + 精确 error 字段。
+	if code, msg := doBody(`{"currentPassword":"wrongold12","newPassword":"newpassword1"}`); code != http.StatusUnauthorized || msg != "current password incorrect" {
+		t.Fatalf("wrong current: got %d %q, want 401 'current password incorrect'", code, msg)
+	}
+	// 新密码太短 => 400 + 精确 error 字段。
+	if code, msg := doBody(`{"currentPassword":"oldpassword1","newPassword":"short"}`); code != http.StatusBadRequest || msg != "password too short" {
+		t.Fatalf("weak new: got %d %q, want 400 'password too short'", code, msg)
 	}
 	// 正确 => 200。
 	if got := do(`{"currentPassword":"oldpassword1","newPassword":"newpassword1"}`); got != http.StatusOK {
