@@ -46,14 +46,47 @@
   │  点"发送"                      │                              │
   ├── POST /api/pair (匿名,限速) ──►│  Mint(): 生成全局唯一6位码     │
   │◄── { code:"424242", expiresAt }│  存入 PairRegistry (TTL 5min) │
-  │  显示 "4 2 4  2 4 2"            │                              │
+  │  设 #c=424242 并 reload,显示码   │                              │
   │                               │              口头/IM 告知码 ──►│ 输入 424242
-  │                               │◄── /ws?code=424242 ───────────┤
+  │                               │◄── /ws?code=424242 ───────────┤ 设#c=并reload
   │── /ws?code=424242 ───────────►│  Validate(): 通过 → 房间c:424242│
   │◄═══════ 同一信令房间, 交换 SDP/ICE ═══════════════════════════►│
   │◄══════════ WebRTC DTLS 直连 (STUN), 文件直传 ════════════════►│
   │                               │ (满2人 → 房满, code 作废)       │
 ```
+
+### 客户端如何进入 code 房间（复用现有 token 重载机制）
+
+现有分享链接的进房方式是：把 token 放进 URL 片段 `#t=<token>`，
+`history.replaceState(CROSS_PATH#t=token)` 后 `location.reload()`，
+`App.svelte` 的 `onMount` 读 `#t=` 并用 `wsURL(location, token)` 连 `/ws?room=token`。
+
+**code 配对完全复刻这套**，只是片段换成 `#c=<code>`：
+- 新增 `parseCodeParam(hash)`（`/^#c=(\d{6})$/`）。
+- `wsURL` 增加 code 形参 → 有 code 时拼 `/ws?code=<code>`。
+- `routeFromLocation`：`#c=` 也判为 `cross` 路由（与 `#t=` 一致）。
+- 发送方拿到码后 `replaceState(CROSS_PATH#c=code)` + `reload`，重载后从 `#c=` 读回码、连接、显示码供口头转告。
+- 接收方输入码后同样 `replaceState(CROSS_PATH#c=code)` + `reload`。
+- ICE：`fetchIceServers("")`（无 token）天然只返回 STUN——正符合 code 仅 STUN 的设计。
+
+## 架构修订：实时传输界面必须上跨网络页（修复既有缺口）
+
+**核实发现**：真正的实时传输界面（设备列表 `peers`、选文件、进度卡、SAS 校验）
+**全部在 `App.svelte` 内，且只在"局域网"路由分支渲染**；跨网络路由只渲染 `CrossPage`
+（仅"分享链接/连接中/发送按钮"，无传输入口）。即**现有分享链接只到"配对/出链接"，
+页面上并无"挑文件发送"的 UI**——这是既有缺口。
+
+代码配对要真能传文件，跨网络页必须有这套界面；而它对 code 房间、token 房间、LAN 房间
+是**同一套**。故本期：
+
+- 用 **Svelte 5 snippet** 把 `App.svelte` 里"peers + incoming 接收确认卡 + xfer 进度卡"
+  那段渲染抽成 `{#snippet transferSurface()}…{/snippet}`，**闭包复用** App 既有的
+  transfer 状态与处理函数（`peers`/`send`/`recv`/`incoming`/`sendFiles`/`acceptFn` 等），
+  **不搬动**那段微妙的传输逻辑（背压/flush/SAS/接受手势），把回归风险降到最低。
+- LAN 分支 `{@render transferSurface()}`；并把该 snippet 作为 prop 传给 `CrossPage`，
+  在"实时直传"卡里 `{@render transferSurface()}`。
+- 结果：**code 路径与现有分享链接路径都获得真正可用的传输 UI**。
+- （后续可选清理：把传输逻辑整体抽成独立组件以缩小 `App.svelte`；本期不做，避免大重构回归。）
 
 ## 组件
 
@@ -72,15 +105,26 @@
 
 ### 前端（Svelte）
 
+- **`transfer-link.ts`（改）**：新增 `parseCodeParam(hash)`、`createPair()`（POST /api/pair）、
+  `wsURL` 增加 code 形参。
+- **`router.svelte.ts`（改）**：`routeFromLocation` 让 `#c=` 也判为 `cross`；
+  `navigate` 的"有片段则整页重载"逻辑同时覆盖 `#c=`。
 - **`CodePairing.svelte`（新）**：
-  - 发送态：点按钮 → `POST /api/pair` → 大字显示 6 位码 + 复制按钮 + 倒计时（5 分钟）。
-  - 接收态：6 格输入框 → 提交 → `/ws?code=` 加入；码错/过期 → 友好报错（`t.pair.err*`）。
-  - 配对成功后**移交给现有实时传输 UI**（`CrossNetwork.svelte` 的传输部分），不重写传输逻辑。
-- **跨网络页重排（改 `CrossPage.svelte`）**：拆成两张"处境卡"。
-  - 「⚡ 实时直传」卡：默认放 `CodePairing`（免登录）；**登录用户**在同卡内额外看到
-    现有"生成分享链接(带 TURN)"作为增强项；底部注"免登录 · 登录可提升连通性"。
+  - 未持码时显示"发送 / 接收"两个入口。
+  - 发送：点按钮 → `createPair()` → `replaceState(CROSS_PATH#c=code)` + `reload`；
+    重载后从 `#c=` 读回码、大字显示 + 复制 + 倒计时（5 分钟）。
+  - 接收：6 位输入 → `replaceState(CROSS_PATH#c=code)` + `reload`。
+  - 错误（码非法/过期/房满，由 `App` 的 `linkDead` 信号驱动）→ 友好报错（`t.pair.err*`）。
+- **`App.svelte`（改）**：解析 `#c=`（`roomCode`）；`wsURL`/路由判定纳入 code；
+  把 peers/接收卡/进度卡那段包成 `{#snippet transferSurface()}`；LAN 分支与
+  `CrossPage` 都渲染它。
+- **`CrossPage.svelte`（改）**：拆成两张"处境卡"。
+  - 「⚡ 实时直传」卡：未进房 → `CodePairing`（免登录）+ **登录用户**额外看到现有
+    `CrossNetwork`"生成分享链接(带 TURN)"作为增强；已进房（code 或 token，有对端）→
+    `{@render transferSurface()}`；底部注"免登录 · 登录可提升连通性"。
   - 「📦 存储链接」卡：放现有 `StoredUpload`（需登录），逻辑不动，仅位置归整。
-- **i18n**：新增 `pair` 段（发送/接收/复制/倒计时/错误等键），覆盖全部 6 种语言。
+  - 接收 `transferSurface`、`roomCode`、`joinedRoom`、`peers` 等 prop。
+- **i18n**：新增 `pair` 段（发送/接收/显示码/复制/倒计时/错误等键），覆盖全部 6 种语言。
 
 ## 安全模型
 
@@ -99,7 +143,9 @@
 **本期做**：
 - 匿名 `POST /api/pair` + `PairRegistry` + 过期回收 + IP 限速。
 - `/ws` 的 `?code=` 第三分支（`maxPeers=2`）。
-- `CodePairing.svelte`（发送/接收）+ 配对成功移交现有实时传输 UI。
+- 客户端 code 进房机制（`#c=` + `parseCodeParam` + `wsURL`/路由纳入 code）。
+- `CodePairing.svelte`（发送/接收）。
+- 把实时传输界面抽成 `transferSurface` snippet，**在跨网络页渲染**（修复既有分享链接缺口）。
 - 跨网络页两卡重排；i18n `pair` 段（6 语言）。
 
 **本期不做**：
@@ -122,9 +168,12 @@
 
 ## 集成点（现有代码）
 
-- `server/main.go:89-110` — `/ws` 房间键分支，新增 `?code=`。
-- `server/internal/signal/` — 新增 `PairRegistry`（与 Hub 同包或邻近包）。
-- `server/internal/account/handlers.go` `Routes()` 或 main 路由 — 注册 `POST /api/pair`（注意匿名，不走 `RequireSession`）。
-- `web/src/lib/CrossPage.svelte` — 两卡重排。
-- `web/src/lib/CrossNetwork.svelte` — 复用其传输 UI；配对来源解耦（code 或现有 token 均可触发传输态）。
+- `server/main.go:89-110` — `/ws` 房间键分支，新增 `?code=`（`validatePair` 注入，仿 `validateRoom`）。
+- `server/internal/signal/` — 新增 `PairRegistry` + 过期回收（与 Hub 同包）。
+- `server/internal/account/files.go` 或新 `pair.go` + `handlers.go` `Routes()` — 注册匿名 `POST /api/pair`（**不**走 `RequireSession`）+ 简单的内存 IP 限速器。
+- `web/src/lib/transfer-link.ts` — `parseCodeParam`、`createPair`、`wsURL` 加 code 形参。
+- `web/src/lib/router.svelte.ts` — `routeFromLocation`/`navigate` 纳入 `#c=`。
+- `web/src/lib/App.svelte` — 解析 `roomCode`；`transferSurface` snippet；LAN 与 CrossPage 共用。
+- `web/src/lib/CodePairing.svelte`（新） — 发送/接收码 UI。
+- `web/src/lib/CrossPage.svelte` — 两卡重排，渲染 `transferSurface`。
 - `web/src/lib/i18n.svelte.ts` — 新增 `pair` 段（6 语言）。
