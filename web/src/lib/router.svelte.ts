@@ -3,11 +3,11 @@
 // ("/cross-network"). A transfer token in the URL fragment (#t=<token>) always
 // implies the cross-network page so a shared link lands the recipient correctly.
 
-import { parseTransferToken } from "./transfer-link";
+import { parseTransferToken, CROSS_PATH } from "./transfer-link";
 
 export type Route = "lan" | "cross";
 
-export const CROSS_PATH = "/cross-network";
+export { CROSS_PATH };
 
 /** Pure mapping from a location to a route. Safe to unit-test without a DOM. */
 export function routeFromLocation(pathname: string, hash: string): Route {
