@@ -173,7 +173,10 @@ server {
         proxy_pass         http://127.0.0.1:8080;
         proxy_set_header   Host              $host;
         proxy_set_header   X-Real-IP         $remote_addr;
-        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        # OVERWRITE (not $proxy_add_x_forwarded_for / append): the Go server's
+        # ClientIP() trusts the first X-Forwarded-For entry, so an appended,
+        # client-supplied leading value would spoof the per-IP rate limits.
+        proxy_set_header   X-Forwarded-For   $remote_addr;
         proxy_set_header   X-Forwarded-Proto $scheme;
     }
 
@@ -186,7 +189,7 @@ server {
         proxy_pass         http://127.0.0.1:8080;
         proxy_set_header   Host              $host;
         proxy_set_header   X-Real-IP         $remote_addr;
-        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-For   $remote_addr;   # overwrite, not append (see /api/)
         proxy_set_header   X-Forwarded-Proto $scheme;
     }
 
@@ -197,6 +200,14 @@ server {
         proxy_set_header   Upgrade    $http_upgrade;
         proxy_set_header   Connection "upgrade";
         proxy_set_header   Host       $host;
+        # REQUIRED: without these the Go server sees only nginx's loopback peer
+        # (127.0.0.1) as the client IP. That IP is shown on the home page AND is
+        # the LAN-room key (RoomKey = ClientIP) — so missing it both displays
+        # "127.0.0.1" and collapses every visitor into ONE shared LAN room.
+        # Overwrite (not append), same as /api/, to keep the per-IP rate limits
+        # on /ws?code= unspoofable.
+        proxy_set_header   X-Real-IP       $remote_addr;
+        proxy_set_header   X-Forwarded-For $remote_addr;
         proxy_read_timeout 1h;        # keep long-lived signaling sockets open
     }
 
