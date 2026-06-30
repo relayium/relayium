@@ -59,6 +59,7 @@ func main() {
 	redisAddr := flag.String("redis-addr", envStr("RELAYIUM_REDIS_ADDR", ""), "Redis host:port for coturn relay-byte metering (empty disables)")
 	enableGoogle := flag.Bool("enable-google", envBool("RELAYIUM_ENABLE_GOOGLE", false), "enable Google OAuth login (disabled by default)")
 	enableMagic := flag.Bool("enable-magic", envBool("RELAYIUM_ENABLE_MAGIC", false), "enable email magic-link login (disabled by default)")
+	adminUser := flag.String("admin-user", envStr("RELAYIUM_ADMIN_USER", "admin"), "admin dashboard username at /admin (defaults to 'admin')")
 	adminPass := flag.String("admin-pass", envStr("RELAYIUM_ADMIN_PASS", ""), "admin dashboard password at /admin (empty disables the dashboard)")
 	flag.Parse()
 
@@ -123,6 +124,7 @@ func main() {
 			TURNCredTTL:    time.Hour,
 			EnableGoogle:   *enableGoogle,
 			EnableMagic:    *enableMagic,
+			AdminUser:      *adminUser,
 			AdminPassword:  *adminPass,
 		})
 		validateRoom = acct.ValidateTransferToken

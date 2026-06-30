@@ -13,8 +13,16 @@ const (
 	adminSessionTTL = 12 * time.Hour
 )
 
-// AdminEnabled 报告是否配置了管理员密码。
+// AdminEnabled 报告是否配置了管理员密码。账号有默认值，故只以密码为开关。
 func (s *Service) AdminEnabled() bool { return s.cfg.AdminPassword != "" }
+
+// adminUser 返回有效管理员账号，未配置时默认为 "admin"（向后兼容只设密码的部署）。
+func (s *Service) adminUser() string {
+	if s.cfg.AdminUser == "" {
+		return "admin"
+	}
+	return s.cfg.AdminUser
+}
 
 // RegisterAdmin 在根 mux 上挂载 /admin 路由（仅当配置了密码）。
 func (s *Service) RegisterAdmin(mux *http.ServeMux) {
@@ -57,10 +65,15 @@ func (s *Service) isAdminReq(r *http.Request) bool {
 }
 
 func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
+	user := r.FormValue("username")
 	pass := r.FormValue("password")
-	if subtle.ConstantTimeCompare([]byte(pass), []byte(s.cfg.AdminPassword)) != 1 {
+	// Compare both fields in constant time and combine without short-circuit,
+	// so neither a wrong username nor a wrong password is distinguishable by timing.
+	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(s.adminUser()))
+	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(s.cfg.AdminPassword))
+	if userOK&passOK != 1 {
 		w.WriteHeader(http.StatusUnauthorized)
-		renderAdminLogin(w, "密码错误")
+		renderAdminLogin(w, "账号或密码错误")
 		return
 	}
 	tok := s.newAdminSession()
@@ -113,7 +126,8 @@ input,button{font:inherit;padding:8px 10px;width:100%;box-sizing:border-box;marg
 <body><h1>Relayium 后台</h1>
 {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
 <form method="post" action="/admin/login">
-<input type="password" name="password" placeholder="管理员密码" autofocus>
+<input type="text" name="username" placeholder="管理员账号" autofocus autocomplete="username">
+<input type="password" name="password" placeholder="管理员密码" autocomplete="current-password">
 <button type="submit">登录</button>
 </form></body></html>`))
 
