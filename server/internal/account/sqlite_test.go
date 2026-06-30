@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"sort"
 	"testing"
 )
 
@@ -269,4 +270,50 @@ func TestPasswordColumnMigrationIsIdempotent(t *testing.T) {
 		t.Fatalf("open2 (re-migrate) must succeed: %v", err)
 	}
 	s2.Close()
+}
+
+func TestAdminListUsersAggregates(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	u, _ := s.UpsertUserByEmail(ctx, "agg@example.com", "Agg")
+	_ = s.SetPassword(ctx, u.ID, "h")
+	_ = s.LinkIdentity(ctx, "password", "agg@example.com", u.ID)
+	_ = s.LinkIdentity(ctx, "google", "google-sub-1", u.ID)
+	_, _ = s.UpsertDevice(ctx, Device{ID: "d1", UserID: u.ID, Name: "Laptop", CreatedAt: 1})
+	_, _ = s.UpsertDevice(ctx, Device{ID: "d2", UserID: u.ID, Name: "Phone", CreatedAt: 2})
+	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a1", Token: "t", UserID: u.ID, RelayedBytes: 700, RecordedAt: 1})
+
+	// 第二个用户：无设备、无流量、仅 password。
+	u2, _ := s.UpsertUserByEmail(ctx, "solo@example.com", "Solo")
+	_ = s.LinkIdentity(ctx, "password", "solo@example.com", u2.ID)
+
+	rows, err := s.AdminListUsers(ctx)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("want 2 rows, got %d", len(rows))
+	}
+	var agg *AdminUserRow
+	for i := range rows {
+		if rows[i].Email == "agg@example.com" {
+			agg = &rows[i]
+		}
+	}
+	if agg == nil {
+		t.Fatalf("agg row missing")
+	}
+	if agg.DeviceCount != 2 {
+		t.Fatalf("device count = %d, want 2", agg.DeviceCount)
+	}
+	if agg.RelayedBytes != 700 {
+		t.Fatalf("relayed = %d, want 700", agg.RelayedBytes)
+	}
+	want := []string{"google", "password"}
+	got := append([]string(nil), agg.Methods...)
+	sort.Strings(got)
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("methods = %v, want %v", agg.Methods, want)
+	}
 }

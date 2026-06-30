@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"sort"
 	"strings"
 	"time"
 
@@ -317,4 +318,64 @@ func (s *SQLiteStore) GetCredentials(ctx context.Context, email string) (string,
 		return uid, "", false, nil
 	}
 	return uid, hash.String, true, nil
+}
+
+func (s *SQLiteStore) AdminListUsers(ctx context.Context) ([]AdminUserRow, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT u.id, u.email, u.display_name, u.created_at,
+		       (SELECT COUNT(*) FROM devices d WHERE d.user_id = u.id),
+		       (SELECT COALESCE(SUM(relayed_bytes), 0) FROM usage_events e WHERE e.user_id = u.id)
+		FROM users u
+		ORDER BY u.created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []AdminUserRow
+	index := map[string]int{}
+	for rows.Next() {
+		var row AdminUserRow
+		if err := rows.Scan(&row.ID, &row.Email, &row.DisplayName, &row.CreatedAt,
+			&row.DeviceCount, &row.RelayedBytes); err != nil {
+			return nil, err
+		}
+		index[row.ID] = len(out)
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// 单独一遍把 provider 摊到对应用户，避免 N+1。
+	irows, err := s.db.QueryContext(ctx, `SELECT user_id, provider FROM identities`)
+	if err != nil {
+		return nil, err
+	}
+	defer irows.Close()
+	seen := map[string]map[string]bool{}
+	for irows.Next() {
+		var uid, provider string
+		if err := irows.Scan(&uid, &provider); err != nil {
+			return nil, err
+		}
+		i, ok := index[uid]
+		if !ok {
+			continue
+		}
+		if seen[uid] == nil {
+			seen[uid] = map[string]bool{}
+		}
+		if !seen[uid][provider] {
+			seen[uid][provider] = true
+			out[i].Methods = append(out[i].Methods, provider)
+		}
+	}
+	if err := irows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range out {
+		sort.Strings(out[i].Methods)
+	}
+	return out, nil
 }

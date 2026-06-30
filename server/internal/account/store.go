@@ -75,6 +75,17 @@ type UsageEvent struct {
 	RecordedAt   int64
 }
 
+// AdminUserRow 是后台用户列表的一行聚合视图（只读）。
+type AdminUserRow struct {
+	ID           string
+	Email        string
+	DisplayName  string
+	CreatedAt    int64
+	Methods      []string // identities 表里的 provider 去重升序
+	DeviceCount  int
+	RelayedBytes int64
+}
+
 // Store is the only abstraction that touches persistent storage. Implemented by
 // SQLiteStore today; a Postgres impl could replace it without changing callers.
 type Store interface {
@@ -103,4 +114,6 @@ type Store interface {
 	// usage (cross-network relay metering)
 	RecordUsage(ctx context.Context, e UsageEvent) error
 	UserUsageTotal(ctx context.Context, userID string) (int64, error)
+	// admin (read-only)
+	AdminListUsers(ctx context.Context) ([]AdminUserRow, error)
 }
