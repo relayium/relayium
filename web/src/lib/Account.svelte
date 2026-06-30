@@ -3,7 +3,7 @@
   import {
     session, refreshSession, logout, localDeviceId,
     googleLoginUrl, requestMagicLink,
-    register, passwordLogin, fetchAuthMethods, type AuthMethods,
+    register, passwordLogin, fetchAuthMethods, changePassword, type AuthMethods,
   } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
 
@@ -17,6 +17,35 @@
 
   // magic-link 备用入口（仅当后端开启）
   let magicSent = $state(false);
+
+  // 改密表单
+  let pwOpen = $state(false);
+  let curPw = $state("");
+  let newPw = $state("");
+  let confirmPw = $state("");
+  let pwError = $state("");
+  let pwDone = $state(false);
+
+  function mapPwError(code?: string): string {
+    if (code === "current password incorrect") return t.account.errCurrentWrong;
+    if (code === "password too short") return t.account.errTooShort;
+    return t.account.errLogin;
+  }
+
+  async function onChangePassword() {
+    pwError = "";
+    pwDone = false;
+    if (newPw.length < 8) { pwError = t.account.errTooShort; return; }
+    if (newPw !== confirmPw) { pwError = t.account.errMismatch; return; }
+    const res = await changePassword(curPw, newPw);
+    if (res.ok) {
+      pwDone = true;
+      curPw = ""; newPw = ""; confirmPw = "";
+      pwOpen = false;
+    } else {
+      pwError = mapPwError(res.error);
+    }
+  }
 
   async function claimDevice() {
     try {
@@ -77,6 +106,25 @@
     {#if open}
       <div class="menu">
         <div class="who">{t.account.signedInAs(session().user!.email)}</div>
+
+        {#if pwOpen}
+          {#if session().user!.hasPassword}
+            <input type="password" bind:value={curPw} placeholder={t.account.currentPassword} />
+          {/if}
+          <input type="password" bind:value={newPw} placeholder={t.account.newPassword} />
+          <input type="password" bind:value={confirmPw} placeholder={t.account.confirmPassword} />
+          {#if pwError}<p class="err">{pwError}</p>{/if}
+          <button class="primary" onclick={onChangePassword}>
+            {session().user!.hasPassword ? t.account.changePassword : t.account.setPassword}
+          </button>
+          <button class="link" onclick={() => { pwOpen = false; pwError = ""; }}>{t.close}</button>
+        {:else}
+          {#if pwDone}<p class="hint">{t.account.pwChanged}</p>{/if}
+          <button class="ghost" onclick={() => { pwOpen = true; pwDone = false; }}>
+            {session().user!.hasPassword ? t.account.changePassword : t.account.setPassword}
+          </button>
+        {/if}
+
         <button class="ghost" onclick={onLogout}>{t.account.signOut}</button>
       </div>
     {/if}
