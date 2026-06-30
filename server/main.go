@@ -49,6 +49,9 @@ func main() {
 	turnURLs := flag.String("turn-urls", "", "comma-separated TURN URLs (e.g. turn:host:3478,turns:host:5349)")
 	stunURLs := flag.String("stun-urls", "stun:stun.l.google.com:19302", "comma-separated STUN URLs")
 	redisAddr := flag.String("redis-addr", "", "Redis host:port for coturn relay-byte metering (empty disables)")
+	enableGoogle := flag.Bool("enable-google", false, "enable Google OAuth login (disabled by default)")
+	enableMagic := flag.Bool("enable-magic", false, "enable email magic-link login (disabled by default)")
+	adminPass := flag.String("admin-pass", "", "admin dashboard password at /admin (empty disables the dashboard)")
 	flag.Parse()
 
 	// Not in Go's built-in MIME table; the PWA manifest should be served as JSON.
@@ -110,6 +113,9 @@ func main() {
 			TURNURLs:       splitURLs(*turnURLs),
 			TURNSecret:     *turnSecret,
 			TURNCredTTL:    time.Hour,
+			EnableGoogle:   *enableGoogle,
+			EnableMagic:    *enableMagic,
+			AdminPassword:  *adminPass,
 		})
 		validateRoom = acct.ValidateTransferToken
 		if *redisAddr != "" {
@@ -127,6 +133,7 @@ func main() {
 			log.Printf("metering: ingesting coturn relay stats from redis %s", *redisAddr)
 		}
 		mux.Handle("/api/", acct.Routes())
+		acct.RegisterAdmin(mux)
 	}
 
 	mux.Handle("/", http.FileServer(http.Dir(*static)))
