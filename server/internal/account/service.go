@@ -25,6 +25,7 @@ type Config struct {
 	GoogleRedirect string
 	EnableGoogle   bool
 	EnableMagic    bool
+	AdminUser      string
 	AdminPassword  string
 }
 
