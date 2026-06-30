@@ -35,23 +35,31 @@ func splitURLs(s string) []string {
 }
 
 func main() {
-	addr := flag.String("addr", ":8080", "listen address")
-	static := flag.String("static", "../web/dist", "static files directory")
-	dbPath := flag.String("db", "relayium.db", "SQLite database path (':memory:' for ephemeral)")
-	baseURL := flag.String("base-url", "http://localhost:8080", "public base URL for links/redirects")
-	googleID := flag.String("google-id", "", "Google OAuth client ID")
-	googleSecret := flag.String("google-secret", "", "Google OAuth client secret")
-	smtpAddr := flag.String("smtp-addr", "", "SMTP host:port (empty = log magic links instead of emailing)")
-	smtpFrom := flag.String("smtp-from", "no-reply@relayium.com", "magic link From address")
-	smtpUser := flag.String("smtp-user", "", "SMTP username (set with -smtp-pass for authenticated providers; empty = unauthenticated relay)")
-	smtpPass := flag.String("smtp-pass", "", "SMTP password (used with -smtp-user)")
-	turnSecret := flag.String("turn-secret", "", "coturn static-auth-secret (empty disables TURN)")
-	turnURLs := flag.String("turn-urls", "", "comma-separated TURN URLs (e.g. turn:host:3478,turns:host:5349)")
-	stunURLs := flag.String("stun-urls", "stun:stun.l.google.com:19302", "comma-separated STUN URLs")
-	redisAddr := flag.String("redis-addr", "", "Redis host:port for coturn relay-byte metering (empty disables)")
-	enableGoogle := flag.Bool("enable-google", false, "enable Google OAuth login (disabled by default)")
-	enableMagic := flag.Bool("enable-magic", false, "enable email magic-link login (disabled by default)")
-	adminPass := flag.String("admin-pass", "", "admin dashboard password at /admin (empty disables the dashboard)")
+	// Load an optional .env file before computing flag defaults, so each flag
+	// can fall back to a RELAYIUM_* variable. Precedence: explicit CLI flag >
+	// real environment variable > .env file > built-in default. The .env path
+	// itself comes from a real env var (it can't be in the not-yet-loaded file).
+	if err := loadDotEnv(envStr("RELAYIUM_ENV_FILE", ".env")); err != nil {
+		log.Printf("WARNING: read env file: %v", err)
+	}
+
+	addr := flag.String("addr", envStr("RELAYIUM_ADDR", ":8080"), "listen address")
+	static := flag.String("static", envStr("RELAYIUM_STATIC", "../web/dist"), "static files directory")
+	dbPath := flag.String("db", envStr("RELAYIUM_DB", "relayium.db"), "SQLite database path (':memory:' for ephemeral)")
+	baseURL := flag.String("base-url", envStr("RELAYIUM_BASE_URL", "http://localhost:8080"), "public base URL for links/redirects")
+	googleID := flag.String("google-id", envStr("RELAYIUM_GOOGLE_ID", ""), "Google OAuth client ID")
+	googleSecret := flag.String("google-secret", envStr("RELAYIUM_GOOGLE_SECRET", ""), "Google OAuth client secret")
+	smtpAddr := flag.String("smtp-addr", envStr("RELAYIUM_SMTP_ADDR", ""), "SMTP host:port (empty = log magic links instead of emailing)")
+	smtpFrom := flag.String("smtp-from", envStr("RELAYIUM_SMTP_FROM", "no-reply@relayium.com"), "magic link From address")
+	smtpUser := flag.String("smtp-user", envStr("RELAYIUM_SMTP_USER", ""), "SMTP username (set with -smtp-pass for authenticated providers; empty = unauthenticated relay)")
+	smtpPass := flag.String("smtp-pass", envStr("RELAYIUM_SMTP_PASS", ""), "SMTP password (used with -smtp-user)")
+	turnSecret := flag.String("turn-secret", envStr("RELAYIUM_TURN_SECRET", ""), "coturn static-auth-secret (empty disables TURN)")
+	turnURLs := flag.String("turn-urls", envStr("RELAYIUM_TURN_URLS", ""), "comma-separated TURN URLs (e.g. turn:host:3478,turns:host:5349)")
+	stunURLs := flag.String("stun-urls", envStr("RELAYIUM_STUN_URLS", "stun:stun.l.google.com:19302"), "comma-separated STUN URLs")
+	redisAddr := flag.String("redis-addr", envStr("RELAYIUM_REDIS_ADDR", ""), "Redis host:port for coturn relay-byte metering (empty disables)")
+	enableGoogle := flag.Bool("enable-google", envBool("RELAYIUM_ENABLE_GOOGLE", false), "enable Google OAuth login (disabled by default)")
+	enableMagic := flag.Bool("enable-magic", envBool("RELAYIUM_ENABLE_MAGIC", false), "enable email magic-link login (disabled by default)")
+	adminPass := flag.String("admin-pass", envStr("RELAYIUM_ADMIN_PASS", ""), "admin dashboard password at /admin (empty disables the dashboard)")
 	flag.Parse()
 
 	// Not in Go's built-in MIME table; the PWA manifest should be served as JSON.
