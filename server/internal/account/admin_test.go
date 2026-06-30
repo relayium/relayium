@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -41,6 +42,93 @@ func TestAdminUserDefaultsToAdminWhenUnset(t *testing.T) {
 		map[string][]string{"username": {"admin"}, "password": {"s3cret"}})
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("default username 'admin' should log in, got %d", resp.StatusCode)
+	}
+}
+
+func newAdminSettingsServer(t *testing.T) (*httptest.Server, *SQLiteStore) {
+	t.Helper()
+	store := newTestStore(t)
+	svc := NewService(store, &capturingMailer{}, Config{
+		BaseURL: "http://example.test", AdminUser: "boss", AdminPassword: "s3cret",
+		MaxFileSize: 50 << 20, DailyQuota: 200 << 20, DefaultTTL: 86400, MaxTTL: 604800,
+	})
+	mux := http.NewServeMux()
+	svc.RegisterAdmin(mux)
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	return ts, store
+}
+
+func adminLogin(t *testing.T, ts *httptest.Server) *http.Cookie {
+	t.Helper()
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, _ := client.PostForm(ts.URL+"/admin/login",
+		map[string][]string{"username": {"boss"}, "password": {"s3cret"}})
+	for _, c := range resp.Cookies() {
+		if c.Name == adminCookie {
+			return c
+		}
+	}
+	t.Fatal("no admin cookie")
+	return nil
+}
+
+func TestAdminSettingsUpdateValid(t *testing.T) {
+	ts, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	// 10 MiB file, 100 MiB quota, 12h default, 48h max.
+	req, _ := http.NewRequest("POST", ts.URL+"/admin/settings", strings.NewReader(
+		"max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookie)
+	resp, _ := client.Do(req)
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("valid settings POST: want 302, got %d", resp.StatusCode)
+	}
+	v, _, _ := store.GetSetting(context.Background(), SettingMaxFileSize)
+	if v != 10*1024*1024 {
+		t.Fatalf("max_file_size = %d, want 10 MiB", v)
+	}
+	if d, _, _ := store.GetSetting(context.Background(), SettingDefaultTTL); d != 12*3600 {
+		t.Fatalf("default_ttl = %d, want 43200", d)
+	}
+}
+
+func TestAdminSettingsRejectsInvalid(t *testing.T) {
+	ts, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	post := func(form string) int {
+		req, _ := http.NewRequest("POST", ts.URL+"/admin/settings", strings.NewReader(form))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(cookie)
+		resp, _ := client.Do(req)
+		return resp.StatusCode
+	}
+	// default_ttl (48h) > max_ttl (24h) → rejected.
+	if code := post("max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=48&max_ttl_hours=24"); code != http.StatusBadRequest {
+		t.Fatalf("default>max: want 400, got %d", code)
+	}
+	// Negative value → rejected.
+	if code := post("max_file_size_mb=-1&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48"); code != http.StatusBadRequest {
+		t.Fatalf("negative: want 400, got %d", code)
+	}
+	// Nothing persisted by the rejected posts.
+	if _, ok, _ := store.GetSetting(context.Background(), SettingMaxFileSize); ok {
+		t.Fatalf("invalid POST must not write settings")
+	}
+}
+
+func TestAdminSettingsRequiresAdmin(t *testing.T) {
+	ts, _ := newAdminSettingsServer(t)
+	resp, _ := ts.Client().Post(ts.URL+"/admin/settings", "application/x-www-form-urlencoded",
+		strings.NewReader("max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48"))
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauth settings POST: want 401, got %d", resp.StatusCode)
 	}
 }
 
