@@ -3,16 +3,24 @@
 // ("/cross-network"). A transfer token in the URL fragment (#t=<token>) always
 // implies the cross-network page so a shared link lands the recipient correctly.
 
-import { parseTransferToken, CROSS_PATH } from "./transfer-link";
+import { parseTransferToken, CROSS_PATH, DOWNLOAD_PREFIX } from "./transfer-link";
 
-export type Route = "lan" | "cross";
+export type Route = "lan" | "cross" | "download";
 
 export { CROSS_PATH };
 
 /** Pure mapping from a location to a route. Safe to unit-test without a DOM. */
 export function routeFromLocation(pathname: string, hash: string): Route {
+  if (downloadId(pathname)) return "download";
   if (parseTransferToken(hash)) return "cross";
   return pathname === CROSS_PATH ? "cross" : "lan";
+}
+
+/** Extract the file id from a /d/<id> path, or "" when not a download path. */
+export function downloadId(pathname: string): string {
+  return pathname.startsWith(DOWNLOAD_PREFIX)
+    ? pathname.slice(DOWNLOAD_PREFIX.length)
+    : "";
 }
 
 let route = $state<Route>("lan");
