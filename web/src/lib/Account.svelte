@@ -1,17 +1,23 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import {
-    session, refreshSession, requestMagicLink, logout,
-    googleLoginUrl, localDeviceId,
+    session, refreshSession, logout, localDeviceId,
+    googleLoginUrl, requestMagicLink,
+    register, passwordLogin, fetchAuthMethods, type AuthMethods,
   } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
   let open = $state(false);
   let email = $state("");
-  let sent = $state(false);
+  let password = $state("");
+  let mode = $state<"login" | "register">("login");
+  let error = $state("");
+  let methods = $state<AuthMethods>({ password: true, google: false, magic: false });
 
-  // Register this browser as a device, once, after we know who the user is.
+  // magic-link 备用入口（仅当后端开启）
+  let magicSent = $state(false);
+
   async function claimDevice() {
     try {
       await fetch("/api/devices", {
@@ -24,14 +30,37 @@
   }
 
   onMount(async () => {
+    methods = await fetchAuthMethods();
     await refreshSession();
     if (session().user) claimDevice();
   });
 
+  function mapError(code?: string): string {
+    if (code === "password too short") return t.account.errTooShort;
+    if (code === "email already registered") return t.account.errEmailTaken;
+    if (code === "invalid credentials") return t.account.errLogin;
+    return t.account.errLogin;
+  }
+
+  async function onSubmit() {
+    error = "";
+    if (!email || !password) return;
+    const res = mode === "register"
+      ? await register(email, password)
+      : await passwordLogin(email, password);
+    if (res.ok) {
+      open = false;
+      password = "";
+      claimDevice();
+    } else {
+      error = mapError(res.error);
+    }
+  }
+
   async function onSendLink() {
     if (!email) return;
     await requestMagicLink(email);
-    sent = true;
+    magicSent = true;
   }
 
   async function onLogout() {
@@ -55,13 +84,28 @@
     <button class="acct-btn" onclick={() => (open = !open)}>{t.account.signIn}</button>
     {#if open}
       <div class="menu">
-        <a class="google" href={googleLoginUrl()}>{t.account.continueGoogle}</a>
-        <div class="sep">{t.account.or}</div>
-        {#if sent}
-          <p class="hint">{t.account.linkSent}</p>
-        {:else}
-          <input type="email" bind:value={email} placeholder={t.account.email} />
-          <button class="primary" onclick={onSendLink}>{t.account.sendLink}</button>
+        <input type="email" bind:value={email} placeholder={t.account.email} />
+        <input type="password" bind:value={password} placeholder={t.account.password} />
+        {#if error}<p class="err">{error}</p>{/if}
+        <button class="primary" onclick={onSubmit}>
+          {mode === "register" ? t.account.createAccount : t.account.logInBtn}
+        </button>
+        <button class="link" onclick={() => { mode = mode === "register" ? "login" : "register"; error = ""; }}>
+          {mode === "register" ? t.account.toLogin : t.account.toRegister}
+        </button>
+
+        {#if methods.google || methods.magic}
+          <div class="sep">{t.account.or}</div>
+        {/if}
+        {#if methods.google}
+          <a class="google" href={googleLoginUrl()}>{t.account.continueGoogle}</a>
+        {/if}
+        {#if methods.magic}
+          {#if magicSent}
+            <p class="hint">{t.account.linkSent}</p>
+          {:else}
+            <button class="ghost" onclick={onSendLink}>{t.account.sendLink}</button>
+          {/if}
         {/if}
       </div>
     {/if}
@@ -85,4 +129,8 @@
   .menu .sep { text-align: center; color: var(--text); font-size: 12px; }
   .menu .who { color: var(--text); }
   .menu .hint { color: var(--text); font-size: 13px; margin: 0; }
+  .menu .err { color: #c00; font-size: 12px; margin: 0; }
+  .menu .link { background: none; border: none; color: var(--text); cursor: pointer; font: inherit; font-size: 12px; padding: 2px; text-decoration: underline; }
+  .menu .primary { padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--text-h); color: var(--bg); cursor: pointer; font: inherit; }
+  .menu .ghost { padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--social-bg); color: var(--text-h); cursor: pointer; font: inherit; }
 </style>

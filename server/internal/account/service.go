@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/url"
+	"sync"
 	"time"
 )
 
@@ -22,6 +23,9 @@ type Config struct {
 	GoogleClientID string
 	GoogleSecret   string
 	GoogleRedirect string
+	EnableGoogle   bool
+	EnableMagic    bool
+	AdminPassword  string
 }
 
 type Service struct {
@@ -30,10 +34,12 @@ type Service struct {
 	cfg             Config
 	now             func() time.Time
 	fetchGoogleUser func(ctx context.Context, code string) (sub, email, name string, verified bool, err error)
+	adminSessions   map[string]int64 // token -> 过期 unix 秒
+	adminMu         sync.Mutex
 }
 
 func NewService(store Store, mailer Mailer, cfg Config) *Service {
-	svc := &Service{store: store, mailer: mailer, cfg: cfg, now: time.Now}
+	svc := &Service{store: store, mailer: mailer, cfg: cfg, now: time.Now, adminSessions: map[string]int64{}}
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
 	return svc
 }
