@@ -281,6 +281,76 @@ func TestMethodsReflectsEnabledFlags(t *testing.T) {
 	}
 }
 
+func TestChangePasswordEndpoint(t *testing.T) {
+	svc := NewService(newTestStore(t), &capturingMailer{}, Config{
+		BaseURL: "http://example.test", SessionTTL: time.Hour,
+	})
+	ts := httptest.NewServer(svc.Routes())
+	t.Cleanup(ts.Close)
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	// 注册取得 session cookie。
+	resp, _ := client.Post(ts.URL+"/api/auth/register", "application/json",
+		strings.NewReader(`{"email":"e@example.com","password":"oldpassword1"}`))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("register: %d", resp.StatusCode)
+	}
+	var cookie *http.Cookie
+	for _, c := range resp.Cookies() {
+		if c.Name == sessionCookie {
+			cookie = c
+		}
+	}
+	if cookie == nil {
+		t.Fatal("no session cookie")
+	}
+
+	do := func(body string) int {
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/password/change", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(cookie)
+		r, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("do: %v", err)
+		}
+		return r.StatusCode
+	}
+
+	// /api/me 报告 hasPassword=true。
+	meReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/me", nil)
+	meReq.AddCookie(cookie)
+	meResp, _ := client.Do(meReq)
+	var me struct {
+		User struct {
+			HasPassword bool `json:"hasPassword"`
+		} `json:"user"`
+	}
+	_ = json.NewDecoder(meResp.Body).Decode(&me)
+	if !me.User.HasPassword {
+		t.Fatal("me.hasPassword: want true for a password user")
+	}
+
+	// 旧密码错 => 401。
+	if got := do(`{"currentPassword":"wrongold12","newPassword":"newpassword1"}`); got != http.StatusUnauthorized {
+		t.Fatalf("wrong current: want 401, got %d", got)
+	}
+	// 新密码太短 => 400。
+	if got := do(`{"currentPassword":"oldpassword1","newPassword":"short"}`); got != http.StatusBadRequest {
+		t.Fatalf("weak new: want 400, got %d", got)
+	}
+	// 正确 => 200。
+	if got := do(`{"currentPassword":"oldpassword1","newPassword":"newpassword1"}`); got != http.StatusOK {
+		t.Fatalf("change: want 200, got %d", got)
+	}
+	// 未登录 => 401。
+	noauth, _ := client.Post(ts.URL+"/api/auth/password/change", "application/json",
+		strings.NewReader(`{"newPassword":"whatever12"}`))
+	if noauth.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauth: want 401, got %d", noauth.StatusCode)
+	}
+}
+
 func TestCreateTransferRequiresSessionAndReturnsToken(t *testing.T) {
 	ts, mail := newTestServer(t)
 	client := ts.Client()
