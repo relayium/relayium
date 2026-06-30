@@ -42,6 +42,55 @@ export function googleLoginUrl(): string {
   return "/api/auth/google/start";
 }
 
+export interface AuthMethods {
+  password: boolean;
+  google: boolean;
+  magic: boolean;
+}
+
+export async function fetchAuthMethods(): Promise<AuthMethods> {
+  try {
+    const res = await fetch("/api/auth/methods", { credentials: "include" });
+    if (res.ok) return (await res.json()) as AuthMethods;
+  } catch {
+    /* fall through to default */
+  }
+  return { password: true, google: false, magic: false };
+}
+
+async function postCredentials(
+  path: string,
+  email: string,
+  password: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(path, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (res.ok) {
+    const body = (await res.json()) as { user: SessionUser };
+    user = body.user;
+    return { ok: true };
+  }
+  let error = "error";
+  try {
+    error = ((await res.json()) as { error?: string }).error ?? error;
+  } catch {
+    /* non-JSON body */
+  }
+  return { ok: false, error };
+}
+
+export function register(email: string, password: string) {
+  return postCredentials("/api/auth/register", email, password);
+}
+
+export function passwordLogin(email: string, password: string) {
+  return postCredentials("/api/auth/password/login", email, password);
+}
+
 const DEVICE_KEY = "relayium_device_id";
 
 export function localDeviceId(): string {

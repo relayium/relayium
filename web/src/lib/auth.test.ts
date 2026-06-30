@@ -28,4 +28,32 @@ describe("auth", () => {
     expect(a).toBe(b);
     expect(a.length).toBeGreaterThan(8);
   });
+
+  it("fetchAuthMethods falls back to password-only on failure", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("network"); }) as unknown as typeof fetch);
+    const { fetchAuthMethods } = await import("./auth.svelte");
+    const m = await fetchAuthMethods();
+    expect(m).toEqual({ password: true, google: false, magic: false });
+  });
+
+  it("register sets the session user on success", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true, status: 200,
+      json: async () => ({ user: { id: "u9", email: "r@b.com", displayName: "" } }),
+    })) as unknown as typeof fetch);
+    const { register, session } = await import("./auth.svelte");
+    const res = await register("r@b.com", "longenough1");
+    expect(res.ok).toBe(true);
+    expect(session().user?.email).toBe("r@b.com");
+  });
+
+  it("register surfaces server error on 409", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: false, status: 409, json: async () => ({ error: "email already registered" }),
+    })) as unknown as typeof fetch);
+    const { register } = await import("./auth.svelte");
+    const res = await register("dup@b.com", "longenough1");
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain("registered");
+  });
 });
