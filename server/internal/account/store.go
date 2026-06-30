@@ -75,6 +75,38 @@ type UsageEvent struct {
 	RecordedAt   int64
 }
 
+// StoredFile is one zero-knowledge stored-transfer object's lifecycle row. The
+// server holds only ciphertext: EncManifest (encrypted filenames/sizes) and the
+// blob it points at are opaque. It never sees plaintext content, names, or the key.
+type StoredFile struct {
+	ID            string
+	UserID        string
+	BlobKey       string
+	EncManifest   []byte
+	Size          int64 // ciphertext byte count
+	BurnAfterRead bool
+	CreatedAt     int64
+	ExpiresAt     int64
+	DownloadedAt  int64 // 0 = not yet downloaded
+}
+
+// UploadEvent is an immutable ledger row for the rolling-24h upload quota. It is
+// independent of StoredFile lifecycle: a file may be burned/expired and deleted,
+// but the day's quota still counts. GC prunes rows older than ~25h.
+type UploadEvent struct {
+	ID         string
+	UserID     string
+	Bytes      int64
+	UploadedAt int64
+}
+
+// Setting is one admin-editable integer config value (bytes or seconds).
+type Setting struct {
+	Key       string
+	Value     int64
+	UpdatedAt int64
+}
+
 // AdminUserRow 是后台用户列表的一行聚合视图（只读）。
 type AdminUserRow struct {
 	ID           string
@@ -116,4 +148,19 @@ type Store interface {
 	UserUsageTotal(ctx context.Context, userID string) (int64, error)
 	// admin (read-only)
 	AdminListUsers(ctx context.Context) ([]AdminUserRow, error)
+	// stored files (zero-knowledge stored transfer)
+	CreateStoredFile(ctx context.Context, f StoredFile) error
+	GetStoredFile(ctx context.Context, id string) (StoredFile, error)
+	ListStoredFilesByUser(ctx context.Context, userID string) ([]StoredFile, error)
+	MarkDownloaded(ctx context.Context, id string, at int64) error
+	DeleteStoredFile(ctx context.Context, id string) error
+	ListExpiredStoredFiles(ctx context.Context, now int64) ([]StoredFile, error)
+	// upload events (rolling-24h quota ledger)
+	RecordUpload(ctx context.Context, e UploadEvent) error
+	UserUploadedSince(ctx context.Context, userID string, since int64) (int64, error)
+	PruneUploadEvents(ctx context.Context, before int64) error
+	// settings (admin-editable limits)
+	GetSetting(ctx context.Context, key string) (int64, bool, error)
+	SetSetting(ctx context.Context, key string, value, at int64) error
+	ListSettings(ctx context.Context) ([]Setting, error)
 }
