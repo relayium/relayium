@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>隐私政策 · Relayium</title>
-    <meta name="description" content="Relayium 如何处理你的数据:文件点对点传输,绝不经过我们的服务器。账号是可选的,仅存储邮箱与显示名。" />
+    <meta name="description" content="Relayium 如何处理你的数据：实时直连传输以点对点方式进行，绝不经过我们的服务器；暂存下载链接模式保持文件零知识加密。账号是可选的，仅存储邮箱与显示名。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/zh/privacy" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/privacy" />
@@ -17,7 +17,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"隐私政策 · Relayium","description":"Relayium 如何处理你的数据:文件点对点传输,绝不经过我们的服务器。账号是可选的,仅存储邮箱与显示名。","url":"https://relayium.com/zh/privacy","inLanguage":"zh-Hans","dateModified":"2026-06-29","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"隐私政策 · Relayium","description":"Relayium 如何处理你的数据：实时直连传输以点对点方式进行，绝不经过我们的服务器；暂存下载链接模式保持文件零知识加密。账号是可选的，仅存储邮箱与显示名。","url":"https://relayium.com/zh/privacy","inLanguage":"zh-Hans","dateModified":"2026-06-29","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -43,7 +43,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h1>隐私政策</h1>
       <p class="updated">最后更新: 2026-06-29</p>
       <nav class="langbar" aria-label="Language"><a href="/privacy">English</a><a href="/zh/privacy" aria-current="true">中文</a><a href="/ja/privacy">日本語</a><a href="/ko/privacy">한국어</a><a href="/de/privacy">Deutsch</a><a href="/fr/privacy">Français</a></nav>
-      <p>Relayium 的设计宗旨是让你的文件始终属于你。文件传输在两台设备之间直接进行,端到端加密,绝不经过我们的服务器。</p>
+      <p>Relayium 的设计宗旨是让你的文件始终属于你。实时直连传输以点对点方式进行，端到端加密，绝不经过我们的服务器；可选的暂存下载链接模式采用零知识加密——服务器仅存储无法解读的密文。</p>
       <p>本页说明本服务确实会处理的少量数据,以及它刻意从不接触的数据。</p>
       <h2>局域网传输不收集任何数据</h2><p>在同一网络下的设备之间传输文件时,无需账号,服务也不会存储任何关于你的信息。信令服务器只帮助两台设备相互发现;文件字节通过加密的 WebRTC 通道在设备之间直接流动。</p>
       <h2>账号会存储什么(仅在你登录时)</h2><p>登录是可选的,仅用于解锁跨网络传输。如果你登录,我们只存储运行账号所必需的最少信息:</p><ul><li>你的邮箱地址和一个显示名。</li><li>你使用的登录方式(Google,或邮箱魔法链接)。魔法链接令牌只以哈希形式存储,绝不明文保存。</li><li>登录会话,保存在安全的 httpOnly cookie 中。</li><li>你注册的设备,以一个随机设备 id 和设备名(例如你的平台名称)的形式。</li></ul>
