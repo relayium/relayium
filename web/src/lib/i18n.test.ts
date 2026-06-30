@@ -20,4 +20,14 @@ describe("i18n completeness", () => {
       expect(m.download.notFound, `${code}.download.notFound`).toBeTruthy();
     }
   });
+
+  it("every language has the pairing strings", () => {
+    for (const { code } of LANGS) {
+      const m = messages[code];
+      expect(m.pair.sendCode, `${code}.pair.sendCode`).toBeTruthy();
+      expect(m.pair.enterCode, `${code}.pair.enterCode`).toBeTruthy();
+      expect(m.pair.errExpired, `${code}.pair.errExpired`).toBeTruthy();
+      expect(m.pair.expiresIn("5:00"), `${code}.pair.expiresIn`).toContain("5:00");
+    }
+  });
 });
