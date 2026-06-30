@@ -206,6 +206,13 @@ func (s *SQLiteStore) RevokeSession(ctx context.Context, id string) error {
 	return err
 }
 
+// RevokeUserSessions revokes every session of userID except exceptID.
+func (s *SQLiteStore) RevokeUserSessions(ctx context.Context, userID, exceptID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE sessions SET revoked = 1 WHERE user_id = ? AND id <> ?`, userID, exceptID)
+	return err
+}
+
 func (s *SQLiteStore) CreateMagicToken(ctx context.Context, t MagicToken) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO magic_tokens (token_hash, email, created_at, expires_at, used_at) VALUES (?, ?, ?, ?, 0)`,
@@ -324,6 +331,20 @@ func (s *SQLiteStore) SetPassword(ctx context.Context, userID, passwordHash stri
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE users SET password_hash = ? WHERE id = ?`, passwordHash, userID)
 	return err
+}
+
+// HasPassword reports whether the user has a usable password hash set.
+func (s *SQLiteStore) HasPassword(ctx context.Context, userID string) (bool, error) {
+	var hash sql.NullString
+	err := s.db.QueryRowContext(ctx,
+		`SELECT password_hash FROM users WHERE id = ?`, userID).Scan(&hash)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return hash.Valid && hash.String != "", nil
 }
 
 func (s *SQLiteStore) GetCredentials(ctx context.Context, email string) (string, string, bool, error) {

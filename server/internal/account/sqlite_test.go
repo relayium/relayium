@@ -376,6 +376,54 @@ func TestSettingsGetSetList(t *testing.T) {
 	}
 }
 
+func TestHasPassword(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u, err := s.UpsertUserByEmail(ctx, "p@example.com", "P")
+	if err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	if has, err := s.HasPassword(ctx, u.ID); err != nil || has {
+		t.Fatalf("fresh user: has=%v err=%v, want false", has, err)
+	}
+	if err := s.SetPassword(ctx, u.ID, "somehash"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	if has, err := s.HasPassword(ctx, u.ID); err != nil || !has {
+		t.Fatalf("after SetPassword: has=%v err=%v, want true", has, err)
+	}
+	if has, err := s.HasPassword(ctx, "no-such-user"); err != nil || has {
+		t.Fatalf("unknown user: has=%v err=%v, want false", has, err)
+	}
+}
+
+func TestRevokeUserSessions(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u, _ := s.UpsertUserByEmail(ctx, "s@example.com", "S")
+	keep := Session{ID: "keep", UserID: u.ID, CreatedAt: 1, ExpiresAt: 1 << 40}
+	drop := Session{ID: "drop", UserID: u.ID, CreatedAt: 1, ExpiresAt: 1 << 40}
+	other, _ := s.UpsertUserByEmail(ctx, "o@example.com", "O")
+	otherSess := Session{ID: "other", UserID: other.ID, CreatedAt: 1, ExpiresAt: 1 << 40}
+	for _, ss := range []Session{keep, drop, otherSess} {
+		if err := s.CreateSession(ctx, ss); err != nil {
+			t.Fatalf("create %s: %v", ss.ID, err)
+		}
+	}
+	if err := s.RevokeUserSessions(ctx, u.ID, "keep"); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+	if _, ok, _ := s.GetSession(ctx, "keep"); !ok {
+		t.Fatal("current session must survive")
+	}
+	if _, ok, _ := s.GetSession(ctx, "drop"); ok {
+		t.Fatal("other session of same user must be revoked")
+	}
+	if _, ok, _ := s.GetSession(ctx, "other"); !ok {
+		t.Fatal("another user's session must be untouched")
+	}
+}
+
 func TestAdminListUsersAggregates(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
