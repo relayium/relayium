@@ -128,10 +128,12 @@ type Store interface {
 	GetUserByIdentity(ctx context.Context, provider, subject string) (User, bool, error)
 	SetPassword(ctx context.Context, userID, passwordHash string) error
 	GetCredentials(ctx context.Context, email string) (userID, passwordHash string, ok bool, err error)
+	HasPassword(ctx context.Context, userID string) (bool, error)
 	// sessions
 	CreateSession(ctx context.Context, s Session) error
 	GetSession(ctx context.Context, id string) (Session, bool, error)
 	RevokeSession(ctx context.Context, id string) error
+	RevokeUserSessions(ctx context.Context, userID, exceptID string) error
 	// magic tokens
 	CreateMagicToken(ctx context.Context, t MagicToken) error
 	UseMagicToken(ctx context.Context, tokenHash string, now int64) (MagicToken, bool, error)

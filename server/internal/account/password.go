@@ -61,3 +61,35 @@ func (s *Service) Login(ctx context.Context, email, password string) (Session, e
 	}
 	return s.IssueSession(ctx, uid)
 }
+
+// ChangePassword sets or changes the authenticated user's password, then revokes
+// the user's other sessions. For a user who already has a password, currentPassword
+// must verify; for a passwordless user (Google/magic) it is a first-time set that
+// also links a "password" identity so they can subsequently log in by email+password.
+func (s *Service) ChangePassword(ctx context.Context, u User, currentSessionID, currentPassword, newPassword string) error {
+	_, hash, hasPass, err := s.store.GetCredentials(ctx, u.Email)
+	if err != nil {
+		return err
+	}
+	if hasPass {
+		if bcrypt.CompareHashAndPassword([]byte(hash), []byte(currentPassword)) != nil {
+			return ErrBadCredentials
+		}
+	}
+	if len(newPassword) < minPasswordLen {
+		return ErrWeakPassword
+	}
+	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	if err := s.store.SetPassword(ctx, u.ID, string(newHash)); err != nil {
+		return err
+	}
+	if !hasPass {
+		if err := s.store.LinkIdentity(ctx, "password", normEmail(u.Email), u.ID); err != nil {
+			return err
+		}
+	}
+	return s.store.RevokeUserSessions(ctx, u.ID, currentSessionID)
+}
