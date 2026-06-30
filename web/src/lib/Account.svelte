@@ -8,7 +8,7 @@
   import { lang, messages, type Messages } from "./i18n.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
-  let open = $state(false);
+  let { open = $bindable(false) }: { open?: boolean } = $props();
   let email = $state("");
   let password = $state("");
   let mode = $state<"login" | "register">("login");

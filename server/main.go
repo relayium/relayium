@@ -146,7 +146,7 @@ func main() {
 		acct.RegisterAdmin(mux)
 	}
 
-	mux.Handle("/", http.FileServer(http.Dir(*static)))
+	mux.Handle("/", spaHandler(*static))
 
 	log.Printf("relayium signaling server listening on %s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, mux))
