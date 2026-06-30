@@ -81,6 +81,17 @@
   );
   const showTransfer = $derived(visiblePeers.length > 0 || busy);
 
+  // The window-wide drop only makes sense where the device cards are actually
+  // rendered: the LAN page (unless unsupported), or the cross page once a
+  // realtime peer is connected. Never on the download page.
+  const surfaceShown = $derived(
+    currentRoute() === "download"
+      ? false
+      : currentRoute() === "cross"
+        ? showTransfer
+        : !unsupported,
+  );
+
   // Reflect transfer progress in the tab title (follows the language switch).
   $effect(() => {
     const x = (send && !send.done && send) || (recv && !recv.done && recv);
@@ -134,7 +145,7 @@
       e.preventDefault();
       dragDepth = 0;
       dragActive = false;
-      if (dropTarget(visiblePeers.length, busy) === "send") {
+      if (surfaceShown && dropTarget(visiblePeers.length, busy) === "send") {
         const files = e.dataTransfer?.files;
         if (files?.length) sendFiles(visiblePeers[0].id, files);
       }
@@ -480,7 +491,7 @@
   {/each}
 {/snippet}
 
-  {#if dragActive && dropTarget(visiblePeers.length, busy) !== "off"}
+  {#if surfaceShown && dragActive && dropTarget(visiblePeers.length, busy) !== "off"}
     <div class="dropzone">
       <div class="dropzone-inner">
         {dropTarget(visiblePeers.length, busy) === "send"
