@@ -225,3 +225,48 @@ func TestUserUsageTotalSumsAndDefaultsZero(t *testing.T) {
 		t.Fatalf("unknown user total = %d (err %v), want 0", zero, err)
 	}
 }
+
+func TestSetAndGetCredentials(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// 未知邮箱：ok=false，无错误。
+	if _, _, ok, err := s.GetCredentials(ctx, "nobody@example.com"); err != nil || ok {
+		t.Fatalf("unknown email: ok=%v err=%v", ok, err)
+	}
+
+	u, err := s.UpsertUserByEmail(ctx, "P@Example.com", "P")
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// 用户存在但还没密码：ok=false。
+	if _, _, ok, _ := s.GetCredentials(ctx, "p@example.com"); ok {
+		t.Fatalf("user without password should have ok=false")
+	}
+	if err := s.SetPassword(ctx, u.ID, "hash-xyz"); err != nil {
+		t.Fatalf("set password: %v", err)
+	}
+	uid, hash, ok, err := s.GetCredentials(ctx, "p@example.com")
+	if err != nil || !ok {
+		t.Fatalf("after set: ok=%v err=%v", ok, err)
+	}
+	if uid != u.ID || hash != "hash-xyz" {
+		t.Fatalf("got uid=%q hash=%q want %q/hash-xyz", uid, hash, u.ID)
+	}
+}
+
+func TestPasswordColumnMigrationIsIdempotent(t *testing.T) {
+	// 在同一文件 DB 上连开两次，ALTER 重复加列不能报错。
+	dir := t.TempDir()
+	dsn := dir + "/mig.db"
+	s1, err := OpenSQLite(dsn)
+	if err != nil {
+		t.Fatalf("open1: %v", err)
+	}
+	s1.Close()
+	s2, err := OpenSQLite(dsn)
+	if err != nil {
+		t.Fatalf("open2 (re-migrate) must succeed: %v", err)
+	}
+	s2.Close()
+}

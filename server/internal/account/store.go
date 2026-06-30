@@ -83,6 +83,8 @@ type Store interface {
 	GetUserByID(ctx context.Context, id string) (User, error)
 	LinkIdentity(ctx context.Context, provider, subject, userID string) error
 	GetUserByIdentity(ctx context.Context, provider, subject string) (User, bool, error)
+	SetPassword(ctx context.Context, userID, passwordHash string) error
+	GetCredentials(ctx context.Context, email string) (userID, passwordHash string, ok bool, err error)
 	// sessions
 	CreateSession(ctx context.Context, s Session) error
 	GetSession(ctx context.Context, id string) (Session, bool, error)
