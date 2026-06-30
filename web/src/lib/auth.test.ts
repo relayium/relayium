@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { session, refreshSession, localDeviceId } from "./auth.svelte";
+import { session, refreshSession, localDeviceId, changePassword } from "./auth.svelte";
 
 beforeEach(() => {
   localStorage.clear();
@@ -55,5 +55,24 @@ describe("auth", () => {
     const res = await register("dup@b.com", "longenough1");
     expect(res.ok).toBe(false);
     expect(res.error).toContain("registered");
+  });
+});
+
+describe("changePassword", () => {
+  it("returns ok on 200", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true, status: 200, json: async () => ({ status: "ok" }),
+    })) as unknown as typeof fetch);
+    const res = await changePassword("old", "newpassword1");
+    expect(res.ok).toBe(true);
+  });
+
+  it("maps the server error on failure", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: false, status: 401, json: async () => ({ error: "current password incorrect" }),
+    })) as unknown as typeof fetch);
+    const res = await changePassword("bad", "newpassword1");
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe("current password incorrect");
   });
 });
