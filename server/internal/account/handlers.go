@@ -21,6 +21,7 @@ func (s *Service) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/auth/register", s.handleRegister)
 	mux.HandleFunc("POST /api/auth/password/login", s.handlePasswordLogin)
+	mux.HandleFunc("POST /api/auth/password/change", s.RequireSession(s.handleChangePassword))
 	mux.HandleFunc("GET /api/auth/methods", s.handleAuthMethods)
 	if s.cfg.EnableMagic {
 		mux.HandleFunc("POST /api/auth/magic/request", s.handleMagicRequest)
@@ -199,9 +200,42 @@ func (s *Service) handleUsage(w http.ResponseWriter, r *http.Request, u User) {
 }
 
 func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {
+	hasPass, err := s.store.HasPassword(r.Context(), u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"user": map[string]string{"id": u.ID, "email": u.Email, "displayName": u.DisplayName},
+		"user": map[string]any{
+			"id": u.ID, "email": u.Email, "displayName": u.DisplayName, "hasPassword": hasPass,
+		},
 	})
+}
+
+func (s *Service) handleChangePassword(w http.ResponseWriter, r *http.Request, u User) {
+	var in struct {
+		CurrentPassword string `json:"currentPassword"`
+		NewPassword     string `json:"newPassword"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	currentSessionID := ""
+	if c, err := r.Cookie(sessionCookie); err == nil {
+		currentSessionID = c.Value
+	}
+	err := s.ChangePassword(r.Context(), u, currentSessionID, in.CurrentPassword, in.NewPassword)
+	switch {
+	case errors.Is(err, ErrBadCredentials):
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "current password incorrect"})
+	case errors.Is(err, ErrWeakPassword):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})
+	case err != nil:
+		http.Error(w, "server error", http.StatusInternalServerError)
+	default:
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	}
 }
 
 func (s *Service) handleAuthMethods(w http.ResponseWriter, r *http.Request) {
