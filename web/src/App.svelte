@@ -26,6 +26,7 @@
   import { fetchIceServers } from "./lib/ice";
   import type { Peer } from "./lib/protocol";
   import { lang, messages, legalUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
+  import { hasFiles, dropTarget } from "./lib/drag";
   import CrossPage from "./lib/CrossPage.svelte";
   import Nav from "./lib/Nav.svelte";
   import { currentRoute, syncRouteFromLocation, downloadId } from "./lib/router.svelte";
@@ -60,6 +61,8 @@
   let recv = $state<Xfer | null>(null);
   let send = $state<Xfer | null>(null);
   let notice = $state(""); // transient hint (e.g. "busy", "too many files")
+  let dragActive = $state(false);
+  let dragDepth = 0; // non-reactive: dragenter/dragleave fire per element; count to know when the drag truly leaves the window
   let roomToken = $state("");
   let roomCode = $state("");
   let joinedRoom = $state(false);
@@ -109,6 +112,43 @@
     });
     listenForIncoming();
     connState = "ready";
+  });
+
+  onMount(() => {
+    const onEnter = (e: DragEvent) => {
+      if (!hasFiles(e.dataTransfer?.types)) return;
+      dragDepth++;
+      dragActive = true;
+    };
+    const onOver = (e: DragEvent) => {
+      if (!hasFiles(e.dataTransfer?.types)) return;
+      e.preventDefault(); // without this the browser opens the dropped file
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    };
+    const onLeave = () => {
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) dragActive = false;
+    };
+    const onWindowDrop = (e: DragEvent) => {
+      if (!hasFiles(e.dataTransfer?.types)) return;
+      e.preventDefault();
+      dragDepth = 0;
+      dragActive = false;
+      if (dropTarget(visiblePeers.length, busy) === "send") {
+        const files = e.dataTransfer?.files;
+        if (files?.length) sendFiles(visiblePeers[0].id, files);
+      }
+    };
+    window.addEventListener("dragenter", onEnter);
+    window.addEventListener("dragover", onOver);
+    window.addEventListener("dragleave", onLeave);
+    window.addEventListener("drop", onWindowDrop);
+    return () => {
+      window.removeEventListener("dragenter", onEnter);
+      window.removeEventListener("dragover", onOver);
+      window.removeEventListener("dragleave", onLeave);
+      window.removeEventListener("drop", onWindowDrop);
+    };
   });
 
   function deviceName(): string {
@@ -376,14 +416,14 @@
     {#if visiblePeers.length === 0}
       <p class="empty">{t.emptyPeers}</p>
     {:else}
-      <ul>
+      <ul class:dragging={dragActive && dropTarget(visiblePeers.length, busy) === "pick"}>
         {#each visiblePeers as p (p.id)}
           <li
             class="peer"
             class:disabled={busy}
             ondragover={(e) => { e.preventDefault(); if (!busy) (e.currentTarget as HTMLElement).classList.add("drag"); }}
             ondragleave={(e) => (e.currentTarget as HTMLElement).classList.remove("drag")}
-            ondrop={(e) => { if (busy) { e.preventDefault(); flash(messages[lang()].busy); return; } onDrop(e, p.id); }}
+            ondrop={(e) => { e.stopPropagation(); if (busy) { e.preventDefault(); flash(messages[lang()].busy); return; } onDrop(e, p.id); }}
           >
             <label>
               <span class="pavatar">{p.name.slice(0, 1).toUpperCase()}</span>
@@ -439,6 +479,16 @@
     </section>
   {/each}
 {/snippet}
+
+  {#if dragActive && dropTarget(visiblePeers.length, busy) !== "off"}
+    <div class="dropzone">
+      <div class="dropzone-inner">
+        {dropTarget(visiblePeers.length, busy) === "send"
+          ? t.dragSendOne(visiblePeers[0].name)
+          : t.dragSendMany}
+      </div>
+    </div>
+  {/if}
 
   {#if currentRoute() === "download"}
     <DownloadPage id={downloadId(location.pathname)} />
@@ -595,4 +645,18 @@
   footer .legal a { color: var(--text-h); text-decoration: none; }
   footer .legal a:hover { color: var(--accent); }
   footer .fineprint { max-width: 60ch; }
+
+  .dropzone {
+    position: fixed; inset: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--accent-bg);
+    pointer-events: none; /* never intercept device-card drops */
+  }
+  .dropzone-inner {
+    padding: 22px 34px; border-radius: 16px;
+    border: 2px dashed var(--accent); color: var(--text-h);
+    background: var(--bg); box-shadow: var(--shadow);
+    font-size: 18px; font-weight: 500;
+  }
+  .peers ul.dragging .peer { border-color: var(--accent-border); background: var(--accent-bg); }
 </style>
