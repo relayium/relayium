@@ -47,11 +47,13 @@ type Service struct {
 	adminMu           sync.Mutex
 	adminTOTPMu       sync.Mutex
 	adminTOTPLastStep int64             // last TOTP time-step accepted for admin login (replay guard)
+	adminLogins       *loginThrottle
 	blobs             storage.BlobStore // nil until SetBlobStore; stored-transfer disabled when nil
 }
 
 func NewService(store Store, mailer Mailer, cfg Config) *Service {
-	svc := &Service{store: store, mailer: mailer, cfg: cfg, now: time.Now, adminSessions: map[string]int64{}}
+	svc := &Service{store: store, mailer: mailer, cfg: cfg, now: time.Now,
+		adminSessions: map[string]int64{}, adminLogins: newLoginThrottle()}
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
 	return svc
 }
