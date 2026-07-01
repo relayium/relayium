@@ -29,10 +29,12 @@
   import { hasFiles, dropTarget } from "./lib/drag";
   import CrossPage from "./lib/CrossPage.svelte";
   import Nav from "./lib/Nav.svelte";
-  import { currentRoute, syncRouteFromLocation, downloadId } from "./lib/router.svelte";
+  import { currentRoute, syncRouteFromLocation, downloadId, navigate } from "./lib/router.svelte";
   import Hero from "./lib/Hero.svelte";
   import DownloadPage from "./lib/DownloadPage.svelte";
   import FeatureStrip from "./lib/FeatureStrip.svelte";
+  import UseCases from "./lib/UseCases.svelte";
+  import Faq from "./lib/Faq.svelte";
 
   interface Incoming { from: string; files: FileMeta[]; total: number }
   interface Xfer {
@@ -520,7 +522,6 @@
   {:else}
     {@render transferSurface()}
 
-    <FeatureStrip />
     <section class="guide">
       <h2>{t.guideTitle}</h2>
       <ol>
@@ -531,6 +532,18 @@
       </ol>
       <p class="hint">{t.hint}</p>
     </section>
+
+    <section class="crosscta">
+      <div class="cc-text">
+        <h3>{t.homeCross.title}</h3>
+        <p>{t.homeCross.desc}</p>
+      </div>
+      <button class="primary" onclick={() => navigate("cross")}>{t.homeCross.cta}</button>
+    </section>
+
+    <FeatureStrip />
+    <UseCases />
+    <Faq />
 
     <footer>
       <nav class="legal">
@@ -575,6 +588,17 @@
   .guide ol { margin: 0; padding-left: 22px; }
   .guide li { margin: 7px 0; }
   .guide .hint { margin-top: 12px; font-size: 13.5px; color: var(--text); }
+
+  .crosscta {
+    margin: 40px 0 8px;
+    display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+    padding: 22px 24px; border-radius: 16px;
+    border: 1px solid var(--accent-border); background: var(--accent-bg);
+  }
+  .crosscta .cc-text { flex: 1 1 260px; min-width: 0; }
+  .crosscta h3 { margin: 0 0 6px; font-size: 18px; color: var(--text-h); font-weight: 600; }
+  .crosscta p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text); }
+  .crosscta .primary { white-space: nowrap; }
 
   .card {
     border: 1px solid var(--border);
