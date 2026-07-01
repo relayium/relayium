@@ -134,7 +134,9 @@ func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		s.renderAdminLogin(w, http.StatusOK, "")
 		return
 	}
-	rows, err := s.store.AdminListUsers(r.Context())
+	rows, _, err := s.store.AdminListUsers(r.Context(), AdminUserQuery{
+		SortBy: "created", SortDir: "desc", Limit: 1000, Offset: 0,
+	})
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
