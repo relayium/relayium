@@ -4,7 +4,7 @@ const en = {
   description:
     "How Relayium handles your data: realtime direct transfers go peer-to-peer and never touch our servers; the stored download-link mode keeps files zero-knowledge encrypted. Accounts are optional and store only an email and display name.",
   updatedLabel: "Last updated",
-  updated: "2026-06-29",
+  updated: "2026-07-01",
   otherDocLabel: "Terms of Service",
   lead: [
     "Relayium is built so that your files stay yours. Realtime direct transfers go peer-to-peer, end-to-end encrypted, and never pass through our servers; the optional stored download-link mode uses zero-knowledge encryption — the server holds only ciphertext it cannot read.",
@@ -38,7 +38,6 @@ const en = {
         "The server stores only ciphertext. It cannot read your file contents, filenames, or keys.",
         "We record the ciphertext size and timestamps (upload time, expiry) for quota management and cleanup.",
         "Ciphertext is automatically deleted at expiry or on the first complete download (burn-after-read), whichever comes first.",
-        "The \"What we never collect\" section below remains accurate: everything the server receives from a stored transfer is ciphertext — plaintext content, filenames, and keys never reach the server.",
       ],
     },
     {
@@ -94,7 +93,7 @@ const zh = {
   description:
     "Relayium 如何处理你的数据：实时直连传输以点对点方式进行，绝不经过我们的服务器；暂存下载链接模式保持文件零知识加密。账号是可选的，仅存储邮箱与显示名。",
   updatedLabel: "最后更新",
-  updated: "2026-06-29",
+  updated: "2026-07-01",
   otherDocLabel: "服务条款",
   lead: [
     "Relayium 的设计宗旨是让你的文件始终属于你。实时直连传输以点对点方式进行，端到端加密，绝不经过我们的服务器；可选的暂存下载链接模式采用零知识加密——服务器仅存储无法解读的密文。",
@@ -126,7 +125,6 @@ const zh = {
         "服务器仅存储密文，无法读取你的文件内容、文件名或密钥。",
         "我们记录密文大小和时间戳（上传时间、有效期）用于配额管理和清理。",
         "密文在到期或首次完整下载（阅后即焚）时自动删除，以先到者为准。",
-        "下方「我们绝不收集什么」一节依然准确：服务器从暂存传输中收到的一切均为密文——明文内容、文件名和密钥永远不会到达服务器。",
       ],
     },
     {
@@ -176,7 +174,7 @@ const ja = {
   description:
     "Relayiumがあなたのデータを扱う方法：リアルタイム直接転送はピアツーピアかつエンドツーエンド暗号化で行われ、当社のサーバーを通過しません。一時保存ダウンロードリンク機能はファイルをゼロ知識暗号化で保護します。アカウントは任意で、メールアドレスと表示名のみを保存します。",
   updatedLabel: "最終更新",
-  updated: "2026-06-29",
+  updated: "2026-07-01",
   otherDocLabel: "利用規約",
   lead: [
     "Relayiumはあなたのファイルが常にあなたのものであるよう設計されています。リアルタイムの直接転送はピアツーピアかつエンドツーエンド暗号化で行われ、当社のサーバーを通過しません——オプションの一時保存ダウンロードリンク機能はゼロ知識暗号化を使用するため、サーバーには解読不能な暗号文のみが保存されます。",
@@ -210,7 +208,6 @@ const ja = {
         "サーバーは暗号文のみを保存します。ファイルの内容、ファイル名、キーを読み取ることはできません。",
         "クォータ管理とクリーンアップのために、暗号文サイズとタイムスタンプ（アップロード時刻、有効期限）を記録します。",
         "暗号文は有効期限切れまたは最初の完全なダウンロード（閲覧後削除）のいずれか早い方で自動削除されます。",
-        "下記の「収集しない情報」は引き続き正確です：サーバーが一時保存転送から受け取るものはすべて暗号文であり、平文コンテンツ、ファイル名、キーはサーバーに届きません。",
       ],
     },
     {
@@ -266,7 +263,7 @@ const ko = {
   description:
     "Relayium이 데이터를 처리하는 방식: 실시간 직접 전송은 피어 투 피어로 이루어지며 당사 서버를 거치지 않습니다. 임시 보관 다운로드 링크 기능은 파일을 영지식 암호화로 보호합니다. 계정은 선택 사항이며 이메일 주소와 표시 이름만 저장합니다.",
   updatedLabel: "최종 업데이트",
-  updated: "2026-06-29",
+  updated: "2026-07-01",
   otherDocLabel: "이용약관",
   lead: [
     "Relayium은 파일이 항상 사용자의 것으로 남도록 설계되었습니다. 실시간 직접 전송은 피어 투 피어로 이루어지며, 엔드 투 엔드로 암호화되어 당사 서버를 통과하지 않습니다——선택적 임시 보관 다운로드 링크 기능은 영지식 암호화를 사용하여 서버에는 해독할 수 없는 암호문만 저장됩니다.",
@@ -300,7 +297,6 @@ const ko = {
         "서버는 암호문만 저장합니다. 파일 내용, 파일 이름, 키를 읽을 수 없습니다.",
         "할당량 관리 및 정리를 위해 암호문 크기와 타임스탬프(업로드 시간, 만료 시간)를 기록합니다.",
         "암호문은 만료 시 또는 첫 번째 완전한 다운로드(열람 후 삭제) 중 먼저 발생하는 시점에 자동 삭제됩니다.",
-        "아래의 '절대 수집하지 않는 정보' 목록은 여전히 정확합니다: 서버가 임시 보관 전송에서 받는 모든 것은 암호문이며 평문 내용, 파일 이름, 키는 서버에 도달하지 않습니다.",
       ],
     },
     {
@@ -352,11 +348,11 @@ const ko = {
 };
 
 const de = {
-  title: "Datenschutzrichtlinie",
+  title: "Datenschutzerklärung",
   description:
     "Wie Relayium mit Ihren Daten umgeht: Echtzeit-Direktübertragungen werden Peer-to-Peer übertragen und berühren nie unsere Server; der Modus für zwischengespeicherte Download-Links hält Dateien Zero-Knowledge-verschlüsselt. Konten sind optional und speichern nur eine E-Mail-Adresse und einen Anzeigenamen.",
   updatedLabel: "Zuletzt aktualisiert",
-  updated: "2026-06-29",
+  updated: "2026-07-01",
   otherDocLabel: "Nutzungsbedingungen",
   lead: [
     "Relayium ist so konzipiert, dass Ihre Dateien Ihnen gehören. Echtzeit-Direktübertragungen erfolgen Peer-to-Peer, Ende-zu-Ende-verschlüsselt, und passieren nie unsere Server – der optionale Modus für zwischengespeicherte Download-Links verwendet Zero-Knowledge-Verschlüsselung, sodass der Server nur Chiffretext speichert, den er nicht lesen kann.",
@@ -390,7 +386,6 @@ const de = {
         "Der Server speichert ausschließlich Chiffretext. Er kann Ihre Dateiinhalte, Dateinamen oder Schlüssel nicht lesen.",
         "Wir erfassen die Chiffretextgröße und Zeitstempel (Upload-Zeitpunkt, Ablaufzeit) für Kontingentverwaltung und Bereinigung.",
         "Der Chiffretext wird automatisch gelöscht, wenn er abläuft oder beim ersten vollständigen Download (einmaliges Lesen) — je nachdem, was zuerst eintritt.",
-        "Die Liste \"Was wir niemals erfassen\" bleibt weiterhin korrekt: Alles, was der Server bei einer zwischengespeicherten Übertragung empfängt, ist Chiffretext — Klartext, Dateinamen und Schlüssel gelangen nie zum Server.",
       ],
     },
     {
@@ -446,7 +441,7 @@ const fr = {
   description:
     "Comment Relayium traite vos données : les transferts directs en temps réel s'effectuent de pair à pair et ne passent jamais par nos serveurs ; le mode de liens de téléchargement stockés maintient les fichiers chiffrés à connaissance nulle. Les comptes sont facultatifs et ne stockent qu'une adresse e-mail et un nom d'affichage.",
   updatedLabel: "Dernière mise à jour",
-  updated: "2026-06-29",
+  updated: "2026-07-01",
   otherDocLabel: "Conditions d'utilisation",
   lead: [
     "Relayium est conçu pour que vos fichiers restent les vôtres. Les transferts directs en temps réel s'effectuent de pair à pair, chiffrés de bout en bout, et ne passent jamais par nos serveurs ; le mode optionnel de liens de téléchargement stockés utilise un chiffrement à connaissance nulle — le serveur ne conserve que du chiffré qu'il ne peut pas lire.",
@@ -480,7 +475,6 @@ const fr = {
         "Le serveur ne stocke que du chiffré. Il ne peut pas lire le contenu de vos fichiers, leurs noms ni les clés.",
         "Nous enregistrons la taille du chiffré et les horodatages (heure d'envoi, expiration) pour la gestion des quotas et le nettoyage.",
         "Le chiffré est automatiquement supprimé à l'expiration ou lors du premier téléchargement complet (lecture unique), selon ce qui survient en premier.",
-        "La liste « Ce que nous ne collectons jamais » ci-dessous reste exacte : tout ce que le serveur reçoit d'un transfert stocké est du chiffré — le contenu en clair, les noms de fichiers et les clés n'atteignent jamais le serveur.",
       ],
     },
     {
