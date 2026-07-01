@@ -37,6 +37,8 @@ Especially valuable areas to scrutinize:
 - **Transfer protocol** (`web/src/lib/transfer.ts`) — framing, chunk integrity, the batch nonce counter.
 - **WebRTC / signaling** (`web/src/lib/webrtc.ts`, `web/src/lib/signaling.ts`, `server/`) — what the
   signaling server can observe or tamper with, and whether the SAS reliably catches a MITM.
+- **Admin dashboard auth** (`server/internal/account/admin.go`, `totp.go`, `throttle.go`) — the optional
+  TOTP 2FA gate on `/admin` login; see [`docs/admin-2fa.md`](docs/admin-2fa.md) for the deployer setup guide.
 
 Out of scope for now (known limitations, documented in [`docs/TESTING.md`](docs/TESTING.md)):
 
