@@ -33,6 +33,30 @@ describe("fetchIceServers", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/ice", { credentials: "include" });
   });
 
+  it("requests /api/ice with ?code= for a pairing code (so codes get TURN too)", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({ iceServers: STUN }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchIceServers("", "424242");
+    expect(fetchMock).toHaveBeenCalledWith("/api/ice?code=424242", {
+      credentials: "include",
+    });
+  });
+
+  it("prefers ?room= over ?code= when both are present", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({ iceServers: STUN }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchIceServers("tok", "424242");
+    expect(fetchMock).toHaveBeenCalledWith("/api/ice?room=tok", {
+      credentials: "include",
+    });
+  });
+
   it("falls back to a STUN entry on a non-ok response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
     const out = await fetchIceServers("tok");

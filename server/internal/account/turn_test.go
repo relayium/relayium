@@ -88,6 +88,46 @@ func TestICEValidTokenIncludesTurn(t *testing.T) {
 	}
 }
 
+func TestICEValidPairCodeIncludesTurn(t *testing.T) {
+	ts, svc, _ := newICEServer(t, "secret")
+	svc.SetPairCodeValidator(func(c string) bool { return c == "424242" })
+
+	resp, _ := ts.Client().Get(ts.URL + "/api/ice?code=424242")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	servers := iceServersFromBody(t, resp)
+	if !hasTURN(servers) {
+		t.Fatalf("valid pairing code should yield a TURN entry, got %+v", servers)
+	}
+	for _, s := range servers {
+		if len(s.URLs) > 0 && s.URLs[0] == "turn:turn.example.com:3478" {
+			if !strings.HasSuffix(s.Username, ":424242") {
+				t.Fatalf("username should embed the code, got %q", s.Username)
+			}
+		}
+	}
+}
+
+func TestICEInvalidPairCodeReturnsStunOnly(t *testing.T) {
+	ts, svc, _ := newICEServer(t, "secret")
+	svc.SetPairCodeValidator(func(c string) bool { return false }) // no live codes
+	resp, _ := ts.Client().Get(ts.URL + "/api/ice?code=000000")
+	servers := iceServersFromBody(t, resp)
+	if hasTURN(servers) {
+		t.Fatalf("invalid code must not yield TURN, got %+v", servers)
+	}
+}
+
+func TestICEPairCodeNoValidatorReturnsStunOnly(t *testing.T) {
+	ts, _, _ := newICEServer(t, "secret") // SetPairCodeValidator never called
+	resp, _ := ts.Client().Get(ts.URL + "/api/ice?code=424242")
+	servers := iceServersFromBody(t, resp)
+	if hasTURN(servers) {
+		t.Fatalf("no validator wired must mean no TURN for codes, got %+v", servers)
+	}
+}
+
 func TestICEInvalidTokenReturnsStunOnly(t *testing.T) {
 	ts, _, _ := newICEServer(t, "secret")
 	resp, _ := ts.Client().Get(ts.URL + "/api/ice?room=bogus")
