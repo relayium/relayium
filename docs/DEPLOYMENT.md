@@ -352,6 +352,7 @@ curl -s https://relayium.com/admin | grep -o '管理员账号\|Relayium 后台'
 | Google button reaches Google but it shows "invalid client" / redirect_uri mismatch | `-google-id/-secret` empty, or redirect URI not registered | Step 6: set creds and register `https://relayium.com/api/auth/google/callback` |
 | Logs in, but reload shows logged-out | Session cookie not `Secure`/`SameSite` viable, usually because `-base-url` is `http://…` while the site is https | Set `-base-url https://relayium.com` and restart |
 | Cross-network transfer can't connect; LAN works | `/api/ice` not proxied (returns HTML) or TURN not configured | Fix `/api/` proxy; configure `-turn-*` (see coturn.md) |
+| Cross-network **pairing-code** transfer hangs at "connecting" 0%, but **share-link** cross-network works | Frontend rebuilt but Go server not (client sends `/api/ice?code=`, old server ignores it → STUN-only for codes). `curl "https://…/api/ice?code=<live code>"` shows no `turn:` entry | Rebuild AND restart the Go server: `cd server && go build -o relayium . && sudo systemctl restart relayium` (see [Redeploying](#redeploying)) |
 | `/privacy` 301-redirects to `/privacy/` | a stricter location forces trailing slash | Rely on `try_files $uri $uri/ /index.html`; don't add a trailing-slash redirect for legal paths (their canonical is slash-less) |
 | `/admin` shows the normal homepage instead of a login form | nginx not proxying `/admin` — it matched `location /` and `try_files` served `index.html`. `curl -s https://…/admin \| grep -o 'End-to-end'` matches | Add the `location /admin` proxy block (Step 4), `nginx -t && systemctl reload nginx` |
 | `/admin` returns 404 | `-admin-pass` not set, so the dashboard is disabled, **or** the running binary predates the admin feature | Set `-admin-pass` (and optionally `-admin-user`) in the systemd unit or `.env`, rebuild, `systemctl restart relayium` |
@@ -360,10 +361,45 @@ curl -s https://relayium.com/admin | grep -o '管理员账号\|Relayium 后台'
 
 ## Redeploying
 
+> **Rebuild BOTH halves.** The frontend (`web/dist`) and the Go server speak a
+> shared contract — a single change often touches both sides at once (the client
+> starts sending a new request shape, the server learns to answer it). If you
+> rebuild only one half you get a **silent mismatch**: no error, just a feature
+> that quietly doesn't work.
+>
+> Real example: the pairing-code TURN fix taught the client to call
+> `/api/ice?code=<code>` and taught the server to return a TURN credential for
+> it. Ship only the new `web/dist` and the new client asks for TURN by code, but
+> the *old* server ignores `?code=` and returns STUN-only — so cross-network
+> pairing-code transfers hang at "connecting" 0% while share-link transfers
+> (which use `?room=<token>`, unchanged) keep working. The asymmetry is the tell.
+
 ```bash
 git pull
-cd web && npm ci && npm run build          # refresh dist + regenerate legal pages
-cd ../server && go build -o relayium .
-sudo systemctl restart relayium
+cd web && npm ci && npm run build          # 1. refresh dist + regenerate legal pages
+cd ../server && go build -o relayium .      # 2. rebuild the Go binary — do NOT skip
+sudo systemctl restart relayium             # 3. restart so the new binary actually runs
 # static is served directly from web/dist; nginx needs no reload unless its config changed
 ```
+
+Step 3 matters even if `go build` reports nothing to do: `systemctl restart`
+is what swaps the running process over to the new binary. `go build` alone only
+writes the file on disk.
+
+### Verify a redeploy took (both halves)
+
+```bash
+# Server half — confirm the running binary is current. With a live pairing code
+# (mint one in the browser, or POST /api/pair), /api/ice must return a turn: entry:
+CODE=123456   # a code you just minted, still within its 5-min TTL
+curl -s "https://relayium.com/api/ice?code=$CODE" | grep -o 'turn:[^"]*' \
+  || echo "NO TURN for code — old server binary (rebuild + restart) or TURN not configured"
+
+# Frontend half — confirm the new hashed bundle is being served (name changes per build):
+curl -s https://relayium.com/ | grep -o 'assets/index-[^"]*\.js'
+```
+
+If `/api/ice?code=` returns TURN but `/api/ice?room=<token>` also does and
+cross-network *still* fails, the mismatch is ruled out — move on to coturn
+(relay ports open? `static-auth-secret` == server `-turn-secret`? `turns:` cert
+valid?) using `chrome://webrtc-internals` to see which ICE candidates pair.
