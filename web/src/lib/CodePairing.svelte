@@ -14,7 +14,12 @@
   let entry = $state("");
   let busy = $state(false);
   let err = $state("");
-  let copied = $state(false);
+  // Which copy button last fired ("" = none) so each shows its own "copied" state.
+  let copied = $state<"" | "code" | "link">("");
+
+  // The full join link the recipient opens (same string the QR encodes). Opening
+  // it auto-joins the code room, so forwarding this link == sharing the code.
+  const joinLink = $derived(`${location.origin}${CROSS_PATH}#c=${roomCode}`);
 
   // isMinter: true on the device that minted the code (EXP_KEY written to
   // sessionStorage); false on the recipient who typed in a code.
@@ -41,9 +46,8 @@
   let qrDataUrl = $state("");
   $effect(() => {
     if (isMinter && roomCode) {
-      const link = `${location.origin}${CROSS_PATH}#c=${roomCode}`;
       import("qrcode").then((m) =>
-        m.toDataURL(link, { margin: 1, width: 160 }).then((u) => (qrDataUrl = u)),
+        m.toDataURL(joinLink, { margin: 1, width: 160 }).then((u) => (qrDataUrl = u)),
       );
     } else {
       qrDataUrl = "";
@@ -70,10 +74,10 @@
     enterRoom({ code: entry });
   }
 
-  async function copy() {
-    await navigator.clipboard.writeText(roomCode);
-    copied = true;
-    setTimeout(() => (copied = false), 2000);
+  async function copyText(what: "code" | "link") {
+    await navigator.clipboard.writeText(what === "code" ? roomCode : joinLink);
+    copied = what;
+    setTimeout(() => { if (copied === what) copied = ""; }, 2000);
   }
 </script>
 
@@ -86,7 +90,8 @@
       <p class="lead">{t.pair.yourCode}</p>
       <div class="code">{roomCode}</div>
       <div class="row">
-        <button class="btn btn-ghost" onclick={copy}>{copied ? t.pair.copied : t.pair.copy}</button>
+        <button class="btn btn-ghost" onclick={() => copyText("code")}>{copied === "code" ? t.pair.copied : t.pair.copy}</button>
+        <button class="btn btn-ghost" onclick={() => copyText("link")}>{copied === "link" ? t.pair.copied : t.pair.copyLink}</button>
         {#if remaining}<span class="ttl">{t.pair.expiresIn(remaining)}</span>{/if}
       </div>
       {#if qrDataUrl}

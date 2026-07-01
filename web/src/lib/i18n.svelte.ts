@@ -121,6 +121,7 @@ export interface Messages {
     expired: string;
     copy: string;
     copied: string;
+    copyLink: string; // copies the full join link for forwarding
     errExpired: string;
   };
   stored: {
@@ -300,6 +301,7 @@ const zh: Messages = {
     expired: "配对码已失效，请重新生成",
     copy: "复制",
     copied: "已复制",
+    copyLink: "复制链接",
     errExpired: "配对码无效或已过期",
   },
   stored: {
@@ -510,6 +512,7 @@ const en: Messages = {
     expired: "Pairing code expired — generate a new one",
     copy: "Copy",
     copied: "Copied",
+    copyLink: "Copy link",
     errExpired: "Pairing code is invalid or expired",
   },
   stored: {
@@ -720,6 +723,7 @@ const ja: Messages = {
     expired: "ペアリングコードが失効しました。再生成してください",
     copy: "コピー",
     copied: "コピーしました",
+    copyLink: "リンクをコピー",
     errExpired: "ペアリングコードが無効か期限切れです",
   },
   stored: {
@@ -930,6 +934,7 @@ const ko: Messages = {
     expired: "페어링 코드가 만료되었습니다. 다시 생성하세요",
     copy: "복사",
     copied: "복사됨",
+    copyLink: "링크 복사",
     errExpired: "페어링 코드가 잘못되었거나 만료되었습니다",
   },
   stored: {
@@ -1140,6 +1145,7 @@ const de: Messages = {
     expired: "Kopplungscode abgelaufen — bitte neu erzeugen",
     copy: "Kopieren",
     copied: "Kopiert",
+    copyLink: "Link kopieren",
     errExpired: "Kopplungscode ist ungültig oder abgelaufen",
   },
   stored: {
@@ -1350,6 +1356,7 @@ const fr: Messages = {
     expired: "Code d'appairage expiré — générez-en un nouveau",
     copy: "Copier",
     copied: "Copié",
+    copyLink: "Copier le lien",
     errExpired: "Code d'appairage invalide ou expiré",
   },
   stored: {
