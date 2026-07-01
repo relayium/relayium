@@ -30,3 +30,11 @@ export function enterRoom(next: { token?: string; code?: string }): void {
   token = t;
   code = c;
 }
+
+/** Drop any active room without touching the URL — the caller owns navigation
+ *  (used by the tab router, which sets its own pathname). App reconnects the
+ *  socket to the room-less (LAN) endpoint via its effect. */
+export function clearRoom(): void {
+  token = "";
+  code = "";
+}

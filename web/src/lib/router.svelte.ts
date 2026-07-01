@@ -4,6 +4,7 @@
 // implies the cross-network page so a shared link lands the recipient correctly.
 
 import { parseTransferToken, parseCodeParam, CROSS_PATH, DOWNLOAD_PREFIX } from "./transfer-link";
+import { clearRoom } from "./room.svelte";
 
 export type Route = "lan" | "cross" | "download";
 
@@ -34,20 +35,12 @@ export function syncRouteFromLocation(): void {
   route = routeFromLocation(location.pathname, location.hash);
 }
 
-/** Switch tabs without reloading: rewrite the URL and update the route. Drops any
- *  stale token fragment so a plain tab switch never re-enters a transfer room.
- *  If a transfer token is in the current URL, the signaling socket is bound to the
- *  2-peer token room. Leaving it must fully reload so the socket reconnects
- *  into the correct room (LAN, or a fresh token-less cross page). */
+/** Switch tabs without reloading: drop any active token/code room, rewrite the URL,
+ *  and update the route. Clearing the room makes App's effect reconnect the
+ *  signaling socket to the room-less (LAN) endpoint, so no page reload is needed. */
 export function navigate(r: Route): void {
   const pathname = r === "cross" ? CROSS_PATH : "/";
-  // If a transfer token is in the URL, the signaling socket is bound to the
-  // 2-peer token room. Leaving it must fully reload so the socket reconnects
-  // into the correct room (LAN, or a fresh token-less cross page).
-  if (parseTransferToken(location.hash) || parseCodeParam(location.hash)) {
-    location.href = pathname; // full navigation + reload; drops the token/code
-    return;
-  }
+  clearRoom(); // leaving a 2-peer token/code room rebinds the socket via App's effect
   history.pushState({}, "", pathname);
   route = r;
 }

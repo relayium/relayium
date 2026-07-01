@@ -36,6 +36,7 @@ export interface Messages {
   recvFrom: (name: string) => string;
   fileCounter: (i: number, n: number) => string;
   close: string;
+  startOver: string; // leave the current room and return to the method choices
   peersTitle: string;
   crossPeersTitle: string; // heading for the single connected peer on the cross-network page
   emptyPeers: string;
@@ -209,6 +210,7 @@ const zh: Messages = {
   recvFrom: (n) => `接收 ← ${n}`,
   fileCounter: (i, n) => `文件 ${i}/${n}`,
   close: "关闭",
+  startOver: "← 重新选择",
   peersTitle: "附近的设备",
   crossPeersTitle: "已连接的对方",
   pickSendTo: (n) => `点击或拖放文件，发送给 ${n}`,
@@ -413,6 +415,7 @@ const en: Messages = {
   recvFrom: (n) => `Receive ← ${n}`,
   fileCounter: (i, n) => `File ${i}/${n}`,
   close: "Close",
+  startOver: "← Start over",
   peersTitle: "Nearby devices",
   crossPeersTitle: "Connected peer",
   pickSendTo: (n) => `Click or drop files to send to ${n}`,
@@ -617,6 +620,7 @@ const ja: Messages = {
   recvFrom: (n) => `受信 ← ${n}`,
   fileCounter: (i, n) => `ファイル ${i}/${n}`,
   close: "閉じる",
+  startOver: "← やり直す",
   peersTitle: "近くのデバイス",
   crossPeersTitle: "接続中の相手",
   pickSendTo: (n) => `クリックまたはドロップで ${n} に送信`,
@@ -821,6 +825,7 @@ const ko: Messages = {
   recvFrom: (n) => `받기 ← ${n}`,
   fileCounter: (i, n) => `파일 ${i}/${n}`,
   close: "닫기",
+  startOver: "← 다시 선택",
   peersTitle: "주변 기기",
   crossPeersTitle: "연결된 상대",
   pickSendTo: (n) => `클릭하거나 파일을 놓아 ${n}에게 전송`,
@@ -1025,6 +1030,7 @@ const de: Messages = {
   recvFrom: (n) => `Empfangen ← ${n}`,
   fileCounter: (i, n) => `Datei ${i}/${n}`,
   close: "Schließen",
+  startOver: "← Von vorn",
   peersTitle: "Geräte in der Nähe",
   crossPeersTitle: "Verbundener Peer",
   pickSendTo: (n) => `Klicken oder Dateien ablegen, um an ${n} zu senden`,
@@ -1229,6 +1235,7 @@ const fr: Messages = {
   recvFrom: (n) => `Réception ← ${n}`,
   fileCounter: (i, n) => `Fichier ${i}/${n}`,
   close: "Fermer",
+  startOver: "← Recommencer",
   peersTitle: "Appareils à proximité",
   crossPeersTitle: "Correspondant connecté",
   pickSendTo: (n) => `Cliquez ou déposez des fichiers pour envoyer à ${n}`,
