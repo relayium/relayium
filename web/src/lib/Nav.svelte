@@ -40,8 +40,8 @@
 
 <style>
   .topnav {
-    display: flex; align-items: center; gap: 12px;
-    padding: 14px 0 10px; margin-bottom: 4px;
+    display: flex; align-items: center; gap: var(--space-3);
+    padding: var(--space-4) 0 var(--space-3); margin-bottom: var(--space-1);
   }
   .brand { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text-h); font-weight: 600; }
   .brand .mark {
@@ -53,16 +53,16 @@
 
   .tabs { display: flex; gap: 6px; margin: 0 auto 0 8px; }
   .tab {
-    font: inherit; font-size: 14px; padding: 7px 14px; border-radius: 999px; cursor: pointer;
+    font: inherit; font-size: var(--fs-sm); padding: var(--space-2) var(--space-4); border-radius: 999px; cursor: pointer;
     border: 1px solid var(--border); background: var(--social-bg); color: var(--text);
-    transition: border-color .15s, color .15s, background .15s;
+    transition: border-color .13s, color .13s, background .13s;
   }
   .tab:hover { border-color: var(--accent-border); }
   .tab.active { color: #fff; background: var(--accent); border-color: var(--accent); }
 
   .lang {
-    font: inherit; font-size: 13px; padding: 5px 28px 5px 10px;
-    border-radius: 8px; border: 1px solid var(--border);
+    font: inherit; font-size: var(--fs-xs); padding: 5px 28px 5px 10px;
+    border-radius: var(--radius-sm); border: 1px solid var(--border);
     background: var(--social-bg); color: var(--text-h); cursor: pointer;
   }
   .lang:hover { border-color: var(--accent-border); }
