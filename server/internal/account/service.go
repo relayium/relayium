@@ -14,21 +14,22 @@ import (
 )
 
 type Config struct {
-	BaseURL        string
-	SessionTTL     time.Duration
-	MagicTTL       time.Duration
-	TransferTTL    time.Duration
-	STUNURLs       []string
-	TURNURLs       []string
-	TURNSecret     string
-	TURNCredTTL    time.Duration
-	GoogleClientID string
-	GoogleSecret   string
-	GoogleRedirect string
-	EnableGoogle   bool
-	EnableMagic    bool
-	AdminUser      string
-	AdminPassword  string
+	BaseURL         string
+	SessionTTL      time.Duration
+	MagicTTL        time.Duration
+	TransferTTL     time.Duration
+	STUNURLs        []string
+	TURNURLs        []string
+	TURNSecret      string
+	TURNCredTTL     time.Duration
+	GoogleClientID  string
+	GoogleSecret    string
+	GoogleRedirect  string
+	EnableGoogle    bool
+	EnableMagic     bool
+	AdminUser       string
+	AdminPassword   string
+	AdminTOTPSecret string // base32 TOTP secret; empty disables admin 2FA
 	// Stored-transfer limits (env/flag defaults; DB settings table overrides these live).
 	MaxFileSize int64 // bytes
 	DailyQuota  int64 // bytes per rolling 24h
@@ -37,14 +38,16 @@ type Config struct {
 }
 
 type Service struct {
-	store           Store
-	mailer          Mailer
-	cfg             Config
-	now             func() time.Time
-	fetchGoogleUser func(ctx context.Context, code string) (sub, email, name string, verified bool, err error)
-	adminSessions   map[string]int64 // token -> 过期 unix 秒
-	adminMu         sync.Mutex
-	blobs           storage.BlobStore // nil until SetBlobStore; stored-transfer disabled when nil
+	store             Store
+	mailer            Mailer
+	cfg               Config
+	now               func() time.Time
+	fetchGoogleUser   func(ctx context.Context, code string) (sub, email, name string, verified bool, err error)
+	adminSessions     map[string]int64 // token -> 过期 unix 秒
+	adminMu           sync.Mutex
+	adminTOTPMu       sync.Mutex
+	adminTOTPLastStep int64             // last TOTP time-step accepted for admin login (replay guard)
+	blobs             storage.BlobStore // nil until SetBlobStore; stored-transfer disabled when nil
 }
 
 func NewService(store Store, mailer Mailer, cfg Config) *Service {
