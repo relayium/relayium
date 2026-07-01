@@ -67,17 +67,30 @@ func (s *Service) isAdminReq(r *http.Request) bool {
 }
 
 func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
+	ip := clientIP(r)
+	if s.adminLogins.locked(ip, s.now()) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		s.renderAdminLogin(w, "尝试过于频繁，请稍后再试")
+		return
+	}
+
 	user := r.FormValue("username")
 	pass := r.FormValue("password")
 	// Compare both fields in constant time and combine without short-circuit,
 	// so neither a wrong username nor a wrong password is distinguishable by timing.
 	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(s.adminUser()))
 	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(s.cfg.AdminPassword))
-	if userOK&passOK != 1 {
+	credsOK := userOK&passOK == 1
+	totpOK := !s.AdminTOTPEnabled() || s.validateAdminTOTP(r.FormValue("totp"))
+
+	if !credsOK || !totpOK {
+		s.adminLogins.recordFail(ip, s.now())
 		w.WriteHeader(http.StatusUnauthorized)
-		renderAdminLogin(w, "账号或密码错误")
+		s.renderAdminLogin(w, "账号、密码或验证码错误")
 		return
 	}
+
+	s.adminLogins.reset(ip)
 	tok := s.newAdminSession()
 	http.SetCookie(w, &http.Cookie{
 		Name: adminCookie, Value: tok, Path: "/admin",
@@ -114,7 +127,7 @@ type adminHomeData struct {
 
 func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
-		renderAdminLogin(w, "")
+		s.renderAdminLogin(w, "")
 		return
 	}
 	rows, err := s.store.AdminListUsers(r.Context())
@@ -173,9 +186,14 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 
-func renderAdminLogin(w http.ResponseWriter, errMsg string) {
+type adminLoginData struct {
+	Error string
+	TOTP  bool // render the 6-digit code field
+}
+
+func (s *Service) renderAdminLogin(w http.ResponseWriter, errMsg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = adminLoginTmpl.Execute(w, map[string]string{"Error": errMsg})
+	_ = adminLoginTmpl.Execute(w, adminLoginData{Error: errMsg, TOTP: s.AdminTOTPEnabled()})
 }
 
 var adminLoginTmpl = template.Must(template.New("login").Parse(`<!doctype html>
@@ -188,6 +206,7 @@ input,button{font:inherit;padding:8px 10px;width:100%;box-sizing:border-box;marg
 <form method="post" action="/admin/login">
 <input type="text" name="username" placeholder="管理员账号" autofocus autocomplete="username">
 <input type="password" name="password" placeholder="管理员密码" autocomplete="current-password">
+{{if .TOTP}}<input type="text" name="totp" placeholder="6 位验证码" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6">{{end}}
 <button type="submit">登录</button>
 </form></body></html>`))
 
