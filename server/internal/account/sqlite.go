@@ -83,6 +83,8 @@ CREATE TABLE IF NOT EXISTS upload_events (
   uploaded_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_upload_events_user ON upload_events(user_id, uploaded_at);
+CREATE INDEX IF NOT EXISTS idx_usage_recorded ON usage_events(recorded_at);
+CREATE INDEX IF NOT EXISTS idx_upload_uploaded ON upload_events(uploaded_at);
 CREATE TABLE IF NOT EXISTS settings (
   key        TEXT PRIMARY KEY,
   value      INTEGER NOT NULL,
@@ -366,15 +368,47 @@ func (s *SQLiteStore) GetCredentials(ctx context.Context, email string) (string,
 	return uid, hash.String, true, nil
 }
 
-func (s *SQLiteStore) AdminListUsers(ctx context.Context) ([]AdminUserRow, error) {
+// escapeLike 转义 LIKE 通配符,使搜索文本按字面匹配(配合 ESCAPE '\')。
+func escapeLike(s string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+}
+
+func (s *SQLiteStore) AdminListUsers(ctx context.Context, q AdminUserQuery) ([]AdminUserRow, int64, error) {
+	where := ""
+	var whereArgs []any
+	if q.Search != "" {
+		where = ` WHERE (u.email LIKE ? ESCAPE '\' OR u.display_name LIKE ? ESCAPE '\')`
+		like := "%" + escapeLike(q.Search) + "%"
+		whereArgs = append(whereArgs, like, like)
+	}
+
+	var total int64
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users u`+where, whereArgs...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	orderCol := "u.created_at"
+	switch q.SortBy {
+	case "email":
+		orderCol = "u.email"
+	case "relayed":
+		orderCol = "relayed_bytes"
+	}
+	dir := "DESC"
+	if strings.EqualFold(q.SortDir, "asc") {
+		dir = "ASC"
+	}
+
+	listArgs := append(append([]any{}, whereArgs...), q.Limit, q.Offset)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT u.id, u.email, u.display_name, u.created_at,
 		       (SELECT COUNT(*) FROM devices d WHERE d.user_id = u.id),
-		       (SELECT COALESCE(SUM(relayed_bytes), 0) FROM usage_events e WHERE e.user_id = u.id)
-		FROM users u
-		ORDER BY u.created_at DESC`)
+		       (SELECT COALESCE(SUM(relayed_bytes), 0) FROM usage_events e WHERE e.user_id = u.id) AS relayed_bytes
+		FROM users u`+where+`
+		ORDER BY `+orderCol+` `+dir+`, u.id ASC
+		LIMIT ? OFFSET ?`, listArgs...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -384,46 +418,74 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context) ([]AdminUserRow, error
 		var row AdminUserRow
 		if err := rows.Scan(&row.ID, &row.Email, &row.DisplayName, &row.CreatedAt,
 			&row.DeviceCount, &row.RelayedBytes); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		index[row.ID] = len(out)
 		out = append(out, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	// 单独一遍把 provider 摊到对应用户，避免 N+1。
-	irows, err := s.db.QueryContext(ctx, `SELECT user_id, provider FROM identities`)
-	if err != nil {
-		return nil, err
-	}
-	defer irows.Close()
-	seen := map[string]map[string]bool{}
-	for irows.Next() {
-		var uid, provider string
-		if err := irows.Scan(&uid, &provider); err != nil {
-			return nil, err
+	// 单独一遍把 provider 摊到本页用户,避免 N+1;查询按本页 user_id 范围限定,避免全表扫描。
+	if len(out) > 0 {
+		ids := make([]any, len(out))
+		ph := make([]string, len(out))
+		for i := range out {
+			ids[i] = out[i].ID
+			ph[i] = "?"
 		}
-		i, ok := index[uid]
-		if !ok {
-			continue
+		irows, err := s.db.QueryContext(ctx,
+			`SELECT user_id, provider FROM identities WHERE user_id IN (`+strings.Join(ph, ",")+`)`, ids...)
+		if err != nil {
+			return nil, 0, err
 		}
-		if seen[uid] == nil {
-			seen[uid] = map[string]bool{}
+		defer irows.Close()
+		seen := map[string]map[string]bool{}
+		for irows.Next() {
+			var uid, provider string
+			if err := irows.Scan(&uid, &provider); err != nil {
+				return nil, 0, err
+			}
+			i, ok := index[uid]
+			if !ok {
+				continue
+			}
+			if seen[uid] == nil {
+				seen[uid] = map[string]bool{}
+			}
+			if !seen[uid][provider] {
+				seen[uid][provider] = true
+				out[i].Methods = append(out[i].Methods, provider)
+			}
 		}
-		if !seen[uid][provider] {
-			seen[uid][provider] = true
-			out[i].Methods = append(out[i].Methods, provider)
+		if err := irows.Err(); err != nil {
+			return nil, 0, err
 		}
-	}
-	if err := irows.Err(); err != nil {
-		return nil, err
 	}
 	for i := range out {
 		sort.Strings(out[i].Methods)
 	}
-	return out, nil
+	return out, total, nil
+}
+
+func (s *SQLiteStore) AdminMetrics(ctx context.Context, now int64) (AdminMetrics, error) {
+	var m AdminMetrics
+	err := s.db.QueryRowContext(ctx, `
+		SELECT
+		  (SELECT COUNT(*) FROM users),
+		  (SELECT COUNT(*) FROM stored_files WHERE expires_at > ?),
+		  (SELECT COALESCE(SUM(size),0) FROM stored_files WHERE expires_at > ?),
+		  (SELECT COALESCE(SUM(relayed_bytes),0) FROM usage_events WHERE recorded_at >= ?),
+		  (SELECT COALESCE(SUM(relayed_bytes),0) FROM usage_events WHERE recorded_at >= ?),
+		  (SELECT COALESCE(SUM(bytes),0) FROM upload_events WHERE uploaded_at >= ?)`,
+		now, now, now-86400, now-604800, now-86400,
+	).Scan(&m.TotalUsers, &m.ActiveStoredFiles, &m.ActiveStoredBytes,
+		&m.RelayedBytes24h, &m.RelayedBytes7d, &m.UploadedBytes24h)
+	if err != nil {
+		return AdminMetrics{}, err
+	}
+	return m, nil
 }
 
 func b2i(b bool) int {

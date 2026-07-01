@@ -440,12 +440,12 @@ func TestAdminListUsersAggregates(t *testing.T) {
 	u2, _ := s.UpsertUserByEmail(ctx, "solo@example.com", "Solo")
 	_ = s.LinkIdentity(ctx, "password", "solo@example.com", u2.ID)
 
-	rows, err := s.AdminListUsers(ctx)
+	rows, total, err := s.AdminListUsers(ctx, AdminUserQuery{Limit: 10})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	if len(rows) != 2 {
-		t.Fatalf("want 2 rows, got %d", len(rows))
+	if total != 2 || len(rows) != 2 {
+		t.Fatalf("want 2 rows, got total=%d len=%d", total, len(rows))
 	}
 	var agg *AdminUserRow
 	for i := range rows {
@@ -467,5 +467,170 @@ func TestAdminListUsersAggregates(t *testing.T) {
 	sort.Strings(got)
 	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("methods = %v, want %v", agg.Methods, want)
+	}
+}
+
+func TestAdminMetrics(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	now := int64(1_700_000_000)
+
+	u, err := s.UpsertUserByEmail(ctx, "a@example.com", "A")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// stored_files: one active (expires in future), one expired.
+	mustCreateStored(t, s, u.ID, "sf-active", 1000, now+3600)
+	mustCreateStored(t, s, u.ID, "sf-expired", 9999, now-1)
+
+	// usage_events: in-24h, in-7d-not-24h, older-than-7d.
+	mustUsage(t, s, u.ID, "ue-24h", 100, now-10)
+	mustUsage(t, s, u.ID, "ue-7d", 200, now-2*86400)
+	mustUsage(t, s, u.ID, "ue-old", 400, now-8*86400)
+
+	// upload_events: in-24h (incl. exact boundary) + older.
+	mustUpload(t, s, u.ID, "up-24h", 50, now-86400) // boundary: >= now-86400 → included
+	mustUpload(t, s, u.ID, "up-old", 70, now-86401) // excluded
+
+	m, err := s.AdminMetrics(ctx, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := AdminMetrics{
+		TotalUsers:        1,
+		ActiveStoredFiles: 1,
+		ActiveStoredBytes: 1000,
+		RelayedBytes24h:   100,
+		RelayedBytes7d:    300, // 100 + 200
+		UploadedBytes24h:  50,
+	}
+	if m != want {
+		t.Fatalf("metrics mismatch:\n got %+v\nwant %+v", m, want)
+	}
+}
+
+func TestAdminListUsersQuery(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// three users with distinct created_at, names, and relay totals.
+	mkUser := func(email, name string, created int64) string {
+		u, err := s.UpsertUserByEmail(ctx, email, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// force created_at deterministically
+		if _, err := s.db.ExecContext(ctx, `UPDATE users SET created_at=? WHERE id=?`, created, u.ID); err != nil {
+			t.Fatal(err)
+		}
+		return u.ID
+	}
+	uA := mkUser("alice@example.com", "Alice", 100)
+	mkUser("bob@example.com", "Bob 50%", 200) // literal % to test escaping
+	mkUser("carol@example.com", "Carol", 300)
+	mustUsage(t, s, uA, "u1", 999, 1_700_000_000) // Alice has the biggest relay total
+
+	all := func(q AdminUserQuery) ([]AdminUserRow, int64) {
+		rows, total, err := s.AdminListUsers(ctx, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rows, total
+	}
+
+	// default sort = created desc → Carol, Bob, Alice
+	rows, total := all(AdminUserQuery{Limit: 10})
+	if total != 3 || len(rows) != 3 || rows[0].Email != "carol@example.com" || rows[2].Email != "alice@example.com" {
+		t.Fatalf("default sort/total wrong: total=%d rows=%v", total, emails(rows))
+	}
+
+	// search by name substring
+	rows, total = all(AdminUserQuery{Search: "carol", Limit: 10})
+	if total != 1 || len(rows) != 1 || rows[0].Email != "carol@example.com" {
+		t.Fatalf("search miss: total=%d rows=%v", total, emails(rows))
+	}
+
+	// literal % must match only Bob, not act as wildcard
+	rows, _ = all(AdminUserQuery{Search: "50%", Limit: 10})
+	if len(rows) != 1 || rows[0].Email != "bob@example.com" {
+		t.Fatalf("LIKE escape failed: rows=%v", emails(rows))
+	}
+
+	// sort by email asc
+	rows, _ = all(AdminUserQuery{SortBy: "email", SortDir: "asc", Limit: 10})
+	if rows[0].Email != "alice@example.com" || rows[2].Email != "carol@example.com" {
+		t.Fatalf("email asc wrong: %v", emails(rows))
+	}
+
+	// sort by email desc → Carol first
+	rows, _ = all(AdminUserQuery{SortBy: "email", SortDir: "desc", Limit: 10})
+	if rows[0].Email != "carol@example.com" {
+		t.Fatalf("email desc wrong: %v", emails(rows))
+	}
+
+	// sort by created asc → Alice first
+	rows, _ = all(AdminUserQuery{SortBy: "created", SortDir: "asc", Limit: 10})
+	if rows[0].Email != "alice@example.com" {
+		t.Fatalf("created asc wrong: %v", emails(rows))
+	}
+
+	// sort by relayed desc → Alice first
+	rows, _ = all(AdminUserQuery{SortBy: "relayed", SortDir: "desc", Limit: 10})
+	if rows[0].Email != "alice@example.com" {
+		t.Fatalf("relayed desc wrong: %v", emails(rows))
+	}
+
+	// sort by relayed asc → Alice last (she has the only/biggest relay total)
+	rows, _ = all(AdminUserQuery{SortBy: "relayed", SortDir: "asc", Limit: 10})
+	if rows[2].Email != "alice@example.com" {
+		t.Fatalf("relayed asc wrong: %v", emails(rows))
+	}
+
+	// pagination: limit 2 offset 2 → one row (the oldest, Alice)
+	rows, total = all(AdminUserQuery{Limit: 2, Offset: 2})
+	if total != 3 || len(rows) != 1 || rows[0].Email != "alice@example.com" {
+		t.Fatalf("paging wrong: total=%d rows=%v", total, emails(rows))
+	}
+
+	// invalid sort/dir fall back to created desc
+	rows, _ = all(AdminUserQuery{SortBy: "; DROP", SortDir: "sideways", Limit: 10})
+	if rows[0].Email != "carol@example.com" {
+		t.Fatalf("fallback wrong: %v", emails(rows))
+	}
+}
+
+func emails(rows []AdminUserRow) []string {
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = r.Email
+	}
+	return out
+}
+
+// helpers
+func mustCreateStored(t *testing.T, s *SQLiteStore, uid, id string, size, expires int64) {
+	t.Helper()
+	if err := s.CreateStoredFile(context.Background(), StoredFile{
+		ID: id, UserID: uid, BlobKey: id, EncManifest: []byte("m"),
+		Size: size, CreatedAt: expires - 100, ExpiresAt: expires,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+func mustUsage(t *testing.T, s *SQLiteStore, uid, alloc string, bytes, at int64) {
+	t.Helper()
+	if err := s.RecordUsage(context.Background(), UsageEvent{
+		AllocID: alloc, Token: alloc, UserID: uid, RelayedBytes: bytes, RecordedAt: at,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+func mustUpload(t *testing.T, s *SQLiteStore, uid, id string, bytes, at int64) {
+	t.Helper()
+	if err := s.RecordUpload(context.Background(), UploadEvent{
+		ID: id, UserID: uid, Bytes: bytes, UploadedAt: at,
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
