@@ -501,8 +501,8 @@
         <div class="sas">{t.codeLabel} <code>{sasCode}</code> — {t.codeCompare}</div>
       {/if}
       <div class="actions">
-        <button class="primary" onclick={() => acceptFn?.()}>{t.accept}</button>
-        <button class="ghost" onclick={() => rejectFn?.()}>{t.decline}</button>
+        <button class="btn btn-primary" onclick={() => acceptFn?.()}>{t.accept}</button>
+        <button class="btn btn-ghost" onclick={() => rejectFn?.()}>{t.decline}</button>
       </div>
     </section>
   {/if}
@@ -575,7 +575,7 @@
         <h3>{t.homeCross.title}</h3>
         <p>{t.homeCross.desc}</p>
       </div>
-      <button class="primary" onclick={() => navigate("cross")}>{t.homeCross.cta}</button>
+      <button class="btn btn-primary" onclick={() => navigate("cross")}>{t.homeCross.cta}</button>
     </section>
 
     <FeatureStrip />
@@ -606,7 +606,8 @@
     text-align: left;
   }
 
-  h2 { font-size: 18px; margin: 0 0 12px; }
+  /* In-app section headings stay modest; marketing sections use the larger global --fs-h2. */
+  h2 { font-size: var(--fs-h3); margin: 0 0 var(--space-3); }
 
   .toast {
     position: sticky; top: 12px; z-index: 5;
@@ -621,21 +622,21 @@
     color: var(--text-h); background: var(--accent-bg); border: 1px solid var(--accent-border);
   }
 
-  .guide { margin: 32px 0 24px; }
+  .guide { margin: var(--section-gap) 0 var(--space-5); }
   .guide ol { margin: 0; padding-left: 22px; }
   .guide li { margin: 7px 0; }
-  .guide .hint { margin-top: 12px; font-size: 13.5px; color: var(--text); }
+  .guide .hint { margin-top: var(--space-3); font-size: var(--fs-xs); color: var(--text); }
 
   .crosscta {
-    margin: 40px 0 8px;
-    display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
-    padding: 22px 24px; border-radius: 16px;
+    margin: var(--section-gap) 0 var(--space-2);
+    display: flex; align-items: center; gap: var(--space-5); flex-wrap: wrap;
+    padding: var(--space-5) var(--space-6); border-radius: var(--radius);
     border: 1px solid var(--accent-border); background: var(--accent-bg);
   }
   .crosscta .cc-text { flex: 1 1 260px; min-width: 0; }
   .crosscta h3 { margin: 0 0 6px; font-size: 18px; color: var(--text-h); font-weight: 600; }
   .crosscta p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text); }
-  .crosscta .primary { white-space: nowrap; }
+  .crosscta .btn { white-space: nowrap; }
 
   .card {
     border: 1px solid var(--border);
@@ -660,28 +661,25 @@
   }
   .sas code { font-size: 16px; font-weight: 700; letter-spacing: 1px; background: transparent; padding: 0 2px; }
 
-  .actions { display: flex; gap: 10px; }
-  button {
-    font: inherit; font-size: 15px; padding: 9px 22px; border-radius: 9px; cursor: pointer;
-    border: 1px solid var(--border); background: var(--bg); color: var(--text-h);
-    transition: filter .15s, box-shadow .15s, transform .05s;
-  }
-  button:hover { box-shadow: var(--shadow); }
-  button:active { transform: translateY(1px); }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button.primary:hover { filter: brightness(1.08); }
+  .actions { display: flex; gap: var(--space-3); }
 
   .xfer-head { display: flex; align-items: center; gap: 10px; }
   .xfer-head .label { color: var(--accent); font-size: 14px; font-weight: 500; white-space: nowrap; }
   .xfer-head .count { color: var(--text); font-size: 13px; margin-left: auto; word-break: break-all; text-align: right; }
-  button.x { margin-left: 8px; padding: 2px 8px; font-size: 13px; border-radius: 7px; color: var(--text); }
+  button.x {
+    margin-left: 8px; padding: 2px 8px; font: inherit; font-size: var(--fs-xs);
+    border-radius: 7px; cursor: pointer; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text);
+    transition: color .13s, box-shadow .13s;
+  }
+  button.x:hover { color: var(--text-h); box-shadow: var(--shadow); }
   .status { font-size: 13.5px; color: var(--text); margin: 8px 0 10px; }
 
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; }
   .fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), #6d28d9); transition: width .2s ease; }
   .meta { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 12.5px; color: var(--text); }
 
-  .peers { margin-top: 30px; }
+  .peers { margin-top: var(--space-7); }
   .peers h2 { font-size: 20px; }
   .peers ul {
     list-style: none; padding: 0; margin: 0;
@@ -719,7 +717,7 @@
   }
 
   footer {
-    margin-top: 32px; padding-top: 18px; border-top: 1px solid var(--border);
+    margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--border);
     display: flex; flex-direction: column; align-items: center; gap: 10px;
     font-size: 12.5px; color: var(--text); text-align: center;
   }
