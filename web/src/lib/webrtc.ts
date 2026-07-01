@@ -22,6 +22,10 @@ interface ConnectOpts {
   onPeerKey: (k: Uint8Array) => void;
   config?: RtcConfig;
   initialSignal?: InboundSignal;
+  /** Notified whenever the peer connection changes state. Lets the UI surface a
+   *  drop as a failed transfer instead of hanging forever. "failed"/"closed" are
+   *  terminal; a transient "disconnected" triggers an automatic ICE restart. */
+  onStateChange?: (state: RTCPeerConnectionState) => void;
 }
 
 export interface Conn {
@@ -87,10 +91,30 @@ export async function connect(opts: ConnectOpts): Promise<Conn> {
     if (from === peerId) handleSignal(data as InboundSignal).catch((err) => console.error("relayium signal error", err));
   });
 
-  // Once the connection reaches a terminal state, stop routing this peer's
-  // signals so listeners don't pile up across repeated transfers.
+  // A transient "disconnected" (a NAT rebinding, a brief network blip) often
+  // recovers on its own, and an ICE restart forces fresh candidate gathering to
+  // speed that up. Only the initiator drives renegotiation; guard to one attempt
+  // so a genuinely dead path fails fast instead of looping offers.
+  let restarted = false;
+  async function tryIceRestart() {
+    if (restarted || role !== "initiator") return;
+    restarted = true;
+    try {
+      const offer = await pc.createOffer({ iceRestart: true });
+      await pc.setLocalDescription(offer);
+      signaling.sendSignal(peerId, { sdp: offer });
+    } catch (err) {
+      console.error("relayium ice restart error", err);
+    }
+  }
+
   pc.onconnectionstatechange = () => {
-    if (pc.connectionState === "closed" || pc.connectionState === "failed") off();
+    const state = pc.connectionState;
+    opts.onStateChange?.(state);
+    if (state === "disconnected") tryIceRestart();
+    // Once the connection reaches a terminal state, stop routing this peer's
+    // signals so listeners don't pile up across repeated transfers.
+    if (state === "closed" || state === "failed") off();
   };
 
   function close() {

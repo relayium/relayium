@@ -180,6 +180,10 @@ func main() {
 			MaxTTL:          *fileTTLMax,
 		})
 		validateRoom = acct.ValidateTransferToken
+		// Let /api/ice hand TURN credentials to anonymous pairing-code rooms too,
+		// not just logged-in transfer tokens — otherwise code transfers are
+		// STUN-only and fail across strict NATs.
+		acct.SetPairCodeValidator(pairReg.Validate)
 		if disk, derr := storage.NewDiskStore(*blobDir); derr != nil {
 			log.Printf("WARNING: open blob dir %q: %v — stored transfers disabled", *blobDir, derr)
 		} else {

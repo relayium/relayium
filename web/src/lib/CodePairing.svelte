@@ -80,7 +80,7 @@
 <section class="pairing">
   {#if expired}
     <p class="error">{t.pair.expired}</p>
-    <button class="btn btn-primary" onclick={() => enterRoom({})}>{t.pair.sendCode}</button>
+    <button class="btn btn-primary" onclick={() => { sessionStorage.removeItem(EXP_KEY); enterRoom({}); }}>{t.pair.sendCode}</button>
   {:else if roomCode}
     {#if isMinter}
       <p class="lead">{t.pair.yourCode}</p>

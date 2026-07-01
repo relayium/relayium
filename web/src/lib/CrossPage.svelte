@@ -19,6 +19,16 @@
   const t = $derived<Messages>(messages[lang()]);
   const inRoom = $derived(!!roomToken || !!roomCode);
   let loginOpen = $state(false);
+
+  // Leaving a room must also drop the sessionStorage role markers — otherwise a
+  // stale "I minted this code / originated this link" flag makes the next method
+  // choice render the wrong side (e.g. showing a waiting screen instead of the
+  // code entry). Keys mirror CodePairing (EXP_KEY) and CrossNetwork (ORIGIN_KEY).
+  function startOver() {
+    sessionStorage.removeItem("relayium_pair_exp");
+    sessionStorage.removeItem("relayium_xfer_token");
+    enterRoom({});
+  }
 </script>
 
 <section class="crosspage">
@@ -40,6 +50,7 @@
         <p class="cardsub">{t.crossnet.realtimeSub}</p>
         {@render transferSurface()}
         <p class="foot">{t.crossnet.realtimeFoot}</p>
+        <button class="startover" onclick={startOver}>{t.startOver}</button>
       </section>
     {:else if roomToken}
       <!-- 🔗 Share link — originator shows link+QR, joiner connects -->
@@ -48,7 +59,7 @@
         <p class="cardsub">{t.methods.share.sub}</p>
         <CrossNetwork {roomToken} />
         <p class="foot">{t.crossnet.realtimeFoot}</p>
-        <button class="startover" onclick={() => enterRoom({})}>{t.startOver}</button>
+        <button class="startover" onclick={startOver}>{t.startOver}</button>
       </section>
     {:else if roomCode}
       <!-- 🔢 Pairing code — recipient joined via a code link -->
@@ -56,7 +67,7 @@
         <div class="mhead"><h2>{t.methods.pairing.name}</h2></div>
         <p class="cardsub">{t.methods.pairing.sub}</p>
         <CodePairing {roomCode} expired={linkDead} />
-        <button class="startover" onclick={() => enterRoom({})}>{t.startOver}</button>
+        <button class="startover" onclick={startOver}>{t.startOver}</button>
       </section>
     {:else}
       <!-- Three peer-to-peer / stored methods, side by side -->
