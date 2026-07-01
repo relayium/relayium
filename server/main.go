@@ -5,13 +5,18 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"flag"
+	"fmt"
 	"log"
 	"mime"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/mdp/qrterminal/v3"
+	"github.com/pquerna/otp"
+	"github.com/pquerna/otp/totp"
 	"github.com/relayium/relayium/internal/account"
 	"github.com/relayium/relayium/internal/metering"
 	"github.com/relayium/relayium/internal/signal"
@@ -62,12 +67,21 @@ func main() {
 	enableMagic := flag.Bool("enable-magic", envBool("RELAYIUM_ENABLE_MAGIC", false), "enable email magic-link login (disabled by default)")
 	adminUser := flag.String("admin-user", envStr("RELAYIUM_ADMIN_USER", "admin"), "admin dashboard username at /admin (defaults to 'admin')")
 	adminPass := flag.String("admin-pass", envStr("RELAYIUM_ADMIN_PASS", ""), "admin dashboard password at /admin (empty disables the dashboard)")
+	adminTOTPSecret := flag.String("admin-totp-secret", envStr("RELAYIUM_ADMIN_TOTP_SECRET", ""), "base32 TOTP secret for admin 2FA (empty disables 2FA)")
+	genAdminTOTP := flag.Bool("gen-admin-totp", false, "generate a new admin TOTP secret + QR and exit")
 	blobDir := flag.String("blob-dir", envStr("RELAYIUM_BLOB_DIR", "./blobs"), "directory for stored-transfer ciphertext blobs")
 	maxFileSize := flag.Int64("max-file-size", envInt64("RELAYIUM_MAX_FILE_SIZE", 50<<20), "stored-transfer max single-file size in bytes (default 50 MiB)")
 	dailyQuota := flag.Int64("daily-quota", envInt64("RELAYIUM_DAILY_QUOTA", 200<<20), "stored-transfer per-account upload quota per 24h in bytes (default 200 MiB)")
 	fileTTL := flag.Int64("file-ttl", envInt64("RELAYIUM_FILE_TTL", 86400), "stored-transfer default link TTL in seconds (default 1 day)")
 	fileTTLMax := flag.Int64("file-ttl-max", envInt64("RELAYIUM_FILE_TTL_MAX", 604800), "stored-transfer max link TTL in seconds (default 7 days)")
 	flag.Parse()
+
+	if *genAdminTOTP {
+		if err := generateAdminTOTP(*adminUser); err != nil {
+			log.Fatalf("generate admin TOTP: %v", err)
+		}
+		return
+	}
 
 	// Not in Go's built-in MIME table; the PWA manifest should be served as JSON.
 	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
@@ -129,30 +143,38 @@ func main() {
 	if dbErr != nil {
 		log.Printf("WARNING: open db: %v — account features disabled; LAN transfer unaffected", dbErr)
 	} else {
+		if err := account.ValidateAdminTOTPSecret(*adminTOTPSecret); err != nil {
+			log.Fatalf("%v", err)
+		}
+		if *adminTOTPSecret != "" && *adminPass == "" {
+			log.Printf("WARNING: RELAYIUM_ADMIN_TOTP_SECRET set but admin password empty; /admin disabled, 2FA ignored")
+		}
+
 		var mailer account.Mailer = &account.LogMailer{Log: log.Default()}
 		if *smtpAddr != "" {
 			mailer = account.NewSMTPMailer(*smtpAddr, *smtpFrom, *smtpUser, *smtpPass)
 		}
 		acct := account.NewService(store, mailer, account.Config{
-			BaseURL:        *baseURL,
-			SessionTTL:     720 * time.Hour, // 30 days
-			MagicTTL:       15 * time.Minute,
-			TransferTTL:    time.Hour,
-			GoogleClientID: *googleID,
-			GoogleSecret:   *googleSecret,
-			GoogleRedirect: *baseURL + "/api/auth/google/callback",
-			STUNURLs:       splitURLs(*stunURLs),
-			TURNURLs:       splitURLs(*turnURLs),
-			TURNSecret:     *turnSecret,
-			TURNCredTTL:    time.Hour,
-			EnableGoogle:   *enableGoogle,
-			EnableMagic:    *enableMagic,
-			AdminUser:      *adminUser,
-			AdminPassword:  *adminPass,
-			MaxFileSize:    *maxFileSize,
-			DailyQuota:     *dailyQuota,
-			DefaultTTL:     *fileTTL,
-			MaxTTL:         *fileTTLMax,
+			BaseURL:         *baseURL,
+			SessionTTL:      720 * time.Hour, // 30 days
+			MagicTTL:        15 * time.Minute,
+			TransferTTL:     time.Hour,
+			GoogleClientID:  *googleID,
+			GoogleSecret:    *googleSecret,
+			GoogleRedirect:  *baseURL + "/api/auth/google/callback",
+			STUNURLs:        splitURLs(*stunURLs),
+			TURNURLs:        splitURLs(*turnURLs),
+			TURNSecret:      *turnSecret,
+			TURNCredTTL:     time.Hour,
+			EnableGoogle:    *enableGoogle,
+			EnableMagic:     *enableMagic,
+			AdminUser:       *adminUser,
+			AdminPassword:   *adminPass,
+			AdminTOTPSecret: *adminTOTPSecret,
+			MaxFileSize:     *maxFileSize,
+			DailyQuota:      *dailyQuota,
+			DefaultTTL:      *fileTTL,
+			MaxTTL:          *fileTTLMax,
 		})
 		validateRoom = acct.ValidateTransferToken
 		if disk, derr := storage.NewDiskStore(*blobDir); derr != nil {
@@ -193,4 +215,32 @@ func main() {
 
 	log.Printf("relayium signaling server listening on %s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, mux))
+}
+
+// generateAdminTOTP creates a fresh TOTP secret for the admin dashboard,
+// prints a scannable terminal QR plus the raw secret/otpauth URL, and
+// returns without starting the server.
+func generateAdminTOTP(adminUser string) error {
+	if adminUser == "" {
+		adminUser = "admin"
+	}
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      "Relayium",
+		AccountName: adminUser,
+		Period:      30,
+		Digits:      otp.DigitsSix,
+		Algorithm:   otp.AlgorithmSHA1,
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Println("扫描下面的二维码，或手动输入密钥到你的验证器 App：")
+	fmt.Println()
+	qrterminal.GenerateHalfBlock(key.URL(), qrterminal.L, os.Stdout)
+	fmt.Println()
+	fmt.Println("Secret (base32):", key.Secret())
+	fmt.Println("otpauth URL:    ", key.URL())
+	fmt.Println()
+	fmt.Println("把 Secret 填入 RELAYIUM_ADMIN_TOTP_SECRET 后重启服务即可启用 2FA。")
+	return nil
 }
