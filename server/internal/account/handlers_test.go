@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -194,9 +195,8 @@ func TestUsageEndpointRequiresSessionAndReturnsTotal(t *testing.T) {
 }
 
 func bodyContains(resp *http.Response, sub string) bool {
-	buf := make([]byte, 4096)
-	n, _ := resp.Body.Read(buf)
-	return strings.Contains(string(buf[:n]), sub)
+	b, _ := io.ReadAll(resp.Body)
+	return strings.Contains(string(b), sub)
 }
 
 func TestPasswordRegisterLoginAndMethods(t *testing.T) {

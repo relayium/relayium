@@ -80,13 +80,13 @@
 <section class="pairing">
   {#if expired}
     <p class="error">{t.pair.expired}</p>
-    <button onclick={() => enterRoom({})}>{t.pair.sendCode}</button>
+    <button class="btn btn-primary" onclick={() => enterRoom({})}>{t.pair.sendCode}</button>
   {:else if roomCode}
     {#if isMinter}
       <p class="lead">{t.pair.yourCode}</p>
       <div class="code">{roomCode}</div>
       <div class="row">
-        <button onclick={copy}>{copied ? t.pair.copied : t.pair.copy}</button>
+        <button class="btn btn-ghost" onclick={copy}>{copied ? t.pair.copied : t.pair.copy}</button>
         {#if remaining}<span class="ttl">{t.pair.expiresIn(remaining)}</span>{/if}
       </div>
       {#if qrDataUrl}
@@ -105,40 +105,36 @@
         bind:value={entry}
         oninput={() => (entry = entry.replace(/\D/g, "").slice(0, 6))}
       />
-      <button class="primary" disabled={entry.length !== 6} onclick={join}>{t.pair.joinBtn}</button>
+      <button class="btn btn-primary" disabled={entry.length !== 6} onclick={join}>{t.pair.joinBtn}</button>
     </div>
   {:else}
     <div class="choices">
-      <button class="primary" disabled={busy} onclick={send}>{busy ? t.generating : t.pair.sendCode}</button>
-      <button onclick={() => (mode = "receive")}>{t.pair.enterCode}</button>
+      <button class="btn btn-primary" disabled={busy} onclick={send}>{busy ? t.generating : t.pair.sendCode}</button>
+      <button class="btn btn-ghost" onclick={() => (mode = "receive")}>{t.pair.enterCode}</button>
     </div>
     {#if err}<p class="error">{err}</p>{/if}
   {/if}
 </section>
 
 <style>
-  .pairing { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 8px 0; }
-  .choices { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
-  .qr { margin-top: 4px; border-radius: 8px; background: #fff; padding: 6px; }
+  .pairing { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; }
+  .choices { display: flex; gap: var(--space-3); flex-wrap: wrap; justify-content: center; }
+  .qr { margin-top: var(--space-1); border-radius: var(--radius-sm); background: #fff; padding: 6px; }
   .scan { margin: 0; font-size: 12px; color: var(--text); text-align: center; max-width: 30ch; }
-  .lead { margin: 0; font-size: 14px; color: var(--text); text-align: center; }
+  .lead { margin: 0; font-size: var(--fs-sm); color: var(--text); text-align: center; }
+  /* Intentional oversized code display — the whole point is at-a-glance readback. */
   .code {
     font-size: 40px; letter-spacing: 10px; font-weight: 700; color: var(--text-h);
     font-variant-numeric: tabular-nums; padding-left: 10px;
   }
-  .row { display: flex; align-items: center; gap: 12px; }
-  .ttl { font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums; }
-  .waiting { margin: 0; font-size: 13.5px; color: var(--text); }
+  .row { display: flex; align-items: center; gap: var(--space-3); }
+  .ttl { font-size: var(--fs-xs); color: var(--text); font-variant-numeric: tabular-nums; }
+  .waiting { margin: 0; font-size: var(--fs-xs); color: var(--text); }
+  /* Intentional oversized code-entry field to match the code display. */
   input {
     font: inherit; font-size: 22px; letter-spacing: 6px; text-align: center; width: 7ch;
-    padding: 8px 10px; border-radius: 9px; border: 1px solid var(--border);
+    padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); border: 1px solid var(--border);
     background: var(--bg); color: var(--text-h); font-variant-numeric: tabular-nums;
   }
-  button {
-    font: inherit; font-size: 15px; padding: 9px 22px; border-radius: 9px; cursor: pointer;
-    border: 1px solid var(--border); background: var(--bg); color: var(--text-h);
-  }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button:disabled { opacity: .5; cursor: not-allowed; }
-  .error { color: var(--accent); font-size: 13.5px; margin: 0; }
+  .error { color: var(--accent); font-size: var(--fs-xs); margin: 0; }
 </style>

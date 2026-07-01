@@ -22,21 +22,21 @@
 </section>
 
 <style>
-  .how { margin: 40px 0 8px; }
-  .head { margin-bottom: 18px; }
-  .head h2 { font-size: 22px; margin: 0 0 6px; }
-  .head .sub { color: var(--text); font-size: 14px; max-width: 60ch; }
+  .how { margin: var(--section-gap) 0 var(--space-2); }
+  .head { margin-bottom: var(--space-5); }
+  .head h2 { font-size: var(--fs-h2); margin: 0 0 var(--space-2); }
+  .head .sub { color: var(--text); font-size: var(--fs-sm); max-width: 60ch; }
 
   .ways {
     list-style: none; margin: 0; padding: 0;
-    display: grid; gap: 14px;
+    display: grid; gap: var(--space-4);
     grid-template-columns: repeat(3, 1fr);
   }
   .way {
     position: relative;
-    border: 1px solid var(--border); border-radius: 16px;
-    background: var(--surface-2); padding: 20px 18px 18px;
-    display: flex; flex-direction: column; gap: 8px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface-2); padding: var(--space-5) var(--space-5) var(--space-4);
+    display: flex; flex-direction: column; gap: var(--space-2);
   }
   .step {
     position: absolute; top: 16px; right: 16px;
@@ -45,8 +45,8 @@
     color: var(--accent); background: var(--accent-bg);
   }
   .icon { font-size: 28px; line-height: 1; }
-  .way h3 { margin: 2px 0 0; font-size: 16px; color: var(--text-h); font-weight: 600; }
-  .way p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text); }
+  .way h3 { margin: 2px 0 0; font-size: var(--fs-body); color: var(--text-h); font-weight: 600; }
+  .way p { margin: 0; font-size: var(--fs-xs); line-height: 1.55; color: var(--text); }
   .tag {
     align-self: flex-start; margin-top: auto;
     font-size: 12px; padding: 4px 10px; border-radius: 999px;
