@@ -286,7 +286,7 @@ func TestAdminHomeDashboardAndPaging(t *testing.T) {
 		t.Fatalf("want 200, got %d", w.Code)
 	}
 	body := w.Body.String()
-	for _, want := range []string{"总用户数", "中继流量", "user0@example.com"} {
+	for _, want := range []string{"总用户数", "未过期暂存文件", "占用存储", "中继流量", "上传量", "user0@example.com"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("home body missing %q", want)
 		}
@@ -295,13 +295,28 @@ func TestAdminHomeDashboardAndPaging(t *testing.T) {
 	// search filters to one user
 	w = get("?q=user1")
 	body = w.Body.String()
-	if !strings.Contains(body, "user1@example.com") || strings.Contains(body, "user0@example.com") {
+	if !strings.Contains(body, "user1@example.com") || strings.Contains(body, "user0@example.com") || strings.Contains(body, "user2@example.com") {
 		t.Fatal("search did not filter to user1 only")
 	}
 
-	// page clamp: absurd page still 200, no crash
-	if w := get("?page=999"); w.Code != http.StatusOK {
+	// page clamp: absurd page still 200, clamped to last page with real content
+	w = get("?page=999")
+	body = w.Body.String()
+	if w.Code != http.StatusOK {
 		t.Fatalf("out-of-range page: want 200, got %d", w.Code)
+	}
+	if !strings.Contains(body, "第 1 / 1 页") || !strings.Contains(body, "user0@example.com") {
+		t.Fatal("out-of-range page did not clamp to a rendered last page")
+	}
+
+	// page overflowing int64 range must fall back to page 1, not a negative offset
+	w = get("?page=99999999999999999999")
+	body = w.Body.String()
+	if w.Code != http.StatusOK {
+		t.Fatalf("overflow page: want 200, got %d", w.Code)
+	}
+	if !strings.Contains(body, "第 1 / 1 页") {
+		t.Fatal("overflow page did not fall back to page 1")
 	}
 }
 
