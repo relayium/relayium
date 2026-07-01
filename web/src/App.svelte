@@ -8,7 +8,8 @@
     type SessionKeys,
   } from "./lib/crypto";
   import { SignalingClient } from "./lib/signaling";
-  import { parseTransferToken, parseCodeParam, wsURL } from "./lib/transfer-link";
+  import { wsURL } from "./lib/transfer-link";
+  import { roomToken as roomTokenStore, roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
   import { connect, type InboundSignal, type Conn } from "./lib/webrtc";
   import {
     Sender,
@@ -65,13 +66,16 @@
   let notice = $state(""); // transient hint (e.g. "busy", "too many files")
   let dragActive = $state(false);
   let dragDepth = 0; // non-reactive: dragenter/dragleave fire per element; count to know when the drag truly leaves the window
-  let roomToken = $state("");
-  let roomCode = $state("");
+  // The active room lives in the URL-driven store; read reactively here so a live
+  // room switch (no reload) reconnects the socket via the effect below.
+  const roomToken = $derived(roomTokenStore());
+  const roomCode = $derived(roomCodeStore());
   let joinedRoom = $state(false);
   let linkDead = $state(false);
 
   // Non-reactive locals
   let signaling: SignalingClient;
+  let socketRoomKey = ""; // which room the current socket is bound to; guards the reconnect effect
   let iceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
   let acceptFn: (() => void) | null = null;
   let rejectFn: (() => void) | null = null;
@@ -104,10 +108,9 @@
 
   onMount(async () => {
     document.documentElement.lang = lang();
+    initRoomFromLocation();
     syncRouteFromLocation();
-    window.addEventListener("popstate", syncRouteFromLocation);
-    roomToken = parseTransferToken(location.hash);
-    roomCode = parseCodeParam(location.hash);
+    window.addEventListener("popstate", onPopState);
     if (!window.isSecureContext || !crypto.subtle) {
       unsupported = true;
       return;
@@ -124,7 +127,36 @@
       if ((roomToken || roomCode) && !joinedRoom) linkDead = true;
     });
     listenForIncoming();
+    socketRoomKey = `${roomToken}|${roomCode}`;
     connState = "ready";
+  });
+
+  function onPopState() {
+    syncRouteFromLocation();
+    initRoomFromLocation();
+  }
+
+  // Switch the signaling socket to a newly-entered room without reloading the page.
+  // Only reached after the socket exists; reconnection happens pre-transfer, so there
+  // is no in-flight WebRTC session to preserve — we reset room-scoped state and rebind.
+  async function switchRoom() {
+    peers = [];
+    selfId = "";
+    selfIP = "";
+    joinedRoom = false;
+    linkDead = false;
+    incoming = null;
+    sasCode = "";
+    iceServers = await fetchIceServers(roomToken);
+    signaling.reconnect(wsURL(location, roomToken, roomCode));
+  }
+
+  $effect(() => {
+    const key = `${roomToken}|${roomCode}`;
+    if (!signaling) return; // socket not built yet (initial mount)
+    if (key === socketRoomKey) return; // already bound to this room
+    socketRoomKey = key;
+    void switchRoom();
   });
 
   onMount(() => {
@@ -424,12 +456,13 @@
 
 <main>
 {#snippet transferSurface()}
+  {@const solo = visiblePeers.length === 1}
   <section class="peers">
-    <h2>{t.peersTitle}</h2>
+    <h2>{currentRoute() === "cross" ? t.crossPeersTitle : t.peersTitle}</h2>
     {#if visiblePeers.length === 0}
       <p class="empty">{t.emptyPeers}</p>
     {:else}
-      <ul class:dragging={dragActive && dropTarget(visiblePeers.length, busy) === "pick"}>
+      <ul class:solo class:dragging={dragActive && dropTarget(visiblePeers.length, busy) === "pick"}>
         {#each visiblePeers as p (p.id)}
           <li
             class="peer"
@@ -439,10 +472,14 @@
             ondrop={(e) => { e.stopPropagation(); if (busy) { e.preventDefault(); flash(messages[lang()].busy); return; } onDrop(e, p.id); }}
           >
             <label>
-              <span class="pavatar">{p.name.slice(0, 1).toUpperCase()}</span>
+              <span class="pavatar" class:big={solo}>{p.name.slice(0, 1).toUpperCase()}</span>
               <span class="ptext">
-                <span class="pname">{p.name}</span>
-                <span class="pick">{t.pickHint(MAX_FILES)}</span>
+                {#if solo}
+                  <span class="pname">{t.pickSendTo(p.name)}</span>
+                {:else}
+                  <span class="pname">{p.name}</span>
+                  <span class="pick">{t.pickHint(MAX_FILES)}</span>
+                {/if}
               </span>
               <input type="file" multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
             </label>
@@ -617,7 +654,11 @@
   .filelist li:last-child { border-bottom: none; }
   .fname { color: var(--text-h); word-break: break-all; }
   .fsize { color: var(--text); white-space: nowrap; }
-  .sas { font-size: 13.5px; margin-bottom: 14px; }
+  .sas {
+    font-size: 13.5px; margin-bottom: 14px; padding: 10px 12px;
+    border-radius: 10px; background: var(--accent-bg); border: 1px solid var(--accent-border);
+  }
+  .sas code { font-size: 16px; font-weight: 700; letter-spacing: 1px; background: transparent; padding: 0 2px; }
 
   .actions { display: flex; gap: 10px; }
   button {
@@ -647,6 +688,10 @@
     display: grid; gap: 12px;
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   }
+  /* A single connected peer (typical cross-network) reads as one prominent send target. */
+  .peers ul.solo { grid-template-columns: 1fr; }
+  .peers ul.solo .peer { border-style: solid; border-color: var(--accent-border); background: var(--accent-bg); }
+  .peers ul.solo .peer label { justify-content: center; padding: 20px; }
   .peer {
     border: 1.5px dashed var(--border); border-radius: 14px;
     transition: border-color .15s, background .15s;
@@ -660,7 +705,9 @@
     border-radius: 50%; color: #fff; font-weight: 600;
     background: linear-gradient(135deg, var(--accent), #6d28d9);
   }
+  .pavatar.big { width: 48px; height: 48px; line-height: 48px; font-size: 20px; }
   .ptext { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .peers ul.solo .pname { font-size: 17px; }
   .pname { color: var(--text-h); font-weight: 500; font-size: 16px; }
   .pick { color: var(--text); font-size: 13px; }
   .peer input[type="file"] { display: none; }

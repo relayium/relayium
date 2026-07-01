@@ -20,12 +20,27 @@ export class SignalingClient {
   constructor(
     url: string,
     private name: string,
-    wsFactory: WsFactory = (u) => new WebSocket(u) as unknown as WebSocketLike,
+    private wsFactory: WsFactory = (u) => new WebSocket(u) as unknown as WebSocketLike,
   ) {
-    this.sock = wsFactory(url);
-    this.sock.onopen = () => this.send({ type: "join", name: this.name });
-    this.sock.onmessage = (ev) => this.handle(JSON.parse(ev.data) as Envelope);
-    this.sock.onclose = () => this.closeCb?.();
+    this.sock = this.open(url);
+  }
+
+  private open(url: string): WebSocketLike {
+    const sock = this.wsFactory(url);
+    sock.onopen = () => this.send({ type: "join", name: this.name });
+    sock.onmessage = (ev) => this.handle(JSON.parse(ev.data) as Envelope);
+    sock.onclose = () => this.closeCb?.();
+    return sock;
+  }
+
+  /** Rebind to a different room by opening a fresh socket. Registered callbacks
+   *  (onSelfId/onPeers/onSignal/onClose) persist on this instance, so no
+   *  re-wiring is needed. Used to switch rooms without a full page reload. */
+  reconnect(url: string) {
+    const old = this.sock;
+    old.onclose = null; // this is an intentional swap, not a room drop — don't fire closeCb
+    try { old.close(); } catch { /* already gone */ }
+    this.sock = this.open(url);
   }
 
   /** Fires on welcome with the self peer id and the server-observed public IP ("" if none). */

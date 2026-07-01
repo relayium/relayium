@@ -3,11 +3,13 @@ import { SignalingClient, type WebSocketLike } from "./signaling";
 
 class FakeSocket implements WebSocketLike {
   sent: string[] = [];
+  closed = false;
   onopen: (() => void) | null = null;
   onmessage: ((ev: { data: string }) => void) | null = null;
   onclose: (() => void) | null = null;
+  constructor(public url = "") {}
   send(d: string) { this.sent.push(d); }
-  close() {}
+  close() { this.closed = true; }
   emit(obj: unknown) { this.onmessage?.({ data: JSON.stringify(obj) }); }
 }
 
@@ -81,5 +83,45 @@ describe("SignalingClient", () => {
     c.onClose(() => (closed = true));
     sock.onclose?.();
     expect(closed).toBe(true);
+  });
+
+  it("reconnect opens a fresh socket at the new url, closes the old, keeps callbacks", () => {
+    const made: FakeSocket[] = [];
+    const c = new SignalingClient("ws://room-a", "Alice", (u) => {
+      const s = new FakeSocket(u);
+      made.push(s);
+      return s;
+    });
+    let peers = 0;
+    c.onPeers((p) => (peers = p.length));
+
+    c.reconnect("ws://room-b");
+    expect(made).toHaveLength(2);
+    expect(made[0].closed).toBe(true);
+    expect(made[1].url).toBe("ws://room-b");
+
+    // join is sent on the new socket's open, and callbacks still route.
+    made[1].onopen?.();
+    expect(JSON.parse(made[1].sent[0])).toMatchObject({ type: "join", name: "Alice" });
+    made[1].emit({ type: "peers", peers: [{ id: "a", name: "A" }, { id: "b", name: "B" }] });
+    expect(peers).toBe(2);
+  });
+
+  it("reconnect does not fire onClose (intentional room swap, not a drop)", () => {
+    const made: FakeSocket[] = [];
+    const c = new SignalingClient("ws://room-a", "Alice", (u) => {
+      const s = new FakeSocket(u);
+      made.push(s);
+      return s;
+    });
+    let closes = 0;
+    c.onClose(() => closes++);
+    c.reconnect("ws://room-b");
+    // The old socket was closed by us, but its onclose was detached first.
+    made[0].onclose?.(); // even if the platform later fires it, it must be a no-op
+    expect(closes).toBe(0);
+    // A genuine close on the live socket still surfaces.
+    made[1].onclose?.();
+    expect(closes).toBe(1);
   });
 });
