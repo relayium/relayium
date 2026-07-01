@@ -54,9 +54,6 @@
 </script>
 
 <section class="stored">
-  <h2>{t.stored.title}</h2>
-  <p class="desc">{t.stored.desc}</p>
-
   <div class="opts">
     <label class="opt"><input type="checkbox" bind:checked={burn} />{t.stored.burnLabel}</label>
     <label class="opt">{t.stored.ttlLabel}
@@ -90,10 +87,8 @@
 </section>
 
 <style>
-  .stored { border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; margin: 18px 0; background: var(--social-bg); }
-  .stored h2 { font-size: 17px; margin: 0 0 6px; }
-  .desc { color: var(--text); font-size: 13.5px; margin: 0 0 12px; }
-  .opts { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 12px; font-size: 14px; }
+  .stored { display: flex; flex-direction: column; }
+  .opts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 12px; font-size: 13.5px; }
   .opt { display: flex; align-items: center; gap: 8px; }
   .pick { display: inline-flex; align-items: center; gap: 10px; padding: 10px 16px; border: 1.5px dashed var(--border); border-radius: 12px; cursor: pointer; }
   .pick.disabled { opacity: .6; cursor: not-allowed; }
