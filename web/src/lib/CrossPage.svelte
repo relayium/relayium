@@ -73,7 +73,7 @@
           <CrossNetwork />
         {:else}
           <div class="signin">
-            <button class="primary" onclick={() => (loginOpen = true)}>{t.account.signIn}</button>
+            <button class="btn btn-primary" onclick={() => (loginOpen = true)}>{t.account.signIn}</button>
             <p class="hint">{t.methods.share.signIn}</p>
           </div>
         {/if}
@@ -86,7 +86,7 @@
           <StoredUpload />
         {:else}
           <div class="signin">
-            <button class="primary" onclick={() => (loginOpen = true)}>{t.account.signIn}</button>
+            <button class="btn btn-primary" onclick={() => (loginOpen = true)}>{t.account.signIn}</button>
           </div>
         {/if}
       </section>
@@ -119,19 +119,20 @@
   .crosspage { position: relative; }
   .acct { display: flex; justify-content: flex-end; min-height: 32px; }
 
-  .cn-head { text-align: center; padding: 12px 0 20px; }
-  .cn-head h1 { font-size: 34px; margin: 0 0 8px; letter-spacing: -1px; }
-  .cn-head .tagline { color: var(--text); font-size: 15px; max-width: 44ch; margin: 0 auto; }
-  .cn-head .pitch { color: var(--text); font-size: 13.5px; max-width: 52ch; margin: 12px auto 0; line-height: 1.55; }
+  .cn-head { text-align: center; padding: var(--space-3) 0 var(--space-5); }
+  /* Intentional page-header size — smaller than the marketing hero (--fs-display). */
+  .cn-head h1 { font-size: 34px; margin: 0 0 var(--space-2); letter-spacing: -1px; }
+  .cn-head .tagline { color: var(--text); font-size: var(--fs-body); max-width: 44ch; margin: 0 auto; }
+  .cn-head .pitch { color: var(--text); font-size: var(--fs-xs); max-width: 52ch; margin: var(--space-3) auto 0; line-height: 1.55; }
 
-  .cards { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); align-items: stretch; }
+  .cards { display: grid; gap: var(--space-4); grid-template-columns: repeat(3, 1fr); align-items: stretch; }
   .cards.single { grid-template-columns: 1fr; max-width: 520px; margin: 0 auto; }
   .card {
-    border: 1px solid var(--border); border-radius: 16px; padding: 20px;
-    background: var(--social-bg); display: flex; flex-direction: column; gap: 12px;
+    border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-5);
+    background: var(--social-bg); display: flex; flex-direction: column; gap: var(--space-3);
   }
-  .card h2 { font-size: 17px; margin: 0; }
-  .cardsub { margin: 0; font-size: 13px; color: var(--text); line-height: 1.5; }
+  .card h2 { font-size: var(--fs-h3); margin: 0; }
+  .cardsub { margin: 0; font-size: var(--fs-xs); color: var(--text); line-height: 1.5; }
 
   .mhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
   .mhead h2 { margin-right: auto; }
@@ -147,27 +148,23 @@
 
   .startover {
     align-self: center; margin-top: 2px;
-    font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 8px; cursor: pointer;
+    font: inherit; font-size: var(--fs-xs); padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); cursor: pointer;
     background: none; border: 1px solid var(--border); color: var(--text);
+    transition: border-color .13s, color .13s;
   }
   .startover:hover { border-color: var(--accent-border); color: var(--text-h); }
-  .signin { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 6px 0; }
-  .signin .hint { margin: 0; font-size: 12.5px; color: var(--text); text-align: center; }
-  .foot { margin: 4px 0 0; font-size: 12px; color: var(--text); text-align: center; }
+  .signin { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
+  .signin .hint { margin: 0; font-size: var(--fs-xs); color: var(--text); text-align: center; }
+  .foot { margin: var(--space-1) 0 0; font-size: 12px; color: var(--text); text-align: center; }
   .error {
     grid-column: 1 / -1;
-    margin: 2px 0 0; text-align: center; padding: 10px 12px; border-radius: 10px; font-size: 13.5px;
+    margin: 2px 0 0; text-align: center; padding: var(--space-3); border-radius: var(--radius-sm); font-size: var(--fs-xs);
     color: var(--text-h); background: var(--accent-bg); border: 1px solid var(--accent-border);
   }
-  .primary {
-    font: inherit; font-size: 15px; padding: 9px 22px; border-radius: 9px; cursor: pointer;
-    background: var(--accent); border: 1px solid var(--accent); color: #fff; align-self: center;
-  }
-  .primary:hover { filter: brightness(1.08); }
 
   footer {
-    margin-top: 32px; padding-top: 18px; border-top: 1px solid var(--border);
-    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    margin-top: var(--space-8); padding-top: var(--space-5); border-top: 1px solid var(--border);
+    display: flex; flex-direction: column; align-items: center; gap: var(--space-3);
     font-size: 12.5px; color: var(--text); text-align: center;
   }
   footer .legal { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
