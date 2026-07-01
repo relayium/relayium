@@ -83,6 +83,8 @@ CREATE TABLE IF NOT EXISTS upload_events (
   uploaded_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_upload_events_user ON upload_events(user_id, uploaded_at);
+CREATE INDEX IF NOT EXISTS idx_usage_recorded ON usage_events(recorded_at);
+CREATE INDEX IF NOT EXISTS idx_upload_uploaded ON upload_events(uploaded_at);
 CREATE TABLE IF NOT EXISTS settings (
   key        TEXT PRIMARY KEY,
   value      INTEGER NOT NULL,
@@ -424,6 +426,25 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context) ([]AdminUserRow, error
 		sort.Strings(out[i].Methods)
 	}
 	return out, nil
+}
+
+func (s *SQLiteStore) AdminMetrics(ctx context.Context, now int64) (AdminMetrics, error) {
+	var m AdminMetrics
+	err := s.db.QueryRowContext(ctx, `
+		SELECT
+		  (SELECT COUNT(*) FROM users),
+		  (SELECT COUNT(*) FROM stored_files WHERE expires_at > ?),
+		  (SELECT COALESCE(SUM(size),0) FROM stored_files WHERE expires_at > ?),
+		  (SELECT COALESCE(SUM(relayed_bytes),0) FROM usage_events WHERE recorded_at >= ?),
+		  (SELECT COALESCE(SUM(relayed_bytes),0) FROM usage_events WHERE recorded_at >= ?),
+		  (SELECT COALESCE(SUM(bytes),0) FROM upload_events WHERE uploaded_at >= ?)`,
+		now, now, now-86400, now-604800, now-86400,
+	).Scan(&m.TotalUsers, &m.ActiveStoredFiles, &m.ActiveStoredBytes,
+		&m.RelayedBytes24h, &m.RelayedBytes7d, &m.UploadedBytes24h)
+	if err != nil {
+		return AdminMetrics{}, err
+	}
+	return m, nil
 }
 
 func b2i(b bool) int {
