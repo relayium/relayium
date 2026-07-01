@@ -18,7 +18,7 @@ describe("legal content", () => {
       it(`${name}.${lang} has every required field`, () => {
         const d = doc.langs[lang];
         for (const k of REQUIRED) expect(d, `${name}.${lang}.${k}`).toHaveProperty(k);
-        expect(d.updated).toBe("2026-06-29");
+        expect(d.updated).toBe("2026-07-01");
         expect(d.lead.length).toBeGreaterThan(0);
         expect(d.sections.length).toBeGreaterThan(0);
         for (const s of d.sections) expect(typeof s.heading).toBe("string");
