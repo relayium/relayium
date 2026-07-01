@@ -69,8 +69,7 @@ func (s *Service) isAdminReq(r *http.Request) bool {
 func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	ip := clientIP(r)
 	if s.adminLogins.locked(ip, s.now()) {
-		w.WriteHeader(http.StatusTooManyRequests)
-		s.renderAdminLogin(w, "尝试过于频繁，请稍后再试")
+		s.renderAdminLogin(w, http.StatusTooManyRequests, "尝试过于频繁，请稍后再试")
 		return
 	}
 
@@ -81,15 +80,20 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(s.adminUser()))
 	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(s.cfg.AdminPassword))
 	credsOK := userOK&passOK == 1
-	totpOK := !s.AdminTOTPEnabled() || s.validateAdminTOTP(r.FormValue("totp"))
+	totpStep, totpOK := int64(0), true
+	if s.AdminTOTPEnabled() {
+		totpStep, totpOK = s.matchAdminTOTPStep(r.FormValue("totp"))
+	}
 
 	if !credsOK || !totpOK {
 		s.adminLogins.recordFail(ip, s.now())
-		w.WriteHeader(http.StatusUnauthorized)
-		s.renderAdminLogin(w, "账号、密码或验证码错误")
+		s.renderAdminLogin(w, http.StatusUnauthorized, "账号、密码或验证码错误")
 		return
 	}
 
+	if s.AdminTOTPEnabled() {
+		s.commitAdminTOTPStep(totpStep)
+	}
 	s.adminLogins.reset(ip)
 	tok := s.newAdminSession()
 	http.SetCookie(w, &http.Cookie{
@@ -127,7 +131,7 @@ type adminHomeData struct {
 
 func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
-		s.renderAdminLogin(w, "")
+		s.renderAdminLogin(w, http.StatusOK, "")
 		return
 	}
 	rows, err := s.store.AdminListUsers(r.Context())
@@ -191,8 +195,9 @@ type adminLoginData struct {
 	TOTP  bool // render the 6-digit code field
 }
 
-func (s *Service) renderAdminLogin(w http.ResponseWriter, errMsg string) {
+func (s *Service) renderAdminLogin(w http.ResponseWriter, status int, errMsg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
 	_ = adminLoginTmpl.Execute(w, adminLoginData{Error: errMsg, TOTP: s.AdminTOTPEnabled()})
 }
 

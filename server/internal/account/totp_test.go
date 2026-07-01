@@ -37,52 +37,66 @@ func TestAdminTOTPEnabled(t *testing.T) {
 	}
 }
 
-func TestValidateAdminTOTP(t *testing.T) {
+func TestMatchAdminTOTPStep(t *testing.T) {
 	base := time.Unix(1_700_000_000, 0)
 	s := newTOTPService(testSecret, base)
 
-	if !s.validateAdminTOTP(codeAt(t, base)) {
-		t.Fatal("current-step code should pass")
+	step, ok := s.matchAdminTOTPStep(codeAt(t, base))
+	if !ok {
+		t.Fatal("current-step code should match")
+	}
+	// Matching alone must not mutate replay state: the same code should
+	// still match on a second call, since it hasn't been committed.
+	if _, ok := s.matchAdminTOTPStep(codeAt(t, base)); !ok {
+		t.Fatal("matching must be read-only: repeated match before commit should still succeed")
+	}
+
+	s.commitAdminTOTPStep(step)
+	if _, ok := s.matchAdminTOTPStep(codeAt(t, base)); ok {
+		t.Fatal("code must not match after its step is committed (replay)")
 	}
 }
 
-func TestValidateAdminTOTPSkew(t *testing.T) {
+func TestMatchAdminTOTPStepSkew(t *testing.T) {
 	base := time.Unix(1_700_000_000, 0)
 
 	// -1 step
 	s := newTOTPService(testSecret, base)
-	if !s.validateAdminTOTP(codeAt(t, base.Add(-30*time.Second))) {
+	if _, ok := s.matchAdminTOTPStep(codeAt(t, base.Add(-30*time.Second))); !ok {
 		t.Fatal("-1 step code should pass (skew=1)")
 	}
 	// +1 step
 	s = newTOTPService(testSecret, base)
-	if !s.validateAdminTOTP(codeAt(t, base.Add(30*time.Second))) {
+	if _, ok := s.matchAdminTOTPStep(codeAt(t, base.Add(30*time.Second))); !ok {
 		t.Fatal("+1 step code should pass (skew=1)")
 	}
 	// +2 steps must fail
 	s = newTOTPService(testSecret, base)
-	if s.validateAdminTOTP(codeAt(t, base.Add(60*time.Second))) {
+	if _, ok := s.matchAdminTOTPStep(codeAt(t, base.Add(60*time.Second))); ok {
 		t.Fatal("+2 step code must be rejected")
 	}
 }
 
-func TestValidateAdminTOTPWrongCode(t *testing.T) {
+func TestMatchAdminTOTPStepWrongCode(t *testing.T) {
 	base := time.Unix(1_700_000_000, 0)
 	s := newTOTPService(testSecret, base)
-	if s.validateAdminTOTP("000000") {
+	if _, ok := s.matchAdminTOTPStep("000000"); ok {
 		t.Fatal("wrong code must be rejected")
 	}
 }
 
-func TestValidateAdminTOTPReplay(t *testing.T) {
+func TestCommitAdminTOTPStepReplay(t *testing.T) {
 	base := time.Unix(1_700_000_000, 0)
 	s := newTOTPService(testSecret, base)
 	code := codeAt(t, base)
-	if !s.validateAdminTOTP(code) {
-		t.Fatal("first use should pass")
+
+	step, ok := s.matchAdminTOTPStep(code)
+	if !ok {
+		t.Fatal("first match should pass")
 	}
-	if s.validateAdminTOTP(code) {
-		t.Fatal("replay of same code/step must be rejected")
+	s.commitAdminTOTPStep(step)
+	if _, ok := s.matchAdminTOTPStep(code); ok {
+		t.Fatal("replay of same code/step must be rejected after commit")
 	}
 }
 
