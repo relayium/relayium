@@ -31,45 +31,66 @@
     {/if}
   </header>
 
-  <div class="cards">
-    <!-- ⚡ Realtime direct — code pairing (login-free), files never touch the server -->
-    <section class="card realtime">
-      <h2>⚡ {t.crossnet.realtimeTitle}</h2>
-      <p class="cardsub">{t.crossnet.realtimeSub}</p>
-
-      {#if showTransfer && transferSurface}
+  <div class="cards" class:single={showTransfer || inRoom}>
+    {#if showTransfer && transferSurface}
+      <!-- Active realtime transfer — one focused card, regardless of how they connected -->
+      <section class="card focus">
+        <h2>⚡ {t.crossnet.realtimeTitle}</h2>
+        <p class="cardsub">{t.crossnet.realtimeSub}</p>
         {@render transferSurface()}
-      {:else if roomToken}
+        <p class="foot">{t.crossnet.realtimeFoot}</p>
+      </section>
+    {:else if roomToken}
+      <!-- 🔗 Share link — originator shows link+QR, joiner connects -->
+      <section class="card focus">
+        <div class="mhead"><h2>{t.methods.share.name}</h2></div>
+        <p class="cardsub">{t.methods.share.sub}</p>
         <CrossNetwork {roomToken} />
-      {:else if roomCode}
+        <p class="foot">{t.crossnet.realtimeFoot}</p>
+      </section>
+    {:else if roomCode}
+      <!-- 🔢 Pairing code — recipient joined via a code link -->
+      <section class="card focus">
+        <div class="mhead"><h2>{t.methods.pairing.name}</h2></div>
+        <p class="cardsub">{t.methods.pairing.sub}</p>
         <CodePairing {roomCode} expired={linkDead} />
-      {:else}
+      </section>
+    {:else}
+      <!-- Three peer-to-peer / stored methods, side by side -->
+      <section class="card">
+        <div class="mhead"><h2>{t.methods.pairing.name}</h2><span class="badge ok">{t.methods.pairing.badge}</span></div>
+        <p class="cardsub">{t.methods.pairing.sub}</p>
         <CodePairing />
+      </section>
+
+      <section class="card">
+        <div class="mhead"><h2>{t.methods.share.name}</h2><span class="badge need">{t.methods.share.badge}</span></div>
+        <p class="cardsub">{t.methods.share.sub}</p>
         {#if session().user}
-          <div class="enhance">
-            <CrossNetwork />
-            <p class="hint">{t.pair.loginEnhance}</p>
+          <CrossNetwork />
+        {:else}
+          <div class="signin">
+            <button class="primary" onclick={() => (loginOpen = true)}>{t.account.signIn}</button>
+            <p class="hint">{t.methods.share.signIn}</p>
           </div>
         {/if}
-      {/if}
+      </section>
 
-      {#if linkDead && !roomCode}
-        <p class="error">{t.crossnet.linkDead}</p>
-      {/if}
-      <p class="foot">{t.crossnet.realtimeFoot}</p>
-    </section>
-
-    <!-- 📦 Stored link — encrypted-at-rest, async download (login required) -->
-    {#if !inRoom}
-      <section class="card stored">
-        <h2>📦 {t.stored.title}</h2>
-        <p class="cardsub">{t.stored.desc}</p>
+      <section class="card">
+        <div class="mhead"><h2>{t.methods.stored.name}</h2><span class="badge">{t.methods.stored.badge}</span></div>
+        <p class="cardsub">{t.methods.stored.sub}</p>
         {#if session().user}
           <StoredUpload />
         {:else}
-          <button class="primary" onclick={() => (loginOpen = true)}>{t.account.signIn}</button>
+          <div class="signin">
+            <button class="primary" onclick={() => (loginOpen = true)}>{t.account.signIn}</button>
+          </div>
         {/if}
       </section>
+    {/if}
+
+    {#if linkDead && !roomCode}
+      <p class="error">{t.crossnet.linkDead}</p>
     {/if}
   </div>
 
@@ -100,18 +121,33 @@
   .cn-head .tagline { color: var(--text); font-size: 15px; max-width: 44ch; margin: 0 auto; }
   .cn-head .pitch { color: var(--text); font-size: 13.5px; max-width: 52ch; margin: 12px auto 0; line-height: 1.55; }
 
-  .cards { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start; }
+  .cards { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); align-items: stretch; }
+  .cards.single { grid-template-columns: 1fr; max-width: 520px; margin: 0 auto; }
   .card {
     border: 1px solid var(--border); border-radius: 16px; padding: 20px;
     background: var(--social-bg); display: flex; flex-direction: column; gap: 12px;
   }
-  .card h2 { font-size: 18px; margin: 0; }
-  .cardsub { margin: 0; font-size: 13.5px; color: var(--text); }
-  .enhance { display: flex; flex-direction: column; gap: 8px; border-top: 1px dashed var(--border); padding-top: 12px; }
-  .enhance .hint { margin: 0; font-size: 12.5px; color: var(--text); text-align: center; }
-  .foot { margin: 0; font-size: 12px; color: var(--text); text-align: center; }
+  .card h2 { font-size: 17px; margin: 0; }
+  .cardsub { margin: 0; font-size: 13px; color: var(--text); line-height: 1.5; }
+
+  .mhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  .mhead h2 { margin-right: auto; }
+  .badge {
+    flex: none; font-size: 11.5px; padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+    color: var(--text); background: var(--code-bg); border: 1px solid var(--border);
+  }
+  .badge.ok { color: #1f9d55; background: rgba(46, 204, 113, .12); border-color: rgba(46, 204, 113, .35); }
+  .badge.need { color: var(--accent); background: var(--accent-bg); border-color: var(--accent-border); }
+  @media (prefers-color-scheme: dark) {
+    .badge.ok { color: #4ade80; background: rgba(46, 204, 113, .16); border-color: rgba(46, 204, 113, .4); }
+  }
+
+  .signin { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 6px 0; }
+  .signin .hint { margin: 0; font-size: 12.5px; color: var(--text); text-align: center; }
+  .foot { margin: 4px 0 0; font-size: 12px; color: var(--text); text-align: center; }
   .error {
-    margin: 6px 0 0; text-align: center; padding: 10px 12px; border-radius: 10px; font-size: 13.5px;
+    grid-column: 1 / -1;
+    margin: 2px 0 0; text-align: center; padding: 10px 12px; border-radius: 10px; font-size: 13.5px;
     color: var(--text-h); background: var(--accent-bg); border: 1px solid var(--accent-border);
   }
   .primary {
@@ -129,4 +165,8 @@
   footer .legal a { color: var(--text-h); text-decoration: none; }
   footer .legal a:hover { color: var(--accent); }
   footer .fineprint { max-width: 60ch; }
+
+  @media (max-width: 760px) {
+    .cards { grid-template-columns: 1fr; }
+  }
 </style>
