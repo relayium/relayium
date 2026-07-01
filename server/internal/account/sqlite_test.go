@@ -469,3 +469,70 @@ func TestAdminListUsersAggregates(t *testing.T) {
 		t.Fatalf("methods = %v, want %v", agg.Methods, want)
 	}
 }
+
+func TestAdminMetrics(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	now := int64(1_700_000_000)
+
+	u, err := s.UpsertUserByEmail(ctx, "a@example.com", "A")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// stored_files: one active (expires in future), one expired.
+	mustCreateStored(t, s, u.ID, "sf-active", 1000, now+3600)
+	mustCreateStored(t, s, u.ID, "sf-expired", 9999, now-1)
+
+	// usage_events: in-24h, in-7d-not-24h, older-than-7d.
+	mustUsage(t, s, u.ID, "ue-24h", 100, now-10)
+	mustUsage(t, s, u.ID, "ue-7d", 200, now-2*86400)
+	mustUsage(t, s, u.ID, "ue-old", 400, now-8*86400)
+
+	// upload_events: in-24h (incl. exact boundary) + older.
+	mustUpload(t, s, u.ID, "up-24h", 50, now-86400) // boundary: >= now-86400 → included
+	mustUpload(t, s, u.ID, "up-old", 70, now-86401) // excluded
+
+	m, err := s.AdminMetrics(ctx, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := AdminMetrics{
+		TotalUsers:        1,
+		ActiveStoredFiles: 1,
+		ActiveStoredBytes: 1000,
+		RelayedBytes24h:   100,
+		RelayedBytes7d:    300, // 100 + 200
+		UploadedBytes24h:  50,
+	}
+	if m != want {
+		t.Fatalf("metrics mismatch:\n got %+v\nwant %+v", m, want)
+	}
+}
+
+// helpers
+func mustCreateStored(t *testing.T, s *SQLiteStore, uid, id string, size, expires int64) {
+	t.Helper()
+	if err := s.CreateStoredFile(context.Background(), StoredFile{
+		ID: id, UserID: uid, BlobKey: id, EncManifest: []byte("m"),
+		Size: size, CreatedAt: expires - 100, ExpiresAt: expires,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+func mustUsage(t *testing.T, s *SQLiteStore, uid, alloc string, bytes, at int64) {
+	t.Helper()
+	if err := s.RecordUsage(context.Background(), UsageEvent{
+		AllocID: alloc, Token: alloc, UserID: uid, RelayedBytes: bytes, RecordedAt: at,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+func mustUpload(t *testing.T, s *SQLiteStore, uid, id string, bytes, at int64) {
+	t.Helper()
+	if err := s.RecordUpload(context.Background(), UploadEvent{
+		ID: id, UserID: uid, Bytes: bytes, UploadedAt: at,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}

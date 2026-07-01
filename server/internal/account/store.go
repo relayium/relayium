@@ -118,6 +118,16 @@ type AdminUserRow struct {
 	RelayedBytes int64
 }
 
+// AdminMetrics 是后台首页的快照指标。字节为累计值,时间窗口以传入的 now(unix 秒)为基准。
+type AdminMetrics struct {
+	TotalUsers        int64
+	ActiveStoredFiles int64 // 未过期暂存文件数(expires_at > now)
+	ActiveStoredBytes int64 // 上述文件 size 之和(近似当前磁盘占用)
+	RelayedBytes24h   int64
+	RelayedBytes7d    int64
+	UploadedBytes24h  int64
+}
+
 // Store is the only abstraction that touches persistent storage. Implemented by
 // SQLiteStore today; a Postgres impl could replace it without changing callers.
 type Store interface {
@@ -150,6 +160,7 @@ type Store interface {
 	UserUsageTotal(ctx context.Context, userID string) (int64, error)
 	// admin (read-only)
 	AdminListUsers(ctx context.Context) ([]AdminUserRow, error)
+	AdminMetrics(ctx context.Context, now int64) (AdminMetrics, error)
 	// stored files (zero-knowledge stored transfer)
 	CreateStoredFile(ctx context.Context, f StoredFile) error
 	GetStoredFile(ctx context.Context, id string) (StoredFile, error)
