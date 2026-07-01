@@ -440,12 +440,12 @@ func TestAdminListUsersAggregates(t *testing.T) {
 	u2, _ := s.UpsertUserByEmail(ctx, "solo@example.com", "Solo")
 	_ = s.LinkIdentity(ctx, "password", "solo@example.com", u2.ID)
 
-	rows, err := s.AdminListUsers(ctx)
+	rows, total, err := s.AdminListUsers(ctx, AdminUserQuery{Limit: 10})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	if len(rows) != 2 {
-		t.Fatalf("want 2 rows, got %d", len(rows))
+	if total != 2 || len(rows) != 2 {
+		t.Fatalf("want 2 rows, got total=%d len=%d", total, len(rows))
 	}
 	var agg *AdminUserRow
 	for i := range rows {
@@ -508,6 +508,86 @@ func TestAdminMetrics(t *testing.T) {
 	if m != want {
 		t.Fatalf("metrics mismatch:\n got %+v\nwant %+v", m, want)
 	}
+}
+
+func TestAdminListUsersQuery(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// three users with distinct created_at, names, and relay totals.
+	mkUser := func(email, name string, created int64) string {
+		u, err := s.UpsertUserByEmail(ctx, email, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// force created_at deterministically
+		if _, err := s.db.ExecContext(ctx, `UPDATE users SET created_at=? WHERE id=?`, created, u.ID); err != nil {
+			t.Fatal(err)
+		}
+		return u.ID
+	}
+	uA := mkUser("alice@example.com", "Alice", 100)
+	mkUser("bob@example.com", "Bob 50%", 200) // literal % to test escaping
+	mkUser("carol@example.com", "Carol", 300)
+	mustUsage(t, s, uA, "u1", 999, 1_700_000_000) // Alice has the biggest relay total
+
+	all := func(q AdminUserQuery) ([]AdminUserRow, int64) {
+		rows, total, err := s.AdminListUsers(ctx, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rows, total
+	}
+
+	// default sort = created desc → Carol, Bob, Alice
+	rows, total := all(AdminUserQuery{Limit: 10})
+	if total != 3 || len(rows) != 3 || rows[0].Email != "carol@example.com" || rows[2].Email != "alice@example.com" {
+		t.Fatalf("default sort/total wrong: total=%d rows=%v", total, emails(rows))
+	}
+
+	// search by name substring
+	rows, total = all(AdminUserQuery{Search: "carol", Limit: 10})
+	if total != 1 || len(rows) != 1 || rows[0].Email != "carol@example.com" {
+		t.Fatalf("search miss: total=%d rows=%v", total, emails(rows))
+	}
+
+	// literal % must match only Bob, not act as wildcard
+	rows, _ = all(AdminUserQuery{Search: "50%", Limit: 10})
+	if len(rows) != 1 || rows[0].Email != "bob@example.com" {
+		t.Fatalf("LIKE escape failed: rows=%v", emails(rows))
+	}
+
+	// sort by email asc
+	rows, _ = all(AdminUserQuery{SortBy: "email", SortDir: "asc", Limit: 10})
+	if rows[0].Email != "alice@example.com" || rows[2].Email != "carol@example.com" {
+		t.Fatalf("email asc wrong: %v", emails(rows))
+	}
+
+	// sort by relayed desc → Alice first
+	rows, _ = all(AdminUserQuery{SortBy: "relayed", SortDir: "desc", Limit: 10})
+	if rows[0].Email != "alice@example.com" {
+		t.Fatalf("relayed desc wrong: %v", emails(rows))
+	}
+
+	// pagination: limit 2 offset 2 → one row
+	rows, total = all(AdminUserQuery{Limit: 2, Offset: 2})
+	if total != 3 || len(rows) != 1 {
+		t.Fatalf("paging wrong: total=%d len=%d", total, len(rows))
+	}
+
+	// invalid sort/dir fall back to created desc
+	rows, _ = all(AdminUserQuery{SortBy: "; DROP", SortDir: "sideways", Limit: 10})
+	if rows[0].Email != "carol@example.com" {
+		t.Fatalf("fallback wrong: %v", emails(rows))
+	}
+}
+
+func emails(rows []AdminUserRow) []string {
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = r.Email
+	}
+	return out
 }
 
 // helpers

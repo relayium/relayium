@@ -118,6 +118,15 @@ type AdminUserRow struct {
 	RelayedBytes int64
 }
 
+// AdminUserQuery 参数化后台用户列表查询。
+type AdminUserQuery struct {
+	Search  string // 空 = 不过滤;非空按 email/display_name 模糊匹配
+	SortBy  string // "created" | "email" | "relayed";非法值回退 "created"
+	SortDir string // "asc" | "desc";非法值回退 "desc"
+	Limit   int
+	Offset  int
+}
+
 // AdminMetrics 是后台首页的快照指标。字节为累计值,时间窗口以传入的 now(unix 秒)为基准。
 type AdminMetrics struct {
 	TotalUsers        int64
@@ -159,7 +168,7 @@ type Store interface {
 	RecordUsage(ctx context.Context, e UsageEvent) error
 	UserUsageTotal(ctx context.Context, userID string) (int64, error)
 	// admin (read-only)
-	AdminListUsers(ctx context.Context) ([]AdminUserRow, error)
+	AdminListUsers(ctx context.Context, q AdminUserQuery) (rows []AdminUserRow, total int64, err error)
 	AdminMetrics(ctx context.Context, now int64) (AdminMetrics, error)
 	// stored files (zero-knowledge stored transfer)
 	CreateStoredFile(ctx context.Context, f StoredFile) error
