@@ -160,7 +160,7 @@
     {:else if pageState === "done"}
       <p class="ok">{t.download.done}</p>
     {:else}
-      <button class="primary" onclick={download}>{t.download.downloadBtn}</button>
+      <button class="btn btn-primary" onclick={download}>{t.download.downloadBtn}</button>
     {/if}
   {/if}
 
@@ -178,59 +178,58 @@
 <style>
   .dlnav {
     width: 560px; max-width: 100%; margin: 0 auto;
-    display: flex; align-items: center; gap: 12px;
-    padding: 14px 20px 0;
+    display: flex; align-items: center; gap: var(--space-3);
+    padding: var(--space-4) var(--space-5) 0;
   }
-  .brand { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; text-decoration: none; color: var(--text-h); font-weight: 600; }
+  .brand { display: inline-flex; align-items: center; gap: var(--space-2); margin-right: auto; text-decoration: none; color: var(--text-h); font-weight: 600; }
   .brand .mark {
     width: 28px; height: 28px; line-height: 28px; text-align: center;
-    border-radius: 9px; color: #fff; font-size: 16px;
+    border-radius: var(--radius-sm); color: #fff; font-size: var(--fs-body);
     background: linear-gradient(135deg, var(--accent), #6d28d9);
   }
-  .brand .word { font-size: 16px; letter-spacing: -0.4px; }
+  .brand .word { font-size: var(--fs-body); letter-spacing: -0.4px; }
   .lang {
-    font: inherit; font-size: 13px; padding: 5px 28px 5px 10px;
-    border-radius: 8px; border: 1px solid var(--border);
+    font: inherit; font-size: var(--fs-xs); padding: 5px 28px 5px 10px;
+    border-radius: var(--radius-sm); border: 1px solid var(--border);
     background: var(--social-bg); color: var(--text-h); cursor: pointer;
   }
   .lang:hover { border-color: var(--accent-border); }
 
-  .dl { width: 560px; max-width: 100%; margin: 0 auto; padding: 20px 20px 48px; text-align: left; }
-  .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 8px 0 10px; }
-  .dl h2 { font-size: 16px; margin: 0; }
-  .summary { font-size: 13px; color: var(--text); white-space: nowrap; }
-  .filelist { list-style: none; margin: 0 0 16px; padding: 0; }
-  .filelist li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px dashed var(--border); }
+  .dl { width: 560px; max-width: 100%; margin: 0 auto; padding: var(--space-5) var(--space-5) var(--space-7); text-align: left; }
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin: var(--space-2) 0 var(--space-3); }
+  .dl h2 { font-size: var(--fs-h3); margin: 0; }
+  .summary { font-size: var(--fs-xs); color: var(--text); white-space: nowrap; }
+  .filelist { list-style: none; margin: 0 0 var(--space-4); padding: 0; }
+  .filelist li { display: flex; justify-content: space-between; gap: var(--space-3); padding: 7px 0; border-bottom: 1px dashed var(--border); }
   .fname { color: var(--text-h); word-break: break-all; }
   .fsize { color: var(--text); white-space: nowrap; }
 
-  .expiry { font-size: 13.5px; color: var(--text); margin: 0 0 12px; }
+  .expiry { font-size: var(--fs-xs); color: var(--text); margin: 0 0 var(--space-3); }
   .expiry.soon { color: var(--accent); font-weight: 500; }
   .trust {
-    font-size: 13px; line-height: 1.55; color: var(--text-h);
-    margin: 0 0 12px; padding: 10px 12px; border-radius: 10px;
+    font-size: var(--fs-xs); line-height: 1.55; color: var(--text-h);
+    margin: 0 0 var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm);
     background: var(--accent-bg); border: 1px solid var(--accent-border);
   }
   .burn {
-    font-size: 13px; line-height: 1.55; color: var(--text-h);
-    margin: 0 0 16px; padding: 10px 12px; border-radius: 10px;
+    font-size: var(--fs-xs); line-height: 1.55; color: var(--text-h);
+    margin: 0 0 var(--space-4); padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm);
     background: var(--code-bg); border: 1px solid var(--accent-border);
   }
 
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; }
   .fill { height: 100%; background: linear-gradient(90deg, var(--accent), #6d28d9); transition: width .2s; }
-  button.primary { font: inherit; font-size: 15px; padding: 10px 24px; border-radius: 9px; cursor: pointer; background: var(--accent); border: 1px solid var(--accent); color: #fff; }
   .error { color: var(--accent); } .ok { color: #2ecc71; }
 
   .sendcta {
-    margin-top: 28px; padding: 14px 16px; border-radius: 12px;
+    margin-top: var(--space-7); padding: var(--space-4); border-radius: var(--radius-sm);
     border: 1px solid var(--border); background: var(--surface-2);
-    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-    font-size: 13.5px; color: var(--text);
+    display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+    font-size: var(--fs-xs); color: var(--text);
   }
   .sendcta a { color: var(--accent); text-decoration: none; font-weight: 500; white-space: nowrap; }
   .sendcta a:hover { text-decoration: underline; }
 
-  footer { margin-top: 20px; display: flex; gap: 16px; font-size: 12.5px; }
+  footer { margin-top: var(--space-5); display: flex; gap: var(--space-4); font-size: 12.5px; }
   footer a { color: var(--text-h); text-decoration: none; }
 </style>
