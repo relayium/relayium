@@ -4,6 +4,11 @@
   import CrossNetwork from "./CrossNetwork.svelte";
   import CodePairing from "./CodePairing.svelte";
   import StoredUpload from "./StoredUpload.svelte";
+  import HowItWorks from "./HowItWorks.svelte";
+  import ModeCompare from "./ModeCompare.svelte";
+  import FeatureStrip from "./FeatureStrip.svelte";
+  import UseCases from "./UseCases.svelte";
+  import Faq from "./Faq.svelte";
   import { session } from "./auth.svelte";
   import { lang, messages, legalUrl, type Messages } from "./i18n.svelte";
 
@@ -21,6 +26,9 @@
   <header class="cn-head">
     <h1>{t.nav.crossTab}</h1>
     <p class="tagline">{t.tagline}</p>
+    {#if !inRoom}
+      <p class="pitch">{t.crossPitch}</p>
+    {/if}
   </header>
 
   <div class="cards">
@@ -65,6 +73,14 @@
     {/if}
   </div>
 
+  {#if !inRoom}
+    <HowItWorks />
+    <ModeCompare />
+    <FeatureStrip />
+    <UseCases />
+    <Faq />
+  {/if}
+
   <footer>
     <nav class="legal">
       <a href={legalUrl("privacy", lang())}>{t.legal.privacy}</a>
@@ -82,6 +98,7 @@
   .cn-head { text-align: center; padding: 12px 0 20px; }
   .cn-head h1 { font-size: 34px; margin: 0 0 8px; letter-spacing: -1px; }
   .cn-head .tagline { color: var(--text); font-size: 15px; max-width: 44ch; margin: 0 auto; }
+  .cn-head .pitch { color: var(--text); font-size: 13.5px; max-width: 52ch; margin: 12px auto 0; line-height: 1.55; }
 
   .cards { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start; }
   .card {
