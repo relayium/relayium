@@ -155,8 +155,8 @@ func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	if strings.EqualFold(q.Get("dir"), "asc") {
 		dir = "asc"
 	}
-	page, _ := strconv.Atoi(q.Get("page"))
-	if page < 1 {
+	page, perr := strconv.Atoi(q.Get("page"))
+	if perr != nil || page < 1 {
 		page = 1
 	}
 
