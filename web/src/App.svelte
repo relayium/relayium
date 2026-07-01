@@ -480,7 +480,10 @@
     } catch (err) {
       if (!cancelled) {
         console.error("relayium send error", err);
-        send = s = { ...s, status: "sendFail", done: true, ok: false };
+        // Distinguish "never connected" from "dropped mid-send" so the user knows
+        // whether to retry the connection or the transfer.
+        const status = s.status === "connecting" || s.status === "waitingAccept" ? "connectFail" : "sendFail";
+        send = s = { ...s, status, done: true, ok: false };
       }
     } finally {
       conn?.close();

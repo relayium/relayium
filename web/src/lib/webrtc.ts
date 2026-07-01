@@ -50,22 +50,35 @@ export async function connect(opts: ConnectOpts): Promise<Conn> {
   };
 
   let channel: RTCDataChannel;
-  const ready = new Promise<RTCDataChannel>((resolve) => {
+  let opened = false;
+  let failReady!: (err: Error) => void;
+  const ready = new Promise<RTCDataChannel>((resolve, reject) => {
+    failReady = reject;
+    const open = (ch: RTCDataChannel) => { opened = true; resolve(ch); };
     if (role === "initiator") {
       channel = pc.createDataChannel("relayium");
       channel.binaryType = "arraybuffer";
       channel.bufferedAmountLowThreshold = 8 << 20; // 8 MB in-flight window keeps the pipe full
-      channel.onopen = () => resolve(channel);
+      channel.onopen = () => open(channel);
     } else {
       pc.ondatachannel = (ev) => {
         channel = ev.channel;
         channel.binaryType = "arraybuffer";
         channel.bufferedAmountLowThreshold = 8 << 20; // 8 MB in-flight window keeps the pipe full
-        if (channel.readyState === "open") resolve(channel);
-        else channel.onopen = () => resolve(channel);
+        if (channel.readyState === "open") open(channel);
+        else channel.onopen = () => open(channel);
       };
     }
   });
+
+  // Fail fast if the data channel never opens. Two escape hatches: a "failed"
+  // connection state, and an overall timeout for the case where ICE sits in
+  // "checking" and never flips to "failed" (no reachable path, TURN blocked).
+  // Without this, a caller awaiting connect() hangs at "connecting" 0% forever.
+  const CONNECT_TIMEOUT_MS = 30_000;
+  const connectTimer = setTimeout(() => {
+    if (!opened) failReady(new Error("relayium: connection timed out"));
+  }, CONNECT_TIMEOUT_MS);
 
   async function handleSignal(msg: InboundSignal) {
     if (msg.key) onPeerKey(unb64(msg.key));
@@ -112,6 +125,9 @@ export async function connect(opts: ConnectOpts): Promise<Conn> {
     const state = pc.connectionState;
     opts.onStateChange?.(state);
     if (state === "disconnected") tryIceRestart();
+    // A failure before the channel ever opened must unblock connect(); after it
+    // opened, ready is already settled and this reject is a harmless no-op.
+    if (state === "failed" && !opened) failReady(new Error("relayium: connection failed"));
     // Once the connection reaches a terminal state, stop routing this peer's
     // signals so listeners don't pile up across repeated transfers.
     if (state === "closed" || state === "failed") off();
@@ -130,6 +146,16 @@ export async function connect(opts: ConnectOpts): Promise<Conn> {
     await handleSignal(opts.initialSignal);
   }
 
-  const openChannel = await ready;
-  return { channel: openChannel, close };
+  try {
+    const openChannel = await ready;
+    clearTimeout(connectTimer);
+    return { channel: openChannel, close };
+  } catch (err) {
+    // Establishment failed or timed out: clean up the listener and peer
+    // connection, then propagate so the caller shows a retryable failure
+    // instead of a progress bar frozen at 0%.
+    clearTimeout(connectTimer);
+    close();
+    throw err;
+  }
 }
