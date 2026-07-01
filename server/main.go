@@ -86,6 +86,16 @@ func main() {
 	// Not in Go's built-in MIME table; the PWA manifest should be served as JSON.
 	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
 
+	// Config validation must not depend on DB availability: a malformed
+	// RELAYIUM_ADMIN_TOTP_SECRET should fail fast on every normal startup,
+	// regardless of whether SQLite opens successfully.
+	if err := account.ValidateAdminTOTPSecret(*adminTOTPSecret); err != nil {
+		log.Fatalf("%v", err)
+	}
+	if *adminTOTPSecret != "" && *adminPass == "" {
+		log.Printf("WARNING: RELAYIUM_ADMIN_TOTP_SECRET set but admin password empty; /admin disabled, 2FA ignored")
+	}
+
 	hub := signal.NewHub()
 	handle := signal.ServeWS(hub, newID)
 
@@ -143,13 +153,6 @@ func main() {
 	if dbErr != nil {
 		log.Printf("WARNING: open db: %v — account features disabled; LAN transfer unaffected", dbErr)
 	} else {
-		if err := account.ValidateAdminTOTPSecret(*adminTOTPSecret); err != nil {
-			log.Fatalf("%v", err)
-		}
-		if *adminTOTPSecret != "" && *adminPass == "" {
-			log.Printf("WARNING: RELAYIUM_ADMIN_TOTP_SECRET set but admin password empty; /admin disabled, 2FA ignored")
-		}
-
 		var mailer account.Mailer = &account.LogMailer{Log: log.Default()}
 		if *smtpAddr != "" {
 			mailer = account.NewSMTPMailer(*smtpAddr, *smtpFrom, *smtpUser, *smtpPass)
