@@ -83,7 +83,7 @@
     <p class="ready">{t.stored.linkReady}</p>
     <div class="row">
       <input readonly value={link} />
-      <button onclick={copy}>{copied ? t.stored.copied : t.stored.copy}</button>
+      <button class="btn btn-ghost" onclick={copy}>{copied ? t.stored.copied : t.stored.copy}</button>
     </div>
     {#if expiresAt > 0}
       <p class="expiry">{t.stored.expiresOn(new Date(expiresAt * 1000).toLocaleString(lang()))}</p>
@@ -94,18 +94,22 @@
 
 <style>
   .stored { display: flex; flex-direction: column; }
-  .opts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 12px; font-size: 13.5px; }
-  .opt { display: flex; align-items: center; gap: 8px; }
-  .pick { display: inline-flex; align-items: center; gap: 10px; padding: 10px 16px; border: 1.5px dashed var(--border); border-radius: 12px; cursor: pointer; }
+  .opts { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); margin-bottom: var(--space-3); font-size: var(--fs-xs); }
+  .opt { display: flex; align-items: center; gap: var(--space-2); }
+  .pick { display: inline-flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1.5px dashed var(--border); border-radius: var(--radius-sm); cursor: pointer; transition: border-color .13s; }
+  .pick:hover { border-color: var(--accent-border); }
   .pick.disabled { opacity: .6; cursor: not-allowed; }
   .pick input[type="file"] { display: none; }
-  .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; margin-top: 12px; }
+  .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; margin-top: var(--space-3); }
   .fill { height: 100%; background: linear-gradient(90deg, var(--accent), #6d28d9); transition: width .2s; }
-  .ready { color: var(--text-h); font-size: 14px; margin: 12px 0 6px; }
-  .expiry { color: var(--text); font-size: 13px; margin: 10px 0 0; }
-  .row { display: flex; gap: 8px; }
-  .row input { flex: 1; font: inherit; padding: 8px 10px; }
-  .row button { font: inherit; padding: 8px 14px; cursor: pointer; }
-  .qr { margin-top: 12px; }
-  .error { color: var(--accent); font-size: 13.5px; margin-top: 10px; }
+  .ready { color: var(--text-h); font-size: var(--fs-sm); margin: var(--space-3) 0 var(--space-2); }
+  .expiry { color: var(--text); font-size: var(--fs-xs); margin: var(--space-3) 0 0; }
+  .row { display: flex; gap: var(--space-2); }
+  .row input {
+    flex: 1; min-width: 0; font: inherit; font-size: var(--fs-xs); padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text-h);
+  }
+  .row .btn { padding: var(--space-2) var(--space-4); white-space: nowrap; }
+  .qr { margin-top: var(--space-3); }
+  .error { color: var(--accent); font-size: var(--fs-xs); margin-top: var(--space-3); }
 </style>
