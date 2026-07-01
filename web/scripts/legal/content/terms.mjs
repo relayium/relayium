@@ -4,7 +4,7 @@ const en = {
   description:
     "The terms for using Relayium — a free, open-source, end-to-end encrypted peer-to-peer file transfer service provided as is.",
   updatedLabel: "Last updated",
-  updated: "2026-06-29",
+  updated: "2026-07-01",
   otherDocLabel: "Privacy Policy",
   lead: [
     "By using Relayium you agree to these terms. Relayium is a free and open-source service that lets you send files directly between devices, end-to-end encrypted.",
@@ -77,7 +77,7 @@ const zh = {
   title: "服务条款",
   description: "使用 Relayium 的条款——一项免费、开源、端到端加密的点对点文件传输服务,按现状提供。",
   updatedLabel: "最后更新",
-  updated: "2026-06-29",
+  updated: "2026-07-01",
   otherDocLabel: "隐私政策",
   lead: [
     "使用 Relayium 即表示你同意本条款。Relayium 是一项免费且开源的服务,让你在设备之间直接、端到端加密地发送文件。",
@@ -147,7 +147,7 @@ const ja = {
   description:
     "Relayiumの利用規約——無料でオープンソースのエンドツーエンド暗号化P2Pファイル転送サービスを現状のまま提供します。",
   updatedLabel: "最終更新",
-  updated: "2026-06-29",
+  updated: "2026-07-01",
   otherDocLabel: "プライバシーポリシー",
   lead: [
     "Relayiumを利用することで、あなたはこれらの規約に同意したものとみなします。Relayiumは、デバイス間で直接かつエンドツーエンドで暗号化されたファイル送信を可能にする、無料のオープンソースサービスです。",
@@ -221,7 +221,7 @@ const ko = {
   description:
     "Relayium 이용약관 — 무료 오픈소스 엔드 투 엔드 암호화 P2P 파일 전송 서비스를 있는 그대로 제공합니다.",
   updatedLabel: "최종 업데이트",
-  updated: "2026-06-29",
+  updated: "2026-07-01",
   otherDocLabel: "개인정보 처리방침",
   lead: [
     "Relayium을 사용함으로써 귀하는 이 약관에 동의하는 것으로 간주됩니다. Relayium은 장치 간에 직접 엔드 투 엔드로 암호화된 파일 전송을 지원하는 무료 오픈소스 서비스입니다.",
@@ -295,8 +295,8 @@ const de = {
   description:
     "Die Nutzungsbedingungen für Relayium — ein kostenloser, quelloffener, Ende-zu-Ende-verschlüsselter Peer-to-Peer-Dateiübertragungsdienst, der ohne Gewährleistung bereitgestellt wird.",
   updatedLabel: "Zuletzt aktualisiert",
-  updated: "2026-06-29",
-  otherDocLabel: "Datenschutzrichtlinie",
+  updated: "2026-07-01",
+  otherDocLabel: "Datenschutzerklärung",
   lead: [
     "Durch die Nutzung von Relayium stimmen Sie diesen Bedingungen zu. Relayium ist ein kostenloser und quelloffener Dienst, der es Ihnen ermöglicht, Dateien direkt zwischen Geräten Ende-zu-Ende-verschlüsselt zu senden.",
   ],
@@ -369,7 +369,7 @@ const fr = {
   description:
     "Les conditions d'utilisation de Relayium — un service de transfert de fichiers pair à pair, gratuit, open source et chiffré de bout en bout, fourni tel quel.",
   updatedLabel: "Dernière mise à jour",
-  updated: "2026-06-29",
+  updated: "2026-07-01",
   otherDocLabel: "Politique de confidentialité",
   lead: [
     "En utilisant Relayium, vous acceptez ces conditions. Relayium est un service gratuit et open source qui vous permet d'envoyer des fichiers directement entre appareils, chiffrés de bout en bout.",
