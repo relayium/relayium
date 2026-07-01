@@ -22,29 +22,29 @@
 </section>
 
 <style>
-  .cases { margin: 40px 0 8px; }
-  .head { margin-bottom: 18px; }
-  .head h2 { font-size: 22px; margin: 0 0 6px; }
-  .head .sub { color: var(--text); font-size: 14px; max-width: 60ch; }
+  .cases { margin: var(--section-gap) 0 var(--space-2); }
+  .head { margin-bottom: var(--space-5); }
+  .head h2 { font-size: var(--fs-h2); margin: 0 0 var(--space-2); }
+  .head .sub { color: var(--text); font-size: var(--fs-sm); max-width: 60ch; }
 
   .grid {
-    display: grid; gap: 14px;
+    display: grid; gap: var(--space-4);
     grid-template-columns: repeat(2, 1fr);
   }
   .case {
-    display: flex; gap: 14px; align-items: flex-start;
-    border: 1px solid var(--border); border-radius: 16px;
-    background: var(--surface-2); padding: 18px;
-    transition: border-color .15s, box-shadow .15s;
+    display: flex; gap: var(--space-4); align-items: flex-start;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface-2); padding: var(--space-5);
+    transition: border-color .13s, box-shadow .13s;
   }
   .case:hover { border-color: var(--accent-border); box-shadow: var(--shadow); }
   .icon {
     flex: none; width: 44px; height: 44px; line-height: 44px; text-align: center;
-    font-size: 24px; border-radius: 12px; background: var(--accent-bg);
+    font-size: 24px; border-radius: var(--radius-sm); background: var(--accent-bg);
   }
   .body { min-width: 0; }
-  .case h3 { margin: 2px 0 6px; font-size: 16px; color: var(--text-h); font-weight: 600; }
-  .case p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text); }
+  .case h3 { margin: 2px 0 var(--space-2); font-size: var(--fs-body); color: var(--text-h); font-weight: 600; }
+  .case p { margin: 0; font-size: var(--fs-xs); line-height: 1.55; color: var(--text); }
 
   @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
 </style>
