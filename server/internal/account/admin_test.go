@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -188,5 +189,95 @@ func TestAdminLoginGate(t *testing.T) {
 	resp, _ = client.Do(req)
 	if !bodyContains(resp, "seen@example.com") {
 		t.Fatalf("authed admin should list users")
+	}
+}
+
+func TestAdminLoginTOTP(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0)
+	s := NewService(nil, nil, Config{AdminUser: "admin", AdminPassword: "pw", AdminTOTPSecret: testSecret})
+	s.now = func() time.Time { return base }
+
+	post := func(user, pass, code string) *httptest.ResponseRecorder {
+		form := url.Values{"username": {user}, "password": {pass}, "totp": {code}}
+		r := httptest.NewRequest("POST", "/admin/login", strings.NewReader(form.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.RemoteAddr = "7.7.7.7:1111"
+		w := httptest.NewRecorder()
+		s.handleAdminLogin(w, r)
+		return w
+	}
+
+	// good creds + good code -> 302 redirect with cookie
+	w := post("admin", "pw", codeAt(t, base))
+	if w.Code != http.StatusFound {
+		t.Fatalf("valid login: want 302, got %d", w.Code)
+	}
+	if len(w.Result().Cookies()) == 0 {
+		t.Fatal("valid login should set admin cookie")
+	}
+
+	// good creds + wrong code -> 401
+	if w := post("admin", "pw", "000000"); w.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong code: want 401, got %d", w.Code)
+	}
+}
+
+// TestAdminLoginTOTPNotBurnedByWrongCreds is a regression test for the
+// replay-guard bug: a valid TOTP code submitted alongside a WRONG password
+// must not advance adminTOTPLastStep. The legitimate admin must still be
+// able to use that same code with the CORRECT password afterward.
+func TestAdminLoginTOTPNotBurnedByWrongCreds(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0)
+	s := NewService(nil, nil, Config{AdminUser: "admin", AdminPassword: "pw", AdminTOTPSecret: testSecret})
+	s.now = func() time.Time { return base }
+
+	post := func(user, pass, code string) *httptest.ResponseRecorder {
+		form := url.Values{"username": {user}, "password": {pass}, "totp": {code}}
+		r := httptest.NewRequest("POST", "/admin/login", strings.NewReader(form.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.RemoteAddr = "9.9.9.9:3333"
+		w := httptest.NewRecorder()
+		s.handleAdminLogin(w, r)
+		return w
+	}
+
+	code := codeAt(t, base)
+
+	// Wrong password + correct current code -> 401, and must NOT consume the step.
+	if w := post("admin", "wrong", code); w.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong password + right code: want 401, got %d", w.Code)
+	}
+
+	// Correct password + the SAME code -> must still succeed (302 + cookie).
+	w := post("admin", "pw", code)
+	if w.Code != http.StatusFound {
+		t.Fatalf("right creds + same code after failed attempt: want 302, got %d", w.Code)
+	}
+	if len(w.Result().Cookies()) == 0 {
+		t.Fatal("successful login should set admin cookie")
+	}
+}
+
+func TestAdminLoginLockout(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0)
+	s := NewService(nil, nil, Config{AdminUser: "admin", AdminPassword: "pw"})
+	s.now = func() time.Time { return base }
+
+	fail := func() *httptest.ResponseRecorder {
+		form := url.Values{"username": {"admin"}, "password": {"wrong"}}
+		r := httptest.NewRequest("POST", "/admin/login", strings.NewReader(form.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.RemoteAddr = "8.8.8.8:2222"
+		w := httptest.NewRecorder()
+		s.handleAdminLogin(w, r)
+		return w
+	}
+	for i := 0; i < adminLoginMaxFails; i++ {
+		if w := fail(); w.Code != http.StatusUnauthorized {
+			t.Fatalf("fail %d: want 401, got %d", i, w.Code)
+		}
+	}
+	if w := fail(); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("after threshold: want 429, got %d", w.Code)
 	}
 }
