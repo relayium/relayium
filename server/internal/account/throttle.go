@@ -16,6 +16,7 @@ const (
 type failEntry struct {
 	count     int
 	lockUntil time.Time
+	last      time.Time // time of the most recent failure, for decay + eviction
 }
 
 // loginThrottle is a per-key in-memory failed-login limiter. Process-scoped,
@@ -48,18 +49,41 @@ func (t *loginThrottle) locked(key string, now time.Time) bool {
 }
 
 // recordFail increments the failure count for key and arms a lockout once the
-// threshold is reached.
+// threshold is reached. Failures separated by more than the lock window are not
+// "consecutive": the count restarts. It also sweeps stale entries so the map
+// stays bounded by the set of recently-active keys rather than growing forever.
 func (t *loginThrottle) recordFail(key string, now time.Time) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.sweep(now)
 	e := t.entries[key]
 	if e == nil {
 		e = &failEntry{}
 		t.entries[key] = e
 	}
+	// A gap longer than the window since the last failure restarts the count.
+	if !e.last.IsZero() && now.Sub(e.last) > adminLoginLockWindow {
+		e.count = 0
+		e.lockUntil = time.Time{}
+	}
 	e.count++
+	e.last = now
 	if e.count >= adminLoginMaxFails {
 		e.lockUntil = now.Add(adminLoginLockWindow)
+	}
+}
+
+// sweep drops entries that are neither still locked nor recently active, so a
+// stream of one-off failures from many IPs cannot grow the map without bound.
+// Caller must hold t.mu.
+func (t *loginThrottle) sweep(now time.Time) {
+	for k, e := range t.entries {
+		if now.Before(e.lockUntil) {
+			continue // still serving a lockout
+		}
+		if now.Sub(e.last) > adminLoginLockWindow {
+			delete(t.entries, k)
+		}
 	}
 }
 
