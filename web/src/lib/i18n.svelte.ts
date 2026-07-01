@@ -37,10 +37,13 @@ export interface Messages {
   fileCounter: (i: number, n: number) => string;
   close: string;
   peersTitle: string;
+  crossPeersTitle: string; // heading for the single connected peer on the cross-network page
   emptyPeers: string;
   dragSendOne: (name: string) => string;
   dragSendMany: string;
   pickHint: (max: number) => string;
+  pickSendTo: (name: string) => string; // prominent single-peer send label
+  generating: string; // transient "creating…" state while a code/link is minted
   footer: string;
   busy: string;
   tooMany: (max: number, n: number) => string;
@@ -111,6 +114,7 @@ export interface Messages {
     enterHint: string;
     joinBtn: string;
     yourCode: string;
+    scanHint: string; // caption under the pairing-code QR
     waiting: string;
     expiresIn: (s: string) => string;
     expired: string;
@@ -206,6 +210,9 @@ const zh: Messages = {
   fileCounter: (i, n) => `文件 ${i}/${n}`,
   close: "关闭",
   peersTitle: "附近的设备",
+  crossPeersTitle: "已连接的对方",
+  pickSendTo: (n) => `点击或拖放文件，发送给 ${n}`,
+  generating: "生成中…",
   emptyPeers: "还没有其它设备。请在同一网络下的另一台设备 / 另一个浏览器窗口打开本页面。",
   dragSendOne: (name) => `松手发送给 ${name}`,
   dragSendMany: "拖到某台设备上发送",
@@ -280,6 +287,7 @@ const zh: Messages = {
     enterHint: "向对方索取 6 位配对码",
     joinBtn: "连接",
     yourCode: "你的配对码 —— 念给对方",
+  scanHint: "或让对方扫码 / 打开链接加入",
     waiting: "等待对方加入…",
     expiresIn: (s) => `${s} 后失效`,
     expired: "配对码已失效，请重新生成",
@@ -406,6 +414,9 @@ const en: Messages = {
   fileCounter: (i, n) => `File ${i}/${n}`,
   close: "Close",
   peersTitle: "Nearby devices",
+  crossPeersTitle: "Connected peer",
+  pickSendTo: (n) => `Click or drop files to send to ${n}`,
+  generating: "Creating…",
   emptyPeers: "No other devices yet. Open this page on another device or browser window on the same network.",
   dragSendOne: (name) => `Release to send to ${name}`,
   dragSendMany: "Drop onto a device to send",
@@ -480,6 +491,7 @@ const en: Messages = {
     enterHint: "Ask the sender for their 6-digit code",
     joinBtn: "Connect",
     yourCode: "Your pairing code — read it to the other person",
+  scanHint: "or have them scan / open the link to join",
     waiting: "Waiting for the other device to join…",
     expiresIn: (s) => `expires in ${s}`,
     expired: "Pairing code expired — generate a new one",
@@ -606,6 +618,9 @@ const ja: Messages = {
   fileCounter: (i, n) => `ファイル ${i}/${n}`,
   close: "閉じる",
   peersTitle: "近くのデバイス",
+  crossPeersTitle: "接続中の相手",
+  pickSendTo: (n) => `クリックまたはドロップで ${n} に送信`,
+  generating: "生成中…",
   emptyPeers: "他のデバイスはまだありません。同じネットワーク上の別のデバイスやブラウザウィンドウでこのページを開いてください。",
   dragSendOne: (name) => `${name} に送信するには離してください`,
   dragSendMany: "送信先のデバイスにドロップしてください",
@@ -680,6 +695,7 @@ const ja: Messages = {
     enterHint: "送信者に 6 桁のコードを尋ねてください",
     joinBtn: "接続",
     yourCode: "あなたのペアリングコード — 相手に伝えてください",
+  scanHint: "または相手にQRを読み取ってもらう / リンクを開いて参加",
     waiting: "相手の参加を待っています…",
     expiresIn: (s) => `${s} で失効`,
     expired: "ペアリングコードが失効しました。再生成してください",
@@ -806,6 +822,9 @@ const ko: Messages = {
   fileCounter: (i, n) => `파일 ${i}/${n}`,
   close: "닫기",
   peersTitle: "주변 기기",
+  crossPeersTitle: "연결된 상대",
+  pickSendTo: (n) => `클릭하거나 파일을 놓아 ${n}에게 전송`,
+  generating: "생성 중…",
   emptyPeers: "아직 다른 기기가 없습니다. 같은 네트워크의 다른 기기나 브라우저 창에서 이 페이지를 여세요.",
   dragSendOne: (name) => `놓으면 ${name}에게 전송`,
   dragSendMany: "보낼 기기 위에 놓으세요",
@@ -880,6 +899,7 @@ const ko: Messages = {
     enterHint: "보내는 사람에게 6자리 코드를 요청하세요",
     joinBtn: "연결",
     yourCode: "내 페어링 코드 — 상대에게 알려주세요",
+  scanHint: "또는 상대가 QR을 스캔하거나 링크를 열어 참여",
     waiting: "상대 기기의 참여를 기다리는 중…",
     expiresIn: (s) => `${s} 후 만료`,
     expired: "페어링 코드가 만료되었습니다. 다시 생성하세요",
@@ -1006,6 +1026,9 @@ const de: Messages = {
   fileCounter: (i, n) => `Datei ${i}/${n}`,
   close: "Schließen",
   peersTitle: "Geräte in der Nähe",
+  crossPeersTitle: "Verbundener Peer",
+  pickSendTo: (n) => `Klicken oder Dateien ablegen, um an ${n} zu senden`,
+  generating: "Wird erstellt…",
   emptyPeers: "Noch keine anderen Geräte. Öffnen Sie diese Seite auf einem anderen Gerät oder Browserfenster im selben Netzwerk.",
   dragSendOne: (name) => `Loslassen, um an ${name} zu senden`,
   dragSendMany: "Zum Senden auf ein Gerät ziehen",
@@ -1080,6 +1103,7 @@ const de: Messages = {
     enterHint: "Frag den Absender nach seinem 6-stelligen Code",
     joinBtn: "Verbinden",
     yourCode: "Dein Kopplungscode — sag ihn der anderen Person",
+  scanHint: "oder die andere Person scannt den QR / öffnet den Link",
     waiting: "Warte darauf, dass das andere Gerät beitritt…",
     expiresIn: (s) => `läuft in ${s} ab`,
     expired: "Kopplungscode abgelaufen — bitte neu erzeugen",
@@ -1206,6 +1230,9 @@ const fr: Messages = {
   fileCounter: (i, n) => `Fichier ${i}/${n}`,
   close: "Fermer",
   peersTitle: "Appareils à proximité",
+  crossPeersTitle: "Correspondant connecté",
+  pickSendTo: (n) => `Cliquez ou déposez des fichiers pour envoyer à ${n}`,
+  generating: "Création…",
   emptyPeers: "Aucun autre appareil pour l’instant. Ouvrez cette page sur un autre appareil ou une autre fenêtre du même réseau.",
   dragSendOne: (name) => `Relâchez pour envoyer à ${name}`,
   dragSendMany: "Déposez sur un appareil pour envoyer",
@@ -1280,6 +1307,7 @@ const fr: Messages = {
     enterHint: "Demandez à l'expéditeur son code à 6 chiffres",
     joinBtn: "Connecter",
     yourCode: "Votre code d'appairage — communiquez-le à l'autre personne",
+  scanHint: "ou faites scanner le QR / ouvrir le lien à l'autre personne",
     waiting: "En attente de l'autre appareil…",
     expiresIn: (s) => `expire dans ${s}`,
     expired: "Code d'appairage expiré — générez-en un nouveau",

@@ -108,65 +108,73 @@
   }
 </script>
 
+<svelte:window onkeydown={(e) => { if (e.key === "Escape" && open) open = false; }} />
+
 <div class="account">
   {#if session().user}
     <button class="acct-btn" onclick={() => (open = !open)}>
       {session().user!.email}
     </button>
-    {#if open}
-      <div class="menu">
-        <div class="who">{t.account.signedInAs(session().user!.email)}</div>
-
-        {#if pwOpen}
-          {#if session().user!.hasPassword}
-            <input type="password" bind:value={curPw} placeholder={t.account.currentPassword} />
-          {/if}
-          <input type="password" bind:value={newPw} placeholder={t.account.newPassword} />
-          <input type="password" bind:value={confirmPw} placeholder={t.account.confirmPassword} />
-          {#if pwError}<p class="err">{pwError}</p>{/if}
-          <button class="primary" onclick={onChangePassword}>
-            {session().user!.hasPassword ? t.account.changePassword : t.account.setPassword}
-          </button>
-          <button class="link" onclick={() => { pwOpen = false; pwError = ""; curPw = ""; newPw = ""; confirmPw = ""; }}>{t.close}</button>
-        {:else}
-          {#if pwDone}<p class="hint">{t.account.pwChanged}</p>{/if}
-          <button class="ghost" onclick={() => { pwOpen = true; pwDone = false; }}>
-            {session().user!.hasPassword ? t.account.changePassword : t.account.setPassword}
-          </button>
-        {/if}
-
-        <button class="ghost" onclick={onLogout}>{t.account.signOut}</button>
-      </div>
-    {/if}
   {:else}
     <button class="acct-btn" onclick={() => (open = !open)}>{t.account.signIn}</button>
-    {#if open}
-      <div class="menu">
-        <input type="email" bind:value={email} placeholder={t.account.email} />
-        <input type="password" bind:value={password} placeholder={t.account.password} />
-        {#if error}<p class="err">{error}</p>{/if}
-        <button class="primary" onclick={onSubmit}>
-          {mode === "register" ? t.account.createAccount : t.account.logInBtn}
-        </button>
-        <button class="link" onclick={() => { mode = mode === "register" ? "login" : "register"; error = ""; }}>
-          {mode === "register" ? t.account.toLogin : t.account.toRegister}
-        </button>
+  {/if}
 
-        {#if methods.google || methods.magic}
-          <div class="sep">{t.account.or}</div>
-        {/if}
-        {#if methods.google}
-          <a class="google" href={googleLoginUrl()}>{t.account.continueGoogle}</a>
-        {/if}
-        {#if methods.magic}
-          {#if magicSent}
-            <p class="hint">{t.account.linkSent}</p>
+  {#if open}
+    <button type="button" class="backdrop" aria-label={t.close} onclick={() => (open = false)}></button>
+    <div class="modal" role="dialog" aria-modal="true">
+      <button class="close-x" onclick={() => (open = false)} aria-label={t.close}>✕</button>
+      {#if session().user}
+        <div class="menu">
+          <div class="who">{t.account.signedInAs(session().user!.email)}</div>
+
+          {#if pwOpen}
+            {#if session().user!.hasPassword}
+              <input type="password" bind:value={curPw} placeholder={t.account.currentPassword} />
+            {/if}
+            <input type="password" bind:value={newPw} placeholder={t.account.newPassword} />
+            <input type="password" bind:value={confirmPw} placeholder={t.account.confirmPassword} />
+            {#if pwError}<p class="err">{pwError}</p>{/if}
+            <button class="primary" onclick={onChangePassword}>
+              {session().user!.hasPassword ? t.account.changePassword : t.account.setPassword}
+            </button>
+            <button class="link" onclick={() => { pwOpen = false; pwError = ""; curPw = ""; newPw = ""; confirmPw = ""; }}>{t.close}</button>
           {:else}
-            <button class="ghost" onclick={onSendLink}>{t.account.sendLink}</button>
+            {#if pwDone}<p class="hint">{t.account.pwChanged}</p>{/if}
+            <button class="ghost" onclick={() => { pwOpen = true; pwDone = false; }}>
+              {session().user!.hasPassword ? t.account.changePassword : t.account.setPassword}
+            </button>
           {/if}
-        {/if}
-      </div>
-    {/if}
+
+          <button class="ghost" onclick={onLogout}>{t.account.signOut}</button>
+        </div>
+      {:else}
+        <div class="menu">
+          <input type="email" bind:value={email} placeholder={t.account.email} />
+          <input type="password" bind:value={password} placeholder={t.account.password} onkeydown={(e) => { if (e.key === "Enter") onSubmit(); }} />
+          {#if error}<p class="err">{error}</p>{/if}
+          <button class="primary" onclick={onSubmit}>
+            {mode === "register" ? t.account.createAccount : t.account.logInBtn}
+          </button>
+          <button class="link" onclick={() => { mode = mode === "register" ? "login" : "register"; error = ""; }}>
+            {mode === "register" ? t.account.toLogin : t.account.toRegister}
+          </button>
+
+          {#if methods.google || methods.magic}
+            <div class="sep">{t.account.or}</div>
+          {/if}
+          {#if methods.google}
+            <a class="google" href={googleLoginUrl()}>{t.account.continueGoogle}</a>
+          {/if}
+          {#if methods.magic}
+            {#if magicSent}
+              <p class="hint">{t.account.linkSent}</p>
+            {:else}
+              <button class="ghost" onclick={onSendLink}>{t.account.sendLink}</button>
+            {/if}
+          {/if}
+        </div>
+      {/if}
+    </div>
   {/if}
 </div>
 
@@ -175,12 +183,27 @@
   .acct-btn {
     padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border);
     background: var(--social-bg); color: var(--text-h); cursor: pointer; font: inherit; font-size: 13px;
+    max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .menu {
-    position: absolute; right: 0; margin-top: 6px; width: 240px; z-index: 10;
-    display: flex; flex-direction: column; gap: 8px;
-    padding: 14px; border-radius: 12px; border: 1px solid var(--border);
+  .backdrop {
+    position: fixed; inset: 0; z-index: 40; border: 0; padding: 0; cursor: default;
+    background: rgba(0, 0, 0, .45); backdrop-filter: blur(1px);
+  }
+  .modal {
+    position: fixed; z-index: 41; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: min(340px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto;
+    padding: 22px 20px 20px; border-radius: 16px; border: 1px solid var(--border);
     background: var(--bg); box-shadow: var(--shadow);
+    text-align: left;
+  }
+  .close-x {
+    position: absolute; top: 10px; right: 10px;
+    width: 28px; height: 28px; padding: 0; border-radius: 8px; cursor: pointer;
+    border: 1px solid transparent; background: none; color: var(--text); font-size: 15px;
+  }
+  .close-x:hover { background: var(--social-bg); color: var(--text-h); }
+  .menu {
+    display: flex; flex-direction: column; gap: 8px;
   }
   .menu input { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); font: inherit; background: var(--social-bg); color: var(--text-h); }
   .menu .google { text-align: center; padding: 8px; border-radius: 8px; border: 1px solid var(--border); text-decoration: none; color: var(--text-h); }

@@ -1,6 +1,7 @@
 <!-- web/src/lib/CodePairing.svelte -->
 <script lang="ts">
   import { createPair, CROSS_PATH } from "./transfer-link";
+  import { enterRoom } from "./room.svelte";
   import { messages, lang, type Messages } from "./i18n.svelte";
 
   let { roomCode = "", expired = false }:
@@ -36,17 +37,25 @@
     return () => clearInterval(h);
   });
 
-  function enterRoom(code: string) {
-    history.replaceState({}, "", `${CROSS_PATH}#c=${code}`);
-    location.reload();
-  }
+  // QR of the join link so the other person can scan instead of typing the code.
+  let qrDataUrl = $state("");
+  $effect(() => {
+    if (isMinter && roomCode) {
+      const link = `${location.origin}${CROSS_PATH}#c=${roomCode}`;
+      import("qrcode").then((m) =>
+        m.toDataURL(link, { margin: 1, width: 160 }).then((u) => (qrDataUrl = u)),
+      );
+    } else {
+      qrDataUrl = "";
+    }
+  });
 
   async function send() {
     busy = true; err = "";
     try {
       const { code, expiresAt } = await createPair();
       sessionStorage.setItem(EXP_KEY, String(expiresAt));
-      enterRoom(code);
+      enterRoom({ code }); // rebinds the socket to the code room without reloading
     } catch {
       busy = false;
       err = t.pair.errExpired;
@@ -54,7 +63,7 @@
   }
 
   function join() {
-    if (/^\d{6}$/.test(entry)) enterRoom(entry);
+    if (/^\d{6}$/.test(entry)) enterRoom({ code: entry });
   }
 
   async function copy() {
@@ -67,7 +76,7 @@
 <section class="pairing">
   {#if expired}
     <p class="error">{t.pair.expired}</p>
-    <button onclick={() => enterRoom("")}>{t.pair.sendCode}</button>
+    <button onclick={() => enterRoom({})}>{t.pair.sendCode}</button>
   {:else if roomCode}
     {#if isMinter}
       <p class="lead">{t.pair.yourCode}</p>
@@ -76,6 +85,10 @@
         <button onclick={copy}>{copied ? t.pair.copied : t.pair.copy}</button>
         {#if remaining}<span class="ttl">{t.pair.expiresIn(remaining)}</span>{/if}
       </div>
+      {#if qrDataUrl}
+        <img class="qr" src={qrDataUrl} alt="QR" width="160" height="160" />
+        <p class="scan">{t.pair.scanHint}</p>
+      {/if}
     {/if}
     <p class="waiting">{t.pair.waiting}</p>
   {:else if mode === "receive"}
@@ -92,7 +105,7 @@
     </div>
   {:else}
     <div class="choices">
-      <button class="primary" disabled={busy} onclick={send}>{t.pair.sendCode}</button>
+      <button class="primary" disabled={busy} onclick={send}>{busy ? t.generating : t.pair.sendCode}</button>
       <button onclick={() => (mode = "receive")}>{t.pair.enterCode}</button>
     </div>
     {#if err}<p class="error">{err}</p>{/if}
@@ -102,6 +115,8 @@
 <style>
   .pairing { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 8px 0; }
   .choices { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .qr { margin-top: 4px; border-radius: 8px; background: #fff; padding: 6px; }
+  .scan { margin: 0; font-size: 12px; color: var(--text); text-align: center; max-width: 30ch; }
   .lead { margin: 0; font-size: 14px; color: var(--text); text-align: center; }
   .code {
     font-size: 40px; letter-spacing: 10px; font-weight: 700; color: var(--text-h);
