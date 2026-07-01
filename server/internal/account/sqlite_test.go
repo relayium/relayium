@@ -563,16 +563,34 @@ func TestAdminListUsersQuery(t *testing.T) {
 		t.Fatalf("email asc wrong: %v", emails(rows))
 	}
 
+	// sort by email desc → Carol first
+	rows, _ = all(AdminUserQuery{SortBy: "email", SortDir: "desc", Limit: 10})
+	if rows[0].Email != "carol@example.com" {
+		t.Fatalf("email desc wrong: %v", emails(rows))
+	}
+
+	// sort by created asc → Alice first
+	rows, _ = all(AdminUserQuery{SortBy: "created", SortDir: "asc", Limit: 10})
+	if rows[0].Email != "alice@example.com" {
+		t.Fatalf("created asc wrong: %v", emails(rows))
+	}
+
 	// sort by relayed desc → Alice first
 	rows, _ = all(AdminUserQuery{SortBy: "relayed", SortDir: "desc", Limit: 10})
 	if rows[0].Email != "alice@example.com" {
 		t.Fatalf("relayed desc wrong: %v", emails(rows))
 	}
 
-	// pagination: limit 2 offset 2 → one row
+	// sort by relayed asc → Alice last (she has the only/biggest relay total)
+	rows, _ = all(AdminUserQuery{SortBy: "relayed", SortDir: "asc", Limit: 10})
+	if rows[2].Email != "alice@example.com" {
+		t.Fatalf("relayed asc wrong: %v", emails(rows))
+	}
+
+	// pagination: limit 2 offset 2 → one row (the oldest, Alice)
 	rows, total = all(AdminUserQuery{Limit: 2, Offset: 2})
-	if total != 3 || len(rows) != 1 {
-		t.Fatalf("paging wrong: total=%d len=%d", total, len(rows))
+	if total != 3 || len(rows) != 1 || rows[0].Email != "alice@example.com" {
+		t.Fatalf("paging wrong: total=%d rows=%v", total, emails(rows))
 	}
 
 	// invalid sort/dir fall back to created desc
