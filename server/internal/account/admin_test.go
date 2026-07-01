@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -255,6 +256,67 @@ func TestAdminLoginTOTPNotBurnedByWrongCreds(t *testing.T) {
 	}
 	if len(w.Result().Cookies()) == 0 {
 		t.Fatal("successful login should set admin cookie")
+	}
+}
+
+func TestAdminHomeDashboardAndPaging(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	for i := 0; i < 3; i++ {
+		email := fmt.Sprintf("user%d@example.com", i)
+		if _, err := store.UpsertUserByEmail(ctx, email, fmt.Sprintf("User %d", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := NewService(store, nil, Config{AdminUser: "admin", AdminPassword: "pw"})
+	s.now = func() time.Time { return time.Unix(1_700_000_000, 0) }
+
+	get := func(query string) *httptest.ResponseRecorder {
+		tok := s.newAdminSession()
+		r := httptest.NewRequest("GET", "/admin"+query, nil)
+		r.AddCookie(&http.Cookie{Name: adminCookie, Value: tok})
+		w := httptest.NewRecorder()
+		s.handleAdminHome(w, r)
+		return w
+	}
+
+	// dashboard: metric card labels + a user present
+	w := get("")
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+	body := w.Body.String()
+	for _, want := range []string{"总用户数", "未过期暂存文件", "占用存储", "中继流量", "上传量", "user0@example.com"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("home body missing %q", want)
+		}
+	}
+
+	// search filters to one user
+	w = get("?q=user1")
+	body = w.Body.String()
+	if !strings.Contains(body, "user1@example.com") || strings.Contains(body, "user0@example.com") || strings.Contains(body, "user2@example.com") {
+		t.Fatal("search did not filter to user1 only")
+	}
+
+	// page clamp: absurd page still 200, clamped to last page with real content
+	w = get("?page=999")
+	body = w.Body.String()
+	if w.Code != http.StatusOK {
+		t.Fatalf("out-of-range page: want 200, got %d", w.Code)
+	}
+	if !strings.Contains(body, "第 1 / 1 页") || !strings.Contains(body, "user0@example.com") {
+		t.Fatal("out-of-range page did not clamp to a rendered last page")
+	}
+
+	// page overflowing int64 range must fall back to page 1, not a negative offset
+	w = get("?page=99999999999999999999")
+	body = w.Body.String()
+	if w.Code != http.StatusOK {
+		t.Fatalf("overflow page: want 200, got %d", w.Code)
+	}
+	if !strings.Contains(body, "第 1 / 1 页") {
+		t.Fatal("overflow page did not fall back to page 1")
 	}
 }
 
