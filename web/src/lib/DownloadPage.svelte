@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { fetchMeta, downloadBlob, parseDownloadKey, keyFromFragment } from "./stored-file";
   import { decryptManifest, type StoredManifest } from "./store-crypto";
   import { pickSaveTarget, type SaveTarget, type FileSink } from "./filesink";
-  import { lang, messages, legalUrl, type Messages } from "./i18n.svelte";
+  import { lang, setLang, LANGS, messages, legalUrl, type Lang, type Messages } from "./i18n.svelte";
+  import { formatRemaining } from "./format";
 
   let { id }: { id: string } = $props();
 
@@ -15,13 +16,20 @@
   let manifest = $state<StoredManifest | null>(null);
   let key: CryptoKey | null = null;
   let progress = $state(0); // 0..100
+  let expiresAt = $state(0); // unix seconds; 0 until meta loads
+  let burnAfterRead = $state(false);
+  let now = $state(Math.floor(Date.now() / 1000)); // ticks so the countdown stays live
 
+  let ticker: ReturnType<typeof setInterval> | undefined;
   onMount(async () => {
+    ticker = setInterval(() => (now = Math.floor(Date.now() / 1000)), 30_000);
     if (!window.isSecureContext || !crypto.subtle) { pageState = "error"; errKey = "unsupported"; return; }
     const k = parseDownloadKey(location.hash);
     if (!k) { pageState = "error"; errKey = "noKey"; return; }
     try {
       const meta = await fetchMeta(id);
+      expiresAt = meta.expiresAt;
+      burnAfterRead = meta.burnAfterRead;
       key = await keyFromFragment(k);
       manifest = await decryptManifest(key, base64ToBytes(meta.encManifest));
       pageState = "ready";
@@ -30,6 +38,7 @@
       errKey = isNotFound(e) ? "notFound" : "decryptFail";
     }
   });
+  onDestroy(() => clearInterval(ticker));
 
   function isNotFound(e: unknown): boolean {
     return e instanceof Error && /\b404\b/.test(e.message);
@@ -41,6 +50,10 @@
     return out;
   }
   const totalBytes = $derived(manifest ? manifest.files.reduce((n, f) => n + f.size, 0) : 0);
+  const secLeft = $derived(expiresAt > 0 ? expiresAt - now : 0);
+  // A link that lapses while the tab is open. Gated to the "ready" state in the
+  // template so it can't interrupt an in-flight download.
+  const expired = $derived(expiresAt > 0 && secLeft <= 0);
 
   async function download() {
     if (!manifest || !key) return;
@@ -93,8 +106,21 @@
   }
 </script>
 
+<header class="dlnav">
+  <a class="brand" href="/"><span class="mark">⇌</span><span class="word">Relayium</span></a>
+  <select
+    class="lang"
+    aria-label={t.langLabel}
+    value={lang()}
+    onchange={(e) => setLang((e.currentTarget as HTMLSelectElement).value as Lang)}
+  >
+    {#each LANGS as l (l.code)}
+      <option value={l.code}>{l.label}</option>
+    {/each}
+  </select>
+</header>
+
 <main class="dl">
-  <h1>Relayium</h1>
   {#if pageState === "loading"}
     <p>{t.download.loading}</p>
   {:else if pageState === "error"}
@@ -104,13 +130,30 @@
       {:else if errKey === "unsupported"}{t.download.unsupported}
       {:else}{t.download.decryptFail}{/if}
     </p>
+  {:else if pageState === "ready" && expired}
+    <p class="error">{t.download.notFound}</p>
   {:else}
-    <h2>{t.download.files}</h2>
+    <div class="head">
+      <h2>{t.download.files}</h2>
+      {#if manifest}
+        <span class="summary">{t.download.summary(manifest.files.length, formatSize(totalBytes))}</span>
+      {/if}
+    </div>
     <ul class="filelist">
       {#each manifest?.files ?? [] as f}
         <li><span class="fname">{f.name}</span><span class="fsize">{formatSize(f.size)}</span></li>
       {/each}
     </ul>
+
+    {#if expiresAt > 0}
+      <p class="expiry" class:soon={secLeft < 3600}>⏳ {t.download.expiresIn(formatRemaining(secLeft, t.download.durUnits))}</p>
+    {/if}
+
+    <p class="trust">{t.download.zeroKnowledge}</p>
+    {#if burnAfterRead}
+      <p class="burn">{t.download.burnWarning}</p>
+    {/if}
+
     {#if pageState === "downloading"}
       <div class="bar"><div class="fill" style:width="{progress}%"></div></div>
       <p>{t.download.downloading} {progress}%</p>
@@ -120,6 +163,12 @@
       <button class="primary" onclick={download}>{t.download.downloadBtn}</button>
     {/if}
   {/if}
+
+  <section class="sendcta">
+    <span>{t.download.sendPrompt}</span>
+    <a href="/">{t.download.sendCta}</a>
+  </section>
+
   <footer>
     <a href={legalUrl("privacy", lang())}>{t.legal.privacy}</a>
     <a href={legalUrl("terms", lang())}>{t.legal.terms}</a>
@@ -127,17 +176,61 @@
 </main>
 
 <style>
-  .dl { width: 560px; max-width: 100%; margin: 0 auto; padding: 24px 20px 48px; text-align: left; }
-  .dl h1 { font-size: 28px; margin: 0 0 18px; }
-  .dl h2 { font-size: 16px; margin: 18px 0 10px; }
+  .dlnav {
+    width: 560px; max-width: 100%; margin: 0 auto;
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px 0;
+  }
+  .brand { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; text-decoration: none; color: var(--text-h); font-weight: 600; }
+  .brand .mark {
+    width: 28px; height: 28px; line-height: 28px; text-align: center;
+    border-radius: 9px; color: #fff; font-size: 16px;
+    background: linear-gradient(135deg, var(--accent), #6d28d9);
+  }
+  .brand .word { font-size: 16px; letter-spacing: -0.4px; }
+  .lang {
+    font: inherit; font-size: 13px; padding: 5px 28px 5px 10px;
+    border-radius: 8px; border: 1px solid var(--border);
+    background: var(--social-bg); color: var(--text-h); cursor: pointer;
+  }
+  .lang:hover { border-color: var(--accent-border); }
+
+  .dl { width: 560px; max-width: 100%; margin: 0 auto; padding: 20px 20px 48px; text-align: left; }
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 8px 0 10px; }
+  .dl h2 { font-size: 16px; margin: 0; }
+  .summary { font-size: 13px; color: var(--text); white-space: nowrap; }
   .filelist { list-style: none; margin: 0 0 16px; padding: 0; }
   .filelist li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px dashed var(--border); }
   .fname { color: var(--text-h); word-break: break-all; }
   .fsize { color: var(--text); white-space: nowrap; }
+
+  .expiry { font-size: 13.5px; color: var(--text); margin: 0 0 12px; }
+  .expiry.soon { color: var(--accent); font-weight: 500; }
+  .trust {
+    font-size: 13px; line-height: 1.55; color: var(--text-h);
+    margin: 0 0 12px; padding: 10px 12px; border-radius: 10px;
+    background: var(--accent-bg); border: 1px solid var(--accent-border);
+  }
+  .burn {
+    font-size: 13px; line-height: 1.55; color: var(--text-h);
+    margin: 0 0 16px; padding: 10px 12px; border-radius: 10px;
+    background: var(--code-bg); border: 1px solid var(--accent-border);
+  }
+
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; }
   .fill { height: 100%; background: linear-gradient(90deg, var(--accent), #6d28d9); transition: width .2s; }
   button.primary { font: inherit; font-size: 15px; padding: 10px 24px; border-radius: 9px; cursor: pointer; background: var(--accent); border: 1px solid var(--accent); color: #fff; }
   .error { color: var(--accent); } .ok { color: #2ecc71; }
-  footer { margin-top: 28px; display: flex; gap: 16px; font-size: 12.5px; }
+
+  .sendcta {
+    margin-top: 28px; padding: 14px 16px; border-radius: 12px;
+    border: 1px solid var(--border); background: var(--surface-2);
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    font-size: 13.5px; color: var(--text);
+  }
+  .sendcta a { color: var(--accent); text-decoration: none; font-weight: 500; white-space: nowrap; }
+  .sendcta a:hover { text-decoration: underline; }
+
+  footer { margin-top: 20px; display: flex; gap: 16px; font-size: 12.5px; }
   footer a { color: var(--text-h); text-decoration: none; }
 </style>
