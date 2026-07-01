@@ -9,6 +9,7 @@
   let busy = $state(false);
   let progress = $state(0); // 0..100
   let link = $state("");
+  let expiresAt = $state(0); // unix seconds of the generated link, 0 until ready
   let err = $state("");
   let copied = $state(false);
   let qrDataUrl = $state("");
@@ -30,6 +31,7 @@
     if (files.length === 0) return;
     err = "";
     link = "";
+    expiresAt = 0;
     busy = true;
     progress = 0;
     try {
@@ -37,6 +39,7 @@
         progress = total > 0 ? Math.round((sent / total) * 100) : 0;
       });
       link = buildDownloadLink(location.origin, out.id, out.key);
+      expiresAt = out.expiresAt;
     } catch (e2) {
       if (e2 instanceof UploadError && e2.status === 413) err = t.stored.errTooLarge;
       else if (e2 instanceof UploadError && e2.status === 429) err = t.stored.errQuota;
@@ -82,6 +85,9 @@
       <input readonly value={link} />
       <button onclick={copy}>{copied ? t.stored.copied : t.stored.copy}</button>
     </div>
+    {#if expiresAt > 0}
+      <p class="expiry">{t.stored.expiresOn(new Date(expiresAt * 1000).toLocaleString(lang()))}</p>
+    {/if}
     {#if qrDataUrl}<img class="qr" src={qrDataUrl} alt="QR" width="192" height="192" />{/if}
   {/if}
 </section>
@@ -96,6 +102,7 @@
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; margin-top: 12px; }
   .fill { height: 100%; background: linear-gradient(90deg, var(--accent), #6d28d9); transition: width .2s; }
   .ready { color: var(--text-h); font-size: 14px; margin: 12px 0 6px; }
+  .expiry { color: var(--text); font-size: 13px; margin: 10px 0 0; }
   .row { display: flex; gap: 8px; }
   .row input { flex: 1; font: inherit; padding: 8px 10px; }
   .row button { font: inherit; padding: 8px 14px; cursor: pointer; }

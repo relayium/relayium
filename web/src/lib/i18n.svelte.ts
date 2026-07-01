@@ -131,6 +131,7 @@ export interface Messages {
     ttl3d: string;
     ttl7d: string;
     linkReady: string;
+    expiresOn: (when: string) => string; // echoes the link's expiry back to the sender
     copy: string;
     copied: string;
     errTooLarge: string;
@@ -140,6 +141,13 @@ export interface Messages {
   download: {
     loading: string;
     files: string;
+    summary: (count: number, size: string) => string; // file count + total size
+    expiresIn: (left: string) => string; // countdown, `left` pre-formatted by formatRemaining
+    durUnits: { d: string; h: string; m: string }; // suffixes for the countdown
+    zeroKnowledge: string; // reassurance + phishing caution
+    burnWarning: string; // shown only for burn-after-read links
+    sendPrompt: string; // reverse-acquisition lead-in
+    sendCta: string; // reverse-acquisition button
     downloadBtn: string;
     downloading: string;
     done: string;
@@ -301,6 +309,7 @@ const zh: Messages = {
     ttl3d: "3 天",
     ttl7d: "7 天",
     linkReady: "链接已生成，发给对方即可下载：",
+    expiresOn: (w) => `此链接将于 ${w} 到期`,
     copy: "复制链接",
     copied: "已复制",
     errTooLarge: "文件超过单文件大小上限。",
@@ -310,6 +319,13 @@ const zh: Messages = {
   download: {
     loading: "正在读取链接…",
     files: "待下载文件",
+    summary: (c, s) => `共 ${c} 个文件 · 合计 ${s}`,
+    expiresIn: (l) => `有效期剩余 ${l}`,
+    durUnits: { d: "天", h: "小时", m: "分钟" },
+    zeroKnowledge: "🔒 文件在发送方浏览器端加密，连我们的服务器也无法解密或查看内容。下载前请确认链接来自你信任的发送者。",
+    burnWarning: "⚠️ 此文件仅可下载一次，下载完成后立即永久删除、不可恢复。请确保网络稳定，一次下完。",
+    sendPrompt: "想反过来发送文件？",
+    sendCta: "用 Relayium 安全发送 →",
     downloadBtn: "下载并解密",
     downloading: "正在下载并解密…",
     done: "下载完成 ✓",
@@ -502,6 +518,7 @@ const en: Messages = {
     ttl3d: "3 days",
     ttl7d: "7 days",
     linkReady: "Link ready — send it to the recipient to download:",
+    expiresOn: (w) => `This link expires on ${w}`,
     copy: "Copy link",
     copied: "Copied",
     errTooLarge: "The file exceeds the single-file size limit.",
@@ -511,6 +528,13 @@ const en: Messages = {
   download: {
     loading: "Reading the link…",
     files: "Files to download",
+    summary: (c, s) => `${c} file${c === 1 ? "" : "s"} · ${s} total`,
+    expiresIn: (l) => `Expires in ${l}`,
+    durUnits: { d: "d", h: "h", m: "m" },
+    zeroKnowledge: "🔒 Files are encrypted in the sender's browser — not even our server can decrypt or view them. Before downloading, make sure the link comes from someone you trust.",
+    burnWarning: "⚠️ This file can be downloaded only once — it's permanently deleted right after, with no recovery. Make sure your connection is stable enough to finish in one go.",
+    sendPrompt: "Need to send files back?",
+    sendCta: "Send securely with Relayium →",
     downloadBtn: "Download & decrypt",
     downloading: "Downloading and decrypting…",
     done: "Download complete ✓",
@@ -703,6 +727,7 @@ const ja: Messages = {
     ttl3d: "3 日",
     ttl7d: "7 日",
     linkReady: "リンクを作成しました。相手に送ってダウンロードしてもらえます：",
+    expiresOn: (w) => `このリンクは ${w} に失効します`,
     copy: "リンクをコピー",
     copied: "コピーしました",
     errTooLarge: "ファイルが単一ファイルの上限を超えています。",
@@ -712,6 +737,13 @@ const ja: Messages = {
   download: {
     loading: "リンクを読み込み中…",
     files: "ダウンロードするファイル",
+    summary: (c, s) => `${c} 個のファイル · 合計 ${s}`,
+    expiresIn: (l) => `残り ${l} で失効`,
+    durUnits: { d: "日", h: "時間", m: "分" },
+    zeroKnowledge: "🔒 ファイルは送信者のブラウザ内で暗号化され、当社のサーバーでも復号・閲覧できません。ダウンロード前に、信頼できる送信者からのリンクかご確認ください。",
+    burnWarning: "⚠️ このファイルは一度だけダウンロードでき、完了後すぐに完全削除され、復元できません。安定した接続で一度に完了させてください。",
+    sendPrompt: "ファイルを送り返しますか？",
+    sendCta: "Relayium で安全に送る →",
     downloadBtn: "ダウンロードして復号",
     downloading: "ダウンロードして復号中…",
     done: "ダウンロード完了 ✓",
@@ -904,6 +936,7 @@ const ko: Messages = {
     ttl3d: "3일",
     ttl7d: "7일",
     linkReady: "링크가 생성되었습니다. 상대에게 보내 다운로드하세요:",
+    expiresOn: (w) => `이 링크는 ${w}에 만료됩니다`,
     copy: "링크 복사",
     copied: "복사됨",
     errTooLarge: "파일이 단일 파일 크기 한도를 초과했습니다.",
@@ -913,6 +946,13 @@ const ko: Messages = {
   download: {
     loading: "링크를 읽는 중…",
     files: "다운로드할 파일",
+    summary: (c, s) => `파일 ${c}개 · 합계 ${s}`,
+    expiresIn: (l) => `${l} 후 만료`,
+    durUnits: { d: "일", h: "시간", m: "분" },
+    zeroKnowledge: "🔒 파일은 보내는 사람의 브라우저에서 암호화되어 저희 서버도 복호화하거나 열람할 수 없습니다. 다운로드 전에 신뢰할 수 있는 사람이 보낸 링크인지 확인하세요.",
+    burnWarning: "⚠️ 이 파일은 한 번만 다운로드할 수 있으며, 완료 직후 영구 삭제되어 복구할 수 없습니다. 안정적인 연결에서 한 번에 완료하세요.",
+    sendPrompt: "파일을 되보내야 하나요?",
+    sendCta: "Relayium으로 안전하게 보내기 →",
     downloadBtn: "다운로드 및 복호화",
     downloading: "다운로드 및 복호화 중…",
     done: "다운로드 완료 ✓",
@@ -1105,6 +1145,7 @@ const de: Messages = {
     ttl3d: "3 Tage",
     ttl7d: "7 Tage",
     linkReady: "Link bereit — senden Sie ihn dem Empfänger zum Herunterladen:",
+    expiresOn: (w) => `Dieser Link läuft am ${w} ab`,
     copy: "Link kopieren",
     copied: "Kopiert",
     errTooLarge: "Die Datei überschreitet das Einzeldatei-Limit.",
@@ -1114,6 +1155,13 @@ const de: Messages = {
   download: {
     loading: "Link wird gelesen…",
     files: "Herunterzuladende Dateien",
+    summary: (c, s) => `${c} Datei${c === 1 ? "" : "en"} · ${s} gesamt`,
+    expiresIn: (l) => `Läuft in ${l} ab`,
+    durUnits: { d: "d", h: "h", m: "min" },
+    zeroKnowledge: "🔒 Dateien werden im Browser des Absenders verschlüsselt — nicht einmal unser Server kann sie entschlüsseln oder einsehen. Vergewissern Sie sich vor dem Download, dass der Link von einer vertrauenswürdigen Person stammt.",
+    burnWarning: "⚠️ Diese Datei kann nur einmal heruntergeladen werden — danach wird sie unwiderruflich gelöscht. Sorgen Sie für eine stabile Verbindung, um sie in einem Zug abzuschließen.",
+    sendPrompt: "Dateien zurücksenden?",
+    sendCta: "Sicher mit Relayium senden →",
     downloadBtn: "Herunterladen & entschlüsseln",
     downloading: "Herunterladen und entschlüsseln…",
     done: "Download abgeschlossen ✓",
@@ -1306,6 +1354,7 @@ const fr: Messages = {
     ttl3d: "3 jours",
     ttl7d: "7 jours",
     linkReady: "Lien prêt — envoyez-le au destinataire pour télécharger :",
+    expiresOn: (w) => `Ce lien expire le ${w}`,
     copy: "Copier le lien",
     copied: "Copié",
     errTooLarge: "Le fichier dépasse la taille maximale par fichier.",
@@ -1315,6 +1364,13 @@ const fr: Messages = {
   download: {
     loading: "Lecture du lien…",
     files: "Fichiers à télécharger",
+    summary: (c, s) => `${c} fichier${c === 1 ? "" : "s"} · ${s} au total`,
+    expiresIn: (l) => `Expire dans ${l}`,
+    durUnits: { d: "j", h: "h", m: "min" },
+    zeroKnowledge: "🔒 Les fichiers sont chiffrés dans le navigateur de l'expéditeur — même notre serveur ne peut ni les déchiffrer ni les consulter. Avant de télécharger, assurez-vous que le lien provient d'une personne de confiance.",
+    burnWarning: "⚠️ Ce fichier ne peut être téléchargé qu'une seule fois — il est ensuite définitivement supprimé, sans récupération possible. Assurez-vous d'une connexion stable pour tout télécharger d'un coup.",
+    sendPrompt: "Besoin de renvoyer des fichiers ?",
+    sendCta: "Envoyer en toute sécurité avec Relayium →",
     downloadBtn: "Télécharger et déchiffrer",
     downloading: "Téléchargement et déchiffrement…",
     done: "Téléchargement terminé ✓",
