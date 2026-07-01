@@ -10,6 +10,7 @@
   import UseCases from "./UseCases.svelte";
   import Faq from "./Faq.svelte";
   import { session } from "./auth.svelte";
+  import { enterRoom } from "./room.svelte";
   import { lang, messages, legalUrl, type Messages } from "./i18n.svelte";
 
   let { roomToken = "", roomCode = "", linkDead = false, showTransfer = false, transferSurface }:
@@ -47,6 +48,7 @@
         <p class="cardsub">{t.methods.share.sub}</p>
         <CrossNetwork {roomToken} />
         <p class="foot">{t.crossnet.realtimeFoot}</p>
+        <button class="startover" onclick={() => enterRoom({})}>{t.startOver}</button>
       </section>
     {:else if roomCode}
       <!-- 🔢 Pairing code — recipient joined via a code link -->
@@ -54,6 +56,7 @@
         <div class="mhead"><h2>{t.methods.pairing.name}</h2></div>
         <p class="cardsub">{t.methods.pairing.sub}</p>
         <CodePairing {roomCode} expired={linkDead} />
+        <button class="startover" onclick={() => enterRoom({})}>{t.startOver}</button>
       </section>
     {:else}
       <!-- Three peer-to-peer / stored methods, side by side -->
@@ -142,6 +145,12 @@
     .badge.ok { color: #4ade80; background: rgba(46, 204, 113, .16); border-color: rgba(46, 204, 113, .4); }
   }
 
+  .startover {
+    align-self: center; margin-top: 2px;
+    font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 8px; cursor: pointer;
+    background: none; border: 1px solid var(--border); color: var(--text);
+  }
+  .startover:hover { border-color: var(--accent-border); color: var(--text-h); }
   .signin { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 6px 0; }
   .signin .hint { margin: 0; font-size: 12.5px; color: var(--text); text-align: center; }
   .foot { margin: 4px 0 0; font-size: 12px; color: var(--text); text-align: center; }

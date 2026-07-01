@@ -63,7 +63,11 @@
   }
 
   function join() {
-    if (/^\d{6}$/.test(entry)) enterRoom({ code: entry });
+    if (!/^\d{6}$/.test(entry)) return;
+    // A joiner is never the minter — drop any stale mint marker from an earlier
+    // "create code" this session so isMinter resolves correctly after start-over.
+    sessionStorage.removeItem(EXP_KEY);
+    enterRoom({ code: entry });
   }
 
   async function copy() {
