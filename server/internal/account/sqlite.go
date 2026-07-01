@@ -427,32 +427,41 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context, q AdminUserQuery) ([]A
 		return nil, 0, err
 	}
 
-	// 单独一遍把 provider 摊到本页用户,避免 N+1(非本页 user_id 不在 index 中,跳过)。
-	irows, err := s.db.QueryContext(ctx, `SELECT user_id, provider FROM identities`)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer irows.Close()
-	seen := map[string]map[string]bool{}
-	for irows.Next() {
-		var uid, provider string
-		if err := irows.Scan(&uid, &provider); err != nil {
+	// 单独一遍把 provider 摊到本页用户,避免 N+1;查询按本页 user_id 范围限定,避免全表扫描。
+	if len(out) > 0 {
+		ids := make([]any, len(out))
+		ph := make([]string, len(out))
+		for i := range out {
+			ids[i] = out[i].ID
+			ph[i] = "?"
+		}
+		irows, err := s.db.QueryContext(ctx,
+			`SELECT user_id, provider FROM identities WHERE user_id IN (`+strings.Join(ph, ",")+`)`, ids...)
+		if err != nil {
 			return nil, 0, err
 		}
-		i, ok := index[uid]
-		if !ok {
-			continue
+		defer irows.Close()
+		seen := map[string]map[string]bool{}
+		for irows.Next() {
+			var uid, provider string
+			if err := irows.Scan(&uid, &provider); err != nil {
+				return nil, 0, err
+			}
+			i, ok := index[uid]
+			if !ok {
+				continue
+			}
+			if seen[uid] == nil {
+				seen[uid] = map[string]bool{}
+			}
+			if !seen[uid][provider] {
+				seen[uid][provider] = true
+				out[i].Methods = append(out[i].Methods, provider)
+			}
 		}
-		if seen[uid] == nil {
-			seen[uid] = map[string]bool{}
+		if err := irows.Err(); err != nil {
+			return nil, 0, err
 		}
-		if !seen[uid][provider] {
-			seen[uid][provider] = true
-			out[i].Methods = append(out[i].Methods, provider)
-		}
-	}
-	if err := irows.Err(); err != nil {
-		return nil, 0, err
 	}
 	for i := range out {
 		sort.Strings(out[i].Methods)
