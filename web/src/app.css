@@ -18,6 +18,7 @@
   --fs-display: 56px;
   --fs-h2: 30px;
   --fs-h3: 18px;
+  --fs-body: 16px;
   --fs-sm: 14px;
   --fs-xs: 13px;
   --space: 16px; /* legacy alias, prefer --space-4 */
