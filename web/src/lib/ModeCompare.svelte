@@ -27,13 +27,13 @@
 </section>
 
 <style>
-  .compare { margin: 40px 0 8px; }
-  .head { margin-bottom: 18px; }
-  .head h2 { font-size: 22px; margin: 0 0 6px; }
-  .head .sub { color: var(--text); font-size: 14px; max-width: 60ch; }
+  .compare { margin: var(--section-gap) 0 var(--space-2); }
+  .head { margin-bottom: var(--space-5); }
+  .head h2 { font-size: var(--fs-h2); margin: 0 0 var(--space-2); }
+  .head .sub { color: var(--text); font-size: var(--fs-sm); max-width: 60ch; }
 
   .table {
-    border: 1px solid var(--border); border-radius: 16px; overflow: hidden;
+    border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
     background: var(--surface-2);
   }
   .row {
@@ -42,13 +42,13 @@
   }
   .row:first-child { border-top: none; }
   .cell {
-    padding: 13px 16px; font-size: 13.5px; line-height: 1.5;
+    padding: var(--space-3) var(--space-4); font-size: var(--fs-xs); line-height: 1.5;
     border-left: 1px solid var(--border);
   }
   .cell.feat { border-left: none; color: var(--text-h); font-weight: 500; }
   .cell.rt, .cell.st { color: var(--text); }
 
-  .row.header .cell { font-weight: 600; color: var(--text-h); background: var(--code-bg); font-size: 14px; }
+  .row.header .cell { font-weight: 600; color: var(--text-h); background: var(--code-bg); font-size: var(--fs-sm); }
   .row:not(.header):hover { background: var(--accent-bg); }
 
   @media (max-width: 640px) {

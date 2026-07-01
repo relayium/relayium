@@ -22,20 +22,20 @@
 </section>
 
 <style>
-  .faq { margin: 40px 0 8px; }
-  .head { margin-bottom: 18px; }
-  .head h2 { font-size: 22px; margin: 0 0 6px; }
-  .head .sub { color: var(--text); font-size: 14px; max-width: 60ch; }
+  .faq { margin: var(--section-gap) 0 var(--space-2); }
+  .head { margin-bottom: var(--space-5); }
+  .head h2 { font-size: var(--fs-h2); margin: 0 0 var(--space-2); }
+  .head .sub { color: var(--text); font-size: var(--fs-sm); max-width: 60ch; }
 
-  .list { display: flex; flex-direction: column; gap: 10px; }
+  .list { display: flex; flex-direction: column; gap: var(--space-3); }
   .qa {
-    border: 1px solid var(--border); border-radius: 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
     background: var(--surface-2); overflow: hidden;
   }
   summary {
-    display: flex; align-items: center; gap: 12px; justify-content: space-between;
-    padding: 15px 18px; cursor: pointer; list-style: none;
-    font-size: 15px; color: var(--text-h); font-weight: 500;
+    display: flex; align-items: center; gap: var(--space-3); justify-content: space-between;
+    padding: var(--space-4) var(--space-5); cursor: pointer; list-style: none;
+    font-size: var(--fs-sm); color: var(--text-h); font-weight: 500;
   }
   summary::-webkit-details-marker { display: none; }
   summary:hover { color: var(--accent); }
@@ -47,6 +47,6 @@
   }
   .qa[open] .chev { transform: rotate(45deg); }
   .a {
-    margin: 0; padding: 0 18px 16px; font-size: 13.5px; line-height: 1.6; color: var(--text);
+    margin: 0; padding: 0 var(--space-5) var(--space-4); font-size: var(--fs-xs); line-height: 1.6; color: var(--text);
   }
 </style>

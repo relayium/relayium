@@ -19,33 +19,33 @@
 </section>
 
 <style>
-  .wrap { margin: 40px 0 8px; }
-  .head { margin-bottom: 18px; }
-  .head h2 { font-size: 22px; margin: 0 0 6px; }
-  .head .sub { color: var(--text); font-size: 14px; max-width: 60ch; }
+  .wrap { margin: var(--section-gap) 0 var(--space-2); }
+  .head { margin-bottom: var(--space-5); }
+  .head h2 { font-size: var(--fs-h2); margin: 0 0 var(--space-2); }
+  .head .sub { color: var(--text); font-size: var(--fs-sm); max-width: 60ch; }
 
   .features {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
+    gap: var(--space-4);
   }
   .feature {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--surface-2);
-    padding: 16px 18px;
-    transition: border-color .15s, box-shadow .15s;
+    padding: var(--space-4) var(--space-5);
+    transition: border-color .13s, box-shadow .13s;
   }
   .feature:hover { border-color: var(--accent-border); box-shadow: var(--shadow); }
   .feature h3 {
-    margin: 0 0 6px;
-    font-size: 15px;
+    margin: 0 0 var(--space-2);
+    font-size: var(--fs-sm);
     font-weight: 600;
     color: var(--text-h);
   }
   .feature p {
     margin: 0;
-    font-size: 13.5px;
+    font-size: var(--fs-xs);
     line-height: 1.5;
     color: var(--text);
   }
