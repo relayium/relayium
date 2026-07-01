@@ -49,6 +49,7 @@ type Service struct {
 	adminTOTPLastStep int64             // last TOTP time-step accepted for admin login (replay guard)
 	adminLogins       *loginThrottle
 	blobs             storage.BlobStore // nil until SetBlobStore; stored-transfer disabled when nil
+	validatePairCode  func(string) bool // reports a live anonymous pairing code; nil until wired
 }
 
 func NewService(store Store, mailer Mailer, cfg Config) *Service {
@@ -61,6 +62,12 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 // SetBlobStore wires the ciphertext blob backend for stored transfers. Called
 // once at startup when the DB (and thus account features) are available.
 func (s *Service) SetBlobStore(b storage.BlobStore) { s.blobs = b }
+
+// SetPairCodeValidator wires the anonymous pairing-code registry so /api/ice can
+// issue TURN credentials for a live code room, not just a logged-in transfer
+// token. Without this, pairing-code transfers would be STUN-only and fail to
+// relay across strict NATs. Called once at startup.
+func (s *Service) SetPairCodeValidator(fn func(string) bool) { s.validatePairCode = fn }
 
 func randToken() string {
 	b := make([]byte, 32)
