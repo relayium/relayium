@@ -100,6 +100,11 @@ export interface Messages {
     realtimeSub: string;
     realtimeFoot: string;
   };
+  methods: {
+    pairing: { name: string; sub: string; badge: string };
+    share: { name: string; sub: string; badge: string; signIn: string };
+    stored: { name: string; sub: string; badge: string };
+  };
   pair: {
     sendCode: string;
     enterCode: string;
@@ -252,7 +257,7 @@ const zh: Messages = {
   },
   nav: { lanTab: "局域网传输", crossTab: "跨网络传输" },
   crossnet: {
-    sendAcross: "发送到其他网络的人",
+    sendAcross: "生成分享链接",
     loginFirst: "请先登录后再发起跨网络传输",
     loginRequired: "跨网络传输需要登录后才能发起。请登录后再继续。",
     shareHint: "把下面的链接发给对方；对方打开后，在下方核对 6 位校验码即可传输",
@@ -263,6 +268,11 @@ const zh: Messages = {
     realtimeTitle: "实时直传",
     realtimeSub: "对方此刻在线 · 点对点直连 · 文件不经服务器",
     realtimeFoot: "免登录 · 登录可提升连通性",
+  },
+  methods: {
+    pairing: { name: "🔢 配对码", sub: "一方生成 6 位配对码，另一方输入即刻点对点直连，最快上手。", badge: "免登录" },
+    share: { name: "🔗 分享链接", sub: "生成带中继的链接或二维码发给对方，打开即实时直连，连通性更好。", badge: "需登录", signIn: "登录后即可生成分享链接" },
+    stored: { name: "📦 下载链接", sub: "浏览器先加密再暂存，对方无需在线、无需登录，凭链接随时下载。", badge: "对方可离线" },
   },
   pair: {
     sendCode: "生成配对码",
@@ -447,7 +457,7 @@ const en: Messages = {
   },
   nav: { lanTab: "LAN transfer", crossTab: "Cross-network" },
   crossnet: {
-    sendAcross: "Send to someone on another network",
+    sendAcross: "Generate share link",
     loginFirst: "Please sign in before starting a cross-network transfer",
     loginRequired: "Starting a cross-network transfer requires signing in. Please sign in to continue.",
     shareHint: "Send this link to the other person; once they open it, verify the 6-digit code below to transfer",
@@ -458,6 +468,11 @@ const en: Messages = {
     realtimeTitle: "Realtime direct",
     realtimeSub: "Both online now · peer-to-peer · files never touch the server",
     realtimeFoot: "No sign-in needed · sign in for better connectivity",
+  },
+  methods: {
+    pairing: { name: "🔢 Pairing code", sub: "One side creates a 6-digit code, the other types it in for an instant peer-to-peer link. Fastest to start.", badge: "No sign-in" },
+    share: { name: "🔗 Share link", sub: "Generate a relayed link or QR code and send it over; opening it connects you in realtime, with better connectivity.", badge: "Sign-in", signIn: "Sign in to generate a share link" },
+    stored: { name: "📦 Download link", sub: "Your browser encrypts then stores; the recipient downloads anytime, no live session and no account needed.", badge: "Offline OK" },
   },
   pair: {
     sendCode: "Create a pairing code",
@@ -642,7 +657,7 @@ const ja: Messages = {
   },
   nav: { lanTab: "LAN 転送", crossTab: "ネットワーク間転送" },
   crossnet: {
-    sendAcross: "別のネットワークの相手に送る",
+    sendAcross: "共有リンクを生成",
     loginFirst: "ネットワーク間転送を始める前にサインインしてください",
     loginRequired: "ネットワーク間転送を開始するにはログインが必要です。ログインして続行してください。",
     shareHint: "このリンクを相手に送ってください。相手が開いたら、下の6桁コードを確認して転送します",
@@ -653,6 +668,11 @@ const ja: Messages = {
     realtimeTitle: "リアルタイム直接転送",
     realtimeSub: "両者が今オンライン · P2P · ファイルはサーバーを経由しません",
     realtimeFoot: "ログイン不要 · ログインで接続性が向上",
+  },
+  methods: {
+    pairing: { name: "🔢 ペアリングコード", sub: "一方が6桁のコードを発行し、もう一方が入力するだけで即座にP2P直結。最も手軽です。", badge: "ログイン不要" },
+    share: { name: "🔗 共有リンク", sub: "リレー経由のリンクやQRコードを生成して送信。開いた瞬間にリアルタイム接続され、接続性も向上します。", badge: "要ログイン", signIn: "ログインすると共有リンクを生成できます" },
+    stored: { name: "📦 ダウンロードリンク", sub: "ブラウザで暗号化してから一時保存。受信者はオンラインもアカウントも不要で、いつでもダウンロードできます。", badge: "相手オフライン可" },
   },
   pair: {
     sendCode: "ペアリングコードを生成",
@@ -837,7 +857,7 @@ const ko: Messages = {
   },
   nav: { lanTab: "LAN 전송", crossTab: "네트워크 간 전송" },
   crossnet: {
-    sendAcross: "다른 네트워크의 상대에게 보내기",
+    sendAcross: "공유 링크 생성",
     loginFirst: "네트워크 간 전송을 시작하려면 먼저 로그인하세요",
     loginRequired: "네트워크 간 전송을 시작하려면 로그인이 필요합니다. 로그인 후 계속하세요.",
     shareHint: "이 링크를 상대에게 보내세요. 상대가 열면 아래 6자리 코드를 확인하여 전송합니다",
@@ -848,6 +868,11 @@ const ko: Messages = {
     realtimeTitle: "실시간 직접 전송",
     realtimeSub: "양쪽 모두 온라인 · P2P · 파일은 서버를 거치지 않습니다",
     realtimeFoot: "로그인 불필요 · 로그인 시 연결성 향상",
+  },
+  methods: {
+    pairing: { name: "🔢 페어링 코드", sub: "한쪽이 6자리 코드를 만들고 다른 쪽이 입력하면 즉시 P2P로 직접 연결됩니다. 가장 빠릅니다.", badge: "로그인 불필요" },
+    share: { name: "🔗 공유 링크", sub: "중계 링크나 QR 코드를 생성해 보내면, 상대가 여는 순간 실시간으로 연결되고 연결 안정성도 좋습니다.", badge: "로그인 필요", signIn: "로그인하면 공유 링크를 만들 수 있습니다" },
+    stored: { name: "📦 다운로드 링크", sub: "브라우저에서 암호화한 뒤 임시 보관하며, 받는 사람은 접속도 계정도 필요 없이 언제든 다운로드합니다.", badge: "상대 오프라인 OK" },
   },
   pair: {
     sendCode: "페어링 코드 생성",
@@ -1032,7 +1057,7 @@ const de: Messages = {
   },
   nav: { lanTab: "LAN-Übertragung", crossTab: "Netzübergreifend" },
   crossnet: {
-    sendAcross: "An jemanden in einem anderen Netzwerk senden",
+    sendAcross: "Freigabelink erzeugen",
     loginFirst: "Bitte melde dich an, bevor du eine netzwerkübergreifende Übertragung startest",
     loginRequired: "Für eine netzübergreifende Übertragung ist eine Anmeldung erforderlich. Bitte melde dich an, um fortzufahren.",
     shareHint: "Sende diesen Link an die andere Person; sobald sie ihn öffnet, bestätige den 6-stelligen Code unten zur Übertragung",
@@ -1043,6 +1068,11 @@ const de: Messages = {
     realtimeTitle: "Echtzeit-Direktübertragung",
     realtimeSub: "Beide jetzt online · Peer-to-Peer · Dateien berühren nie den Server",
     realtimeFoot: "Keine Anmeldung nötig · angemeldet bessere Verbindung",
+  },
+  methods: {
+    pairing: { name: "🔢 Kopplungscode", sub: "Eine Seite erzeugt einen 6-stelligen Code, die andere gibt ihn ein — sofort direkt Peer-to-Peer verbunden. Am schnellsten.", badge: "Ohne Anmeldung" },
+    share: { name: "🔗 Freigabelink", sub: "Erzeuge einen weitergeleiteten Link oder QR-Code und verschick ihn; beim Öffnen seid ihr in Echtzeit verbunden, mit besserer Konnektivität.", badge: "Anmeldung nötig", signIn: "Melde dich an, um einen Freigabelink zu erzeugen" },
+    stored: { name: "📦 Download-Link", sub: "Dein Browser verschlüsselt und speichert zwischen; die empfangende Person lädt jederzeit herunter — ohne Sitzung, ohne Konto.", badge: "Auch offline" },
   },
   pair: {
     sendCode: "Kopplungscode erstellen",
@@ -1227,7 +1257,7 @@ const fr: Messages = {
   },
   nav: { lanTab: "Transfert LAN", crossTab: "Inter-réseaux" },
   crossnet: {
-    sendAcross: "Envoyer à quelqu'un sur un autre réseau",
+    sendAcross: "Générer un lien de partage",
     loginFirst: "Veuillez vous connecter avant de lancer un transfert inter-réseaux",
     loginRequired: "Lancer un transfert inter-réseaux nécessite une connexion. Veuillez vous connecter pour continuer.",
     shareHint: "Envoyez ce lien à l'autre personne ; une fois ouvert, vérifiez le code à 6 chiffres ci-dessous pour transférer",
@@ -1238,6 +1268,11 @@ const fr: Messages = {
     realtimeTitle: "Transfert direct en temps réel",
     realtimeSub: "Les deux en ligne · pair-à-pair · les fichiers ne passent jamais par le serveur",
     realtimeFoot: "Sans connexion · connectez-vous pour une meilleure connectivité",
+  },
+  methods: {
+    pairing: { name: "🔢 Code d'appairage", sub: "Un côté crée un code à 6 chiffres, l'autre le saisit pour une liaison pair-à-pair instantanée. Le plus rapide.", badge: "Sans connexion" },
+    share: { name: "🔗 Lien de partage", sub: "Générez un lien relayé ou un QR code et envoyez-le ; en l'ouvrant, vous êtes connectés en temps réel, avec une meilleure connectivité.", badge: "Connexion requise", signIn: "Connectez-vous pour générer un lien de partage" },
+    stored: { name: "📦 Lien de téléchargement", sub: "Votre navigateur chiffre puis stocke temporairement ; le destinataire télécharge quand il veut, sans session ni compte.", badge: "Même hors ligne" },
   },
   pair: {
     sendCode: "Créer un code d'appairage",
