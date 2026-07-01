@@ -2,19 +2,21 @@ import { describe, it, expect } from "vitest";
 import { messages, LANGS } from "./i18n.svelte";
 
 describe("i18n completeness", () => {
-  it("every language has nav tab labels and the login-required string", () => {
+  it("every language has nav tab labels and the cross-network method names", () => {
     for (const { code } of LANGS) {
       const m = messages[code];
       expect(m.nav.lanTab, `${code}.nav.lanTab`).toBeTruthy();
       expect(m.nav.crossTab, `${code}.nav.crossTab`).toBeTruthy();
-      expect(m.crossnet.loginRequired, `${code}.crossnet.loginRequired`).toBeTruthy();
+      expect(m.methods.pairing.name, `${code}.methods.pairing.name`).toBeTruthy();
+      expect(m.methods.share.name, `${code}.methods.share.name`).toBeTruthy();
+      expect(m.methods.stored.name, `${code}.methods.stored.name`).toBeTruthy();
     }
   });
 
   it("every language has the stored-transfer + download strings", () => {
     for (const { code } of LANGS) {
       const m = messages[code];
-      expect(m.stored.title, `${code}.stored.title`).toBeTruthy();
+      expect(m.stored.pick, `${code}.stored.pick`).toBeTruthy();
       expect(m.stored.errQuota, `${code}.stored.errQuota`).toBeTruthy();
       expect(m.download.downloadBtn, `${code}.download.downloadBtn`).toBeTruthy();
       expect(m.download.notFound, `${code}.download.notFound`).toBeTruthy();
