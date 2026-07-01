@@ -14,8 +14,18 @@ type adminSettingsView struct {
 }
 
 type adminHomeData struct {
-	Users    []AdminUserRow
-	Settings adminSettingsView
+	Metrics    AdminMetrics
+	Users      []AdminUserRow
+	Total      int64
+	Page       int
+	TotalPages int
+	Search     string
+	Sort       string
+	Dir        string
+	PrevHref   string            // empty = no previous page
+	NextHref   string            // empty = no next page
+	SortHref   map[string]string // column key ("created"/"email"/"relayed") -> sort link on click
+	Settings   adminSettingsView
 }
 
 type adminLoginData struct {
@@ -49,10 +59,26 @@ th{background:#f5f5f5}.top{display:flex;justify-content:space-between;align-item
 .settings .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;max-width:520px}
 .settings label{display:flex;flex-direction:column;font-size:13px;gap:4px}
 .settings input{font:inherit;padding:6px 8px}
-.settings button{font:inherit;padding:8px 14px;grid-column:1/-1;width:max-content}</style></head>
+.settings button{font:inherit;padding:8px 14px;grid-column:1/-1;width:max-content}
+.cards{display:flex;flex-wrap:wrap;gap:12px;margin:14px 0 26px}
+.card{border:1px solid #ddd;border-radius:8px;padding:12px 16px;min-width:140px}
+.card .n{font-size:20px;font-weight:600}.card .l{color:#666;font-size:12px;margin-top:4px}
+.search{display:flex;gap:6px}.search input[type=text]{font:inherit;padding:6px 8px}
+.pager{display:flex;gap:16px;align-items:center;margin:16px 0}
+.pager .off{color:#bbb}
+th a{text-decoration:none;color:inherit}th a:hover{text-decoration:underline}</style></head>
 <body>
-<div class="top"><h1>注册用户（{{len .Users}}）</h1>
+<div class="top"><h1>后台概览</h1>
 <form method="post" action="/admin/logout"><button type="submit">退出</button></form></div>
+
+<section class="cards">
+<div class="card"><div class="n">{{.Metrics.TotalUsers}}</div><div class="l">总用户数</div></div>
+<div class="card"><div class="n">{{.Metrics.ActiveStoredFiles}}</div><div class="l">未过期暂存文件</div></div>
+<div class="card"><div class="n">{{bytes .Metrics.ActiveStoredBytes}}</div><div class="l">占用存储(近似)</div></div>
+<div class="card"><div class="n">{{bytes .Metrics.RelayedBytes24h}}</div><div class="l">中继流量 · 近 24h</div></div>
+<div class="card"><div class="n">{{bytes .Metrics.RelayedBytes7d}}</div><div class="l">中继流量 · 近 7d</div></div>
+<div class="card"><div class="n">{{bytes .Metrics.UploadedBytes24h}}</div><div class="l">上传量 · 近 24h</div></div>
+</section>
 
 <section class="settings">
 <h2>暂存传输设置</h2>
@@ -65,8 +91,19 @@ th{background:#f5f5f5}.top{display:flex;justify-content:space-between;align-item
 </form>
 </section>
 
+<div class="top"><h2>注册用户（{{.Total}}）</h2>
+<form method="get" action="/admin" class="search">
+<input type="text" name="q" value="{{.Search}}" placeholder="搜索邮箱或显示名">
+<input type="hidden" name="sort" value="{{.Sort}}"><input type="hidden" name="dir" value="{{.Dir}}">
+<button type="submit">搜索</button>
+</form></div>
+
 <table><thead><tr>
-<th>邮箱</th><th>显示名</th><th>注册时间(UTC)</th><th>登录方式</th><th>设备</th><th>中继流量</th>
+<th><a href="{{index .SortHref "email"}}">邮箱</a></th>
+<th>显示名</th>
+<th><a href="{{index .SortHref "created"}}">注册时间(UTC)</a></th>
+<th>登录方式</th><th>设备</th>
+<th><a href="{{index .SortHref "relayed"}}">中继流量</a></th>
 </tr></thead><tbody>
 {{range .Users}}<tr>
 <td>{{.Email}}</td><td>{{.DisplayName}}</td><td>{{ts .CreatedAt}}</td>
@@ -74,6 +111,12 @@ th{background:#f5f5f5}.top{display:flex;justify-content:space-between;align-item
 <td>{{.DeviceCount}}</td><td>{{bytes .RelayedBytes}}</td>
 </tr>{{end}}
 </tbody></table>
+
+<div class="pager">
+{{if .PrevHref}}<a href="{{.PrevHref}}">← 上一页</a>{{else}}<span class="off">← 上一页</span>{{end}}
+<span>第 {{.Page}} / {{.TotalPages}} 页</span>
+{{if .NextHref}}<a href="{{.NextHref}}">下一页 →</a>{{else}}<span class="off">下一页 →</span>{{end}}
+</div>
 </body></html>`))
 
 // humanBytes 把字节数格式化为人类可读字符串（使用 strconv 标准库）。

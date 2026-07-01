@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -255,6 +256,52 @@ func TestAdminLoginTOTPNotBurnedByWrongCreds(t *testing.T) {
 	}
 	if len(w.Result().Cookies()) == 0 {
 		t.Fatal("successful login should set admin cookie")
+	}
+}
+
+func TestAdminHomeDashboardAndPaging(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	for i := 0; i < 3; i++ {
+		email := fmt.Sprintf("user%d@example.com", i)
+		if _, err := store.UpsertUserByEmail(ctx, email, fmt.Sprintf("User %d", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := NewService(store, nil, Config{AdminUser: "admin", AdminPassword: "pw"})
+	s.now = func() time.Time { return time.Unix(1_700_000_000, 0) }
+
+	get := func(query string) *httptest.ResponseRecorder {
+		tok := s.newAdminSession()
+		r := httptest.NewRequest("GET", "/admin"+query, nil)
+		r.AddCookie(&http.Cookie{Name: adminCookie, Value: tok})
+		w := httptest.NewRecorder()
+		s.handleAdminHome(w, r)
+		return w
+	}
+
+	// dashboard: metric card labels + a user present
+	w := get("")
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+	body := w.Body.String()
+	for _, want := range []string{"总用户数", "中继流量", "user0@example.com"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("home body missing %q", want)
+		}
+	}
+
+	// search filters to one user
+	w = get("?q=user1")
+	body = w.Body.String()
+	if !strings.Contains(body, "user1@example.com") || strings.Contains(body, "user0@example.com") {
+		t.Fatal("search did not filter to user1 only")
+	}
+
+	// page clamp: absurd page still 200, no crash
+	if w := get("?page=999"); w.Code != http.StatusOK {
+		t.Fatalf("out-of-range page: want 200, got %d", w.Code)
 	}
 }
 

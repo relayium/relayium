@@ -2,16 +2,40 @@ package account
 
 import (
 	"crypto/subtle"
+	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
 )
 
 const (
-	adminCookie     = "relayium_admin"
-	adminSessionTTL = 12 * time.Hour
+	adminCookie       = "relayium_admin"
+	adminSessionTTL   = 12 * time.Hour
+	adminUsersPerPage = 50
 )
+
+// adminListHref builds a /admin list link, keeping only non-default params, URL-encoded.
+func adminListHref(search, sort, dir string, page int) string {
+	v := url.Values{}
+	if search != "" {
+		v.Set("q", search)
+	}
+	if sort != "" {
+		v.Set("sort", sort)
+	}
+	if dir != "" {
+		v.Set("dir", dir)
+	}
+	if page > 1 {
+		v.Set("page", strconv.Itoa(page))
+	}
+	if len(v) == 0 {
+		return "/admin"
+	}
+	return "/admin?" + v.Encode()
+}
 
 // AdminEnabled 报告是否配置了管理员密码。账号有默认值，故只以密码为开关。
 func (s *Service) AdminEnabled() bool { return s.cfg.AdminPassword != "" }
@@ -121,16 +145,73 @@ func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		s.renderAdminLogin(w, http.StatusOK, "")
 		return
 	}
-	rows, _, err := s.store.AdminListUsers(r.Context(), AdminUserQuery{
-		SortBy: "created", SortDir: "desc", Limit: 1000, Offset: 0,
+	q := r.URL.Query()
+	search := strings.TrimSpace(q.Get("q"))
+	sortBy := q.Get("sort")
+	if sortBy != "email" && sortBy != "relayed" {
+		sortBy = "created"
+	}
+	dir := "desc"
+	if strings.EqualFold(q.Get("dir"), "asc") {
+		dir = "asc"
+	}
+	page, _ := strconv.Atoi(q.Get("page"))
+	if page < 1 {
+		page = 1
+	}
+
+	now := s.now().Unix()
+	metrics, err := s.store.AdminMetrics(r.Context(), now)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	rows, total, err := s.store.AdminListUsers(r.Context(), AdminUserQuery{
+		Search: search, SortBy: sortBy, SortDir: dir,
+		Limit: adminUsersPerPage, Offset: (page - 1) * adminUsersPerPage,
 	})
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
+	totalPages := int(math.Ceil(float64(total) / float64(adminUsersPerPage)))
+	if totalPages < 1 {
+		totalPages = 1
+	}
+	if page > totalPages { // clamp to the last page and re-fetch it
+		page = totalPages
+		rows, total, err = s.store.AdminListUsers(r.Context(), AdminUserQuery{
+			Search: search, SortBy: sortBy, SortDir: dir,
+			Limit: adminUsersPerPage, Offset: (page - 1) * adminUsersPerPage,
+		})
+		if err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Sort link for a column header: non-current column -> desc; current column -> toggle direction. Resets to page 1.
+	sortHref := map[string]string{}
+	for _, col := range []string{"created", "email", "relayed"} {
+		nd := "desc"
+		if sortBy == col && dir == "desc" {
+			nd = "asc"
+		}
+		sortHref[col] = adminListHref(search, col, nd, 1)
+	}
+	prev, next := "", ""
+	if page > 1 {
+		prev = adminListHref(search, sortBy, dir, page-1)
+	}
+	if page < totalPages {
+		next = adminListHref(search, sortBy, dir, page+1)
+	}
+
 	st := s.resolveSettings(r.Context())
 	data := adminHomeData{
-		Users: rows,
+		Metrics: metrics, Users: rows, Total: total, Page: page, TotalPages: totalPages,
+		Search: search, Sort: sortBy, Dir: dir,
+		PrevHref: prev, NextHref: next, SortHref: sortHref,
 		Settings: adminSettingsView{
 			MaxFileSizeMB: st.MaxFileSize / (1024 * 1024),
 			DailyQuotaMB:  st.DailyQuota / (1024 * 1024),
