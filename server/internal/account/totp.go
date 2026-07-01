@@ -24,32 +24,44 @@ func (s *Service) AdminTOTPEnabled() bool {
 	return s.AdminEnabled() && s.cfg.AdminTOTPSecret != ""
 }
 
-// validateAdminTOTP checks a 6-digit code against the configured secret,
-// allowing ±1 time-step of clock skew. It rejects replays: once a code from
-// a given time-step succeeds, that step and any earlier one are permanently
-// dead (monotonic adminTOTPLastStep).
-func (s *Service) validateAdminTOTP(code string) bool {
+// matchAdminTOTPStep checks a 6-digit code against the configured secret,
+// allowing ±1 time-step of clock skew, and returns the time-step it maps to.
+// It rejects replays: a step at or before the last committed one is stale.
+// It does NOT mutate replay state; call commitAdminTOTPStep after a fully
+// successful login to consume the step. ok is false for an empty/invalid/
+// already-consumed code.
+func (s *Service) matchAdminTOTPStep(code string) (step int64, ok bool) {
 	secret := s.cfg.AdminTOTPSecret
 	if secret == "" || code == "" {
-		return false
+		return 0, false
 	}
 	now := s.now()
+	s.adminTOTPMu.Lock()
+	last := s.adminTOTPLastStep
+	s.adminTOTPMu.Unlock()
 	for delta := int64(-1); delta <= 1; delta++ {
 		t := now.Add(time.Duration(delta) * 30 * time.Second)
-		ok, err := totp.ValidateCustom(code, secret, t, totpOpts)
-		if err != nil || !ok {
+		okc, err := totp.ValidateCustom(code, secret, t, totpOpts)
+		if err != nil || !okc {
 			continue
 		}
-		step := t.Unix() / 30
-		s.adminTOTPMu.Lock()
-		defer s.adminTOTPMu.Unlock()
-		if step <= s.adminTOTPLastStep {
-			return false // replay or stale step
+		st := t.Unix() / 30
+		if st <= last {
+			return 0, false // replayed / stale step
 		}
-		s.adminTOTPLastStep = step
-		return true
+		return st, true
 	}
-	return false
+	return 0, false
+}
+
+// commitAdminTOTPStep consumes a matched step after a fully successful login,
+// advancing the monotonic replay guard so that step and earlier can't be reused.
+func (s *Service) commitAdminTOTPStep(step int64) {
+	s.adminTOTPMu.Lock()
+	if step > s.adminTOTPLastStep {
+		s.adminTOTPLastStep = step
+	}
+	s.adminTOTPMu.Unlock()
 }
 
 // validateAdminTOTPSecret returns an error if secret is non-empty but not a
