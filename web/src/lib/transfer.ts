@@ -32,9 +32,15 @@ export interface Manifest {
 const KIND_BATCH = 3; // manifest (plaintext): the whole batch's file list
 const KIND_CHUNK = 1; // one encrypted file slice
 const KIND_DONE = 2; // end-of-file integrity hash (plaintext)
+const KIND_RESUME_START = 4; // sender->receiver (plaintext): {index, offset, seq} — where a resumed stream picks up
+const KIND_RESUME_REQ = 5; // receiver->sender (plaintext): {index, offset} — the last durably-written point
 
 /** Frame kinds, exported so the UI can read a frame's type for progress tracking. */
 export const FRAME = { CHUNK: KIND_CHUNK, DONE: KIND_DONE, BATCH: KIND_BATCH } as const;
+
+/** A resume checkpoint: the receiver has durably written `offset` bytes of file
+ *  `index`; the sender continues from there. */
+export interface ResumePoint { index: number; offset: number; }
 /** Per-chunk wire overhead: 5-byte header + 16-byte AES-GCM tag. plaintext = byteLength - this. */
 export const CHUNK_OVERHEAD = 5 + 16;
 
@@ -56,6 +62,22 @@ export function controlKind(buf: ArrayBuffer): "accept" | "reject" | "complete" 
   if (b[0] === CTRL_REJECT) return "reject";
   if (b[0] === CTRL_COMPLETE) return "complete";
   return null;
+}
+
+/** Receiver->sender resume request: the last point the receiver durably has. */
+export function resumeReqFrame(index: number, offset: number): Bytes {
+  return frame(KIND_RESUME_REQ, 0, enc.encode(JSON.stringify({ index, offset })));
+}
+
+/** Decode a resume request; null if the frame is not one. */
+export function parseResumeReq(buf: ArrayBuffer): ResumePoint | null {
+  const b = new Uint8Array(buf);
+  if (b[0] !== KIND_RESUME_REQ) return null;
+  try {
+    return JSON.parse(dec.decode(b.slice(5))) as ResumePoint;
+  } catch {
+    return null;
+  }
 }
 
 const enc = new TextEncoder();
@@ -82,6 +104,12 @@ function toHex(b: Uint8Array): string {
 }
 
 export class Sender {
+  // AES-GCM nonce counter. GLOBAL across the whole transfer AND across resumes:
+  // it only ever increases, never rewinds, so no nonce is reused under the
+  // session key — which is what makes reusing the authenticated keys on a
+  // resumed connection safe. Chunks lost in-flight simply burn their seq.
+  private seq = 0;
+
   /** The plaintext manifest frame; sent first so the receiver can prompt once for
    *  the batch. Throws if the encoded manifest would exceed the DataChannel
    *  message ceiling (too many files, or paths too long). */
@@ -92,25 +120,41 @@ export class Sender {
     return frame(KIND_BATCH, 0, payload);
   }
 
+  /** Announce where a resumed stream picks up. `this.seq` is the nonce the first
+   *  resumed chunk will carry — send this frame immediately before dataFrames(). */
+  resumeStartFrame(point: ResumePoint): Bytes {
+    return frame(KIND_RESUME_START, 0, enc.encode(JSON.stringify({ ...point, seq: this.seq })));
+  }
+
   /**
    * Encrypted chunk frames for every file, each followed by its integrity frame.
-   * The AES-GCM nonce counter `seq` is GLOBAL across the whole batch — it never
-   * resets per file — so no nonce is ever reused under the session key.
+   * With `resume` set, files before `resume.index` are skipped (already
+   * delivered) and file `resume.index` is streamed from `resume.offset` — but its
+   * chain hash is still computed from byte 0, so the per-file DONE remains a hash
+   * of the whole file and the receiver's resumed chain lines up.
    */
-  async *dataFrames(files: File[], keys: SessionKeys): AsyncGenerator<Bytes> {
-    let seq = 0;
-    for (const file of files) {
+  async *dataFrames(files: File[], keys: SessionKeys, resume?: ResumePoint): AsyncGenerator<Bytes> {
+    for (let fi = 0; fi < files.length; fi++) {
+      if (resume && fi < resume.index) continue; // delivered before the drop
+      const file = files[fi];
+      const from = resume && fi === resume.index ? resume.offset : 0;
       let hash = new Uint8Array(32);
       for (let offset = 0; offset < file.size; offset += CHUNK_SIZE) {
         const piece = new Uint8Array(
           await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer(),
         );
         hash = await chainHash(hash, piece);
-        yield frame(KIND_CHUNK, seq, await seal(keys.send, seq, piece));
-        seq++;
+        if (offset >= from) {
+          // Reserve the nonce and advance BEFORE yielding: a generator suspends at
+          // the yield, so if the transfer is abandoned here (a drop), this.seq must
+          // already point past this chunk — otherwise a resume would reuse its
+          // nonce. A burned (sent-but-lost) chunk simply consumes its seq forever.
+          const s = this.seq++;
+          yield frame(KIND_CHUNK, s, await seal(keys.send, s, piece));
+        }
       }
       // DONE is unencrypted and does not consume a nonce slot.
-      yield frame(KIND_DONE, seq, enc.encode(JSON.stringify({ sha256: toHex(hash) })));
+      yield frame(KIND_DONE, this.seq, enc.encode(JSON.stringify({ sha256: toHex(hash) })));
     }
   }
 }
@@ -119,15 +163,34 @@ export class Receiver {
   private expectedSeq = 0; // global nonce counter, mirrors the sender
   private hash = new Uint8Array(32); // chained hash of the file currently arriving
 
+  /** A copy of the current file's running chain hash. The App checkpoints this
+   *  next to the bytes it has durably written, so a resume can restore a point
+   *  where hash state and written bytes agree. */
+  snapshotChain(): Uint8Array {
+    return this.hash.slice();
+  }
+
+  /** Restore the chain hash to a checkpoint and align the nonce counter to the
+   *  sender's resumed start seq. Called before feeding resumed chunks. */
+  resumeAt(chain: Uint8Array, seq: number): void {
+    this.hash = chain.slice();
+    this.expectedSeq = seq;
+  }
+
   async feed(
     encoded: Bytes,
     keys: SessionKeys,
-  ): Promise<{ batch?: Manifest; chunk?: Uint8Array; done?: { ok: boolean } }> {
+  ): Promise<{ batch?: Manifest; chunk?: Uint8Array; done?: { ok: boolean }; resume?: ResumePoint & { seq: number } }> {
     const kind = encoded[0];
     const seq = new DataView(encoded.buffer, encoded.byteOffset).getUint32(1);
     const payload = encoded.slice(5);
     if (kind === KIND_BATCH) {
       return { batch: JSON.parse(dec.decode(payload)) as Manifest };
+    }
+    if (kind === KIND_RESUME_START) {
+      // The App restores the chain snapshot and calls resumeAt(); we just surface
+      // the announced start so it can align file index/offset and the nonce.
+      return { resume: JSON.parse(dec.decode(payload)) as ResumePoint & { seq: number } };
     }
     if (kind === KIND_CHUNK) {
       if (seq !== this.expectedSeq) throw new Error("out-of-order chunk");
