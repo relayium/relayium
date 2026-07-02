@@ -1,3 +1,5 @@
+import { ZipWriter } from "./zip";
+
 export interface FileSink {
   write(chunk: Uint8Array): Promise<void>;
   close(): Promise<void>;
@@ -6,13 +8,17 @@ export interface FileSink {
 export interface FileMetaLite {
   name: string;
   size: number;
+  path?: string; // relative path within a sent folder; absent for a flat file
 }
 
 /** A destination for a whole batch: hands out one sink per file, in arrival order. */
 export interface SaveTarget {
   /** Human-readable description of where files are going (for the UI). */
   label: string;
-  file(name: string, size: number): Promise<FileSink>;
+  file(name: string, size: number, path?: string): Promise<FileSink>;
+  /** Finalise the batch (e.g. flush a bundled ZIP). Called once, after the last
+   *  file's sink closes. Optional: streaming targets need no finalisation. */
+  done?(): Promise<void>;
 }
 
 interface SavePickerWindow {
@@ -22,6 +28,7 @@ interface SavePickerWindow {
 interface FsFileHandle { createWritable: () => Promise<FsWritable>; }
 interface FsDirHandle {
   getFileHandle: (name: string, o: { create: boolean }) => Promise<FsFileHandle>;
+  getDirectoryHandle: (name: string, o: { create: boolean }) => Promise<FsDirHandle>;
 }
 interface FsWritable {
   write: (d: Uint8Array) => Promise<void>;
@@ -57,15 +64,7 @@ function blobSink(name: string): FileSink {
   const parts: Uint8Array[] = [];
   return {
     write: async (chunk) => { parts.push(chunk); },
-    close: async () => {
-      const blob = new Blob(parts as BlobPart[]);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = name;
-      a.click();
-      URL.revokeObjectURL(url);
-    },
+    close: async () => download(new Blob(parts as BlobPart[]), name),
   };
 }
 
@@ -98,38 +97,86 @@ export async function pickSaveTarget(files: FileMetaLite[]): Promise<SaveTarget>
 
   if (w.showDirectoryPicker) {
     // Grant folder access now; per-file handles afterwards need no further gesture.
-    const dir = await w.showDirectoryPicker();
-    // Never silently clobber: dedupe both against files already in the folder and
+    const root = await w.showDirectoryPicker();
+    // Never silently clobber: dedupe both against files already on disk and
     // against earlier files in this same batch ("name (1).ext", "name (2).ext", …).
+    // Dedup is scoped per destination directory, keyed by full relative path.
     const claimed = new Set<string>();
-    const existsInDir = async (n: string): Promise<boolean> => {
+    const existsInDir = async (d: FsDirHandle, n: string): Promise<boolean> => {
       try {
-        await dir.getFileHandle(n, { create: false });
+        await d.getFileHandle(n, { create: false });
         return true;
       } catch {
         return false;
       }
     };
+    // Resolve (creating as needed) the nested subdirectory a relative path lives in.
+    const dirFor = async (segments: string[]): Promise<FsDirHandle> => {
+      let d = root;
+      for (const seg of segments) d = await d.getDirectoryHandle(seg, { create: true });
+      return d;
+    };
     return {
       label: "已选择目标文件夹",
-      file: async (name) => {
+      file: async (name, _size, path) => {
+        const segs = (path || name).split("/").filter(Boolean);
+        const base = segs.pop() ?? name;
+        const dir = segs.length ? await dirFor(segs) : root;
+        const prefix = segs.join("/");
+        const key = (n: string) => (prefix ? `${prefix}/${n}` : n);
         // Resolve claimed-in-batch synchronously, then probe the folder; loop in
         // case a probed variant is itself already on disk.
-        let unique = nextAvailableName(name, (n) => claimed.has(n));
-        while (await existsInDir(unique)) {
-          claimed.add(unique); // force the next candidate past this on-disk name
-          unique = nextAvailableName(name, (n) => claimed.has(n));
+        let unique = nextAvailableName(base, (n) => claimed.has(key(n)));
+        while (await existsInDir(dir, unique)) {
+          claimed.add(key(unique)); // force the next candidate past this on-disk name
+          unique = nextAvailableName(base, (n) => claimed.has(key(n)));
         }
-        claimed.add(unique);
+        claimed.add(key(unique));
         const fh = await dir.getFileHandle(unique, { create: true });
         return nativeSink(await fh.createWritable());
       },
     };
   }
 
-  // No File System Access API: each file is buffered and downloaded on close.
+  // No File System Access API (Firefox/Safari). A folder send can't stream to
+  // disk here, and per-file downloads would lose the tree, so bundle the batch
+  // into one ZIP that preserves paths. Flat batches keep per-file downloads.
+  if (files.some((f) => f.path && f.path.includes("/"))) {
+    const zip = new ZipWriter();
+    const topDir = files.find((f) => f.path?.includes("/"))!.path!.split("/")[0];
+    return {
+      label: "将打包为 ZIP 下载",
+      file: async (name, _size, path) => {
+        const parts: Uint8Array[] = [];
+        return {
+          write: async (c) => { parts.push(c); },
+          close: async () => { zip.add(path || name, concat(parts)); },
+        };
+      },
+      done: async () => download(zip.finish(), `${topDir || "relayium"}.zip`),
+    };
+  }
   return {
     label: "将逐个下载到默认下载目录",
     file: async (name) => blobSink(name),
   };
+}
+
+/** Concatenate chunks into one contiguous buffer (the ZIP writer stores whole files). */
+function concat(parts: Uint8Array[]): Uint8Array {
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const p of parts) { out.set(p, at); at += p.length; }
+  return out;
+}
+
+/** Trigger a browser download of a blob under the given filename. */
+function download(blob: Blob, name: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
 }

@@ -29,7 +29,7 @@
   import { fetchIceServers } from "./lib/ice";
   import type { Peer } from "./lib/protocol";
   import { lang, messages, legalUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
-  import { hasFiles, dropTarget } from "./lib/drag";
+  import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
   import CrossPage from "./lib/CrossPage.svelte";
   import Nav from "./lib/Nav.svelte";
   import { currentRoute, syncRouteFromLocation, downloadId, navigate, setNavGuard } from "./lib/router.svelte";
@@ -137,7 +137,7 @@
     if (pendingShared.length && surfaceShown && !busy && visiblePeers.length === 1) {
       const files = pendingShared;
       pendingShared = [];
-      sendFiles(visiblePeers[0].id, files);
+      sendFiles(visiblePeers[0].id, files.map((file) => ({ file })));
     }
   });
 
@@ -286,9 +286,9 @@
       e.preventDefault();
       dragDepth = 0;
       dragActive = false;
-      if (surfaceShown && dropTarget(visiblePeers.length, busy) === "send") {
-        const files = e.dataTransfer?.files;
-        if (files?.length) sendFiles(visiblePeers[0].id, files);
+      if (surfaceShown && dropTarget(visiblePeers.length, busy) === "send" && e.dataTransfer) {
+        const peer = visiblePeers[0].id;
+        filesFromDataTransfer(e.dataTransfer).then((picked) => { if (picked.length) sendFiles(peer, picked); });
       }
     };
     window.addEventListener("dragenter", onEnter);
@@ -393,7 +393,7 @@
 
     const openSink = async () => {
       const f = manifest[fileIndex];
-      sink = f ? await target!.file(f.name, f.size) : undefined;
+      sink = f ? await target!.file(f.name, f.size, f.path) : undefined;
     };
 
     // The accept click is the user gesture that lets the save picker open.
@@ -476,6 +476,9 @@
         } else {
           clearWatchdog();
           recvAbort = null;
+          // Finalise the batch destination — flushes the bundled ZIP on the
+          // fallback path; a no-op for streaming targets.
+          await target!.done?.();
           const n = manifest.length;
           recv = r = {
             ...r, sent: total, index: n - 1,
@@ -503,14 +506,14 @@
   }
 
   // ── SEND ───────────────────────────────────────────────────────────────────────
-  async function sendFiles(peerId: string, picked: FileList | File[]) {
+  async function sendFiles(peerId: string, picked: PickedFile[]) {
     if (busy) { flash(messages[lang()].busy); return; }
-    const all = Array.from(picked);
-    const files = all.slice(0, MAX_FILES);
-    if (files.length === 0) return;
-    const dropped = all.length - files.length;
+    const chosen = picked.slice(0, MAX_FILES);
+    if (chosen.length === 0) return;
+    const dropped = picked.length - chosen.length;
+    const files = chosen.map((p) => p.file);
 
-    const metas: FileMeta[] = files.map((f) => ({ name: f.name, size: f.size }));
+    const metas: FileMeta[] = chosen.map((p) => ({ name: p.file.name, size: p.file.size, path: p.path }));
     const total = metas.reduce((n, m) => n + m.size, 0);
     let s: Xfer = { peer: peerId, dir: "send", files: metas, index: 0, sent: 0, total, status: "connecting", done: false, ok: false, speed: 0 };
     send = s;
@@ -672,14 +675,16 @@
 
   function pickFile(e: Event, peerId: string) {
     const input = e.currentTarget as HTMLInputElement;
-    if (input.files?.length) sendFiles(peerId, input.files);
+    if (input.files?.length) sendFiles(peerId, pickedFromInput(input.files));
     input.value = ""; // allow re-picking the same files
   }
   function onDrop(e: DragEvent, peerId: string) {
     e.preventDefault();
     (e.currentTarget as HTMLElement).classList.remove("drag");
-    const files = e.dataTransfer?.files;
-    if (files?.length) sendFiles(peerId, files);
+    if (!e.dataTransfer) return;
+    // Kick off entry extraction now (it captures DataTransfer items synchronously
+    // before its first await), then send once the folder tree is flattened.
+    filesFromDataTransfer(e.dataTransfer).then((picked) => { if (picked.length) sendFiles(peerId, picked); });
   }
 </script>
 
@@ -714,8 +719,12 @@
                 {/if}
               </span>
               <input type="file" multiple disabled={busy}
-                onclick={(e) => { if (pendingShared.length) { e.preventDefault(); const f = pendingShared; pendingShared = []; sendFiles(p.id, f); } }}
+                onclick={(e) => { if (pendingShared.length) { e.preventDefault(); const f = pendingShared; pendingShared = []; sendFiles(p.id, f.map((file) => ({ file }))); } }}
                 onchange={(e) => pickFile(e, p.id)} />
+            </label>
+            <label class="folder-btn" class:disabled={busy}>
+              📁 {t.sendFolder}
+              <input type="file" webkitdirectory multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
             </label>
           </li>
         {/each}
@@ -955,6 +964,15 @@
   .pname { color: var(--text-h); font-weight: 500; font-size: 16px; }
   .pick { color: var(--text); font-size: 13px; }
   .peer input[type="file"] { display: none; }
+  .folder-btn {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    margin: 0 12px 10px; padding: 7px; border-radius: 9px;
+    border: 1px solid var(--border); font-size: 13px; color: var(--text); cursor: pointer;
+    transition: border-color .15s, background .15s, color .15s;
+  }
+  .folder-btn:not(.disabled):hover { border-color: var(--accent-border); background: var(--accent-bg); color: var(--text-h); }
+  .folder-btn.disabled { cursor: not-allowed; opacity: .6; }
+  .peers ul.solo .folder-btn { max-width: 240px; margin-inline: auto; width: 100%; }
 
   .empty {
     color: var(--text); font-size: 14px; text-align: center;

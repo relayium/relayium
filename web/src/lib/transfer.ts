@@ -10,11 +10,18 @@ type Bytes = Uint8Array<ArrayBuffer>;
 // well under the DataChannel max-message-size (256 KiB on Chrome) so sends never
 // fail with "Message too large".
 export const CHUNK_SIZE = 192 * 1024;
-export const MAX_FILES = 10;
+// Raised from 10 to accommodate folder sends. The real ceiling is the manifest
+// frame size (guarded below), not this count.
+export const MAX_FILES = 1000;
+// The manifest travels as a single plaintext DataChannel message; keep it well
+// under the 256 KiB max-message-size. Long relative paths make this the true
+// limit on how many files a batch can carry.
+export const MANIFEST_MAX_BYTES = 200 * 1024;
 
 export interface FileMeta {
-  name: string;
+  name: string; // basename, for display and single-file "Save As"
   size: number;
+  path?: string; // relative path within a sent folder (e.g. "photos/a.jpg"); absent for a flat file
 }
 
 export interface Manifest {
@@ -75,10 +82,14 @@ function toHex(b: Uint8Array): string {
 }
 
 export class Sender {
-  /** The plaintext manifest frame; sent first so the receiver can prompt once for the batch. */
+  /** The plaintext manifest frame; sent first so the receiver can prompt once for
+   *  the batch. Throws if the encoded manifest would exceed the DataChannel
+   *  message ceiling (too many files, or paths too long). */
   batchFrame(files: FileMeta[]): Bytes {
     const manifest: Manifest = { files };
-    return frame(KIND_BATCH, 0, enc.encode(JSON.stringify(manifest)));
+    const payload = enc.encode(JSON.stringify(manifest));
+    if (payload.length > MANIFEST_MAX_BYTES) throw new Error("relayium: manifest too large");
+    return frame(KIND_BATCH, 0, payload);
   }
 
   /**

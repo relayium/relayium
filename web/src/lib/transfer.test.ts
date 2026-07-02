@@ -71,6 +71,25 @@ describe("transfer", () => {
     expect(oks).toEqual([true, true]);
   });
 
+  it("carries a folder-relative path through the manifest", async () => {
+    const { kb } = await session();
+    const sender = new Sender();
+    const out = await new Receiver().feed(
+      sender.batchFrame([{ name: "a.jpg", size: 3, path: "trip/day1/a.jpg" }]),
+      kb,
+    );
+    expect(out.batch!.files[0].path).toBe("trip/day1/a.jpg");
+  });
+
+  it("rejects a manifest that would exceed the DataChannel message ceiling", () => {
+    const many = Array.from({ length: 3000 }, (_, i) => ({
+      name: `file-${i}.bin`,
+      size: i,
+      path: `deeply/nested/folder/path/segment/file-${i}.bin`,
+    }));
+    expect(() => new Sender().batchFrame(many)).toThrow(/manifest too large/);
+  });
+
   it("reports integrity failure when a chunk is corrupted", async () => {
     const { ka, kb } = await session();
     const file = new File([new Uint8Array(100_000)], "x.bin");
