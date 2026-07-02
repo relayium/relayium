@@ -53,10 +53,14 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	if !s.AdminEnabled() {
 		return
 	}
+	// State-changing admin form posts go through the same Origin-based CSRF
+	// guard as the API. The admin panel is server-rendered same-origin HTML, so
+	// legitimate submissions carry a matching Origin; a cross-site forgery does
+	// not. GET /admin (the login/dashboard page) is a safe method, left alone.
 	mux.HandleFunc("GET /admin", s.handleAdminHome)
-	mux.HandleFunc("POST /admin/login", s.handleAdminLogin)
-	mux.HandleFunc("POST /admin/logout", s.handleAdminLogout)
-	mux.HandleFunc("POST /admin/settings", s.handleAdminSettings)
+	mux.Handle("POST /admin/login", s.csrfGuard(http.HandlerFunc(s.handleAdminLogin)))
+	mux.Handle("POST /admin/logout", s.csrfGuard(http.HandlerFunc(s.handleAdminLogout)))
+	mux.Handle("POST /admin/settings", s.csrfGuard(http.HandlerFunc(s.handleAdminSettings)))
 }
 
 func (s *Service) newAdminSession() string {

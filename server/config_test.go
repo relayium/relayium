@@ -1,10 +1,41 @@
 package main
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestParseTrustedProxies(t *testing.T) {
+	// Empty input trusts nothing (default-safe: XFF ignored).
+	if got, err := parseTrustedProxies(""); err != nil || got != nil {
+		t.Fatalf("empty: got %v err %v, want nil,nil", got, err)
+	}
+	if got, err := parseTrustedProxies("  ,  "); err != nil || got != nil {
+		t.Fatalf("blank entries: got %v err %v, want nil,nil", got, err)
+	}
+
+	// CIDRs and bare IPs (bare IPs widen to /32 or /128).
+	nets, err := parseTrustedProxies("10.0.0.0/8, 192.168.1.1, ::1")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(nets) != 3 {
+		t.Fatalf("got %d nets, want 3", len(nets))
+	}
+	if !nets[0].Contains(net.ParseIP("10.1.2.3")) {
+		t.Error("10.0.0.0/8 should contain 10.1.2.3")
+	}
+	if !nets[1].Contains(net.ParseIP("192.168.1.1")) || nets[1].Contains(net.ParseIP("192.168.1.2")) {
+		t.Error("bare IP should become an exact /32 match")
+	}
+
+	// A malformed entry is a hard error (fail fast at startup).
+	if _, err := parseTrustedProxies("not-a-cidr"); err == nil {
+		t.Fatal("malformed CIDR should error")
+	}
+}
 
 func TestLoadDotEnvSetsOnlyUnsetKeys(t *testing.T) {
 	dir := t.TempDir()

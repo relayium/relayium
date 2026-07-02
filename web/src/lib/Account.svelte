@@ -13,10 +13,12 @@
   let password = $state("");
   let mode = $state<"login" | "register">("login");
   let error = $state("");
+  let submitting = $state(false); // in-flight guard for the password login/register form
   let methods = $state<AuthMethods>({ password: true, google: false, magic: false });
 
   // magic-link 备用入口（仅当后端开启）
   let magicSent = $state(false);
+  let magicBusy = $state(false);
 
   // 改密表单
   let pwOpen = $state(false);
@@ -36,24 +38,33 @@
     }
   });
 
+  let pwBusy = $state(false);
+
   function mapPwError(code?: string): string {
     if (code === "current password incorrect") return t.account.errCurrentWrong;
     if (code === "password too short") return t.account.errTooShort;
+    if (code === "network") return t.account.errNetwork;
     return t.account.errLogin;
   }
 
   async function onChangePassword() {
+    if (pwBusy) return;
     pwError = "";
     pwDone = false;
     if (newPw.length < 8) { pwError = t.account.errTooShort; return; }
     if (newPw !== confirmPw) { pwError = t.account.errMismatch; return; }
-    const res = await changePassword(curPw, newPw);
-    if (res.ok) {
-      pwDone = true;
-      curPw = ""; newPw = ""; confirmPw = "";
-      pwOpen = false;
-    } else {
-      pwError = mapPwError(res.error);
+    pwBusy = true;
+    try {
+      const res = await changePassword(curPw, newPw);
+      if (res.ok) {
+        pwDone = true;
+        curPw = ""; newPw = ""; confirmPw = "";
+        pwOpen = false;
+      } else {
+        pwError = mapPwError(res.error);
+      }
+    } finally {
+      pwBusy = false;
     }
   }
 
@@ -78,28 +89,42 @@
     if (code === "password too short") return t.account.errTooShort;
     if (code === "email already registered") return t.account.errEmailTaken;
     if (code === "invalid credentials") return t.account.errLogin;
+    if (code === "network") return t.account.errNetwork;
     return t.account.errLogin;
   }
 
   async function onSubmit() {
+    if (submitting) return; // guard against double-submit while a request is in flight
     error = "";
     if (!email || !password) return;
-    const res = mode === "register"
-      ? await register(email, password)
-      : await passwordLogin(email, password);
-    if (res.ok) {
-      open = false;
-      password = "";
-      claimDevice();
-    } else {
-      error = mapError(res.error);
+    submitting = true;
+    try {
+      const res = mode === "register"
+        ? await register(email, password)
+        : await passwordLogin(email, password);
+      if (res.ok) {
+        open = false;
+        password = "";
+        claimDevice();
+      } else {
+        error = mapError(res.error);
+      }
+    } finally {
+      submitting = false;
     }
   }
 
   async function onSendLink() {
-    if (!email) return;
-    await requestMagicLink(email);
-    magicSent = true;
+    if (!email || magicBusy) return;
+    error = "";
+    magicBusy = true;
+    try {
+      const res = await requestMagicLink(email);
+      if (res.ok) magicSent = true;
+      else error = mapError(res.error);
+    } finally {
+      magicBusy = false;
+    }
   }
 
   async function onLogout() {
@@ -134,7 +159,7 @@
             <input type="password" bind:value={newPw} placeholder={t.account.newPassword} />
             <input type="password" bind:value={confirmPw} placeholder={t.account.confirmPassword} />
             {#if pwError}<p class="err">{pwError}</p>{/if}
-            <button class="btn btn-primary" onclick={onChangePassword}>
+            <button class="btn btn-primary" disabled={pwBusy} onclick={onChangePassword}>
               {session().user!.hasPassword ? t.account.changePassword : t.account.setPassword}
             </button>
             <button class="btn-link" onclick={() => { pwOpen = false; pwError = ""; curPw = ""; newPw = ""; confirmPw = ""; }}>{t.close}</button>
@@ -152,7 +177,7 @@
           <input type="email" bind:value={email} placeholder={t.account.email} />
           <input type="password" bind:value={password} placeholder={t.account.password} onkeydown={(e) => { if (e.key === "Enter") onSubmit(); }} />
           {#if error}<p class="err">{error}</p>{/if}
-          <button class="btn btn-primary" onclick={onSubmit}>
+          <button class="btn btn-primary" disabled={submitting} onclick={onSubmit}>
             {mode === "register" ? t.account.createAccount : t.account.logInBtn}
           </button>
           <button class="btn-link" onclick={() => { mode = mode === "register" ? "login" : "register"; error = ""; }}>
@@ -169,7 +194,7 @@
             {#if magicSent}
               <p class="hint">{t.account.linkSent}</p>
             {:else}
-              <button class="btn btn-ghost" onclick={onSendLink}>{t.account.sendLink}</button>
+              <button class="btn btn-ghost" disabled={magicBusy} onclick={onSendLink}>{t.account.sendLink}</button>
             {/if}
           {/if}
         </div>

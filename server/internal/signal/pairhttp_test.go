@@ -14,7 +14,7 @@ func TestPairHandlerMints(t *testing.T) {
 	now := func() int64 { return clock }
 	reg := NewPairRegistry(300, now)
 	rl := NewRateLimiter(5, time.Minute, now)
-	h := PairHandler(reg, rl)
+	h := PairHandler(reg, rl, NewIPExtractor(nil))
 
 	req := httptest.NewRequest(http.MethodPost, "/api/pair", nil)
 	req.RemoteAddr = "203.0.113.5:5555"
@@ -58,7 +58,7 @@ func TestPairHandlerRateLimitsPerIP(t *testing.T) {
 	now := func() int64 { return clock }
 	reg := NewPairRegistry(300, now)
 	rl := NewRateLimiter(2, time.Minute, now)
-	h := PairHandler(reg, rl)
+	h := PairHandler(reg, rl, NewIPExtractor(nil))
 
 	call := func(ip string) int {
 		req := httptest.NewRequest(http.MethodPost, "/api/pair", nil)

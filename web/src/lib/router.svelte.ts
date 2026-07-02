@@ -35,10 +35,20 @@ export function syncRouteFromLocation(): void {
   route = routeFromLocation(location.pathname, location.hash);
 }
 
+// Optional guard consulted before a navigation that would tear down room-scoped
+// state (and thus abort an in-flight transfer). Returns true to proceed, false to
+// cancel. App registers one that confirms before interrupting an active transfer.
+let navGuard: (() => boolean) | null = null;
+export function setNavGuard(g: (() => boolean) | null): void {
+  navGuard = g;
+}
+
 /** Switch tabs without reloading: drop any active token/code room, rewrite the URL,
  *  and update the route. Clearing the room makes App's effect reconnect the
  *  signaling socket to the room-less (LAN) endpoint, so no page reload is needed. */
 export function navigate(r: Route): void {
+  if (r === route) return; // already on this tab — don't tear down the room / abort a transfer
+  if (navGuard && !navGuard()) return; // e.g. user declined the "interrupt transfer?" confirm
   const pathname = r === "cross" ? CROSS_PATH : "/";
   clearRoom(); // leaving a 2-peer token/code room rebinds the socket via App's effect
   history.pushState({}, "", pathname);

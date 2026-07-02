@@ -1,7 +1,7 @@
 <script lang="ts">
   import { lang, messages, type Messages } from "./i18n.svelte";
   let { connState, unsupported, selfName, selfIP }:
-    { connState: "connecting" | "ready"; unsupported: boolean; selfName: string; selfIP: string } = $props();
+    { connState: "connecting" | "ready" | "reconnecting"; unsupported: boolean; selfName: string; selfIP: string } = $props();
   const t = $derived<Messages>(messages[lang()]);
 </script>
 
@@ -19,6 +19,8 @@
         <span class="sep">·</span>
         <span class="ip">{t.ipLabel} {selfIP}</span>
       {/if}
+    {:else if connState === "reconnecting"}
+      {t.reconnecting}
     {:else}
       {t.connecting}
     {/if}

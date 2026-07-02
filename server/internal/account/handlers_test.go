@@ -410,3 +410,143 @@ func TestCreateTransferRequiresSessionAndReturnsToken(t *testing.T) {
 		t.Fatalf("expected token+expiresAt, got %+v", out)
 	}
 }
+
+func TestPasswordLoginThrottleLocksAfterFailures(t *testing.T) {
+	store := newTestStore(t)
+	svc := NewService(store, &capturingMailer{}, Config{
+		BaseURL: "http://example.test", SessionTTL: time.Hour,
+	})
+	ts := httptest.NewServer(svc.Routes())
+	t.Cleanup(ts.Close)
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	// Register a real account so failures are genuine bad-password attempts.
+	resp, _ := client.Post(ts.URL+"/api/auth/register", "application/json",
+		strings.NewReader(`{"email":"lock@example.com","password":"correcthorse1"}`))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("register: %d", resp.StatusCode)
+	}
+
+	login := func(pw string) int {
+		r, err := client.Post(ts.URL+"/api/auth/password/login", "application/json",
+			strings.NewReader(`{"email":"lock@example.com","password":"`+pw+`"}`))
+		if err != nil {
+			t.Fatalf("login: %v", err)
+		}
+		return r.StatusCode
+	}
+
+	// adminLoginMaxFails wrong attempts all return 401 (not yet locked).
+	for i := 0; i < adminLoginMaxFails; i++ {
+		if got := login("wrongpass"); got != http.StatusUnauthorized {
+			t.Fatalf("attempt %d: want 401, got %d", i, got)
+		}
+	}
+	// The next attempt — even with the CORRECT password — is locked out (429).
+	if got := login("correcthorse1"); got != http.StatusTooManyRequests {
+		t.Fatalf("after threshold: want 429, got %d", got)
+	}
+}
+
+func TestPasswordLoginSuccessResetsThrottle(t *testing.T) {
+	store := newTestStore(t)
+	svc := NewService(store, &capturingMailer{}, Config{
+		BaseURL: "http://example.test", SessionTTL: time.Hour,
+	})
+	ts := httptest.NewServer(svc.Routes())
+	t.Cleanup(ts.Close)
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	_, _ = client.Post(ts.URL+"/api/auth/register", "application/json",
+		strings.NewReader(`{"email":"reset@example.com","password":"correcthorse1"}`))
+
+	login := func(pw string) int {
+		r, _ := client.Post(ts.URL+"/api/auth/password/login", "application/json",
+			strings.NewReader(`{"email":"reset@example.com","password":"`+pw+`"}`))
+		return r.StatusCode
+	}
+	// A few failures below threshold, then a success clears the counter.
+	for i := 0; i < adminLoginMaxFails-1; i++ {
+		_ = login("wrongpass")
+	}
+	if got := login("correcthorse1"); got != http.StatusOK {
+		t.Fatalf("valid login should succeed, got %d", got)
+	}
+	// After reset a fresh failure does not immediately lock.
+	if got := login("wrongpass"); got != http.StatusUnauthorized {
+		t.Fatalf("post-reset failure: want 401 (not locked), got %d", got)
+	}
+}
+
+func TestMagicRequestRateLimited(t *testing.T) {
+	ts, mail := newTestServer(t)
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	// Fire well past the threshold; every response is 200 (no enumeration / no
+	// leak of the limit), but only adminLoginMaxFails links are actually sent.
+	for i := 0; i < adminLoginMaxFails+5; i++ {
+		resp, err := client.PostForm(ts.URL+"/api/auth/magic/request", url.Values{"email": {"bomb@example.com"}})
+		if err != nil || resp.StatusCode != http.StatusOK {
+			t.Fatalf("request %d: err=%v status=%v", i, err, resp.StatusCode)
+		}
+	}
+	if got := mail.sends(); got != adminLoginMaxFails {
+		t.Fatalf("magic links sent = %d, want %d (rate limited)", got, adminLoginMaxFails)
+	}
+	// A different email is unaffected by the first email's limit.
+	resp, _ := client.PostForm(ts.URL+"/api/auth/magic/request", url.Values{"email": {"other@example.com"}})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("other email: %d", resp.StatusCode)
+	}
+	if got := mail.sends(); got != adminLoginMaxFails+1 {
+		t.Fatalf("after other email, sends = %d, want %d", got, adminLoginMaxFails+1)
+	}
+}
+
+func TestCSRFGuardBlocksForeignOrigin(t *testing.T) {
+	ts, _ := newTestServer(t) // BaseURL is http://example.test
+	client := ts.Client()
+
+	// A cross-origin POST is rejected before reaching the handler.
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/register",
+		strings.NewReader(`{"email":"a@b.test","password":"password1"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://evil.example")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("foreign Origin: want 403, got %d", resp.StatusCode)
+	}
+
+	// A matching Origin is allowed through (registration succeeds → 200).
+	req2, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/register",
+		strings.NewReader(`{"email":"a@b.test","password":"password1"}`))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("Origin", "http://example.test")
+	resp2, err := client.Do(req2)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("same Origin: want 200, got %d", resp2.StatusCode)
+	}
+
+	// A safe method with a foreign Origin is untouched (GET methods list → 200).
+	req3, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/auth/methods", nil)
+	req3.Header.Set("Origin", "https://evil.example")
+	resp3, err := client.Do(req3)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp3.Body.Close()
+	if resp3.StatusCode != http.StatusOK {
+		t.Fatalf("safe method: want 200, got %d", resp3.StatusCode)
+	}
+}
