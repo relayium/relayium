@@ -12,6 +12,7 @@
   import { roomToken as roomTokenStore, roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
   import { connect, type InboundSignal, type Conn, type ConnPath } from "./lib/webrtc";
   import { createWakeLock } from "./lib/wakelock";
+  import { registerServiceWorker, drainSharedFiles } from "./lib/share-target";
   import {
     Sender,
     Receiver,
@@ -69,6 +70,7 @@
   // never races the transfer loop's high-frequency rewrites of send/recv.
   let sendPath = $state<ConnPath | undefined>();
   let recvPath = $state<ConnPath | undefined>();
+  let pendingShared = $state<File[]>([]); // files handed in via the OS share sheet, awaiting a target device
   let notice = $state(""); // transient hint (e.g. "busy", "too many files")
   let dragActive = $state(false);
   let dragDepth = 0; // non-reactive: dragenter/dragleave fire per element; count to know when the drag truly leaves the window
@@ -128,6 +130,17 @@
     else wake.release();
   });
 
+  // Files arriving via the OS share sheet auto-send the moment there's exactly
+  // one reachable device and nothing else in flight; with several devices the
+  // user picks one (the peer cards below become send targets). Cleared on send.
+  $effect(() => {
+    if (pendingShared.length && surfaceShown && !busy && visiblePeers.length === 1) {
+      const files = pendingShared;
+      pendingShared = [];
+      sendFiles(visiblePeers[0].id, files);
+    }
+  });
+
   // Poll the live ICE path a few times once a channel is up: the selected
   // candidate pair can settle shortly after the data channel opens.
   async function trackPath(conn: Conn, set: (p: ConnPath) => void) {
@@ -143,6 +156,10 @@
     initRoomFromLocation();
     syncRouteFromLocation();
     window.addEventListener("popstate", onPopState);
+    registerServiceWorker();
+    // Pick up any files launched into the app via the OS share sheet (installed
+    // PWA, Android/Chromium). The auto-send effect routes them once a peer is up.
+    drainSharedFiles().then((files) => { if (files.length) pendingShared = files; });
     if (!window.isSecureContext || !crypto.subtle) {
       unsupported = true;
       return;
@@ -671,6 +688,9 @@
   {@const solo = visiblePeers.length === 1}
   <section class="peers">
     <h2>{currentRoute() === "cross" ? t.crossPeersTitle : t.peersTitle}</h2>
+    {#if pendingShared.length && visiblePeers.length !== 1}
+      <p class="share-pending">{t.sharePending(pendingShared.length)}</p>
+    {/if}
     {#if visiblePeers.length === 0}
       <p class="empty">{t.emptyPeers}</p>
     {:else}
@@ -693,7 +713,9 @@
                   <span class="pick">{t.pickHint(MAX_FILES)}</span>
                 {/if}
               </span>
-              <input type="file" multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
+              <input type="file" multiple disabled={busy}
+                onclick={(e) => { if (pendingShared.length) { e.preventDefault(); const f = pendingShared; pendingShared = []; sendFiles(p.id, f); } }}
+                onchange={(e) => pickFile(e, p.id)} />
             </label>
           </li>
         {/each}
@@ -899,6 +921,12 @@
 
   .peers { margin-top: var(--space-7); }
   .peers h2 { font-size: 20px; }
+  .share-pending {
+    margin: 0 0 12px; padding: 10px 14px; border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    color: var(--text); font-size: 14px;
+  }
   .peers ul {
     list-style: none; padding: 0; margin: 0;
     display: grid; gap: 12px;

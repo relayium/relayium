@@ -33,6 +33,8 @@ export interface Messages {
   pathLan: string; // connection-path badge: host↔host on the local network
   pathP2p: string; // direct P2P over the public internet (NAT-traversed)
   pathRelay: string; // traffic going through a TURN relay
+  sharePending: (n: number) => string; // files came in via the OS share sheet; pick a device
+  sendFolder: string; // button: choose a folder to send
   accept: string;
   decline: string;
   sendTo: (name: string) => string;
@@ -224,6 +226,8 @@ const zh: Messages = {
   pathLan: "局域网直连",
   pathP2p: "P2P 直连",
   pathRelay: "中继",
+  sharePending: (n) => `${n} 个文件待发送 — 选择设备`,
+  sendFolder: "发送文件夹",
   accept: "接收",
   decline: "拒绝",
   sendTo: (n) => `发送 → ${n}`,
@@ -447,6 +451,8 @@ const en: Messages = {
   pathLan: "LAN direct",
   pathP2p: "P2P direct",
   pathRelay: "Relayed",
+  sharePending: (n) => `${n} file${n === 1 ? "" : "s"} ready to send — pick a device`,
+  sendFolder: "Send a folder",
   accept: "Accept",
   decline: "Decline",
   sendTo: (n) => `Send → ${n}`,
@@ -670,6 +676,8 @@ const ja: Messages = {
   pathLan: "LAN直結",
   pathP2p: "P2P直結",
   pathRelay: "中継",
+  sharePending: (n) => `${n} 個のファイルを送信待ち — デバイスを選択`,
+  sendFolder: "フォルダを送信",
   accept: "受信",
   decline: "拒否",
   sendTo: (n) => `送信 → ${n}`,
@@ -893,6 +901,8 @@ const ko: Messages = {
   pathLan: "LAN 직접",
   pathP2p: "P2P 직접",
   pathRelay: "중계",
+  sharePending: (n) => `${n}개 파일 전송 대기 — 기기를 선택하세요`,
+  sendFolder: "폴더 보내기",
   accept: "받기",
   decline: "거부",
   sendTo: (n) => `보내기 → ${n}`,
@@ -1116,6 +1126,8 @@ const de: Messages = {
   pathLan: "LAN direkt",
   pathP2p: "P2P direkt",
   pathRelay: "Über Relay",
+  sharePending: (n) => `${n} Datei${n === 1 ? "" : "en"} bereit zum Senden — Gerät wählen`,
+  sendFolder: "Ordner senden",
   accept: "Annehmen",
   decline: "Ablehnen",
   sendTo: (n) => `Senden → ${n}`,
@@ -1339,6 +1351,8 @@ const fr: Messages = {
   pathLan: "LAN direct",
   pathP2p: "P2P direct",
   pathRelay: "Relais",
+  sharePending: (n) => `${n} fichier${n === 1 ? "" : "s"} prêt${n === 1 ? "" : "s"} à envoyer — choisissez un appareil`,
+  sendFolder: "Envoyer un dossier",
   accept: "Accepter",
   decline: "Refuser",
   sendTo: (n) => `Envoi → ${n}`,

@@ -16,5 +16,8 @@
     "checkJs": true,
     "moduleDetection": "force"
   },
-  "include": ["src/**/*.ts", "src/**/*.js", "src/**/*.svelte"]
+  "include": ["src/**/*.ts", "src/**/*.js", "src/**/*.svelte"],
+  /* sw-template.js is a service-worker template with build-time __PLACEHOLDERS__,
+     never imported or bundled — it can't and shouldn't be typechecked here. */
+  "exclude": ["src/sw-template.js"]
 }
