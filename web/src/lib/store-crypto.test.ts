@@ -67,6 +67,46 @@ describe("store-crypto file stream", () => {
     expect(concat(out)).toEqual(bytes);
   });
 
+  it("throws when the stream is truncated on a frame boundary (length check)", async () => {
+    const sk = await generateStoreKey();
+    const bytes = new Uint8Array(400 * 1024); // 3 chunks
+    for (let i = 0; i < bytes.length; i++) bytes[i] = i & 0xff;
+    const file = new File([bytes], "big.bin");
+    const frames: Uint8Array[] = [];
+    for await (const fr of encryptFiles([file], sk.key)) frames.push(fr);
+    const truncated = concat(frames.slice(0, frames.length - 1)); // drop last frame
+
+    const dec = new StoreDecryptor(sk.key);
+    for await (const _ of dec.push(truncated)) { /* drain — ends on a frame boundary */ }
+    // Buffer is empty (clean boundary), but the total is short → end() must throw.
+    await expect(
+      (async () => { for await (const _ of dec.end(bytes.length)) { /* drain */ } })(),
+    ).rejects.toThrow(/mismatch|truncated/);
+  });
+
+  it("accepts a complete stream when the expected length matches", async () => {
+    const sk = await generateStoreKey();
+    const bytes = new Uint8Array(300 * 1024);
+    const file = new File([bytes], "f.bin");
+    const frames: Uint8Array[] = [];
+    for await (const fr of encryptFiles([file], sk.key)) frames.push(fr);
+    const dec = new StoreDecryptor(sk.key);
+    for await (const _ of dec.push(concat(frames))) { /* drain */ }
+    expect(dec.decryptedBytes).toBe(bytes.length);
+    for await (const _ of dec.end(bytes.length)) { /* no throw */ }
+  });
+
+  it("rejects a frame whose length prefix exceeds the cap", async () => {
+    const sk = await generateStoreKey();
+    // A 5 GiB length prefix followed by nothing: must be rejected before buffering.
+    const evil = new Uint8Array(4);
+    new DataView(evil.buffer).setUint32(0, 0xffffffff);
+    const dec = new StoreDecryptor(sk.key);
+    await expect(
+      (async () => { for await (const _ of dec.push(evil)) { /* drain */ } })(),
+    ).rejects.toThrow(/exceeds/);
+  });
+
   it("throws on a tampered ciphertext frame", async () => {
     const sk = await generateStoreKey();
     const file = new File([new Uint8Array([1, 2, 3, 4])], "x");

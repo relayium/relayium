@@ -94,6 +94,41 @@ export async function open(
   return new Uint8Array(pt);
 }
 
+// ── SAS commitment (commit-then-reveal handshake) ────────────────────────────
+// A 6-digit SAS is only ~20 bits, so a malicious signaling relay that sees both
+// real public keys before choosing its own could brute-force a colliding code
+// and MITM the session. To stop that we bind each side's public key with a
+// commitment `C = BLAKE2b(pub || nonce)` that is exchanged *before* either side
+// reveals its real public key. An attacker must therefore commit to its keys
+// without having seen the peer's key, removing the post-hoc collision freedom.
+export const COMMIT_BYTES = 32;
+export const NONCE_BYTES = 32;
+
+/** Fresh 32-byte commitment nonce. Requires ready(). */
+export function randomNonce(): Uint8Array {
+  return sodium.randombytes_buf(NONCE_BYTES);
+}
+
+/** Commitment to a public key: 32-byte BLAKE2b(pub || nonce). */
+export function commitKey(pub: Uint8Array, nonce: Uint8Array): Uint8Array {
+  const combined = new Uint8Array(pub.length + nonce.length);
+  combined.set(pub, 0);
+  combined.set(nonce, pub.length);
+  return sodium.crypto_generichash(COMMIT_BYTES, combined, null);
+}
+
+/** Constant-time check that `commit` opens to (pub, nonce). False on any
+ *  mismatch, including a malformed/short commitment. */
+export function verifyCommit(
+  commit: Uint8Array,
+  pub: Uint8Array,
+  nonce: Uint8Array,
+): boolean {
+  const expected = commitKey(pub, nonce);
+  if (commit.length !== expected.length) return false;
+  return sodium.memcmp(commit as Bytes, expected as Bytes);
+}
+
 export function sas(self: Uint8Array, peer: Uint8Array): string {
   // Order-independent: sort the two public keys before hashing.
   const [a, b] = compare(self, peer) <= 0 ? [self, peer] : [peer, self];

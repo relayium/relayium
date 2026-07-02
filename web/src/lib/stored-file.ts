@@ -4,6 +4,7 @@ import {
   generateStoreKey,
   importStoreKey,
   encryptManifest,
+  decryptManifest,
   encryptFiles,
   decodeKey,
   encodeKey,
@@ -71,13 +72,34 @@ export async function fetchMeta(id: string): Promise<StoredFileMeta> {
   return res.json();
 }
 
-/** Stream the ciphertext, decrypt chunk-by-chunk, and hand plaintext to onChunk. */
+function base64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/** Expected total plaintext length, from the (encrypted) manifest's file sizes.
+ *  Used to detect a stream truncated on a frame boundary, which a bare frame
+ *  reassembler cannot distinguish from a clean end. */
+async function expectedPlaintextBytes(id: string, key: CryptoKey): Promise<number> {
+  const meta = await fetchMeta(id);
+  const manifest = await decryptManifest(key, base64ToBytes(meta.encManifest));
+  return manifest.files.reduce((n, f) => n + f.size, 0);
+}
+
+/** Stream the ciphertext, decrypt chunk-by-chunk, and hand plaintext to onChunk.
+ *  The decrypted total is checked against `expectedBytes` (defaulting to the
+ *  manifest's summed file sizes) so a truncated download fails instead of being
+ *  reported as a complete file. */
 export async function downloadBlob(
   id: string,
   key: CryptoKey,
   onChunk: (pt: Uint8Array) => Promise<void>,
   onProgress?: (received: number) => void,
+  expectedBytes?: number,
 ): Promise<void> {
+  const expected = expectedBytes ?? (await expectedPlaintextBytes(id, key));
   const res = await fetch(`/api/files/${encodeURIComponent(id)}/blob`);
   if (!res.ok) throw new Error(`blob failed: ${res.status}`);
   if (!res.body) throw new Error("streaming not supported");
@@ -93,7 +115,9 @@ export async function downloadBlob(
       onProgress?.(received);
     }
   }
-  for await (const pt of decryptor.end()) {
+  // end() throws on trailing bytes or a length shortfall — an incomplete file
+  // must surface as an error, never as a successful download.
+  for await (const pt of decryptor.end(expected)) {
     await onChunk(pt);
     received += pt.length;
     onProgress?.(received);

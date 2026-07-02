@@ -7,7 +7,7 @@ import {
   downloadBlob,
   UploadError,
 } from "./stored-file";
-import { generateStoreKey, encryptFiles } from "./store-crypto";
+import { generateStoreKey, encryptFiles, encryptManifest } from "./store-crypto";
 
 // Concatenate Uint8Array parts into a single buffer.
 function concat(parts: Uint8Array[]): Uint8Array {
@@ -19,6 +19,12 @@ function concat(parts: Uint8Array[]): Uint8Array {
     off += p.length;
   }
   return out;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let s = "";
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s);
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -126,6 +132,7 @@ describe("downloadBlob", () => {
       (received) => {
         progressValues.push(received);
       },
+      original.length, // expected plaintext length (skips the manifest fetch)
     );
 
     expect(concat(chunks)).toEqual(original);
@@ -138,8 +145,65 @@ describe("downloadBlob", () => {
     const sk = await generateStoreKey();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403 }));
     await expect(
-      downloadBlob("gone", sk.key, async () => {}),
+      downloadBlob("gone", sk.key, async () => {}, undefined, 0),
     ).rejects.toThrow("403");
+  });
+
+  it("throws when the ciphertext stream is truncated on a frame boundary", async () => {
+    // Two full chunks; dropping the second frame entirely leaves a stream that
+    // ends cleanly on a frame boundary yet is short of the expected length.
+    const sk = await generateStoreKey();
+    const original = new Uint8Array(400 * 1024); // 3 chunks at 192 KiB
+    for (let i = 0; i < original.length; i++) original[i] = i & 0xff;
+    const file = new File([original], "data.bin");
+
+    const frames: Uint8Array[] = [];
+    for await (const fr of encryptFiles([file], sk.key)) frames.push(fr);
+    const truncated = concat(frames.slice(0, frames.length - 1)); // drop last frame
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(truncated);
+        controller.close();
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, body: stream }));
+
+    await expect(
+      downloadBlob("test-id", sk.key, async () => {}, undefined, original.length),
+    ).rejects.toThrow(/truncated|mismatch/);
+  });
+
+  it("derives the expected length from the manifest when none is passed", async () => {
+    const sk = await generateStoreKey();
+    const original = new Uint8Array(200);
+    for (let i = 0; i < original.length; i++) original[i] = i & 0xff;
+    const file = new File([original], "data.bin");
+
+    const frames: Uint8Array[] = [];
+    for await (const fr of encryptFiles([file], sk.key)) frames.push(fr);
+    const body = concat(frames);
+    const encManifest = await encryptManifest(sk.key, {
+      files: [{ name: "data.bin", size: original.length }],
+    });
+
+    // Route by URL: /meta returns the encrypted manifest, /blob the frame stream.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async (url: string) => {
+        if (url.endsWith("/meta")) {
+          return { ok: true, json: async () => ({ encManifest: bytesToBase64(encManifest), size: body.length, burnAfterRead: false, expiresAt: 0 }) };
+        }
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) { controller.enqueue(body); controller.close(); },
+        });
+        return { ok: true, body: stream };
+      }),
+    );
+
+    const chunks: Uint8Array[] = [];
+    await downloadBlob("test-id", sk.key, async (pt) => { chunks.push(pt); });
+    expect(concat(chunks)).toEqual(original);
   });
 });
 

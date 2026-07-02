@@ -86,12 +86,24 @@ export async function* encryptFiles(files: File[], key: CryptoKey): AsyncGenerat
   }
 }
 
+// Upper bound on a single ciphertext frame: a full plaintext chunk plus the
+// 16-byte GCM tag, with a little slack. A frame's length prefix is attacker-
+// controlled, so without this cap a hostile/faulty server could claim a huge
+// length and make us buffer unbounded memory waiting to "complete" the frame.
+export const MAX_FRAME_CT = STORE_CHUNK_SIZE + 16 + 256;
+
 // StoreDecryptor reassembles length-prefixed frames across arbitrary network
 // chunk boundaries and yields decrypted plaintext in order. Throws on tamper.
 export class StoreDecryptor {
   private seq = 1;
   private buf = new Uint8Array(0);
+  private plaintextBytes = 0;
   constructor(private key: CryptoKey) {}
+
+  /** Total decrypted plaintext bytes emitted so far. */
+  get decryptedBytes(): number {
+    return this.plaintextBytes;
+  }
 
   async *push(data: Uint8Array): AsyncGenerator<Bytes> {
     const merged = new Uint8Array(this.buf.length + data.length);
@@ -100,18 +112,32 @@ export class StoreDecryptor {
     let off = 0;
     while (off + 4 <= merged.length) {
       const len = new DataView(merged.buffer, merged.byteOffset + off, 4).getUint32(0);
+      // Reject an oversized/garbage length before allocating for it.
+      if (len > MAX_FRAME_CT) {
+        throw new Error(`store-crypto: frame length ${len} exceeds ${MAX_FRAME_CT}`);
+      }
       if (off + 4 + len > merged.length) break; // frame incomplete; wait for more
       const ct = merged.slice(off + 4, off + 4 + len) as Bytes;
       const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce(this.seq) }, this.key, ct);
       this.seq++;
       off += 4 + len;
+      this.plaintextBytes += pt.byteLength;
       yield new Uint8Array(pt);
     }
     this.buf = off < merged.length ? merged.slice(off) : new Uint8Array(0);
   }
 
+  // Finalize the stream. Besides rejecting a dangling partial frame, assert the
+  // decrypted total matches the expected plaintext length when one is supplied
+  // (from the manifest): a stream truncated on a *frame boundary* is otherwise
+  // indistinguishable from a clean end, so it would be silently accepted.
   // eslint-disable-next-line require-yield
-  async *end(): AsyncGenerator<Bytes> {
+  async *end(expectedBytes?: number): AsyncGenerator<Bytes> {
     if (this.buf.length !== 0) throw new Error("store-crypto: trailing bytes — truncated stream");
+    if (expectedBytes !== undefined && this.plaintextBytes !== expectedBytes) {
+      throw new Error(
+        `store-crypto: length mismatch — got ${this.plaintextBytes}, expected ${expectedBytes} (truncated stream)`,
+      );
+    }
   }
 }
