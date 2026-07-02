@@ -9,7 +9,7 @@ This guide describes a single-host production deployment:
             │    ├─ location /admin   → proxy → Go server 127.0.0.1:8080   │  read-only admin dashboard
             │    ├─ location /ws      → proxy → Go server 127.0.0.1:8080   │  WebRTC signaling
             │    ├─ location /healthz → proxy → Go server 127.0.0.1:8080   │  health check
-            │    └─ location /        → static files in web/dist           │  SPA + the 12 legal pages
+            │    └─ location /        → static files in web/dist           │  SPA + the 18 legal pages
             └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -22,7 +22,41 @@ reloads the SPA, and magic-link requests never hit the backend. See
 
 ---
 
-## Prerequisites
+## Option A — Docker (quickest)
+
+A [`Dockerfile`](../Dockerfile) and [`docker-compose.yml`](../docker-compose.yml) live at the repo
+root. The image is self-contained: a static Go binary that serves the pre-built SPA, so no Node,
+Go, or nginx is needed on the host to run it.
+
+```bash
+# From the repo root:
+docker compose up -d --build            # server only, on http://localhost:8080
+# or, to also start a TURN relay + redis metering:
+RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build
+```
+
+- The SQLite database and stored-transfer ciphertext persist in the named volume `relayium-data`
+  (mounted at `/data`).
+- App config comes from `./server/.env` (optional — copy from `server/.env.example`) plus the
+  `environment:` block in `docker-compose.yml`. Every setting has a `RELAYIUM_*` key.
+- The container listens on `:8080`; put nginx/Caddy in front for TLS in production, proxying the
+  same paths shown above. TURN still needs a public IP and an open UDP relay-port range — see
+  [coturn.md](coturn.md).
+
+Build just the image without compose:
+
+```bash
+docker build -t relayium .
+docker run -d -p 8080:8080 -v relayium-data:/data relayium
+```
+
+The manual build below (Option B) is for hosts where you prefer systemd + a locally built binary.
+
+---
+
+## Option B — Manual build (systemd + nginx)
+
+### Prerequisites
 
 - A Linux host with a public IP and a domain (`relayium.com` below — substitute yours).
 - Go ≥ 1.23 and Node ≥ 20 to build (or build elsewhere and copy the artifacts).
@@ -33,7 +67,7 @@ reloads the SPA, and magic-link requests never hit the backend. See
 
 ## Step 1 — Build the web frontend
 
-The build also generates the 12 static legal pages into `web/dist` (privacy/terms × 6
+The build also generates the 18 static legal pages into `web/dist` (privacy/terms/security × 6
 languages) via the `gen:legal` prebuild step.
 
 ```bash
