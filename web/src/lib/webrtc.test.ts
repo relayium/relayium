@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
-import { connect, type InboundSignal } from "./webrtc";
+import { connect, classifyPath, type InboundSignal } from "./webrtc";
 import type { SignalingClient } from "./signaling";
 import { ready, generateKeyPair, sas } from "./crypto";
 
@@ -123,5 +123,56 @@ describe("webrtc commit-then-reveal handshake", () => {
     // Tidy the still-pending initiator side (channel-open clears its timer).
     openAll();
     try { (await iP).close(); } catch { /* also rejected — fine */ }
+  });
+});
+
+// A getStats() report is a Map keyed by stat id; each candidate-pair references
+// its two endpoint candidates by id. Build the minimal shape classifyPath reads.
+function statsReport(pair: Record<string, unknown>, cands: Record<string, string>) {
+  const m = new Map<string, unknown>();
+  m.set("cp", { type: "candidate-pair", ...pair });
+  for (const [id, candidateType] of Object.entries(cands)) m.set(id, { type: "local-candidate", candidateType });
+  return m as unknown as RTCStatsReport;
+}
+
+describe("classifyPath", () => {
+  it("reports lan for a nominated host↔host pair (Chromium shape)", () => {
+    const s = statsReport(
+      { nominated: true, state: "succeeded", localCandidateId: "l", remoteCandidateId: "r" },
+      { l: "host", r: "host" },
+    );
+    expect(classifyPath(s)).toBe("lan");
+  });
+
+  it("reports p2p when a srflx candidate is involved", () => {
+    const s = statsReport(
+      { nominated: true, state: "succeeded", localCandidateId: "l", remoteCandidateId: "r" },
+      { l: "srflx", r: "host" },
+    );
+    expect(classifyPath(s)).toBe("p2p");
+  });
+
+  it("reports relay when either end is a TURN relay", () => {
+    const s = statsReport(
+      { nominated: true, state: "succeeded", localCandidateId: "l", remoteCandidateId: "r" },
+      { l: "host", r: "relay" },
+    );
+    expect(classifyPath(s)).toBe("relay");
+  });
+
+  it("honours Firefox's `selected` flag without `nominated`", () => {
+    const s = statsReport(
+      { selected: true, localCandidateId: "l", remoteCandidateId: "r" },
+      { l: "host", r: "host" },
+    );
+    expect(classifyPath(s)).toBe("lan");
+  });
+
+  it("is unknown when no pair is selected yet", () => {
+    const s = statsReport(
+      { nominated: true, state: "in-progress", localCandidateId: "l", remoteCandidateId: "r" },
+      { l: "host", r: "host" },
+    );
+    expect(classifyPath(s)).toBe("unknown");
   });
 });

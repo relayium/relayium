@@ -30,6 +30,9 @@ export interface Messages {
   requestHead: (name: string, count: number, size: string) => string;
   codeLabel: string;
   codeCompare: string;
+  pathLan: string; // connection-path badge: host↔host on the local network
+  pathP2p: string; // direct P2P over the public internet (NAT-traversed)
+  pathRelay: string; // traffic going through a TURN relay
   accept: string;
   decline: string;
   sendTo: (name: string) => string;
@@ -218,6 +221,9 @@ const zh: Messages = {
   requestHead: (n, c, s) => `📥 ${n} 想发送 ${c} 个文件 · 共 ${s}`,
   codeLabel: "校验码",
   codeCompare: "请与发送方屏幕核对一致后再接收",
+  pathLan: "局域网直连",
+  pathP2p: "P2P 直连",
+  pathRelay: "中继",
   accept: "接收",
   decline: "拒绝",
   sendTo: (n) => `发送 → ${n}`,
@@ -438,6 +444,9 @@ const en: Messages = {
   requestHead: (n, c, s) => `📥 ${n} wants to send ${c} file(s) · ${s} total`,
   codeLabel: "Verification code",
   codeCompare: "compare it with the sender’s screen before accepting",
+  pathLan: "LAN direct",
+  pathP2p: "P2P direct",
+  pathRelay: "Relayed",
   accept: "Accept",
   decline: "Decline",
   sendTo: (n) => `Send → ${n}`,
@@ -658,6 +667,9 @@ const ja: Messages = {
   requestHead: (n, c, s) => `📥 ${n} さんが ${c} 個のファイルを送信しようとしています · 合計 ${s}`,
   codeLabel: "確認コード",
   codeCompare: "受信する前に送信側の画面と一致するか確認してください",
+  pathLan: "LAN直結",
+  pathP2p: "P2P直結",
+  pathRelay: "中継",
   accept: "受信",
   decline: "拒否",
   sendTo: (n) => `送信 → ${n}`,
@@ -878,6 +890,9 @@ const ko: Messages = {
   requestHead: (n, c, s) => `📥 ${n} 님이 파일 ${c}개를 보내려 합니다 · 총 ${s}`,
   codeLabel: "확인 코드",
   codeCompare: "받기 전에 보내는 쪽 화면과 일치하는지 확인하세요",
+  pathLan: "LAN 직접",
+  pathP2p: "P2P 직접",
+  pathRelay: "중계",
   accept: "받기",
   decline: "거부",
   sendTo: (n) => `보내기 → ${n}`,
@@ -1098,6 +1113,9 @@ const de: Messages = {
   requestHead: (n, c, s) => `📥 ${n} möchte ${c} Datei(en) senden · ${s} gesamt`,
   codeLabel: "Prüfcode",
   codeCompare: "vergleichen Sie ihn vor dem Annehmen mit dem Bildschirm des Absenders",
+  pathLan: "LAN direkt",
+  pathP2p: "P2P direkt",
+  pathRelay: "Über Relay",
   accept: "Annehmen",
   decline: "Ablehnen",
   sendTo: (n) => `Senden → ${n}`,
@@ -1318,6 +1336,9 @@ const fr: Messages = {
   requestHead: (n, c, s) => `📥 ${n} veut envoyer ${c} fichier(s) · ${s} au total`,
   codeLabel: "Code de vérification",
   codeCompare: "comparez-le avec l’écran de l’expéditeur avant d’accepter",
+  pathLan: "LAN direct",
+  pathP2p: "P2P direct",
+  pathRelay: "Relais",
   accept: "Accepter",
   decline: "Refuser",
   sendTo: (n) => `Envoi → ${n}`,

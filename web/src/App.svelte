@@ -10,7 +10,8 @@
   import { SignalingClient } from "./lib/signaling";
   import { wsURL } from "./lib/transfer-link";
   import { roomToken as roomTokenStore, roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
-  import { connect, type InboundSignal, type Conn } from "./lib/webrtc";
+  import { connect, type InboundSignal, type Conn, type ConnPath } from "./lib/webrtc";
+  import { createWakeLock } from "./lib/wakelock";
   import {
     Sender,
     Receiver,
@@ -64,6 +65,10 @@
   let incoming = $state<Incoming | null>(null); // pending receive awaiting accept/reject
   let recv = $state<Xfer | null>(null);
   let send = $state<Xfer | null>(null);
+  // Live ICE path per direction, kept out of Xfer so the async getStats() poll
+  // never races the transfer loop's high-frequency rewrites of send/recv.
+  let sendPath = $state<ConnPath | undefined>();
+  let recvPath = $state<ConnPath | undefined>();
   let notice = $state(""); // transient hint (e.g. "busy", "too many files")
   let dragActive = $state(false);
   let dragDepth = 0; // non-reactive: dragenter/dragleave fire per element; count to know when the drag truly leaves the window
@@ -112,6 +117,26 @@
       ? `${pct(x)}% ${x.dir === "send" ? "↑" : "↓"} · Relayium`
       : messages[lang()].titleDefault;
   });
+
+  // Hold a screen wake lock while any transfer is in flight so a phone locking
+  // its screen mid-transfer doesn't tear down the connection. Centralised here so
+  // every exit path (done/fail/cancel) releases without per-branch bookkeeping.
+  const wake = createWakeLock();
+  $effect(() => {
+    const active = (send && !send.done) || (recv && !recv.done);
+    if (active) wake.acquire();
+    else wake.release();
+  });
+
+  // Poll the live ICE path a few times once a channel is up: the selected
+  // candidate pair can settle shortly after the data channel opens.
+  async function trackPath(conn: Conn, set: (p: ConnPath) => void) {
+    for (let i = 0; i < 8; i++) {
+      const p = await conn.path();
+      if (p !== "unknown") { set(p); return; }
+      await sleep(400);
+    }
+  }
 
   onMount(async () => {
     document.documentElement.lang = lang();
@@ -300,6 +325,7 @@
 
     let r: Xfer = { peer: from, dir: "recv", files: [], index: 0, sent: 0, total: 0, status: "connecting", done: false, ok: false, speed: 0 };
     recv = r;
+    recvPath = undefined;
 
     // Stall detection: a receive that goes quiet for STALL_MS (peer vanished, path
     // died before ICE noticed) is failed rather than left frozen mid-progress.
@@ -385,6 +411,7 @@
         return;
       }
       recv = r = { peer: from, dir: "recv", files: req.files, index: 0, sent: 0, total: req.total, status: "receiving", done: false, ok: false, speed: 0 };
+      if (conn) trackPath(conn, (p) => (recvPath = p));
       incoming = null;
       // Arm the stall watchdog only once data is actually expected.
       lastActivity = Date.now();
@@ -470,6 +497,7 @@
     const total = metas.reduce((n, m) => n + m.size, 0);
     let s: Xfer = { peer: peerId, dir: "send", files: metas, index: 0, sent: 0, total, status: "connecting", done: false, ok: false, speed: 0 };
     send = s;
+    sendPath = undefined;
     if (dropped > 0) flash(messages[lang()].tooMany(MAX_FILES, dropped));
 
     const selfKey = generateKeyPair();
@@ -537,6 +565,7 @@
       }
 
       send = s = { ...s, status: "sending" };
+      trackPath(conn, (p) => (sendPath = p));
       const start = Date.now();
       let sent = 0, idx = 0;
       for await (const frame of sender.dataFrames(files, keys)) {
@@ -609,6 +638,9 @@
     if (x.status === "sendDone") return m.status.sendDone(x.files.length);
     if (x.status === "recvDone") return m.status.recvDone(x.files.length);
     return m.status[x.status] as string;
+  }
+  function pathLabel(m: Messages, p: ConnPath): string {
+    return p === "lan" ? m.pathLan : p === "relay" ? m.pathRelay : m.pathP2p;
   }
   function formatSize(n: number): string {
     if (n < 1024) return `${n} B`;
@@ -704,10 +736,14 @@
         {#if sasCode && !xf.done} · {t.codeLabel} <code>{sasCode}</code>{/if}
       </div>
       {#if !xf.done}
+        {@const path = xf.dir === "send" ? sendPath : recvPath}
         <div class="bar"><div class="fill" style:width="{pct(xf)}%"></div></div>
         <div class="meta">
           <span>{pct(xf)}% · {formatSize(xf.sent)} / {formatSize(xf.total)}</span>
-          {#if xf.speed > 0}<span>{formatSpeed(xf.speed)}</span>{/if}
+          <span class="meta-right">
+            {#if path}<span class="path path-{path}"><i class="dot"></i>{pathLabel(t, path)}</span>{/if}
+            {#if xf.speed > 0}<span>{formatSpeed(xf.speed)}</span>{/if}
+          </span>
         </div>
       {/if}
     </section>
@@ -853,6 +889,13 @@
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; }
   .fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), #6d28d9); transition: width .2s ease; }
   .meta { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 12.5px; color: var(--text); }
+  .meta-right { display: inline-flex; align-items: center; gap: 12px; }
+  /* Connection-path badge: a coloured dot + label. Green LAN, blue P2P, orange relay. */
+  .path { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .path .dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; flex: none; }
+  .path-lan { color: #16a34a; }
+  .path-p2p { color: #2563eb; }
+  .path-relay { color: #d97706; }
 
   .peers { margin-top: var(--space-7); }
   .peers h2 { font-size: 20px; }

@@ -38,10 +38,42 @@ interface ConnectOpts {
   onStateChange?: (state: RTCPeerConnectionState) => void;
 }
 
+/** Which ICE path the connection is actually using. "lan" is a host↔host hop on
+ *  the local network, "relay" means traffic is going through TURN, "p2p" is a
+ *  direct hole-punched path over the public internet. "unknown" until a pair is
+ *  selected (or on browsers that don't surface it). */
+export type ConnPath = "lan" | "p2p" | "relay" | "unknown";
+
 export interface Conn {
   channel: RTCDataChannel;
   /** Tear down the peer connection and stop listening for this peer's signals. */
   close(): void;
+  /** The live ICE path, read from getStats() on demand. */
+  path(): Promise<ConnPath>;
+}
+
+/** Classify the in-use ICE path from a getStats() report: find the selected
+ *  candidate pair, then read the candidate type on each end. A relay on either
+ *  side means TURN; host↔host is a LAN direct hop; anything else (srflx/prflx,
+ *  i.e. a NAT-traversed direct path) is P2P. Firefox flags the live pair with
+ *  `selected`; Chromium leaves `nominated` + `succeeded` on it — accept either.
+ *  Exported for unit testing against synthetic stats. */
+export function classifyPath(stats: RTCStatsReport): ConnPath {
+  let pair: { localCandidateId?: string; remoteCandidateId?: string } | undefined;
+  stats.forEach((r) => {
+    const s = r as unknown as { type: string; selected?: boolean; nominated?: boolean; state?: string };
+    if (s.type === "candidate-pair" && (s.selected || (s.nominated && s.state === "succeeded"))) {
+      pair ??= r as unknown as typeof pair;
+    }
+  });
+  if (!pair) return "unknown";
+  const typeOf = (id?: string) =>
+    id ? (stats.get(id) as unknown as { candidateType?: string } | undefined)?.candidateType : undefined;
+  const local = typeOf(pair.localCandidateId);
+  const remote = typeOf(pair.remoteCandidateId);
+  if (local === "relay" || remote === "relay") return "relay";
+  if (local === "host" && remote === "host") return "lan";
+  return "p2p";
 }
 
 function b64(bytes: Uint8Array): string {
@@ -204,7 +236,7 @@ export async function connect(opts: ConnectOpts): Promise<Conn> {
   try {
     const openChannel = await ready;
     clearTimeout(connectTimer);
-    return { channel: openChannel, close };
+    return { channel: openChannel, close, path: () => pc.getStats().then(classifyPath) };
   } catch (err) {
     // Establishment failed or timed out: clean up the listener and peer
     // connection, then propagate so the caller shows a retryable failure
