@@ -39,6 +39,15 @@ func (g *GC) sweep(ctx context.Context) {
 	if err := g.Store.PruneUploadEvents(ctx, now-pruneMargin); err != nil {
 		g.Log.Printf("gc: prune upload events: %v", err)
 	}
+	// Auth tables are otherwise append-only: expired/revoked sessions and
+	// spent/expired magic tokens are never deleted on the request path, so GC
+	// reclaims them to keep the tables bounded.
+	if err := g.Store.DeleteExpiredSessions(ctx, now); err != nil {
+		g.Log.Printf("gc: delete expired sessions: %v", err)
+	}
+	if err := g.Store.DeleteSpentMagicTokens(ctx, now); err != nil {
+		g.Log.Printf("gc: delete spent magic tokens: %v", err)
+	}
 }
 
 // Run sweeps once immediately, then every interval until ctx is cancelled.

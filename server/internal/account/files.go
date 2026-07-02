@@ -73,6 +73,26 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	}
 
 	now := s.now().Unix()
+
+	// Cheap pre-check to avoid writing a blob we'd immediately delete: if the
+	// declared body already overflows the remaining daily quota, reject before
+	// touching disk. Content-Length is client-supplied, so it is trusted only to
+	// fail fast — never to admit; the authoritative gate is ReserveUpload below.
+	if r.ContentLength > 0 {
+		declared := r.ContentLength - 4 - int64(mlen) // ciphertext bytes (minus framing)
+		if declared > 0 {
+			used, err := s.store.UserUploadedSince(r.Context(), u.ID, now-dayWindow)
+			if err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+			if used+declared > st.DailyQuota {
+				http.Error(w, "daily quota exceeded", http.StatusTooManyRequests)
+				return
+			}
+		}
+	}
+
 	blobKey := randToken()
 	capped := &cappedReader{r: br, max: st.MaxFileSize}
 	size, err := s.blobs.Put(r.Context(), blobKey, capped)
@@ -86,24 +106,21 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		return
 	}
 
-	// Daily quota: rolling 24h sum + this upload must stay within the limit.
-	used, err := s.store.UserUploadedSince(r.Context(), u.ID, now-dayWindow)
+	// Daily quota: atomically re-read the rolling 24h sum, verify this upload
+	// fits, and record the event in one transaction. This closes the read/record
+	// race where concurrent uploads each see a stale sum and collectively bust the
+	// quota. Reserve first, then commit the file — if either fails, drop the blob.
+	ok, err := s.store.ReserveUpload(r.Context(),
+		UploadEvent{ID: newID(), UserID: u.ID, Bytes: size, UploadedAt: now},
+		now-dayWindow, st.DailyQuota)
 	if err != nil {
 		_ = s.blobs.Delete(r.Context(), blobKey)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	if used+size > st.DailyQuota {
+	if !ok {
 		_ = s.blobs.Delete(r.Context(), blobKey)
 		http.Error(w, "daily quota exceeded", http.StatusTooManyRequests)
-		return
-	}
-
-	if err := s.store.RecordUpload(r.Context(), UploadEvent{
-		ID: newID(), UserID: u.ID, Bytes: size, UploadedAt: now,
-	}); err != nil {
-		_ = s.blobs.Delete(r.Context(), blobKey)
-		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
 	id := newID()
@@ -143,6 +160,22 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	// Burn-after-read: atomically claim the single download BEFORE streaming a
+	// byte. Concurrent GETs race on one UPDATE; only the winner proceeds, the rest
+	// 404. Claiming up front means even an interrupted transfer spends the one
+	// shot — that is the burn contract, and it closes the TOCTOU where two GETs
+	// both streamed the full plaintext before either marked it consumed.
+	if sf.BurnAfterRead {
+		claimed, err := s.store.ClaimBurnDownload(r.Context(), sf.ID, s.now().Unix())
+		if err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if !claimed {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+	}
 	rc, err := s.blobs.Get(r.Context(), sf.BlobKey)
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
@@ -153,12 +186,11 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", strconv.FormatInt(sf.Size, 10))
 	n, err := io.Copy(w, rc)
 	if err != nil {
-		return // client hung up mid-stream; leave the file intact
+		return // client hung up mid-stream; the download is already spent
 	}
-	// Burn-after-read: only after the whole blob streamed out. Row-state delete
-	// is idempotent so a double download can't 500.
+	// Burn-after-read: the download is already claimed, so this is pure cleanup of
+	// the now-spent ciphertext and row (an interrupted stream leaves them for GC).
 	if sf.BurnAfterRead && n == sf.Size {
-		_ = s.store.MarkDownloaded(r.Context(), sf.ID, s.now().Unix())
 		_ = s.blobs.Delete(r.Context(), sf.BlobKey)
 		_ = s.store.DeleteStoredFile(r.Context(), sf.ID)
 	}
@@ -206,6 +238,12 @@ func (s *Service) handleDeleteFile(w http.ResponseWriter, r *http.Request, u Use
 func (s *Service) liveFile(r *http.Request, id string) (StoredFile, bool) {
 	sf, err := s.store.GetStoredFile(r.Context(), id)
 	if err != nil || s.now().Unix() >= sf.ExpiresAt {
+		return StoredFile{}, false
+	}
+	// A burn-after-read file whose one download was already claimed is spent:
+	// treat it as gone even if the row lingers (e.g. an interrupted stream that
+	// claimed the download but never reached the cleanup delete).
+	if sf.BurnAfterRead && sf.DownloadedAt > 0 {
 		return StoredFile{}, false
 	}
 	return sf, true

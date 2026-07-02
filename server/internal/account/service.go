@@ -48,13 +48,16 @@ type Service struct {
 	adminTOTPMu       sync.Mutex
 	adminTOTPLastStep int64             // last TOTP time-step accepted for admin login (replay guard)
 	adminLogins       *loginThrottle
+	pwLogins          *loginThrottle    // per email+IP failed password-login limiter
+	magicRequests     *loginThrottle    // per email+IP magic-link request rate limiter
 	blobs             storage.BlobStore // nil until SetBlobStore; stored-transfer disabled when nil
 	validatePairCode  func(string) bool // reports a live anonymous pairing code; nil until wired
 }
 
 func NewService(store Store, mailer Mailer, cfg Config) *Service {
 	svc := &Service{store: store, mailer: mailer, cfg: cfg, now: time.Now,
-		adminSessions: map[string]int64{}, adminLogins: newLoginThrottle()}
+		adminSessions: map[string]int64{}, adminLogins: newLoginThrottle(),
+		pwLogins: newLoginThrottle(), magicRequests: newLoginThrottle()}
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
 	return svc
 }

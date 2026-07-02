@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -245,5 +247,106 @@ func TestDeleteFileOwnerGate(t *testing.T) {
 	m, _ := ts.Client().Get(ts.URL + "/api/files/" + up.ID + "/meta")
 	if m.StatusCode != http.StatusNotFound {
 		t.Fatalf("meta after delete: want 404, got %d", m.StatusCode)
+	}
+}
+
+// TestBurnBlobConcurrentSingleDelivery proves the burn-after-read TOCTOU fix at
+// the HTTP layer: many concurrent GETs of the same burn file yield exactly one
+// 200 with the full plaintext; every other request 404s. Before the fix, several
+// requests could each stream the complete ciphertext.
+func TestBurnBlobConcurrentSingleDelivery(t *testing.T) {
+	ts, _, store, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "burnrace@example.com")
+	resp := postUpload(t, ts, cookie, "?burnAfterRead=1&ttl=0", uploadBody([]byte("m"), []byte("CIPHERTEXT")))
+	var up struct {
+		ID string `json:"id"`
+	}
+	decodeJSON(t, resp, &up)
+
+	const n = 24
+	var full, notFound int64
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			r, err := ts.Client().Get(ts.URL + "/api/files/" + up.ID + "/blob")
+			if err != nil {
+				t.Errorf("get: %v", err)
+				return
+			}
+			defer r.Body.Close()
+			body, _ := io.ReadAll(r.Body)
+			switch {
+			case r.StatusCode == http.StatusOK && string(body) == "CIPHERTEXT":
+				atomic.AddInt64(&full, 1)
+			case r.StatusCode == http.StatusNotFound:
+				atomic.AddInt64(&notFound, 1)
+			default:
+				t.Errorf("unexpected status=%d body=%q", r.StatusCode, body)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	if full != 1 {
+		t.Fatalf("full plaintext deliveries = %d, want exactly 1", full)
+	}
+	if notFound != n-1 {
+		t.Fatalf("404s = %d, want %d", notFound, n-1)
+	}
+	// Row is gone after the single successful burn download.
+	if _, err := store.GetStoredFile(context.Background(), up.ID); err != ErrNotFound {
+		t.Fatalf("burned file should be deleted, got err=%v", err)
+	}
+}
+
+// TestConcurrentUploadsRespectQuota proves the quota TOCTOU fix: firing many
+// uploads at once, whose combined size far exceeds the daily quota, never lets
+// the recorded total exceed the quota. Pre-fix, each request read a stale usage
+// sum and they collectively busted the cap.
+func TestConcurrentUploadsRespectQuota(t *testing.T) {
+	ts, _, store, mail := newFileServer(t) // MaxFileSize 1024, DailyQuota 4096
+	cookie := loginCookie(t, ts, mail, "qrace@example.com")
+	u, _ := store.UpsertUserByEmail(context.Background(), "qrace@example.com", "")
+
+	const (
+		n    = 16
+		each = 1000 // fits under MaxFileSize; 4 fit the 4096 quota
+	)
+	var accepted int64
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			resp := postUpload(t, ts, cookie, "?ttl=0", uploadBody([]byte("m"), bytes.Repeat([]byte("z"), each)))
+			defer resp.Body.Close()
+			switch resp.StatusCode {
+			case http.StatusOK:
+				atomic.AddInt64(&accepted, 1)
+			case http.StatusTooManyRequests:
+			default:
+				t.Errorf("unexpected upload status %d", resp.StatusCode)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	total, _ := store.UserUploadedSince(context.Background(), u.ID, 0)
+	if total > 4096 {
+		t.Fatalf("recorded upload total %d exceeds quota 4096", total)
+	}
+	if accepted*each != total {
+		t.Fatalf("accepted*each=%d != recorded total=%d", accepted*each, total)
+	}
+	if accepted != 4 {
+		t.Fatalf("accepted uploads = %d, want 4 (4*1000 <= 4096 < 5*1000)", accepted)
 	}
 }

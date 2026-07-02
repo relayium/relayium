@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -18,7 +19,50 @@ func (s *Service) cookieSecure() bool {
 	return strings.HasPrefix(s.cfg.BaseURL, "https://")
 }
 
-func (s *Service) Routes() *http.ServeMux {
+// Routes returns the account API handler. State-changing requests pass through
+// csrfGuard first; the returned http.Handler is not a *ServeMux, so callers must
+// treat it as an opaque handler.
+func (s *Service) Routes() http.Handler {
+	return s.csrfGuard(s.routeMux())
+}
+
+// selfOrigin is the scheme://host the app is served from, derived from BaseURL.
+// Cross-site requests carrying a different Origin on an unsafe method are
+// rejected. Empty when BaseURL is unparseable, which disables the Origin check
+// (SameSite=Lax cookies remain the backstop).
+func (s *Service) selfOrigin() string {
+	u, err := url.Parse(s.cfg.BaseURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
+
+// csrfGuard rejects state-changing requests (POST/PUT/PATCH/DELETE) whose Origin
+// header is present and does not match the site's own origin. This complements
+// the SameSite=Lax session cookie as defense-in-depth against CSRF: a cross-site
+// attacker's fetch/XHR always sends a foreign Origin, so it is blocked here even
+// if a browser or proxy quirk were to weaken SameSite enforcement. Safe methods
+// (GET/HEAD/OPTIONS) and requests with no Origin (e.g. top-level OAuth/magic-link
+// redirects, non-browser clients) are left alone.
+func (s *Service) csrfGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet, http.MethodHead, http.MethodOptions:
+			next.ServeHTTP(w, r)
+			return
+		}
+		if origin := r.Header.Get("Origin"); origin != "" {
+			if self := s.selfOrigin(); self != "" && origin != self {
+				http.Error(w, "cross-origin request rejected", http.StatusForbidden)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Service) routeMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/auth/register", s.handleRegister)
 	mux.HandleFunc("POST /api/auth/password/login", s.handlePasswordLogin)
@@ -151,11 +195,17 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 }
 
 func (s *Service) handleMagicRequest(w http.ResponseWriter, r *http.Request) {
-	email := r.FormValue("email")
-	// Always respond 200, regardless of whether sending succeeds or the email is new,
-	// to avoid account enumeration. Log errors server-side only.
+	email := normEmail(r.FormValue("email"))
+	// Rate-limit per email+IP so the endpoint can't be turned into an email bomb.
+	// Each request counts toward the limit; past the threshold we silently skip
+	// sending. Always respond 200 regardless — of send success, unknown email, or
+	// throttle state — so neither account existence nor the limit leaks.
 	if email != "" {
-		_ = s.RequestMagicLink(r.Context(), email)
+		key := email + "|" + clientIP(r)
+		if !s.magicRequests.locked(key, s.now()) {
+			s.magicRequests.recordFail(key, s.now())
+			_ = s.RequestMagicLink(r.Context(), email)
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
 }
@@ -296,8 +346,17 @@ func (s *Service) handlePasswordLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	// Throttle brute force per email+IP. Keying on both (not email alone) still
+	// caps a single source's guessing while denying an attacker the ability to
+	// lock a victim out of their own account from unrelated IPs.
+	key := normEmail(in.Email) + "|" + clientIP(r)
+	if s.pwLogins.locked(key, s.now()) {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts, try again later"})
+		return
+	}
 	sess, err := s.Login(r.Context(), in.Email, in.Password)
 	if errors.Is(err, ErrBadCredentials) {
+		s.pwLogins.recordFail(key, s.now())
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 		return
 	}
@@ -305,6 +364,7 @@ func (s *Service) handlePasswordLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
+	s.pwLogins.reset(key)
 	u, err := s.store.GetUserByID(r.Context(), sess.UserID)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
