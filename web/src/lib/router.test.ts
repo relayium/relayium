@@ -1,5 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { routeFromLocation as rfl, downloadId, CROSS_PATH } from "./router.svelte";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import {
+  routeFromLocation as rfl, downloadId, CROSS_PATH,
+  navigate, currentRoute, setNavGuard, syncRouteFromLocation,
+} from "./router.svelte";
 
 describe("routeFromLocation", () => {
   it("defaults to lan on root", () => {
@@ -40,5 +43,41 @@ describe("routeFromLocation with a pairing code", () => {
   });
   it("does not treat a malformed #c= as cross", () => {
     expect(rfl("/", "#c=123")).toBe("lan");
+  });
+});
+
+describe("navigate", () => {
+  afterEach(() => {
+    setNavGuard(null);
+    history.replaceState({}, "", "/");
+    syncRouteFromLocation(); // reset route to "lan" between cases
+  });
+
+  it("switches route to the target tab", () => {
+    navigate("cross");
+    expect(currentRoute()).toBe("cross");
+  });
+
+  it("is a no-op when already on the target tab (does not consult the guard)", () => {
+    navigate("cross");
+    const guard = vi.fn(() => true);
+    setNavGuard(guard);
+    navigate("cross"); // already here
+    expect(guard).not.toHaveBeenCalled();
+    expect(currentRoute()).toBe("cross");
+  });
+
+  it("cancels navigation when the guard returns false", () => {
+    // start on lan
+    expect(currentRoute()).toBe("lan");
+    setNavGuard(() => false);
+    navigate("cross");
+    expect(currentRoute()).toBe("lan");
+  });
+
+  it("proceeds when the guard returns true", () => {
+    setNavGuard(() => true);
+    navigate("cross");
+    expect(currentRoute()).toBe("cross");
   });
 });

@@ -30,7 +30,7 @@
   import { hasFiles, dropTarget } from "./lib/drag";
   import CrossPage from "./lib/CrossPage.svelte";
   import Nav from "./lib/Nav.svelte";
-  import { currentRoute, syncRouteFromLocation, downloadId, navigate } from "./lib/router.svelte";
+  import { currentRoute, syncRouteFromLocation, downloadId, navigate, setNavGuard } from "./lib/router.svelte";
   import Hero from "./lib/Hero.svelte";
   import DownloadPage from "./lib/DownloadPage.svelte";
   import FeatureStrip from "./lib/FeatureStrip.svelte";
@@ -52,7 +52,7 @@
   }
 
   // Reactive state
-  let connState = $state<"connecting" | "ready">("connecting");
+  let connState = $state<"connecting" | "ready" | "reconnecting">("connecting");
   let unsupported = $state(false);
   let selfName = $state("");
   let selfId = $state("");
@@ -76,6 +76,8 @@
   // Non-reactive locals
   let signaling: SignalingClient;
   let socketRoomKey = ""; // which room the current socket is bound to; guards the reconnect effect
+  let roomEpoch = 0; // bumped per room switch; discards a stale fetchIceServers response
+  let reconnectTimer: ReturnType<typeof setTimeout> | undefined; // pending auto-reconnect after a WS drop
   let iceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
   let acceptFn: (() => void) | null = null;
   let rejectFn: (() => void) | null = null;
@@ -123,17 +125,43 @@
     selfName = deviceName();
     iceServers = await fetchIceServers(roomToken, roomCode);
     signaling = new SignalingClient(wsURL(location, roomToken, roomCode), selfName);
-    signaling.onSelfId((id, ip) => { selfId = id; selfIP = ip; joinedRoom = true; });
+    signaling.onSelfId((id, ip) => {
+      selfId = id; selfIP = ip; joinedRoom = true;
+      // A welcome means the socket is (re)connected — clear any reconnect state.
+      connState = "ready";
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = undefined; }
+    });
     signaling.onPeers((p) => (peers = p));
     signaling.onClose(() => {
       // In a token-room, a close before we ever joined means the link was
-      // invalid/expired or the room was full.
-      if ((roomToken || roomCode) && !joinedRoom) linkDead = true;
+      // invalid/expired or the room was full — surface that, don't retry.
+      if ((roomToken || roomCode) && !joinedRoom) { linkDead = true; return; }
+      // Otherwise the signalling socket dropped unexpectedly. Reflect the break in
+      // the UI (no green "connected" dot, no zombie devices) and auto-reconnect.
+      peers = [];
+      selfId = "";
+      selfIP = "";
+      joinedRoom = false;
+      connState = "reconnecting";
+      scheduleReconnect();
     });
     listenForIncoming();
     socketRoomKey = `${roomToken}|${roomCode}`;
     connState = "ready";
   });
+
+  // Reconnect the signalling socket to the current room after an unexpected drop.
+  // A single pending timer at a time; onSelfId cancels it once the welcome lands.
+  function scheduleReconnect() {
+    if (reconnectTimer) return;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = undefined;
+      if (!signaling) return;
+      // reconnect() intentionally swaps the socket (won't re-fire onClose); if this
+      // fresh socket also closes, onClose runs again and re-schedules.
+      signaling.reconnect(wsURL(location, roomToken, roomCode));
+    }, 2000);
+  }
 
   function onPopState() {
     syncRouteFromLocation();
@@ -147,6 +175,8 @@
     // Tear down any in-flight transfer/connection before rebinding — switching
     // methods mid-transfer must not leak the old WebRTC session or leave the UI
     // wedged as "busy".
+    const epoch = ++roomEpoch; // newer switch supersedes any slower in-flight one
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = undefined; }
     sendAbort?.();
     recvAbort?.();
     peers = [];
@@ -158,7 +188,13 @@
     send = null;
     recv = null;
     sasCode = "";
-    iceServers = await fetchIceServers(roomToken, roomCode);
+    connState = "connecting";
+    const servers = await fetchIceServers(roomToken, roomCode);
+    // A rapid second switch may have started (and possibly finished) while this
+    // fetch was in flight — discard the stale credentials rather than clobbering
+    // the newer room's TURN config and socket.
+    if (epoch !== roomEpoch) return;
+    iceServers = servers;
     signaling.reconnect(wsURL(location, roomToken, roomCode));
   }
 
@@ -168,6 +204,23 @@
     if (key === socketRoomKey) return; // already bound to this room
     socketRoomKey = key;
     void switchRoom();
+  });
+
+  onMount(() => {
+    // Guard tab/logo navigation and tab-close while a transfer is live: navigating
+    // tears down the room (aborting the transfer), so confirm first; and warn on a
+    // full page unload so an accidental close doesn't silently kill a transfer.
+    setNavGuard(() => (busy ? confirm(messages[lang()].confirmLeave) : true));
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!busy) return;
+      e.preventDefault();
+      e.returnValue = ""; // required for the native "leave site?" prompt in some browsers
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      setNavGuard(null);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
   });
 
   onMount(() => {
@@ -250,6 +303,7 @@
     // Stall detection: a receive that goes quiet for STALL_MS (peer vanished, path
     // died before ICE noticed) is failed rather than left frozen mid-progress.
     let conn: Conn | undefined;
+    let cancelled = false; // user hit cancel (possibly during ICE, before conn exists)
     let lastActivity = Date.now();
     let watchdog: ReturnType<typeof setInterval> | undefined;
     const clearWatchdog = () => { if (watchdog) { clearInterval(watchdog); watchdog = undefined; } };
@@ -264,6 +318,20 @@
       conn?.close();
     };
 
+    // User pressed cancel: tear down and return to idle (not a failure card).
+    // Installed *before* connect so cancel works during ICE negotiation too — at
+    // that point conn is undefined, so we flag `cancelled` and the post-connect
+    // check closes the late connection. Mirrors the sender's pre-connect sendAbort.
+    recvAbort = () => {
+      cancelled = true;
+      clearWatchdog();
+      conn?.close();
+      recv = null;
+      incoming = null;
+      sasCode = "";
+      recvAbort = null;
+    };
+
     conn = await connect({
       signaling, peerId: from, selfKey: selfKey.publicKey, role: "responder",
       initialSignal: offer,
@@ -275,15 +343,9 @@
       onStateChange: (state) => { if (state === "failed" || state === "closed") failRecv("recvFail"); },
     });
 
-    // User pressed cancel: tear down and return to idle (not a failure card).
-    recvAbort = () => {
-      clearWatchdog();
-      conn?.close();
-      recv = null;
-      incoming = null;
-      sasCode = "";
-      recvAbort = null;
-    };
+    // Cancelled while ICE was negotiating: the connection resolved after the abort,
+    // so close it now (recvAbort already reset the UI to idle) and stop here.
+    if (cancelled) { conn.close(); return; }
 
     const openSink = async () => {
       const f = manifest[fileIndex];
@@ -304,11 +366,25 @@
         conn!.close();
         return;
       }
+      // The save picker can sit open for tens of seconds. If the connection died
+      // (or the user cancelled) meanwhile, failRecv/recvAbort already tore this
+      // receive down — do NOT resurrect it as "receiving" over a dead channel.
+      if (r.done || cancelled) return;
       fileIndex = 0; got = 0; start = Date.now();
       await openSink(); // prepare file 0 (also covers a leading zero-byte file)
+      // Tell the sender we're ready. On an already-closed channel this throws
+      // InvalidStateError — surface a failure the user can dismiss/retry instead
+      // of freezing at "receiving 0%" with a dead cancel button.
+      try {
+        conn!.channel.send(ACCEPT);
+      } catch (err) {
+        console.error("relayium accept send error", err);
+        if (sink) { try { await sink.close(); } catch { /* ignore */ } }
+        failRecv("recvFail");
+        return;
+      }
       recv = r = { peer: from, dir: "recv", files: req.files, index: 0, sent: 0, total: req.total, status: "receiving", done: false, ok: false, speed: 0 };
       incoming = null;
-      conn!.channel.send(ACCEPT);
       // Arm the stall watchdog only once data is actually expected.
       lastActivity = Date.now();
       watchdog = setInterval(() => {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { session } from "./auth.svelte";
-  import { createTransfer, buildTransferLink } from "./transfer-link";
+  import { createTransfer, buildTransferLink, HttpError } from "./transfer-link";
   import { enterRoom } from "./room.svelte";
   import { messages, lang, type Messages } from "./i18n.svelte";
 
@@ -21,14 +21,16 @@
 
   let qrDataUrl = $state("");
   $effect(() => {
-    if (isOriginator && shareLink) {
-      // Lazy-load qrcode so it stays out of the main bundle path.
-      import("qrcode").then((m) =>
-        m.toDataURL(shareLink, { margin: 1, width: 192 }).then((u) => (qrDataUrl = u)),
-      );
-    } else {
-      qrDataUrl = "";
-    }
+    if (!(isOriginator && shareLink)) { qrDataUrl = ""; return; }
+    // Lazy-load qrcode so it stays out of the main bundle path. Cancel a slow
+    // render if the link changes first, and swallow failures (QR is optional).
+    let cancelled = false;
+    const target = shareLink;
+    import("qrcode")
+      .then((m) => m.toDataURL(target, { margin: 1, width: 192 }))
+      .then((u) => { if (!cancelled) qrDataUrl = u; })
+      .catch(() => { /* link is still shown/copyable without the QR */ });
+    return () => { cancelled = true; };
   });
 
   async function start() {
@@ -44,14 +46,22 @@
       // Enter the token room in place; App rebinds the signaling socket to the
       // 2-peer room without a full page reload.
       enterRoom({ token });
-    } catch {
+    } catch (e) {
       busy = false;
-      err = t.crossnet.linkDead;
+      if (e instanceof HttpError) {
+        err = e.status === 401 ? t.crossnet.sessionExpired : t.crossnet.linkDead;
+      } else {
+        err = t.crossnet.netError; // fetch threw — never reached the server
+      }
     }
   }
 
   async function copy() {
-    await navigator.clipboard.writeText(shareLink);
+    try {
+      await navigator.clipboard.writeText(shareLink);
+    } catch {
+      return; // clipboard blocked — the link is visible in the read-only field
+    }
     copied = true;
     setTimeout(() => (copied = false), 2000);
   }

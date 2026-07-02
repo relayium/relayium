@@ -32,6 +32,25 @@ function nativeSink(writable: FsWritable): FileSink {
   return { write: (c) => writable.write(c), close: () => writable.close() };
 }
 
+/** Split a filename into base + extension, keeping the dot with the extension.
+ *  A leading dot (dotfile) or no dot means the whole name is the base. */
+export function splitExtension(name: string): { base: string; ext: string } {
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) return { base: name, ext: "" };
+  return { base: name.slice(0, dot), ext: name.slice(dot) };
+}
+
+/** First non-colliding variant of `name` given a `taken` predicate: returns the
+ *  name as-is if free, otherwise "base (1).ext", "base (2).ext", … Pure/testable. */
+export function nextAvailableName(name: string, taken: (n: string) => boolean): string {
+  if (!taken(name)) return name;
+  const { base, ext } = splitExtension(name);
+  for (let i = 1; ; i++) {
+    const candidate = `${base} (${i})${ext}`;
+    if (!taken(candidate)) return candidate;
+  }
+}
+
 // Fallback: buffer in memory, download as a Blob on close. Memory-bound — fine for
 // small files on Firefox/Safari, which lack the File System Access API.
 function blobSink(name: string): FileSink {
@@ -80,10 +99,29 @@ export async function pickSaveTarget(files: FileMetaLite[]): Promise<SaveTarget>
   if (w.showDirectoryPicker) {
     // Grant folder access now; per-file handles afterwards need no further gesture.
     const dir = await w.showDirectoryPicker();
+    // Never silently clobber: dedupe both against files already in the folder and
+    // against earlier files in this same batch ("name (1).ext", "name (2).ext", …).
+    const claimed = new Set<string>();
+    const existsInDir = async (n: string): Promise<boolean> => {
+      try {
+        await dir.getFileHandle(n, { create: false });
+        return true;
+      } catch {
+        return false;
+      }
+    };
     return {
       label: "已选择目标文件夹",
       file: async (name) => {
-        const fh = await dir.getFileHandle(name, { create: true });
+        // Resolve claimed-in-batch synchronously, then probe the folder; loop in
+        // case a probed variant is itself already on disk.
+        let unique = nextAvailableName(name, (n) => claimed.has(n));
+        while (await existsInDir(unique)) {
+          claimed.add(unique); // force the next candidate past this on-disk name
+          unique = nextAvailableName(name, (n) => claimed.has(n));
+        }
+        claimed.add(unique);
+        const fh = await dir.getFileHandle(unique, { create: true });
         return nativeSink(await fh.createWritable());
       },
     };
