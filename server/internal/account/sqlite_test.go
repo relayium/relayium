@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"sort"
+	"sync"
 	"testing"
 )
 
@@ -632,5 +633,149 @@ func mustUpload(t *testing.T, s *SQLiteStore, uid, id string, bytes, at int64) {
 		ID: id, UserID: uid, Bytes: bytes, UploadedAt: at,
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestClaimBurnDownloadIsSingleWinner proves the burn-after-read TOCTOU fix at
+// the store level: many concurrent claims on one file yield exactly one winner.
+func TestClaimBurnDownloadIsSingleWinner(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u, _ := s.UpsertUserByEmail(ctx, "burn@example.com", "B")
+	_ = s.CreateStoredFile(ctx, StoredFile{
+		ID: "bf", UserID: u.ID, BlobKey: "k", EncManifest: []byte{1}, Size: 10,
+		BurnAfterRead: true, CreatedAt: 1, ExpiresAt: 1 << 40,
+	})
+
+	const n = 32
+	var wins int64
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	var mu sync.Mutex
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			claimed, err := s.ClaimBurnDownload(ctx, "bf", 100)
+			if err != nil {
+				t.Errorf("claim: %v", err)
+				return
+			}
+			if claimed {
+				mu.Lock()
+				wins++
+				mu.Unlock()
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	if wins != 1 {
+		t.Fatalf("concurrent burn claims: got %d winners, want exactly 1", wins)
+	}
+	// A non-burn file must never be claimable.
+	_ = s.CreateStoredFile(ctx, StoredFile{ID: "nf", UserID: u.ID, BlobKey: "k2",
+		EncManifest: []byte{1}, Size: 1, BurnAfterRead: false, CreatedAt: 1, ExpiresAt: 1 << 40})
+	if claimed, _ := s.ClaimBurnDownload(ctx, "nf", 100); claimed {
+		t.Fatal("non-burn file must not be claimable")
+	}
+}
+
+// TestReserveUploadNeverExceedsQuota proves the quota TOCTOU fix: many concurrent
+// reservations that each fit alone but not together can never collectively pass
+// the quota. Total recorded bytes stay within the limit.
+func TestReserveUploadNeverExceedsQuota(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u, _ := s.UpsertUserByEmail(ctx, "res@example.com", "R")
+
+	const (
+		quota = int64(4096)
+		each  = int64(1000)
+		n     = 20
+	)
+	var oks int64
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	var mu sync.Mutex
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			ok, err := s.ReserveUpload(ctx,
+				UploadEvent{ID: newID(), UserID: u.ID, Bytes: each, UploadedAt: 100},
+				0, quota)
+			if err != nil {
+				t.Errorf("reserve: %v", err)
+				return
+			}
+			if ok {
+				mu.Lock()
+				oks++
+				mu.Unlock()
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	total, _ := s.UserUploadedSince(ctx, u.ID, 0)
+	if total > quota {
+		t.Fatalf("recorded %d bytes exceeds quota %d", total, quota)
+	}
+	if oks*each != total {
+		t.Fatalf("winners*each=%d != recorded total=%d", oks*each, total)
+	}
+	// With 1000-byte reservations against a 4096 quota, at most 4 can succeed.
+	if oks != 4 {
+		t.Fatalf("got %d successful reservations, want 4", oks)
+	}
+}
+
+func TestDeleteExpiredSessions(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u, _ := s.UpsertUserByEmail(ctx, "s@example.com", "S")
+	_ = s.CreateSession(ctx, Session{ID: "live", UserID: u.ID, CreatedAt: 1, ExpiresAt: 5000})
+	_ = s.CreateSession(ctx, Session{ID: "expired", UserID: u.ID, CreatedAt: 1, ExpiresAt: 100})
+	_ = s.CreateSession(ctx, Session{ID: "revoked", UserID: u.ID, CreatedAt: 1, ExpiresAt: 5000})
+	_ = s.RevokeSession(ctx, "revoked")
+
+	if err := s.DeleteExpiredSessions(ctx, 1000); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, ok, _ := s.GetSession(ctx, "live"); !ok {
+		t.Fatal("live session wrongly deleted")
+	}
+	// Expired and revoked rows are physically gone.
+	var count int
+	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sessions`).Scan(&count)
+	if count != 1 {
+		t.Fatalf("sessions remaining = %d, want 1 (only live)", count)
+	}
+}
+
+func TestDeleteSpentMagicTokens(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	_ = s.CreateMagicToken(ctx, MagicToken{TokenHash: "live", Email: "a@x.com", CreatedAt: 1, ExpiresAt: 5000})
+	_ = s.CreateMagicToken(ctx, MagicToken{TokenHash: "expired", Email: "b@x.com", CreatedAt: 1, ExpiresAt: 100})
+	_ = s.CreateMagicToken(ctx, MagicToken{TokenHash: "used", Email: "c@x.com", CreatedAt: 1, ExpiresAt: 5000})
+	_, _, _ = s.UseMagicToken(ctx, "used", 200) // sets used_at
+
+	if err := s.DeleteSpentMagicTokens(ctx, 1000); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	var count int
+	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM magic_tokens`).Scan(&count)
+	if count != 1 {
+		t.Fatalf("magic tokens remaining = %d, want 1 (only live)", count)
+	}
+	var hash string
+	_ = s.db.QueryRowContext(ctx, `SELECT token_hash FROM magic_tokens`).Scan(&hash)
+	if hash != "live" {
+		t.Fatalf("surviving token = %q, want live", hash)
 	}
 }

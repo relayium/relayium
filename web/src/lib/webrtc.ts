@@ -1,4 +1,5 @@
 import type { SignalingClient } from "./signaling";
+import { commitKey, randomNonce, verifyCommit } from "./crypto";
 
 export interface RtcConfig {
   iceServers: RTCIceServer[];
@@ -8,9 +9,18 @@ export const DEFAULT_ICE: RtcConfig = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 };
 
+/** A public key + nonce revealed only after both commitments were exchanged. */
+export interface Reveal {
+  key: string; // base64 public key
+  nonce: string; // base64 commitment nonce
+}
+
 export interface InboundSignal {
   sdp?: RTCSessionDescriptionInit;
-  key?: string;
+  /** base64 BLAKE2b(pub || nonce); travels with the offer/answer SDP. */
+  commit?: string;
+  /** Sent only after this side has seen the peer's commit. */
+  reveal?: Reveal;
   ice?: RTCIceCandidateInit;
 }
 
@@ -44,6 +54,15 @@ function unb64(s: string): Uint8Array {
 export async function connect(opts: ConnectOpts): Promise<Conn> {
   const pc = new RTCPeerConnection(opts.config ?? DEFAULT_ICE);
   const { signaling, peerId, selfKey, role, onPeerKey } = opts;
+
+  // Commit-then-reveal: publish BLAKE2b(selfKey || selfNonce) with the SDP, and
+  // only disclose selfKey/selfNonce once the peer's commit is in hand. See
+  // crypto.ts for why this is what makes a 6-digit SAS safe against a relay MITM.
+  const selfNonce = randomNonce();
+  const selfCommit = b64(commitKey(selfKey, selfNonce));
+  let peerCommit: Uint8Array | undefined;
+  let revealSent = false;
+  let peerKeyDelivered = false;
 
   pc.onicecandidate = (e) => {
     if (e.candidate) signaling.sendSignal(peerId, { ice: e.candidate });
@@ -80,16 +99,52 @@ export async function connect(opts: ConnectOpts): Promise<Conn> {
     if (!opened) failReady(new Error("relayium: connection timed out"));
   }, CONNECT_TIMEOUT_MS);
 
+  // Disclose our real key + nonce. Guarded to once: an ICE-restart answer would
+  // otherwise re-trigger this after the SAS is already fixed.
+  function sendReveal() {
+    if (revealSent) return;
+    revealSent = true;
+    signaling.sendSignal(peerId, {
+      reveal: { key: b64(selfKey), nonce: b64(selfNonce) },
+    });
+  }
+
+  // Verify a peer reveal against its earlier commit. A mismatch means the value
+  // was chosen after seeing our key (or tampered in flight): abort hard, never
+  // open the channel — silently continuing would defeat the SAS entirely.
+  function handleReveal(rev: Reveal) {
+    if (peerKeyDelivered) return; // ignore duplicates (e.g. ICE restart)
+    const peerPub = unb64(rev.key);
+    const peerNonce = unb64(rev.nonce);
+    if (!peerCommit || !verifyCommit(peerCommit, peerPub, peerNonce)) {
+      // failReady unblocks a caller still awaiting connect(); close() tears down
+      // even if the channel already opened (then failReady is a settled no-op),
+      // surfacing to the app as a dropped connection rather than a silent MITM.
+      failReady(new Error("relayium: key commitment mismatch — possible MITM"));
+      close();
+      return;
+    }
+    peerKeyDelivered = true;
+    // Responder learns the peer key from the reveal and only now discloses its
+    // own; the initiator has already revealed (on receiving the answer's commit).
+    if (role === "responder") sendReveal();
+    onPeerKey(peerPub);
+  }
+
   async function handleSignal(msg: InboundSignal) {
-    if (msg.key) onPeerKey(unb64(msg.key));
+    if (msg.commit) peerCommit = unb64(msg.commit);
     if (msg.sdp) {
       await pc.setRemoteDescription(msg.sdp);
       if (msg.sdp.type === "offer") {
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        signaling.sendSignal(peerId, { sdp: answer, key: b64(selfKey) });
+        signaling.sendSignal(peerId, { sdp: answer, commit: selfCommit });
+      } else if (msg.sdp.type === "answer") {
+        // Initiator now holds the responder's commit → safe to reveal our key.
+        sendReveal();
       }
     }
+    if (msg.reveal) handleReveal(msg.reveal);
     if (msg.ice) {
       try {
         await pc.addIceCandidate(msg.ice);
@@ -141,7 +196,7 @@ export async function connect(opts: ConnectOpts): Promise<Conn> {
   if (role === "initiator") {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    signaling.sendSignal(peerId, { sdp: offer, key: b64(selfKey) });
+    signaling.sendSignal(peerId, { sdp: offer, commit: selfCommit });
   } else if (opts.initialSignal) {
     await handleSignal(opts.initialSignal);
   }

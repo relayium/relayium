@@ -7,7 +7,10 @@
   let burn = $state(false);
   let ttl = $state(86400); // default 1 day
   let busy = $state(false);
-  let progress = $state(0); // 0..100
+  let progress = $state(0); // 0..100 — encryption progress (the only phase the API reports)
+  // The API reports encryption progress; the POST that follows has none. Track the
+  // phase so the bar hitting 100% reads as "now uploading…" rather than a silent stall.
+  let phase = $state<"encrypting" | "uploading">("encrypting");
   let link = $state("");
   let expiresAt = $state(0); // unix seconds of the generated link, 0 until ready
   let err = $state("");
@@ -15,13 +18,14 @@
   let qrDataUrl = $state("");
 
   $effect(() => {
-    if (link) {
-      import("qrcode").then((m) =>
-        m.toDataURL(link, { margin: 1, width: 192 }).then((u) => (qrDataUrl = u)),
-      );
-    } else {
-      qrDataUrl = "";
-    }
+    if (!link) { qrDataUrl = ""; return; }
+    let cancelled = false;
+    const target = link;
+    import("qrcode")
+      .then((m) => m.toDataURL(target, { margin: 1, width: 192 }))
+      .then((u) => { if (!cancelled) qrDataUrl = u; })
+      .catch(() => { /* QR optional — the link is shown/copyable */ });
+    return () => { cancelled = true; };
   });
 
   async function onPick(e: Event) {
@@ -34,9 +38,12 @@
     expiresAt = 0;
     busy = true;
     progress = 0;
+    phase = "encrypting";
     try {
       const out = await uploadFile(files, { burnAfterRead: burn, ttl }, (sent, total) => {
         progress = total > 0 ? Math.round((sent / total) * 100) : 0;
+        // Encryption finished feeding frames — the upload POST is what runs now.
+        if (total > 0 && sent >= total) phase = "uploading";
       });
       link = buildDownloadLink(location.origin, out.id, out.key);
       expiresAt = out.expiresAt;
@@ -50,7 +57,11 @@
   }
 
   async function copy() {
-    await navigator.clipboard.writeText(link);
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      return; // clipboard blocked — the link is visible in the read-only field
+    }
     copied = true;
     setTimeout(() => (copied = false), 2000);
   }
@@ -75,6 +86,7 @@
 
   {#if busy}
     <div class="bar"><div class="fill" style:width="{progress}%"></div></div>
+    <p class="phase">{phase === "uploading" ? t.stored.uploadingNow : `${t.stored.encrypting} ${progress}%`}</p>
   {/if}
 
   {#if err}<p class="error">{err}</p>{/if}
@@ -102,6 +114,7 @@
   .pick input[type="file"] { display: none; }
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; margin-top: var(--space-3); }
   .fill { height: 100%; background: linear-gradient(90deg, var(--accent), #6d28d9); transition: width .2s; }
+  .phase { margin: var(--space-2) 0 0; font-size: var(--fs-xs); color: var(--text); }
   .ready { color: var(--text-h); font-size: var(--fs-sm); margin: var(--space-3) 0 var(--space-2); }
   .expiry { color: var(--text); font-size: var(--fs-xs); margin: var(--space-3) 0 0; }
   .row { display: flex; gap: var(--space-2); }

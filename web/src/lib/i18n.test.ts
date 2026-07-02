@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { messages, LANGS } from "./i18n.svelte";
+import { describe, it, expect, beforeEach } from "vitest";
+import { messages, LANGS, detect } from "./i18n.svelte";
 
 describe("i18n completeness", () => {
   it("every language has nav tab labels and the cross-network method names", () => {
@@ -48,5 +48,40 @@ describe("i18n completeness", () => {
       expect(m.dragSendOne("Dev"), `${code}.dragSendOne`).toContain("Dev");
       expect(m.dragSendMany, `${code}.dragSendMany`).toBeTruthy();
     }
+  });
+
+  it("every language has the reconnect/leave, network-error, and upload-phase strings", () => {
+    for (const { code } of LANGS) {
+      const m = messages[code];
+      expect(m.reconnecting, `${code}.reconnecting`).toBeTruthy();
+      expect(m.confirmLeave, `${code}.confirmLeave`).toBeTruthy();
+      expect(m.account.errNetwork, `${code}.account.errNetwork`).toBeTruthy();
+      expect(m.stored.encrypting, `${code}.stored.encrypting`).toBeTruthy();
+      expect(m.stored.uploadingNow, `${code}.stored.uploadingNow`).toBeTruthy();
+    }
+  });
+});
+
+describe("detect", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("returns a saved language when it is a real, own key", () => {
+    localStorage.setItem("relayium-lang", "de");
+    expect(detect()).toBe("de");
+  });
+
+  it("ignores a prototype-chain key like 'toString' instead of white-screening", () => {
+    // Regression: `saved in messages` would resolve "toString" to Object.prototype's
+    // function and later crash the whole app; Object.hasOwn rejects it.
+    localStorage.setItem("relayium-lang", "toString");
+    const l = detect();
+    expect(typeof messages[l].tagline).toBe("string");
+  });
+
+  it("ignores an unknown saved language", () => {
+    localStorage.setItem("relayium-lang", "xx");
+    expect(["zh", "ja", "ko", "de", "fr", "en"]).toContain(detect());
   });
 });

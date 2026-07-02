@@ -2,16 +2,31 @@ package account
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 )
 
-// capturingMailer records the last link so the test can replay it.
-type capturingMailer struct{ lastLink string }
+// capturingMailer records the last link so the test can replay it, and counts
+// sends so rate-limit tests can assert how many links actually went out.
+type capturingMailer struct {
+	mu       sync.Mutex
+	lastLink string
+	count    int
+}
 
 func (m *capturingMailer) SendMagicLink(_ context.Context, _, link string) error {
+	m.mu.Lock()
 	m.lastLink = link
+	m.count++
+	m.mu.Unlock()
 	return nil
+}
+
+func (m *capturingMailer) sends() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.count
 }
 
 func newTestService(t *testing.T) (*Service, *capturingMailer) {

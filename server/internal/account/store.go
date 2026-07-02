@@ -153,9 +153,11 @@ type Store interface {
 	GetSession(ctx context.Context, id string) (Session, bool, error)
 	RevokeSession(ctx context.Context, id string) error
 	RevokeUserSessions(ctx context.Context, userID, exceptID string) error
+	DeleteExpiredSessions(ctx context.Context, now int64) error
 	// magic tokens
 	CreateMagicToken(ctx context.Context, t MagicToken) error
 	UseMagicToken(ctx context.Context, tokenHash string, now int64) (MagicToken, bool, error)
+	DeleteSpentMagicTokens(ctx context.Context, now int64) error
 	// devices
 	UpsertDevice(ctx context.Context, d Device) (Device, error)
 	ListDevices(ctx context.Context, userID string) ([]Device, error)
@@ -175,11 +177,20 @@ type Store interface {
 	GetStoredFile(ctx context.Context, id string) (StoredFile, error)
 	ListStoredFilesByUser(ctx context.Context, userID string) ([]StoredFile, error)
 	MarkDownloaded(ctx context.Context, id string, at int64) error
+	// ClaimBurnDownload atomically consumes a burn-after-read file's single
+	// download: it sets downloaded_at only if the file is burn and still unclaimed,
+	// returning claimed=true exactly once across concurrent callers.
+	ClaimBurnDownload(ctx context.Context, id string, at int64) (claimed bool, err error)
 	DeleteStoredFile(ctx context.Context, id string) error
 	ListExpiredStoredFiles(ctx context.Context, now int64) ([]StoredFile, error)
 	// upload events (rolling-24h quota ledger)
 	RecordUpload(ctx context.Context, e UploadEvent) error
 	UserUploadedSince(ctx context.Context, userID string, since int64) (int64, error)
+	// ReserveUpload atomically records an upload event only if the user's rolling
+	// usage since `since` plus e.Bytes stays within quota, in one transaction, so
+	// concurrent uploads cannot collectively exceed the quota. ok=false means the
+	// reservation was refused (over quota) and nothing was written.
+	ReserveUpload(ctx context.Context, e UploadEvent, since, quota int64) (ok bool, err error)
 	PruneUploadEvents(ctx context.Context, before int64) error
 	// settings (admin-editable limits)
 	GetSetting(ctx context.Context, key string) (int64, bool, error)
