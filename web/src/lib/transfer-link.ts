@@ -3,6 +3,16 @@
 // header. The token is minted by the (authenticated) sender via POST
 // /api/transfers; anyone holding the link can join the room (capability model).
 
+/** Error carrying the HTTP status of a failed mint, so callers can tell a
+ *  lapsed session (401) apart from other failures. A thrown TypeError (fetch
+ *  never reached the server) is left as-is and surfaces as a network error. */
+export class HttpError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+    this.name = "HttpError";
+  }
+}
+
 /** Extract the transfer token from a location hash like "#t=abc". "" if none. */
 export function parseTransferToken(hash: string): string {
   const m = /^#t=([A-Za-z0-9]+)$/.exec(hash);
@@ -48,13 +58,13 @@ export async function createTransfer(): Promise<{
     method: "POST",
     credentials: "include",
   });
-  if (!res.ok) throw new Error(`createTransfer failed: ${res.status}`);
+  if (!res.ok) throw new HttpError(res.status, `createTransfer failed: ${res.status}`);
   return res.json();
 }
 
 /** Mint an anonymous short pairing code. No session required. */
 export async function createPair(): Promise<{ code: string; expiresAt: number }> {
   const res = await fetch("/api/pair", { method: "POST" });
-  if (!res.ok) throw new Error(`createPair failed: ${res.status}`);
+  if (!res.ok) throw new HttpError(res.status, `createPair failed: ${res.status}`);
   return res.json();
 }

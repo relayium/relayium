@@ -45,13 +45,16 @@
   // QR of the join link so the other person can scan instead of typing the code.
   let qrDataUrl = $state("");
   $effect(() => {
-    if (isMinter && roomCode) {
-      import("qrcode").then((m) =>
-        m.toDataURL(joinLink, { margin: 1, width: 160 }).then((u) => (qrDataUrl = u)),
-      );
-    } else {
-      qrDataUrl = "";
-    }
+    if (!(isMinter && roomCode)) { qrDataUrl = ""; return; }
+    // Cancel a slow render if the link changes before it resolves, so a stale QR
+    // can't overwrite a newer one. Failures degrade silently (no unhandled reject).
+    let cancelled = false;
+    const target = joinLink;
+    import("qrcode")
+      .then((m) => m.toDataURL(target, { margin: 1, width: 160 }))
+      .then((u) => { if (!cancelled) qrDataUrl = u; })
+      .catch(() => { /* QR is a convenience; the code/link are still shown */ });
+    return () => { cancelled = true; };
   });
 
   async function send() {
@@ -62,7 +65,9 @@
       enterRoom({ code }); // rebinds the socket to the code room without reloading
     } catch {
       busy = false;
-      err = t.pair.errExpired;
+      // Minting a brand-new code just failed; it was never issued, so "expired"
+      // would be misleading — report a mint/network failure instead.
+      err = t.pair.mintFailed;
     }
   }
 
@@ -75,7 +80,11 @@
   }
 
   async function copyText(what: "code" | "link") {
-    await navigator.clipboard.writeText(what === "code" ? roomCode : joinLink);
+    try {
+      await navigator.clipboard.writeText(what === "code" ? roomCode : joinLink);
+    } catch {
+      return; // clipboard blocked (permissions/insecure context) — the value is on screen
+    }
     copied = what;
     setTimeout(() => { if (copied === what) copied = ""; }, 2000);
   }

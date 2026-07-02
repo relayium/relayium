@@ -50,6 +50,8 @@ export interface Messages {
   busy: string;
   tooMany: (max: number, n: number) => string;
   titleDefault: string;
+  reconnecting: string; // signalling socket dropped, trying to reconnect
+  confirmLeave: string; // confirm() before an action would interrupt an active transfer
   status: {
     connecting: string;
     waitingAccept: string;
@@ -82,6 +84,7 @@ export interface Messages {
     errTooShort: string;
     errEmailTaken: string;
     errLogin: string;
+    errNetwork: string; // request never reached the server (offline / fetch threw)
     changePassword: string;
     setPassword: string;
     currentPassword: string;
@@ -100,6 +103,8 @@ export interface Messages {
     copied: string;
     connecting: string;
     linkDead: string;
+    sessionExpired: string; // /api/transfers returned 401 — session lapsed, re-login
+    netError: string; // request never reached the server (offline / fetch threw)
     realtimeTitle: string;
     realtimeSub: string;
     realtimeFoot: string;
@@ -123,10 +128,13 @@ export interface Messages {
     copied: string;
     copyLink: string; // copies the full join link for forwarding
     errExpired: string;
+    mintFailed: string; // minting a fresh code failed (network/server), not expiry
   };
   stored: {
     pick: string;
     uploading: string;
+    encrypting: string; // phase 1: encrypting in the browser (progress bar tracks this)
+    uploadingNow: string; // phase 2: ciphertext is being POSTed (bar sits full)
     burnLabel: string;
     ttlLabel: string;
     ttl1d: string;
@@ -230,6 +238,8 @@ const zh: Messages = {
   busy: "已有传输进行中，请等待完成",
   tooMany: (m, n) => `一次最多 ${m} 个文件，已忽略多余的 ${n} 个`,
   titleDefault: "Relayium — 端到端加密文件传输",
+  reconnecting: "连接已断开，正在重连…",
+  confirmLeave: "当前有传输正在进行，切换会中断它。确定要继续吗？",
   status: {
     connecting: "正在建立加密连接…",
     waitingAccept: "等待对方确认接收…",
@@ -262,6 +272,7 @@ const zh: Messages = {
     errTooShort: "密码至少 8 位。",
     errEmailTaken: "该邮箱已注册，请直接登录。",
     errLogin: "邮箱或密码错误。",
+    errNetwork: "网络错误，请检查连接后重试。",
     changePassword: "修改密码",
     setPassword: "设置密码",
     currentPassword: "当前密码",
@@ -280,6 +291,8 @@ const zh: Messages = {
     copied: "已复制",
     connecting: "正在通过跨网络链接连接…",
     linkDead: "链接已失效或正在被使用，请向发送方索要新链接",
+    sessionExpired: "登录已过期，请重新登录后再试。",
+    netError: "网络错误，请检查连接后重试。",
     realtimeTitle: "实时直传",
     realtimeSub: "对方此刻在线 · 点对点直连 · 文件不经服务器",
     realtimeFoot: "免登录 · 登录可提升连通性",
@@ -303,10 +316,13 @@ const zh: Messages = {
     copied: "已复制",
     copyLink: "复制链接",
     errExpired: "配对码无效或已过期",
+    mintFailed: "无法生成配对码，请检查网络后重试。",
   },
   stored: {
     pick: "选择文件上传",
     uploading: "正在加密并上传…",
+    encrypting: "正在加密…",
+    uploadingNow: "上传中…",
     burnLabel: "阅后即焚（首次下载后删除）",
     ttlLabel: "有效期",
     ttl1d: "1 天",
@@ -441,6 +457,8 @@ const en: Messages = {
   busy: "A transfer is already in progress — please wait for it to finish",
   tooMany: (m, n) => `Up to ${m} files at a time; ignored the extra ${n}`,
   titleDefault: "Relayium — end-to-end encrypted file transfer",
+  reconnecting: "Connection lost — reconnecting…",
+  confirmLeave: "A transfer is in progress. Switching will interrupt it. Continue?",
   status: {
     connecting: "Establishing an encrypted connection…",
     waitingAccept: "Waiting for the recipient to accept…",
@@ -473,6 +491,7 @@ const en: Messages = {
     errTooShort: "Password must be at least 8 characters.",
     errEmailTaken: "That email is already registered — please log in.",
     errLogin: "Wrong email or password.",
+    errNetwork: "Network error — check your connection and try again.",
     changePassword: "Change password",
     setPassword: "Set a password",
     currentPassword: "Current password",
@@ -491,6 +510,8 @@ const en: Messages = {
     copied: "Copied",
     connecting: "Connecting over the cross-network link…",
     linkDead: "This link is invalid or already in use — ask the sender for a new one",
+    sessionExpired: "Your session expired — please sign in again.",
+    netError: "Network error — check your connection and try again.",
     realtimeTitle: "Realtime direct",
     realtimeSub: "Both online now · peer-to-peer · files never touch the server",
     realtimeFoot: "No sign-in needed · sign in for better connectivity",
@@ -514,10 +535,13 @@ const en: Messages = {
     copied: "Copied",
     copyLink: "Copy link",
     errExpired: "Pairing code is invalid or expired",
+    mintFailed: "Couldn't create a pairing code — check your connection and try again.",
   },
   stored: {
     pick: "Choose files to upload",
     uploading: "Encrypting and uploading…",
+    encrypting: "Encrypting…",
+    uploadingNow: "Uploading…",
     burnLabel: "Burn after reading (delete on first download)",
     ttlLabel: "Expires in",
     ttl1d: "1 day",
@@ -652,6 +676,8 @@ const ja: Messages = {
   busy: "すでに転送が進行中です。完了するまでお待ちください",
   tooMany: (m, n) => `一度に最大 ${m} 個まで。超過した ${n} 個は無視しました`,
   titleDefault: "Relayium — エンドツーエンド暗号化ファイル転送",
+  reconnecting: "接続が切れました。再接続しています…",
+  confirmLeave: "転送が進行中です。切り替えると中断されます。続けますか？",
   status: {
     connecting: "暗号化接続を確立中…",
     waitingAccept: "相手の受信確認を待っています…",
@@ -684,6 +710,7 @@ const ja: Messages = {
     errTooShort: "パスワードは8文字以上にしてください。",
     errEmailTaken: "このメールは登録済みです。ログインしてください。",
     errLogin: "メールアドレスまたはパスワードが違います。",
+    errNetwork: "ネットワークエラーです。接続を確認して再試行してください。",
     changePassword: "パスワードを変更",
     setPassword: "パスワードを設定",
     currentPassword: "現在のパスワード",
@@ -702,6 +729,8 @@ const ja: Messages = {
     copied: "コピーしました",
     connecting: "ネットワーク間リンクで接続中…",
     linkDead: "リンクが無効か使用中です。送信者に新しいリンクを依頼してください",
+    sessionExpired: "セッションの有効期限が切れました。再度ログインしてください。",
+    netError: "ネットワークエラーです。接続を確認して再試行してください。",
     realtimeTitle: "リアルタイム直接転送",
     realtimeSub: "両者が今オンライン · P2P · ファイルはサーバーを経由しません",
     realtimeFoot: "ログイン不要 · ログインで接続性が向上",
@@ -725,10 +754,13 @@ const ja: Messages = {
     copied: "コピーしました",
     copyLink: "リンクをコピー",
     errExpired: "ペアリングコードが無効か期限切れです",
+    mintFailed: "ペアリングコードを作成できませんでした。接続を確認して再試行してください。",
   },
   stored: {
     pick: "アップロードするファイルを選択",
     uploading: "暗号化してアップロード中…",
+    encrypting: "暗号化しています…",
+    uploadingNow: "アップロード中…",
     burnLabel: "閲覧後に削除（最初のダウンロードで削除）",
     ttlLabel: "有効期限",
     ttl1d: "1 日",
@@ -863,6 +895,8 @@ const ko: Messages = {
   busy: "이미 전송이 진행 중입니다. 완료될 때까지 기다려 주세요",
   tooMany: (m, n) => `한 번에 최대 ${m}개까지. 초과한 ${n}개는 무시했습니다`,
   titleDefault: "Relayium — 종단간 암호화 파일 전송",
+  reconnecting: "연결이 끊어졌습니다. 다시 연결하는 중…",
+  confirmLeave: "전송이 진행 중입니다. 전환하면 중단됩니다. 계속할까요?",
   status: {
     connecting: "암호화 연결을 설정하는 중…",
     waitingAccept: "상대의 수락을 기다리는 중…",
@@ -895,6 +929,7 @@ const ko: Messages = {
     errTooShort: "비밀번호는 8자 이상이어야 합니다.",
     errEmailTaken: "이미 가입된 이메일입니다. 로그인해 주세요.",
     errLogin: "이메일 또는 비밀번호가 올바르지 않습니다.",
+    errNetwork: "네트워크 오류입니다. 연결을 확인한 후 다시 시도하세요.",
     changePassword: "비밀번호 변경",
     setPassword: "비밀번호 설정",
     currentPassword: "현재 비밀번호",
@@ -913,6 +948,8 @@ const ko: Messages = {
     copied: "복사됨",
     connecting: "네트워크 간 링크로 연결 중…",
     linkDead: "링크가 유효하지 않거나 사용 중입니다. 보낸 사람에게 새 링크를 요청하세요",
+    sessionExpired: "세션이 만료되었습니다. 다시 로그인하세요.",
+    netError: "네트워크 오류입니다. 연결을 확인한 후 다시 시도하세요.",
     realtimeTitle: "실시간 직접 전송",
     realtimeSub: "양쪽 모두 온라인 · P2P · 파일은 서버를 거치지 않습니다",
     realtimeFoot: "로그인 불필요 · 로그인 시 연결성 향상",
@@ -936,10 +973,13 @@ const ko: Messages = {
     copied: "복사됨",
     copyLink: "링크 복사",
     errExpired: "페어링 코드가 잘못되었거나 만료되었습니다",
+    mintFailed: "페어링 코드를 만들지 못했습니다. 연결을 확인한 후 다시 시도하세요.",
   },
   stored: {
     pick: "업로드할 파일 선택",
     uploading: "암호화 후 업로드 중…",
+    encrypting: "암호화 중…",
+    uploadingNow: "업로드 중…",
     burnLabel: "열람 후 삭제 (첫 다운로드 시 삭제)",
     ttlLabel: "유효 기간",
     ttl1d: "1일",
@@ -1074,6 +1114,8 @@ const de: Messages = {
   busy: "Eine Übertragung läuft bereits – bitte warten Sie, bis sie abgeschlossen ist",
   tooMany: (m, n) => `Maximal ${m} Dateien auf einmal; ${n} überzählige ignoriert`,
   titleDefault: "Relayium — Ende-zu-Ende-verschlüsselte Dateiübertragung",
+  reconnecting: "Verbindung getrennt – neu verbinden…",
+  confirmLeave: "Eine Übertragung läuft. Ein Wechsel bricht sie ab. Fortfahren?",
   status: {
     connecting: "Verschlüsselte Verbindung wird hergestellt…",
     waitingAccept: "Warten auf die Annahme des Empfängers…",
@@ -1106,6 +1148,7 @@ const de: Messages = {
     errTooShort: "Das Passwort muss mindestens 8 Zeichen haben.",
     errEmailTaken: "Diese E-Mail ist bereits registriert — bitte anmelden.",
     errLogin: "Falsche E-Mail oder falsches Passwort.",
+    errNetwork: "Netzwerkfehler – bitte Verbindung prüfen und erneut versuchen.",
     changePassword: "Passwort ändern",
     setPassword: "Passwort festlegen",
     currentPassword: "Aktuelles Passwort",
@@ -1124,6 +1167,8 @@ const de: Messages = {
     copied: "Kopiert",
     connecting: "Verbindung über den netzwerkübergreifenden Link…",
     linkDead: "Dieser Link ist ungültig oder bereits in Gebrauch — bitte den Absender um einen neuen",
+    sessionExpired: "Ihre Sitzung ist abgelaufen — bitte erneut anmelden.",
+    netError: "Netzwerkfehler – bitte Verbindung prüfen und erneut versuchen.",
     realtimeTitle: "Echtzeit-Direktübertragung",
     realtimeSub: "Beide jetzt online · Peer-to-Peer · Dateien berühren nie den Server",
     realtimeFoot: "Keine Anmeldung nötig · angemeldet bessere Verbindung",
@@ -1147,10 +1192,13 @@ const de: Messages = {
     copied: "Kopiert",
     copyLink: "Link kopieren",
     errExpired: "Kopplungscode ist ungültig oder abgelaufen",
+    mintFailed: "Kopplungscode konnte nicht erstellt werden – bitte Verbindung prüfen und erneut versuchen.",
   },
   stored: {
     pick: "Dateien zum Hochladen wählen",
     uploading: "Verschlüsseln und hochladen…",
+    encrypting: "Verschlüsseln…",
+    uploadingNow: "Hochladen…",
     burnLabel: "Nach dem Lesen löschen (beim ersten Download)",
     ttlLabel: "Gültig für",
     ttl1d: "1 Tag",
@@ -1285,6 +1333,8 @@ const fr: Messages = {
   busy: "Un transfert est déjà en cours — veuillez attendre qu’il se termine",
   tooMany: (m, n) => `Jusqu’à ${m} fichiers à la fois ; ${n} en trop ignoré(s)`,
   titleDefault: "Relayium — transfert de fichiers chiffré de bout en bout",
+  reconnecting: "Connexion perdue — reconnexion…",
+  confirmLeave: "Un transfert est en cours. Changer l'interrompra. Continuer ?",
   status: {
     connecting: "Établissement d’une connexion chiffrée…",
     waitingAccept: "En attente de l’acceptation du destinataire…",
@@ -1317,6 +1367,7 @@ const fr: Messages = {
     errTooShort: "Le mot de passe doit comporter au moins 8 caractères.",
     errEmailTaken: "Cet e-mail est déjà enregistré — veuillez vous connecter.",
     errLogin: "E-mail ou mot de passe incorrect.",
+    errNetwork: "Erreur réseau — vérifiez votre connexion et réessayez.",
     changePassword: "Changer le mot de passe",
     setPassword: "Définir un mot de passe",
     currentPassword: "Mot de passe actuel",
@@ -1335,6 +1386,8 @@ const fr: Messages = {
     copied: "Copié",
     connecting: "Connexion via le lien inter-réseaux…",
     linkDead: "Ce lien est invalide ou déjà utilisé — demandez-en un nouveau à l'expéditeur",
+    sessionExpired: "Votre session a expiré — veuillez vous reconnecter.",
+    netError: "Erreur réseau — vérifiez votre connexion et réessayez.",
     realtimeTitle: "Transfert direct en temps réel",
     realtimeSub: "Les deux en ligne · pair-à-pair · les fichiers ne passent jamais par le serveur",
     realtimeFoot: "Sans connexion · connectez-vous pour une meilleure connectivité",
@@ -1358,10 +1411,13 @@ const fr: Messages = {
     copied: "Copié",
     copyLink: "Copier le lien",
     errExpired: "Code d'appairage invalide ou expiré",
+    mintFailed: "Impossible de créer un code d'appairage — vérifiez votre connexion et réessayez.",
   },
   stored: {
     pick: "Choisir des fichiers à envoyer",
     uploading: "Chiffrement et envoi…",
+    encrypting: "Chiffrement…",
+    uploadingNow: "Envoi en cours…",
     burnLabel: "Détruire après lecture (supprimé au premier téléchargement)",
     ttlLabel: "Expire dans",
     ttl1d: "1 jour",
@@ -1463,10 +1519,12 @@ export const messages: Record<Lang, Messages> = { zh, en, ja, ko, de, fr };
 
 const STORAGE_KEY = "relayium-lang";
 
-function detect(): Lang {
+export function detect(): Lang {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved && saved in messages) return saved as Lang;
+    // Object.hasOwn (not `in`) so a poisoned key like "toString" — which exists on
+    // the prototype chain — can't resolve to a function and white-screen the app.
+    if (saved && Object.hasOwn(messages, saved)) return saved as Lang;
   } catch { /* storage may be unavailable */ }
   const nav = (typeof navigator !== "undefined" ? navigator.language : "en").toLowerCase();
   for (const code of ["zh", "ja", "ko", "de", "fr"] as Lang[]) {
