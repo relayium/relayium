@@ -1,0 +1,18 @@
+# Keep the build context small and reproducible.
+.git
+.gitignore
+*.md
+docs
+
+# Node
+web/node_modules
+web/dist
+
+# Go build output + local runtime state
+server/relayium-server
+server/relayium.db
+server/*.db
+server/blobs
+
+# Local env / secrets
+**/.env

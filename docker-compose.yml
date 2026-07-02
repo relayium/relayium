@@ -1,0 +1,67 @@
+# Relayium — docker compose.
+#
+#   docker compose up -d                 # server only (LAN realtime + stored links)
+#   docker compose --profile relay up -d # + coturn TURN relay + redis metering
+#
+# App config comes from ./server/.env (optional) plus the `environment:` block
+# below. See server/.env.example for every RELAYIUM_* key.
+name: relayium
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: relayium/relayium:local
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - path: ./server/.env
+        required: false
+    environment:
+      RELAYIUM_ADDR: ":8080"
+      RELAYIUM_STATIC: "/app/web/dist"
+      RELAYIUM_DB: "/data/relayium.db"
+      RELAYIUM_BLOB_DIR: "/data/blobs"
+      # Enable relay-byte metering when the `relay` profile is running:
+      # RELAYIUM_REDIS_ADDR: "redis:6379"
+    volumes:
+      - relayium-data:/data
+
+  # --- Optional: TURN relay for cross-network transfers (profile: relay) ---
+  # TURN needs the host's real IP and a wide UDP relay-port range, so it runs
+  # with host networking. Set RELAYIUM_TURN_SECRET (and the server's matching
+  # -turn-secret / -turn-urls) before enabling. See docs/coturn.md.
+  coturn:
+    image: coturn/coturn:latest
+    profiles: ["relay"]
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - -n
+      - --realm=relayium.app
+      - --listening-port=3478
+      - --tls-listening-port=5349
+      - --min-port=49152
+      - --max-port=65535
+      - --use-auth-secret
+      - --static-auth-secret=${RELAYIUM_TURN_SECRET:?set RELAYIUM_TURN_SECRET in the shell or ./server/.env}
+      - --no-cli
+      # - --external-ip=YOUR.PUBLIC.IP
+      # Relay-byte metering: also write stats to redis (host-networked, so localhost):
+      # - --redis-statsdb=ip=127.0.0.1 dbname=0
+
+  # --- Optional: Redis for coturn relay-byte metering (profile: relay) ---
+  redis:
+    image: redis:7-alpine
+    profiles: ["relay"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - relayium-redis:/data
+
+volumes:
+  relayium-data:
+  relayium-redis:
