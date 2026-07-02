@@ -22,6 +22,10 @@ export interface InboundSignal {
   /** Sent only after this side has seen the peer's commit. */
   reveal?: Reveal;
   ice?: RTCIceCandidateInit;
+  /** Marks a signal as belonging to a resume (connectResume) connection rather
+   *  than the original connect(). Each side ignores the other generation's
+   *  signals, so a dying original connection can't cross-route a resume offer. */
+  resume?: boolean;
 }
 
 interface ConnectOpts {
@@ -188,7 +192,8 @@ export async function connect(opts: ConnectOpts): Promise<Conn> {
   }
 
   const off = signaling.onSignal((from, data) => {
-    if (from === peerId) handleSignal(data as InboundSignal).catch((err) => console.error("relayium signal error", err));
+    if (from !== peerId || (data as InboundSignal).resume) return; // resume-gen signals aren't ours
+    handleSignal(data as InboundSignal).catch((err) => console.error("relayium signal error", err));
   });
 
   // A transient "disconnected" (a NAT rebinding, a brief network blip) often
@@ -269,7 +274,7 @@ export async function connectResume(opts: ResumeOpts): Promise<Conn> {
   const { signaling, peerId, role } = opts;
 
   pc.onicecandidate = (e) => {
-    if (e.candidate) signaling.sendSignal(peerId, { ice: e.candidate });
+    if (e.candidate) signaling.sendSignal(peerId, { ice: e.candidate, resume: true });
   };
 
   let channel: RTCDataChannel;
@@ -299,14 +304,14 @@ export async function connectResume(opts: ResumeOpts): Promise<Conn> {
     if (!opened) failReady(new Error("relayium: resume connection timed out"));
   }, CONNECT_TIMEOUT_MS);
 
-  // No commit/reveal: plain SDP + ICE only.
+  // No commit/reveal: plain SDP + ICE only. All signals carry resume:true.
   async function handleSignal(msg: InboundSignal) {
     if (msg.sdp) {
       await pc.setRemoteDescription(msg.sdp);
       if (msg.sdp.type === "offer") {
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        signaling.sendSignal(peerId, { sdp: answer });
+        signaling.sendSignal(peerId, { sdp: answer, resume: true });
       }
     }
     if (msg.ice) {
@@ -315,7 +320,8 @@ export async function connectResume(opts: ResumeOpts): Promise<Conn> {
   }
 
   const off = signaling.onSignal((from, data) => {
-    if (from === peerId) handleSignal(data as InboundSignal).catch((err) => console.error("relayium resume signal error", err));
+    if (from !== peerId || !(data as InboundSignal).resume) return; // only this resume generation's signals
+    handleSignal(data as InboundSignal).catch((err) => console.error("relayium resume signal error", err));
   });
 
   let restarted = false;
@@ -325,7 +331,7 @@ export async function connectResume(opts: ResumeOpts): Promise<Conn> {
     try {
       const offer = await pc.createOffer({ iceRestart: true });
       await pc.setLocalDescription(offer);
-      signaling.sendSignal(peerId, { sdp: offer });
+      signaling.sendSignal(peerId, { sdp: offer, resume: true });
     } catch (err) {
       console.error("relayium resume ice restart error", err);
     }
@@ -347,7 +353,7 @@ export async function connectResume(opts: ResumeOpts): Promise<Conn> {
   if (role === "initiator") {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    signaling.sendSignal(peerId, { sdp: offer });
+    signaling.sendSignal(peerId, { sdp: offer, resume: true });
   } else if (opts.initialSignal) {
     await handleSignal(opts.initialSignal);
   }
