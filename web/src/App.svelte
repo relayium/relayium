@@ -34,6 +34,7 @@
   import Hero from "./lib/Hero.svelte";
   import DownloadPage from "./lib/DownloadPage.svelte";
   import FeatureStrip from "./lib/FeatureStrip.svelte";
+  import HowToSteps from "./lib/HowToSteps.svelte";
   import UseCases from "./lib/UseCases.svelte";
   import Faq from "./lib/Faq.svelte";
 
@@ -742,16 +743,7 @@
   {:else}
     {@render transferSurface()}
 
-    <section class="guide">
-      <h2>{t.guideTitle}</h2>
-      <ol>
-        <li>{t.step1}</li>
-        <li>{t.step2}</li>
-        <li>{t.step3(MAX_FILES)}</li>
-        <li>{t.step4}</li>
-      </ol>
-      <p class="hint">{t.hint}</p>
-    </section>
+    <HowToSteps maxFiles={MAX_FILES} />
 
     <section class="crosscta">
       <div class="cc-text">
@@ -767,6 +759,7 @@
 
     <footer>
       <nav class="legal">
+        <a href={legalUrl("security", lang())}>{t.legal.security}</a>
         <a href={legalUrl("privacy", lang())}>{t.legal.privacy}</a>
         <a href={legalUrl("terms", lang())}>{t.legal.terms}</a>
         <a href="https://github.com/relayium/relayium" target="_blank" rel="noopener noreferrer">GitHub</a>
@@ -805,10 +798,6 @@
     color: var(--text-h); background: var(--accent-bg); border: 1px solid var(--accent-border);
   }
 
-  .guide { margin: var(--section-gap) 0 var(--space-5); }
-  .guide ol { margin: 0; padding-left: 22px; }
-  .guide li { margin: 7px 0; }
-  .guide .hint { margin-top: var(--space-3); font-size: var(--fs-xs); color: var(--text); }
 
   .crosscta {
     margin: var(--section-gap) 0 var(--space-2);

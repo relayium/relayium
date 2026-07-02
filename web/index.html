@@ -59,7 +59,7 @@
             "alternateName": "Relayium — secure P2P file transfer",
             "url": "https://relayium.com/",
             "description": "Open-source, end-to-end encrypted peer-to-peer file transfer in your browser. In realtime mode, files stream device-to-device over WebRTC and never touch the server; the optional stored download-link mode keeps them as zero-knowledge ciphertext only you can decrypt.",
-            "abstract": "Send files directly between two devices in the browser — end-to-end encrypted, peer-to-peer, with no account, no install, and no file stored on a server in realtime mode; an optional stored download-link mode keeps them as zero-knowledge ciphertext until expiry or first download.",
+            "abstract": "Send files directly between two devices in the browser — end-to-end encrypted, peer-to-peer, with no install and no file stored on a server in realtime mode (LAN and pairing-code transfers need no account); an optional stored download-link mode keeps them as zero-knowledge ciphertext until expiry or first download, and creating share or download links requires the sender to sign in.",
             "applicationCategory": "UtilitiesApplication",
             "applicationSubCategory": "File transfer",
             "operatingSystem": "Web (Chrome, Edge, Firefox, Safari; desktop and mobile)",
@@ -78,7 +78,7 @@
               "Short verification code (SAS) to detect man-in-the-middle",
               "Multi-file transfer (up to 10) with streaming to disk",
               "Per-file SHA-256 integrity check",
-              "No account and no install",
+              "No install; no account needed for realtime transfers (share and download links require the sender to sign in)",
               "Cross-platform: Windows, macOS, Linux, Android, iOS via the browser"
             ]
           },
@@ -97,7 +97,7 @@
               {
                 "@type": "Question",
                 "name": "Is Relayium free?",
-                "acceptedAnswer": { "@type": "Answer", "text": "Yes. Relayium is free and open source under the MIT license. There is no account, no sign-up, and no installation." }
+                "acceptedAnswer": { "@type": "Answer", "text": "Yes. Relayium is free and open source under the MIT license, with no installation. Realtime transfers over the LAN or a pairing code need no account; creating a share link or a stored download link requires the sender to sign in." }
               },
               {
                 "@type": "Question",
@@ -148,8 +148,10 @@
           another over a WebRTC DataChannel and <strong>never touch any
           server</strong>. An optional stored download-link mode encrypts files
           in your browser (AES-256-GCM) before any upload, so the server holds
-          only zero-knowledge ciphertext. There is no account, no installation,
-          and no server-imposed file-size limit in realtime mode.
+          only zero-knowledge ciphertext. There is no installation, and no
+          server-imposed file-size limit in realtime mode. Realtime transfers
+          over the LAN or a pairing code need no account; creating a share link
+          or a stored download link requires the sender to sign in.
         </p>
 
         <h2>How it works</h2>
@@ -166,7 +168,7 @@
           <li><strong>Truly peer-to-peer (realtime mode)</strong> — file bytes flow over WebRTC and never pass through the server, which only helps the devices find each other. An optional stored download-link mode keeps files as zero-knowledge ciphertext only you can decrypt.</li>
           <li><strong>Man-in-the-middle protection</strong> — a 6-digit Short Authentication String (SAS) on top of WebRTC's DTLS.</li>
           <li><strong>Cross-platform</strong> — works between Windows, macOS, Linux, Android and iOS through any modern browser (Chrome, Edge, Firefox, Safari).</li>
-          <li><strong>Free and open source</strong> — MIT licensed, no account, no install.</li>
+          <li><strong>Free and open source</strong> — MIT licensed, no install; realtime transfers need no account (share and download links require the sender to sign in).</li>
         </ul>
 
         <h2>How Relayium compares</h2>
@@ -178,7 +180,7 @@
 
         <h2>Frequently asked questions</h2>
         <h3>Is Relayium free?</h3>
-        <p>Yes — free and open source under the MIT license, with no account or installation.</p>
+        <p>Yes — free and open source under the MIT license, with no installation. Realtime transfers (LAN or pairing code) need no account; creating a share link or a stored download link requires the sender to sign in.</p>
         <h3>Do my files get uploaded to a server?</h3>
         <p>In realtime mode: no — files stream directly between the two devices over WebRTC and never touch the server. There is also an optional stored download-link mode where your browser encrypts files before upload and the server stores only zero-knowledge ciphertext (AES-256-GCM, key only in the URL fragment).</p>
         <h3>Is it end-to-end encrypted?</h3>

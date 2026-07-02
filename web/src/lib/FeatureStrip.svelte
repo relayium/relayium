@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { lang, messages, type Messages } from "./i18n.svelte";
+  import { lang, messages, legalUrl, type Messages } from "./i18n.svelte";
   const t = $derived<Messages>(messages[lang()]);
 </script>
 
@@ -16,6 +16,7 @@
       </div>
     {/each}
   </div>
+  <a class="secure-link" href={legalUrl("security", lang())}>{t.features.secureLink}</a>
 </section>
 
 <style>
@@ -55,4 +56,10 @@
   @media (max-width: 480px) {
     .features { grid-template-columns: 1fr; }
   }
+  .secure-link {
+    display: inline-block; margin-top: var(--space-4);
+    font-size: var(--fs-sm); font-weight: 600;
+    color: var(--accent); text-decoration: none;
+  }
+  .secure-link:hover { text-decoration: underline; }
 </style>

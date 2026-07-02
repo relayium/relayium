@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Security &amp; Threat Model · Relayium</title>
+    <meta name="description" content="How Relayium protects your files: per-transfer X25519 keys and AES-256-GCM, a SAS verification code with a commit-then-reveal handshake to defeat a malicious server, zero-knowledge download links, and an honest account of what we do and do not defend against." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/security" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/security" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/security" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/security" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/security" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/security" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/security" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/security" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Security & Threat Model · Relayium","description":"How Relayium protects your files: per-transfer X25519 keys and AES-256-GCM, a SAS verification code with a commit-then-reveal handshake to defeat a malicious server, zero-knowledge download links, and an honest account of what we do and do not defend against.","url":"https://relayium.com/security","inLanguage":"en","dateModified":"2026-07-01","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:21px;margin:34px 0 10px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>Security &amp; Threat Model</h1>
+      <p class="updated">Last updated: 2026-07-01</p>
+      <nav class="langbar" aria-label="Language"><a href="/security" aria-current="true">English</a><a href="/zh/security">中文</a><a href="/ja/security">日本語</a><a href="/ko/security">한국어</a><a href="/de/security">Deutsch</a><a href="/fr/security">Français</a></nav>
+      <p>Relayium is built so that the people transferring files — not the server — hold the keys. This page describes exactly what is protected, how it works, and the limits of that protection.</p>
+      <p>The short version: in realtime mode your files never touch our servers; the encryption keys are generated fresh on each device and never leave it; and a short verification code lets two people detect a malicious server. The detail follows.</p>
+      <h2>End-to-end encryption (X25519 + AES-256-GCM)</h2><p>Each transfer generates a fresh, ephemeral X25519 key pair on each device. The two devices perform a key exchange to derive a shared AES-256-GCM key that exists only inside the two browsers. Every chunk is encrypted under that key with a unique nonce, so the signaling server — and any relay — only ever sees ciphertext.</p><ul><li>Keys are ephemeral and per-transfer — nothing is reused across sessions.</li><li>The shared key is derived on the two devices; it is never sent to, or stored on, any server.</li><li>Encryption is applied at the application layer, on top of WebRTC&#39;s own transport security, so it holds even if the transport layer is compromised.</li></ul>
+      <h2>The verification code (SAS) — detecting a malicious server</h2><p>WebRTC&#39;s built-in encryption (DTLS) exchanges key fingerprints through the signaling server, so a dishonest server could sit in the middle and swap keys. To catch this, Relayium derives a 6-digit Short Authentication String (SAS) from both sides&#39; public keys and shows it on both screens. If the two codes match, no one is in the middle.</p><p>A plain 6-digit code (about 20 bits) could in principle be brute-forced by a relay racing to force a matching code. Relayium closes that gap with a commit-then-reveal handshake: each side first commits to its key by sending a hash, and only reveals the key after receiving the other side&#39;s commitment. A server therefore cannot pick a colliding key after the fact, so the short code stays trustworthy.</p><ul><li>For the strongest guarantee, compare the code out of band — in person or over a voice call.</li><li>If the two codes differ, stop the transfer: someone may be intercepting the connection.</li></ul>
+      <h2>What the server never sees</h2><p>The service is designed so that the following never reach our servers, in any mode:</p><p>In realtime mode the file bytes never touch the server at all — they flow directly between the two devices. The signaling server only relays connection-setup messages and sees room membership (your public IP), a device nickname you choose, and presence.</p><ul><li>The contents of your files.</li><li>The names of your files.</li><li>Your encryption keys.</li></ul>
+      <h2>When your files are relayed (TURN)</h2><p>When two devices cannot open a direct connection across networks (restrictive NATs or firewalls), the encrypted stream is relayed through a TURN server so the transfer can still complete. Direct peer-to-peer is always tried first; the relay is a fallback, and only pairing-code and share-link sessions are issued relay credentials.</p><ul><li>The relay forwards only ciphertext — it cannot read your files, which stay end-to-end encrypted.</li><li>For operating the service we record only the number of relayed bytes per transfer, attributed to the signed-in user who created it.</li><li>We never inspect relayed content.</li></ul>
+      <h2>Stored download links — the key never leaves your browser</h2><p>The optional download-link mode is for when the recipient is not online. Your browser encrypts the files with AES-256-GCM before anything is uploaded, and the decryption key is placed only in the URL fragment — the part after the # — which browsers never send to the server.</p><ul><li>The server stores only ciphertext, plus the ciphertext size and timestamps for quota and cleanup — never plaintext, filenames, or keys.</li><li>Anyone with the full link can decrypt, so treat the link like the file itself and share it over a trusted channel.</li><li>Links can be set to expire (1, 3, or 7 days) or to burn after the first complete download.</li></ul>
+      <h2>File integrity (SHA-256)</h2><p>Beyond confidentiality, each file&#39;s integrity is verified. Every chunk carries an AES-GCM authentication tag, and a per-file SHA-256 hash is checked end-to-end on the receiving side, so a corrupted or tampered file is detected rather than silently accepted.</p>
+      <h2>What Relayium does not protect against</h2><p>End-to-end encryption protects data in transit between two honest endpoints. It cannot, by design, protect against:</p><ul><li>A compromised device or browser on either end — malware, a hostile browser extension, or someone reading the screen.</li><li>Metadata the server necessarily handles: that a transfer happened, its size and timing, and — if you signed in — the account that created it.</li><li>A recipient choosing to keep or forward the files after they have received them.</li><li>Sharing a download link over an untrusted channel, since the decryption key travels inside the link.</li></ul>
+      <h2>Browser support and its limits</h2><p>Relayium runs in any modern browser with WebRTC over HTTPS. A few capabilities differ by browser:</p><ul><li>Chrome and Edge stream large files straight to disk, with no practical memory ceiling.</li><li>Firefox and Safari buffer files in memory, so very large files (over roughly 200 MB) may fail — prefer Chrome/Edge, or use the download-link mode for those.</li><li>WebRTC requires a secure context (HTTPS); the app will not connect over plain HTTP.</li></ul>
+      <h2>Open source and reporting issues</h2><p>The protocol design and all client and server code are public on GitHub, so anyone can audit the cryptography, run their own server, or contribute. If you find a security issue, please report it privately through GitHub&#39;s vulnerability reporting on the repository, rather than opening a public issue.</p>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/privacy">Privacy Policy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

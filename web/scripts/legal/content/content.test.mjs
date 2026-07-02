@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import privacy from "./privacy.mjs";
 import terms from "./terms.mjs";
+import security from "./security.mjs";
 import { LANGS } from "../shared.mjs";
 
-const docs = { privacy, terms };
+const docs = { privacy, terms, security };
 const REQUIRED = ["title", "description", "updatedLabel", "updated", "otherDocLabel", "lead", "sections"];
 
 describe("legal content", () => {

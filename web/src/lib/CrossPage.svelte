@@ -118,6 +118,7 @@
 
   <footer>
     <nav class="legal">
+      <a href={legalUrl("security", lang())}>{t.legal.security}</a>
       <a href={legalUrl("privacy", lang())}>{t.legal.privacy}</a>
       <a href={legalUrl("terms", lang())}>{t.legal.terms}</a>
       <a href="https://github.com/relayium/relayium" target="_blank" rel="noopener noreferrer">GitHub</a>
