@@ -246,3 +246,119 @@ export async function connect(opts: ConnectOpts): Promise<Conn> {
     throw err;
   }
 }
+
+interface ResumeOpts {
+  signaling: SignalingClient;
+  peerId: string;
+  role: "initiator" | "responder";
+  config?: RtcConfig;
+  initialSignal?: InboundSignal;
+  onStateChange?: (state: RTCPeerConnectionState) => void;
+}
+
+/**
+ * Re-establish a data channel for a transfer whose original connection dropped,
+ * WITHOUT re-running the commit-reveal handshake. Trust and the session keys were
+ * already anchored (and SAS-verified by the user) on the first connection; the
+ * caller reuses those keys, so no new key is exchanged here and the SAS is
+ * unchanged. This is a deliberate transport-only mirror of connect() — it shares
+ * no auth state with it, which is exactly why the security path stays isolated.
+ */
+export async function connectResume(opts: ResumeOpts): Promise<Conn> {
+  const pc = new RTCPeerConnection(opts.config ?? DEFAULT_ICE);
+  const { signaling, peerId, role } = opts;
+
+  pc.onicecandidate = (e) => {
+    if (e.candidate) signaling.sendSignal(peerId, { ice: e.candidate });
+  };
+
+  let channel: RTCDataChannel;
+  let opened = false;
+  let failReady!: (err: Error) => void;
+  const ready = new Promise<RTCDataChannel>((resolve, reject) => {
+    failReady = reject;
+    const open = (ch: RTCDataChannel) => { opened = true; resolve(ch); };
+    if (role === "initiator") {
+      channel = pc.createDataChannel("relayium");
+      channel.binaryType = "arraybuffer";
+      channel.bufferedAmountLowThreshold = 8 << 20;
+      channel.onopen = () => open(channel);
+    } else {
+      pc.ondatachannel = (ev) => {
+        channel = ev.channel;
+        channel.binaryType = "arraybuffer";
+        channel.bufferedAmountLowThreshold = 8 << 20;
+        if (channel.readyState === "open") open(channel);
+        else channel.onopen = () => open(channel);
+      };
+    }
+  });
+
+  const CONNECT_TIMEOUT_MS = 30_000;
+  const connectTimer = setTimeout(() => {
+    if (!opened) failReady(new Error("relayium: resume connection timed out"));
+  }, CONNECT_TIMEOUT_MS);
+
+  // No commit/reveal: plain SDP + ICE only.
+  async function handleSignal(msg: InboundSignal) {
+    if (msg.sdp) {
+      await pc.setRemoteDescription(msg.sdp);
+      if (msg.sdp.type === "offer") {
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        signaling.sendSignal(peerId, { sdp: answer });
+      }
+    }
+    if (msg.ice) {
+      try { await pc.addIceCandidate(msg.ice); } catch { /* pre-remote-desc / post-close: non-fatal */ }
+    }
+  }
+
+  const off = signaling.onSignal((from, data) => {
+    if (from === peerId) handleSignal(data as InboundSignal).catch((err) => console.error("relayium resume signal error", err));
+  });
+
+  let restarted = false;
+  async function tryIceRestart() {
+    if (restarted || role !== "initiator") return;
+    restarted = true;
+    try {
+      const offer = await pc.createOffer({ iceRestart: true });
+      await pc.setLocalDescription(offer);
+      signaling.sendSignal(peerId, { sdp: offer });
+    } catch (err) {
+      console.error("relayium resume ice restart error", err);
+    }
+  }
+
+  pc.onconnectionstatechange = () => {
+    const state = pc.connectionState;
+    opts.onStateChange?.(state);
+    if (state === "disconnected") tryIceRestart();
+    if (state === "failed" && !opened) failReady(new Error("relayium: resume connection failed"));
+    if (state === "closed" || state === "failed") off();
+  };
+
+  function close() {
+    off();
+    try { pc.close(); } catch { /* already closed */ }
+  }
+
+  if (role === "initiator") {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    signaling.sendSignal(peerId, { sdp: offer });
+  } else if (opts.initialSignal) {
+    await handleSignal(opts.initialSignal);
+  }
+
+  try {
+    const openChannel = await ready;
+    clearTimeout(connectTimer);
+    return { channel: openChannel, close, path: () => pc.getStats().then(classifyPath) };
+  } catch (err) {
+    clearTimeout(connectTimer);
+    close();
+    throw err;
+  }
+}

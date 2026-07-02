@@ -69,6 +69,7 @@ export interface Messages {
     recvDone: (n: number) => string;
     integrityFail: string;
     recvFail: string;
+    resuming: string; // connection dropped mid-transfer, reconnecting to resume
     noSave: string;
     connectFail: string;
   };
@@ -262,6 +263,7 @@ const zh: Messages = {
     recvDone: (n) => `接收完成 ✓（${n} 个文件）`,
     integrityFail: "完整性校验失败 ✗",
     recvFail: "接收失败 ✗",
+    resuming: "连接中断，正在重连续传…",
     noSave: "未选择保存位置，已取消",
     connectFail: "建立连接失败 ✗",
   },
@@ -487,6 +489,7 @@ const en: Messages = {
     recvDone: (n) => `Received ✓ (${n} file${n === 1 ? "" : "s"})`,
     integrityFail: "Integrity check failed ✗",
     recvFail: "Receive failed ✗",
+    resuming: "Connection dropped — reconnecting to resume…",
     noSave: "No save location chosen — cancelled",
     connectFail: "Connection failed ✗",
   },
@@ -712,6 +715,7 @@ const ja: Messages = {
     recvDone: (n) => `受信完了 ✓（${n} 個のファイル）`,
     integrityFail: "整合性チェックに失敗しました ✗",
     recvFail: "受信に失敗しました ✗",
+    resuming: "接続が切断されました — 再接続して再開中…",
     noSave: "保存先が選択されなかったため、キャンセルしました",
     connectFail: "接続の確立に失敗しました ✗",
   },
@@ -937,6 +941,7 @@ const ko: Messages = {
     recvDone: (n) => `받기 완료 ✓ (파일 ${n}개)`,
     integrityFail: "무결성 검사 실패 ✗",
     recvFail: "받기 실패 ✗",
+    resuming: "연결이 끊겼습니다 — 재연결하여 이어받는 중…",
     noSave: "저장 위치를 선택하지 않아 취소되었습니다",
     connectFail: "연결 실패 ✗",
   },
@@ -1162,6 +1167,7 @@ const de: Messages = {
     recvDone: (n) => `Empfangen ✓ (${n} Datei${n === 1 ? "" : "en"})`,
     integrityFail: "Integritätsprüfung fehlgeschlagen ✗",
     recvFail: "Empfang fehlgeschlagen ✗",
+    resuming: "Verbindung getrennt — neu verbinden, um fortzusetzen…",
     noSave: "Kein Speicherort gewählt – abgebrochen",
     connectFail: "Verbindung fehlgeschlagen ✗",
   },
@@ -1387,6 +1393,7 @@ const fr: Messages = {
     recvDone: (n) => `Reçu ✓ (${n} fichier${n === 1 ? "" : "s"})`,
     integrityFail: "Échec du contrôle d’intégrité ✗",
     recvFail: "Échec de la réception ✗",
+    resuming: "Connexion interrompue — reconnexion pour reprendre…",
     noSave: "Aucun emplacement de sauvegarde choisi — annulé",
     connectFail: "Échec de la connexion ✗",
   },

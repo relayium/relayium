@@ -10,7 +10,7 @@
   import { SignalingClient } from "./lib/signaling";
   import { wsURL } from "./lib/transfer-link";
   import { roomToken as roomTokenStore, roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
-  import { connect, type InboundSignal, type Conn, type ConnPath } from "./lib/webrtc";
+  import { connect, connectResume, type InboundSignal, type Conn, type ConnPath } from "./lib/webrtc";
   import { createWakeLock } from "./lib/wakelock";
   import { registerServiceWorker, drainSharedFiles } from "./lib/share-target";
   import {
@@ -20,10 +20,13 @@
     REJECT,
     COMPLETE,
     controlKind,
+    resumeReqFrame,
+    parseResumeReq,
     FRAME,
     CHUNK_OVERHEAD,
     MAX_FILES,
     type FileMeta,
+    type ResumePoint,
   } from "./lib/transfer";
   import { pickSaveTarget, type SaveTarget, type FileSink } from "./lib/filesink";
   import { fetchIceServers } from "./lib/ice";
@@ -66,6 +69,13 @@
   let incoming = $state<Incoming | null>(null); // pending receive awaiting accept/reject
   let recv = $state<Xfer | null>(null);
   let send = $state<Xfer | null>(null);
+  // A receive whose connection dropped mid-transfer, waiting for the sender to
+  // re-offer so it can resume. Non-reactive: it's a coordination handle for the
+  // signalling router, not UI state. See beginReceive's resume closure.
+  let pausedRecv: { from: string; resume: (offer: InboundSignal) => void } | null = null;
+  // How long each side keeps trying to reconnect-and-resume after a mid-transfer
+  // drop before giving up and failing the transfer.
+  const RESUME_WINDOW_MS = 90_000;
   // Live ICE path per direction, kept out of Xfer so the async getStats() poll
   // never races the transfer loop's high-frequency rewrites of send/recv.
   let sendPath = $state<ConnPath | undefined>();
@@ -320,6 +330,9 @@
     signaling.onSignal(async (from, data) => {
       const msg = data as InboundSignal;
       if (msg.sdp?.type !== "offer") return; // act only on offers
+      // A re-offer from a peer whose transfer dropped mid-flight is a resume, not
+      // a new receive — route it before the busy guard (busy is true here).
+      if (pausedRecv && pausedRecv.from === from) { pausedRecv.resume(msg); return; }
       if (busy) return; // one transfer at a time — ignore until the current one ends
       try {
         await beginReceive(from, msg);
@@ -339,6 +352,13 @@
     let manifest: FileMeta[] = [];
     let total = 0, got = 0, fileIndex = 0, start = 0;
     let allOk = true;
+    // Resume state: `fileOffset` is bytes written of the *current* file (got is
+    // batch-cumulative); `checkpoint` is the last point where the receiver's
+    // chain hash and durably-written bytes agree — restored on resume.
+    let fileOffset = 0;
+    let checkpoint: { index: number; offset: number; chain: Uint8Array } = { index: 0, offset: 0, chain: new Uint8Array(32) };
+    let resumable = false; // true once bytes are flowing — before that a drop just fails
+    let resumeTimer: ReturnType<typeof setTimeout> | undefined;
 
     let r: Xfer = { peer: from, dir: "recv", files: [], index: 0, sent: 0, total: 0, status: "connecting", done: false, ok: false, speed: 0 };
     recv = r;
@@ -356,6 +376,8 @@
     const failRecv = (status: StatusKey) => {
       if (r.done) return;
       clearWatchdog();
+      if (resumeTimer) { clearTimeout(resumeTimer); resumeTimer = undefined; }
+      if (pausedRecv?.from === from) pausedRecv = null;
       recv = r = { ...r, status, done: true, ok: false };
       incoming = null;
       recvAbort = null;
@@ -369,6 +391,8 @@
     recvAbort = () => {
       cancelled = true;
       clearWatchdog();
+      if (resumeTimer) { clearTimeout(resumeTimer); resumeTimer = undefined; }
+      if (pausedRecv?.from === from) pausedRecv = null;
       conn?.close();
       recv = null;
       incoming = null;
@@ -381,10 +405,10 @@
       initialSignal: offer,
       onPeerKey: async (pk) => { keys = await deriveSession("responder", selfKey, pk); sasCode = sas(selfKey.publicKey, pk); },
       config: { iceServers },
-      // A drop ICE can't recover surfaces as a failed receive instead of a
-      // progress bar stuck forever. The normal end-of-batch close also fires
-      // "closed", but failRecv is a no-op once the batch is already done.
-      onStateChange: (state) => { if (state === "failed" || state === "closed") failRecv("recvFail"); },
+      // A drop ICE can't recover: if bytes were already flowing, pause and wait
+      // for the sender to re-offer so we can resume; otherwise fail. The normal
+      // end-of-batch close also fires "closed", but this is a no-op once done.
+      onStateChange: (state) => { if (state === "failed" || state === "closed") onRecvDrop(); },
     });
 
     // Cancelled while ICE was negotiating: the connection resolved after the abort,
@@ -428,6 +452,7 @@
         return;
       }
       recv = r = { peer: from, dir: "recv", files: req.files, index: 0, sent: 0, total: req.total, status: "receiving", done: false, ok: false, speed: 0 };
+      resumable = true; // bytes are now expected — a drop from here on resumes
       if (conn) trackPath(conn, (p) => (recvPath = p));
       incoming = null;
       // Arm the stall watchdog only once data is actually expected.
@@ -444,6 +469,60 @@
       incoming = null; recv = null; conn!.close();
     };
 
+    // Wire a (re)connected channel to the frame pipeline. The pending chain
+    // serialises async frame handling; a real (non-connection) error fails hard.
+    const installChannel = (c: Conn) => {
+      let pending: Promise<void> = Promise.resolve();
+      c.channel.onmessage = (ev) => {
+        pending = pending
+          .then(() => handleFrame(ev.data as ArrayBuffer))
+          .catch((err) => { console.error("relayium receive error", err); failRecv("recvFail"); });
+      };
+    };
+
+    // A connection drop. Before any bytes flow (or after done/cancel) it's a plain
+    // failure; mid-transfer it pauses and waits for the sender to re-offer.
+    const onRecvDrop = () => {
+      if (r.done || cancelled) return;
+      if (!resumable) { failRecv("recvFail"); return; }
+      if (pausedRecv) return; // already waiting
+      clearWatchdog();
+      recv = r = { ...r, status: "resuming", speed: 0 };
+      pausedRecv = { from, resume };
+      // Give up if the sender never comes back within the window.
+      resumeTimer = setTimeout(() => { pausedRecv = null; failRecv("recvFail"); }, RESUME_WINDOW_MS);
+    };
+
+    // The sender re-offered: rebuild the channel reusing the existing keys (no new
+    // handshake, SAS unchanged) and ask it to resume from our checkpoint.
+    const resume = async (offer: InboundSignal) => {
+      if (r.done || cancelled) return;
+      let c: Conn;
+      try {
+        c = await connectResume({
+          signaling, peerId: from, role: "responder", initialSignal: offer,
+          config: { iceServers },
+          onStateChange: (state) => { if (state === "failed" || state === "closed") onRecvDrop(); },
+        });
+      } catch {
+        return; // this attempt failed; stay paused for the next re-offer (until the timer)
+      }
+      if (r.done || cancelled) { c.close(); return; }
+      if (resumeTimer) { clearTimeout(resumeTimer); resumeTimer = undefined; }
+      pausedRecv = null;
+      conn = c;
+      installChannel(c);
+      trackPath(c, (p) => (recvPath = p));
+      recv = r = { ...r, status: "receiving" };
+      lastActivity = Date.now();
+      watchdog = setInterval(() => {
+        if (!r.done && Date.now() - lastActivity > 45_000) failRecv("recvFail");
+      }, 5_000);
+      // Ask the sender to pick up from our last durable point.
+      try { c.channel.send(resumeReqFrame(checkpoint.index, checkpoint.offset)); }
+      catch { onRecvDrop(); }
+    };
+
     const handleFrame = async (buf: ArrayBuffer) => {
       while (!keys) {
         if (r.done) return; // connection failed/cancelled during handshake — drop the frame
@@ -457,10 +536,26 @@
         recv = null; // the accept card takes over
         return;
       }
+      if (out.resume) {
+        // The sender announced where it's picking up. Restore the chain hash to
+        // our last durable checkpoint and align the nonce; keep writing the same
+        // (still-open) sink from here. `got` is recomputed batch-cumulatively.
+        receiver.resumeAt(checkpoint.chain, out.resume.seq);
+        fileIndex = checkpoint.index;
+        fileOffset = checkpoint.offset;
+        got = manifest.slice(0, checkpoint.index).reduce((n, f) => n + f.size, 0) + checkpoint.offset;
+        start = Date.now();
+        lastActivity = Date.now();
+        return;
+      }
       if (out.chunk && sink) {
         await sink.write(out.chunk);
         got += out.chunk.length;
+        fileOffset += out.chunk.length;
         lastActivity = Date.now(); // progress resets the stall watchdog
+        // Checkpoint only after the write lands, so a resume never claims bytes
+        // that weren't durably written.
+        checkpoint = { index: fileIndex, offset: fileOffset, chain: receiver.snapshotChain() };
         const elapsed = (Date.now() - start) / 1000;
         recv = r = { ...r, sent: got, index: fileIndex, speed: elapsed > 0 ? got / elapsed : 0 };
         return;
@@ -470,8 +565,12 @@
         if (sink) await sink.close();
         allOk = allOk && out.done.ok;
         fileIndex++;
+        fileOffset = 0;
         if (fileIndex < manifest.length) {
           await openSink();
+          // New file, fresh chain: checkpoint the boundary so a drop before the
+          // first chunk resumes this file from 0.
+          checkpoint = { index: fileIndex, offset: 0, chain: new Uint8Array(32) };
           recv = r = { ...r, index: fileIndex };
         } else {
           clearWatchdog();
@@ -494,15 +593,7 @@
       }
     };
 
-    let pending: Promise<void> = Promise.resolve();
-    conn.channel.onmessage = (ev) => {
-      pending = pending
-        .then(() => handleFrame(ev.data as ArrayBuffer))
-        .catch((err) => {
-          console.error("relayium receive error", err);
-          failRecv("recvFail");
-        });
-    };
+    installChannel(conn);
   }
 
   // ── SEND ───────────────────────────────────────────────────────────────────────
@@ -529,6 +620,8 @@
     let conn: Conn | undefined;
     let connLost = false;
     let cancelled = false;
+    let sender: Sender | undefined; // hoisted so a resume can keep its monotonic seq
+    let dataStarted = false; // true once we're actually streaming file data (resume only applies after this)
 
     // User pressed cancel: unblock every await, tear down, and clear the card so
     // the UI returns to idle (not a failure state) and other methods reopen.
@@ -540,6 +633,69 @@
       conn?.close();
       send = null;
       sasCode = "";
+    };
+
+    // Reconnect-and-resume after a mid-send drop: retry connectResume (reusing the
+    // authenticated keys — no new handshake, SAS unchanged) until the receiver's
+    // resume request arrives and we stream the rest, or the window elapses.
+    const resumeSend = async (): Promise<boolean> => {
+      if (!sender || !keys) return false;
+      const deadline = Date.now() + RESUME_WINDOW_MS;
+      while (Date.now() < deadline) {
+        if (cancelled) return false;
+        send = s = { ...s, status: "resuming", speed: 0 };
+        let rconn: Conn | undefined;
+        try {
+          let lost = false;
+          rconn = await connectResume({
+            signaling, peerId, role: "initiator", config: { iceServers },
+            onStateChange: (state) => { if (state === "failed" || state === "closed") lost = true; },
+          });
+          conn = rconn; // so sendAbort tears down the current connection
+          let resolveReq!: (rp: ResumePoint) => void;
+          const reqReceived = new Promise<ResumePoint>((r) => (resolveReq = r));
+          let doneAck = false;
+          rconn.channel.onmessage = (ev) => {
+            const buf = ev.data as ArrayBuffer;
+            const rp = parseResumeReq(buf);
+            if (rp) { resolveReq(rp); return; }
+            if (controlKind(buf) === "complete") doneAck = true;
+          };
+          // The receiver sends its resume request as soon as the channel opens.
+          const rp = await Promise.race([
+            reqReceived,
+            sleep(15_000).then(() => Promise.reject(new Error("no resume request"))),
+          ]) as ResumePoint;
+          if (cancelled) return false;
+          rconn.channel.send(sender.resumeStartFrame(rp));
+          send = s = { ...s, status: "sending" };
+          const base = files.slice(0, rp.index).reduce((n, f) => n + f.size, 0) + rp.offset;
+          const start = Date.now();
+          let sent = base, idx = rp.index;
+          for await (const frame of sender.dataFrames(files, keys, rp)) {
+            if (lost) throw new Error("connection lost during resume");
+            await backpressure(rconn.channel);
+            rconn.channel.send(frame);
+            if (frame[0] === FRAME.CHUNK) sent += frame.byteLength - CHUNK_OVERHEAD;
+            else if (frame[0] === FRAME.DONE) idx++;
+            const elapsed = (Date.now() - start) / 1000;
+            send = s = { ...s, sent: Math.min(total, sent), index: Math.min(idx, files.length - 1), speed: elapsed > 0 ? (sent - base) / elapsed : 0 };
+          }
+          send = s = { ...s, sent: total, index: files.length - 1, status: "finishing", speed: 0 };
+          const completeAck = new Promise<void>((r) => {
+            const iv = setInterval(() => { if (doneAck) { clearInterval(iv); r(); } }, 100);
+            setTimeout(() => { clearInterval(iv); r(); }, 30_000);
+          });
+          await flush(rconn.channel, completeAck);
+          if (lost) throw new Error("connection lost");
+          return true;
+        } catch {
+          rconn?.close();
+          if (cancelled) return false;
+          await sleep(1500); // backoff before the next reconnect attempt
+        }
+      }
+      return false;
     };
 
     try {
@@ -573,7 +729,7 @@
         await sleep(20);
       }
 
-      const sender = new Sender();
+      sender = new Sender();
       conn.channel.send(sender.batchFrame(metas)); // announce the batch; wait for the decision
       send = s = { ...s, status: "waitingAccept" };
 
@@ -585,6 +741,7 @@
       }
 
       send = s = { ...s, status: "sending" };
+      dataStarted = true; // from here a drop can resume instead of failing
       trackPath(conn, (p) => (sendPath = p));
       const start = Date.now();
       let sent = 0, idx = 0;
@@ -604,8 +761,13 @@
       if (connLost) throw new Error("connection lost");
       send = s = { ...s, status: "sendDone", done: true, ok: true };
     } catch (err) {
-      if (!cancelled) {
-        console.error("relayium send error", err);
+      if (cancelled) return;
+      console.error("relayium send error", err);
+      // A mid-send drop is resumable: reconnect (reusing keys) and finish from the
+      // receiver's checkpoint. Only fall through to failure if that gives up.
+      if (dataStarted && (await resumeSend())) {
+        send = s = { ...s, status: "sendDone", done: true, ok: true };
+      } else if (!cancelled) {
         // Distinguish "never connected" from "dropped mid-send" so the user knows
         // whether to retry the connection or the transfer.
         const status = s.status === "connecting" || s.status === "waitingAccept" ? "connectFail" : "sendFail";
