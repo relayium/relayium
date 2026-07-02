@@ -74,6 +74,7 @@ func main() {
 	dailyQuota := flag.Int64("daily-quota", envInt64("RELAYIUM_DAILY_QUOTA", 200<<20), "stored-transfer per-account upload quota per 24h in bytes (default 200 MiB)")
 	fileTTL := flag.Int64("file-ttl", envInt64("RELAYIUM_FILE_TTL", 86400), "stored-transfer default link TTL in seconds (default 1 day)")
 	fileTTLMax := flag.Int64("file-ttl-max", envInt64("RELAYIUM_FILE_TTL_MAX", 604800), "stored-transfer max link TTL in seconds (default 7 days)")
+	trustedProxies := flag.String("trusted-proxies", envStr("RELAYIUM_TRUSTED_PROXIES", ""), "comma-separated CIDRs (or IPs) of reverse proxies whose X-Forwarded-For is trusted; empty (default) ignores XFF and uses the direct peer IP")
 	flag.Parse()
 
 	if *genAdminTOTP {
@@ -94,6 +95,18 @@ func main() {
 	}
 	if *adminTOTPSecret != "" && *adminPass == "" {
 		log.Printf("WARNING: RELAYIUM_ADMIN_TOTP_SECRET set but admin password empty; /admin disabled, 2FA ignored")
+	}
+
+	// X-Forwarded-For is only trusted from configured reverse proxies; otherwise
+	// the direct peer IP is authoritative (see signal.IPExtractor). This value
+	// keys the pairing-code rate limits and the LAN room grouping.
+	trustedNets, err := parseTrustedProxies(*trustedProxies)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	ipx := signal.NewIPExtractor(trustedNets)
+	if len(trustedNets) > 0 {
+		log.Printf("trusting X-Forwarded-For from %d proxy CIDR(s)", len(trustedNets))
 	}
 
 	hub := signal.NewHub()
@@ -123,7 +136,7 @@ func main() {
 	})
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		code := r.URL.Query().Get("code")
-		if code != "" && !wsCodeLimiter.Allow(signal.ClientIP(r)) {
+		if code != "" && !wsCodeLimiter.Allow(ipx.IP(r)) {
 			http.Error(w, "too many pairing attempts", http.StatusTooManyRequests)
 			return
 		}
@@ -137,7 +150,7 @@ func main() {
 			return
 		}
 		if lan {
-			room = signal.RoomKey(r)
+			room = ipx.RoomKey(r)
 			maxPeers = 0 // LAN: unlimited
 		}
 		c, err := websocket.Accept(w, r, nil)
@@ -145,10 +158,10 @@ func main() {
 			return
 		}
 		ctx := r.Context()
-		handle(ctx, c, room, maxPeers, signal.ClientIP(r))
+		handle(ctx, c, room, maxPeers, ipx.IP(r))
 		_ = c.Close(websocket.StatusNormalClosure, "")
 	})
-	mux.HandleFunc("POST /api/pair", signal.PairHandler(pairReg, pairLimiter))
+	mux.HandleFunc("POST /api/pair", signal.PairHandler(pairReg, pairLimiter, ipx))
 
 	if dbErr != nil {
 		log.Printf("WARNING: open db: %v — account features disabled; LAN transfer unaffected", dbErr)
@@ -188,6 +201,14 @@ func main() {
 			log.Printf("WARNING: open blob dir %q: %v — stored transfers disabled", *blobDir, derr)
 		} else {
 			acct.SetBlobStore(disk)
+			// Sweep temp files orphaned by a crash mid-Put (write→rename); the GC
+			// never reaps these. Anything older than an hour can't be an in-flight
+			// upload, so it is safe to delete at startup.
+			if removed, cerr := disk.CleanupTemp(time.Hour); cerr != nil {
+				log.Printf("WARNING: cleanup orphaned temp blobs: %v", cerr)
+			} else if removed > 0 {
+				log.Printf("cleaned up %d orphaned temp blob(s)", removed)
+			}
 			if err := acct.SeedSettings(context.Background()); err != nil {
 				log.Printf("WARNING: seed settings: %v", err)
 			}
@@ -207,9 +228,17 @@ func main() {
 				Log:  log.Default(),
 			}
 			src := metering.NewRedisSource(*redisAddr)
+			// The Redis source now reconnects internally, so Run only returns on a
+			// setup error; retry so a startup blip can't permanently disable
+			// metering. It exits cleanly (nil) only if the context is cancelled.
 			go func() {
-				if err := worker.Run(context.Background(), src); err != nil {
-					log.Printf("metering worker stopped: %v", err)
+				for {
+					err := worker.Run(context.Background(), src)
+					if err == nil {
+						return
+					}
+					log.Printf("metering worker error, retrying in 5s: %v", err)
+					time.Sleep(5 * time.Second)
 				}
 			}()
 			log.Printf("metering: ingesting coturn relay stats from redis %s", *redisAddr)
@@ -220,8 +249,22 @@ func main() {
 
 	mux.Handle("/", spaHandler(*static))
 
+	// Explicit timeouts instead of http.ListenAndServe's unbounded defaults.
+	// ReadHeaderTimeout caps the request-header read phase, which is the Slowloris
+	// surface, and — crucially — stops applying once /ws is hijacked into a
+	// long-lived WebSocket, so it can't sever active transfers. IdleTimeout
+	// reaps keep-alive connections that go silent. We deliberately set no
+	// ReadTimeout/WriteTimeout: those cover the whole request/response and would
+	// kill open WebSockets mid-session (the ping/pong keepalive in the WS handler
+	// detects dead peers instead).
+	srv := &http.Server{
+		Addr:              *addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 	log.Printf("relayium signaling server listening on %s", *addr)
-	log.Fatal(http.ListenAndServe(*addr, mux))
+	log.Fatal(srv.ListenAndServe())
 }
 
 // generateAdminTOTP creates a fresh TOTP secret for the admin dashboard,
