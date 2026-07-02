@@ -5,11 +5,12 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import privacy from "./legal/content/privacy.mjs";
 import terms from "./legal/content/terms.mjs";
+import security from "./legal/content/security.mjs";
 import { buildAllPages, buildSitemap } from "./legal/build-pages.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const publicDir = resolve(here, "..", "public");
-const docs = [privacy, terms];
+const docs = [privacy, terms, security];
 
 async function main() {
   const pages = buildAllPages(docs);

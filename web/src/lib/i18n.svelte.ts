@@ -166,7 +166,7 @@ export interface Messages {
     decryptFail: string;
     unsupported: string;
   };
-  features: { title: string; sub: string; items: { title: string; desc: string }[] };
+  features: { title: string; sub: string; secureLink: string; items: { title: string; desc: string }[] };
   howItWorks: {
     title: string;
     sub: string;
@@ -192,10 +192,10 @@ export interface Messages {
   };
   crossPitch: string; // one-line cross-network pitch under the two cards
   homeCross: { title: string; desc: string; cta: string }; // homepage → cross-network CTA
-  legal: { privacy: string; terms: string };
+  legal: { privacy: string; terms: string; security: string };
 }
 
-export function legalUrl(slug: "privacy" | "terms", l: Lang): string {
+export function legalUrl(slug: "privacy" | "terms" | "security", l: Lang): string {
   return l === "en" ? `/${slug}` : `/${l}/${slug}`;
 }
 
@@ -295,11 +295,11 @@ const zh: Messages = {
     netError: "网络错误，请检查连接后重试。",
     realtimeTitle: "实时直传",
     realtimeSub: "对方此刻在线 · 点对点直连 · 文件不经服务器",
-    realtimeFoot: "免登录 · 登录可提升连通性",
+    realtimeFoot: "免登录 · 登录后可用分享链接与下载链接",
   },
   methods: {
     pairing: { name: "🔢 配对码", sub: "一方生成 6 位配对码，另一方输入即刻点对点直连，最快上手。", badge: "免登录" },
-    share: { name: "🔗 分享链接", sub: "生成带中继的链接或二维码发给对方，打开即实时直连，连通性更好。", badge: "需登录", signIn: "登录后即可生成分享链接" },
+    share: { name: "🔗 分享链接", sub: "生成一条链接或二维码，通过任意渠道发给对方；对方点开即实时直连，免手动输码。", badge: "需登录", signIn: "登录后即可生成分享链接" },
     stored: { name: "📦 下载链接", sub: "浏览器先加密再暂存，对方无需在线、无需登录，凭链接随时下载。", badge: "对方可离线" },
   },
   pair: {
@@ -357,6 +357,7 @@ const zh: Messages = {
   features: {
     title: "为什么选 Relayium",
     sub: "隐私优先、点对点直连、协议开源——文件传输本该如此。",
+    secureLink: "了解它如何加密与防中间人 →",
     items: [
       { title: "端到端加密", desc: "X25519 + AES-256-GCM，密钥只在两台设备间协商，服务器无从解密。" },
       { title: "文件不经服务器", desc: "实时直传通过 WebRTC 在设备间直接流动，绝不经过服务器；可选的下载链接仅为零知识加密暂存。" },
@@ -371,7 +372,7 @@ const zh: Messages = {
     sub: "不在同一个局域网也能传：根据对方是否在线、是否愿意登录，挑一种最顺手的。",
     ways: [
       { icon: "🔢", name: "配对码", how: "双方都在线时，一方点「生成配对码」得到 6 位数字，另一方输入即刻建立点对点直连。免登录、最快上手。", tag: "文件不经服务器" },
-      { icon: "🔗", name: "分享链接", how: "登录后生成一条带中继的分享链接或二维码，发给对方；对方打开即与你实时直连，连通性更好。即便流量经中继，也是端到端加密、无法解密。", tag: "端到端加密" },
+      { icon: "🔗", name: "分享链接", how: "登录后生成一条分享链接或二维码，通过任意渠道发给对方；对方点开即与你实时直连，免手动输码。打洞失败时经加密 TURN 中继转发，依然端到端加密、无法解密。", tag: "端到端加密" },
       { icon: "📥", name: "下载链接", how: "浏览器先加密再上传，服务器只存密文。对方无需在线、无需登录，凭链接随时下载，可设有效期或阅后即焚。", tag: "仅存密文" },
     ],
   },
@@ -382,9 +383,9 @@ const zh: Messages = {
     colRealtime: "⚡ 实时直传",
     colStored: "📦 下载链接",
     rows: [
-      { label: "是否需登录", realtime: "免登录（登录可增强连通性）", stored: "发送方需登录" },
+      { label: "是否需登录", realtime: "免登录（登录后可用分享链接/下载链接）", stored: "发送方需登录" },
       { label: "对方是否需在线", realtime: "需要，双方同时在线", stored: "不需要，可异步下载" },
-      { label: "文件是否经服务器", realtime: "否 · 点对点直连（分享链接在打洞失败时可经加密中继）", stored: "是，但仅存零知识密文" },
+      { label: "文件是否经服务器", realtime: "否 · 点对点直连（跨网络传输在打洞失败时可经加密中继）", stored: "是，但仅存零知识密文" },
       { label: "有效期", realtime: "即传即走，不留存", stored: "1 / 3 / 7 天，或阅后即焚" },
       { label: "适合场景", realtime: "双方在线时直传大文件", stored: "对方不在线，或一次发多人取" },
     ],
@@ -404,7 +405,7 @@ const zh: Messages = {
     sub: "关于跨网络传输、连通性与安全，你可能想知道的。",
     items: [
       { q: "需要安装 App 吗？", a: "不需要。用任意现代浏览器打开网页即可传输，推荐 Chrome（大文件流式落盘、可选目标文件夹，不占内存）。" },
-      { q: "连不上 / 看不到对方怎么办？", a: "配对码是纯点对点直连（仅走 STUN 打洞）；若网络受限连不上，改用分享链接更稳——它带 TURN 中继，打洞失败时会自动经加密中继转发。仍不行就用下载链接（异步、最稳妥）。" },
+      { q: "连不上 / 看不到对方怎么办？", a: "配对码和分享链接都会先尝试点对点直连（STUN 打洞），失败时自动切换到加密 TURN 中继转发（中继也只经手密文，无法解密）。若仍然连不上，改用下载链接最稳妥——它是异步的，双方无需同时在线。" },
       { q: "文件能多大？", a: "实时直传采用流式传输，理论上没有硬性大小上限；下载链接受单文件大小上限与每日额度限制，页面会给出提示。" },
       { q: "服务器能看到我的文件吗？", a: "不能。实时直传的文件根本不经过服务器；下载链接在浏览器端先加密，服务器只保存无法解密的密文，密钥只存在于链接的分享者与接收者之间。" },
       { q: "一定要注册账号吗？", a: "配对码方式完全免登录。分享链接和下载链接需要发送方登录，以便生成带中继的链接与暂存密文。" },
@@ -417,7 +418,7 @@ const zh: Messages = {
     desc: "跨网络传输支持配对码、分享链接与加密下载链接，异地也能端到端加密直传。",
     cta: "前往跨网络传输 →",
   },
-  legal: { privacy: "隐私政策", terms: "服务条款" },
+  legal: { privacy: "隐私政策", terms: "服务条款", security: "安全说明" },
 };
 
 const en: Messages = {
@@ -514,11 +515,11 @@ const en: Messages = {
     netError: "Network error — check your connection and try again.",
     realtimeTitle: "Realtime direct",
     realtimeSub: "Both online now · peer-to-peer · files never touch the server",
-    realtimeFoot: "No sign-in needed · sign in for better connectivity",
+    realtimeFoot: "No sign-in needed · sign in to use share links and download links",
   },
   methods: {
     pairing: { name: "🔢 Pairing code", sub: "One side creates a 6-digit code, the other types it in for an instant peer-to-peer link. Fastest to start.", badge: "No sign-in" },
-    share: { name: "🔗 Share link", sub: "Generate a relayed link or QR code and send it over; opening it connects you in realtime, with better connectivity.", badge: "Sign-in", signIn: "Sign in to generate a share link" },
+    share: { name: "🔗 Share link", sub: "Generate a link or QR code and send it through any channel; the recipient just opens it to connect in realtime — no code to type.", badge: "Sign-in", signIn: "Sign in to generate a share link" },
     stored: { name: "📦 Download link", sub: "Your browser encrypts then stores; the recipient downloads anytime, no live session and no account needed.", badge: "Offline OK" },
   },
   pair: {
@@ -576,6 +577,7 @@ const en: Messages = {
   features: {
     title: "Why Relayium",
     sub: "Privacy-first, peer-to-peer, open source — file transfer the way it should be.",
+    secureLink: "See how it's encrypted and MITM-protected →",
     items: [
       { title: "End-to-end encrypted", desc: "X25519 + AES-256-GCM; keys are negotiated only between the two devices and the server can't decrypt." },
       { title: "Files never touch the server", desc: "In realtime mode, bytes flow device-to-device over WebRTC and never touch the server; the optional download-link mode stores only zero-knowledge ciphertext." },
@@ -590,7 +592,7 @@ const en: Messages = {
     sub: "Not on the same LAN? Pick whichever fits — based on whether the other person is online and willing to sign in.",
     ways: [
       { icon: "🔢", name: "Pairing code", how: "When both are online, one side taps “Create pairing code” for a 6-digit number; the other types it in to open a direct peer-to-peer link. No sign-in, fastest to start.", tag: "Files never touch the server" },
-      { icon: "🔗", name: "Share link", how: "Sign in to generate a relayed link or QR code and send it over; the moment they open it you're connected in realtime, with better connectivity. Even relayed, traffic stays end-to-end encrypted.", tag: "End-to-end encrypted" },
+      { icon: "🔗", name: "Share link", how: "Sign in to generate a share link or QR code and send it through any channel; the moment they open it you're connected in realtime — no code to type. If hole-punching fails it falls back to an encrypted TURN relay, still end-to-end encrypted.", tag: "End-to-end encrypted" },
       { icon: "📥", name: "Download link", how: "Your browser encrypts before upload; the server stores only ciphertext. The recipient needs no account and no live session — they download anytime, with an expiry or burn-after-reading.", tag: "Ciphertext only" },
     ],
   },
@@ -601,9 +603,9 @@ const en: Messages = {
     colRealtime: "⚡ Realtime direct",
     colStored: "📦 Download link",
     rows: [
-      { label: "Sign-in needed", realtime: "No (sign in for better connectivity)", stored: "Sender signs in" },
+      { label: "Sign-in needed", realtime: "No (sign in to use share/download links)", stored: "Sender signs in" },
       { label: "Recipient online?", realtime: "Yes — both online at once", stored: "No — download asynchronously" },
-      { label: "Files via server?", realtime: "No — peer-to-peer (a share link can fall back to an encrypted relay)", stored: "Yes, but zero-knowledge ciphertext only" },
+      { label: "Files via server?", realtime: "No — peer-to-peer (cross-network transfers can fall back to an encrypted relay)", stored: "Yes, but zero-knowledge ciphertext only" },
       { label: "Lifetime", realtime: "Send and gone, nothing stored", stored: "1 / 3 / 7 days, or burn after reading" },
       { label: "Best for", realtime: "Direct big-file transfer while both online", stored: "Recipient offline, or one link for many" },
     ],
@@ -623,7 +625,7 @@ const en: Messages = {
     sub: "What you might want to know about cross-network transfer, connectivity, and security.",
     items: [
       { q: "Do I need to install an app?", a: "No. Any modern browser can transfer straight from the web page — Chrome is recommended (streams large files to disk with an optional target folder, without using memory)." },
-      { q: "What if it won't connect?", a: "A pairing code is direct-only (STUN hole-punching). If a restrictive network blocks it, a share link is more robust — it includes a TURN relay and falls back to an encrypted relay when hole-punching fails. Still stuck? A download link is the most reliable (asynchronous) option." },
+      { q: "What if it won't connect?", a: "Both a pairing code and a share link first try a direct peer-to-peer path (STUN hole-punching) and automatically fall back to an encrypted TURN relay when that fails (the relay only ever forwards ciphertext and cannot decrypt). Still stuck? A download link is the most reliable option — it's asynchronous, so both sides don't need to be online at once." },
       { q: "How big can files be?", a: "Realtime direct transfer streams data, so there's no hard size cap in practice; download links are bounded by a per-file size limit and a daily quota, which the page will tell you about." },
       { q: "Can the server see my files?", a: "No. Realtime transfers never touch the server; download links are encrypted in your browser and the server keeps only ciphertext it can't decrypt — the key lives solely with the link's sharer and recipient." },
       { q: "Do I have to create an account?", a: "The pairing-code flow needs no sign-in at all. Share links and download links require the sender to sign in, so a relayed link or stored ciphertext can be created." },
@@ -636,7 +638,7 @@ const en: Messages = {
     desc: "Cross-network transfer supports pairing codes, share links, and encrypted download links — end-to-end encrypted, even across the world.",
     cta: "Go to cross-network transfer →",
   },
-  legal: { privacy: "Privacy Policy", terms: "Terms of Service" },
+  legal: { privacy: "Privacy Policy", terms: "Terms of Service", security: "Security" },
 };
 
 const ja: Messages = {
@@ -733,11 +735,11 @@ const ja: Messages = {
     netError: "ネットワークエラーです。接続を確認して再試行してください。",
     realtimeTitle: "リアルタイム直接転送",
     realtimeSub: "両者が今オンライン · P2P · ファイルはサーバーを経由しません",
-    realtimeFoot: "ログイン不要 · ログインで接続性が向上",
+    realtimeFoot: "ログイン不要 · ログインで共有リンクとダウンロードリンクが使えます",
   },
   methods: {
     pairing: { name: "🔢 ペアリングコード", sub: "一方が6桁のコードを発行し、もう一方が入力するだけで即座にP2P直結。最も手軽です。", badge: "ログイン不要" },
-    share: { name: "🔗 共有リンク", sub: "リレー経由のリンクやQRコードを生成して送信。開いた瞬間にリアルタイム接続され、接続性も向上します。", badge: "要ログイン", signIn: "ログインすると共有リンクを生成できます" },
+    share: { name: "🔗 共有リンク", sub: "リンクまたはQRコードを生成し、任意の手段で送信。相手は開くだけでリアルタイム接続でき、コード入力は不要です。", badge: "要ログイン", signIn: "ログインすると共有リンクを生成できます" },
     stored: { name: "📦 ダウンロードリンク", sub: "ブラウザで暗号化してから一時保存。受信者はオンラインもアカウントも不要で、いつでもダウンロードできます。", badge: "相手オフライン可" },
   },
   pair: {
@@ -795,6 +797,7 @@ const ja: Messages = {
   features: {
     title: "Relayium が選ばれる理由",
     sub: "プライバシー優先・P2P直結・オープンソース——ファイル転送はこうあるべき。",
+    secureLink: "暗号化と中間者対策の仕組みを見る →",
     items: [
       { title: "エンドツーエンド暗号化", desc: "X25519 + AES-256-GCM。鍵は2台の端末間だけでネゴシエートされ、サーバーは復号できません。" },
       { title: "ファイルはサーバーを経由しません", desc: "リアルタイムモードではデータはWebRTCで端末間を直接流れ、サーバーを経由しません。任意のダウンロードリンクモードでもゼロ知識の暗号文しか保存しません。" },
@@ -809,7 +812,7 @@ const ja: Messages = {
     sub: "同じLANにいない？相手がオンラインか、ログインできるかに応じて、最適な方法を選べます。",
     ways: [
       { icon: "🔢", name: "ペアリングコード", how: "双方がオンラインなら、一方が「ペアリングコードを作成」で6桁の番号を発行し、もう一方が入力するだけで直接のP2P接続が開きます。ログイン不要で最も手軽です。", tag: "ファイルはサーバーを経由しません" },
-      { icon: "🔗", name: "共有リンク", how: "ログインしてリレー経由のリンクまたはQRコードを生成し送信。相手が開いた瞬間にリアルタイム接続され、接続性も向上します。リレー経由でも通信はエンドツーエンド暗号化のままです。", tag: "エンドツーエンド暗号化" },
+      { icon: "🔗", name: "共有リンク", how: "ログインして共有リンクまたはQRコードを生成し、任意の手段で送信。相手が開いた瞬間にあなたとリアルタイム接続でき、コード入力は不要です。ホールパンチング失敗時は暗号化TURNリレーへ切り替わりますが、通信はエンドツーエンド暗号化のままです。", tag: "エンドツーエンド暗号化" },
       { icon: "📥", name: "ダウンロードリンク", how: "アップロード前にブラウザ側で暗号化し、サーバーは暗号文しか保存しません。受信者はアカウントもリアルタイム接続も不要で、失効期限や閲覧後削除付きでいつでもダウンロードできます。", tag: "暗号文のみ" },
     ],
   },
@@ -820,9 +823,9 @@ const ja: Messages = {
     colRealtime: "⚡ リアルタイム直接転送",
     colStored: "📦 ダウンロードリンク",
     rows: [
-      { label: "ログインの要否", realtime: "不要（ログインで接続性が向上）", stored: "送信者はログインが必要" },
+      { label: "ログインの要否", realtime: "不要（ログインで共有/ダウンロードリンクが使える）", stored: "送信者はログインが必要" },
       { label: "相手はオンライン？", realtime: "必要——双方が同時にオンライン", stored: "不要——非同期でダウンロード" },
-      { label: "ファイルはサーバー経由？", realtime: "いいえ · P2P直結（共有リンクはホールパンチング失敗時に暗号化リレーへ切替可）", stored: "はい、ただしゼロ知識の暗号文のみ" },
+      { label: "ファイルはサーバー経由？", realtime: "いいえ · P2P直結（クロスネットワーク転送はホールパンチング失敗時に暗号化リレーへ切替可）", stored: "はい、ただしゼロ知識の暗号文のみ" },
       { label: "有効期間", realtime: "送ったら消える、保存なし", stored: "1／3／7日、または閲覧後に削除" },
       { label: "適した用途", realtime: "双方オンライン時の大容量ファイル直接転送", stored: "受信者がオフライン、または1つのリンクを複数人へ" },
     ],
@@ -842,7 +845,7 @@ const ja: Messages = {
     sub: "ネットワークをまたぐ転送・接続性・セキュリティについて知っておきたいこと。",
     items: [
       { q: "アプリのインストールは必要？", a: "不要です。モダンブラウザならウェブページから直接転送できます。Chrome推奨（メモリを使わず、任意の保存先フォルダを指定して大容量ファイルをディスクへストリーミングできます）。" },
-      { q: "接続できないときは？", a: "ペアリングコードはP2P直結のみ（STUNによるホールパンチング）。制限の厳しいネットワークでつながらない場合は共有リンクの方が確実です——TURNリレーを備え、ホールパンチング失敗時は暗号化リレーへ自動で切り替わります。それでも駄目ならダウンロードリンク（非同期で最も確実）を。" },
+      { q: "接続できないときは？", a: "ペアリングコードも共有リンクも、まずP2P直結（STUNホールパンチング）を試み、失敗時は暗号化TURNリレーへ自動で切り替わります（リレーは暗号文を転送するだけで復号できません）。それでもつながらない場合は、非同期で双方が同時にオンラインである必要がないダウンロードリンクが最も確実です。" },
       { q: "ファイルはどれくらい大きくできる？", a: "リアルタイム直接転送はデータをストリーミングするため、実用上のサイズ上限はありません。ダウンロードリンクは1ファイルあたりのサイズ制限と1日の上限があり、ページ上で案内されます。" },
       { q: "サーバーは私のファイルを見られる？", a: "いいえ。リアルタイム転送はサーバーを一切経由しません。ダウンロードリンクはブラウザ内で暗号化され、サーバーは復号できない暗号文しか保持しません。鍵はリンクの共有者と受信者だけが持ちます。" },
       { q: "アカウント登録は必須？", a: "ペアリングコードのフローはログイン不要です。共有リンクとダウンロードリンクは、リレー経由のリンクや保存する暗号文を作成するため、送信者のログインが必要です。" },
@@ -855,7 +858,7 @@ const ja: Messages = {
     desc: "ネットワークをまたぐ転送は、ペアリングコード・共有リンク・暗号化ダウンロードリンクに対応。世界の反対側でもエンドツーエンド暗号化です。",
     cta: "ネットワーク間転送へ →",
   },
-  legal: { privacy: "プライバシーポリシー", terms: "利用規約" },
+  legal: { privacy: "プライバシーポリシー", terms: "利用規約", security: "セキュリティ" },
 };
 
 const ko: Messages = {
@@ -952,11 +955,11 @@ const ko: Messages = {
     netError: "네트워크 오류입니다. 연결을 확인한 후 다시 시도하세요.",
     realtimeTitle: "실시간 직접 전송",
     realtimeSub: "양쪽 모두 온라인 · P2P · 파일은 서버를 거치지 않습니다",
-    realtimeFoot: "로그인 불필요 · 로그인 시 연결성 향상",
+    realtimeFoot: "로그인 불필요 · 로그인하면 공유 링크와 다운로드 링크 사용 가능",
   },
   methods: {
     pairing: { name: "🔢 페어링 코드", sub: "한쪽이 6자리 코드를 만들고 다른 쪽이 입력하면 즉시 P2P로 직접 연결됩니다. 가장 빠릅니다.", badge: "로그인 불필요" },
-    share: { name: "🔗 공유 링크", sub: "중계 링크나 QR 코드를 생성해 보내면, 상대가 여는 순간 실시간으로 연결되고 연결 안정성도 좋습니다.", badge: "로그인 필요", signIn: "로그인하면 공유 링크를 만들 수 있습니다" },
+    share: { name: "🔗 공유 링크", sub: "링크나 QR 코드를 만들어 원하는 방법으로 보내면, 상대는 열기만 하면 실시간으로 연결됩니다 — 코드 입력이 필요 없습니다.", badge: "로그인 필요", signIn: "로그인하면 공유 링크를 만들 수 있습니다" },
     stored: { name: "📦 다운로드 링크", sub: "브라우저에서 암호화한 뒤 임시 보관하며, 받는 사람은 접속도 계정도 필요 없이 언제든 다운로드합니다.", badge: "상대 오프라인 OK" },
   },
   pair: {
@@ -1014,6 +1017,7 @@ const ko: Messages = {
   features: {
     title: "왜 Relayium인가",
     sub: "프라이버시 우선, P2P 직접 연결, 오픈소스 — 파일 전송은 이래야 합니다.",
+    secureLink: "어떻게 암호화하고 중간자 공격을 막는지 보기 →",
     items: [
       { title: "종단간 암호화", desc: "X25519 + AES-256-GCM. 키는 두 기기 사이에서만 협상되며 서버는 복호화할 수 없습니다." },
       { title: "파일은 서버를 거치지 않습니다", desc: "실시간 모드에서는 데이터가 WebRTC로 기기 간 직접 전송되어 서버를 거치지 않으며, 선택적 다운로드 링크 모드는 제로 지식 암호문만 저장합니다." },
@@ -1028,7 +1032,7 @@ const ko: Messages = {
     sub: "같은 LAN이 아닌가요? 상대방이 온라인인지, 로그인할 의향이 있는지에 따라 알맞은 방법을 고르세요.",
     ways: [
       { icon: "🔢", name: "페어링 코드", how: "둘 다 온라인일 때 한쪽이 '페어링 코드 만들기'를 누르면 6자리 숫자가 나옵니다. 상대가 이를 입력하면 기기 간 직접 연결이 열립니다. 로그인 없이 가장 빠르게 시작합니다.", tag: "파일은 서버를 거치지 않습니다" },
-      { icon: "🔗", name: "공유 링크", how: "로그인하면 중계 링크나 QR 코드를 생성해 보낼 수 있습니다. 상대가 여는 순간 실시간으로 연결되며 연결 안정성이 더 좋습니다. 중계되더라도 트래픽은 종단간 암호화됩니다.", tag: "종단간 암호화" },
+      { icon: "🔗", name: "공유 링크", how: "로그인하면 공유 링크나 QR 코드를 만들어 원하는 방법으로 보낼 수 있습니다. 상대가 여는 순간 실시간으로 연결되며 코드 입력이 필요 없습니다. 홀 펀칭 실패 시 암호화된 TURN 중계로 전환되지만 트래픽은 종단간 암호화된 상태로 유지됩니다.", tag: "종단간 암호화" },
       { icon: "📥", name: "다운로드 링크", how: "브라우저가 업로드 전에 암호화하므로 서버는 암호문만 저장합니다. 받는 사람은 계정도, 실시간 연결도 필요 없이 언제든 다운로드하며, 만료 또는 열람 후 삭제를 적용할 수 있습니다.", tag: "암호문만 저장" },
     ],
   },
@@ -1039,9 +1043,9 @@ const ko: Messages = {
     colRealtime: "⚡ 실시간 직접 전송",
     colStored: "📦 다운로드 링크",
     rows: [
-      { label: "로그인 필요", realtime: "불필요 (연결 안정성을 위해 로그인 가능)", stored: "보내는 사람이 로그인" },
+      { label: "로그인 필요", realtime: "불필요 (로그인하면 공유/다운로드 링크 사용 가능)", stored: "보내는 사람이 로그인" },
       { label: "상대방 온라인 여부", realtime: "필요 — 둘 다 동시에 온라인", stored: "불필요 — 비동기로 다운로드" },
-      { label: "파일이 서버를 거치는지", realtime: "아니요 · P2P 직접 연결 (공유 링크는 홀 펀칭 실패 시 암호화 중계로 대체 가능)", stored: "예, 단 제로 지식 암호문만" },
+      { label: "파일이 서버를 거치는지", realtime: "아니요 · P2P 직접 연결 (크로스 네트워크 전송은 홀 펀칭 실패 시 암호화 중계로 대체 가능)", stored: "예, 단 제로 지식 암호문만" },
       { label: "유효 기간", realtime: "보내면 끝, 저장되지 않음", stored: "1 / 3 / 7일, 또는 열람 후 삭제" },
       { label: "적합한 상황", realtime: "둘 다 온라인일 때 대용량 파일 직접 전송", stored: "받는 사람이 오프라인이거나, 한 링크로 여러 명에게" },
     ],
@@ -1061,7 +1065,7 @@ const ko: Messages = {
     sub: "네트워크 간 전송, 연결, 보안에 관해 궁금할 만한 점들.",
     items: [
       { q: "앱을 설치해야 하나요?", a: "아니요. 최신 브라우저라면 웹 페이지에서 바로 전송할 수 있습니다. Chrome을 권장합니다(대용량 파일을 메모리 없이 디스크로 스트리밍하며 대상 폴더를 지정할 수 있습니다)." },
-      { q: "연결이 안 되면 어떻게 하나요?", a: "페어링 코드는 순수 P2P 직접 연결입니다(STUN 홀 펀칭). 제한이 심한 네트워크에서 안 되면 공유 링크가 더 안정적입니다——TURN 중계가 있어 홀 펀칭 실패 시 암호화 중계로 자동 전환됩니다. 그래도 안 되면 다운로드 링크(비동기, 가장 확실)를 쓰세요." },
+      { q: "연결이 안 되면 어떻게 하나요?", a: "페어링 코드와 공유 링크 모두 먼저 P2P 직접 연결(STUN 홀 펀칭)을 시도하고, 실패하면 암호화된 TURN 중계로 자동 전환됩니다(중계는 암호문만 전달하며 복호화할 수 없습니다). 그래도 안 되면 비동기라서 양쪽이 동시에 접속할 필요가 없는 다운로드 링크가 가장 확실합니다." },
       { q: "파일은 얼마나 커도 되나요?", a: "실시간 직접 전송은 데이터를 스트리밍하므로 실질적인 크기 상한이 없습니다. 다운로드 링크는 파일당 크기 제한과 일일 할당량이 있으며, 페이지에서 안내합니다." },
       { q: "서버가 내 파일을 볼 수 있나요?", a: "아니요. 실시간 전송은 서버를 거치지 않습니다. 다운로드 링크는 브라우저에서 암호화되어 서버는 복호화할 수 없는 암호문만 보관하며, 키는 링크를 공유한 사람과 받는 사람에게만 있습니다." },
       { q: "반드시 계정을 만들어야 하나요?", a: "페어링 코드 방식은 로그인이 전혀 필요 없습니다. 공유 링크와 다운로드 링크는 중계 링크나 저장된 암호문을 만들기 위해 보내는 사람의 로그인이 필요합니다." },
@@ -1074,7 +1078,7 @@ const ko: Messages = {
     desc: "네트워크 간 전송은 페어링 코드, 공유 링크, 암호화 다운로드 링크를 지원합니다 — 지구 반대편이라도 종단간 암호화로.",
     cta: "네트워크 간 전송으로 이동 →",
   },
-  legal: { privacy: "개인정보 처리방침", terms: "이용약관" },
+  legal: { privacy: "개인정보 처리방침", terms: "이용약관", security: "보안" },
 };
 
 const de: Messages = {
@@ -1171,11 +1175,11 @@ const de: Messages = {
     netError: "Netzwerkfehler – bitte Verbindung prüfen und erneut versuchen.",
     realtimeTitle: "Echtzeit-Direktübertragung",
     realtimeSub: "Beide jetzt online · Peer-to-Peer · Dateien berühren nie den Server",
-    realtimeFoot: "Keine Anmeldung nötig · angemeldet bessere Verbindung",
+    realtimeFoot: "Keine Anmeldung nötig · angemeldet für Freigabe- und Download-Links",
   },
   methods: {
     pairing: { name: "🔢 Kopplungscode", sub: "Eine Seite erzeugt einen 6-stelligen Code, die andere gibt ihn ein — sofort direkt Peer-to-Peer verbunden. Am schnellsten.", badge: "Ohne Anmeldung" },
-    share: { name: "🔗 Freigabelink", sub: "Erzeuge einen weitergeleiteten Link oder QR-Code und verschick ihn; beim Öffnen seid ihr in Echtzeit verbunden, mit besserer Konnektivität.", badge: "Anmeldung nötig", signIn: "Melde dich an, um einen Freigabelink zu erzeugen" },
+    share: { name: "🔗 Freigabelink", sub: "Erzeuge einen Link oder QR-Code und verschick ihn über einen beliebigen Kanal; die andere Person öffnet ihn einfach und ist in Echtzeit verbunden — ohne Code einzutippen.", badge: "Anmeldung nötig", signIn: "Melde dich an, um einen Freigabelink zu erzeugen" },
     stored: { name: "📦 Download-Link", sub: "Dein Browser verschlüsselt und speichert zwischen; die empfangende Person lädt jederzeit herunter — ohne Sitzung, ohne Konto.", badge: "Auch offline" },
   },
   pair: {
@@ -1233,6 +1237,7 @@ const de: Messages = {
   features: {
     title: "Warum Relayium",
     sub: "Datenschutz zuerst, Peer-to-Peer, Open Source — Dateiübertragung, wie sie sein sollte.",
+    secureLink: "So wird verschlüsselt und vor MITM geschützt →",
     items: [
       { title: "Ende-zu-Ende-verschlüsselt", desc: "X25519 + AES-256-GCM; die Schlüssel werden ausschließlich zwischen den beiden Geräten ausgehandelt, der Server kann nicht entschlüsseln." },
       { title: "Dateien erreichen nie den Server", desc: "Im Echtzeitmodus fließen die Bytes per WebRTC direkt von Gerät zu Gerät und erreichen nie den Server; der optionale Download-Link-Modus speichert nur Zero-Knowledge-Chiffretext." },
@@ -1247,7 +1252,7 @@ const de: Messages = {
     sub: "Nicht im selben LAN? Wähle, was passt — je nachdem, ob die andere Person online ist und sich anmelden möchte.",
     ways: [
       { icon: "🔢", name: "Kopplungscode", how: "Wenn beide online sind, tippt eine Seite auf „Kopplungscode erstellen“ für eine 6-stellige Zahl; die andere gibt sie ein und öffnet eine direkte Peer-to-Peer-Verbindung. Ohne Anmeldung, am schnellsten startklar.", tag: "Dateien erreichen nie den Server" },
-      { icon: "🔗", name: "Freigabelink", how: "Melde dich an, um einen weitergeleiteten Link oder QR-Code zu erzeugen und zu verschicken; sobald ihn die andere Person öffnet, seid ihr in Echtzeit verbunden — mit besserer Konnektivität. Auch weitergeleitet bleibt der Datenverkehr Ende-zu-Ende-verschlüsselt.", tag: "Ende-zu-Ende-verschlüsselt" },
+      { icon: "🔗", name: "Freigabelink", how: "Melde dich an, um einen Freigabelink oder QR-Code zu erzeugen und über einen beliebigen Kanal zu verschicken; sobald ihn die andere Person öffnet, seid ihr in Echtzeit verbunden — ohne Code einzutippen. Scheitert das Hole-Punching, wird auf ein verschlüsseltes TURN-Relay ausgewichen, weiterhin Ende-zu-Ende-verschlüsselt.", tag: "Ende-zu-Ende-verschlüsselt" },
       { icon: "📥", name: "Download-Link", how: "Dein Browser verschlüsselt vor dem Upload; der Server speichert nur Chiffretext. Die empfangende Person braucht kein Konto und keine laufende Sitzung — sie lädt jederzeit herunter, mit Ablauf oder Löschen nach dem Lesen.", tag: "Nur Chiffretext" },
     ],
   },
@@ -1258,9 +1263,9 @@ const de: Messages = {
     colRealtime: "⚡ Echtzeit-Direkt",
     colStored: "📦 Download-Link",
     rows: [
-      { label: "Anmeldung nötig", realtime: "Nein (Anmeldung für bessere Konnektivität)", stored: "Sender meldet sich an" },
+      { label: "Anmeldung nötig", realtime: "Nein (angemeldet für Freigabe-/Download-Links)", stored: "Sender meldet sich an" },
       { label: "Empfänger online?", realtime: "Ja — beide gleichzeitig online", stored: "Nein — asynchron herunterladen" },
-      { label: "Dateien über Server?", realtime: "Nein · Peer-to-Peer (Freigabelink kann bei Fehlschlag auf ein verschlüsseltes Relay ausweichen)", stored: "Ja, aber nur Zero-Knowledge-Chiffretext" },
+      { label: "Dateien über Server?", realtime: "Nein · Peer-to-Peer (netzwerkübergreifende Übertragungen können bei Fehlschlag auf ein verschlüsseltes Relay ausweichen)", stored: "Ja, aber nur Zero-Knowledge-Chiffretext" },
       { label: "Lebensdauer", realtime: "Senden und weg, nichts gespeichert", stored: "1 / 3 / 7 Tage oder Löschen nach dem Lesen" },
       { label: "Am besten für", realtime: "Direkte Übertragung großer Dateien, solange beide online sind", stored: "Empfänger offline, oder ein Link für viele" },
     ],
@@ -1280,7 +1285,7 @@ const de: Messages = {
     sub: "Was du über netzübergreifende Übertragung, Konnektivität und Sicherheit wissen möchtest.",
     items: [
       { q: "Muss ich eine App installieren?", a: "Nein. Jeder moderne Browser überträgt direkt von der Webseite aus — Chrome wird empfohlen (streamt große Dateien speicherschonend auf die Festplatte, optional in einen Zielordner)." },
-      { q: "Was, wenn keine Verbindung zustande kommt?", a: "Ein Kopplungscode ist rein direkt (STUN-Hole-Punching). Blockiert ein restriktives Netzwerk das, ist ein Freigabelink robuster — er enthält ein TURN-Relay und weicht bei fehlgeschlagenem Hole-Punching auf ein verschlüsseltes Relay aus. Immer noch nichts? Ein Download-Link ist die zuverlässigste (asynchrone) Option." },
+      { q: "Was, wenn keine Verbindung zustande kommt?", a: "Sowohl ein Kopplungscode als auch ein Freigabelink versuchen zuerst eine direkte Peer-to-Peer-Verbindung (STUN-Hole-Punching) und weichen bei Fehlschlag automatisch auf ein verschlüsseltes TURN-Relay aus (das Relay leitet nur Chiffretext weiter und kann nicht entschlüsseln). Immer noch nichts? Ein Download-Link ist am zuverlässigsten — er ist asynchron, sodass nicht beide Seiten gleichzeitig online sein müssen." },
       { q: "Wie groß dürfen Dateien sein?", a: "Die Echtzeit-Direktübertragung streamt die Daten, in der Praxis gibt es also keine harte Größengrenze; Download-Links sind durch ein Größenlimit pro Datei und ein Tageskontingent begrenzt, über die dich die Seite informiert." },
       { q: "Kann der Server meine Dateien sehen?", a: "Nein. Echtzeitübertragungen erreichen nie den Server; Download-Links werden in deinem Browser verschlüsselt, und der Server behält nur Chiffretext, den er nicht entschlüsseln kann — der Schlüssel liegt allein bei der teilenden und der empfangenden Person." },
       { q: "Muss ich ein Konto anlegen?", a: "Der Kopplungscode-Ablauf braucht überhaupt keine Anmeldung. Freigabelinks und Download-Links erfordern, dass sich der Sender anmeldet, damit ein weitergeleiteter Link oder gespeicherter Chiffretext erstellt werden kann." },
@@ -1293,7 +1298,7 @@ const de: Messages = {
     desc: "Netzübergreifende Übertragung unterstützt Kopplungscodes, Freigabelinks und verschlüsselte Download-Links — Ende-zu-Ende-verschlüsselt, selbst um die halbe Welt.",
     cta: "Zur netzübergreifenden Übertragung →",
   },
-  legal: { privacy: "Datenschutzerklärung", terms: "Nutzungsbedingungen" },
+  legal: { privacy: "Datenschutzerklärung", terms: "Nutzungsbedingungen", security: "Sicherheit" },
 };
 
 const fr: Messages = {
@@ -1390,11 +1395,11 @@ const fr: Messages = {
     netError: "Erreur réseau — vérifiez votre connexion et réessayez.",
     realtimeTitle: "Transfert direct en temps réel",
     realtimeSub: "Les deux en ligne · pair-à-pair · les fichiers ne passent jamais par le serveur",
-    realtimeFoot: "Sans connexion · connectez-vous pour une meilleure connectivité",
+    realtimeFoot: "Sans connexion · connectez-vous pour les liens de partage et de téléchargement",
   },
   methods: {
     pairing: { name: "🔢 Code d'appairage", sub: "Un côté crée un code à 6 chiffres, l'autre le saisit pour une liaison pair-à-pair instantanée. Le plus rapide.", badge: "Sans connexion" },
-    share: { name: "🔗 Lien de partage", sub: "Générez un lien relayé ou un QR code et envoyez-le ; en l'ouvrant, vous êtes connectés en temps réel, avec une meilleure connectivité.", badge: "Connexion requise", signIn: "Connectez-vous pour générer un lien de partage" },
+    share: { name: "🔗 Lien de partage", sub: "Générez un lien ou un QR code et envoyez-le par le canal de votre choix ; le destinataire l'ouvre simplement pour se connecter en temps réel — sans code à saisir.", badge: "Connexion requise", signIn: "Connectez-vous pour générer un lien de partage" },
     stored: { name: "📦 Lien de téléchargement", sub: "Votre navigateur chiffre puis stocke temporairement ; le destinataire télécharge quand il veut, sans session ni compte.", badge: "Même hors ligne" },
   },
   pair: {
@@ -1452,6 +1457,7 @@ const fr: Messages = {
   features: {
     title: "Pourquoi Relayium",
     sub: "Confidentialité d'abord, pair-à-pair, open source — le transfert de fichiers tel qu'il devrait être.",
+    secureLink: "Voir comment c'est chiffré et protégé du MITM →",
     items: [
       { title: "Chiffré de bout en bout", desc: "X25519 + AES-256-GCM ; les clés sont négociées uniquement entre les deux appareils et le serveur ne peut pas déchiffrer." },
       { title: "Les fichiers ne passent jamais par le serveur", desc: "En mode temps réel, les octets circulent d'appareil à appareil via WebRTC sans jamais passer par le serveur ; le mode lien de téléchargement optionnel ne stocke que du chiffré à divulgation nulle." },
@@ -1466,7 +1472,7 @@ const fr: Messages = {
     sub: "Pas sur le même réseau local ? Choisissez celle qui convient — selon que votre correspondant est en ligne et prêt à se connecter.",
     ways: [
       { icon: "🔢", name: "Code d'appairage", how: "Quand les deux sont en ligne, l'un touche « Créer un code d'appairage » pour obtenir un nombre à 6 chiffres ; l'autre le saisit pour ouvrir un lien direct pair-à-pair. Sans connexion, le plus rapide à lancer.", tag: "Les fichiers ne passent jamais par le serveur" },
-      { icon: "🔗", name: "Lien de partage", how: "Connectez-vous pour générer un lien relayé ou un QR code et l'envoyer ; dès qu'il l'ouvre, vous êtes connectés en temps réel, avec une meilleure connectivité. Même relayé, le trafic reste chiffré de bout en bout.", tag: "Chiffré de bout en bout" },
+      { icon: "🔗", name: "Lien de partage", how: "Connectez-vous pour générer un lien de partage ou un QR code et l'envoyer par le canal de votre choix ; dès qu'il l'ouvre, vous êtes connectés en temps réel — sans code à saisir. En cas d'échec du hole-punching, la connexion bascule vers un relais TURN chiffré, toujours chiffrée de bout en bout.", tag: "Chiffré de bout en bout" },
       { icon: "📥", name: "Lien de téléchargement", how: "Votre navigateur chiffre avant l'envoi ; le serveur ne stocke que du chiffré. Le destinataire n'a besoin ni de compte ni de session active — il télécharge quand il veut, avec expiration ou destruction après lecture.", tag: "Chiffré uniquement" },
     ],
   },
@@ -1477,9 +1483,9 @@ const fr: Messages = {
     colRealtime: "⚡ Direct en temps réel",
     colStored: "📦 Lien de téléchargement",
     rows: [
-      { label: "Connexion requise", realtime: "Non (connectez-vous pour une meilleure connectivité)", stored: "L'expéditeur se connecte" },
+      { label: "Connexion requise", realtime: "Non (connexion pour les liens de partage/téléchargement)", stored: "L'expéditeur se connecte" },
       { label: "Destinataire en ligne ?", realtime: "Oui — les deux en ligne en même temps", stored: "Non — téléchargement asynchrone" },
-      { label: "Fichiers via le serveur ?", realtime: "Non · pair-à-pair (le lien de partage peut basculer vers un relais chiffré)", stored: "Oui, mais uniquement du chiffré à divulgation nulle" },
+      { label: "Fichiers via le serveur ?", realtime: "Non · pair-à-pair (les transferts inter-réseaux peuvent basculer vers un relais chiffré)", stored: "Oui, mais uniquement du chiffré à divulgation nulle" },
       { label: "Durée de vie", realtime: "Envoyé puis disparu, rien de stocké", stored: "1 / 3 / 7 jours, ou destruction après lecture" },
       { label: "Idéal pour", realtime: "Transfert direct de gros fichiers pendant que les deux sont en ligne", stored: "Destinataire hors ligne, ou un lien pour plusieurs" },
     ],
@@ -1499,7 +1505,7 @@ const fr: Messages = {
     sub: "Ce que vous voudrez peut-être savoir sur le transfert inter-réseaux, la connectivité et la sécurité.",
     items: [
       { q: "Dois-je installer une application ?", a: "Non. N'importe quel navigateur moderne transfère directement depuis la page web — Chrome est recommandé (écrit les gros fichiers en flux sur le disque, avec un dossier cible optionnel, sans utiliser la mémoire)." },
-      { q: "Que faire si ça ne connecte pas ?", a: "Un code d'appairage est en direct uniquement (hole-punching STUN). Si un réseau restrictif le bloque, un lien de partage est plus robuste — il inclut un relais TURN et bascule vers un relais chiffré quand le hole-punching échoue. Toujours bloqué ? Un lien de téléchargement est l'option la plus fiable (asynchrone)." },
+      { q: "Que faire si ça ne connecte pas ?", a: "Un code d'appairage comme un lien de partage tentent d'abord une connexion directe de pair à pair (hole-punching STUN) et basculent automatiquement vers un relais TURN chiffré en cas d'échec (le relais ne transmet que du chiffré et ne peut pas déchiffrer). Toujours bloqué ? Un lien de téléchargement est le plus fiable — il est asynchrone, les deux parties n'ont donc pas besoin d'être en ligne en même temps." },
       { q: "Quelle taille les fichiers peuvent-ils atteindre ?", a: "Le transfert direct en temps réel diffuse les données en flux, donc il n'y a en pratique aucune limite stricte de taille ; les liens de téléchargement sont soumis à une taille maximale par fichier et à un quota quotidien, que la page vous indiquera." },
       { q: "Le serveur peut-il voir mes fichiers ?", a: "Non. Les transferts en temps réel ne passent jamais par le serveur ; les liens de téléchargement sont chiffrés dans votre navigateur et le serveur ne conserve que du chiffré qu'il ne peut pas déchiffrer — la clé reste uniquement chez celui qui partage le lien et son destinataire." },
       { q: "Faut-il obligatoirement créer un compte ?", a: "Le flux par code d'appairage ne nécessite aucune connexion. Les liens de partage et de téléchargement exigent que l'expéditeur se connecte, afin de créer un lien relayé ou du chiffré stocké." },
@@ -1512,7 +1518,7 @@ const fr: Messages = {
     desc: "Le transfert inter-réseaux prend en charge les codes d'appairage, les liens de partage et les liens de téléchargement chiffrés — chiffré de bout en bout, même à l'autre bout du monde.",
     cta: "Aller au transfert inter-réseaux →",
   },
-  legal: { privacy: "Politique de confidentialité", terms: "Conditions d'utilisation" },
+  legal: { privacy: "Politique de confidentialité", terms: "Conditions d'utilisation", security: "Sécurité" },
 };
 
 export const messages: Record<Lang, Messages> = { zh, en, ja, ko, de, fr };

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sicherheit &amp; Bedrohungsmodell · Relayium</title>
+    <meta name="description" content="Wie Relayium Ihre Dateien schützt: pro Übertragung neue X25519-Schlüssel und AES-256-GCM, ein SAS-Prüfcode mit Commit-dann-Offenlegen-Handshake gegen einen bösartigen Server, Zero-Knowledge-Download-Links und eine ehrliche Darstellung dessen, wovor wir schützen und wovor nicht." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/de/security" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/security" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/security" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/security" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/security" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/security" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/security" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/security" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Sicherheit & Bedrohungsmodell · Relayium","description":"Wie Relayium Ihre Dateien schützt: pro Übertragung neue X25519-Schlüssel und AES-256-GCM, ein SAS-Prüfcode mit Commit-dann-Offenlegen-Handshake gegen einen bösartigen Server, Zero-Knowledge-Download-Links und eine ehrliche Darstellung dessen, wovor wir schützen und wovor nicht.","url":"https://relayium.com/de/security","inLanguage":"de","dateModified":"2026-07-01","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:21px;margin:34px 0 10px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>Sicherheit &amp; Bedrohungsmodell</h1>
+      <p class="updated">Zuletzt aktualisiert: 2026-07-01</p>
+      <nav class="langbar" aria-label="Language"><a href="/security">English</a><a href="/zh/security">中文</a><a href="/ja/security">日本語</a><a href="/ko/security">한국어</a><a href="/de/security" aria-current="true">Deutsch</a><a href="/fr/security">Français</a></nav>
+      <p>Relayium ist so gebaut, dass die Personen, die Dateien übertragen — nicht der Server — die Schlüssel besitzen. Diese Seite beschreibt genau, was geschützt ist, wie es funktioniert und wo die Grenzen dieses Schutzes liegen.</p>
+      <p>Kurz gesagt: Im Echtzeitmodus berühren Ihre Dateien nie unsere Server; die Verschlüsselungsschlüssel werden auf jedem Gerät neu erzeugt und verlassen es nie; und ein kurzer Prüfcode erlaubt zwei Personen, einen bösartigen Server zu erkennen. Es folgen die Details.</p>
+      <h2>Ende-zu-Ende-Verschlüsselung (X25519 + AES-256-GCM)</h2><p>Jede Übertragung erzeugt auf jedem Gerät ein frisches, kurzlebiges X25519-Schlüsselpaar. Die beiden Geräte führen einen Schlüsselaustausch durch und leiten daraus einen gemeinsamen AES-256-GCM-Schlüssel ab, der nur in den beiden Browsern existiert. Jeder Chunk wird mit diesem Schlüssel und einer eindeutigen Nonce verschlüsselt, sodass der Signalisierungsserver — und jede Weiterleitung — stets nur Chiffretext sieht.</p><ul><li>Schlüssel sind kurzlebig und pro Übertragung eigenständig — nichts wird über Sitzungen hinweg wiederverwendet.</li><li>Der gemeinsame Schlüssel wird auf den beiden Geräten abgeleitet; er wird nie an einen Server gesendet oder dort gespeichert.</li><li>Die Verschlüsselung erfolgt auf der Anwendungsebene, oberhalb der Transportsicherheit von WebRTC, und bleibt daher selbst dann wirksam, wenn die Transportebene kompromittiert wird.</li></ul>
+      <h2>Der Prüfcode (SAS) — einen bösartigen Server erkennen</h2><p>Die eingebaute Verschlüsselung von WebRTC (DTLS) tauscht Schlüssel-Fingerabdrücke über den Signalisierungsserver aus, sodass ein unehrlicher Server sich dazwischenschalten und Schlüssel austauschen könnte. Um das zu erkennen, leitet Relayium aus den öffentlichen Schlüsseln beider Seiten einen 6-stelligen Short Authentication String (SAS) ab und zeigt ihn auf beiden Bildschirmen an. Stimmen die beiden Codes überein, ist niemand dazwischen.</p><p>Ein bloßer 6-stelliger Code (etwa 20 Bit) ließe sich im Prinzip von einer Weiterleitung durch Brute Force zu einem passenden Code zwingen. Relayium schließt diese Lücke mit einem Commit-dann-Offenlegen-Handshake: Jede Seite legt sich zunächst durch das Senden eines Hashes auf ihren Schlüssel fest und gibt den Schlüssel erst preis, nachdem sie die Festlegung der Gegenseite erhalten hat. Ein Server kann daher nicht nachträglich einen kollidierenden Schlüssel wählen, und der kurze Code bleibt vertrauenswürdig.</p><ul><li>Für die stärkste Garantie vergleichen Sie den Code außerhalb des Kanals — persönlich oder per Sprachanruf.</li><li>Wenn die beiden Codes abweichen, brechen Sie die Übertragung ab: Möglicherweise fängt jemand die Verbindung ab.</li></ul>
+      <h2>Was der Server nie sieht</h2><p>Der Dienst ist so gestaltet, dass Folgendes in keinem Modus unsere Server erreicht:</p><p>Im Echtzeitmodus berühren die Dateidaten den Server überhaupt nicht — sie fließen direkt zwischen den beiden Geräten. Der Signalisierungsserver leitet nur Nachrichten zum Verbindungsaufbau weiter und sieht die Raumzugehörigkeit (Ihre öffentliche IP), einen von Ihnen gewählten Gerätenamen und die Anwesenheit.</p><ul><li>Den Inhalt Ihrer Dateien.</li><li>Die Namen Ihrer Dateien.</li><li>Ihre Verschlüsselungsschlüssel.</li></ul>
+      <h2>Wenn Ihre Dateien weitergeleitet werden (TURN)</h2><p>Wenn zwei Geräte über verschiedene Netzwerke hinweg keine direkte Verbindung aufbauen können (restriktive NATs oder Firewalls), wird der verschlüsselte Datenstrom über einen TURN-Server weitergeleitet, damit die Übertragung dennoch abgeschlossen werden kann. Zuerst wird stets eine direkte Peer-to-Peer-Verbindung versucht; die Weiterleitung ist ein Rückfall, und Weiterleitungs-Anmeldedaten werden nur an Sitzungen mit Kopplungscode und Freigabelink ausgegeben.</p><ul><li>Die Weiterleitung übermittelt nur Chiffretext — sie kann Ihre Dateien nicht lesen, die Ende-zu-Ende-verschlüsselt bleiben.</li><li>Für den Betrieb des Dienstes erfassen wir nur die Anzahl der weitergeleiteten Bytes pro Übertragung, zugeordnet dem angemeldeten Benutzer, der sie erstellt hat.</li><li>Weitergeleitete Inhalte sehen wir nie ein.</li></ul>
+      <h2>Zwischengespeicherte Download-Links — der Schlüssel verlässt Ihren Browser nie</h2><p>Der optionale Download-Link-Modus ist für den Fall gedacht, dass der Empfänger nicht online ist. Ihr Browser verschlüsselt die Dateien mit AES-256-GCM, bevor irgendetwas hochgeladen wird, und der Entschlüsselungsschlüssel wird ausschließlich im URL-Fragment abgelegt — dem Teil nach dem # —, das Browser nie an den Server senden.</p><ul><li>Der Server speichert nur Chiffretext sowie die Chiffretextgröße und Zeitstempel für Kontingent und Bereinigung — niemals Klartext, Dateinamen oder Schlüssel.</li><li>Jeder mit dem vollständigen Link kann entschlüsseln; behandeln Sie den Link daher wie die Datei selbst und teilen Sie ihn über einen vertrauenswürdigen Kanal.</li><li>Links können so eingestellt werden, dass sie ablaufen (1, 3 oder 7 Tage) oder nach dem ersten vollständigen Download verfallen.</li></ul>
+      <h2>Dateiintegrität (SHA-256)</h2><p>Über die Vertraulichkeit hinaus wird die Integrität jeder Datei überprüft. Jeder Chunk trägt ein AES-GCM-Authentifizierungs-Tag, und ein SHA-256-Hash pro Datei wird Ende-zu-Ende auf der Empfängerseite überprüft, sodass eine beschädigte oder manipulierte Datei erkannt und nicht stillschweigend akzeptiert wird.</p>
+      <h2>Wovor Relayium nicht schützt</h2><p>Ende-zu-Ende-Verschlüsselung schützt Daten während der Übertragung zwischen zwei ehrlichen Endpunkten. Konstruktionsbedingt kann sie nicht schützen vor:</p><ul><li>Einem kompromittierten Gerät oder Browser an einem der beiden Enden — Schadsoftware, einer bösartigen Browsererweiterung oder jemandem, der auf den Bildschirm sieht.</li><li>Metadaten, die der Server zwangsläufig verarbeitet: dass eine Übertragung stattfand, deren Größe und Zeitpunkt und — falls Sie angemeldet waren — das Konto, das sie erstellt hat.</li><li>Einem Empfänger, der sich entscheidet, die Dateien nach Erhalt zu behalten oder weiterzuleiten.</li><li>Dem Teilen eines Download-Links über einen nicht vertrauenswürdigen Kanal, da der Entschlüsselungsschlüssel im Link mitreist.</li></ul>
+      <h2>Browserunterstützung und ihre Grenzen</h2><p>Relayium läuft in jedem modernen Browser mit WebRTC über HTTPS. Einige Fähigkeiten unterscheiden sich je nach Browser:</p><ul><li>Chrome und Edge streamen große Dateien direkt auf die Festplatte, ohne praktische Speicherobergrenze.</li><li>Firefox und Safari puffern Dateien im Arbeitsspeicher, sodass sehr große Dateien (über etwa 200 MB) fehlschlagen können — bevorzugen Sie Chrome/Edge oder nutzen Sie für solche Dateien den Download-Link-Modus.</li><li>WebRTC erfordert einen sicheren Kontext (HTTPS); die App stellt über einfaches HTTP keine Verbindung her.</li></ul>
+      <h2>Open Source und Melden von Problemen</h2><p>Das Protokolldesign sowie der gesamte Client- und Servercode sind auf GitHub öffentlich, sodass jeder die Kryptografie prüfen, einen eigenen Server betreiben oder beitragen kann. Wenn Sie ein Sicherheitsproblem finden, melden Sie es bitte vertraulich über die GitHub-Schwachstellenmeldung im Repository, anstatt ein öffentliches Issue zu eröffnen.</p>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/de/privacy">Datenschutzerklärung</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

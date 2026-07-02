@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>セキュリティと脅威モデル · Relayium</title>
+    <meta name="description" content="Relayium がファイルを保護する仕組み：転送ごとの X25519 鍵と AES-256-GCM、悪意あるサーバーを見破るためのコミット後開示ハンドシェイクを備えた SAS 検証コード、ゼロ知識ダウンロードリンク、そして何を守り何を守らないかの率直な説明。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ja/security" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/security" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/security" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/security" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/security" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/security" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/security" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/security" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"セキュリティと脅威モデル · Relayium","description":"Relayium がファイルを保護する仕組み：転送ごとの X25519 鍵と AES-256-GCM、悪意あるサーバーを見破るためのコミット後開示ハンドシェイクを備えた SAS 検証コード、ゼロ知識ダウンロードリンク、そして何を守り何を守らないかの率直な説明。","url":"https://relayium.com/ja/security","inLanguage":"ja","dateModified":"2026-07-01","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:21px;margin:34px 0 10px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>セキュリティと脅威モデル</h1>
+      <p class="updated">最終更新: 2026-07-01</p>
+      <nav class="langbar" aria-label="Language"><a href="/security">English</a><a href="/zh/security">中文</a><a href="/ja/security" aria-current="true">日本語</a><a href="/ko/security">한국어</a><a href="/de/security">Deutsch</a><a href="/fr/security">Français</a></nav>
+      <p>Relayium は、鍵を握るのはサーバーではなくファイルを転送する当事者であるように設計されています。このページでは、何がどのように保護されるのか、そしてその保護の限界を説明します。</p>
+      <p>要点：リアルタイムモードではファイルは当社のサーバーを一切通りません。暗号鍵は各デバイスで新たに生成され、デバイスの外に出ることはありません。そして短い検証コードによって、当事者は悪意あるサーバーを見破ることができます。以下に詳細を記します。</p>
+      <h2>エンドツーエンド暗号化（X25519 + AES-256-GCM）</h2><p>転送ごとに、各デバイスで新しい一時的な X25519 鍵ペアが生成されます。2 台のデバイスは鍵交換を行い、両ブラウザ内にのみ存在する共有 AES-256-GCM 鍵を導出します。各チャンクはその鍵と一意のノンスで暗号化されるため、シグナリングサーバー、そしてあらゆる中継サーバーが目にするのは暗号文だけです。</p><ul><li>鍵は一時的で転送ごとに独立しており、セッションをまたいで再利用されることはありません。</li><li>共有鍵は 2 台のデバイス上で導出され、いかなるサーバーにも送信・保存されません。</li><li>暗号化は WebRTC 自身のトランスポート層セキュリティの上のアプリケーション層で適用されるため、トランスポート層が侵害されても有効性を保ちます。</li></ul>
+      <h2>検証コード（SAS）——悪意あるサーバーの検出</h2><p>WebRTC 標準の暗号化（DTLS）は鍵のフィンガープリントをシグナリングサーバー経由で交換するため、不正なサーバーが中間に入り鍵をすり替える可能性があります。これを検出するため、Relayium は双方の公開鍵から 6 桁の Short Authentication String（SAS）を導出し、両方の画面に表示します。2 つのコードが一致すれば、中間に誰もいません。</p><p>単純な 6 桁のコード（約 20 ビット）は、原理的には中継サーバーが一致するコードを総当たりで作り出す余地があります。Relayium はコミット後開示ハンドシェイクでこの隙を塞ぎます。各側はまず鍵のハッシュを送ってコミットし、相手のコミットメントを受け取ってから初めて鍵を開示します。そのためサーバーは後から衝突する鍵を選ぶことができず、短いコードは信頼できるままです。</p><ul><li>最も強い保証を得るには、コードを帯域外——対面または音声通話——で照合してください。</li><li>2 つのコードが異なる場合は転送を中止してください。誰かが接続を傍受している可能性があります。</li></ul>
+      <h2>サーバーが決して見ないもの</h2><p>本サービスは、以下がどのモードでも当社のサーバーに届かないように設計されています：</p><p>リアルタイムモードでは、ファイルの実体はサーバーを一切通らず、2 台のデバイス間で直接やり取りされます。シグナリングサーバーは接続確立のためのメッセージを中継するだけで、把握するのはルームの所属（あなたの公開 IP）、あなたが選んだデバイス名、在席状況のみです。</p><ul><li>ファイルの内容。</li><li>ファイルの名前。</li><li>あなたの暗号鍵。</li></ul>
+      <h2>ファイルが中継される場合（TURN）</h2><p>2 台のデバイスがネットワークをまたいで直接接続できない場合（制限の厳しい NAT やファイアウォール）、転送を完了させるために暗号化ストリームが TURN サーバー経由で中継されます。まず常に直接のピアツーピアが試みられ、中継はフォールバックであり、中継用の資格情報が発行されるのはペアリングコードと共有リンクのセッションのみです。</p><ul><li>中継サーバーは暗号文のみを転送します。ファイルを読むことはできず、エンドツーエンド暗号化が維持されます。</li><li>サービス運用のため、転送ごとの中継バイト数のみを記録し、それを作成したサインイン済みユーザーに紐付けます。</li><li>中継されたコンテンツを検査することはありません。</li></ul>
+      <h2>一時保存ダウンロードリンク——鍵はブラウザから出ない</h2><p>オプションのダウンロードリンクモードは、受信者がオンラインでない場合のためのものです。ブラウザは何かがアップロードされる前にファイルを AES-256-GCM で暗号化し、復号鍵は URL フラグメント——# より後ろの部分——にのみ置かれます。ブラウザはこれをサーバーに送信しません。</p><ul><li>サーバーが保存するのは暗号文と、クォータおよびクリーンアップのための暗号文サイズとタイムスタンプだけで、平文・ファイル名・鍵は決して保存しません。</li><li>完全なリンクを持つ人は誰でも復号できるため、リンクをファイルそのものと同様に扱い、信頼できる経路で共有してください。</li><li>リンクには有効期限（1、3、または 7 日）を設定するか、最初の完全なダウンロード後に消える設定にできます。</li></ul>
+      <h2>ファイル整合性（SHA-256）</h2><p>機密性に加えて、各ファイルの整合性も検証されます。各チャンクには AES-GCM の認証タグが付き、受信側ではファイルごとの SHA-256 ハッシュがエンドツーエンドで照合されるため、破損・改ざんされたファイルは黙って受け入れられるのではなく検出されます。</p>
+      <h2>Relayium が防げないこと</h2><p>エンドツーエンド暗号化は、2 つの誠実なエンドポイント間の転送中のデータを保護します。設計上、次のものは防げません：</p><ul><li>いずれかの端末側のデバイスやブラウザの侵害——マルウェア、悪意ある拡張機能、あるいは画面を覗き見る人。</li><li>サーバーが必然的に扱うメタデータ：転送が行われた事実、そのサイズと時刻、そして（サインインしていれば）作成したアカウント。</li><li>受信者がファイルを受け取った後に保持または転送することを選ぶこと。</li><li>復号鍵がリンク内に含まれるため、信頼できない経路でダウンロードリンクを共有すること。</li></ul>
+      <h2>ブラウザ対応とその限界</h2><p>Relayium は、HTTPS 経由で WebRTC が使える最新ブラウザで動作します。一部の機能はブラウザによって異なります：</p><ul><li>Chrome と Edge は大きなファイルをディスクへ直接ストリーミングし、実質的なメモリ上限はありません。</li><li>Firefox と Safari はファイルをメモリにバッファするため、非常に大きなファイル（およそ 200 MB 超）は失敗することがあります——Chrome/Edge を使うか、そうしたファイルにはダウンロードリンクモードをご利用ください。</li><li>WebRTC はセキュアコンテキスト（HTTPS）を必要とします。アプリは平文の HTTP では接続しません。</li></ul>
+      <h2>オープンソースと問題の報告</h2><p>プロトコル設計とクライアント・サーバーの全コードは GitHub で公開されており、誰でも暗号方式を監査し、自分のサーバーを運用し、貢献できます。セキュリティ上の問題を見つけた場合は、公開の issue を作成するのではなく、リポジトリの GitHub 非公開脆弱性報告を通じて非公開でご報告ください。</p>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/ja/privacy">プライバシーポリシー</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>
