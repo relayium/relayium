@@ -9,6 +9,12 @@
 > - P0-3 修正「无需账号」不实文案（README / index.html / llms.txt；应用内 i18n 本就准确）
 > - P0-4 根目录 `Dockerfile` + `docker-compose.yml` + `.dockerignore`（两阶段构建已在本机验证）+ DEPLOYMENT.md Docker 章节
 > P1（含 CLI）与 P2 待后续。
+>
+> **P1 进度（2026-07-02 续）**：
+> - P1-1 PWA ✅ 完成——手写 Service Worker（自写 Vite 插件注入 hashed 资源预缓存 + 版本失效）+ manifest `share_target` + 入站分享落地（Android/Chromium；iOS 不支持已如实说明）。
+> - P1-2 部分 ✅——Wake Lock + 连接路径徽标已完成（见 `specs/2026-07-02-p1-2-*`）；**断点续传仍未做**，两块 P1 完成后独立立项。
+> - P1-3 ✅ 完成——文件夹发送（webkitdirectory + 拖拽目录递归、保留相对路径）、`MAX_FILES` 10→1000（含 manifest 字节守卫）、接收端嵌套目录写入、缺 FSA 浏览器手写 store-only ZIP 兜底。
+> - P1-4 CLI、P1-5 持久配对 待后续。
 
 ---
 
