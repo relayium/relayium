@@ -215,6 +215,15 @@ func (s *SQLiteStore) RevokeUserSessions(ctx context.Context, userID, exceptID s
 	return err
 }
 
+// DeleteExpiredSessions reclaims session rows that can no longer authenticate:
+// past their expiry or explicitly revoked. Both are already rejected by
+// GetSession, so deleting them changes nothing but bounds table growth.
+func (s *SQLiteStore) DeleteExpiredSessions(ctx context.Context, now int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM sessions WHERE expires_at < ? OR revoked <> 0`, now)
+	return err
+}
+
 func (s *SQLiteStore) CreateMagicToken(ctx context.Context, t MagicToken) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO magic_tokens (token_hash, email, created_at, expires_at, used_at) VALUES (?, ?, ?, ?, 0)`,
@@ -239,6 +248,15 @@ func (s *SQLiteStore) UseMagicToken(ctx context.Context, tokenHash string, now i
 		`SELECT token_hash, email, created_at, expires_at, used_at FROM magic_tokens WHERE token_hash = ?`, tokenHash,
 	).Scan(&t.TokenHash, &t.Email, &t.CreatedAt, &t.ExpiresAt, &t.UsedAt)
 	return t, err == nil, err
+}
+
+// DeleteSpentMagicTokens reclaims one-time login tokens that are no longer
+// usable: already redeemed (used_at != 0) or expired. UseMagicToken already
+// refuses these, so removal is pure garbage collection.
+func (s *SQLiteStore) DeleteSpentMagicTokens(ctx context.Context, now int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM magic_tokens WHERE used_at <> 0 OR expires_at < ?`, now)
+	return err
 }
 
 func (s *SQLiteStore) UpsertDevice(ctx context.Context, d Device) (Device, error) {
@@ -550,6 +568,20 @@ func (s *SQLiteStore) MarkDownloaded(ctx context.Context, id string, at int64) e
 	return err
 }
 
+// ClaimBurnDownload atomically claims the one download of a burn-after-read file.
+// The WHERE clause (burn_after_read=1 AND downloaded_at=0) means only the first
+// concurrent UPDATE affects a row; RowsAffected==1 is the single winner.
+func (s *SQLiteStore) ClaimBurnDownload(ctx context.Context, id string, at int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE stored_files SET downloaded_at = ? WHERE id = ? AND burn_after_read = 1 AND downloaded_at = 0`,
+		at, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n == 1, nil
+}
+
 func (s *SQLiteStore) DeleteStoredFile(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM stored_files WHERE id = ?`, id)
 	return err
@@ -589,6 +621,33 @@ func (s *SQLiteStore) UserUploadedSince(ctx context.Context, userID string, sinc
 		return 0, err
 	}
 	return total.Int64, nil // SUM over no rows is NULL → 0
+}
+
+// ReserveUpload sums the rolling window, checks the quota, and inserts the event
+// in one transaction. With MaxOpenConns(1) SQLite serializes writers, so two
+// concurrent reservations can never both read a stale (pre-insert) sum and both
+// pass the check — the loser sees the winner's committed row.
+func (s *SQLiteStore) ReserveUpload(ctx context.Context, e UploadEvent, since, quota int64) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback() // no-op after a successful Commit
+	var used sql.NullInt64
+	if err := tx.QueryRowContext(ctx,
+		`SELECT SUM(bytes) FROM upload_events WHERE user_id = ? AND uploaded_at >= ?`,
+		e.UserID, since).Scan(&used); err != nil {
+		return false, err
+	}
+	if used.Int64+e.Bytes > quota {
+		return false, nil
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO upload_events (id, user_id, bytes, uploaded_at) VALUES (?, ?, ?, ?)`,
+		e.ID, e.UserID, e.Bytes, e.UploadedAt); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
 }
 
 func (s *SQLiteStore) PruneUploadEvents(ctx context.Context, before int64) error {
