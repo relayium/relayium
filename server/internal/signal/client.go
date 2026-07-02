@@ -15,12 +15,36 @@ import (
 const (
 	pingInterval = 25 * time.Second
 	pingTimeout  = 10 * time.Second
+	// writeTimeout bounds a single frame write. The hub broadcasts to every peer
+	// on one goroutine, so a stuck/slow consumer with no write deadline could
+	// wedge the whole room until coder/websocket's own ~35s guard fires. Ten
+	// seconds is generous for a live signaling frame yet fails a dead peer fast.
+	writeTimeout = 10 * time.Second
 )
 
 type wsConn struct {
-	ctx context.Context
-	c   *websocket.Conn
-	mu  sync.Mutex // serialize writes
+	ctx          context.Context
+	c            *websocket.Conn
+	mu           sync.Mutex // serialize writes
+	writeTimeout time.Duration
+	// writeFn performs the actual frame write; a field so tests can inject a
+	// blocking writer without a live socket. Defaults to c.Write.
+	writeFn func(ctx context.Context, typ websocket.MessageType, p []byte) error
+}
+
+// newWSConn wires a wsConn to a live websocket with the default write timeout.
+func newWSConn(ctx context.Context, c *websocket.Conn) *wsConn {
+	return &wsConn{ctx: ctx, c: c, writeTimeout: writeTimeout, writeFn: c.Write}
+}
+
+// send writes one already-encoded frame under a write deadline derived from the
+// connection context, returning any write/timeout error.
+func (w *wsConn) send(b []byte) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	ctx, cancel := context.WithTimeout(w.ctx, w.writeTimeout)
+	defer cancel()
+	return w.writeFn(ctx, websocket.MessageText, b)
 }
 
 func (w *wsConn) Send(e Envelope) {
@@ -28,16 +52,22 @@ func (w *wsConn) Send(e Envelope) {
 	if err != nil {
 		return
 	}
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	_ = w.c.Write(w.ctx, websocket.MessageText, b)
+	if err := w.send(b); err != nil {
+		// A slow or stuck consumer must not stall the shared broadcast path. On
+		// write timeout (or any write error) close the socket: coder/websocket
+		// has already torn down the frame stream, and this unblocks the Read loop
+		// so the hub drops this peer.
+		if w.c != nil {
+			_ = w.c.Close(websocket.StatusPolicyViolation, "slow consumer")
+		}
+	}
 }
 
 // ServeWS handles one websocket client for its whole lifetime.
 func ServeWS(h *Hub, idgen func() string) func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, clientIP string) {
 	return func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, clientIP string) {
 		id := idgen()
-		conn := &wsConn{ctx: ctx, c: c}
+		conn := newWSConn(ctx, c)
 		joined := false
 		defer func() {
 			if joined {

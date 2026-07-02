@@ -80,10 +80,11 @@ func (rl *RateLimiter) Run(ctx context.Context, interval time.Duration) {
 }
 
 // PairHandler serves the anonymous POST /api/pair endpoint: it rate-limits by
-// client IP, then mints a short rendezvous code. No auth, no DB.
-func PairHandler(reg *PairRegistry, rl *RateLimiter) http.HandlerFunc {
+// client IP, then mints a short rendezvous code. No auth, no DB. The IPExtractor
+// determines the rate-limit key (see IPExtractor for the X-Forwarded-For policy).
+func PairHandler(reg *PairRegistry, rl *RateLimiter, ipx *IPExtractor) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ip := ClientIP(r)
+		ip := ipx.IP(r)
 		if !rl.Allow(ip) {
 			http.Error(w, "too many pairing requests", http.StatusTooManyRequests)
 			return
