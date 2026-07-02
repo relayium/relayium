@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -74,6 +76,35 @@ func envBool(key string, def bool) bool {
 		}
 	}
 	return def
+}
+
+// parseTrustedProxies parses a comma-separated list of CIDRs (or bare IPs,
+// treated as /32 or /128) into networks used to decide when X-Forwarded-For may
+// be trusted. Empty entries are skipped; an empty input yields a nil slice,
+// meaning no proxies are trusted and XFF is ignored (the default-safe posture).
+func parseTrustedProxies(s string) ([]*net.IPNet, error) {
+	var out []*net.IPNet
+	for _, p := range strings.Split(s, ",") {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if !strings.Contains(p, "/") {
+			if ip := net.ParseIP(p); ip != nil {
+				if ip.To4() != nil {
+					p += "/32"
+				} else {
+					p += "/128"
+				}
+			}
+		}
+		_, n, err := net.ParseCIDR(p)
+		if err != nil {
+			return nil, fmt.Errorf("invalid trusted proxy %q: %w", p, err)
+		}
+		out = append(out, n)
+	}
+	return out, nil
 }
 
 // envInt64 parses the env var key as a base-10 int64; on an unset or unparseable
