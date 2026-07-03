@@ -3,6 +3,7 @@
   import Account from "./Account.svelte";
   import StoredUpload from "./StoredUpload.svelte";
   import HowItWorks from "./HowItWorks.svelte";
+  import CrossSell from "./CrossSell.svelte";
   import ModeCompare from "./ModeCompare.svelte";
   import FeatureStrip from "./FeatureStrip.svelte";
   import UseCases from "./UseCases.svelte";
@@ -40,6 +41,7 @@
     </section>
   </div>
 
+  <CrossSell target="realtime" />
   <HowItWorks variant="offline" />
   <ModeCompare />
   <FeatureStrip />
