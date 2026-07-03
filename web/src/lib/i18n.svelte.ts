@@ -47,6 +47,7 @@ export interface Messages {
   peersTitle: string;
   crossPeersTitle: string; // heading for the single connected peer on the cross-network page
   emptyPeers: string;
+  emptyCrossCta: string; // LAN empty-state escape hatch → cross-network transfer
   dragSendOne: (name: string) => string;
   dragSendMany: string;
   pickHint: (max: number) => string;
@@ -262,6 +263,7 @@ const zh: Messages = {
   pickSendTo: (n) => `点击或拖放文件，发送给 ${n}`,
   generating: "生成中…",
   emptyPeers: "还没有其它设备。请在同一网络下的另一台设备 / 另一个浏览器窗口打开本页面。",
+  emptyCrossCta: "设备不在同一网络？改用跨网络传输 →",
   dragSendOne: (name) => `松手发送给 ${name}`,
   dragSendMany: "拖到某台设备上发送",
   pickHint: (m) => `点击选择文件 · 或拖放到此处（最多 ${m} 个）`,
@@ -501,6 +503,7 @@ const en: Messages = {
   pickSendTo: (n) => `Click or drop files to send to ${n}`,
   generating: "Creating…",
   emptyPeers: "No other devices yet. Open this page on another device or browser window on the same network.",
+  emptyCrossCta: "Not on the same network? Try cross-network transfer →",
   dragSendOne: (name) => `Release to send to ${name}`,
   dragSendMany: "Drop onto a device to send",
   pickHint: (m) => `Click to choose files · or drop them here (up to ${m})`,
@@ -740,6 +743,7 @@ const ja: Messages = {
   pickSendTo: (n) => `クリックまたはドロップで ${n} に送信`,
   generating: "生成中…",
   emptyPeers: "他のデバイスはまだありません。同じネットワーク上の別のデバイスやブラウザウィンドウでこのページを開いてください。",
+  emptyCrossCta: "同じネットワークにない場合は、ネットワーク間転送を →",
   dragSendOne: (name) => `${name} に送信するには離してください`,
   dragSendMany: "送信先のデバイスにドロップしてください",
   pickHint: (m) => `クリックしてファイルを選択 · またはここにドロップ（最大 ${m} 個）`,
@@ -979,6 +983,7 @@ const ko: Messages = {
   pickSendTo: (n) => `클릭하거나 파일을 놓아 ${n}에게 전송`,
   generating: "생성 중…",
   emptyPeers: "아직 다른 기기가 없습니다. 같은 네트워크의 다른 기기나 브라우저 창에서 이 페이지를 여세요.",
+  emptyCrossCta: "같은 네트워크가 아닌가요? 네트워크 간 전송 →",
   dragSendOne: (name) => `놓으면 ${name}에게 전송`,
   dragSendMany: "보낼 기기 위에 놓으세요",
   pickHint: (m) => `클릭하여 파일 선택 · 또는 여기에 드롭(최대 ${m}개)`,
@@ -1218,6 +1223,7 @@ const de: Messages = {
   pickSendTo: (n) => `Klicken oder Dateien ablegen, um an ${n} zu senden`,
   generating: "Wird erstellt…",
   emptyPeers: "Noch keine anderen Geräte. Öffnen Sie diese Seite auf einem anderen Gerät oder Browserfenster im selben Netzwerk.",
+  emptyCrossCta: "Nicht im selben Netzwerk? Netzwerkübergreifend übertragen →",
   dragSendOne: (name) => `Loslassen, um an ${name} zu senden`,
   dragSendMany: "Zum Senden auf ein Gerät ziehen",
   pickHint: (m) => `Zum Auswählen klicken · oder hierher ziehen (bis zu ${m})`,
@@ -1457,6 +1463,7 @@ const fr: Messages = {
   pickSendTo: (n) => `Cliquez ou déposez des fichiers pour envoyer à ${n}`,
   generating: "Création…",
   emptyPeers: "Aucun autre appareil pour l’instant. Ouvrez cette page sur un autre appareil ou une autre fenêtre du même réseau.",
+  emptyCrossCta: "Pas sur le même réseau ? Essayez le transfert inter-réseaux →",
   dragSendOne: (name) => `Relâchez pour envoyer à ${name}`,
   dragSendMany: "Déposez sur un appareil pour envoyer",
   pickHint: (m) => `Cliquez pour choisir · ou déposez ici (jusqu’à ${m})`,

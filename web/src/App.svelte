@@ -950,7 +950,12 @@
       <p class="share-pending">{t.sharePending(pendingShared.length)}</p>
     {/if}
     {#if visiblePeers.length === 0}
-      <p class="empty">{t.emptyPeers}</p>
+      <div class="empty">
+        <p class="empty-lead">{t.emptyPeers}</p>
+        {#if currentRoute() === "lan"}
+          <button class="btn btn-ghost empty-cta" onclick={() => navigate("cross")}>{t.emptyCrossCta}</button>
+        {/if}
+      </div>
     {:else}
       <ul class:solo class:dragging={dragActive && dropTarget(visiblePeers.length, busy) === "pick"}>
         {#each visiblePeers as p (p.id)}
@@ -1236,10 +1241,13 @@
   .peers ul.solo .folder-btn { max-width: 240px; margin-inline: auto; width: 100%; }
 
   .empty {
-    color: var(--text); font-size: 14px; text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: var(--space-3);
+    text-align: center;
     padding: 28px 20px; border: 1.5px dashed var(--border); border-radius: 14px;
     background: var(--surface-2);
   }
+  .empty-lead { margin: 0; color: var(--text); font-size: 14px; max-width: 46ch; }
+  .empty-cta { margin-top: var(--space-1); }
 
   footer {
     margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--border);
