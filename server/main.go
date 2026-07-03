@@ -114,7 +114,7 @@ func main() {
 
 	// Anonymous, login-free pairing: short numeric codes for cross-network
 	// realtime rendezvous. Pure in-memory — works even if the DB is unavailable.
-	pairReg := signal.NewPairRegistry(300, func() int64 { return time.Now().Unix() }) // 5 min
+	pairReg := signal.NewPairRegistry(900, func() int64 { return time.Now().Unix() }) // 15 min
 	go pairReg.Run(context.Background(), time.Minute)
 	pairLimiter := signal.NewRateLimiter(10, time.Minute, func() int64 { return time.Now().Unix() })
 	go pairLimiter.Run(context.Background(), time.Minute)
