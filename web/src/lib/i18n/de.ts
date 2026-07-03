@@ -259,7 +259,7 @@ const de: Messages = {
       { q: "Ist es Open Source?", a: "Ja. Das Protokolldesign sowie der gesamte Frontend- und Backend-Code liegen offen auf GitHub — frei zum Prüfen, Selbst-Hosten oder Mitwirken." },
     ],
   },
-  crossPitch: "Im selben Netzwerk ist „LAN-Übertragung“ am einfachsten; seid ihr getrennt, nutze einen der zwei Wege unten.",
+  crossPitch: "Im selben Netzwerk ist „LAN-Übertragung“ am einfachsten; getrennt und beide online? Dann direkt hier in Echtzeit übertragen — Gegenseite offline? Unten geht's zur asynchronen Übertragung.",
   homeCross: {
     title: "Nicht im selben Netzwerk?",
     desc: "Ist die Gegenseite online, nutze Echtzeit-Direkt (ohne Anmeldung, Dateien berühren nie den Server); wenn nicht, die asynchrone Übertragung (verschlüsselt zwischengespeichert, Abruf per Link).",

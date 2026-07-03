@@ -259,7 +259,7 @@ const en: Messages = {
       { q: "Is it open source?", a: "Yes. The protocol design and all front-end and back-end code are public on GitHub — free to review, self-host, or contribute to." },
     ],
   },
-  crossPitch: "On the same network, “LAN transfer” is simplest; when you're apart, use one of the two ways below.",
+  crossPitch: "On the same network, “LAN transfer” is simplest; apart but both online, transfer right here in realtime — recipient offline? Switch to async transfer below.",
   homeCross: {
     title: "Not on the same network?",
     desc: "If they're online, use realtime direct (no sign-in, files never touch the server); if not, use async transfer (encrypted storage, fetch by link anytime).",

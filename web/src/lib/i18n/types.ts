@@ -234,7 +234,7 @@ export interface Messages {
     sub: string;
     items: { q: string; a: string }[];
   };
-  crossPitch: string; // one-line cross-network pitch under the two cards
+  crossPitch: string; // one-line pitch under the realtime page header
   homeCross: { title: string; desc: string; realtimeCta: string; offlineCta: string }; // homepage → the two cross-network pages
   legal: { privacy: string; terms: string; security: string };
   // Short footer labels linking to the generated static articles/landing pages.

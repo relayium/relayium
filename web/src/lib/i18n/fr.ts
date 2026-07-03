@@ -259,7 +259,7 @@ const fr: Messages = {
       { q: "Est-ce open source ?", a: "Oui. La conception du protocole ainsi que tout le code front-end et back-end sont publics sur GitHub — libres à examiner, auto-héberger ou enrichir." },
     ],
   },
-  crossPitch: "Sur le même réseau, le « transfert en réseau local » est le plus simple ; à distance, utilisez l'une des deux façons ci-dessous.",
+  crossPitch: "Sur le même réseau, le « transfert en réseau local » est le plus simple ; à distance et tous deux en ligne, transférez ici en temps réel — destinataire hors ligne ? Passez au transfert asynchrone ci-dessous.",
   homeCross: {
     title: "Pas sur le même réseau ?",
     desc: "S'il est en ligne, utilisez le direct en temps réel (sans connexion, les fichiers ne passent jamais par le serveur) ; sinon, le transfert asynchrone (stockage chiffré, récupération par lien à tout moment).",
