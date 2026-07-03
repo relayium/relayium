@@ -225,15 +225,29 @@
   }
 
   // ── ?debug=1 diagnostics ─────────────────────────────────────────────────────────
-  // Read-only WebRTC stats surfaced in-page (phones have no dev console). Off unless
-  // the URL carries ?debug=1; never auto-uploaded — the user copies what to share.
-  const debugMode = new URLSearchParams(location.search).get("debug") === "1";
+  // Read-only WebRTC stats surfaced in-page (phones have no dev console). Never
+  // auto-uploaded — the user copies what to share. ?debug=1 turns it on and REMEMBERS
+  // it (localStorage), because room entry rewrites the URL: the pairing code lives in
+  // the # fragment and enterRoom drops the query string, so a one-shot ?debug=1 would
+  // vanish. Persisting lets a phone enable it once on the base URL, then open a code
+  // link normally and still get the panel. ?debug=0 turns it back off.
+  function readDebugFlag(): boolean {
+    const q = new URLSearchParams(location.search).get("debug");
+    try {
+      if (q === "1") { localStorage.setItem("relayium-debug", "1"); return true; }
+      if (q === "0") { localStorage.removeItem("relayium-debug"); return false; }
+      return localStorage.getItem("relayium-debug") === "1";
+    } catch { return q === "1"; } // storage disabled (private mode) — honour the URL only
+  }
+  let debugOn = $state(readDebugFlag());
   let activeConn: Conn | null = null; // set in trackPath; the panel reads .stats()
   let dbg = $state<ConnDiagnostics | null>(null);
   let dbgIncludeIps = $state(false);
+  let dbgFrozen = $state(false); // pause polling so values hold still to read/copy
   $effect(() => {
-    if (!debugMode) return;
+    if (!debugOn) return;
     const poll = async () => {
+      if (dbgFrozen) return; // frozen: keep the last snapshot on screen
       if (!activeConn) { dbg = null; return; }
       try { dbg = summarizeStats(await activeConn.stats(), dbgIncludeIps); }
       catch { dbg = null; } // pc closed between transfers — stats() can reject
@@ -244,6 +258,10 @@
   });
   function copyDiagnostics() {
     navigator.clipboard?.writeText(JSON.stringify(dbg, null, 2)).catch(() => { /* denied */ });
+  }
+  function closeDebug() {
+    try { localStorage.removeItem("relayium-debug"); } catch { /* ignore */ }
+    debugOn = false;
   }
 
   onMount(async () => {
@@ -1225,12 +1243,14 @@
   {/if}
 </main>
 
-{#if debugMode}
-  <aside class="dbg" aria-label="connection diagnostics">
+{#if debugOn}
+  <aside class="dbg" class:frozen={dbgFrozen} aria-label="connection diagnostics">
     <div class="dbg-head">
-      <strong>调试 · 连接诊断</strong>
+      <strong>调试 · 连接诊断{dbgFrozen ? " · 已冻结" : ""}</strong>
       <label><input type="checkbox" bind:checked={dbgIncludeIps} /> 含 IP</label>
+      <button type="button" onclick={() => (dbgFrozen = !dbgFrozen)}>{dbgFrozen ? "继续" : "冻结"}</button>
       <button type="button" onclick={copyDiagnostics} disabled={!dbg}>复制</button>
+      <button type="button" class="dbg-x" onclick={closeDebug} title="关闭调试" aria-label="关闭调试">✕</button>
     </div>
     {#if dbg}
       <dl>
@@ -1436,11 +1456,13 @@
     font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   }
-  .dbg-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .dbg-head strong { flex: 1; font-size: 12px; }
+  .dbg.frozen { border-color: #ffb454; }
+  .dbg-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .dbg-head strong { flex: 1 0 100%; font-size: 12px; }
   .dbg-head label { display: flex; align-items: center; gap: 3px; white-space: nowrap; opacity: 0.85; }
-  .dbg-head button { padding: 2px 8px; border: 1px solid #55555c; border-radius: 5px; background: #2a2a2e; color: inherit; cursor: pointer; }
+  .dbg-head button { padding: 3px 10px; border: 1px solid #55555c; border-radius: 5px; background: #2a2a2e; color: inherit; cursor: pointer; }
   .dbg-head button:disabled { opacity: 0.4; cursor: default; }
+  .dbg-head .dbg-x { margin-left: auto; padding: 3px 8px; }
   .dbg dl { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; margin: 0; }
   .dbg dt { opacity: 0.6; }
   .dbg dd { margin: 0; word-break: break-all; }
