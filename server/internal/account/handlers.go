@@ -85,6 +85,7 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/transfers", s.RequireSession(s.handleCreateTransfer))
 	mux.HandleFunc("GET /api/ice", s.handleICE)
 	mux.HandleFunc("GET /api/usage", s.RequireSession(s.handleUsage))
+	mux.HandleFunc("GET /api/stats", s.RequireSession(s.handleStats))
 	s.registerFileRoutes(mux)
 	return mux
 }
@@ -248,6 +249,29 @@ func (s *Service) handleUsage(w http.ResponseWriter, r *http.Request, u User) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"relayedBytes": total})
+}
+
+// handleStats serves the personal-center aggregates: lifetime upload/download
+// counts and bytes (user_stats) plus TURN relay bytes (usage_events). All are
+// the caller's own totals; no per-event data or downloader identity is exposed.
+func (s *Service) handleStats(w http.ResponseWriter, r *http.Request, u User) {
+	st, err := s.store.GetUserStats(r.Context(), u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	relay, err := s.store.UserUsageTotal(r.Context(), u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"transfers":     st.TransfersTotal,
+		"downloads":     st.DownloadsTotal,
+		"uploadBytes":   st.UploadBytes,
+		"downloadBytes": st.DownloadBytes,
+		"relayBytes":    relay,
+	})
 }
 
 func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {

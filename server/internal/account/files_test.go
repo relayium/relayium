@@ -350,3 +350,95 @@ func TestConcurrentUploadsRespectQuota(t *testing.T) {
 		t.Fatalf("accepted uploads = %d, want 4 (4*1000 <= 4096 < 5*1000)", accepted)
 	}
 }
+
+// getJSON does an authenticated GET and decodes the JSON body.
+func getJSON(t *testing.T, ts *httptest.Server, cookie *http.Cookie, path string, v any) *http.Response {
+	t.Helper()
+	req, _ := http.NewRequest("GET", ts.URL+path, nil)
+	req.AddCookie(cookie)
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatalf("get %s: %v", path, err)
+	}
+	if v != nil {
+		decodeJSON(t, resp, v)
+	}
+	return resp
+}
+
+type statsResp struct {
+	Transfers     int64 `json:"transfers"`
+	Downloads     int64 `json:"downloads"`
+	UploadBytes   int64 `json:"uploadBytes"`
+	DownloadBytes int64 `json:"downloadBytes"`
+	RelayBytes    int64 `json:"relayBytes"`
+}
+
+// TestDownloadCountAndStats: a non-burn file downloaded twice reports
+// downloadCount=2 in the list, and /api/stats aggregates 1 upload + 2 downloads
+// with matching byte totals. Downloads are recorded per fetch (no dedup).
+func TestDownloadCountAndStats(t *testing.T) {
+	ts, _, _, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "dc@example.com")
+	resp := postUpload(t, ts, cookie, "?ttl=0", uploadBody([]byte("m"), []byte("HELLO")))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("upload: %d", resp.StatusCode)
+	}
+	var up struct {
+		ID string `json:"id"`
+	}
+	decodeJSON(t, resp, &up)
+
+	for i := 0; i < 2; i++ {
+		br, _ := ts.Client().Get(ts.URL + "/api/files/" + up.ID + "/blob")
+		body, _ := io.ReadAll(br.Body)
+		br.Body.Close()
+		if br.StatusCode != http.StatusOK || string(body) != "HELLO" {
+			t.Fatalf("download %d: status=%d body=%q", i, br.StatusCode, body)
+		}
+	}
+
+	var list struct {
+		Files []map[string]any `json:"files"`
+	}
+	getJSON(t, ts, cookie, "/api/files", &list)
+	if len(list.Files) != 1 {
+		t.Fatalf("want 1 file, got %d", len(list.Files))
+	}
+	if dc, _ := list.Files[0]["downloadCount"].(float64); dc != 2 {
+		t.Fatalf("downloadCount = %v, want 2", list.Files[0]["downloadCount"])
+	}
+
+	var st statsResp
+	if r := getJSON(t, ts, cookie, "/api/stats", &st); r.StatusCode != http.StatusOK {
+		t.Fatalf("stats: %d", r.StatusCode)
+	}
+	if st.Transfers != 1 || st.Downloads != 2 {
+		t.Fatalf("stats counts = %+v, want transfers=1 downloads=2", st)
+	}
+	sz := int64(len("HELLO"))
+	if st.UploadBytes != sz || st.DownloadBytes != 2*sz {
+		t.Fatalf("stats bytes = %+v, want upload=%d download=%d", st, sz, 2*sz)
+	}
+}
+
+// TestBurnDownloadCountsInStats: a burn-after-read download deletes its row, but
+// the user's lifetime stats still record the one download + its bytes.
+func TestBurnDownloadCountsInStats(t *testing.T) {
+	ts, _, _, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "burnstat@example.com")
+	resp := postUpload(t, ts, cookie, "?burnAfterRead=1&ttl=0", uploadBody([]byte("m"), []byte("XY")))
+	var up struct {
+		ID string `json:"id"`
+	}
+	decodeJSON(t, resp, &up)
+	br, _ := ts.Client().Get(ts.URL + "/api/files/" + up.ID + "/blob")
+	io.ReadAll(br.Body)
+	br.Body.Close()
+
+	var st statsResp
+	getJSON(t, ts, cookie, "/api/stats", &st)
+	if st.Downloads != 1 || st.DownloadBytes != int64(len("XY")) {
+		t.Fatalf("burn stats = %+v, want downloads=1 downloadBytes=2", st)
+	}
+}

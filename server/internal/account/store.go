@@ -88,6 +88,17 @@ type StoredFile struct {
 	CreatedAt     int64
 	ExpiresAt     int64
 	DownloadedAt  int64 // 0 = not yet downloaded
+	DownloadCount int64 // lifetime successful downloads of this file (non-burn)
+}
+
+// UserStats are a user's lifetime aggregate counters for the personal center /
+// future metering. Monotonic (never decremented), survive file expiry/GC, and
+// carry no per-event metadata (no timestamps, no downloader identity).
+type UserStats struct {
+	TransfersTotal int64 // stored download-links created (one per upload)
+	DownloadsTotal int64 // successful downloads of this user's files (each fetch)
+	UploadBytes    int64 // ciphertext bytes uploaded
+	DownloadBytes  int64 // ciphertext bytes delivered to downloaders
 }
 
 // UploadEvent is an immutable ledger row for the rolling-24h upload quota. It is
@@ -183,6 +194,11 @@ type Store interface {
 	ClaimBurnDownload(ctx context.Context, id string, at int64) (claimed bool, err error)
 	DeleteStoredFile(ctx context.Context, id string) error
 	ListExpiredStoredFiles(ctx context.Context, now int64) ([]StoredFile, error)
+	IncDownloadCount(ctx context.Context, id string) error
+	// user_stats (lifetime aggregate counters; privacy-minimal, no per-event rows)
+	AddUploadStat(ctx context.Context, userID string, bytes int64) error
+	AddDownloadStat(ctx context.Context, userID string, bytes int64) error
+	GetUserStats(ctx context.Context, userID string) (UserStats, error)
 	// upload events (rolling-24h quota ledger)
 	RecordUpload(ctx context.Context, e UploadEvent) error
 	UserUploadedSince(ctx context.Context, userID string, since int64) (int64, error)

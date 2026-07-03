@@ -133,6 +133,9 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
+	// Lifetime stats are best-effort: a stats write failure must not fail the
+	// upload the user already completed.
+	_ = s.store.AddUploadStat(r.Context(), u.ID, size)
 	writeJSON(w, http.StatusOK, map[string]any{"id": id, "expiresAt": sf.ExpiresAt})
 }
 
@@ -185,14 +188,19 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", strconv.FormatInt(sf.Size, 10))
 	n, err := io.Copy(w, rc)
-	if err != nil {
-		return // client hung up mid-stream; the download is already spent
+	if err != nil || n != sf.Size {
+		return // client hung up / incomplete: not a counted download (burn already spent)
 	}
-	// Burn-after-read: the download is already claimed, so this is pure cleanup of
-	// the now-spent ciphertext and row (an interrupted stream leaves them for GC).
-	if sf.BurnAfterRead && n == sf.Size {
+	// Count the completed download against the file's OWNER only — never the
+	// downloader (no downloader identity is read or stored). Best-effort: a stats
+	// failure must not turn a delivered file into an error.
+	_ = s.store.AddDownloadStat(r.Context(), sf.UserID, sf.Size)
+	if sf.BurnAfterRead {
+		// Already claimed up front; this is cleanup of the now-spent ciphertext+row.
 		_ = s.blobs.Delete(r.Context(), sf.BlobKey)
 		_ = s.store.DeleteStoredFile(r.Context(), sf.ID)
+	} else {
+		_ = s.store.IncDownloadCount(r.Context(), sf.ID)
 	}
 }
 
@@ -211,6 +219,7 @@ func (s *Service) handleListFiles(w http.ResponseWriter, r *http.Request, u User
 			"expiresAt":     f.ExpiresAt,
 			"burnAfterRead": f.BurnAfterRead,
 			"downloaded":    f.DownloadedAt > 0,
+			"downloadCount": f.DownloadCount,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"files": out})

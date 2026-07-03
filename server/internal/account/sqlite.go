@@ -90,6 +90,13 @@ CREATE TABLE IF NOT EXISTS settings (
   value      INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS user_stats (
+  user_id         TEXT PRIMARY KEY REFERENCES users(id),
+  transfers_total INTEGER NOT NULL DEFAULT 0,
+  downloads_total INTEGER NOT NULL DEFAULT 0,
+  upload_bytes    INTEGER NOT NULL DEFAULT 0,
+  download_bytes  INTEGER NOT NULL DEFAULT 0
+);
 `
 
 func OpenSQLite(dsn string) (*SQLiteStore, error) {
@@ -106,6 +113,14 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 	// 列已存在时 SQLite 报 "duplicate column name"，幂等忽略。
 	if _, err := db.ExecContext(context.Background(),
 		`ALTER TABLE users ADD COLUMN password_hash TEXT`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column name") {
+		db.Close()
+		return nil, err
+	}
+	// download_count is per-file lifetime download tally, added after the initial
+	// stored_files schema. Same idempotent-ALTER pattern as password_hash above.
+	if _, err := db.ExecContext(context.Background(),
+		`ALTER TABLE stored_files ADD COLUMN download_count INTEGER NOT NULL DEFAULT 0`); err != nil &&
 		!strings.Contains(err.Error(), "duplicate column name") {
 		db.Close()
 		return nil, err
@@ -519,12 +534,15 @@ func scanStoredFile(sc rowScanner) (StoredFile, error) {
 	var f StoredFile
 	var burn int
 	err := sc.Scan(&f.ID, &f.UserID, &f.BlobKey, &f.EncManifest, &f.Size,
-		&burn, &f.CreatedAt, &f.ExpiresAt, &f.DownloadedAt)
+		&burn, &f.CreatedAt, &f.ExpiresAt, &f.DownloadedAt, &f.DownloadCount)
 	f.BurnAfterRead = burn != 0
 	return f, err
 }
 
+// storedFileCols is the INSERT column list (CreateStoredFile). storedFileSelectCols
+// adds download_count, which defaults to 0 on insert and is only ever read back.
 const storedFileCols = `id, user_id, blob_key, enc_manifest, size, burn_after_read, created_at, expires_at, downloaded_at`
+const storedFileSelectCols = storedFileCols + `, download_count`
 
 func (s *SQLiteStore) CreateStoredFile(ctx context.Context, f StoredFile) error {
 	_, err := s.db.ExecContext(ctx,
@@ -537,7 +555,7 @@ func (s *SQLiteStore) CreateStoredFile(ctx context.Context, f StoredFile) error 
 
 func (s *SQLiteStore) GetStoredFile(ctx context.Context, id string) (StoredFile, error) {
 	f, err := scanStoredFile(s.db.QueryRowContext(ctx,
-		`SELECT `+storedFileCols+` FROM stored_files WHERE id = ?`, id))
+		`SELECT `+storedFileSelectCols+` FROM stored_files WHERE id = ?`, id))
 	if err == sql.ErrNoRows {
 		return StoredFile{}, ErrNotFound
 	}
@@ -546,7 +564,7 @@ func (s *SQLiteStore) GetStoredFile(ctx context.Context, id string) (StoredFile,
 
 func (s *SQLiteStore) ListStoredFilesByUser(ctx context.Context, userID string) ([]StoredFile, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+storedFileCols+` FROM stored_files WHERE user_id = ? ORDER BY created_at DESC`, userID)
+		`SELECT `+storedFileSelectCols+` FROM stored_files WHERE user_id = ? ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -587,9 +605,57 @@ func (s *SQLiteStore) DeleteStoredFile(ctx context.Context, id string) error {
 	return err
 }
 
+// IncDownloadCount bumps a stored file's lifetime download tally by one. Used for
+// non-burn files (burn rows are deleted on download); a no-op if the row is gone.
+func (s *SQLiteStore) IncDownloadCount(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE stored_files SET download_count = download_count + 1 WHERE id = ?`, id)
+	return err
+}
+
+// AddUploadStat records one upload against the user's lifetime counters. These
+// are monotonic aggregates (never decremented, unaffected by file expiry/GC) and
+// hold no per-event metadata — the privacy-minimal form that still supports
+// snapshot-diff metering. Upserts the row on first activity.
+func (s *SQLiteStore) AddUploadStat(ctx context.Context, userID string, bytes int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO user_stats (user_id, transfers_total, upload_bytes) VALUES (?, 1, ?)
+		 ON CONFLICT(user_id) DO UPDATE SET
+		   transfers_total = transfers_total + 1,
+		   upload_bytes = upload_bytes + excluded.upload_bytes`,
+		userID, bytes)
+	return err
+}
+
+// AddDownloadStat records one successful download against the file owner's
+// lifetime counters (never the downloader — no downloader identity is touched).
+func (s *SQLiteStore) AddDownloadStat(ctx context.Context, userID string, bytes int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO user_stats (user_id, downloads_total, download_bytes) VALUES (?, 1, ?)
+		 ON CONFLICT(user_id) DO UPDATE SET
+		   downloads_total = downloads_total + 1,
+		   download_bytes = download_bytes + excluded.download_bytes`,
+		userID, bytes)
+	return err
+}
+
+// GetUserStats returns the user's lifetime aggregate counters; a user with no
+// activity yet has no row and reads back as all-zero.
+func (s *SQLiteStore) GetUserStats(ctx context.Context, userID string) (UserStats, error) {
+	var st UserStats
+	err := s.db.QueryRowContext(ctx,
+		`SELECT transfers_total, downloads_total, upload_bytes, download_bytes
+		 FROM user_stats WHERE user_id = ?`, userID,
+	).Scan(&st.TransfersTotal, &st.DownloadsTotal, &st.UploadBytes, &st.DownloadBytes)
+	if err == sql.ErrNoRows {
+		return UserStats{}, nil
+	}
+	return st, err
+}
+
 func (s *SQLiteStore) ListExpiredStoredFiles(ctx context.Context, now int64) ([]StoredFile, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+storedFileCols+` FROM stored_files WHERE expires_at < ?`, now)
+		`SELECT `+storedFileSelectCols+` FROM stored_files WHERE expires_at < ?`, now)
 	if err != nil {
 		return nil, err
 	}
