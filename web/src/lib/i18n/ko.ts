@@ -22,6 +22,7 @@ const ko: Messages = {
   pathP2p: "P2P 직접",
   pathRelay: "중계",
   sharePending: (n) => `${n}개 파일 전송 대기 — 기기를 선택하세요`,
+  sendFile: "파일 보내기",
   sendFolder: "폴더 보내기",
   accept: "받기",
   decline: "거부",

@@ -35,6 +35,7 @@ export interface Messages {
   pathP2p: string; // direct P2P over the public internet (NAT-traversed)
   pathRelay: string; // traffic going through a TURN relay
   sharePending: (n: number) => string; // files came in via the OS share sheet; pick a device
+  sendFile: string; // button: choose files to send
   sendFolder: string; // button: choose a folder to send
   accept: string;
   decline: string;

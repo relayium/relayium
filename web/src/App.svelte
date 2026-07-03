@@ -996,7 +996,7 @@
             ondragleave={(e) => (e.currentTarget as HTMLElement).classList.remove("drag")}
             ondrop={(e) => { e.stopPropagation(); if (busy) { e.preventDefault(); flash(messages[lang()].busy); return; } onDrop(e, p.id); }}
           >
-            <label>
+            <label class="pcard">
               <span class="pavatar" class:big={solo}>{p.name.slice(0, 1).toUpperCase()}</span>
               <span class="ptext">
                 {#if solo}
@@ -1006,16 +1006,19 @@
                   <span class="pick">{t.pickHint(MAX_FILES)}</span>
                 {/if}
               </span>
-              <input type="file" multiple disabled={busy}
+              <input id={`pick-${p.id}`} type="file" multiple disabled={busy}
                 onclick={(e) => { if (pendingShared.length) { e.preventDefault(); const f = pendingShared; pendingShared = []; sendFiles(p.id, f.map((file) => ({ file }))); } }}
                 onchange={(e) => pickFile(e, p.id)} />
             </label>
-            {#if folderUploadSupported}
-              <label class="folder-btn" class:disabled={busy}>
-                📁 {t.sendFolder}
-                <input type="file" webkitdirectory multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
-              </label>
-            {/if}
+            <div class="peer-actions">
+              <label class="act-btn" class:disabled={busy} for={`pick-${p.id}`}>📄 {t.sendFile}</label>
+              {#if folderUploadSupported}
+                <label class="act-btn" class:disabled={busy}>
+                  📁 {t.sendFolder}
+                  <input type="file" webkitdirectory multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
+                </label>
+              {/if}
+            </div>
           </li>
         {/each}
       </ul>
@@ -1219,7 +1222,7 @@
      minimum comfortable tap target (visual padding stays modest via flex centring). */
   @media (pointer: coarse) {
     button.x { min-height: 44px; padding-inline: 14px; }
-    .folder-btn { min-height: 44px; }
+    .act-btn { min-height: 44px; }
   }
   .status { font-size: 13.5px; color: var(--text); margin: 8px 0 10px; }
 
@@ -1250,15 +1253,15 @@
   /* A single connected peer (typical cross-network) reads as one prominent send target. */
   .peers ul.solo { grid-template-columns: 1fr; }
   .peers ul.solo .peer { border-style: solid; border-color: var(--accent-border); background: var(--accent-bg); }
-  .peers ul.solo .peer label { justify-content: center; padding: 20px; }
+  .peers ul.solo .peer .pcard { justify-content: center; padding: 20px; }
   .peer {
     border: 1.5px dashed var(--border); border-radius: 14px;
     transition: border-color .15s, background .15s;
   }
   .peer:not(.disabled):hover, .peer:global(.drag) { border-color: var(--accent-border); background: var(--accent-bg); }
   .peer.disabled { opacity: .5; }
-  .peer label { display: flex; align-items: center; gap: 14px; padding: 14px 16px; cursor: pointer; }
-  .peer.disabled label { cursor: not-allowed; }
+  .peer .pcard { display: flex; align-items: center; gap: 14px; padding: 14px 16px; cursor: pointer; }
+  .peer.disabled .pcard { cursor: not-allowed; }
   .pavatar {
     flex: none; width: 40px; height: 40px; line-height: 40px; text-align: center;
     border-radius: 50%; color: #fff; font-weight: 600;
@@ -1270,15 +1273,16 @@
   .pname { color: var(--text-h); font-weight: 500; font-size: 16px; }
   .pick { color: var(--text); font-size: 13px; }
   .peer input[type="file"] { display: none; }
-  .folder-btn {
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-    margin: 0 12px 10px; padding: 7px; border-radius: 9px;
+  .peer-actions { display: flex; gap: 8px; margin: 0 12px 10px; }
+  .act-btn {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 7px; border-radius: 9px;
     border: 1px solid var(--border); font-size: 13px; color: var(--text); cursor: pointer;
     transition: border-color .15s, background .15s, color .15s;
   }
-  .folder-btn:not(.disabled):hover { border-color: var(--accent-border); background: var(--accent-bg); color: var(--text-h); }
-  .folder-btn.disabled { cursor: not-allowed; opacity: .6; }
-  .peers ul.solo .folder-btn { max-width: 240px; margin-inline: auto; width: 100%; }
+  .act-btn:not(.disabled):hover { border-color: var(--accent-border); background: var(--accent-bg); color: var(--text-h); }
+  .act-btn.disabled { cursor: not-allowed; opacity: .6; }
+  .peers ul.solo .peer-actions { max-width: 360px; margin-inline: auto; }
 
   .empty {
     display: flex; flex-direction: column; align-items: center; gap: var(--space-3);
