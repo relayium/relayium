@@ -173,11 +173,12 @@
     else recvNotified = false;
   });
 
-  // Auto-dismiss a *successful* completion card after a few seconds so back-to-back
-  // batches don't stack stale cards; failure cards stay put (they need a read + a
-  // deliberate dismiss). The effect's cleanup cancels the timer if a new transfer
-  // replaces the card first, and the identity guard avoids clearing that new one.
-  const DISMISS_MS = 6000;
+  // Auto-dismiss a *successful* completion card after a few minutes so the user has
+  // ample time to see the result, while back-to-back batches still don't stack stale
+  // cards (a new transfer replaces the card immediately — the effect's cleanup
+  // cancels this timer and the identity guard avoids clearing the new one). Failure
+  // cards stay put (they need a read + a deliberate dismiss).
+  const DISMISS_MS = 180_000; // 3 minutes
   $effect(() => {
     const s = send;
     if (s?.done && s.ok) {
