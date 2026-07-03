@@ -1,7 +1,6 @@
 package account
 
 import (
-	"context"
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/base64"
@@ -18,7 +17,6 @@ func newICEServer(t *testing.T, secret string) (*httptest.Server, *Service, *SQL
 	t.Helper()
 	store := newTestStore(t)
 	svc := NewService(store, &capturingMailer{}, Config{
-		TransferTTL: time.Hour,
 		TURNCredTTL: time.Hour,
 		STUNURLs:    []string{"stun:stun.example.com:3478"},
 		TURNURLs:    []string{"turn:turn.example.com:3478"},
@@ -118,10 +116,9 @@ func TestICEPairCodeNoValidatorReturnsStunOnly(t *testing.T) {
 }
 
 func TestICENoSecretReturnsStunOnly(t *testing.T) {
-	ts, svc, store := newICEServer(t, "") // TURN disabled
-	u, _ := store.UpsertUserByEmail(context.Background(), "o@example.com", "O")
-	tr, _ := svc.CreateTransfer(context.Background(), u.ID)
-	resp, _ := ts.Client().Get(ts.URL + "/api/ice?room=" + tr.Token)
+	ts, svc, _ := newICEServer(t, "") // TURN disabled
+	svc.SetPairCodeValidator(func(c string) bool { return c == "424242" })
+	resp, _ := ts.Client().Get(ts.URL + "/api/ice?code=424242")
 	servers := iceServersFromBody(t, resp)
 	if hasTURN(servers) {
 		t.Fatalf("no secret must mean no TURN, got %+v", servers)

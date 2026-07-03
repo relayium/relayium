@@ -17,7 +17,6 @@ type Config struct {
 	BaseURL         string
 	SessionTTL      time.Duration
 	MagicTTL        time.Duration
-	TransferTTL     time.Duration
 	STUNURLs        []string
 	TURNURLs        []string
 	TURNSecret      string
@@ -46,7 +45,7 @@ type Service struct {
 	adminSessions     map[string]int64 // token -> 过期 unix 秒
 	adminMu           sync.Mutex
 	adminTOTPMu       sync.Mutex
-	adminTOTPLastStep int64             // last TOTP time-step accepted for admin login (replay guard)
+	adminTOTPLastStep int64 // last TOTP time-step accepted for admin login (replay guard)
 	adminLogins       *loginThrottle
 	pwLogins          *loginThrottle    // per email+IP failed password-login limiter
 	magicRequests     *loginThrottle    // per email+IP magic-link request rate limiter
@@ -83,34 +82,6 @@ func randToken() string {
 func hashToken(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
-}
-
-// CreateTransfer mints a one-time rendezvous token bound to userID.
-func (s *Service) CreateTransfer(ctx context.Context, userID string) (Transfer, error) {
-	now := s.now()
-	t := Transfer{
-		Token:     randToken(),
-		UserID:    userID,
-		CreatedAt: now.Unix(),
-		ExpiresAt: now.Add(s.cfg.TransferTTL).Unix(),
-	}
-	if err := s.store.CreateTransfer(ctx, t); err != nil {
-		return Transfer{}, err
-	}
-	return t, nil
-}
-
-// ValidateTransferToken reports whether token names a live (existing, unexpired)
-// rendezvous room. Fails closed on empty input or any store error.
-func (s *Service) ValidateTransferToken(ctx context.Context, token string) bool {
-	if token == "" {
-		return false
-	}
-	t, err := s.store.GetTransfer(ctx, token)
-	if err != nil {
-		return false
-	}
-	return s.now().Unix() < t.ExpiresAt
 }
 
 func (s *Service) IssueSession(ctx context.Context, userID string) (Session, error) {

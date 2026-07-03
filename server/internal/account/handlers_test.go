@@ -16,7 +16,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *capturingMailer) {
 	t.Helper()
 	store := newTestStore(t)
 	mail := &capturingMailer{}
-	svc := NewService(store, mail, Config{BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute, TransferTTL: time.Hour, EnableMagic: true})
+	svc := NewService(store, mail, Config{BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute, EnableMagic: true})
 	ts := httptest.NewServer(svc.Routes())
 	t.Cleanup(ts.Close)
 	return ts, mail
@@ -146,7 +146,7 @@ func TestDeviceCRUDOverHTTP(t *testing.T) {
 func TestUsageEndpointRequiresSessionAndReturnsTotal(t *testing.T) {
 	store := newTestStore(t)
 	mail := &capturingMailer{}
-	svc := NewService(store, mail, Config{BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute, TransferTTL: time.Hour, EnableMagic: true})
+	svc := NewService(store, mail, Config{BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute, EnableMagic: true})
 	ts := httptest.NewServer(svc.Routes())
 	t.Cleanup(ts.Close)
 	client := ts.Client()
@@ -340,7 +340,9 @@ func TestChangePasswordEndpoint(t *testing.T) {
 			t.Fatalf("do: %v", err)
 		}
 		defer r.Body.Close()
-		var b struct{ Error string `json:"error"` }
+		var b struct {
+			Error string `json:"error"`
+		}
 		_ = json.NewDecoder(r.Body).Decode(&b)
 		return r.StatusCode, b.Error
 	}

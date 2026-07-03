@@ -48,13 +48,6 @@ CREATE TABLE IF NOT EXISTS devices (
   created_at   INTEGER NOT NULL,
   last_seen_at INTEGER NOT NULL DEFAULT 0
 );
-CREATE TABLE IF NOT EXISTS transfers (
-  token      TEXT PRIMARY KEY,
-  user_id    TEXT NOT NULL REFERENCES users(id),
-  created_at INTEGER NOT NULL,
-  expires_at INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_transfers_user ON transfers(user_id);
 CREATE TABLE IF NOT EXISTS usage_events (
   alloc_id      TEXT PRIMARY KEY,
   token         TEXT NOT NULL,
@@ -122,6 +115,14 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 	if _, err := db.ExecContext(context.Background(),
 		`ALTER TABLE stored_files ADD COLUMN download_count INTEGER NOT NULL DEFAULT 0`); err != nil &&
 		!strings.Contains(err.Error(), "duplicate column name") {
+		db.Close()
+		return nil, err
+	}
+	// The transfers table backed the retired share-link mode (one-time
+	// rendezvous tokens). Dropping it is idempotent and safe: tokens lived
+	// at most one hour, so nothing in an existing deployment still needs it.
+	if _, err := db.ExecContext(context.Background(),
+		`DROP TABLE IF EXISTS transfers`); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -320,24 +321,6 @@ func (s *SQLiteStore) DeleteDevice(ctx context.Context, id, userID string) error
 	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM devices WHERE id = ? AND user_id = ?`, id, userID)
 	return err
-}
-
-func (s *SQLiteStore) CreateTransfer(ctx context.Context, t Transfer) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO transfers (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`,
-		t.Token, t.UserID, t.CreatedAt, t.ExpiresAt)
-	return err
-}
-
-func (s *SQLiteStore) GetTransfer(ctx context.Context, token string) (Transfer, error) {
-	var t Transfer
-	err := s.db.QueryRowContext(ctx,
-		`SELECT token, user_id, created_at, expires_at FROM transfers WHERE token = ?`, token,
-	).Scan(&t.Token, &t.UserID, &t.CreatedAt, &t.ExpiresAt)
-	if err == sql.ErrNoRows {
-		return Transfer{}, ErrNotFound
-	}
-	return t, err
 }
 
 func (s *SQLiteStore) RecordUsage(ctx context.Context, e UsageEvent) error {

@@ -166,7 +166,6 @@ func main() {
 			BaseURL:         *baseURL,
 			SessionTTL:      720 * time.Hour, // 30 days
 			MagicTTL:        15 * time.Minute,
-			TransferTTL:     time.Hour,
 			GoogleClientID:  *googleID,
 			GoogleSecret:    *googleSecret,
 			GoogleRedirect:  *baseURL + "/api/auth/google/callback",
@@ -184,9 +183,9 @@ func main() {
 			DefaultTTL:      *fileTTL,
 			MaxTTL:          *fileTTLMax,
 		})
-		// Let /api/ice hand TURN credentials to anonymous pairing-code rooms too,
-		// not just logged-in transfer tokens — otherwise code transfers are
-		// STUN-only and fail across strict NATs.
+		// Wire /api/ice to validate anonymous pairing codes so it can hand out
+		// TURN credentials for them — otherwise code transfers are STUN-only
+		// and fail across strict NATs.
 		acct.SetPairCodeValidator(pairReg.Validate)
 		if disk, derr := storage.NewDiskStore(*blobDir); derr != nil {
 			log.Printf("WARNING: open blob dir %q: %v — stored transfers disabled", *blobDir, derr)

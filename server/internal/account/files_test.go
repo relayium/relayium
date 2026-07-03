@@ -25,7 +25,7 @@ func newFileServer(t *testing.T) (*httptest.Server, *Service, *SQLiteStore, *cap
 	mail := &capturingMailer{}
 	svc := NewService(store, mail, Config{
 		BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute,
-		TransferTTL: time.Hour, EnableMagic: true,
+		EnableMagic: true,
 		MaxFileSize: 1024, DailyQuota: 4096, DefaultTTL: 3600, MaxTTL: 7200,
 	})
 	disk, err := storage.NewDiskStore(t.TempDir())
@@ -146,7 +146,9 @@ func TestFileMetaOKAnd404(t *testing.T) {
 	ts, _, _, mail := newFileServer(t)
 	cookie := loginCookie(t, ts, mail, "m@example.com")
 	resp := postUpload(t, ts, cookie, "?ttl=0", uploadBody([]byte("MANIFEST"), []byte("blobby")))
-	var up struct{ ID string `json:"id"` }
+	var up struct {
+		ID string `json:"id"`
+	}
 	decodeJSON(t, resp, &up)
 
 	// Public meta — no cookie needed.
@@ -179,7 +181,9 @@ func TestBlobStreamsAndBurnDeletes(t *testing.T) {
 	ts, _, store, mail := newFileServer(t)
 	cookie := loginCookie(t, ts, mail, "b@example.com")
 	resp := postUpload(t, ts, cookie, "?burnAfterRead=1&ttl=0", uploadBody([]byte("m"), []byte("CIPHERTEXT")))
-	var up struct{ ID string `json:"id"` }
+	var up struct {
+		ID string `json:"id"`
+	}
 	decodeJSON(t, resp, &up)
 
 	bresp, _ := ts.Client().Get(ts.URL + "/api/files/" + up.ID + "/blob")
@@ -226,7 +230,9 @@ func TestDeleteFileOwnerGate(t *testing.T) {
 	ts, _, _, mail := newFileServer(t)
 	owner := loginCookie(t, ts, mail, "owner@example.com")
 	resp := postUpload(t, ts, owner, "?ttl=0", uploadBody([]byte("m"), []byte("c")))
-	var up struct{ ID string `json:"id"` }
+	var up struct {
+		ID string `json:"id"`
+	}
 	decodeJSON(t, resp, &up)
 
 	// A different user cannot see/delete it → 404 (no existence leak).
