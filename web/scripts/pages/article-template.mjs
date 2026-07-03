@@ -1,7 +1,13 @@
 // web/scripts/pages/article-template.mjs — renders one article (one language) to a
 // self-contained static HTML string. No JS, no external CSS: styles are inlined so
 // the page is independent of the Vite asset graph and crawlable with JS disabled.
-import { LANGS, DEFAULT_LANG, LANG_LABELS, BCP47, SITE, urlPath, absUrl, esc, ctaHref, landingUrl } from "./shared.mjs";
+import { LANGS, DEFAULT_LANG, LANG_LABELS, BCP47, OG_LOCALE, SITE, urlPath, absUrl, esc, ctaHref, landingUrl } from "./shared.mjs";
+
+// Footer link label; matches content/landing.mjs footer.privacy per language.
+const PRIVACY_LABELS = {
+  en: "Privacy", zh: "隐私政策", ja: "プライバシーポリシー",
+  ko: "개인정보 처리방침", de: "Datenschutz", fr: "Confidentialité",
+};
 
 const STYLE = `
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
@@ -54,6 +60,7 @@ function sectionHtml(s) {
 export function renderArticlePage({ slug, lang, doc, updated, related = [] }) {
   const dateModified = doc.updated || updated;
   const canonical = absUrl(urlPath(slug, lang));
+  const ogImage = SITE.origin + "/og-image.jpg";
   const ld = {
     "@context": "https://schema.org",
     "@graph": [
@@ -112,7 +119,12 @@ export function renderArticlePage({ slug, lang, doc, updated, related = [] }) {
     <meta property="og:title" content="${esc(doc.title)}" />
     <meta property="og:description" content="${esc(doc.description)}" />
     <meta property="og:url" content="${canonical}" />
-    <meta property="og:locale" content="${BCP47[lang]}" />
+    <meta property="og:image" content="${ogImage}" />
+    <meta property="og:locale" content="${OG_LOCALE[lang]}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${esc(doc.title)}" />
+    <meta name="twitter:description" content="${esc(doc.description)}" />
+    <meta name="twitter:image" content="${ogImage}" />
     <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
     <style>${STYLE}</style>
   </head>
@@ -132,7 +144,7 @@ export function renderArticlePage({ slug, lang, doc, updated, related = [] }) {
       ${relatedBlock}
       <footer>
         <a href="${ctaHref(lang)}">← ${esc(SITE.name)}</a>
-        <a href="${urlPath("privacy", lang)}">Privacy</a>
+        <a href="${urlPath("privacy", lang)}">${esc(PRIVACY_LABELS[lang])}</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import compareSnapdrop from "./content/articles/compare-snapdrop.mjs";
-import { buildArticlePages, articleLinksByLang } from "./build-pages.mjs";
+import privacy from "./content/legal/privacy.mjs";
+import terms from "./content/legal/terms.mjs";
+import { buildArticlePages, articleLinksByLang, buildSitemap } from "./build-pages.mjs";
 
 describe("buildArticlePages", () => {
   const pages = buildArticlePages([compareSnapdrop]);
@@ -39,5 +41,28 @@ describe("buildArticlePages", () => {
   it("missing translation fails the build", () => {
     const broken = { slug: "x", updated: "2026-07-03", langs: { en: compareSnapdrop.langs.en } };
     expect(() => buildArticlePages([broken])).toThrow(/missing translations/);
+  });
+
+  it("carries share-card meta: og:image, twitter:card, OG-format og:locale", () => {
+    const zh = pages.find((p) => p.path === "zh/compare/snapdrop/index.html").html;
+    expect(zh).toContain('property="og:image" content="https://relayium.com/og-image.jpg"');
+    expect(zh).toContain('name="twitter:card" content="summary_large_image"');
+    expect(zh).toContain('property="og:locale" content="zh_CN"');
+  });
+
+  it("localizes the footer privacy label", () => {
+    const zh = pages.find((p) => p.path === "zh/compare/snapdrop/index.html").html;
+    expect(zh).toContain('<a href="/zh/privacy">隐私政策</a>');
+    const en = pages.find((p) => p.path === "compare/snapdrop/index.html").html;
+    expect(en).toContain('<a href="/privacy">Privacy</a>');
+  });
+});
+
+describe("buildSitemap homepage lastmod", () => {
+  it("uses the newest date across legal docs, landing, and articles", () => {
+    // legal docs are older (2026-07-01) than the article (2026-07-03)
+    const xml = buildSitemap([privacy, terms], { home: true, articles: [compareSnapdrop] });
+    const home = xml.slice(xml.indexOf("<loc>https://relayium.com/</loc>"));
+    expect(home.slice(0, 200)).toContain(`<lastmod>${compareSnapdrop.updated}</lastmod>`);
   });
 });

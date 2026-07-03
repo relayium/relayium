@@ -21,7 +21,12 @@
     <meta property="og:title" content="Envoyer de gros fichiers sans le cloud" />
     <meta property="og:description" content="Envoyez des vidéos et des archives de projet de plusieurs gigaoctets directement, d&#39;un navigateur à l&#39;autre — sans envoi vers le cloud, sans limite de taille en temps réel, avec reprise des transferts et vérification d&#39;intégrité par fichier." />
     <meta property="og:url" content="https://relayium.com/fr/how-to/send-large-files-without-cloud" />
-    <meta property="og:locale" content="fr" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Envoyer de gros fichiers sans le cloud" />
+    <meta name="twitter:description" content="Envoyez des vidéos et des archives de projet de plusieurs gigaoctets directement, d&#39;un navigateur à l&#39;autre — sans envoi vers le cloud, sans limite de taille en temps réel, avec reprise des transferts et vérification d&#39;intégrité par fichier." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Envoyer de gros fichiers sans le cloud","description":"Envoyez des vidéos et des archives de projet de plusieurs gigaoctets directement, d'un navigateur à l'autre — sans envoi vers le cloud, sans limite de taille en temps réel, avec reprise des transferts et vérification d'intégrité par fichier.","inLanguage":"fr","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/fr/how-to/send-large-files-without-cloud","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Quelle est la taille maximale d'un fichier que je peux envoyer ?","acceptedAnswer":{"@type":"Answer","text":"En mode temps réel, il n'y a aucune limite côté serveur — le plafond vient du navigateur qui reçoit. Sur Chrome ou Edge, le fichier est diffusé sur le disque, vous pouvez donc envoyer des dizaines de gigaoctets sans manquer de mémoire. Sur Firefox ou Safari, le fichier est mis en mémoire tampon, gardez-y les fichiers individuels sous environ 200 Mo."}},{"@type":"Question","name":"Que se passe-t-il si le transfert est interrompu ?","acceptedAnswer":{"@type":"Answer","text":"Il reprend automatiquement. Si la connexion se coupe en cours de transfert — un signal Wi-Fi perdu, un ordinateur en veille, un changement de réseau — Relayium repart de là où il s'était arrêté au lieu de recommencer tout le fichier, de sorte qu'un long transfert n'est pas perdu pour un bref incident."}},{"@type":"Question","name":"Comment ma vie privée est-elle protégée pour les gros fichiers ?","acceptedAnswer":{"@type":"Answer","text":"Les transferts en temps réel sont chiffrés de bout en bout par un échange de clés X25519 et un AES-256-GCM par bloc, et cette clé n'atteint jamais aucun serveur. Les deux appareils affichent un code de vérification à 6 chiffres pour confirmer que personne ne s'intercale, et chaque fichier est vérifié par une empreinte SHA-256. Même quand un relais TURN est nécessaire, il ne voit que du texte chiffré."}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
@@ -84,7 +89,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul class="related"><li><a href="/fr/compare/snapdrop">Relayium vs Snapdrop et PairDrop : quel transfert P2P sécurisé ?</a></li><li><a href="/fr/compare/airdrop">Relayium vs AirDrop : une alternative multiplateforme</a></li><li><a href="/fr/compare/wetransfer">Relayium vs WeTransfer : envoyer de gros fichiers sans serveur</a></li><li><a href="/fr/how-to/transfer-files-android-to-iphone">Transférer des fichiers d&#39;Android vers iPhone (sans câble)</a></li><li><a href="/fr/how-to/send-files-pc-to-phone-wirelessly">Envoyer des fichiers du PC au téléphone sans fil, sans câble ni appli</a></li><li><a href="/fr/">Relayium</a></li></ul>
       <footer>
         <a href="/?lang=fr">← Relayium</a>
-        <a href="/fr/privacy">Privacy</a>
+        <a href="/fr/privacy">Confidentialité</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

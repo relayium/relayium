@@ -51,7 +51,11 @@ export function articleLinksByLang(articles) {
 
 export function buildSitemap(docs, { home = true, landing = null, articles = [] } = {}) {
   const urls = [];
-  const newest = docs.map((d) => d.langs.en.updated).sort().at(-1);
+  const newest = [
+    ...docs.map((d) => d.langs.en.updated),
+    ...(landing ? [landing.updated] : []),
+    ...articles.map((a) => a.updated),
+  ].sort().at(-1);
   if (home) urls.push({ loc: SITE.origin + "/", lastmod: newest, priority: "1.0", changefreq: "weekly" });
   if (landing) {
     for (const lang of LANDING_LANGS) {

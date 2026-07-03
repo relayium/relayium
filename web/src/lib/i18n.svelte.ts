@@ -211,7 +211,7 @@ export interface Messages {
 }
 
 export function legalUrl(slug: "privacy" | "terms" | "security", l: Lang): string {
-  return l === "en" ? `/${slug}` : `/${l}/${slug}`;
+  return pageUrl(slug, l);
 }
 
 /** URL of a generated static page (article/landing) in the given language. */

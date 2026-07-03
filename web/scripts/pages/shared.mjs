@@ -6,6 +6,8 @@ export const LANG_LABELS = {
   en: "English", zh: "中文", ja: "日本語", ko: "한국어", de: "Deutsch", fr: "Français",
 };
 export const BCP47 = { en: "en", zh: "zh-Hans", ja: "ja", ko: "ko", de: "de", fr: "fr" };
+// Open Graph wants language_TERRITORY with an underscore, not BCP47.
+export const OG_LOCALE = { en: "en_US", zh: "zh_CN", ja: "ja_JP", ko: "ko_KR", de: "de_DE", fr: "fr_FR" };
 
 export const SITE = { origin: "https://relayium.com", name: "Relayium" };
 

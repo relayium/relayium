@@ -21,7 +21,12 @@
     <meta property="og:title" content="Envoyer des fichiers du PC au téléphone sans fil, sans câble ni appli" />
     <meta property="og:description" content="Un guide pas à pas pour déplacer des fichiers entre un ordinateur et un téléphone par Wi-Fi — glisser-déposer, sans câble USB, sans compte cloud, et chiffré de bout en bout tout du long." />
     <meta property="og:url" content="https://relayium.com/fr/how-to/send-files-pc-to-phone-wirelessly" />
-    <meta property="og:locale" content="fr" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Envoyer des fichiers du PC au téléphone sans fil, sans câble ni appli" />
+    <meta name="twitter:description" content="Un guide pas à pas pour déplacer des fichiers entre un ordinateur et un téléphone par Wi-Fi — glisser-déposer, sans câble USB, sans compte cloud, et chiffré de bout en bout tout du long." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Envoyer des fichiers du PC au téléphone sans fil, sans câble ni appli","description":"Un guide pas à pas pour déplacer des fichiers entre un ordinateur et un téléphone par Wi-Fi — glisser-déposer, sans câble USB, sans compte cloud, et chiffré de bout en bout tout du long.","inLanguage":"fr","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/fr/how-to/send-files-pc-to-phone-wirelessly","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Est-ce que ça marche avec Mac et Android, pas seulement Windows et iPhone ?","acceptedAnswer":{"@type":"Answer","text":"Oui. Relayium tourne dans le navigateur sous Windows, macOS, Linux, Android et iOS, donc toute combinaison fonctionne — Windows vers Android, Mac vers iPhone, Linux vers un téléphone, et inversement. Il n'y a rien à installer sur aucun des appareils."}},{"@type":"Question","name":"À quelle vitesse se fait le transfert ?","acceptedAnswer":{"@type":"Answer","text":"Sur le même Wi-Fi, les deux appareils se connectent directement, la vitesse est donc limitée par votre réseau local et non par un serveur — en général aussi rapide que votre Wi-Fi le permet. Entre réseaux différents, cela dépend des deux connexions internet, et Relayium ne bascule sur un relais chiffré que lorsqu'une liaison directe est impossible."}},{"@type":"Question","name":"Est-ce sûr d'envoyer des fichiers ainsi ?","acceptedAnswer":{"@type":"Answer","text":"Oui. Par-dessus le chiffrement de transport du navigateur, Relayium ajoute sa propre couche : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, et cette clé n'atteint jamais un serveur. Les deux appareils affichent le même code à 6 chiffres (SAS) pour confirmer que personne ne s'intercale, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256."}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
@@ -86,7 +91,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul class="related"><li><a href="/fr/compare/snapdrop">Relayium vs Snapdrop et PairDrop : quel transfert P2P sécurisé ?</a></li><li><a href="/fr/compare/airdrop">Relayium vs AirDrop : une alternative multiplateforme</a></li><li><a href="/fr/compare/wetransfer">Relayium vs WeTransfer : envoyer de gros fichiers sans serveur</a></li><li><a href="/fr/how-to/transfer-files-android-to-iphone">Transférer des fichiers d&#39;Android vers iPhone (sans câble)</a></li><li><a href="/fr/how-to/send-large-files-without-cloud">Envoyer de gros fichiers sans le cloud</a></li><li><a href="/fr/">Relayium</a></li></ul>
       <footer>
         <a href="/?lang=fr">← Relayium</a>
-        <a href="/fr/privacy">Privacy</a>
+        <a href="/fr/privacy">Confidentialité</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

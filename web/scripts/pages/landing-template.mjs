@@ -1,7 +1,7 @@
 // web/scripts/pages/landing-template.mjs — renders one static localized landing page.
 // Self-contained: no JS, no external CSS. Styles are inlined so the page is
 // independent of the Vite asset graph and fully crawlable with JS disabled.
-import { LANGS, LANG_LABELS, BCP47, SITE, landingUrl, ctaHref, urlPath, absUrl, esc } from "./shared.mjs";
+import { LANGS, LANG_LABELS, BCP47, OG_LOCALE, SITE, landingUrl, ctaHref, urlPath, absUrl, esc } from "./shared.mjs";
 
 const STYLE = `
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
@@ -106,7 +106,7 @@ export function renderLandingPage({ lang, doc, articleLinks = [] }) {
     <meta property="og:description" content="${esc(doc.description)}" />
     <meta property="og:url" content="${canonical}" />
     <meta property="og:image" content="${ogImage}" />
-    <meta property="og:locale" content="${BCP47[lang]}" />
+    <meta property="og:locale" content="${OG_LOCALE[lang]}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${esc(doc.title)}" />
     <meta name="twitter:description" content="${esc(doc.description)}" />

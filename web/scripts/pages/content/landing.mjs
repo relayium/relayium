@@ -299,7 +299,7 @@ const de = {
     steps: [
       "Öffne relayium.com auf beiden Geräten in einem modernen Browser.",
       "Eine Seite wählt die zu sendenden Dateien aus oder zieht sie hinein (bis zu 10 pro Vorgang).",
-      "Vergleicht auf beiden Bildschirmen denselben 6-stelligen Prüfcode (SAS) und bestätigt die Übereinstimmung, um einen Mittelsmann auszuschließen.",
+      "Vergleiche auf beiden Bildschirmen denselben 6-stelligen Prüfcode (SAS) und bestätige die Übereinstimmung, um einen Mittelsmann auszuschließen.",
       "Eine direkte P2P-Verbindung wird aufgebaut; Dateien werden Chunk für Chunk mit AES-256-GCM verschlüsselt übertragen, jede Datei per SHA-256 auf Integrität geprüft.",
     ],
   },

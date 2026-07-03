@@ -21,7 +21,12 @@
     <meta property="og:title" content="Relayium vs. WeTransfer: große Dateien ohne Server senden" />
     <meta property="og:description" content="Ein ehrlicher Vergleich von Relayium und WeTransfer. WeTransfer glänzt beim asynchronen Teilen per Link; Relayium bietet Echtzeitübertragungen ohne Größenlimit, ohne Server, plus Zero-Knowledge-Speicherlinks." />
     <meta property="og:url" content="https://relayium.com/de/compare/wetransfer" />
-    <meta property="og:locale" content="de" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="de_DE" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium vs. WeTransfer: große Dateien ohne Server senden" />
+    <meta name="twitter:description" content="Ein ehrlicher Vergleich von Relayium und WeTransfer. WeTransfer glänzt beim asynchronen Teilen per Link; Relayium bietet Echtzeitübertragungen ohne Größenlimit, ohne Server, plus Zero-Knowledge-Speicherlinks." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs. WeTransfer: große Dateien ohne Server senden","description":"Ein ehrlicher Vergleich von Relayium und WeTransfer. WeTransfer glänzt beim asynchronen Teilen per Link; Relayium bietet Echtzeitübertragungen ohne Größenlimit, ohne Server, plus Zero-Knowledge-Speicherlinks.","inLanguage":"de","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/de/compare/wetransfer","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Gibt es wirklich kein Dateigrößenlimit?","acceptedAnswer":{"@type":"Answer","text":"Im Echtzeitmodus gibt es kein serverseitiges Limit, weil die Datei nie einen Server berührt. In Chrome oder Edge streamt der Download direkt auf die Festplatte, sodass mehrere Gigabyte große Dateien kein Problem sind. Firefox und Safari puffern stattdessen im Arbeitsspeicher, halte solche Übertragungen also unter etwa 200 MB. Gespeicherte Download-Links haben ein an dein Konto gebundenes Kontingent."}},{"@type":"Question","name":"Was, wenn der Empfänger nicht online ist?","acceptedAnswer":{"@type":"Answer","text":"Nutze einen gespeicherten Download-Link. Dein Browser verschlüsselt die Dateien mit AES-256-GCM, der Schlüssel bleibt nur im URL-Fragment, und der Server hält Zero-Knowledge-Chiffretext, den der Empfänger später abrufen kann. Das Erstellen des Links erfordert die Anmeldung des Absenders, und du kannst ihn auf Ablauf oder Vernichtung nach dem ersten Download einstellen."}},{"@type":"Question","name":"Ist Relayium kostenlos?","acceptedAnswer":{"@type":"Answer","text":"Ja. Relayium ist kostenlos und quelloffen unter der MIT-Lizenz, mit dem vollständigen Protokoll und Code unter github.com/relayium/relayium. Es gibt keinen Bezahltarif, um größere Echtzeitübertragungen freizuschalten — der Größenspielraum kommt vom Streaming auf die Festplatte im Browser, nicht von einem Abo."}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
@@ -86,7 +91,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul class="related"><li><a href="/de/compare/snapdrop">Relayium vs. Snapdrop &amp; PairDrop: welche sichere P2P-Übertragung?</a></li><li><a href="/de/compare/airdrop">Relayium vs. AirDrop: eine plattformübergreifende Alternative</a></li><li><a href="/de/how-to/transfer-files-android-to-iphone">Dateien von Android auf iPhone übertragen (ohne Kabel)</a></li><li><a href="/de/how-to/send-files-pc-to-phone-wirelessly">Dateien vom PC drahtlos aufs Handy senden — ohne Kabel, ohne App</a></li><li><a href="/de/how-to/send-large-files-without-cloud">Große Dateien ohne Cloud versenden</a></li><li><a href="/de/">Relayium</a></li></ul>
       <footer>
         <a href="/?lang=de">← Relayium</a>
-        <a href="/de/privacy">Privacy</a>
+        <a href="/de/privacy">Datenschutz</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

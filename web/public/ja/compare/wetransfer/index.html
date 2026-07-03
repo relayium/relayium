@@ -21,7 +21,12 @@
     <meta property="og:title" content="Relayium と WeTransfer の比較：サーバーを介さず大容量を送る" />
     <meta property="og:description" content="Relayium と WeTransfer を公平に比較。WeTransfer は非同期のリンク共有が得意です。Relayium はサイズ上限のないリアルタイム転送でサーバーに置かず、ゼロ知識の保存リンクも備えます。" />
     <meta property="og:url" content="https://relayium.com/ja/compare/wetransfer" />
-    <meta property="og:locale" content="ja" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium と WeTransfer の比較：サーバーを介さず大容量を送る" />
+    <meta name="twitter:description" content="Relayium と WeTransfer を公平に比較。WeTransfer は非同期のリンク共有が得意です。Relayium はサイズ上限のないリアルタイム転送でサーバーに置かず、ゼロ知識の保存リンクも備えます。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium と WeTransfer の比較：サーバーを介さず大容量を送る","description":"Relayium と WeTransfer を公平に比較。WeTransfer は非同期のリンク共有が得意です。Relayium はサイズ上限のないリアルタイム転送でサーバーに置かず、ゼロ知識の保存リンクも備えます。","inLanguage":"ja","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/ja/compare/wetransfer","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"本当にファイルサイズの上限はないのですか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイムモードではサーバー側の上限はありません。ファイルがサーバーに一切触れないからです。Chrome や Edge ではダウンロードがそのままディスクにストリーミングされるので、数ギガバイトのファイルも問題ありません。Firefox と Safari はメモリにバッファするため、そうした転送は約 200 MB 以内に抑えてください。保存型ダウンロードリンクにはアカウントに紐づく容量枠があります。"}},{"@type":"Question","name":"受信側がオンラインでないときは？","acceptedAnswer":{"@type":"Answer","text":"保存型ダウンロードリンクを使います。ブラウザがファイルを AES-256-GCM で暗号化し、鍵は URL フラグメントだけに残り、サーバーは受信側が後で取得できるゼロ知識の暗号文を保持します。リンクの作成には送信側のサインインが必要で、有効期限切れや最初のダウンロード後の消去を設定できます。"}},{"@type":"Question","name":"Relayium は無料ですか？","acceptedAnswer":{"@type":"Answer","text":"はい。Relayium は MIT ライセンスの無料オープンソースで、プロトコルとコードのすべてが github.com/relayium/relayium にあります。より大きなリアルタイム転送を解放する有料プランはありません——大容量の余裕はブラウザのディスクへのストリーミングから来るものであり、サブスクリプションからではありません。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
@@ -86,7 +91,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul class="related"><li><a href="/ja/compare/snapdrop">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/how-to/transfer-files-android-to-iphone">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/how-to/send-large-files-without-cloud">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/">Relayium</a></li></ul>
       <footer>
         <a href="/?lang=ja">← Relayium</a>
-        <a href="/ja/privacy">Privacy</a>
+        <a href="/ja/privacy">プライバシーポリシー</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

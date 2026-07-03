@@ -1009,13 +1009,13 @@
     <Faq />
 
     <footer>
-      <nav class="legal">
+      <nav class="legal" aria-label="Legal">
         <a href={legalUrl("security", lang())}>{t.legal.security}</a>
         <a href={legalUrl("privacy", lang())}>{t.legal.privacy}</a>
         <a href={legalUrl("terms", lang())}>{t.legal.terms}</a>
         <a href="https://github.com/relayium/relayium" target="_blank" rel="noopener noreferrer">GitHub</a>
       </nav>
-      <nav class="legal">
+      <nav class="legal" aria-label="Guides">
         <a href={pageUrl("compare/snapdrop", lang())}>{t.learn.compareSnapdrop}</a>
         <a href={pageUrl("compare/airdrop", lang())}>{t.learn.compareAirdrop}</a>
         <a href={pageUrl("compare/wetransfer", lang())}>{t.learn.compareWetransfer}</a>
