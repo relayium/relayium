@@ -16,6 +16,16 @@ type ICEServer struct {
 	Credential string   `json:"credential,omitempty"`
 }
 
+// relayEntry describes one member of the TURN pool: its id/region plus a
+// ready-to-use iceServers list (the TURN URLs with a fresh ephemeral credential).
+// The client measures RTT to each and both peers converge on the fastest common id.
+type relayEntry struct {
+	ID         string      `json:"id"`
+	Region     string      `json:"region,omitempty"`
+	STUN       string      `json:"stun,omitempty"`
+	ICEServers []ICEServer `json:"iceServers"`
+}
+
 // stunServers returns the configured STUN entries (always offered, no credentials).
 func (s *Service) stunServers() []ICEServer {
 	if len(s.cfg.STUNURLs) == 0 {
@@ -32,15 +42,41 @@ func (s *Service) stunServers() []ICEServer {
 // reveals code validity.
 func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 	servers := s.stunServers()
-	if s.cfg.TURNSecret != "" && len(s.cfg.TURNURLs) > 0 {
-		// The credential username embeds the pairing code so coturn validates it
-		// and relay accounting can key usage by code.
-		if code := r.URL.Query().Get("code"); code != "" && s.validatePairCode != nil && s.validatePairCode(code) {
-			expiry := s.now().Add(s.cfg.TURNCredTTL).Unix()
-			servers = append(servers, turnCredentials(s.cfg.TURNSecret, code, expiry, s.cfg.TURNURLs))
+	code := r.URL.Query().Get("code")
+	// The credential username embeds the pairing code so coturn validates it and
+	// relay accounting can key usage by code. TURN is only handed out for a live code.
+	validCode := code != "" && s.validatePairCode != nil && s.validatePairCode(code)
+	expiry := s.now().Add(s.cfg.TURNCredTTL).Unix()
+
+	// Legacy single TURN stays in the top-level iceServers so older clients (that
+	// don't read `relays`) keep working unchanged.
+	if validCode && s.cfg.TURNSecret != "" && len(s.cfg.TURNURLs) > 0 {
+		servers = append(servers, turnCredentials(s.cfg.TURNSecret, code, expiry, s.cfg.TURNURLs))
+	}
+
+	resp := map[string]any{"iceServers": servers}
+
+	// Multi-relay pool: one self-contained entry per relay, each with its own
+	// ephemeral credential, so the client can measure and pick the fastest.
+	if validCode && len(s.cfg.TURNRelays) > 0 {
+		relays := make([]relayEntry, 0, len(s.cfg.TURNRelays))
+		for _, rc := range s.cfg.TURNRelays {
+			if rc.ID == "" || rc.Secret == "" || len(rc.URLs) == 0 {
+				continue // skip a misconfigured relay rather than emitting a dead entry
+			}
+			relays = append(relays, relayEntry{
+				ID:         rc.ID,
+				Region:     rc.Region,
+				STUN:       rc.STUN,
+				ICEServers: []ICEServer{turnCredentials(rc.Secret, code, expiry, rc.URLs)},
+			})
+		}
+		if len(relays) > 0 {
+			resp["relays"] = relays
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"iceServers": servers})
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // turnCredentials builds a coturn TURN-REST ephemeral credential. The shared

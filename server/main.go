@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -40,6 +41,21 @@ func splitURLs(s string) []string {
 	return out
 }
 
+// parseTURNRelays parses the RELAYIUM_TURN_RELAYS JSON array into a relay pool.
+// A malformed value is logged and ignored (falling back to the single -turn-urls
+// relay) rather than aborting startup — TURN is best-effort infrastructure.
+func parseTURNRelays(s string) []account.RelayConfig {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	var relays []account.RelayConfig
+	if err := json.Unmarshal([]byte(s), &relays); err != nil {
+		log.Printf("relayium: ignoring RELAYIUM_TURN_RELAYS — invalid JSON: %v", err)
+		return nil
+	}
+	return relays
+}
+
 func main() {
 	// Load an optional .env file before computing flag defaults, so each flag
 	// can fall back to a RELAYIUM_* variable. Precedence: explicit CLI flag >
@@ -62,6 +78,7 @@ func main() {
 	turnSecret := flag.String("turn-secret", envStr("RELAYIUM_TURN_SECRET", ""), "coturn static-auth-secret (empty disables TURN)")
 	turnURLs := flag.String("turn-urls", envStr("RELAYIUM_TURN_URLS", ""), "comma-separated TURN URLs (e.g. turn:host:3478,turns:host:5349)")
 	stunURLs := flag.String("stun-urls", envStr("RELAYIUM_STUN_URLS", "stun:stun.l.google.com:19302"), "comma-separated STUN URLs")
+	turnRelays := flag.String("turn-relays", envStr("RELAYIUM_TURN_RELAYS", ""), `JSON array of TURN relays for the multi-relay pool, e.g. [{"id":"asia-tok","region":"asia","urls":["turn:tok:3478"],"secret":"..."}]; empty uses -turn-urls only (see docs/coturn.md)`)
 	redisAddr := flag.String("redis-addr", envStr("RELAYIUM_REDIS_ADDR", ""), "Redis host:port for coturn relay-byte metering (empty disables)")
 	enableGoogle := flag.Bool("enable-google", envBool("RELAYIUM_ENABLE_GOOGLE", false), "enable Google OAuth login (disabled by default)")
 	enableMagic := flag.Bool("enable-magic", envBool("RELAYIUM_ENABLE_MAGIC", false), "enable email magic-link login (disabled by default)")
@@ -172,6 +189,7 @@ func main() {
 			STUNURLs:        splitURLs(*stunURLs),
 			TURNURLs:        splitURLs(*turnURLs),
 			TURNSecret:      *turnSecret,
+			TURNRelays:      parseTURNRelays(*turnRelays),
 			TURNCredTTL:     time.Hour,
 			EnableGoogle:    *enableGoogle,
 			EnableMagic:     *enableMagic,

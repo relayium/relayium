@@ -13,6 +13,18 @@ import (
 	"github.com/relayium/relayium/internal/storage"
 )
 
+// RelayConfig is one TURN relay in the pool (RELAYIUM_TURN_RELAYS JSON). The
+// client measures its RTT to each and both peers agree on the fastest common one.
+// Each relay carries its own coturn static-auth-secret so relays can live on
+// independent hosts. Leaving the pool empty keeps the legacy single-TURN behaviour.
+type RelayConfig struct {
+	ID     string   `json:"id"`
+	Region string   `json:"region,omitempty"`
+	URLs   []string `json:"urls"`           // turn:/turns: URLs for this relay
+	STUN   string   `json:"stun,omitempty"` // optional stun: URL co-located with it
+	Secret string   `json:"secret"`         // this relay's coturn static-auth-secret
+}
+
 type Config struct {
 	BaseURL         string
 	SessionTTL      time.Duration
@@ -21,6 +33,7 @@ type Config struct {
 	TURNURLs        []string
 	TURNSecret      string
 	TURNCredTTL     time.Duration
+	TURNRelays      []RelayConfig // multi-relay pool; empty = legacy single TURN only
 	GoogleClientID  string
 	GoogleSecret    string
 	GoogleRedirect  string

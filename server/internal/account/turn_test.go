@@ -125,6 +125,82 @@ func TestICENoSecretReturnsStunOnly(t *testing.T) {
 	}
 }
 
+func relaysFromBody(t *testing.T, resp *http.Response) []relayEntry {
+	t.Helper()
+	var out struct {
+		Relays []relayEntry `json:"relays"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	return out.Relays
+}
+
+func newPoolICEServer(t *testing.T, relays []RelayConfig) (*httptest.Server, *Service) {
+	t.Helper()
+	svc := NewService(newTestStore(t), &capturingMailer{}, Config{
+		TURNCredTTL: time.Hour,
+		STUNURLs:    []string{"stun:stun.example.com:3478"},
+		TURNRelays:  relays,
+	})
+	svc.SetPairCodeValidator(func(c string) bool { return c == "424242" })
+	ts := httptest.NewServer(svc.Routes())
+	t.Cleanup(ts.Close)
+	return ts, svc
+}
+
+func TestICEPoolReturnsPerRelayCredentials(t *testing.T) {
+	ts, _ := newPoolICEServer(t, []RelayConfig{
+		{ID: "asia-tok", Region: "asia", URLs: []string{"turn:tok.example.com:3478"}, Secret: "s1"},
+		{ID: "us-la", Region: "us-west", URLs: []string{"turn:la.example.com:3478"}, Secret: "s2"},
+	})
+	resp, _ := ts.Client().Get(ts.URL + "/api/ice?code=424242")
+	relays := relaysFromBody(t, resp)
+	if len(relays) != 2 {
+		t.Fatalf("want 2 relays, got %d: %+v", len(relays), relays)
+	}
+	// Each relay carries its own HMAC credential (computed with ITS secret) and the
+	// username embeds the code so coturn/metering can attribute it.
+	for _, r := range relays {
+		if len(r.ICEServers) != 1 || len(r.ICEServers[0].URLs) == 0 {
+			t.Fatalf("relay %q missing iceServers: %+v", r.ID, r)
+		}
+		if !strings.HasSuffix(r.ICEServers[0].Username, ":424242") {
+			t.Fatalf("relay %q username should embed the code, got %q", r.ID, r.ICEServers[0].Username)
+		}
+	}
+	if relays[0].ICEServers[0].Credential == relays[1].ICEServers[0].Credential {
+		t.Fatal("distinct per-relay secrets must yield distinct credentials")
+	}
+}
+
+func TestICEPoolOmittedWithoutValidCode(t *testing.T) {
+	ts, _ := newPoolICEServer(t, []RelayConfig{
+		{ID: "asia-tok", URLs: []string{"turn:tok.example.com:3478"}, Secret: "s1"},
+	})
+	// No code and an invalid code both yield no pool (and no TURN at all).
+	for _, url := range []string{ts.URL + "/api/ice", ts.URL + "/api/ice?code=000000"} {
+		resp, _ := ts.Client().Get(url)
+		if r := relaysFromBody(t, resp); len(r) != 0 {
+			t.Fatalf("%s: expected no relays, got %+v", url, r)
+		}
+	}
+}
+
+func TestICEPoolSkipsMisconfiguredRelays(t *testing.T) {
+	ts, _ := newPoolICEServer(t, []RelayConfig{
+		{ID: "ok", URLs: []string{"turn:ok.example.com:3478"}, Secret: "s"},
+		{ID: "", URLs: []string{"turn:x:3478"}, Secret: "s"}, // missing id
+		{ID: "no-secret", URLs: []string{"turn:y:3478"}},     // missing secret
+		{ID: "no-urls", Secret: "s"},                         // missing urls
+	})
+	resp, _ := ts.Client().Get(ts.URL + "/api/ice?code=424242")
+	relays := relaysFromBody(t, resp)
+	if len(relays) != 1 || relays[0].ID != "ok" {
+		t.Fatalf("only the well-formed relay should survive, got %+v", relays)
+	}
+}
+
 func TestTurnCredentials(t *testing.T) {
 	secret := "s3cr3t"
 	token := "abc123"
