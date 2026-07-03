@@ -87,7 +87,12 @@
       enterRoom({ code }); // rebinds the socket to the code room without reloading
     } catch {
       busy = false;
-      clearOutbox(); // no room to deliver into — a stale queue would surprise-send later
+      // Only the choose state (roomCode "") drops the queue: a roomless stale queue
+      // could surprise-send later (Fix-1's room-exit clearing never fires because no
+      // room was entered). In the timedOut state the user is still in the room
+      // retrying the re-mint — keep the batch; leaving the room (start over / tab
+      // switch) clears it via the room-exit path.
+      if (!roomCode) clearOutbox();
       // Minting a brand-new code just failed; it was never issued, so "expired"
       // would be misleading — report a mint/network failure instead.
       err = t.pair.mintFailed;
@@ -170,14 +175,15 @@
       <button class="btn btn-ghost" onclick={() => (mode = "receive")}>{t.pair.enterCode}</button>
     </div>
     <button class="btn-link" disabled={busy} onclick={send}>{busy ? t.generating : t.pair.bareConnect}</button>
-    {#if err}<p class="error">{err}</p>{/if}
   {/if}
+  {#if err}<p class="error">{err}</p>{/if}
 </section>
 
 <style>
   .pairing { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; }
   .choices { display: flex; gap: var(--space-3); flex-wrap: wrap; justify-content: center; }
   .choices label.btn input[type="file"] { display: none; }
+  .choices label.btn.disabled { opacity: .55; cursor: not-allowed; }
   .queued { margin: 0; font-size: var(--fs-xs); color: var(--text-h); text-align: center; }
   .qr { margin-top: var(--space-1); border-radius: var(--radius-sm); background: #fff; padding: 6px; }
   .scan { margin: 0; font-size: 12px; color: var(--text); text-align: center; max-width: 30ch; }

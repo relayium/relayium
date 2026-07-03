@@ -288,10 +288,10 @@ Prerequisites: a running coturn (see `docs/coturn.md`) and the Go server started
 with matching `-turn-secret` / `-turn-urls`.
 
 1. **STUN-only regression (no TURN configured):** start the server WITHOUT
-   `-turn-secret`. `GET /api/ice?room=<valid code>` returns STUN only; an
+   `-turn-secret`. `GET /api/ice?code=<valid code>` returns STUN only; an
    easy-NAT cross-network transfer still works (②a behavior).
 2. **Credentials served:** with TURN configured, generate a pairing code, and in
-   the browser devtools confirm `GET /api/ice?room=<code>` returns a `turn:`
+   the browser devtools confirm `GET /api/ice?code=<code>` returns a `turn:`
    entry with a `username` (`<expiry>:<code>`) and a `credential`. The
    receiver opening the join link gets the same TURN entry.
 3. **Forced-relay transfer:** to prove the coturn path end-to-end, temporarily

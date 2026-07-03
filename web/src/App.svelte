@@ -35,7 +35,7 @@
   import type { Peer } from "./lib/protocol";
   import { lang, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
-  import { outbox, setOutbox, takeOutbox } from "./lib/outbox.svelte";
+  import { outbox, setOutbox, takeOutbox, clearOutbox } from "./lib/outbox.svelte";
   import { folderUploadSupported } from "./lib/platform";
   import CrossPage from "./lib/CrossPage.svelte";
   import MePage from "./lib/MePage.svelte";
@@ -306,6 +306,11 @@
     const key = roomCode;
     if (!signaling) return; // socket not built yet (initial mount)
     if (key === socketRoomKey) return; // already bound to this room
+    // Queued files belong to the pairing attempt that queued them: leaving the code
+    // room by ANY path (start over, tab switch, back button) must drop them so they
+    // can't surprise-send to an unrelated peer later. Only the code→"" exit clears —
+    // ""→code (files were just queued) and code→code (timedOut re-mint) keep the queue.
+    if (socketRoomKey && !key) clearOutbox();
     socketRoomKey = key;
     void switchRoom();
   });
