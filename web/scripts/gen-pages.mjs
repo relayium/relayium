@@ -8,6 +8,11 @@ import terms from "./pages/content/legal/terms.mjs";
 import security from "./pages/content/legal/security.mjs";
 import landing from "./pages/content/landing.mjs";
 import compareSnapdrop from "./pages/content/articles/compare-snapdrop.mjs";
+import compareAirdrop from "./pages/content/articles/compare-airdrop.mjs";
+import compareWetransfer from "./pages/content/articles/compare-wetransfer.mjs";
+import howtoAndroidToIphone from "./pages/content/articles/howto-android-to-iphone.mjs";
+import howtoPcToPhoneWirelessly from "./pages/content/articles/howto-pc-to-phone-wirelessly.mjs";
+import howtoLargeFilesWithoutCloud from "./pages/content/articles/howto-large-files-without-cloud.mjs";
 import {
   buildLegalPages,
   buildLandingPages,
@@ -19,7 +24,14 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const publicDir = resolve(here, "..", "public");
 const legalDocs = [privacy, terms, security];
-const articles = [compareSnapdrop];
+const articles = [
+  compareSnapdrop,
+  compareAirdrop,
+  compareWetransfer,
+  howtoAndroidToIphone,
+  howtoPcToPhoneWirelessly,
+  howtoLargeFilesWithoutCloud,
+];
 
 async function main() {
   const pages = [

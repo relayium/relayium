@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Envoyer de gros fichiers sans le cloud · Relayium</title>
+    <meta name="description" content="Envoyez des vidéos et des archives de projet de plusieurs gigaoctets directement, d&#39;un navigateur à l&#39;autre — sans envoi vers le cloud, sans limite de taille en temps réel, avec reprise des transferts et vérification d&#39;intégrité par fichier." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/fr/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-large-files-without-cloud" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Envoyer de gros fichiers sans le cloud" />
+    <meta property="og:description" content="Envoyez des vidéos et des archives de projet de plusieurs gigaoctets directement, d&#39;un navigateur à l&#39;autre — sans envoi vers le cloud, sans limite de taille en temps réel, avec reprise des transferts et vérification d&#39;intégrité par fichier." />
+    <meta property="og:url" content="https://relayium.com/fr/how-to/send-large-files-without-cloud" />
+    <meta property="og:locale" content="fr" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Envoyer de gros fichiers sans le cloud","description":"Envoyez des vidéos et des archives de projet de plusieurs gigaoctets directement, d'un navigateur à l'autre — sans envoi vers le cloud, sans limite de taille en temps réel, avec reprise des transferts et vérification d'intégrité par fichier.","inLanguage":"fr","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/fr/how-to/send-large-files-without-cloud","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Quelle est la taille maximale d'un fichier que je peux envoyer ?","acceptedAnswer":{"@type":"Answer","text":"En mode temps réel, il n'y a aucune limite côté serveur — le plafond vient du navigateur qui reçoit. Sur Chrome ou Edge, le fichier est diffusé sur le disque, vous pouvez donc envoyer des dizaines de gigaoctets sans manquer de mémoire. Sur Firefox ou Safari, le fichier est mis en mémoire tampon, gardez-y les fichiers individuels sous environ 200 Mo."}},{"@type":"Question","name":"Que se passe-t-il si le transfert est interrompu ?","acceptedAnswer":{"@type":"Answer","text":"Il reprend automatiquement. Si la connexion se coupe en cours de transfert — un signal Wi-Fi perdu, un ordinateur en veille, un changement de réseau — Relayium repart de là où il s'était arrêté au lieu de recommencer tout le fichier, de sorte qu'un long transfert n'est pas perdu pour un bref incident."}},{"@type":"Question","name":"Comment ma vie privée est-elle protégée pour les gros fichiers ?","acceptedAnswer":{"@type":"Answer","text":"Les transferts en temps réel sont chiffrés de bout en bout par un échange de clés X25519 et un AES-256-GCM par bloc, et cette clé n'atteint jamais aucun serveur. Les deux appareils affichent un code de vérification à 6 chiffres pour confirmer que personne ne s'intercale, et chaque fichier est vérifié par une empreinte SHA-256. Même quand un relais TURN est nécessaire, il ne voit que du texte chiffré."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=fr">Relayium</a></header>
+      <h1>Envoyer de gros fichiers sans le cloud</h1>
+      <p class="updated">Dernière mise à jour: 2026-07-03</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-large-files-without-cloud">English</a><a href="/zh/how-to/send-large-files-without-cloud">中文</a><a href="/ja/how-to/send-large-files-without-cloud">日本語</a><a href="/ko/how-to/send-large-files-without-cloud">한국어</a><a href="/de/how-to/send-large-files-without-cloud">Deutsch</a><a href="/fr/how-to/send-large-files-without-cloud" aria-current="true">Français</a></nav>
+      <p class="lead">Un export vidéo de 20 Go ou une lourde archive de projet, c&#39;est justement là que le stockage cloud paraît le plus lent : vous téléversez tout le fichier une fois, vous attendez, puis l&#39;autre personne le télécharge à nouveau — deux transferts complets, plus ce que votre quota de stockage autorise. Pour une remise unique, cela fait beaucoup de copies et d&#39;attente pour des octets qui ne devaient aller que de A à B.</p>
+      <p class="lead">Relayium prend la voie directe. Le fichier circule tout droit de votre navigateur vers celui du destinataire par un canal pair-à-pair chiffré, et n&#39;atterrit jamais sur un serveur entre les deux. Ce guide montre comment déplacer de gros fichiers ainsi, et reste honnête sur les deux limites réelles : quels navigateurs supportent des tailles illimitées, et le fait que les deux personnes doivent généralement être en ligne en même temps.</p>
+      <h2>Pourquoi le transfert direct l&#39;emporte pour les gros fichiers</h2>
+      <p>Avec le stockage cloud, un gros fichier traverse le réseau deux fois — jusqu&#39;au serveur, puis de nouveau vers le destinataire — et pèse sur un quota de stockage entre les deux. Un transfert pair-à-pair direct traverse le réseau une seule fois, de l&#39;expéditeur au destinataire, sans rien stocker au milieu.</p>
+      <p>Relayium fonctionne entièrement dans le navigateur, il n&#39;y a donc rien à installer d&#39;un côté ou de l&#39;autre. Il marche sous Windows, macOS, Linux, Android et iOS, et les transferts en temps réel ne demandent aucun compte — il suffit d&#39;ouvrir relayium.com sur les deux appareils et de les connecter.</p>
+      <h2>Aucune limite de taille en mode temps réel</h2>
+      <p>Les transferts en temps réel n&#39;ont aucune limite de taille côté serveur, parce qu&#39;aucun serveur ne détient le fichier. Le plafond pratique est fixé par le navigateur qui reçoit, pas par nous.</p>
+      <p>Sur Chrome et Edge, le fichier entrant est diffusé directement sur le disque à mesure qu&#39;il arrive, il n&#39;a donc jamais à tenir en mémoire — c&#39;est la combinaison à utiliser pour de très gros fichiers, aisément jusqu&#39;à des dizaines de gigaoctets. Un lot peut contenir jusqu&#39;à 10 fichiers, et chacun est vérifié de bout en bout par une empreinte SHA-256, de sorte que ce qui arrive sur le disque est identique octet pour octet à ce que vous avez envoyé.</p>
+      <ul><li>Chrome ou Edge côté réception : les fichiers sont diffusés sur le disque, il n&#39;y a donc pratiquement aucune limite de taille.</li><li>Firefox et Safari mettent le fichier en mémoire tampon à la place, gardez-y les fichiers individuels sous environ 200 Mo.</li><li>Jusqu&#39;à 10 fichiers par lot, chacun vérifié à l&#39;arrivée par sa propre empreinte SHA-256.</li></ul>
+      <h2>Reprendre plutôt que recommencer</h2>
+      <p>Les gros transferts prennent du temps, et c&#39;est pendant ce temps que le Wi-Fi lâche, que les ordinateurs se mettent en veille et que les téléphones changent de réseau. Relayium est conçu pour cela : si la connexion se rompt en cours de route, le transfert reprend là où il s&#39;était arrêté au lieu de recommencer tout le fichier.</p>
+      <p>La connectivité est gérée de la même façon. Le transfert se fait en pair-à-pair direct chaque fois que possible ; quand deux réseaux ne peuvent pas s&#39;atteindre directement, le flux chiffré bascule vers un relais TURN. Le relais ne voit que du texte chiffré, si bien que même la voie de secours reste chiffrée de bout en bout.</p>
+      <h2>Envoyer maintenant, ou laisser un lien pour plus tard</h2>
+      <p>Le transfert direct en temps réel exige que les deux personnes soient en ligne en même temps, ce qui est idéal quand vous pouvez vous coordonner — un appel, un moment partagé, un collègue à son bureau. Si l&#39;autre personne n&#39;est pas disponible pour l&#39;instant, vous pouvez créer un lien de téléchargement stocké à la place.</p>
+      <p>Un lien stocké est à divulgation nulle : votre navigateur chiffre les fichiers en AES-256-GCM avant l&#39;envoi et la clé de déchiffrement ne vit que dans le fragment de l&#39;URL, de sorte que le serveur conserve un texte chiffré qu&#39;il ne peut pas lire. Ayez les compromis en tête — créer un lien exige que l&#39;expéditeur se connecte, les liens comptent dans un quota de stockage et expirent (ou peuvent s&#39;autodétruire après le premier téléchargement). Pour les plus gros fichiers, quand vous pouvez tous deux être en ligne, la voie en temps réel reste l&#39;option la plus nette.</p>
+      <h2>Questions fréquentes</h2>
+      <h3>Quelle est la taille maximale d&#39;un fichier que je peux envoyer ?</h3>
+      <p>En mode temps réel, il n&#39;y a aucune limite côté serveur — le plafond vient du navigateur qui reçoit. Sur Chrome ou Edge, le fichier est diffusé sur le disque, vous pouvez donc envoyer des dizaines de gigaoctets sans manquer de mémoire. Sur Firefox ou Safari, le fichier est mis en mémoire tampon, gardez-y les fichiers individuels sous environ 200 Mo.</p>
+      <h3>Que se passe-t-il si le transfert est interrompu ?</h3>
+      <p>Il reprend automatiquement. Si la connexion se coupe en cours de transfert — un signal Wi-Fi perdu, un ordinateur en veille, un changement de réseau — Relayium repart de là où il s&#39;était arrêté au lieu de recommencer tout le fichier, de sorte qu&#39;un long transfert n&#39;est pas perdu pour un bref incident.</p>
+      <h3>Comment ma vie privée est-elle protégée pour les gros fichiers ?</h3>
+      <p>Les transferts en temps réel sont chiffrés de bout en bout par un échange de clés X25519 et un AES-256-GCM par bloc, et cette clé n&#39;atteint jamais aucun serveur. Les deux appareils affichent un code de vérification à 6 chiffres pour confirmer que personne ne s&#39;intercale, et chaque fichier est vérifié par une empreinte SHA-256. Même quand un relais TURN est nécessaire, il ne voit que du texte chiffré.</p>
+      <div class="ctacard">
+        <p>Déplacez votre prochain fichier de plusieurs gigaoctets par la voie directe — sans installation, et sans compte pour les transferts en temps réel.</p>
+        <a class="cta" href="/?lang=fr">Essayer Relayium maintenant</a>
+      </div>
+      <h2>À lire ensuite</h2>
+      <ul class="related"><li><a href="/fr/compare/snapdrop">Relayium vs Snapdrop et PairDrop : quel transfert P2P sécurisé ?</a></li><li><a href="/fr/compare/airdrop">Relayium vs AirDrop : une alternative multiplateforme</a></li><li><a href="/fr/compare/wetransfer">Relayium vs WeTransfer : envoyer de gros fichiers sans serveur</a></li><li><a href="/fr/how-to/transfer-files-android-to-iphone">Transférer des fichiers d&#39;Android vers iPhone (sans câble)</a></li><li><a href="/fr/how-to/send-files-pc-to-phone-wirelessly">Envoyer des fichiers du PC au téléphone sans fil, sans câble ni appli</a></li><li><a href="/fr/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=fr">← Relayium</a>
+        <a href="/fr/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

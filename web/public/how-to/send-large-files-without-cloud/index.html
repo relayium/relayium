@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>How to send large files without the cloud · Relayium</title>
+    <meta name="description" content="Send multi-gigabyte videos and project archives directly, browser to browser — no cloud upload, no size cap in realtime mode, with resumable transfers and per-file integrity checks." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-large-files-without-cloud" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="How to send large files without the cloud" />
+    <meta property="og:description" content="Send multi-gigabyte videos and project archives directly, browser to browser — no cloud upload, no size cap in realtime mode, with resumable transfers and per-file integrity checks." />
+    <meta property="og:url" content="https://relayium.com/how-to/send-large-files-without-cloud" />
+    <meta property="og:locale" content="en" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"How to send large files without the cloud","description":"Send multi-gigabyte videos and project archives directly, browser to browser — no cloud upload, no size cap in realtime mode, with resumable transfers and per-file integrity checks.","inLanguage":"en","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/how-to/send-large-files-without-cloud","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"What is the largest file I can send?","acceptedAnswer":{"@type":"Answer","text":"In realtime mode there is no server-side limit — the cap comes from the receiving browser. On Chrome or Edge the file streams to disk, so you can send tens of gigabytes without running out of memory. On Firefox or Safari the file is buffered in memory, so keep individual files under about 200 MB on those browsers."}},{"@type":"Question","name":"What happens if the transfer is interrupted?","acceptedAnswer":{"@type":"Answer","text":"It resumes automatically. If the connection drops mid-transfer — a dropped Wi-Fi signal, a sleeping laptop, a network switch — Relayium picks up from where it stopped rather than restarting the whole file, so a long transfer is not lost to a brief hiccup."}},{"@type":"Question","name":"How is my privacy protected for large files?","acceptedAnswer":{"@type":"Answer","text":"Realtime transfers are end-to-end encrypted with an X25519 key exchange and per-chunk AES-256-GCM, and that key never reaches any server. Both devices show a 6-digit verification code to confirm no one is in the middle, and each file is checked with a SHA-256 hash. Even when a TURN relay is needed, it only sees ciphertext."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>How to send large files without the cloud</h1>
+      <p class="updated">Last updated: 2026-07-03</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-large-files-without-cloud" aria-current="true">English</a><a href="/zh/how-to/send-large-files-without-cloud">中文</a><a href="/ja/how-to/send-large-files-without-cloud">日本語</a><a href="/ko/how-to/send-large-files-without-cloud">한국어</a><a href="/de/how-to/send-large-files-without-cloud">Deutsch</a><a href="/fr/how-to/send-large-files-without-cloud">Français</a></nav>
+      <p class="lead">A 20 GB video export or a heavy project archive is exactly where cloud storage feels slowest: you upload the whole file once, wait, then the other person downloads it again — two full transfers plus whatever your storage quota allows. For a one-time hand-off, that is a lot of copying and waiting for bytes that only ever needed to go from A to B.</p>
+      <p class="lead">Relayium takes the direct route. The file streams straight from your browser to the recipient&#39;s over an encrypted peer-to-peer channel, so it never lands on a server in between. This guide shows how to move big files that way, and is honest about the two real limits: which browsers can handle unlimited sizes, and the fact that both people usually need to be online at the same time.</p>
+      <h2>Why direct transfer wins for big files</h2>
+      <p>With cloud storage a large file crosses the network twice — up to the server, then back down to the recipient — and sits against a storage quota in between. A direct peer-to-peer transfer crosses the network once, from sender to receiver, with nothing stored in the middle.</p>
+      <p>Relayium runs entirely in the browser, so there is nothing to install on either end. It works on Windows, macOS, Linux, Android and iOS, and realtime transfers need no account — you just open relayium.com on both devices and connect.</p>
+      <h2>No size cap in realtime mode</h2>
+      <p>Realtime transfers have no server-side size limit, because there is no server holding the file. The practical ceiling is set by the receiving browser, not by us.</p>
+      <p>On Chrome and Edge the incoming file is streamed straight to disk as it arrives, so it never has to fit in memory — this is the combination to use for very large files, comfortably into the tens of gigabytes. A batch can hold up to 10 files, and each one is verified end-to-end with a SHA-256 hash, so what lands on disk is byte-for-byte what you sent.</p>
+      <ul><li>Chrome or Edge on the receiving side: files stream to disk, so there is effectively no size cap.</li><li>Firefox and Safari buffer the file in memory instead, so keep individual files under about 200 MB there.</li><li>Up to 10 files per batch, each checked with its own SHA-256 hash on arrival.</li></ul>
+      <h2>Resume instead of restarting</h2>
+      <p>Big transfers take time, and time is when Wi-Fi drops, laptops sleep, and phones switch networks. Relayium is built for that: if the connection breaks partway through, the transfer resumes from where it left off instead of starting the whole file over.</p>
+      <p>Connectivity is handled the same way. The transfer goes directly peer-to-peer whenever possible; when two networks cannot reach each other directly, the encrypted stream falls back to a TURN relay. The relay only ever sees ciphertext, so even the fallback path stays end-to-end encrypted.</p>
+      <h2>Send now, or leave a link for later</h2>
+      <p>Realtime direct transfer needs both people online at the same time, which is ideal when you can coordinate — a call, a shared moment, a colleague at their desk. If the other person is not available right now, you can create a stored download link instead.</p>
+      <p>A stored link is zero-knowledge: your browser encrypts the files with AES-256-GCM before upload and the decryption key lives only in the URL fragment, so the server keeps ciphertext it cannot read. Be aware of the trade-offs — creating a link requires the sender to sign in, links count against a storage quota, and they expire (or can burn after the first download). For the biggest files, when you can both be online, the realtime path stays the cleanest option.</p>
+      <h2>Frequently asked questions</h2>
+      <h3>What is the largest file I can send?</h3>
+      <p>In realtime mode there is no server-side limit — the cap comes from the receiving browser. On Chrome or Edge the file streams to disk, so you can send tens of gigabytes without running out of memory. On Firefox or Safari the file is buffered in memory, so keep individual files under about 200 MB on those browsers.</p>
+      <h3>What happens if the transfer is interrupted?</h3>
+      <p>It resumes automatically. If the connection drops mid-transfer — a dropped Wi-Fi signal, a sleeping laptop, a network switch — Relayium picks up from where it stopped rather than restarting the whole file, so a long transfer is not lost to a brief hiccup.</p>
+      <h3>How is my privacy protected for large files?</h3>
+      <p>Realtime transfers are end-to-end encrypted with an X25519 key exchange and per-chunk AES-256-GCM, and that key never reaches any server. Both devices show a 6-digit verification code to confirm no one is in the middle, and each file is checked with a SHA-256 hash. Even when a TURN relay is needed, it only sees ciphertext.</p>
+      <div class="ctacard">
+        <p>Move your next multi-gigabyte file the direct way — no install, and no account for realtime transfers.</p>
+        <a class="cta" href="/">Try Relayium now</a>
+      </div>
+      <h2>Keep reading</h2>
+      <ul class="related"><li><a href="/compare/snapdrop">Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</a></li><li><a href="/compare/airdrop">Relayium vs AirDrop: a cross-platform AirDrop alternative</a></li><li><a href="/compare/wetransfer">Relayium vs WeTransfer: send large files without the server</a></li><li><a href="/how-to/transfer-files-android-to-iphone">How to transfer files from Android to iPhone (no cable)</a></li><li><a href="/how-to/send-files-pc-to-phone-wirelessly">Send files from PC to phone wirelessly, no cable or app</a></li><li><a href="/">Relayium</a></li></ul>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

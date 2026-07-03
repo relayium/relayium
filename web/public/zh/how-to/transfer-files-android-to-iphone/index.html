@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>如何把文件从安卓传到 iPhone（无需数据线） · Relayium</title>
+    <meta name="description" content="一步步教你在浏览器里把照片、视频和文档从安卓传到 iPhone——不用 AirDrop、不用数据线、不用上传网盘。两台设备打开 Relayium 即可。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/zh/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/transfer-files-android-to-iphone" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="如何把文件从安卓传到 iPhone（无需数据线）" />
+    <meta property="og:description" content="一步步教你在浏览器里把照片、视频和文档从安卓传到 iPhone——不用 AirDrop、不用数据线、不用上传网盘。两台设备打开 Relayium 即可。" />
+    <meta property="og:url" content="https://relayium.com/zh/how-to/transfer-files-android-to-iphone" />
+    <meta property="og:locale" content="zh-Hans" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"如何把文件从安卓传到 iPhone（无需数据线）","description":"一步步教你在浏览器里把照片、视频和文档从安卓传到 iPhone——不用 AirDrop、不用数据线、不用上传网盘。两台设备打开 Relayium 即可。","inLanguage":"zh-Hans","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/zh/how-to/transfer-files-android-to-iphone","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"两台手机都要装 App 吗？","acceptedAnswer":{"@type":"Answer","text":"不用。Relayium 在安卓和 iPhone 上都完全运行于浏览器里。在每台设备上打开 relayium.com 就绪了——实时传输无需账号、无需下载。你也可以把它作为 PWA 添加到主屏幕，但那只是个快捷方式。"}},{"@type":"Question","name":"两台手机必须在同一 Wi-Fi 上吗？","acceptedAnswer":{"@type":"Answer","text":"不必。同一网络是最快的路径，因为设备会自动发现彼此；但配对码能把两台手机跨越不同网络连起来——哪怕一台用移动数据、一台用 Wi-Fi。两种情况下传输都保持端到端加密。"}},{"@type":"Question","name":"照片会被压缩或改动吗？","acceptedAnswer":{"@type":"Answer","text":"不会。原文件按逐字节传输、不做压缩，每个文件还用 SHA-256 做端到端校验，所以到达 iPhone 的内容与你从安卓发出的逐位一致。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <h1>如何把文件从安卓传到 iPhone（无需数据线）</h1>
+      <p class="updated">最近更新: 2026-07-03</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-android-to-iphone">English</a><a href="/zh/how-to/transfer-files-android-to-iphone" aria-current="true">中文</a><a href="/ja/how-to/transfer-files-android-to-iphone">日本語</a><a href="/ko/how-to/transfer-files-android-to-iphone">한국어</a><a href="/de/how-to/transfer-files-android-to-iphone">Deutsch</a><a href="/fr/how-to/transfer-files-android-to-iphone">Français</a></nav>
+      <p class="lead">安卓和 iPhone 之间没有互通的 AirDrop，所以在两者间传几张照片或一段视频，往往只能靠 USB 数据线、会压缩画质的聊天软件，或者绕一圈网盘上传下载。三种方式都比本该有的更慢、更折腾。</p>
+      <p class="lead">Relayium 把这些统统省掉。两台手机打开同一个网页，彼此发现，文件就在它们之间直接传输——端到端加密、无需安装应用、实时传输也无需账号。本文一步步带你完成。</p>
+      <h2>开始前需要准备什么</h2>
+      <p>不用安装、不用注册。实时传输在两台设备的浏览器里直接就能用。</p>
+      <ul><li>一台装有 Chrome（或任意现代浏览器）的安卓手机，一台用 Safari 的 iPhone——都保持最新版本。</li><li>想要最快的路径，就让两台设备连到同一个 Wi-Fi。如果做不到也没关系——配对码同样能跨越不同网络。</li><li>你要发送的文件，每批最多 10 个。</li></ul>
+      <h2>分步操作：两台设备连同一 Wi-Fi</h2>
+      <p>这是最简单的方式。在同一网络里，两台手机会自动发现彼此，几乎不用输入任何东西。</p>
+      <ul><li>在安卓手机和 iPhone 上，都在浏览器里打开 relayium.com。</li><li>每台设备都会作为附近的设备出现在另一台上。在发送方手机上，点击接收方那台。</li><li>选择要发送的文件——每批最多 10 个——或者直接拖进去。</li><li>两边屏幕会显示同一段 6 位校验码。核对它们是否一致；这段校验码证明没有服务器插在你们中间。</li><li>在接收方 iPhone 上确认接收，文件就会直接传过来，随后保存到设备里。</li></ul>
+      <h2>不在同一网络？用配对码</h2>
+      <p>你不必连同一个 Wi-Fi。如果两台手机在不同网络——一台用移动数据，另一台用家里的 Wi-Fi——Relayium 依然能用配对码把它们连起来。</p>
+      <p>发送方设备会显示一段简短的配对码，在另一台手机上输入即可（或打开它生成的分享链接）。只要条件允许，传输仍然点对点直连；当无法直连时，会退回到加密的 TURN 中继，而中继只能看到密文——所以无论哪种方式，传输都保持端到端加密。若中途连接断开，可以断点续传，而不必从头再来。</p>
+      <h2>在安卓和 iPhone 间传文件的其他方式</h2>
+      <p>Relayium 并不是唯一选择，了解各备选方案诚实的取舍也很有必要：</p>
+      <ul><li>谷歌的快速分享（Quick Share）以及 SHAREit 这类第三方 App 传得很快，但两台手机都要安装，而且快速分享无法覆盖 iPhone。</li><li>网盘（Google Drive、iCloud、Dropbox）在对方不在线时也能用，但同一个文件要上传再下载两次，会占用你的配额，且服务商手里留有一份副本。</li><li>聊天软件和邮件随处可用，但它们通常会重新压缩照片、限制附件大小，且文件分享并非端到端加密。</li><li>USB 数据线很可靠，但需要 USB-C 与 Lightning 之间合适的转接头，很多文件类型还得靠中间一台电脑。</li></ul>
+      <h2>照片会掉画质吗？</h2>
+      <p>不会。与聊天软件不同，Relayium 按原文件逐字节发送——不重新压缩、不缩放。落到 iPhone 上的，就是从安卓手机发出的那份的精确副本。</p>
+      <p>为了证明这一点，每个文件都用 SHA-256 做端到端校验，所以收到的照片或视频保证与你发送的完全一致。大文件也处理得很好：在 Chrome 和 Edge 里，下载会直接流式写入磁盘，没有大小上限；而 Firefox 和 Safari 在内存中缓冲，所以在这两者上单次传输建议控制在约 200 MB 以内。</p>
+      <h2>常见问题</h2>
+      <h3>两台手机都要装 App 吗？</h3>
+      <p>不用。Relayium 在安卓和 iPhone 上都完全运行于浏览器里。在每台设备上打开 relayium.com 就绪了——实时传输无需账号、无需下载。你也可以把它作为 PWA 添加到主屏幕，但那只是个快捷方式。</p>
+      <h3>两台手机必须在同一 Wi-Fi 上吗？</h3>
+      <p>不必。同一网络是最快的路径，因为设备会自动发现彼此；但配对码能把两台手机跨越不同网络连起来——哪怕一台用移动数据、一台用 Wi-Fi。两种情况下传输都保持端到端加密。</p>
+      <h3>照片会被压缩或改动吗？</h3>
+      <p>不会。原文件按逐字节传输、不做压缩，每个文件还用 SHA-256 做端到端校验，所以到达 iPhone 的内容与你从安卓发出的逐位一致。</p>
+      <div class="ctacard">
+        <p>在两台手机上打开 Relayium，把第一批文件传过去吧——无需安装，实时传输也无需账号。</p>
+        <a class="cta" href="/?lang=zh">立即试用 Relayium</a>
+      </div>
+      <h2>继续阅读</h2>
+      <ul class="related"><li><a href="/zh/compare/snapdrop">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud">如何不用网盘传输大文件</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=zh">← Relayium</a>
+        <a href="/zh/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

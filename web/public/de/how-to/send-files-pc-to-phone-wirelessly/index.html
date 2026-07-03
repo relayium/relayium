@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dateien vom PC drahtlos aufs Handy senden — ohne Kabel, ohne App · Relayium</title>
+    <meta name="description" content="Eine Schritt-für-Schritt-Anleitung, um Dateien per WLAN zwischen Computer und Handy zu bewegen — per Drag-and-drop, ohne USB-Kabel, ohne Cloud-Konto und durchgehend Ende-zu-Ende-verschlüsselt." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/de/how-to/send-files-pc-to-phone-wirelessly" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-files-pc-to-phone-wirelessly" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-files-pc-to-phone-wirelessly" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-files-pc-to-phone-wirelessly" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-files-pc-to-phone-wirelessly" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-files-pc-to-phone-wirelessly" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-files-pc-to-phone-wirelessly" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-files-pc-to-phone-wirelessly" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Dateien vom PC drahtlos aufs Handy senden — ohne Kabel, ohne App" />
+    <meta property="og:description" content="Eine Schritt-für-Schritt-Anleitung, um Dateien per WLAN zwischen Computer und Handy zu bewegen — per Drag-and-drop, ohne USB-Kabel, ohne Cloud-Konto und durchgehend Ende-zu-Ende-verschlüsselt." />
+    <meta property="og:url" content="https://relayium.com/de/how-to/send-files-pc-to-phone-wirelessly" />
+    <meta property="og:locale" content="de" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Dateien vom PC drahtlos aufs Handy senden — ohne Kabel, ohne App","description":"Eine Schritt-für-Schritt-Anleitung, um Dateien per WLAN zwischen Computer und Handy zu bewegen — per Drag-and-drop, ohne USB-Kabel, ohne Cloud-Konto und durchgehend Ende-zu-Ende-verschlüsselt.","inLanguage":"de","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/de/how-to/send-files-pc-to-phone-wirelessly","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Funktioniert das auch mit Mac und Android, nicht nur Windows und iPhone?","acceptedAnswer":{"@type":"Answer","text":"Ja. Relayium läuft im Browser unter Windows, macOS, Linux, Android und iOS, jede Kombination funktioniert also — Windows zu Android, Mac zu iPhone, Linux zu einem Handy und umgekehrt. Auf keinem Gerät muss etwas installiert werden."}},{"@type":"Question","name":"Wie schnell ist die Übertragung?","acceptedAnswer":{"@type":"Answer","text":"Im selben WLAN verbinden sich die beiden Geräte direkt, die Geschwindigkeit hängt also von deinem lokalen Netz ab und nicht von einem Server — meist so schnell, wie dein WLAN es erlaubt. Netzwerkübergreifend hängt es von beiden Internetverbindungen ab, und Relayium weicht nur dann auf ein verschlüsseltes Relay aus, wenn keine direkte Verbindung möglich ist."}},{"@type":"Question","name":"Ist es sicher, Dateien so zu senden?","acceptedAnswer":{"@type":"Answer","text":"Ja. Zusätzlich zur Transportverschlüsselung des Browsers legt Relayium eine eigene Schicht darüber: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, und dieser Schlüssel erreicht nie einen Server. Beide Geräte zeigen denselben sechsstelligen Code (SAS), sodass du bestätigen kannst, dass niemand dazwischensitzt, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=de">Relayium</a></header>
+      <h1>Dateien vom PC drahtlos aufs Handy senden — ohne Kabel, ohne App</h1>
+      <p class="updated">Zuletzt aktualisiert: 2026-07-03</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-pc-to-phone-wirelessly">English</a><a href="/zh/how-to/send-files-pc-to-phone-wirelessly">中文</a><a href="/ja/how-to/send-files-pc-to-phone-wirelessly">日本語</a><a href="/ko/how-to/send-files-pc-to-phone-wirelessly">한국어</a><a href="/de/how-to/send-files-pc-to-phone-wirelessly" aria-current="true">Deutsch</a><a href="/fr/how-to/send-files-pc-to-phone-wirelessly">Français</a></nav>
+      <p class="lead">Eine Datei vom Laptop aufs Handy zu bekommen, sollte nicht bedeuten, das richtige Kabel zu suchen, sich selbst eine E-Mail zu schreiben oder etwas in eine Cloud hochzuladen und wieder herunterzuladen. Relayium bewegt die Bytes über dein eigenes WLAN direkt vom Computer aufs Handy, im Browser, ohne dass auf einer Seite etwas installiert werden muss.</p>
+      <p class="lead">Diese Anleitung zeigt den drahtlosen Weg Schritt für Schritt — im selben Netz oder netzwerkübergreifend — und vergleicht ihn dann ehrlich mit den üblichen Alternativen (USB, Bluetooth, Chat-Apps und E-Mail), damit du das passende Werkzeug wählen kannst.</p>
+      <h2>Im selben WLAN vom PC aufs Handy senden</h2>
+      <p>Das ist der schnellste Weg: Beide Geräte sind im selben Netz, verbinden sich also direkt, und die Übertragung ist nur durch dein WLAN begrenzt. Du brauchst nichts außer einem Browser auf jedem Gerät.</p>
+      <ul><li>Öffne am Computer relayium.com in einem beliebigen modernen Browser (Chrome, Edge, Firefox oder Safari).</li><li>Öffne relayium.com auch auf dem Handy. Im selben Netz erkennen sich die beiden Geräte automatisch.</li><li>Ziehe am Computer Dateien direkt auf die Seite oder klicke, um sie auszuwählen — bis zu 10 Dateien pro Stapel. Du kannst einen ganzen Ordner ablegen, und Relayium behält dessen Struktur bei.</li><li>Wähle das Handy als Ziel und starte. Beide Geräte zeigen denselben sechsstelligen Prüfcode (SAS); ein kurzer Blick, bestätige die Übereinstimmung, und die Dateien fliegen hinüber.</li><li>Speichere die empfangenen Dateien auf dem Handy. Für eine solche Echtzeitübertragung ist kein Konto nötig.</li></ul>
+      <h2>Nicht im selben Netz? Nimm einen Pairing-Code</h2>
+      <p>Das Handy ist im Mobilfunknetz und der PC im heimischen WLAN? Kein Problem — Relayium ist darauf ausgelegt, über Netzwerke hinweg zu reichen, nicht nur im selben.</p>
+      <p>Statt automatischer Erkennung erhält der Absender einen kurzen Pairing-Code (oder einen Freigabelink). Gib den Code auf dem anderen Gerät ein, und die beiden verbinden sich direkt Peer-to-Peer, sofern die Netzwerke es zulassen. Ist ein direkter Weg unmöglich, weicht der verschlüsselte Datenstrom auf ein TURN-Relay aus — das Relay sieht nur Chiffretext, sodass die Übertragung Ende-zu-Ende-verschlüsselt bleibt. Bricht die Verbindung mittendrin ab, kann die Übertragung fortgesetzt werden, statt neu zu beginnen.</p>
+      <h2>Wie eine App installieren (optionale PWA)</h2>
+      <p>Relayium ist eine Website, es gibt also wirklich nichts zu installieren. Wenn du aber oft Dateien sendest, kannst du sie als Progressive Web App (PWA) zum Startbildschirm oder Desktop hinzufügen: Sie öffnet sich dann in einem eigenen Fenster und startet wie eine native App, während sie im Kern weiterhin nur die Webseite ist.</p>
+      <p>Nutze auf dem Handy die Option „Zum Startbildschirm hinzufügen“ deines Browsers; am Computer das Installationssymbol in der Adressleiste. Kostenlos bleibt es so oder so — Relayium ist quelloffen unter der MIT-Lizenz auf github.com/relayium/relayium und läuft unter Windows, macOS, Linux, Android und iOS.</p>
+      <h2>Große Dateien: was dein Browser bewältigt</h2>
+      <p>Da eine Echtzeitübertragung deine Dateien nie auf einem Server ablegt, musst du dich um kein Upload-Kontingent kümmern. Die praktische Grenze hängt davon ab, welcher Browser empfängt.</p>
+      <p>In Chrome oder Edge streamen eingehende Daten direkt auf die Festplatte, es gibt also praktisch keine Größengrenze — Videos mit mehreren Gigabyte sind kein Problem. Firefox und Safari puffern die Datei stattdessen im Arbeitsspeicher, halte dort eine einzelne Datei also unter etwa 200 MB. Wenn du etwas Großes an ein Safari-basiertes iPhone senden musst, umgehst du die Grenze vollständig, indem du auf einem Chrome-basierten Gerät empfängst.</p>
+      <h2>Andere Wege vom PC aufs Handy (und ihre Grenzen)</h2>
+      <p>Drahtlos im Browser ist nicht die einzige Möglichkeit, und ehrlich gesagt hat jede Alternative ihren Platz. So schneiden die üblichen ab:</p>
+      <ul><li>USB-Kabel: zuverlässig und schnell, aber du brauchst das richtige Kabel, und der Dateizugriff vom Handy zum PC kann fummelig sein (besonders iPhone zu Windows). Es ist kabelgebunden, nicht drahtlos.</li><li>Bluetooth: wirklich kabellos, aber langsam — schon ein paar große Fotos können Minuten dauern, und für Videos oder große Stapel ist es unpraktisch.</li><li>Chat-Apps oder E-Mail an sich selbst (WhatsApp, Telegram, Mail): praktisch, wenn schon geöffnet, aber die meisten haben Größenbeschränkungen, komprimieren Fotos womöglich neu und leiten deine Dateien über einen fremden Server, statt sie privat zu halten.</li><li>Relayium: drahtlos, ohne Installation, ohne Konto für Echtzeitübertragungen, ohne Neukomprimierung (byteweise mit SHA-256-Integritätsprüfung je Datei) und Ende-zu-Ende-verschlüsselt mit einem Prüfcode, den du selbst kontrollieren kannst.</li></ul>
+      <h2>Häufige Fragen</h2>
+      <h3>Funktioniert das auch mit Mac und Android, nicht nur Windows und iPhone?</h3>
+      <p>Ja. Relayium läuft im Browser unter Windows, macOS, Linux, Android und iOS, jede Kombination funktioniert also — Windows zu Android, Mac zu iPhone, Linux zu einem Handy und umgekehrt. Auf keinem Gerät muss etwas installiert werden.</p>
+      <h3>Wie schnell ist die Übertragung?</h3>
+      <p>Im selben WLAN verbinden sich die beiden Geräte direkt, die Geschwindigkeit hängt also von deinem lokalen Netz ab und nicht von einem Server — meist so schnell, wie dein WLAN es erlaubt. Netzwerkübergreifend hängt es von beiden Internetverbindungen ab, und Relayium weicht nur dann auf ein verschlüsseltes Relay aus, wenn keine direkte Verbindung möglich ist.</p>
+      <h3>Ist es sicher, Dateien so zu senden?</h3>
+      <p>Ja. Zusätzlich zur Transportverschlüsselung des Browsers legt Relayium eine eigene Schicht darüber: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, und dieser Schlüssel erreicht nie einen Server. Beide Geräte zeigen denselben sechsstelligen Code (SAS), sodass du bestätigen kannst, dass niemand dazwischensitzt, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft.</p>
+      <div class="ctacard">
+        <p>Öffne Relayium auf deinem Computer und deinem Handy und sende deine erste Datei drahtlos — kein Kabel, keine Installation, kein Konto nötig.</p>
+        <a class="cta" href="/?lang=de">Relayium jetzt ausprobieren</a>
+      </div>
+      <h2>Weiterlesen</h2>
+      <ul class="related"><li><a href="/de/compare/snapdrop">Relayium vs. Snapdrop &amp; PairDrop: welche sichere P2P-Übertragung?</a></li><li><a href="/de/compare/airdrop">Relayium vs. AirDrop: eine plattformübergreifende Alternative</a></li><li><a href="/de/compare/wetransfer">Relayium vs. WeTransfer: große Dateien ohne Server senden</a></li><li><a href="/de/how-to/transfer-files-android-to-iphone">Dateien von Android auf iPhone übertragen (ohne Kabel)</a></li><li><a href="/de/how-to/send-large-files-without-cloud">Große Dateien ohne Cloud versenden</a></li><li><a href="/de/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=de">← Relayium</a>
+        <a href="/de/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

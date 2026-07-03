@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium vs WeTransfer : envoyer de gros fichiers sans serveur · Relayium</title>
+    <meta name="description" content="Un comparatif honnête de Relayium et WeTransfer. WeTransfer excelle au partage asynchrone par lien ; Relayium ajoute des transferts en temps réel sans limite de taille, sans serveur, et des liens stockés à divulgation nulle." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/fr/compare/wetransfer" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/wetransfer" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/wetransfer" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/wetransfer" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/wetransfer" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/wetransfer" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/wetransfer" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/wetransfer" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Relayium vs WeTransfer : envoyer de gros fichiers sans serveur" />
+    <meta property="og:description" content="Un comparatif honnête de Relayium et WeTransfer. WeTransfer excelle au partage asynchrone par lien ; Relayium ajoute des transferts en temps réel sans limite de taille, sans serveur, et des liens stockés à divulgation nulle." />
+    <meta property="og:url" content="https://relayium.com/fr/compare/wetransfer" />
+    <meta property="og:locale" content="fr" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs WeTransfer : envoyer de gros fichiers sans serveur","description":"Un comparatif honnête de Relayium et WeTransfer. WeTransfer excelle au partage asynchrone par lien ; Relayium ajoute des transferts en temps réel sans limite de taille, sans serveur, et des liens stockés à divulgation nulle.","inLanguage":"fr","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/fr/compare/wetransfer","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"N'y a-t-il vraiment aucune limite de taille de fichier ?","acceptedAnswer":{"@type":"Answer","text":"En mode temps réel, il n'y a aucune limite côté serveur, car le fichier ne touche jamais un serveur. Dans Chrome ou Edge, le téléchargement se diffuse directement sur le disque, donc les fichiers de plusieurs gigaoctets passent sans souci. Firefox et Safari mettent en mémoire tampon à la place, gardez donc ces transferts sous environ 200 Mo. Les liens de téléchargement stockés ont un quota lié à votre compte."}},{"@type":"Question","name":"Que faire si le destinataire n'est pas en ligne ?","acceptedAnswer":{"@type":"Answer","text":"Utilisez un lien de téléchargement stocké. Votre navigateur chiffre les fichiers en AES-256-GCM, la clé reste uniquement dans le fragment de l'URL, et le serveur conserve un texte chiffré à divulgation nulle que le destinataire pourra récupérer plus tard. Créer le lien exige que l'expéditeur se connecte, et vous pouvez le régler pour expirer ou se détruire après le premier téléchargement."}},{"@type":"Question","name":"Relayium est-il gratuit ?","acceptedAnswer":{"@type":"Answer","text":"Oui. Relayium est gratuit et open source sous licence MIT, avec l'intégralité du protocole et du code sur github.com/relayium/relayium. Il n'y a pas d'offre payante pour débloquer de plus gros transferts en temps réel — la marge de taille vient de la diffusion sur le disque dans le navigateur, pas d'un abonnement."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=fr">Relayium</a></header>
+      <h1>Relayium vs WeTransfer : envoyer de gros fichiers sans serveur</h1>
+      <p class="updated">Dernière mise à jour: 2026-07-03</p>
+      <nav class="langbar" aria-label="Language"><a href="/compare/wetransfer">English</a><a href="/zh/compare/wetransfer">中文</a><a href="/ja/compare/wetransfer">日本語</a><a href="/ko/compare/wetransfer">한국어</a><a href="/de/compare/wetransfer">Deutsch</a><a href="/fr/compare/wetransfer" aria-current="true">Français</a></nav>
+      <p class="lead">WeTransfer a rendu l&#39;envoi de gros fichiers sans effort : déposez un fichier, obtenez un lien, et le destinataire télécharge quand il est prêt — même s&#39;il était hors ligne au moment de l&#39;envoi. Cette expérience asynchrone, sans compte pour recevoir, est vraiment bonne, et c&#39;est pourquoi tant de gens s&#39;y fient.</p>
+      <p class="lead">Cet article compare les deux équitablement. La force de WeTransfer est un partage soigné, basé sur des liens, où le fichier attend sur un serveur. Le focus de Relayium est différent : des transferts en temps réel qui vont directement entre les appareils, sans limite de taille, et qui n&#39;atterrissent jamais sur un serveur ; s&#39;y ajoute un lien stocké optionnel qui reste chiffré à divulgation nulle. Aucun n&#39;est simplement meilleur — ils résolvent des problèmes légèrement différents.</p>
+      <h2>Ce que WeTransfer fait bien</h2>
+      <p>L&#39;idée centrale de WeTransfer est asynchrone : l&#39;expéditeur téléverse une fois, obtient un lien, et le destinataire télécharge plus tard. Les deux n&#39;ont jamais à être en ligne en même temps, exactement ce que vous voulez quand vous envoyez par e-mail une vidéo à un client qui l&#39;ouvrira demain.</p>
+      <p>Il est aussi mature et sans friction. Rien à installer, l&#39;offre gratuite permet d&#39;envoyer sans compte, et l&#39;interface est réputée simple. Pour un partage occasionnel par lien dans la limite de taille, il fonctionne tout simplement.</p>
+      <h2>Là où ils diffèrent : le fichier réside sur un serveur</h2>
+      <p>Avec WeTransfer, votre fichier est téléversé sur ses serveurs, y est stocké un moment, puis téléchargé depuis là. L&#39;offre gratuite plafonne chaque transfert à 2 Go, et le lien pointe vers une copie posée sur une infrastructure que vous ne contrôlez pas. Le transfert est chiffré en transit et au repos, mais il n&#39;est pas à divulgation nulle : le service détient les clés et pourrait, en principe, lire le fichier.</p>
+      <p>Le mode temps réel de Relayium fonctionne à l&#39;inverse. Les octets circulent directement entre les deux appareils via un canal pair-à-pair chiffré et ne sont jamais garés sur un serveur, il n&#39;y a donc aucune limite de taille côté serveur à atteindre. Par-dessus le transport WebRTC, Relayium ajoute sa propre couche : un échange de clés X25519 dérive une clé pour un AES-256-GCM par bloc, les deux appareils affichent un code de vérification à 6 chiffres identique (SAS) pour écarter un homme du milieu, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256.</p>
+      <h2>Des transferts en temps réel sans limite de taille</h2>
+      <p>Comme rien n&#39;est stocké sur un serveur, la limite pratique de taille vient de votre propre navigateur. Dans Chrome ou Edge, Relayium diffuse les données entrantes directement sur le disque, il n&#39;y a donc en pratique aucune limite de taille — des vidéos et archives de projet de plusieurs gigaoctets passent sans souci.</p>
+      <p>Firefox et Safari n&#39;offrent pas encore le même téléchargement en flux, si bien que le navigateur y met le fichier en mémoire tampon ; gardez ces transferts sous environ 200 Mo pour une expérience fluide. Les transferts en temps réel ne demandent aucun compte : ouvrez relayium.com sur les deux appareils, choisissez jusqu&#39;à 10 fichiers, vérifiez le code, et envoyez. Si une connexion tombe en cours de route, le transfert reprend au lieu de recommencer, et quand une liaison directe est impossible, il bascule vers un relais TURN chiffré qui ne voit que du texte chiffré.</p>
+      <h2>Quand le destinataire est hors ligne : les liens stockés à divulgation nulle</h2>
+      <p>Le transfert en temps réel exige que les deux soient présents, la seule chose que le modèle de lien de WeTransfer fait mieux. Alors Relayium offre le même confort asynchrone sans renoncer à la confidentialité : un lien de téléchargement stocké.</p>
+      <p>Votre navigateur chiffre les fichiers en AES-256-GCM avant le téléversement, et la clé de déchiffrement ne vit que dans le fragment de l&#39;URL — la partie après le #, que les navigateurs n&#39;envoient jamais au serveur. Le serveur ne stocke donc qu&#39;un texte chiffré à divulgation nulle qu&#39;il ne peut pas lire, et le destinataire n&#39;a pas besoin de compte pour télécharger. Créer un tel lien exige que l&#39;expéditeur se connecte, et chaque lien peut être réglé pour expirer ou se détruire après le premier téléchargement.</p>
+      <h2>Comparatif des fonctions en un coup d&#39;œil</h2>
+      <p>Les différences qui comptent le plus, côte à côte :</p>
+      <ul><li>Limite de taille : l&#39;offre gratuite de WeTransfer plafonne les transferts à 2 Go ; le temps réel de Relayium n&#39;a aucune limite côté serveur (Chrome/Edge diffusent sur le disque ; gardez Firefox/Safari sous ~200 Mo).</li><li>Où résident les fichiers : WeTransfer stocke votre fichier sur ses serveurs ; le temps réel de Relayium ne met jamais le fichier sur un serveur.</li><li>Chiffrement : WeTransfer chiffre en transit et au repos mais détient les clés ; Relayium est de bout en bout avec un code SAS à 6 chiffres, et les liens stockés sont à divulgation nulle avec la clé uniquement dans le fragment de l&#39;URL.</li><li>Destinataire hors ligne : les deux gèrent le cas — WeTransfer via son lien stocké, Relayium via un lien de téléchargement stocké à divulgation nulle avec expiration ou destruction après téléchargement.</li><li>Intégrité et reprise : Relayium vérifie chaque fichier par SHA-256 et peut reprendre un transfert interrompu au lieu de recommencer.</li><li>Coût et ouverture : Relayium est gratuit et sous licence MIT sur github.com/relayium/relayium, et tourne dans le navigateur sur Windows, macOS, Linux, Android et iOS sans rien installer.</li></ul>
+      <h2>Questions fréquentes</h2>
+      <h3>N&#39;y a-t-il vraiment aucune limite de taille de fichier ?</h3>
+      <p>En mode temps réel, il n&#39;y a aucune limite côté serveur, car le fichier ne touche jamais un serveur. Dans Chrome ou Edge, le téléchargement se diffuse directement sur le disque, donc les fichiers de plusieurs gigaoctets passent sans souci. Firefox et Safari mettent en mémoire tampon à la place, gardez donc ces transferts sous environ 200 Mo. Les liens de téléchargement stockés ont un quota lié à votre compte.</p>
+      <h3>Que faire si le destinataire n&#39;est pas en ligne ?</h3>
+      <p>Utilisez un lien de téléchargement stocké. Votre navigateur chiffre les fichiers en AES-256-GCM, la clé reste uniquement dans le fragment de l&#39;URL, et le serveur conserve un texte chiffré à divulgation nulle que le destinataire pourra récupérer plus tard. Créer le lien exige que l&#39;expéditeur se connecte, et vous pouvez le régler pour expirer ou se détruire après le premier téléchargement.</p>
+      <h3>Relayium est-il gratuit ?</h3>
+      <p>Oui. Relayium est gratuit et open source sous licence MIT, avec l&#39;intégralité du protocole et du code sur github.com/relayium/relayium. Il n&#39;y a pas d&#39;offre payante pour débloquer de plus gros transferts en temps réel — la marge de taille vient de la diffusion sur le disque dans le navigateur, pas d&#39;un abonnement.</p>
+      <div class="ctacard">
+        <p>Envoyez un gros fichier maintenant — sans limite de taille, sans installation, et sans compte pour les transferts en temps réel.</p>
+        <a class="cta" href="/?lang=fr">Essayer Relayium maintenant</a>
+      </div>
+      <h2>À lire ensuite</h2>
+      <ul class="related"><li><a href="/fr/compare/snapdrop">Relayium vs Snapdrop et PairDrop : quel transfert P2P sécurisé ?</a></li><li><a href="/fr/compare/airdrop">Relayium vs AirDrop : une alternative multiplateforme</a></li><li><a href="/fr/how-to/transfer-files-android-to-iphone">Transférer des fichiers d&#39;Android vers iPhone (sans câble)</a></li><li><a href="/fr/how-to/send-files-pc-to-phone-wirelessly">Envoyer des fichiers du PC au téléphone sans fil, sans câble ni appli</a></li><li><a href="/fr/how-to/send-large-files-without-cloud">Envoyer de gros fichiers sans le cloud</a></li><li><a href="/fr/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=fr">← Relayium</a>
+        <a href="/fr/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

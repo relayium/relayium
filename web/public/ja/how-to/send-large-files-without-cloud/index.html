@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>クラウドを使わずに大きなファイルを送る方法 · Relayium</title>
+    <meta name="description" content="数ギガバイトの動画やプロジェクトのアーカイブを、ブラウザからブラウザへ直接送信。クラウドへのアップロード不要、リアルタイムモードではサイズ上限なし、再開可能な転送とファイルごとの整合性チェック付き。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ja/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-large-files-without-cloud" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-large-files-without-cloud" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="クラウドを使わずに大きなファイルを送る方法" />
+    <meta property="og:description" content="数ギガバイトの動画やプロジェクトのアーカイブを、ブラウザからブラウザへ直接送信。クラウドへのアップロード不要、リアルタイムモードではサイズ上限なし、再開可能な転送とファイルごとの整合性チェック付き。" />
+    <meta property="og:url" content="https://relayium.com/ja/how-to/send-large-files-without-cloud" />
+    <meta property="og:locale" content="ja" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"クラウドを使わずに大きなファイルを送る方法","description":"数ギガバイトの動画やプロジェクトのアーカイブを、ブラウザからブラウザへ直接送信。クラウドへのアップロード不要、リアルタイムモードではサイズ上限なし、再開可能な転送とファイルごとの整合性チェック付き。","inLanguage":"ja","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/ja/how-to/send-large-files-without-cloud","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"送れるファイルの最大サイズは？","acceptedAnswer":{"@type":"Answer","text":"リアルタイムモードにサーバー側の制限はありません——上限は受信側のブラウザ次第です。Chrome や Edge ではファイルがディスクへストリーミングされるため、メモリを使い切らずに数十 GB を送れます。Firefox や Safari ではファイルがメモリにバッファされるので、それらのブラウザでは個々のファイルを約 200 MB 以内に抑えてください。"}},{"@type":"Question","name":"転送が中断されたらどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"自動的に再開します。転送の途中で接続が切れても——Wi-Fi の切断、ノートPCのスリープ、ネットワークの切り替え——Relayium はファイル全体をやり直すのではなく止まった所から続けるので、長い転送が一瞬の不調で無駄になりません。"}},{"@type":"Question","name":"大きなファイルでプライバシーはどう守られますか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイム転送は X25519 の鍵交換とブロックごとの AES-256-GCM でエンドツーエンドに暗号化され、その鍵はどのサーバーにも届きません。両方の端末が6桁の検証コードを表示して間に誰もいないことを確認し、各ファイルは SHA-256 ハッシュで検証されます。TURN リレーが必要な場合でも、それが見るのは暗号文だけです。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <h1>クラウドを使わずに大きなファイルを送る方法</h1>
+      <p class="updated">最終更新: 2026-07-03</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-large-files-without-cloud">English</a><a href="/zh/how-to/send-large-files-without-cloud">中文</a><a href="/ja/how-to/send-large-files-without-cloud" aria-current="true">日本語</a><a href="/ko/how-to/send-large-files-without-cloud">한국어</a><a href="/de/how-to/send-large-files-without-cloud">Deutsch</a><a href="/fr/how-to/send-large-files-without-cloud">Français</a></nav>
+      <p class="lead">20 GB の動画書き出しや重いプロジェクトのアーカイブは、まさにクラウドストレージが最も遅く感じる場面です。ファイル全体を一度アップロードして待ち、相手がもう一度ダウンロードする——2回の完全な転送に加え、ストレージ容量の制限も受けます。一度きりの受け渡しなのに、A から B へ送るだけのバイトのために、これだけの複製と待ち時間がかかります。</p>
+      <p class="lead">Relayium は直接の経路を取ります。ファイルは暗号化された P2P チャネルであなたのブラウザから相手のブラウザへ直接流れ、途中でサーバーに置かれることはありません。本ガイドではその方法で大きなファイルを送る手順を示し、2つの現実的な制限についても正直にお伝えします。どのブラウザが無制限のサイズに対応できるか、そして通常は双方が同時にオンラインである必要がある、という点です。</p>
+      <h2>大きなファイルで直接転送が有利な理由</h2>
+      <p>クラウドストレージでは大きなファイルがネットワークを2回横断します——サーバーへアップロードし、相手へダウンロードで——その間ストレージ容量も消費します。P2P の直接転送はネットワークを1回だけ、送信者から受信者へ横断し、途中には何も保存しません。</p>
+      <p>Relayium は完全にブラウザ内で動作するため、どちらの端末にもインストールは不要です。Windows、macOS、Linux、Android、iOS で動き、リアルタイム転送にアカウントは要りません——両方の端末で relayium.com を開いて接続するだけです。</p>
+      <h2>リアルタイムモードにはサイズ上限がない</h2>
+      <p>リアルタイム転送にはサーバー側のサイズ制限がありません。ファイルを保持するサーバーが存在しないからです。実際の上限は受信側のブラウザが決めるもので、私たちが決めるものではありません。</p>
+      <p>Chrome と Edge では、届いたファイルは到着に合わせてそのままディスクへストリーミングされるため、メモリに収める必要がありません——これが非常に大きなファイルに使うべき組み合わせで、数十 GB まで余裕です。1バッチには最大10ファイルを入れられ、それぞれが SHA-256 ハッシュでエンドツーエンドに検証されるので、ディスクに残るものは送ったものとバイト単位で同一です。</p>
+      <ul><li>受信側が Chrome または Edge：ファイルはディスクへストリーミングされるため、実質的にサイズ上限はありません。</li><li>Firefox と Safari は代わりにファイルをメモリにバッファするため、そこでは個々のファイルを約 200 MB 以内に抑えてください。</li><li>1バッチ最大10ファイル、それぞれ到着時に固有の SHA-256 ハッシュで検証されます。</li></ul>
+      <h2>最初からではなく再開する</h2>
+      <p>大きな転送には時間がかかり、その時間こそ Wi-Fi が切れ、ノートPCがスリープし、スマホがネットワークを切り替える瞬間です。Relayium はそれに備えて作られています。途中で接続が切れても、転送はファイル全体をやり直すのではなく、止まった所から再開します。</p>
+      <p>接続性も同じように扱われます。可能な限り転送は P2P で直接行われ、2つのネットワークが直接到達できないときは、暗号化ストリームが TURN リレーにフォールバックします。リレーが見るのは暗号文だけなので、フォールバックの経路でもエンドツーエンド暗号化のままです。</p>
+      <h2>今すぐ送る、または後で取れるリンクを残す</h2>
+      <p>リアルタイムの直接転送は双方が同時にオンラインであることが必要で、都合を合わせられるときに最適です——通話中、共有の瞬間、席にいる同僚。相手が今いない場合は、代わりに保存型のダウンロードリンクを作成できます。</p>
+      <p>保存リンクはゼロ知識です。ブラウザがアップロード前に AES-256-GCM でファイルを暗号化し、復号鍵は URL フラグメントにだけ存在するため、サーバーは読めない暗号文を保持します。トレードオフも把握してください——リンクの作成には送信側のサインインが必要で、リンクはストレージ容量を消費し、有効期限があります(初回ダウンロード後に消去する設定も可能)。最大のファイルでは、双方がオンラインになれるなら、リアルタイムの経路が常に最もすっきりした選択肢です。</p>
+      <h2>よくある質問</h2>
+      <h3>送れるファイルの最大サイズは？</h3>
+      <p>リアルタイムモードにサーバー側の制限はありません——上限は受信側のブラウザ次第です。Chrome や Edge ではファイルがディスクへストリーミングされるため、メモリを使い切らずに数十 GB を送れます。Firefox や Safari ではファイルがメモリにバッファされるので、それらのブラウザでは個々のファイルを約 200 MB 以内に抑えてください。</p>
+      <h3>転送が中断されたらどうなりますか？</h3>
+      <p>自動的に再開します。転送の途中で接続が切れても——Wi-Fi の切断、ノートPCのスリープ、ネットワークの切り替え——Relayium はファイル全体をやり直すのではなく止まった所から続けるので、長い転送が一瞬の不調で無駄になりません。</p>
+      <h3>大きなファイルでプライバシーはどう守られますか？</h3>
+      <p>リアルタイム転送は X25519 の鍵交換とブロックごとの AES-256-GCM でエンドツーエンドに暗号化され、その鍵はどのサーバーにも届きません。両方の端末が6桁の検証コードを表示して間に誰もいないことを確認し、各ファイルは SHA-256 ハッシュで検証されます。TURN リレーが必要な場合でも、それが見るのは暗号文だけです。</p>
+      <div class="ctacard">
+        <p>次の数ギガバイトのファイルを直接の方法で送りましょう——インストール不要、リアルタイム転送はアカウントも不要です。</p>
+        <a class="cta" href="/?lang=ja">Relayium を今すぐ試す</a>
+      </div>
+      <h2>続けて読む</h2>
+      <ul class="related"><li><a href="/ja/compare/snapdrop">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/compare/wetransfer">Relayium と WeTransfer の比較：サーバーを介さず大容量を送る</a></li><li><a href="/ja/how-to/transfer-files-android-to-iphone">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ja">← Relayium</a>
+        <a href="/ja/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

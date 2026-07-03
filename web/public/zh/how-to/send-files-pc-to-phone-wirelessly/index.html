@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>电脑无线传文件到手机：不用数据线，不用装 App · Relayium</title>
+    <meta name="description" content="一步步教你在电脑和手机之间通过 Wi-Fi 传文件——拖拽即发，不用数据线，不用网盘账号，全程端到端加密。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/zh/how-to/send-files-pc-to-phone-wirelessly" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-files-pc-to-phone-wirelessly" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-files-pc-to-phone-wirelessly" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-files-pc-to-phone-wirelessly" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-files-pc-to-phone-wirelessly" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-files-pc-to-phone-wirelessly" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-files-pc-to-phone-wirelessly" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-files-pc-to-phone-wirelessly" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="电脑无线传文件到手机：不用数据线，不用装 App" />
+    <meta property="og:description" content="一步步教你在电脑和手机之间通过 Wi-Fi 传文件——拖拽即发，不用数据线，不用网盘账号，全程端到端加密。" />
+    <meta property="og:url" content="https://relayium.com/zh/how-to/send-files-pc-to-phone-wirelessly" />
+    <meta property="og:locale" content="zh-Hans" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"电脑无线传文件到手机：不用数据线，不用装 App","description":"一步步教你在电脑和手机之间通过 Wi-Fi 传文件——拖拽即发，不用数据线，不用网盘账号，全程端到端加密。","inLanguage":"zh-Hans","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/zh/how-to/send-files-pc-to-phone-wirelessly","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Mac 和 Android 也行吗，不只是 Windows 和 iPhone？","acceptedAnswer":{"@type":"Answer","text":"行。Relayium 在 Windows、macOS、Linux、Android 和 iOS 的浏览器里都能运行，所以任意组合都可以——Windows 传 Android、Mac 传 iPhone、Linux 传手机，反过来也一样。两端都无需安装任何东西。"}},{"@type":"Question","name":"传输速度有多快？","acceptedAnswer":{"@type":"Answer","text":"在同一 Wi-Fi 下，两台设备直接互连，所以速度由你的本地网络决定，而不受任何服务器限制——通常能跑满你的 Wi-Fi。跨网络时则取决于双方的网络，而且只有在无法直连时，Relayium 才会退回到加密中继。"}},{"@type":"Question","name":"这样传文件安全吗？","acceptedAnswer":{"@type":"Answer","text":"安全。在浏览器的传输加密之上，Relayium 再加了一层：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，这把密钥从不接触服务器。两台设备会显示同一段 6 位校验码（SAS），你可以据此确认没有人插在中间；每个文件还会用 SHA-256 做端到端校验。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <h1>电脑无线传文件到手机：不用数据线，不用装 App</h1>
+      <p class="updated">最近更新: 2026-07-03</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-pc-to-phone-wirelessly">English</a><a href="/zh/how-to/send-files-pc-to-phone-wirelessly" aria-current="true">中文</a><a href="/ja/how-to/send-files-pc-to-phone-wirelessly">日本語</a><a href="/ko/how-to/send-files-pc-to-phone-wirelessly">한국어</a><a href="/de/how-to/send-files-pc-to-phone-wirelessly">Deutsch</a><a href="/fr/how-to/send-files-pc-to-phone-wirelessly">Français</a></nav>
+      <p class="lead">把一个文件从笔记本弄到手机上，不该还得翻找合适的数据线、给自己发邮件，或者先上传到网盘再下载一遍。Relayium 通过你自己的 Wi-Fi，把文件字节直接从电脑传到手机，全程在浏览器里完成，两端都无需安装任何软件。</p>
+      <p class="lead">本文一步步讲清无线传输的做法——同一网络或跨网络都行——再客观地和常见的几种替代方式（数据线、蓝牙、聊天软件和邮件）作对比，帮你为不同场景选对工具。</p>
+      <h2>同一 Wi-Fi 下，从电脑传到手机</h2>
+      <p>这是最快的方式：两台设备在同一网络里，直接互连，传输速度只受你的 Wi-Fi 限制。除了浏览器，两边什么都不需要。</p>
+      <ul><li>在电脑上用任意现代浏览器（Chrome、Edge、Firefox 或 Safari）打开 relayium.com。</li><li>在手机上同样打开 relayium.com。在同一网络里，两台设备会自动发现彼此。</li><li>在电脑上，把文件直接拖到页面上，或点击选择——每批最多 10 个文件。你也可以整个文件夹拖进去，Relayium 会保留其结构。</li><li>选中手机作为目标并开始。两台设备会显示同一段 6 位校验码（SAS）；瞄一眼，确认一致，文件就飞过去了。</li><li>在手机上保存收到的文件。像这样的实时传输无需账号。</li></ul>
+      <h2>不在同一网络？用配对码</h2>
+      <p>手机用的是移动数据，电脑连的是家里的 Wi-Fi？没关系——Relayium 生来就支持跨网络，而不只是同一个网络。</p>
+      <p>此时不再自动发现，而是发送方拿到一个短配对码（或分享链接）。在另一台设备上输入这个码，两者就点对点直连，只要网络条件允许就直传。当无法直连时，加密数据流会退回到 TURN 中继——中继只能看到密文，因此传输始终保持端到端加密。若中途断开，传输可以断点续传，而不必从头再来。</p>
+      <h2>像 App 一样安装（可选的 PWA）</h2>
+      <p>Relayium 就是一个网站，所以确实没有什么要安装的。但如果你经常传文件，可以把它添加到主屏幕或桌面，作为渐进式网页应用（PWA）：它会在独立窗口中打开，像原生应用一样启动，而底层依然只是那张网页。</p>
+      <p>在手机上用浏览器的&quot;添加到主屏幕&quot;；在电脑上用地址栏里的安装图标。无论哪种方式它都保持免费——Relayium 采用 MIT 许可开源，代码在 github.com/relayium/relayium，支持 Windows、macOS、Linux、Android 和 iOS。</p>
+      <h2>大文件：你的浏览器能扛多大</h2>
+      <p>由于实时传输从不把文件存到服务器上，所以不用担心任何上传配额。实际的上限取决于用哪个浏览器接收。</p>
+      <p>在 Chrome 或 Edge 上，接收到的数据直接流式写入磁盘，因此几乎没有大小上限——几个 GB 的视频也没问题。Firefox 和 Safari 则是在内存里缓冲文件，所以在这两者上单个文件建议控制在约 200 MB 以内。如果你要把很大的文件发给基于 Safari 的 iPhone，改用基于 Chrome 的设备接收就能完全避开这个限制。</p>
+      <h2>电脑传手机的其它方式（及其局限）</h2>
+      <p>浏览器无线传输并不是唯一选择，而且说句实话，每种替代方式都有它的用武之地。常见的几种对比如下：</p>
+      <ul><li>数据线：可靠又快，但你得有合适的线，而且手机到电脑的文件访问有时挺麻烦（尤其 iPhone 到 Windows）。它是有线的，不是无线。</li><li>蓝牙：真正免线，但慢——发几张大照片就可能要好几分钟，传视频或大批文件很不现实。</li><li>聊天软件或给自己发邮件（微信、Telegram、邮箱）：如果已经开着，用起来方便，但大多有大小限制、可能重新压缩照片，而且会把文件经由第三方服务器中转，而非保持私密。</li><li>Relayium：无线、免安装、实时传输免账号、不重新压缩（字节级传输并对每个文件做 SHA-256 完整性校验），且端到端加密，还带一个你能亲自核对的校验码。</li></ul>
+      <h2>常见问题</h2>
+      <h3>Mac 和 Android 也行吗，不只是 Windows 和 iPhone？</h3>
+      <p>行。Relayium 在 Windows、macOS、Linux、Android 和 iOS 的浏览器里都能运行，所以任意组合都可以——Windows 传 Android、Mac 传 iPhone、Linux 传手机，反过来也一样。两端都无需安装任何东西。</p>
+      <h3>传输速度有多快？</h3>
+      <p>在同一 Wi-Fi 下，两台设备直接互连，所以速度由你的本地网络决定，而不受任何服务器限制——通常能跑满你的 Wi-Fi。跨网络时则取决于双方的网络，而且只有在无法直连时，Relayium 才会退回到加密中继。</p>
+      <h3>这样传文件安全吗？</h3>
+      <p>安全。在浏览器的传输加密之上，Relayium 再加了一层：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，这把密钥从不接触服务器。两台设备会显示同一段 6 位校验码（SAS），你可以据此确认没有人插在中间；每个文件还会用 SHA-256 做端到端校验。</p>
+      <div class="ctacard">
+        <p>在电脑和手机上同时打开 Relayium，无线发出你的第一个文件——不用数据线，不用安装，也不用账号。</p>
+        <a class="cta" href="/?lang=zh">立即试用 Relayium</a>
+      </div>
+      <h2>继续阅读</h2>
+      <ul class="related"><li><a href="/zh/compare/snapdrop">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/transfer-files-android-to-iphone">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-large-files-without-cloud">如何不用网盘传输大文件</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=zh">← Relayium</a>
+        <a href="/zh/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

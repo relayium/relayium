@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Transférer des fichiers d&#39;Android vers iPhone (sans câble) · Relayium</title>
+    <meta name="description" content="Un guide pas à pas pour envoyer photos, vidéos et documents d&#39;Android vers iPhone dans le navigateur — sans AirDrop, sans câble, sans envoi vers le cloud. Ouvrez simplement Relayium sur les deux appareils." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/fr/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/transfer-files-android-to-iphone" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Transférer des fichiers d&#39;Android vers iPhone (sans câble)" />
+    <meta property="og:description" content="Un guide pas à pas pour envoyer photos, vidéos et documents d&#39;Android vers iPhone dans le navigateur — sans AirDrop, sans câble, sans envoi vers le cloud. Ouvrez simplement Relayium sur les deux appareils." />
+    <meta property="og:url" content="https://relayium.com/fr/how-to/transfer-files-android-to-iphone" />
+    <meta property="og:locale" content="fr" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Transférer des fichiers d'Android vers iPhone (sans câble)","description":"Un guide pas à pas pour envoyer photos, vidéos et documents d'Android vers iPhone dans le navigateur — sans AirDrop, sans câble, sans envoi vers le cloud. Ouvrez simplement Relayium sur les deux appareils.","inLanguage":"fr","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/fr/how-to/transfer-files-android-to-iphone","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Dois-je installer une application sur l'un des téléphones ?","acceptedAnswer":{"@type":"Answer","text":"Non. Relayium fonctionne entièrement dans le navigateur, sur Android comme sur iPhone. Ouvrez relayium.com sur chaque appareil et vous êtes prêt — un transfert en temps réel ne demande ni compte ni téléchargement. Vous pouvez au choix l'ajouter à l'écran d'accueil comme PWA, mais ce n'est qu'un raccourci."}},{"@type":"Question","name":"Les deux téléphones doivent-ils être sur le même Wi-Fi ?","acceptedAnswer":{"@type":"Answer","text":"Non. Le même réseau est la voie la plus rapide car les appareils se découvrent automatiquement, mais un code d'appairage connecte deux téléphones sur des réseaux différents — même l'un en données mobiles et l'autre en Wi-Fi. Le transfert reste chiffré de bout en bout dans les deux cas."}},{"@type":"Question","name":"Les photos sont-elles compressées ou modifiées d'une quelconque façon ?","acceptedAnswer":{"@type":"Answer","text":"Non. Le fichier d'origine est transféré octet par octet sans compression, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256, si bien que ce qui arrive sur l'iPhone est identique bit pour bit à ce que vous avez envoyé depuis Android."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=fr">Relayium</a></header>
+      <h1>Transférer des fichiers d&#39;Android vers iPhone (sans câble)</h1>
+      <p class="updated">Dernière mise à jour: 2026-07-03</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-android-to-iphone">English</a><a href="/zh/how-to/transfer-files-android-to-iphone">中文</a><a href="/ja/how-to/transfer-files-android-to-iphone">日本語</a><a href="/ko/how-to/transfer-files-android-to-iphone">한국어</a><a href="/de/how-to/transfer-files-android-to-iphone">Deutsch</a><a href="/fr/how-to/transfer-files-android-to-iphone" aria-current="true">Français</a></nav>
+      <p class="lead">Android et iPhone ne partagent pas d&#39;AirDrop, donc déplacer quelques photos ou une vidéo entre eux passe le plus souvent par un câble USB, une messagerie qui compresse vos images, ou un aller-retour via un espace cloud. Les trois sont plus lents et plus pénibles qu&#39;ils ne devraient l&#39;être.</p>
+      <p class="lead">Relayium fait l&#39;impasse sur tout cela. Les deux téléphones ouvrent la même page web, se trouvent, et les fichiers voyagent directement entre eux — chiffrés de bout en bout, aucune application à installer, aucun compte pour un transfert en temps réel. Ce guide vous accompagne pas à pas.</p>
+      <h2>Ce qu&#39;il vous faut avant de commencer</h2>
+      <p>Rien à installer et rien à créer. Les transferts en temps réel fonctionnent directement depuis le navigateur sur les deux appareils.</p>
+      <ul><li>Un téléphone Android avec Chrome (ou n&#39;importe quel navigateur moderne) et un iPhone avec Safari — tous deux à jour.</li><li>Pour la voie la plus rapide, placez les deux appareils sur le même réseau Wi-Fi. Si c&#39;est impossible, pas de souci — un code d&#39;appairage fonctionne aussi sur des réseaux différents.</li><li>Les fichiers à envoyer, jusqu&#39;à 10 par lot.</li></ul>
+      <h2>Pas à pas : les deux appareils sur le même Wi-Fi</h2>
+      <p>C&#39;est la voie la plus simple. Sur le même réseau, les deux téléphones se découvrent automatiquement, il n&#39;y a donc presque rien à saisir.</p>
+      <ul><li>Sur le téléphone Android et sur l&#39;iPhone, ouvrez relayium.com dans le navigateur.</li><li>Chaque appareil apparaît sur l&#39;autre comme un appareil à proximité. Sur le téléphone qui envoie, touchez celui qui reçoit.</li><li>Choisissez les fichiers à envoyer — jusqu&#39;à 10 par lot — ou faites-les simplement glisser.</li><li>Les deux écrans affichent le même code à 6 chiffres. Vérifiez qu&#39;ils concordent ; c&#39;est le code de vérification qui prouve qu&#39;aucun serveur ne s&#39;est intercalé entre vous.</li><li>Acceptez sur l&#39;iPhone qui reçoit, les fichiers se transfèrent directement, puis enregistrez-les sur votre appareil.</li></ul>
+      <h2>Sur des réseaux différents ? Utilisez un code d&#39;appairage</h2>
+      <p>Vous n&#39;avez pas besoin d&#39;être sur le même Wi-Fi. Si les téléphones sont sur des réseaux différents — l&#39;un en données mobiles, l&#39;autre sur le Wi-Fi de la maison — Relayium peut quand même les connecter avec un code d&#39;appairage.</p>
+      <p>L&#39;appareil qui envoie affiche un court code d&#39;appairage ; saisissez-le sur l&#39;autre téléphone (ou ouvrez le lien de partage qu&#39;il génère). Le transfert reste en pair-à-pair direct chaque fois que possible, et quand aucune voie directe n&#39;est disponible, il bascule vers un relais TURN chiffré qui ne voit que du texte chiffré — le transfert reste donc chiffré de bout en bout dans les deux cas. Si la connexion se coupe en cours de route, il peut reprendre au lieu de tout recommencer.</p>
+      <h2>Autres façons de déplacer des fichiers entre Android et iPhone</h2>
+      <p>Relayium n&#39;est pas la seule option, et il vaut la peine de connaître les compromis honnêtes des solutions de rechange :</p>
+      <ul><li>Le Partage rapide de Google et des applications tierces comme SHAREit transfèrent vite, mais exigent une installation sur les deux téléphones, et le Partage rapide n&#39;atteint pas les iPhone.</li><li>Un espace cloud (Google Drive, iCloud, Dropbox) fonctionne quand l&#39;autre personne est hors ligne, mais vous téléversez puis téléchargez deux fois le même fichier, cela grignote votre quota, et le fournisseur en garde une copie.</li><li>Les messageries et l&#39;e-mail sont partout, mais elles recompressent souvent les photos, limitent la taille des pièces jointes et ne sont pas chiffrées de bout en bout pour le partage de fichiers.</li><li>Un câble USB est fiable, mais demande le bon adaptateur entre USB-C et Lightning, plus un ordinateur au milieu pour beaucoup de types de fichiers.</li></ul>
+      <h2>Mes photos perdront-elles en qualité ?</h2>
+      <p>Non. Contrairement à une messagerie, Relayium envoie le fichier d&#39;origine octet par octet — aucune recompression, aucun redimensionnement. Ce qui arrive sur l&#39;iPhone est une copie exacte de ce qui a quitté le téléphone Android.</p>
+      <p>Pour le prouver, chaque fichier est vérifié de bout en bout par une empreinte SHA-256, si bien qu&#39;une photo ou une vidéo qui arrive est garantie identique à celle que vous avez envoyée. Les gros fichiers sont bien gérés aussi : dans Chrome et Edge, le téléchargement est écrit directement sur le disque sans limite de taille, tandis que Firefox et Safari tamponnent en mémoire — sur ceux-là, gardez donc un transfert unique sous environ 200 Mo.</p>
+      <h2>Questions fréquentes</h2>
+      <h3>Dois-je installer une application sur l&#39;un des téléphones ?</h3>
+      <p>Non. Relayium fonctionne entièrement dans le navigateur, sur Android comme sur iPhone. Ouvrez relayium.com sur chaque appareil et vous êtes prêt — un transfert en temps réel ne demande ni compte ni téléchargement. Vous pouvez au choix l&#39;ajouter à l&#39;écran d&#39;accueil comme PWA, mais ce n&#39;est qu&#39;un raccourci.</p>
+      <h3>Les deux téléphones doivent-ils être sur le même Wi-Fi ?</h3>
+      <p>Non. Le même réseau est la voie la plus rapide car les appareils se découvrent automatiquement, mais un code d&#39;appairage connecte deux téléphones sur des réseaux différents — même l&#39;un en données mobiles et l&#39;autre en Wi-Fi. Le transfert reste chiffré de bout en bout dans les deux cas.</p>
+      <h3>Les photos sont-elles compressées ou modifiées d&#39;une quelconque façon ?</h3>
+      <p>Non. Le fichier d&#39;origine est transféré octet par octet sans compression, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256, si bien que ce qui arrive sur l&#39;iPhone est identique bit pour bit à ce que vous avez envoyé depuis Android.</p>
+      <div class="ctacard">
+        <p>Ouvrez Relayium sur les deux téléphones et envoyez vos premiers fichiers — sans installation, sans compte pour les transferts en temps réel.</p>
+        <a class="cta" href="/?lang=fr">Essayer Relayium maintenant</a>
+      </div>
+      <h2>À lire ensuite</h2>
+      <ul class="related"><li><a href="/fr/compare/snapdrop">Relayium vs Snapdrop et PairDrop : quel transfert P2P sécurisé ?</a></li><li><a href="/fr/compare/airdrop">Relayium vs AirDrop : une alternative multiplateforme</a></li><li><a href="/fr/compare/wetransfer">Relayium vs WeTransfer : envoyer de gros fichiers sans serveur</a></li><li><a href="/fr/how-to/send-files-pc-to-phone-wirelessly">Envoyer des fichiers du PC au téléphone sans fil, sans câble ni appli</a></li><li><a href="/fr/how-to/send-large-files-without-cloud">Envoyer de gros fichiers sans le cloud</a></li><li><a href="/fr/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=fr">← Relayium</a>
+        <a href="/fr/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

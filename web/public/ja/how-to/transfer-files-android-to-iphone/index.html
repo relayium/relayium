@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Android から iPhone へファイルを転送する方法（ケーブル不要） · Relayium</title>
+    <meta name="description" content="写真・動画・書類を Android から iPhone へブラウザで送る手順を解説。AirDrop もケーブルもクラウドへのアップロードも不要。両方の端末で Relayium を開くだけです。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ja/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/transfer-files-android-to-iphone" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/transfer-files-android-to-iphone" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Android から iPhone へファイルを転送する方法（ケーブル不要）" />
+    <meta property="og:description" content="写真・動画・書類を Android から iPhone へブラウザで送る手順を解説。AirDrop もケーブルもクラウドへのアップロードも不要。両方の端末で Relayium を開くだけです。" />
+    <meta property="og:url" content="https://relayium.com/ja/how-to/transfer-files-android-to-iphone" />
+    <meta property="og:locale" content="ja" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Android から iPhone へファイルを転送する方法（ケーブル不要）","description":"写真・動画・書類を Android から iPhone へブラウザで送る手順を解説。AirDrop もケーブルもクラウドへのアップロードも不要。両方の端末で Relayium を開くだけです。","inLanguage":"ja","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/ja/how-to/transfer-files-android-to-iphone","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"どちらのスマホにもアプリのインストールは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。Relayium は Android でも iPhone でもすべてブラウザで動作します。各端末で relayium.com を開けば準備完了です——リアルタイム転送にアカウントもダウンロードも不要です。任意で PWA としてホーム画面に追加できますが、それはショートカットにすぎません。"}},{"@type":"Question","name":"両方のスマホが同じ Wi-Fi にある必要がありますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。同じネットワークは端末が自動的に互いを見つけるため最速の経路ですが、ペアリングコードなら2台のスマホを異なるネットワークをまたいで接続できます——一方がモバイルデータ、もう一方が Wi-Fi でも大丈夫です。どちらの場合も転送はエンドツーエンド暗号化のままです。"}},{"@type":"Question","name":"写真は圧縮されたり変更されたりしますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。元のファイルは圧縮なしでバイト単位で転送され、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるため、iPhone に届くものは Android から送ったものとビット単位で同一です。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <h1>Android から iPhone へファイルを転送する方法（ケーブル不要）</h1>
+      <p class="updated">最終更新: 2026-07-03</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-android-to-iphone">English</a><a href="/zh/how-to/transfer-files-android-to-iphone">中文</a><a href="/ja/how-to/transfer-files-android-to-iphone" aria-current="true">日本語</a><a href="/ko/how-to/transfer-files-android-to-iphone">한국어</a><a href="/de/how-to/transfer-files-android-to-iphone">Deutsch</a><a href="/fr/how-to/transfer-files-android-to-iphone">Français</a></nav>
+      <p class="lead">Android と iPhone は AirDrop を共有していないため、写真を数枚や動画を1本やり取りするだけでも、USB ケーブル、画質を圧縮するチャットアプリ、あるいはクラウドドライブへのアップロードとダウンロードの往復に頼りがちです。どれも本来より遅く、面倒です。</p>
+      <p class="lead">Relayium はそれをすべて省きます。2台のスマホが同じ Web ページを開き、互いを見つけ、ファイルは端末間で直接転送されます——エンドツーエンド暗号化、アプリのインストール不要、リアルタイム転送ならアカウントも不要です。本記事で手順を順に説明します。</p>
+      <h2>始める前に必要なもの</h2>
+      <p>インストールも登録も不要です。リアルタイム転送は両方の端末のブラウザからそのまま使えます。</p>
+      <ul><li>Chrome（または任意の最新ブラウザ）が入った Android 端末と、Safari を使う iPhone——どちらも最新の状態に。</li><li>最速の経路は、両方の端末を同じ Wi-Fi ネットワークに置くことです。無理でも大丈夫——ペアリングコードは異なるネットワークをまたいでも機能します。</li><li>送りたいファイル、1バッチあたり最大10個。</li></ul>
+      <h2>手順：両方の端末が同じ Wi-Fi の場合</h2>
+      <p>これが最もシンプルな経路です。同じネットワークなら2台のスマホが自動的に互いを見つけるので、入力はほとんどありません。</p>
+      <ul><li>Android 端末と iPhone の両方で、ブラウザから relayium.com を開きます。</li><li>各端末はもう一方に近くの端末として表示されます。送信側のスマホで、受信側をタップします。</li><li>送るファイルを選びます——1バッチ最大10個——またはそのままドラッグして入れます。</li><li>両方の画面に同じ6桁のコードが表示されます。一致するか確認してください。これは、間にサーバーが入り込んでいないことを示す検証コードです。</li><li>受信側の iPhone で承認するとファイルが直接転送され、端末に保存されます。</li></ul>
+      <h2>異なるネットワークの場合は？ ペアリングコードを使う</h2>
+      <p>同じ Wi-Fi である必要はありません。スマホが別々のネットワーク——一方はモバイルデータ、もう一方は自宅の Wi-Fi——にあっても、Relayium はペアリングコードで両者を接続できます。</p>
+      <p>送信側の端末が短いペアリングコードを表示するので、もう一方のスマホで入力します（または生成された共有リンクを開きます）。可能な限り転送は P2P で直接行われ、直接の経路が使えないときは暗号化された TURN リレーにフォールバックしますが、リレーが見るのは暗号文だけです——どちらの場合も転送はエンドツーエンド暗号化のままです。途中で接続が切れても、最初からではなく再開できます。</p>
+      <h2>Android と iPhone の間でファイルを移す他の方法</h2>
+      <p>Relayium だけが選択肢ではありません。代替手段の正直なトレードオフを知っておく価値があります。</p>
+      <ul><li>Google のクイック共有や SHAREit のようなサードパーティ製アプリは高速ですが、両方のスマホにインストールが必要で、クイック共有は iPhone には届きません。</li><li>クラウドドライブ（Google ドライブ、iCloud、Dropbox）は相手がオフラインでも使えますが、同じファイルをアップロードして再びダウンロードと2回動かすことになり、容量を消費し、提供元がコピーを保持します。</li><li>チャットアプリやメールはどこにでもありますが、たいてい写真を再圧縮し、添付サイズを制限し、ファイル共有はエンドツーエンド暗号化されていません。</li><li>USB ケーブルは確実ですが、USB-C と Lightning の間に適切なアダプターが必要で、多くのファイル形式では間にパソコンも要ります。</li></ul>
+      <h2>写真の画質は落ちますか？</h2>
+      <p>落ちません。メッセージアプリと違い、Relayium は元のファイルをバイト単位でそのまま送ります——再圧縮もリサイズもしません。iPhone に届くのは、Android から出たものの正確なコピーです。</p>
+      <p>それを裏づけるため、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるので、届いた写真や動画は送ったものと必ず同一です。大きなファイルもうまく扱えます。Chrome と Edge ではダウンロードがサイズ上限なしでそのままディスクにストリーミングされ、Firefox と Safari はメモリにバッファするため、その2つでは1回の転送を約200MB以内に抑えてください。</p>
+      <h2>よくある質問</h2>
+      <h3>どちらのスマホにもアプリのインストールは必要ですか？</h3>
+      <p>いいえ。Relayium は Android でも iPhone でもすべてブラウザで動作します。各端末で relayium.com を開けば準備完了です——リアルタイム転送にアカウントもダウンロードも不要です。任意で PWA としてホーム画面に追加できますが、それはショートカットにすぎません。</p>
+      <h3>両方のスマホが同じ Wi-Fi にある必要がありますか？</h3>
+      <p>いいえ。同じネットワークは端末が自動的に互いを見つけるため最速の経路ですが、ペアリングコードなら2台のスマホを異なるネットワークをまたいで接続できます——一方がモバイルデータ、もう一方が Wi-Fi でも大丈夫です。どちらの場合も転送はエンドツーエンド暗号化のままです。</p>
+      <h3>写真は圧縮されたり変更されたりしますか？</h3>
+      <p>いいえ。元のファイルは圧縮なしでバイト単位で転送され、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるため、iPhone に届くものは Android から送ったものとビット単位で同一です。</p>
+      <div class="ctacard">
+        <p>両方のスマホで Relayium を開いて、最初のファイルを送ってみましょう——インストール不要、リアルタイム転送はアカウントも不要です。</p>
+        <a class="cta" href="/?lang=ja">Relayium を今すぐ試す</a>
+      </div>
+      <h2>続けて読む</h2>
+      <ul class="related"><li><a href="/ja/compare/snapdrop">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/compare/wetransfer">Relayium と WeTransfer の比較：サーバーを介さず大容量を送る</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/how-to/send-large-files-without-cloud">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ja">← Relayium</a>
+        <a href="/ja/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>
