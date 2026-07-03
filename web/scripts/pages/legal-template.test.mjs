@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { renderLegalPage } from "./template.mjs";
+import { renderLegalPage } from "./legal-template.mjs";
 import { urlPath, absUrl } from "./shared.mjs";
 
 const doc = {

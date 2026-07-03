@@ -1,4 +1,4 @@
-// web/scripts/legal/content/privacy.mjs
+// web/scripts/pages/content/legal/privacy.mjs
 const en = {
   title: "Privacy Policy",
   description:

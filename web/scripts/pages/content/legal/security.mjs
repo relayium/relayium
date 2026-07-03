@@ -1,4 +1,4 @@
-// web/scripts/legal/content/security.mjs
+// web/scripts/pages/content/legal/security.mjs
 const en = {
   title: "Security & Threat Model",
   description:

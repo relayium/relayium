@@ -1,4 +1,4 @@
-// web/scripts/legal/template.mjs — renders one legal document (one language) to a
+// web/scripts/pages/legal-template.mjs — renders one legal document (one language) to a
 // self-contained static HTML string. No JS, no external CSS: styles are inlined so
 // the page is independent of the Vite asset graph and crawlable with JS disabled.
 import { LANGS, DEFAULT_LANG, LANG_LABELS, BCP47, SITE, urlPath, absUrl, esc } from "./shared.mjs";

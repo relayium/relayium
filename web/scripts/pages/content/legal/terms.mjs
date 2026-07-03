@@ -1,4 +1,4 @@
-// web/scripts/legal/content/terms.mjs
+// web/scripts/pages/content/legal/terms.mjs
 const en = {
   title: "Terms of Service",
   description:

@@ -1,8 +1,8 @@
-// web/scripts/legal/build-pages.mjs — pure builders (no disk IO).
+// web/scripts/pages/build-pages.mjs — pure builders (no disk IO).
 import { LANGS, SITE, pagePath, urlPath, absUrl } from "./shared.mjs";
-import { renderLegalPage } from "./template.mjs";
+import { renderLegalPage } from "./legal-template.mjs";
 
-export function buildAllPages(docs) {
+export function buildLegalPages(docs) {
   const out = [];
   for (const doc of docs) {
     for (const lang of LANGS) {
@@ -16,18 +16,18 @@ export function buildAllPages(docs) {
 }
 
 export function buildSitemap(docs, { home = true } = {}) {
-  const lastmod = "2026-06-29";
   const urls = [];
-  if (home) urls.push({ loc: SITE.origin + "/", priority: "1.0", changefreq: "weekly" });
+  const newest = docs.map((d) => d.langs.en.updated).sort().at(-1);
+  if (home) urls.push({ loc: SITE.origin + "/", lastmod: newest, priority: "1.0", changefreq: "weekly" });
   for (const doc of docs) {
     for (const lang of LANGS) {
-      urls.push({ loc: absUrl(urlPath(doc.slug, lang)), priority: "0.3", changefreq: "yearly" });
+      urls.push({ loc: absUrl(urlPath(doc.slug, lang)), lastmod: doc.langs.en.updated, priority: "0.3", changefreq: "yearly" });
     }
   }
   const body = urls
     .map(
       (u) =>
-        `  <url>\n    <loc>${u.loc}</loc>\n    <lastmod>${lastmod}</lastmod>\n` +
+        `  <url>\n    <loc>${u.loc}</loc>\n    <lastmod>${u.lastmod}</lastmod>\n` +
         `    <changefreq>${u.changefreq}</changefreq>\n    <priority>${u.priority}</priority>\n  </url>`
     )
     .join("\n");
