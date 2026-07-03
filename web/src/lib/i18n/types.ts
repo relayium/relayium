@@ -154,6 +154,8 @@ export interface Messages {
     yourCode: string;
     scanHint: string; // caption under the pairing-code QR
     waiting: string;
+    queued: (n: number, size: string) => string; // files picked before pairing, auto-send on join
+    bareConnect: string; // secondary: open a room without picking files (receiver-initiated flows)
     expiresIn: (s: string) => string;
     expired: string;
     copy: string;

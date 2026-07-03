@@ -141,6 +141,8 @@ const fr: Messages = {
     yourCode: "Votre code d'appairage — communiquez-le à l'autre personne",
   scanHint: "ou faites scanner le QR / ouvrir le lien à l'autre personne",
     waiting: "En attente de l'autre appareil…",
+    queued: (n, s) => `${n} fichier(s) · ${s} — envoi automatique dès que l'autre appareil rejoint`,
+    bareConnect: "Créer une connexion sans choisir de fichiers",
     expiresIn: (s) => `expire dans ${s}`,
     expired: "Code d'appairage expiré — générez-en un nouveau",
     copy: "Copier",

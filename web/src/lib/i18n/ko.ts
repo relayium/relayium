@@ -141,6 +141,8 @@ const ko: Messages = {
     yourCode: "내 페어링 코드 — 상대에게 알려주세요",
   scanHint: "또는 상대가 QR을 스캔하거나 링크를 열어 참여",
     waiting: "상대 기기의 참여를 기다리는 중…",
+    queued: (n, s) => `${n}개 파일 · ${s} — 상대가 참여하면 자동으로 전송됩니다`,
+    bareConnect: "파일 없이 연결만 만들기",
     expiresIn: (s) => `${s} 후 만료`,
     expired: "페어링 코드가 만료되었습니다. 다시 생성하세요",
     copy: "복사",

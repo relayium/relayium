@@ -141,6 +141,8 @@ const zh: Messages = {
     yourCode: "你的配对码 —— 念给对方",
   scanHint: "或让对方扫码 / 打开链接加入",
     waiting: "等待对方加入…",
+    queued: (n, s) => `已选 ${n} 个文件 · ${s}，对方加入后自动发送`,
+    bareConnect: "不选文件，仅创建连接",
     expiresIn: (s) => `${s} 后失效`,
     expired: "配对码已失效，请重新生成",
     copy: "复制",

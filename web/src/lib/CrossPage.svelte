@@ -11,6 +11,7 @@
   import Faq from "./Faq.svelte";
   import { session } from "./auth.svelte";
   import { enterRoom } from "./room.svelte";
+  import { clearOutbox } from "./outbox.svelte";
   import { lang, messages, legalUrl, type Messages } from "./i18n.svelte";
 
   let { roomToken = "", roomCode = "", linkDead = false, showTransfer = false, transferSurface, dismissLan }:
@@ -27,6 +28,9 @@
   function startOver() {
     sessionStorage.removeItem("relayium_pair_exp");
     sessionStorage.removeItem("relayium_xfer_token");
+    // Queued-but-unsent files belong to the abandoned pairing attempt — drop
+    // them so they can't surprise-send to the next peer that appears.
+    clearOutbox();
     // A LAN auto-pair (and the share-link+same-LAN overlap) has no room to leave —
     // enterRoom({}) alone leaves the surface up, since it's driven by the visible
     // peer, not the URL. Suppress it so we fall back to the method choices; App

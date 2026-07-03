@@ -141,6 +141,8 @@ const de: Messages = {
     yourCode: "Dein Kopplungscode — sag ihn der anderen Person",
   scanHint: "oder die andere Person scannt den QR / öffnet den Link",
     waiting: "Warte darauf, dass das andere Gerät beitritt…",
+    queued: (n, s) => `${n} Datei(en) · ${s} — wird automatisch gesendet, sobald die Gegenseite beitritt`,
+    bareConnect: "Nur verbinden, ohne Dateien auszuwählen",
     expiresIn: (s) => `läuft in ${s} ab`,
     expired: "Kopplungscode abgelaufen — bitte neu erzeugen",
     copy: "Kopieren",

@@ -141,6 +141,8 @@ const en: Messages = {
     yourCode: "Your pairing code — read it to the other person",
   scanHint: "or have them scan / open the link to join",
     waiting: "Waiting for the other device to join…",
+    queued: (n, s) => `${n} file(s) · ${s} — sends automatically once the other side joins`,
+    bareConnect: "Create a connection without picking files",
     expiresIn: (s) => `expires in ${s}`,
     expired: "Pairing code expired — generate a new one",
     copy: "Copy",
