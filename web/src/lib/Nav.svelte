@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { currentRoute, navigate, type Route } from "./router.svelte";
+  import { currentRoute, navigate, CROSS_PATH, type Route } from "./router.svelte";
   import { lang, setLang, LANGS, messages, type Lang, type Messages } from "./i18n.svelte";
   import ThemeSelect from "./ThemeSelect.svelte";
 
@@ -15,15 +15,18 @@
     <span class="mark">⇌</span><span class="word">Relayium</span>
   </a>
 
-  <div class="tabs" role="tablist">
+  <!-- These switch pages, not tab panels, so they're navigation links with
+       aria-current — not role="tab" (which would promise a tabpanel that
+       doesn't exist). Real hrefs keep right-click/open-in-new-tab working. -->
+  <div class="tabs">
     {#each tabs as tab (tab.id)}
-      <button
-        role="tab"
+      <a
+        href={tab.id === "cross" ? CROSS_PATH : "/"}
         class="tab"
         class:active={currentRoute() === tab.id}
-        aria-selected={currentRoute() === tab.id}
-        onclick={() => navigate(tab.id)}
-      >{tab.label()}</button>
+        aria-current={currentRoute() === tab.id ? "page" : undefined}
+        onclick={(e) => { e.preventDefault(); navigate(tab.id); }}
+      >{tab.label()}</a>
     {/each}
   </div>
 
@@ -56,8 +59,9 @@
 
   .tabs { display: flex; gap: 6px; margin: 0 auto 0 8px; }
   .tab {
+    display: inline-flex; align-items: center; justify-content: center;
     font: inherit; font-size: var(--fs-sm); padding: var(--space-2) var(--space-4); border-radius: 999px; cursor: pointer;
-    border: 1px solid var(--border); background: var(--social-bg); color: var(--text);
+    border: 1px solid var(--border); background: var(--social-bg); color: var(--text); text-decoration: none;
     transition: border-color .13s, color .13s, background .13s;
   }
   .tab:hover { border-color: var(--accent-border); }

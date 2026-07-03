@@ -116,7 +116,7 @@
         <p class="scan">{t.pair.scanHint}</p>
       {/if}
     {/if}
-    <p class="waiting">{t.pair.waiting}</p>
+    <p class="waiting"><span class="pulse" aria-hidden="true"></span>{t.pair.waiting}</p>
   {:else if mode === "receive"}
     <p class="lead">{t.pair.enterHint}</p>
     <div class="row">
@@ -159,7 +159,17 @@
      on narrow screens instead of overflowing the card. */
   .row.wrap { flex-wrap: wrap; justify-content: center; }
   .ttl { font-size: var(--fs-xs); color: var(--text); font-variant-numeric: tabular-nums; }
-  .waiting { margin: 0; font-size: var(--fs-xs); color: var(--text); }
+  .waiting { display: inline-flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--fs-xs); color: var(--text); }
+  /* A slow breathing dot so a wait for the other side reads as "live", not stuck. */
+  .pulse {
+    width: 8px; height: 8px; border-radius: 50%; flex: none;
+    background: var(--accent); animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: .25; transform: scale(.7); }
+    50% { opacity: 1; transform: scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) { .pulse { animation: none; opacity: .7; } }
   /* Intentional oversized code-entry field to match the code display. */
   input {
     font: inherit; font-size: 22px; letter-spacing: 6px; text-align: center; width: 7ch;
