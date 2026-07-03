@@ -28,7 +28,7 @@ const en = {
     {
       heading: "Accounts",
       body: [
-        "An account is optional and only needed for cross-network transfers. You are responsible for keeping access to your email and account secure. You may delete your account at any time.",
+        "An account is optional and only needed for async stored transfers (creating download links). You are responsible for keeping access to your email and account secure. You may delete your account at any time.",
       ],
     },
     {
@@ -99,7 +99,7 @@ const zh = {
     {
       heading: "账号",
       body: [
-        "账号是可选的,仅跨网络传输时需要。你有责任妥善保管你的邮箱和账号访问权限。你可以随时删除你的账号。",
+        "账号是可选的,仅异步暂存传输(创建下载链接)时需要。你有责任妥善保管你的邮箱和账号访问权限。你可以随时删除你的账号。",
       ],
     },
     {
@@ -171,7 +171,7 @@ const ja = {
     {
       heading: "アカウント",
       body: [
-        "アカウントは任意で、クロスネットワーク転送にのみ必要です。メールアドレスとアカウントへのアクセスを安全に保つ責任はあなたにあります。アカウントはいつでも削除できます。",
+        "アカウントは任意で、非同期の一時保存転送（ダウンロードリンクの作成）にのみ必要です。メールアドレスとアカウントへのアクセスを安全に保つ責任はあなたにあります。アカウントはいつでも削除できます。",
       ],
     },
     {
@@ -245,7 +245,7 @@ const ko = {
     {
       heading: "계정",
       body: [
-        "계정은 선택 사항이며 크로스 네트워크 전송에만 필요합니다. 이메일 주소와 계정에 대한 접근을 안전하게 관리할 책임은 귀하에게 있습니다. 계정은 언제든지 삭제할 수 있습니다.",
+        "계정은 선택 사항이며 비동기 임시 보관 전송(다운로드 링크 생성)에만 필요합니다. 이메일 주소와 계정에 대한 접근을 안전하게 관리할 책임은 귀하에게 있습니다. 계정은 언제든지 삭제할 수 있습니다.",
       ],
     },
     {
@@ -319,7 +319,7 @@ const de = {
     {
       heading: "Konten",
       body: [
-        "Ein Konto ist optional und wird nur für netzwerkübergreifende Übertragungen benötigt. Sie sind dafür verantwortlich, den Zugang zu Ihrer E-Mail-Adresse und Ihrem Konto zu sichern. Sie können Ihr Konto jederzeit löschen.",
+        "Ein Konto ist optional und wird nur für asynchrone zwischengespeicherte Übertragungen (das Erstellen von Download-Links) benötigt. Sie sind dafür verantwortlich, den Zugang zu Ihrer E-Mail-Adresse und Ihrem Konto zu sichern. Sie können Ihr Konto jederzeit löschen.",
       ],
     },
     {
@@ -393,7 +393,7 @@ const fr = {
     {
       heading: "Comptes",
       body: [
-        "Un compte est facultatif et n'est nécessaire que pour les transferts inter-réseaux. Vous êtes responsable de la sécurisation de l'accès à votre adresse e-mail et à votre compte. Vous pouvez supprimer votre compte à tout moment.",
+        "Un compte est facultatif et n'est nécessaire que pour les transferts stockés asynchrones (la création de liens de téléchargement). Vous êtes responsable de la sécurisation de l'accès à votre adresse e-mail et à votre compte. Vous pouvez supprimer votre compte à tout moment.",
       ],
     },
     {
