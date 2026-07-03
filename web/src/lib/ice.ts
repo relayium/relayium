@@ -9,6 +9,15 @@
 // signaling starts.
 const FALLBACK: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
 
+/** Whether the list carries a usable TURN relay (a turn:/turns: URL). Only then is
+ *  it safe to force relay-only ICE — otherwise there would be no candidates at all. */
+export function hasTurnServer(servers: RTCIceServer[]): boolean {
+  return servers.some((s) => {
+    const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+    return urls.some((u) => u.startsWith("turn:") || u.startsWith("turns:"));
+  });
+}
+
 export async function fetchIceServers(code = ""): Promise<RTCIceServer[]> {
   const q = code ? `?code=${encodeURIComponent(code)}` : "";
   try {

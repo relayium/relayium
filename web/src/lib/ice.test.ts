@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { fetchIceServers } from "./ice";
+import { fetchIceServers, hasTurnServer } from "./ice";
 
 const STUN = [{ urls: "stun:stun.l.google.com:19302" }];
 
@@ -57,5 +57,23 @@ describe("fetchIceServers", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
     const out = await fetchIceServers("424242");
     expect(out).toEqual(STUN);
+  });
+});
+
+describe("hasTurnServer", () => {
+  it("is false for a STUN-only list (LAN / no pairing code)", () => {
+    expect(hasTurnServer(STUN)).toBe(false);
+    expect(hasTurnServer([])).toBe(false);
+  });
+
+  it("is true when a turn: or turns: URL is present", () => {
+    expect(hasTurnServer([{ urls: ["turn:t:3478"], username: "u", credential: "c" }])).toBe(true);
+    expect(hasTurnServer([{ urls: "turns:t:5349", username: "u", credential: "c" }])).toBe(true);
+    // Mixed STUN + TURN (the real /api/ice code-room response) still counts.
+    expect(hasTurnServer([{ urls: "stun:s:3478" }, { urls: ["turn:t:3478"] }])).toBe(true);
+  });
+
+  it("does not mistake a stun: URL that merely contains 'turn' hostname parts", () => {
+    expect(hasTurnServer([{ urls: "stun:saturn.example.com:3478" }])).toBe(false);
   });
 });

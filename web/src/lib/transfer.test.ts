@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { ready, generateKeyPair, deriveSession } from "./crypto";
-import { Sender, Receiver, FRAME, CHUNK_SIZE, type ResumePoint } from "./transfer";
+import {
+  Sender, Receiver, FRAME, CHUNK_SIZE, CHUNK_OVERHEAD, FLOW_WINDOW, FLOW_ACK_INTERVAL,
+  ackFrame, parseAck, type ResumePoint,
+} from "./transfer";
 
 beforeAll(async () => { await ready(); });
 
@@ -252,4 +255,80 @@ describe("resumable transfer", () => {
     // A non-resume-req frame decodes to null.
     expect(parseResumeReq(new Uint8Array([1, 0, 0, 0, 0]).buffer)).toBeNull();
   });
+});
+
+describe("flow-control ack frame", () => {
+  it("round-trips a byte count, including large (>4 GiB) values", async () => {
+    const { ackFrame, parseAck } = await import("./transfer");
+    for (const n of [0, 1, 512 * 1024, 8 << 20, 5_000_000_000, Number.MAX_SAFE_INTEGER]) {
+      expect(parseAck(ackFrame(n).buffer as ArrayBuffer)).toBe(n);
+    }
+  });
+
+  it("decodes to null for frames that are not acks", async () => {
+    const { ackFrame, parseAck, ACCEPT, COMPLETE, resumeReqFrame } = await import("./transfer");
+    // Wrong length (a single-byte control frame) and wrong kind both reject.
+    expect(parseAck(ACCEPT.buffer as ArrayBuffer)).toBeNull();
+    expect(parseAck(COMPLETE.buffer as ArrayBuffer)).toBeNull();
+    expect(parseAck(resumeReqFrame(1, 2).buffer as ArrayBuffer)).toBeNull();
+    // A 13-byte frame with the wrong kind byte still rejects.
+    const notAck = ackFrame(123).slice();
+    notAck[0] = 1;
+    expect(parseAck(notAck.buffer as ArrayBuffer)).toBeNull();
+  });
+
+  it("does not collide with the receiver->sender control decoders", async () => {
+    const { controlKind, parseResumeReq } = await import("./transfer");
+    const buf = ackFrame(1 << 20).buffer as ArrayBuffer;
+    expect(controlKind(buf)).toBeNull();
+    expect(parseResumeReq(buf)).toBeNull();
+  });
+
+  // The App's send loop gates on the receiver's acks so it can't outrun a slow
+  // receiver (no receive-side backpressure exists in the DataChannel itself). This
+  // reconstructs that loop over the real Sender/Receiver + ack wire format with a
+  // receiver that drains one chunk per tick, and asserts the two properties the fix
+  // guarantees: the sender never runs more than one window ahead of durable writes
+  // (bounds receiver memory), and the whole batch still arrives intact.
+  it("keeps the sender within one flow-control window of a slow receiver", async () => {
+    const { ka, kb } = await session();
+    const bytes = new Uint8Array(10 << 20); // 10 MB > one window
+    for (let i = 0; i < bytes.length; i += 4096) bytes[i] = (i / 4096) % 251; // cheap non-trivial fill
+
+    const sender = new Sender();
+    const receiver = new Receiver();
+    await receiver.feed(sender.batchFrame([{ name: "big.bin", size: bytes.length }]), kb);
+
+    // Pre-encrypt every data frame (the wire the App would send).
+    const frames: Uint8Array[] = [];
+    for await (const f of sender.dataFrames([new File([bytes], "big.bin")], ka)) frames.push(f);
+
+    const wire: Uint8Array[] = []; // sender -> receiver, drained one per tick (slow disk)
+    let si = 0, sent = 0, acked = 0, got = 0, lastAckSent = 0, maxAhead = 0, ok = false;
+
+    while (si < frames.length || wire.length) {
+      // Sender: emit while its credit allows — mirrors `await creditGate(sent)`.
+      while (si < frames.length && sent - acked <= FLOW_WINDOW) {
+        const f = frames[si++];
+        wire.push(f);
+        if (f[0] === FRAME.CHUNK) sent += f.byteLength - CHUNK_OVERHEAD;
+        maxAhead = Math.max(maxAhead, sent - acked);
+      }
+      // Receiver: durably "write" one frame, then ack on the interval boundary.
+      const out = await receiver.feed(wire.shift()! as Uint8Array<ArrayBuffer>, kb);
+      if (out.chunk) {
+        got += out.chunk.length;
+        if (got - lastAckSent >= FLOW_ACK_INTERVAL) {
+          lastAckSent = got;
+          acked = parseAck(ackFrame(got).buffer as ArrayBuffer)!; // real ack round-trip
+        }
+      }
+      if (out.done) ok = out.done.ok; // per-file SHA-256 integrity verdict
+    }
+
+    expect(got).toBe(bytes.length); // whole batch arrived
+    expect(ok).toBe(true); // …and passed its integrity hash
+    expect(maxAhead).toBeLessThanOrEqual(FLOW_WINDOW + CHUNK_SIZE); // bounded receiver memory
+    expect(maxAhead).toBeGreaterThan(FLOW_WINDOW - CHUNK_SIZE); // window actually engaged (test is meaningful)
+  }, 30_000);
 });

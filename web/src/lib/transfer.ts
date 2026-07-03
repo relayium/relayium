@@ -34,6 +34,7 @@ const KIND_CHUNK = 1; // one encrypted file slice
 const KIND_DONE = 2; // end-of-file integrity hash (plaintext)
 const KIND_RESUME_START = 4; // sender->receiver (plaintext): {index, offset, seq} — where a resumed stream picks up
 const KIND_RESUME_REQ = 5; // receiver->sender (plaintext): {index, offset} — the last durably-written point
+const KIND_ACK = 6; // receiver->sender (plaintext): cumulative bytes durably written — flow-control credit
 
 /** Frame kinds, exported so the UI can read a frame's type for progress tracking. */
 export const FRAME = { CHUNK: KIND_CHUNK, DONE: KIND_DONE, BATCH: KIND_BATCH } as const;
@@ -43,6 +44,17 @@ export const FRAME = { CHUNK: KIND_CHUNK, DONE: KIND_DONE, BATCH: KIND_BATCH } a
 export interface ResumePoint { index: number; offset: number; }
 /** Per-chunk wire overhead: 5-byte header + 16-byte AES-GCM tag. plaintext = byteLength - this. */
 export const CHUNK_OVERHEAD = 5 + 16;
+
+// Application-level receive flow control. A DataChannel exposes no receive-side
+// backpressure to JS: onmessage drains the SCTP buffer into memory as fast as the
+// network delivers, decoupled from the (slow) decrypt+disk pipeline. Without this,
+// the sender races to the end, its send buffer empties, it declares "done" and
+// closes while the receiver is still writing a huge in-memory backlog — which the
+// receiver then misreads as a mid-transfer drop. The receiver acks durably-written
+// bytes; the sender keeps at most FLOW_WINDOW bytes ahead of that ack, which bounds
+// receiver memory AND paces the sender to real disk speed.
+export const FLOW_WINDOW = 8 << 20; // 8 MB the sender may get ahead of durable writes
+export const FLOW_ACK_INTERVAL = 512 * 1024; // receiver acks at least this often (bytes)
 
 // Control frames travel receiver -> sender on the same DataChannel (the opposite
 // direction from file frames, so there is no collision). Each is a single byte.
@@ -62,6 +74,22 @@ export function controlKind(buf: ArrayBuffer): "accept" | "reject" | "complete" 
   if (b[0] === CTRL_REJECT) return "reject";
   if (b[0] === CTRL_COMPLETE) return "complete";
   return null;
+}
+
+/** Receiver->sender flow-control ack: total bytes durably written so far in the
+ *  batch. The sender uses it to bound its in-flight window and to keep the pc open
+ *  (as a liveness signal) until the receiver has actually caught up. */
+export function ackFrame(bytesWritten: number): Bytes {
+  const payload = new Uint8Array(8);
+  new DataView(payload.buffer).setFloat64(0, bytesWritten); // exact for integers < 2^53
+  return frame(KIND_ACK, 0, payload);
+}
+
+/** Decode a flow-control ack; null if the frame is not one. */
+export function parseAck(buf: ArrayBuffer): number | null {
+  const b = new Uint8Array(buf);
+  if (b.length !== 13 || b[0] !== KIND_ACK) return null;
+  return new DataView(b.buffer, b.byteOffset + 5).getFloat64(0);
 }
 
 /** Receiver->sender resume request: the last point the receiver durably has. */

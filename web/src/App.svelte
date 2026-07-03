@@ -11,7 +11,7 @@
   import { SignalingClient } from "./lib/signaling";
   import { wsURL } from "./lib/transfer-link";
   import { roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
-  import { connect, connectResume, PeerBusyError, type InboundSignal, type Conn, type ConnPath } from "./lib/webrtc";
+  import { connect, connectResume, PeerBusyError, type InboundSignal, type Conn, type ConnPath, type RtcConfig } from "./lib/webrtc";
   import { createWakeLock } from "./lib/wakelock";
   import { registerServiceWorker, drainSharedFiles } from "./lib/share-target";
   import { requestNotifyPermission, notifyTransfer } from "./lib/notify";
@@ -24,6 +24,10 @@
     controlKind,
     resumeReqFrame,
     parseResumeReq,
+    ackFrame,
+    parseAck,
+    FLOW_WINDOW,
+    FLOW_ACK_INTERVAL,
     FRAME,
     CHUNK_OVERHEAD,
     MAX_FILES,
@@ -31,7 +35,7 @@
     type ResumePoint,
   } from "./lib/transfer";
   import { pickSaveTarget, type SaveTarget, type FileSink } from "./lib/filesink";
-  import { fetchIceServers } from "./lib/ice";
+  import { fetchIceServers, hasTurnServer } from "./lib/ice";
   import type { Peer } from "./lib/protocol";
   import { lang, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
@@ -101,6 +105,13 @@
   let roomEpoch = 0; // bumped per room switch; discards a stale fetchIceServers response
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined; // pending auto-reconnect after a WS drop
   let iceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+  // Build the RTCConfiguration for a new connection. On the cross-network path a
+  // TURN relay is handed out (via the pairing code); force relay-only ICE there so
+  // connection setup is ~1-2 s instead of ~20 s spent waiting for cross-NAT direct
+  // candidate checks to time out before ICE would fall back to that relay anyway.
+  // STUN-only rooms (LAN, no code) keep the default "all" so host candidates work.
+  const rtcConfig = (): RtcConfig =>
+    hasTurnServer(iceServers) ? { iceServers, iceTransportPolicy: "relay" } : { iceServers };
   let acceptFn: (() => void) | null = null;
   let rejectFn: (() => void) | null = null;
   // Abort handles for an in-flight transfer — let the user bail out of a stuck
@@ -438,6 +449,7 @@
     let fileOffset = 0;
     let checkpoint: { index: number; offset: number; chain: Uint8Array } = { index: 0, offset: 0, chain: new Uint8Array(32) };
     let resumable = false; // true once a byte is durably written — before that a drop just fails
+    let lastAckSent = 0; // cumulative bytes at our last flow-control ack to the sender
     let resumeTimer: ReturnType<typeof setTimeout> | undefined;
     let resuming = false; // a resume() is mid-flight — blocks re-entrant offers
     let completing = false; // final batch is being flushed — a late "closed" must not resume
@@ -490,7 +502,7 @@
       signaling, peerId: from, selfKey: selfKey.publicKey, role: "responder",
       initialSignal: offer,
       onPeerKey: async (pk) => { keys = await deriveSession("responder", selfKey, pk); sasCode = sas(selfKey.publicKey, pk); },
-      config: { iceServers },
+      config: rtcConfig(),
       // A drop ICE can't recover: if bytes were already flowing, pause and wait
       // for the sender to re-offer so we can resume; otherwise fail. The normal
       // end-of-batch close also fires "closed", but this is a no-op once done.
@@ -595,7 +607,7 @@
       try {
         c = await connectResume({
           signaling, peerId: from, role: "responder", initialSignal: offer,
-          config: { iceServers },
+          config: rtcConfig(),
           onStateChange: (state) => { if (state === "failed" || state === "closed") onRecvDrop(); },
         });
       } catch {
@@ -643,6 +655,7 @@
         fileOffset = checkpoint.offset;
         got = manifest.slice(0, checkpoint.index).reduce((n, f) => n + f.size, 0) + checkpoint.offset;
         speedBase = got; // measure post-resume throughput from here, not from 0
+        lastAckSent = got; // realign the ack cursor so the first post-resume ack is fresh
         start = Date.now();
         lastActivity = Date.now();
         return;
@@ -656,6 +669,12 @@
         // Checkpoint only after the write lands, so a resume never claims bytes
         // that weren't durably written.
         checkpoint = { index: fileIndex, offset: fileOffset, chain: receiver.snapshotChain() };
+        // Flow-control: report durably-written bytes so the sender paces itself to
+        // our disk speed and keeps at most one window ahead. Throttled by interval.
+        if (got - lastAckSent >= FLOW_ACK_INTERVAL) {
+          lastAckSent = got;
+          try { conn!.channel.send(ackFrame(got)); } catch { /* gone — the drop path handles it */ }
+        }
         const elapsed = (Date.now() - start) / 1000;
         recv = r = { ...r, sent: got, index: fileIndex, speed: elapsed > 0 ? (got - speedBase) / elapsed : 0 };
         return;
@@ -728,6 +747,27 @@
     let sender: Sender | undefined; // hoisted so a resume can keep its monotonic seq
     let dataStarted = false; // true once we're actually streaming file data (resume only applies after this)
 
+    // Application-level flow control: the receiver reports cumulative durably-written
+    // bytes; we never run more than FLOW_WINDOW ahead of that. `ackedAt` is the last
+    // time the ack advanced — flush() uses it as a liveness signal so it waits for a
+    // slow-but-alive receiver instead of closing on a fixed short timeout.
+    let acked = 0;
+    let ackedAt = Date.now();
+    let ackWaiter: (() => void) | null = null;
+    const onAck = (n: number) => {
+      if (n > acked) { acked = n; ackedAt = Date.now(); const w = ackWaiter; ackWaiter = null; w?.(); }
+    };
+    // Block until the receiver's acks let us send more (or it goes silent — then
+    // throw so the send loop treats it as a drop and resumes/fails, not hangs).
+    const creditGate = async (sent: number) => {
+      while (sent - acked > FLOW_WINDOW) {
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => { ackWaiter = null; reject(new Error("send stalled: receiver not acking")); }, 60_000);
+          ackWaiter = () => { clearTimeout(timer); resolve(); };
+        });
+      }
+    };
+
     // User pressed cancel: unblock every await, tear down, and clear the card so
     // the UI returns to idle (not a failure state) and other methods reopen.
     sendAbort = () => {
@@ -753,7 +793,7 @@
         try {
           let lost = false;
           rconn = await connectResume({
-            signaling, peerId, role: "initiator", config: { iceServers },
+            signaling, peerId, role: "initiator", config: rtcConfig(),
             onStateChange: (state) => { if (state === "failed" || state === "closed") lost = true; },
           });
           conn = rconn; // so sendAbort tears down the current connection
@@ -762,6 +802,8 @@
           let doneAck = false;
           rconn.channel.onmessage = (ev) => {
             const buf = ev.data as ArrayBuffer;
+            const a = parseAck(buf);
+            if (a !== null) { onAck(a); return; }
             const rp = parseResumeReq(buf);
             if (rp) { resolveReq(rp); return; }
             if (controlKind(buf) === "complete") doneAck = true;
@@ -775,11 +817,14 @@
           rconn.channel.send(sender.resumeStartFrame(rp));
           send = s = { ...s, status: "sending" };
           const base = files.slice(0, rp.index).reduce((n, f) => n + f.size, 0) + rp.offset;
+          acked = base; // the receiver already has these bytes; open the window from here
+          ackedAt = Date.now();
           const start = Date.now();
           let sent = base, idx = rp.index;
           for await (const frame of sender.dataFrames(files, keys, rp)) {
             if (lost) throw new Error("connection lost during resume");
             await backpressure(rconn.channel);
+            await creditGate(sent); // don't outrun the receiver's durable writes
             rconn.channel.send(frame);
             if (frame[0] === FRAME.CHUNK) sent += frame.byteLength - CHUNK_OVERHEAD;
             else if (frame[0] === FRAME.DONE) idx++;
@@ -791,7 +836,7 @@
             const iv = setInterval(() => { if (doneAck) { clearInterval(iv); r(); } }, 100);
             setTimeout(() => { clearInterval(iv); r(); }, 30_000);
           });
-          await flush(rconn.channel, completeAck);
+          await flush(rconn.channel, completeAck, () => ackedAt);
           if (lost) throw new Error("connection lost");
           return true;
         } catch {
@@ -807,7 +852,7 @@
       conn = await connect({
         signaling, peerId, selfKey: selfKey.publicKey, role: "initiator",
         onPeerKey: async (pk) => { keys = await deriveSession("initiator", selfKey, pk); sasCode = sas(selfKey.publicKey, pk); },
-        config: { iceServers },
+        config: rtcConfig(),
         // A drop that ICE can't recover unblocks every await so the loop stops
         // instead of hanging; the post-await connLost checks turn it into a
         // visible failure the user can retry.
@@ -820,7 +865,10 @@
         },
       });
       conn.channel.onmessage = (ev) => {
-        const k = controlKind(ev.data as ArrayBuffer);
+        const buf = ev.data as ArrayBuffer;
+        const a = parseAck(buf);
+        if (a !== null) { onAck(a); return; }
+        const k = controlKind(buf);
         if (k === "accept") resolveAccept(true);
         else if (k === "reject") resolveAccept(false);
         else if (k === "complete") { gotComplete = true; resolveComplete(); }
@@ -852,6 +900,7 @@
       let sent = 0, idx = 0;
       for await (const frame of sender.dataFrames(files, keys)) {
         await backpressure(conn.channel);
+        await creditGate(sent); // don't outrun the receiver's durable writes
         conn.channel.send(frame);
         if (frame[0] === FRAME.CHUNK) sent += frame.byteLength - CHUNK_OVERHEAD;
         else if (frame[0] === FRAME.DONE) idx++;
@@ -862,7 +911,7 @@
       // drop whatever is still in flight (the receiver would stall short of 100%), so
       // wait for the receiver's completion ack — or our buffer to drain — before closing.
       send = s = { ...s, sent: total, index: files.length - 1, status: "finishing", speed: 0 };
-      await flush(conn.channel, completed);
+      await flush(conn.channel, completed, () => ackedAt);
       // If the receiver already acked the whole batch, the transfer succeeded even
       // if the pc dropped right after — don't fail (or needlessly try to resume) it.
       if (connLost && !gotComplete) throw new Error("connection lost");
@@ -912,15 +961,19 @@
     });
   }
 
-  // Wait until it is safe to close: ideally the receiver's explicit completion ack,
-  // otherwise our send buffer draining plus a grace period for in-flight delivery
-  // (bounded so a dead peer can't hang the sender forever).
-  async function flush(ch: RTCDataChannel, completed: Promise<void>) {
-    const fallback = (async () => {
-      for (let i = 0; i < 600 && ch.bufferedAmount > 0; i++) await sleep(50); // up to ~30s
-      await sleep(1000);
-    })();
-    await Promise.race([completed, fallback]);
+  // Wait until it is safe to close: ideally the receiver's explicit completion ack.
+  // Until then keep waiting while the receiver is still alive — either our send
+  // buffer is still draining, or its flow-control acks are still advancing (a slow
+  // phone writing the last window to disk). Only give up once BOTH have been idle
+  // for the grace period, so we never close on a receiver that is merely slow (the
+  // old fixed 1 s fallback did exactly that, dropping the tail and faking a "drop").
+  async function flush(ch: RTCDataChannel, completed: Promise<void>, lastAckAt: () => number) {
+    let done = false;
+    void completed.then(() => { done = true; });
+    while (!done) {
+      if (ch.bufferedAmount === 0 && Date.now() - lastAckAt() > 30_000) return;
+      await sleep(250);
+    }
   }
 
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

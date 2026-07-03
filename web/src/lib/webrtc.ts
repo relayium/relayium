@@ -3,6 +3,11 @@ import { commitKey, randomNonce, verifyCommit } from "./crypto";
 
 export interface RtcConfig {
   iceServers: RTCIceServer[];
+  // "relay" makes ICE gather/use only TURN candidates — set on the cross-network
+  // path so we skip the ~20 s wait for doomed direct candidate checks to time out
+  // before ICE falls back to the relay it would use anyway. Only safe when a TURN
+  // server is actually configured (see hasTurnServer).
+  iceTransportPolicy?: RTCIceTransportPolicy;
 }
 
 export const DEFAULT_ICE: RtcConfig = {
