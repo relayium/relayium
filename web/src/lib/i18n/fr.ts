@@ -113,7 +113,7 @@ const fr: Messages = {
     del: "Supprimer",
     confirmDel: "Supprimer ce lien de fichier ? Le destinataire ne pourra plus le télécharger.",
   },
-  nav: { lanTab: "Transfert LAN", crossTab: "Inter-réseaux" },
+  nav: { lanTab: "Transfert LAN", crossTab: "Direct en temps réel", offlineTab: "Transfert asynchrone" },
   crossnet: {
     realtimeTitle: "Transfert direct en temps réel",
     realtimeSub: "Les deux en ligne · pair-à-pair · les fichiers ne passent jamais par le serveur",

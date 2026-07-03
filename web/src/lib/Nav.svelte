@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { currentRoute, navigate, CROSS_PATH, type Route } from "./router.svelte";
+  import { currentRoute, navigate, CROSS_PATH, OFFLINE_PATH, type Route } from "./router.svelte";
   import { lang, setLang, LANGS, messages, type Lang, type Messages } from "./i18n.svelte";
   import ThemeSelect from "./ThemeSelect.svelte";
 
@@ -7,6 +7,7 @@
   const tabs: { id: Route; label: () => string }[] = [
     { id: "lan", label: () => t.nav.lanTab },
     { id: "cross", label: () => t.nav.crossTab },
+    { id: "offline", label: () => t.nav.offlineTab },
   ];
 </script>
 
@@ -21,7 +22,7 @@
   <div class="tabs">
     {#each tabs as tab (tab.id)}
       <a
-        href={tab.id === "cross" ? CROSS_PATH : "/"}
+        href={tab.id === "cross" ? CROSS_PATH : tab.id === "offline" ? OFFLINE_PATH : "/"}
         class="tab"
         class:active={currentRoute() === tab.id}
         aria-current={currentRoute() === tab.id ? "page" : undefined}

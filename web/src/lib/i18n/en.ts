@@ -113,7 +113,7 @@ const en: Messages = {
     del: "Delete",
     confirmDel: "Delete this file link? The recipient won't be able to download it.",
   },
-  nav: { lanTab: "LAN transfer", crossTab: "Cross-network" },
+  nav: { lanTab: "LAN transfer", crossTab: "Realtime direct", offlineTab: "Async transfer" },
   crossnet: {
     realtimeTitle: "Realtime direct",
     realtimeSub: "Both online now · peer-to-peer · files never touch the server",

@@ -113,7 +113,7 @@ const de: Messages = {
     del: "Löschen",
     confirmDel: "Diesen Dateilink löschen? Der Empfänger kann ihn dann nicht mehr herunterladen.",
   },
-  nav: { lanTab: "LAN-Übertragung", crossTab: "Netzübergreifend" },
+  nav: { lanTab: "LAN-Übertragung", crossTab: "Echtzeit-Direkt", offlineTab: "Asynchron senden" },
   crossnet: {
     realtimeTitle: "Echtzeit-Direktübertragung",
     realtimeSub: "Beide jetzt online · Peer-to-Peer · Dateien berühren nie den Server",
