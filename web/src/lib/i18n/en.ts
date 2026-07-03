@@ -113,11 +113,20 @@ const en: Messages = {
     del: "Delete",
     confirmDel: "Delete this file link? The recipient won't be able to download it.",
   },
-  nav: { lanTab: "LAN transfer", crossTab: "Cross-network" },
+  nav: { lanTab: "LAN transfer", crossTab: "Realtime direct", offlineTab: "Async transfer" },
   crossnet: {
     realtimeTitle: "Realtime direct",
     realtimeSub: "Both online now · peer-to-peer · files never touch the server",
-    realtimeFoot: "No sign-in needed · sign in to use download links",
+    realtimeFoot: "No sign-in needed · end-to-end encrypted",
+  },
+  offline: {
+    tagline: "Encrypted in your browser, then stored · the server only ever holds ciphertext",
+    pitch: "Recipient not online right now? Encrypt and upload, send them a download link with an expiry — they fetch it whenever they're free. Zero-knowledge throughout: the server cannot see the content.",
+    signIn: "Sign in to upload and create download links; recipients never need an account.",
+  },
+  crossSell: {
+    realtime: { lead: "Is the other person online right now? Realtime direct is faster — peer-to-peer, files never touch the server, no sign-in.", cta: "Go to realtime direct →" },
+    offline: { lead: "Recipient not online? Use async transfer — encrypt, upload, and leave a download link they can fetch for days.", cta: "Go to async transfer →" },
   },
   methods: {
     realtime: { name: "⚡ Realtime direct", sub: "Pick your files and get a 6-digit code — read it out, send the link, or show the QR; the moment the other side joins, the transfer starts peer-to-peer.", badge: "No sign-in" },
@@ -195,12 +204,24 @@ const en: Messages = {
     ],
   },
   howItWorks: {
-    title: "Two ways across networks",
-    sub: "Not on the same LAN? Transfer in realtime when both are online, or leave a download link when they're not.",
-    ways: [
-      { icon: "⚡", name: "Realtime direct", how: "When both are online, one side picks files and gets a 6-digit code — read it out, send the join link, or show the QR. The moment the other side joins, a direct peer-to-peer transfer starts automatically. No sign-in; if hole-punching fails it falls back to an encrypted TURN relay, still end-to-end encrypted.", tag: "Files never touch the server" },
-      { icon: "📥", name: "Download link", how: "Your browser encrypts before upload; the server stores only ciphertext. The recipient needs no account and no live session — they download anytime, with an expiry or burn-after-reading.", tag: "Ciphertext only" },
-    ],
+    realtime: {
+      title: "Realtime direct, in three steps",
+      sub: "When both sides are online, connect peer-to-peer across networks — no sign-in.",
+      ways: [
+        { icon: "📄", name: "Pick files, get a code", how: "Tap “Send files” and choose what to send — a 6-digit pairing code is minted automatically, along with a join link and QR.", tag: "No sign-in" },
+        { icon: "🔢", name: "Give the code to the other side", how: "Read it out, send the link, or show the QR — any of the three; they type it in or open it in any modern browser.", tag: "Codes live 15 minutes" },
+        { icon: "⚡", name: "Transfer starts on join", how: "The moment they join, the transfer starts automatically — peer-to-peer and end-to-end encrypted; if hole-punching fails it falls back to an encrypted TURN relay that still can't decrypt anything.", tag: "Files never touch the server" },
+      ],
+    },
+    offline: {
+      title: "Async transfer, in three steps",
+      sub: "Send even when they're offline: encrypt and store now, they fetch by link later.",
+      ways: [
+        { icon: "🔒", name: "Sign in and pick files", how: "Files are encrypted with AES-256-GCM in your browser before upload — the server only ever stores ciphertext it cannot decrypt.", tag: "Zero-knowledge" },
+        { icon: "🔗", name: "Create the download link", how: "Set an expiry from 1 hour to 7 days, or burn-after-reading; the decryption key lives in the link's # fragment and is never sent to the server.", tag: "Expiry you control" },
+        { icon: "📥", name: "They download anytime", how: "Send them the link; no account and no waiting online — they decrypt and download right in the browser.", tag: "No account for recipients" },
+      ],
+    },
   },
   compare: {
     title: "Which mode to choose",
@@ -238,11 +259,12 @@ const en: Messages = {
       { q: "Is it open source?", a: "Yes. The protocol design and all front-end and back-end code are public on GitHub — free to review, self-host, or contribute to." },
     ],
   },
-  crossPitch: "On the same network, “LAN transfer” is simplest; when you're apart, use one of the two ways below.",
+  crossPitch: "On the same network, “LAN transfer” is simplest; apart but both online, transfer right here in realtime — recipient offline? Switch to async transfer below.",
   homeCross: {
     title: "Not on the same network?",
-    desc: "Cross-network transfer offers sign-in-free realtime direct (code / link / QR) and encrypted download links — end-to-end encrypted, even across the world.",
-    cta: "Go to cross-network transfer →",
+    desc: "If they're online, use realtime direct (no sign-in, files never touch the server); if not, use async transfer (encrypted storage, fetch by link anytime).",
+    realtimeCta: "Realtime direct →",
+    offlineCta: "Async transfer →",
   },
   legal: { privacy: "Privacy Policy", terms: "Terms of Service", security: "Security" },
   learn: {

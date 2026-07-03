@@ -113,11 +113,20 @@ const fr: Messages = {
     del: "Supprimer",
     confirmDel: "Supprimer ce lien de fichier ? Le destinataire ne pourra plus le télécharger.",
   },
-  nav: { lanTab: "Transfert LAN", crossTab: "Inter-réseaux" },
+  nav: { lanTab: "Transfert LAN", crossTab: "Direct en temps réel", offlineTab: "Transfert asynchrone" },
   crossnet: {
     realtimeTitle: "Transfert direct en temps réel",
     realtimeSub: "Les deux en ligne · pair-à-pair · les fichiers ne passent jamais par le serveur",
-    realtimeFoot: "Sans connexion · connectez-vous pour les liens de téléchargement",
+    realtimeFoot: "Sans connexion · chiffré de bout en bout",
+  },
+  offline: {
+    tagline: "Chiffré dans votre navigateur, puis stocké · le serveur ne détient que du chiffré",
+    pitch: "Le destinataire n'est pas en ligne ? Chiffrez, envoyez, et transmettez un lien de téléchargement à durée limitée — il récupère quand il veut. Zéro connaissance de bout en bout : le serveur ne peut pas voir le contenu.",
+    signIn: "Connectez-vous pour téléverser et créer des liens de téléchargement ; les destinataires n'ont jamais besoin de compte.",
+  },
+  crossSell: {
+    realtime: { lead: "L'autre personne est en ligne ? Le direct en temps réel est plus rapide — pair-à-pair, les fichiers ne passent jamais par le serveur, sans connexion.", cta: "Vers le direct en temps réel →" },
+    offline: { lead: "Destinataire hors ligne ? Utilisez le transfert asynchrone — chiffrez, téléversez et laissez un lien de téléchargement, récupérable pendant plusieurs jours.", cta: "Vers le transfert asynchrone →" },
   },
   methods: {
     realtime: { name: "⚡ Transfert direct en temps réel", sub: "Choisissez vos fichiers et obtenez un code à 6 chiffres — dictez-le, envoyez le lien ou montrez le QR ; dès que l'autre appareil rejoint, le transfert pair-à-pair démarre automatiquement.", badge: "Sans connexion" },
@@ -195,12 +204,24 @@ const fr: Messages = {
     ],
   },
   howItWorks: {
-    title: "Deux façons de franchir les réseaux",
-    sub: "Pas sur le même réseau local ? Transférez en temps réel si les deux sont en ligne, ou laissez un lien de téléchargement sinon.",
-    ways: [
-      { icon: "⚡", name: "Transfert direct en temps réel", how: "Quand les deux sont en ligne, un côté choisit ses fichiers et obtient un code à 6 chiffres — dictez-le, envoyez le lien ou montrez le QR. Dès que l'autre appareil rejoint, le transfert direct pair-à-pair démarre automatiquement. Sans connexion ; en cas d'échec du hole-punching, bascule vers un relais TURN chiffré, toujours chiffré de bout en bout.", tag: "Les fichiers ne passent jamais par le serveur" },
-      { icon: "📥", name: "Lien de téléchargement", how: "Votre navigateur chiffre avant l'envoi ; le serveur ne stocke que du chiffré. Le destinataire n'a besoin ni de compte ni de session active — il télécharge quand il veut, avec expiration ou destruction après lecture.", tag: "Chiffré uniquement" },
-    ],
+    realtime: {
+      title: "Direct en temps réel, en trois étapes",
+      sub: "Quand les deux sont en ligne, connectez-vous en pair-à-pair à travers les réseaux — sans connexion.",
+      ways: [
+        { icon: "📄", name: "Choisir les fichiers, obtenir un code", how: "Touchez « Envoyer des fichiers » et choisissez quoi envoyer — un code d'appairage à 6 chiffres est créé automatiquement, avec lien d'accès et QR.", tag: "Sans connexion" },
+        { icon: "🔢", name: "Transmettre le code", how: "Dictez-le, envoyez le lien ou montrez le QR — au choix ; l'autre personne le saisit ou l'ouvre dans n'importe quel navigateur moderne.", tag: "Codes valables 15 minutes" },
+        { icon: "⚡", name: "Le transfert démarre à l'arrivée", how: "Dès que l'autre appareil rejoint, le transfert démarre automatiquement — pair-à-pair et chiffré de bout en bout ; en cas d'échec du hole-punching, un relais TURN chiffré prend le relais sans rien pouvoir déchiffrer.", tag: "Les fichiers ne passent jamais par le serveur" },
+      ],
+    },
+    offline: {
+      title: "Transfert asynchrone, en trois étapes",
+      sub: "Envoyez même hors ligne : chiffrez et stockez maintenant, récupération par lien plus tard.",
+      ways: [
+        { icon: "🔒", name: "Se connecter et choisir les fichiers", how: "Les fichiers sont chiffrés en AES-256-GCM dans votre navigateur avant l'envoi — le serveur ne stocke jamais que du chiffré indéchiffrable.", tag: "Zéro connaissance" },
+        { icon: "🔗", name: "Créer le lien de téléchargement", how: "Expiration de 1 heure à 7 jours, ou destruction après lecture ; la clé de déchiffrement vit dans le fragment # du lien et n'atteint jamais le serveur.", tag: "Expiration maîtrisée" },
+        { icon: "📥", name: "Récupération à tout moment", how: "Envoyez le lien — ni compte ni attente en ligne : le déchiffrement et le téléchargement se font directement dans le navigateur.", tag: "Sans compte pour le destinataire" },
+      ],
+    },
   },
   compare: {
     title: "Quel mode choisir",
@@ -238,11 +259,12 @@ const fr: Messages = {
       { q: "Est-ce open source ?", a: "Oui. La conception du protocole ainsi que tout le code front-end et back-end sont publics sur GitHub — libres à examiner, auto-héberger ou enrichir." },
     ],
   },
-  crossPitch: "Sur le même réseau, le « transfert en réseau local » est le plus simple ; à distance, utilisez l'une des deux façons ci-dessous.",
+  crossPitch: "Sur le même réseau, le « transfert en réseau local » est le plus simple ; à distance et tous deux en ligne, transférez ici en temps réel — destinataire hors ligne ? Passez au transfert asynchrone ci-dessous.",
   homeCross: {
     title: "Pas sur le même réseau ?",
-    desc: "Le transfert inter-réseaux offre un transfert direct en temps réel sans connexion (code / lien / QR) et des liens de téléchargement chiffrés — chiffré de bout en bout, même à l'autre bout du monde.",
-    cta: "Aller au transfert inter-réseaux →",
+    desc: "S'il est en ligne, utilisez le direct en temps réel (sans connexion, les fichiers ne passent jamais par le serveur) ; sinon, le transfert asynchrone (stockage chiffré, récupération par lien à tout moment).",
+    realtimeCta: "Direct en temps réel →",
+    offlineCta: "Transfert asynchrone →",
   },
   legal: { privacy: "Politique de confidentialité", terms: "Conditions d'utilisation", security: "Sécurité" },
   learn: {

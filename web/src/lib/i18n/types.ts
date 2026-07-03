@@ -13,6 +13,13 @@ export const LANGS: { code: Lang; label: string }[] = [
   { code: "fr", label: "Français" },
 ];
 
+/** One page's "how it works" walkthrough: three sequential step cards. */
+export interface HowSection {
+  title: string;
+  sub: string;
+  ways: { icon: string; name: string; how: string; tag: string }[];
+}
+
 export interface Messages {
   langLabel: string;
   theme: { label: string; system: string; light: string; dark: string };
@@ -126,11 +133,21 @@ export interface Messages {
     del: string; // delete button
     confirmDel: string; // confirm() before deleting a file
   };
-  nav: { lanTab: string; crossTab: string };
+  nav: { lanTab: string; crossTab: string; offlineTab: string };
   crossnet: {
     realtimeTitle: string;
     realtimeSub: string;
     realtimeFoot: string;
+  };
+  offline: {
+    tagline: string; // page subtitle — encrypt-then-store, ciphertext-only server
+    pitch: string; // one-paragraph how/why under the header
+    signIn: string; // hint beside the sign-in button on the gated card
+  };
+  crossSell: {
+    // Directional cross-links between the two cross-network pages.
+    realtime: { lead: string; cta: string }; // rendered on the OFFLINE page → go realtime
+    offline: { lead: string; cta: string }; // rendered on the REALTIME page → go offline
   };
   methods: {
     realtime: { name: string; sub: string; badge: string };
@@ -196,9 +213,8 @@ export interface Messages {
   };
   features: { title: string; sub: string; secureLink: string; items: { title: string; desc: string }[] };
   howItWorks: {
-    title: string;
-    sub: string;
-    ways: { icon: string; name: string; how: string; tag: string }[];
+    realtime: HowSection;
+    offline: HowSection;
   };
   compare: {
     title: string;
@@ -218,8 +234,8 @@ export interface Messages {
     sub: string;
     items: { q: string; a: string }[];
   };
-  crossPitch: string; // one-line cross-network pitch under the two cards
-  homeCross: { title: string; desc: string; cta: string }; // homepage → cross-network CTA
+  crossPitch: string; // one-line pitch under the realtime page header
+  homeCross: { title: string; desc: string; realtimeCta: string; offlineCta: string }; // homepage → the two cross-network pages
   legal: { privacy: string; terms: string; security: string };
   // Short footer labels linking to the generated static articles/landing pages.
   learn: {

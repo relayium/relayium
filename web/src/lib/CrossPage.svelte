@@ -1,14 +1,12 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import Account from "./Account.svelte";
   import CodePairing from "./CodePairing.svelte";
-  import StoredUpload from "./StoredUpload.svelte";
   import HowItWorks from "./HowItWorks.svelte";
   import ModeCompare from "./ModeCompare.svelte";
   import FeatureStrip from "./FeatureStrip.svelte";
   import UseCases from "./UseCases.svelte";
   import Faq from "./Faq.svelte";
-  import { session } from "./auth.svelte";
+  import CrossSell from "./CrossSell.svelte";
   import { enterRoom } from "./room.svelte";
   import { clearOutbox } from "./outbox.svelte";
   import { lang, messages, legalUrl, type Messages } from "./i18n.svelte";
@@ -18,7 +16,6 @@
 
   const t = $derived<Messages>(messages[lang()]);
   const inRoom = $derived(!!roomCode);
-  let loginOpen = $state(false);
 
   // Leaving a room must also drop the sessionStorage role markers — otherwise a
   // stale "I minted this code" flag makes the next method choice render the
@@ -39,8 +36,6 @@
 </script>
 
 <section class="crosspage">
-  <div class="acct"><Account bind:open={loginOpen} /></div>
-
   <header class="cn-head">
     <h1>{t.nav.crossTab}</h1>
     <p class="tagline">{t.tagline}</p>
@@ -49,7 +44,7 @@
     {/if}
   </header>
 
-  <div class="cards" class:single={showTransfer || inRoom}>
+  <div class="cards">
     {#if showTransfer && transferSurface}
       <!-- Active realtime transfer — one focused card, regardless of how they connected -->
       <section class="card focus">
@@ -68,29 +63,18 @@
         <button class="startover" onclick={startOver}>{t.startOver}</button>
       </section>
     {:else}
-      <!-- Realtime direct + stored download link, side by side -->
+      <!-- Realtime direct — the only method on this page (stored moved to /offline-transfer) -->
       <section class="card">
         <div class="mhead"><h2>{t.methods.realtime.name}</h2><span class="badge ok">{t.methods.realtime.badge}</span></div>
         <p class="cardsub">{t.methods.realtime.sub}</p>
         <CodePairing />
       </section>
-
-      <section class="card">
-        <div class="mhead"><h2>{t.methods.stored.name}</h2><span class="badge">{t.methods.stored.badge}</span></div>
-        <p class="cardsub">{t.methods.stored.sub}</p>
-        {#if session().user}
-          <StoredUpload />
-        {:else}
-          <div class="signin">
-            <button class="btn btn-primary" onclick={() => (loginOpen = true)}>{t.account.signIn}</button>
-          </div>
-        {/if}
-      </section>
     {/if}
   </div>
 
   {#if !inRoom}
-    <HowItWorks />
+    <CrossSell target="offline" />
+    <HowItWorks variant="realtime" />
     <ModeCompare />
     <FeatureStrip />
     <UseCases />
@@ -110,7 +94,6 @@
 
 <style>
   .crosspage { position: relative; }
-  .acct { display: flex; justify-content: flex-end; min-height: 32px; }
 
   .cn-head { text-align: center; padding: var(--space-3) 0 var(--space-5); }
   /* Intentional page-header size — smaller than the marketing hero (--fs-display). */
@@ -118,8 +101,7 @@
   .cn-head .tagline { color: var(--text); font-size: var(--fs-body); max-width: 44ch; margin: 0 auto; }
   .cn-head .pitch { color: var(--text); font-size: var(--fs-xs); max-width: 52ch; margin: var(--space-3) auto 0; line-height: 1.55; }
 
-  .cards { display: grid; gap: var(--space-4); grid-template-columns: repeat(2, 1fr); max-width: 900px; margin: 0 auto; align-items: stretch; }
-  .cards.single { grid-template-columns: 1fr; max-width: 520px; margin: 0 auto; }
+  .cards { display: grid; grid-template-columns: 1fr; gap: var(--space-4); max-width: 520px; margin: 0 auto; align-items: stretch; }
   .card {
     border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-5);
     background: var(--social-bg); display: flex; flex-direction: column; gap: var(--space-3);
@@ -145,7 +127,6 @@
     transition: border-color .13s, color .13s;
   }
   .startover:hover { border-color: var(--accent-border); color: var(--text-h); }
-  .signin { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
   .foot { margin: var(--space-1) 0 0; font-size: 12px; color: var(--text); text-align: center; }
 
   footer {
@@ -157,8 +138,4 @@
   footer .legal a { color: var(--text-h); text-decoration: none; }
   footer .legal a:hover { color: var(--accent); }
   footer .fineprint { max-width: 60ch; }
-
-  @media (max-width: 760px) {
-    .cards { grid-template-columns: 1fr; }
-  }
 </style>

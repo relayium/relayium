@@ -1,15 +1,17 @@
 <script lang="ts">
   import { lang, messages, type Messages } from "./i18n.svelte";
+  let { variant }: { variant: "realtime" | "offline" } = $props();
   const t = $derived<Messages>(messages[lang()]);
+  const sec = $derived(t.howItWorks[variant]);
 </script>
 
-<section class="how" aria-label={t.howItWorks.title}>
+<section class="how" aria-label={sec.title}>
   <div class="head">
-    <h2>{t.howItWorks.title}</h2>
-    <p class="sub">{t.howItWorks.sub}</p>
+    <h2>{sec.title}</h2>
+    <p class="sub">{sec.sub}</p>
   </div>
   <ol class="ways">
-    {#each t.howItWorks.ways as w, i (w.name)}
+    {#each sec.ways as w, i (w.name)}
       <li class="way">
         <span class="step">{i + 1}</span>
         <span class="icon" aria-hidden="true">{w.icon}</span>

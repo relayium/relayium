@@ -1,15 +1,19 @@
 // Minimal client-side router for the Relayium SPA, driven by Svelte 5 runes.
-// Two routes: the LAN transfer page (default, "/") and the cross-network page
-// ("/cross-network"). A pairing code in the URL fragment (#c=<code>) always
-// implies the cross-network page so a join link lands the recipient correctly.
+// Three pages: the LAN transfer page (default, "/"), the realtime cross-network
+// page ("/cross-network"), and the async stored-transfer page ("/offline-transfer").
+// A pairing code in the URL fragment (#c=<code>) always implies the cross-network
+// page so a join link lands the recipient correctly.
 
 import { parseCodeParam, CROSS_PATH, DOWNLOAD_PREFIX } from "./transfer-link";
 import { clearRoom } from "./room.svelte";
 
-export type Route = "lan" | "cross" | "download" | "me";
+export type Route = "lan" | "cross" | "offline" | "download" | "me";
 
 /** Personal center path. Login-gated page; not part of the transfer flows. */
 export const ME_PATH = "/me";
+
+/** Path of the async stored-transfer page (login-gated; the paid tier lives here). */
+export const OFFLINE_PATH = "/offline-transfer";
 
 export { CROSS_PATH };
 
@@ -18,6 +22,7 @@ export function routeFromLocation(pathname: string, hash: string): Route {
   if (downloadId(pathname)) return "download";
   if (parseCodeParam(hash)) return "cross";
   if (pathname === CROSS_PATH) return "cross";
+  if (pathname === OFFLINE_PATH) return "offline";
   if (pathname === ME_PATH) return "me";
   return "lan";
 }
@@ -54,7 +59,8 @@ export function setNavGuard(g: (() => boolean) | null): void {
 export function navigate(r: Route): void {
   if (r === route) return; // already on this tab — don't tear down the room / abort a transfer
   if (navGuard && !navGuard()) return; // e.g. user declined the "interrupt transfer?" confirm
-  const pathname = r === "cross" ? CROSS_PATH : r === "me" ? ME_PATH : "/";
+  const pathname =
+    r === "cross" ? CROSS_PATH : r === "offline" ? OFFLINE_PATH : r === "me" ? ME_PATH : "/";
   clearRoom(); // leaving a 2-peer code room rebinds the socket via App's effect
   history.pushState({}, "", pathname);
   route = r;

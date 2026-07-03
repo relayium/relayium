@@ -16,6 +16,15 @@ describe("routeFromLocation", () => {
   });
 });
 
+describe("routeFromLocation offline page", () => {
+  it("maps /offline-transfer to the offline route", () => {
+    expect(rfl("/offline-transfer", "")).toBe("offline");
+  });
+  it("a pairing code still wins over the offline path", () => {
+    expect(rfl("/offline-transfer", "#c=424242")).toBe("cross");
+  });
+});
+
 describe("download route", () => {
   it("is download for /d/<id>", () => {
     expect(rfl("/d/abc123", "")).toBe("download");

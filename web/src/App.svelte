@@ -38,6 +38,7 @@
   import { outbox, setOutbox, takeOutbox, clearOutbox } from "./lib/outbox.svelte";
   import { folderUploadSupported } from "./lib/platform";
   import CrossPage from "./lib/CrossPage.svelte";
+  import OfflinePage from "./lib/OfflinePage.svelte";
   import MePage from "./lib/MePage.svelte";
   import Nav from "./lib/Nav.svelte";
   import { currentRoute, syncRouteFromLocation, downloadId, navigate, setNavGuard } from "./lib/router.svelte";
@@ -129,7 +130,7 @@
   // rendered: the LAN page (unless unsupported), or the cross page once a
   // realtime peer is connected. Never on the download page.
   const surfaceShown = $derived(
-    currentRoute() === "download"
+    currentRoute() === "download" || currentRoute() === "offline" || currentRoute() === "me"
       ? false
       : currentRoute() === "cross"
         ? showTransfer
@@ -1088,6 +1089,8 @@
 
   {#if currentRoute() === "cross"}
     <CrossPage {roomCode} {linkDead} {showTransfer} {transferSurface} dismissLan={() => (lanDismissed = true)} />
+  {:else if currentRoute() === "offline"}
+    <OfflinePage />
   {:else if currentRoute() === "me"}
     <MePage />
   {:else}
@@ -1109,7 +1112,10 @@
         <h3>{t.homeCross.title}</h3>
         <p>{t.homeCross.desc}</p>
       </div>
-      <button class="btn btn-primary" onclick={() => navigate("cross")}>{t.homeCross.cta}</button>
+      <div class="cc-actions">
+        <button class="btn btn-primary" onclick={() => navigate("cross")}>{t.homeCross.realtimeCta}</button>
+        <button class="btn btn-ghost" onclick={() => navigate("offline")}>{t.homeCross.offlineCta}</button>
+      </div>
     </section>
 
     <FeatureStrip />
@@ -1178,6 +1184,7 @@
   .crosscta h3 { margin: 0 0 6px; font-size: 18px; color: var(--text-h); font-weight: 600; }
   .crosscta p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text); }
   .crosscta .btn { white-space: nowrap; }
+  .crosscta .cc-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; }
 
   .card {
     border: 1px solid var(--border);
