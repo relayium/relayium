@@ -510,9 +510,13 @@
     acceptFn = async () => {
       const req = incoming;
       if (!req) return;
-      requestNotifyPermission(); // the accept click is a good moment to ask once
       try {
+        // The save picker requires the click's transient user activation. Ask for
+        // notification permission only AFTER it opens — Notification.requestPermission()
+        // consumes that activation, and asking first makes the picker throw
+        // "must be handling a user gesture" (no dialog shown) on mobile.
         target = await pickSaveTarget(req.files);
+        requestNotifyPermission();
       } catch (err) {
         console.error("relayium save-target error", err);
         recv = r = { ...r, status: "noSave", done: true, ok: false };
