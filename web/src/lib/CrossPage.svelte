@@ -90,7 +90,7 @@
   </div>
 
   {#if !inRoom}
-    <HowItWorks />
+    <HowItWorks variant="realtime" />
     <ModeCompare />
     <FeatureStrip />
     <UseCases />

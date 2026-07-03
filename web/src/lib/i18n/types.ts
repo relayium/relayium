@@ -13,6 +13,13 @@ export const LANGS: { code: Lang; label: string }[] = [
   { code: "fr", label: "Français" },
 ];
 
+/** One page's "how it works" walkthrough: three sequential step cards. */
+export interface HowSection {
+  title: string;
+  sub: string;
+  ways: { icon: string; name: string; how: string; tag: string }[];
+}
+
 export interface Messages {
   langLabel: string;
   theme: { label: string; system: string; light: string; dark: string };
@@ -206,9 +213,8 @@ export interface Messages {
   };
   features: { title: string; sub: string; secureLink: string; items: { title: string; desc: string }[] };
   howItWorks: {
-    title: string;
-    sub: string;
-    ways: { icon: string; name: string; how: string; tag: string }[];
+    realtime: HowSection;
+    offline: HowSection;
   };
   compare: {
     title: string;

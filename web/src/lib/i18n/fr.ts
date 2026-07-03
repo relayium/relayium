@@ -204,12 +204,24 @@ const fr: Messages = {
     ],
   },
   howItWorks: {
-    title: "Deux façons de franchir les réseaux",
-    sub: "Pas sur le même réseau local ? Transférez en temps réel si les deux sont en ligne, ou laissez un lien de téléchargement sinon.",
-    ways: [
-      { icon: "⚡", name: "Transfert direct en temps réel", how: "Quand les deux sont en ligne, un côté choisit ses fichiers et obtient un code à 6 chiffres — dictez-le, envoyez le lien ou montrez le QR. Dès que l'autre appareil rejoint, le transfert direct pair-à-pair démarre automatiquement. Sans connexion ; en cas d'échec du hole-punching, bascule vers un relais TURN chiffré, toujours chiffré de bout en bout.", tag: "Les fichiers ne passent jamais par le serveur" },
-      { icon: "📥", name: "Lien de téléchargement", how: "Votre navigateur chiffre avant l'envoi ; le serveur ne stocke que du chiffré. Le destinataire n'a besoin ni de compte ni de session active — il télécharge quand il veut, avec expiration ou destruction après lecture.", tag: "Chiffré uniquement" },
-    ],
+    realtime: {
+      title: "Direct en temps réel, en trois étapes",
+      sub: "Quand les deux sont en ligne, connectez-vous en pair-à-pair à travers les réseaux — sans connexion.",
+      ways: [
+        { icon: "📄", name: "Choisir les fichiers, obtenir un code", how: "Touchez « Envoyer des fichiers » et choisissez quoi envoyer — un code d'appairage à 6 chiffres est créé automatiquement, avec lien d'accès et QR.", tag: "Sans connexion" },
+        { icon: "🔢", name: "Transmettre le code", how: "Dictez-le, envoyez le lien ou montrez le QR — au choix ; l'autre personne le saisit ou l'ouvre dans n'importe quel navigateur moderne.", tag: "Codes valables 15 minutes" },
+        { icon: "⚡", name: "Le transfert démarre à l'arrivée", how: "Dès que l'autre appareil rejoint, le transfert démarre automatiquement — pair-à-pair et chiffré de bout en bout ; en cas d'échec du hole-punching, un relais TURN chiffré prend le relais sans rien pouvoir déchiffrer.", tag: "Les fichiers ne passent jamais par le serveur" },
+      ],
+    },
+    offline: {
+      title: "Transfert asynchrone, en trois étapes",
+      sub: "Envoyez même hors ligne : chiffrez et stockez maintenant, récupération par lien plus tard.",
+      ways: [
+        { icon: "🔒", name: "Se connecter et choisir les fichiers", how: "Les fichiers sont chiffrés en AES-256-GCM dans votre navigateur avant l'envoi — le serveur ne stocke jamais que du chiffré indéchiffrable.", tag: "Zéro connaissance" },
+        { icon: "🔗", name: "Créer le lien de téléchargement", how: "Expiration de 1 heure à 7 jours, ou destruction après lecture ; la clé de déchiffrement vit dans le fragment # du lien et n'atteint jamais le serveur.", tag: "Expiration maîtrisée" },
+        { icon: "📥", name: "Récupération à tout moment", how: "Envoyez le lien — ni compte ni attente en ligne : le déchiffrement et le téléchargement se font directement dans le navigateur.", tag: "Sans compte pour le destinataire" },
+      ],
+    },
   },
   compare: {
     title: "Quel mode choisir",

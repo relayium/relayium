@@ -204,12 +204,24 @@ const en: Messages = {
     ],
   },
   howItWorks: {
-    title: "Two ways across networks",
-    sub: "Not on the same LAN? Transfer in realtime when both are online, or leave a download link when they're not.",
-    ways: [
-      { icon: "⚡", name: "Realtime direct", how: "When both are online, one side picks files and gets a 6-digit code — read it out, send the join link, or show the QR. The moment the other side joins, a direct peer-to-peer transfer starts automatically. No sign-in; if hole-punching fails it falls back to an encrypted TURN relay, still end-to-end encrypted.", tag: "Files never touch the server" },
-      { icon: "📥", name: "Download link", how: "Your browser encrypts before upload; the server stores only ciphertext. The recipient needs no account and no live session — they download anytime, with an expiry or burn-after-reading.", tag: "Ciphertext only" },
-    ],
+    realtime: {
+      title: "Realtime direct, in three steps",
+      sub: "When both sides are online, connect peer-to-peer across networks — no sign-in.",
+      ways: [
+        { icon: "📄", name: "Pick files, get a code", how: "Tap “Send files” and choose what to send — a 6-digit pairing code is minted automatically, along with a join link and QR.", tag: "No sign-in" },
+        { icon: "🔢", name: "Give the code to the other side", how: "Read it out, send the link, or show the QR — any of the three; they type it in or open it in any modern browser.", tag: "Codes live 15 minutes" },
+        { icon: "⚡", name: "Transfer starts on join", how: "The moment they join, the transfer starts automatically — peer-to-peer and end-to-end encrypted; if hole-punching fails it falls back to an encrypted TURN relay that still can't decrypt anything.", tag: "Files never touch the server" },
+      ],
+    },
+    offline: {
+      title: "Async transfer, in three steps",
+      sub: "Send even when they're offline: encrypt and store now, they fetch by link later.",
+      ways: [
+        { icon: "🔒", name: "Sign in and pick files", how: "Files are encrypted with AES-256-GCM in your browser before upload — the server only ever stores ciphertext it cannot decrypt.", tag: "Zero-knowledge" },
+        { icon: "🔗", name: "Create the download link", how: "Set an expiry from 1 hour to 7 days, or burn-after-reading; the decryption key lives in the link's # fragment and is never sent to the server.", tag: "Expiry you control" },
+        { icon: "📥", name: "They download anytime", how: "Send them the link; no account and no waiting online — they decrypt and download right in the browser.", tag: "No account for recipients" },
+      ],
+    },
   },
   compare: {
     title: "Which mode to choose",

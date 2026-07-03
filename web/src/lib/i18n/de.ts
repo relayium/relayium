@@ -204,12 +204,24 @@ const de: Messages = {
     ],
   },
   howItWorks: {
-    title: "Zwei Wege über Netzgrenzen hinweg",
-    sub: "Nicht im selben LAN? Übertrage in Echtzeit, wenn beide online sind — oder hinterlasse einen Download-Link, wenn nicht.",
-    ways: [
-      { icon: "⚡", name: "Echtzeit-Direktübertragung", how: "Sind beide online, wählt eine Seite Dateien aus und erhält einen 6-stelligen Code — vorlesen, als Link verschicken oder QR zeigen. Sobald die Gegenseite beitritt, startet die direkte Peer-to-Peer-Übertragung automatisch. Ohne Anmeldung; scheitert das Hole-Punching, wird auf ein verschlüsseltes TURN-Relay ausgewichen, weiterhin Ende-zu-Ende-verschlüsselt.", tag: "Dateien erreichen nie den Server" },
-      { icon: "📥", name: "Download-Link", how: "Dein Browser verschlüsselt vor dem Upload; der Server speichert nur Chiffretext. Die empfangende Person braucht kein Konto und keine laufende Sitzung — sie lädt jederzeit herunter, mit Ablauf oder Löschen nach dem Lesen.", tag: "Nur Chiffretext" },
-    ],
+    realtime: {
+      title: "Echtzeit-Direkt in drei Schritten",
+      sub: "Sind beide online, verbindet ihr euch netzübergreifend Peer-to-Peer — ohne Anmeldung.",
+      ways: [
+        { icon: "📄", name: "Dateien wählen, Code erhalten", how: "Auf „Dateien senden“ tippen und auswählen — ein 6-stelliger Kopplungscode wird automatisch erzeugt, samt Beitrittslink und QR.", tag: "Ohne Anmeldung" },
+        { icon: "🔢", name: "Code an die Gegenseite geben", how: "Vorlesen, den Link schicken oder den QR zeigen — die andere Person tippt ihn ein oder öffnet ihn in einem beliebigen modernen Browser.", tag: "Codes gelten 15 Minuten" },
+        { icon: "⚡", name: "Übertragung startet beim Beitritt", how: "Sobald die Gegenseite beitritt, startet die Übertragung automatisch — Peer-to-Peer und Ende-zu-Ende-verschlüsselt; scheitert das Hole-Punching, springt ein verschlüsseltes TURN-Relay ein, das nichts entschlüsseln kann.", tag: "Dateien erreichen nie den Server" },
+      ],
+    },
+    offline: {
+      title: "Asynchron senden in drei Schritten",
+      sub: "Senden, auch wenn die Gegenseite offline ist: jetzt verschlüsselt ablegen, später per Link abholen.",
+      ways: [
+        { icon: "🔒", name: "Anmelden und Dateien wählen", how: "Dateien werden vor dem Upload im Browser mit AES-256-GCM verschlüsselt — der Server speichert durchgehend nur Chiffretext, den er nicht entschlüsseln kann.", tag: "Zero-Knowledge" },
+        { icon: "🔗", name: "Download-Link erzeugen", how: "Ablauf von 1 Stunde bis 7 Tagen oder Löschen nach dem Lesen; der Schlüssel steckt im #-Fragment des Links und erreicht den Server nie.", tag: "Ablauf selbst bestimmen" },
+        { icon: "📥", name: "Abholen, wann es passt", how: "Schick den Link — kein Konto, kein Online-Warten: entschlüsselt und heruntergeladen wird direkt im Browser.", tag: "Empfänger ohne Konto" },
+      ],
+    },
   },
   compare: {
     title: "Welcher Modus passt",
