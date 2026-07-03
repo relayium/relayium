@@ -43,10 +43,11 @@
     phase = "encrypting";
     controller = new AbortController();
     try {
-      const out = await uploadFile(files, { burnAfterRead: burn, ttl }, (sent, total) => {
-        progress = total > 0 ? Math.round((sent / total) * 100) : 0;
-        // Encryption finished feeding frames — the upload POST is what runs now.
-        if (total > 0 && sent >= total) phase = "uploading";
+      const out = await uploadFile(files, { burnAfterRead: burn, ttl }, (p) => {
+        // The bar tracks whichever phase is live; it fills 0→100 for encryption,
+        // then resets and fills again for the real upload (the label says which).
+        phase = p.phase;
+        progress = p.total > 0 ? Math.round((p.sent / p.total) * 100) : 0;
       }, controller.signal);
       link = buildDownloadLink(location.origin, out.id, out.key);
       expiresAt = out.expiresAt;
@@ -96,7 +97,7 @@
 
   {#if busy}
     <div class="bar" role="progressbar" aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"><div class="fill" style:width="{progress}%"></div></div>
-    <p class="phase" aria-live="polite">{phase === "uploading" ? t.stored.uploadingNow : `${t.stored.encrypting} ${progress}%`}</p>
+    <p class="phase" aria-live="polite">{phase === "uploading" ? `${t.stored.uploadingNow} ${progress}%` : `${t.stored.encrypting} ${progress}%`}</p>
     <button type="button" class="btn btn-ghost cancel" onclick={cancel}>{t.cancel}</button>
   {/if}
 

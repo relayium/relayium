@@ -44,11 +44,20 @@ export class DownloadNetworkError extends Error {
   }
 }
 
+/** Upload progress, split into the two sequential phases so the UI can show real
+ *  bytes for each: in-browser encryption, then the network POST of the ciphertext.
+ *  `total` differs per phase (plaintext size vs. ciphertext blob size). */
+export interface UploadProgress {
+  phase: "encrypting" | "uploading";
+  sent: number;
+  total: number;
+}
+
 /** Encrypt files in-browser and POST the ciphertext; returns the link parts. */
 export async function uploadFile(
   files: File[],
   opts: { burnAfterRead: boolean; ttl: number },
-  onProgress?: (sent: number, total: number) => void,
+  onProgress?: (p: UploadProgress) => void,
   signal?: AbortSignal,
 ): Promise<UploadResult> {
   const sk = await generateStoreKey();
@@ -66,19 +75,58 @@ export async function uploadFile(
     if (signal?.aborted) throw new DOMException("aborted", "AbortError");
     parts.push(fr);
     sent += fr.length - 4 - 16; // frame = 4-byte len + (plaintext + 16-byte tag)
-    onProgress?.(Math.min(sent, total), total);
+    onProgress?.({ phase: "encrypting", sent: Math.min(sent, total), total });
   }
 
+  // XHR, not fetch: upload.onprogress gives real byte-level upload progress that
+  // fetch cannot surface. The body is the same assembled ciphertext Blob.
   const query = `?burnAfterRead=${opts.burnAfterRead ? 1 : 0}&ttl=${opts.ttl}`;
-  const res = await fetch("/api/files" + query, {
-    method: "POST",
-    credentials: "include",
-    body: new Blob(parts),
+  const { id, expiresAt } = await postWithProgress(
+    "/api/files" + query,
+    new Blob(parts),
     signal,
-  });
-  if (!res.ok) throw new UploadError(res.status);
-  const { id, expiresAt } = (await res.json()) as { id: string; expiresAt: number };
+    (loaded, tot) => onProgress?.({ phase: "uploading", sent: loaded, total: tot }),
+  );
   return { id, expiresAt, key: encodeKey(sk.raw) };
+}
+
+/** POST a Blob with real upload-progress reporting and AbortSignal support.
+ *  Rejects with UploadError(status) on a non-2xx response (status 0 on a network
+ *  error) and with an AbortError DOMException when the signal aborts. */
+function postWithProgress(
+  url: string,
+  body: Blob,
+  signal: AbortSignal | undefined,
+  onUpload: (loaded: number, total: number) => void,
+): Promise<{ id: string; expiresAt: number }> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(new DOMException("aborted", "AbortError")); return; }
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.withCredentials = true;
+    const onAbort = () => xhr.abort();
+    signal?.addEventListener("abort", onAbort, { once: true });
+    const cleanup = () => signal?.removeEventListener("abort", onAbort);
+    if (xhr.upload) {
+      xhr.upload.onprogress = (e) => { if (e.lengthComputable) onUpload(e.loaded, e.total); };
+    }
+    xhr.onload = () => {
+      cleanup();
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const r = JSON.parse(xhr.responseText) as { id: string; expiresAt: number };
+          resolve({ id: r.id, expiresAt: r.expiresAt });
+        } catch {
+          reject(new UploadError(xhr.status)); // 2xx but unparseable body
+        }
+      } else {
+        reject(new UploadError(xhr.status));
+      }
+    };
+    xhr.onerror = () => { cleanup(); reject(new UploadError(0)); };
+    xhr.onabort = () => { cleanup(); reject(new DOMException("aborted", "AbortError")); };
+    xhr.send(body);
+  });
 }
 
 export async function fetchMeta(id: string): Promise<StoredFileMeta> {

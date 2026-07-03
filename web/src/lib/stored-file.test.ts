@@ -29,6 +29,38 @@ function bytesToBase64(bytes: Uint8Array): string {
 
 afterEach(() => vi.unstubAllGlobals());
 
+// A minimal XMLHttpRequest double for the upload path — uploadFile POSTs via XHR
+// (not fetch) so it can report real upload progress. Captures the sent body and
+// open() args, and settles onload/onerror on a microtask from the given config.
+interface XHRConfig { status: number; response: string; network: boolean }
+function installFakeXHR(cfg: XHRConfig) {
+  const captured = { body: null as Blob | null, url: "", method: "", withCredentials: false };
+  class FakeXHR {
+    withCredentials = false;
+    status = 0;
+    responseText = "";
+    upload = { onprogress: null as ((e: { lengthComputable: boolean; loaded: number; total: number }) => void) | null };
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    onabort: (() => void) | null = null;
+    open(method: string, url: string) { captured.method = method; captured.url = url; }
+    send(body: Blob) {
+      captured.body = body;
+      captured.withCredentials = this.withCredentials;
+      queueMicrotask(() => {
+        if (cfg.network) { this.onerror?.(); return; }
+        this.upload.onprogress?.({ lengthComputable: true, loaded: body.size, total: body.size });
+        this.status = cfg.status;
+        this.responseText = cfg.response;
+        this.onload?.();
+      });
+    }
+    abort() { this.onabort?.(); }
+  }
+  vi.stubGlobal("XMLHttpRequest", FakeXHR);
+  return captured;
+}
+
 describe("buildDownloadLink", () => {
   it("puts id in the path and key in the fragment", () => {
     expect(buildDownloadLink("https://relayium.app", "abc", "KEY")).toBe(
@@ -50,30 +82,41 @@ describe("parseDownloadKey", () => {
 
 describe("uploadFile", () => {
   it("POSTs to /api/files with query + credentials and returns id/expiresAt/key", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ id: "file42", expiresAt: 999 }),
-    });
-    vi.stubGlobal("fetch", fetchMock);
+    const cap = installFakeXHR({ status: 200, response: JSON.stringify({ id: "file42", expiresAt: 999 }), network: false });
     const file = new File([new Uint8Array([1, 2, 3])], "secret.txt");
     const out = await uploadFile([file], { burnAfterRead: true, ttl: 3600 });
     expect(out.id).toBe("file42");
     expect(out.expiresAt).toBe(999);
     expect(out.key.length).toBeGreaterThan(0);
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/files?burnAfterRead=1&ttl=3600");
-    expect(init.method).toBe("POST");
-    expect(init.credentials).toBe("include");
-    expect(init.body).toBeInstanceOf(Blob);
+    expect(cap.method).toBe("POST");
+    expect(cap.url).toBe("/api/files?burnAfterRead=1&ttl=3600");
+    expect(cap.withCredentials).toBe(true);
+    expect(cap.body).toBeInstanceOf(Blob);
   });
 
   it("throws UploadError with the HTTP status on failure", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 413 }));
+    installFakeXHR({ status: 413, response: "", network: false });
     const file = new File([new Uint8Array([1])], "x");
     await expect(uploadFile([file], { burnAfterRead: false, ttl: 0 })).rejects.toMatchObject({
       status: 413,
     });
     await expect(uploadFile([file], { burnAfterRead: false, ttl: 0 })).rejects.toBeInstanceOf(UploadError);
+  });
+
+  it("throws UploadError(0) on a network error", async () => {
+    installFakeXHR({ status: 0, response: "", network: true });
+    const file = new File([new Uint8Array([1])], "x");
+    await expect(uploadFile([file], { burnAfterRead: false, ttl: 0 })).rejects.toBeInstanceOf(UploadError);
+  });
+
+  it("reports the encrypting phase then the uploading phase", async () => {
+    installFakeXHR({ status: 200, response: JSON.stringify({ id: "x", expiresAt: 0 }), network: false });
+    const file = new File([new Uint8Array(100)], "data.bin");
+    const phases: string[] = [];
+    await uploadFile([file], { burnAfterRead: false, ttl: 0 }, (p) => {
+      if (phases[phases.length - 1] !== p.phase) phases.push(p.phase);
+    });
+    expect(phases).toEqual(["encrypting", "uploading"]);
   });
 });
 
@@ -209,21 +252,14 @@ describe("downloadBlob", () => {
 
 describe("uploadFile — body wire format", () => {
   it("prefixes the blob with uint32BE(encManifest length) then the manifest ciphertext then the frame stream", async () => {
-    let capturedBody: Blob | undefined;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockImplementation(async (_url: string, init: { body: Blob }) => {
-        capturedBody = init.body;
-        return { ok: true, json: async () => ({ id: "x", expiresAt: 0 }) };
-      }),
-    );
+    const cap = installFakeXHR({ status: 200, response: JSON.stringify({ id: "x", expiresAt: 0 }), network: false });
 
     const fileBytes = new Uint8Array([10, 20, 30, 40, 50]); // 5 bytes
     const file = new File([fileBytes], "data.bin");
     await uploadFile([file], { burnAfterRead: false, ttl: 0 });
 
-    expect(capturedBody).toBeInstanceOf(Blob);
-    const buf = await capturedBody!.arrayBuffer();
+    expect(cap.body).toBeInstanceOf(Blob);
+    const buf = await cap.body!.arrayBuffer();
     const view = new DataView(buf);
 
     // First 4 bytes: uint32BE of the encrypted-manifest ciphertext length.
