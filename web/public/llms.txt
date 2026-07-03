@@ -6,13 +6,13 @@
 
 - **Category:** Secure file transfer / file sharing between devices (web app), on the same network or across the internet.
 - **Same-network (default):** Open https://relayium.com on two devices on the same network. They discover each other automatically (grouped into a "room" by shared public IP). Pick a file (or drag-and-drop, up to 10 at once), the receiver accepts, both sides compare a short verification code, and the file streams device-to-device. No account needed.
-- **Cross-network:** For devices on different networks, use the cross-network page — a pairing code (which also generates a join link and QR) for a realtime transfer, or a stored download link (see Transfer modes).
+- **Cross-network:** two pages — realtime direct at /cross-network (pairing code / join link / QR, no account), and async stored transfer at /offline-transfer (sender signs in, recipients never need an account).
 
 ## Transfer modes
 
 - **Realtime — same network:** automatic device discovery on the LAN, direct peer-to-peer over WebRTC. No account.
-- **Realtime — pairing code (cross-network):** one side picks files and gets a 6-digit code plus a join link and QR; the other enters the code or opens the link to connect directly across networks. No account, codes live 15 minutes.
-- **Stored download link (asynchronous):** for when the recipient is offline. A signed-in sender's browser encrypts the files before upload; the server stores only zero-knowledge ciphertext, with a settable expiry (1/3/7 days) or burn-after-first-download. Recipients need no account.
+- **Realtime — pairing code (cross-network):** on the /cross-network page, one side picks files and gets a 6-digit code plus a join link and QR; the other enters the code or opens the link to connect directly across networks. No account, codes live 15 minutes.
+- **Stored download link (asynchronous):** created on the /offline-transfer page, for when the recipient is offline. A signed-in sender's browser encrypts the files before upload; the server stores only zero-knowledge ciphertext, with a settable expiry (1/3/7 days) or burn-after-first-download. Recipients need no account.
 - Cross-network realtime transfers (a pairing code and its join link) try a direct peer-to-peer path first (STUN) and fall back to an encrypted TURN relay for strict/symmetric NATs; the relay still only sees ciphertext.
 
 ## Security & privacy
