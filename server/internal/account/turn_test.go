@@ -51,7 +51,7 @@ func hasTURN(servers []ICEServer) bool {
 	return false
 }
 
-func TestICENoTokenReturnsStunOnly(t *testing.T) {
+func TestICENoRendezvousReturnsStunOnly(t *testing.T) {
 	ts, _, _ := newICEServer(t, "secret")
 	resp, err := ts.Client().Get(ts.URL + "/api/ice")
 	if err != nil || resp.StatusCode != http.StatusOK {
@@ -63,28 +63,17 @@ func TestICENoTokenReturnsStunOnly(t *testing.T) {
 	}
 }
 
-func TestICEValidTokenIncludesTurn(t *testing.T) {
-	ts, svc, store := newICEServer(t, "secret")
-	u, _ := store.UpsertUserByEmail(context.Background(), "o@example.com", "O")
-	tr, _ := svc.CreateTransfer(context.Background(), u.ID)
-
-	resp, _ := ts.Client().Get(ts.URL + "/api/ice?room=" + tr.Token)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status %d", resp.StatusCode)
+func TestICERoomParamIsIgnored(t *testing.T) {
+	// The legacy share-link "?room=" parameter is retired; supplying it must
+	// no longer yield TURN credentials.
+	ts, _, _ := newICEServer(t, "secret")
+	resp, err := ts.Client().Get(ts.URL + "/api/ice?room=deadbeef")
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("get: err=%v status=%v", err, resp.StatusCode)
 	}
 	servers := iceServersFromBody(t, resp)
-	if !hasTURN(servers) {
-		t.Fatalf("expected a TURN entry, got %+v", servers)
-	}
-	for _, s := range servers {
-		if len(s.URLs) > 0 && (s.URLs[0] == "turn:turn.example.com:3478") {
-			if s.Username == "" || s.Credential == "" {
-				t.Fatalf("TURN entry missing username/credential: %+v", s)
-			}
-			if !strings.HasSuffix(s.Username, ":"+tr.Token) {
-				t.Fatalf("username should embed token, got %q", s.Username)
-			}
-		}
+	if hasTURN(servers) {
+		t.Fatalf("room param must not yield TURN credentials, got %+v", servers)
 	}
 }
 
@@ -125,15 +114,6 @@ func TestICEPairCodeNoValidatorReturnsStunOnly(t *testing.T) {
 	servers := iceServersFromBody(t, resp)
 	if hasTURN(servers) {
 		t.Fatalf("no validator wired must mean no TURN for codes, got %+v", servers)
-	}
-}
-
-func TestICEInvalidTokenReturnsStunOnly(t *testing.T) {
-	ts, _, _ := newICEServer(t, "secret")
-	resp, _ := ts.Client().Get(ts.URL + "/api/ice?room=bogus")
-	servers := iceServersFromBody(t, resp)
-	if hasTURN(servers) {
-		t.Fatalf("invalid token must not yield TURN, got %+v", servers)
 	}
 }
 

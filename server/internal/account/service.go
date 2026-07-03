@@ -67,9 +67,9 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 func (s *Service) SetBlobStore(b storage.BlobStore) { s.blobs = b }
 
 // SetPairCodeValidator wires the anonymous pairing-code registry so /api/ice can
-// issue TURN credentials for a live code room, not just a logged-in transfer
-// token. Without this, pairing-code transfers would be STUN-only and fail to
-// relay across strict NATs. Called once at startup.
+// issue TURN credentials for a live code room. Pairing-code rooms are the only
+// realtime rendezvous; without this, pairing-code transfers would be STUN-only
+// and fail to relay across strict NATs. Called once at startup.
 func (s *Service) SetPairCodeValidator(fn func(string) bool) { s.validatePairCode = fn }
 
 func randToken() string {
