@@ -50,7 +50,7 @@ is **how seriously we take end-to-end encryption**:
 - 📦 **Multi-file batches** (up to 10) — streamed straight to disk; large files don't get buffered in memory.
 - ✅ **Per-file SHA-256 integrity check** on the receiving end.
 - 🌐 **6 languages** — English, 中文, 日本語, 한국어, Deutsch, Français — auto-detected, switchable.
-- ⚡ **No install, ever** — just open a URL. Realtime transfers (LAN + pairing code) need **no account** too; creating a share link or a stored download link requires the sender to sign in.
+- ⚡ **No install, ever** — just open a URL. All realtime transfers (LAN, or cross-network via a pairing code and the join link/QR it generates) need **no account**; only stored download links require the sender to sign in.
 - 🪶 **Tiny footprint** — one static SPA + a single Go binary for signaling.
 
 ## How does Relayium compare?
@@ -66,8 +66,9 @@ is **how seriously we take end-to-end encryption**:
 | Server-imposed size cap  | ❌ none                 | ❌ none          | ✅ (e.g. 2 GB free) | ❌ none             |
 | Open source              | ✅ MIT                  | ❌               | ❌                 | ✅                  |
 
-\* Realtime transfers over the LAN or via a pairing code need no account. Creating a **share link** or a
-**stored download link** requires the sender to sign in (recipients never need an account).
+\* Realtime transfers need no account — over the LAN, or cross-network via a pairing code (and the join
+link/QR it generates). Creating a **stored download link** requires the sender to sign in (recipients
+never need an account).
 
 The gap from Snapdrop/PairDrop is the **application-layer E2E + SAS**: WebRTC's DTLS fingerprints are
 exchanged *through the signaling server*, so a malicious server could MITM them. Relayium adds an
@@ -187,8 +188,8 @@ relayium/
 ## FAQ
 
 **Is Relayium free?**
-Yes — free and open source under the MIT license. No install, ever. Realtime transfers (LAN + pairing
-code) need no account; creating a share link or a stored download link requires the sender to sign in.
+Yes — free and open source under the MIT license. No install, ever. All realtime transfers (LAN, or a
+pairing code and its join link) need no account; only creating a stored download link requires the sender to sign in.
 
 **Do my files get uploaded to a server?**
 No. File bytes stream directly between the two devices over the WebRTC DataChannel and never pass through

@@ -257,27 +257,29 @@ These are explicitly out of scope for the first milestone and are **not** defect
 | No cross-origin CORS | The Go server does not set CORS headers. API calls from a different origin will fail. |
 | No HTTPS / WSS | M0 uses plain HTTP and WS. For production use, place behind a TLS-terminating reverse proxy (nginx, Caddy). WebRTC will still use DTLS-SRTP internally regardless. |
 
-## Cross-network transfer (②a: token-room + STUN P2P)
+## Cross-network transfer (②a: pairing-code room + STUN P2P)
 
-Prerequisites: server running with a working DB and a logged-in sender. For a
-real cross-network test, the two machines must be on different networks (e.g.
+Prerequisites: server running (no sign-in needed; pairing codes are account-free).
+For a real cross-network test, the two machines must be on different networks (e.g.
 laptop on Wi-Fi, phone on cellular). STUN-only means symmetric-NAT pairs may
 fail to connect — that fallback is ②b (TURN), out of scope here.
 
-1. **Mint a link (sender, logged in):** open the app, sign in, click
-   "Send to someone on another network". A share link (and QR) appears; the page
-   reloads into token-room mode.
+1. **Generate a pairing code (sender):** open the app, click
+   "Send to someone on another network", pick files, and generate a 6-digit
+   pairing code — a join link and QR appear alongside it (no sign-in needed;
+   codes live 15 minutes). The page reloads into pairing-room mode.
 2. **Open the link (receiver, different network):** open the link (or scan the
    QR). The receiver connects to the same room.
 3. **Verify SAS:** both sides see the 6-digit code; confirm they match.
 4. **Transfer:** sender picks files and sends; receiver accepts and downloads.
    Confirm the per-file SHA-256 integrity check passes.
-5. **Dead-link check:** open `https://<host>/#t=deadbeef` (a bogus token). Expect
-   the "link invalid or in use" banner and no connection.
-6. **Capacity check:** with a sender + receiver already in a room, open the same
-   link in a third tab. Expect it to be refused (room full).
+5. **Legacy-link check:** open `https://<host>/cross-network#t=deadbeef` (a retired
+   share-link token). Expect it to land on the normal cross-network method-selection
+   page — no error, no hang.
+6. **Capacity check:** with a sender + receiver already in a pairing room, open the
+   same join link in a third tab. Expect it to be refused (room full).
 7. **LAN regression:** open the app on two devices on the SAME network with NO
-   `#t=` in the URL. Confirm they still discover each other and transfer
+   `#c=` in the URL. Confirm they still discover each other and transfer
    (login-free), proving the LAN path is unaffected.
 
 ## Cross-network TURN relay (②b-1)
@@ -286,12 +288,12 @@ Prerequisites: a running coturn (see `docs/coturn.md`) and the Go server started
 with matching `-turn-secret` / `-turn-urls`.
 
 1. **STUN-only regression (no TURN configured):** start the server WITHOUT
-   `-turn-secret`. `GET /api/ice?room=<valid token>` returns STUN only; an
+   `-turn-secret`. `GET /api/ice?room=<valid code>` returns STUN only; an
    easy-NAT cross-network transfer still works (②a behavior).
-2. **Credentials served:** with TURN configured, sign in, mint a link, and in
-   the browser devtools confirm `GET /api/ice?room=<token>` returns a `turn:`
-   entry with a `username` (`<expiry>:<token>`) and a `credential`. The
-   login-free receiver opening the link gets the same TURN entry.
+2. **Credentials served:** with TURN configured, generate a pairing code, and in
+   the browser devtools confirm `GET /api/ice?room=<code>` returns a `turn:`
+   entry with a `username` (`<expiry>:<code>`) and a `credential`. The
+   receiver opening the join link gets the same TURN entry.
 3. **Forced-relay transfer:** to prove the coturn path end-to-end, temporarily
    set `iceTransportPolicy: "relay"` in `RTCPeerConnection` (or test between two
    genuinely symmetric-NAT networks). Complete a transfer; confirm SAS matches
@@ -302,19 +304,20 @@ with matching `-turn-secret` / `-turn-urls`.
 
 ## Cross-network relay-byte metering (②b-2)
 
-Prerequisites: Redis running; coturn with `redis-statsdb=...` (see `docs/coturn.md`);
-the Go server started with `-redis-addr <host:port>` and matching TURN flags.
+Metering is now **anonymous**: ingested relay bytes are recorded as a global total,
+unattributed to any account (realtime relay sessions are authorized by a pairing
+code, not a sign-in). Prerequisites: Redis running; coturn with `redis-statsdb=...`
+(see `docs/coturn.md`); the Go server started with `-redis-addr <host:port>` and
+matching TURN flags.
 
 1. **Metering off (regression):** start the server WITHOUT `-redis-addr`. A
-   relayed transfer still works; `/api/usage` for a logged-in user stays at 0
-   (no ingestion). The server logs no metering worker.
-2. **Ingestion:** with Redis + coturn + `-redis-addr` set, sign in, mint a link,
-   and force a relayed transfer (`iceTransportPolicy: "relay"` or symmetric NATs).
-   After the transfer completes, `GET /api/usage` returns a non-zero
-   `relayedBytes` for the sender, and the value is consistent with coturn's
-   reported `rcvb+sentb` for that session (check `redis-cli psubscribe
-   'turn/realm/*/user/*/allocation/*/total_traffic'` while transferring).
-3. **Idempotency:** restarting the Go server (re-subscribing) does not change an
-   already-recorded session's contribution to `/api/usage` (alloc_id dedup).
-4. **Unknown token:** a relay session whose credential token no longer maps to a
-   transfer row is logged and skipped (no `/api/usage` change, no crash).
+   relayed transfer still works; no usage is ingested. The server logs no
+   metering worker.
+2. **Ingestion:** with Redis + coturn + `-redis-addr` set, generate a pairing
+   code and force a relayed transfer (`iceTransportPolicy: "relay"` or symmetric
+   NATs). After the transfer completes, the ingested byte total increases and is
+   consistent with coturn's reported `rcvb+sentb` for that session (check
+   `redis-cli psubscribe 'turn/realm/*/user/*/allocation/*/total_traffic'` while
+   transferring). The recorded event carries no account attribution.
+3. **Idempotency:** restarting the Go server (re-subscribing) does not double-count
+   an already-recorded session (alloc_id dedup).

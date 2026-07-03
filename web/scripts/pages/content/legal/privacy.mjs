@@ -20,7 +20,7 @@ const en = {
     {
       heading: "What an account stores (only if you sign in)",
       body: [
-        "Signing in is optional and only unlocks cross-network transfers. If you sign in, we store the minimum needed to run an account:",
+        "Signing in is optional and only unlocks stored download links; every realtime transfer (LAN, or a pairing code and its join link) is account-free. If you sign in, we store the minimum needed to run an account:",
       ],
       bullets: [
         "Your email address and a display name.",
@@ -52,7 +52,7 @@ const en = {
     {
       heading: "Cross-network relay (TURN)",
       body: [
-        "When two devices cannot connect directly across networks, the encrypted stream is relayed through a TURN server. The relay still cannot read your files — they remain end-to-end encrypted. For operating the service we record only the number of relayed bytes for a transfer, attributed to the signed-in user who created it. We never inspect relayed content.",
+        "When two devices cannot connect directly across networks, the encrypted stream is relayed through a TURN server. The relay still cannot read your files — they remain end-to-end encrypted. For operating the service we record only the total number of relayed bytes, kept anonymously and never tied to an account. We never inspect relayed content.",
       ],
     },
     {
@@ -108,7 +108,7 @@ const zh = {
     },
     {
       heading: "账号会存储什么(仅在你登录时)",
-      body: ["登录是可选的,仅用于解锁跨网络传输。如果你登录,我们只存储运行账号所必需的最少信息:"],
+      body: ["登录是可选的,仅用于解锁托管下载链接；所有实时传输(局域网,或配对码及其加入链接)都无需账号。如果你登录,我们只存储运行账号所必需的最少信息:"],
       bullets: [
         "你的邮箱地址和一个显示名。",
         "你使用的登录方式(Google,或邮箱魔法链接)。魔法链接令牌只以哈希形式存储,绝不明文保存。",
@@ -135,7 +135,7 @@ const zh = {
     {
       heading: "跨网络中继(TURN)",
       body: [
-        "当两台设备无法跨网络直接连接时,加密流会通过 TURN 服务器中继。中继依然无法读取你的文件——它们始终保持端到端加密。出于运营目的,我们仅记录某次传输中继的字节数,并归属到创建该传输的登录用户。我们绝不检查中继内容。",
+        "当两台设备无法跨网络直接连接时,加密流会通过 TURN 服务器中继。中继依然无法读取你的文件——它们始终保持端到端加密。出于运营目的,我们仅记录中继的总字节数,且以匿名方式保存,绝不与任何账号关联。我们绝不检查中继内容。",
       ],
     },
     {
@@ -190,7 +190,7 @@ const ja = {
     {
       heading: "アカウントに保存される情報（サインインした場合のみ）",
       body: [
-        "サインインは任意で、クロスネットワーク転送を有効にするためだけに必要です。サインインした場合、アカウントの運用に必要な最小限の情報のみを保存します：",
+        "サインインは任意で、保存型ダウンロードリンクにのみ必要です。すべてのリアルタイム転送（LAN、またはペアリングコードとその参加リンク）はアカウント不要です。サインインした場合、アカウントの運用に必要な最小限の情報のみを保存します：",
       ],
       bullets: [
         "メールアドレスと表示名。",
@@ -222,7 +222,7 @@ const ja = {
     {
       heading: "クロスネットワーク中継（TURN）",
       body: [
-        "2台のデバイスがネットワークをまたいで直接接続できない場合、暗号化されたストリームはTURNサーバーを経由して中継されます。中継サーバーはあなたのファイルを読み取ることができません——エンドツーエンド暗号化が維持されます。サービスの運用上、転送ごとの中継バイト数のみを記録し、それを作成したサインイン済みユーザーに紐付けます。中継されたコンテンツを検査することはありません。",
+        "2台のデバイスがネットワークをまたいで直接接続できない場合、暗号化されたストリームはTURNサーバーを経由して中継されます。中継サーバーはあなたのファイルを読み取ることができません——エンドツーエンド暗号化が維持されます。サービスの運用上、中継バイトの合計のみを記録し、どのアカウントにも紐付けず匿名で保存します。中継されたコンテンツを検査することはありません。",
       ],
     },
     {
@@ -279,7 +279,7 @@ const ko = {
     {
       heading: "계정에 저장되는 정보(로그인한 경우에만)",
       body: [
-        "로그인은 선택 사항이며 크로스 네트워크 전송 기능을 사용할 때만 필요합니다. 로그인하면 계정 운영에 필요한 최소한의 정보만 저장합니다:",
+        "로그인은 선택 사항이며 저장형 다운로드 링크에만 필요합니다. 모든 실시간 전송(LAN, 또는 페어링 코드와 그 참여 링크)은 계정이 필요 없습니다. 로그인하면 계정 운영에 필요한 최소한의 정보만 저장합니다:",
       ],
       bullets: [
         "이메일 주소와 표시 이름.",
@@ -311,7 +311,7 @@ const ko = {
     {
       heading: "크로스 네트워크 릴레이(TURN)",
       body: [
-        "두 장치가 네트워크를 가로질러 직접 연결할 수 없는 경우, 암호화된 스트림이 TURN 서버를 통해 중계됩니다. 릴레이 서버는 여전히 파일을 읽을 수 없습니다——엔드 투 엔드 암호화가 유지됩니다. 서비스 운영을 위해 전송별 릴레이 바이트 수만 기록하며, 이를 전송을 생성한 로그인 사용자에게 귀속시킵니다. 중계된 콘텐츠를 검사하지 않습니다.",
+        "두 장치가 네트워크를 가로질러 직접 연결할 수 없는 경우, 암호화된 스트림이 TURN 서버를 통해 중계됩니다. 릴레이 서버는 여전히 파일을 읽을 수 없습니다——엔드 투 엔드 암호화가 유지됩니다. 서비스 운영을 위해 릴레이 바이트 총량만 기록하며, 어떤 계정에도 연결하지 않고 익명으로 보관합니다. 중계된 콘텐츠를 검사하지 않습니다.",
       ],
     },
     {
@@ -368,7 +368,7 @@ const de = {
     {
       heading: "Was ein Konto speichert (nur wenn Sie angemeldet sind)",
       body: [
-        "Die Anmeldung ist optional und schaltet nur geräteübergreifende Übertragungen frei. Bei einer Anmeldung speichern wir nur das für den Kontobetrieb notwendige Minimum:",
+        "Die Anmeldung ist optional und schaltet nur gespeicherte Download-Links frei; jede Echtzeitübertragung (LAN oder ein Pairing-Code samt Beitrittslink) kommt ohne Konto aus. Bei einer Anmeldung speichern wir nur das für den Kontobetrieb notwendige Minimum:",
       ],
       bullets: [
         "Ihre E-Mail-Adresse und ein Anzeigename.",
@@ -400,7 +400,7 @@ const de = {
     {
       heading: "Netzwerkübergreifende Weiterleitung (TURN)",
       body: [
-        "Wenn sich zwei Geräte nicht direkt über verschiedene Netzwerke verbinden können, wird der verschlüsselte Datenstrom über einen TURN-Server weitergeleitet. Die Weiterleitung kann Ihre Dateien dennoch nicht lesen — sie bleiben Ende-zu-Ende-verschlüsselt. Für den Betrieb des Dienstes erfassen wir lediglich die Anzahl der weitergeleiteten Bytes einer Übertragung, zugeordnet dem angemeldeten Benutzer, der sie erstellt hat. Weitergeleitete Inhalte werden von uns nie eingesehen.",
+        "Wenn sich zwei Geräte nicht direkt über verschiedene Netzwerke verbinden können, wird der verschlüsselte Datenstrom über einen TURN-Server weitergeleitet. Die Weiterleitung kann Ihre Dateien dennoch nicht lesen — sie bleiben Ende-zu-Ende-verschlüsselt. Für den Betrieb des Dienstes erfassen wir lediglich die Gesamtzahl der weitergeleiteten Bytes, anonym gespeichert und keinem Konto zugeordnet. Weitergeleitete Inhalte werden von uns nie eingesehen.",
       ],
     },
     {
@@ -457,7 +457,7 @@ const fr = {
     {
       heading: "Ce que stocke un compte (uniquement si vous vous connectez)",
       body: [
-        "La connexion est facultative et ne sert qu'à débloquer les transferts inter-réseaux. En cas de connexion, nous stockons le strict minimum nécessaire au fonctionnement du compte :",
+        "La connexion est facultative et ne sert qu'à débloquer les liens de téléchargement stockés ; tout transfert en temps réel (réseau local, ou un code d'appairage et son lien de participation) ne demande aucun compte. En cas de connexion, nous stockons le strict minimum nécessaire au fonctionnement du compte :",
       ],
       bullets: [
         "Votre adresse e-mail et un nom d'affichage.",
@@ -489,7 +489,7 @@ const fr = {
     {
       heading: "Relais inter-réseau (TURN)",
       body: [
-        "Lorsque deux appareils ne peuvent pas se connecter directement entre différents réseaux, le flux chiffré est relayé via un serveur TURN. Le relais ne peut toujours pas lire vos fichiers — ils restent chiffrés de bout en bout. Pour l'exploitation du service, nous enregistrons uniquement le nombre d'octets relayés pour un transfert, attribué à l'utilisateur connecté qui l'a créé. Nous n'inspectons jamais le contenu relayé.",
+        "Lorsque deux appareils ne peuvent pas se connecter directement entre différents réseaux, le flux chiffré est relayé via un serveur TURN. Le relais ne peut toujours pas lire vos fichiers — ils restent chiffrés de bout en bout. Pour l'exploitation du service, nous enregistrons uniquement le nombre total d'octets relayés, conservé de façon anonyme et jamais lié à un compte. Nous n'inspectons jamais le contenu relayé.",
       ],
     },
     {
