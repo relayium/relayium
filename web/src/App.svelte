@@ -1109,7 +1109,10 @@
         <h3>{t.homeCross.title}</h3>
         <p>{t.homeCross.desc}</p>
       </div>
-      <button class="btn btn-primary" onclick={() => navigate("cross")}>{t.homeCross.cta}</button>
+      <div class="cc-actions">
+        <button class="btn btn-primary" onclick={() => navigate("cross")}>{t.homeCross.realtimeCta}</button>
+        <button class="btn btn-ghost" onclick={() => navigate("offline")}>{t.homeCross.offlineCta}</button>
+      </div>
     </section>
 
     <FeatureStrip />
@@ -1178,6 +1181,7 @@
   .crosscta h3 { margin: 0 0 6px; font-size: 18px; color: var(--text-h); font-weight: 600; }
   .crosscta p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text); }
   .crosscta .btn { white-space: nowrap; }
+  .crosscta .cc-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; }
 
   .card {
     border: 1px solid var(--border);

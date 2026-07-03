@@ -117,7 +117,16 @@ const fr: Messages = {
   crossnet: {
     realtimeTitle: "Transfert direct en temps réel",
     realtimeSub: "Les deux en ligne · pair-à-pair · les fichiers ne passent jamais par le serveur",
-    realtimeFoot: "Sans connexion · connectez-vous pour les liens de téléchargement",
+    realtimeFoot: "Sans connexion · chiffré de bout en bout",
+  },
+  offline: {
+    tagline: "Chiffré dans votre navigateur, puis stocké · le serveur ne détient que du chiffré",
+    pitch: "Le destinataire n'est pas en ligne ? Chiffrez, envoyez, et transmettez un lien de téléchargement à durée limitée — il récupère quand il veut. Zéro connaissance de bout en bout : le serveur ne peut pas voir le contenu.",
+    signIn: "Connectez-vous pour téléverser et créer des liens de téléchargement ; les destinataires n'ont jamais besoin de compte.",
+  },
+  crossSell: {
+    realtime: { lead: "L'autre personne est en ligne ? Le direct en temps réel est plus rapide — pair-à-pair, les fichiers ne passent jamais par le serveur, sans connexion.", cta: "Vers le direct en temps réel →" },
+    offline: { lead: "Destinataire hors ligne ? Utilisez le transfert asynchrone — chiffrez, téléversez et laissez un lien de téléchargement, récupérable pendant plusieurs jours.", cta: "Vers le transfert asynchrone →" },
   },
   methods: {
     realtime: { name: "⚡ Transfert direct en temps réel", sub: "Choisissez vos fichiers et obtenez un code à 6 chiffres — dictez-le, envoyez le lien ou montrez le QR ; dès que l'autre appareil rejoint, le transfert pair-à-pair démarre automatiquement.", badge: "Sans connexion" },
@@ -241,8 +250,9 @@ const fr: Messages = {
   crossPitch: "Sur le même réseau, le « transfert en réseau local » est le plus simple ; à distance, utilisez l'une des deux façons ci-dessous.",
   homeCross: {
     title: "Pas sur le même réseau ?",
-    desc: "Le transfert inter-réseaux offre un transfert direct en temps réel sans connexion (code / lien / QR) et des liens de téléchargement chiffrés — chiffré de bout en bout, même à l'autre bout du monde.",
-    cta: "Aller au transfert inter-réseaux →",
+    desc: "S'il est en ligne, utilisez le direct en temps réel (sans connexion, les fichiers ne passent jamais par le serveur) ; sinon, le transfert asynchrone (stockage chiffré, récupération par lien à tout moment).",
+    realtimeCta: "Direct en temps réel →",
+    offlineCta: "Transfert asynchrone →",
   },
   legal: { privacy: "Politique de confidentialité", terms: "Conditions d'utilisation", security: "Sécurité" },
   learn: {

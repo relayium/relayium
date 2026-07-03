@@ -117,7 +117,16 @@ const en: Messages = {
   crossnet: {
     realtimeTitle: "Realtime direct",
     realtimeSub: "Both online now · peer-to-peer · files never touch the server",
-    realtimeFoot: "No sign-in needed · sign in to use download links",
+    realtimeFoot: "No sign-in needed · end-to-end encrypted",
+  },
+  offline: {
+    tagline: "Encrypted in your browser, then stored · the server only ever holds ciphertext",
+    pitch: "Recipient not online right now? Encrypt and upload, send them a download link with an expiry — they fetch it whenever they're free. Zero-knowledge throughout: the server cannot see the content.",
+    signIn: "Sign in to upload and create download links; recipients never need an account.",
+  },
+  crossSell: {
+    realtime: { lead: "Is the other person online right now? Realtime direct is faster — peer-to-peer, files never touch the server, no sign-in.", cta: "Go to realtime direct →" },
+    offline: { lead: "Recipient not online? Use async transfer — encrypt, upload, and leave a download link they can fetch for days.", cta: "Go to async transfer →" },
   },
   methods: {
     realtime: { name: "⚡ Realtime direct", sub: "Pick your files and get a 6-digit code — read it out, send the link, or show the QR; the moment the other side joins, the transfer starts peer-to-peer.", badge: "No sign-in" },
@@ -241,8 +250,9 @@ const en: Messages = {
   crossPitch: "On the same network, “LAN transfer” is simplest; when you're apart, use one of the two ways below.",
   homeCross: {
     title: "Not on the same network?",
-    desc: "Cross-network transfer offers sign-in-free realtime direct (code / link / QR) and encrypted download links — end-to-end encrypted, even across the world.",
-    cta: "Go to cross-network transfer →",
+    desc: "If they're online, use realtime direct (no sign-in, files never touch the server); if not, use async transfer (encrypted storage, fetch by link anytime).",
+    realtimeCta: "Realtime direct →",
+    offlineCta: "Async transfer →",
   },
   legal: { privacy: "Privacy Policy", terms: "Terms of Service", security: "Security" },
   learn: {

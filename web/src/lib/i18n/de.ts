@@ -117,7 +117,16 @@ const de: Messages = {
   crossnet: {
     realtimeTitle: "Echtzeit-Direktübertragung",
     realtimeSub: "Beide jetzt online · Peer-to-Peer · Dateien berühren nie den Server",
-    realtimeFoot: "Keine Anmeldung nötig · angemeldet für Download-Links",
+    realtimeFoot: "Keine Anmeldung nötig · Ende-zu-Ende-verschlüsselt",
+  },
+  offline: {
+    tagline: "Im Browser verschlüsselt, dann zwischengespeichert · der Server hält nur Chiffretext",
+    pitch: "Die Gegenseite ist gerade nicht online? Verschlüsseln, hochladen und einen Download-Link mit Ablaufdatum schicken — abgeholt wird, wann es passt. Durchgehend Zero-Knowledge: der Server kann den Inhalt nicht sehen.",
+    signIn: "Melde dich an, um hochzuladen und Download-Links zu erzeugen; Empfänger brauchen nie ein Konto.",
+  },
+  crossSell: {
+    realtime: { lead: "Ist die andere Person gerade online? Echtzeit-Direkt ist schneller — Peer-to-Peer, Dateien berühren nie den Server, ohne Anmeldung.", cta: "Zur Echtzeit-Direktübertragung →" },
+    offline: { lead: "Gegenseite offline? Nutze die asynchrone Übertragung — verschlüsselt hochladen und einen Download-Link hinterlassen, tagelang abholbar.", cta: "Zur asynchronen Übertragung →" },
   },
   methods: {
     realtime: { name: "⚡ Echtzeit-Direktübertragung", sub: "Dateien auswählen und einen 6-stelligen Code erhalten — vorlesen, als Link verschicken oder QR zeigen; sobald die Gegenseite beitritt, startet die Peer-to-Peer-Übertragung automatisch.", badge: "Ohne Anmeldung" },
@@ -241,8 +250,9 @@ const de: Messages = {
   crossPitch: "Im selben Netzwerk ist „LAN-Übertragung“ am einfachsten; seid ihr getrennt, nutze einen der zwei Wege unten.",
   homeCross: {
     title: "Nicht im selben Netzwerk?",
-    desc: "Netzübergreifende Übertragung bietet anmeldefreie Echtzeit-Direktübertragung (Code / Link / QR) und verschlüsselte Download-Links — Ende-zu-Ende-verschlüsselt, selbst um die halbe Welt.",
-    cta: "Zur netzübergreifenden Übertragung →",
+    desc: "Ist die Gegenseite online, nutze Echtzeit-Direkt (ohne Anmeldung, Dateien berühren nie den Server); wenn nicht, die asynchrone Übertragung (verschlüsselt zwischengespeichert, Abruf per Link).",
+    realtimeCta: "Echtzeit-Direkt →",
+    offlineCta: "Asynchron senden →",
   },
   legal: { privacy: "Datenschutzerklärung", terms: "Nutzungsbedingungen", security: "Sicherheit" },
   learn: {

@@ -132,6 +132,16 @@ export interface Messages {
     realtimeSub: string;
     realtimeFoot: string;
   };
+  offline: {
+    tagline: string; // page subtitle — encrypt-then-store, ciphertext-only server
+    pitch: string; // one-paragraph how/why under the header
+    signIn: string; // hint beside the sign-in button on the gated card
+  };
+  crossSell: {
+    // Directional cross-links between the two cross-network pages.
+    realtime: { lead: string; cta: string }; // rendered on the OFFLINE page → go realtime
+    offline: { lead: string; cta: string }; // rendered on the REALTIME page → go offline
+  };
   methods: {
     realtime: { name: string; sub: string; badge: string };
     stored: { name: string; sub: string; badge: string };
@@ -219,7 +229,7 @@ export interface Messages {
     items: { q: string; a: string }[];
   };
   crossPitch: string; // one-line cross-network pitch under the two cards
-  homeCross: { title: string; desc: string; cta: string }; // homepage → cross-network CTA
+  homeCross: { title: string; desc: string; realtimeCta: string; offlineCta: string }; // homepage → the two cross-network pages
   legal: { privacy: string; terms: string; security: string };
   // Short footer labels linking to the generated static articles/landing pages.
   learn: {
