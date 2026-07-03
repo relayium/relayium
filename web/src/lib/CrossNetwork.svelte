@@ -96,5 +96,5 @@
   /* Compact copy button that lines up with the link input beside it. */
   .row .btn { padding: var(--space-2) var(--space-4); white-space: nowrap; }
   .qr { margin-top: var(--space-1); border-radius: var(--radius-sm); background: #fff; padding: 6px; }
-  .error { color: var(--accent); font-size: var(--fs-xs); margin: 0; }
+  .error { color: var(--danger); font-size: var(--fs-xs); margin: 0; }
 </style>

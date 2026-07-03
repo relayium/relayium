@@ -176,7 +176,9 @@
   .error {
     grid-column: 1 / -1;
     margin: 2px 0 0; text-align: center; padding: var(--space-3); border-radius: var(--radius-sm); font-size: var(--fs-xs);
-    color: var(--text-h); background: var(--accent-bg); border: 1px solid var(--accent-border);
+    color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
   }
 
   footer {

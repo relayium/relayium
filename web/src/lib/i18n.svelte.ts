@@ -72,6 +72,7 @@ export interface Messages {
     resuming: string; // connection dropped mid-transfer, reconnecting to resume
     noSave: string;
     connectFail: string;
+    peerBusy: string; // the peer refused the offer because it's already in a transfer
   };
   account: {
     signIn: string;
@@ -135,6 +136,7 @@ export interface Messages {
     copyLink: string; // copies the full join link for forwarding
     errExpired: string;
     mintFailed: string; // minting a fresh code failed (network/server), not expiry
+    back: string; // return from code entry to the send/receive choice
   };
   stored: {
     pick: string;
@@ -171,6 +173,8 @@ export interface Messages {
     noKey: string;
     decryptFail: string;
     unsupported: string;
+    netFail: string; // download connection dropped — retryable, distinct from a decrypt failure
+    retry: string; // button: retry a network-failed download
   };
   features: { title: string; sub: string; secureLink: string; items: { title: string; desc: string }[] };
   howItWorks: {
@@ -280,6 +284,7 @@ const zh: Messages = {
     resuming: "连接中断，正在重连续传…",
     noSave: "未选择保存位置，已取消",
     connectFail: "建立连接失败 ✗",
+    peerBusy: "对方正忙（另一个传输进行中），请稍后再试 ✗",
   },
   account: {
     signIn: "登录",
@@ -343,6 +348,7 @@ const zh: Messages = {
     copyLink: "复制链接",
     errExpired: "配对码无效或已过期",
     mintFailed: "无法生成配对码，请检查网络后重试。",
+    back: "返回",
   },
   stored: {
     pick: "选择文件上传",
@@ -378,6 +384,8 @@ const zh: Messages = {
     notFound: "链接无效、已过期或已被下载删除。",
     noKey: "链接不完整：缺少解密密钥（#k=）。",
     decryptFail: "解密失败：密钥错误或文件已损坏。",
+    netFail: "下载中断：请检查网络后重试。",
+    retry: "重试",
     unsupported: "需要 HTTPS（或 localhost）才能解密下载。",
   },
   features: {
@@ -514,6 +522,7 @@ const en: Messages = {
     resuming: "Connection dropped — reconnecting to resume…",
     noSave: "No save location chosen — cancelled",
     connectFail: "Connection failed ✗",
+    peerBusy: "The other device is busy with another transfer — try again shortly ✗",
   },
   account: {
     signIn: "Sign in",
@@ -577,6 +586,7 @@ const en: Messages = {
     copyLink: "Copy link",
     errExpired: "Pairing code is invalid or expired",
     mintFailed: "Couldn't create a pairing code — check your connection and try again.",
+    back: "Back",
   },
   stored: {
     pick: "Choose files to upload",
@@ -612,6 +622,8 @@ const en: Messages = {
     notFound: "This link is invalid, expired, or already downloaded and deleted.",
     noKey: "Incomplete link: the decryption key (#k=) is missing.",
     decryptFail: "Decryption failed: wrong key or corrupted file.",
+    netFail: "Download interrupted — check your connection and try again.",
+    retry: "Retry",
     unsupported: "Decryption requires HTTPS (or localhost).",
   },
   features: {
@@ -748,6 +760,7 @@ const ja: Messages = {
     resuming: "接続が切断されました — 再接続して再開中…",
     noSave: "保存先が選択されなかったため、キャンセルしました",
     connectFail: "接続の確立に失敗しました ✗",
+    peerBusy: "相手は別の転送中です。しばらくして再試行してください ✗",
   },
   account: {
     signIn: "ログイン",
@@ -811,6 +824,7 @@ const ja: Messages = {
     copyLink: "リンクをコピー",
     errExpired: "ペアリングコードが無効か期限切れです",
     mintFailed: "ペアリングコードを作成できませんでした。接続を確認して再試行してください。",
+    back: "戻る",
   },
   stored: {
     pick: "アップロードするファイルを選択",
@@ -846,6 +860,8 @@ const ja: Messages = {
     notFound: "このリンクは無効、期限切れ、またはダウンロード済みで削除されています。",
     noKey: "リンクが不完全です：復号キー（#k=）がありません。",
     decryptFail: "復号に失敗しました：キーが違うかファイルが破損しています。",
+    netFail: "ダウンロードが中断されました。接続を確認して再試行してください。",
+    retry: "再試行",
     unsupported: "復号ダウンロードには HTTPS（または localhost）が必要です。",
   },
   features: {
@@ -982,6 +998,7 @@ const ko: Messages = {
     resuming: "연결이 끊겼습니다 — 재연결하여 이어받는 중…",
     noSave: "저장 위치를 선택하지 않아 취소되었습니다",
     connectFail: "연결 실패 ✗",
+    peerBusy: "상대가 다른 전송 중입니다. 잠시 후 다시 시도하세요 ✗",
   },
   account: {
     signIn: "로그인",
@@ -1045,6 +1062,7 @@ const ko: Messages = {
     copyLink: "링크 복사",
     errExpired: "페어링 코드가 잘못되었거나 만료되었습니다",
     mintFailed: "페어링 코드를 만들지 못했습니다. 연결을 확인한 후 다시 시도하세요.",
+    back: "뒤로",
   },
   stored: {
     pick: "업로드할 파일 선택",
@@ -1080,6 +1098,8 @@ const ko: Messages = {
     notFound: "유효하지 않거나 만료되었거나 이미 다운로드되어 삭제된 링크입니다.",
     noKey: "불완전한 링크: 복호화 키(#k=)가 없습니다.",
     decryptFail: "복호화 실패: 키가 틀리거나 파일이 손상되었습니다.",
+    netFail: "다운로드가 중단되었습니다. 연결을 확인한 후 다시 시도하세요.",
+    retry: "다시 시도",
     unsupported: "복호화 다운로드에는 HTTPS(또는 localhost)가 필요합니다.",
   },
   features: {
@@ -1216,6 +1236,7 @@ const de: Messages = {
     resuming: "Verbindung getrennt — neu verbinden, um fortzusetzen…",
     noSave: "Kein Speicherort gewählt – abgebrochen",
     connectFail: "Verbindung fehlgeschlagen ✗",
+    peerBusy: "Das andere Gerät ist mit einer anderen Übertragung beschäftigt – bitte gleich erneut versuchen ✗",
   },
   account: {
     signIn: "Anmelden",
@@ -1279,6 +1300,7 @@ const de: Messages = {
     copyLink: "Link kopieren",
     errExpired: "Kopplungscode ist ungültig oder abgelaufen",
     mintFailed: "Kopplungscode konnte nicht erstellt werden – bitte Verbindung prüfen und erneut versuchen.",
+    back: "Zurück",
   },
   stored: {
     pick: "Dateien zum Hochladen wählen",
@@ -1314,6 +1336,8 @@ const de: Messages = {
     notFound: "Dieser Link ist ungültig, abgelaufen oder bereits heruntergeladen und gelöscht.",
     noKey: "Unvollständiger Link: Der Entschlüsselungsschlüssel (#k=) fehlt.",
     decryptFail: "Entschlüsselung fehlgeschlagen: falscher Schlüssel oder beschädigte Datei.",
+    netFail: "Download unterbrochen – bitte Verbindung prüfen und erneut versuchen.",
+    retry: "Erneut versuchen",
     unsupported: "Für den entschlüsselten Download ist HTTPS (oder localhost) erforderlich.",
   },
   features: {
@@ -1450,6 +1474,7 @@ const fr: Messages = {
     resuming: "Connexion interrompue — reconnexion pour reprendre…",
     noSave: "Aucun emplacement de sauvegarde choisi — annulé",
     connectFail: "Échec de la connexion ✗",
+    peerBusy: "L’autre appareil est occupé par un autre transfert — réessayez dans un instant ✗",
   },
   account: {
     signIn: "Se connecter",
@@ -1513,6 +1538,7 @@ const fr: Messages = {
     copyLink: "Copier le lien",
     errExpired: "Code d'appairage invalide ou expiré",
     mintFailed: "Impossible de créer un code d'appairage — vérifiez votre connexion et réessayez.",
+    back: "Retour",
   },
   stored: {
     pick: "Choisir des fichiers à envoyer",
@@ -1548,6 +1574,8 @@ const fr: Messages = {
     notFound: "Ce lien est invalide, expiré, ou déjà téléchargé puis supprimé.",
     noKey: "Lien incomplet : la clé de déchiffrement (#k=) est absente.",
     decryptFail: "Échec du déchiffrement : mauvaise clé ou fichier corrompu.",
+    netFail: "Téléchargement interrompu — vérifiez votre connexion et réessayez.",
+    retry: "Réessayer",
     unsupported: "Le téléchargement déchiffré nécessite HTTPS (ou localhost).",
   },
   features: {

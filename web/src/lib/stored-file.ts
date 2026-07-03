@@ -34,11 +34,22 @@ export class UploadError extends Error {
   }
 }
 
+/** The download's network layer failed (offline, connection dropped mid-stream) —
+ *  distinct from a decrypt/integrity failure, so the UI can offer a plain retry
+ *  instead of the misleading "wrong key or corrupt file" message. */
+export class DownloadNetworkError extends Error {
+  constructor(public override cause?: unknown) {
+    super("download network error");
+    this.name = "DownloadNetworkError";
+  }
+}
+
 /** Encrypt files in-browser and POST the ciphertext; returns the link parts. */
 export async function uploadFile(
   files: File[],
   opts: { burnAfterRead: boolean; ttl: number },
   onProgress?: (sent: number, total: number) => void,
+  signal?: AbortSignal,
 ): Promise<UploadResult> {
   const sk = await generateStoreKey();
   const manifest: StoredManifest = { files: files.map((f) => ({ name: f.name, size: f.size })) };
@@ -50,6 +61,9 @@ export async function uploadFile(
   const parts: BlobPart[] = [header, encManifest];
   let sent = 0;
   for await (const fr of encryptFiles(files, sk.key)) {
+    // Honour a cancel mid-encryption (a large multi-file batch) instead of only
+    // at the network boundary.
+    if (signal?.aborted) throw new DOMException("aborted", "AbortError");
     parts.push(fr);
     sent += fr.length - 4 - 16; // frame = 4-byte len + (plaintext + 16-byte tag)
     onProgress?.(Math.min(sent, total), total);
@@ -60,6 +74,7 @@ export async function uploadFile(
     method: "POST",
     credentials: "include",
     body: new Blob(parts),
+    signal,
   });
   if (!res.ok) throw new UploadError(res.status);
   const { id, expiresAt } = (await res.json()) as { id: string; expiresAt: number };
@@ -100,14 +115,25 @@ export async function downloadBlob(
   expectedBytes?: number,
 ): Promise<void> {
   const expected = expectedBytes ?? (await expectedPlaintextBytes(id, key));
-  const res = await fetch(`/api/files/${encodeURIComponent(id)}/blob`);
+  let res: Response;
+  try {
+    res = await fetch(`/api/files/${encodeURIComponent(id)}/blob`);
+  } catch (e) {
+    throw new DownloadNetworkError(e); // fetch rejected — offline / DNS / connection refused
+  }
   if (!res.ok) throw new Error(`blob failed: ${res.status}`);
   if (!res.body) throw new Error("streaming not supported");
   const decryptor = new StoreDecryptor(key);
   const reader = res.body.getReader();
   let received = 0;
   for (;;) {
-    const { done, value } = await reader.read();
+    let chunk: ReadableStreamReadResult<Uint8Array>;
+    try {
+      chunk = await reader.read(); // a mid-stream drop rejects here — a network fault, not a decrypt fault
+    } catch (e) {
+      throw new DownloadNetworkError(e);
+    }
+    const { done, value } = chunk;
     if (done) break;
     for await (const pt of decryptor.push(value)) {
       await onChunk(pt);

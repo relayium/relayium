@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { fetchMeta, downloadBlob, parseDownloadKey, keyFromFragment } from "./stored-file";
+  import { fetchMeta, downloadBlob, parseDownloadKey, keyFromFragment, DownloadNetworkError } from "./stored-file";
   import { decryptManifest, type StoredManifest } from "./store-crypto";
   import { pickSaveTarget, type SaveTarget, type FileSink } from "./filesink";
   import { lang, setLang, LANGS, messages, legalUrl, type Lang, type Messages } from "./i18n.svelte";
@@ -12,7 +12,7 @@
 
   type PageState = "loading" | "ready" | "downloading" | "done" | "error";
   let pageState: PageState = $state("loading");
-  let errKey: "notFound" | "noKey" | "decryptFail" | "unsupported" | "" = $state("");
+  let errKey: "notFound" | "noKey" | "decryptFail" | "unsupported" | "netFail" | "" = $state("");
   let manifest = $state<StoredManifest | null>(null);
   let key: CryptoKey | null = null;
   let progress = $state(0); // 0..100
@@ -91,9 +91,11 @@
       );
       if (sink) await sink.close();
       pageState = "done";
-    } catch {
+    } catch (e) {
       pageState = "error";
-      errKey = "decryptFail";
+      // A dropped connection is retryable; only a genuine decrypt/integrity failure
+      // warrants the "wrong key or corrupt file" message.
+      errKey = e instanceof DownloadNetworkError ? "netFail" : "decryptFail";
     }
   }
 
@@ -128,8 +130,12 @@
       {#if errKey === "notFound"}{t.download.notFound}
       {:else if errKey === "noKey"}{t.download.noKey}
       {:else if errKey === "unsupported"}{t.download.unsupported}
+      {:else if errKey === "netFail"}{t.download.netFail}
       {:else}{t.download.decryptFail}{/if}
     </p>
+    {#if errKey === "netFail" && manifest}
+      <button class="btn btn-primary" onclick={download}>{t.download.retry}</button>
+    {/if}
   {:else if pageState === "ready" && expired}
     <p class="error">{t.download.notFound}</p>
   {:else}
@@ -155,8 +161,8 @@
     {/if}
 
     {#if pageState === "downloading"}
-      <div class="bar"><div class="fill" style:width="{progress}%"></div></div>
-      <p>{t.download.downloading} {progress}%</p>
+      <div class="bar" role="progressbar" aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"><div class="fill" style:width="{progress}%"></div></div>
+      <p aria-live="polite">{t.download.downloading} {progress}%</p>
     {:else if pageState === "done"}
       <p class="ok">{t.download.done}</p>
     {:else}
@@ -220,7 +226,7 @@
 
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; }
   .fill { height: 100%; background: linear-gradient(90deg, var(--accent), #6d28d9); transition: width .2s; }
-  .error { color: var(--accent); } .ok { color: #2ecc71; }
+  .error { color: var(--danger); } .ok { color: #2ecc71; }
 
   .sendcta {
     margin-top: var(--space-7); padding: var(--space-4); border-radius: var(--radius-sm);

@@ -26,6 +26,20 @@ export interface InboundSignal {
    *  than the original connect(). Each side ignores the other generation's
    *  signals, so a dying original connection can't cross-route a resume offer. */
   resume?: boolean;
+  /** The peer refused the offer because it is already in a transfer. Lets the
+   *  sender fail fast with a "peer busy" message instead of waiting out the ICE
+   *  timeout and mislabelling it a connection failure. */
+  busy?: boolean;
+}
+
+/** The peer declined a fresh offer because it is mid-transfer (one at a time).
+ *  Thrown by connect() so the caller can surface "peer busy" rather than a
+ *  generic connection failure. */
+export class PeerBusyError extends Error {
+  constructor() {
+    super("relayium: peer busy");
+    this.name = "PeerBusyError";
+  }
 }
 
 interface ConnectOpts {
@@ -193,7 +207,11 @@ export async function connect(opts: ConnectOpts): Promise<Conn> {
 
   const off = signaling.onSignal((from, data) => {
     if (from !== peerId || (data as InboundSignal).resume) return; // resume-gen signals aren't ours
-    handleSignal(data as InboundSignal).catch((err) => console.error("relayium signal error", err));
+    const msg = data as InboundSignal;
+    // The responder is mid-transfer and won't answer — stop waiting for a channel
+    // that will never open and report it as "peer busy". A no-op once opened.
+    if (msg.busy) { if (!opened) failReady(new PeerBusyError()); return; }
+    handleSignal(msg).catch((err) => console.error("relayium signal error", err));
   });
 
   // A transient "disconnected" (a NAT rebinding, a brief network blip) often

@@ -16,6 +16,7 @@
   let err = $state("");
   let copied = $state(false);
   let qrDataUrl = $state("");
+  let controller: AbortController | null = null; // in-flight upload, so it can be cancelled
 
   $effect(() => {
     if (!link) { qrDataUrl = ""; return; }
@@ -39,21 +40,29 @@
     busy = true;
     progress = 0;
     phase = "encrypting";
+    controller = new AbortController();
     try {
       const out = await uploadFile(files, { burnAfterRead: burn, ttl }, (sent, total) => {
         progress = total > 0 ? Math.round((sent / total) * 100) : 0;
         // Encryption finished feeding frames — the upload POST is what runs now.
         if (total > 0 && sent >= total) phase = "uploading";
-      });
+      }, controller.signal);
       link = buildDownloadLink(location.origin, out.id, out.key);
       expiresAt = out.expiresAt;
     } catch (e2) {
-      if (e2 instanceof UploadError && e2.status === 413) err = t.stored.errTooLarge;
+      // User-initiated cancel: return to idle silently, not as an error.
+      if (controller?.signal.aborted) { /* cancelled */ }
+      else if (e2 instanceof UploadError && e2.status === 413) err = t.stored.errTooLarge;
       else if (e2 instanceof UploadError && e2.status === 429) err = t.stored.errQuota;
       else err = t.stored.errUpload;
     } finally {
       busy = false;
+      controller = null;
     }
+  }
+
+  function cancel() {
+    controller?.abort();
   }
 
   async function copy() {
@@ -85,8 +94,9 @@
   </label>
 
   {#if busy}
-    <div class="bar"><div class="fill" style:width="{progress}%"></div></div>
-    <p class="phase">{phase === "uploading" ? t.stored.uploadingNow : `${t.stored.encrypting} ${progress}%`}</p>
+    <div class="bar" role="progressbar" aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"><div class="fill" style:width="{progress}%"></div></div>
+    <p class="phase" aria-live="polite">{phase === "uploading" ? t.stored.uploadingNow : `${t.stored.encrypting} ${progress}%`}</p>
+    <button type="button" class="btn btn-ghost cancel" onclick={cancel}>{t.cancel}</button>
   {/if}
 
   {#if err}<p class="error">{err}</p>{/if}
@@ -115,6 +125,7 @@
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; margin-top: var(--space-3); }
   .fill { height: 100%; background: linear-gradient(90deg, var(--accent), #6d28d9); transition: width .2s; }
   .phase { margin: var(--space-2) 0 0; font-size: var(--fs-xs); color: var(--text); }
+  .cancel { align-self: flex-start; margin-top: var(--space-3); }
   .ready { color: var(--text-h); font-size: var(--fs-sm); margin: var(--space-3) 0 var(--space-2); }
   .expiry { color: var(--text); font-size: var(--fs-xs); margin: var(--space-3) 0 0; }
   .row { display: flex; gap: var(--space-2); }
@@ -124,5 +135,5 @@
   }
   .row .btn { padding: var(--space-2) var(--space-4); white-space: nowrap; }
   .qr { margin-top: var(--space-3); }
-  .error { color: var(--accent); font-size: var(--fs-xs); margin-top: var(--space-3); }
+  .error { color: var(--danger); font-size: var(--fs-xs); margin-top: var(--space-3); }
 </style>

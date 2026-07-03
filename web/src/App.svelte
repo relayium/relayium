@@ -10,9 +10,10 @@
   import { SignalingClient } from "./lib/signaling";
   import { wsURL } from "./lib/transfer-link";
   import { roomToken as roomTokenStore, roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
-  import { connect, connectResume, type InboundSignal, type Conn, type ConnPath } from "./lib/webrtc";
+  import { connect, connectResume, PeerBusyError, type InboundSignal, type Conn, type ConnPath } from "./lib/webrtc";
   import { createWakeLock } from "./lib/wakelock";
   import { registerServiceWorker, drainSharedFiles } from "./lib/share-target";
+  import { requestNotifyPermission, notifyTransfer } from "./lib/notify";
   import {
     Sender,
     Receiver,
@@ -139,6 +140,23 @@
     document.title = x
       ? `${pct(x)}% ${x.dir === "send" ? "↑" : "↓"} · Relayium`
       : messages[lang()].titleDefault;
+  });
+
+  // Notify when a transfer finishes and the user is on another tab/app, so a long
+  // transfer needn't be babysat. Edge-detected per direction; each flag resets
+  // when its card clears so the next transfer notifies again. notifyTransfer
+  // itself no-ops when the tab is visible or permission wasn't granted.
+  let sendNotified = false;
+  let recvNotified = false;
+  $effect(() => {
+    const s = send;
+    if (s?.done) { if (!sendNotified) { sendNotified = true; void notifyTransfer(statusText(messages[lang()], s)); } }
+    else sendNotified = false;
+  });
+  $effect(() => {
+    const r = recv;
+    if (r?.done) { if (!recvNotified) { recvNotified = true; void notifyTransfer(statusText(messages[lang()], r)); } }
+    else recvNotified = false;
   });
 
   // Hold a screen wake lock while any transfer is in flight so a phone locking
@@ -324,9 +342,29 @@
     };
   });
 
+  const DEVICE_NAME_KEY = "relayium_device_name";
+  // A stable, readable device name. Persisted so a peer sees the same "iPhone-482"
+  // across reloads instead of a fresh random platform string every visit.
   function deviceName(): string {
-    const base = navigator.platform || "device";
-    return `${base}-${Math.floor(Math.random() * 1000)}`;
+    try {
+      const saved = localStorage.getItem(DEVICE_NAME_KEY);
+      if (saved) return saved;
+    } catch { /* storage blocked (private mode) — fall through to a fresh name */ }
+    const name = `${deviceLabel()}-${Math.floor(Math.random() * 1000)}`;
+    try { localStorage.setItem(DEVICE_NAME_KEY, name); } catch { /* ignore */ }
+    return name;
+  }
+  // A short device class from the UA (best-effort; navigator.platform is deprecated
+  // and unreadable). Never throws — an unknown UA just reads as "Device".
+  function deviceLabel(): string {
+    const ua = navigator.userAgent || "";
+    if (/iPhone/.test(ua)) return "iPhone";
+    if (/iPad/.test(ua)) return "iPad";
+    if (/Android/.test(ua)) return /Mobile/.test(ua) ? "Android" : "Android-Tablet";
+    if (/Macintosh|Mac OS X/.test(ua)) return "Mac";
+    if (/Windows/.test(ua)) return "Windows";
+    if (/Linux/.test(ua)) return "Linux";
+    return "Device";
   }
   function nameOf(peerId: string): string {
     return peers.find((p) => p.id === peerId)?.name ?? peerId.slice(0, 6);
@@ -345,7 +383,9 @@
       // a new receive — route it before the busy guard (busy is true here).
       if (pausedRecv && pausedRecv.from === from) { pausedRecv.resume(msg); return; }
       if (msg.resume) return; // a stray resume offer with nothing paused to attach to
-      if (busy) return; // one transfer at a time — ignore until the current one ends
+      // One transfer at a time. Tell the sender we're busy so it fails fast with a
+      // clear "peer busy" message instead of waiting out its ICE timeout.
+      if (busy) { signaling.sendSignal(from, { busy: true }); return; }
       try {
         await beginReceive(from, msg);
       } catch (err) {
@@ -442,6 +482,7 @@
     acceptFn = async () => {
       const req = incoming;
       if (!req) return;
+      requestNotifyPermission(); // the accept click is a good moment to ask once
       try {
         target = await pickSaveTarget(req.files);
       } catch (err) {
@@ -631,6 +672,7 @@
     if (busy) { flash(messages[lang()].busy); return; }
     const chosen = picked.slice(0, MAX_FILES);
     if (chosen.length === 0) return;
+    requestNotifyPermission(); // ask once, inside the gesture that starts the send
     const dropped = picked.length - chosen.length;
     const files = chosen.map((p) => p.file);
 
@@ -795,6 +837,12 @@
       send = s = { ...s, status: "sendDone", done: true, ok: true };
     } catch (err) {
       if (cancelled) return;
+      // The peer refused the offer because it's already in a transfer — a clean
+      // "busy", not a failure to connect. Surface it as such and don't retry.
+      if (err instanceof PeerBusyError) {
+        send = s = { ...s, status: "peerBusy", done: true, ok: false };
+        return;
+      }
       console.error("relayium send error", err);
       // A mid-send drop is resumable: reconnect (reusing keys) and finish from the
       // receiver's checkpoint. Only fall through to failure if that gives up.
@@ -866,6 +914,16 @@
   }
   function formatSpeed(bps: number): string {
     return bps > 0 ? `${formatSize(bps)}/s` : "";
+  }
+  // Estimated time remaining from the live speed. Clock format (m:ss / Ns) so it
+  // needs no per-language copy. "" when there's nothing meaningful to show yet.
+  function formatEta(x: Xfer): string {
+    if (x.done || x.speed <= 0 || x.total <= x.sent) return "";
+    const secLeft = Math.ceil((x.total - x.sent) / x.speed);
+    if (secLeft <= 0) return "";
+    const m = Math.floor(secLeft / 60);
+    const s = secLeft % 60;
+    return m > 0 ? `~${m}:${String(s).padStart(2, "0")}` : `~${s}s`;
   }
 
   function pickFile(e: Event, peerId: string) {
@@ -957,18 +1015,18 @@
           <button class="x cancel" onclick={() => (xf.dir === "send" ? sendAbort?.() : recvAbort?.())}>{t.cancel}</button>
         {/if}
       </div>
-      <div class="status">
+      <div class="status" aria-live="polite">
         {statusText(t, xf)}
         {#if sasCode && !xf.done} · {t.codeLabel} <code>{sasCode}</code>{/if}
       </div>
       {#if !xf.done}
         {@const path = xf.dir === "send" ? sendPath : recvPath}
-        <div class="bar"><div class="fill" style:width="{pct(xf)}%"></div></div>
+        <div class="bar" role="progressbar" aria-valuenow={pct(xf)} aria-valuemin="0" aria-valuemax="100"><div class="fill" style:width="{pct(xf)}%"></div></div>
         <div class="meta">
           <span>{pct(xf)}% · {formatSize(xf.sent)} / {formatSize(xf.total)}</span>
           <span class="meta-right">
             {#if path}<span class="path path-{path}"><i class="dot"></i>{pathLabel(t, path)}</span>{/if}
-            {#if xf.speed > 0}<span>{formatSpeed(xf.speed)}</span>{/if}
+            {#if xf.speed > 0}<span>{formatSpeed(xf.speed)}{#if formatEta(xf)} · {formatEta(xf)}{/if}</span>{/if}
           </span>
         </div>
       {/if}
@@ -997,7 +1055,7 @@
     <Hero {connState} {unsupported} {selfName} {selfIP} />
 
   {#if notice}
-    <div class="toast">{notice}</div>
+    <div class="toast" role="status" aria-live="polite">{notice}</div>
   {/if}
 
   {#if unsupported}

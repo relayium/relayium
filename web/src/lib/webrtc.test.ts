@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
-import { connect, classifyPath, type InboundSignal } from "./webrtc";
+import { connect, classifyPath, PeerBusyError, type InboundSignal } from "./webrtc";
 import type { SignalingClient } from "./signaling";
 import { ready, generateKeyPair, sas } from "./crypto";
 
@@ -94,6 +94,22 @@ describe("webrtc commit-then-reveal handshake", () => {
     const [ic, rc] = await Promise.all([iP, rP]);
     ic.close();
     rc.close();
+  });
+
+  it("rejects with PeerBusyError when the peer replies busy", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const iKey = generateKeyPair();
+    // Stand-in for a mid-transfer responder: on the initiator's offer, refuse
+    // with { busy: true } instead of answering.
+    hub.R.onSignal((from, data) => {
+      if ((data as InboundSignal).sdp?.type === "offer") hub.R.sendSignal(from, { busy: true });
+    });
+
+    const iP = connect({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {} });
+    const rejected = expect(iP).rejects.toBeInstanceOf(PeerBusyError);
+    await flush();
+    await rejected;
   });
 
   it("aborts when a reveal does not open its commitment (MITM)", async () => {

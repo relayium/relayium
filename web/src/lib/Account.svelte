@@ -131,6 +131,12 @@
     await logout();
     open = false;
   }
+
+  // Focus the field the moment it mounts (modal opened) so keyboard users land in
+  // the form without a stray Tab. An action avoids Svelte's autofocus a11y warning.
+  function focusOnMount(node: HTMLElement) {
+    node.focus();
+  }
 </script>
 
 <svelte:window onkeydown={(e) => { if (e.key === "Escape" && open) open = false; }} />
@@ -153,16 +159,24 @@
           <div class="who">{t.account.signedInAs(session().user!.email)}</div>
 
           {#if pwOpen}
-            {#if session().user!.hasPassword}
-              <input type="password" bind:value={curPw} placeholder={t.account.currentPassword} />
-            {/if}
-            <input type="password" bind:value={newPw} placeholder={t.account.newPassword} />
-            <input type="password" bind:value={confirmPw} placeholder={t.account.confirmPassword} />
-            {#if pwError}<p class="err">{pwError}</p>{/if}
-            <button class="btn btn-primary" disabled={pwBusy} onclick={onChangePassword}>
-              {session().user!.hasPassword ? t.account.changePassword : t.account.setPassword}
-            </button>
-            <button class="btn-link" onclick={() => { pwOpen = false; pwError = ""; curPw = ""; newPw = ""; confirmPw = ""; }}>{t.close}</button>
+            <form class="pwform" onsubmit={(e) => { e.preventDefault(); onChangePassword(); }}>
+              <!-- Hidden username so password managers associate the new password with this account. -->
+              <input class="sr-only" type="text" name="username" autocomplete="username"
+                     value={session().user!.email} readonly tabindex="-1" aria-hidden="true" />
+              {#if session().user!.hasPassword}
+                <input type="password" name="current-password" autocomplete="current-password"
+                       bind:value={curPw} placeholder={t.account.currentPassword} use:focusOnMount />
+              {/if}
+              <input type="password" name="new-password" autocomplete="new-password"
+                     bind:value={newPw} placeholder={t.account.newPassword} />
+              <input type="password" name="confirm-password" autocomplete="new-password"
+                     bind:value={confirmPw} placeholder={t.account.confirmPassword} />
+              {#if pwError}<p class="err">{pwError}</p>{/if}
+              <button type="submit" class="btn btn-primary" disabled={pwBusy}>
+                {session().user!.hasPassword ? t.account.changePassword : t.account.setPassword}
+              </button>
+              <button type="button" class="btn-link" onclick={() => { pwOpen = false; pwError = ""; curPw = ""; newPw = ""; confirmPw = ""; }}>{t.close}</button>
+            </form>
           {:else}
             {#if pwDone}<p class="hint">{t.account.pwChanged}</p>{/if}
             <button class="btn btn-ghost" onclick={() => { pwOpen = true; pwDone = false; }}>
@@ -173,14 +187,17 @@
           <button class="btn btn-ghost" onclick={onLogout}>{t.account.signOut}</button>
         </div>
       {:else}
-        <div class="menu">
-          <input type="email" bind:value={email} placeholder={t.account.email} />
-          <input type="password" bind:value={password} placeholder={t.account.password} onkeydown={(e) => { if (e.key === "Enter") onSubmit(); }} />
+        <form class="menu" onsubmit={(e) => { e.preventDefault(); onSubmit(); }}>
+          <input type="email" name="email" autocomplete="username"
+                 bind:value={email} placeholder={t.account.email} use:focusOnMount />
+          <input type="password" name="password"
+                 autocomplete={mode === "register" ? "new-password" : "current-password"}
+                 bind:value={password} placeholder={t.account.password} />
           {#if error}<p class="err">{error}</p>{/if}
-          <button class="btn btn-primary" disabled={submitting} onclick={onSubmit}>
+          <button type="submit" class="btn btn-primary" disabled={submitting}>
             {mode === "register" ? t.account.createAccount : t.account.logInBtn}
           </button>
-          <button class="btn-link" onclick={() => { mode = mode === "register" ? "login" : "register"; error = ""; }}>
+          <button type="button" class="btn-link" onclick={() => { mode = mode === "register" ? "login" : "register"; error = ""; }}>
             {mode === "register" ? t.account.toLogin : t.account.toRegister}
           </button>
 
@@ -194,10 +211,10 @@
             {#if magicSent}
               <p class="hint">{t.account.linkSent}</p>
             {:else}
-              <button class="btn btn-ghost" disabled={magicBusy} onclick={onSendLink}>{t.account.sendLink}</button>
+              <button type="button" class="btn btn-ghost" disabled={magicBusy} onclick={onSendLink}>{t.account.sendLink}</button>
             {/if}
           {/if}
-        </div>
+        </form>
       {/if}
     </div>
   {/if}
@@ -232,6 +249,14 @@
   .close-x:hover { background: var(--social-bg); color: var(--text-h); }
   .menu {
     display: flex; flex-direction: column; gap: var(--space-3);
+  }
+  /* The change-password <form> is semantic only (for password managers); it must
+     not alter the flex-column layout of the surrounding .menu. */
+  .pwform { display: contents; }
+  /* Scoped under .menu to outrank the `.menu input` box styling. */
+  .menu .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
   }
   .menu input {
     padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); border: 1px solid var(--border);

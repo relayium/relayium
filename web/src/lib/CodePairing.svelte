@@ -27,14 +27,18 @@
 
   // Countdown (only the minting device has the expiry stashed).
   let remaining = $state(""); // "m:ss" or ""
+  let timedOut = $state(false); // the minter's own countdown hit zero — the code is now dead
   $effect(() => {
     if (!roomCode) return;
     const raw = sessionStorage.getItem(EXP_KEY);
     if (!raw) return;
     const exp = Number(raw);
+    timedOut = false; // re-armed for each fresh code (roomCode change re-runs this effect)
     const tick = () => {
       const left = exp - Math.floor(Date.now() / 1000);
-      if (left <= 0) { remaining = "0:00"; return; }
+      // Once it lapses, flip into the expired branch so the minter isn't left
+      // showing a live-looking code that the other side can no longer join.
+      if (left <= 0) { remaining = "0:00"; timedOut = true; return; }
       remaining = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
     };
     tick();
@@ -91,7 +95,7 @@
 </script>
 
 <section class="pairing">
-  {#if expired}
+  {#if expired || timedOut}
     <p class="error">{t.pair.expired}</p>
     <button class="btn btn-primary" onclick={() => { sessionStorage.removeItem(EXP_KEY); enterRoom({}); }}>{t.pair.sendCode}</button>
   {:else if roomCode}
@@ -117,10 +121,15 @@
         maxlength="6"
         placeholder="000000"
         bind:value={entry}
-        oninput={() => (entry = entry.replace(/\D/g, "").slice(0, 6))}
+        oninput={() => {
+          entry = entry.replace(/\D/g, "").slice(0, 6);
+          if (entry.length === 6) join(); // full code — join without a second click
+        }}
+        onkeydown={(e) => { if (e.key === "Enter") join(); }}
       />
       <button class="btn btn-primary" disabled={entry.length !== 6} onclick={join}>{t.pair.joinBtn}</button>
     </div>
+    <button class="btn-link" onclick={() => { mode = "choose"; entry = ""; err = ""; }}>{t.pair.back}</button>
   {:else}
     <div class="choices">
       <button class="btn btn-primary" disabled={busy} onclick={send}>{busy ? t.generating : t.pair.sendCode}</button>
@@ -150,5 +159,5 @@
     padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); border: 1px solid var(--border);
     background: var(--bg); color: var(--text-h); font-variant-numeric: tabular-nums;
   }
-  .error { color: var(--accent); font-size: var(--fs-xs); margin: 0; }
+  .error { color: var(--danger); font-size: var(--fs-xs); margin: 0; }
 </style>
