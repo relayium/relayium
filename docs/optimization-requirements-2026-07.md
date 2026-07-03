@@ -40,7 +40,7 @@
 
 ### P0-1 独立 Security / 威胁模型页面【✅要做】
 - **现状**：安全叙事散落在首页 FeatureStrip、FAQ、README、SECURITY.md，SPA 无 `/security` 路由。
-- **需求**：新增 `/security` 页面（可复用 legal 静态页生成方式 `web/scripts/gen-legal.mjs`，6 语言）。内容：服务器能看到什么 / 看不到什么、SAS + commit-reveal 防什么、何时走 TURN、下载链接的 URL fragment 密钥如何处理、浏览器兼容限制。
+- **需求**：新增 `/security` 页面（可复用 legal 静态页生成方式 `web/scripts/gen-pages.mjs`，6 语言）。内容：服务器能看到什么 / 看不到什么、SAS + commit-reveal 防什么、何时走 TURN、下载链接的 URL fragment 密钥如何处理、浏览器兼容限制。
 - **理由**：这是 Relayium 相对 Snapdrop/PairDrop 唯一的硬差异（应用层 E2EE + SAS + 密钥承诺握手，`web/src/lib/crypto.ts` 里实现相当扎实），但目前没有一个可链接的信任资产页。首屏可以因此减负——把技术细节从首屏移到这里。
 
 ### P0-2 首屏信息降密度 + 视觉演示【✅要做】
