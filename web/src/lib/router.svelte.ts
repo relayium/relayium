@@ -6,7 +6,10 @@
 import { parseTransferToken, parseCodeParam, CROSS_PATH, DOWNLOAD_PREFIX } from "./transfer-link";
 import { clearRoom } from "./room.svelte";
 
-export type Route = "lan" | "cross" | "download";
+export type Route = "lan" | "cross" | "download" | "me";
+
+/** Personal center path. Login-gated page; not part of the transfer flows. */
+export const ME_PATH = "/me";
 
 export { CROSS_PATH };
 
@@ -14,7 +17,9 @@ export { CROSS_PATH };
 export function routeFromLocation(pathname: string, hash: string): Route {
   if (downloadId(pathname)) return "download";
   if (parseTransferToken(hash) || parseCodeParam(hash)) return "cross";
-  return pathname === CROSS_PATH ? "cross" : "lan";
+  if (pathname === CROSS_PATH) return "cross";
+  if (pathname === ME_PATH) return "me";
+  return "lan";
 }
 
 /** Extract the file id from a /d/<id> path, or "" when not a download path. */
@@ -49,7 +54,7 @@ export function setNavGuard(g: (() => boolean) | null): void {
 export function navigate(r: Route): void {
   if (r === route) return; // already on this tab — don't tear down the room / abort a transfer
   if (navGuard && !navGuard()) return; // e.g. user declined the "interrupt transfer?" confirm
-  const pathname = r === "cross" ? CROSS_PATH : "/";
+  const pathname = r === "cross" ? CROSS_PATH : r === "me" ? ME_PATH : "/";
   clearRoom(); // leaving a 2-peer token/code room rebinds the socket via App's effect
   history.pushState({}, "", pathname);
   route = r;

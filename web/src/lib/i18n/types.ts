@@ -104,6 +104,27 @@ export interface Messages {
     pwChanged: string;
     errCurrentWrong: string;
     errMismatch: string;
+    personalCenter: string; // menu entry → /me
+  };
+  me: {
+    title: string;
+    back: string; // link back to the home page
+    loginRequired: string; // shown when /me is opened without a session
+    signIn: string; // sign-in button on the login-required state
+    transfers: string; // stat card: stored links created
+    downloads: string; // stat card: total downloads of my files
+    traffic: string; // stat card: total bytes
+    trafficParts: (up: string, down: string, relay: string) => string; // breakdown line
+    privacyNote: string; // reassurance: aggregate only, no downloader info
+    filesTitle: string;
+    filesEmpty: string;
+    noName: string; //列表标题旁的说明：零知识加密，无文件名
+    downloadsN: (n: number) => string; // per-file download count
+    burnTag: string; // burn-after-read badge
+    expiresIn: (left: string) => string; // per-file expiry countdown
+    expiringSoon: string; // <1h marker
+    del: string; // delete button
+    confirmDel: string; // confirm() before deleting a file
   };
   nav: { lanTab: string; crossTab: string };
   crossnet: {

@@ -6,6 +6,7 @@
     register, passwordLogin, fetchAuthMethods, changePassword, type AuthMethods,
   } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
+  import { navigate } from "./router.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
   let { open = $bindable(false) }: { open?: boolean } = $props();
@@ -184,6 +185,7 @@
             </button>
           {/if}
 
+          <button class="btn btn-ghost" onclick={() => { open = false; navigate("me"); }}>{t.account.personalCenter}</button>
           <button class="btn btn-ghost" onclick={onLogout}>{t.account.signOut}</button>
         </div>
       {:else}

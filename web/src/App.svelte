@@ -36,6 +36,7 @@
   import { lang, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
   import CrossPage from "./lib/CrossPage.svelte";
+  import MePage from "./lib/MePage.svelte";
   import Nav from "./lib/Nav.svelte";
   import { currentRoute, syncRouteFromLocation, downloadId, navigate, setNavGuard } from "./lib/router.svelte";
   import Hero from "./lib/Hero.svelte";
@@ -1091,6 +1092,8 @@
 
   {#if currentRoute() === "cross"}
     <CrossPage {roomToken} {roomCode} {linkDead} {showTransfer} {transferSurface} dismissLan={() => (lanDismissed = true)} />
+  {:else if currentRoute() === "me"}
+    <MePage />
   {:else}
     <Hero {connState} {unsupported} {selfName} {selfIP} />
 
