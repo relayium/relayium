@@ -1,6 +1,7 @@
 <!-- web/src/lib/CodePairing.svelte -->
 <script lang="ts">
   import { createPair, CROSS_PATH } from "./transfer-link";
+  import { canShare, share } from "./share";
   import { enterRoom } from "./room.svelte";
   import { messages, lang, type Messages } from "./i18n.svelte";
 
@@ -102,9 +103,10 @@
     {#if isMinter}
       <p class="lead">{t.pair.yourCode}</p>
       <div class="code">{roomCode}</div>
-      <div class="row">
+      <div class="row wrap">
         <button class="btn btn-ghost" onclick={() => copyText("code")}>{copied === "code" ? t.pair.copied : t.pair.copy}</button>
         <button class="btn btn-ghost" onclick={() => copyText("link")}>{copied === "link" ? t.pair.copied : t.pair.copyLink}</button>
+        {#if canShare()}<button class="btn btn-ghost" onclick={() => share({ title: "Relayium", text: `Relayium: ${roomCode}`, url: joinLink })}>{t.share}</button>{/if}
         {#if remaining}<span class="ttl">{t.pair.expiresIn(remaining)}</span>{/if}
       </div>
       {#if qrDataUrl}
@@ -151,6 +153,9 @@
     font-variant-numeric: tabular-nums; padding-left: 10px;
   }
   .row { display: flex; align-items: center; gap: var(--space-3); }
+  /* The minter's action row can hold copy + copy-link + share + ttl; let it wrap
+     on narrow screens instead of overflowing the card. */
+  .row.wrap { flex-wrap: wrap; justify-content: center; }
   .ttl { font-size: var(--fs-xs); color: var(--text); font-variant-numeric: tabular-nums; }
   .waiting { margin: 0; font-size: var(--fs-xs); color: var(--text); }
   /* Intentional oversized code-entry field to match the code display. */

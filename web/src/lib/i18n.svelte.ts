@@ -42,6 +42,7 @@ export interface Messages {
   fileCounter: (i: number, n: number) => string;
   close: string;
   cancel: string; // abort an in-progress transfer and return to idle
+  share: string; // Web Share button label (opens the OS share sheet for a link)
   startOver: string; // leave the current room and return to the method choices
   peersTitle: string;
   crossPeersTitle: string; // heading for the single connected peer on the cross-network page
@@ -254,6 +255,7 @@ const zh: Messages = {
   fileCounter: (i, n) => `文件 ${i}/${n}`,
   close: "关闭",
   cancel: "取消",
+  share: "分享",
   startOver: "← 重新选择",
   peersTitle: "附近的设备",
   crossPeersTitle: "已连接的对方",
@@ -492,6 +494,7 @@ const en: Messages = {
   fileCounter: (i, n) => `File ${i}/${n}`,
   close: "Close",
   cancel: "Cancel",
+  share: "Share",
   startOver: "← Start over",
   peersTitle: "Nearby devices",
   crossPeersTitle: "Connected peer",
@@ -730,6 +733,7 @@ const ja: Messages = {
   fileCounter: (i, n) => `ファイル ${i}/${n}`,
   close: "閉じる",
   cancel: "キャンセル",
+  share: "共有",
   startOver: "← やり直す",
   peersTitle: "近くのデバイス",
   crossPeersTitle: "接続中の相手",
@@ -968,6 +972,7 @@ const ko: Messages = {
   fileCounter: (i, n) => `파일 ${i}/${n}`,
   close: "닫기",
   cancel: "취소",
+  share: "공유",
   startOver: "← 다시 선택",
   peersTitle: "주변 기기",
   crossPeersTitle: "연결된 상대",
@@ -1206,6 +1211,7 @@ const de: Messages = {
   fileCounter: (i, n) => `Datei ${i}/${n}`,
   close: "Schließen",
   cancel: "Abbrechen",
+  share: "Teilen",
   startOver: "← Von vorn",
   peersTitle: "Geräte in der Nähe",
   crossPeersTitle: "Verbundener Peer",
@@ -1444,6 +1450,7 @@ const fr: Messages = {
   fileCounter: (i, n) => `Fichier ${i}/${n}`,
   close: "Fermer",
   cancel: "Annuler",
+  share: "Partager",
   startOver: "← Recommencer",
   peersTitle: "Appareils à proximité",
   crossPeersTitle: "Correspondant connecté",

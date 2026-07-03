@@ -1,5 +1,6 @@
 <script lang="ts">
   import { uploadFile, buildDownloadLink, UploadError } from "./stored-file";
+  import { canShare, share } from "./share";
   import { lang, messages, type Messages } from "./i18n.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
@@ -106,6 +107,7 @@
     <div class="row">
       <input readonly value={link} />
       <button class="btn btn-ghost" onclick={copy}>{copied ? t.stored.copied : t.stored.copy}</button>
+      {#if canShare()}<button class="btn btn-ghost" onclick={() => share({ title: "Relayium", url: link })}>{t.share}</button>{/if}
     </div>
     {#if expiresAt > 0}
       <p class="expiry">{t.stored.expiresOn(new Date(expiresAt * 1000).toLocaleString(lang()))}</p>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { session } from "./auth.svelte";
   import { createTransfer, buildTransferLink, HttpError } from "./transfer-link";
+  import { canShare, share } from "./share";
   import { enterRoom } from "./room.svelte";
   import { messages, lang, type Messages } from "./i18n.svelte";
 
@@ -73,6 +74,7 @@
     <div class="row">
       <input readonly value={shareLink} />
       <button class="btn btn-ghost" onclick={copy}>{copied ? t.crossnet.copied : t.crossnet.copy}</button>
+      {#if canShare()}<button class="btn btn-ghost" onclick={() => share({ title: "Relayium", url: shareLink })}>{t.share}</button>{/if}
     </div>
     {#if qrDataUrl}
       <img class="qr" src={qrDataUrl} alt="QR" width="192" height="192" />
