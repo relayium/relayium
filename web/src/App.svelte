@@ -109,7 +109,18 @@
   const busy = $derived(
     !!incoming || !!(recv && !recv.done) || !!(send && !send.done),
   );
-  const showTransfer = $derived(visiblePeers.length > 0 || busy);
+  // The realtime surface auto-appears whenever a LAN peer is visible, but there's
+  // no room to leave — so "Start over" there sets this flag to fall back to the
+  // method choices instead. An in-flight transfer (busy) always wins over it, and
+  // the reset effect below clears it once the peer drops, so a reconnect re-shows.
+  let lanDismissed = $state(false);
+  const showTransfer = $derived(busy || (visiblePeers.length > 0 && !lanDismissed));
+
+  // Un-dismiss once the LAN peer disconnects, so the next device that appears
+  // re-shows the transfer surface rather than staying hidden behind a stale flag.
+  $effect(() => {
+    if (visiblePeers.length === 0) lanDismissed = false;
+  });
 
   // The window-wide drop only makes sense where the device cards are actually
   // rendered: the LAN page (unless unsupported), or the cross page once a
@@ -981,7 +992,7 @@
   <Nav />
 
   {#if currentRoute() === "cross"}
-    <CrossPage {roomToken} {roomCode} {linkDead} {showTransfer} {transferSurface} />
+    <CrossPage {roomToken} {roomCode} {linkDead} {showTransfer} {transferSurface} dismissLan={() => (lanDismissed = true)} />
   {:else}
     <Hero {connState} {unsupported} {selfName} {selfIP} />
 
