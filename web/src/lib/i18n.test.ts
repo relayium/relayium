@@ -18,8 +18,7 @@ describe("i18n completeness", () => {
       const m = messages[code];
       expect(m.nav.lanTab, `${code}.nav.lanTab`).toBeTruthy();
       expect(m.nav.crossTab, `${code}.nav.crossTab`).toBeTruthy();
-      expect(m.methods.pairing.name, `${code}.methods.pairing.name`).toBeTruthy();
-      expect(m.methods.share.name, `${code}.methods.share.name`).toBeTruthy();
+      expect(m.methods.realtime.name, `${code}.methods.realtime.name`).toBeTruthy();
       expect(m.methods.stored.name, `${code}.methods.stored.name`).toBeTruthy();
     }
   });

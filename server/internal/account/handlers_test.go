@@ -16,7 +16,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *capturingMailer) {
 	t.Helper()
 	store := newTestStore(t)
 	mail := &capturingMailer{}
-	svc := NewService(store, mail, Config{BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute, TransferTTL: time.Hour, EnableMagic: true})
+	svc := NewService(store, mail, Config{BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute, EnableMagic: true})
 	ts := httptest.NewServer(svc.Routes())
 	t.Cleanup(ts.Close)
 	return ts, mail
@@ -146,7 +146,7 @@ func TestDeviceCRUDOverHTTP(t *testing.T) {
 func TestUsageEndpointRequiresSessionAndReturnsTotal(t *testing.T) {
 	store := newTestStore(t)
 	mail := &capturingMailer{}
-	svc := NewService(store, mail, Config{BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute, TransferTTL: time.Hour, EnableMagic: true})
+	svc := NewService(store, mail, Config{BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute, EnableMagic: true})
 	ts := httptest.NewServer(svc.Routes())
 	t.Cleanup(ts.Close)
 	client := ts.Client()
@@ -340,7 +340,9 @@ func TestChangePasswordEndpoint(t *testing.T) {
 			t.Fatalf("do: %v", err)
 		}
 		defer r.Body.Close()
-		var b struct{ Error string `json:"error"` }
+		var b struct {
+			Error string `json:"error"`
+		}
 		_ = json.NewDecoder(r.Body).Decode(&b)
 		return r.StatusCode, b.Error
 	}
@@ -361,53 +363,6 @@ func TestChangePasswordEndpoint(t *testing.T) {
 		strings.NewReader(`{"newPassword":"whatever12"}`))
 	if noauth.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("unauth: want 401, got %d", noauth.StatusCode)
-	}
-}
-
-func TestCreateTransferRequiresSessionAndReturnsToken(t *testing.T) {
-	ts, mail := newTestServer(t)
-	client := ts.Client()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-
-	// Without a session cookie → 401.
-	resp, err := client.Post(ts.URL+"/api/transfers", "application/json", nil)
-	if err != nil {
-		t.Fatalf("post: %v", err)
-	}
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("no session should be 401, got %d", resp.StatusCode)
-	}
-
-	// Log in via magic link to get a session cookie.
-	_, _ = client.PostForm(ts.URL+"/api/auth/magic/request", url.Values{"email": {"u@example.com"}})
-	i := strings.Index(mail.lastLink, "token=")
-	verify, _ := client.Get(ts.URL + "/api/auth/magic/verify?token=" + mail.lastLink[i+len("token="):])
-	var cookie *http.Cookie
-	for _, c := range verify.Cookies() {
-		if c.Name == sessionCookie {
-			cookie = c
-		}
-	}
-	if cookie == nil {
-		t.Fatalf("no session cookie from verify")
-	}
-
-	// With the session → 200 + a non-empty token.
-	req, _ := http.NewRequest("POST", ts.URL+"/api/transfers", nil)
-	req.AddCookie(cookie)
-	resp, err = client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		t.Fatalf("create: err=%v status=%v", err, resp.StatusCode)
-	}
-	var out struct {
-		Token     string `json:"token"`
-		ExpiresAt int64  `json:"expiresAt"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if out.Token == "" || out.ExpiresAt == 0 {
-		t.Fatalf("expected token+expiresAt, got %+v", out)
 	}
 }
 

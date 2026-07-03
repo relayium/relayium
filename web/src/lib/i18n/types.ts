@@ -128,22 +128,12 @@ export interface Messages {
   };
   nav: { lanTab: string; crossTab: string };
   crossnet: {
-    sendAcross: string;
-    loginFirst: string;
-    shareHint: string;
-    copy: string;
-    copied: string;
-    connecting: string;
-    linkDead: string;
-    sessionExpired: string; // /api/transfers returned 401 — session lapsed, re-login
-    netError: string; // request never reached the server (offline / fetch threw)
     realtimeTitle: string;
     realtimeSub: string;
     realtimeFoot: string;
   };
   methods: {
-    pairing: { name: string; sub: string; badge: string };
-    share: { name: string; sub: string; badge: string; signIn: string };
+    realtime: { name: string; sub: string; badge: string };
     stored: { name: string; sub: string; badge: string };
   };
   pair: {
@@ -154,6 +144,8 @@ export interface Messages {
     yourCode: string;
     scanHint: string; // caption under the pairing-code QR
     waiting: string;
+    queued: (n: number, size: string) => string; // files picked before pairing, auto-send on join
+    bareConnect: string; // secondary: open a room without picking files (receiver-initiated flows)
     expiresIn: (s: string) => string;
     expired: string;
     copy: string;

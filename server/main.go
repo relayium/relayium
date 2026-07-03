@@ -114,7 +114,7 @@ func main() {
 
 	// Anonymous, login-free pairing: short numeric codes for cross-network
 	// realtime rendezvous. Pure in-memory — works even if the DB is unavailable.
-	pairReg := signal.NewPairRegistry(300, func() int64 { return time.Now().Unix() }) // 5 min
+	pairReg := signal.NewPairRegistry(900, func() int64 { return time.Now().Unix() }) // 15 min
 	go pairReg.Run(context.Background(), time.Minute)
 	pairLimiter := signal.NewRateLimiter(10, time.Minute, func() int64 { return time.Now().Unix() })
 	go pairLimiter.Run(context.Background(), time.Minute)
@@ -124,10 +124,6 @@ func main() {
 	go wsCodeLimiter.Run(context.Background(), time.Minute)
 
 	store, dbErr := account.OpenSQLite(*dbPath)
-
-	// validateRoom gates token-rooms. Nil (DB unavailable) => token-rooms are
-	// rejected, but LAN rooms (no ?room=) are unaffected.
-	var validateRoom func(context.Context, string) bool
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -140,13 +136,9 @@ func main() {
 			http.Error(w, "too many pairing attempts", http.StatusTooManyRequests)
 			return
 		}
-		token := r.URL.Query().Get("room")
-		room, maxPeers, lan, ok := signal.RoomFor(code, token,
-			pairReg.Validate,
-			func(t string) bool { return validateRoom != nil && validateRoom(r.Context(), t) },
-		)
+		room, maxPeers, lan, ok := signal.RoomFor(code, pairReg.Validate)
 		if !ok {
-			http.Error(w, "invalid or expired pairing code or transfer link", http.StatusForbidden)
+			http.Error(w, "invalid or expired pairing code", http.StatusForbidden)
 			return
 		}
 		if lan {
@@ -174,7 +166,6 @@ func main() {
 			BaseURL:         *baseURL,
 			SessionTTL:      720 * time.Hour, // 30 days
 			MagicTTL:        15 * time.Minute,
-			TransferTTL:     time.Hour,
 			GoogleClientID:  *googleID,
 			GoogleSecret:    *googleSecret,
 			GoogleRedirect:  *baseURL + "/api/auth/google/callback",
@@ -192,10 +183,9 @@ func main() {
 			DefaultTTL:      *fileTTL,
 			MaxTTL:          *fileTTLMax,
 		})
-		validateRoom = acct.ValidateTransferToken
-		// Let /api/ice hand TURN credentials to anonymous pairing-code rooms too,
-		// not just logged-in transfer tokens — otherwise code transfers are
-		// STUN-only and fail across strict NATs.
+		// Wire /api/ice to validate anonymous pairing codes so it can hand out
+		// TURN credentials for them — otherwise code transfers are STUN-only
+		// and fail across strict NATs.
 		acct.SetPairCodeValidator(pairReg.Validate)
 		if disk, derr := storage.NewDiskStore(*blobDir); derr != nil {
 			log.Printf("WARNING: open blob dir %q: %v — stored transfers disabled", *blobDir, derr)

@@ -115,11 +115,9 @@ describe("requestMagicLink", () => {
 describe("logout", () => {
   it("clears the session and role markers even when the request fails", async () => {
     sessionStorage.setItem("relayium_pair_exp", "123");
-    sessionStorage.setItem("relayium_xfer_token", "tok");
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("offline"); }) as unknown as typeof fetch);
     await logout();
     expect(session().user).toBeNull();
     expect(sessionStorage.getItem("relayium_pair_exp")).toBeNull();
-    expect(sessionStorage.getItem("relayium_xfer_token")).toBeNull();
   });
 });

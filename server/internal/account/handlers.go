@@ -82,7 +82,6 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/devices", s.RequireSession(s.handleUpsertDevice))
 	mux.HandleFunc("PATCH /api/devices/{id}", s.RequireSession(s.handleRenameDevice))
 	mux.HandleFunc("DELETE /api/devices/{id}", s.RequireSession(s.handleDeleteDevice))
-	mux.HandleFunc("POST /api/transfers", s.RequireSession(s.handleCreateTransfer))
 	mux.HandleFunc("GET /api/ice", s.handleICE)
 	mux.HandleFunc("GET /api/usage", s.RequireSession(s.handleUsage))
 	mux.HandleFunc("GET /api/stats", s.RequireSession(s.handleStats))
@@ -228,18 +227,6 @@ func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	s.clearSessionCookie(w)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-func (s *Service) handleCreateTransfer(w http.ResponseWriter, r *http.Request, u User) {
-	t, err := s.CreateTransfer(r.Context(), u.ID)
-	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"token":     t.Token,
-		"expiresAt": t.ExpiresAt,
-	})
 }
 
 func (s *Service) handleUsage(w http.ResponseWriter, r *http.Request, u User) {

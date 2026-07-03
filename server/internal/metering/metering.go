@@ -1,6 +1,6 @@
-// Package metering ingests coturn's per-allocation relay accounting and records
-// it against the user who owns the transfer token. The Redis dependency lives in
-// redis.go; this file is Redis-free and unit-testable with fakes.
+// Package metering ingests coturn's per-allocation relay accounting and
+// records it keyed by pairing code, unattributed. The Redis dependency lives
+// in redis.go; this file is Redis-free and unit-testable with fakes.
 package metering
 
 import (
@@ -28,7 +28,6 @@ type StatsSource interface {
 
 // Sink is the subset of account.Store the worker needs.
 type Sink interface {
-	GetTransfer(ctx context.Context, token string) (account.Transfer, error)
 	RecordUsage(ctx context.Context, e account.UsageEvent) error
 }
 
@@ -74,15 +73,14 @@ func (w *Worker) handle(ctx context.Context, ev UsageEvent) {
 		w.Log.Printf("metering: skip alloc %s, malformed username %q", ev.AllocID, ev.Username)
 		return
 	}
-	tr, err := w.Sink.GetTransfer(ctx, token)
-	if err != nil {
-		w.Log.Printf("metering: skip alloc %s, unknown token: %v", ev.AllocID, err)
-		return
-	}
+	// Pairing codes are anonymous, so relay usage is recorded unattributed
+	// (empty UserID): global relay accounting keeps working, per-user
+	// attribution returns if/when signed-in users mint codes bound to their
+	// account (deferred).
 	rec := account.UsageEvent{
 		AllocID:      ev.AllocID,
 		Token:        token,
-		UserID:       tr.UserID,
+		UserID:       "",
 		RelayedBytes: ev.RelayedBytes,
 		RecordedAt:   w.Now(),
 	}

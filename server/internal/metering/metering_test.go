@@ -20,38 +20,23 @@ func (f *fakeSource) Events(ctx context.Context) (<-chan UsageEvent, error) {
 	return ch, nil
 }
 
+// fakeSink records usage events, keeping only the max RelayedBytes per
+// AllocID (mirrors the real store's keep-max upsert).
 type fakeSink struct {
-	transfers map[string]account.Transfer   // token → transfer
-	recorded  map[string]account.UsageEvent // alloc_id → event (mimics keep-max upsert)
-}
-
-func (f *fakeSink) GetTransfer(ctx context.Context, token string) (account.Transfer, error) {
-	tr, ok := f.transfers[token]
-	if !ok {
-		return account.Transfer{}, account.ErrNotFound
-	}
-	return tr, nil
+	recorded []account.UsageEvent
 }
 
 func (f *fakeSink) RecordUsage(ctx context.Context, e account.UsageEvent) error {
-	if cur, ok := f.recorded[e.AllocID]; ok {
-		if e.RelayedBytes > cur.RelayedBytes {
-			f.recorded[e.AllocID] = e
+	for i, cur := range f.recorded {
+		if cur.AllocID == e.AllocID {
+			if e.RelayedBytes > cur.RelayedBytes {
+				f.recorded[i] = e
+			}
+			return nil
 		}
-		return nil
 	}
-	f.recorded[e.AllocID] = e
+	f.recorded = append(f.recorded, e)
 	return nil
-}
-
-func (f *fakeSink) total(userID string) int64 {
-	var t int64
-	for _, e := range f.recorded {
-		if e.UserID == userID {
-			t += e.RelayedBytes
-		}
-	}
-	return t
 }
 
 func newWorker(sink *fakeSink) *Worker {
@@ -65,30 +50,21 @@ func runWith(t *testing.T, sink *fakeSink, events []UsageEvent) {
 	}
 }
 
-func TestWorkerRecordsAndAttributes(t *testing.T) {
-	sink := &fakeSink{
-		transfers: map[string]account.Transfer{"tok": {Token: "tok", UserID: "u1"}},
-		recorded:  map[string]account.UsageEvent{},
+func TestWorkerRecordsAnonymously(t *testing.T) {
+	sink := &fakeSink{}
+	w := &Worker{Sink: sink, Now: func() int64 { return 42 }, Log: log.New(io.Discard, "", 0)}
+	w.handle(context.Background(), UsageEvent{AllocID: "a1", Username: "99:424242", RelayedBytes: 7})
+	if len(sink.recorded) != 1 {
+		t.Fatalf("want 1 usage row, got %d", len(sink.recorded))
 	}
-	runWith(t, sink, []UsageEvent{{AllocID: "a1", Username: "1000:tok", RelayedBytes: 1500}})
-	if got := sink.total("u1"); got != 1500 {
-		t.Fatalf("total = %d, want 1500", got)
-	}
-	if rec := sink.recorded["a1"]; rec.Token != "tok" || rec.UserID != "u1" || rec.RecordedAt != 1234 {
-		t.Fatalf("recorded event wrong: %+v", rec)
-	}
-}
-
-func TestWorkerSkipsUnknownToken(t *testing.T) {
-	sink := &fakeSink{transfers: map[string]account.Transfer{}, recorded: map[string]account.UsageEvent{}}
-	runWith(t, sink, []UsageEvent{{AllocID: "a1", Username: "1000:ghost", RelayedBytes: 100}})
-	if len(sink.recorded) != 0 {
-		t.Fatalf("unknown token must not record, got %+v", sink.recorded)
+	got := sink.recorded[0]
+	if got.Token != "424242" || got.UserID != "" || got.RelayedBytes != 7 || got.RecordedAt != 42 {
+		t.Fatalf("unexpected record: %+v", got)
 	}
 }
 
 func TestWorkerSkipsMalformedUsername(t *testing.T) {
-	sink := &fakeSink{transfers: map[string]account.Transfer{}, recorded: map[string]account.UsageEvent{}}
+	sink := &fakeSink{}
 	runWith(t, sink, []UsageEvent{{AllocID: "a1", Username: "nocolon", RelayedBytes: 100}})
 	if len(sink.recorded) != 0 {
 		t.Fatalf("malformed username must not record, got %+v", sink.recorded)
@@ -96,15 +72,12 @@ func TestWorkerSkipsMalformedUsername(t *testing.T) {
 }
 
 func TestWorkerKeepsMaxPerAlloc(t *testing.T) {
-	sink := &fakeSink{
-		transfers: map[string]account.Transfer{"tok": {Token: "tok", UserID: "u1"}},
-		recorded:  map[string]account.UsageEvent{},
-	}
+	sink := &fakeSink{}
 	runWith(t, sink, []UsageEvent{
 		{AllocID: "a1", Username: "1000:tok", RelayedBytes: 100},
 		{AllocID: "a1", Username: "1000:tok", RelayedBytes: 999},
 	})
-	if got := sink.total("u1"); got != 999 {
-		t.Fatalf("keep-max total = %d, want 999", got)
+	if len(sink.recorded) != 1 || sink.recorded[0].RelayedBytes != 999 {
+		t.Fatalf("keep-max record wrong: %+v", sink.recorded)
 	}
 }

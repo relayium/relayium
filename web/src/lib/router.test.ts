@@ -11,10 +11,7 @@ describe("routeFromLocation", () => {
   it("is cross on the cross-network path", () => {
     expect(rfl(CROSS_PATH, "")).toBe("cross");
   });
-  it("is cross whenever a transfer token is present, regardless of path", () => {
-    expect(rfl("/", "#t=abc123")).toBe("cross");
-  });
-  it("ignores non-token hashes", () => {
+  it("ignores non-code hashes", () => {
     expect(rfl("/", "#other=1")).toBe("lan");
   });
 });

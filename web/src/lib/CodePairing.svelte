@@ -4,6 +4,10 @@
   import { canShare, share } from "./share";
   import { enterRoom } from "./room.svelte";
   import { messages, lang, type Messages } from "./i18n.svelte";
+  import { outbox, setOutbox, clearOutbox } from "./outbox.svelte";
+  import { pickedFromInput } from "./drag";
+  import { formatSize } from "./format";
+  import { folderUploadSupported } from "./platform";
 
   let { roomCode = "", expired = false }:
     { roomCode?: string; expired?: boolean } = $props();
@@ -62,6 +66,19 @@
     return () => { cancelled = true; };
   });
 
+  const queuedBytes = $derived(outbox().reduce((n, p) => n + p.file.size, 0));
+
+  // Files-first entry: pick files, then mint — the batch waits in the outbox
+  // and App auto-offers it the moment the recipient joins the code room.
+  async function pickAndSend(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    const picked = input.files?.length ? pickedFromInput(input.files) : [];
+    input.value = ""; // allow re-picking the same files
+    if (!picked.length) return;
+    setOutbox(picked);
+    await send();
+  }
+
   async function send() {
     busy = true; err = "";
     try {
@@ -70,6 +87,12 @@
       enterRoom({ code }); // rebinds the socket to the code room without reloading
     } catch {
       busy = false;
+      // Only the choose state (roomCode "") drops the queue: a roomless stale queue
+      // could surprise-send later (Fix-1's room-exit clearing never fires because no
+      // room was entered). In the timedOut state the user is still in the room
+      // retrying the re-mint — keep the batch; leaving the room (start over / tab
+      // switch) clears it via the room-exit path.
+      if (!roomCode) clearOutbox();
       // Minting a brand-new code just failed; it was never issued, so "expired"
       // would be misleading — report a mint/network failure instead.
       err = t.pair.mintFailed;
@@ -100,7 +123,7 @@
     <!-- timedOut is the minter's own code lapsing ("expired, regenerate"); `expired`
          (a failed join) may equally be a typo'd code, so it reads "invalid or expired". -->
     <p class="error">{timedOut ? t.pair.expired : t.pair.errExpired}</p>
-    <button class="btn btn-primary" onclick={() => { sessionStorage.removeItem(EXP_KEY); enterRoom({}); }}>{timedOut ? t.pair.sendCode : t.pair.enterCode}</button>
+    <button class="btn btn-primary" onclick={() => { timedOut ? void send() : (sessionStorage.removeItem(EXP_KEY), enterRoom({})); }}>{timedOut ? t.pair.sendCode : t.pair.enterCode}</button>
   {:else if roomCode}
     {#if isMinter}
       <p class="lead">{t.pair.yourCode}</p>
@@ -114,6 +137,9 @@
       {#if qrDataUrl}
         <img class="qr" src={qrDataUrl} alt="QR" width="160" height="160" />
         <p class="scan">{t.pair.scanHint}</p>
+      {/if}
+      {#if outbox().length}
+        <p class="queued">{t.pair.queued(outbox().length, formatSize(queuedBytes))}</p>
       {/if}
     {/if}
     <p class="waiting"><span class="pulse" aria-hidden="true"></span>{t.pair.waiting}</p>
@@ -136,16 +162,29 @@
     <button class="btn-link" onclick={() => { mode = "choose"; entry = ""; err = ""; }}>{t.pair.back}</button>
   {:else}
     <div class="choices">
-      <button class="btn btn-primary" disabled={busy} onclick={send}>{busy ? t.generating : t.pair.sendCode}</button>
+      <label class="btn btn-primary" class:disabled={busy}>
+        📄 {t.sendFile}
+        <input type="file" multiple disabled={busy} onchange={pickAndSend} />
+      </label>
+      {#if folderUploadSupported}
+        <label class="btn btn-primary" class:disabled={busy}>
+          📁 {t.sendFolder}
+          <input type="file" webkitdirectory multiple disabled={busy} onchange={pickAndSend} />
+        </label>
+      {/if}
       <button class="btn btn-ghost" onclick={() => (mode = "receive")}>{t.pair.enterCode}</button>
     </div>
-    {#if err}<p class="error">{err}</p>{/if}
+    <button class="btn-link" disabled={busy} onclick={send}>{busy ? t.generating : t.pair.bareConnect}</button>
   {/if}
+  {#if err}<p class="error">{err}</p>{/if}
 </section>
 
 <style>
   .pairing { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; }
   .choices { display: flex; gap: var(--space-3); flex-wrap: wrap; justify-content: center; }
+  .choices label.btn input[type="file"] { display: none; }
+  .choices label.btn.disabled { opacity: .55; cursor: not-allowed; }
+  .queued { margin: 0; font-size: var(--fs-xs); color: var(--text-h); text-align: center; }
   .qr { margin-top: var(--space-1); border-radius: var(--radius-sm); background: #fff; padding: 6px; }
   .scan { margin: 0; font-size: 12px; color: var(--text); text-align: center; max-width: 30ch; }
   .lead { margin: 0; font-size: var(--fs-sm); color: var(--text); text-align: center; }

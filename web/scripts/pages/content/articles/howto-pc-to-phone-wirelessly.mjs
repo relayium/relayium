@@ -30,7 +30,7 @@ const en = {
       heading: "Not on the same network? Use a pairing code",
       body: [
         "Your phone is on mobile data and your PC is on home Wi-Fi? That is fine — Relayium is built to reach across networks, not only the same one.",
-        "Instead of automatic discovery, the sender gets a short pairing code (or a share link). Enter the code on the other device and the two connect directly, peer-to-peer, whenever the networks allow it. When a direct path is impossible, the encrypted stream falls back to a TURN relay — the relay only ever sees ciphertext, so the transfer stays end-to-end encrypted. If the connection drops mid-way, the transfer can resume instead of starting over.",
+        "Instead of automatic discovery, the sender gets a short pairing code (or the join link it generates). Enter the code on the other device and the two connect directly, peer-to-peer, whenever the networks allow it. When a direct path is impossible, the encrypted stream falls back to a TURN relay — the relay only ever sees ciphertext, so the transfer stays end-to-end encrypted. If the connection drops mid-way, the transfer can resume instead of starting over.",
       ],
     },
     {
@@ -111,7 +111,7 @@ const zh = {
       heading: "不在同一网络？用配对码",
       body: [
         "手机用的是移动数据，电脑连的是家里的 Wi-Fi？没关系——Relayium 生来就支持跨网络，而不只是同一个网络。",
-        "此时不再自动发现，而是发送方拿到一个短配对码（或分享链接）。在另一台设备上输入这个码，两者就点对点直连，只要网络条件允许就直传。当无法直连时，加密数据流会退回到 TURN 中继——中继只能看到密文，因此传输始终保持端到端加密。若中途断开，传输可以断点续传，而不必从头再来。",
+        "此时不再自动发现，而是发送方拿到一个短配对码（或它生成的加入链接）。在另一台设备上输入这个码，两者就点对点直连，只要网络条件允许就直传。当无法直连时，加密数据流会退回到 TURN 中继——中继只能看到密文，因此传输始终保持端到端加密。若中途断开，传输可以断点续传，而不必从头再来。",
       ],
     },
     {
@@ -192,7 +192,7 @@ const ja = {
       heading: "同じネットワークにない？ペアリングコードを使う",
       body: [
         "スマホはモバイル通信、PC は自宅の Wi-Fi？大丈夫です——Relayium は同じネットワークだけでなく、ネットワークをまたいで届くように作られています。",
-        "この場合は自動発見ではなく、送信側が短いペアリングコード（または共有リンク）を受け取ります。もう一方の端末でそのコードを入力すると、ネットワークが許す限り2台は P2P で直接つながります。直接の経路が不可能なときは、暗号化ストリームが TURN リレーにフォールバックしますが、リレーが見るのは暗号文だけなので、転送はエンドツーエンド暗号化のままです。途中で切れても、転送は最初からではなく再開できます。",
+        "この場合は自動発見ではなく、送信側が短いペアリングコード（またはそれが生成する参加リンク）を受け取ります。もう一方の端末でそのコードを入力すると、ネットワークが許す限り2台は P2P で直接つながります。直接の経路が不可能なときは、暗号化ストリームが TURN リレーにフォールバックしますが、リレーが見るのは暗号文だけなので、転送はエンドツーエンド暗号化のままです。途中で切れても、転送は最初からではなく再開できます。",
       ],
     },
     {
@@ -273,7 +273,7 @@ const ko = {
       heading: "같은 네트워크가 아니라면? 페어링 코드를 쓰세요",
       body: [
         "휴대폰은 모바일 데이터, PC는 집 Wi-Fi인가요? 괜찮습니다 — Relayium은 같은 네트워크뿐 아니라 네트워크를 넘나들며 닿도록 만들어졌습니다.",
-        "이 경우 자동 탐색 대신 보내는 쪽이 짧은 페어링 코드(또는 공유 링크)를 받습니다. 상대 기기에 그 코드를 입력하면 네트워크가 허락하는 한 두 기기가 P2P로 직접 연결됩니다. 직접 경로가 불가능할 때는 암호화된 스트림이 TURN 릴레이로 폴백하지만, 릴레이는 암호문만 보므로 전송은 종단간 암호화를 유지합니다. 도중에 끊겨도 전송은 처음부터가 아니라 이어서 재개할 수 있습니다.",
+        "이 경우 자동 탐색 대신 보내는 쪽이 짧은 페어링 코드(또는 그것이 생성하는 참여 링크)를 받습니다. 상대 기기에 그 코드를 입력하면 네트워크가 허락하는 한 두 기기가 P2P로 직접 연결됩니다. 직접 경로가 불가능할 때는 암호화된 스트림이 TURN 릴레이로 폴백하지만, 릴레이는 암호문만 보므로 전송은 종단간 암호화를 유지합니다. 도중에 끊겨도 전송은 처음부터가 아니라 이어서 재개할 수 있습니다.",
       ],
     },
     {
@@ -354,7 +354,7 @@ const de = {
       heading: "Nicht im selben Netz? Nimm einen Pairing-Code",
       body: [
         "Das Handy ist im Mobilfunknetz und der PC im heimischen WLAN? Kein Problem — Relayium ist darauf ausgelegt, über Netzwerke hinweg zu reichen, nicht nur im selben.",
-        "Statt automatischer Erkennung erhält der Absender einen kurzen Pairing-Code (oder einen Freigabelink). Gib den Code auf dem anderen Gerät ein, und die beiden verbinden sich direkt Peer-to-Peer, sofern die Netzwerke es zulassen. Ist ein direkter Weg unmöglich, weicht der verschlüsselte Datenstrom auf ein TURN-Relay aus — das Relay sieht nur Chiffretext, sodass die Übertragung Ende-zu-Ende-verschlüsselt bleibt. Bricht die Verbindung mittendrin ab, kann die Übertragung fortgesetzt werden, statt neu zu beginnen.",
+        "Statt automatischer Erkennung erhält der Absender einen kurzen Pairing-Code (oder den erzeugten Beitrittslink). Gib den Code auf dem anderen Gerät ein, und die beiden verbinden sich direkt Peer-to-Peer, sofern die Netzwerke es zulassen. Ist ein direkter Weg unmöglich, weicht der verschlüsselte Datenstrom auf ein TURN-Relay aus — das Relay sieht nur Chiffretext, sodass die Übertragung Ende-zu-Ende-verschlüsselt bleibt. Bricht die Verbindung mittendrin ab, kann die Übertragung fortgesetzt werden, statt neu zu beginnen.",
       ],
     },
     {
@@ -435,7 +435,7 @@ const fr = {
       heading: "Pas sur le même réseau ? Utilisez un code d'appairage",
       body: [
         "Votre téléphone est en données mobiles et votre PC sur le Wi-Fi de la maison ? Aucun souci — Relayium est conçu pour atteindre à travers les réseaux, pas seulement le même.",
-        "Au lieu de la découverte automatique, l'expéditeur obtient un court code d'appairage (ou un lien de partage). Saisissez le code sur l'autre appareil et les deux se connectent directement, en pair-à-pair, chaque fois que les réseaux le permettent. Quand une voie directe est impossible, le flux chiffré bascule vers un relais TURN — le relais ne voit que du texte chiffré, donc le transfert reste chiffré de bout en bout. Si la connexion se coupe en cours de route, le transfert peut reprendre au lieu de tout recommencer.",
+        "Au lieu de la découverte automatique, l'expéditeur obtient un court code d'appairage (ou le lien de participation qu'il génère). Saisissez le code sur l'autre appareil et les deux se connectent directement, en pair-à-pair, chaque fois que les réseaux le permettent. Quand une voie directe est impossible, le flux chiffré bascule vers un relais TURN — le relais ne voit que du texte chiffré, donc le transfert reste chiffré de bout en bout. Si la connexion se coupe en cours de route, le transfert peut reprendre au lieu de tout recommencer.",
       ],
     },
     {

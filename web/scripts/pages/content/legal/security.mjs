@@ -48,11 +48,11 @@ const en = {
     {
       heading: "When your files are relayed (TURN)",
       body: [
-        "When two devices cannot open a direct connection across networks (restrictive NATs or firewalls), the encrypted stream is relayed through a TURN server so the transfer can still complete. Direct peer-to-peer is always tried first; the relay is a fallback, and only pairing-code and share-link sessions are issued relay credentials.",
+        "When two devices cannot open a direct connection across networks (restrictive NATs or firewalls), the encrypted stream is relayed through a TURN server so the transfer can still complete. Direct peer-to-peer is always tried first; the relay is a fallback, and only pairing-code sessions (including their join links) are issued relay credentials.",
       ],
       bullets: [
         "The relay forwards only ciphertext — it cannot read your files, which stay end-to-end encrypted.",
-        "For operating the service we record only the number of relayed bytes per transfer, attributed to the signed-in user who created it.",
+        "For operating the service we record only the total number of relayed bytes, kept anonymously and never tied to an account.",
         "We never inspect relayed content.",
       ],
     },
@@ -80,7 +80,7 @@ const en = {
       ],
       bullets: [
         "A compromised device or browser on either end — malware, a hostile browser extension, or someone reading the screen.",
-        "Metadata the server necessarily handles: that a transfer happened, its size and timing, and — if you signed in — the account that created it.",
+        "Metadata the server necessarily handles: that a transfer happened, its size and timing, and — for a stored download link — the account that created it.",
         "A recipient choosing to keep or forward the files after they have received them.",
         "Sharing a download link over an untrusted channel, since the decryption key travels inside the link.",
       ],
@@ -154,11 +154,11 @@ const zh = {
     {
       heading: "文件何时会经中继转发（TURN）",
       body: [
-        "当两台设备无法跨网络直接建立连接（受限的 NAT 或防火墙）时，加密流会经由 TURN 服务器中继，让传输仍能完成。系统始终优先尝试点对点直连；中继只是兜底，且只有配对码与分享链接的会话才会获发中继凭证。",
+        "当两台设备无法跨网络直接建立连接（受限的 NAT 或防火墙）时，加密流会经由 TURN 服务器中继，让传输仍能完成。系统始终优先尝试点对点直连；中继只是兜底，且只有配对码会话（含其生成的加入链接）才会获发中继凭证。",
       ],
       bullets: [
         "中继只转发密文——它无法读取你的文件，文件始终保持端到端加密。",
-        "出于运营目的，我们仅记录某次传输中继的字节数，并归属到创建该传输的登录用户。",
+        "出于运营目的，我们仅记录中继的总字节数，且以匿名方式保存，绝不与任何账号关联。",
         "我们绝不检查中继内容。",
       ],
     },
@@ -186,7 +186,7 @@ const zh = {
       ],
       bullets: [
         "任一端设备或浏览器被攻陷——恶意软件、恶意浏览器扩展，或有人偷看屏幕。",
-        "服务器必然会接触到的元数据：曾发生过一次传输、其大小与时间，以及（若你已登录）创建它的账号。",
+        "服务器必然会接触到的元数据：曾发生过一次传输、其大小与时间，以及（若为托管下载链接）创建它的账号。",
         "接收方在收到文件后选择保留或转发。",
         "通过不可信渠道分享下载链接，因为解密密钥就在链接里。",
       ],
@@ -260,11 +260,11 @@ const ja = {
     {
       heading: "ファイルが中継される場合（TURN）",
       body: [
-        "2 台のデバイスがネットワークをまたいで直接接続できない場合（制限の厳しい NAT やファイアウォール）、転送を完了させるために暗号化ストリームが TURN サーバー経由で中継されます。まず常に直接のピアツーピアが試みられ、中継はフォールバックであり、中継用の資格情報が発行されるのはペアリングコードと共有リンクのセッションのみです。",
+        "2 台のデバイスがネットワークをまたいで直接接続できない場合（制限の厳しい NAT やファイアウォール）、転送を完了させるために暗号化ストリームが TURN サーバー経由で中継されます。まず常に直接のピアツーピアが試みられ、中継はフォールバックであり、中継用の資格情報が発行されるのはペアリングコードのセッション（その参加リンクを含む）のみです。",
       ],
       bullets: [
         "中継サーバーは暗号文のみを転送します。ファイルを読むことはできず、エンドツーエンド暗号化が維持されます。",
-        "サービス運用のため、転送ごとの中継バイト数のみを記録し、それを作成したサインイン済みユーザーに紐付けます。",
+        "サービス運用のため、中継バイトの合計のみを記録し、どのアカウントにも紐付けず匿名で保存します。",
         "中継されたコンテンツを検査することはありません。",
       ],
     },
@@ -292,7 +292,7 @@ const ja = {
       ],
       bullets: [
         "いずれかの端末側のデバイスやブラウザの侵害——マルウェア、悪意ある拡張機能、あるいは画面を覗き見る人。",
-        "サーバーが必然的に扱うメタデータ：転送が行われた事実、そのサイズと時刻、そして（サインインしていれば）作成したアカウント。",
+        "サーバーが必然的に扱うメタデータ：転送が行われた事実、そのサイズと時刻、そして（保存型ダウンロードリンクの場合）作成したアカウント。",
         "受信者がファイルを受け取った後に保持または転送することを選ぶこと。",
         "復号鍵がリンク内に含まれるため、信頼できない経路でダウンロードリンクを共有すること。",
       ],
@@ -366,11 +366,11 @@ const ko = {
     {
       heading: "파일이 중계될 때(TURN)",
       body: [
-        "두 기기가 네트워크를 가로질러 직접 연결할 수 없는 경우(제한적인 NAT 또는 방화벽), 전송을 완료할 수 있도록 암호화된 스트림이 TURN 서버를 통해 중계됩니다. 언제나 직접 피어 투 피어를 먼저 시도하며, 중계는 대체 수단이고, 중계 자격 증명은 페어링 코드와 공유 링크 세션에만 발급됩니다.",
+        "두 기기가 네트워크를 가로질러 직접 연결할 수 없는 경우(제한적인 NAT 또는 방화벽), 전송을 완료할 수 있도록 암호화된 스트림이 TURN 서버를 통해 중계됩니다. 언제나 직접 피어 투 피어를 먼저 시도하며, 중계는 대체 수단이고, 중계 자격 증명은 페어링 코드 세션(그 참여 링크 포함)에만 발급됩니다.",
       ],
       bullets: [
         "중계 서버는 암호문만 전달합니다. 파일을 읽을 수 없으며 종단간 암호화가 유지됩니다.",
-        "서비스 운영을 위해 전송별 중계 바이트 수만 기록하며, 이를 전송을 생성한 로그인 사용자에게 귀속시킵니다.",
+        "서비스 운영을 위해 중계 바이트 총량만 기록하며, 어떤 계정에도 연결하지 않고 익명으로 보관합니다.",
         "중계된 콘텐츠를 검사하지 않습니다.",
       ],
     },
@@ -398,7 +398,7 @@ const ko = {
       ],
       bullets: [
         "어느 한쪽 기기나 브라우저의 침해 — 멀웨어, 악성 브라우저 확장 프로그램, 또는 화면을 훔쳐보는 사람.",
-        "서버가 필연적으로 다루는 메타데이터: 전송이 일어났다는 사실, 그 크기와 시각, 그리고 (로그인한 경우) 이를 생성한 계정.",
+        "서버가 필연적으로 다루는 메타데이터: 전송이 일어났다는 사실, 그 크기와 시각, 그리고 (저장형 다운로드 링크의 경우) 이를 생성한 계정.",
         "수신자가 파일을 받은 후 보관하거나 전달하기로 선택하는 것.",
         "복호화 키가 링크 안에 담겨 이동하므로, 신뢰할 수 없는 경로로 다운로드 링크를 공유하는 것.",
       ],
@@ -472,11 +472,11 @@ const de = {
     {
       heading: "Wenn Ihre Dateien weitergeleitet werden (TURN)",
       body: [
-        "Wenn zwei Geräte über verschiedene Netzwerke hinweg keine direkte Verbindung aufbauen können (restriktive NATs oder Firewalls), wird der verschlüsselte Datenstrom über einen TURN-Server weitergeleitet, damit die Übertragung dennoch abgeschlossen werden kann. Zuerst wird stets eine direkte Peer-to-Peer-Verbindung versucht; die Weiterleitung ist ein Rückfall, und Weiterleitungs-Anmeldedaten werden nur an Sitzungen mit Kopplungscode und Freigabelink ausgegeben.",
+        "Wenn zwei Geräte über verschiedene Netzwerke hinweg keine direkte Verbindung aufbauen können (restriktive NATs oder Firewalls), wird der verschlüsselte Datenstrom über einen TURN-Server weitergeleitet, damit die Übertragung dennoch abgeschlossen werden kann. Zuerst wird stets eine direkte Peer-to-Peer-Verbindung versucht; die Weiterleitung ist ein Rückfall, und Weiterleitungs-Anmeldedaten werden nur an Pairing-Code-Sitzungen (einschließlich ihrer Beitrittslinks) ausgegeben.",
       ],
       bullets: [
         "Die Weiterleitung übermittelt nur Chiffretext — sie kann Ihre Dateien nicht lesen, die Ende-zu-Ende-verschlüsselt bleiben.",
-        "Für den Betrieb des Dienstes erfassen wir nur die Anzahl der weitergeleiteten Bytes pro Übertragung, zugeordnet dem angemeldeten Benutzer, der sie erstellt hat.",
+        "Für den Betrieb des Dienstes erfassen wir nur die Gesamtzahl der weitergeleiteten Bytes, anonym gespeichert und keinem Konto zugeordnet.",
         "Weitergeleitete Inhalte sehen wir nie ein.",
       ],
     },
@@ -504,7 +504,7 @@ const de = {
       ],
       bullets: [
         "Einem kompromittierten Gerät oder Browser an einem der beiden Enden — Schadsoftware, einer bösartigen Browsererweiterung oder jemandem, der auf den Bildschirm sieht.",
-        "Metadaten, die der Server zwangsläufig verarbeitet: dass eine Übertragung stattfand, deren Größe und Zeitpunkt und — falls Sie angemeldet waren — das Konto, das sie erstellt hat.",
+        "Metadaten, die der Server zwangsläufig verarbeitet: dass eine Übertragung stattfand, deren Größe und Zeitpunkt und — bei einem gespeicherten Download-Link — das Konto, das ihn erstellt hat.",
         "Einem Empfänger, der sich entscheidet, die Dateien nach Erhalt zu behalten oder weiterzuleiten.",
         "Dem Teilen eines Download-Links über einen nicht vertrauenswürdigen Kanal, da der Entschlüsselungsschlüssel im Link mitreist.",
       ],
@@ -578,11 +578,11 @@ const fr = {
     {
       heading: "Quand vos fichiers sont relayés (TURN)",
       body: [
-        "Lorsque deux appareils ne peuvent pas ouvrir de connexion directe entre différents réseaux (NAT restrictifs ou pare-feu), le flux chiffré est relayé via un serveur TURN afin que le transfert puisse tout de même aboutir. Le pair à pair direct est toujours tenté en premier ; le relais est un repli, et les identifiants de relais ne sont délivrés qu'aux sessions par code d'appariement et par lien de partage.",
+        "Lorsque deux appareils ne peuvent pas ouvrir de connexion directe entre différents réseaux (NAT restrictifs ou pare-feu), le flux chiffré est relayé via un serveur TURN afin que le transfert puisse tout de même aboutir. Le pair à pair direct est toujours tenté en premier ; le relais est un repli, et les identifiants de relais ne sont délivrés qu'aux sessions par code d'appairage (y compris leurs liens de participation).",
       ],
       bullets: [
         "Le relais ne transmet que du chiffré — il ne peut pas lire vos fichiers, qui restent chiffrés de bout en bout.",
-        "Pour l'exploitation du service, nous enregistrons uniquement le nombre d'octets relayés par transfert, attribué à l'utilisateur connecté qui l'a créé.",
+        "Pour l'exploitation du service, nous enregistrons uniquement le nombre total d'octets relayés, conservé de façon anonyme et jamais lié à un compte.",
         "Nous n'inspectons jamais le contenu relayé.",
       ],
     },
@@ -610,7 +610,7 @@ const fr = {
       ],
       bullets: [
         "Un appareil ou un navigateur compromis à l'une des extrémités — logiciel malveillant, extension de navigateur hostile, ou quelqu'un qui regarde l'écran.",
-        "Les métadonnées que le serveur traite nécessairement : le fait qu'un transfert a eu lieu, sa taille et son horodatage, et — si vous étiez connecté — le compte qui l'a créé.",
+        "Les métadonnées que le serveur traite nécessairement : le fait qu'un transfert a eu lieu, sa taille et son horodatage, et — pour un lien de téléchargement stocké — le compte qui l'a créé.",
         "Un destinataire qui choisit de conserver ou de transmettre les fichiers après les avoir reçus.",
         "Le partage d'un lien de téléchargement par un canal non fiable, puisque la clé de déchiffrement voyage dans le lien.",
       ],

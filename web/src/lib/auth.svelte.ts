@@ -45,8 +45,8 @@ export async function requestMagicLink(
 }
 
 // Session/role markers stashed by the cross-network flows; cleared on logout so a
-// later sign-in doesn't inherit a stale "I minted this / I originated that" side.
-const ROLE_KEYS = ["relayium_pair_exp", "relayium_xfer_token"];
+// later sign-in doesn't inherit a stale "I minted this code" side.
+const ROLE_KEYS = ["relayium_pair_exp"];
 
 export async function logout(): Promise<void> {
   try {

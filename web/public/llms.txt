@@ -1,20 +1,19 @@
 # Relayium
 
-> Relayium is an open-source, end-to-end encrypted file transfer tool that runs entirely in the browser. It works on the same network and across networks (over the internet). In realtime mode, files stream directly from one device to another over a WebRTC DataChannel and never pass through any server; for restrictive networks the connection can fall back to an encrypted TURN relay that still only sees ciphertext. An optional stored download-link mode encrypts files in the browser (AES-256-GCM) before upload for when the recipient is offline; the server stores only ciphertext and cannot read content, filenames, or the key. No installation; realtime transfers over the LAN or via a pairing code need no account, while creating a share link or a stored download link requires the sender to sign in. Live at https://relayium.com.
+> Relayium is an open-source, end-to-end encrypted file transfer tool that runs entirely in the browser. It works on the same network and across networks (over the internet). In realtime mode, files stream directly from one device to another over a WebRTC DataChannel and never pass through any server; for restrictive networks the connection can fall back to an encrypted TURN relay that still only sees ciphertext. An optional stored download-link mode encrypts files in the browser (AES-256-GCM) before upload for when the recipient is offline; the server stores only ciphertext and cannot read content, filenames, or the key. No installation; all realtime transfers (LAN, or a cross-network pairing code and the join link/QR it generates) need no account, while only stored download links require the sender to sign in. Live at https://relayium.com.
 
 ## What it is
 
 - **Category:** Secure file transfer / file sharing between devices (web app), on the same network or across the internet.
 - **Same-network (default):** Open https://relayium.com on two devices on the same network. They discover each other automatically (grouped into a "room" by shared public IP). Pick a file (or drag-and-drop, up to 10 at once), the receiver accepts, both sides compare a short verification code, and the file streams device-to-device. No account needed.
-- **Cross-network:** For devices on different networks, use the cross-network page — a pairing code, a share link, or a stored download link (see Transfer modes).
+- **Cross-network:** For devices on different networks, use the cross-network page — a pairing code (which also generates a join link and QR) for a realtime transfer, or a stored download link (see Transfer modes).
 
 ## Transfer modes
 
 - **Realtime — same network:** automatic device discovery on the LAN, direct peer-to-peer over WebRTC. No account.
-- **Realtime — pairing code (cross-network):** one side generates a 6-digit code, the other enters it to open a direct connection across networks. No account.
-- **Realtime — share link (cross-network):** a signed-in sender generates a link or QR code; opening it connects the two sides in realtime, with better connectivity.
+- **Realtime — pairing code (cross-network):** one side picks files and gets a 6-digit code plus a join link and QR; the other enters the code or opens the link to connect directly across networks. No account, codes live 15 minutes.
 - **Stored download link (asynchronous):** for when the recipient is offline. A signed-in sender's browser encrypts the files before upload; the server stores only zero-knowledge ciphertext, with a settable expiry (1/3/7 days) or burn-after-first-download. Recipients need no account.
-- Cross-network realtime transfers (pairing code and share link) try a direct peer-to-peer path first (STUN) and fall back to an encrypted TURN relay for strict/symmetric NATs; the relay still only sees ciphertext.
+- Cross-network realtime transfers (a pairing code and its join link) try a direct peer-to-peer path first (STUN) and fall back to an encrypted TURN relay for strict/symmetric NATs; the relay still only sees ciphertext.
 
 ## Security & privacy
 
@@ -27,18 +26,18 @@
 
 ## Accounts
 
-- Optional. Realtime LAN transfers and pairing-code transfers need no account. Signing in is required only to create a share link or a stored download link. Recipients never need an account.
+- Optional. All realtime transfers (LAN, or a pairing code and its join link) need no account. Signing in is required only to create a stored download link. Recipients never need an account.
 - Sign-in methods: email + password by default; Google OAuth and email magic-link are supported but off by default (self-hosters can enable them). An account stores only an email and display name.
 
 ## Key facts
 
 - License: MIT (free and open source).
-- Price: free. No install. Realtime transfers (LAN + pairing code) need no account; creating a share link or a stored download link requires the sender to sign in (recipients never need an account).
+- Price: free. No install. All realtime transfers (LAN, or a pairing code and its join link) need no account; only stored download links require the sender to sign in (recipients never need an account).
 - Platforms: any modern browser with WebRTC over HTTPS — Chrome, Edge, Firefox, Safari, on desktop and mobile.
 - Large files: Chrome/Edge stream straight to disk (no memory cap); Firefox/Safari buffer in memory (keep files under ~200 MB).
 - Multi-file: up to 10 files per batch, streamed to disk.
 - Languages: English, Chinese (中文), Japanese (日本語), Korean (한국어), German (Deutsch), French (Français) — auto-detected.
-- Network scope: same network and across networks / over the internet — realtime via a pairing code or share link (with encrypted TURN relay fallback), or an asynchronous stored download link.
+- Network scope: same network and across networks / over the internet — realtime via a pairing code (and the join link it generates, with encrypted TURN relay fallback), or an asynchronous stored download link.
 - Tech stack: Svelte single-page app + a single Go server (WebRTC signaling, accounts, and the stored-file API), SQLite for account data, libsodium for browser crypto; optional coturn for the TURN relay and Redis for relay-byte metering.
 
 ## Self-hosting
@@ -54,12 +53,12 @@
 ## FAQ
 
 - **Is Relayium free?** Yes — free and open source under the MIT license.
-- **Do I need an account or to install anything?** No installation. Realtime transfers over the LAN or a pairing code need no account — just open the URL in a browser on both devices. Creating a share link or a stored download link requires the sender to sign in; recipients never need an account.
+- **Do I need an account or to install anything?** No installation. All realtime transfers (LAN, or a pairing code and its join link) need no account — just open the URL in a browser on both devices. Only creating a stored download link requires the sender to sign in; recipients never need an account.
 - **Do my files get uploaded to a server?** In realtime mode: no — files stream directly between the two devices over WebRTC and never touch the server (a TURN relay may forward the encrypted stream across strict networks, but it only ever sees ciphertext). The optional stored download-link mode uploads only zero-knowledge ciphertext (AES-256-GCM); the server cannot read content, filenames, or the key.
 - **Is it end-to-end encrypted?** Yes — X25519 key exchange and AES-256-GCM, with keys that never leave the two devices, plus a 6-digit code to verify against man-in-the-middle attacks.
 - **Can I send files between different operating systems?** Yes — it is browser-based, so Windows ↔ iPhone, Android ↔ Mac, Linux ↔ anything all work.
 - **What is the file-size limit?** Realtime transfers have no server-imposed limit (Chrome/Edge stream to disk; in Firefox/Safari keep files under ~200 MB because they buffer in memory). Stored download links are subject to a per-file size cap and a per-account daily quota, shown in the app.
-- **Can I send between two different networks / over the internet?** Yes. Use a pairing code or a share link for a realtime cross-network transfer (with an encrypted TURN relay fallback for restrictive networks), or a stored download link when the recipient is offline.
+- **Can I send between two different networks / over the internet?** Yes. Use a pairing code (or the join link it generates) for a realtime cross-network transfer (with an encrypted TURN relay fallback for restrictive networks), or a stored download link when the recipient is offline.
 - **Can I self-host it?** Yes — a single Go binary serves both the API and the web app; a Dockerfile and docker-compose are provided, and STUN/TURN are configurable.
 
 ## Links

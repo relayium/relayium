@@ -10,7 +10,7 @@
   } from "./lib/crypto";
   import { SignalingClient } from "./lib/signaling";
   import { wsURL } from "./lib/transfer-link";
-  import { roomToken as roomTokenStore, roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
+  import { roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
   import { connect, connectResume, PeerBusyError, type InboundSignal, type Conn, type ConnPath } from "./lib/webrtc";
   import { createWakeLock } from "./lib/wakelock";
   import { registerServiceWorker, drainSharedFiles } from "./lib/share-target";
@@ -35,6 +35,8 @@
   import type { Peer } from "./lib/protocol";
   import { lang, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
+  import { outbox, setOutbox, takeOutbox, clearOutbox } from "./lib/outbox.svelte";
+  import { folderUploadSupported } from "./lib/platform";
   import CrossPage from "./lib/CrossPage.svelte";
   import MePage from "./lib/MePage.svelte";
   import Nav from "./lib/Nav.svelte";
@@ -83,13 +85,11 @@
   // never races the transfer loop's high-frequency rewrites of send/recv.
   let sendPath = $state<ConnPath | undefined>();
   let recvPath = $state<ConnPath | undefined>();
-  let pendingShared = $state<File[]>([]); // files handed in via the OS share sheet, awaiting a target device
   let notice = $state(""); // transient hint (e.g. "busy", "too many files")
   let dragActive = $state(false);
   let dragDepth = 0; // non-reactive: dragenter/dragleave fire per element; count to know when the drag truly leaves the window
   // The active room lives in the URL-driven store; read reactively here so a live
   // room switch (no reload) reconnects the socket via the effect below.
-  const roomToken = $derived(roomTokenStore());
   const roomCode = $derived(roomCodeStore());
   let joinedRoom = $state(false);
   let linkDead = $state(false);
@@ -191,14 +191,12 @@
     else wake.release();
   });
 
-  // Files arriving via the OS share sheet auto-send the moment there's exactly
-  // one reachable device and nothing else in flight; with several devices the
-  // user picks one (the peer cards below become send targets). Cleared on send.
+  // Queued files (OS share sheet, or picked before pairing) auto-send the
+  // moment there's exactly one reachable device and nothing else in flight;
+  // with several devices the user picks one (the peer cards become targets).
   $effect(() => {
-    if (pendingShared.length && surfaceShown && !busy && visiblePeers.length === 1) {
-      const files = pendingShared;
-      pendingShared = [];
-      sendFiles(visiblePeers[0].id, files.map((file) => ({ file })));
+    if (outbox().length && surfaceShown && !busy && visiblePeers.length === 1) {
+      sendFiles(visiblePeers[0].id, takeOutbox());
     }
   });
 
@@ -220,15 +218,17 @@
     registerServiceWorker();
     // Pick up any files launched into the app via the OS share sheet (installed
     // PWA, Android/Chromium). The auto-send effect routes them once a peer is up.
-    drainSharedFiles().then((files) => { if (files.length) pendingShared = files; });
+    drainSharedFiles().then((files) => {
+      if (files.length) setOutbox(files.map((file) => ({ file })));
+    });
     if (!window.isSecureContext || !crypto.subtle) {
       unsupported = true;
       return;
     }
     await ready();
     selfName = deviceName();
-    iceServers = await fetchIceServers(roomToken, roomCode);
-    signaling = new SignalingClient(wsURL(location, roomToken, roomCode), selfName);
+    iceServers = await fetchIceServers(roomCode);
+    signaling = new SignalingClient(wsURL(location, roomCode), selfName);
     signaling.onSelfId((id, ip) => {
       selfId = id; selfIP = ip; joinedRoom = true;
       // A welcome means the socket is (re)connected — clear any reconnect state.
@@ -237,9 +237,9 @@
     });
     signaling.onPeers((p) => (peers = p));
     signaling.onClose(() => {
-      // In a token-room, a close before we ever joined means the link was
+      // In a code room, a close before we ever joined means the code/link was
       // invalid/expired or the room was full — surface that, don't retry.
-      if ((roomToken || roomCode) && !joinedRoom) { linkDead = true; return; }
+      if (roomCode && !joinedRoom) { linkDead = true; return; }
       // Otherwise the signalling socket dropped unexpectedly. Reflect the break in
       // the UI (no green "connected" dot, no zombie devices) and auto-reconnect.
       peers = [];
@@ -250,7 +250,7 @@
       scheduleReconnect();
     });
     listenForIncoming();
-    socketRoomKey = `${roomToken}|${roomCode}`;
+    socketRoomKey = roomCode;
     connState = "ready";
   });
 
@@ -263,7 +263,7 @@
       if (!signaling) return;
       // reconnect() intentionally swaps the socket (won't re-fire onClose); if this
       // fresh socket also closes, onClose runs again and re-schedules.
-      signaling.reconnect(wsURL(location, roomToken, roomCode));
+      signaling.reconnect(wsURL(location, roomCode));
     }, 2000);
   }
 
@@ -293,19 +293,24 @@
     recv = null;
     sasCode = "";
     connState = "connecting";
-    const servers = await fetchIceServers(roomToken, roomCode);
+    const servers = await fetchIceServers(roomCode);
     // A rapid second switch may have started (and possibly finished) while this
     // fetch was in flight — discard the stale credentials rather than clobbering
     // the newer room's TURN config and socket.
     if (epoch !== roomEpoch) return;
     iceServers = servers;
-    signaling.reconnect(wsURL(location, roomToken, roomCode));
+    signaling.reconnect(wsURL(location, roomCode));
   }
 
   $effect(() => {
-    const key = `${roomToken}|${roomCode}`;
+    const key = roomCode;
     if (!signaling) return; // socket not built yet (initial mount)
     if (key === socketRoomKey) return; // already bound to this room
+    // Queued files belong to the pairing attempt that queued them: leaving the code
+    // room by ANY path (start over, tab switch, back button) must drop them so they
+    // can't surprise-send to an unrelated peer later. Only the code→"" exit clears —
+    // ""→code (files were just queued) and code→code (timedOut re-mint) keep the queue.
+    if (socketRoomKey && !key) clearOutbox();
     socketRoomKey = key;
     void switchRoom();
   });
@@ -388,15 +393,6 @@
     if (/Linux/.test(ua)) return "Linux";
     return "Device";
   }
-  // iOS/iPadOS Safari has no folder picker (webkitdirectory is inert), so the
-  // "send folder" button just misbehaves there — hide it. iPadOS 13+ reports a
-  // Mac UA, so also treat a touch-capable "Mac" as iOS-like.
-  function isIOS(): boolean {
-    const ua = navigator.userAgent || "";
-    if (/iPhone|iPad|iPod/.test(ua)) return true;
-    return /Macintosh/.test(ua) && (navigator.maxTouchPoints ?? 0) > 1;
-  }
-  const folderUploadSupported = !isIOS();
   function nameOf(peerId: string): string {
     return peers.find((p) => p.id === peerId)?.name ?? peerId.slice(0, 6);
   }
@@ -977,8 +973,8 @@
   {@const solo = visiblePeers.length === 1}
   <section class="peers">
     <h2>{currentRoute() === "cross" ? t.crossPeersTitle : t.peersTitle}</h2>
-    {#if pendingShared.length && visiblePeers.length !== 1}
-      <p class="share-pending">{t.sharePending(pendingShared.length)}</p>
+    {#if outbox().length && visiblePeers.length !== 1}
+      <p class="share-pending">{t.sharePending(outbox().length)}</p>
     {/if}
     {#if visiblePeers.length === 0}
       <div class="empty">
@@ -1008,7 +1004,7 @@
                 {/if}
               </span>
               <input id={`pick-${p.id}`} type="file" multiple disabled={busy}
-                onclick={(e) => { if (pendingShared.length) { e.preventDefault(); const f = pendingShared; pendingShared = []; sendFiles(p.id, f.map((file) => ({ file }))); } }}
+                onclick={(e) => { if (outbox().length) { e.preventDefault(); sendFiles(p.id, takeOutbox()); } }}
                 onchange={(e) => pickFile(e, p.id)} />
             </label>
             <div class="peer-actions">
@@ -1091,7 +1087,7 @@
   <Nav />
 
   {#if currentRoute() === "cross"}
-    <CrossPage {roomToken} {roomCode} {linkDead} {showTransfer} {transferSurface} dismissLan={() => (lanDismissed = true)} />
+    <CrossPage {roomCode} {linkDead} {showTransfer} {transferSurface} dismissLan={() => (lanDismissed = true)} />
   {:else if currentRoute() === "me"}
     <MePage />
   {:else}
