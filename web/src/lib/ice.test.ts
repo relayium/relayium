@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { fetchIceServers, hasTurnServer } from "./ice";
+import { fetchIceServers, hasTurnServer, pickRelay } from "./ice";
 
 const STUN = [{ urls: "stun:stun.l.google.com:19302" }];
 
@@ -75,5 +75,34 @@ describe("hasTurnServer", () => {
 
   it("does not mistake a stun: URL that merely contains 'turn' hostname parts", () => {
     expect(hasTurnServer([{ urls: "stun:saturn.example.com:3478" }])).toBe(false);
+  });
+});
+
+describe("pickRelay", () => {
+  it("minimises the worse of the two peers' RTTs", () => {
+    // tok: max(30,200)=200; la: max(180,40)=180 → la wins (better worst-case leg).
+    const mine = { tok: 30, la: 180 };
+    const theirs = { tok: 200, la: 40 };
+    expect(pickRelay(mine, theirs)).toBe("la");
+  });
+
+  it("only considers relays both peers measured", () => {
+    // sg is fastest for me but the peer never measured it → ineligible.
+    expect(pickRelay({ sg: 10, tok: 90 }, { tok: 95 })).toBe("tok");
+    expect(pickRelay({ sg: 10 }, { tok: 95 })).toBeNull();
+    expect(pickRelay({}, {})).toBeNull();
+  });
+
+  it("is symmetric — both peers derive the same id from swapped inputs", () => {
+    const a = { tok: 30, la: 180, fra: 90 };
+    const b = { tok: 200, la: 40, fra: 95 };
+    expect(pickRelay(a, b)).toBe(pickRelay(b, a));
+  });
+
+  it("breaks ties on worst-case by sum, then by id (stable on both sides)", () => {
+    // Both have max 100; tok sum=150 < la sum=200 → tok.
+    expect(pickRelay({ tok: 100, la: 100 }, { tok: 50, la: 100 })).toBe("tok");
+    // Identical worst-case AND sum → lowest id, same on both sides.
+    expect(pickRelay({ b: 100, a: 100 }, { b: 100, a: 100 })).toBe("a");
   });
 });

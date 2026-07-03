@@ -35,7 +35,7 @@
     type ResumePoint,
   } from "./lib/transfer";
   import { pickSaveTarget, type SaveTarget, type FileSink } from "./lib/filesink";
-  import { fetchIceServers, hasTurnServer } from "./lib/ice";
+  import { fetchIceConfig, hasTurnServer, measureRelays, pickRelay, type RelayEntry } from "./lib/ice";
   import type { Peer } from "./lib/protocol";
   import { lang, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
@@ -105,13 +105,60 @@
   let roomEpoch = 0; // bumped per room switch; discards a stale fetchIceServers response
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined; // pending auto-reconnect after a WS drop
   let iceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+  // Multi-relay pool + the two peers' measured RTTs to it. Both sides run pickRelay
+  // over the same (mine, theirs) data and converge on the same relay id — see the
+  // relay-measurement block below.
+  let relayPool = $state<RelayEntry[]>([]);
+  let myRelayRtt = $state<Record<string, number>>({});
+  let peerRelayRtt = $state<Record<string, number>>({});
+  let selectedRelayId = $state<string | null>(null);
   // Build the RTCConfiguration for a new connection. On the cross-network path a
   // TURN relay is handed out (via the pairing code); force relay-only ICE there so
   // connection setup is ~1-2 s instead of ~20 s spent waiting for cross-NAT direct
   // candidate checks to time out before ICE would fall back to that relay anyway.
-  // STUN-only rooms (LAN, no code) keep the default "all" so host candidates work.
-  const rtcConfig = (): RtcConfig =>
-    hasTurnServer(iceServers) ? { iceServers, iceTransportPolicy: "relay" } : { iceServers };
+  // Prefer the relay the two peers agreed is fastest; fall back to the whole
+  // advertised set. STUN-only rooms (LAN, no code) keep "all" so host candidates work.
+  const rtcConfig = (): RtcConfig => {
+    const picked = selectedRelayId ? relayPool.find((r) => r.id === selectedRelayId) : undefined;
+    if (picked) return { iceServers: picked.iceServers, iceTransportPolicy: "relay" };
+    return hasTurnServer(iceServers) ? { iceServers, iceTransportPolicy: "relay" } : { iceServers };
+  };
+
+  // ── nearest-relay selection ──────────────────────────────────────────────────────
+  // Each peer measures its RTT to every pool relay; the maps are swapped over signaling
+  // and both run pickRelay(mine, theirs) to converge on the fastest COMMON relay id
+  // (symmetric → same result on both sides, no negotiation). Runs in the background at
+  // room join so the choice is usually ready before a transfer starts; until then
+  // rtcConfig() falls back to the whole advertised set. No effect on LAN (empty pool).
+  let relayMeasureEpoch = 0;
+  function resetRelaySelection() {
+    relayMeasureEpoch++; // supersede any in-flight measurement from the previous room
+    myRelayRtt = {};
+    peerRelayRtt = {};
+    selectedRelayId = null;
+  }
+  function broadcastRelayRtt() {
+    if (!signaling || Object.keys(myRelayRtt).length === 0) return;
+    for (const p of peers) if (p.id !== selfId) signaling.sendSignal(p.id, { relayRtt: myRelayRtt });
+  }
+  async function startRelayMeasurement() {
+    if (relayPool.length === 0) return;
+    const epoch = relayMeasureEpoch;
+    const rtt = await measureRelays(relayPool);
+    if (epoch !== relayMeasureEpoch) return; // room switched while measuring — discard
+    myRelayRtt = rtt;
+    selectedRelayId = pickRelay(myRelayRtt, peerRelayRtt);
+    broadcastRelayRtt();
+  }
+  // Peer's measurement arrived: record it and re-derive the choice. We never reply
+  // here (broadcasts fire on measure-done and on peer-join instead), so there is no
+  // ping-pong loop.
+  function onPeerRelayRtt(from: string, data: unknown) {
+    const m = (data as { relayRtt?: Record<string, number> }).relayRtt;
+    if (!m || from === selfId) return;
+    peerRelayRtt = m;
+    selectedRelayId = pickRelay(myRelayRtt, peerRelayRtt);
+  }
   let acceptFn: (() => void) | null = null;
   let rejectFn: (() => void) | null = null;
   // Abort handles for an in-flight transfer — let the user bail out of a stuck
@@ -263,6 +310,10 @@
     try { localStorage.removeItem("relayium-debug"); } catch { /* ignore */ }
     debugOn = false;
   }
+  const relayRttText = (m: Record<string, number>): string => {
+    const parts = Object.entries(m).map(([id, ms]) => `${id}:${ms}`);
+    return parts.length ? parts.join(" ") : "—";
+  };
 
   onMount(async () => {
     document.documentElement.lang = lang();
@@ -281,7 +332,9 @@
     }
     await ready();
     selfName = deviceName();
-    iceServers = await fetchIceServers(roomCode);
+    const ice = await fetchIceConfig(roomCode);
+    iceServers = ice.iceServers;
+    relayPool = ice.relays;
     signaling = new SignalingClient(wsURL(location, roomCode), selfName);
     signaling.onSelfId((id, ip) => {
       selfId = id; selfIP = ip; joinedRoom = true;
@@ -289,7 +342,10 @@
       connState = "ready";
       if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = undefined; }
     });
-    signaling.onPeers((p) => (peers = p));
+    // A peer (re)appearing is our cue to (re)send our relay measurements to it.
+    signaling.onPeers((p) => { peers = p; broadcastRelayRtt(); });
+    signaling.onSignal(onPeerRelayRtt); // capture peers' relay-RTT maps (ignored by the WebRTC handlers)
+    startRelayMeasurement(); // background; the choice is usually ready before a transfer
     signaling.onClose(() => {
       // In a code room, a close before we ever joined means the code/link was
       // invalid/expired or the room was full — surface that, don't retry.
@@ -347,13 +403,16 @@
     recv = null;
     sasCode = "";
     connState = "connecting";
-    const servers = await fetchIceServers(roomCode);
+    resetRelaySelection(); // the new room has its own relay pool + measurements
+    const ice = await fetchIceConfig(roomCode);
     // A rapid second switch may have started (and possibly finished) while this
     // fetch was in flight — discard the stale credentials rather than clobbering
     // the newer room's TURN config and socket.
     if (epoch !== roomEpoch) return;
-    iceServers = servers;
+    iceServers = ice.iceServers;
+    relayPool = ice.relays;
     signaling.reconnect(wsURL(location, roomCode));
+    startRelayMeasurement(); // measure the new room's pool in the background
   }
 
   $effect(() => {
@@ -1252,6 +1311,12 @@
       <button type="button" onclick={copyDiagnostics} disabled={!dbg}>复制</button>
       <button type="button" class="dbg-x" onclick={closeDebug} title="关闭调试" aria-label="关闭调试">✕</button>
     </div>
+    {#if relayPool.length}
+      <div class="dbg-relay">
+        中继选优: <b>{selectedRelayId ?? "测量中…"}</b>
+        · 我 {relayRttText(myRelayRtt)} · 对方 {relayRttText(peerRelayRtt)}
+      </div>
+    {/if}
     {#if dbg}
       <dl>
         <dt>path</dt><dd class:relay={dbg.path === "relay"}>{dbg.path}</dd>
@@ -1468,4 +1533,6 @@
   .dbg dd { margin: 0; word-break: break-all; }
   .dbg dd.relay { color: #ffb454; } /* relay path is highlighted — the speed-relevant case */
   .dbg-idle { margin: 0; opacity: 0.7; }
+  .dbg-relay { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #3a3a40; word-break: break-all; }
+  .dbg-relay b { color: #7fd88f; }
 </style>
