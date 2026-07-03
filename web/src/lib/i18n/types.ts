@@ -128,22 +128,12 @@ export interface Messages {
   };
   nav: { lanTab: string; crossTab: string };
   crossnet: {
-    sendAcross: string;
-    loginFirst: string;
-    shareHint: string;
-    copy: string;
-    copied: string;
-    connecting: string;
-    linkDead: string;
-    sessionExpired: string; // /api/transfers returned 401 — session lapsed, re-login
-    netError: string; // request never reached the server (offline / fetch threw)
     realtimeTitle: string;
     realtimeSub: string;
     realtimeFoot: string;
   };
   methods: {
-    pairing: { name: string; sub: string; badge: string };
-    share: { name: string; sub: string; badge: string; signIn: string };
+    realtime: { name: string; sub: string; badge: string };
     stored: { name: string; sub: string; badge: string };
   };
   pair: {

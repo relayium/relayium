@@ -1,9 +1,9 @@
 // Minimal client-side router for the Relayium SPA, driven by Svelte 5 runes.
 // Two routes: the LAN transfer page (default, "/") and the cross-network page
-// ("/cross-network"). A transfer token in the URL fragment (#t=<token>) always
-// implies the cross-network page so a shared link lands the recipient correctly.
+// ("/cross-network"). A pairing code in the URL fragment (#c=<code>) always
+// implies the cross-network page so a join link lands the recipient correctly.
 
-import { parseTransferToken, parseCodeParam, CROSS_PATH, DOWNLOAD_PREFIX } from "./transfer-link";
+import { parseCodeParam, CROSS_PATH, DOWNLOAD_PREFIX } from "./transfer-link";
 import { clearRoom } from "./room.svelte";
 
 export type Route = "lan" | "cross" | "download" | "me";
@@ -16,7 +16,7 @@ export { CROSS_PATH };
 /** Pure mapping from a location to a route. Safe to unit-test without a DOM. */
 export function routeFromLocation(pathname: string, hash: string): Route {
   if (downloadId(pathname)) return "download";
-  if (parseTransferToken(hash) || parseCodeParam(hash)) return "cross";
+  if (parseCodeParam(hash)) return "cross";
   if (pathname === CROSS_PATH) return "cross";
   if (pathname === ME_PATH) return "me";
   return "lan";
@@ -48,14 +48,14 @@ export function setNavGuard(g: (() => boolean) | null): void {
   navGuard = g;
 }
 
-/** Switch tabs without reloading: drop any active token/code room, rewrite the URL,
+/** Switch tabs without reloading: drop any active code room, rewrite the URL,
  *  and update the route. Clearing the room makes App's effect reconnect the
  *  signaling socket to the room-less (LAN) endpoint, so no page reload is needed. */
 export function navigate(r: Route): void {
   if (r === route) return; // already on this tab — don't tear down the room / abort a transfer
   if (navGuard && !navGuard()) return; // e.g. user declined the "interrupt transfer?" confirm
   const pathname = r === "cross" ? CROSS_PATH : r === "me" ? ME_PATH : "/";
-  clearRoom(); // leaving a 2-peer token/code room rebinds the socket via App's effect
+  clearRoom(); // leaving a 2-peer code room rebinds the socket via App's effect
   history.pushState({}, "", pathname);
   route = r;
 }

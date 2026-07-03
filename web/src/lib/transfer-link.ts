@@ -1,10 +1,9 @@
-// One-time cross-network transfer link: a rendezvous room token carried in the
-// URL fragment (#t=<token>) so it never reaches server logs or the Referer
-// header. The token is minted by the (authenticated) sender via POST
-// /api/transfers; anyone holding the link can join the room (capability model).
+// Cross-network realtime rendezvous: a short pairing code minted anonymously
+// via POST /api/pair. The join link carries it in the URL fragment
+// (#c=<code>) so it never reaches server logs or the Referer header; anyone
+// holding a live code can join its 2-peer room (capability model).
 
-/** Error carrying the HTTP status of a failed mint, so callers can tell a
- *  lapsed session (401) apart from other failures. A thrown TypeError (fetch
+/** Error carrying the HTTP status of a failed mint. A thrown TypeError (fetch
  *  never reached the server) is left as-is and surfaces as a network error. */
 export class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -13,53 +12,24 @@ export class HttpError extends Error {
   }
 }
 
-/** Extract the transfer token from a location hash like "#t=abc". "" if none. */
-export function parseTransferToken(hash: string): string {
-  const m = /^#t=([A-Za-z0-9]+)$/.exec(hash);
-  return m ? m[1] : "";
-}
-
 /** Extract a 6-digit pairing code from a hash like "#c=424242". "" if none. */
 export function parseCodeParam(hash: string): string {
   const m = /^#c=(\d{6})$/.exec(hash);
   return m ? m[1] : "";
 }
 
-/** Path of the cross-network page; shared links and the originator both target it. */
+/** Path of the cross-network page; join links and the originator both target it. */
 export const CROSS_PATH = "/cross-network";
 
 /** Path prefix of the public stored-download page: /d/<id>. Single source of truth. */
 export const DOWNLOAD_PREFIX = "/d/";
 
-/** Build the shareable link for a token against the given origin. */
-export function buildTransferLink(origin: string, token: string): string {
-  return `${origin}${CROSS_PATH}#t=${token}`;
-}
-
-/** Construct the signaling websocket URL. A pairing code wins over a token; with
- *  neither, it is the LAN (IP-grouped) socket. */
-export function wsURL(
-  loc: { protocol: string; host: string },
-  token: string,
-  code = "",
-): string {
+/** Construct the signaling websocket URL: the code's 2-peer room, or with no
+ *  code the LAN (IP-grouped) socket. */
+export function wsURL(loc: { protocol: string; host: string }, code = ""): string {
   const proto = loc.protocol === "https:" ? "wss" : "ws";
   const base = `${proto}://${loc.host}/ws`;
-  if (code) return `${base}?code=${encodeURIComponent(code)}`;
-  return token ? `${base}?room=${encodeURIComponent(token)}` : base;
-}
-
-/** Mint a rendezvous token. Requires an authenticated session (cookie). */
-export async function createTransfer(): Promise<{
-  token: string;
-  expiresAt: number;
-}> {
-  const res = await fetch("/api/transfers", {
-    method: "POST",
-    credentials: "include",
-  });
-  if (!res.ok) throw new HttpError(res.status, `createTransfer failed: ${res.status}`);
-  return res.json();
+  return code ? `${base}?code=${encodeURIComponent(code)}` : base;
 }
 
 /** Mint an anonymous short pairing code. No session required. */

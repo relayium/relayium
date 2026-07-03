@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import Account from "./Account.svelte";
-  import CrossNetwork from "./CrossNetwork.svelte";
   import CodePairing from "./CodePairing.svelte";
   import StoredUpload from "./StoredUpload.svelte";
   import HowItWorks from "./HowItWorks.svelte";
@@ -14,20 +13,19 @@
   import { clearOutbox } from "./outbox.svelte";
   import { lang, messages, legalUrl, type Messages } from "./i18n.svelte";
 
-  let { roomToken = "", roomCode = "", linkDead = false, showTransfer = false, transferSurface, dismissLan }:
-    { roomToken?: string; roomCode?: string; linkDead?: boolean; showTransfer?: boolean; transferSurface?: Snippet; dismissLan?: () => void } = $props();
+  let { roomCode = "", linkDead = false, showTransfer = false, transferSurface, dismissLan }:
+    { roomCode?: string; linkDead?: boolean; showTransfer?: boolean; transferSurface?: Snippet; dismissLan?: () => void } = $props();
 
   const t = $derived<Messages>(messages[lang()]);
-  const inRoom = $derived(!!roomToken || !!roomCode);
+  const inRoom = $derived(!!roomCode);
   let loginOpen = $state(false);
 
   // Leaving a room must also drop the sessionStorage role markers — otherwise a
-  // stale "I minted this code / originated this link" flag makes the next method
-  // choice render the wrong side (e.g. showing a waiting screen instead of the
-  // code entry). Keys mirror CodePairing (EXP_KEY) and CrossNetwork (ORIGIN_KEY).
+  // stale "I minted this code" flag makes the next method choice render the
+  // wrong side (e.g. showing a waiting screen instead of the code entry). Key
+  // mirrors CodePairing (EXP_KEY).
   function startOver() {
     sessionStorage.removeItem("relayium_pair_exp");
-    sessionStorage.removeItem("relayium_xfer_token");
     // Queued-but-unsent files belong to the abandoned pairing attempt — drop
     // them so they can't surprise-send to the next peer that appears.
     clearOutbox();
@@ -61,42 +59,20 @@
         <p class="foot">{t.crossnet.realtimeFoot}</p>
         <button class="startover" onclick={startOver}>{t.startOver}</button>
       </section>
-    {:else if roomToken}
-      <!-- 🔗 Share link — originator shows link+QR, joiner connects -->
-      <section class="card focus">
-        <div class="mhead"><h2>{t.methods.share.name}</h2></div>
-        <p class="cardsub">{t.methods.share.sub}</p>
-        <CrossNetwork {roomToken} />
-        <p class="foot">{t.crossnet.realtimeFoot}</p>
-        <button class="startover" onclick={startOver}>{t.startOver}</button>
-      </section>
     {:else if roomCode}
-      <!-- 🔢 Pairing code — recipient joined via a code link -->
+      <!-- In a code room (minter waiting, or recipient who joined via code/link) -->
       <section class="card focus">
-        <div class="mhead"><h2>{t.methods.pairing.name}</h2></div>
-        <p class="cardsub">{t.methods.pairing.sub}</p>
+        <div class="mhead"><h2>{t.methods.realtime.name}</h2></div>
+        <p class="cardsub">{t.methods.realtime.sub}</p>
         <CodePairing {roomCode} expired={linkDead} />
         <button class="startover" onclick={startOver}>{t.startOver}</button>
       </section>
     {:else}
-      <!-- Three peer-to-peer / stored methods, side by side -->
+      <!-- Realtime direct + stored download link, side by side -->
       <section class="card">
-        <div class="mhead"><h2>{t.methods.pairing.name}</h2><span class="badge ok">{t.methods.pairing.badge}</span></div>
-        <p class="cardsub">{t.methods.pairing.sub}</p>
+        <div class="mhead"><h2>{t.methods.realtime.name}</h2><span class="badge ok">{t.methods.realtime.badge}</span></div>
+        <p class="cardsub">{t.methods.realtime.sub}</p>
         <CodePairing />
-      </section>
-
-      <section class="card">
-        <div class="mhead"><h2>{t.methods.share.name}</h2><span class="badge need">{t.methods.share.badge}</span></div>
-        <p class="cardsub">{t.methods.share.sub}</p>
-        {#if session().user}
-          <CrossNetwork />
-        {:else}
-          <div class="signin">
-            <button class="btn btn-primary" onclick={() => (loginOpen = true)}>{t.account.signIn}</button>
-            <p class="hint">{t.methods.share.signIn}</p>
-          </div>
-        {/if}
       </section>
 
       <section class="card">
@@ -110,10 +86,6 @@
           </div>
         {/if}
       </section>
-    {/if}
-
-    {#if linkDead && !roomCode}
-      <p class="error">{t.crossnet.linkDead}</p>
     {/if}
   </div>
 
@@ -146,7 +118,7 @@
   .cn-head .tagline { color: var(--text); font-size: var(--fs-body); max-width: 44ch; margin: 0 auto; }
   .cn-head .pitch { color: var(--text); font-size: var(--fs-xs); max-width: 52ch; margin: var(--space-3) auto 0; line-height: 1.55; }
 
-  .cards { display: grid; gap: var(--space-4); grid-template-columns: repeat(3, 1fr); align-items: stretch; }
+  .cards { display: grid; gap: var(--space-4); grid-template-columns: repeat(2, 1fr); max-width: 900px; margin: 0 auto; align-items: stretch; }
   .cards.single { grid-template-columns: 1fr; max-width: 520px; margin: 0 auto; }
   .card {
     border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-5);
@@ -162,7 +134,6 @@
     color: var(--text); background: var(--code-bg); border: 1px solid var(--border);
   }
   .badge.ok { color: #1f9d55; background: rgba(46, 204, 113, .12); border-color: rgba(46, 204, 113, .35); }
-  .badge.need { color: var(--accent); background: var(--accent-bg); border-color: var(--accent-border); }
   @media (prefers-color-scheme: dark) {
     .badge.ok { color: #4ade80; background: rgba(46, 204, 113, .16); border-color: rgba(46, 204, 113, .4); }
   }
@@ -175,15 +146,7 @@
   }
   .startover:hover { border-color: var(--accent-border); color: var(--text-h); }
   .signin { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
-  .signin .hint { margin: 0; font-size: var(--fs-xs); color: var(--text); text-align: center; }
   .foot { margin: var(--space-1) 0 0; font-size: 12px; color: var(--text); text-align: center; }
-  .error {
-    grid-column: 1 / -1;
-    margin: 2px 0 0; text-align: center; padding: var(--space-3); border-radius: var(--radius-sm); font-size: var(--fs-xs);
-    color: var(--danger);
-    background: color-mix(in srgb, var(--danger) 8%, transparent);
-    border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
-  }
 
   footer {
     margin-top: var(--space-8); padding-top: var(--space-5); border-top: 1px solid var(--border);

@@ -10,7 +10,7 @@
   } from "./lib/crypto";
   import { SignalingClient } from "./lib/signaling";
   import { wsURL } from "./lib/transfer-link";
-  import { roomToken as roomTokenStore, roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
+  import { roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
   import { connect, connectResume, PeerBusyError, type InboundSignal, type Conn, type ConnPath } from "./lib/webrtc";
   import { createWakeLock } from "./lib/wakelock";
   import { registerServiceWorker, drainSharedFiles } from "./lib/share-target";
@@ -90,7 +90,6 @@
   let dragDepth = 0; // non-reactive: dragenter/dragleave fire per element; count to know when the drag truly leaves the window
   // The active room lives in the URL-driven store; read reactively here so a live
   // room switch (no reload) reconnects the socket via the effect below.
-  const roomToken = $derived(roomTokenStore());
   const roomCode = $derived(roomCodeStore());
   let joinedRoom = $state(false);
   let linkDead = $state(false);
@@ -228,8 +227,8 @@
     }
     await ready();
     selfName = deviceName();
-    iceServers = await fetchIceServers(roomToken, roomCode);
-    signaling = new SignalingClient(wsURL(location, roomToken, roomCode), selfName);
+    iceServers = await fetchIceServers(roomCode);
+    signaling = new SignalingClient(wsURL(location, roomCode), selfName);
     signaling.onSelfId((id, ip) => {
       selfId = id; selfIP = ip; joinedRoom = true;
       // A welcome means the socket is (re)connected — clear any reconnect state.
@@ -238,9 +237,9 @@
     });
     signaling.onPeers((p) => (peers = p));
     signaling.onClose(() => {
-      // In a token-room, a close before we ever joined means the link was
+      // In a code room, a close before we ever joined means the code/link was
       // invalid/expired or the room was full — surface that, don't retry.
-      if ((roomToken || roomCode) && !joinedRoom) { linkDead = true; return; }
+      if (roomCode && !joinedRoom) { linkDead = true; return; }
       // Otherwise the signalling socket dropped unexpectedly. Reflect the break in
       // the UI (no green "connected" dot, no zombie devices) and auto-reconnect.
       peers = [];
@@ -251,7 +250,7 @@
       scheduleReconnect();
     });
     listenForIncoming();
-    socketRoomKey = `${roomToken}|${roomCode}`;
+    socketRoomKey = roomCode;
     connState = "ready";
   });
 
@@ -264,7 +263,7 @@
       if (!signaling) return;
       // reconnect() intentionally swaps the socket (won't re-fire onClose); if this
       // fresh socket also closes, onClose runs again and re-schedules.
-      signaling.reconnect(wsURL(location, roomToken, roomCode));
+      signaling.reconnect(wsURL(location, roomCode));
     }, 2000);
   }
 
@@ -294,17 +293,17 @@
     recv = null;
     sasCode = "";
     connState = "connecting";
-    const servers = await fetchIceServers(roomToken, roomCode);
+    const servers = await fetchIceServers(roomCode);
     // A rapid second switch may have started (and possibly finished) while this
     // fetch was in flight — discard the stale credentials rather than clobbering
     // the newer room's TURN config and socket.
     if (epoch !== roomEpoch) return;
     iceServers = servers;
-    signaling.reconnect(wsURL(location, roomToken, roomCode));
+    signaling.reconnect(wsURL(location, roomCode));
   }
 
   $effect(() => {
-    const key = `${roomToken}|${roomCode}`;
+    const key = roomCode;
     if (!signaling) return; // socket not built yet (initial mount)
     if (key === socketRoomKey) return; // already bound to this room
     socketRoomKey = key;
@@ -1083,7 +1082,7 @@
   <Nav />
 
   {#if currentRoute() === "cross"}
-    <CrossPage {roomToken} {roomCode} {linkDead} {showTransfer} {transferSurface} dismissLan={() => (lanDismissed = true)} />
+    <CrossPage {roomCode} {linkDead} {showTransfer} {transferSurface} dismissLan={() => (lanDismissed = true)} />
   {:else if currentRoute() === "me"}
     <MePage />
   {:else}
