@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium — エンドツーエンド暗号化のP2Pファイル転送</title>
+    <meta name="description" content="Relayiumはオープンソースでエンドツーエンド暗号化のP2Pファイル転送ツールです。ブラウザで2台の端末を直結し、ファイルはサーバーを経由しません。インストールもアカウントも不要で、リアルタイムに転送できます。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ja/" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Relayium — エンドツーエンド暗号化のP2Pファイル転送" />
+    <meta property="og:description" content="Relayiumはオープンソースでエンドツーエンド暗号化のP2Pファイル転送ツールです。ブラウザで2台の端末を直結し、ファイルはサーバーを経由しません。インストールもアカウントも不要で、リアルタイムに転送できます。" />
+    <meta property="og:url" content="https://relayium.com/ja/" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ja" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium — エンドツーエンド暗号化のP2Pファイル転送" />
+    <meta name="twitter:description" content="Relayiumはオープンソースでエンドツーエンド暗号化のP2Pファイル転送ツールです。ブラウザで2台の端末を直結し、ファイルはサーバーを経由しません。インストールもアカウントも不要で、リアルタイムに転送できます。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":["WebApplication","SoftwareApplication"],"name":"Relayium","url":"https://relayium.com/ja/","description":"Relayiumはオープンソースでエンドツーエンド暗号化のP2Pファイル転送ツールです。ブラウザで2台の端末を直結し、ファイルはサーバーを経由しません。インストールもアカウントも不要で、リアルタイムに転送できます。","applicationCategory":"UtilitiesApplication","operatingSystem":"Web","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"inLanguage":"ja"},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"無料ですか？","acceptedAnswer":{"@type":"Answer","text":"無料です。RelayiumはMITライセンスのオープンソースで、リアルタイム転送はログイン不要、料金も一切かかりません。"}},{"@type":"Question","name":"ファイルはサーバーにアップロードされますか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイム直接転送のファイルはサーバーを一切経由しません。任意のダウンロードリンクを使う場合のみ、ブラウザで暗号化してからアップロードし、サーバーは復号できない暗号文だけを保持します。鍵はリンクの中にしかありません。"}},{"@type":"Question","name":"エンドツーエンド暗号化ですか？","acceptedAnswer":{"@type":"Answer","text":"はい。X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、鍵は2台の端末間だけでネゴシエートされるため、サーバーは何も復号できません。"}},{"@type":"Question","name":"異なるOS間でも転送できますか？","acceptedAnswer":{"@type":"Answer","text":"できます。モダンブラウザさえあれば、Windows・macOS・Linux・Android・iOSの間で相互に転送でき、アプリのインストールは不要です。"}},{"@type":"Question","name":"ファイルサイズの制限はありますか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイム直接転送はストリーミングのため、実用上のサイズ上限はありません（Chrome・Edgeはディスクへ直接ストリーミング、Firefox・Safariはメモリにバッファするため1ファイル約200MBまでを推奨）。1回につき最大10ファイルです。"}},{"@type":"Question","name":"Snapdropとの違いは？","acceptedAnswer":{"@type":"Answer","text":"Relayiumはアプリケーション層のエンドツーエンド暗号化とSAS検証コードを追加しており、シグナリングサーバーが侵害されても盗聴やなりすましができません。さらにネットワークをまたぐ転送や任意のゼロ知識ダウンロードリンクにも対応します。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:820px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:38px;letter-spacing:-.5px;margin:40px 0 12px}
+h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.pitch{font-size:20px;margin:0 0 24px;max-width:42em}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:8px 0}
+ol.steps{margin:12px 0;padding-left:22px}ol.steps li{margin:10px 0}
+.cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.why li b,.compare h3{color:var(--text-h)}
+.learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
+footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <nav class="langbar" aria-label="Language"><a href="/">English</a><a href="/zh/">中文</a><a href="/ja/" aria-current="true">日本語</a><a href="/ko/">한국어</a><a href="/de/">Deutsch</a><a href="/fr/">Français</a></nav>
+      <h1>エンドツーエンド暗号化のP2Pファイル転送</h1>
+      <p class="pitch">ブラウザで2台の端末を直接つなぎ、ファイルはエンドツーエンド暗号化されチャンクごとに転送されます。リアルタイムモードではサーバーを一切経由しません。インストールも登録も不要、ウェブページを開くだけで始められます。</p>
+      <a class="cta" href="/?lang=ja">転送を始める</a>
+
+      <h2>4ステップで転送</h2>
+      <ol class="steps">
+        <li>2台の端末でモダンブラウザから relayium.com を開きます。</li>
+        <li>片方が送るファイルを選ぶかドラッグします（1回につき最大10個）。</li>
+        <li>両方の画面に表示される同じ6桁の検証コード（SAS）を照合し、一致を確認して中間者を排除します。</li>
+        <li>P2P直結を確立し、ファイルはチャンクごとにAES-256-GCMで暗号化して転送、各ファイルはSHA-256で完全性を検証します。</li>
+      </ol>
+
+      <h2>Relayiumが選ばれる理由</h2>
+      <ul class="why">
+        <li><b>エンドツーエンド暗号化</b> — X25519鍵交換とチャンクごとのAES-256-GCM。鍵は2台の端末間だけでネゴシエートされ、サーバーは復号できません。</li>
+        <li><b>真のP2P</b> — リアルタイムモードではファイルは暗号化されたWebRTCチャネルを通じて端末間を直接流れ、当社のサーバーを一切経由しません。</li>
+        <li><b>SASで中間者攻撃を防止</b> — 両方の画面に同じ6桁の検証コードが表示されます。一致を確認すれば盗聴を狙う中間者を排除でき、シグナリングサーバーが侵害されてもなりすませません。</li>
+        <li><b>クロスプラットフォーム</b> — Windows・macOS・Linux・Android・iOS——モダンブラウザさえあればインストール不要で使えます。</li>
+        <li><b>無料でオープンソース</b> — MITライセンス。プロトコルとすべてのコードはGitHubで公開。リアルタイム転送はログイン不要です。</li>
+      </ul>
+
+      <h2>他の方法との比較</h2>
+      <div class="compare">
+      <h3>AirDropとの比較</h3>
+      <p>AirDropはネイティブで滑らかですが、Apple製品同士に限られます。Relayiumはクロスプラットフォーム——WindowsやAndroidとiPhoneやMacの間でも、ブラウザさえあれば同じように直結できます。</p>
+      <h3>Snapdrop / PairDropとの比較</h3>
+      <p>SnapdropとPairDropは同種の先駆けです。Relayiumはその上にアプリケーション層のエンドツーエンド暗号化とSAS検証コードを追加。シグナリングサーバーが悪意を持っていても中間者攻撃はできません。</p>
+      <h3>WeTransfer / クラウドストレージとの比較</h3>
+      <p>WeTransferやクラウドストレージは非同期で便利ですが、無料枠は通常2GBまでで、ファイルは先方のサーバーへアップロードされます。Relayiumのリアルタイムモードにはサイズ上限がなく、サーバーへの保存もありません。</p>
+      </div>
+
+      <h2>よくある質問</h2>
+      <h3>無料ですか？</h3>
+      <p>無料です。RelayiumはMITライセンスのオープンソースで、リアルタイム転送はログイン不要、料金も一切かかりません。</p>
+      <h3>ファイルはサーバーにアップロードされますか？</h3>
+      <p>リアルタイム直接転送のファイルはサーバーを一切経由しません。任意のダウンロードリンクを使う場合のみ、ブラウザで暗号化してからアップロードし、サーバーは復号できない暗号文だけを保持します。鍵はリンクの中にしかありません。</p>
+      <h3>エンドツーエンド暗号化ですか？</h3>
+      <p>はい。X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、鍵は2台の端末間だけでネゴシエートされるため、サーバーは何も復号できません。</p>
+      <h3>異なるOS間でも転送できますか？</h3>
+      <p>できます。モダンブラウザさえあれば、Windows・macOS・Linux・Android・iOSの間で相互に転送でき、アプリのインストールは不要です。</p>
+      <h3>ファイルサイズの制限はありますか？</h3>
+      <p>リアルタイム直接転送はストリーミングのため、実用上のサイズ上限はありません（Chrome・Edgeはディスクへ直接ストリーミング、Firefox・Safariはメモリにバッファするため1ファイル約200MBまでを推奨）。1回につき最大10ファイルです。</p>
+      <h3>Snapdropとの違いは？</h3>
+      <p>Relayiumはアプリケーション層のエンドツーエンド暗号化とSAS検証コードを追加しており、シグナリングサーバーが侵害されても盗聴やなりすましができません。さらにネットワークをまたぐ転送や任意のゼロ知識ダウンロードリンクにも対応します。</p>
+
+      
+      <footer>
+        <a href="/?lang=ja">← Relayium</a>
+        <a href="/ja/privacy">プライバシーポリシー</a>
+        <a href="/ja/terms">利用規約</a>
+        <a href="/ja/security">セキュリティ</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

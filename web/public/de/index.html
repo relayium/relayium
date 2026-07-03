@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium — Ende-zu-Ende-verschlüsselte P2P-Dateiübertragung</title>
+    <meta name="description" content="Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug für Peer-to-Peer-Dateiübertragung. Zwei Geräte verbinden sich direkt im Browser, Dateien erreichen nie den Server — ohne Installation, ohne Konto, in Echtzeit." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/de/" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Relayium — Ende-zu-Ende-verschlüsselte P2P-Dateiübertragung" />
+    <meta property="og:description" content="Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug für Peer-to-Peer-Dateiübertragung. Zwei Geräte verbinden sich direkt im Browser, Dateien erreichen nie den Server — ohne Installation, ohne Konto, in Echtzeit." />
+    <meta property="og:url" content="https://relayium.com/de/" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="de" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium — Ende-zu-Ende-verschlüsselte P2P-Dateiübertragung" />
+    <meta name="twitter:description" content="Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug für Peer-to-Peer-Dateiübertragung. Zwei Geräte verbinden sich direkt im Browser, Dateien erreichen nie den Server — ohne Installation, ohne Konto, in Echtzeit." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":["WebApplication","SoftwareApplication"],"name":"Relayium","url":"https://relayium.com/de/","description":"Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug für Peer-to-Peer-Dateiübertragung. Zwei Geräte verbinden sich direkt im Browser, Dateien erreichen nie den Server — ohne Installation, ohne Konto, in Echtzeit.","applicationCategory":"UtilitiesApplication","operatingSystem":"Web","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"inLanguage":"de"},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Ist es kostenlos?","acceptedAnswer":{"@type":"Answer","text":"Ja. Relayium ist Open Source unter der MIT-Lizenz; Echtzeitübertragungen sind ohne Anmeldung und ohne jede Gebühr nutzbar."}},{"@type":"Question","name":"Werden meine Dateien auf einen Server hochgeladen?","acceptedAnswer":{"@type":"Answer","text":"Dateien der Echtzeit-Direktübertragung erreichen den Server nie. Nur wenn du den optionalen Download-Link nutzt, verschlüsselt der Browser sie vor dem Hochladen, und der Server behält lediglich Chiffretext, den er nicht entschlüsseln kann — der Schlüssel steckt nur im Link."}},{"@type":"Question","name":"Ist es Ende-zu-Ende-verschlüsselt?","acceptedAnswer":{"@type":"Answer","text":"Ja. Es nutzt X25519-Schlüsselaustausch und AES-256-GCM pro Chunk; die Schlüssel werden nur zwischen den beiden Geräten ausgehandelt, sodass der Server nichts entschlüsseln kann."}},{"@type":"Question","name":"Funktioniert es systemübergreifend?","acceptedAnswer":{"@type":"Answer","text":"Ja. Mit einem modernen Browser kannst du zwischen Windows, macOS, Linux, Android und iOS übertragen, ganz ohne App-Installation."}},{"@type":"Question","name":"Gibt es eine Größenbeschränkung?","acceptedAnswer":{"@type":"Answer","text":"Die Echtzeit-Direktübertragung streamt die Daten, daher gibt es in der Praxis keine harte Größengrenze (Chrome und Edge streamen direkt auf die Festplatte; Firefox und Safari puffern im Speicher, daher werden ca. 200 MB pro Datei empfohlen). Maximal 10 Dateien pro Vorgang."}},{"@type":"Question","name":"Was ist der Unterschied zu Snapdrop?","acceptedAnswer":{"@type":"Answer","text":"Relayium ergänzt Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und einen SAS-Prüfcode, sodass selbst ein kompromittierter Signalisierungsserver weder mithören noch sich ausgeben kann. Zudem unterstützt es netzübergreifende Übertragungen und optionale Zero-Knowledge-Download-Links."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:820px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:38px;letter-spacing:-.5px;margin:40px 0 12px}
+h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.pitch{font-size:20px;margin:0 0 24px;max-width:42em}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:8px 0}
+ol.steps{margin:12px 0;padding-left:22px}ol.steps li{margin:10px 0}
+.cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.why li b,.compare h3{color:var(--text-h)}
+.learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
+footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=de">Relayium</a></header>
+      <nav class="langbar" aria-label="Language"><a href="/">English</a><a href="/zh/">中文</a><a href="/ja/">日本語</a><a href="/ko/">한국어</a><a href="/de/" aria-current="true">Deutsch</a><a href="/fr/">Français</a></nav>
+      <h1>Ende-zu-Ende-verschlüsselte P2P-Dateiübertragung</h1>
+      <p class="pitch">Verbinde zwei Geräte direkt im Browser; Dateien werden Ende-zu-Ende verschlüsselt und Chunk für Chunk übertragen. Im Echtzeitmodus erreichen sie nie den Server. Keine Installation, keine Registrierung — einfach die Webseite öffnen und loslegen.</p>
+      <a class="cta" href="/?lang=de">Übertragung starten</a>
+
+      <h2>In vier Schritten übertragen</h2>
+      <ol class="steps">
+        <li>Öffne relayium.com auf beiden Geräten in einem modernen Browser.</li>
+        <li>Eine Seite wählt die zu sendenden Dateien aus oder zieht sie hinein (bis zu 10 pro Vorgang).</li>
+        <li>Vergleicht auf beiden Bildschirmen denselben 6-stelligen Prüfcode (SAS) und bestätigt die Übereinstimmung, um einen Mittelsmann auszuschließen.</li>
+        <li>Eine direkte P2P-Verbindung wird aufgebaut; Dateien werden Chunk für Chunk mit AES-256-GCM verschlüsselt übertragen, jede Datei per SHA-256 auf Integrität geprüft.</li>
+      </ol>
+
+      <h2>Warum Relayium</h2>
+      <ul class="why">
+        <li><b>Ende-zu-Ende-verschlüsselt</b> — X25519-Schlüsselaustausch und AES-256-GCM pro Chunk; die Schlüssel werden ausschließlich zwischen den beiden Geräten ausgehandelt, der Server kann nicht entschlüsseln.</li>
+        <li><b>Echtes Peer-to-Peer</b> — Im Echtzeitmodus fließen Dateien über einen verschlüsselten WebRTC-Kanal direkt von Gerät zu Gerät und erreichen unsere Server nie.</li>
+        <li><b>SAS gegen Man-in-the-Middle</b> — Beide Bildschirme zeigen denselben 6-stelligen Prüfcode; stimmt er überein, ist ein mithörender Mittelsmann ausgeschlossen — selbst ein kompromittierter Signalisierungsserver kann sich nicht ausgeben.</li>
+        <li><b>Plattformübergreifend</b> — Windows, macOS, Linux, Android, iOS — ein moderner Browser genügt, es ist keine Installation nötig.</li>
+        <li><b>Kostenlos &amp; Open Source</b> — MIT-Lizenz; Protokoll und der gesamte Code liegen offen auf GitHub. Echtzeitübertragungen brauchen kein Konto.</li>
+      </ul>
+
+      <h2>Im Vergleich</h2>
+      <div class="compare">
+      <h3>Gegenüber AirDrop</h3>
+      <p>AirDrop ist nativ und flüssig, aber auf Apple-Geräte beschränkt. Relayium ist plattformübergreifend — auch zwischen Windows oder Android und iPhone oder Mac verbindet es genauso direkt, es genügt ein Browser.</p>
+      <h3>Gegenüber Snapdrop / PairDrop</h3>
+      <p>Snapdrop und PairDrop sind Vorreiter derselben Art. Relayium ergänzt sie um Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und einen SAS-Prüfcode: Selbst ein bösartiger Signalisierungsserver kann keinen Mittelsmann-Angriff durchführen.</p>
+      <h3>Gegenüber WeTransfer / Cloud-Speicher</h3>
+      <p>WeTransfer und Cloud-Speicher sind asynchron und bequem, doch das kostenlose Kontingent liegt meist bei 2 GB und Dateien werden auf deren Server hochgeladen. Der Echtzeitmodus von Relayium hat keine Größengrenze und speichert nichts auf dem Server.</p>
+      </div>
+
+      <h2>Häufige Fragen</h2>
+      <h3>Ist es kostenlos?</h3>
+      <p>Ja. Relayium ist Open Source unter der MIT-Lizenz; Echtzeitübertragungen sind ohne Anmeldung und ohne jede Gebühr nutzbar.</p>
+      <h3>Werden meine Dateien auf einen Server hochgeladen?</h3>
+      <p>Dateien der Echtzeit-Direktübertragung erreichen den Server nie. Nur wenn du den optionalen Download-Link nutzt, verschlüsselt der Browser sie vor dem Hochladen, und der Server behält lediglich Chiffretext, den er nicht entschlüsseln kann — der Schlüssel steckt nur im Link.</p>
+      <h3>Ist es Ende-zu-Ende-verschlüsselt?</h3>
+      <p>Ja. Es nutzt X25519-Schlüsselaustausch und AES-256-GCM pro Chunk; die Schlüssel werden nur zwischen den beiden Geräten ausgehandelt, sodass der Server nichts entschlüsseln kann.</p>
+      <h3>Funktioniert es systemübergreifend?</h3>
+      <p>Ja. Mit einem modernen Browser kannst du zwischen Windows, macOS, Linux, Android und iOS übertragen, ganz ohne App-Installation.</p>
+      <h3>Gibt es eine Größenbeschränkung?</h3>
+      <p>Die Echtzeit-Direktübertragung streamt die Daten, daher gibt es in der Praxis keine harte Größengrenze (Chrome und Edge streamen direkt auf die Festplatte; Firefox und Safari puffern im Speicher, daher werden ca. 200 MB pro Datei empfohlen). Maximal 10 Dateien pro Vorgang.</p>
+      <h3>Was ist der Unterschied zu Snapdrop?</h3>
+      <p>Relayium ergänzt Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und einen SAS-Prüfcode, sodass selbst ein kompromittierter Signalisierungsserver weder mithören noch sich ausgeben kann. Zudem unterstützt es netzübergreifende Übertragungen und optionale Zero-Knowledge-Download-Links.</p>
+
+      
+      <footer>
+        <a href="/?lang=de">← Relayium</a>
+        <a href="/de/privacy">Datenschutz</a>
+        <a href="/de/terms">Nutzungsbedingungen</a>
+        <a href="/de/security">Sicherheit</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>
