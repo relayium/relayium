@@ -11,7 +11,7 @@
   import { SignalingClient } from "./lib/signaling";
   import { wsURL } from "./lib/transfer-link";
   import { roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
-  import { connect, connectResume, PeerBusyError, type InboundSignal, type Conn, type ConnPath, type RtcConfig } from "./lib/webrtc";
+  import { connect, connectResume, summarizeStats, PeerBusyError, type InboundSignal, type Conn, type ConnPath, type RtcConfig, type ConnDiagnostics } from "./lib/webrtc";
   import { createWakeLock } from "./lib/wakelock";
   import { registerServiceWorker, drainSharedFiles } from "./lib/share-target";
   import { requestNotifyPermission, notifyTransfer } from "./lib/notify";
@@ -216,11 +216,34 @@
   // Poll the live ICE path a few times once a channel is up: the selected
   // candidate pair can settle shortly after the data channel opens.
   async function trackPath(conn: Conn, set: (p: ConnPath) => void) {
+    activeConn = conn; // latest live connection — the ?debug=1 panel polls its stats
     for (let i = 0; i < 8; i++) {
       const p = await conn.path();
       if (p !== "unknown") { set(p); return; }
       await sleep(400);
     }
+  }
+
+  // ── ?debug=1 diagnostics ─────────────────────────────────────────────────────────
+  // Read-only WebRTC stats surfaced in-page (phones have no dev console). Off unless
+  // the URL carries ?debug=1; never auto-uploaded — the user copies what to share.
+  const debugMode = new URLSearchParams(location.search).get("debug") === "1";
+  let activeConn: Conn | null = null; // set in trackPath; the panel reads .stats()
+  let dbg = $state<ConnDiagnostics | null>(null);
+  let dbgIncludeIps = $state(false);
+  $effect(() => {
+    if (!debugMode) return;
+    const poll = async () => {
+      if (!activeConn) { dbg = null; return; }
+      try { dbg = summarizeStats(await activeConn.stats(), dbgIncludeIps); }
+      catch { dbg = null; } // pc closed between transfers — stats() can reject
+    };
+    poll();
+    const iv = setInterval(poll, 1000);
+    return () => clearInterval(iv);
+  });
+  function copyDiagnostics() {
+    navigator.clipboard?.writeText(JSON.stringify(dbg, null, 2)).catch(() => { /* denied */ });
   }
 
   onMount(async () => {
@@ -1202,6 +1225,29 @@
   {/if}
 </main>
 
+{#if debugMode}
+  <aside class="dbg" aria-label="connection diagnostics">
+    <div class="dbg-head">
+      <strong>调试 · 连接诊断</strong>
+      <label><input type="checkbox" bind:checked={dbgIncludeIps} /> 含 IP</label>
+      <button type="button" onclick={copyDiagnostics} disabled={!dbg}>复制</button>
+    </div>
+    {#if dbg}
+      <dl>
+        <dt>path</dt><dd class:relay={dbg.path === "relay"}>{dbg.path}</dd>
+        {#if dbg.rttMs !== undefined}<dt>RTT</dt><dd>{dbg.rttMs} ms</dd>{/if}
+        {#if dbg.outgoingBitrateKbps !== undefined}<dt>可用带宽</dt><dd>{dbg.outgoingBitrateKbps} kbps</dd>{/if}
+        {#if dbg.local}<dt>local</dt><dd>{dbg.local.candidateType ?? "?"} / {dbg.local.protocol ?? "?"}{dbg.local.relayProtocol ? ` (relay ${dbg.local.relayProtocol})` : ""}{dbg.local.address ? ` ${dbg.local.address}${dbg.local.port ? ":" + dbg.local.port : ""}` : ""}</dd>{/if}
+        {#if dbg.remote}<dt>remote</dt><dd>{dbg.remote.candidateType ?? "?"} / {dbg.remote.protocol ?? "?"}{dbg.remote.address ? ` ${dbg.remote.address}${dbg.remote.port ? ":" + dbg.remote.port : ""}` : ""}</dd>{/if}
+        {#if dbg.bytesSent !== undefined}<dt>bytes ↑/↓</dt><dd>{dbg.bytesSent} / {dbg.bytesReceived}</dd>{/if}
+        {#if dbg.dataChannel}<dt>channel</dt><dd>{dbg.dataChannel.state ?? "?"} · msg {dbg.dataChannel.messagesSent ?? 0}/{dbg.dataChannel.messagesReceived ?? 0}</dd>{/if}
+      </dl>
+    {:else}
+      <p class="dbg-idle">无活动连接 · 开始一次传输后显示</p>
+    {/if}
+  </aside>
+{/if}
+
 <style>
   main {
     position: relative;
@@ -1380,4 +1426,24 @@
     font-size: 18px; font-weight: 500;
   }
   .peers ul.dragging .peer { border-color: var(--accent-border); background: var(--accent-bg); }
+
+  /* ?debug=1 connection diagnostics — fixed, unobtrusive, monospace. */
+  .dbg {
+    position: fixed; right: 8px; bottom: 8px; z-index: 9999;
+    max-width: min(92vw, 360px); padding: 8px 10px;
+    background: rgba(20, 20, 22, 0.92); color: #e8e8ea;
+    border: 1px solid #3a3a40; border-radius: 8px;
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  }
+  .dbg-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .dbg-head strong { flex: 1; font-size: 12px; }
+  .dbg-head label { display: flex; align-items: center; gap: 3px; white-space: nowrap; opacity: 0.85; }
+  .dbg-head button { padding: 2px 8px; border: 1px solid #55555c; border-radius: 5px; background: #2a2a2e; color: inherit; cursor: pointer; }
+  .dbg-head button:disabled { opacity: 0.4; cursor: default; }
+  .dbg dl { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; margin: 0; }
+  .dbg dt { opacity: 0.6; }
+  .dbg dd { margin: 0; word-break: break-all; }
+  .dbg dd.relay { color: #ffb454; } /* relay path is highlighted — the speed-relevant case */
+  .dbg-idle { margin: 0; opacity: 0.7; }
 </style>

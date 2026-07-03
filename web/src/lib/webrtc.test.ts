@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
-import { connect, classifyPath, PeerBusyError, type InboundSignal } from "./webrtc";
+import { connect, classifyPath, summarizeStats, PeerBusyError, type InboundSignal } from "./webrtc";
 import type { SignalingClient } from "./signaling";
 import { ready, generateKeyPair, sas } from "./crypto";
 
@@ -190,5 +190,47 @@ describe("classifyPath", () => {
       { l: "host", r: "host" },
     );
     expect(classifyPath(s)).toBe("unknown");
+  });
+});
+
+// A richer report: the selected pair carries RTT/bitrate/byte counters and points
+// at two candidates whose protocol/relayProtocol/address we surface in the panel.
+function richReport() {
+  const m = new Map<string, unknown>();
+  m.set("cp", {
+    type: "candidate-pair", nominated: true, state: "succeeded",
+    localCandidateId: "lc", remoteCandidateId: "rc",
+    currentRoundTripTime: 0.32, availableOutgoingBitrate: 350_000,
+    bytesSent: 4096, bytesReceived: 8192,
+  });
+  m.set("lc", { type: "local-candidate", candidateType: "relay", protocol: "udp", relayProtocol: "tls", address: "203.0.113.7", port: 49500 });
+  m.set("rc", { type: "remote-candidate", candidateType: "relay", protocol: "udp", address: "198.51.100.9", port: 51000 });
+  m.set("dc", { type: "data-channel", state: "open", messagesSent: 20, messagesReceived: 0, bytesSent: 4000, bytesReceived: 0 });
+  return m as unknown as RTCStatsReport;
+}
+
+describe("summarizeStats", () => {
+  it("extracts path, RTT (ms), bitrate (kbps), relayProtocol and channel counters", () => {
+    const d = summarizeStats(richReport());
+    expect(d.path).toBe("relay");
+    expect(d.rttMs).toBe(320);
+    expect(d.outgoingBitrateKbps).toBe(350);
+    expect(d.local?.relayProtocol).toBe("tls"); // the tell for a slow TLS relay fallback
+    expect(d.local?.candidateType).toBe("relay");
+    expect(d.dataChannel).toMatchObject({ state: "open", messagesSent: 20 });
+  });
+
+  it("redacts IP/port by default and reveals them only when asked", () => {
+    expect(summarizeStats(richReport()).local?.address).toBe("•••");
+    expect(summarizeStats(richReport()).local?.port).toBeUndefined();
+    const shown = summarizeStats(richReport(), true);
+    expect(shown.local?.address).toBe("203.0.113.7");
+    expect(shown.local?.port).toBe(49500);
+  });
+
+  it("returns just the path when no pair is selected", () => {
+    const m = new Map<string, unknown>([["cp", { type: "candidate-pair", state: "in-progress" }]]);
+    const d = summarizeStats(m as unknown as RTCStatsReport);
+    expect(d).toEqual({ path: "unknown" });
   });
 });

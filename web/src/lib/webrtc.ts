@@ -73,6 +73,30 @@ export interface Conn {
   close(): void;
   /** The live ICE path, read from getStats() on demand. */
   path(): Promise<ConnPath>;
+  /** Raw getStats() report — for the ?debug=1 diagnostics panel. */
+  stats(): Promise<RTCStatsReport>;
+}
+
+/** One end of the selected ICE pair. `address`/`port` are omitted unless the
+ *  caller opts into IPs (the debug panel redacts by default). */
+export interface CandidateInfo {
+  candidateType?: string; // host / srflx / prflx / relay
+  protocol?: string; // udp / tcp
+  relayProtocol?: string; // for a relay candidate: the client↔TURN transport (udp/tcp/tls)
+  address?: string;
+  port?: number;
+}
+
+/** A human-readable snapshot of the live connection for the debug panel. */
+export interface ConnDiagnostics {
+  path: ConnPath;
+  rttMs?: number;
+  outgoingBitrateKbps?: number;
+  bytesSent?: number;
+  bytesReceived?: number;
+  local?: CandidateInfo;
+  remote?: CandidateInfo;
+  dataChannel?: { state?: string; messagesSent?: number; messagesReceived?: number; bytesSent?: number; bytesReceived?: number };
 }
 
 /** Classify the in-use ICE path from a getStats() report: find the selected
@@ -97,6 +121,58 @@ export function classifyPath(stats: RTCStatsReport): ConnPath {
   if (local === "relay" || remote === "relay") return "relay";
   if (local === "host" && remote === "host") return "lan";
   return "p2p";
+}
+
+/** Extract a readable connection diagnostic from a getStats() report: the selected
+ *  ICE pair's transport (candidate types, relay protocol, RTT, available bitrate)
+ *  plus data-channel counters. IPs are redacted unless includeIps. Pure/testable;
+ *  feeds the ?debug=1 panel — the fastest way to see why a transfer is slow (e.g. a
+ *  TLS/TCP relay fallback, or a high-RTT relay hairpin). */
+export function summarizeStats(stats: RTCStatsReport, includeIps = false): ConnDiagnostics {
+  type Row = Record<string, unknown> & { type?: string; selected?: boolean; nominated?: boolean; state?: string };
+  let pair: Row | undefined;
+  let dc: Row | undefined;
+  stats.forEach((r) => {
+    const s = r as Row;
+    if (s.type === "candidate-pair" && (s.selected || (s.nominated && s.state === "succeeded"))) pair ??= s;
+    if (s.type === "data-channel") dc ??= s;
+  });
+  const num = (v: unknown): number | undefined => (typeof v === "number" ? v : undefined);
+  const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
+  const cand = (id: unknown): CandidateInfo | undefined => {
+    if (typeof id !== "string") return undefined;
+    const c = stats.get(id) as Row | undefined;
+    if (!c) return undefined;
+    const addr = str(c.address) ?? str(c.ip);
+    return {
+      candidateType: str(c.candidateType),
+      protocol: str(c.protocol),
+      relayProtocol: str(c.relayProtocol),
+      address: includeIps ? addr : addr ? "•••" : undefined,
+      port: includeIps ? num(c.port) : undefined,
+    };
+  };
+  const d: ConnDiagnostics = { path: classifyPath(stats) };
+  if (pair) {
+    const rtt = num(pair.currentRoundTripTime);
+    if (rtt !== undefined) d.rttMs = Math.round(rtt * 1000);
+    const abr = num(pair.availableOutgoingBitrate);
+    if (abr !== undefined) d.outgoingBitrateKbps = Math.round(abr / 1000);
+    d.bytesSent = num(pair.bytesSent);
+    d.bytesReceived = num(pair.bytesReceived);
+    d.local = cand(pair.localCandidateId);
+    d.remote = cand(pair.remoteCandidateId);
+  }
+  if (dc) {
+    d.dataChannel = {
+      state: str(dc.state),
+      messagesSent: num(dc.messagesSent),
+      messagesReceived: num(dc.messagesReceived),
+      bytesSent: num(dc.bytesSent),
+      bytesReceived: num(dc.bytesReceived),
+    };
+  }
+  return d;
 }
 
 function b64(bytes: Uint8Array): string {
@@ -264,7 +340,7 @@ export async function connect(opts: ConnectOpts): Promise<Conn> {
   try {
     const openChannel = await ready;
     clearTimeout(connectTimer);
-    return { channel: openChannel, close, path: () => pc.getStats().then(classifyPath) };
+    return { channel: openChannel, close, path: () => pc.getStats().then(classifyPath), stats: () => pc.getStats() };
   } catch (err) {
     // Establishment failed or timed out: clean up the listener and peer
     // connection, then propagate so the caller shows a retryable failure
@@ -384,7 +460,7 @@ export async function connectResume(opts: ResumeOpts): Promise<Conn> {
   try {
     const openChannel = await ready;
     clearTimeout(connectTimer);
-    return { channel: openChannel, close, path: () => pc.getStats().then(classifyPath) };
+    return { channel: openChannel, close, path: () => pc.getStats().then(classifyPath), stats: () => pc.getStats() };
   } catch (err) {
     clearTimeout(connectTimer);
     close();
