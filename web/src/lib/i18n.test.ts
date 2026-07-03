@@ -85,3 +85,20 @@ describe("detect", () => {
     expect(["zh", "ja", "ko", "de", "fr", "en"]).toContain(detect());
   });
 });
+
+describe("detect with ?lang=", () => {
+  it("prefers a valid ?lang= over saved and navigator language", () => {
+    localStorage.setItem("relayium-lang", "fr");
+    expect(detect("?lang=ja")).toBe("ja");
+  });
+
+  it("ignores an invalid ?lang= value", () => {
+    localStorage.setItem("relayium-lang", "fr");
+    expect(detect("?lang=klingon")).toBe("fr");
+  });
+
+  it("ignores prototype-chain keys", () => {
+    localStorage.clear();
+    expect(detect("?lang=toString")).not.toBe("toString");
+  });
+});

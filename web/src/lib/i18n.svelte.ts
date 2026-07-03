@@ -1567,7 +1567,13 @@ export const messages: Record<Lang, Messages> = { zh, en, ja, ko, de, fr };
 
 const STORAGE_KEY = "relayium-lang";
 
-export function detect(): Lang {
+export function detect(search?: string): Lang {
+  const s = search ?? (typeof location !== "undefined" ? location.search : "");
+  try {
+    const q = new URLSearchParams(s).get("lang");
+    // Object.hasOwn (not `in`) so a poisoned key like "toString" can't match.
+    if (q && Object.hasOwn(messages, q)) return q as Lang;
+  } catch { /* malformed search — fall through */ }
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     // Object.hasOwn (not `in`) so a poisoned key like "toString" — which exists on
