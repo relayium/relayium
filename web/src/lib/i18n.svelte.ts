@@ -199,9 +199,23 @@ export interface Messages {
   crossPitch: string; // one-line cross-network pitch under the two cards
   homeCross: { title: string; desc: string; cta: string }; // homepage → cross-network CTA
   legal: { privacy: string; terms: string; security: string };
+  // Short footer labels linking to the generated static articles/landing pages.
+  learn: {
+    compareSnapdrop: string;
+    compareAirdrop: string;
+    compareWetransfer: string;
+    howtoAndroidIphone: string;
+    howtoPcPhone: string;
+    howtoLargeFiles: string;
+  };
 }
 
 export function legalUrl(slug: "privacy" | "terms" | "security", l: Lang): string {
+  return l === "en" ? `/${slug}` : `/${l}/${slug}`;
+}
+
+/** URL of a generated static page (article/landing) in the given language. */
+export function pageUrl(slug: string, l: Lang): string {
   return l === "en" ? `/${slug}` : `/${l}/${slug}`;
 }
 
@@ -431,6 +445,14 @@ const zh: Messages = {
     cta: "前往跨网络传输 →",
   },
   legal: { privacy: "隐私政策", terms: "服务条款", security: "安全说明" },
+  learn: {
+    compareSnapdrop: "对比 Snapdrop",
+    compareAirdrop: "对比 AirDrop",
+    compareWetransfer: "对比 WeTransfer",
+    howtoAndroidIphone: "安卓 ↔ iPhone 互传",
+    howtoPcPhone: "电脑无线传手机",
+    howtoLargeFiles: "不经云端传大文件",
+  },
 };
 
 const en: Messages = {
@@ -657,6 +679,14 @@ const en: Messages = {
     cta: "Go to cross-network transfer →",
   },
   legal: { privacy: "Privacy Policy", terms: "Terms of Service", security: "Security" },
+  learn: {
+    compareSnapdrop: "vs Snapdrop",
+    compareAirdrop: "vs AirDrop",
+    compareWetransfer: "vs WeTransfer",
+    howtoAndroidIphone: "Android ↔ iPhone",
+    howtoPcPhone: "PC to phone wirelessly",
+    howtoLargeFiles: "Large files without the cloud",
+  },
 };
 
 const ja: Messages = {
@@ -883,6 +913,14 @@ const ja: Messages = {
     cta: "ネットワーク間転送へ →",
   },
   legal: { privacy: "プライバシーポリシー", terms: "利用規約", security: "セキュリティ" },
+  learn: {
+    compareSnapdrop: "Snapdrop と比較",
+    compareAirdrop: "AirDrop と比較",
+    compareWetransfer: "WeTransfer と比較",
+    howtoAndroidIphone: "Android→iPhone 転送",
+    howtoPcPhone: "PC→スマホ 無線転送",
+    howtoLargeFiles: "クラウド不要で大容量送信",
+  },
 };
 
 const ko: Messages = {
@@ -1109,6 +1147,14 @@ const ko: Messages = {
     cta: "네트워크 간 전송으로 이동 →",
   },
   legal: { privacy: "개인정보 처리방침", terms: "이용약관", security: "보안" },
+  learn: {
+    compareSnapdrop: "Snapdrop 비교",
+    compareAirdrop: "AirDrop 비교",
+    compareWetransfer: "WeTransfer 비교",
+    howtoAndroidIphone: "안드로이드 ↔ 아이폰 전송",
+    howtoPcPhone: "PC→폰 무선 전송",
+    howtoLargeFiles: "클라우드 없이 대용량 전송",
+  },
 };
 
 const de: Messages = {
@@ -1335,6 +1381,14 @@ const de: Messages = {
     cta: "Zur netzübergreifenden Übertragung →",
   },
   legal: { privacy: "Datenschutzerklärung", terms: "Nutzungsbedingungen", security: "Sicherheit" },
+  learn: {
+    compareSnapdrop: "vs. Snapdrop",
+    compareAirdrop: "vs. AirDrop",
+    compareWetransfer: "vs. WeTransfer",
+    howtoAndroidIphone: "Android ↔ iPhone",
+    howtoPcPhone: "PC zum Handy, drahtlos",
+    howtoLargeFiles: "Große Dateien ohne Cloud",
+  },
 };
 
 const fr: Messages = {
@@ -1561,6 +1615,14 @@ const fr: Messages = {
     cta: "Aller au transfert inter-réseaux →",
   },
   legal: { privacy: "Politique de confidentialité", terms: "Conditions d'utilisation", security: "Sécurité" },
+  learn: {
+    compareSnapdrop: "vs Snapdrop",
+    compareAirdrop: "vs AirDrop",
+    compareWetransfer: "vs WeTransfer",
+    howtoAndroidIphone: "Android ↔ iPhone",
+    howtoPcPhone: "PC vers mobile sans fil",
+    howtoLargeFiles: "Gros fichiers sans le cloud",
+  },
 };
 
 export const messages: Record<Lang, Messages> = { zh, en, ja, ko, de, fr };

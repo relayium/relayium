@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { messages, LANGS, detect } from "./i18n.svelte";
+import { messages, LANGS, detect, pageUrl } from "./i18n.svelte";
 
 describe("i18n completeness", () => {
   it("every language has nav tab labels and the cross-network method names", () => {
@@ -100,5 +100,22 @@ describe("detect with ?lang=", () => {
   it("ignores prototype-chain keys", () => {
     localStorage.clear();
     expect(detect("?lang=toString")).not.toBe("toString");
+  });
+});
+
+describe("pageUrl", () => {
+  it("leaves en unprefixed and prefixes other languages", () => {
+    expect(pageUrl("compare/snapdrop", "en")).toBe("/compare/snapdrop");
+    expect(pageUrl("how-to/send-large-files-without-cloud", "zh")).toBe("/zh/how-to/send-large-files-without-cloud");
+  });
+});
+
+describe("learn strings", () => {
+  it("every language has all six learn labels", () => {
+    for (const { code } of LANGS) {
+      const learn = messages[code].learn;
+      expect(Object.keys(learn).length).toBe(6);
+      for (const v of Object.values(learn)) expect(v.length).toBeGreaterThan(0);
+    }
   });
 });

@@ -31,7 +31,7 @@
   import { pickSaveTarget, type SaveTarget, type FileSink } from "./lib/filesink";
   import { fetchIceServers } from "./lib/ice";
   import type { Peer } from "./lib/protocol";
-  import { lang, messages, legalUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
+  import { lang, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
   import CrossPage from "./lib/CrossPage.svelte";
   import Nav from "./lib/Nav.svelte";
@@ -1014,6 +1014,14 @@
         <a href={legalUrl("privacy", lang())}>{t.legal.privacy}</a>
         <a href={legalUrl("terms", lang())}>{t.legal.terms}</a>
         <a href="https://github.com/relayium/relayium" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </nav>
+      <nav class="legal">
+        <a href={pageUrl("compare/snapdrop", lang())}>{t.learn.compareSnapdrop}</a>
+        <a href={pageUrl("compare/airdrop", lang())}>{t.learn.compareAirdrop}</a>
+        <a href={pageUrl("compare/wetransfer", lang())}>{t.learn.compareWetransfer}</a>
+        <a href={pageUrl("how-to/transfer-files-android-to-iphone", lang())}>{t.learn.howtoAndroidIphone}</a>
+        <a href={pageUrl("how-to/send-files-pc-to-phone-wirelessly", lang())}>{t.learn.howtoPcPhone}</a>
+        <a href={pageUrl("how-to/send-large-files-without-cloud", lang())}>{t.learn.howtoLargeFiles}</a>
       </nav>
       <span class="fineprint">{t.footer}</span>
     </footer>
