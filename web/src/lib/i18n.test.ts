@@ -1,5 +1,16 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { messages, LANGS, detect, pageUrl } from "./i18n.svelte";
+import { LANGS, detect, pageUrl, loadLang, setLang, lang, messages as liveMessages, type Lang, type Messages } from "./i18n.svelte";
+// Language tables are code-split, so `messages` is empty until loaded at runtime.
+// The completeness checks want every language synchronously, so import the split
+// modules directly and reassemble the full record here.
+import zh from "./i18n/zh";
+import en from "./i18n/en";
+import ja from "./i18n/ja";
+import ko from "./i18n/ko";
+import de from "./i18n/de";
+import fr from "./i18n/fr";
+
+const messages: Record<Lang, Messages> = { zh, en, ja, ko, de, fr };
 
 describe("i18n completeness", () => {
   it("every language has nav tab labels and the cross-network method names", () => {
@@ -74,7 +85,8 @@ describe("detect", () => {
 
   it("ignores a prototype-chain key like 'toString' instead of white-screening", () => {
     // Regression: `saved in messages` would resolve "toString" to Object.prototype's
-    // function and later crash the whole app; Object.hasOwn rejects it.
+    // function and later crash the whole app; validating against the static code
+    // set (CODES.has) rejects it.
     localStorage.setItem("relayium-lang", "toString");
     const l = detect();
     expect(typeof messages[l].tagline).toBe("string");
@@ -117,5 +129,25 @@ describe("learn strings", () => {
       expect(Object.keys(learn).length).toBe(6);
       for (const v of Object.values(learn)) expect(v.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("language code-splitting", () => {
+  it("bootstrap: after loadLang(lang()), the live table has the current language", async () => {
+    // Mirrors main.ts: this is exactly what guarantees no undefined read at render.
+    await loadLang(lang());
+    expect(liveMessages[lang()]).toBeDefined();
+    expect(liveMessages[lang()].tagline).toBeTruthy();
+  });
+
+  it("loadLang lazily populates a language table on demand", async () => {
+    await loadLang("en");
+    expect(liveMessages.en.tagline).toBeTruthy();
+  });
+
+  it("setLang loads the target table before switching the current language", async () => {
+    await setLang("ja");
+    expect(lang()).toBe("ja");
+    expect(liveMessages.ja.tagline).toBeTruthy();
   });
 });
