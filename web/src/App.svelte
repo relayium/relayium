@@ -35,6 +35,8 @@
   import type { Peer } from "./lib/protocol";
   import { lang, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
+  import { outbox, setOutbox, takeOutbox } from "./lib/outbox.svelte";
+  import { folderUploadSupported } from "./lib/platform";
   import CrossPage from "./lib/CrossPage.svelte";
   import MePage from "./lib/MePage.svelte";
   import Nav from "./lib/Nav.svelte";
@@ -83,7 +85,6 @@
   // never races the transfer loop's high-frequency rewrites of send/recv.
   let sendPath = $state<ConnPath | undefined>();
   let recvPath = $state<ConnPath | undefined>();
-  let pendingShared = $state<File[]>([]); // files handed in via the OS share sheet, awaiting a target device
   let notice = $state(""); // transient hint (e.g. "busy", "too many files")
   let dragActive = $state(false);
   let dragDepth = 0; // non-reactive: dragenter/dragleave fire per element; count to know when the drag truly leaves the window
@@ -191,14 +192,12 @@
     else wake.release();
   });
 
-  // Files arriving via the OS share sheet auto-send the moment there's exactly
-  // one reachable device and nothing else in flight; with several devices the
-  // user picks one (the peer cards below become send targets). Cleared on send.
+  // Queued files (OS share sheet, or picked before pairing) auto-send the
+  // moment there's exactly one reachable device and nothing else in flight;
+  // with several devices the user picks one (the peer cards become targets).
   $effect(() => {
-    if (pendingShared.length && surfaceShown && !busy && visiblePeers.length === 1) {
-      const files = pendingShared;
-      pendingShared = [];
-      sendFiles(visiblePeers[0].id, files.map((file) => ({ file })));
+    if (outbox().length && surfaceShown && !busy && visiblePeers.length === 1) {
+      sendFiles(visiblePeers[0].id, takeOutbox());
     }
   });
 
@@ -220,7 +219,9 @@
     registerServiceWorker();
     // Pick up any files launched into the app via the OS share sheet (installed
     // PWA, Android/Chromium). The auto-send effect routes them once a peer is up.
-    drainSharedFiles().then((files) => { if (files.length) pendingShared = files; });
+    drainSharedFiles().then((files) => {
+      if (files.length) setOutbox(files.map((file) => ({ file })));
+    });
     if (!window.isSecureContext || !crypto.subtle) {
       unsupported = true;
       return;
@@ -388,15 +389,6 @@
     if (/Linux/.test(ua)) return "Linux";
     return "Device";
   }
-  // iOS/iPadOS Safari has no folder picker (webkitdirectory is inert), so the
-  // "send folder" button just misbehaves there — hide it. iPadOS 13+ reports a
-  // Mac UA, so also treat a touch-capable "Mac" as iOS-like.
-  function isIOS(): boolean {
-    const ua = navigator.userAgent || "";
-    if (/iPhone|iPad|iPod/.test(ua)) return true;
-    return /Macintosh/.test(ua) && (navigator.maxTouchPoints ?? 0) > 1;
-  }
-  const folderUploadSupported = !isIOS();
   function nameOf(peerId: string): string {
     return peers.find((p) => p.id === peerId)?.name ?? peerId.slice(0, 6);
   }
@@ -977,8 +969,8 @@
   {@const solo = visiblePeers.length === 1}
   <section class="peers">
     <h2>{currentRoute() === "cross" ? t.crossPeersTitle : t.peersTitle}</h2>
-    {#if pendingShared.length && visiblePeers.length !== 1}
-      <p class="share-pending">{t.sharePending(pendingShared.length)}</p>
+    {#if outbox().length && visiblePeers.length !== 1}
+      <p class="share-pending">{t.sharePending(outbox().length)}</p>
     {/if}
     {#if visiblePeers.length === 0}
       <div class="empty">
@@ -1008,7 +1000,7 @@
                 {/if}
               </span>
               <input id={`pick-${p.id}`} type="file" multiple disabled={busy}
-                onclick={(e) => { if (pendingShared.length) { e.preventDefault(); const f = pendingShared; pendingShared = []; sendFiles(p.id, f.map((file) => ({ file }))); } }}
+                onclick={(e) => { if (outbox().length) { e.preventDefault(); sendFiles(p.id, takeOutbox()); } }}
                 onchange={(e) => pickFile(e, p.id)} />
             </label>
             <div class="peer-actions">
