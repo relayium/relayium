@@ -125,10 +125,6 @@ func main() {
 
 	store, dbErr := account.OpenSQLite(*dbPath)
 
-	// validateRoom gates token-rooms. Nil (DB unavailable) => token-rooms are
-	// rejected, but LAN rooms (no ?room=) are unaffected.
-	var validateRoom func(context.Context, string) bool
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -140,13 +136,9 @@ func main() {
 			http.Error(w, "too many pairing attempts", http.StatusTooManyRequests)
 			return
 		}
-		token := r.URL.Query().Get("room")
-		room, maxPeers, lan, ok := signal.RoomFor(code, token,
-			pairReg.Validate,
-			func(t string) bool { return validateRoom != nil && validateRoom(r.Context(), t) },
-		)
+		room, maxPeers, lan, ok := signal.RoomFor(code, pairReg.Validate)
 		if !ok {
-			http.Error(w, "invalid or expired pairing code or transfer link", http.StatusForbidden)
+			http.Error(w, "invalid or expired pairing code", http.StatusForbidden)
 			return
 		}
 		if lan {
@@ -192,7 +184,6 @@ func main() {
 			DefaultTTL:      *fileTTL,
 			MaxTTL:          *fileTTLMax,
 		})
-		validateRoom = acct.ValidateTransferToken
 		// Let /api/ice hand TURN credentials to anonymous pairing-code rooms too,
 		// not just logged-in transfer tokens — otherwise code transfers are
 		// STUN-only and fail across strict NATs.
