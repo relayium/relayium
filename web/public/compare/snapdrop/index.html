@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer? · Relayium</title>
+    <meta name="description" content="An honest look at Relayium, Snapdrop and PairDrop. All three do browser-based peer-to-peer transfer; the real difference is Relayium&#39;s application-layer end-to-end encryption and cross-network reach." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/compare/snapdrop" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/snapdrop" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/snapdrop" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/snapdrop" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/snapdrop" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/snapdrop" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/snapdrop" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/snapdrop" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?" />
+    <meta property="og:description" content="An honest look at Relayium, Snapdrop and PairDrop. All three do browser-based peer-to-peer transfer; the real difference is Relayium&#39;s application-layer end-to-end encryption and cross-network reach." />
+    <meta property="og:url" content="https://relayium.com/compare/snapdrop" />
+    <meta property="og:locale" content="en" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs Snapdrop & PairDrop: which secure P2P file transfer?","description":"An honest look at Relayium, Snapdrop and PairDrop. All three do browser-based peer-to-peer transfer; the real difference is Relayium's application-layer end-to-end encryption and cross-network reach.","inLanguage":"en","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/compare/snapdrop","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Can Relayium and Snapdrop/PairDrop replace each other?","acceptedAnswer":{"@type":"Answer","text":"For quick sharing between devices on the same network, any of them works well. If you need to reach across different networks or you want an extra, server-independent encryption layer with a verification code, Relayium is aimed at that; if you love PairDrop's rooms and persistent pairing, it remains an excellent choice."}},{"@type":"Question","name":"Is Relayium open source and self-hostable?","acceptedAnswer":{"@type":"Answer","text":"Yes. Relayium is MIT-licensed and the full protocol and code are public at github.com/relayium/relayium, so you can audit it or run your own instance — the same openness that made Snapdrop and PairDrop trusted."}},{"@type":"Question","name":"Is there a performance difference?","acceptedAnswer":{"@type":"Answer","text":"In practice, no meaningful one. All three make a direct WebRTC connection, so throughput is bounded by your network. Relayium's extra AES-256-GCM layer runs in the browser and its overhead is negligible next to the network transfer itself."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</h1>
+      <p class="updated">Last updated: 2026-07-03</p>
+      <nav class="langbar" aria-label="Language"><a href="/compare/snapdrop" aria-current="true">English</a><a href="/zh/compare/snapdrop">中文</a><a href="/ja/compare/snapdrop">日本語</a><a href="/ko/compare/snapdrop">한국어</a><a href="/de/compare/snapdrop">Deutsch</a><a href="/fr/compare/snapdrop">Français</a></nav>
+      <p class="lead">Snapdrop and its actively maintained fork PairDrop are pioneers of browser-based, install-free file sharing. They are polished, familiar, and genuinely good tools — Relayium builds on the same idea rather than dismissing it.</p>
+      <p class="lead">This article compares the three fairly: what they share, where Snapdrop and PairDrop are stronger, and where Relayium is different. The short version is that Relayium&#39;s focus is encryption strength and reaching across networks, not replacing what already works well on your LAN.</p>
+      <h2>What they have in common</h2>
+      <p>All three run entirely in a modern web browser with nothing to install, and all three use WebRTC to move file bytes directly between two devices instead of parking them on a server.</p>
+      <p>On the same local network they can discover nearby devices automatically, so sending a photo from a laptop to a phone in the same room is a couple of taps in any of them.</p>
+      <h2>Where Snapdrop and PairDrop shine</h2>
+      <p>Snapdrop has been around for years and has a large, trusting community; PairDrop extends it with features Relayium does not try to match today.</p>
+      <ul><li>PairDrop adds rooms and persistent device pairing, so you can connect specific devices even across different networks by pairing code.</li><li>Both are simple to self-host — the server code is small and well understood, which matters if you want to run your own instance.</li><li>Years of real-world use mean broad device coverage, plenty of documentation, and a mature, predictable experience.</li></ul>
+      <h2>Where Relayium differs: application-layer end-to-end encryption</h2>
+      <p>Plain WebRTC is encrypted in transit by DTLS, and that is real protection against a passive network eavesdropper. But the DTLS fingerprints that authenticate each side are exchanged through the signaling server. A malicious or compromised signaling server can substitute its own fingerprints and sit invisibly in the middle — a classic man-in-the-middle attack that DTLS alone does not stop.</p>
+      <p>Relayium adds a second, independent encryption layer on top of the WebRTC channel: an X25519 key exchange derives a key used for per-chunk AES-256-GCM, and that key is never sent to any server. To detect a man-in-the-middle, both devices display the same 6-digit Short Authentication String (SAS); if the codes match, no server sits between you. Each file is also verified end-to-end with a SHA-256 hash.</p>
+      <h2>Beyond the LAN</h2>
+      <p>Relayium is designed to work across networks, not only on the same Wi-Fi. You can connect two devices with a pairing code or a share link, and the transfer still goes directly peer-to-peer whenever possible.</p>
+      <p>When a direct connection is impossible, the encrypted stream falls back to a TURN relay — but the relay only ever sees ciphertext, so the transfer stays end-to-end encrypted. There is also an optional stored download-link mode: your browser encrypts the files with AES-256-GCM and the decryption key lives only in the URL fragment, so the server stores zero-knowledge ciphertext it cannot read. Realtime transfers need no account; creating a share or download link requires the sender to sign in. Transfers that drop mid-way can resume instead of restarting.</p>
+      <h2>Feature comparison at a glance</h2>
+      <p>The differences that matter most, side by side:</p>
+      <ul><li>Encryption layer: plain WebRTC relies on DTLS alone; Relayium adds application-layer X25519 + AES-256-GCM on top.</li><li>MITM defense: Relayium shows a 6-digit SAS code both sides verify; plain WebRTC has no equivalent check against a malicious signaling server.</li><li>Across networks: Relayium connects by pairing code or share link with an encrypted TURN fallback; LAN discovery is the primary path for Snapdrop.</li><li>Storage mode: Relayium offers optional zero-knowledge stored download links; the others are realtime-only.</li><li>Resume: Relayium can resume an interrupted transfer instead of starting over.</li><li>Batch: Relayium sends up to 10 files per batch with a per-file SHA-256 integrity check.</li></ul>
+      <h2>Frequently asked questions</h2>
+      <h3>Can Relayium and Snapdrop/PairDrop replace each other?</h3>
+      <p>For quick sharing between devices on the same network, any of them works well. If you need to reach across different networks or you want an extra, server-independent encryption layer with a verification code, Relayium is aimed at that; if you love PairDrop&#39;s rooms and persistent pairing, it remains an excellent choice.</p>
+      <h3>Is Relayium open source and self-hostable?</h3>
+      <p>Yes. Relayium is MIT-licensed and the full protocol and code are public at github.com/relayium/relayium, so you can audit it or run your own instance — the same openness that made Snapdrop and PairDrop trusted.</p>
+      <h3>Is there a performance difference?</h3>
+      <p>In practice, no meaningful one. All three make a direct WebRTC connection, so throughput is bounded by your network. Relayium&#39;s extra AES-256-GCM layer runs in the browser and its overhead is negligible next to the network transfer itself.</p>
+      <div class="ctacard">
+        <p>See how the application-layer encryption feels in practice — no install, no account needed for realtime transfers.</p>
+        <a class="cta" href="/">Try Relayium now</a>
+      </div>
+      <h2>Keep reading</h2>
+      <ul class="related"><li><a href="/">Relayium</a></li></ul>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

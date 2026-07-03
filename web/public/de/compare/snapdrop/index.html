@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium vs. Snapdrop &amp; PairDrop: welche sichere P2P-Übertragung? · Relayium</title>
+    <meta name="description" content="Ein ehrlicher Vergleich von Relayium, Snapdrop und PairDrop. Alle drei übertragen Peer-to-Peer im Browser; der echte Unterschied ist Relayiums Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und seine netzwerkübergreifende Reichweite." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/de/compare/snapdrop" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/snapdrop" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/snapdrop" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/snapdrop" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/snapdrop" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/snapdrop" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/snapdrop" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/snapdrop" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Relayium vs. Snapdrop &amp; PairDrop: welche sichere P2P-Übertragung?" />
+    <meta property="og:description" content="Ein ehrlicher Vergleich von Relayium, Snapdrop und PairDrop. Alle drei übertragen Peer-to-Peer im Browser; der echte Unterschied ist Relayiums Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und seine netzwerkübergreifende Reichweite." />
+    <meta property="og:url" content="https://relayium.com/de/compare/snapdrop" />
+    <meta property="og:locale" content="de" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs. Snapdrop & PairDrop: welche sichere P2P-Übertragung?","description":"Ein ehrlicher Vergleich von Relayium, Snapdrop und PairDrop. Alle drei übertragen Peer-to-Peer im Browser; der echte Unterschied ist Relayiums Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und seine netzwerkübergreifende Reichweite.","inLanguage":"de","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/de/compare/snapdrop","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Können Relayium und Snapdrop/PairDrop einander ersetzen?","acceptedAnswer":{"@type":"Answer","text":"Für schnelles Teilen zwischen Geräten im selben Netz funktioniert jedes gut. Wenn du über verschiedene Netzwerke hinweg erreichen musst oder eine zusätzliche, serverunabhängige Verschlüsselungsschicht mit Prüfcode willst, zielt Relayium darauf ab; wenn du PairDrops Räume und dauerhafte Paarung liebst, bleibt es eine ausgezeichnete Wahl."}},{"@type":"Question","name":"Ist Relayium quelloffen und selbst hostbar?","acceptedAnswer":{"@type":"Answer","text":"Ja. Relayium ist MIT-lizenziert, und das vollständige Protokoll samt Code ist öffentlich unter github.com/relayium/relayium — du kannst es prüfen oder eine eigene Instanz betreiben, dieselbe Offenheit, die Snapdrop und PairDrop Vertrauen verschafft hat."}},{"@type":"Question","name":"Gibt es einen Leistungsunterschied?","acceptedAnswer":{"@type":"Answer","text":"In der Praxis keinen nennenswerten. Alle drei bauen eine direkte WebRTC-Verbindung auf, der Durchsatz ist also durch dein Netzwerk begrenzt. Relayiums zusätzliche AES-256-GCM-Schicht läuft im Browser, und ihr Aufwand ist neben der Netzwerkübertragung selbst vernachlässigbar."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=de">Relayium</a></header>
+      <h1>Relayium vs. Snapdrop &amp; PairDrop: welche sichere P2P-Übertragung?</h1>
+      <p class="updated">Zuletzt aktualisiert: 2026-07-03</p>
+      <nav class="langbar" aria-label="Language"><a href="/compare/snapdrop">English</a><a href="/zh/compare/snapdrop">中文</a><a href="/ja/compare/snapdrop">日本語</a><a href="/ko/compare/snapdrop">한국어</a><a href="/de/compare/snapdrop" aria-current="true">Deutsch</a><a href="/fr/compare/snapdrop">Français</a></nav>
+      <p class="lead">Snapdrop und sein aktiv gepflegter Fork PairDrop sind Pioniere des browserbasierten, installationsfreien Dateiaustauschs. Sie sind ausgereift, vertraut und wirklich gute Werkzeuge — Relayium baut auf derselben Idee auf, statt sie abzutun.</p>
+      <p class="lead">Dieser Artikel vergleicht die drei fair: Gemeinsamkeiten, wo Snapdrop und PairDrop stärker sind und wo Relayium anders ist. Kurz gesagt liegt Relayiums Fokus auf Verschlüsselungsstärke und dem Erreichen über Netzwerke hinweg — nicht darauf, das zu ersetzen, was im LAN bereits gut funktioniert.</p>
+      <h2>Was sie gemeinsam haben</h2>
+      <p>Alle drei laufen vollständig in einem modernen Webbrowser ohne Installation, und alle drei nutzen WebRTC, um Datei-Bytes direkt zwischen zwei Geräten zu bewegen, statt sie auf einem Server abzulegen.</p>
+      <p>Im selben lokalen Netz erkennen sie nahe Geräte automatisch, sodass das Senden eines Fotos vom Laptop zum Handy im selben Raum bei jedem von ihnen nur ein paar Tipps ist.</p>
+      <h2>Wo Snapdrop und PairDrop glänzen</h2>
+      <p>Snapdrop gibt es seit Jahren und hat eine große, vertrauensvolle Community; PairDrop erweitert es um Funktionen, die Relayium heute nicht anstrebt.</p>
+      <ul><li>PairDrop bietet Räume und dauerhafte Gerätepaarung, sodass du bestimmte Geräte per Pairing-Code verbinden kannst — sogar über verschiedene Netzwerke hinweg.</li><li>Beide lassen sich einfach selbst hosten — der Servercode ist klein und gut verstanden, was zählt, wenn du eine eigene Instanz betreiben willst.</li><li>Jahre realen Einsatzes bedeuten breite Geräteabdeckung, viel Dokumentation und eine ausgereifte, vorhersehbare Erfahrung.</li></ul>
+      <h2>Worin sich Relayium unterscheidet: Ende-zu-Ende-Verschlüsselung auf Anwendungsebene</h2>
+      <p>Reines WebRTC ist beim Transport durch DTLS verschlüsselt, und das ist echter Schutz gegen einen passiven Netzwerk-Lauscher. Aber die DTLS-Fingerabdrücke, die jede Seite authentifizieren, werden über den Signalisierungsserver ausgetauscht. Ein bösartiger oder kompromittierter Signalisierungsserver kann eigene Fingerabdrücke einschleusen und sich unsichtbar dazwischensetzen — ein klassischer Man-in-the-Middle-Angriff, den DTLS allein nicht verhindert.</p>
+      <p>Relayium fügt über dem WebRTC-Kanal eine zweite, unabhängige Verschlüsselungsschicht hinzu: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, und dieser Schlüssel wird nie an einen Server gesendet. Um einen Man-in-the-Middle zu erkennen, zeigen beide Geräte denselben sechsstelligen Short Authentication String (SAS) an; stimmen die Codes überein, sitzt kein Server dazwischen. Jede Datei wird zudem per SHA-256-Hash Ende-zu-Ende geprüft.</p>
+      <h2>Über das LAN hinaus</h2>
+      <p>Relayium ist darauf ausgelegt, netzwerkübergreifend zu funktionieren, nicht nur im selben WLAN. Du kannst zwei Geräte per Pairing-Code oder Freigabelink verbinden, und die Übertragung läuft nach Möglichkeit weiterhin direkt Peer-to-Peer.</p>
+      <p>Ist eine Direktverbindung unmöglich, weicht der verschlüsselte Datenstrom auf ein TURN-Relay aus — doch das Relay sieht nur Chiffretext, sodass die Übertragung Ende-zu-Ende-verschlüsselt bleibt. Es gibt außerdem einen optionalen Modus mit gespeichertem Download-Link: Der Browser verschlüsselt die Dateien mit AES-256-GCM, und der Entschlüsselungsschlüssel liegt nur im URL-Fragment, sodass der Server nur Zero-Knowledge-Chiffretext speichert, den er nicht lesen kann. Echtzeitübertragungen brauchen kein Konto; das Erstellen eines Freigabe- oder Download-Links erfordert die Anmeldung des Absenders. Abgebrochene Übertragungen können fortgesetzt statt neu gestartet werden.</p>
+      <h2>Funktionsvergleich auf einen Blick</h2>
+      <p>Die wichtigsten Unterschiede nebeneinander:</p>
+      <ul><li>Verschlüsselungsschicht: Reines WebRTC verlässt sich allein auf DTLS; Relayium legt X25519 + AES-256-GCM auf Anwendungsebene darüber.</li><li>MITM-Schutz: Relayium zeigt einen sechsstelligen SAS-Code, den beide Seiten prüfen; reines WebRTC hat keine entsprechende Kontrolle gegen einen bösartigen Signalisierungsserver.</li><li>Netzwerkübergreifend: Relayium verbindet per Pairing-Code oder Freigabelink mit verschlüsseltem TURN-Fallback; bei Snapdrop ist die LAN-Erkennung der Hauptweg.</li><li>Speichermodus: Relayium bietet optionale Zero-Knowledge-Download-Links; die anderen sind nur Echtzeit.</li><li>Fortsetzen: Relayium kann eine unterbrochene Übertragung fortsetzen, statt neu zu beginnen.</li><li>Stapel: Relayium sendet bis zu 10 Dateien pro Stapel mit einer SHA-256-Integritätsprüfung je Datei.</li></ul>
+      <h2>Häufige Fragen</h2>
+      <h3>Können Relayium und Snapdrop/PairDrop einander ersetzen?</h3>
+      <p>Für schnelles Teilen zwischen Geräten im selben Netz funktioniert jedes gut. Wenn du über verschiedene Netzwerke hinweg erreichen musst oder eine zusätzliche, serverunabhängige Verschlüsselungsschicht mit Prüfcode willst, zielt Relayium darauf ab; wenn du PairDrops Räume und dauerhafte Paarung liebst, bleibt es eine ausgezeichnete Wahl.</p>
+      <h3>Ist Relayium quelloffen und selbst hostbar?</h3>
+      <p>Ja. Relayium ist MIT-lizenziert, und das vollständige Protokoll samt Code ist öffentlich unter github.com/relayium/relayium — du kannst es prüfen oder eine eigene Instanz betreiben, dieselbe Offenheit, die Snapdrop und PairDrop Vertrauen verschafft hat.</p>
+      <h3>Gibt es einen Leistungsunterschied?</h3>
+      <p>In der Praxis keinen nennenswerten. Alle drei bauen eine direkte WebRTC-Verbindung auf, der Durchsatz ist also durch dein Netzwerk begrenzt. Relayiums zusätzliche AES-256-GCM-Schicht läuft im Browser, und ihr Aufwand ist neben der Netzwerkübertragung selbst vernachlässigbar.</p>
+      <div class="ctacard">
+        <p>Erlebe, wie sich die Verschlüsselung auf Anwendungsebene in der Praxis anfühlt — keine Installation, für Echtzeitübertragungen kein Konto nötig.</p>
+        <a class="cta" href="/?lang=de">Relayium jetzt ausprobieren</a>
+      </div>
+      <h2>Weiterlesen</h2>
+      <ul class="related"><li><a href="/de/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=de">← Relayium</a>
+        <a href="/de/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

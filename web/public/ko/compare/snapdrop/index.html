@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium vs Snapdrop·PairDrop: 어떤 P2P 파일 전송이 더 안전할까? · Relayium</title>
+    <meta name="description" content="Relayium, Snapdrop, PairDrop을 공정하게 비교합니다. 셋 다 브라우저 기반 P2P 전송을 하지만, 진짜 차이는 Relayium의 애플리케이션 계층 종단간 암호화와 네트워크를 넘나드는 도달성입니다." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ko/compare/snapdrop" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/snapdrop" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/snapdrop" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/snapdrop" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/snapdrop" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/snapdrop" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/snapdrop" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/snapdrop" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Relayium vs Snapdrop·PairDrop: 어떤 P2P 파일 전송이 더 안전할까?" />
+    <meta property="og:description" content="Relayium, Snapdrop, PairDrop을 공정하게 비교합니다. 셋 다 브라우저 기반 P2P 전송을 하지만, 진짜 차이는 Relayium의 애플리케이션 계층 종단간 암호화와 네트워크를 넘나드는 도달성입니다." />
+    <meta property="og:url" content="https://relayium.com/ko/compare/snapdrop" />
+    <meta property="og:locale" content="ko" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs Snapdrop·PairDrop: 어떤 P2P 파일 전송이 더 안전할까?","description":"Relayium, Snapdrop, PairDrop을 공정하게 비교합니다. 셋 다 브라우저 기반 P2P 전송을 하지만, 진짜 차이는 Relayium의 애플리케이션 계층 종단간 암호화와 네트워크를 넘나드는 도달성입니다.","inLanguage":"ko","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/ko/compare/snapdrop","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"Relayium과 Snapdrop·PairDrop은 서로 대체할 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"같은 네트워크의 기기 간 빠른 공유라면 어느 것이든 잘 작동합니다. 서로 다른 네트워크를 넘나들어야 하거나 서버에 의존하지 않는 검증 코드가 있는 추가 암호화 계층을 원한다면 Relayium이 그 목적입니다. PairDrop의 방과 지속 페어링을 좋아한다면 그것도 여전히 훌륭한 선택입니다."}},{"@type":"Question","name":"Relayium은 오픈소스이며 자체 호스팅이 가능한가요?","acceptedAnswer":{"@type":"Answer","text":"네. Relayium은 MIT 라이선스이며 프로토콜과 코드 전체가 github.com/relayium/relayium에 공개되어 있어 감사하거나 자체 인스턴스를 운영할 수 있습니다. Snapdrop과 PairDrop이 신뢰받게 한 바로 그 개방성입니다."}},{"@type":"Question","name":"성능 차이가 있나요?","acceptedAnswer":{"@type":"Answer","text":"실제로는 의미 있는 차이가 없습니다. 셋 다 WebRTC 직접 연결을 하므로 처리량은 네트워크에 의해 결정됩니다. Relayium의 추가 AES-256-GCM 계층은 브라우저에서 동작하며 그 오버헤드는 네트워크 전송 자체에 비해 무시할 만합니다."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ko">Relayium</a></header>
+      <h1>Relayium vs Snapdrop·PairDrop: 어떤 P2P 파일 전송이 더 안전할까?</h1>
+      <p class="updated">마지막 업데이트: 2026-07-03</p>
+      <nav class="langbar" aria-label="Language"><a href="/compare/snapdrop">English</a><a href="/zh/compare/snapdrop">中文</a><a href="/ja/compare/snapdrop">日本語</a><a href="/ko/compare/snapdrop" aria-current="true">한국어</a><a href="/de/compare/snapdrop">Deutsch</a><a href="/fr/compare/snapdrop">Français</a></nav>
+      <p class="lead">Snapdrop과 활발히 유지되는 포크 PairDrop은 브라우저 기반 무설치 파일 공유의 선구자입니다. 세련되고 익숙하며 정말로 훌륭한 도구로, Relayium은 이를 부정하는 대신 같은 발상 위에 쌓아 올립니다.</p>
+      <p class="lead">이 글은 세 가지를 공정하게 비교합니다. 공통점, Snapdrop과 PairDrop이 더 강한 점, 그리고 Relayium이 다른 점입니다. 요약하면 Relayium의 초점은 암호화 강도와 네트워크를 넘나드는 도달성이며, LAN에서 이미 잘 작동하는 것을 대체하려는 것이 아닙니다.</p>
+      <h2>공통점</h2>
+      <p>셋 다 최신 웹 브라우저에서 설치 없이 완전히 동작하며, 모두 WebRTC를 사용해 파일 바이트를 서버에 두지 않고 두 기기 사이에서 직접 주고받습니다.</p>
+      <p>같은 로컬 네트워크에서는 근처 기기를 자동으로 찾을 수 있어, 같은 방에서 노트북에서 휴대폰으로 사진을 보내는 일은 어느 것을 써도 몇 번의 탭이면 됩니다.</p>
+      <h2>Snapdrop과 PairDrop이 뛰어난 점</h2>
+      <p>Snapdrop은 오랫동안 쓰였고 신뢰하는 큰 커뮤니티가 있습니다. PairDrop은 여기에 Relayium이 지금은 목표로 하지 않는 기능을 더합니다.</p>
+      <ul><li>PairDrop은 방과 지속적인 기기 페어링을 제공해, 페어링 코드로 특정 기기를 서로 다른 네트워크를 넘어서도 연결할 수 있습니다.</li><li>둘 다 자체 호스팅이 간단합니다. 서버 코드가 작고 잘 이해되어 있어, 자체 인스턴스를 운영하려는 경우 중요합니다.</li><li>수년간의 실제 사용은 폭넓은 기기 지원, 풍부한 문서, 성숙하고 예측 가능한 경험을 의미합니다.</li></ul>
+      <h2>Relayium의 차이: 애플리케이션 계층 종단간 암호화</h2>
+      <p>순수 WebRTC는 DTLS로 전송 중 암호화되며, 수동적 도청자에 대해서는 실질적인 보호가 됩니다. 하지만 양쪽을 인증하는 DTLS 지문은 시그널링 서버를 거쳐 교환됩니다. 악의적이거나 침해된 시그널링 서버는 자신의 지문으로 바꿔치기해 보이지 않게 중간에 끼어들 수 있습니다. 이것이 DTLS만으로는 막을 수 없는 전형적인 중간자 공격입니다.</p>
+      <p>Relayium은 WebRTC 채널 위에 독립적인 두 번째 암호화 계층을 더합니다. X25519 키 교환으로 도출한 키를 블록별 AES-256-GCM에 사용하며, 이 키는 어떤 서버에도 전송되지 않습니다. 중간자를 탐지하기 위해 두 기기가 동일한 6자리 짧은 인증 문자열(SAS)을 표시합니다. 코드가 일치하면 사이에 서버가 없다는 뜻입니다. 각 파일은 SHA-256 해시로 종단간 검증됩니다.</p>
+      <h2>LAN을 넘어서</h2>
+      <p>Relayium은 같은 Wi-Fi뿐 아니라 네트워크를 넘나들며 작동하도록 설계되었습니다. 페어링 코드나 공유 링크로 두 기기를 연결할 수 있고, 가능한 경우 전송은 여전히 P2P로 직접 이루어집니다.</p>
+      <p>직접 연결이 불가능할 때는 암호화된 스트림이 TURN 릴레이로 폴백하지만, 릴레이는 암호문만 볼 수 있어 전송은 종단간 암호화를 유지합니다. 선택적인 저장형 다운로드 링크 모드도 있습니다. 브라우저가 AES-256-GCM으로 파일을 암호화하고 복호화 키는 URL 프래그먼트에만 존재하므로, 서버는 읽을 수 없는 영지식 암호문을 저장합니다. 실시간 전송에는 계정이 필요 없고, 공유·다운로드 링크 생성에는 보내는 쪽의 로그인이 필요합니다. 도중에 끊긴 전송은 처음부터가 아니라 이어서 재개할 수 있습니다.</p>
+      <h2>기능 한눈에 비교</h2>
+      <p>가장 중요한 차이를 나란히 정리하면:</p>
+      <ul><li>암호화 계층: 순수 WebRTC는 DTLS에만 의존; Relayium은 그 위에 애플리케이션 계층 X25519 + AES-256-GCM을 더함.</li><li>중간자 방어: Relayium은 양쪽이 대조하는 6자리 SAS 코드를 표시; 순수 WebRTC는 악의적 시그널링 서버에 대한 상응하는 확인 수단이 없음.</li><li>네트워크 넘기: Relayium은 페어링 코드나 공유 링크로 연결하고 암호화된 TURN 폴백을 가짐; Snapdrop은 주로 LAN 탐색에 의존.</li><li>저장 모드: Relayium은 선택적 영지식 저장 다운로드 링크를 제공; 나머지는 실시간 전용.</li><li>재개: Relayium은 중단된 전송을 처음부터 다시 하지 않고 이어받을 수 있음.</li><li>일괄: Relayium은 배치당 최대 10개 파일을 보내며 파일별 SHA-256 무결성 검사를 함.</li></ul>
+      <h2>자주 묻는 질문</h2>
+      <h3>Relayium과 Snapdrop·PairDrop은 서로 대체할 수 있나요?</h3>
+      <p>같은 네트워크의 기기 간 빠른 공유라면 어느 것이든 잘 작동합니다. 서로 다른 네트워크를 넘나들어야 하거나 서버에 의존하지 않는 검증 코드가 있는 추가 암호화 계층을 원한다면 Relayium이 그 목적입니다. PairDrop의 방과 지속 페어링을 좋아한다면 그것도 여전히 훌륭한 선택입니다.</p>
+      <h3>Relayium은 오픈소스이며 자체 호스팅이 가능한가요?</h3>
+      <p>네. Relayium은 MIT 라이선스이며 프로토콜과 코드 전체가 github.com/relayium/relayium에 공개되어 있어 감사하거나 자체 인스턴스를 운영할 수 있습니다. Snapdrop과 PairDrop이 신뢰받게 한 바로 그 개방성입니다.</p>
+      <h3>성능 차이가 있나요?</h3>
+      <p>실제로는 의미 있는 차이가 없습니다. 셋 다 WebRTC 직접 연결을 하므로 처리량은 네트워크에 의해 결정됩니다. Relayium의 추가 AES-256-GCM 계층은 브라우저에서 동작하며 그 오버헤드는 네트워크 전송 자체에 비해 무시할 만합니다.</p>
+      <div class="ctacard">
+        <p>애플리케이션 계층 암호화가 실제로 어떤지 직접 확인해 보세요 — 설치 불필요, 실시간 전송에는 계정도 필요 없습니다.</p>
+        <a class="cta" href="/?lang=ko">지금 Relayium 사용해보기</a>
+      </div>
+      <h2>계속 읽기</h2>
+      <ul class="related"><li><a href="/ko/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ko">← Relayium</a>
+        <a href="/ko/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

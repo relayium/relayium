@@ -2,6 +2,7 @@
 import { LANGS, LANDING_LANGS, SITE, pagePath, urlPath, absUrl, landingUrl, landingPath, validateLangs } from "./shared.mjs";
 import { renderLegalPage } from "./legal-template.mjs";
 import { renderLandingPage } from "./landing-template.mjs";
+import { renderArticlePage } from "./article-template.mjs";
 
 export function buildLegalPages(docs) {
   const out = [];
@@ -24,7 +25,31 @@ export function buildLandingPages(landing, articleLinksByLang = {}) {
   }));
 }
 
-export function buildSitemap(docs, { home = true, landing = null } = {}) {
+export function buildArticlePages(articles) {
+  return articles.flatMap((a) => {
+    validateLangs(a.slug, a.langs);
+    return LANGS.map((lang) => ({
+      path: pagePath(a.slug, lang),
+      html: renderArticlePage({
+        slug: a.slug,
+        lang,
+        doc: a.langs[lang],
+        updated: a.updated,
+        related: articles
+          .filter((o) => o.slug !== a.slug)
+          .map((o) => ({ slug: o.slug, title: o.langs[lang].title })),
+      }),
+    }));
+  });
+}
+
+export function articleLinksByLang(articles) {
+  return Object.fromEntries(
+    LANGS.map((lang) => [lang, articles.map((a) => ({ slug: a.slug, title: a.langs[lang].title }))])
+  );
+}
+
+export function buildSitemap(docs, { home = true, landing = null, articles = [] } = {}) {
   const urls = [];
   const newest = docs.map((d) => d.langs.en.updated).sort().at(-1);
   if (home) urls.push({ loc: SITE.origin + "/", lastmod: newest, priority: "1.0", changefreq: "weekly" });
@@ -36,6 +61,11 @@ export function buildSitemap(docs, { home = true, landing = null } = {}) {
   for (const doc of docs) {
     for (const lang of LANGS) {
       urls.push({ loc: absUrl(urlPath(doc.slug, lang)), lastmod: doc.langs.en.updated, priority: "0.3", changefreq: "yearly" });
+    }
+  }
+  for (const article of articles) {
+    for (const lang of LANGS) {
+      urls.push({ loc: absUrl(urlPath(article.slug, lang)), lastmod: article.updated, priority: "0.6", changefreq: "monthly" });
     }
   }
   const body = urls
