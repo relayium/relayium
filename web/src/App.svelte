@@ -38,6 +38,7 @@
   import { outbox, setOutbox, takeOutbox, clearOutbox } from "./lib/outbox.svelte";
   import { folderUploadSupported } from "./lib/platform";
   import CrossPage from "./lib/CrossPage.svelte";
+  import OfflinePage from "./lib/OfflinePage.svelte";
   import MePage from "./lib/MePage.svelte";
   import Nav from "./lib/Nav.svelte";
   import { currentRoute, syncRouteFromLocation, downloadId, navigate, setNavGuard } from "./lib/router.svelte";
@@ -129,7 +130,7 @@
   // rendered: the LAN page (unless unsupported), or the cross page once a
   // realtime peer is connected. Never on the download page.
   const surfaceShown = $derived(
-    currentRoute() === "download"
+    currentRoute() === "download" || currentRoute() === "offline" || currentRoute() === "me"
       ? false
       : currentRoute() === "cross"
         ? showTransfer
@@ -1088,6 +1089,8 @@
 
   {#if currentRoute() === "cross"}
     <CrossPage {roomCode} {linkDead} {showTransfer} {transferSurface} dismissLan={() => (lanDismissed = true)} />
+  {:else if currentRoute() === "offline"}
+    <OfflinePage />
   {:else if currentRoute() === "me"}
     <MePage />
   {:else}
