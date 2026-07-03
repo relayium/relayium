@@ -83,6 +83,7 @@
     <label class="opt"><input type="checkbox" bind:checked={burn} />{t.stored.burnLabel}</label>
     <label class="opt">{t.stored.ttlLabel}
       <select bind:value={ttl}>
+        <option value={3600}>{t.stored.ttl1h}</option>
         <option value={86400}>{t.stored.ttl1d}</option>
         <option value={259200}>{t.stored.ttl3d}</option>
         <option value={604800}>{t.stored.ttl7d}</option>

@@ -2,6 +2,7 @@ import type { Messages } from "./types";
 
 const zh: Messages = {
   langLabel: "语言",
+  theme: { label: "主题", system: "跟随系统", light: "浅色", dark: "深色" },
   tagline: "端到端加密的点对点文件传输 · 文件不经过服务器",
   connected: (n) => `已连接 · 本机 ${n}`,
   ipLabel: "公网 IP",
@@ -134,6 +135,7 @@ const zh: Messages = {
     uploadingNow: "上传中…",
     burnLabel: "阅后即焚（首次下载后删除）",
     ttlLabel: "有效期",
+    ttl1h: "1 小时",
     ttl1d: "1 天",
     ttl3d: "3 天",
     ttl7d: "7 天",

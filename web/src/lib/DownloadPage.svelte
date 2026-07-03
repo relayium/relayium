@@ -4,6 +4,7 @@
   import { decryptManifest, type StoredManifest } from "./store-crypto";
   import { pickSaveTarget, type SaveTarget, type FileSink } from "./filesink";
   import { lang, setLang, LANGS, messages, legalUrl, type Lang, type Messages } from "./i18n.svelte";
+  import ThemeSelect from "./ThemeSelect.svelte";
   import { formatRemaining } from "./format";
 
   let { id }: { id: string } = $props();
@@ -120,6 +121,7 @@
       <option value={l.code}>{l.label}</option>
     {/each}
   </select>
+  <ThemeSelect />
 </header>
 
 <main class="dl">

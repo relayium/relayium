@@ -2,6 +2,7 @@ import type { Messages } from "./types";
 
 const de: Messages = {
   langLabel: "Sprache",
+  theme: { label: "Design", system: "System", light: "Hell", dark: "Dunkel" },
   tagline: "Ende-zu-Ende-verschlüsselte Peer-to-Peer-Dateiübertragung · Dateien erreichen nie den Server",
   connected: (n) => `Verbunden · dieses Gerät ${n}`,
   ipLabel: "öffentliche IP",
@@ -134,6 +135,7 @@ const de: Messages = {
     uploadingNow: "Hochladen…",
     burnLabel: "Nach dem Lesen löschen (beim ersten Download)",
     ttlLabel: "Gültig für",
+    ttl1h: "1 Stunde",
     ttl1d: "1 Tag",
     ttl3d: "3 Tage",
     ttl7d: "7 Tage",

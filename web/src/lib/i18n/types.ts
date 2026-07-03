@@ -15,6 +15,7 @@ export const LANGS: { code: Lang; label: string }[] = [
 
 export interface Messages {
   langLabel: string;
+  theme: { label: string; system: string; light: string; dark: string };
   tagline: string;
   connected: (name: string) => string;
   ipLabel: string; // prefix shown before the device's server-observed public IP
@@ -147,6 +148,7 @@ export interface Messages {
     uploadingNow: string; // phase 2: ciphertext is being POSTed (bar sits full)
     burnLabel: string;
     ttlLabel: string;
+    ttl1h: string;
     ttl1d: string;
     ttl3d: string;
     ttl7d: string;

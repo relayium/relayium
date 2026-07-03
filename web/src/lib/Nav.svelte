@@ -1,6 +1,7 @@
 <script lang="ts">
   import { currentRoute, navigate, type Route } from "./router.svelte";
   import { lang, setLang, LANGS, messages, type Lang, type Messages } from "./i18n.svelte";
+  import ThemeSelect from "./ThemeSelect.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
   const tabs: { id: Route; label: () => string }[] = [
@@ -36,6 +37,8 @@
       <option value={l.code}>{l.label}</option>
     {/each}
   </select>
+
+  <ThemeSelect />
 </nav>
 
 <style>

@@ -2,6 +2,7 @@ import type { Messages } from "./types";
 
 const fr: Messages = {
   langLabel: "Langue",
+  theme: { label: "Thème", system: "Système", light: "Clair", dark: "Sombre" },
   tagline: "Transfert de fichiers pair-à-pair chiffré de bout en bout · les fichiers ne passent jamais par le serveur",
   connected: (n) => `Connecté · cet appareil ${n}`,
   ipLabel: "IP publique",
@@ -134,6 +135,7 @@ const fr: Messages = {
     uploadingNow: "Envoi en cours…",
     burnLabel: "Détruire après lecture (supprimé au premier téléchargement)",
     ttlLabel: "Expire dans",
+    ttl1h: "1 heure",
     ttl1d: "1 jour",
     ttl3d: "3 jours",
     ttl7d: "7 jours",

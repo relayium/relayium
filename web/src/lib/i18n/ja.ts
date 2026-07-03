@@ -2,6 +2,7 @@ import type { Messages } from "./types";
 
 const ja: Messages = {
   langLabel: "言語",
+  theme: { label: "テーマ", system: "システムに合わせる", light: "ライト", dark: "ダーク" },
   tagline: "エンドツーエンド暗号化のP2Pファイル転送 · ファイルはサーバーを経由しません",
   connected: (n) => `接続済み · このデバイス ${n}`,
   ipLabel: "グローバル IP",
@@ -134,6 +135,7 @@ const ja: Messages = {
     uploadingNow: "アップロード中…",
     burnLabel: "閲覧後に削除（最初のダウンロードで削除）",
     ttlLabel: "有効期限",
+    ttl1h: "1 時間",
     ttl1d: "1 日",
     ttl3d: "3 日",
     ttl7d: "7 日",

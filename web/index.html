@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!-- Apply a saved manual theme before first paint to avoid a flash; "system"
+         (or no value) leaves it to the prefers-color-scheme media query. -->
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+
     <title>Relayium — End-to-end encrypted P2P file transfer</title>
     <meta name="description" content="Open-source, end-to-end encrypted peer-to-peer file transfer in your browser. In realtime mode, files stream device-to-device over WebRTC and never touch the server; the optional stored download-link mode keeps them as zero-knowledge ciphertext only you can decrypt." />
     <meta name="keywords" content="file transfer, end-to-end encryption, peer-to-peer, P2P, WebRTC, secure file sharing, send files between devices, open source, AirDrop alternative, Snapdrop alternative, Pairdrop alternative" />

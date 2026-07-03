@@ -2,6 +2,7 @@ import type { Messages } from "./types";
 
 const ko: Messages = {
   langLabel: "언어",
+  theme: { label: "테마", system: "시스템 설정", light: "라이트", dark: "다크" },
   tagline: "종단간 암호화 P2P 파일 전송 · 파일은 서버를 거치지 않습니다",
   connected: (n) => `연결됨 · 내 기기 ${n}`,
   ipLabel: "공인 IP",
@@ -134,6 +135,7 @@ const ko: Messages = {
     uploadingNow: "업로드 중…",
     burnLabel: "열람 후 삭제 (첫 다운로드 시 삭제)",
     ttlLabel: "유효 기간",
+    ttl1h: "1시간",
     ttl1d: "1일",
     ttl3d: "3일",
     ttl7d: "7일",

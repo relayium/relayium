@@ -97,8 +97,10 @@
 
 <section class="pairing">
   {#if expired || timedOut}
-    <p class="error">{t.pair.expired}</p>
-    <button class="btn btn-primary" onclick={() => { sessionStorage.removeItem(EXP_KEY); enterRoom({}); }}>{t.pair.sendCode}</button>
+    <!-- timedOut is the minter's own code lapsing ("expired, regenerate"); `expired`
+         (a failed join) may equally be a typo'd code, so it reads "invalid or expired". -->
+    <p class="error">{timedOut ? t.pair.expired : t.pair.errExpired}</p>
+    <button class="btn btn-primary" onclick={() => { sessionStorage.removeItem(EXP_KEY); enterRoom({}); }}>{timedOut ? t.pair.sendCode : t.pair.enterCode}</button>
   {:else if roomCode}
     {#if isMinter}
       <p class="lead">{t.pair.yourCode}</p>

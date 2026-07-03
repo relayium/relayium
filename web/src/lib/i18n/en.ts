@@ -2,6 +2,7 @@ import type { Messages } from "./types";
 
 const en: Messages = {
   langLabel: "Language",
+  theme: { label: "Theme", system: "System", light: "Light", dark: "Dark" },
   tagline: "End-to-end encrypted peer-to-peer file transfer · files never touch the server",
   connected: (n) => `Connected · this device ${n}`,
   ipLabel: "public IP",
@@ -134,6 +135,7 @@ const en: Messages = {
     uploadingNow: "Uploading…",
     burnLabel: "Burn after reading (delete on first download)",
     ttlLabel: "Expires in",
+    ttl1h: "1 hour",
     ttl1d: "1 day",
     ttl3d: "3 days",
     ttl7d: "7 days",
