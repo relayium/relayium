@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { fade } from "svelte/transition";
   import {
     ready,
     generateKeyPair,
@@ -157,6 +158,26 @@
     const r = recv;
     if (r?.done) { if (!recvNotified) { recvNotified = true; void notifyTransfer(statusText(messages[lang()], r)); } }
     else recvNotified = false;
+  });
+
+  // Auto-dismiss a *successful* completion card after a few seconds so back-to-back
+  // batches don't stack stale cards; failure cards stay put (they need a read + a
+  // deliberate dismiss). The effect's cleanup cancels the timer if a new transfer
+  // replaces the card first, and the identity guard avoids clearing that new one.
+  const DISMISS_MS = 6000;
+  $effect(() => {
+    const s = send;
+    if (s?.done && s.ok) {
+      const timer = setTimeout(() => { if (send === s) send = null; }, DISMISS_MS);
+      return () => clearTimeout(timer);
+    }
+  });
+  $effect(() => {
+    const r = recv;
+    if (r?.done && r.ok) {
+      const timer = setTimeout(() => { if (recv === r) recv = null; }, DISMISS_MS);
+      return () => clearTimeout(timer);
+    }
   });
 
   // Hold a screen wake lock while any transfer is in flight so a phone locking
@@ -366,6 +387,15 @@
     if (/Linux/.test(ua)) return "Linux";
     return "Device";
   }
+  // iOS/iPadOS Safari has no folder picker (webkitdirectory is inert), so the
+  // "send folder" button just misbehaves there — hide it. iPadOS 13+ reports a
+  // Mac UA, so also treat a touch-capable "Mac" as iOS-like.
+  function isIOS(): boolean {
+    const ua = navigator.userAgent || "";
+    if (/iPhone|iPad|iPod/.test(ua)) return true;
+    return /Macintosh/.test(ua) && (navigator.maxTouchPoints ?? 0) > 1;
+  }
+  const folderUploadSupported = !isIOS();
   function nameOf(peerId: string): string {
     return peers.find((p) => p.id === peerId)?.name ?? peerId.slice(0, 6);
   }
@@ -980,10 +1010,12 @@
                 onclick={(e) => { if (pendingShared.length) { e.preventDefault(); const f = pendingShared; pendingShared = []; sendFiles(p.id, f.map((file) => ({ file }))); } }}
                 onchange={(e) => pickFile(e, p.id)} />
             </label>
-            <label class="folder-btn" class:disabled={busy}>
-              📁 {t.sendFolder}
-              <input type="file" webkitdirectory multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
-            </label>
+            {#if folderUploadSupported}
+              <label class="folder-btn" class:disabled={busy}>
+                📁 {t.sendFolder}
+                <input type="file" webkitdirectory multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
+              </label>
+            {/if}
           </li>
         {/each}
       </ul>
@@ -1010,7 +1042,7 @@
 
   {#each [send, recv].filter(Boolean) as x (x!.dir)}
     {@const xf = x as Xfer}
-    <section class="card xfer" class:ok={xf.done && xf.ok} class:bad={xf.done && !xf.ok}>
+    <section class="card xfer" class:ok={xf.done && xf.ok} class:bad={xf.done && !xf.ok} out:fade={{ duration: 300 }}>
       <div class="xfer-head">
         <span class="label">{xf.dir === "send" ? t.sendTo(nameOf(xf.peer)) : t.recvFrom(nameOf(xf.peer))}</span>
         {#if xf.files.length}<span class="count">{xf.files.length > 1 ? t.fileCounter(xf.index + 1, xf.files.length) : xf.files[0].name}</span>{/if}
@@ -1118,12 +1150,14 @@
   /* In-app section headings stay modest; marketing sections use the larger global --fs-h2. */
   h2 { font-size: var(--fs-h3); margin: 0 0 var(--space-3); }
 
+  /* Fixed overlay (not sticky-in-flow) so appearing/dismissing the toast doesn't
+     shove the page content below it up and down. */
   .toast {
-    position: sticky; top: 12px; z-index: 5;
-    margin: 16px 0 0; padding: 10px 14px;
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 30;
+    margin: 0; padding: 10px 16px; max-width: calc(100vw - 32px);
     border-radius: 10px; font-size: 14px; text-align: center;
     color: var(--text-h); background: var(--accent-bg);
-    border: 1px solid var(--accent-border);
+    border: 1px solid var(--accent-border); box-shadow: var(--shadow);
   }
 
   .banner.error {
@@ -1181,6 +1215,12 @@
   /* The in-progress variant is a labelled "Cancel" rather than a bare ✕. */
   button.x.cancel { padding: 2px 12px; }
   button.x.cancel:hover { color: var(--accent); border-color: var(--accent-border); }
+  /* On touch devices, grow the close/cancel and folder-pick hit areas to the ~44px
+     minimum comfortable tap target (visual padding stays modest via flex centring). */
+  @media (pointer: coarse) {
+    button.x { min-height: 44px; padding-inline: 14px; }
+    .folder-btn { min-height: 44px; }
+  }
   .status { font-size: 13.5px; color: var(--text); margin: 8px 0 10px; }
 
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; }
