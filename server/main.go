@@ -91,6 +91,8 @@ func main() {
 	dailyQuota := flag.Int64("daily-quota", envInt64("RELAYIUM_DAILY_QUOTA", 200<<20), "stored-transfer per-account upload quota per 24h in bytes (default 200 MiB)")
 	fileTTL := flag.Int64("file-ttl", envInt64("RELAYIUM_FILE_TTL", 86400), "stored-transfer default link TTL in seconds (default 1 day)")
 	fileTTLMax := flag.Int64("file-ttl-max", envInt64("RELAYIUM_FILE_TTL_MAX", 604800), "stored-transfer max link TTL in seconds (default 7 days)")
+	relayMonthlyFree := flag.Int64("relay-monthly-free", envInt64("RELAYIUM_RELAY_MONTHLY_FREE", 2<<30),
+		"interim per-user monthly TURN-relay allowance in bytes (default 2 GiB); superseded by per-plan quota later")
 	trustedProxies := flag.String("trusted-proxies", envStr("RELAYIUM_TRUSTED_PROXIES", ""), "comma-separated CIDRs (or IPs) of reverse proxies whose X-Forwarded-For is trusted; empty (default) ignores XFF and uses the direct peer IP")
 	flag.Parse()
 
@@ -180,26 +182,27 @@ func main() {
 			mailer = account.NewSMTPMailer(*smtpAddr, *smtpFrom, *smtpUser, *smtpPass)
 		}
 		acct := account.NewService(store, mailer, account.Config{
-			BaseURL:         *baseURL,
-			SessionTTL:      720 * time.Hour, // 30 days
-			MagicTTL:        15 * time.Minute,
-			GoogleClientID:  *googleID,
-			GoogleSecret:    *googleSecret,
-			GoogleRedirect:  *baseURL + "/api/auth/google/callback",
-			STUNURLs:        splitURLs(*stunURLs),
-			TURNURLs:        splitURLs(*turnURLs),
-			TURNSecret:      *turnSecret,
-			TURNRelays:      parseTURNRelays(*turnRelays),
-			TURNCredTTL:     time.Hour,
-			EnableGoogle:    *enableGoogle,
-			EnableMagic:     *enableMagic,
-			AdminUser:       *adminUser,
-			AdminPassword:   *adminPass,
-			AdminTOTPSecret: *adminTOTPSecret,
-			MaxFileSize:     *maxFileSize,
-			DailyQuota:      *dailyQuota,
-			DefaultTTL:      *fileTTL,
-			MaxTTL:          *fileTTLMax,
+			BaseURL:          *baseURL,
+			SessionTTL:       720 * time.Hour, // 30 days
+			MagicTTL:         15 * time.Minute,
+			GoogleClientID:   *googleID,
+			GoogleSecret:     *googleSecret,
+			GoogleRedirect:   *baseURL + "/api/auth/google/callback",
+			STUNURLs:         splitURLs(*stunURLs),
+			TURNURLs:         splitURLs(*turnURLs),
+			TURNSecret:       *turnSecret,
+			TURNRelays:       parseTURNRelays(*turnRelays),
+			TURNCredTTL:      time.Hour,
+			EnableGoogle:     *enableGoogle,
+			EnableMagic:      *enableMagic,
+			AdminUser:        *adminUser,
+			AdminPassword:    *adminPass,
+			AdminTOTPSecret:  *adminTOTPSecret,
+			MaxFileSize:      *maxFileSize,
+			DailyQuota:       *dailyQuota,
+			DefaultTTL:       *fileTTL,
+			MaxTTL:           *fileTTLMax,
+			RelayMonthlyFree: *relayMonthlyFree,
 		})
 		// Wire /api/ice to validate anonymous pairing codes so it can hand out
 		// TURN credentials for them — otherwise code transfers are STUN-only

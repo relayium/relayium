@@ -4,10 +4,11 @@ import "context"
 
 // Setting keys for the admin-editable stored-transfer limits.
 const (
-	SettingMaxFileSize = "max_file_size"
-	SettingDailyQuota  = "daily_quota"
-	SettingDefaultTTL  = "default_ttl"
-	SettingMaxTTL      = "max_ttl"
+	SettingMaxFileSize      = "max_file_size"
+	SettingDailyQuota       = "daily_quota"
+	SettingDefaultTTL       = "default_ttl"
+	SettingMaxTTL           = "max_ttl"
+	SettingRelayMonthlyFree = "relay_monthly_free_bytes"
 )
 
 // minTTL is the floor a requested TTL is clamped up to; well below default_ttl.
@@ -15,10 +16,11 @@ const minTTL int64 = 60
 
 // Settings is the resolved live view of the four limits for one request.
 type Settings struct {
-	MaxFileSize int64
-	DailyQuota  int64
-	DefaultTTL  int64
-	MaxTTL      int64
+	MaxFileSize      int64
+	DailyQuota       int64
+	DefaultTTL       int64
+	MaxTTL           int64
+	RelayMonthlyFree int64
 }
 
 // settingOr returns the DB value for key, or def when unset/on error (fail to env).
@@ -34,10 +36,11 @@ func (s *Service) settingOr(ctx context.Context, key string, def int64) int64 {
 // env/flag default seeded into Config. "Admin change > env default."
 func (s *Service) resolveSettings(ctx context.Context) Settings {
 	return Settings{
-		MaxFileSize: s.settingOr(ctx, SettingMaxFileSize, s.cfg.MaxFileSize),
-		DailyQuota:  s.settingOr(ctx, SettingDailyQuota, s.cfg.DailyQuota),
-		DefaultTTL:  s.settingOr(ctx, SettingDefaultTTL, s.cfg.DefaultTTL),
-		MaxTTL:      s.settingOr(ctx, SettingMaxTTL, s.cfg.MaxTTL),
+		MaxFileSize:      s.settingOr(ctx, SettingMaxFileSize, s.cfg.MaxFileSize),
+		DailyQuota:       s.settingOr(ctx, SettingDailyQuota, s.cfg.DailyQuota),
+		DefaultTTL:       s.settingOr(ctx, SettingDefaultTTL, s.cfg.DefaultTTL),
+		MaxTTL:           s.settingOr(ctx, SettingMaxTTL, s.cfg.MaxTTL),
+		RelayMonthlyFree: s.settingOr(ctx, SettingRelayMonthlyFree, s.cfg.RelayMonthlyFree),
 	}
 }
 
@@ -68,6 +71,7 @@ func (s *Service) SeedSettings(ctx context.Context) error {
 		{SettingDailyQuota, s.cfg.DailyQuota},
 		{SettingDefaultTTL, s.cfg.DefaultTTL},
 		{SettingMaxTTL, s.cfg.MaxTTL},
+		{SettingRelayMonthlyFree, s.cfg.RelayMonthlyFree},
 	}
 	now := s.now().Unix()
 	for _, d := range defaults {

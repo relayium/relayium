@@ -200,6 +200,29 @@ func TestUserUsageTotalSumsAndDefaultsZero(t *testing.T) {
 	}
 }
 
+func TestUserRelayedSince(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u, _ := s.UpsertUserByEmail(ctx, "r@example.com", "R")
+
+	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a1", Token: "c1", UserID: u.ID, RelayedBytes: 100, RecordedAt: 1000})
+	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a2", Token: "c2", UserID: u.ID, RelayedBytes: 250, RecordedAt: 2000})
+	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a3", Token: "c3", UserID: "other", RelayedBytes: 999, RecordedAt: 2000})
+
+	// since=1500 → only the 250 event counts; "other" user excluded.
+	got, err := s.UserRelayedSince(ctx, u.ID, 1500)
+	if err != nil {
+		t.Fatalf("UserRelayedSince: %v", err)
+	}
+	if got != 250 {
+		t.Fatalf("got %d, want 250", got)
+	}
+	// since=0 → both of u's events.
+	if got, _ := s.UserRelayedSince(ctx, u.ID, 0); got != 350 {
+		t.Fatalf("got %d, want 350", got)
+	}
+}
+
 func TestSetAndGetCredentials(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

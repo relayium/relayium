@@ -48,6 +48,9 @@ type Config struct {
 	DailyQuota  int64 // bytes per rolling 24h
 	DefaultTTL  int64 // seconds
 	MaxTTL      int64 // seconds
+	// RelayMonthlyFree is the interim per-user monthly TURN-relay allowance in
+	// bytes; superseded by a per-plan quota later.
+	RelayMonthlyFree int64
 }
 
 type Service struct {

@@ -355,6 +355,16 @@ func (s *SQLiteStore) UserUsageTotal(ctx context.Context, userID string) (int64,
 	return total.Int64, nil // SUM over no rows is NULL → 0
 }
 
+// UserRelayedSince sums a user's relayed bytes recorded at or after `since`
+// (used for the interim monthly relay cap).
+func (s *SQLiteStore) UserRelayedSince(ctx context.Context, userID string, since int64) (int64, error) {
+	var total int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(relayed_bytes),0) FROM usage_events WHERE user_id = ? AND recorded_at >= ?`,
+		userID, since).Scan(&total)
+	return total, err
+}
+
 func (s *SQLiteStore) SetPassword(ctx context.Context, userID, passwordHash string) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE users SET password_hash = ? WHERE id = ?`, passwordHash, userID)

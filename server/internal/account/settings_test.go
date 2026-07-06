@@ -42,6 +42,23 @@ func TestResolveSettingsDBOverridesEnv(t *testing.T) {
 	}
 }
 
+func TestRelayMonthlyFreeResolvesAndSeeds(t *testing.T) {
+	s := newTestStore(t)
+	svc := NewService(s, &capturingMailer{}, Config{RelayMonthlyFree: 2 << 30})
+	ctx := context.Background()
+	// Default from Config when unset in DB.
+	if st := svc.resolveSettings(ctx); st.RelayMonthlyFree != 2<<30 {
+		t.Fatalf("default relay cap = %d, want %d", st.RelayMonthlyFree, int64(2<<30))
+	}
+	// DB override wins.
+	if err := s.SetSetting(ctx, SettingRelayMonthlyFree, 5<<20, 1); err != nil {
+		t.Fatal(err)
+	}
+	if st := svc.resolveSettings(ctx); st.RelayMonthlyFree != 5<<20 {
+		t.Fatalf("override relay cap = %d, want %d", st.RelayMonthlyFree, int64(5<<20))
+	}
+}
+
 func TestClampTTL(t *testing.T) {
 	st := Settings{DefaultTTL: 86400, MaxTTL: 604800}
 	cases := []struct{ in, want int64 }{
@@ -66,8 +83,8 @@ func TestSeedSettingsInsertsDefaultsOnceAndKeepsExisting(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	all, _ := store.ListSettings(ctx)
-	if len(all) != 4 {
-		t.Fatalf("want 4 settings seeded, got %d (%+v)", len(all), all)
+	if len(all) != 5 {
+		t.Fatalf("want 5 settings seeded, got %d (%+v)", len(all), all)
 	}
 	if v, _, _ := store.GetSetting(ctx, SettingDailyQuota); v != 777 {
 		t.Fatalf("seed overwrote existing daily_quota = %d, want 777", v)

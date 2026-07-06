@@ -179,6 +179,7 @@ type Store interface {
 	// usage (cross-network relay metering)
 	RecordUsage(ctx context.Context, e UsageEvent) error
 	UserUsageTotal(ctx context.Context, userID string) (int64, error)
+	UserRelayedSince(ctx context.Context, userID string, since int64) (int64, error)
 	// admin (read-only)
 	AdminListUsers(ctx context.Context, q AdminUserQuery) (rows []AdminUserRow, total int64, err error)
 	AdminMetrics(ctx context.Context, period string, now int64) (AdminMetrics, error)
