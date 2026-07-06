@@ -140,14 +140,14 @@ type AdminUserQuery struct {
 	Offset  int
 }
 
-// AdminMetrics 是后台首页的快照指标。字节为累计值,时间窗口以传入的 now(unix 秒)为基准。
+// AdminMetrics 是后台首页的快照指标。存储/用户/文件为当前快照;上传/下载/中继为选定月合计。
 type AdminMetrics struct {
 	TotalUsers        int64
 	ActiveStoredFiles int64 // 未过期暂存文件数(expires_at > now)
 	ActiveStoredBytes int64 // 上述文件 size 之和(近似当前磁盘占用)
-	RelayedBytes24h   int64
-	RelayedBytes7d    int64
-	UploadedBytes24h  int64
+	UploadBytes       int64 // 选定月上传合计
+	DownloadBytes     int64 // 选定月下载合计
+	RelayBytes        int64 // 选定月中继合计
 }
 
 // Store is the only abstraction that touches persistent storage. Implemented by
@@ -181,7 +181,7 @@ type Store interface {
 	UserUsageTotal(ctx context.Context, userID string) (int64, error)
 	// admin (read-only)
 	AdminListUsers(ctx context.Context, q AdminUserQuery) (rows []AdminUserRow, total int64, err error)
-	AdminMetrics(ctx context.Context, now int64) (AdminMetrics, error)
+	AdminMetrics(ctx context.Context, period string, now int64) (AdminMetrics, error)
 	// stored files (zero-knowledge stored transfer)
 	CreateStoredFile(ctx context.Context, f StoredFile) error
 	GetStoredFile(ctx context.Context, id string) (StoredFile, error)

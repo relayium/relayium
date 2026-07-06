@@ -165,7 +165,7 @@ func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := s.now().Unix()
-	metrics, err := s.store.AdminMetrics(r.Context(), now)
+	metrics, err := s.store.AdminMetrics(r.Context(), periodOf(now), now)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return

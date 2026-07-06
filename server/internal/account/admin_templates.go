@@ -95,9 +95,9 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <div class="card"><div class="n">{{.Metrics.TotalUsers}}</div><div class="l">总用户数</div></div>
 <div class="card"><div class="n">{{.Metrics.ActiveStoredFiles}}</div><div class="l">未过期暂存文件</div></div>
 <div class="card"><div class="n">{{bytes .Metrics.ActiveStoredBytes}}</div><div class="l">占用存储(近似)</div></div>
-<div class="card"><div class="n">{{bytes .Metrics.RelayedBytes24h}}</div><div class="l">中继流量 · 近 24h</div></div>
-<div class="card"><div class="n">{{bytes .Metrics.RelayedBytes7d}}</div><div class="l">中继流量 · 近 7d</div></div>
-<div class="card"><div class="n">{{bytes .Metrics.UploadedBytes24h}}</div><div class="l">上传量 · 近 24h</div></div>
+<div class="card"><div class="n">{{bytes .Metrics.UploadBytes}}</div><div class="l">上传量 · 本月</div></div>
+<div class="card"><div class="n">{{bytes .Metrics.DownloadBytes}}</div><div class="l">下载量 · 本月</div></div>
+<div class="card"><div class="n">{{bytes .Metrics.RelayBytes}}</div><div class="l">中继流量 · 本月</div></div>
 </section>
 
 <section class="settings">

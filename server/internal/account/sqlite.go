@@ -511,19 +511,20 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context, q AdminUserQuery) ([]A
 	return out, total, nil
 }
 
-func (s *SQLiteStore) AdminMetrics(ctx context.Context, now int64) (AdminMetrics, error) {
+func (s *SQLiteStore) AdminMetrics(ctx context.Context, period string, now int64) (AdminMetrics, error) {
+	start, end := monthRange(period)
 	var m AdminMetrics
 	err := s.db.QueryRowContext(ctx, `
 		SELECT
 		  (SELECT COUNT(*) FROM users),
 		  (SELECT COUNT(*) FROM stored_files WHERE expires_at > ?),
 		  (SELECT COALESCE(SUM(size),0) FROM stored_files WHERE expires_at > ?),
-		  (SELECT COALESCE(SUM(relayed_bytes),0) FROM usage_events WHERE recorded_at >= ?),
-		  (SELECT COALESCE(SUM(relayed_bytes),0) FROM usage_events WHERE recorded_at >= ?),
-		  (SELECT COALESCE(SUM(bytes),0) FROM upload_events WHERE uploaded_at >= ?)`,
-		now, now, now-86400, now-604800, now-86400,
+		  (SELECT COALESCE(SUM(upload_bytes),0) FROM usage_monthly WHERE period = ?),
+		  (SELECT COALESCE(SUM(download_bytes),0) FROM usage_monthly WHERE period = ?),
+		  (SELECT COALESCE(SUM(relayed_bytes),0) FROM usage_events WHERE recorded_at >= ? AND recorded_at < ?)`,
+		now, now, period, period, start, end,
 	).Scan(&m.TotalUsers, &m.ActiveStoredFiles, &m.ActiveStoredBytes,
-		&m.RelayedBytes24h, &m.RelayedBytes7d, &m.UploadedBytes24h)
+		&m.UploadBytes, &m.DownloadBytes, &m.RelayBytes)
 	if err != nil {
 		return AdminMetrics{}, err
 	}

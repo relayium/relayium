@@ -448,7 +448,8 @@ func TestAdminListUsersAggregates(t *testing.T) {
 func TestAdminMetrics(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
-	now := int64(1_700_000_000)
+	now := int64(1_700_000_000) // 2023-11-14 UTC
+	period := periodOf(now)
 
 	u, err := s.UpsertUserByEmail(ctx, "a@example.com", "A")
 	if err != nil {
@@ -459,16 +460,19 @@ func TestAdminMetrics(t *testing.T) {
 	mustCreateStored(t, s, u.ID, "sf-active", 1000, now+3600)
 	mustCreateStored(t, s, u.ID, "sf-expired", 9999, now-1)
 
-	// usage_events: in-24h, in-7d-not-24h, older-than-7d.
-	mustUsage(t, s, u.ID, "ue-24h", 100, now-10)
-	mustUsage(t, s, u.ID, "ue-7d", 200, now-2*86400)
-	mustUsage(t, s, u.ID, "ue-old", 400, now-8*86400)
+	// usage_events: both within the current period.
+	mustUsage(t, s, u.ID, "ue-1", 100, now-10)
+	mustUsage(t, s, u.ID, "ue-2", 200, now-2*86400)
 
-	// upload_events: in-24h (incl. exact boundary) + older.
-	mustUpload(t, s, u.ID, "up-24h", 50, now-86400) // boundary: >= now-86400 → included
-	mustUpload(t, s, u.ID, "up-old", 70, now-86401) // excluded
+	// usage_monthly: upload/download totals for the current period.
+	if err := s.RecordMeter(ctx, u.ID, MeterUpload, 50, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RecordMeter(ctx, u.ID, MeterDownload, 20, now); err != nil {
+		t.Fatal(err)
+	}
 
-	m, err := s.AdminMetrics(ctx, now)
+	m, err := s.AdminMetrics(ctx, period, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -476,9 +480,9 @@ func TestAdminMetrics(t *testing.T) {
 		TotalUsers:        1,
 		ActiveStoredFiles: 1,
 		ActiveStoredBytes: 1000,
-		RelayedBytes24h:   100,
-		RelayedBytes7d:    300, // 100 + 200
-		UploadedBytes24h:  50,
+		UploadBytes:       50,
+		DownloadBytes:     20,
+		RelayBytes:        300, // 100 + 200
 	}
 	if m != want {
 		t.Fatalf("metrics mismatch:\n got %+v\nwant %+v", m, want)

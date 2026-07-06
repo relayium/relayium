@@ -43,3 +43,33 @@ func TestAdminListUsersPeriodColumns(t *testing.T) {
 		t.Fatalf("storage want 900 (expired excluded), got %d", r.StorageBytes)
 	}
 }
+
+func TestAdminMetricsPerPeriod(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u1, _ := s.UpsertUserByEmail(ctx, "a@example.com", "A")
+	u2, _ := s.UpsertUserByEmail(ctx, "b@example.com", "B")
+
+	jan := int64(1_767_312_000) // 2026-01
+	_ = s.RecordMeter(ctx, u1.ID, MeterUpload, 100, jan)
+	_ = s.RecordMeter(ctx, u2.ID, MeterUpload, 20, jan)
+	_ = s.RecordMeter(ctx, u1.ID, MeterDownload, 5, jan)
+	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "al", Token: "t", UserID: u1.ID, RelayedBytes: 300, RecordedAt: jan + 5})
+
+	now := jan + 1000
+	_ = s.CreateStoredFile(ctx, StoredFile{ID: "f1", UserID: u1.ID, BlobKey: "b", EncManifest: []byte("m"), Size: 900, CreatedAt: now, ExpiresAt: now + 1000})
+
+	m, err := s.AdminMetrics(ctx, "202601", now)
+	if err != nil {
+		t.Fatalf("metrics: %v", err)
+	}
+	if m.TotalUsers != 2 {
+		t.Fatalf("users want 2, got %d", m.TotalUsers)
+	}
+	if m.UploadBytes != 120 || m.DownloadBytes != 5 || m.RelayBytes != 300 {
+		t.Fatalf("period totals want 120/5/300, got %d/%d/%d", m.UploadBytes, m.DownloadBytes, m.RelayBytes)
+	}
+	if m.ActiveStoredFiles != 1 || m.ActiveStoredBytes != 900 {
+		t.Fatalf("storage want 1/900, got %d/%d", m.ActiveStoredFiles, m.ActiveStoredBytes)
+	}
+}
