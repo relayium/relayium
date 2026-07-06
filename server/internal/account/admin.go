@@ -17,7 +17,7 @@ const (
 )
 
 // adminListHref builds a /admin list link, keeping only non-default params, URL-encoded.
-func adminListHref(search, sort, dir string, page int) string {
+func adminListHref(search, sort, dir, period string, page int) string {
 	v := url.Values{}
 	if search != "" {
 		v.Set("q", search)
@@ -28,6 +28,9 @@ func adminListHref(search, sort, dir string, page int) string {
 	if dir != "" {
 		v.Set("dir", dir)
 	}
+	if period != "" {
+		v.Set("period", period)
+	}
 	if page > 1 {
 		v.Set("page", strconv.Itoa(page))
 	}
@@ -35,6 +38,27 @@ func adminListHref(search, sort, dir string, page int) string {
 		return "/admin"
 	}
 	return "/admin?" + v.Encode()
+}
+
+// recentMonths returns the last n billing periods ('YYYYMM', UTC), newest first,
+// where index 0 is the month containing `now`.
+func recentMonths(now int64, n int) []string {
+	first := time.Unix(now, 0).UTC()
+	first = time.Date(first.Year(), first.Month(), 1, 0, 0, 0, 0, time.UTC)
+	out := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		out = append(out, first.AddDate(0, -i, 0).Format("200601"))
+	}
+	return out
+}
+
+func contains(ss []string, s string) bool {
+	for _, v := range ss {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 // AdminEnabled 报告是否配置了管理员密码。账号有默认值，故只以密码为开关。
@@ -152,7 +176,9 @@ func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	search := strings.TrimSpace(q.Get("q"))
 	sortBy := q.Get("sort")
-	if sortBy != "email" && sortBy != "relayed" {
+	switch sortBy {
+	case "email", "relayed", "upload", "download", "storage":
+	default:
 		sortBy = "created"
 	}
 	dir := "desc"
@@ -165,13 +191,19 @@ func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := s.now().Unix()
-	metrics, err := s.store.AdminMetrics(r.Context(), periodOf(now), now)
+	months := recentMonths(now, 12)
+	period := q.Get("period")
+	if !contains(months, period) {
+		period = months[0] // default = current month
+	}
+	metrics, err := s.store.AdminMetrics(r.Context(), period, now)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
 	rows, total, err := s.store.AdminListUsers(r.Context(), AdminUserQuery{
 		Search: search, SortBy: sortBy, SortDir: dir,
+		Period: period, Now: now,
 		Limit: adminUsersPerPage, Offset: (page - 1) * adminUsersPerPage,
 	})
 	if err != nil {
@@ -186,6 +218,7 @@ func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		page = totalPages
 		rows, total, err = s.store.AdminListUsers(r.Context(), AdminUserQuery{
 			Search: search, SortBy: sortBy, SortDir: dir,
+			Period: period, Now: now,
 			Limit: adminUsersPerPage, Offset: (page - 1) * adminUsersPerPage,
 		})
 		if err != nil {
@@ -196,25 +229,25 @@ func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 
 	// Sort link for a column header: non-current column -> desc; current column -> toggle direction. Resets to page 1.
 	sortHref := map[string]string{}
-	for _, col := range []string{"created", "email", "relayed"} {
+	for _, col := range []string{"created", "email", "relayed", "upload", "download", "storage"} {
 		nd := "desc"
 		if sortBy == col && dir == "desc" {
 			nd = "asc"
 		}
-		sortHref[col] = adminListHref(search, col, nd, 1)
+		sortHref[col] = adminListHref(search, col, nd, period, 1)
 	}
 	prev, next := "", ""
 	if page > 1 {
-		prev = adminListHref(search, sortBy, dir, page-1)
+		prev = adminListHref(search, sortBy, dir, period, page-1)
 	}
 	if page < totalPages {
-		next = adminListHref(search, sortBy, dir, page+1)
+		next = adminListHref(search, sortBy, dir, period, page+1)
 	}
 
 	st := s.resolveSettings(r.Context())
 	data := adminHomeData{
 		Metrics: metrics, Users: rows, Total: total, Page: page, TotalPages: totalPages,
-		Search: search, Sort: sortBy, Dir: dir,
+		Search: search, Sort: sortBy, Dir: dir, Period: period, Months: months,
 		PrevHref: prev, NextHref: next, SortHref: sortHref,
 		Settings: adminSettingsView{
 			MaxFileSizeMB: st.MaxFileSize / (1024 * 1024),

@@ -286,7 +286,7 @@ func TestAdminHomeDashboardAndPaging(t *testing.T) {
 		t.Fatalf("want 200, got %d", w.Code)
 	}
 	body := w.Body.String()
-	for _, want := range []string{"总用户数", "未过期暂存文件", "占用存储", "中继流量", "上传量", "user0@example.com"} {
+	for _, want := range []string{"总用户数", "未过期暂存文件", "占用存储", "用量月份", "上传", "user0@example.com"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("home body missing %q", want)
 		}

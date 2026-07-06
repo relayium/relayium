@@ -22,9 +22,11 @@ type adminHomeData struct {
 	Search     string
 	Sort       string
 	Dir        string
+	Period     string            // 选定月 'YYYYMM'
+	Months     []string          // 最近 12 个月（下拉，最新在前）
 	PrevHref   string            // empty = no previous page
 	NextHref   string            // empty = no next page
-	SortHref   map[string]string // column key ("created"/"email"/"relayed") -> sort link on click
+	SortHref   map[string]string // column key ("created"/"email"/"relayed"/"upload"/"download"/"storage") -> sort link on click
 	Settings   adminSettingsView
 }
 
@@ -58,6 +60,12 @@ button:hover{filter:brightness(1.07)}
 var adminUsersTmpl = template.Must(template.New("users").Funcs(template.FuncMap{
 	"ts":    func(sec int64) string { return time.Unix(sec, 0).UTC().Format("2006-01-02 15:04") },
 	"bytes": humanBytes,
+	"period": func(p string) string {
+		if t, err := time.Parse("200601", p); err == nil {
+			return t.Format("2006-01")
+		}
+		return p
+	},
 }).Parse(`<!doctype html>
 <html><head><meta charset="utf-8"><title>Relayium Admin · 用户</title>
 <style>:root{--a:#7c3aad;--bg:#faf9fb;--fg:#1a1420;--muted:#6b6375;--bd:#e5e4e7;--card:#fff;--soft:#f4f3ec}
@@ -95,9 +103,9 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <div class="card"><div class="n">{{.Metrics.TotalUsers}}</div><div class="l">总用户数</div></div>
 <div class="card"><div class="n">{{.Metrics.ActiveStoredFiles}}</div><div class="l">未过期暂存文件</div></div>
 <div class="card"><div class="n">{{bytes .Metrics.ActiveStoredBytes}}</div><div class="l">占用存储(近似)</div></div>
-<div class="card"><div class="n">{{bytes .Metrics.UploadBytes}}</div><div class="l">上传量 · 本月</div></div>
-<div class="card"><div class="n">{{bytes .Metrics.DownloadBytes}}</div><div class="l">下载量 · 本月</div></div>
-<div class="card"><div class="n">{{bytes .Metrics.RelayBytes}}</div><div class="l">中继流量 · 本月</div></div>
+<div class="card"><div class="n">{{bytes .Metrics.UploadBytes}}</div><div class="l">上传 · {{period .Period}}</div></div>
+<div class="card"><div class="n">{{bytes .Metrics.DownloadBytes}}</div><div class="l">下载 · {{period .Period}}</div></div>
+<div class="card"><div class="n">{{bytes .Metrics.RelayBytes}}</div><div class="l">中继 · {{period .Period}}</div></div>
 </section>
 
 <section class="settings">
@@ -111,6 +119,15 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 </form>
 </section>
 
+<div class="top"><h2>用量月份</h2>
+<form method="get" action="/admin" class="search">
+<input type="hidden" name="q" value="{{.Search}}"><input type="hidden" name="sort" value="{{.Sort}}"><input type="hidden" name="dir" value="{{.Dir}}">
+<select name="period" onchange="this.form.submit()">
+{{$sel := .Period}}{{range .Months}}<option value="{{.}}"{{if eq . $sel}} selected{{end}}>{{period .}}</option>{{end}}
+</select>
+<noscript><button type="submit">切换</button></noscript>
+</form></div>
+
 <div class="top"><h2>注册用户（{{.Total}}）</h2>
 <form method="get" action="/admin" class="search">
 <input type="text" name="q" value="{{.Search}}" placeholder="搜索邮箱或显示名">
@@ -123,12 +140,17 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <th>显示名</th>
 <th><a href="{{index .SortHref "created"}}">注册时间(UTC)</a></th>
 <th>登录方式</th><th>设备</th>
-<th><a href="{{index .SortHref "relayed"}}">中继流量</a></th>
+<th><a href="{{index .SortHref "upload"}}">上传</a></th>
+<th><a href="{{index .SortHref "download"}}">下载</a></th>
+<th><a href="{{index .SortHref "relayed"}}">中继</a></th>
+<th><a href="{{index .SortHref "storage"}}">当前存储占用</a></th>
 </tr></thead><tbody>
 {{range .Users}}<tr>
 <td>{{.Email}}</td><td>{{.DisplayName}}</td><td>{{ts .CreatedAt}}</td>
 <td>{{range $i, $m := .Methods}}{{if $i}}, {{end}}{{$m}}{{end}}</td>
-<td>{{.DeviceCount}}</td><td>{{bytes .RelayedBytes}}</td>
+<td>{{.DeviceCount}}</td>
+<td>{{bytes .UploadBytes}}</td><td>{{bytes .DownloadBytes}}</td>
+<td>{{bytes .RelayedBytes}}</td><td>{{bytes .StorageBytes}}</td>
 </tr>{{end}}
 </tbody></table>
 
