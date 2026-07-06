@@ -51,6 +51,19 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 	now := s.now()
 	expiry := now.Add(s.cfg.TURNCredTTL).Unix()
 
+	// Interim relay cap: withhold TURN when the code's owner is over the monthly
+	// free relay allowance. On a read error, fail open (issue TURN) rather than
+	// blocking a legit transfer. Per-plan quota (billing phase-1) supersedes this.
+	relayDenied := ""
+	if validCode {
+		st := s.resolveSettings(r.Context())
+		since, _ := monthRange(periodOf(now.Unix()))
+		if used, err := s.store.UserRelayedSince(r.Context(), owner, since); err == nil && used >= st.RelayMonthlyFree {
+			validCode = false
+			relayDenied = "quota"
+		}
+	}
+
 	// The credential username embeds the owner userID (and code) so coturn→Redis→
 	// metering attributes relay bytes to the owning account.
 	token := owner + "." + code
@@ -81,6 +94,10 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 		if len(relays) > 0 {
 			resp["relays"] = relays
 		}
+	}
+
+	if relayDenied != "" {
+		resp["relayDenied"] = relayDenied
 	}
 
 	writeJSON(w, http.StatusOK, resp)

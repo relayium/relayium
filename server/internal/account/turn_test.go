@@ -1,6 +1,7 @@
 package account
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/base64"
@@ -17,10 +18,11 @@ func newICEServer(t *testing.T, secret string) (*httptest.Server, *Service, *SQL
 	t.Helper()
 	store := newTestStore(t)
 	svc := NewService(store, &capturingMailer{}, Config{
-		TURNCredTTL: time.Hour,
-		STUNURLs:    []string{"stun:stun.example.com:3478"},
-		TURNURLs:    []string{"turn:turn.example.com:3478"},
-		TURNSecret:  secret,
+		TURNCredTTL:      time.Hour,
+		STUNURLs:         []string{"stun:stun.example.com:3478"},
+		TURNURLs:         []string{"turn:turn.example.com:3478"},
+		TURNSecret:       secret,
+		RelayMonthlyFree: 2 << 30, // 2GB default cap so plain TURN tests aren't gated
 	})
 	ts := httptest.NewServer(svc.Routes())
 	t.Cleanup(ts.Close)
@@ -157,6 +159,80 @@ func TestICEEmbedsOwnerInTurnUsername(t *testing.T) {
 	}
 }
 
+// TestICEWithholdsTurnOverCap: once the pairing code's owner has relayed at
+// least RelayMonthlyFree bytes this month, /api/ice must withhold TURN
+// (STUN-only) and flag resp["relayDenied"] = "quota", even though the code
+// itself is otherwise valid.
+func TestICEWithholdsTurnOverCap(t *testing.T) {
+	ts, svc, store := newICEServer(t, "secret")
+	svc.SetPairCodeOwner(ownerResolver("owner-1", "424242"))
+
+	ctx := context.Background()
+	now := svc.now().Unix()
+	if err := store.SetSetting(ctx, SettingRelayMonthlyFree, 100, now); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+	if err := store.RecordUsage(ctx, UsageEvent{
+		AllocID: "x", Token: "424242", UserID: "owner-1", RelayedBytes: 500, RecordedAt: now,
+	}); err != nil {
+		t.Fatalf("RecordUsage: %v", err)
+	}
+
+	resp, err := ts.Client().Get(ts.URL + "/api/ice?code=424242")
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("get: err=%v status=%v", err, resp.StatusCode)
+	}
+	var out struct {
+		ICEServers  []ICEServer `json:"iceServers"`
+		RelayDenied string      `json:"relayDenied"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if hasTURN(out.ICEServers) {
+		t.Fatalf("expected STUN-only when over cap, got %+v", out.ICEServers)
+	}
+	if out.RelayDenied != "quota" {
+		t.Fatalf("relayDenied = %q, want %q", out.RelayDenied, "quota")
+	}
+}
+
+// TestICEUnderCapIncludesTurn: below the monthly cap, TURN is issued as usual
+// and relayDenied is absent.
+func TestICEUnderCapIncludesTurn(t *testing.T) {
+	ts, svc, store := newICEServer(t, "secret")
+	svc.SetPairCodeOwner(ownerResolver("owner-1", "424242"))
+
+	ctx := context.Background()
+	now := svc.now().Unix()
+	if err := store.SetSetting(ctx, SettingRelayMonthlyFree, 1000, now); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+	if err := store.RecordUsage(ctx, UsageEvent{
+		AllocID: "y", Token: "424242", UserID: "owner-1", RelayedBytes: 500, RecordedAt: now,
+	}); err != nil {
+		t.Fatalf("RecordUsage: %v", err)
+	}
+
+	resp, err := ts.Client().Get(ts.URL + "/api/ice?code=424242")
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("get: err=%v status=%v", err, resp.StatusCode)
+	}
+	var out struct {
+		ICEServers  []ICEServer `json:"iceServers"`
+		RelayDenied string      `json:"relayDenied"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !hasTURN(out.ICEServers) {
+		t.Fatalf("expected TURN when under cap, got %+v", out.ICEServers)
+	}
+	if out.RelayDenied != "" {
+		t.Fatalf("relayDenied should be absent under cap, got %q", out.RelayDenied)
+	}
+}
+
 func relaysFromBody(t *testing.T, resp *http.Response) []relayEntry {
 	t.Helper()
 	var out struct {
@@ -171,9 +247,10 @@ func relaysFromBody(t *testing.T, resp *http.Response) []relayEntry {
 func newPoolICEServer(t *testing.T, relays []RelayConfig) (*httptest.Server, *Service) {
 	t.Helper()
 	svc := NewService(newTestStore(t), &capturingMailer{}, Config{
-		TURNCredTTL: time.Hour,
-		STUNURLs:    []string{"stun:stun.example.com:3478"},
-		TURNRelays:  relays,
+		TURNCredTTL:      time.Hour,
+		STUNURLs:         []string{"stun:stun.example.com:3478"},
+		TURNRelays:       relays,
+		RelayMonthlyFree: 2 << 30, // 2GB default cap so plain TURN tests aren't gated
 	})
 	svc.SetPairCodeOwner(ownerResolver("owner-1", "424242"))
 	ts := httptest.NewServer(svc.Routes())
