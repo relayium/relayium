@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -81,9 +82,9 @@ func TestAdminSettingsUpdateValid(t *testing.T) {
 	cookie := adminLogin(t, ts)
 	client := ts.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	// 10 MiB file, 100 MiB quota, 12h default, 48h max.
+	// 10 MiB file, 100 MiB quota, 12h default, 48h max, 5 MiB relay cap.
 	req, _ := http.NewRequest("POST", ts.URL+"/admin/settings", strings.NewReader(
-		"max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48"))
+		"max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48&relay_monthly_free_mb=5"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(cookie)
 	resp, _ := client.Do(req)
@@ -112,16 +113,47 @@ func TestAdminSettingsRejectsInvalid(t *testing.T) {
 		return resp.StatusCode
 	}
 	// default_ttl (48h) > max_ttl (24h) → rejected.
-	if code := post("max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=48&max_ttl_hours=24"); code != http.StatusBadRequest {
+	if code := post("max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=48&max_ttl_hours=24&relay_monthly_free_mb=5"); code != http.StatusBadRequest {
 		t.Fatalf("default>max: want 400, got %d", code)
 	}
 	// Negative value → rejected.
-	if code := post("max_file_size_mb=-1&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48"); code != http.StatusBadRequest {
+	if code := post("max_file_size_mb=-1&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48&relay_monthly_free_mb=5"); code != http.StatusBadRequest {
 		t.Fatalf("negative: want 400, got %d", code)
 	}
 	// Nothing persisted by the rejected posts.
 	if _, ok, _ := store.GetSetting(context.Background(), SettingMaxFileSize); ok {
 		t.Fatalf("invalid POST must not write settings")
+	}
+}
+
+func TestAdminSettingsSavesRelayCap(t *testing.T) {
+	ts, _ := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	// Post all five settings; relay cap = 3 MiB.
+	req, _ := http.NewRequest("POST", ts.URL+"/admin/settings", strings.NewReader(
+		"max_file_size_mb=50&daily_quota_mb=200&default_ttl_hours=24&max_ttl_hours=168&relay_monthly_free_mb=3"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookie)
+	resp, _ := client.Do(req)
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("settings POST = %d, want 302", resp.StatusCode)
+	}
+
+	// The rendered dashboard shows the new value (3) in the relay-cap field.
+	getReq, _ := http.NewRequest("GET", ts.URL+"/admin", nil)
+	getReq.AddCookie(cookie)
+	getResp, err := client.Do(getReq)
+	if err != nil {
+		t.Fatalf("get /admin: %v", err)
+	}
+	b, _ := io.ReadAll(getResp.Body)
+	getResp.Body.Close()
+	body := string(b)
+	if !strings.Contains(body, `name="relay_monthly_free_mb"`) || !strings.Contains(body, `value="3"`) {
+		t.Fatalf("relay cap field not rendered with value 3")
 	}
 }
 

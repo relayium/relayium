@@ -250,10 +250,11 @@ func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		Search: search, Sort: sortBy, Dir: dir, Period: period, Months: months,
 		PrevHref: prev, NextHref: next, SortHref: sortHref,
 		Settings: adminSettingsView{
-			MaxFileSizeMB: st.MaxFileSize / (1024 * 1024),
-			DailyQuotaMB:  st.DailyQuota / (1024 * 1024),
-			DefaultTTLHrs: st.DefaultTTL / 3600,
-			MaxTTLHrs:     st.MaxTTL / 3600,
+			MaxFileSizeMB:      st.MaxFileSize / (1024 * 1024),
+			DailyQuotaMB:       st.DailyQuota / (1024 * 1024),
+			DefaultTTLHrs:      st.DefaultTTL / 3600,
+			MaxTTLHrs:          st.MaxTTL / 3600,
+			RelayMonthlyFreeMB: st.RelayMonthlyFree / (1024 * 1024),
 		},
 	}
 	if err := adminUsersTmpl.Execute(w, data); err != nil {
@@ -274,7 +275,8 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 	quota, ok2 := atoi("daily_quota_mb")
 	defH, ok3 := atoi("default_ttl_hours")
 	maxH, ok4 := atoi("max_ttl_hours")
-	if !(ok1 && ok2 && ok3 && ok4) || defH > maxH {
+	relayMB, ok5 := atoi("relay_monthly_free_mb")
+	if !(ok1 && ok2 && ok3 && ok4 && ok5) || defH > maxH {
 		http.Error(w, "invalid settings (positive integers; default_ttl <= max_ttl)", http.StatusBadRequest)
 		return
 	}
@@ -287,6 +289,7 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		{SettingDailyQuota, quota * 1024 * 1024},
 		{SettingDefaultTTL, defH * 3600},
 		{SettingMaxTTL, maxH * 3600},
+		{SettingRelayMonthlyFree, relayMB * 1024 * 1024},
 	}
 	for _, u := range updates {
 		if err := s.store.SetSetting(r.Context(), u.key, u.val, now); err != nil {
