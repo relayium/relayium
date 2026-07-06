@@ -75,9 +75,18 @@ func TestICERoomParamIsIgnored(t *testing.T) {
 	}
 }
 
+func ownerResolver(owner, wantCode string) func(string) (string, bool) {
+	return func(c string) (string, bool) {
+		if c == wantCode {
+			return owner, true
+		}
+		return "", false
+	}
+}
+
 func TestICEValidPairCodeIncludesTurn(t *testing.T) {
 	ts, svc, _ := newICEServer(t, "secret")
-	svc.SetPairCodeValidator(func(c string) bool { return c == "424242" })
+	svc.SetPairCodeOwner(ownerResolver("owner-1", "424242"))
 
 	resp, _ := ts.Client().Get(ts.URL + "/api/ice?code=424242")
 	if resp.StatusCode != http.StatusOK {
@@ -89,8 +98,8 @@ func TestICEValidPairCodeIncludesTurn(t *testing.T) {
 	}
 	for _, s := range servers {
 		if len(s.URLs) > 0 && s.URLs[0] == "turn:turn.example.com:3478" {
-			if !strings.HasSuffix(s.Username, ":424242") {
-				t.Fatalf("username should embed the code, got %q", s.Username)
+			if !strings.HasSuffix(s.Username, ":owner-1.424242") {
+				t.Fatalf("username should embed the owner and code, got %q", s.Username)
 			}
 		}
 	}
@@ -98,7 +107,7 @@ func TestICEValidPairCodeIncludesTurn(t *testing.T) {
 
 func TestICEInvalidPairCodeReturnsStunOnly(t *testing.T) {
 	ts, svc, _ := newICEServer(t, "secret")
-	svc.SetPairCodeValidator(func(c string) bool { return false }) // no live codes
+	svc.SetPairCodeOwner(func(c string) (string, bool) { return "", false }) // no live codes
 	resp, _ := ts.Client().Get(ts.URL + "/api/ice?code=000000")
 	servers := iceServersFromBody(t, resp)
 	if hasTURN(servers) {
@@ -107,7 +116,7 @@ func TestICEInvalidPairCodeReturnsStunOnly(t *testing.T) {
 }
 
 func TestICEPairCodeNoValidatorReturnsStunOnly(t *testing.T) {
-	ts, _, _ := newICEServer(t, "secret") // SetPairCodeValidator never called
+	ts, _, _ := newICEServer(t, "secret") // SetPairCodeOwner never called
 	resp, _ := ts.Client().Get(ts.URL + "/api/ice?code=424242")
 	servers := iceServersFromBody(t, resp)
 	if hasTURN(servers) {
@@ -117,11 +126,34 @@ func TestICEPairCodeNoValidatorReturnsStunOnly(t *testing.T) {
 
 func TestICENoSecretReturnsStunOnly(t *testing.T) {
 	ts, svc, _ := newICEServer(t, "") // TURN disabled
-	svc.SetPairCodeValidator(func(c string) bool { return c == "424242" })
+	svc.SetPairCodeOwner(ownerResolver("owner-1", "424242"))
 	resp, _ := ts.Client().Get(ts.URL + "/api/ice?code=424242")
 	servers := iceServersFromBody(t, resp)
 	if hasTURN(servers) {
 		t.Fatalf("no secret must mean no TURN, got %+v", servers)
+	}
+}
+
+func TestICEEmbedsOwnerInTurnUsername(t *testing.T) {
+	ts, svc, _ := newICEServer(t, "secret")
+	svc.SetPairCodeOwner(ownerResolver("owner-1", "424242"))
+
+	resp, err := ts.Client().Get(ts.URL + "/api/ice?code=424242")
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("get: err=%v status=%v", err, resp.StatusCode)
+	}
+	servers := iceServersFromBody(t, resp)
+	found := false
+	for _, s := range servers {
+		if len(s.URLs) > 0 && s.URLs[0] == "turn:turn.example.com:3478" {
+			found = true
+			if !strings.Contains(s.Username, ":owner-1.424242") {
+				t.Fatalf("turn username = %q, want to contain :owner-1.424242", s.Username)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected a TURN entry in the response")
 	}
 }
 
@@ -143,7 +175,7 @@ func newPoolICEServer(t *testing.T, relays []RelayConfig) (*httptest.Server, *Se
 		STUNURLs:    []string{"stun:stun.example.com:3478"},
 		TURNRelays:  relays,
 	})
-	svc.SetPairCodeValidator(func(c string) bool { return c == "424242" })
+	svc.SetPairCodeOwner(ownerResolver("owner-1", "424242"))
 	ts := httptest.NewServer(svc.Routes())
 	t.Cleanup(ts.Close)
 	return ts, svc
@@ -165,8 +197,8 @@ func TestICEPoolReturnsPerRelayCredentials(t *testing.T) {
 		if len(r.ICEServers) != 1 || len(r.ICEServers[0].URLs) == 0 {
 			t.Fatalf("relay %q missing iceServers: %+v", r.ID, r)
 		}
-		if !strings.HasSuffix(r.ICEServers[0].Username, ":424242") {
-			t.Fatalf("relay %q username should embed the code, got %q", r.ID, r.ICEServers[0].Username)
+		if !strings.HasSuffix(r.ICEServers[0].Username, ":owner-1.424242") {
+			t.Fatalf("relay %q username should embed the owner and code, got %q", r.ID, r.ICEServers[0].Username)
 		}
 	}
 	if relays[0].ICEServers[0].Credential == relays[1].ICEServers[0].Credential {

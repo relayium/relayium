@@ -43,15 +43,22 @@ func (s *Service) stunServers() []ICEServer {
 func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 	servers := s.stunServers()
 	code := r.URL.Query().Get("code")
-	// The credential username embeds the pairing code so coturn validates it and
-	// relay accounting can key usage by code. TURN is only handed out for a live code.
-	validCode := code != "" && s.validatePairCode != nil && s.validatePairCode(code)
-	expiry := s.now().Add(s.cfg.TURNCredTTL).Unix()
+	owner := ""
+	validCode := false
+	if code != "" && s.pairCodeOwner != nil {
+		owner, validCode = s.pairCodeOwner(code)
+	}
+	now := s.now()
+	expiry := now.Add(s.cfg.TURNCredTTL).Unix()
+
+	// The credential username embeds the owner userID (and code) so coturn→Redis→
+	// metering attributes relay bytes to the owning account.
+	token := owner + "." + code
 
 	// Legacy single TURN stays in the top-level iceServers so older clients (that
 	// don't read `relays`) keep working unchanged.
 	if validCode && s.cfg.TURNSecret != "" && len(s.cfg.TURNURLs) > 0 {
-		servers = append(servers, turnCredentials(s.cfg.TURNSecret, code, expiry, s.cfg.TURNURLs))
+		servers = append(servers, turnCredentials(s.cfg.TURNSecret, token, expiry, s.cfg.TURNURLs))
 	}
 
 	resp := map[string]any{"iceServers": servers}
@@ -68,7 +75,7 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 				ID:         rc.ID,
 				Region:     rc.Region,
 				STUN:       rc.STUN,
-				ICEServers: []ICEServer{turnCredentials(rc.Secret, code, expiry, rc.URLs)},
+				ICEServers: []ICEServer{turnCredentials(rc.Secret, token, expiry, rc.URLs)},
 			})
 		}
 		if len(relays) > 0 {

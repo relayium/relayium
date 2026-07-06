@@ -204,7 +204,7 @@ func main() {
 		// Wire /api/ice to validate anonymous pairing codes so it can hand out
 		// TURN credentials for them — otherwise code transfers are STUN-only
 		// and fail across strict NATs.
-		acct.SetPairCodeValidator(pairReg.Validate)
+		acct.SetPairCodeOwner(pairReg.OwnerOf)
 		// /api/pair requires a logged-in owner: the receiver still joins the code
 		// room anonymously via /ws?code= and /api/ice?code=, but minting a
 		// cross-network rendezvous code needs an account for attribution.
