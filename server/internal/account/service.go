@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"net/url"
 	"sync"
 	"time"
@@ -124,6 +125,21 @@ func (s *Service) ValidateSession(ctx context.Context, sessionID string) (User, 
 		return User{}, false, err
 	}
 	return u, true, nil
+}
+
+// UserFromRequest resolves the logged-in user from the session cookie, or
+// (User{}, false) when the cookie is absent or invalid. Unlike RequireSession it
+// writes no response — callers decide how to treat an anonymous request.
+func (s *Service) UserFromRequest(r *http.Request) (User, bool) {
+	c, err := r.Cookie(sessionCookie)
+	if err != nil {
+		return User{}, false
+	}
+	u, ok, err := s.ValidateSession(r.Context(), c.Value)
+	if err != nil || !ok {
+		return User{}, false
+	}
+	return u, true
 }
 
 func (s *Service) RequestMagicLink(ctx context.Context, email string) error {

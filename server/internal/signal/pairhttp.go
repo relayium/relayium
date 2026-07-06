@@ -79,17 +79,25 @@ func (rl *RateLimiter) Run(ctx context.Context, interval time.Duration) {
 	}
 }
 
-// PairHandler serves the anonymous POST /api/pair endpoint: it rate-limits by
-// client IP, then mints a short rendezvous code. No auth, no DB. The IPExtractor
-// determines the rate-limit key (see IPExtractor for the X-Forwarded-For policy).
-func PairHandler(reg *PairRegistry, rl *RateLimiter, ipx *IPExtractor) http.HandlerFunc {
+// PairHandler mints a pairing code for a logged-in user. currentUser resolves the
+// request's owner (injected so this package need not depend on the account layer);
+// an anonymous request is rejected with 401 — cross-network rendezvous requires an
+// owning account, while the receiver still joins the code room anonymously. The
+// IPExtractor determines the rate-limit key (see IPExtractor for the
+// X-Forwarded-For policy).
+func PairHandler(reg *PairRegistry, rl *RateLimiter, ipx *IPExtractor, currentUser func(*http.Request) (string, bool)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ip := ipx.IP(r)
 		if !rl.Allow(ip) {
 			http.Error(w, "too many pairing requests", http.StatusTooManyRequests)
 			return
 		}
-		code, exp := reg.MintFor("")
+		userID, ok := currentUser(r)
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		code, exp := reg.MintFor(userID)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"code": code, "expiresAt": exp})
 	}

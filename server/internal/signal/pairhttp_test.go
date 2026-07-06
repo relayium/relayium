@@ -9,12 +9,16 @@ import (
 	"time"
 )
 
+// alwaysAuthed stubs a logged-in currentUser for tests that exercise minting
+// and rate-limiting rather than the login gate itself.
+func alwaysAuthed(*http.Request) (string, bool) { return "user-test", true }
+
 func TestPairHandlerMints(t *testing.T) {
 	clock := int64(1000)
 	now := func() int64 { return clock }
 	reg := NewPairRegistry(300, now)
 	rl := NewRateLimiter(5, time.Minute, now)
-	h := PairHandler(reg, rl, NewIPExtractor(nil))
+	h := PairHandler(reg, rl, NewIPExtractor(nil), alwaysAuthed)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/pair", nil)
 	req.RemoteAddr = "203.0.113.5:5555"
@@ -53,12 +57,43 @@ func TestRateLimiterReapEvictsIdleKeys(t *testing.T) {
 	}
 }
 
+func TestPairHandlerRequiresLogin(t *testing.T) {
+	clock := int64(1000)
+	now := func() int64 { return clock }
+	reg := NewPairRegistry(60, now)
+	rl := NewRateLimiter(100, time.Minute, now) // permissive; match this file's constructor
+	ipx := NewIPExtractor(nil)
+
+	// Anonymous (currentUser returns false) → 401.
+	anon := PairHandler(reg, rl, ipx, func(*http.Request) (string, bool) { return "", false })
+	rec := httptest.NewRecorder()
+	anon.ServeHTTP(rec, httptest.NewRequest("POST", "/api/pair", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anon pair = %d, want 401", rec.Code)
+	}
+
+	// Logged in → 200 with a code owned by that user.
+	authed := PairHandler(reg, rl, ipx, func(*http.Request) (string, bool) { return "user-xyz", true })
+	rec2 := httptest.NewRecorder()
+	authed.ServeHTTP(rec2, httptest.NewRequest("POST", "/api/pair", nil))
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("authed pair = %d, want 200", rec2.Code)
+	}
+	var body struct {
+		Code string `json:"code"`
+	}
+	_ = json.NewDecoder(rec2.Body).Decode(&body)
+	if owner, ok := reg.OwnerOf(body.Code); !ok || owner != "user-xyz" {
+		t.Fatalf("minted code owner = (%q,%v), want user-xyz,true", owner, ok)
+	}
+}
+
 func TestPairHandlerRateLimitsPerIP(t *testing.T) {
 	clock := int64(1000)
 	now := func() int64 { return clock }
 	reg := NewPairRegistry(300, now)
 	rl := NewRateLimiter(2, time.Minute, now)
-	h := PairHandler(reg, rl, NewIPExtractor(nil))
+	h := PairHandler(reg, rl, NewIPExtractor(nil), alwaysAuthed)
 
 	call := func(ip string) int {
 		req := httptest.NewRequest(http.MethodPost, "/api/pair", nil)

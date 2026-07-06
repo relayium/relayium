@@ -170,9 +170,9 @@ func main() {
 		handle(ctx, c, room, maxPeers, ipx.IP(r))
 		_ = c.Close(websocket.StatusNormalClosure, "")
 	})
-	mux.HandleFunc("POST /api/pair", signal.PairHandler(pairReg, pairLimiter, ipx))
-
 	if dbErr != nil {
+		// /api/pair mints cross-network pairing codes owned by a logged-in user, so
+		// without accounts it is simply not registered — LAN transfer is unaffected.
 		log.Printf("WARNING: open db: %v — account features disabled; LAN transfer unaffected", dbErr)
 	} else {
 		var mailer account.Mailer = &account.LogMailer{Log: log.Default()}
@@ -205,6 +205,14 @@ func main() {
 		// TURN credentials for them — otherwise code transfers are STUN-only
 		// and fail across strict NATs.
 		acct.SetPairCodeValidator(pairReg.Validate)
+		// /api/pair requires a logged-in owner: the receiver still joins the code
+		// room anonymously via /ws?code= and /api/ice?code=, but minting a
+		// cross-network rendezvous code needs an account for attribution.
+		mux.HandleFunc("POST /api/pair", signal.PairHandler(pairReg, pairLimiter, ipx,
+			func(r *http.Request) (string, bool) {
+				u, ok := acct.UserFromRequest(r)
+				return u.ID, ok
+			}))
 		if disk, derr := storage.NewDiskStore(*blobDir); derr != nil {
 			log.Printf("WARNING: open blob dir %q: %v — stored transfers disabled", *blobDir, derr)
 		} else {
