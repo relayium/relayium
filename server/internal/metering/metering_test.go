@@ -81,3 +81,30 @@ func TestWorkerKeepsMaxPerAlloc(t *testing.T) {
 		t.Fatalf("keep-max record wrong: %+v", sink.recorded)
 	}
 }
+
+func TestSplitAttrib(t *testing.T) {
+	cases := []struct{ in, user, code string }{
+		{"deadbeefcafe.424242", "deadbeefcafe", "424242"}, // new format
+		{"424242", "", "424242"},                          // legacy: no owner
+		{"", "", ""},
+	}
+	for _, c := range cases {
+		u, code := splitAttrib(c.in)
+		if u != c.user || code != c.code {
+			t.Fatalf("splitAttrib(%q) = (%q,%q), want (%q,%q)", c.in, u, code, c.user, c.code)
+		}
+	}
+}
+
+func TestHandleAttributesOwner(t *testing.T) {
+	sink := &fakeSink{}
+	w := &Worker{Sink: sink, Now: func() int64 { return 42 }, Log: log.New(io.Discard, "", 0)}
+	w.handle(context.Background(), UsageEvent{AllocID: "a1", Username: "999:deadbeef.424242", RelayedBytes: 500})
+	if len(sink.recorded) != 1 {
+		t.Fatalf("want 1 usage row, got %d", len(sink.recorded))
+	}
+	got := sink.recorded[0]
+	if got.UserID != "deadbeef" || got.Token != "424242" || got.RelayedBytes != 500 {
+		t.Fatalf("recorded = %+v, want UserID=deadbeef Token=424242 Bytes=500", got)
+	}
+}

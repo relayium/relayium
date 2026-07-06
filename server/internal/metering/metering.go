@@ -1,5 +1,6 @@
 // Package metering ingests coturn's per-allocation relay accounting and
-// records it keyed by pairing code, unattributed. The Redis dependency lives
+// records it keyed by pairing code, attributed to the code's owner when the
+// username token carries one (see splitAttrib). The Redis dependency lives
 // in redis.go; this file is Redis-free and unit-testable with fakes.
 package metering
 
@@ -67,20 +68,28 @@ func tokenFromUsername(username string) string {
 	return parts[1]
 }
 
+// splitAttrib splits a coturn-username token "<userID>.<code>" into its parts.
+// A token with no '.' (legacy anonymous codes) yields ("", token), keeping global
+// relay accounting working without attribution.
+func splitAttrib(token string) (userID, code string) {
+	parts := strings.SplitN(token, ".", 2)
+	if len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	return "", token
+}
+
 func (w *Worker) handle(ctx context.Context, ev UsageEvent) {
 	token := tokenFromUsername(ev.Username)
 	if token == "" {
 		w.Log.Printf("metering: skip alloc %s, malformed username %q", ev.AllocID, ev.Username)
 		return
 	}
-	// Pairing codes are anonymous, so relay usage is recorded unattributed
-	// (empty UserID): global relay accounting keeps working, per-user
-	// attribution returns if/when signed-in users mint codes bound to their
-	// account (deferred).
+	userID, code := splitAttrib(token)
 	rec := account.UsageEvent{
 		AllocID:      ev.AllocID,
-		Token:        token,
-		UserID:       "",
+		Token:        code,
+		UserID:       userID,
 		RelayedBytes: ev.RelayedBytes,
 		RecordedAt:   w.Now(),
 	}
