@@ -118,6 +118,9 @@ const fr: Messages = {
     realtimeTitle: "Transfert direct en temps réel",
     realtimeSub: "Les deux en ligne · pair-à-pair · les fichiers ne passent jamais par le serveur",
     realtimeFoot: "Sans connexion · chiffré de bout en bout",
+    signInToSend: "Connectez-vous pour envoyer d'un réseau à l'autre. La personne qui reçoit n'a jamais besoin de compte.",
+    relayQuotaWarn: "Vous avez épuisé le trafic de relais de ce mois-ci. Une connexion directe pair-à-pair fonctionne toujours — seul le relais de secours est indisponible. Passez à une offre supérieure pour rétablir le relais.",
+    relayQuotaFail: "Connexion directe impossible et le trafic de relais de ce mois-ci est épuisé — aucun relais de secours. Utilisez plutôt un lien de téléchargement, ou passez à une offre supérieure pour réactiver le relais.",
   },
   offline: {
     tagline: "Chiffré dans votre navigateur, puis stocké · le serveur ne détient que du chiffré",

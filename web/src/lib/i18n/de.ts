@@ -118,6 +118,9 @@ const de: Messages = {
     realtimeTitle: "Echtzeit-Direktübertragung",
     realtimeSub: "Beide jetzt online · Peer-to-Peer · Dateien berühren nie den Server",
     realtimeFoot: "Keine Anmeldung nötig · Ende-zu-Ende-verschlüsselt",
+    signInToSend: "Zum netzwerkübergreifenden Senden anmelden. Die empfangende Person braucht nie ein Konto.",
+    relayQuotaWarn: "Das Relay-Kontingent dieses Monats ist aufgebraucht. Eine direkte Peer-to-Peer-Verbindung funktioniert weiterhin — nur der Relay-Rückfall steht nicht zur Verfügung. Upgraden, um das Relay wiederherzustellen.",
+    relayQuotaFail: "Direkte Verbindung fehlgeschlagen und das Relay-Kontingent dieses Monats ist aufgebraucht — kein Relay als Rückfall. Nutze stattdessen einen Download-Link oder upgrade, um das Relay wieder zu aktivieren.",
   },
   offline: {
     tagline: "Im Browser verschlüsselt, dann zwischengespeichert · der Server hält nur Chiffretext",

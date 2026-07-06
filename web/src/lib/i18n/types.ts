@@ -138,6 +138,9 @@ export interface Messages {
     realtimeTitle: string;
     realtimeSub: string;
     realtimeFoot: string;
+    signInToSend: string; // gate hint on the mint card when signed out
+    relayQuotaWarn: string; // proactive banner on the minter's code card when over the monthly relay cap
+    relayQuotaFail: string; // shown when a cross-network transfer fails and no relay was available (over cap)
   };
   offline: {
     tagline: string; // page subtitle — encrypt-then-store, ciphertext-only server

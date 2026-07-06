@@ -118,6 +118,9 @@ const en: Messages = {
     realtimeTitle: "Realtime direct",
     realtimeSub: "Both online now · peer-to-peer · files never touch the server",
     realtimeFoot: "No sign-in needed · end-to-end encrypted",
+    signInToSend: "Sign in to send across networks. The person receiving never needs an account.",
+    relayQuotaWarn: "You've used up this month's relay traffic. A direct peer-to-peer connection still works — only the relay fallback is unavailable. Upgrade to restore relaying.",
+    relayQuotaFail: "Couldn't connect directly, and this month's relay traffic is used up — no relay to fall back on. Try a download link instead, or upgrade to re-enable relaying.",
   },
   offline: {
     tagline: "Encrypted in your browser, then stored · the server only ever holds ciphertext",

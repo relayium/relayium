@@ -118,6 +118,9 @@ const zh: Messages = {
     realtimeTitle: "实时直传",
     realtimeSub: "对方此刻在线 · 点对点直连 · 文件不经服务器",
     realtimeFoot: "免登录 · 端到端加密",
+    signInToSend: "登录后即可跨网络发送。接收方无需账号。",
+    relayQuotaWarn: "本月中继流量已用尽。点对点直连仍可用——仅中继兜底不可用。升级后恢复中继。",
+    relayQuotaFail: "直连失败,且本月中继流量已用尽——无中继可兜底。可改用下载链接,或升级以恢复中继。",
   },
   offline: {
     tagline: "浏览器先加密再暂存 · 服务器只保存无法解密的密文",

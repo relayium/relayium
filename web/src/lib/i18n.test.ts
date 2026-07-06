@@ -70,6 +70,15 @@ describe("i18n completeness", () => {
       expect(m.stored.uploadingNow, `${code}.stored.uploadingNow`).toBeTruthy();
     }
   });
+
+  it("every language has the cross-network login-gate and relay-quota strings", () => {
+    for (const { code } of LANGS) {
+      const m = messages[code];
+      expect(m.crossnet.signInToSend, `${code}.crossnet.signInToSend`).toBeTruthy();
+      expect(m.crossnet.relayQuotaWarn, `${code}.crossnet.relayQuotaWarn`).toBeTruthy();
+      expect(m.crossnet.relayQuotaFail, `${code}.crossnet.relayQuotaFail`).toBeTruthy();
+    }
+  });
 });
 
 describe("detect", () => {
