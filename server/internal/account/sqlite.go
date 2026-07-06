@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -90,6 +91,15 @@ CREATE TABLE IF NOT EXISTS user_stats (
   upload_bytes    INTEGER NOT NULL DEFAULT 0,
   download_bytes  INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS usage_monthly (
+  user_id        TEXT    NOT NULL REFERENCES users(id),
+  period         TEXT    NOT NULL,
+  upload_bytes   INTEGER NOT NULL DEFAULT 0,
+  download_bytes INTEGER NOT NULL DEFAULT 0,
+  updated_at     INTEGER NOT NULL,
+  PRIMARY KEY (user_id, period)
+);
+CREATE INDEX IF NOT EXISTS idx_usage_monthly_period ON usage_monthly(period);
 `
 
 func OpenSQLite(dsn string) (*SQLiteStore, error) {
@@ -722,6 +732,46 @@ func (s *SQLiteStore) SetSetting(ctx context.Context, key string, value, at int6
 		 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
 		key, value, at)
 	return err
+}
+
+// periodOf maps a unix timestamp to its billing month bucket 'YYYYMM' (UTC).
+func periodOf(at int64) string { return time.Unix(at, 0).UTC().Format("200601") }
+
+// RecordMeter adds a one-shot upload/download event to the user's current-month
+// bucket, creating the row on first use. Relay is NOT metered here (derived from
+// usage_events). Callers treat this as best-effort.
+func (s *SQLiteStore) RecordMeter(ctx context.Context, userID string, kind UsageKind, bytes, at int64) error {
+	var col string
+	switch kind {
+	case MeterUpload:
+		col = "upload_bytes"
+	case MeterDownload:
+		col = "download_bytes"
+	default:
+		return fmt.Errorf("account: unknown usage kind %d", kind)
+	}
+	// col comes from a fixed switch above (never user input), so interpolating it
+	// into the statement is safe; bytes/user/period stay parameterized.
+	q := `INSERT INTO usage_monthly (user_id, period, ` + col + `, updated_at)
+	      VALUES (?, ?, ?, ?)
+	      ON CONFLICT(user_id, period) DO UPDATE SET
+	        ` + col + ` = ` + col + ` + excluded.` + col + `,
+	        updated_at = excluded.updated_at`
+	_, err := s.db.ExecContext(ctx, q, userID, periodOf(at), bytes, at)
+	return err
+}
+
+// MonthlyUsage returns the user's upload/download bytes for a 'YYYYMM' period
+// (0,0 when there is no row).
+func (s *SQLiteStore) MonthlyUsage(ctx context.Context, userID, period string) (upload, download int64, err error) {
+	err = s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(upload_bytes,0), COALESCE(download_bytes,0)
+		 FROM usage_monthly WHERE user_id = ? AND period = ?`, userID, period).
+		Scan(&upload, &download)
+	if err == sql.ErrNoRows {
+		return 0, 0, nil
+	}
+	return upload, download, err
 }
 
 func (s *SQLiteStore) ListSettings(ctx context.Context) ([]Setting, error) {

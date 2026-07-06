@@ -80,6 +80,14 @@ type StoredFile struct {
 	DownloadCount int64 // lifetime successful downloads of this file (non-burn)
 }
 
+// UsageKind selects which per-month meter a RecordMeter call increments.
+type UsageKind int
+
+const (
+	MeterUpload UsageKind = iota
+	MeterDownload
+)
+
 // UserStats are a user's lifetime aggregate counters for the personal center /
 // future metering. Monotonic (never decremented), survive file expiry/GC, and
 // carry no per-event metadata (no timestamps, no downloader identity).
@@ -185,6 +193,10 @@ type Store interface {
 	AddUploadStat(ctx context.Context, userID string, bytes int64) error
 	AddDownloadStat(ctx context.Context, userID string, bytes int64) error
 	GetUserStats(ctx context.Context, userID string) (UserStats, error)
+	// usage_monthly (per-month billing ledger: upload/download bytes; relay is
+	// derived from usage_events, not stored here)
+	RecordMeter(ctx context.Context, userID string, kind UsageKind, bytes, at int64) error
+	MonthlyUsage(ctx context.Context, userID, period string) (upload, download int64, err error)
 	// upload events (rolling-24h quota ledger)
 	RecordUpload(ctx context.Context, e UploadEvent) error
 	UserUploadedSince(ctx context.Context, userID string, since int64) (int64, error)
