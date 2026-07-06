@@ -1,7 +1,9 @@
-// Cross-network realtime rendezvous: a short pairing code minted anonymously
-// via POST /api/pair. The join link carries it in the URL fragment
-// (#c=<code>) so it never reaches server logs or the Referer header; anyone
-// holding a live code can join its 2-peer room (capability model).
+// Cross-network realtime rendezvous: a short pairing code minted by a
+// logged-in owner via POST /api/pair (401 without a session — the initiator
+// owns the transfer and its relay usage). The join link carries the code in
+// the URL fragment (#c=<code>) so it never reaches server logs or the Referer
+// header; anyone holding a live code can join its 2-peer room anonymously
+// (capability model — only minting requires a session, joining does not).
 
 /** Error carrying the HTTP status of a failed mint. A thrown TypeError (fetch
  *  never reached the server) is left as-is and surfaces as a network error. */
@@ -32,7 +34,9 @@ export function wsURL(loc: { protocol: string; host: string }, code = ""): strin
   return code ? `${base}?code=${encodeURIComponent(code)}` : base;
 }
 
-/** Mint an anonymous short pairing code. No session required. */
+/** Mint a short pairing code owned by the logged-in user. Requires a session:
+ *  a missing/expired one yields a 401 (surfaced as an HttpError the caller uses
+ *  to re-prompt login). The receiver who joins by code needs no session. */
 export async function createPair(): Promise<{ code: string; expiresAt: number }> {
   const res = await fetch("/api/pair", { method: "POST" });
   if (!res.ok) throw new HttpError(res.status, `createPair failed: ${res.status}`);
