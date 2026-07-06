@@ -136,6 +136,7 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	// Lifetime stats are best-effort: a stats write failure must not fail the
 	// upload the user already completed.
 	_ = s.store.AddUploadStat(r.Context(), u.ID, size)
+	_ = s.store.RecordMeter(r.Context(), u.ID, MeterUpload, size, now)
 	writeJSON(w, http.StatusOK, map[string]any{"id": id, "expiresAt": sf.ExpiresAt})
 }
 
@@ -195,6 +196,7 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	// downloader (no downloader identity is read or stored). Best-effort: a stats
 	// failure must not turn a delivered file into an error.
 	_ = s.store.AddDownloadStat(r.Context(), sf.UserID, sf.Size)
+	_ = s.store.RecordMeter(r.Context(), sf.UserID, MeterDownload, sf.Size, s.now().Unix())
 	if sf.BurnAfterRead {
 		// Already claimed up front; this is cleanup of the now-spent ciphertext+row.
 		_ = s.blobs.Delete(r.Context(), sf.BlobKey)
