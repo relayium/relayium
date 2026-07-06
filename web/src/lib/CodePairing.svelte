@@ -1,6 +1,6 @@
 <!-- web/src/lib/CodePairing.svelte -->
 <script lang="ts">
-  import { createPair, CROSS_PATH } from "./transfer-link";
+  import { createPair, CROSS_PATH, HttpError } from "./transfer-link";
   import { canShare, share } from "./share";
   import { enterRoom } from "./room.svelte";
   import { messages, lang, type Messages } from "./i18n.svelte";
@@ -8,9 +8,10 @@
   import { pickedFromInput } from "./drag";
   import { formatSize } from "./format";
   import { folderUploadSupported } from "./platform";
+  import { session } from "./auth.svelte";
 
-  let { roomCode = "", expired = false }:
-    { roomCode?: string; expired?: boolean } = $props();
+  let { roomCode = "", expired = false, requireLogin }:
+    { roomCode?: string; expired?: boolean; requireLogin?: () => void } = $props();
 
   const t = $derived<Messages>(messages[lang()]);
   const EXP_KEY = "relayium_pair_exp";
@@ -85,7 +86,7 @@
       const { code, expiresAt } = await createPair();
       sessionStorage.setItem(EXP_KEY, String(expiresAt));
       enterRoom({ code }); // rebinds the socket to the code room without reloading
-    } catch {
+    } catch (e) {
       busy = false;
       // Only the choose state (roomCode "") drops the queue: a roomless stale queue
       // could surprise-send later (Fix-1's room-exit clearing never fires because no
@@ -93,6 +94,9 @@
       // retrying the re-mint — keep the batch; leaving the room (start over / tab
       // switch) clears it via the room-exit path.
       if (!roomCode) clearOutbox();
+      // A 401 means the session lapsed between render and mint — re-open the login
+      // panel instead of a dead-end "couldn't create a code" error.
+      if (e instanceof HttpError && e.status === 401) { requireLogin?.(); return; }
       // Minting a brand-new code just failed; it was never issued, so "expired"
       // would be misleading — report a mint/network failure instead.
       err = t.pair.mintFailed;
@@ -160,7 +164,7 @@
       <button class="btn btn-primary" disabled={entry.length !== 6} onclick={join}>{t.pair.joinBtn}</button>
     </div>
     <button class="btn-link" onclick={() => { mode = "choose"; entry = ""; err = ""; }}>{t.pair.back}</button>
-  {:else}
+  {:else if session().user}
     <div class="choices">
       <label class="btn btn-primary" class:disabled={busy}>
         📄 {t.sendFile}
@@ -175,6 +179,12 @@
       <button class="btn btn-ghost" onclick={() => (mode = "receive")}>{t.pair.enterCode}</button>
     </div>
     <button class="btn-link" disabled={busy} onclick={send}>{busy ? t.generating : t.pair.bareConnect}</button>
+  {:else}
+    <div class="signin">
+      <button class="btn btn-primary" onclick={() => requireLogin?.()}>{t.account.signIn}</button>
+      <p class="hint">{t.crossnet.signInToSend}</p>
+    </div>
+    <button class="btn btn-ghost" onclick={() => (mode = "receive")}>{t.pair.enterCode}</button>
   {/if}
   {#if err}<p class="error">{err}</p>{/if}
 </section>
@@ -185,6 +195,8 @@
   .choices label.btn input[type="file"] { display: none; }
   .choices label.btn.disabled { opacity: .55; cursor: not-allowed; }
   .queued { margin: 0; font-size: var(--fs-xs); color: var(--text-h); text-align: center; }
+  .signin { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
+  .signin .hint { margin: 0; font-size: var(--fs-xs); color: var(--text); text-align: center; max-width: 34ch; }
   .qr { margin-top: var(--space-1); border-radius: var(--radius-sm); background: #fff; padding: 6px; }
   .scan { margin: 0; font-size: 12px; color: var(--text); text-align: center; max-width: 30ch; }
   .lead { margin: 0; font-size: var(--fs-sm); color: var(--text); text-align: center; }

@@ -10,12 +10,15 @@
   import { enterRoom } from "./room.svelte";
   import { clearOutbox } from "./outbox.svelte";
   import { lang, messages, legalUrl, type Messages } from "./i18n.svelte";
+  import Account from "./Account.svelte";
+  import { session } from "./auth.svelte";
 
   let { roomCode = "", linkDead = false, showTransfer = false, transferSurface, dismissLan }:
     { roomCode?: string; linkDead?: boolean; showTransfer?: boolean; transferSurface?: Snippet; dismissLan?: () => void } = $props();
 
   const t = $derived<Messages>(messages[lang()]);
   const inRoom = $derived(!!roomCode);
+  let loginOpen = $state(false);
 
   // Leaving a room must also drop the sessionStorage role markers — otherwise a
   // stale "I minted this code" flag makes the next method choice render the
@@ -36,6 +39,8 @@
 </script>
 
 <section class="crosspage">
+  <div class="acct"><Account bind:open={loginOpen} /></div>
+
   <header class="cn-head">
     <h1>{t.nav.crossTab}</h1>
     <p class="tagline">{t.tagline}</p>
@@ -67,7 +72,7 @@
       <section class="card">
         <div class="mhead"><h2>{t.methods.realtime.name}</h2><span class="badge ok">{t.methods.realtime.badge}</span></div>
         <p class="cardsub">{t.methods.realtime.sub}</p>
-        <CodePairing />
+        <CodePairing requireLogin={() => (loginOpen = true)} />
       </section>
     {/if}
   </div>
@@ -94,6 +99,7 @@
 
 <style>
   .crosspage { position: relative; }
+  .acct { display: flex; justify-content: flex-end; min-height: 32px; }
 
   .cn-head { text-align: center; padding: var(--space-3) 0 var(--space-5); }
   /* Intentional page-header size — smaller than the marketing hero (--fs-display). */
