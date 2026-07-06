@@ -413,7 +413,9 @@ func TestAdminListUsersAggregates(t *testing.T) {
 	u2, _ := s.UpsertUserByEmail(ctx, "solo@example.com", "Solo")
 	_ = s.LinkIdentity(ctx, "password", "solo@example.com", u2.ID)
 
-	rows, total, err := s.AdminListUsers(ctx, AdminUserQuery{Limit: 10})
+	// RelayedBytes is scoped to the selected period; pass the period the fixture's
+	// usage event actually falls in so the assertion still exercises real data.
+	rows, total, err := s.AdminListUsers(ctx, AdminUserQuery{Limit: 10, Period: periodOf(1)})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -548,14 +550,16 @@ func TestAdminListUsersQuery(t *testing.T) {
 		t.Fatalf("created asc wrong: %v", emails(rows))
 	}
 
-	// sort by relayed desc → Alice first
-	rows, _ = all(AdminUserQuery{SortBy: "relayed", SortDir: "desc", Limit: 10})
+	// sort by relayed desc → Alice first (RelayedBytes is scoped to the selected
+	// period, so pass the period the fixture's usage event actually falls in)
+	relayPeriod := periodOf(1_700_000_000)
+	rows, _ = all(AdminUserQuery{SortBy: "relayed", SortDir: "desc", Limit: 10, Period: relayPeriod})
 	if rows[0].Email != "alice@example.com" {
 		t.Fatalf("relayed desc wrong: %v", emails(rows))
 	}
 
 	// sort by relayed asc → Alice last (she has the only/biggest relay total)
-	rows, _ = all(AdminUserQuery{SortBy: "relayed", SortDir: "asc", Limit: 10})
+	rows, _ = all(AdminUserQuery{SortBy: "relayed", SortDir: "asc", Limit: 10, Period: relayPeriod})
 	if rows[2].Email != "alice@example.com" {
 		t.Fatalf("relayed asc wrong: %v", emails(rows))
 	}

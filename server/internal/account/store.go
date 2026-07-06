@@ -117,20 +117,25 @@ type Setting struct {
 
 // AdminUserRow 是后台用户列表的一行聚合视图（只读）。
 type AdminUserRow struct {
-	ID           string
-	Email        string
-	DisplayName  string
-	CreatedAt    int64
-	Methods      []string // identities 表里的 provider 去重升序
-	DeviceCount  int
-	RelayedBytes int64
+	ID            string
+	Email         string
+	DisplayName   string
+	CreatedAt     int64
+	Methods       []string // identities 表里的 provider 去重升序
+	DeviceCount   int
+	RelayedBytes  int64 // 选定月的中继流量（来自 usage_events）
+	UploadBytes   int64 // 选定月上传（usage_monthly）
+	DownloadBytes int64 // 选定月下载（usage_monthly）
+	StorageBytes  int64 // 当前存储占用（未过期文件 size 之和，与月份无关）
 }
 
 // AdminUserQuery 参数化后台用户列表查询。
 type AdminUserQuery struct {
 	Search  string // 空 = 不过滤;非空按 email/display_name 模糊匹配
-	SortBy  string // "created" | "email" | "relayed";非法值回退 "created"
-	SortDir string // "asc" | "desc";非法值回退 "desc"
+	SortBy  string // "created"|"email"|"relayed"|"upload"|"download"|"storage";非法回退 "created"
+	SortDir string // "asc"|"desc";非法回退 "desc"
+	Period  string // 'YYYYMM'，决定上传/下载/中继列的口径
+	Now     int64  // 用于存储占用的"未过期"判定
 	Limit   int
 	Offset  int
 }

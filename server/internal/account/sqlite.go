@@ -419,17 +419,32 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context, q AdminUserQuery) ([]A
 		orderCol = "u.email"
 	case "relayed":
 		orderCol = "relayed_bytes"
+	case "upload":
+		orderCol = "upload_bytes"
+	case "download":
+		orderCol = "download_bytes"
+	case "storage":
+		orderCol = "storage_bytes"
 	}
 	dir := "DESC"
 	if strings.EqualFold(q.SortDir, "asc") {
 		dir = "ASC"
 	}
 
-	listArgs := append(append([]any{}, whereArgs...), q.Limit, q.Offset)
+	mStart, mEnd := monthRange(q.Period)
+	listArgs := append([]any{mStart, mEnd, q.Period, q.Period, q.Now}, whereArgs...)
+	listArgs = append(listArgs, q.Limit, q.Offset)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT u.id, u.email, u.display_name, u.created_at,
 		       (SELECT COUNT(*) FROM devices d WHERE d.user_id = u.id),
-		       (SELECT COALESCE(SUM(relayed_bytes), 0) FROM usage_events e WHERE e.user_id = u.id) AS relayed_bytes
+		       (SELECT COALESCE(SUM(e.relayed_bytes),0) FROM usage_events e
+		          WHERE e.user_id = u.id AND e.recorded_at >= ? AND e.recorded_at < ?) AS relayed_bytes,
+		       (SELECT COALESCE(SUM(um.upload_bytes),0) FROM usage_monthly um
+		          WHERE um.user_id = u.id AND um.period = ?) AS upload_bytes,
+		       (SELECT COALESCE(SUM(um.download_bytes),0) FROM usage_monthly um
+		          WHERE um.user_id = u.id AND um.period = ?) AS download_bytes,
+		       (SELECT COALESCE(SUM(sf.size),0) FROM stored_files sf
+		          WHERE sf.user_id = u.id AND sf.expires_at > ?) AS storage_bytes
 		FROM users u`+where+`
 		ORDER BY `+orderCol+` `+dir+`, u.id ASC
 		LIMIT ? OFFSET ?`, listArgs...)
@@ -443,7 +458,8 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context, q AdminUserQuery) ([]A
 	for rows.Next() {
 		var row AdminUserRow
 		if err := rows.Scan(&row.ID, &row.Email, &row.DisplayName, &row.CreatedAt,
-			&row.DeviceCount, &row.RelayedBytes); err != nil {
+			&row.DeviceCount, &row.RelayedBytes,
+			&row.UploadBytes, &row.DownloadBytes, &row.StorageBytes); err != nil {
 			return nil, 0, err
 		}
 		index[row.ID] = len(out)
@@ -736,6 +752,16 @@ func (s *SQLiteStore) SetSetting(ctx context.Context, key string, value, at int6
 
 // periodOf maps a unix timestamp to its billing month bucket 'YYYYMM' (UTC).
 func periodOf(at int64) string { return time.Unix(at, 0).UTC().Format("200601") }
+
+// monthRange returns [start, end) unix seconds for a 'YYYYMM' period (UTC).
+// Returns (0,0) if period is malformed.
+func monthRange(period string) (start, end int64) {
+	t, err := time.Parse("200601", period)
+	if err != nil {
+		return 0, 0
+	}
+	return t.Unix(), t.AddDate(0, 1, 0).Unix()
+}
 
 // RecordMeter adds a one-shot upload/download event to the user's current-month
 // bucket, creating the row on first use. Relay is NOT metered here (derived from
