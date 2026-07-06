@@ -607,14 +607,6 @@ func mustUsage(t *testing.T, s *SQLiteStore, uid, alloc string, bytes, at int64)
 		t.Fatal(err)
 	}
 }
-func mustUpload(t *testing.T, s *SQLiteStore, uid, id string, bytes, at int64) {
-	t.Helper()
-	if err := s.RecordUpload(context.Background(), UploadEvent{
-		ID: id, UserID: uid, Bytes: bytes, UploadedAt: at,
-	}); err != nil {
-		t.Fatal(err)
-	}
-}
 
 // TestClaimBurnDownloadIsSingleWinner proves the burn-after-read TOCTOU fix at
 // the store level: many concurrent claims on one file yield exactly one winner.

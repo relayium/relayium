@@ -131,7 +131,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <div class="top"><h2>注册用户（{{.Total}}）</h2>
 <form method="get" action="/admin" class="search">
 <input type="text" name="q" value="{{.Search}}" placeholder="搜索邮箱或显示名">
-<input type="hidden" name="sort" value="{{.Sort}}"><input type="hidden" name="dir" value="{{.Dir}}">
+<input type="hidden" name="sort" value="{{.Sort}}"><input type="hidden" name="dir" value="{{.Dir}}"><input type="hidden" name="period" value="{{.Period}}">
 <button type="submit">搜索</button>
 </form></div>
 
