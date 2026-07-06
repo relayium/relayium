@@ -11,10 +11,9 @@
   import { clearOutbox } from "./outbox.svelte";
   import { lang, messages, legalUrl, type Messages } from "./i18n.svelte";
   import Account from "./Account.svelte";
-  import { session } from "./auth.svelte";
 
-  let { roomCode = "", linkDead = false, showTransfer = false, transferSurface, dismissLan }:
-    { roomCode?: string; linkDead?: boolean; showTransfer?: boolean; transferSurface?: Snippet; dismissLan?: () => void } = $props();
+  let { roomCode = "", linkDead = false, showTransfer = false, relayDenied = "", transferSurface, dismissLan }:
+    { roomCode?: string; linkDead?: boolean; showTransfer?: boolean; relayDenied?: string; transferSurface?: Snippet; dismissLan?: () => void } = $props();
 
   const t = $derived<Messages>(messages[lang()]);
   const inRoom = $derived(!!roomCode);
@@ -64,7 +63,7 @@
       <section class="card focus">
         <div class="mhead"><h2>{t.methods.realtime.name}</h2></div>
         <p class="cardsub">{t.methods.realtime.sub}</p>
-        <CodePairing {roomCode} expired={linkDead} />
+        <CodePairing {roomCode} expired={linkDead} {relayDenied} />
         <button class="startover" onclick={startOver}>{t.startOver}</button>
       </section>
     {:else}

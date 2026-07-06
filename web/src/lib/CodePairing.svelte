@@ -10,8 +10,8 @@
   import { folderUploadSupported } from "./platform";
   import { session } from "./auth.svelte";
 
-  let { roomCode = "", expired = false, requireLogin }:
-    { roomCode?: string; expired?: boolean; requireLogin?: () => void } = $props();
+  let { roomCode = "", expired = false, relayDenied = "", requireLogin }:
+    { roomCode?: string; expired?: boolean; relayDenied?: string; requireLogin?: () => void } = $props();
 
   const t = $derived<Messages>(messages[lang()]);
   const EXP_KEY = "relayium_pair_exp";
@@ -145,6 +145,9 @@
       {#if outbox().length}
         <p class="queued">{t.pair.queued(outbox().length, formatSize(queuedBytes))}</p>
       {/if}
+      {#if relayDenied === "quota"}
+        <p class="quota-warn">{t.crossnet.relayQuotaWarn}</p>
+      {/if}
     {/if}
     <p class="waiting"><span class="pulse" aria-hidden="true"></span>{t.pair.waiting}</p>
   {:else if mode === "receive"}
@@ -228,4 +231,10 @@
     background: var(--bg); color: var(--text-h); font-variant-numeric: tabular-nums;
   }
   .error { color: var(--danger); font-size: var(--fs-xs); margin: 0; }
+  .quota-warn {
+    margin: 0; font-size: var(--fs-xs); line-height: 1.5; text-align: center; max-width: 34ch;
+    color: var(--text-h);
+    border: 1px solid var(--accent-border); border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3); background: var(--code-bg);
+  }
 </style>

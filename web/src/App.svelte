@@ -98,6 +98,7 @@
   const roomCode = $derived(roomCodeStore());
   let joinedRoom = $state(false);
   let linkDead = $state(false);
+  let relayDenied = $state<string>(""); // "quota" when the code owner is over the monthly relay cap (no TURN issued)
 
   // Non-reactive locals
   let signaling: SignalingClient;
@@ -335,6 +336,7 @@
     const ice = await fetchIceConfig(roomCode);
     iceServers = ice.iceServers;
     relayPool = ice.relays;
+    relayDenied = ice.relayDenied ?? "";
     signaling = new SignalingClient(wsURL(location, roomCode), selfName);
     signaling.onSelfId((id, ip) => {
       selfId = id; selfIP = ip; joinedRoom = true;
@@ -398,6 +400,7 @@
     selfIP = "";
     joinedRoom = false;
     linkDead = false;
+    relayDenied = "";
     incoming = null;
     send = null;
     recv = null;
@@ -411,6 +414,7 @@
     if (epoch !== roomEpoch) return;
     iceServers = ice.iceServers;
     relayPool = ice.relays;
+    relayDenied = ice.relayDenied ?? "";
     signaling.reconnect(wsURL(location, roomCode));
     startRelayMeasurement(); // measure the new room's pool in the background
   }
@@ -1215,6 +1219,9 @@
         {statusText(t, xf)}
         {#if sasCode && !xf.done} · {t.codeLabel} <code>{sasCode}</code>{/if}
       </div>
+      {#if xf.done && !xf.ok && xf.status === "connectFail" && relayDenied === "quota"}
+        <p class="quota-note">{t.crossnet.relayQuotaFail}</p>
+      {/if}
       {#if !xf.done}
         {@const path = xf.dir === "send" ? sendPath : recvPath}
         <div class="bar" role="progressbar" aria-valuenow={pct(xf)} aria-valuemin="0" aria-valuemax="100"><div class="fill" style:width="{pct(xf)}%"></div></div>
@@ -1246,7 +1253,7 @@
   <Nav />
 
   {#if currentRoute() === "cross"}
-    <CrossPage {roomCode} {linkDead} {showTransfer} {transferSurface} dismissLan={() => (lanDismissed = true)} />
+    <CrossPage {roomCode} {linkDead} {showTransfer} {relayDenied} {transferSurface} dismissLan={() => (lanDismissed = true)} />
   {:else if currentRoute() === "offline"}
     <OfflinePage />
   {:else if currentRoute() === "me"}
@@ -1420,6 +1427,12 @@
     .act-btn { min-height: 44px; }
   }
   .status { font-size: 13.5px; color: var(--text); margin: 8px 0 10px; }
+  .xfer .quota-note {
+    margin: var(--space-2) 0 0; font-size: var(--fs-xs); line-height: 1.5;
+    color: var(--text-h);
+    border: 1px solid var(--accent-border); border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3); background: var(--accent-bg);
+  }
 
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; }
   .fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), #6d28d9); transition: width .2s ease; }
