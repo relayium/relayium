@@ -233,7 +233,7 @@ const ko: Messages = {
     colRealtime: "⚡ 실시간 직접 전송",
     colStored: "📦 다운로드 링크",
     rows: [
-      { label: "로그인 필요", realtime: "불필요", stored: "보내는 사람이 로그인" },
+      { label: "로그인 필요", realtime: "네트워크를 넘어 보낼 때만", stored: "보내는 사람이 로그인" },
       { label: "상대방 온라인 여부", realtime: "필요 — 둘 다 동시에 온라인", stored: "불필요 — 비동기로 다운로드" },
       { label: "파일이 서버를 거치는지", realtime: "아니요 · P2P 직접 연결 (크로스 네트워크 전송은 홀 펀칭 실패 시 암호화 중계로 대체 가능)", stored: "예, 단 제로 지식 암호문만" },
       { label: "유효 기간", realtime: "보내면 끝, 저장되지 않음", stored: "1 / 3 / 7일, 또는 열람 후 삭제" },

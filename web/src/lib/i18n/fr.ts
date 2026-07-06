@@ -233,7 +233,7 @@ const fr: Messages = {
     colRealtime: "⚡ Direct en temps réel",
     colStored: "📦 Lien de téléchargement",
     rows: [
-      { label: "Connexion requise", realtime: "Non", stored: "L'expéditeur se connecte" },
+      { label: "Connexion requise", realtime: "Seulement pour envoyer d'un réseau à l'autre", stored: "L'expéditeur se connecte" },
       { label: "Destinataire en ligne ?", realtime: "Oui — les deux en ligne en même temps", stored: "Non — téléchargement asynchrone" },
       { label: "Fichiers via le serveur ?", realtime: "Non · pair-à-pair (les transferts inter-réseaux peuvent basculer vers un relais chiffré)", stored: "Oui, mais uniquement du chiffré à divulgation nulle" },
       { label: "Durée de vie", realtime: "Envoyé puis disparu, rien de stocké", stored: "1 / 3 / 7 jours, ou destruction après lecture" },

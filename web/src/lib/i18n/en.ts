@@ -233,7 +233,7 @@ const en: Messages = {
     colRealtime: "⚡ Realtime direct",
     colStored: "📦 Download link",
     rows: [
-      { label: "Sign-in needed", realtime: "No", stored: "Sender signs in" },
+      { label: "Sign-in needed", realtime: "Only to send across networks", stored: "Sender signs in" },
       { label: "Recipient online?", realtime: "Yes — both online at once", stored: "No — download asynchronously" },
       { label: "Files via server?", realtime: "No — peer-to-peer (cross-network transfers can fall back to an encrypted relay)", stored: "Yes, but zero-knowledge ciphertext only" },
       { label: "Lifetime", realtime: "Send and gone, nothing stored", stored: "1 / 3 / 7 days, or burn after reading" },

@@ -233,7 +233,7 @@ const zh: Messages = {
     colRealtime: "⚡ 实时直传",
     colStored: "📦 下载链接",
     rows: [
-      { label: "是否需登录", realtime: "免登录", stored: "发送方需登录" },
+      { label: "是否需登录", realtime: "仅跨网络发送时需要", stored: "发送方需登录" },
       { label: "对方是否需在线", realtime: "需要，双方同时在线", stored: "不需要，可异步下载" },
       { label: "文件是否经服务器", realtime: "否 · 点对点直连（跨网络传输在打洞失败时可经加密中继）", stored: "是，但仅存零知识密文" },
       { label: "有效期", realtime: "即传即走，不留存", stored: "1 / 3 / 7 天，或阅后即焚" },

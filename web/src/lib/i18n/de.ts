@@ -233,7 +233,7 @@ const de: Messages = {
     colRealtime: "⚡ Echtzeit-Direkt",
     colStored: "📦 Download-Link",
     rows: [
-      { label: "Anmeldung nötig", realtime: "Nein", stored: "Sender meldet sich an" },
+      { label: "Anmeldung nötig", realtime: "Nur zum netzwerkübergreifenden Senden", stored: "Sender meldet sich an" },
       { label: "Empfänger online?", realtime: "Ja — beide gleichzeitig online", stored: "Nein — asynchron herunterladen" },
       { label: "Dateien über Server?", realtime: "Nein · Peer-to-Peer (netzwerkübergreifende Übertragungen können bei Fehlschlag auf ein verschlüsseltes Relay ausweichen)", stored: "Ja, aber nur Zero-Knowledge-Chiffretext" },
       { label: "Lebensdauer", realtime: "Senden und weg, nichts gespeichert", stored: "1 / 3 / 7 Tage oder Löschen nach dem Lesen" },
