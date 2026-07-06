@@ -9,51 +9,70 @@ import (
 	"time"
 )
 
-// PairRegistry mints short numeric pairing codes for anonymous, login-free
-// realtime rendezvous. Codes are in-memory only (no DB) and short-lived; a code
-// becomes a 2-peer signaling room "c:<code>". now is injected for tests.
+// codeEntry is a live pairing code's expiry plus the userID that minted it.
+type codeEntry struct {
+	exp   int64
+	owner string // userID that owns (and is billed for) this cross-network transfer
+}
+
+// PairRegistry mints short numeric pairing codes for realtime rendezvous. Codes
+// are in-memory only and short-lived; a code becomes a 2-peer signaling room
+// "c:<code>". Each code is owned by the logged-in user that minted it. now is
+// injected for tests.
 type PairRegistry struct {
 	mu    sync.Mutex
-	codes map[string]int64 // code -> unix expiry
+	codes map[string]codeEntry
 	ttl   int64
 	now   func() int64
 }
 
 func NewPairRegistry(ttlSeconds int64, now func() int64) *PairRegistry {
-	return &PairRegistry{codes: make(map[string]int64), ttl: ttlSeconds, now: now}
+	return &PairRegistry{codes: make(map[string]codeEntry), ttl: ttlSeconds, now: now}
 }
 
-// Mint returns a fresh 6-digit code not currently colliding with a live one,
-// plus its unix expiry.
-func (p *PairRegistry) Mint() (string, int64) {
+// MintFor returns a fresh 6-digit code not colliding with a live one, bound to
+// owner, plus its unix expiry.
+func (p *PairRegistry) MintFor(owner string) (string, int64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := p.now()
 	for {
 		code := randCode()
-		if exp, ok := p.codes[code]; ok && exp > now {
+		if e, ok := p.codes[code]; ok && e.exp > now {
 			continue // collide with a still-live code; try again
 		}
 		exp := now + p.ttl
-		p.codes[code] = exp
+		p.codes[code] = codeEntry{exp: exp, owner: owner}
 		return code, exp
 	}
+}
+
+// OwnerOf returns the owning userID of a live code, or ("", false) if the code
+// is unknown or expired.
+func (p *PairRegistry) OwnerOf(code string) (string, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	e, ok := p.codes[code]
+	if !ok || e.exp <= p.now() {
+		return "", false
+	}
+	return e.owner, true
 }
 
 // Validate reports whether code exists and has not expired (expiry is exclusive).
 func (p *PairRegistry) Validate(code string) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	exp, ok := p.codes[code]
-	return ok && exp > p.now()
+	e, ok := p.codes[code]
+	return ok && e.exp > p.now()
 }
 
 func (p *PairRegistry) reap() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := p.now()
-	for c, exp := range p.codes {
-		if exp <= now {
+	for c, e := range p.codes {
+		if e.exp <= now {
 			delete(p.codes, c)
 		}
 	}

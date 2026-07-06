@@ -89,7 +89,7 @@ func PairHandler(reg *PairRegistry, rl *RateLimiter, ipx *IPExtractor) http.Hand
 			http.Error(w, "too many pairing requests", http.StatusTooManyRequests)
 			return
 		}
-		code, exp := reg.Mint()
+		code, exp := reg.MintFor("")
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"code": code, "expiresAt": exp})
 	}
