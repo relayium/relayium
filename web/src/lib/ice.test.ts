@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { fetchIceServers, hasTurnServer, pickRelay } from "./ice";
+import { fetchIceConfig, fetchIceServers, hasTurnServer, pickRelay } from "./ice";
 
 const STUN = [{ urls: "stun:stun.l.google.com:19302" }];
+const FALLBACK_STUN = [{ urls: "stun:stun.l.google.com:19302" }];
 
 describe("fetchIceServers", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -57,6 +58,42 @@ describe("fetchIceServers", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
     const out = await fetchIceServers("424242");
     expect(out).toEqual(STUN);
+  });
+});
+
+describe("fetchIceConfig relayDenied", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("passes through relayDenied when the server withholds TURN over the cap", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ iceServers: STUN, relays: [], relayDenied: "quota" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const cfg = await fetchIceConfig("424242");
+    expect(cfg.relayDenied).toBe("quota");
+    expect(cfg.iceServers).toEqual(STUN);
+  });
+
+  it("leaves relayDenied undefined when the server does not send it", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ iceServers: STUN, relays: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const cfg = await fetchIceConfig("424242");
+    expect(cfg.relayDenied).toBeUndefined();
+  });
+
+  it("leaves relayDenied undefined on a fallback (non-ok / network error)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const cfg = await fetchIceConfig("424242");
+    expect(cfg.relayDenied).toBeUndefined();
+    expect(cfg.iceServers).toEqual(FALLBACK_STUN);
   });
 });
 

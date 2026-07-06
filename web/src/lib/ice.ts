@@ -31,6 +31,7 @@ export interface RelayEntry {
 export interface IceConfig {
   iceServers: RTCIceServer[]; // fallback / legacy single relay + STUN
   relays: RelayEntry[]; // the pool (empty unless the server advertises one)
+  relayDenied?: string; // "quota" when the code owner is over the monthly relay cap and TURN was withheld
 }
 
 export async function fetchIceConfig(code = ""): Promise<IceConfig> {
@@ -38,8 +39,12 @@ export async function fetchIceConfig(code = ""): Promise<IceConfig> {
   try {
     const res = await fetch(`/api/ice${q}`, { credentials: "include" });
     if (!res.ok) return { iceServers: FALLBACK, relays: [] };
-    const body = (await res.json()) as { iceServers?: RTCIceServer[]; relays?: RelayEntry[] };
-    return { iceServers: body.iceServers ?? FALLBACK, relays: body.relays ?? [] };
+    const body = (await res.json()) as {
+      iceServers?: RTCIceServer[];
+      relays?: RelayEntry[];
+      relayDenied?: string;
+    };
+    return { iceServers: body.iceServers ?? FALLBACK, relays: body.relays ?? [], relayDenied: body.relayDenied };
   } catch {
     return { iceServers: FALLBACK, relays: [] };
   }
