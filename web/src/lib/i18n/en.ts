@@ -117,7 +117,7 @@ const en: Messages = {
   crossnet: {
     realtimeTitle: "Realtime direct",
     realtimeSub: "Both online now · peer-to-peer · files never touch the server",
-    realtimeFoot: "No sign-in needed · end-to-end encrypted",
+    realtimeFoot: "Recipient needs no account · end-to-end encrypted",
     signInToSend: "Sign in to send across networks. The person receiving never needs an account.",
     relayQuotaWarn: "You've used up this month's relay traffic. A direct peer-to-peer connection still works — only the relay fallback is unavailable. Upgrade to restore relaying.",
     relayQuotaFail: "Couldn't connect directly, and this month's relay traffic is used up — no relay to fall back on. Try a download link instead, or upgrade to re-enable relaying.",
@@ -128,11 +128,11 @@ const en: Messages = {
     signIn: "Sign in to upload and create download links; recipients never need an account.",
   },
   crossSell: {
-    realtime: { lead: "Is the other person online right now? Realtime direct is faster — peer-to-peer, files never touch the server, no sign-in.", cta: "Go to realtime direct →" },
+    realtime: { lead: "Is the other person online right now? Realtime direct is faster — peer-to-peer, files never touch the server.", cta: "Go to realtime direct →" },
     offline: { lead: "Recipient not online? Use async transfer — encrypt, upload, and leave a download link they can fetch for days.", cta: "Go to async transfer →" },
   },
   methods: {
-    realtime: { name: "⚡ Realtime direct", sub: "Pick your files and get a 6-digit code — read it out, send the link, or show the QR; the moment the other side joins, the transfer starts peer-to-peer.", badge: "No sign-in" },
+    realtime: { name: "⚡ Realtime direct", sub: "Pick your files and get a 6-digit code — read it out, send the link, or show the QR; the moment the other side joins, the transfer starts peer-to-peer.", badge: "Recipient: no account" },
     stored: { name: "📦 Download link", sub: "Your browser encrypts then stores; the recipient downloads anytime, no live session and no account needed.", badge: "Offline OK" },
   },
   pair: {
@@ -209,9 +209,9 @@ const en: Messages = {
   howItWorks: {
     realtime: {
       title: "Realtime direct, in three steps",
-      sub: "When both sides are online, connect peer-to-peer across networks — no sign-in.",
+      sub: "When both sides are online, connect peer-to-peer across networks — the recipient needs no account.",
       ways: [
-        { icon: "📄", name: "Pick files, get a code", how: "Tap “Send files” and choose what to send — a 6-digit pairing code is minted automatically, along with a join link and QR.", tag: "No sign-in" },
+        { icon: "📄", name: "Pick files, get a code", how: "Tap “Send files” and choose what to send — a 6-digit pairing code is minted automatically, along with a join link and QR.", tag: "Sign in to send" },
         { icon: "🔢", name: "Give the code to the other side", how: "Read it out, send the link, or show the QR — any of the three; they type it in or open it in any modern browser.", tag: "Codes live 15 minutes" },
         { icon: "⚡", name: "Transfer starts on join", how: "The moment they join, the transfer starts automatically — peer-to-peer and end-to-end encrypted; if hole-punching fails it falls back to an encrypted TURN relay that still can't decrypt anything.", tag: "Files never touch the server" },
       ],
@@ -258,14 +258,14 @@ const en: Messages = {
       { q: "What if it won't connect?", a: "Realtime transfers first try a direct peer-to-peer path (STUN hole-punching) and automatically fall back to an encrypted TURN relay when that fails (the relay only ever forwards ciphertext and cannot decrypt). Still stuck? A download link is the most reliable option — it's asynchronous, so both sides don't need to be online at once." },
       { q: "How big can files be?", a: "Realtime direct transfer streams data, so there's no hard size cap in practice; download links are bounded by a per-file size limit and a daily quota, which the page will tell you about." },
       { q: "Can the server see my files?", a: "No. Realtime transfers never touch the server; download links are encrypted in your browser and the server keeps only ciphertext it can't decrypt — the key lives solely with the link's sharer and recipient." },
-      { q: "Do I have to create an account?", a: "Realtime transfers — on the LAN or across networks via a pairing code or its join link — need no sign-in at all. Only download links require the sender to sign in, so the encrypted ciphertext can be stored; recipients never need an account." },
+      { q: "Do I have to create an account?", a: "LAN transfers on the same network need no sign-in. Sending across networks by pairing code or link requires the sender to sign in — the recipient never needs an account. Download links also require the sender to sign in, so the encrypted ciphertext can be stored." },
       { q: "Is it open source?", a: "Yes. The protocol design and all front-end and back-end code are public on GitHub — free to review, self-host, or contribute to." },
     ],
   },
   crossPitch: "On the same network, “LAN transfer” is simplest; apart but both online, transfer right here in realtime — recipient offline? Switch to async transfer below.",
   homeCross: {
     title: "Not on the same network?",
-    desc: "If they're online, use realtime direct (no sign-in, files never touch the server); if not, use async transfer (encrypted storage, fetch by link anytime).",
+    desc: "If they're online, use realtime direct (peer-to-peer, files never touch the server); if not, use async transfer (encrypted storage, fetch by link anytime).",
     realtimeCta: "Realtime direct →",
     offlineCta: "Async transfer →",
   },

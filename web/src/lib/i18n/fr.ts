@@ -117,7 +117,7 @@ const fr: Messages = {
   crossnet: {
     realtimeTitle: "Transfert direct en temps réel",
     realtimeSub: "Les deux en ligne · pair-à-pair · les fichiers ne passent jamais par le serveur",
-    realtimeFoot: "Sans connexion · chiffré de bout en bout",
+    realtimeFoot: "Le destinataire n'a pas besoin de compte · chiffré de bout en bout",
     signInToSend: "Connectez-vous pour envoyer d'un réseau à l'autre. La personne qui reçoit n'a jamais besoin de compte.",
     relayQuotaWarn: "Vous avez épuisé le trafic de relais de ce mois-ci. Une connexion directe pair-à-pair fonctionne toujours — seul le relais de secours est indisponible. Passez à une offre supérieure pour rétablir le relais.",
     relayQuotaFail: "Connexion directe impossible et le trafic de relais de ce mois-ci est épuisé — aucun relais de secours. Utilisez plutôt un lien de téléchargement, ou passez à une offre supérieure pour réactiver le relais.",
@@ -128,11 +128,11 @@ const fr: Messages = {
     signIn: "Connectez-vous pour téléverser et créer des liens de téléchargement ; les destinataires n'ont jamais besoin de compte.",
   },
   crossSell: {
-    realtime: { lead: "L'autre personne est en ligne ? Le direct en temps réel est plus rapide — pair-à-pair, les fichiers ne passent jamais par le serveur, sans connexion.", cta: "Vers le direct en temps réel →" },
+    realtime: { lead: "L'autre personne est en ligne maintenant ? Le direct en temps réel est plus rapide — pair-à-pair, les fichiers ne touchent jamais le serveur.", cta: "Vers le direct en temps réel →" },
     offline: { lead: "Destinataire hors ligne ? Utilisez le transfert asynchrone — chiffrez, téléversez et laissez un lien de téléchargement, récupérable pendant plusieurs jours.", cta: "Vers le transfert asynchrone →" },
   },
   methods: {
-    realtime: { name: "⚡ Transfert direct en temps réel", sub: "Choisissez vos fichiers et obtenez un code à 6 chiffres — dictez-le, envoyez le lien ou montrez le QR ; dès que l'autre appareil rejoint, le transfert pair-à-pair démarre automatiquement.", badge: "Sans connexion" },
+    realtime: { name: "⚡ Transfert direct en temps réel", sub: "Choisissez vos fichiers et obtenez un code à 6 chiffres — dictez-le, envoyez le lien ou montrez le QR ; dès que l'autre appareil rejoint, le transfert pair-à-pair démarre automatiquement.", badge: "Destinataire sans compte" },
     stored: { name: "📦 Lien de téléchargement", sub: "Votre navigateur chiffre puis stocke temporairement ; le destinataire télécharge quand il veut, sans session ni compte.", badge: "Même hors ligne" },
   },
   pair: {
@@ -209,9 +209,9 @@ const fr: Messages = {
   howItWorks: {
     realtime: {
       title: "Direct en temps réel, en trois étapes",
-      sub: "Quand les deux sont en ligne, connectez-vous en pair-à-pair à travers les réseaux — sans connexion.",
+      sub: "Quand les deux côtés sont en ligne, connexion pair-à-pair d'un réseau à l'autre — le destinataire n'a pas besoin de compte.",
       ways: [
-        { icon: "📄", name: "Choisir les fichiers, obtenir un code", how: "Touchez « Envoyer des fichiers » et choisissez quoi envoyer — un code d'appairage à 6 chiffres est créé automatiquement, avec lien d'accès et QR.", tag: "Sans connexion" },
+        { icon: "📄", name: "Choisir les fichiers, obtenir un code", how: "Touchez « Envoyer des fichiers » et choisissez quoi envoyer — un code d'appairage à 6 chiffres est créé automatiquement, avec lien d'accès et QR.", tag: "Connexion pour envoyer" },
         { icon: "🔢", name: "Transmettre le code", how: "Dictez-le, envoyez le lien ou montrez le QR — au choix ; l'autre personne le saisit ou l'ouvre dans n'importe quel navigateur moderne.", tag: "Codes valables 15 minutes" },
         { icon: "⚡", name: "Le transfert démarre à l'arrivée", how: "Dès que l'autre appareil rejoint, le transfert démarre automatiquement — pair-à-pair et chiffré de bout en bout ; en cas d'échec du hole-punching, un relais TURN chiffré prend le relais sans rien pouvoir déchiffrer.", tag: "Les fichiers ne passent jamais par le serveur" },
       ],
@@ -258,14 +258,14 @@ const fr: Messages = {
       { q: "Que faire si ça ne connecte pas ?", a: "Les transferts en temps réel tentent d'abord une connexion directe de pair à pair (hole-punching STUN) et basculent automatiquement vers un relais TURN chiffré en cas d'échec (le relais ne transmet que du chiffré et ne peut pas déchiffrer). Toujours bloqué ? Un lien de téléchargement est le plus fiable — il est asynchrone, les deux parties n'ont donc pas besoin d'être en ligne en même temps." },
       { q: "Quelle taille les fichiers peuvent-ils atteindre ?", a: "Le transfert direct en temps réel diffuse les données en flux, donc il n'y a en pratique aucune limite stricte de taille ; les liens de téléchargement sont soumis à une taille maximale par fichier et à un quota quotidien, que la page vous indiquera." },
       { q: "Le serveur peut-il voir mes fichiers ?", a: "Non. Les transferts en temps réel ne passent jamais par le serveur ; les liens de téléchargement sont chiffrés dans votre navigateur et le serveur ne conserve que du chiffré qu'il ne peut pas déchiffrer — la clé reste uniquement chez celui qui partage le lien et son destinataire." },
-      { q: "Faut-il obligatoirement créer un compte ?", a: "Les transferts en temps réel — en réseau local ou entre réseaux via un code d'appairage ou son lien — ne nécessitent aucune connexion. Seuls les liens de téléchargement exigent que l'expéditeur se connecte, afin de stocker le chiffré ; les destinataires n'ont jamais besoin de compte." },
+      { q: "Faut-il obligatoirement créer un compte ?", a: "Les transferts LAN sur le même réseau ne nécessitent aucune connexion. Envoyer d'un réseau à l'autre par code d'appairage ou lien exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte. Les liens de téléchargement exigent aussi la connexion de l'expéditeur, afin de stocker le texte chiffré." },
       { q: "Est-ce open source ?", a: "Oui. La conception du protocole ainsi que tout le code front-end et back-end sont publics sur GitHub — libres à examiner, auto-héberger ou enrichir." },
     ],
   },
   crossPitch: "Sur le même réseau, le « transfert en réseau local » est le plus simple ; à distance et tous deux en ligne, transférez ici en temps réel — destinataire hors ligne ? Passez au transfert asynchrone ci-dessous.",
   homeCross: {
     title: "Pas sur le même réseau ?",
-    desc: "S'il est en ligne, utilisez le direct en temps réel (sans connexion, les fichiers ne passent jamais par le serveur) ; sinon, le transfert asynchrone (stockage chiffré, récupération par lien à tout moment).",
+    desc: "S'il est en ligne, utilisez le direct en temps réel (les fichiers ne passent jamais par le serveur) ; sinon, le transfert asynchrone (stockage chiffré, récupération par lien à tout moment).",
     realtimeCta: "Direct en temps réel →",
     offlineCta: "Transfert asynchrone →",
   },

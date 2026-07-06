@@ -117,7 +117,7 @@ const de: Messages = {
   crossnet: {
     realtimeTitle: "Echtzeit-Direktübertragung",
     realtimeSub: "Beide jetzt online · Peer-to-Peer · Dateien berühren nie den Server",
-    realtimeFoot: "Keine Anmeldung nötig · Ende-zu-Ende-verschlüsselt",
+    realtimeFoot: "Empfänger braucht kein Konto · Ende-zu-Ende-verschlüsselt",
     signInToSend: "Zum netzwerkübergreifenden Senden anmelden. Die empfangende Person braucht nie ein Konto.",
     relayQuotaWarn: "Das Relay-Kontingent dieses Monats ist aufgebraucht. Eine direkte Peer-to-Peer-Verbindung funktioniert weiterhin — nur der Relay-Rückfall steht nicht zur Verfügung. Upgraden, um das Relay wiederherzustellen.",
     relayQuotaFail: "Direkte Verbindung fehlgeschlagen und das Relay-Kontingent dieses Monats ist aufgebraucht — kein Relay als Rückfall. Nutze stattdessen einen Download-Link oder upgrade, um das Relay wieder zu aktivieren.",
@@ -128,11 +128,11 @@ const de: Messages = {
     signIn: "Melde dich an, um hochzuladen und Download-Links zu erzeugen; Empfänger brauchen nie ein Konto.",
   },
   crossSell: {
-    realtime: { lead: "Ist die andere Person gerade online? Echtzeit-Direkt ist schneller — Peer-to-Peer, Dateien berühren nie den Server, ohne Anmeldung.", cta: "Zur Echtzeit-Direktübertragung →" },
+    realtime: { lead: "Ist die andere Person gerade online? Direkt in Echtzeit ist schneller – Peer-to-Peer, Dateien berühren nie den Server.", cta: "Zur Echtzeit-Direktübertragung →" },
     offline: { lead: "Gegenseite offline? Nutze die asynchrone Übertragung — verschlüsselt hochladen und einen Download-Link hinterlassen, tagelang abholbar.", cta: "Zur asynchronen Übertragung →" },
   },
   methods: {
-    realtime: { name: "⚡ Echtzeit-Direktübertragung", sub: "Dateien auswählen und einen 6-stelligen Code erhalten — vorlesen, als Link verschicken oder QR zeigen; sobald die Gegenseite beitritt, startet die Peer-to-Peer-Übertragung automatisch.", badge: "Ohne Anmeldung" },
+    realtime: { name: "⚡ Echtzeit-Direktübertragung", sub: "Dateien auswählen und einen 6-stelligen Code erhalten — vorlesen, als Link verschicken oder QR zeigen; sobald die Gegenseite beitritt, startet die Peer-to-Peer-Übertragung automatisch.", badge: "Empfänger ohne Konto" },
     stored: { name: "📦 Download-Link", sub: "Dein Browser verschlüsselt und speichert zwischen; die empfangende Person lädt jederzeit herunter — ohne Sitzung, ohne Konto.", badge: "Auch offline" },
   },
   pair: {
@@ -209,9 +209,9 @@ const de: Messages = {
   howItWorks: {
     realtime: {
       title: "Echtzeit-Direkt in drei Schritten",
-      sub: "Sind beide online, verbindet ihr euch netzübergreifend Peer-to-Peer — ohne Anmeldung.",
+      sub: "Wenn beide Seiten online sind, netzwerkübergreifend Peer-to-Peer verbinden — der Empfänger braucht kein Konto.",
       ways: [
-        { icon: "📄", name: "Dateien wählen, Code erhalten", how: "Auf „Dateien senden“ tippen und auswählen — ein 6-stelliger Kopplungscode wird automatisch erzeugt, samt Beitrittslink und QR.", tag: "Ohne Anmeldung" },
+        { icon: "📄", name: "Dateien wählen, Code erhalten", how: "Auf „Dateien senden“ tippen und auswählen — ein 6-stelliger Kopplungscode wird automatisch erzeugt, samt Beitrittslink und QR.", tag: "Zum Senden anmelden" },
         { icon: "🔢", name: "Code an die Gegenseite geben", how: "Vorlesen, den Link schicken oder den QR zeigen — die andere Person tippt ihn ein oder öffnet ihn in einem beliebigen modernen Browser.", tag: "Codes gelten 15 Minuten" },
         { icon: "⚡", name: "Übertragung startet beim Beitritt", how: "Sobald die Gegenseite beitritt, startet die Übertragung automatisch — Peer-to-Peer und Ende-zu-Ende-verschlüsselt; scheitert das Hole-Punching, springt ein verschlüsseltes TURN-Relay ein, das nichts entschlüsseln kann.", tag: "Dateien erreichen nie den Server" },
       ],
@@ -258,14 +258,14 @@ const de: Messages = {
       { q: "Was, wenn keine Verbindung zustande kommt?", a: "Echtzeitübertragungen versuchen zuerst eine direkte Peer-to-Peer-Verbindung (STUN-Hole-Punching) und weichen bei Fehlschlag automatisch auf ein verschlüsseltes TURN-Relay aus (das Relay leitet nur Chiffretext weiter und kann nicht entschlüsseln). Immer noch nichts? Ein Download-Link ist am zuverlässigsten — er ist asynchron, sodass nicht beide Seiten gleichzeitig online sein müssen." },
       { q: "Wie groß dürfen Dateien sein?", a: "Die Echtzeit-Direktübertragung streamt die Daten, in der Praxis gibt es also keine harte Größengrenze; Download-Links sind durch ein Größenlimit pro Datei und ein Tageskontingent begrenzt, über die dich die Seite informiert." },
       { q: "Kann der Server meine Dateien sehen?", a: "Nein. Echtzeitübertragungen erreichen nie den Server; Download-Links werden in deinem Browser verschlüsselt, und der Server behält nur Chiffretext, den er nicht entschlüsseln kann — der Schlüssel liegt allein bei der teilenden und der empfangenden Person." },
-      { q: "Muss ich ein Konto anlegen?", a: "Echtzeitübertragungen — im LAN oder netzübergreifend per Kopplungscode bzw. dessen Beitrittslink — brauchen überhaupt keine Anmeldung. Nur Download-Links erfordern, dass sich der Sender anmeldet, damit der verschlüsselte Chiffretext gespeichert werden kann; Empfänger brauchen nie ein Konto." },
+      { q: "Muss ich ein Konto anlegen?", a: "LAN-Übertragungen im selben Netzwerk brauchen keine Anmeldung. Netzwerkübergreifendes Senden per Kopplungscode oder Link erfordert die Anmeldung des Absenders — der Empfänger braucht nie ein Konto. Auch Download-Links erfordern die Anmeldung des Absenders, damit der verschlüsselte Chiffretext gespeichert werden kann." },
       { q: "Ist es Open Source?", a: "Ja. Das Protokolldesign sowie der gesamte Frontend- und Backend-Code liegen offen auf GitHub — frei zum Prüfen, Selbst-Hosten oder Mitwirken." },
     ],
   },
   crossPitch: "Im selben Netzwerk ist „LAN-Übertragung“ am einfachsten; getrennt und beide online? Dann direkt hier in Echtzeit übertragen — Gegenseite offline? Unten geht's zur asynchronen Übertragung.",
   homeCross: {
     title: "Nicht im selben Netzwerk?",
-    desc: "Ist die Gegenseite online, nutze Echtzeit-Direkt (ohne Anmeldung, Dateien berühren nie den Server); wenn nicht, die asynchrone Übertragung (verschlüsselt zwischengespeichert, Abruf per Link).",
+    desc: "Ist die Gegenseite online, nutze Echtzeit-Direkt (Dateien berühren nie den Server); wenn nicht, die asynchrone Übertragung (verschlüsselt zwischengespeichert, Abruf per Link).",
     realtimeCta: "Echtzeit-Direkt →",
     offlineCta: "Asynchron senden →",
   },
