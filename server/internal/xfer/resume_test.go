@@ -60,3 +60,53 @@ func TestResumeSkipsAlreadyReceivedPrefix(t *testing.T) {
 		t.Fatalf("final sent = %d, want 10", sentTail)
 	}
 }
+
+// TestResumeStateForDirect exercises resumeStateFor directly so a regression in
+// the resume-offset logic fails a test (the end-to-end pipe test above can't:
+// a full re-send of a sub-chunk file also ends byte-correct at sentTail==10).
+func TestResumeStateForDirect(t *testing.T) {
+	// One 10-byte file, built via the same path the real receiver uses.
+	srcRoot := t.TempDir()
+	full := []byte("0123456789")
+	if err := os.WriteFile(filepath.Join(srcRoot, "big.bin"), full, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, _, err := BuildManifest([]string{srcRoot})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := filepath.Base(srcRoot)
+
+	// Partial (4 of 10 bytes) → exactly one entry {Index:0, Have:4}.
+	partial := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(partial, base), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(partial, base, "big.bin"), full[:4], 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rs := resumeStateFor(partial, m)
+	if len(rs.Entries) != 1 {
+		t.Fatalf("partial: want 1 entry, got %d: %+v", len(rs.Entries), rs.Entries)
+	}
+	if rs.Entries[0].Index != 0 || rs.Entries[0].Have != 4 {
+		t.Fatalf("partial: want {Index:0, Have:4}, got %+v", rs.Entries[0])
+	}
+
+	// Absent file (empty dest dir) → zero entries.
+	if rsAbsent := resumeStateFor(t.TempDir(), m); len(rsAbsent.Entries) != 0 {
+		t.Fatalf("absent: want 0 entries, got %+v", rsAbsent.Entries)
+	}
+
+	// Complete file (disk size == declared size) → zero entries.
+	complete := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(complete, base), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(complete, base, "big.bin"), full, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if rsComplete := resumeStateFor(complete, m); len(rsComplete.Entries) != 0 {
+		t.Fatalf("complete: want 0 entries, got %+v", rsComplete.Entries)
+	}
+}
