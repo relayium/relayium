@@ -216,6 +216,15 @@ func main() {
 				u, ok := acct.UserFromRequest(r)
 				return u.ID, ok
 			}))
+		// /relay is the metered fallback for CLI cross-network transfers that
+		// can't establish a direct connection; billed against the owning
+		// account's monthly relay allowance (see acct.RelayOverQuota).
+		mux.HandleFunc("/relay", signal.RelayHandler(signal.RelayDeps{
+			OwnerOf:   pairReg.OwnerOf,
+			OverQuota: acct.RelayOverQuota,
+			Record:    acct.RecordRelaySession,
+			NewID:     newID,
+		}))
 		if disk, derr := storage.NewDiskStore(*blobDir); derr != nil {
 			log.Printf("WARNING: open blob dir %q: %v — stored transfers disabled", *blobDir, derr)
 		} else {

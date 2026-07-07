@@ -15,6 +15,8 @@ const usage = `relayium — SSH-native file transfer
 usage:
   relayium push <src...> [user@]host:dest    push files to a server you can ssh into
   relayium pull [user@]host:src <dest>       pull files from such a server
+  relayium send <src...> <code>              send to a peer over a pairing code (cross-network)
+  relayium receive <code> [destdir]          receive such a transfer
 
 flags (after the subcommand):
   -i <file>     ssh identity file
@@ -40,6 +42,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runPush(args[1:], stdout, stderr)
 	case "pull":
 		return runPull(args[1:], stdout, stderr)
+	case "send":
+		return runSendCross(args[1:], stdout, stderr)
+	case "receive":
+		return runReceiveCross(args[1:], stdout, stderr)
 	case "__recv":
 		return runRecv(args[1:], stdout, stderr)
 	case "__send":
