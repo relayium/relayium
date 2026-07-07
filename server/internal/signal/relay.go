@@ -147,31 +147,66 @@ func RelayHandler(deps RelayDeps) http.HandlerFunc {
 		defer func() { deps.Record(ctx, sid, owner, code, total.Load()) }()
 		defer close(done)
 
+		// lastActivity is refreshed by BOTH pipe goroutines on real traffic in
+		// EITHER direction, so the idle timeout is session-scoped: a live
+		// one-directional transfer (the CLI streams sender→receiver while the
+		// receiver stays silent) keeps the forward read firing and never trips.
+		var lastActivity atomic.Int64
+		lastActivity.Store(time.Now().UnixNano())
+
 		// Pipe self→partner, accumulating bytes; a second goroutine pipes the
 		// reverse direction. Either side closing ends the session.
 		errc := make(chan error, 2)
-		go pipe(ctx, c, partner, &total, deps, sid, owner, code, idleTO, errc)
-		go pipe(ctx, partner, c, &total, deps, sid, owner, code, idleTO, errc)
+		go pipe(ctx, c, partner, &total, &lastActivity, deps, sid, owner, code, errc)
+		go pipe(ctx, partner, c, &total, &lastActivity, deps, sid, owner, code, errc)
+
+		// One watchdog per session: tears the session down only if NO traffic
+		// flows in either direction for idleTO. It exits when the session ends.
+		wdDone := make(chan struct{})
+		go idleWatchdog(c, partner, &lastActivity, idleTO, wdDone)
+
 		<-errc
+		close(wdDone)
 		c.Close(websocket.StatusNormalClosure, "")
 		partner.Close(websocket.StatusNormalClosure, "")
 	}
 }
 
-func pipe(ctx context.Context, from, to *websocket.Conn, total *atomic.Int64, deps RelayDeps, sid, owner, code string, idleTimeout time.Duration, errc chan<- error) {
+// idleWatchdog closes both conns (ending the session) if lastActivity goes
+// stale for idleTimeout. It stops when wdDone is closed (session ended
+// normally), so it never leaks.
+func idleWatchdog(a, b *websocket.Conn, lastActivity *atomic.Int64, idleTimeout time.Duration, wdDone <-chan struct{}) {
+	tick := idleTimeout / 4
+	if tick < 25*time.Millisecond {
+		tick = 25 * time.Millisecond
+	}
+	t := time.NewTicker(tick)
+	defer t.Stop()
+	for {
+		select {
+		case <-wdDone:
+			return
+		case <-t.C:
+			if time.Since(time.Unix(0, lastActivity.Load())) > idleTimeout {
+				a.Close(websocket.StatusPolicyViolation, "idle timeout")
+				b.Close(websocket.StatusPolicyViolation, "idle timeout")
+				return
+			}
+		}
+	}
+}
+
+func pipe(ctx context.Context, from, to *websocket.Conn, total, lastActivity *atomic.Int64, deps RelayDeps, sid, owner, code string, errc chan<- error) {
 	var lastRecord time.Time
 	for {
-		// Bound each read so a silent paired session is torn down instead of
-		// pinning both websockets open forever. When one direction times out its
-		// error ends the session (the handler closes both conns), which also
-		// unblocks any Write stuck on the other goroutine.
-		rctx, rcancel := context.WithTimeout(ctx, idleTimeout)
-		typ, data, err := from.Read(rctx)
-		rcancel()
+		typ, data, err := from.Read(ctx)
 		if err != nil {
 			errc <- err
 			return
 		}
+		// Real traffic in this direction refreshes the shared session activity
+		// clock so the watchdog only trips on a truly-silent session.
+		lastActivity.Store(time.Now().UnixNano())
 		if err := to.Write(ctx, typ, data); err != nil {
 			errc <- err
 			return
