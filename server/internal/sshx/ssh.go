@@ -5,11 +5,13 @@
 package sshx
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"strconv"
+	"sync"
 
 	"github.com/relayium/relayium/internal/xfer"
 )
@@ -40,22 +42,32 @@ func BuildArgs(e xfer.Endpoint, remoteCmd string, o Opts) []string {
 
 // Session is a running ssh child process presented as a duplex stream.
 type Session struct {
-	cmd *exec.Cmd
-	in  io.WriteCloser
-	out io.ReadCloser
+	cmd      *exec.Cmd
+	in       io.WriteCloser
+	out      io.ReadCloser
+	waitOnce sync.Once
+	waitErr  error
 }
 
 func (s *Session) Read(p []byte) (int, error)  { return s.out.Read(p) }
 func (s *Session) Write(p []byte) (int, error) { return s.in.Write(p) }
 
+// wait reaps the child exactly once and caches its exit error, so Close and
+// Wait can both be called (in any order) without the second one hitting
+// "exec: Wait was already called" and masking the real exit status.
+func (s *Session) wait() error {
+	s.waitOnce.Do(func() { s.waitErr = s.cmd.Wait() })
+	return s.waitErr
+}
+
 // Close closes the child's stdin (signalling EOF to the remote) and waits.
 func (s *Session) Close() error {
 	s.in.Close()
-	return s.cmd.Wait()
+	return s.wait()
 }
 
 // Wait blocks until ssh exits.
-func (s *Session) Wait() error { return s.cmd.Wait() }
+func (s *Session) Wait() error { return s.wait() }
 
 // Dial starts `ssh <args> host remoteCmd` and returns its stdio as a stream.
 // ssh's own stderr is inherited so host-key prompts and errors reach the user.
@@ -85,16 +97,17 @@ func RemoteHasRelayium(e xfer.Endpoint, o Opts) (bool, error) {
 		return true, nil
 	}
 	var ee *exec.ExitError
-	if ok := asExitError(err, &ee); ok {
+	if errors.As(err, &ee) {
+		// ssh itself exits 255 on connection/auth failure; distinguish that
+		// from the remote shell's exit 1 for a missing `relayium` binary.
+		if ee.ExitCode() == 255 {
+			host := e.Host
+			if e.User != "" {
+				host = e.User + "@" + e.Host
+			}
+			return false, fmt.Errorf("ssh: could not connect to %s", host)
+		}
 		return false, nil // non-zero exit = not found
 	}
 	return false, fmt.Errorf("ssh probe failed: %w", err)
-}
-
-func asExitError(err error, target **exec.ExitError) bool {
-	if ee, ok := err.(*exec.ExitError); ok {
-		*target = ee
-		return true
-	}
-	return false
 }
