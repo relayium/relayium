@@ -85,3 +85,44 @@ func TestIPFallsBackWhenAllHopsTrusted(t *testing.T) {
 		t.Fatalf("got %q, want direct peer 10.0.0.1", got)
 	}
 }
+
+// A same-host reverse proxy connects from loopback (nginx → 127.0.0.1:8080).
+// Loopback is ALWAYS trusted — only a same-host process can connect from it, so
+// its X-Forwarded-For is authoritative — WITHOUT needing -trusted-proxies. This
+// is the standard documented deployment; forgetting to list loopback used to
+// collapse every visitor into one "127.0.0.1" LAN room.
+func TestIPTrustsLoopbackProxyByDefault(t *testing.T) {
+	x := NewIPExtractor(nil) // no configured proxies at all
+	for _, peer := range []string{"127.0.0.1:12345", "[::1]:12345", "127.0.0.5:9"} {
+		r := &http.Request{RemoteAddr: peer, Header: http.Header{}}
+		r.Header.Set("X-Forwarded-For", "203.0.113.7")
+		if got := x.IP(r); got != "203.0.113.7" {
+			t.Fatalf("loopback peer %s: IP = %q, want 203.0.113.7 (XFF must be trusted)", peer, got)
+		}
+		if got := x.RoomKey(r); got != "203.0.113.7" {
+			t.Fatalf("loopback peer %s: RoomKey = %q, want 203.0.113.7", peer, got)
+		}
+	}
+}
+
+// A loopback entry appended inside X-Forwarded-For is itself treated as a proxy
+// hop and skipped, so the resolved client is never a loopback address.
+func TestIPSkipsLoopbackInsideForwardedFor(t *testing.T) {
+	x := NewIPExtractor(nil)
+	r := &http.Request{RemoteAddr: "127.0.0.1:1", Header: http.Header{}}
+	r.Header.Set("X-Forwarded-For", "203.0.113.7, 127.0.0.1")
+	if got := x.IP(r); got != "203.0.113.7" {
+		t.Fatalf("got %q, want 203.0.113.7 (loopback XFF hop must be skipped)", got)
+	}
+}
+
+// A genuinely remote/public peer still cannot get its X-Forwarded-For trusted
+// by default — the loopback auto-trust must NOT weaken this security property.
+func TestIPStillIgnoresForwardedForFromPublicPeer(t *testing.T) {
+	x := NewIPExtractor(nil)
+	r := &http.Request{RemoteAddr: "198.51.100.23:443", Header: http.Header{}}
+	r.Header.Set("X-Forwarded-For", "10.9.9.9")
+	if got := x.IP(r); got != "198.51.100.23" {
+		t.Fatalf("public peer XFF must stay ignored, got %q", got)
+	}
+}
