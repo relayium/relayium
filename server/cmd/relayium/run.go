@@ -93,9 +93,11 @@ func runPush(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if has {
-		remoteCmd := "relayium __recv " + sshx.ShellQuote(dest.Path)
+		// A "--" terminator stops the remote runRecv's flag parser, so a dest
+		// path literally starting with "-" isn't misread as an unknown flag.
+		remoteCmd := "relayium __recv -- " + sshx.ShellQuote(dest.Path)
 		if f.noResume {
-			remoteCmd = "relayium __recv --no-resume " + sshx.ShellQuote(dest.Path)
+			remoteCmd = "relayium __recv --no-resume -- " + sshx.ShellQuote(dest.Path)
 		}
 		sess, err := sshx.Dial(dest, remoteCmd, opts)
 		if err != nil {
