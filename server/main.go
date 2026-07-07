@@ -124,9 +124,10 @@ func main() {
 		log.Fatalf("%v", err)
 	}
 	ipx := signal.NewIPExtractor(trustedNets)
-	if len(trustedNets) > 0 {
-		log.Printf("trusting X-Forwarded-For from %d proxy CIDR(s)", len(trustedNets))
-	}
+	// Loopback is always trusted (same-host reverse proxy); additional non-loopback
+	// proxy CIDRs come from -trusted-proxies. Logged so a misconfigured deployment
+	// (real client IPs showing as the proxy address) is diagnosable from the boot log.
+	log.Printf("client-IP: X-Forwarded-For trusted from loopback + %d configured proxy CIDR(s)", len(trustedNets))
 
 	hub := signal.NewHub()
 	handle := signal.ServeWS(hub, newID)
