@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -92,7 +93,11 @@ func runPush(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if has {
-		sess, err := sshx.Dial(dest, "relayium __recv "+sshx.ShellQuote(dest.Path), opts)
+		remoteCmd := "relayium __recv " + sshx.ShellQuote(dest.Path)
+		if f.noResume {
+			remoteCmd = "relayium __recv --no-resume " + sshx.ShellQuote(dest.Path)
+		}
+		sess, err := sshx.Dial(dest, remoteCmd, opts)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -156,7 +161,7 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	rep, err := xfer.Receive(sess, destDir, xfer.RecvOpts{})
+	rep, err := xfer.Receive(sess, destDir, xfer.RecvOpts{NoResume: f.noResume})
 	cerr := sess.Close()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -170,12 +175,19 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 }
 
 func runRecv(args []string, stdout, stderr io.Writer) int {
-	if len(args) != 1 {
+	fs := flag.NewFlagSet("__recv", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	var noResume bool
+	fs.BoolVar(&noResume, "no-resume", false, "disable resuming partial files")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 1 {
 		fmt.Fprintln(stderr, "__recv needs <destDir>")
 		return 2
 	}
 	rw := duplex{Reader: os.Stdin, Writer: os.Stdout}
-	rep, err := xfer.Receive(rw, args[0], xfer.RecvOpts{})
+	rep, err := xfer.Receive(rw, fs.Arg(0), xfer.RecvOpts{NoResume: noResume})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

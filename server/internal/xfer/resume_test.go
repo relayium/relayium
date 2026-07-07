@@ -61,6 +61,56 @@ func TestResumeSkipsAlreadyReceivedPrefix(t *testing.T) {
 	}
 }
 
+// TestNoResumeForcesFullResend proves RecvOpts{NoResume:true} makes the
+// receiver ignore an on-disk prefix and re-send from offset 0. The dest is
+// pre-seeded with the WRONG 4 bytes; if resume were (incorrectly) honored the
+// merged file would be "XXXX456789" and fail the SHA-256 check. A full resend
+// truncates to 0 and yields the correct "0123456789".
+func TestNoResumeForcesFullResend(t *testing.T) {
+	srcRoot := t.TempDir()
+	full := []byte("0123456789")
+	if err := os.WriteFile(filepath.Join(srcRoot, "big.bin"), full, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, srcs, err := BuildManifest([]string{srcRoot})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := filepath.Base(srcRoot)
+
+	// Destination holds 4 bytes of WRONG content.
+	dst := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dst, base), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dst, base, "big.bin"), []byte("XXXX"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cSend, cRecv := net.Pipe()
+	errc := make(chan error, 1)
+	go func() {
+		_, err := Send(cSend, m, srcs, SendOpts{})
+		cSend.Close()
+		errc <- err
+	}()
+	rep, err := Receive(cRecv, dst, RecvOpts{NoResume: true})
+	cRecv.Close()
+	if err != nil {
+		t.Fatalf("receive: %v", err)
+	}
+	if serr := <-errc; serr != nil {
+		t.Fatalf("send: %v", serr)
+	}
+	if len(rep.Failed) != 0 {
+		t.Fatalf("NoResume should re-send in full, but got failures: %v", rep.Failed)
+	}
+	got, _ := os.ReadFile(filepath.Join(dst, base, "big.bin"))
+	if string(got) != "0123456789" {
+		t.Fatalf("file after NoResume = %q, want %q", got, "0123456789")
+	}
+}
+
 // TestResumeStateForDirect exercises resumeStateFor directly so a regression in
 // the resume-offset logic fails a test (the end-to-end pipe test above can't:
 // a full re-send of a sub-chunk file also ends byte-correct at sentTail==10).

@@ -10,7 +10,9 @@ import (
 	"strings"
 )
 
-type RecvOpts struct{}
+type RecvOpts struct {
+	NoResume bool
+}
 
 // Receive accepts a pushed batch into destDir. It reads the manifest, reports
 // resume state for any partial files already on disk, then writes each file,
@@ -29,7 +31,13 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 	}
 
 	// Report resume state: partial on-disk files let the sender skip ahead.
-	if err := WriteJSON(rw, MsgResume, resumeStateFor(destDir, m)); err != nil {
+	// With NoResume, we send an empty state so the sender always re-sends in
+	// full (the receiver truncates at offset 0 rather than trusting a prefix).
+	rs := ResumeState{}
+	if !opts.NoResume {
+		rs = resumeStateFor(destDir, m)
+	}
+	if err := WriteJSON(rw, MsgResume, rs); err != nil {
 		return Report{}, err
 	}
 
