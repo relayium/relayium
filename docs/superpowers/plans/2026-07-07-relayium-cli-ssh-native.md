@@ -1338,7 +1338,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"struct" // placeholder — remove; see note
 
 	"github.com/relayium/relayium/internal/sshx"
 	"github.com/relayium/relayium/internal/xfer"
@@ -1355,6 +1354,13 @@ flags (after the subcommand):
   -p <port>     ssh port
   --no-resume   disable resuming partial files
 `
+
+// duplex adapts a separate reader and writer into one io.ReadWriter (used to
+// hand os.Stdin/os.Stdout to the transfer engine on the remote side).
+type duplex struct {
+	io.Reader
+	io.Writer
+}
 
 // Run dispatches a subcommand and returns a process exit code.
 func Run(args []string, stdout, stderr io.Writer) int {
@@ -1387,16 +1393,9 @@ type sshFlags struct {
 // (parseFlags, runPush, runPull, runRecv implemented below.)
 ```
 
-> **Note on the import:** delete the bogus `"struct"` import shown above — it is not a real package and was only a marker. The receiver uses an anonymous duplex type declared locally (see `runRecv`). Ensure `goimports`/`go vet` is clean before committing.
-
-Add the subcommand bodies to `run.go`:
+Add the subcommand bodies to `run.go` (all flag parsing goes through `parseFlagsStd`, defined in `flags.go` below):
 
 ```go
-func parseFlags(fs *flagSetLike, args []string) (sshFlags, []string, error) {
-	// Implemented with the standard library flag package.
-	return parseFlagsStd(args)
-}
-
 func runPush(args []string, stdout, stderr io.Writer) int {
 	f, rest, err := parseFlagsStd(args)
 	if err != nil {
@@ -1508,12 +1507,6 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 	return reportExit(rep, stderr)
 }
 
-// duplex adapts a separate reader and writer into one io.ReadWriter.
-type duplex struct {
-	io.Reader
-	io.Writer
-}
-
 func runRecv(args []string, stdout, stderr io.Writer) int {
 	if len(args) != 1 {
 		fmt.Fprintln(stderr, "__recv needs <destDir>")
@@ -1566,12 +1559,7 @@ func parseFlagsStd(args []string) (sshFlags, []string, error) {
 	}
 	return f, fs.Args(), nil
 }
-
-// flagSetLike is referenced by parseFlags's signature note in run.go; unused.
-type flagSetLike = flag.FlagSet
 ```
-
-> **Cleanup for the implementer:** the `parseFlags`/`flagSetLike` shim in `run.go` was a signature placeholder — delete `parseFlags` and `flagSetLike` and call `parseFlagsStd` directly (as `runPush`/`runPull` already do). Also remove the bogus `"struct"` import. The task is done when `go vet ./cmd/relayium/` is clean.
 
 Note: `pull` references a remote `relayium __send`. Add a matching hidden `__send` case that calls `xfer.Send` from a manifest built on the remote for `src.Path`. Implement it symmetrically:
 
@@ -1705,7 +1693,7 @@ git commit -m "test(cli): opt-in E2E push over ssh localhost"
 - §8 Go wire protocol first written → Tasks 2–5. ✅
 - §10 unit + integration + E2E → Tasks 1–8 unit, Task 9 E2E. ✅
 
-**2. Placeholder scan:** Two deliberate placeholders were introduced in Task 8's first draft (`"struct"` import, `parseFlags`/`flagSetLike` shim) and each is called out with an explicit **removal instruction** and a `go vet` gate in Step 4. No silent TODOs remain.
+**2. Placeholder scan:** No TODOs, stubs-without-instruction, or bogus imports remain. `resumeStateFor` is a real stub in Task 4 with a same-signature replacement in Task 5 (explicitly sequenced, not a silent placeholder). Task 8 Step 4 gates on `go vet ./cmd/relayium/` being clean.
 
 **3. Type consistency:** `Endpoint`, `Manifest`, `FileEntry`, `ResumeState`, `Report`, `SendOpts{Progress}`, `RecvOpts`, `sshx.Opts`, `Session`, `Send`/`Receive`/`BuildManifest`/`BuildArgs`/`Dial`/`RemoteHasRelayium`/`WriteTarStream`/`RemoteUntarCmd`/`ShellQuote`/`Run` are used with identical signatures across tasks. `resumeStateFor` is stubbed in Task 4 and replaced in Task 5 — same signature. ✅
 
