@@ -13,7 +13,8 @@ import (
 type RecvOpts struct{}
 
 // Receive accepts a pushed batch into destDir. It reads the manifest, reports
-// resume state (empty in Task 4), then writes each file, verifying SHA-256.
+// resume state for any partial files already on disk, then writes each file,
+// verifying SHA-256.
 func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 	var hello Hello
 	if _, err := ReadJSON(rw, &hello); err != nil {
@@ -27,7 +28,7 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 		return Report{}, err
 	}
 
-	// Task 4: no resume — report empty state. Task 5 fills Entries.
+	// Report resume state: partial on-disk files let the sender skip ahead.
 	if err := WriteJSON(rw, MsgResume, resumeStateFor(destDir, m)); err != nil {
 		return Report{}, err
 	}
@@ -63,8 +64,27 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 	return rep, WriteJSON(rw, MsgResult, res)
 }
 
-// resumeStateFor is defined in Task 5; Task 4 provides the empty stub below.
-func resumeStateFor(destDir string, m Manifest) ResumeState { return ResumeState{} }
+// resumeStateFor inspects destDir and returns, for each manifest file that has
+// a partial (non-empty, shorter-than-declared) copy on disk, the number of
+// bytes already present, so the sender can resume from that offset. The
+// end-to-end SHA-256 check still validates the merged result.
+func resumeStateFor(destDir string, m Manifest) ResumeState {
+	var rs ResumeState
+	for i, f := range m.Files {
+		dest, err := safeJoin(destDir, f.Path)
+		if err != nil {
+			continue
+		}
+		info, err := os.Stat(dest)
+		if err != nil {
+			continue // absent → full send
+		}
+		if info.Size() > 0 && info.Size() < f.Size {
+			rs.Entries = append(rs.Entries, ResumeEntry{Index: i, Have: info.Size()})
+		}
+	}
+	return rs
+}
 
 // writeFileBody reads exactly f.Size-offset bytes from rw, writes them at the
 // given offset in dest, and returns the SHA-256 (hex) of the full file.
