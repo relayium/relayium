@@ -10,11 +10,28 @@ import (
 	"github.com/coder/websocket"
 )
 
+// defaultParkTimeout bounds how long the first peer waits for a partner before
+// the server releases its rendezvous slot, closes the parked websocket, and
+// returns — without it a "sender starts, receiver never runs" case leaks the
+// goroutine, the FD, and the waiting[code] entry forever (coder/websocket has
+// no background pinger, so the dead client is never noticed).
+const defaultParkTimeout = 30 * time.Second
+
+// defaultIdleTimeout tears down a paired-but-silent session: each relay read is
+// given this bounded deadline, so a stalled peer no longer holds both websockets
+// open indefinitely.
+const defaultIdleTimeout = 60 * time.Second
+
 type RelayDeps struct {
 	OwnerOf   func(code string) (string, bool)
 	OverQuota func(ctx context.Context, owner string) bool
 	Record    func(ctx context.Context, sessionID, owner, code string, bytes int64)
 	NewID     func() string
+	// ParkTimeout / IdleTimeout override the defaults above (<=0 uses default).
+	// Injected per-handler rather than global so tests can shrink them without a
+	// data race against running relay goroutines.
+	ParkTimeout time.Duration
+	IdleTimeout time.Duration
 }
 
 // relayMatch is handed to the parked first peer once a second peer arrives:
@@ -46,7 +63,7 @@ func newRelayRendezvous() *relayRendezvous {
 // the first caller's handler can return — this keeps a single reader
 // goroutine per websocket.Conn (coder/websocket forbids concurrent Reads on
 // the same conn).
-func (rr *relayRendezvous) pair(code string, self *websocket.Conn) (partner *websocket.Conn, isFirst bool, done chan struct{}) {
+func (rr *relayRendezvous) pair(code string, self *websocket.Conn, parkTimeout time.Duration) (partner *websocket.Conn, isFirst bool, done chan struct{}) {
 	rr.mu.Lock()
 	if w, ok := rr.waiting[code]; ok {
 		delete(rr.waiting, code)
@@ -58,8 +75,27 @@ func (rr *relayRendezvous) pair(code string, self *websocket.Conn) (partner *web
 	w := &relayWaiter{conn: self, ready: make(chan relayMatch, 1)}
 	rr.waiting[code] = w
 	rr.mu.Unlock()
-	m := <-w.ready
-	return m.conn, true, m.done
+
+	select {
+	case m := <-w.ready:
+		return m.conn, true, m.done
+	case <-time.After(parkTimeout):
+		// No partner arrived in time. Drop our slot, but only if it is still
+		// ours: a second peer may have just claimed it under the lock (deleted
+		// the entry and buffered a send on w.ready). Re-check identity under the
+		// mutex to avoid racing that claim.
+		rr.mu.Lock()
+		if cur, ok := rr.waiting[code]; ok && cur == w {
+			delete(rr.waiting, code)
+			rr.mu.Unlock()
+			return nil, true, nil // timed out; caller closes self
+		}
+		rr.mu.Unlock()
+		// A partner claimed us concurrently; its send is buffered (cap 1), so
+		// receive it and proceed as a normal paired first peer.
+		m := <-w.ready
+		return m.conn, true, m.done
+	}
 }
 
 func RelayHandler(deps RelayDeps) http.HandlerFunc {
@@ -81,7 +117,16 @@ func RelayHandler(deps RelayDeps) http.HandlerFunc {
 		}
 		c.SetReadLimit(-1) // file bytes; no small default cap
 
-		partner, isFirst, done := rr.pair(code, c)
+		parkTO := deps.ParkTimeout
+		if parkTO <= 0 {
+			parkTO = defaultParkTimeout
+		}
+		idleTO := deps.IdleTimeout
+		if idleTO <= 0 {
+			idleTO = defaultIdleTimeout
+		}
+
+		partner, isFirst, done := rr.pair(code, c, parkTO)
 		if partner == nil {
 			c.Close(websocket.StatusInternalError, "no partner")
 			return
@@ -105,18 +150,24 @@ func RelayHandler(deps RelayDeps) http.HandlerFunc {
 		// Pipe self→partner, accumulating bytes; a second goroutine pipes the
 		// reverse direction. Either side closing ends the session.
 		errc := make(chan error, 2)
-		go pipe(ctx, c, partner, &total, deps, sid, owner, code, errc)
-		go pipe(ctx, partner, c, &total, deps, sid, owner, code, errc)
+		go pipe(ctx, c, partner, &total, deps, sid, owner, code, idleTO, errc)
+		go pipe(ctx, partner, c, &total, deps, sid, owner, code, idleTO, errc)
 		<-errc
 		c.Close(websocket.StatusNormalClosure, "")
 		partner.Close(websocket.StatusNormalClosure, "")
 	}
 }
 
-func pipe(ctx context.Context, from, to *websocket.Conn, total *atomic.Int64, deps RelayDeps, sid, owner, code string, errc chan<- error) {
+func pipe(ctx context.Context, from, to *websocket.Conn, total *atomic.Int64, deps RelayDeps, sid, owner, code string, idleTimeout time.Duration, errc chan<- error) {
 	var lastRecord time.Time
 	for {
-		typ, data, err := from.Read(ctx)
+		// Bound each read so a silent paired session is torn down instead of
+		// pinning both websockets open forever. When one direction times out its
+		// error ends the session (the handler closes both conns), which also
+		// unblocks any Write stuck on the other goroutine.
+		rctx, rcancel := context.WithTimeout(ctx, idleTimeout)
+		typ, data, err := from.Read(rctx)
+		rcancel()
 		if err != nil {
 			errc <- err
 			return

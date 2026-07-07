@@ -63,20 +63,40 @@ func crossnetConn(ctx context.Context, code, name string, f crossFlags, stderr i
 		ServerURL:      f.server,
 		Code:           code,
 		RelayOnly:      f.relayOnly,
+		PreferAccept:   hs.IsServer,
 	})
 	if err != nil {
 		return nil, false, err
 	}
 
-	var tconn *tls.Conn
-	if hs.IsServer {
-		tconn, err = secure.Server(raw, id, hs.PeerFingerprint)
-	} else {
-		tconn, err = secure.Client(raw, id, hs.PeerFingerprint)
+	secureWrap := func(c net.Conn) (*tls.Conn, error) {
+		if hs.IsServer {
+			return secure.Server(c, id, hs.PeerFingerprint)
+		}
+		return secure.Client(c, id, hs.PeerFingerprint)
 	}
+
+	tconn, err := secureWrap(raw)
 	if err != nil {
 		raw.Close()
-		return nil, false, err
+		if viaRelay {
+			// A relay-path TLS failure is fatal: the relay is the last resort.
+			return nil, false, err
+		}
+		// Belt-and-suspenders: a direct connection whose pinned-TLS handshake
+		// fails (e.g. residual glare, or a half-open direct path) must not abort
+		// the transfer — fall back to the metered relay and try the handshake
+		// there with the same role.
+		raw, err = connect.DialRelay(ctx, f.server, code)
+		if err != nil {
+			return nil, false, err
+		}
+		viaRelay = true
+		tconn, err = secureWrap(raw)
+		if err != nil {
+			raw.Close()
+			return nil, false, err
+		}
 	}
 	if viaRelay {
 		fmt.Fprintln(stderr, "path: relay (metered)")
