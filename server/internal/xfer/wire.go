@@ -28,6 +28,8 @@ const maxFramePayload = 8 << 20 // 8 MiB guard for control frames
 type Hello struct {
 	Version int
 	Mode    string // "push" or "pull"
+	Sync    bool   // sync mode: receiver may skip unchanged files and preserve mtime
+	Delete  bool   // mirror: receiver may delete files not in the manifest (if permitted)
 }
 
 type FileEntry struct {
@@ -44,7 +46,10 @@ type ResumeEntry struct {
 	Have  int64 // bytes already on the receiver's disk for this file
 }
 
-type ResumeState struct{ Entries []ResumeEntry }
+type ResumeState struct {
+	Entries []ResumeEntry
+	Skip    []int // sync mode: manifest indices already present & identical (not sent)
+}
 
 type FileStart struct {
 	Index  int
