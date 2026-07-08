@@ -16,6 +16,7 @@ const usage = `relayium — file transfer
 usage:
   relayium push <src...> [user@]host:dest    push files to a server you can ssh into
   relayium push <src...> relayium://host[:port]  push straight to a listening peer (daemon direct)
+  relayium sync <src...> <dest> [--delete] [--watch]   incremental one-way folder mirror
   relayium pull [user@]host:src <dest>       pull files from such a server
   relayium send <src...> <code>              send to a peer over a pairing code (cross-network)
   relayium receive <code> [destdir]          receive such a transfer
@@ -48,6 +49,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "push":
 		return runPush(args[1:], stdout, stderr)
+	case "sync":
+		return runSync(args[1:], stdout, stderr)
 	case "pull":
 		return runPull(args[1:], stdout, stderr)
 	case "send":
@@ -217,7 +220,7 @@ func runRecv(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	rw := duplex{Reader: os.Stdin, Writer: os.Stdout}
-	rep, err := xfer.Receive(rw, fs.Arg(0), xfer.RecvOpts{NoResume: noResume})
+	rep, err := xfer.Receive(rw, fs.Arg(0), xfer.RecvOpts{NoResume: noResume, AllowDelete: true})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
