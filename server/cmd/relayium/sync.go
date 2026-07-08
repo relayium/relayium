@@ -77,6 +77,10 @@ func syncOnce(dest string, srcs []string, f syncFlags, stdout, stderr io.Writer)
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	if f.del && len(paths) == 0 {
+		fmt.Fprintln(stderr, "refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).")
+		return 1
+	}
 	opts := xfer.SendOpts{Sync: true, Delete: f.del, Progress: progressFn(stderr)}
 
 	if strings.HasPrefix(dest, daemonScheme) {
@@ -92,6 +96,9 @@ func syncOnce(dest string, srcs []string, f syncFlags, stdout, stderr io.Writer)
 			return 1
 		}
 		fmt.Fprintf(stderr, "synced: %d sent, %d unchanged\n", rep.Files, rep.Skipped)
+		if rep.DeleteDenied {
+			fmt.Fprintln(stderr, "warning: the receiver ignored --delete (its listener isn't started with --allow-delete); nothing was deleted")
+		}
 		return reportExit(rep, stderr)
 	}
 
@@ -131,5 +138,8 @@ func syncOnce(dest string, srcs []string, f syncFlags, stdout, stderr io.Writer)
 		return 1
 	}
 	fmt.Fprintf(stderr, "synced: %d sent, %d unchanged\n", rep.Files, rep.Skipped)
+	if rep.DeleteDenied {
+		fmt.Fprintln(stderr, "warning: the receiver ignored --delete (its listener isn't started with --allow-delete); nothing was deleted")
+	}
 	return reportExit(rep, stderr)
 }

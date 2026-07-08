@@ -66,6 +66,7 @@ func Send(rw io.ReadWriter, m Manifest, srcs []string, opts SendOpts) (Report, e
 		return rep, err
 	}
 	rep.Failed = res.Failed
+	rep.DeleteDenied = res.DeleteDenied
 	return rep, nil
 }
 

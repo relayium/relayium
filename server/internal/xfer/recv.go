@@ -84,6 +84,9 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 	} else if hello.Delete {
 		rep.DeleteDenied = true
 	}
+	// Surface a denied delete to the sender too (spec §8 "both ends"), not
+	// just the receiver's local Report.
+	res.DeleteDenied = hello.Delete && !opts.AllowDelete
 
 	rep.Failed = res.Failed
 	return rep, WriteJSON(rw, MsgResult, res)

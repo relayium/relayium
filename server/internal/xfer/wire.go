@@ -62,8 +62,9 @@ type FileHash struct {
 }
 
 type Result struct {
-	OK     bool
-	Failed []string
+	OK           bool
+	Failed       []string
+	DeleteDenied bool // sync mode: Hello.Delete was set but the receiver isn't --allow-delete
 }
 
 // WriteFrame writes [type:1][len:uint32-BE][payload].
