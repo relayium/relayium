@@ -44,6 +44,7 @@
   import CrossPage from "./lib/CrossPage.svelte";
   import OfflinePage from "./lib/OfflinePage.svelte";
   import MePage from "./lib/MePage.svelte";
+  import CliPage from "./lib/CliPage.svelte";
   import Nav from "./lib/Nav.svelte";
   import { currentRoute, syncRouteFromLocation, downloadId, navigate, setNavGuard } from "./lib/router.svelte";
   import Hero from "./lib/Hero.svelte";
@@ -189,7 +190,7 @@
   // rendered: the LAN page (unless unsupported), or the cross page once a
   // realtime peer is connected. Never on the download page.
   const surfaceShown = $derived(
-    currentRoute() === "download" || currentRoute() === "offline" || currentRoute() === "me"
+    currentRoute() === "download" || currentRoute() === "offline" || currentRoute() === "me" || currentRoute() === "cli"
       ? false
       : currentRoute() === "cross"
         ? showTransfer
@@ -1258,6 +1259,8 @@
     <OfflinePage />
   {:else if currentRoute() === "me"}
     <MePage />
+  {:else if currentRoute() === "cli"}
+    <CliPage />
   {:else}
     <Hero {connState} {unsupported} {selfName} {selfIP} />
 
