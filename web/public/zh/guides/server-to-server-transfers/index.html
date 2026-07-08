@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>用 Relayium CLI 实现服务器到服务器直传（守护进程直连） · Relayium</title>
-    <meta name="description" content="用 relayium serve 和 push relayium:// 在你自己掌控的两台服务器之间直接搬运文件——基于锁定的 TLS，无需中继、无需 SSH、无需代码。用 relayium id 和 authorized_fingerprints 一次性建立公钥信任，然后在 systemd 下运行。" />
+    <meta name="description" content="用 relayium serve 和 push relayium:// 在你自己掌控的两台服务器之间直接搬运文件——基于锁定的 TLS，无需中继、无需 SSH、无需代码。在新的推送方首次推送时批准一次，之后即可自动化，或在 systemd 下运行。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/zh/guides/server-to-server-transfers" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/server-to-server-transfers" />
@@ -19,15 +19,15 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:title" content="用 Relayium CLI 实现服务器到服务器直传（守护进程直连）" />
-    <meta property="og:description" content="用 relayium serve 和 push relayium:// 在你自己掌控的两台服务器之间直接搬运文件——基于锁定的 TLS，无需中继、无需 SSH、无需代码。用 relayium id 和 authorized_fingerprints 一次性建立公钥信任，然后在 systemd 下运行。" />
+    <meta property="og:description" content="用 relayium serve 和 push relayium:// 在你自己掌控的两台服务器之间直接搬运文件——基于锁定的 TLS，无需中继、无需 SSH、无需代码。在新的推送方首次推送时批准一次，之后即可自动化，或在 systemd 下运行。" />
     <meta property="og:url" content="https://relayium.com/zh/guides/server-to-server-transfers" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="用 Relayium CLI 实现服务器到服务器直传（守护进程直连）" />
-    <meta name="twitter:description" content="用 relayium serve 和 push relayium:// 在你自己掌控的两台服务器之间直接搬运文件——基于锁定的 TLS，无需中继、无需 SSH、无需代码。用 relayium id 和 authorized_fingerprints 一次性建立公钥信任，然后在 systemd 下运行。" />
+    <meta name="twitter:description" content="用 relayium serve 和 push relayium:// 在你自己掌控的两台服务器之间直接搬运文件——基于锁定的 TLS，无需中继、无需 SSH、无需代码。在新的推送方首次推送时批准一次，之后即可自动化，或在 systemd 下运行。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 实现服务器到服务器直传（守护进程直连）","description":"用 relayium serve 和 push relayium:// 在你自己掌控的两台服务器之间直接搬运文件——基于锁定的 TLS，无需中继、无需 SSH、无需代码。用 relayium id 和 authorized_fingerprints 一次性建立公钥信任，然后在 systemd 下运行。","inLanguage":"zh-Hans","dateModified":"2026-07-08","mainEntityOfPage":"https://relayium.com/zh/guides/server-to-server-transfers","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"守护进程直连和通过 SSH 推送有什么不同？","acceptedAnswer":{"@type":"Answer","text":"通过 SSH 推送会把传输隧道进你的 SSH 连接，并且需要在远端有一个 SSH 账号。守护进程直连不需要 SSH，也不需要账号——两台服务器通过锁定的 TLS，用证书指纹互相验证身份，当两台机器都是你自己的时候，这样更轻量。"}},{"@type":"Question","name":"我需要手动到处复制指纹吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。在终端中，serve 会在每个新推送方首次推送时提示你批准它——显示其地址和指纹——并记住它，因此后续推送是静默的。只有在没有终端的非交互式场景（比如作为 systemd 服务运行，没有人来回应提示）时，你才需要用到 relayium id 或 relayium authorize。"}},{"@type":"Question","name":"身份和信任文件在哪里？","acceptedAnswer":{"@type":"Answer","text":"默认在 ~/.config/relayium/ 中（可用 --config-dir 覆盖）。id.key / id.crt 是这台主机的持久身份，known_hosts 保存着你推送过的监听端的指纹，authorized_fingerprints 则是监听端的推送方允许列表。"}},{"@type":"Question","name":"指纹变化了会怎样？","acceptedAnswer":{"@type":"Answer","text":"推送会被拒绝并发出警告。监听端的密钥在首次使用时就被锁定在 known_hosts 中，因此之后的变化——无论是主机重新生成了密钥，还是中间人攻击——都会被拒绝而不是被默默接受。只有在你确实主动轮换了密钥时，才应删除 known_hosts 中对应的那一行。"}},{"@type":"Question","name":"有没有中继回退？","acceptedAnswer":{"@type":"Answer","text":"没有。守护进程直连假定监听端地址是可达的；如果无法建立连接，就会失败。任何数据都绝不会经由 Relayium 代理——这正是这个模式的意义所在。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 实现服务器到服务器直传（守护进程直连）","description":"用 relayium serve 和 push relayium:// 在你自己掌控的两台服务器之间直接搬运文件——基于锁定的 TLS，无需中继、无需 SSH、无需代码。在新的推送方首次推送时批准一次，之后即可自动化，或在 systemd 下运行。","inLanguage":"zh-Hans","dateModified":"2026-07-08","mainEntityOfPage":"https://relayium.com/zh/guides/server-to-server-transfers","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"守护进程直连和通过 SSH 推送有什么不同？","acceptedAnswer":{"@type":"Answer","text":"通过 SSH 推送会把传输隧道进你的 SSH 连接，并且需要在远端有一个 SSH 账号。守护进程直连不需要 SSH，也不需要账号——两台服务器通过锁定的 TLS，用证书指纹互相验证身份，当两台机器都是你自己的时候，这样更轻量。"}},{"@type":"Question","name":"我需要手动到处复制指纹吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。在终端中，serve 会在每个新推送方首次推送时提示你批准它——显示其地址和指纹——并记住它，因此后续推送是静默的。只有在没有终端的非交互式场景（比如作为 systemd 服务运行，没有人来回应提示）时，你才需要用到 relayium id 或 relayium authorize。"}},{"@type":"Question","name":"身份和信任文件在哪里？","acceptedAnswer":{"@type":"Answer","text":"默认在 ~/.config/relayium/ 中（可用 --config-dir 覆盖）。id.key / id.crt 是这台主机的持久身份，known_hosts 保存着你推送过的监听端的指纹，authorized_fingerprints 则是监听端的推送方允许列表。"}},{"@type":"Question","name":"指纹变化了会怎样？","acceptedAnswer":{"@type":"Answer","text":"推送会被拒绝并发出警告。监听端的密钥在首次使用时就被锁定在 known_hosts 中，因此之后的变化——无论是主机重新生成了密钥，还是中间人攻击——都会被拒绝而不是被默默接受。只有在你确实主动轮换了密钥时，才应删除 known_hosts 中对应的那一行。"}},{"@type":"Question","name":"有没有中继回退？","acceptedAnswer":{"@type":"Answer","text":"没有。守护进程直连假定监听端地址是可达的；如果无法建立连接，就会失败。任何数据都绝不会经由 Relayium 代理——这正是这个模式的意义所在。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -62,31 +62,30 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="updated">最近更新: 2026-07-08</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers">English</a><a href="/zh/guides/server-to-server-transfers" aria-current="true">中文</a><a href="/ja/guides/server-to-server-transfers">日本語</a><a href="/ko/guides/server-to-server-transfers">한국어</a><a href="/de/guides/server-to-server-transfers">Deutsch</a><a href="/fr/guides/server-to-server-transfers">Français</a></nav>
       <p class="lead">当两台机器都是你自己的，并且彼此知道对方地址时，SSH 是多余的摩擦，中转撮合纯属多余开销。守护进程直连正是为此而生：一台服务器监听，另一台通过锁定的 TLS 1.3 连接直接推送过去。无需中继、无需 SSH、无需配对码——信任基于公钥，只需设置一次。</p>
-      <p class="lead">本指南涵盖监听端、用指纹一次性建立信任、向其推送，以及把监听端作为 systemd 服务运行。</p>
-      <h2>启动一个监听端</h2>
-      <p>在接收方服务器上，serve 监听推送并把它们写入某个目录。它默认长期运行；加上 --once 可以只接受一次传输就退出。用 relayium id 打印这台主机的指纹——马上就要用到：</p>
-      <pre><code># on the LISTENER
-relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031
-relayium id                       # prints THIS host&#39;s fingerprint</code></pre>
+      <p class="lead">本指南涵盖启动监听端、向其推送、在首次联系时批准新的推送方、实现自动化，以及把监听端作为 systemd 服务运行。</p>
+      <h2>启动监听端（在接收方）</h2>
+      <p>在接收方服务器上，serve 监听推送并把它们写入某个目录。它默认长期运行；加上 --once 可以只接受一次传输就退出。你不需要预先共享任何东西——不用提前复制任何指纹：</p>
+      <pre><code># on the RECEIVER
+relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031</code></pre>
       <ul><li>监听端依次处理连接，并把文件落到 --dir 指定的目录下。</li><li>默认端口是 9031；可用 --port 修改，并在防火墙上开放该端口。</li></ul>
-      <h2>向监听端推送</h2>
-      <p>从另一台服务器，推送到一个 relayium:// 地址。第一次连接会锁定监听端的指纹；此后每次连接都会校验它，指纹一旦变化就会被拒绝而不是被默默接受——因此密钥被替换或中间人攻击会被发现，而不是被信任。</p>
-      <pre><code># on the PUSHER
+      <h2>向监听端推送（在发送方）</h2>
+      <p>从发送方服务器，推送到接收方的 relayium:// 地址。第一次连接会锁定接收方的指纹；此后每次连接都会校验它，指纹一旦变化就会被拒绝而不是被默默接受——因此密钥被替换或中间人攻击会被发现，而不是被信任。在第一次推送时，发送方会稍等片刻，等待接收方批准（下一步）。</p>
+      <pre><code># on the SENDER
 relayium push ./build.tar.zst relayium://receiver.example.com
 
 # non-default port
 relayium push ./build.tar.zst relayium://receiver.example.com:9040</code></pre>
       <ul><li>没有中继，也没有回退：如果监听端无法到达，推送就会失败——文件字节永远不会经过其他任何人转发。</li><li>使用与其他模式相同的传输引擎：可续传，并对每个文件做 SHA-256 校验。</li></ul>
-      <h2>批准首次推送的推送方</h2>
-      <p>在终端里，你不需要预先共享任何东西。当一台新机器第一次向你的监听端推送时，serve 会显示它的来源和指纹，并请你批准它——就像 SSH 首次连接时的提示，只不过是在接收方这一侧：</p>
-      <pre><code># on the LISTENER, when a new peer pushes:
+      <h2>在首次推送时批准发送方（在接收方）</h2>
+      <p>当一台新机器第一次向你的监听端推送时，serve（在终端中）会显示它的来源和指纹，并请你批准它——就像 SSH 首次连接时的提示，只不过是在接收方这一侧：</p>
+      <pre><code># on the RECEIVER, when a new sender pushes:
 Incoming push from 203.0.113.7:54021
   fingerprint: 74318e3b…
 Accept and remember this peer? [y/N] y</code></pre>
       <ul><li>回答 y，该指纹就会被记录到 authorized_fingerprints 中；此后同一台机器的每次推送都会静默通过。</li><li>指纹是一台机器的稳定身份（重启和 IP 变化都不受影响），因此批准对每个推送方来说只是一次性的步骤。</li><li>推送方则在首次连接时获知监听端的密钥（首次使用即信任），并将其锁定在 known_hosts 中。</li></ul>
       <h2>实现自动化（或在没有终端的环境下运行）</h2>
       <p>由于已批准的指纹会被记住，后续推送不再需要确认——因此 relayium push 可以直接接入 cron、部署脚本或 CI，实现加密、可校验完整性、可续传的服务器到服务器同步。当 serve 在没有终端的环境下运行（作为 systemd 服务、通过管道）时，它无法弹出提示，因此会拒绝未知的推送方；这时应改为预先授权它们。可以从推送方的 relayium id 获取指纹，或者从 serve 日志中 “rejected unauthorized peer …” 那一行复制它，然后：</p>
-      <pre><code># on the LISTENER: pre-authorize a pusher without a prompt
+      <pre><code># on the RECEIVER: pre-authorize a sender without a prompt
 relayium authorize 74318e3b...</code></pre>
       <ul><li>身份和信任文件存放在 ~/.config/relayium/ 中（可用 --config-dir 覆盖，例如作为服务时用 /etc/relayium）。</li><li>authorize 是幂等的——对同一个指纹再次运行它不会有任何效果。</li></ul>
       <h2>在 systemd 下运行监听端</h2>

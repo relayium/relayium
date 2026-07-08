@@ -23,19 +23,16 @@ relayium send ./file.zip 123456
 
 # receiver
 relayium receive 123456 ./downloads`;
-  const daemonListenCmd = `# on the LISTENER
-relayium serve --dir ~/inbox      # long-running; --once to accept one transfer
-relayium id                       # prints THIS host's fingerprint`;
-  const daemonAuthCmd = `# on the LISTENER, first push from a new peer prompts:
+  const daemonListenCmd = `# on the RECEIVER
+relayium serve --dir ~/inbox      # --once to accept one transfer; --port to change 9031`;
+  const daemonPushCmd = `# on the SENDER
+relayium push ./file.zip relayium://receiver.example.com`;
+  const daemonAuthCmd = `# on the RECEIVER, the first push prompts:
 Incoming push from 203.0.113.7  (fingerprint 74318e3b…)
 Accept and remember this peer? [y/N] y
 
 # no terminal (a systemd service)? pre-authorize instead:
 relayium authorize 74318e3b…`;
-  const daemonPushCmd = `# on the PUSHER
-relayium push ./file.zip relayium://host.example.com
-# first connect is trusted on first use (TOFU) and pinned in known_hosts;
-# if the listener's fingerprint later changes, the push refuses and warns.`;
 
   // Literal command names / flags / emoji; all prose comes from t.cliPage.
   const osBadge = "macOS · Linux · Windows";
@@ -137,15 +134,15 @@ relayium push ./file.zip relayium://host.example.com
     <ol class="steps">
       <li>
         <strong>{t.cliPage.step1Label}</strong> {t.cliPage.step1Body}
-        <CommandBlock code={daemonListenCmd} title="listener" />
+        <CommandBlock code={daemonListenCmd} title="receiver · listen" />
       </li>
       <li>
         <strong>{t.cliPage.step2Label}</strong> {t.cliPage.step2Body}
-        <CommandBlock code={daemonAuthCmd} title="listener · approve" />
+        <CommandBlock code={daemonPushCmd} title="sender · push" />
       </li>
       <li>
         <strong>{t.cliPage.step3Label}</strong> {t.cliPage.step3Body}
-        <CommandBlock code={daemonPushCmd} title="pusher" />
+        <CommandBlock code={daemonAuthCmd} title="receiver · approve" />
       </li>
     </ol>
   </div>

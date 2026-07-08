@@ -150,14 +150,15 @@ const fr: Messages = {
     mode3Tag: "gratuit",
     mode3Body:
       "Pour deux hôtes que vous contrôlez et qui connaissent déjà l'adresse l'un de l'autre : l'un écoute, l'autre lui envoie directement (push) via TLS 1.3 épinglé. Pas de relais, pas de SSH, pas de code — la confiance repose sur une clé publique, configurée une seule fois. Trois étapes :",
-    step1Label: "Récepteur :",
-    step1Body: "lancez serve et affichez l'empreinte de cet hôte avec relayium id.",
-    step2Label: "Autoriser au premier push :",
+    step1Label: "Sur le récepteur :",
+    step1Body:
+      "démarrez l'écouteur — les fichiers poussés atterrissent dans le répertoire --dir. Rien à partager au préalable.",
+    step2Label: "Sur l'expéditeur :",
     step2Body:
-      "dans un terminal, le récepteur affiche l'adresse et l'empreinte du nouvel expéditeur et vous demande de l'approuver — répondez y et c'est mémorisé, les push suivants passent alors sans confirmation. Vous l'exécutez comme service (pas de terminal) ? Autorisez-le à l'avance avec relayium authorize.",
-    step3Label: "Expéditeur :",
+      "faites push vers l'adresse relayium:// du récepteur. Lors du tout premier push, il patiente un instant le temps que le récepteur approuve.",
+    step3Label: "De retour sur le récepteur :",
     step3Body:
-      "faites push vers relayium://host. La clé du récepteur est approuvée à la première utilisation et épinglée dans known_hosts ; un changement d'empreinte ultérieur est refusé (jamais accepté silencieusement).",
+      "le premier push affiche l'adresse et l'empreinte de l'expéditeur — répondez y pour accepter et la mémoriser ; les push suivants depuis cette machine passent alors silencieusement. Pas de terminal (un service systemd) ? Autorisez plutôt à l'avance avec relayium authorize (récupérez l'empreinte via relayium id de l'expéditeur, ou dans le journal serve).",
     refH2: "Référence",
     flagsH3: "Options courantes",
     thFlag: "Option",

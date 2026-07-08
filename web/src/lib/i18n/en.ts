@@ -150,14 +150,14 @@ const en: Messages = {
     mode3Tag: "free",
     mode3Body:
       "For two hosts you control that already know each other's address: one listens, the other pushes straight to it over pinned TLS 1.3. No relay, no SSH, no code — trust is public-key, set up once. Three steps:",
-    step1Label: "Listener:",
-    step1Body: "start serve and print this host's fingerprint with relayium id.",
-    step2Label: "Approve on first push:",
+    step1Label: "On the receiver:",
+    step1Body: "start the listener — pushed files land in the --dir directory. Nothing to pre-share.",
+    step2Label: "On the sender:",
     step2Body:
-      "in a terminal, the listener shows the new pusher's address and fingerprint and asks you to approve it — answer y and it's remembered, so later pushes are silent. Running as a service (no terminal)? pre-authorize with relayium authorize.",
-    step3Label: "Pusher:",
+      "push to the receiver's relayium:// address. On the very first push it waits a moment while the receiver approves.",
+    step3Label: "Back on the receiver:",
     step3Body:
-      "push to relayium://host. The listener's key is trusted on first use and pinned in known_hosts; a later fingerprint change is refused (not silently accepted).",
+      "the first push shows the sender's address and fingerprint — answer y to accept and remember it, and later pushes from that machine pass silently. No terminal (a systemd service)? pre-authorize with relayium authorize instead (get the fingerprint from the sender's relayium id, or from the serve log).",
     refH2: "Reference",
     flagsH3: "Common flags",
     thFlag: "Flag",

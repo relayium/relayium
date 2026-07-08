@@ -6,22 +6,21 @@
 const en = {
   title: "Server-to-server transfers with the Relayium CLI (daemon direct)",
   description:
-    "Move files straight between two servers you control with relayium serve and push relayium:// — over pinned TLS, no relay, no SSH, no code. Set up public-key trust once with relayium id and authorized_fingerprints, then run it under systemd.",
+    "Move files straight between two servers you control with relayium serve and push relayium:// — over pinned TLS, no relay, no SSH, no code. Approve a new pusher once on its first push, then automate it or run it under systemd.",
   updatedLabel: "Last updated",
   lead: [
     "When both machines are yours and each knows the other's address, SSH is extra friction and a rendezvous is pure overhead. Daemon direct is built for exactly this: one server listens, the other pushes straight to it over a pinned TLS 1.3 connection. No relay, no SSH, no pairing code — trust is public-key and set up once.",
-    "This guide covers the listener, the one-time trust setup with fingerprints, pushing to it, and running the listener as a systemd service.",
+    "This guide covers starting the listener, pushing to it, approving a new pusher on first contact, automating it, and running the listener as a systemd service.",
   ],
   sections: [
     {
-      heading: "Start a listener",
+      heading: "Start the listener (on the receiver)",
       body: [
-        "On the receiving server, serve listens for pushes and writes them into a directory. It's long-running by default; add --once to accept a single transfer and exit. Print this host's fingerprint with relayium id — you'll need it in a moment:",
+        "On the receiving server, serve listens for pushes and writes them into a directory. It's long-running by default; add --once to accept a single transfer and exit. You don't pre-share anything — no fingerprints to copy up front:",
       ],
       code: [
-        `# on the LISTENER
-relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031
-relayium id                       # prints THIS host's fingerprint`,
+        `# on the RECEIVER
+relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031`,
       ],
       bullets: [
         "The listener processes connections one at a time and lands files under --dir.",
@@ -29,12 +28,12 @@ relayium id                       # prints THIS host's fingerprint`,
       ],
     },
     {
-      heading: "Push to the listener",
+      heading: "Push to it (on the sender)",
       body: [
-        "From the other server, push to a relayium:// address. The first connection pins the listener's fingerprint; every connection after that verifies it, and a changed fingerprint is refused rather than silently accepted — so a swapped key or a man-in-the-middle is caught, not trusted.",
+        "From the sending server, push to the receiver's relayium:// address. The first connection pins the receiver's fingerprint; every connection after that verifies it, and a changed fingerprint is refused rather than silently accepted — so a swapped key or a man-in-the-middle is caught, not trusted. On the very first push, the sender waits a moment while the receiver approves it (next step).",
       ],
       code: [
-        `# on the PUSHER
+        `# on the SENDER
 relayium push ./build.tar.zst relayium://receiver.example.com
 
 # non-default port
@@ -46,12 +45,12 @@ relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
       ],
     },
     {
-      heading: "Approve the pusher on first push",
+      heading: "Approve the sender on first push (on the receiver)",
       body: [
-        "In a terminal you don't pre-share anything. The first time a new machine pushes to your listener, serve shows you where it's from and its fingerprint and asks you to approve it — like SSH's first-connect prompt, but on the receiving side:",
+        "The first time a new machine pushes to your listener, serve (in a terminal) shows you where it's from and its fingerprint and asks you to approve it — like SSH's first-connect prompt, but on the receiving side:",
       ],
       code: [
-        `# on the LISTENER, when a new peer pushes:
+        `# on the RECEIVER, when a new sender pushes:
 Incoming push from 203.0.113.7:54021
   fingerprint: 74318e3b…
 Accept and remember this peer? [y/N] y`,
@@ -68,7 +67,7 @@ Accept and remember this peer? [y/N] y`,
         "Because an approved fingerprint is remembered, later pushes need no prompt — so relayium push drops straight into cron, a deploy script, or CI for encrypted, integrity-checked, resumable server-to-server sync. When serve runs without a terminal (a systemd service, a pipe) it can't prompt, so it rejects unknown pushers; pre-authorize them instead. Get the fingerprint from the pusher's relayium id, or copy it from the \"rejected unauthorized peer …\" line in the serve log, then:",
       ],
       code: [
-        `# on the LISTENER: pre-authorize a pusher without a prompt
+        `# on the RECEIVER: pre-authorize a sender without a prompt
 relayium authorize 74318e3b...`,
       ],
       bullets: [
@@ -137,22 +136,21 @@ WantedBy=multi-user.target`,
 const zh = {
   title: "用 Relayium CLI 实现服务器到服务器直传（守护进程直连）",
   description:
-    "用 relayium serve 和 push relayium:// 在你自己掌控的两台服务器之间直接搬运文件——基于锁定的 TLS，无需中继、无需 SSH、无需代码。用 relayium id 和 authorized_fingerprints 一次性建立公钥信任，然后在 systemd 下运行。",
+    "用 relayium serve 和 push relayium:// 在你自己掌控的两台服务器之间直接搬运文件——基于锁定的 TLS，无需中继、无需 SSH、无需代码。在新的推送方首次推送时批准一次，之后即可自动化，或在 systemd 下运行。",
   updatedLabel: "最近更新",
   lead: [
     "当两台机器都是你自己的，并且彼此知道对方地址时，SSH 是多余的摩擦，中转撮合纯属多余开销。守护进程直连正是为此而生：一台服务器监听，另一台通过锁定的 TLS 1.3 连接直接推送过去。无需中继、无需 SSH、无需配对码——信任基于公钥，只需设置一次。",
-    "本指南涵盖监听端、用指纹一次性建立信任、向其推送，以及把监听端作为 systemd 服务运行。",
+    "本指南涵盖启动监听端、向其推送、在首次联系时批准新的推送方、实现自动化，以及把监听端作为 systemd 服务运行。",
   ],
   sections: [
     {
-      heading: "启动一个监听端",
+      heading: "启动监听端（在接收方）",
       body: [
-        "在接收方服务器上，serve 监听推送并把它们写入某个目录。它默认长期运行；加上 --once 可以只接受一次传输就退出。用 relayium id 打印这台主机的指纹——马上就要用到：",
+        "在接收方服务器上，serve 监听推送并把它们写入某个目录。它默认长期运行；加上 --once 可以只接受一次传输就退出。你不需要预先共享任何东西——不用提前复制任何指纹：",
       ],
       code: [
-        `# on the LISTENER
-relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031
-relayium id                       # prints THIS host's fingerprint`,
+        `# on the RECEIVER
+relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031`,
       ],
       bullets: [
         "监听端依次处理连接，并把文件落到 --dir 指定的目录下。",
@@ -160,12 +158,12 @@ relayium id                       # prints THIS host's fingerprint`,
       ],
     },
     {
-      heading: "向监听端推送",
+      heading: "向监听端推送（在发送方）",
       body: [
-        "从另一台服务器，推送到一个 relayium:// 地址。第一次连接会锁定监听端的指纹；此后每次连接都会校验它，指纹一旦变化就会被拒绝而不是被默默接受——因此密钥被替换或中间人攻击会被发现，而不是被信任。",
+        "从发送方服务器，推送到接收方的 relayium:// 地址。第一次连接会锁定接收方的指纹；此后每次连接都会校验它，指纹一旦变化就会被拒绝而不是被默默接受——因此密钥被替换或中间人攻击会被发现，而不是被信任。在第一次推送时，发送方会稍等片刻，等待接收方批准（下一步）。",
       ],
       code: [
-        `# on the PUSHER
+        `# on the SENDER
 relayium push ./build.tar.zst relayium://receiver.example.com
 
 # non-default port
@@ -177,12 +175,12 @@ relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
       ],
     },
     {
-      heading: "批准首次推送的推送方",
+      heading: "在首次推送时批准发送方（在接收方）",
       body: [
-        "在终端里，你不需要预先共享任何东西。当一台新机器第一次向你的监听端推送时，serve 会显示它的来源和指纹，并请你批准它——就像 SSH 首次连接时的提示，只不过是在接收方这一侧：",
+        "当一台新机器第一次向你的监听端推送时，serve（在终端中）会显示它的来源和指纹，并请你批准它——就像 SSH 首次连接时的提示，只不过是在接收方这一侧：",
       ],
       code: [
-        `# on the LISTENER, when a new peer pushes:
+        `# on the RECEIVER, when a new sender pushes:
 Incoming push from 203.0.113.7:54021
   fingerprint: 74318e3b…
 Accept and remember this peer? [y/N] y`,
@@ -199,7 +197,7 @@ Accept and remember this peer? [y/N] y`,
         "由于已批准的指纹会被记住，后续推送不再需要确认——因此 relayium push 可以直接接入 cron、部署脚本或 CI，实现加密、可校验完整性、可续传的服务器到服务器同步。当 serve 在没有终端的环境下运行（作为 systemd 服务、通过管道）时，它无法弹出提示，因此会拒绝未知的推送方；这时应改为预先授权它们。可以从推送方的 relayium id 获取指纹，或者从 serve 日志中 “rejected unauthorized peer …” 那一行复制它，然后：",
       ],
       code: [
-        `# on the LISTENER: pre-authorize a pusher without a prompt
+        `# on the RECEIVER: pre-authorize a sender without a prompt
 relayium authorize 74318e3b...`,
       ],
       bullets: [
@@ -268,22 +266,21 @@ WantedBy=multi-user.target`,
 const ja = {
   title: "Relayium CLI でサーバー間転送(デーモン直結)",
   description:
-    "relayium serve と push relayium:// を使い、あなたが管理する2台のサーバー間でファイルを直接やり取りします——固定された TLS 上で、リレーも SSH もコードも不要。relayium id と authorized_fingerprints で公開鍵の信頼関係を一度だけ設定し、systemd の下で実行します。",
+    "relayium serve と push relayium:// を使い、あなたが管理する2台のサーバー間でファイルを直接やり取りします——固定された TLS 上で、リレーも SSH もコードも不要です。新しいプッシュ側が最初にプッシュしたときに一度だけ承認し、その後は自動化するか systemd の下で実行します。",
   updatedLabel: "最終更新",
   lead: [
     "両方のマシンが自分のもので、互いのアドレスを知っている場合、SSH は余計な手間であり、集合場所を介するのは純粋なオーバーヘッドです。デーモン直結はまさにこのために作られています。一方のサーバーが待ち受け、もう一方が固定された TLS 1.3 接続でそこへ直接プッシュします。リレーも SSH もペアリングコードも不要——信頼は公開鍵によるもので、一度設定すれば済みます。",
-    "本ガイドではリスナー、フィンガープリントによる一度きりの信頼設定、そこへのプッシュ、そしてリスナーを systemd サービスとして実行する方法を扱います。",
+    "本ガイドではリスナーの起動、そこへのプッシュ、初回接触時に新しいプッシュ側を承認すること、自動化、そしてリスナーを systemd サービスとして実行する方法を扱います。",
   ],
   sections: [
     {
-      heading: "リスナーを起動する",
+      heading: "リスナーを起動する(受信側)",
       body: [
-        "受信側のサーバーでは、serve がプッシュを待ち受け、あるディレクトリへ書き込みます。デフォルトでは常駐し続けます。--once を付けると1回の転送だけを受け取って終了します。relayium id でこのホストのフィンガープリントを表示します——すぐに必要になります:",
+        "受信側のサーバーでは、serve がプッシュを待ち受け、あるディレクトリへ書き込みます。デフォルトでは常駐し続けます。--once を付けると1回の転送だけを受け取って終了します。事前に何かを共有しておく必要はありません——あらかじめコピーしておくフィンガープリントもありません:",
       ],
       code: [
-        `# on the LISTENER
-relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031
-relayium id                       # prints THIS host's fingerprint`,
+        `# on the RECEIVER
+relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031`,
       ],
       bullets: [
         "リスナーは接続を1つずつ処理し、ファイルを --dir の下に配置します。",
@@ -291,12 +288,12 @@ relayium id                       # prints THIS host's fingerprint`,
       ],
     },
     {
-      heading: "リスナーへプッシュする",
+      heading: "リスナーへプッシュする(送信側)",
       body: [
-        "もう一方のサーバーから、relayium:// アドレスへプッシュします。最初の接続でリスナーのフィンガープリントが固定され、以降の接続はすべてそれを検証します。フィンガープリントが変わった場合は黙って受け入れられるのではなく拒否されます——鍵のすり替えや中間者攻撃はそのまま信頼されるのではなく、検知されます。",
+        "送信側のサーバーから、受信側の relayium:// アドレスへプッシュします。最初の接続で受信側のフィンガープリントが固定され、以降の接続はすべてそれを検証します。フィンガープリントが変わった場合は黙って受け入れられるのではなく拒否されます——鍵のすり替えや中間者攻撃はそのまま信頼されるのではなく、検知されます。最初のプッシュでは、受信側が承認するまでの間、送信側は少し待機します(次のステップ)。",
       ],
       code: [
-        `# on the PUSHER
+        `# on the SENDER
 relayium push ./build.tar.zst relayium://receiver.example.com
 
 # non-default port
@@ -308,12 +305,12 @@ relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
       ],
     },
     {
-      heading: "初回プッシュ時にプッシュ側を承認する",
+      heading: "初回プッシュ時に送信側を承認する(受信側)",
       body: [
-        "ターミナルでは、事前に何かを共有しておく必要はありません。新しいマシンが初めてあなたのリスナーへプッシュすると、serve はその送信元とフィンガープリントを表示し、承認するかどうかを尋ねます——SSH の初回接続時のプロンプトに似ていますが、受信側で行われる点が異なります:",
+        "新しいマシンが初めてあなたのリスナーへプッシュすると、serve は(ターミナルで)その送信元とフィンガープリントを表示し、承認するかどうかを尋ねます——SSH の初回接続時のプロンプトに似ていますが、受信側で行われる点が異なります:",
       ],
       code: [
-        `# on the LISTENER, when a new peer pushes:
+        `# on the RECEIVER, when a new sender pushes:
 Incoming push from 203.0.113.7:54021
   fingerprint: 74318e3b…
 Accept and remember this peer? [y/N] y`,
@@ -330,7 +327,7 @@ Accept and remember this peer? [y/N] y`,
         "承認済みのフィンガープリントは記憶されるため、以降のプッシュにはプロンプトが不要になります——そのため relayium push は cron、デプロイスクリプト、CI にそのまま組み込め、暗号化・整合性チェック済み・再開可能なサーバー間同期を実現します。serve がターミナルなしで動作している場合(systemd サービスやパイプなど)はプロンプトを出せないため、未知のプッシュ側を拒否します。その場合は事前に承認してください。フィンガープリントはプッシュ側で relayium id を実行して取得するか、serve のログにある「rejected unauthorized peer …」の行からコピーし、次のように実行します:",
       ],
       code: [
-        `# on the LISTENER: pre-authorize a pusher without a prompt
+        `# on the RECEIVER: pre-authorize a sender without a prompt
 relayium authorize 74318e3b...`,
       ],
       bullets: [
@@ -399,22 +396,21 @@ WantedBy=multi-user.target`,
 const ko = {
   title: "Relayium CLI로 서버 간 전송(데몬 다이렉트)",
   description:
-    "relayium serve와 push relayium://로 당신이 관리하는 두 서버 사이에서 파일을 곧바로 옮기세요——고정된 TLS를 통해, 릴레이도 SSH도 코드도 필요 없습니다. relayium id와 authorized_fingerprints로 공개 키 신뢰를 한 번만 설정한 뒤 systemd 아래에서 실행하세요.",
+    "relayium serve와 push relayium://로 당신이 관리하는 두 서버 사이에서 파일을 곧바로 옮기세요——고정된 TLS를 통해, 릴레이도 SSH도 코드도 필요 없습니다. 새로운 푸시하는 쪽이 처음 푸시할 때 한 번만 승인하면, 이후 자동화하거나 systemd 아래에서 실행할 수 있습니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
     "두 기기가 모두 당신 것이고 서로의 주소를 알고 있다면, SSH는 불필요한 마찰이고 랑데부는 순전한 오버헤드입니다. 데몬 다이렉트는 정확히 이를 위해 만들어졌습니다. 한쪽 서버는 대기하고, 다른 쪽은 고정된 TLS 1.3 연결로 그곳에 곧바로 푸시합니다. 릴레이도 SSH도 페어링 코드도 없습니다——신뢰는 공개 키 방식이며 한 번만 설정하면 됩니다.",
-    "이 가이드는 리스너, 핑거프린트를 이용한 일회성 신뢰 설정, 리스너로의 푸시, 그리고 리스너를 systemd 서비스로 실행하는 방법을 다룹니다.",
+    "이 가이드는 리스너 시작하기, 리스너로의 푸시, 처음 접촉했을 때 새로운 푸시하는 쪽 승인하기, 자동화하기, 그리고 리스너를 systemd 서비스로 실행하는 방법을 다룹니다.",
   ],
   sections: [
     {
-      heading: "리스너 시작하기",
+      heading: "리스너 시작하기(받는 쪽)",
       body: [
-        "받는 쪽 서버에서 serve는 푸시를 대기하고 이를 어떤 디렉터리에 기록합니다. 기본적으로 계속 실행되며, --once를 추가하면 한 번의 전송만 받고 종료합니다. relayium id로 이 호스트의 핑거프린트를 출력하세요——곧 필요합니다:",
+        "받는 쪽 서버에서 serve는 푸시를 대기하고 이를 어떤 디렉터리에 기록합니다. 기본적으로 계속 실행되며, --once를 추가하면 한 번의 전송만 받고 종료합니다. 미리 공유해야 할 것은 아무것도 없습니다——미리 복사해 둘 핑거프린트도 없습니다:",
       ],
       code: [
-        `# on the LISTENER
-relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031
-relayium id                       # prints THIS host's fingerprint`,
+        `# on the RECEIVER
+relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031`,
       ],
       bullets: [
         "리스너는 연결을 한 번에 하나씩 처리하며 파일을 --dir 아래에 내려놓습니다.",
@@ -422,12 +418,12 @@ relayium id                       # prints THIS host's fingerprint`,
       ],
     },
     {
-      heading: "리스너로 푸시하기",
+      heading: "리스너로 푸시하기(보내는 쪽)",
       body: [
-        "다른 서버에서 relayium:// 주소로 푸시하세요. 첫 연결에서 리스너의 핑거프린트가 고정되고, 이후 모든 연결은 이를 검증합니다. 핑거프린트가 바뀌면 조용히 받아들여지는 대신 거부됩니다——그래서 키가 바뀌었거나 중간자 공격이 있으면 신뢰되는 대신 발견됩니다.",
+        "보내는 쪽 서버에서 받는 쪽의 relayium:// 주소로 푸시하세요. 첫 연결에서 받는 쪽의 핑거프린트가 고정되고, 이후 모든 연결은 이를 검증합니다. 핑거프린트가 바뀌면 조용히 받아들여지는 대신 거부됩니다——그래서 키가 바뀌었거나 중간자 공격이 있으면 신뢰되는 대신 발견됩니다. 첫 푸시에서는 받는 쪽이 승인할 때까지 보내는 쪽이 잠시 대기합니다(다음 단계).",
       ],
       code: [
-        `# on the PUSHER
+        `# on the SENDER
 relayium push ./build.tar.zst relayium://receiver.example.com
 
 # non-default port
@@ -439,12 +435,12 @@ relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
       ],
     },
     {
-      heading: "첫 푸시 시 푸시하는 쪽 승인하기",
+      heading: "첫 푸시 시 보내는 쪽 승인하기(받는 쪽)",
       body: [
-        "터미널에서는 아무것도 미리 공유할 필요가 없습니다. 새 기기가 리스너로 처음 푸시하면, serve는 그 출처와 핑거프린트를 보여주고 승인할지 물어봅니다——SSH의 첫 연결 프롬프트와 비슷하지만, 받는 쪽에서 이루어진다는 점이 다릅니다:",
+        "새 기기가 리스너로 처음 푸시하면, serve는(터미널에서) 그 출처와 핑거프린트를 보여주고 승인할지 물어봅니다——SSH의 첫 연결 프롬프트와 비슷하지만, 받는 쪽에서 이루어진다는 점이 다릅니다:",
       ],
       code: [
-        `# on the LISTENER, when a new peer pushes:
+        `# on the RECEIVER, when a new sender pushes:
 Incoming push from 203.0.113.7:54021
   fingerprint: 74318e3b…
 Accept and remember this peer? [y/N] y`,
@@ -461,7 +457,7 @@ Accept and remember this peer? [y/N] y`,
         "승인된 핑거프린트는 기억되므로 이후의 푸시에는 확인이 필요 없습니다——따라서 relayium push는 cron, 배포 스크립트, CI에 곧바로 연결되어 암호화되고 무결성이 검증되며 재개 가능한 서버 간 동기화를 제공합니다. serve가 터미널 없이 실행될 때(systemd 서비스, 파이프 등)는 프롬프트를 띄울 수 없으므로 알 수 없는 푸시하는 쪽을 거부합니다. 대신 미리 승인해 두세요. 핑거프린트는 푸시하는 쪽에서 relayium id로 얻거나, serve 로그의 “rejected unauthorized peer …” 줄에서 복사한 뒤 다음을 실행하세요:",
       ],
       code: [
-        `# on the LISTENER: pre-authorize a pusher without a prompt
+        `# on the RECEIVER: pre-authorize a sender without a prompt
 relayium authorize 74318e3b...`,
       ],
       bullets: [
@@ -530,22 +526,21 @@ WantedBy=multi-user.target`,
 const de = {
   title: "Server-zu-Server-Übertragungen mit der Relayium CLI (Daemon Direct)",
   description:
-    "Bewege Dateien direkt zwischen zwei Servern, die du kontrollierst, mit relayium serve und push relayium:// — über gepinntes TLS, ohne Relay, ohne SSH, ohne Code. Richte das Public-Key-Vertrauen einmalig mit relayium id und authorized_fingerprints ein und lass es dann unter systemd laufen.",
+    "Bewege Dateien direkt zwischen zwei Servern, die du kontrollierst, mit relayium serve und push relayium:// — über gepinntes TLS, ohne Relay, ohne SSH, ohne Code. Genehmige einen neuen Pusher einmalig bei seinem ersten Push, dann automatisiere es oder lass es unter systemd laufen.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "Wenn beide Maschinen dir gehören und jede die Adresse der anderen kennt, ist SSH zusätzliche Reibung und ein Rendezvous reiner Overhead. Daemon Direct ist genau dafür gebaut: Ein Server lauscht, der andere pusht direkt dorthin über eine gepinnte TLS-1.3-Verbindung. Kein Relay, kein SSH, kein Pairing-Code — das Vertrauen basiert auf Public Keys und wird einmal eingerichtet.",
-    "Diese Anleitung behandelt den Listener, die einmalige Vertrauenseinrichtung mit Fingerprints, das Pushen dorthin und den Betrieb des Listeners als systemd-Dienst.",
+    "Diese Anleitung behandelt das Starten des Listeners, das Pushen dorthin, das Genehmigen eines neuen Pushers beim ersten Kontakt, die Automatisierung und den Betrieb des Listeners als systemd-Dienst.",
   ],
   sections: [
     {
-      heading: "Einen Listener starten",
+      heading: "Den Listener starten (auf dem Empfänger)",
       body: [
-        "Auf dem empfangenden Server lauscht serve auf Pushes und schreibt sie in ein Verzeichnis. Standardmäßig läuft es dauerhaft; mit --once nimmt es eine einzelne Übertragung an und beendet sich. Gib den Fingerprint dieses Hosts mit relayium id aus — du brauchst ihn gleich:",
+        "Auf dem empfangenden Server lauscht serve auf Pushes und schreibt sie in ein Verzeichnis. Standardmäßig läuft es dauerhaft; mit --once nimmt es eine einzelne Übertragung an und beendet sich. Du musst nichts vorab teilen — keine Fingerprints, die du im Voraus kopieren müsstest:",
       ],
       code: [
-        `# on the LISTENER
-relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031
-relayium id                       # prints THIS host's fingerprint`,
+        `# on the RECEIVER
+relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031`,
       ],
       bullets: [
         "Der Listener verarbeitet Verbindungen nacheinander und legt Dateien unter --dir ab.",
@@ -553,12 +548,12 @@ relayium id                       # prints THIS host's fingerprint`,
       ],
     },
     {
-      heading: "Zum Listener pushen",
+      heading: "Zum Listener pushen (auf dem Sender)",
       body: [
-        "Push vom anderen Server aus an eine relayium://-Adresse. Die erste Verbindung pinnt den Fingerprint des Listeners; jede folgende Verbindung überprüft ihn, und ein geänderter Fingerprint wird abgelehnt statt stillschweigend akzeptiert — ein ausgetauschter Schlüssel oder ein Man-in-the-Middle wird so erkannt, nicht vertraut.",
+        "Vom sendenden Server aus, push zur relayium://-Adresse des Empfängers. Die erste Verbindung pinnt den Fingerprint des Empfängers; jede folgende Verbindung überprüft ihn, und ein geänderter Fingerprint wird abgelehnt statt stillschweigend akzeptiert — ein ausgetauschter Schlüssel oder ein Man-in-the-Middle wird so erkannt, nicht vertraut. Beim allerersten Push wartet der Sender einen Moment, während der Empfänger ihn genehmigt (nächster Schritt).",
       ],
       code: [
-        `# on the PUSHER
+        `# on the SENDER
 relayium push ./build.tar.zst relayium://receiver.example.com
 
 # non-default port
@@ -570,12 +565,12 @@ relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
       ],
     },
     {
-      heading: "Den Pusher beim ersten Push genehmigen",
+      heading: "Den Sender beim ersten Push genehmigen (auf dem Empfänger)",
       body: [
-        "In einem Terminal musst du nichts vorab teilen. Wenn eine neue Maschine zum ersten Mal zu deinem Listener pusht, zeigt serve dir, woher sie kommt und ihren Fingerprint, und bittet dich, sie zu genehmigen — wie die Erstverbindungs-Abfrage von SSH, nur auf der Empfängerseite:",
+        "Wenn eine neue Maschine zum ersten Mal zu deinem Listener pusht, zeigt dir serve (in einem Terminal), woher sie kommt und ihren Fingerprint, und bittet dich, sie zu genehmigen — wie die Erstverbindungs-Abfrage von SSH, nur auf der Empfängerseite:",
       ],
       code: [
-        `# on the LISTENER, when a new peer pushes:
+        `# on the RECEIVER, when a new sender pushes:
 Incoming push from 203.0.113.7:54021
   fingerprint: 74318e3b…
 Accept and remember this peer? [y/N] y`,
@@ -592,7 +587,7 @@ Accept and remember this peer? [y/N] y`,
         "Weil ein genehmigter Fingerprint gespeichert bleibt, brauchen spätere Pushes keine Abfrage mehr — relayium push lässt sich also direkt in cron, ein Deploy-Skript oder CI einbinden, für verschlüsselte, integritätsgeprüfte, fortsetzbare Server-zu-Server-Synchronisation. Läuft serve ohne Terminal (ein systemd-Dienst, eine Pipe), kann es nicht nachfragen und lehnt daher unbekannte Pusher ab; genehmige sie stattdessen im Voraus. Hol dir den Fingerprint über relayium id auf der Pusher-Seite, oder kopiere ihn aus der Zeile „rejected unauthorized peer …“ im serve-Log, dann:",
       ],
       code: [
-        `# on the LISTENER: pre-authorize a pusher without a prompt
+        `# on the RECEIVER: pre-authorize a sender without a prompt
 relayium authorize 74318e3b...`,
       ],
       bullets: [
@@ -661,22 +656,21 @@ WantedBy=multi-user.target`,
 const fr = {
   title: "Transferts serveur à serveur avec la CLI Relayium (daemon direct)",
   description:
-    "Déplacez des fichiers directement entre deux serveurs que vous contrôlez avec relayium serve et push relayium:// — via TLS épinglé, sans relais, sans SSH, sans code. Établissez la confiance par clé publique une seule fois avec relayium id et authorized_fingerprints, puis exécutez-le sous systemd.",
+    "Déplacez des fichiers directement entre deux serveurs que vous contrôlez avec relayium serve et push relayium:// — via TLS épinglé, sans relais, sans SSH, sans code. Approuvez un nouvel émetteur une seule fois lors de son premier envoi, puis automatisez-le ou exécutez-le sous systemd.",
   updatedLabel: "Dernière mise à jour",
   lead: [
     "Quand les deux machines vous appartiennent et que chacune connaît l'adresse de l'autre, SSH est une friction superflue et un rendez-vous n'est que du pur surcoût. Le daemon direct est fait exactement pour cela : un serveur écoute, l'autre pousse directement vers lui via une connexion TLS 1.3 épinglée. Pas de relais, pas de SSH, pas de code de jumelage — la confiance repose sur des clés publiques et se configure une seule fois.",
-    "Ce guide couvre l'écouteur, la mise en place unique de la confiance par empreintes, l'envoi vers celui-ci, et l'exécution de l'écouteur en tant que service systemd.",
+    "Ce guide couvre le démarrage de l'écouteur, l'envoi vers celui-ci, l'approbation d'un nouvel émetteur au premier contact, l'automatisation, et l'exécution de l'écouteur en tant que service systemd.",
   ],
   sections: [
     {
-      heading: "Démarrer un écouteur",
+      heading: "Démarrer l'écouteur (sur le récepteur)",
       body: [
-        "Sur le serveur récepteur, serve écoute les envois et les écrit dans un répertoire. Il tourne en continu par défaut ; ajoutez --once pour accepter un seul transfert puis s'arrêter. Affichez l'empreinte de cet hôte avec relayium id — vous en aurez besoin dans un instant :",
+        "Sur le serveur récepteur, serve écoute les envois et les écrit dans un répertoire. Il tourne en continu par défaut ; ajoutez --once pour accepter un seul transfert puis s'arrêter. Vous n'avez rien à partager à l'avance — aucune empreinte à copier au préalable :",
       ],
       code: [
-        `# on the LISTENER
-relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031
-relayium id                       # prints THIS host's fingerprint`,
+        `# on the RECEIVER
+relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031`,
       ],
       bullets: [
         "L'écouteur traite les connexions une par une et dépose les fichiers sous --dir.",
@@ -684,12 +678,12 @@ relayium id                       # prints THIS host's fingerprint`,
       ],
     },
     {
-      heading: "Envoyer vers l'écouteur",
+      heading: "Envoyer vers l'écouteur (sur l'émetteur)",
       body: [
-        "Depuis l'autre serveur, envoyez vers une adresse relayium://. La première connexion épingle l'empreinte de l'écouteur ; chaque connexion suivante la vérifie, et une empreinte modifiée est refusée plutôt qu'acceptée silencieusement — une clé remplacée ou une attaque de l'homme du milieu est ainsi détectée, pas approuvée.",
+        "Depuis le serveur émetteur, envoyez vers l'adresse relayium:// du récepteur. La première connexion épingle l'empreinte du récepteur ; chaque connexion suivante la vérifie, et une empreinte modifiée est refusée plutôt qu'acceptée silencieusement — une clé remplacée ou une attaque de l'homme du milieu est ainsi détectée, pas approuvée. Lors du tout premier envoi, l'émetteur patiente un instant pendant que le récepteur l'approuve (étape suivante).",
       ],
       code: [
-        `# on the PUSHER
+        `# on the SENDER
 relayium push ./build.tar.zst relayium://receiver.example.com
 
 # non-default port
@@ -701,12 +695,12 @@ relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
       ],
     },
     {
-      heading: "Approuver l'émetteur au premier envoi",
+      heading: "Approuver l'émetteur au premier envoi (sur le récepteur)",
       body: [
-        "Dans un terminal, vous n'avez rien à partager à l'avance. La première fois qu'une nouvelle machine envoie vers votre écouteur, serve vous montre d'où elle vient et son empreinte, puis vous demande de l'approuver — comme l'invite de première connexion de SSH, mais côté récepteur :",
+        "La première fois qu'une nouvelle machine envoie vers votre écouteur, serve (dans un terminal) vous montre d'où elle vient et son empreinte, puis vous demande de l'approuver — comme l'invite de première connexion de SSH, mais côté récepteur :",
       ],
       code: [
-        `# on the LISTENER, when a new peer pushes:
+        `# on the RECEIVER, when a new sender pushes:
 Incoming push from 203.0.113.7:54021
   fingerprint: 74318e3b…
 Accept and remember this peer? [y/N] y`,
@@ -723,7 +717,7 @@ Accept and remember this peer? [y/N] y`,
         "Comme une empreinte approuvée est mémorisée, les envois suivants ne demandent plus de confirmation — relayium push s'intègre donc directement dans cron, un script de déploiement ou la CI pour une synchronisation serveur à serveur chiffrée, vérifiée en intégrité et reprenable. Quand serve tourne sans terminal (un service systemd, un pipe), il ne peut pas demander confirmation et rejette donc les émetteurs inconnus ; autorisez-les plutôt à l'avance. Récupérez l'empreinte via relayium id côté émetteur, ou copiez-la depuis la ligne « rejected unauthorized peer … » du journal de serve, puis :",
       ],
       code: [
-        `# on the LISTENER: pre-authorize a pusher without a prompt
+        `# on the RECEIVER: pre-authorize a sender without a prompt
 relayium authorize 74318e3b...`,
       ],
       bullets: [

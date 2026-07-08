@@ -150,14 +150,15 @@ const de: Messages = {
     mode3Tag: "kostenlos",
     mode3Body:
       "Für zwei Hosts unter deiner Kontrolle, die die Adresse der jeweils anderen bereits kennen: Einer lauscht, der andere pusht direkt dorthin über gepinntes TLS 1.3. Kein Relay, kein SSH, kein Code — Vertrauen basiert auf Public-Key, einmalig eingerichtet. Drei Schritte:",
-    step1Label: "Listener:",
-    step1Body: "serve starten und den Fingerprint dieses Hosts mit relayium id ausgeben.",
-    step2Label: "Beim ersten Push autorisieren:",
+    step1Label: "Beim Empfänger:",
+    step1Body:
+      "den Listener starten — gepushte Dateien landen im --dir-Verzeichnis. Nichts muss vorab geteilt werden.",
+    step2Label: "Beim Sender:",
     step2Body:
-      "in einem Terminal zeigt der Listener Adresse und Fingerprint des neuen Pushers an und bittet um Bestätigung — antworte mit y, dann wird es gemerkt und spätere Pushes laufen ohne Rückfrage. Läuft es als Dienst (kein Terminal)? Dann mit relayium authorize vorab autorisieren.",
-    step3Label: "Pusher:",
+      "zur relayium://-Adresse des Empfängers pushen. Beim allerersten Push wartet es kurz, während der Empfänger zustimmt.",
+    step3Label: "Wieder beim Empfänger:",
     step3Body:
-      "push zu relayium://host. Der Schlüssel des Listeners wird beim ersten Gebrauch vertraut und in known_hosts gepinnt; eine spätere Änderung des Fingerprints wird abgelehnt (nicht stillschweigend akzeptiert).",
+      "der erste Push zeigt Adresse und Fingerprint des Senders — mit y bestätigen, um zu akzeptieren und zu merken; spätere Pushes von dieser Maschine laufen dann ohne Rückfrage. Kein Terminal (ein systemd-Dienst)? Dann stattdessen mit relayium authorize vorab autorisieren (den Fingerprint aus relayium id des Senders holen oder aus dem serve-Log).",
     refH2: "Referenz",
     flagsH3: "Gängige Flags",
     thFlag: "Flag",
