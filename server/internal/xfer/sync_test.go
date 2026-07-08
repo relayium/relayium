@@ -82,3 +82,102 @@ func TestSyncRoundTripSkipsUnchanged(t *testing.T) {
 		t.Fatalf("b.txt = %q", got)
 	}
 }
+
+func TestDeleteExtrasRemovesFilesNotInManifest(t *testing.T) {
+	dst := t.TempDir()
+	writeFileMtime(t, filepath.Join(dst, "keep.txt"), "k", 1000)
+	writeFileMtime(t, filepath.Join(dst, "old", "gone.txt"), "g", 1000)
+	m := Manifest{Files: []FileEntry{{Path: "keep.txt", Size: 1, ModTime: 1000}}}
+
+	n, err := deleteExtras(dst, m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("deleted %d, want 1", n)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "keep.txt")); err != nil {
+		t.Fatal("keep.txt must remain")
+	}
+	if _, err := os.Stat(filepath.Join(dst, "old", "gone.txt")); !os.IsNotExist(err) {
+		t.Fatal("gone.txt must be deleted")
+	}
+	if _, err := os.Stat(filepath.Join(dst, "old")); !os.IsNotExist(err) {
+		t.Fatal("emptied dir should be pruned")
+	}
+}
+
+// TestReceiveDeleteDeniedWhenNotAllowed asserts the spec §8 requirement that a
+// denied delete is surfaced (Report.DeleteDenied), not silently ignored: the
+// sender's --delete request is dropped and the receiver's extra file survives.
+func TestReceiveDeleteDeniedWhenNotAllowed(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+	writeFileMtime(t, filepath.Join(src, "a.txt"), "hello", 1000)
+	writeFileMtime(t, filepath.Join(dst, "extra.txt"), "stale", 1000) // not in source
+
+	m, srcs, err := BuildManifest([]string{filepath.Join(src, "a.txt")})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c1, c2 := net.Pipe()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	var recvErr error
+	var rep Report
+	go func() {
+		defer wg.Done()
+		rep, recvErr = Receive(c2, dst, RecvOpts{AllowDelete: false})
+		c2.Close()
+	}()
+	_, serr := Send(c1, m, srcs, SendOpts{Sync: true, Delete: true})
+	c1.Close()
+	wg.Wait()
+	if serr != nil || recvErr != nil {
+		t.Fatalf("send=%v recv=%v", serr, recvErr)
+	}
+	if !rep.DeleteDenied {
+		t.Fatal("rep.DeleteDenied should be true when Hello.Delete is set but AllowDelete is false")
+	}
+	if _, err := os.Stat(filepath.Join(dst, "extra.txt")); err != nil {
+		t.Fatal("extra.txt must remain when delete is denied")
+	}
+}
+
+// TestReceiveDeletesExtrasWhenAllowed is the companion happy path: AllowDelete
+// true honors the sender's request and clears DeleteDenied.
+func TestReceiveDeletesExtrasWhenAllowed(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+	writeFileMtime(t, filepath.Join(src, "a.txt"), "hello", 1000)
+	writeFileMtime(t, filepath.Join(dst, "extra.txt"), "stale", 1000)
+
+	m, srcs, err := BuildManifest([]string{filepath.Join(src, "a.txt")})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c1, c2 := net.Pipe()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	var recvErr error
+	var rep Report
+	go func() {
+		defer wg.Done()
+		rep, recvErr = Receive(c2, dst, RecvOpts{AllowDelete: true})
+		c2.Close()
+	}()
+	_, serr := Send(c1, m, srcs, SendOpts{Sync: true, Delete: true})
+	c1.Close()
+	wg.Wait()
+	if serr != nil || recvErr != nil {
+		t.Fatalf("send=%v recv=%v", serr, recvErr)
+	}
+	if rep.DeleteDenied {
+		t.Fatal("rep.DeleteDenied should be false when AllowDelete is true")
+	}
+	if _, err := os.Stat(filepath.Join(dst, "extra.txt")); !os.IsNotExist(err) {
+		t.Fatal("extra.txt should have been deleted")
+	}
+}

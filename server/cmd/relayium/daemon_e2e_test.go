@@ -16,8 +16,9 @@ import (
 
 // daemonServe spins up serveLoop on an ephemeral loopback port with the given
 // allow-set and approval callback, returning the port plus a channel carrying
-// the loop's exit code. approve nil ⇒ unknown peers are rejected.
-func daemonServe(t *testing.T, serverDir, recvDir string, allow map[string]bool, approve func(remote, fp string) bool) (int, <-chan int) {
+// the loop's exit code. approve nil ⇒ unknown peers are rejected. allowDelete
+// gates whether a sender's --delete (mirror) request is honored.
+func daemonServe(t *testing.T, serverDir, recvDir string, allow map[string]bool, approve func(remote, fp string) bool, allowDelete bool) (int, <-chan int) {
 	t.Helper()
 	id, err := secure.LoadOrCreateIdentity(serverDir)
 	if err != nil {
@@ -30,7 +31,7 @@ func daemonServe(t *testing.T, serverDir, recvDir string, allow map[string]bool,
 	t.Cleanup(func() { ln.Close() })
 	port := ln.Addr().(*net.TCPAddr).Port
 	h := &serveHandler{
-		id: id, allow: allow, dir: recvDir, cfgDir: serverDir,
+		id: id, allow: allow, dir: recvDir, cfgDir: serverDir, allowDelete: allowDelete,
 		approve: approve, stdout: io.Discard, stderr: io.Discard,
 	}
 	done := make(chan int, 1)
@@ -61,7 +62,7 @@ func TestDaemonPushHappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	port, done := daemonServe(t, serverDir, recvDir, map[string]bool{pusher.Fingerprint: true}, nil)
+	port, done := daemonServe(t, serverDir, recvDir, map[string]bool{pusher.Fingerprint: true}, nil, false)
 
 	src := writeSrc(t, "hello.txt", "daemon direct!")
 	var o, e bytes.Buffer
@@ -88,7 +89,7 @@ func TestDaemonPushUnauthorizedRejected(t *testing.T) {
 	recvDir := t.TempDir()
 
 	// Empty allow-set and no approval callback ⇒ pusher rejected.
-	port, done := daemonServe(t, serverDir, recvDir, map[string]bool{}, nil)
+	port, done := daemonServe(t, serverDir, recvDir, map[string]bool{}, nil, false)
 
 	src := writeSrc(t, "nope.txt", "should not land")
 	var o, e bytes.Buffer
@@ -110,7 +111,7 @@ func TestDaemonPushKnownHostsMismatch(t *testing.T) {
 	recvDir := t.TempDir()
 
 	pusher, _ := secure.LoadOrCreateIdentity(pusherDir)
-	port, done := daemonServe(t, serverDir, recvDir, map[string]bool{pusher.Fingerprint: true}, nil)
+	port, done := daemonServe(t, serverDir, recvDir, map[string]bool{pusher.Fingerprint: true}, nil, false)
 
 	// Pre-pin a WRONG fingerprint for this host:port.
 	hostport := "127.0.0.1:" + strconv.Itoa(port)
@@ -154,7 +155,7 @@ func TestDaemonPushInteractiveApprove(t *testing.T) {
 		approvedIP, approvedFP = remote, fp
 		return true
 	}
-	port, done := daemonServe(t, serverDir, recvDir, map[string]bool{}, approve)
+	port, done := daemonServe(t, serverDir, recvDir, map[string]bool{}, approve, false)
 
 	src := writeSrc(t, "first.txt", "approve me")
 	var o, e bytes.Buffer

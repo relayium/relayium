@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -76,10 +77,73 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 		}
 	}
 
-	// (Task 5 will insert --delete handling here, before the Result write.)
+	if hello.Delete && opts.AllowDelete {
+		// Best-effort mirror delete; a failure here doesn't undo the files that
+		// already landed, so it does not fail the transfer.
+		_, _ = deleteExtras(destDir, m)
+	} else if hello.Delete {
+		rep.DeleteDenied = true
+	}
 
 	rep.Failed = res.Failed
 	return rep, WriteJSON(rw, MsgResult, res)
+}
+
+// deleteExtras removes regular files under destDir whose relative path is not in
+// the manifest, then prunes directories left empty. It stays within destDir
+// (the same guarantee safeJoin gives the write path). Returns files removed.
+func deleteExtras(destDir string, m Manifest) (int, error) {
+	want := make(map[string]bool, len(m.Files))
+	for _, f := range m.Files {
+		want[filepath.Clean(filepath.FromSlash(f.Path))] = true
+	}
+	var files []string
+	err := filepath.WalkDir(destDir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !d.Type().IsRegular() {
+			return nil
+		}
+		rel, err := filepath.Rel(destDir, p)
+		if err != nil {
+			return err
+		}
+		if !want[rel] {
+			files = append(files, p)
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, p := range files {
+		if err := os.Remove(p); err != nil {
+			return n, err
+		}
+		n++
+	}
+	pruneEmptyDirs(destDir)
+	return n, nil
+}
+
+// pruneEmptyDirs removes empty subdirectories under root (root itself is kept).
+func pruneEmptyDirs(root string) {
+	var dirs []string
+	filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && d.IsDir() {
+			dirs = append(dirs, p)
+		}
+		return nil
+	})
+	// Deepest first so a parent can empty after its children go.
+	for i := len(dirs) - 1; i >= 0; i-- {
+		if dirs[i] == root {
+			continue
+		}
+		os.Remove(dirs[i]) // fails harmlessly if not empty
+	}
 }
 
 // resumeStateFor inspects destDir and returns, for each manifest file that has

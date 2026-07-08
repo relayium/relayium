@@ -16,11 +16,12 @@ import (
 )
 
 type serveFlags struct {
-	dir       string
-	port      int
-	once      bool
-	noResume  bool
-	configDir string
+	dir         string
+	port        int
+	once        bool
+	noResume    bool
+	allowDelete bool
+	configDir   string
 }
 
 func runServe(args []string, stdout, stderr io.Writer) int {
@@ -31,6 +32,7 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	fs.IntVar(&f.port, "port", defaultDaemonPort, "TCP port to listen on")
 	fs.BoolVar(&f.once, "once", false, "handle a single transfer then exit")
 	fs.BoolVar(&f.noResume, "no-resume", false, "disable resuming partial files")
+	fs.BoolVar(&f.allowDelete, "allow-delete", false, "honor a sender's --delete (mirror) request")
 	fs.StringVar(&f.configDir, "config-dir", "", "identity/trust directory")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -53,7 +55,7 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	}
 
 	h := &serveHandler{
-		id: id, allow: allow, dir: f.dir, noResume: f.noResume, cfgDir: cfgDir,
+		id: id, allow: allow, dir: f.dir, noResume: f.noResume, allowDelete: f.allowDelete, cfgDir: cfgDir,
 		stdout: stdout, stderr: stderr,
 	}
 	// In an interactive terminal, an unknown pusher is approved on first push and
@@ -87,11 +89,12 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 // serveHandler carries everything one serve invocation needs to authorize and
 // receive pushes. allow is mutated in place as new peers are approved.
 type serveHandler struct {
-	id       *secure.Identity
-	allow    map[string]bool
-	dir      string
-	noResume bool
-	cfgDir   string
+	id          *secure.Identity
+	allow       map[string]bool
+	dir         string
+	noResume    bool
+	allowDelete bool
+	cfgDir      string
 	// approve is consulted for an unknown fingerprint; nil (or false) rejects it.
 	// It receives the peer's remote address and fingerprint.
 	approve func(remote, fp string) bool
@@ -148,10 +151,13 @@ func (h *serveHandler) serve(conn net.Conn) bool {
 		fmt.Fprintf(h.stderr, "authorized %s (added to %s)\n", fp, trust.AuthorizedPath(h.cfgDir))
 	}
 
-	rep, err := xfer.Receive(tconn, h.dir, xfer.RecvOpts{NoResume: h.noResume})
+	rep, err := xfer.Receive(tconn, h.dir, xfer.RecvOpts{NoResume: h.noResume, AllowDelete: h.allowDelete})
 	if err != nil {
 		fmt.Fprintf(h.stderr, "receive from %s (%s): %v\n", fp, remote, err)
 		return false
+	}
+	if rep.DeleteDenied {
+		fmt.Fprintf(h.stderr, "warning: sender requested --delete but this listener isn't started with --allow-delete; nothing was deleted\n")
 	}
 	if len(rep.Failed) > 0 {
 		fmt.Fprintf(h.stderr, "%d file(s) failed integrity check from %s: %v\n", len(rep.Failed), fp, rep.Failed)

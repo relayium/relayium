@@ -15,10 +15,11 @@ type SendOpts struct {
 }
 
 type Report struct {
-	Files   int
-	Bytes   int64
-	Skipped int // sync mode: files the receiver already had, not sent
-	Failed  []string
+	Files        int
+	Bytes        int64
+	Skipped      int // sync mode: files the receiver already had, not sent
+	Failed       []string
+	DeleteDenied bool // sender asked for --delete but this listener isn't --allow-delete
 }
 
 // Send transmits the manifest's files over rw (a duplex stream, typically the
