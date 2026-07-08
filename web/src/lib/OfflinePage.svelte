@@ -21,7 +21,7 @@
   <div class="acct"><Account bind:open={loginOpen} /></div>
 
   <header class="cn-head">
-    <h1>{t.nav.offlineTab}</h1>
+    <h1>{t.offlineTitle}</h1>
     <p class="tagline">{t.offline.tagline}</p>
     <p class="pitch">{t.offline.pitch}</p>
   </header>

@@ -113,7 +113,9 @@ const fr: Messages = {
     del: "Supprimer",
     confirmDel: "Supprimer ce lien de fichier ? Le destinataire ne pourra plus le télécharger.",
   },
-  nav: { lanTab: "Transfert LAN", crossTab: "Direct en temps réel", offlineTab: "Transfert asynchrone", cliTab: "CLI" },
+  nav: { lanTab: "LAN", crossTab: "Temps réel", offlineTab: "Asynchrone", cliTab: "CLI" },
+  crossTitle: "Direct en temps réel",
+  offlineTitle: "Transfert asynchrone",
   cli: { subtitle: "Transférez des fichiers depuis votre terminal — chiffré de bout en bout, auto-hébergeable." },
   cliCallout: {
     heading: "Vous préférez le terminal ?",

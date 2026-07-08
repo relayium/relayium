@@ -134,6 +134,10 @@ export interface Messages {
     confirmDel: string; // confirm() before deleting a file
   };
   nav: { lanTab: string; crossTab: string; offlineTab: string; cliTab: string };
+  // Full page headings for the cross/offline pages. The nav.*Tab strings are the
+  // short pill labels; these are the descriptive <h1> titles.
+  crossTitle: string;
+  offlineTitle: string;
   cli: { subtitle: string };
   cliCallout: { heading: string; blurb: string; cta: string };
   crossnet: {

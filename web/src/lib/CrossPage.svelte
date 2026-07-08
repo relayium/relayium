@@ -41,7 +41,7 @@
   <div class="acct"><Account bind:open={loginOpen} /></div>
 
   <header class="cn-head">
-    <h1>{t.nav.crossTab}</h1>
+    <h1>{t.crossTitle}</h1>
     <p class="tagline">{t.tagline}</p>
     {#if !inRoom}
       <p class="pitch">{t.crossPitch}</p>

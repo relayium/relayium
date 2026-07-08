@@ -113,7 +113,9 @@ const en: Messages = {
     del: "Delete",
     confirmDel: "Delete this file link? The recipient won't be able to download it.",
   },
-  nav: { lanTab: "LAN transfer", crossTab: "Realtime direct", offlineTab: "Async transfer", cliTab: "CLI" },
+  nav: { lanTab: "LAN", crossTab: "Realtime", offlineTab: "Async", cliTab: "CLI" },
+  crossTitle: "Realtime direct",
+  offlineTitle: "Async transfer",
   cli: { subtitle: "Transfer files from your terminal — end-to-end encrypted, self-hostable." },
   cliCallout: {
     heading: "Prefer the terminal?",

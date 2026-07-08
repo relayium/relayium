@@ -114,6 +114,8 @@ const ko: Messages = {
     confirmDel: "이 파일 링크를 삭제할까요? 상대방은 더 이상 다운로드할 수 없습니다.",
   },
   nav: { lanTab: "LAN 전송", crossTab: "실시간 직접 전송", offlineTab: "비동기 전송", cliTab: "CLI" },
+  crossTitle: "실시간 직접 전송",
+  offlineTitle: "비동기 전송",
   cli: { subtitle: "터미널에서 파일 전송 — 종단간 암호화, 자체 호스팅 가능." },
   cliCallout: {
     heading: "터미널을 선호하시나요?",

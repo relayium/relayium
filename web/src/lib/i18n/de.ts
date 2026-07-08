@@ -113,7 +113,9 @@ const de: Messages = {
     del: "Löschen",
     confirmDel: "Diesen Dateilink löschen? Der Empfänger kann ihn dann nicht mehr herunterladen.",
   },
-  nav: { lanTab: "LAN-Übertragung", crossTab: "Echtzeit-Direkt", offlineTab: "Asynchron senden", cliTab: "CLI" },
+  nav: { lanTab: "LAN", crossTab: "Echtzeit", offlineTab: "Asynchron", cliTab: "CLI" },
+  crossTitle: "Echtzeit-Direkt",
+  offlineTitle: "Asynchron senden",
   cli: { subtitle: "Dateien vom Terminal übertragen — Ende-zu-Ende-verschlüsselt, selbst hostbar." },
   cliCallout: {
     heading: "Lieber das Terminal?",

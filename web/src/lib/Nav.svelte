@@ -63,6 +63,7 @@
   .tab {
     display: inline-flex; align-items: center; justify-content: center;
     font: inherit; font-size: var(--fs-sm); padding: var(--space-2) var(--space-4); border-radius: 999px; cursor: pointer;
+    white-space: nowrap;
     border: 1px solid var(--border); background: var(--social-bg); color: var(--text); text-decoration: none;
     transition: border-color .13s, color .13s, background .13s;
   }
