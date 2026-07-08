@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Server-zu-Server-Übertragungen mit der Relayium CLI (Daemon Direct) · Relayium</title>
+    <meta name="description" content="Bewege Dateien direkt zwischen zwei Servern, die du kontrollierst, mit relayium serve und push relayium:// — über gepinntes TLS, ohne Relay, ohne SSH, ohne Code. Richte das Public-Key-Vertrauen einmalig mit relayium id und authorized_fingerprints ein und lass es dann unter systemd laufen." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/de/cli/server-to-server-transfers" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/cli/server-to-server-transfers" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/cli/server-to-server-transfers" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/cli/server-to-server-transfers" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/cli/server-to-server-transfers" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/cli/server-to-server-transfers" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/cli/server-to-server-transfers" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/cli/server-to-server-transfers" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Server-zu-Server-Übertragungen mit der Relayium CLI (Daemon Direct)" />
+    <meta property="og:description" content="Bewege Dateien direkt zwischen zwei Servern, die du kontrollierst, mit relayium serve und push relayium:// — über gepinntes TLS, ohne Relay, ohne SSH, ohne Code. Richte das Public-Key-Vertrauen einmalig mit relayium id und authorized_fingerprints ein und lass es dann unter systemd laufen." />
+    <meta property="og:url" content="https://relayium.com/de/cli/server-to-server-transfers" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="de_DE" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Server-zu-Server-Übertragungen mit der Relayium CLI (Daemon Direct)" />
+    <meta name="twitter:description" content="Bewege Dateien direkt zwischen zwei Servern, die du kontrollierst, mit relayium serve und push relayium:// — über gepinntes TLS, ohne Relay, ohne SSH, ohne Code. Richte das Public-Key-Vertrauen einmalig mit relayium id und authorized_fingerprints ein und lass es dann unter systemd laufen." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Server-zu-Server-Übertragungen mit der Relayium CLI (Daemon Direct)","description":"Bewege Dateien direkt zwischen zwei Servern, die du kontrollierst, mit relayium serve und push relayium:// — über gepinntes TLS, ohne Relay, ohne SSH, ohne Code. Richte das Public-Key-Vertrauen einmalig mit relayium id und authorized_fingerprints ein und lass es dann unter systemd laufen.","inLanguage":"de","dateModified":"2026-07-08","mainEntityOfPage":"https://relayium.com/de/cli/server-to-server-transfers","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Wie unterscheidet sich Daemon Direct von push über SSH?","acceptedAnswer":{"@type":"Answer","text":"push über SSH tunnelt die Übertragung durch deine SSH-Verbindung und braucht ein SSH-Konto auf der Gegenseite. Daemon Direct braucht weder SSH noch ein Konto — die beiden Server authentifizieren sich gegenseitig per Zertifikats-Fingerprint über gepinntes TLS, was leichtgewichtiger ist, wenn beide Maschinen dir gehören."}},{"@type":"Question","name":"Wo liegen die Identitäts- und Vertrauensdateien?","acceptedAnswer":{"@type":"Answer","text":"Standardmäßig in ~/.config/relayium/ (mit --config-dir überschreibbar). id.key / id.crt sind die dauerhafte Identität dieses Hosts, known_hosts enthält die Fingerprints der Listener, zu denen du gepusht hast, und authorized_fingerprints ist die Allow-Liste des Listeners für Pusher."}},{"@type":"Question","name":"Was passiert, wenn sich ein Fingerprint ändert?","acceptedAnswer":{"@type":"Answer","text":"Der Push wird abgelehnt und warnt. Der Schlüssel des Listeners wird bei der ersten Nutzung in known_hosts gepinnt, sodass eine spätere Änderung — ein neu verschlüsselter Host oder ein Man-in-the-Middle — abgelehnt statt stillschweigend akzeptiert wird. Entferne die known_hosts-Zeile nur, wenn du den Schlüssel absichtlich rotiert hast."}},{"@type":"Question","name":"Gibt es einen Relay-Fallback?","acceptedAnswer":{"@type":"Answer","text":"Nein. Daemon Direct setzt eine erreichbare Listener-Adresse voraus; kann die Verbindung nicht hergestellt werden, schlägt es fehl. Nichts wird jemals über Relayium weitergeleitet — genau das ist der Sinn dieses Modus."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=de">Relayium</a></header>
+      <h1>Server-zu-Server-Übertragungen mit der Relayium CLI (Daemon Direct)</h1>
+      <p class="updated">Zuletzt aktualisiert: 2026-07-08</p>
+      <nav class="langbar" aria-label="Language"><a href="/cli/server-to-server-transfers">English</a><a href="/zh/cli/server-to-server-transfers">中文</a><a href="/ja/cli/server-to-server-transfers">日本語</a><a href="/ko/cli/server-to-server-transfers">한국어</a><a href="/de/cli/server-to-server-transfers" aria-current="true">Deutsch</a><a href="/fr/cli/server-to-server-transfers">Français</a></nav>
+      <p class="lead">Wenn beide Maschinen dir gehören und jede die Adresse der anderen kennt, ist SSH zusätzliche Reibung und ein Rendezvous reiner Overhead. Daemon Direct ist genau dafür gebaut: Ein Server lauscht, der andere pusht direkt dorthin über eine gepinnte TLS-1.3-Verbindung. Kein Relay, kein SSH, kein Pairing-Code — das Vertrauen basiert auf Public Keys und wird einmal eingerichtet.</p>
+      <p class="lead">Diese Anleitung behandelt den Listener, die einmalige Vertrauenseinrichtung mit Fingerprints, das Pushen dorthin und den Betrieb des Listeners als systemd-Dienst.</p>
+      <h2>Einen Listener starten</h2>
+      <p>Auf dem empfangenden Server lauscht serve auf Pushes und schreibt sie in ein Verzeichnis. Standardmäßig läuft es dauerhaft; mit --once nimmt es eine einzelne Übertragung an und beendet sich. Gib den Fingerprint dieses Hosts mit relayium id aus — du brauchst ihn gleich:</p>
+      <pre><code># on the LISTENER
+relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031
+relayium id                       # prints THIS host&#39;s fingerprint</code></pre>
+      <ul><li>Der Listener verarbeitet Verbindungen nacheinander und legt Dateien unter --dir ab.</li><li>Der Standardport ist 9031; ändere ihn mit --port und öffne ihn in deiner Firewall.</li></ul>
+      <h2>Vertrauen einmalig einrichten</h2>
+      <p>Vertrauen ist gegenseitig und basiert auf Zertifikats-Fingerprints, ähnlich wie SSH-Schlüssel. Der Listener akzeptiert nur Pusher, von denen er weiß: Trage die relayium-id-Ausgabe des Pushers in die Allow-Liste des Listeners ein. Eine leere Allow-Liste weist jeden zurück.</p>
+      <pre><code># on the LISTENER: authorize a specific pusher by its fingerprint
+echo &quot;&lt;pusher-fingerprint&gt;&quot; &gt;&gt; ~/.config/relayium/authorized_fingerprints</code></pre>
+      <ul><li>Hole den Fingerprint des Pushers, indem du relayium id auf der pushenden Maschine ausführst.</li><li>Identitäts- und Vertrauensdateien liegen in ~/.config/relayium/ (mit --config-dir überschreibbar, z. B. /etc/relayium für einen Dienst).</li><li>Der Pusher wiederum lernt den Schlüssel des Listeners beim ersten Verbinden (Vertrauen bei erster Nutzung) und pinnt ihn in known_hosts.</li></ul>
+      <h2>Zum Listener pushen</h2>
+      <p>Push vom anderen Server aus an eine relayium://-Adresse. Die erste Verbindung pinnt den Fingerprint des Listeners; jede folgende Verbindung überprüft ihn, und ein geänderter Fingerprint wird abgelehnt statt stillschweigend akzeptiert — ein ausgetauschter Schlüssel oder ein Man-in-the-Middle wird so erkannt, nicht vertraut.</p>
+      <pre><code># on the PUSHER
+relayium push ./build.tar.zst relayium://receiver.example.com
+
+# non-default port
+relayium push ./build.tar.zst relayium://receiver.example.com:9040</code></pre>
+      <ul><li>Kein Relay und kein Fallback: Ist der Listener nicht erreichbar, schlägt der Push fehl — die Datei-Bytes laufen nie über irgendjemand anderen.</li><li>Dieselbe Übertragungs-Engine wie die anderen Modi: fortsetzbar, mit einer SHA-256-Prüfung pro Datei.</li></ul>
+      <h2>Den Listener unter systemd betreiben</h2>
+      <p>Für einen dauerhaft laufenden Posteingang betreibst du serve als systemd-Dienst. Richte --config-dir auf einen festen Ort wie /etc/relayium, damit die Identität über Neustarts hinweg stabil bleibt, und lass systemd sie am Leben halten:</p>
+      <pre><code># /etc/systemd/system/relayium-serve.service
+[Unit]
+Description=Relayium daemon-direct listener
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/relayium serve --dir /srv/inbox --config-dir /etc/relayium
+Restart=always
+User=relayium
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+      <ul><li>systemctl enable --now relayium-serve, um ihn zu starten und beim Booten hochzufahren.</li><li>Halte /etc/relayium/id.key nur für den Dienstbenutzer lesbar — relayium verweigert das Laden eines Schlüssels mit zu lockeren Berechtigungen.</li></ul>
+      <h2>Häufige Fragen</h2>
+      <h3>Wie unterscheidet sich Daemon Direct von push über SSH?</h3>
+      <p>push über SSH tunnelt die Übertragung durch deine SSH-Verbindung und braucht ein SSH-Konto auf der Gegenseite. Daemon Direct braucht weder SSH noch ein Konto — die beiden Server authentifizieren sich gegenseitig per Zertifikats-Fingerprint über gepinntes TLS, was leichtgewichtiger ist, wenn beide Maschinen dir gehören.</p>
+      <h3>Wo liegen die Identitäts- und Vertrauensdateien?</h3>
+      <p>Standardmäßig in ~/.config/relayium/ (mit --config-dir überschreibbar). id.key / id.crt sind die dauerhafte Identität dieses Hosts, known_hosts enthält die Fingerprints der Listener, zu denen du gepusht hast, und authorized_fingerprints ist die Allow-Liste des Listeners für Pusher.</p>
+      <h3>Was passiert, wenn sich ein Fingerprint ändert?</h3>
+      <p>Der Push wird abgelehnt und warnt. Der Schlüssel des Listeners wird bei der ersten Nutzung in known_hosts gepinnt, sodass eine spätere Änderung — ein neu verschlüsselter Host oder ein Man-in-the-Middle — abgelehnt statt stillschweigend akzeptiert wird. Entferne die known_hosts-Zeile nur, wenn du den Schlüssel absichtlich rotiert hast.</p>
+      <h3>Gibt es einen Relay-Fallback?</h3>
+      <p>Nein. Daemon Direct setzt eine erreichbare Listener-Adresse voraus; kann die Verbindung nicht hergestellt werden, schlägt es fehl. Nichts wird jemals über Relayium weitergeleitet — genau das ist der Sinn dieses Modus.</p>
+      <div class="ctacard">
+        <p>Verbinde zwei deiner eigenen Server für direkte Übertragungen — kein Relay, kein SSH, kein Pairing-Code.</p>
+        <a class="cta" href="/cli">CLI holen</a>
+      </div>
+      <h2>Weiterlesen</h2>
+      <ul class="related"><li><a href="/de/compare/snapdrop">Relayium vs. Snapdrop &amp; PairDrop: welche sichere P2P-Übertragung?</a></li><li><a href="/de/compare/airdrop">Relayium vs. AirDrop: eine plattformübergreifende Alternative</a></li><li><a href="/de/compare/wetransfer">Relayium vs. WeTransfer: große Dateien ohne Server senden</a></li><li><a href="/de/how-to/transfer-files-android-to-iphone">Dateien von Android auf iPhone übertragen (ohne Kabel)</a></li><li><a href="/de/how-to/send-files-pc-to-phone-wirelessly">Dateien vom PC drahtlos aufs Handy senden — ohne Kabel, ohne App</a></li><li><a href="/de/how-to/send-large-files-without-cloud">Große Dateien ohne Cloud versenden</a></li><li><a href="/de/cli/transfer-files-from-terminal">Dateien vom Terminal aus übertragen mit der Relayium CLI</a></li><li><a href="/de/cli/back-up-a-server-over-ssh">Dateien über SSH auf dem eigenen Server sichern mit der Relayium CLI</a></li><li><a href="/de/cli/send-a-file-to-someone">Mit der Relayium CLI eine Datei über Netzwerke hinweg an jemanden senden</a></li><li><a href="/de/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=de">← Relayium</a>
+        <a href="/de/privacy">Datenschutz</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -183,6 +183,8 @@ export interface Messages {
     footerSource: string;
     footerReleases: string;
     footerBrowser: string;
+    guidesH2: string;
+    guides: string[];
   };
   crossnet: {
     realtimeTitle: string;

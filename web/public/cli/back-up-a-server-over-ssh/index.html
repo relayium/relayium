@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Back up files to your own server over SSH with the Relayium CLI · Relayium</title>
+    <meta name="description" content="Use relayium push and pull to copy or sync directories to a server you already SSH into — resumable, integrity-checked, and free. Bytes travel over your own SSH connection and never touch Relayium&#39;s servers." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/cli/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/cli/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/cli/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/cli/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/cli/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/cli/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/cli/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/cli/back-up-a-server-over-ssh" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Back up files to your own server over SSH with the Relayium CLI" />
+    <meta property="og:description" content="Use relayium push and pull to copy or sync directories to a server you already SSH into — resumable, integrity-checked, and free. Bytes travel over your own SSH connection and never touch Relayium&#39;s servers." />
+    <meta property="og:url" content="https://relayium.com/cli/back-up-a-server-over-ssh" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Back up files to your own server over SSH with the Relayium CLI" />
+    <meta name="twitter:description" content="Use relayium push and pull to copy or sync directories to a server you already SSH into — resumable, integrity-checked, and free. Bytes travel over your own SSH connection and never touch Relayium&#39;s servers." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Back up files to your own server over SSH with the Relayium CLI","description":"Use relayium push and pull to copy or sync directories to a server you already SSH into — resumable, integrity-checked, and free. Bytes travel over your own SSH connection and never touch Relayium's servers.","inLanguage":"en","dateModified":"2026-07-08","mainEntityOfPage":"https://relayium.com/cli/back-up-a-server-over-ssh","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Do the files go through Relayium's servers?","acceptedAnswer":{"@type":"Answer","text":"No. push and pull run entirely over your own SSH connection. Relayium's servers are never involved and you need no account."}},{"@type":"Question","name":"Does the server need relayium installed?","acceptedAnswer":{"@type":"Answer","text":"It's optional. With relayium on the remote you get the native protocol — resumable transfers and per-file SHA-256 checks. Without it, relayium falls back to a tar stream over SSH, which still works but always sends each file in full."}},{"@type":"Question","name":"How does it choose which SSH key and port to use?","acceptedAnswer":{"@type":"Answer","text":"It reads your ~/.ssh/config like ssh does, so host aliases, keys and ports are picked up automatically. You can also override them per command with -i for the identity file and -p for the port."}},{"@type":"Question","name":"Is this faster than rsync?","acceptedAnswer":{"@type":"Answer","text":"For pushing to your own server it's in the same ballpark as rsync over SSH; the point isn't to beat rsync but to give you one tool that also does cross-network and server-to-server transfers with the same resume and integrity guarantees."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>Back up files to your own server over SSH with the Relayium CLI</h1>
+      <p class="updated">Last updated: 2026-07-08</p>
+      <nav class="langbar" aria-label="Language"><a href="/cli/back-up-a-server-over-ssh" aria-current="true">English</a><a href="/zh/cli/back-up-a-server-over-ssh">中文</a><a href="/ja/cli/back-up-a-server-over-ssh">日本語</a><a href="/ko/cli/back-up-a-server-over-ssh">한국어</a><a href="/de/cli/back-up-a-server-over-ssh">Deutsch</a><a href="/fr/cli/back-up-a-server-over-ssh">Français</a></nav>
+      <p class="lead">If you already have SSH access to a box — a VPS, a home server, a NAS, a workstation — you can back files up to it with the Relayium CLI without setting up a sync service or an account. The transfer runs over your existing SSH connection, so the bytes go straight to your server and never pass through Relayium.</p>
+      <p class="lead">This guide covers pushing and pulling directories, what resume and integrity checking give you, and how to run it on a schedule with cron.</p>
+      <h2>Push a directory to your server</h2>
+      <p>push takes one or more sources and an scp-style destination. Relayium connects over SSH using your usual keys and config, then streams the files to the destination directory:</p>
+      <pre><code># copy a local folder to the server
+relayium push ./photos user@your-server:backups/
+
+# choose an SSH key and a non-default port
+relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</code></pre>
+      <ul><li>It reuses your ~/.ssh/config, so host aliases, keys and ports you already set up just work.</li><li>If relayium is installed on the server, it uses the native protocol: per-file resume and a SHA-256 check on every file.</li><li>If not, it falls back to piping a tar stream into the remote, so a bare server with no relayium still works.</li></ul>
+      <h2>Pull files back</h2>
+      <p>Restoring is the same command in reverse: give a remote source and a local destination directory. This is how you recover a backup, or sync a server&#39;s output down to your laptop:</p>
+      <pre><code>relayium pull user@your-server:backups/ ./restore</code></pre>
+      <h2>Resume and integrity come built in</h2>
+      <p>Backups tend to be large and networks tend to drop. When relayium is on both ends, an interrupted transfer resumes from where it stopped on the next run instead of re-sending everything, and each file is verified end to end with a SHA-256 hash — what lands on the server is byte-for-byte what you sent.</p>
+      <p>If you ever want a clean, full re-send instead of resuming a partial file, pass --no-resume.</p>
+      <ul><li>Resume needs relayium on the remote (the native protocol); the tar fallback always sends in full.</li><li>The SHA-256 check runs automatically; a mismatch is reported and that file is flagged as failed.</li></ul>
+      <h2>Run it on a schedule with cron</h2>
+      <p>Because push is a single non-interactive command that uses your SSH keys, it drops straight into cron for a recurring backup. Point it at a key with no passphrase (or an agent), and log the output so you can see failures:</p>
+      <pre><code># back up every night at 2am — add to your crontab (crontab -e)
+0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@your-server:backups/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1</code></pre>
+      <ul><li>Combined with resume, a nightly job that gets interrupted simply continues the next night.</li><li>The command exits non-zero if any file fails its integrity check, so cron&#39;s mail-on-failure catches problems.</li></ul>
+      <h2>Frequently asked questions</h2>
+      <h3>Do the files go through Relayium&#39;s servers?</h3>
+      <p>No. push and pull run entirely over your own SSH connection. Relayium&#39;s servers are never involved and you need no account.</p>
+      <h3>Does the server need relayium installed?</h3>
+      <p>It&#39;s optional. With relayium on the remote you get the native protocol — resumable transfers and per-file SHA-256 checks. Without it, relayium falls back to a tar stream over SSH, which still works but always sends each file in full.</p>
+      <h3>How does it choose which SSH key and port to use?</h3>
+      <p>It reads your ~/.ssh/config like ssh does, so host aliases, keys and ports are picked up automatically. You can also override them per command with -i for the identity file and -p for the port.</p>
+      <h3>Is this faster than rsync?</h3>
+      <p>For pushing to your own server it&#39;s in the same ballpark as rsync over SSH; the point isn&#39;t to beat rsync but to give you one tool that also does cross-network and server-to-server transfers with the same resume and integrity guarantees.</p>
+      <div class="ctacard">
+        <p>Back up your next directory the direct way — over your own SSH, resumable, integrity-checked, and free.</p>
+        <a class="cta" href="/cli">Get the CLI</a>
+      </div>
+      <h2>Keep reading</h2>
+      <ul class="related"><li><a href="/compare/snapdrop">Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</a></li><li><a href="/compare/airdrop">Relayium vs AirDrop: a cross-platform AirDrop alternative</a></li><li><a href="/compare/wetransfer">Relayium vs WeTransfer: send large files without the server</a></li><li><a href="/how-to/transfer-files-android-to-iphone">How to transfer files from Android to iPhone (no cable)</a></li><li><a href="/how-to/send-files-pc-to-phone-wirelessly">Send files from PC to phone wirelessly, no cable or app</a></li><li><a href="/how-to/send-large-files-without-cloud">How to send large files without the cloud</a></li><li><a href="/cli/transfer-files-from-terminal">Transfer files from the terminal with the Relayium CLI</a></li><li><a href="/cli/send-a-file-to-someone">Send a file to someone across networks with the Relayium CLI</a></li><li><a href="/cli/server-to-server-transfers">Server-to-server transfers with the Relayium CLI (daemon direct)</a></li><li><a href="/">Relayium</a></li></ul>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

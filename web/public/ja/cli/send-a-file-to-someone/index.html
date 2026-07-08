@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium CLI でネットワークを越えて誰かにファイルを送る · Relayium</title>
+    <meta name="description" content="relayium send と receive を使い、短いペアリングコードだけで異なるネットワーク上の2人の間でファイルを直接移動します。エンドツーエンドで暗号化され、SAS コードで検証され、しかも無料——ファイルは二人の間を直接行き来し、当社のサーバーを経由することはありません。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ja/cli/send-a-file-to-someone" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/cli/send-a-file-to-someone" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/cli/send-a-file-to-someone" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/cli/send-a-file-to-someone" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/cli/send-a-file-to-someone" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/cli/send-a-file-to-someone" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/cli/send-a-file-to-someone" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/cli/send-a-file-to-someone" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Relayium CLI でネットワークを越えて誰かにファイルを送る" />
+    <meta property="og:description" content="relayium send と receive を使い、短いペアリングコードだけで異なるネットワーク上の2人の間でファイルを直接移動します。エンドツーエンドで暗号化され、SAS コードで検証され、しかも無料——ファイルは二人の間を直接行き来し、当社のサーバーを経由することはありません。" />
+    <meta property="og:url" content="https://relayium.com/ja/cli/send-a-file-to-someone" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium CLI でネットワークを越えて誰かにファイルを送る" />
+    <meta name="twitter:description" content="relayium send と receive を使い、短いペアリングコードだけで異なるネットワーク上の2人の間でファイルを直接移動します。エンドツーエンドで暗号化され、SAS コードで検証され、しかも無料——ファイルは二人の間を直接行き来し、当社のサーバーを経由することはありません。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI でネットワークを越えて誰かにファイルを送る","description":"relayium send と receive を使い、短いペアリングコードだけで異なるネットワーク上の2人の間でファイルを直接移動します。エンドツーエンドで暗号化され、SAS コードで検証され、しかも無料——ファイルは二人の間を直接行き来し、当社のサーバーを経由することはありません。","inLanguage":"ja","dateModified":"2026-07-08","mainEntityOfPage":"https://relayium.com/ja/cli/send-a-file-to-someone","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"ペアリングコードはどこから来るのですか？","acceptedAnswer":{"@type":"Answer","text":"自分で決めます。両側が入力する任意の短い文字列で構いません——通話やチャットで決めてください。両端で一致してさえいればよいのです。"}},{"@type":"Question","name":"ファイルはどこかにアップロードされますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。ファイルは二人の間で直接ストリーミングされ、エンドツーエンドで暗号化されます。二つの端を引き合わせるためのごく小さなランデブー・ハンドシェイクだけが Relayium を経由し、ファイルは決して経由しません。"}},{"@type":"Question","name":"接続できない場合はどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"両端が厳格な NAT の内側にあり到達可能なアドレスがない場合、直接接続は確立できず転送は失敗します——CLI は設計上リレーへのフォールバックを持ちません。直接の経路が使えない場合は、到達可能な2台のサーバー間での daemon direct、または SSH 経由の push を使ってください。"}},{"@type":"Question","name":"相手が本当に正しい人物だとどうやって分かりますか？","acceptedAnswer":{"@type":"Answer","text":"両方のターミナルがセッション鍵から得た同一の6桁の SAS コードを表示します。帯域外で比べてください。一致すれば、間に誰もいないということです。バイトが動く前にその確認を必須にするには --verify を追加します。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <h1>Relayium CLI でネットワークを越えて誰かにファイルを送る</h1>
+      <p class="updated">最終更新: 2026-07-08</p>
+      <nav class="langbar" aria-label="Language"><a href="/cli/send-a-file-to-someone">English</a><a href="/zh/cli/send-a-file-to-someone">中文</a><a href="/ja/cli/send-a-file-to-someone" aria-current="true">日本語</a><a href="/ko/cli/send-a-file-to-someone">한국어</a><a href="/de/cli/send-a-file-to-someone">Deutsch</a><a href="/fr/cli/send-a-file-to-someone">Français</a></nav>
+      <p class="lead">相手のマシンが自分のものではなく SSH でログインできないこともあります——別のオフィスの同僚へのファイル、クライアント向けのビルド、遠方の友人へのアーカイブ。relayium send と receive は、二人で決めた短いコードだけを使って、ネットワークを越えてそれを二人の間で直接移動させます。</p>
+      <p class="lead">接続はピアツーピアでエンドツーエンドに暗号化されています。二つの端を引き合わせるためのごく小さなランデブー・ハンドシェイクだけが Relayium を経由し、ファイルのバイトは決して経由しません。</p>
+      <h2>コードを決めてから send と receive</h2>
+      <p>好きな短いコードを選び、帯域外で共有します——通話で伝える、チャットに書く、など。一方が send し、もう一方が同じコードで receive します：</p>
+      <pre><code># sender
+relayium send ./release.zip 428571
+
+# receiver (in the folder where files should land)
+relayium receive 428571</code></pre>
+      <ul><li>コードは合流するための共有シークレットにすぎません。ランデブー先以外の誰にも送られず、二つの端を引き合わせるためだけに使われます。</li><li>受信側は送り先のディレクトリを指定できます: relayium receive 428571 ./downloads</li></ul>
+      <h2>SAS コードで検証する</h2>
+      <p>二つの端が接続すると、両方のターミナルにセッション鍵から導かれた同じ6桁の SAS（short authentication string）が表示されます。それを比べて——通話中に読み上げて——中間の誰かではなく、お互いに接続していることを確認してください。</p>
+      <p>確実な保証が欲しいときは --verify を付けます。すると転送は、コードが一致することをあなたが確認するまで、1バイトも動かさずに待機します。</p>
+      <pre><code>relayium send --verify ./release.zip 428571</code></pre>
+      <h2>直接接続のみ——無料、さもなくば失敗</h2>
+      <p>転送は二つの端の間で直接接続の確立を競います。確立できれば——少なくとも一方に到達可能なアドレスがある一般的なケースでは——ファイルはそのまま暗号化された状態で全速力かつ無料で流れます。</p>
+      <p>両端が厳格な NAT の内側にあり直接の経路が見つからない場合、転送はリレー経由でファイルを送るのではなく、きれいに失敗します。これにより CLI は完全に無料のままで、ファイルのバイトも当社のサーバーに触れません。この状況に当たった場合、確実な答えは到達可能な2台のサーバー間での daemon direct、または SSH 経由の push です。</p>
+      <ul><li>直接接続が成功 → 無料、全速力、エンドツーエンドで暗号化。</li><li>直接の経路がない → 転送は失敗します。CLI が代わりにファイルを中継することは決してありません。</li><li>両端は地理的にどこにあっても構いません——それぞれが同じコードでコマンドを実行するだけです。</li></ul>
+      <h2>よくある質問</h2>
+      <h3>ペアリングコードはどこから来るのですか？</h3>
+      <p>自分で決めます。両側が入力する任意の短い文字列で構いません——通話やチャットで決めてください。両端で一致してさえいればよいのです。</p>
+      <h3>ファイルはどこかにアップロードされますか？</h3>
+      <p>いいえ。ファイルは二人の間で直接ストリーミングされ、エンドツーエンドで暗号化されます。二つの端を引き合わせるためのごく小さなランデブー・ハンドシェイクだけが Relayium を経由し、ファイルは決して経由しません。</p>
+      <h3>接続できない場合はどうなりますか？</h3>
+      <p>両端が厳格な NAT の内側にあり到達可能なアドレスがない場合、直接接続は確立できず転送は失敗します——CLI は設計上リレーへのフォールバックを持ちません。直接の経路が使えない場合は、到達可能な2台のサーバー間での daemon direct、または SSH 経由の push を使ってください。</p>
+      <h3>相手が本当に正しい人物だとどうやって分かりますか？</h3>
+      <p>両方のターミナルがセッション鍵から得た同一の6桁の SAS コードを表示します。帯域外で比べてください。一致すれば、間に誰もいないということです。バイトが動く前にその確認を必須にするには --verify を追加します。</p>
+      <div class="ctacard">
+        <p>次のファイルを、別のネットワークにいる相手へ直接送りましょう——エンドツーエンドで暗号化され、しかも無料です。</p>
+        <a class="cta" href="/cli">CLI を入手する</a>
+      </div>
+      <h2>続けて読む</h2>
+      <ul class="related"><li><a href="/ja/compare/snapdrop">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/compare/wetransfer">Relayium と WeTransfer の比較：サーバーを介さず大容量を送る</a></li><li><a href="/ja/how-to/transfer-files-android-to-iphone">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/how-to/send-large-files-without-cloud">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/cli/transfer-files-from-terminal">Relayium CLI でターミナルからファイルを転送する</a></li><li><a href="/ja/cli/back-up-a-server-over-ssh">Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</a></li><li><a href="/ja/cli/server-to-server-transfers">Relayium CLI でサーバー間転送(デーモン直結)</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ja">← Relayium</a>
+        <a href="/ja/privacy">プライバシーポリシー</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

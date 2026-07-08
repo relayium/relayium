@@ -13,6 +13,10 @@ import compareWetransfer from "./pages/content/articles/compare-wetransfer.mjs";
 import howtoAndroidToIphone from "./pages/content/articles/howto-android-to-iphone.mjs";
 import howtoPcToPhoneWirelessly from "./pages/content/articles/howto-pc-to-phone-wirelessly.mjs";
 import howtoLargeFilesWithoutCloud from "./pages/content/articles/howto-large-files-without-cloud.mjs";
+import cliGettingStarted from "./pages/content/articles/cli-getting-started.mjs";
+import cliBackupSsh from "./pages/content/articles/cli-backup-server-ssh.mjs";
+import cliSendToSomeone from "./pages/content/articles/cli-send-to-someone.mjs";
+import cliServerToServer from "./pages/content/articles/cli-server-to-server.mjs";
 import {
   buildLegalPages,
   buildLandingPages,
@@ -31,6 +35,10 @@ const articles = [
   howtoAndroidToIphone,
   howtoPcToPhoneWirelessly,
   howtoLargeFilesWithoutCloud,
+  cliGettingStarted,
+  cliBackupSsh,
+  cliSendToSomeone,
+  cliServerToServer,
 ];
 
 async function main() {

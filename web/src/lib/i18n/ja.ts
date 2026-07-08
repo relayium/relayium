@@ -187,6 +187,13 @@ const ja: Messages = {
     footerSource: "GitHub でソースを見る ↗",
     footerReleases: "リリース",
     footerBrowser: "ブラウザ派ですか？ホームページをご覧ください。",
+    guidesH2: "ガイド",
+    guides: [
+      "入門：ターミナルからファイル転送",
+      "SSH でサーバーをバックアップ",
+      "誰かにファイルを送る",
+      "サーバー間の転送",
+    ],
   },
   crossnet: {
     realtimeTitle: "リアルタイム直接転送",

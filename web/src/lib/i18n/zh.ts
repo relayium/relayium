@@ -187,6 +187,13 @@ const zh: Messages = {
     footerSource: "GitHub 源码 ↗",
     footerReleases: "发布版本",
     footerBrowser: "更喜欢浏览器？首页就是。",
+    guidesH2: "教程",
+    guides: [
+      "入门：从终端传文件",
+      "通过 SSH 备份服务器",
+      "把文件发给别人",
+      "服务器到服务器传输",
+    ],
   },
   crossnet: {
     realtimeTitle: "实时直传",

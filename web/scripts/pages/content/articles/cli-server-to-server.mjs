@@ -1,0 +1,676 @@
+// web/scripts/pages/content/articles/cli-server-to-server.mjs
+// How-to: server-to-server transfers with relayium daemon direct (serve + push relayium://).
+// English is the master; zh/ja/ko/de/fr follow the same structure and facts.
+// Command blocks (code) stay English in every language.
+
+const en = {
+  title: "Server-to-server transfers with the Relayium CLI (daemon direct)",
+  description:
+    "Move files straight between two servers you control with relayium serve and push relayium:// — over pinned TLS, no relay, no SSH, no code. Set up public-key trust once with relayium id and authorized_fingerprints, then run it under systemd.",
+  updatedLabel: "Last updated",
+  lead: [
+    "When both machines are yours and each knows the other's address, SSH is extra friction and a rendezvous is pure overhead. Daemon direct is built for exactly this: one server listens, the other pushes straight to it over a pinned TLS 1.3 connection. No relay, no SSH, no pairing code — trust is public-key and set up once.",
+    "This guide covers the listener, the one-time trust setup with fingerprints, pushing to it, and running the listener as a systemd service.",
+  ],
+  sections: [
+    {
+      heading: "Start a listener",
+      body: [
+        "On the receiving server, serve listens for pushes and writes them into a directory. It's long-running by default; add --once to accept a single transfer and exit. Print this host's fingerprint with relayium id — you'll need it in a moment:",
+      ],
+      code: [
+        `# on the LISTENER
+relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031
+relayium id                       # prints THIS host's fingerprint`,
+      ],
+      bullets: [
+        "The listener processes connections one at a time and lands files under --dir.",
+        "The default port is 9031; change it with --port and open it on your firewall.",
+      ],
+    },
+    {
+      heading: "Set up trust once",
+      body: [
+        "Trust is mutual and based on certificate fingerprints, like SSH keys. The listener only accepts pushers it has been told about: add the pusher's relayium id output to the listener's allow-list. An empty allow-list rejects everyone.",
+      ],
+      code: [
+        `# on the LISTENER: authorize a specific pusher by its fingerprint
+echo "<pusher-fingerprint>" >> ~/.config/relayium/authorized_fingerprints`,
+      ],
+      bullets: [
+        "Get the pusher's fingerprint by running relayium id on the pushing machine.",
+        "Identity and trust files live in ~/.config/relayium/ (override with --config-dir, e.g. /etc/relayium for a service).",
+        "The pusher, in turn, learns the listener's key on first connect (trust on first use) and pins it in known_hosts.",
+      ],
+    },
+    {
+      heading: "Push to the listener",
+      body: [
+        "From the other server, push to a relayium:// address. The first connection pins the listener's fingerprint; every connection after that verifies it, and a changed fingerprint is refused rather than silently accepted — so a swapped key or a man-in-the-middle is caught, not trusted.",
+      ],
+      code: [
+        `# on the PUSHER
+relayium push ./build.tar.zst relayium://receiver.example.com
+
+# non-default port
+relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
+      ],
+      bullets: [
+        "No relay and no fallback: if the listener isn't reachable, the push fails — file bytes never route through anyone else.",
+        "The same transfer engine as the other modes: resumable, with a per-file SHA-256 check.",
+      ],
+    },
+    {
+      heading: "Run the listener under systemd",
+      body: [
+        "For an always-on inbox, run serve as a systemd service. Point --config-dir at a fixed location like /etc/relayium so the identity is stable across restarts, and let systemd keep it alive:",
+      ],
+      code: [
+        `# /etc/systemd/system/relayium-serve.service
+[Unit]
+Description=Relayium daemon-direct listener
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/relayium serve --dir /srv/inbox --config-dir /etc/relayium
+Restart=always
+User=relayium
+
+[Install]
+WantedBy=multi-user.target`,
+      ],
+      bullets: [
+        "systemctl enable --now relayium-serve to start it and bring it up on boot.",
+        "Keep /etc/relayium/id.key readable only by the service user — relayium refuses to load a key with loose permissions.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Frequently asked questions",
+    items: [
+      {
+        q: "How is daemon direct different from push over SSH?",
+        a: "push over SSH tunnels the transfer through your SSH connection and needs an SSH account on the remote. Daemon direct needs no SSH and no account — the two servers authenticate each other by certificate fingerprint over pinned TLS, which is lighter when both machines are yours.",
+      },
+      {
+        q: "Where are the identity and trust files?",
+        a: "In ~/.config/relayium/ by default (override with --config-dir). id.key / id.crt are this host's persistent identity, known_hosts holds fingerprints of listeners you've pushed to, and authorized_fingerprints is the listener's allow-list of pushers.",
+      },
+      {
+        q: "What happens if a fingerprint changes?",
+        a: "The push refuses and warns. The listener's key is pinned in known_hosts on first use, so a later change — a re-keyed host, or a man-in-the-middle — is rejected rather than silently accepted. Remove the known_hosts line only if you intentionally rotated the key.",
+      },
+      {
+        q: "Is there any relay fallback?",
+        a: "No. Daemon direct assumes a reachable listener address; if the connection can't be made, it fails. Nothing is ever proxied through Relayium — that's the point of this mode.",
+      },
+    ],
+  },
+  cta: {
+    text: "Wire up two of your own servers for direct transfers — no relay, no SSH, no pairing code.",
+    button: "Get the CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Keep reading",
+};
+
+const zh = {
+  title: "用 Relayium CLI 实现服务器到服务器直传（守护进程直连）",
+  description:
+    "用 relayium serve 和 push relayium:// 在你自己掌控的两台服务器之间直接搬运文件——基于锁定的 TLS，无需中继、无需 SSH、无需代码。用 relayium id 和 authorized_fingerprints 一次性建立公钥信任，然后在 systemd 下运行。",
+  updatedLabel: "最近更新",
+  lead: [
+    "当两台机器都是你自己的，并且彼此知道对方地址时，SSH 是多余的摩擦，中转撮合纯属多余开销。守护进程直连正是为此而生：一台服务器监听，另一台通过锁定的 TLS 1.3 连接直接推送过去。无需中继、无需 SSH、无需配对码——信任基于公钥，只需设置一次。",
+    "本指南涵盖监听端、用指纹一次性建立信任、向其推送，以及把监听端作为 systemd 服务运行。",
+  ],
+  sections: [
+    {
+      heading: "启动一个监听端",
+      body: [
+        "在接收方服务器上，serve 监听推送并把它们写入某个目录。它默认长期运行；加上 --once 可以只接受一次传输就退出。用 relayium id 打印这台主机的指纹——马上就要用到：",
+      ],
+      code: [
+        `# on the LISTENER
+relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031
+relayium id                       # prints THIS host's fingerprint`,
+      ],
+      bullets: [
+        "监听端依次处理连接，并把文件落到 --dir 指定的目录下。",
+        "默认端口是 9031；可用 --port 修改，并在防火墙上开放该端口。",
+      ],
+    },
+    {
+      heading: "一次性建立信任",
+      body: [
+        "信任是双向的，基于证书指纹，就像 SSH 密钥一样。监听端只接受它被告知过的推送方：把推送方的 relayium id 输出加入监听端的允许列表。空的允许列表会拒绝所有人。",
+      ],
+      code: [
+        `# on the LISTENER: authorize a specific pusher by its fingerprint
+echo "<pusher-fingerprint>" >> ~/.config/relayium/authorized_fingerprints`,
+      ],
+      bullets: [
+        "在推送方机器上运行 relayium id 获取推送方的指纹。",
+        "身份和信任文件存放在 ~/.config/relayium/ 中（可用 --config-dir 覆盖，例如作为服务时用 /etc/relayium）。",
+        "推送方则在首次连接时获知监听端的密钥（首次使用即信任），并将其锁定在 known_hosts 中。",
+      ],
+    },
+    {
+      heading: "向监听端推送",
+      body: [
+        "从另一台服务器，推送到一个 relayium:// 地址。第一次连接会锁定监听端的指纹；此后每次连接都会校验它，指纹一旦变化就会被拒绝而不是被默默接受——因此密钥被替换或中间人攻击会被发现，而不是被信任。",
+      ],
+      code: [
+        `# on the PUSHER
+relayium push ./build.tar.zst relayium://receiver.example.com
+
+# non-default port
+relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
+      ],
+      bullets: [
+        "没有中继，也没有回退：如果监听端无法到达，推送就会失败——文件字节永远不会经过其他任何人转发。",
+        "使用与其他模式相同的传输引擎：可续传，并对每个文件做 SHA-256 校验。",
+      ],
+    },
+    {
+      heading: "在 systemd 下运行监听端",
+      body: [
+        "要做一个常驻收件箱，把 serve 作为 systemd 服务运行。把 --config-dir 指向一个固定位置，例如 /etc/relayium，让身份在重启之间保持稳定，并交给 systemd 来保活：",
+      ],
+      code: [
+        `# /etc/systemd/system/relayium-serve.service
+[Unit]
+Description=Relayium daemon-direct listener
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/relayium serve --dir /srv/inbox --config-dir /etc/relayium
+Restart=always
+User=relayium
+
+[Install]
+WantedBy=multi-user.target`,
+      ],
+      bullets: [
+        "用 systemctl enable --now relayium-serve 启动它，并让它开机自启。",
+        "让 /etc/relayium/id.key 只能被服务用户读取——权限过于宽松时 relayium 会拒绝加载该密钥。",
+      ],
+    },
+  ],
+  faq: {
+    heading: "常见问题",
+    items: [
+      {
+        q: "守护进程直连和通过 SSH 推送有什么不同？",
+        a: "通过 SSH 推送会把传输隧道进你的 SSH 连接，并且需要在远端有一个 SSH 账号。守护进程直连不需要 SSH，也不需要账号——两台服务器通过锁定的 TLS，用证书指纹互相验证身份，当两台机器都是你自己的时候，这样更轻量。",
+      },
+      {
+        q: "身份和信任文件在哪里？",
+        a: "默认在 ~/.config/relayium/ 中（可用 --config-dir 覆盖）。id.key / id.crt 是这台主机的持久身份，known_hosts 保存着你推送过的监听端的指纹，authorized_fingerprints 则是监听端的推送方允许列表。",
+      },
+      {
+        q: "指纹变化了会怎样？",
+        a: "推送会被拒绝并发出警告。监听端的密钥在首次使用时就被锁定在 known_hosts 中，因此之后的变化——无论是主机重新生成了密钥，还是中间人攻击——都会被拒绝而不是被默默接受。只有在你确实主动轮换了密钥时，才应删除 known_hosts 中对应的那一行。",
+      },
+      {
+        q: "有没有中继回退？",
+        a: "没有。守护进程直连假定监听端地址是可达的；如果无法建立连接，就会失败。任何数据都绝不会经由 Relayium 代理——这正是这个模式的意义所在。",
+      },
+    ],
+  },
+  cta: {
+    text: "把你自己的两台服务器接起来做直接传输——无需中继、无需 SSH、无需配对码。",
+    button: "获取 CLI",
+    href: "/cli",
+  },
+  relatedHeading: "继续阅读",
+};
+
+const ja = {
+  title: "Relayium CLI でサーバー間転送(デーモン直結)",
+  description:
+    "relayium serve と push relayium:// を使い、あなたが管理する2台のサーバー間でファイルを直接やり取りします——固定された TLS 上で、リレーも SSH もコードも不要。relayium id と authorized_fingerprints で公開鍵の信頼関係を一度だけ設定し、systemd の下で実行します。",
+  updatedLabel: "最終更新",
+  lead: [
+    "両方のマシンが自分のもので、互いのアドレスを知っている場合、SSH は余計な手間であり、集合場所を介するのは純粋なオーバーヘッドです。デーモン直結はまさにこのために作られています。一方のサーバーが待ち受け、もう一方が固定された TLS 1.3 接続でそこへ直接プッシュします。リレーも SSH もペアリングコードも不要——信頼は公開鍵によるもので、一度設定すれば済みます。",
+    "本ガイドではリスナー、フィンガープリントによる一度きりの信頼設定、そこへのプッシュ、そしてリスナーを systemd サービスとして実行する方法を扱います。",
+  ],
+  sections: [
+    {
+      heading: "リスナーを起動する",
+      body: [
+        "受信側のサーバーでは、serve がプッシュを待ち受け、あるディレクトリへ書き込みます。デフォルトでは常駐し続けます。--once を付けると1回の転送だけを受け取って終了します。relayium id でこのホストのフィンガープリントを表示します——すぐに必要になります:",
+      ],
+      code: [
+        `# on the LISTENER
+relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031
+relayium id                       # prints THIS host's fingerprint`,
+      ],
+      bullets: [
+        "リスナーは接続を1つずつ処理し、ファイルを --dir の下に配置します。",
+        "デフォルトのポートは 9031 です。--port で変更し、ファイアウォールで開放してください。",
+      ],
+    },
+    {
+      heading: "信頼関係を一度だけ設定する",
+      body: [
+        "信頼は相互的で、SSH の鍵と同様、証明書のフィンガープリントに基づきます。リスナーは、あらかじめ伝えられたプッシュ側だけを受け入れます。プッシュ側の relayium id の出力をリスナーの許可リストに追加してください。許可リストが空だと誰も拒否されます。",
+      ],
+      code: [
+        `# on the LISTENER: authorize a specific pusher by its fingerprint
+echo "<pusher-fingerprint>" >> ~/.config/relayium/authorized_fingerprints`,
+      ],
+      bullets: [
+        "プッシュ側のマシンで relayium id を実行し、プッシュ側のフィンガープリントを取得します。",
+        "アイデンティティと信頼のファイルは ~/.config/relayium/ にあります(サービスとして使う場合など、--config-dir で /etc/relayium などに上書きできます)。",
+        "プッシュ側は、初回接続時にリスナーの鍵を学習し(信頼オンファーストユース)、known_hosts に固定します。",
+      ],
+    },
+    {
+      heading: "リスナーへプッシュする",
+      body: [
+        "もう一方のサーバーから、relayium:// アドレスへプッシュします。最初の接続でリスナーのフィンガープリントが固定され、以降の接続はすべてそれを検証します。フィンガープリントが変わった場合は黙って受け入れられるのではなく拒否されます——鍵のすり替えや中間者攻撃はそのまま信頼されるのではなく、検知されます。",
+      ],
+      code: [
+        `# on the PUSHER
+relayium push ./build.tar.zst relayium://receiver.example.com
+
+# non-default port
+relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
+      ],
+      bullets: [
+        "リレーもフォールバックもありません。リスナーに到達できなければプッシュは失敗します——ファイルのバイト列が他の誰かを経由することは決してありません。",
+        "他のモードと同じ転送エンジンです。再開可能で、ファイルごとに SHA-256 チェックが行われます。",
+      ],
+    },
+    {
+      heading: "systemd でリスナーを実行する",
+      body: [
+        "常時稼働の受信箱にするには、serve を systemd サービスとして実行します。--config-dir を /etc/relayium のような固定の場所に向けて、再起動をまたいでアイデンティティを安定させ、生存は systemd に任せます:",
+      ],
+      code: [
+        `# /etc/systemd/system/relayium-serve.service
+[Unit]
+Description=Relayium daemon-direct listener
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/relayium serve --dir /srv/inbox --config-dir /etc/relayium
+Restart=always
+User=relayium
+
+[Install]
+WantedBy=multi-user.target`,
+      ],
+      bullets: [
+        "systemctl enable --now relayium-serve で起動し、起動時に自動的に立ち上がるようにします。",
+        "/etc/relayium/id.key はサービスユーザーだけが読めるようにしてください——権限が緩い鍵は relayium が読み込みを拒否します。",
+      ],
+    },
+  ],
+  faq: {
+    heading: "よくある質問",
+    items: [
+      {
+        q: "デーモン直結は SSH 経由の push と何が違いますか?",
+        a: "SSH 経由の push は転送を SSH 接続のトンネルに通し、リモート側に SSH アカウントが必要です。デーモン直結には SSH もアカウントも不要です——2台のサーバーは固定された TLS 上で証明書のフィンガープリントによって互いを認証します。両方のマシンが自分のものである場合、これはより軽量です。",
+      },
+      {
+        q: "アイデンティティと信頼のファイルはどこにありますか?",
+        a: "デフォルトでは ~/.config/relayium/ にあります(--config-dir で上書き可能)。id.key / id.crt はこのホストの永続的なアイデンティティ、known_hosts はプッシュ先にしたリスナーのフィンガープリントを保持し、authorized_fingerprints はリスナー側のプッシュ元許可リストです。",
+      },
+      {
+        q: "フィンガープリントが変わったらどうなりますか?",
+        a: "プッシュは拒否され、警告が出ます。リスナーの鍵は初回使用時に known_hosts に固定されるため、その後の変化——鍵を再生成したホスト、あるいは中間者攻撃——は黙って受け入れられるのではなく拒否されます。known_hosts の該当行を削除するのは、意図的に鍵をローテーションした場合だけにしてください。",
+      },
+      {
+        q: "リレーへのフォールバックはありますか?",
+        a: "ありません。デーモン直結はリスナーのアドレスに到達できることを前提としています。接続できなければ失敗します。何ものも Relayium を経由してプロキシされることはありません——それがこのモードの要点です。",
+      },
+    ],
+  },
+  cta: {
+    text: "自分の2台のサーバーをつないで直接転送しましょう——リレーも SSH もペアリングコードも不要です。",
+    button: "CLI を入手する",
+    href: "/cli",
+  },
+  relatedHeading: "続けて読む",
+};
+
+const ko = {
+  title: "Relayium CLI로 서버 간 전송(데몬 다이렉트)",
+  description:
+    "relayium serve와 push relayium://로 당신이 관리하는 두 서버 사이에서 파일을 곧바로 옮기세요——고정된 TLS를 통해, 릴레이도 SSH도 코드도 필요 없습니다. relayium id와 authorized_fingerprints로 공개 키 신뢰를 한 번만 설정한 뒤 systemd 아래에서 실행하세요.",
+  updatedLabel: "마지막 업데이트",
+  lead: [
+    "두 기기가 모두 당신 것이고 서로의 주소를 알고 있다면, SSH는 불필요한 마찰이고 랑데부는 순전한 오버헤드입니다. 데몬 다이렉트는 정확히 이를 위해 만들어졌습니다. 한쪽 서버는 대기하고, 다른 쪽은 고정된 TLS 1.3 연결로 그곳에 곧바로 푸시합니다. 릴레이도 SSH도 페어링 코드도 없습니다——신뢰는 공개 키 방식이며 한 번만 설정하면 됩니다.",
+    "이 가이드는 리스너, 핑거프린트를 이용한 일회성 신뢰 설정, 리스너로의 푸시, 그리고 리스너를 systemd 서비스로 실행하는 방법을 다룹니다.",
+  ],
+  sections: [
+    {
+      heading: "리스너 시작하기",
+      body: [
+        "받는 쪽 서버에서 serve는 푸시를 대기하고 이를 어떤 디렉터리에 기록합니다. 기본적으로 계속 실행되며, --once를 추가하면 한 번의 전송만 받고 종료합니다. relayium id로 이 호스트의 핑거프린트를 출력하세요——곧 필요합니다:",
+      ],
+      code: [
+        `# on the LISTENER
+relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031
+relayium id                       # prints THIS host's fingerprint`,
+      ],
+      bullets: [
+        "리스너는 연결을 한 번에 하나씩 처리하며 파일을 --dir 아래에 내려놓습니다.",
+        "기본 포트는 9031입니다. --port로 변경하고 방화벽에서 열어 두세요.",
+      ],
+    },
+    {
+      heading: "신뢰를 한 번만 설정하기",
+      body: [
+        "신뢰는 SSH 키처럼 인증서 핑거프린트를 기반으로 하며 상호적입니다. 리스너는 자신에게 알려진 푸시하는 쪽만 받아들입니다. 푸시하는 쪽의 relayium id 출력을 리스너의 허용 목록에 추가하세요. 허용 목록이 비어 있으면 누구도 받아들이지 않습니다.",
+      ],
+      code: [
+        `# on the LISTENER: authorize a specific pusher by its fingerprint
+echo "<pusher-fingerprint>" >> ~/.config/relayium/authorized_fingerprints`,
+      ],
+      bullets: [
+        "푸시하는 쪽 기기에서 relayium id를 실행해 푸시하는 쪽의 핑거프린트를 얻으세요.",
+        "신원 및 신뢰 파일은 ~/.config/relayium/에 있습니다(서비스로 쓸 때는 --config-dir로 /etc/relayium 같은 곳으로 재정의할 수 있습니다).",
+        "푸시하는 쪽은 첫 연결 시 리스너의 키를 알게 되고(첫 사용 시 신뢰), 이를 known_hosts에 고정합니다.",
+      ],
+    },
+    {
+      heading: "리스너로 푸시하기",
+      body: [
+        "다른 서버에서 relayium:// 주소로 푸시하세요. 첫 연결에서 리스너의 핑거프린트가 고정되고, 이후 모든 연결은 이를 검증합니다. 핑거프린트가 바뀌면 조용히 받아들여지는 대신 거부됩니다——그래서 키가 바뀌었거나 중간자 공격이 있으면 신뢰되는 대신 발견됩니다.",
+      ],
+      code: [
+        `# on the PUSHER
+relayium push ./build.tar.zst relayium://receiver.example.com
+
+# non-default port
+relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
+      ],
+      bullets: [
+        "릴레이도 폴백도 없습니다. 리스너에 도달할 수 없으면 푸시는 실패합니다——파일 바이트는 결코 다른 누군가를 거쳐 전달되지 않습니다.",
+        "다른 모드와 동일한 전송 엔진입니다. 재개 가능하며 파일별 SHA-256 검사를 수행합니다.",
+      ],
+    },
+    {
+      heading: "systemd에서 리스너 실행하기",
+      body: [
+        "항상 켜져 있는 수신함을 만들려면 serve를 systemd 서비스로 실행하세요. --config-dir을 /etc/relayium 같은 고정된 위치로 지정해 재시작 간에도 신원이 안정적으로 유지되게 하고, 살아 있게 하는 것은 systemd에 맡기세요:",
+      ],
+      code: [
+        `# /etc/systemd/system/relayium-serve.service
+[Unit]
+Description=Relayium daemon-direct listener
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/relayium serve --dir /srv/inbox --config-dir /etc/relayium
+Restart=always
+User=relayium
+
+[Install]
+WantedBy=multi-user.target`,
+      ],
+      bullets: [
+        "systemctl enable --now relayium-serve로 시작하고 부팅 시 자동으로 올라오게 하세요.",
+        "/etc/relayium/id.key는 서비스 사용자만 읽을 수 있게 하세요——권한이 느슨한 키는 relayium이 불러오기를 거부합니다.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "자주 묻는 질문",
+    items: [
+      {
+        q: "데몬 다이렉트는 SSH를 통한 push와 어떻게 다른가요?",
+        a: "SSH를 통한 push는 전송을 SSH 연결 터널로 통과시키며 원격에 SSH 계정이 필요합니다. 데몬 다이렉트는 SSH도 계정도 필요 없습니다——두 서버는 고정된 TLS를 통해 인증서 핑거프린트로 서로를 인증하며, 두 기기가 모두 당신 것일 때 더 가볍습니다.",
+      },
+      {
+        q: "신원 및 신뢰 파일은 어디에 있나요?",
+        a: "기본적으로 ~/.config/relayium/에 있습니다(--config-dir로 재정의 가능). id.key / id.crt는 이 호스트의 영구적인 신원이고, known_hosts는 푸시했던 리스너들의 핑거프린트를 담고 있으며, authorized_fingerprints는 리스너 쪽의 푸시하는 쪽 허용 목록입니다.",
+      },
+      {
+        q: "핑거프린트가 바뀌면 어떻게 되나요?",
+        a: "푸시가 거부되고 경고가 표시됩니다. 리스너의 키는 첫 사용 시 known_hosts에 고정되므로, 이후의 변화——키를 재발급한 호스트든 중간자 공격이든——는 조용히 받아들여지는 대신 거부됩니다. known_hosts의 해당 줄은 의도적으로 키를 교체했을 때만 삭제하세요.",
+      },
+      {
+        q: "릴레이 폴백이 있나요?",
+        a: "없습니다. 데몬 다이렉트는 도달 가능한 리스너 주소를 전제로 합니다. 연결할 수 없으면 실패합니다. 어떤 것도 Relayium을 통해 프록시되지 않습니다——그것이 이 모드의 요점입니다.",
+      },
+    ],
+  },
+  cta: {
+    text: "당신의 서버 두 대를 연결해 직접 전송을 해보세요——릴레이도, SSH도, 페어링 코드도 필요 없습니다.",
+    button: "CLI 받기",
+    href: "/cli",
+  },
+  relatedHeading: "계속 읽기",
+};
+
+const de = {
+  title: "Server-zu-Server-Übertragungen mit der Relayium CLI (Daemon Direct)",
+  description:
+    "Bewege Dateien direkt zwischen zwei Servern, die du kontrollierst, mit relayium serve und push relayium:// — über gepinntes TLS, ohne Relay, ohne SSH, ohne Code. Richte das Public-Key-Vertrauen einmalig mit relayium id und authorized_fingerprints ein und lass es dann unter systemd laufen.",
+  updatedLabel: "Zuletzt aktualisiert",
+  lead: [
+    "Wenn beide Maschinen dir gehören und jede die Adresse der anderen kennt, ist SSH zusätzliche Reibung und ein Rendezvous reiner Overhead. Daemon Direct ist genau dafür gebaut: Ein Server lauscht, der andere pusht direkt dorthin über eine gepinnte TLS-1.3-Verbindung. Kein Relay, kein SSH, kein Pairing-Code — das Vertrauen basiert auf Public Keys und wird einmal eingerichtet.",
+    "Diese Anleitung behandelt den Listener, die einmalige Vertrauenseinrichtung mit Fingerprints, das Pushen dorthin und den Betrieb des Listeners als systemd-Dienst.",
+  ],
+  sections: [
+    {
+      heading: "Einen Listener starten",
+      body: [
+        "Auf dem empfangenden Server lauscht serve auf Pushes und schreibt sie in ein Verzeichnis. Standardmäßig läuft es dauerhaft; mit --once nimmt es eine einzelne Übertragung an und beendet sich. Gib den Fingerprint dieses Hosts mit relayium id aus — du brauchst ihn gleich:",
+      ],
+      code: [
+        `# on the LISTENER
+relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031
+relayium id                       # prints THIS host's fingerprint`,
+      ],
+      bullets: [
+        "Der Listener verarbeitet Verbindungen nacheinander und legt Dateien unter --dir ab.",
+        "Der Standardport ist 9031; ändere ihn mit --port und öffne ihn in deiner Firewall.",
+      ],
+    },
+    {
+      heading: "Vertrauen einmalig einrichten",
+      body: [
+        "Vertrauen ist gegenseitig und basiert auf Zertifikats-Fingerprints, ähnlich wie SSH-Schlüssel. Der Listener akzeptiert nur Pusher, von denen er weiß: Trage die relayium-id-Ausgabe des Pushers in die Allow-Liste des Listeners ein. Eine leere Allow-Liste weist jeden zurück.",
+      ],
+      code: [
+        `# on the LISTENER: authorize a specific pusher by its fingerprint
+echo "<pusher-fingerprint>" >> ~/.config/relayium/authorized_fingerprints`,
+      ],
+      bullets: [
+        "Hole den Fingerprint des Pushers, indem du relayium id auf der pushenden Maschine ausführst.",
+        "Identitäts- und Vertrauensdateien liegen in ~/.config/relayium/ (mit --config-dir überschreibbar, z. B. /etc/relayium für einen Dienst).",
+        "Der Pusher wiederum lernt den Schlüssel des Listeners beim ersten Verbinden (Vertrauen bei erster Nutzung) und pinnt ihn in known_hosts.",
+      ],
+    },
+    {
+      heading: "Zum Listener pushen",
+      body: [
+        "Push vom anderen Server aus an eine relayium://-Adresse. Die erste Verbindung pinnt den Fingerprint des Listeners; jede folgende Verbindung überprüft ihn, und ein geänderter Fingerprint wird abgelehnt statt stillschweigend akzeptiert — ein ausgetauschter Schlüssel oder ein Man-in-the-Middle wird so erkannt, nicht vertraut.",
+      ],
+      code: [
+        `# on the PUSHER
+relayium push ./build.tar.zst relayium://receiver.example.com
+
+# non-default port
+relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
+      ],
+      bullets: [
+        "Kein Relay und kein Fallback: Ist der Listener nicht erreichbar, schlägt der Push fehl — die Datei-Bytes laufen nie über irgendjemand anderen.",
+        "Dieselbe Übertragungs-Engine wie die anderen Modi: fortsetzbar, mit einer SHA-256-Prüfung pro Datei.",
+      ],
+    },
+    {
+      heading: "Den Listener unter systemd betreiben",
+      body: [
+        "Für einen dauerhaft laufenden Posteingang betreibst du serve als systemd-Dienst. Richte --config-dir auf einen festen Ort wie /etc/relayium, damit die Identität über Neustarts hinweg stabil bleibt, und lass systemd sie am Leben halten:",
+      ],
+      code: [
+        `# /etc/systemd/system/relayium-serve.service
+[Unit]
+Description=Relayium daemon-direct listener
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/relayium serve --dir /srv/inbox --config-dir /etc/relayium
+Restart=always
+User=relayium
+
+[Install]
+WantedBy=multi-user.target`,
+      ],
+      bullets: [
+        "systemctl enable --now relayium-serve, um ihn zu starten und beim Booten hochzufahren.",
+        "Halte /etc/relayium/id.key nur für den Dienstbenutzer lesbar — relayium verweigert das Laden eines Schlüssels mit zu lockeren Berechtigungen.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Häufige Fragen",
+    items: [
+      {
+        q: "Wie unterscheidet sich Daemon Direct von push über SSH?",
+        a: "push über SSH tunnelt die Übertragung durch deine SSH-Verbindung und braucht ein SSH-Konto auf der Gegenseite. Daemon Direct braucht weder SSH noch ein Konto — die beiden Server authentifizieren sich gegenseitig per Zertifikats-Fingerprint über gepinntes TLS, was leichtgewichtiger ist, wenn beide Maschinen dir gehören.",
+      },
+      {
+        q: "Wo liegen die Identitäts- und Vertrauensdateien?",
+        a: "Standardmäßig in ~/.config/relayium/ (mit --config-dir überschreibbar). id.key / id.crt sind die dauerhafte Identität dieses Hosts, known_hosts enthält die Fingerprints der Listener, zu denen du gepusht hast, und authorized_fingerprints ist die Allow-Liste des Listeners für Pusher.",
+      },
+      {
+        q: "Was passiert, wenn sich ein Fingerprint ändert?",
+        a: "Der Push wird abgelehnt und warnt. Der Schlüssel des Listeners wird bei der ersten Nutzung in known_hosts gepinnt, sodass eine spätere Änderung — ein neu verschlüsselter Host oder ein Man-in-the-Middle — abgelehnt statt stillschweigend akzeptiert wird. Entferne die known_hosts-Zeile nur, wenn du den Schlüssel absichtlich rotiert hast.",
+      },
+      {
+        q: "Gibt es einen Relay-Fallback?",
+        a: "Nein. Daemon Direct setzt eine erreichbare Listener-Adresse voraus; kann die Verbindung nicht hergestellt werden, schlägt es fehl. Nichts wird jemals über Relayium weitergeleitet — genau das ist der Sinn dieses Modus.",
+      },
+    ],
+  },
+  cta: {
+    text: "Verbinde zwei deiner eigenen Server für direkte Übertragungen — kein Relay, kein SSH, kein Pairing-Code.",
+    button: "CLI holen",
+    href: "/cli",
+  },
+  relatedHeading: "Weiterlesen",
+};
+
+const fr = {
+  title: "Transferts serveur à serveur avec la CLI Relayium (daemon direct)",
+  description:
+    "Déplacez des fichiers directement entre deux serveurs que vous contrôlez avec relayium serve et push relayium:// — via TLS épinglé, sans relais, sans SSH, sans code. Établissez la confiance par clé publique une seule fois avec relayium id et authorized_fingerprints, puis exécutez-le sous systemd.",
+  updatedLabel: "Dernière mise à jour",
+  lead: [
+    "Quand les deux machines vous appartiennent et que chacune connaît l'adresse de l'autre, SSH est une friction superflue et un rendez-vous n'est que du pur surcoût. Le daemon direct est fait exactement pour cela : un serveur écoute, l'autre pousse directement vers lui via une connexion TLS 1.3 épinglée. Pas de relais, pas de SSH, pas de code de jumelage — la confiance repose sur des clés publiques et se configure une seule fois.",
+    "Ce guide couvre l'écouteur, la mise en place unique de la confiance par empreintes, l'envoi vers celui-ci, et l'exécution de l'écouteur en tant que service systemd.",
+  ],
+  sections: [
+    {
+      heading: "Démarrer un écouteur",
+      body: [
+        "Sur le serveur récepteur, serve écoute les envois et les écrit dans un répertoire. Il tourne en continu par défaut ; ajoutez --once pour accepter un seul transfert puis s'arrêter. Affichez l'empreinte de cet hôte avec relayium id — vous en aurez besoin dans un instant :",
+      ],
+      code: [
+        `# on the LISTENER
+relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031
+relayium id                       # prints THIS host's fingerprint`,
+      ],
+      bullets: [
+        "L'écouteur traite les connexions une par une et dépose les fichiers sous --dir.",
+        "Le port par défaut est 9031 ; changez-le avec --port et ouvrez-le sur votre pare-feu.",
+      ],
+    },
+    {
+      heading: "Établir la confiance une seule fois",
+      body: [
+        "La confiance est mutuelle et repose sur des empreintes de certificat, comme les clés SSH. L'écouteur n'accepte que les émetteurs dont il a connaissance : ajoutez la sortie de relayium id de l'émetteur à la liste d'autorisation de l'écouteur. Une liste d'autorisation vide rejette tout le monde.",
+      ],
+      code: [
+        `# on the LISTENER: authorize a specific pusher by its fingerprint
+echo "<pusher-fingerprint>" >> ~/.config/relayium/authorized_fingerprints`,
+      ],
+      bullets: [
+        "Obtenez l'empreinte de l'émetteur en exécutant relayium id sur la machine qui envoie.",
+        "Les fichiers d'identité et de confiance se trouvent dans ~/.config/relayium/ (à surcharger avec --config-dir, par exemple /etc/relayium pour un service).",
+        "L'émetteur, de son côté, découvre la clé de l'écouteur à la première connexion (confiance à la première utilisation) et l'épingle dans known_hosts.",
+      ],
+    },
+    {
+      heading: "Envoyer vers l'écouteur",
+      body: [
+        "Depuis l'autre serveur, envoyez vers une adresse relayium://. La première connexion épingle l'empreinte de l'écouteur ; chaque connexion suivante la vérifie, et une empreinte modifiée est refusée plutôt qu'acceptée silencieusement — une clé remplacée ou une attaque de l'homme du milieu est ainsi détectée, pas approuvée.",
+      ],
+      code: [
+        `# on the PUSHER
+relayium push ./build.tar.zst relayium://receiver.example.com
+
+# non-default port
+relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
+      ],
+      bullets: [
+        "Aucun relais et aucun repli : si l'écouteur n'est pas joignable, l'envoi échoue — les octets du fichier ne transitent jamais par qui que ce soit d'autre.",
+        "Le même moteur de transfert que les autres modes : reprenable, avec une vérification SHA-256 par fichier.",
+      ],
+    },
+    {
+      heading: "Exécuter l'écouteur sous systemd",
+      body: [
+        "Pour une boîte de réception toujours active, exécutez serve en tant que service systemd. Pointez --config-dir vers un emplacement fixe comme /etc/relayium pour que l'identité reste stable entre les redémarrages, et laissez systemd le maintenir en vie :",
+      ],
+      code: [
+        `# /etc/systemd/system/relayium-serve.service
+[Unit]
+Description=Relayium daemon-direct listener
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/relayium serve --dir /srv/inbox --config-dir /etc/relayium
+Restart=always
+User=relayium
+
+[Install]
+WantedBy=multi-user.target`,
+      ],
+      bullets: [
+        "systemctl enable --now relayium-serve pour le démarrer et le faire démarrer au boot.",
+        "Gardez /etc/relayium/id.key lisible uniquement par l'utilisateur du service — relayium refuse de charger une clé aux permissions trop permissives.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Questions fréquentes",
+    items: [
+      {
+        q: "En quoi le daemon direct diffère-t-il de push via SSH ?",
+        a: "push via SSH fait transiter le transfert par votre connexion SSH et nécessite un compte SSH sur la machine distante. Le daemon direct ne nécessite ni SSH ni compte — les deux serveurs s'authentifient mutuellement par empreinte de certificat via TLS épinglé, ce qui est plus léger quand les deux machines vous appartiennent.",
+      },
+      {
+        q: "Où se trouvent les fichiers d'identité et de confiance ?",
+        a: "Dans ~/.config/relayium/ par défaut (à surcharger avec --config-dir). id.key / id.crt sont l'identité persistante de cet hôte, known_hosts contient les empreintes des écouteurs vers lesquels vous avez envoyé, et authorized_fingerprints est la liste d'autorisation des émetteurs de l'écouteur.",
+      },
+      {
+        q: "Que se passe-t-il si une empreinte change ?",
+        a: "L'envoi est refusé et un avertissement s'affiche. La clé de l'écouteur est épinglée dans known_hosts à la première utilisation, donc un changement ultérieur — un hôte reclé, ou une attaque de l'homme du milieu — est rejeté plutôt qu'accepté silencieusement. Ne supprimez la ligne known_hosts que si vous avez intentionnellement fait tourner la clé.",
+      },
+      {
+        q: "Y a-t-il un repli vers un relais ?",
+        a: "Non. Le daemon direct suppose une adresse d'écouteur joignable ; si la connexion ne peut pas être établie, il échoue. Rien n'est jamais relayé via Relayium — c'est tout l'intérêt de ce mode.",
+      },
+    ],
+  },
+  cta: {
+    text: "Reliez deux de vos propres serveurs pour des transferts directs — sans relais, sans SSH, sans code de jumelage.",
+    button: "Obtenir la CLI",
+    href: "/cli",
+  },
+  relatedHeading: "À lire ensuite",
+};
+
+export default {
+  slug: "cli/server-to-server-transfers",
+  updated: "2026-07-08",
+  langs: { en, zh, ja, ko, de, fr },
+};

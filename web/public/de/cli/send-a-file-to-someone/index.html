@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mit der Relayium CLI eine Datei über Netzwerke hinweg an jemanden senden · Relayium</title>
+    <meta name="description" content="Nutze relayium send und receive, um eine Datei mithilfe eines kurzen Pairing-Codes direkt zwischen zwei Personen in unterschiedlichen Netzwerken zu bewegen. Ende-zu-Ende verschlüsselt, mit einem SAS-Code verifiziert und kostenlos — die Datei geht direkt zwischen euch hin und her, nie über unsere Server." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/de/cli/send-a-file-to-someone" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/cli/send-a-file-to-someone" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/cli/send-a-file-to-someone" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/cli/send-a-file-to-someone" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/cli/send-a-file-to-someone" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/cli/send-a-file-to-someone" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/cli/send-a-file-to-someone" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/cli/send-a-file-to-someone" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Mit der Relayium CLI eine Datei über Netzwerke hinweg an jemanden senden" />
+    <meta property="og:description" content="Nutze relayium send und receive, um eine Datei mithilfe eines kurzen Pairing-Codes direkt zwischen zwei Personen in unterschiedlichen Netzwerken zu bewegen. Ende-zu-Ende verschlüsselt, mit einem SAS-Code verifiziert und kostenlos — die Datei geht direkt zwischen euch hin und her, nie über unsere Server." />
+    <meta property="og:url" content="https://relayium.com/de/cli/send-a-file-to-someone" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="de_DE" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Mit der Relayium CLI eine Datei über Netzwerke hinweg an jemanden senden" />
+    <meta name="twitter:description" content="Nutze relayium send und receive, um eine Datei mithilfe eines kurzen Pairing-Codes direkt zwischen zwei Personen in unterschiedlichen Netzwerken zu bewegen. Ende-zu-Ende verschlüsselt, mit einem SAS-Code verifiziert und kostenlos — die Datei geht direkt zwischen euch hin und her, nie über unsere Server." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Mit der Relayium CLI eine Datei über Netzwerke hinweg an jemanden senden","description":"Nutze relayium send und receive, um eine Datei mithilfe eines kurzen Pairing-Codes direkt zwischen zwei Personen in unterschiedlichen Netzwerken zu bewegen. Ende-zu-Ende verschlüsselt, mit einem SAS-Code verifiziert und kostenlos — die Datei geht direkt zwischen euch hin und her, nie über unsere Server.","inLanguage":"de","dateModified":"2026-07-08","mainEntityOfPage":"https://relayium.com/de/cli/send-a-file-to-someone","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Woher kommt der Pairing-Code?","acceptedAnswer":{"@type":"Answer","text":"Ihr denkt ihn euch selbst aus. Es ist eine beliebige kurze Zeichenfolge, die beide Seiten eingeben — vereinbart sie am Telefon oder im Chat. Sie muss nur auf beiden Enden übereinstimmen."}},{"@type":"Question","name":"Wird die Datei irgendwohin hochgeladen?","acceptedAnswer":{"@type":"Answer","text":"Nein. Die Datei fließt direkt zwischen euch beiden, Ende-zu-Ende verschlüsselt. Nur ein kleiner Rendezvous-Handshake läuft über Relayium, um die Enden einander vorzustellen — die Datei nie."}},{"@type":"Question","name":"Was, wenn wir keine Verbindung herstellen können?","acceptedAnswer":{"@type":"Answer","text":"Stehen beide Enden hinter strengem NAT ohne erreichbare Adresse, kann die direkte Verbindung nicht hergestellt werden und die Übertragung schlägt fehl — die CLI hat absichtlich kein Relay-Fallback. Nutzt daemon direct zwischen zwei erreichbaren Servern oder push über SSH, wenn kein direkter Pfad verfügbar ist."}},{"@type":"Question","name":"Woher weiß ich, dass wirklich die richtige Person am anderen Ende ist?","acceptedAnswer":{"@type":"Answer","text":"Beide Terminals geben einen identischen 6-stelligen SAS-Code aus den Sitzungsschlüsseln aus. Vergleicht ihn außerhalb des Kanals; stimmt er überein, sitzt niemand dazwischen. Fügt --verify hinzu, um diese Bestätigung zu verlangen, bevor Bytes bewegt werden."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=de">Relayium</a></header>
+      <h1>Mit der Relayium CLI eine Datei über Netzwerke hinweg an jemanden senden</h1>
+      <p class="updated">Zuletzt aktualisiert: 2026-07-08</p>
+      <nav class="langbar" aria-label="Language"><a href="/cli/send-a-file-to-someone">English</a><a href="/zh/cli/send-a-file-to-someone">中文</a><a href="/ja/cli/send-a-file-to-someone">日本語</a><a href="/ko/cli/send-a-file-to-someone">한국어</a><a href="/de/cli/send-a-file-to-someone" aria-current="true">Deutsch</a><a href="/fr/cli/send-a-file-to-someone">Français</a></nav>
+      <p class="lead">Manchmal ist die andere Maschine nicht deine eigene und du kannst dich nicht per SSH einloggen — eine Datei für eine Kollegin in einem anderen Büro, ein Build für einen Kunden, ein Archiv für einen Freund am anderen Ende des Landes. relayium send und receive bewegen sie über Netzwerke hinweg direkt zwischen euch beiden, nur mit einem kurzen Code, den ihr vereinbart.</p>
+      <p class="lead">Die Verbindung ist Peer-to-Peer und Ende-zu-Ende verschlüsselt. Nur ein winziger Rendezvous-Handshake läuft über Relayium, um die beiden Enden einander vorzustellen; die Dateibytes nie.</p>
+      <h2>Einen Code vereinbaren, dann send und receive</h2>
+      <p>Wählt einen beliebigen kurzen Code und teilt ihn außerhalb des Kanals — sagt ihn am Telefon, schreibt ihn in einen Chat. Eine Seite sendet, die andere empfängt mit demselben Code:</p>
+      <pre><code># sender
+relayium send ./release.zip 428571
+
+# receiver (in the folder where files should land)
+relayium receive 428571</code></pre>
+      <ul><li>Der Code ist nur ein gemeinsames Geheimnis zum Treffen; er wird an niemanden außer der Rendezvous-Stelle gesendet und stellt nur die beiden Enden einander vor.</li><li>Der Empfänger kann ein Zielverzeichnis angeben: relayium receive 428571 ./downloads</li></ul>
+      <h2>Mit dem SAS-Code verifizieren</h2>
+      <p>Sobald sich die beiden Enden verbinden, geben beide Terminals denselben 6-stelligen SAS (Short Authentication String) aus, der aus den Sitzungsschlüsseln abgeleitet ist. Vergleicht ihn — lest ihn beim Telefonat laut vor —, um sicherzugehen, dass ihr miteinander verbunden seid und nicht mit jemandem dazwischen.</p>
+      <p>Für eine harte Garantie fügt --verify hinzu: Die Übertragung wartet dann, bis ihr bestätigt, dass die Codes übereinstimmen, bevor auch nur ein einziges Byte bewegt wird.</p>
+      <pre><code>relayium send --verify ./release.zip 428571</code></pre>
+      <h2>Nur direkt — kostenlos, sonst schlägt es fehl</h2>
+      <p>Die Übertragung versucht, eine direkte Verbindung zwischen den beiden Enden herzustellen. Gelingt das — der übliche Fall, wenn wenigstens eine Seite eine erreichbare Adresse hat —, fließt die Datei verschlüsselt direkt hindurch, mit voller Geschwindigkeit und ohne Kosten.</p>
+      <p>Stehen beide Enden hinter strengem NAT und lässt sich kein direkter Pfad finden, schlägt die Übertragung sauber fehl, statt deine Datei über ein Relay zu leiten. So bleibt die CLI vollständig kostenlos, und deine Dateibytes bleiben von unseren Servern fern. Falls das passiert, ist die verlässliche Antwort daemon direct zwischen zwei erreichbaren Servern oder push über SSH.</p>
+      <ul><li>Direkte Verbindung gelingt → kostenlos, volle Geschwindigkeit, Ende-zu-Ende verschlüsselt.</li><li>Kein direkter Pfad → die Übertragung schlägt fehl; die CLI leitet die Datei niemals stellvertretend für dich weiter.</li><li>Beide Enden können geografisch überall sein — sie müssen nur jeweils den Befehl mit demselben Code ausführen.</li></ul>
+      <h2>Häufige Fragen</h2>
+      <h3>Woher kommt der Pairing-Code?</h3>
+      <p>Ihr denkt ihn euch selbst aus. Es ist eine beliebige kurze Zeichenfolge, die beide Seiten eingeben — vereinbart sie am Telefon oder im Chat. Sie muss nur auf beiden Enden übereinstimmen.</p>
+      <h3>Wird die Datei irgendwohin hochgeladen?</h3>
+      <p>Nein. Die Datei fließt direkt zwischen euch beiden, Ende-zu-Ende verschlüsselt. Nur ein kleiner Rendezvous-Handshake läuft über Relayium, um die Enden einander vorzustellen — die Datei nie.</p>
+      <h3>Was, wenn wir keine Verbindung herstellen können?</h3>
+      <p>Stehen beide Enden hinter strengem NAT ohne erreichbare Adresse, kann die direkte Verbindung nicht hergestellt werden und die Übertragung schlägt fehl — die CLI hat absichtlich kein Relay-Fallback. Nutzt daemon direct zwischen zwei erreichbaren Servern oder push über SSH, wenn kein direkter Pfad verfügbar ist.</p>
+      <h3>Woher weiß ich, dass wirklich die richtige Person am anderen Ende ist?</h3>
+      <p>Beide Terminals geben einen identischen 6-stelligen SAS-Code aus den Sitzungsschlüsseln aus. Vergleicht ihn außerhalb des Kanals; stimmt er überein, sitzt niemand dazwischen. Fügt --verify hinzu, um diese Bestätigung zu verlangen, bevor Bytes bewegt werden.</p>
+      <div class="ctacard">
+        <p>Schicke deine nächste Datei direkt an jemanden in einem anderen Netzwerk — Ende-zu-Ende verschlüsselt und kostenlos.</p>
+        <a class="cta" href="/cli">CLI holen</a>
+      </div>
+      <h2>Weiterlesen</h2>
+      <ul class="related"><li><a href="/de/compare/snapdrop">Relayium vs. Snapdrop &amp; PairDrop: welche sichere P2P-Übertragung?</a></li><li><a href="/de/compare/airdrop">Relayium vs. AirDrop: eine plattformübergreifende Alternative</a></li><li><a href="/de/compare/wetransfer">Relayium vs. WeTransfer: große Dateien ohne Server senden</a></li><li><a href="/de/how-to/transfer-files-android-to-iphone">Dateien von Android auf iPhone übertragen (ohne Kabel)</a></li><li><a href="/de/how-to/send-files-pc-to-phone-wirelessly">Dateien vom PC drahtlos aufs Handy senden — ohne Kabel, ohne App</a></li><li><a href="/de/how-to/send-large-files-without-cloud">Große Dateien ohne Cloud versenden</a></li><li><a href="/de/cli/transfer-files-from-terminal">Dateien vom Terminal aus übertragen mit der Relayium CLI</a></li><li><a href="/de/cli/back-up-a-server-over-ssh">Dateien über SSH auf dem eigenen Server sichern mit der Relayium CLI</a></li><li><a href="/de/cli/server-to-server-transfers">Server-zu-Server-Übertragungen mit der Relayium CLI (Daemon Direct)</a></li><li><a href="/de/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=de">← Relayium</a>
+        <a href="/de/privacy">Datenschutz</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

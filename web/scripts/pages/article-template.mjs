@@ -24,6 +24,8 @@ h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 .lead{font-size:19px}
 p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
 .langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
@@ -53,6 +55,7 @@ function alternates(slug) {
 function sectionHtml(s) {
   let out = `<h2>${esc(s.heading)}</h2>`;
   for (const p of s.body || []) out += `\n      <p>${esc(p)}</p>`;
+  for (const block of s.code || []) out += `\n      <pre><code>${esc(block)}</code></pre>`;
   if (s.bullets?.length) out += `\n      <ul>${s.bullets.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>`;
   return out;
 }
@@ -139,7 +142,7 @@ export function renderArticlePage({ slug, lang, doc, updated, related = [] }) {
       ${faq}
       <div class="ctacard">
         <p>${esc(doc.cta.text)}</p>
-        <a class="cta" href="${ctaHref(lang)}">${esc(doc.cta.button)}</a>
+        <a class="cta" href="${doc.cta.href || ctaHref(lang)}">${esc(doc.cta.button)}</a>
       </div>
       ${relatedBlock}
       <footer>

@@ -187,6 +187,13 @@ const de: Messages = {
     footerSource: "Quellcode auf GitHub ↗",
     footerReleases: "Releases",
     footerBrowser: "Lieber im Browser? Das ist die Startseite.",
+    guidesH2: "Anleitungen",
+    guides: [
+      "Erste Schritte: Dateien vom Terminal",
+      "Einen Server über SSH sichern",
+      "Eine Datei an jemanden senden",
+      "Server-zu-Server-Übertragungen",
+    ],
   },
   crossnet: {
     realtimeTitle: "Echtzeit-Direktübertragung",

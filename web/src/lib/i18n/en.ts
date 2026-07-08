@@ -187,6 +187,13 @@ const en: Messages = {
     footerSource: "Source on GitHub ↗",
     footerReleases: "Releases",
     footerBrowser: "Prefer the browser? It's the home page.",
+    guidesH2: "Guides",
+    guides: [
+      "Getting started: files from the terminal",
+      "Back up a server over SSH",
+      "Send a file to someone",
+      "Server-to-server transfers",
+    ],
   },
   crossnet: {
     realtimeTitle: "Realtime direct",

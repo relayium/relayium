@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Transfer files from the terminal with the Relayium CLI · Relayium</title>
+    <meta name="description" content="Install the free, end-to-end-encrypted Relayium CLI and move files three ways from your terminal — over your own SSH, by a pairing code across networks, or straight between two servers. No account, and file bytes never pass through our servers." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/cli/transfer-files-from-terminal" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/cli/transfer-files-from-terminal" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/cli/transfer-files-from-terminal" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/cli/transfer-files-from-terminal" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/cli/transfer-files-from-terminal" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/cli/transfer-files-from-terminal" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/cli/transfer-files-from-terminal" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/cli/transfer-files-from-terminal" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Transfer files from the terminal with the Relayium CLI" />
+    <meta property="og:description" content="Install the free, end-to-end-encrypted Relayium CLI and move files three ways from your terminal — over your own SSH, by a pairing code across networks, or straight between two servers. No account, and file bytes never pass through our servers." />
+    <meta property="og:url" content="https://relayium.com/cli/transfer-files-from-terminal" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Transfer files from the terminal with the Relayium CLI" />
+    <meta name="twitter:description" content="Install the free, end-to-end-encrypted Relayium CLI and move files three ways from your terminal — over your own SSH, by a pairing code across networks, or straight between two servers. No account, and file bytes never pass through our servers." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Transfer files from the terminal with the Relayium CLI","description":"Install the free, end-to-end-encrypted Relayium CLI and move files three ways from your terminal — over your own SSH, by a pairing code across networks, or straight between two servers. No account, and file bytes never pass through our servers.","inLanguage":"en","dateModified":"2026-07-08","mainEntityOfPage":"https://relayium.com/cli/transfer-files-from-terminal","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Does the CLI cost anything?","acceptedAnswer":{"@type":"Answer","text":"No. The CLI is completely free. It connects your machines directly and never proxies your file bytes through Relayium, so there is nothing to meter and nothing to pay."}},{"@type":"Question","name":"Do I need a Relayium account?","acceptedAnswer":{"@type":"Answer","text":"No. push / pull uses your own SSH, daemon direct uses public-key trust between your servers, and send / receive uses a code you agree on out of band. None of them require an account."}},{"@type":"Question","name":"Which operating systems are supported?","acceptedAnswer":{"@type":"Answer","text":"Prebuilt binaries are published for macOS, Linux and Windows on both x86-64 and arm64. The install script covers macOS and Linux; on Windows, download the .zip from the releases page."}},{"@type":"Question","name":"Do my files pass through Relayium's servers?","acceptedAnswer":{"@type":"Answer","text":"No. In every mode the file bytes travel directly between the two ends. Only send / receive contacts our servers at all, and only for a small rendezvous handshake — never the file contents."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>Transfer files from the terminal with the Relayium CLI</h1>
+      <p class="updated">Last updated: 2026-07-08</p>
+      <nav class="langbar" aria-label="Language"><a href="/cli/transfer-files-from-terminal" aria-current="true">English</a><a href="/zh/cli/transfer-files-from-terminal">中文</a><a href="/ja/cli/transfer-files-from-terminal">日本語</a><a href="/ko/cli/transfer-files-from-terminal">한국어</a><a href="/de/cli/transfer-files-from-terminal">Deutsch</a><a href="/fr/cli/transfer-files-from-terminal">Français</a></nav>
+      <p class="lead">The Relayium CLI is a single small binary that moves files from your terminal — encrypted end to end, self-hostable, and completely free. It exists for the case a browser handles badly: copying files to a server you already run, pushing a build between two machines, or sending an archive to a colleague across networks without uploading it to anyone&#39;s cloud.</p>
+      <p class="lead">Whichever way you use it, the file bytes travel directly between the two ends and never pass through Relayium&#39;s servers. This guide gets you installed and through your first transfer, then points you at the deeper how-tos for each mode.</p>
+      <h2>Install in one command</h2>
+      <p>On macOS or Linux, one command downloads a prebuilt binary for your OS and puts it on your PATH:</p>
+      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>Prefer to pick the file yourself? Download a binary from the releases page.</li><li>Have Go installed? Clone the repo and run: go build -o relayium ./cmd/relayium (from the server directory).</li><li>Then run relayium --help to see every command, and relayium version to check the build.</li></ul>
+      <h2>The three ways it moves files</h2>
+      <p>Relayium moves files three ways. You pick by where the other end is, not by learning three different tools — they share one transfer engine with per-file resume and SHA-256 verification.</p>
+      <ul><li>push / pull — to a server you can already SSH into. Bytes travel over your SSH connection; no Relayium account.</li><li>send / receive — to another person across networks, using a short pairing code. Direct peer-to-peer; if a direct path can&#39;t be found the transfer fails rather than routing through us.</li><li>serve + push relayium:// (daemon direct) — straight between two servers you own, over pinned TLS. No relay, no SSH, no code.</li></ul>
+      <h2>Your first transfer</h2>
+      <p>The quickest thing to try is copying a folder to a server you can SSH into. Relayium uses your existing SSH access, so there is nothing to configure on the remote and no account to create:</p>
+      <pre><code>relayium push ./photos user@your-server:backups/</code></pre>
+      <ul><li>If relayium is installed on the remote too, it uses the native protocol (resumable, per-file SHA-256).</li><li>If not, it falls back to a plain tar stream, so it still works on a bare server.</li><li>Pull the same files back with: relayium pull user@your-server:backups/ ./restore</li></ul>
+      <h2>Free, and private by design</h2>
+      <p>There is nothing to pay and no account to keep. The CLI connects the two ends directly, so your files are never uploaded to a server in the middle — the only thing that ever touches Relayium is a tiny rendezvous handshake in send / receive mode, used to introduce the two ends, never the file itself.</p>
+      <p>Every transfer is encrypted end to end, every file is verified with a SHA-256 hash on arrival, and an interrupted transfer resumes from where it stopped instead of starting over. It runs on macOS, Linux and Windows, and the whole thing is open source and self-hostable.</p>
+      <h2>Frequently asked questions</h2>
+      <h3>Does the CLI cost anything?</h3>
+      <p>No. The CLI is completely free. It connects your machines directly and never proxies your file bytes through Relayium, so there is nothing to meter and nothing to pay.</p>
+      <h3>Do I need a Relayium account?</h3>
+      <p>No. push / pull uses your own SSH, daemon direct uses public-key trust between your servers, and send / receive uses a code you agree on out of band. None of them require an account.</p>
+      <h3>Which operating systems are supported?</h3>
+      <p>Prebuilt binaries are published for macOS, Linux and Windows on both x86-64 and arm64. The install script covers macOS and Linux; on Windows, download the .zip from the releases page.</p>
+      <h3>Do my files pass through Relayium&#39;s servers?</h3>
+      <p>No. In every mode the file bytes travel directly between the two ends. Only send / receive contacts our servers at all, and only for a small rendezvous handshake — never the file contents.</p>
+      <div class="ctacard">
+        <p>Install the Relayium CLI and make your first transfer — completely free, and no account.</p>
+        <a class="cta" href="/cli">Get the CLI</a>
+      </div>
+      <h2>Keep reading</h2>
+      <ul class="related"><li><a href="/compare/snapdrop">Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</a></li><li><a href="/compare/airdrop">Relayium vs AirDrop: a cross-platform AirDrop alternative</a></li><li><a href="/compare/wetransfer">Relayium vs WeTransfer: send large files without the server</a></li><li><a href="/how-to/transfer-files-android-to-iphone">How to transfer files from Android to iPhone (no cable)</a></li><li><a href="/how-to/send-files-pc-to-phone-wirelessly">Send files from PC to phone wirelessly, no cable or app</a></li><li><a href="/how-to/send-large-files-without-cloud">How to send large files without the cloud</a></li><li><a href="/cli/back-up-a-server-over-ssh">Back up files to your own server over SSH with the Relayium CLI</a></li><li><a href="/cli/send-a-file-to-someone">Send a file to someone across networks with the Relayium CLI</a></li><li><a href="/cli/server-to-server-transfers">Server-to-server transfers with the Relayium CLI (daemon direct)</a></li><li><a href="/">Relayium</a></li></ul>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

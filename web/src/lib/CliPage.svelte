@@ -51,6 +51,13 @@ relayium push ./file.zip relayium://host.example.com
     { flag: "--verify", who: "send / receive" },
   ];
   const fileNames = ["id.key / id.crt", "known_hosts", "authorized_fingerprints"];
+  const guideSlugs = [
+    "cli/transfer-files-from-terminal",
+    "cli/back-up-a-server-over-ssh",
+    "cli/send-a-file-to-someone",
+    "cli/server-to-server-transfers",
+  ];
+  const guideUrl = (slug: string) => (lang() === "en" ? `/${slug}` : `/${lang()}/${slug}`);
 </script>
 
 <section class="cli">
@@ -136,6 +143,16 @@ relayium push ./file.zip relayium://host.example.com
         <CommandBlock code={daemonPushCmd} title="pusher" />
       </li>
     </ol>
+  </div>
+
+  <!-- Guides -->
+  <div class="block">
+    <h2>{t.cliPage.guidesH2}</h2>
+    <ul class="guides">
+      {#each guideSlugs as slug, i (slug)}
+        <li><a href={guideUrl(slug)}>{t.cliPage.guides[i]} →</a></li>
+      {/each}
+    </ul>
   </div>
 
   <!-- Reference -->
@@ -381,6 +398,23 @@ relayium push ./file.zip relayium://host.example.com
     color: var(--text);
     line-height: 1.7;
     padding-left: 1.2em;
+  }
+
+  .guides {
+    list-style: none;
+    padding: 0;
+    margin: var(--space-3) 0 0;
+  }
+  .guides li {
+    margin: var(--space-2) 0;
+  }
+  .guides a {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: var(--fs-body);
+  }
+  .guides a:hover {
+    text-decoration: underline;
   }
 
   /* Inline code (filenames in the trust-files list) + links */

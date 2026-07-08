@@ -187,6 +187,13 @@ const ko: Messages = {
     footerSource: "GitHub에서 소스 보기 ↗",
     footerReleases: "릴리스",
     footerBrowser: "브라우저가 더 편하신가요? 홈페이지를 이용하세요.",
+    guidesH2: "가이드",
+    guides: [
+      "시작하기: 터미널에서 파일 전송",
+      "SSH로 서버 백업",
+      "다른 사람에게 파일 보내기",
+      "서버 간 전송",
+    ],
   },
   crossnet: {
     realtimeTitle: "실시간 직접 전송",
