@@ -1,6 +1,7 @@
 <script lang="ts">
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate, CLI_PATH } from "./router.svelte";
+  import CommandBlock from "./CommandBlock.svelte";
   const t = $derived<Messages>(messages[lang()]);
   const installCmd = "curl -fsSL https://relayium.com/install.sh | sh";
 </script>
@@ -18,7 +19,7 @@
       }}>{t.cliCallout.cta}</a
     >
   </div>
-  <pre class="cmd"><code>{installCmd}</code></pre>
+  <div class="cmd-wrap"><CommandBlock code={installCmd} title="install" /></div>
 </section>
 
 <style>
@@ -63,20 +64,9 @@
   .cta:hover {
     filter: brightness(1.05);
   }
-  .cmd {
-    flex: 1 1 320px;
+  .cmd-wrap {
+    flex: 1 1 340px;
     min-width: 0;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: var(--space-3);
-    overflow-x: auto;
-    margin: 0;
-  }
-  .cmd code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: var(--fs-sm);
-    color: var(--text-h);
-    white-space: pre;
   }
   @media (max-width: 560px) {
     .cli-callout {
