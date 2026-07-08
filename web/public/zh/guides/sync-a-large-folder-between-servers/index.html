@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>在两台服务器之间同步一个大文件夹（可续传、后台运行） · Relayium</title>
+    <meta name="description" content="用 relayium sync 把一台服务器上的大目录镜像到另一台——增量传输、掉线后可续传、可无人值守地后台运行。配合 tmux 里的重试循环，无需守着终端就能搬运数十 GB。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/zh/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/sync-a-large-folder-between-servers" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="在两台服务器之间同步一个大文件夹（可续传、后台运行）" />
+    <meta property="og:description" content="用 relayium sync 把一台服务器上的大目录镜像到另一台——增量传输、掉线后可续传、可无人值守地后台运行。配合 tmux 里的重试循环，无需守着终端就能搬运数十 GB。" />
+    <meta property="og:url" content="https://relayium.com/zh/guides/sync-a-large-folder-between-servers" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="在两台服务器之间同步一个大文件夹（可续传、后台运行）" />
+    <meta name="twitter:description" content="用 relayium sync 把一台服务器上的大目录镜像到另一台——增量传输、掉线后可续传、可无人值守地后台运行。配合 tmux 里的重试循环，无需守着终端就能搬运数十 GB。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"在两台服务器之间同步一个大文件夹（可续传、后台运行）","description":"用 relayium sync 把一台服务器上的大目录镜像到另一台——增量传输、掉线后可续传、可无人值守地后台运行。配合 tmux 里的重试循环，无需守着终端就能搬运数十 GB。","inLanguage":"zh-Hans","dateModified":"2026-07-08","mainEntityOfPage":"https://relayium.com/zh/guides/sync-a-large-folder-between-servers","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"传到一半被打断会怎样？","acceptedAnswer":{"@type":"Answer","text":"什么都不会丢。重新运行 relayium sync——它会跳过接收方已有的文件，并把传了一半的文件从磁盘上已有的字节偏移续传。本指南里的 until 循环会自动做这件事，直到整个文件夹镜像完成。"}},{"@type":"Question","name":"这和 rsync 有什么不同？","acceptedAnswer":{"@type":"Answer","text":"两者都做增量单向镜像，但 relayium sync 走锁定的 TLS 连接、不需要 SSH 账号（守护进程直连），通过证书指纹互相认证两台机器，并对每个文件做 SHA-256 校验。它和 relayium 其它模式用的是同一个传输引擎。"}},{"@type":"Question","name":"sync 会把我从源端删掉的文件在接收方也删掉吗？","acceptedAnswer":{"@type":"Answer","text":"只有你要求时才会。默认情况下 sync 只新增和更新。加 --delete 才会镜像删除，而且接收方必须以 --allow-delete 运行 serve 才会执行——否则删除会被忽略并回报给你。"}},{"@type":"Question","name":"我能让两个文件夹持续保持同步吗？","acceptedAnswer":{"@type":"Answer","text":"可以。加 --watch，sync 会持续运行，在源目录下任何改动时重新镜像。对于一次性搬运一个大文件夹，你不需要它——重试循环加一个普通的 sync 就够了。"}},{"@type":"Question","name":"我必须开一个端口吗？","acceptedAnswer":{"@type":"Answer","text":"用守护进程直连的话，是的——监听端口（默认 9031）必须能从发送方访问到。如果你不想开端口、而且两台服务器之间已经有 SSH，sync 也可以走 SSH：relayium sync /path user@host:/path（远端必须装了 relayium）。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <h1>在两台服务器之间同步一个大文件夹（可续传、后台运行）</h1>
+      <p class="updated">最近更新: 2026-07-08</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers">English</a><a href="/zh/guides/sync-a-large-folder-between-servers" aria-current="true">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers">Français</a></nav>
+      <p class="lead">你在一台服务器上有一个很大的文件夹——几十 GB——想在另一台上得到一份完整副本。你没法盯着终端好几个小时，而且传到一半断掉的传输不应该从头再来。relayium sync 正是为此而生：一个单向增量镜像，跳过已经存在的文件，把传了一半的文件从中断处续传，并对每个文件做端到端校验。</p>
+      <p class="lead">本指南搭建一个无人值守、自动恢复的传输：把发送方授权一次，让监听端在后台运行，并在 tmux 里用重试循环驱动 relayium sync，让它在掉线之后继续跑，直到整个文件夹全部到达。</p>
+      <h2>为什么 relayium sync 适合这件事</h2>
+      <p>sync 是走原生协议的单向增量镜像（两端都要装 relayium）。有三个特性让它可以安心地无人值守地反复运行：</p>
+      <ul><li>跳过已存在的文件：接收方上大小和修改时间都一致的文件不会重复发送。</li><li>续传半截文件：如果某个文件在连接断开时只传了一半，下次运行会从磁盘上已有的字节偏移继续，而不是重新传。</li><li>校验每个文件：每个文件都做端到端的 SHA-256 校验，因此完成的镜像可以确认是完整的。</li><li>正因如此，这条命令是幂等的——再跑一次只做剩下的活，这正是重试循环能完成一次超大传输的关键。</li></ul>
+      <h2>前提条件</h2>
+      <p>两端服务器都要装 relayium（sync 走原生协议，因此每一端都必须有）：</p>
+      <pre><code># on BOTH servers
+curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>本指南用守护进程直连（relayium://），所以两台服务器之间不需要 SSH 互访。</li><li>在接收方的防火墙或安全组上，向发送方开放监听端口（默认 9031）。</li></ul>
+      <h2>把发送方授权一次（在接收方）</h2>
+      <p>接收方对发送的那台机器授权一次；授权会写入磁盘并在重启之间保持有效，因此你无需重复。先在终端里前台启动监听端，并把 --dir 指向父目录——relayium sync /root/workspace 会在接收方重建出 workspace/...，所以 --dir /root 会把文件落到 /root/workspace/。</p>
+      <p>当发送方首次连接时（见下一节），serve 会显示它的地址和指纹并请你批准；回答 y，它就会被永久记住：</p>
+      <pre><code># on the RECEIVER (foreground, to approve interactively)
+relayium serve --dir /root --port 9031</code></pre>
+      <pre><code># on the RECEIVER, at the first connection:
+Incoming push from 203.0.113.9:52140
+  fingerprint: 9f2c41ab…
+Accept and remember this peer? [y/N] y</code></pre>
+      <ul><li>若要完全无人值守，可跳过提示：在发送方运行 relayium id 打印其指纹，再在接收方运行 relayium authorize &lt;指纹&gt;。</li><li>--dir 是你要同步的文件夹的父目录，而不是文件夹本身——否则文件会多落一层（例如 /root/workspace/workspace）。</li></ul>
+      <h2>让监听端在后台运行（在接收方）</h2>
+      <p>指纹授权之后，停掉前台的 serve（Ctrl-C），再以脱离终端的方式重新启动，让它在你退出登录后依然存活。它会读回已保存的指纹并静默接受发送方——这次不再提示：</p>
+      <pre><code># on the RECEIVER
+nohup relayium serve --dir /root --port 9031 &gt; ~/relayium-serve.log 2&gt;&amp;1 &amp;</code></pre>
+      <ul><li>serve 一次处理一个连接并持续运行，因此下面重试循环的每次重连它都准备好接收。</li><li>若要做常驻收件箱，改用 systemd 运行（Restart=always，--config-dir /etc/relayium）。</li></ul>
+      <h2>在 tmux 里用重试循环运行 sync（在发送方）</h2>
+      <p>长时间的传输总会被打断——会话断开、网络抖动、机器重启。解决办法不是什么高级工具，而是一个把 sync 反复重跑到成功为止的循环，再加一个终端复用器让它在你退出登录后存活。这里 tmux 比 nohup 更省心：没有容易写错的输出重定向，而且可以重新接入查看进度。</p>
+      <p>开一个 tmux 会话，然后在 until 循环里运行镜像——它每 10 秒重试一次，直到 sync 成功返回，然后自己退出：</p>
+      <pre><code># on the SENDER
+tmux new -s xfer      # apt install -y tmux if it&#39;s missing</code></pre>
+      <pre><code>until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre>
+      <ul><li>按 Ctrl-b 再按 d 脱离；关掉终端后循环仍在跑。用 tmux attach -t xfer 重新接入。</li><li>每次重试做的活都更少：已传完的文件被跳过，传了一半的文件续传——所以循环会收敛并结束。</li><li>进度是每传完一个文件打印一行，因此一个大文件会安静地传到完成为止。没有输出不代表卡住（见排错）。</li></ul>
+      <h2>验证与收尾</h2>
+      <p>当 until 循环结束、你回到普通的 shell 提示符时，传输就完成了。确认两边一致，然后停掉监听端：</p>
+      <pre><code># compare totals on BOTH servers
+du -sh /root/workspace</code></pre>
+      <pre><code># on the RECEIVER, once verified
+pkill -f &#39;relayium serve&#39;</code></pre>
+      <ul><li>每个文件到达时都做过 SHA-256 校验，所以大小一致再加上干净退出，就意味着副本是完整的。</li></ul>
+      <h2>排错</h2>
+      <p>有几件事看起来像问题，但通常并不是——以及一个通常确实是问题的（端口被挡）。</p>
+      <ul><li>没有输出不代表卡住。进度只在每个文件传完时才打印，因此一个大文件会安静地传。用 ss -tnp | grep 9031 在发送方查看真实状态——ESTAB 表示已连上并在传；SYN-SENT 表示连不上监听端。</li><li>SYN-SENT 表示端口被挡。在接收方向发送方开放 9031/TCP（云安全组，或 ufw allow 9031/tcp）。这是「传输迟迟不开始」最常见的原因。</li><li>优先用 tmux 加单行循环，而不是多行 nohup。把带引号和 &gt; 重定向的多行命令粘进 shell，常常会在重定向处出错，或让你停在 &gt; 续行提示符上。</li><li>清理进程时要精确匹配（pkill -f &#39;relayium sync&#39;），而不是 pkill relayium——宽泛匹配可能误杀同一台机器上无关的 relayium 进程。</li><li>venv 等可再生目录值得排除。一个 Python 虚拟环境可能装着几个 GB 的库，这些在对端 pip 就能重建；跳过它们能省下大量传输。</li><li>符号链接和特殊文件会被跳过——sync 只传常规文件。重要的软链请单独处理。</li></ul>
+      <h2>常见问题</h2>
+      <h3>传到一半被打断会怎样？</h3>
+      <p>什么都不会丢。重新运行 relayium sync——它会跳过接收方已有的文件，并把传了一半的文件从磁盘上已有的字节偏移续传。本指南里的 until 循环会自动做这件事，直到整个文件夹镜像完成。</p>
+      <h3>这和 rsync 有什么不同？</h3>
+      <p>两者都做增量单向镜像，但 relayium sync 走锁定的 TLS 连接、不需要 SSH 账号（守护进程直连），通过证书指纹互相认证两台机器，并对每个文件做 SHA-256 校验。它和 relayium 其它模式用的是同一个传输引擎。</p>
+      <h3>sync 会把我从源端删掉的文件在接收方也删掉吗？</h3>
+      <p>只有你要求时才会。默认情况下 sync 只新增和更新。加 --delete 才会镜像删除，而且接收方必须以 --allow-delete 运行 serve 才会执行——否则删除会被忽略并回报给你。</p>
+      <h3>我能让两个文件夹持续保持同步吗？</h3>
+      <p>可以。加 --watch，sync 会持续运行，在源目录下任何改动时重新镜像。对于一次性搬运一个大文件夹，你不需要它——重试循环加一个普通的 sync 就够了。</p>
+      <h3>我必须开一个端口吗？</h3>
+      <p>用守护进程直连的话，是的——监听端口（默认 9031）必须能从发送方访问到。如果你不想开端口、而且两台服务器之间已经有 SSH，sync 也可以走 SSH：relayium sync /path user@host:/path（远端必须装了 relayium）。</p>
+      <div class="ctacard">
+        <p>在你自己的两台服务器之间镜像一个文件夹——增量、可续传、无需盯守。</p>
+        <a class="cta" href="/cli">获取 CLI</a>
+      </div>
+      <h2>继续阅读</h2>
+      <ul class="related"><li><a href="/zh/compare/snapdrop">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/transfer-files-android-to-iphone">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud">如何不用网盘传输大文件</a></li><li><a href="/zh/guides/transfer-files-from-terminal">用 Relayium CLI 从终端传输文件</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/guides/send-a-file-to-someone">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/server-to-server-transfers">用 Relayium CLI 实现服务器到服务器直传（守护进程直连）</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=zh">← Relayium</a>
+        <a href="/zh/privacy">隐私政策</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

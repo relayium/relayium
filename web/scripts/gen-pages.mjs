@@ -17,6 +17,7 @@ import cliGettingStarted from "./pages/content/articles/cli-getting-started.mjs"
 import cliBackupSsh from "./pages/content/articles/cli-backup-server-ssh.mjs";
 import cliSendToSomeone from "./pages/content/articles/cli-send-to-someone.mjs";
 import cliServerToServer from "./pages/content/articles/cli-server-to-server.mjs";
+import cliSyncLargeFolder from "./pages/content/articles/cli-sync-large-folder.mjs";
 import {
   buildLegalPages,
   buildLandingPages,
@@ -39,6 +40,7 @@ const articles = [
   cliBackupSsh,
   cliSendToSomeone,
   cliServerToServer,
+  cliSyncLargeFolder,
 ];
 
 async function main() {

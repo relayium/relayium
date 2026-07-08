@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sync a large folder between two servers (resumable, in the background) · Relayium</title>
+    <meta name="description" content="Mirror a big directory from one server to another with relayium sync — incremental, resumable after a dropped connection, and safe to run unattended. A retry loop under tmux moves gigabytes without babysitting a terminal." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/sync-a-large-folder-between-servers" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Sync a large folder between two servers (resumable, in the background)" />
+    <meta property="og:description" content="Mirror a big directory from one server to another with relayium sync — incremental, resumable after a dropped connection, and safe to run unattended. A retry loop under tmux moves gigabytes without babysitting a terminal." />
+    <meta property="og:url" content="https://relayium.com/guides/sync-a-large-folder-between-servers" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Sync a large folder between two servers (resumable, in the background)" />
+    <meta name="twitter:description" content="Mirror a big directory from one server to another with relayium sync — incremental, resumable after a dropped connection, and safe to run unattended. A retry loop under tmux moves gigabytes without babysitting a terminal." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Sync a large folder between two servers (resumable, in the background)","description":"Mirror a big directory from one server to another with relayium sync — incremental, resumable after a dropped connection, and safe to run unattended. A retry loop under tmux moves gigabytes without babysitting a terminal.","inLanguage":"en","dateModified":"2026-07-08","mainEntityOfPage":"https://relayium.com/guides/sync-a-large-folder-between-servers","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"What happens if the transfer is interrupted halfway?","acceptedAnswer":{"@type":"Answer","text":"Nothing is lost. Rerun relayium sync — it skips files already on the receiver and resumes a half-sent file from the byte offset already on disk. The until loop in this guide does that automatically until the whole folder is mirrored."}},{"@type":"Question","name":"How is this different from rsync?","acceptedAnswer":{"@type":"Answer","text":"Both do incremental one-way mirroring, but relayium sync runs over a pinned TLS connection with no SSH account required (daemon direct), authenticates the two machines by certificate fingerprint, and verifies every file with SHA-256. It's the same transfer engine as relayium's other modes."}},{"@type":"Question","name":"Does sync delete files on the receiver that I removed from the source?","acceptedAnswer":{"@type":"Answer","text":"Only if you ask. By default sync only adds and updates. Pass --delete to mirror deletions, and the receiver must run serve with --allow-delete for it to be honored — otherwise the delete is ignored and reported back."}},{"@type":"Question","name":"Can I keep two folders in sync continuously?","acceptedAnswer":{"@type":"Answer","text":"Yes. Add --watch and sync stays running, re-mirroring on any change under the source. For a one-time move of a large folder you don't need it — the retry loop plus a plain sync is enough."}},{"@type":"Question","name":"Do I have to open a port?","acceptedAnswer":{"@type":"Answer","text":"For daemon direct, yes — the listener's port (9031 by default) must be reachable from the sender. If you'd rather not open a port and already have SSH between the servers, sync also works over SSH: relayium sync /path user@host:/path (relayium must be installed on the remote)."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>Sync a large folder between two servers (resumable, in the background)</h1>
+      <p class="updated">Last updated: 2026-07-08</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers" aria-current="true">English</a><a href="/zh/guides/sync-a-large-folder-between-servers">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers">Français</a></nav>
+      <p class="lead">You have a large folder — tens of gigabytes — on one server and you want an exact copy on another. You can&#39;t watch a terminal for hours, and a transfer that dies halfway shouldn&#39;t start over from zero. relayium sync is built for this: a one-way incremental mirror that skips what&#39;s already there, resumes a half-sent file from where it stopped, and verifies every file end to end.</p>
+      <p class="lead">This guide sets up an unattended, self-healing transfer: authorize the sender once, run the listener in the background, and drive relayium sync from a retry loop inside tmux so it keeps going across dropped connections until the whole folder has landed.</p>
+      <h2>Why relayium sync fits this job</h2>
+      <p>sync is a one-way incremental mirror over the native protocol (install relayium on both ends). Three properties make it safe to run and re-run unattended:</p>
+      <ul><li>Skips files already there: a file whose copy on the receiver matches by size and modification time isn&#39;t sent again.</li><li>Resumes partial files: if a file was half-transferred when the connection dropped, the next run continues from the byte offset already on disk instead of restarting it.</li><li>Verifies every file: each file is checked with SHA-256 end to end, so a completed mirror is known to be intact.</li><li>Because of these, the command is idempotent — running it again only does the work that&#39;s left, which is exactly what lets a retry loop finish a huge transfer.</li></ul>
+      <h2>Prerequisites</h2>
+      <p>Install relayium on both servers (sync speaks the native protocol, so it must be present on each end):</p>
+      <pre><code># on BOTH servers
+curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>This guide uses daemon direct (relayium://), so the two servers don&#39;t need SSH access to each other.</li><li>Open the listener&#39;s port (9031 by default) to the sender on the receiver&#39;s firewall or security group.</li></ul>
+      <h2>Authorize the sender once (on the receiver)</h2>
+      <p>The receiver approves the sending machine one time; the approval is written to disk and stays valid across restarts, so you never repeat it. Start the listener in a terminal, and point --dir at the parent directory — relayium sync /root/workspace reproduces workspace/... on the receiver, so --dir /root lands the files at /root/workspace/.</p>
+      <p>On the sender&#39;s first connection (next section), serve shows its address and fingerprint and asks you to approve it; answer y and it&#39;s remembered for good:</p>
+      <pre><code># on the RECEIVER (foreground, to approve interactively)
+relayium serve --dir /root --port 9031</code></pre>
+      <pre><code># on the RECEIVER, at the first connection:
+Incoming push from 203.0.113.9:52140
+  fingerprint: 9f2c41ab…
+Accept and remember this peer? [y/N] y</code></pre>
+      <ul><li>For a fully unattended setup, skip the prompt: run relayium id on the sender to print its fingerprint, then relayium authorize &lt;fingerprint&gt; on the receiver.</li><li>--dir is the parent of the folder you&#39;re syncing, not the folder itself — otherwise files land one level too deep (e.g. /root/workspace/workspace).</li></ul>
+      <h2>Run the listener in the background (on the receiver)</h2>
+      <p>Once the fingerprint is authorized, stop the foreground serve (Ctrl-C) and re-launch it detached so it survives your logout. It loads the saved fingerprint and accepts the sender silently — no prompt this time:</p>
+      <pre><code># on the RECEIVER
+nohup relayium serve --dir /root --port 9031 &gt; ~/relayium-serve.log 2&gt;&amp;1 &amp;</code></pre>
+      <ul><li>serve handles connections one at a time and keeps running, so it&#39;s ready for every reconnect from the retry loop below.</li><li>For an always-on inbox, run it under systemd instead (Restart=always, --config-dir /etc/relayium).</li></ul>
+      <h2>Run the sync in a retry loop under tmux (on the sender)</h2>
+      <p>Long transfers get interrupted — a dropped session, a flaky network, a reboot. The fix isn&#39;t a fancy tool; it&#39;s a loop that reruns sync until it succeeds, plus a terminal multiplexer so it survives you logging out. tmux is cleaner than nohup here: no output redirection to get wrong, and you can reattach to watch progress.</p>
+      <p>Start a tmux session, then run the mirror in an until loop — it retries every 10 seconds until sync returns success, then exits on its own:</p>
+      <pre><code># on the SENDER
+tmux new -s xfer      # apt install -y tmux if it&#39;s missing</code></pre>
+      <pre><code>until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre>
+      <ul><li>Detach with Ctrl-b then d; the loop keeps running after you close the terminal. Reattach with tmux attach -t xfer.</li><li>Each retry does less: already-transferred files are skipped, a half-sent file resumes — so the loop converges and finishes.</li><li>Progress prints one line per completed file, so a big file transfers quietly until it&#39;s done. Silence isn&#39;t a stall (see troubleshooting).</li></ul>
+      <h2>Verify and finish</h2>
+      <p>The transfer is complete when the until loop ends and you&#39;re back at a normal shell prompt. Confirm both sides match, then stop the listener:</p>
+      <pre><code># compare totals on BOTH servers
+du -sh /root/workspace</code></pre>
+      <pre><code># on the RECEIVER, once verified
+pkill -f &#39;relayium serve&#39;</code></pre>
+      <ul><li>Every file was SHA-256 checked on arrival, so matching sizes plus a clean exit means an intact copy.</li></ul>
+      <h2>Troubleshooting</h2>
+      <p>A few things that look like problems but usually aren&#39;t — and the one that usually is (a blocked port).</p>
+      <ul><li>No output isn&#39;t a stall. Progress prints only when each file finishes, so a large file transfers silently. Check the real state on the sender with ss -tnp | grep 9031 — ESTAB means it&#39;s connected and transferring; SYN-SENT means it can&#39;t reach the listener.</li><li>SYN-SENT means the port is blocked. Open 9031/TCP to the sender on the receiver (cloud security group, or ufw allow 9031/tcp). This is the most common cause of a transfer that never starts.</li><li>Prefer tmux plus a single-line loop over multi-line nohup. Pasting a multi-line command with quotes and a &gt; redirect into a shell often breaks on the redirect or leaves you at a &gt; continuation prompt.</li><li>When cleaning up processes, match precisely (pkill -f &#39;relayium sync&#39;), not pkill relayium — a broad match can kill an unrelated relayium process running on the same box.</li><li>venv and other regenerable directories are worth excluding. A Python virtualenv can hold gigabytes of libraries that pip recreates on the far side; skipping them saves a lot of transfer.</li><li>Symlinks and special files are skipped — sync transfers regular files only. Handle any important symlinks separately.</li></ul>
+      <h2>Frequently asked questions</h2>
+      <h3>What happens if the transfer is interrupted halfway?</h3>
+      <p>Nothing is lost. Rerun relayium sync — it skips files already on the receiver and resumes a half-sent file from the byte offset already on disk. The until loop in this guide does that automatically until the whole folder is mirrored.</p>
+      <h3>How is this different from rsync?</h3>
+      <p>Both do incremental one-way mirroring, but relayium sync runs over a pinned TLS connection with no SSH account required (daemon direct), authenticates the two machines by certificate fingerprint, and verifies every file with SHA-256. It&#39;s the same transfer engine as relayium&#39;s other modes.</p>
+      <h3>Does sync delete files on the receiver that I removed from the source?</h3>
+      <p>Only if you ask. By default sync only adds and updates. Pass --delete to mirror deletions, and the receiver must run serve with --allow-delete for it to be honored — otherwise the delete is ignored and reported back.</p>
+      <h3>Can I keep two folders in sync continuously?</h3>
+      <p>Yes. Add --watch and sync stays running, re-mirroring on any change under the source. For a one-time move of a large folder you don&#39;t need it — the retry loop plus a plain sync is enough.</p>
+      <h3>Do I have to open a port?</h3>
+      <p>For daemon direct, yes — the listener&#39;s port (9031 by default) must be reachable from the sender. If you&#39;d rather not open a port and already have SSH between the servers, sync also works over SSH: relayium sync /path user@host:/path (relayium must be installed on the remote).</p>
+      <div class="ctacard">
+        <p>Mirror a folder between two of your own servers — incremental, resumable, no babysitting.</p>
+        <a class="cta" href="/cli">Get the CLI</a>
+      </div>
+      <h2>Keep reading</h2>
+      <ul class="related"><li><a href="/compare/snapdrop">Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</a></li><li><a href="/compare/airdrop">Relayium vs AirDrop: a cross-platform AirDrop alternative</a></li><li><a href="/compare/wetransfer">Relayium vs WeTransfer: send large files without the server</a></li><li><a href="/how-to/transfer-files-android-to-iphone">How to transfer files from Android to iPhone (no cable)</a></li><li><a href="/how-to/send-files-pc-to-phone-wirelessly">Send files from PC to phone wirelessly, no cable or app</a></li><li><a href="/how-to/send-large-files-without-cloud">How to send large files without the cloud</a></li><li><a href="/guides/transfer-files-from-terminal">Transfer files from the terminal with the Relayium CLI</a></li><li><a href="/guides/back-up-a-server-over-ssh">Back up files to your own server over SSH with the Relayium CLI</a></li><li><a href="/guides/send-a-file-to-someone">Send a file to someone across networks with the Relayium CLI</a></li><li><a href="/guides/server-to-server-transfers">Server-to-server transfers with the Relayium CLI (daemon direct)</a></li><li><a href="/">Relayium</a></li></ul>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>
