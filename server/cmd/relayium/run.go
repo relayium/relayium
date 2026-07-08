@@ -21,6 +21,7 @@ usage:
   relayium receive <code> [destdir]          receive such a transfer
   relayium serve [--dir D] [--port N] [--once]   listen for daemon-direct pushes
   relayium id                                print this host's fingerprint
+  relayium version                          print the CLI version
 
 flags (after the subcommand):
   -i <file>       ssh identity file
@@ -55,6 +56,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runServe(args[1:], stdout, stderr)
 	case "id":
 		return runID(args[1:], stdout, stderr)
+	case "version", "--version", "-version":
+		return runVersion(stdout)
 	case "__recv":
 		return runRecv(args[1:], stdout, stderr)
 	case "__send":
