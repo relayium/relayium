@@ -496,7 +496,7 @@ const fr = {
 };
 
 export default {
-  slug: "cli/transfer-files-from-terminal",
+  slug: "guides/transfer-files-from-terminal",
   updated: "2026-07-08",
   langs: { en, zh, ja, ko, de, fr },
 };

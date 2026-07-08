@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium CLI と SSH で自分のサーバーにファイルをバックアップする · Relayium</title>
+    <meta name="description" content="relayium push と pull を使って、すでに ssh でアクセスできるサーバーへディレクトリをコピーまたは同期。再開可能、整合性チェック付きで無料。バイトはあなた自身の SSH 接続を通り、Relayium のサーバーには一切触れません。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ja/guides/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/back-up-a-server-over-ssh" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Relayium CLI と SSH で自分のサーバーにファイルをバックアップする" />
+    <meta property="og:description" content="relayium push と pull を使って、すでに ssh でアクセスできるサーバーへディレクトリをコピーまたは同期。再開可能、整合性チェック付きで無料。バイトはあなた自身の SSH 接続を通り、Relayium のサーバーには一切触れません。" />
+    <meta property="og:url" content="https://relayium.com/ja/guides/back-up-a-server-over-ssh" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium CLI と SSH で自分のサーバーにファイルをバックアップする" />
+    <meta name="twitter:description" content="relayium push と pull を使って、すでに ssh でアクセスできるサーバーへディレクトリをコピーまたは同期。再開可能、整合性チェック付きで無料。バイトはあなた自身の SSH 接続を通り、Relayium のサーバーには一切触れません。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI と SSH で自分のサーバーにファイルをバックアップする","description":"relayium push と pull を使って、すでに ssh でアクセスできるサーバーへディレクトリをコピーまたは同期。再開可能、整合性チェック付きで無料。バイトはあなた自身の SSH 接続を通り、Relayium のサーバーには一切触れません。","inLanguage":"ja","dateModified":"2026-07-08","mainEntityOfPage":"https://relayium.com/ja/guides/back-up-a-server-over-ssh","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"ファイルは Relayium のサーバーを経由しますか?","acceptedAnswer":{"@type":"Answer","text":"いいえ。push と pull はすべてあなた自身の SSH 接続の上で完結します。Relayium のサーバーは一切関与せず、アカウントも不要です。"}},{"@type":"Question","name":"サーバーに relayium のインストールは必要ですか?","acceptedAnswer":{"@type":"Answer","text":"任意です。リモートに relayium があればネイティブプロトコルが使え、再開可能な転送とファイルごとの SHA-256 チェックが得られます。なければ relayium は SSH 上の tar ストリームにフォールバックし、それでも動作しますが、各ファイルは常に全体が送信されます。"}},{"@type":"Question","name":"どの SSH 鍵とポートを使うかはどう決まりますか?","acceptedAnswer":{"@type":"Answer","text":"ssh と同じようにあなたの ~/.ssh/config を読み込むため、ホストエイリアス、鍵、ポートは自動的に反映されます。コマンドごとに -i でアイデンティティファイル、-p でポートを指定して上書きすることもできます。"}},{"@type":"Question","name":"これは rsync より速いですか?","acceptedAnswer":{"@type":"Answer","text":"自分のサーバーへの push に関しては、SSH 経由の rsync とほぼ同等です。狙いは rsync に勝つことではなく、同じ再開・整合性保証を備えたまま、クロスネットワーク転送やサーバー間転送もこなせる1つのツールを提供することです。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <h1>Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</h1>
+      <p class="updated">最終更新: 2026-07-08</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh">English</a><a href="/zh/guides/back-up-a-server-over-ssh">中文</a><a href="/ja/guides/back-up-a-server-over-ssh" aria-current="true">日本語</a><a href="/ko/guides/back-up-a-server-over-ssh">한국어</a><a href="/de/guides/back-up-a-server-over-ssh">Deutsch</a><a href="/fr/guides/back-up-a-server-over-ssh">Français</a></nav>
+      <p class="lead">VPS、自宅サーバー、NAS、ワークステーションなど、すでに ssh でアクセスできるマシンがあれば、同期サービスやアカウントを用意しなくても Relayium CLI でそこへファイルをバックアップできます。転送は既存の SSH 接続の上で行われるため、バイトは直接あなたのサーバーへ向かい、Relayium を通ることはありません。</p>
+      <p class="lead">本ガイドではディレクトリの push と pull、再開機能と整合性チェックが何をもたらすか、そして cron でスケジュール実行する方法を扱います。</p>
+      <h2>ディレクトリをサーバーへ push する</h2>
+      <p>push は1つ以上のソースと scp 形式の宛先を受け取ります。Relayium はいつも使っている鍵と設定を使って SSH 経由で接続し、ファイルを宛先ディレクトリへストリーミングします:</p>
+      <pre><code># copy a local folder to the server
+relayium push ./photos user@your-server:backups/
+
+# choose an SSH key and a non-default port
+relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</code></pre>
+      <ul><li>あなたの ~/.ssh/config を再利用するので、すでに設定済みのホストエイリアス、鍵、ポートがそのまま使えます。</li><li>サーバーに relayium がインストールされていれば、ネイティブプロトコルを使います。ファイルごとの再開と、すべてのファイルに対する SHA-256 チェックです。</li><li>インストールされていない場合は、tar ストリームをリモートへパイプする方式にフォールバックするので、relayium のない素のサーバーでも動作します。</li></ul>
+      <h2>ファイルを pull で戻す</h2>
+      <p>復元は同じコマンドを逆にするだけです。リモートのソースとローカルの宛先ディレクトリを指定します。これがバックアップを復元したり、サーバーの出力をノート PC に同期したりする方法です:</p>
+      <pre><code>relayium pull user@your-server:backups/ ./restore</code></pre>
+      <h2>再開と整合性が標準で備わっている</h2>
+      <p>バックアップは大きくなりがちで、ネットワークは切れがちです。relayium が両端にあれば、中断された転送は次回の実行時にすべてを再送するのではなく中断した所から再開し、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます——サーバーに届くものは送ったものとバイト単位で同一です。</p>
+      <p>部分的なファイルを再開するのではなく、きれいに全体を再送したい場合は --no-resume を指定してください。</p>
+      <ul><li>再開にはリモート側に relayium が必要です(ネイティブプロトコル)。tar フォールバックは常に全体を送信します。</li><li>SHA-256 チェックは自動的に実行され、不一致があれば報告され、そのファイルは失敗としてフラグが立てられます。</li></ul>
+      <h2>cron でスケジュール実行する</h2>
+      <p>push は SSH 鍵を使う単一の非対話型コマンドなので、そのまま cron に組み込んで定期バックアップにできます。パスフレーズなしの鍵(または agent)を指定し、出力をログに残して失敗を確認できるようにしましょう:</p>
+      <pre><code># back up every night at 2am — add to your crontab (crontab -e)
+0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@your-server:backups/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1</code></pre>
+      <ul><li>再開と組み合わせれば、中断された夜間ジョブは翌晩そのまま続きから進みます。</li><li>いずれかのファイルが整合性チェックに失敗すると、コマンドは非ゼロで終了するので、cron の失敗時メール通知で問題に気づけます。</li></ul>
+      <h2>よくある質問</h2>
+      <h3>ファイルは Relayium のサーバーを経由しますか?</h3>
+      <p>いいえ。push と pull はすべてあなた自身の SSH 接続の上で完結します。Relayium のサーバーは一切関与せず、アカウントも不要です。</p>
+      <h3>サーバーに relayium のインストールは必要ですか?</h3>
+      <p>任意です。リモートに relayium があればネイティブプロトコルが使え、再開可能な転送とファイルごとの SHA-256 チェックが得られます。なければ relayium は SSH 上の tar ストリームにフォールバックし、それでも動作しますが、各ファイルは常に全体が送信されます。</p>
+      <h3>どの SSH 鍵とポートを使うかはどう決まりますか?</h3>
+      <p>ssh と同じようにあなたの ~/.ssh/config を読み込むため、ホストエイリアス、鍵、ポートは自動的に反映されます。コマンドごとに -i でアイデンティティファイル、-p でポートを指定して上書きすることもできます。</p>
+      <h3>これは rsync より速いですか?</h3>
+      <p>自分のサーバーへの push に関しては、SSH 経由の rsync とほぼ同等です。狙いは rsync に勝つことではなく、同じ再開・整合性保証を備えたまま、クロスネットワーク転送やサーバー間転送もこなせる1つのツールを提供することです。</p>
+      <div class="ctacard">
+        <p>次のディレクトリを直接の方法でバックアップしましょう——自分の SSH 経由、再開可能、整合性チェック付きで無料です。</p>
+        <a class="cta" href="/cli">CLI を入手</a>
+      </div>
+      <h2>続けて読む</h2>
+      <ul class="related"><li><a href="/ja/compare/snapdrop">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/compare/wetransfer">Relayium と WeTransfer の比較：サーバーを介さず大容量を送る</a></li><li><a href="/ja/how-to/transfer-files-android-to-iphone">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/how-to/send-large-files-without-cloud">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/guides/transfer-files-from-terminal">Relayium CLI でターミナルからファイルを転送する</a></li><li><a href="/ja/guides/send-a-file-to-someone">Relayium CLI でネットワークを越えて誰かにファイルを送る</a></li><li><a href="/ja/guides/server-to-server-transfers">Relayium CLI でサーバー間転送(デーモン直結)</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ja">← Relayium</a>
+        <a href="/ja/privacy">プライバシーポリシー</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

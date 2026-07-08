@@ -56,10 +56,10 @@ relayium push ./file.zip relayium://host.example.com
   ];
   const fileNames = ["id.key / id.crt", "known_hosts", "authorized_fingerprints"];
   const guideSlugs = [
-    "cli/transfer-files-from-terminal",
-    "cli/back-up-a-server-over-ssh",
-    "cli/send-a-file-to-someone",
-    "cli/server-to-server-transfers",
+    "guides/transfer-files-from-terminal",
+    "guides/back-up-a-server-over-ssh",
+    "guides/send-a-file-to-someone",
+    "guides/server-to-server-transfers",
   ];
   const guideIcons = ["🚀", "🔑", "🔗", "🖧"];
   const guideUrl = (slug: string) => (lang() === "en" ? `/${slug}` : `/${lang()}/${slug}`);

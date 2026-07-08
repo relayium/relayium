@@ -790,7 +790,7 @@ WantedBy=multi-user.target`,
 };
 
 export default {
-  slug: "cli/server-to-server-transfers",
+  slug: "guides/server-to-server-transfers",
   updated: "2026-07-08",
   langs: { en, zh, ja, ko, de, fr },
 };

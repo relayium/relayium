@@ -466,7 +466,7 @@ relayium receive 428571`,
 };
 
 export default {
-  slug: "cli/send-a-file-to-someone",
+  slug: "guides/send-a-file-to-someone",
   updated: "2026-07-08",
   langs: { en, zh, ja, ko, de, fr },
 };

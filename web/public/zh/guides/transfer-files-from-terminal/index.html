@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>用 Relayium CLI 从终端传输文件 · Relayium</title>
+    <meta name="description" content="安装免费、端到端加密的 Relayium CLI，从终端以三种方式传输文件——通过你自己的 SSH、跨网络使用配对码，或直接在两台服务器之间传输。无需账号，文件字节从不经过我们的服务器。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/zh/guides/transfer-files-from-terminal" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/transfer-files-from-terminal" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/transfer-files-from-terminal" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/transfer-files-from-terminal" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/transfer-files-from-terminal" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/transfer-files-from-terminal" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/transfer-files-from-terminal" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/transfer-files-from-terminal" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="用 Relayium CLI 从终端传输文件" />
+    <meta property="og:description" content="安装免费、端到端加密的 Relayium CLI，从终端以三种方式传输文件——通过你自己的 SSH、跨网络使用配对码，或直接在两台服务器之间传输。无需账号，文件字节从不经过我们的服务器。" />
+    <meta property="og:url" content="https://relayium.com/zh/guides/transfer-files-from-terminal" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="用 Relayium CLI 从终端传输文件" />
+    <meta name="twitter:description" content="安装免费、端到端加密的 Relayium CLI，从终端以三种方式传输文件——通过你自己的 SSH、跨网络使用配对码，或直接在两台服务器之间传输。无需账号，文件字节从不经过我们的服务器。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 从终端传输文件","description":"安装免费、端到端加密的 Relayium CLI，从终端以三种方式传输文件——通过你自己的 SSH、跨网络使用配对码，或直接在两台服务器之间传输。无需账号，文件字节从不经过我们的服务器。","inLanguage":"zh-Hans","dateModified":"2026-07-08","mainEntityOfPage":"https://relayium.com/zh/guides/transfer-files-from-terminal","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"CLI 要收费吗？","acceptedAnswer":{"@type":"Answer","text":"不收费。CLI 完全免费。它直接连接你的机器，从不代理你的文件字节经过 Relayium，因此没有什么可计量，也没有什么可付费。"}},{"@type":"Question","name":"需要 Relayium 账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。push / pull 用你自己的 SSH，daemon direct 在你的服务器之间使用公钥信任，send / receive 用你们线下约定的配对码。三者都不需要账号。"}},{"@type":"Question","name":"支持哪些操作系统？","acceptedAnswer":{"@type":"Answer","text":"macOS、Linux 和 Windows 上均提供预编译二进制，覆盖 x86-64 和 arm64。安装脚本适用于 macOS 和 Linux；在 Windows 上，请从发布页下载 .zip。"}},{"@type":"Question","name":"我的文件会经过 Relayium 的服务器吗？","acceptedAnswer":{"@type":"Answer","text":"不会。在每种模式下，文件字节都在两端之间直接传输。只有 send / receive 会联系到我们的服务器，而且只是为了一次很小的会合握手——从不涉及文件内容。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <h1>用 Relayium CLI 从终端传输文件</h1>
+      <p class="updated">最近更新: 2026-07-08</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/transfer-files-from-terminal">English</a><a href="/zh/guides/transfer-files-from-terminal" aria-current="true">中文</a><a href="/ja/guides/transfer-files-from-terminal">日本語</a><a href="/ko/guides/transfer-files-from-terminal">한국어</a><a href="/de/guides/transfer-files-from-terminal">Deutsch</a><a href="/fr/guides/transfer-files-from-terminal">Français</a></nav>
+      <p class="lead">Relayium CLI 是一个体积很小的单一二进制文件，用来从终端传输文件——端到端加密、可自托管、完全免费。它解决的正是浏览器难以胜任的场景：把文件复制到你已经在运行的服务器、在两台机器之间推送一次构建产物，或者跨网络把一个压缩包发给同事而不上传到任何人的网盘。</p>
+      <p class="lead">无论用哪种方式，文件字节都在两端之间直接传输，从不经过 Relayium 的服务器。本指南带你完成安装并走通第一次传输，然后指向每种模式更深入的操作指南。</p>
+      <h2>一条命令完成安装</h2>
+      <p>在 macOS 或 Linux 上，一条命令就能下载适配你操作系统的预编译二进制，并放进你的 PATH：</p>
+      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>想自己挑选文件？从发布页下载对应的二进制。</li><li>已安装 Go？克隆仓库后运行：go build -o relayium ./cmd/relayium（在 server 目录下执行）。</li><li>然后运行 relayium --help 查看全部命令，运行 relayium version 检查构建版本。</li></ul>
+      <h2>传输文件的三种方式</h2>
+      <p>Relayium 提供三种传输方式。你按对方所在的位置来选，而不用去学三种不同的工具——它们共用同一个传输引擎，支持逐文件断点续传和 SHA-256 校验。</p>
+      <ul><li>push / pull——传到一台你已能 SSH 进去的服务器。字节走你的 SSH 连接；无需 Relayium 账号。</li><li>send / receive——跨网络传给另一个人，使用一个简短的配对码。直连点对点；如果找不到直连路径，传输会直接失败，而不会经我们中转。</li><li>serve + push relayium://（daemon direct）——直接在你拥有的两台服务器之间传输，通过锁定的 TLS。无中继、无 SSH、无需配对码。</li></ul>
+      <h2>第一次传输</h2>
+      <p>最快上手的方式是把一个文件夹复制到你能 SSH 进去的服务器。Relayium 使用你现有的 SSH 访问权限，远程无需任何配置，也不用创建账号：</p>
+      <pre><code>relayium push ./photos user@your-server:backups/</code></pre>
+      <ul><li>如果远程也装了 relayium，就会使用原生协议（可续传、逐文件 SHA-256）。</li><li>如果没装，就会退化为普通的 tar 流，因此在裸机服务器上依然可用。</li><li>用这个命令把同样的文件取回来：relayium pull user@your-server:backups/ ./restore</li></ul>
+      <h2>免费，且从设计上保护隐私</h2>
+      <p>没有任何费用，也不用保留账号。CLI 直接连接两端，因此你的文件永远不会上传到中间的服务器——唯一会接触 Relayium 的，是 send / receive 模式下一次很小的会合握手，用来撮合两端，绝不是文件本身。</p>
+      <p>每次传输都端到端加密，每个文件到达时都会用 SHA-256 哈希校验，中断的传输会从断点续传而不是从头再来。它可在 macOS、Linux 和 Windows 上运行，整个项目开源、可自托管。</p>
+      <h2>常见问题</h2>
+      <h3>CLI 要收费吗？</h3>
+      <p>不收费。CLI 完全免费。它直接连接你的机器，从不代理你的文件字节经过 Relayium，因此没有什么可计量，也没有什么可付费。</p>
+      <h3>需要 Relayium 账号吗？</h3>
+      <p>不需要。push / pull 用你自己的 SSH，daemon direct 在你的服务器之间使用公钥信任，send / receive 用你们线下约定的配对码。三者都不需要账号。</p>
+      <h3>支持哪些操作系统？</h3>
+      <p>macOS、Linux 和 Windows 上均提供预编译二进制，覆盖 x86-64 和 arm64。安装脚本适用于 macOS 和 Linux；在 Windows 上，请从发布页下载 .zip。</p>
+      <h3>我的文件会经过 Relayium 的服务器吗？</h3>
+      <p>不会。在每种模式下，文件字节都在两端之间直接传输。只有 send / receive 会联系到我们的服务器，而且只是为了一次很小的会合握手——从不涉及文件内容。</p>
+      <div class="ctacard">
+        <p>安装 Relayium CLI，完成你的第一次传输——完全免费，也无需账号。</p>
+        <a class="cta" href="/cli">获取 CLI</a>
+      </div>
+      <h2>继续阅读</h2>
+      <ul class="related"><li><a href="/zh/compare/snapdrop">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/transfer-files-android-to-iphone">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud">如何不用网盘传输大文件</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/guides/send-a-file-to-someone">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/server-to-server-transfers">用 Relayium CLI 实现服务器到服务器直传（守护进程直连）</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=zh">← Relayium</a>
+        <a href="/zh/privacy">隐私政策</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

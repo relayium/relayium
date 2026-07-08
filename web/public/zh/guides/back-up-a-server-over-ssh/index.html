@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>用 Relayium CLI 通过 SSH 把文件备份到自己的服务器 · Relayium</title>
+    <meta name="description" content="用 relayium push 和 pull 把目录复制或同步到你已经能用 ssh 连接的服务器——支持断点续传、完整性校验,而且免费。字节通过你自己的 SSH 连接传输,从不经过 Relayium 的服务器。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/zh/guides/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/back-up-a-server-over-ssh" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="用 Relayium CLI 通过 SSH 把文件备份到自己的服务器" />
+    <meta property="og:description" content="用 relayium push 和 pull 把目录复制或同步到你已经能用 ssh 连接的服务器——支持断点续传、完整性校验,而且免费。字节通过你自己的 SSH 连接传输,从不经过 Relayium 的服务器。" />
+    <meta property="og:url" content="https://relayium.com/zh/guides/back-up-a-server-over-ssh" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="用 Relayium CLI 通过 SSH 把文件备份到自己的服务器" />
+    <meta name="twitter:description" content="用 relayium push 和 pull 把目录复制或同步到你已经能用 ssh 连接的服务器——支持断点续传、完整性校验,而且免费。字节通过你自己的 SSH 连接传输,从不经过 Relayium 的服务器。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 通过 SSH 把文件备份到自己的服务器","description":"用 relayium push 和 pull 把目录复制或同步到你已经能用 ssh 连接的服务器——支持断点续传、完整性校验,而且免费。字节通过你自己的 SSH 连接传输,从不经过 Relayium 的服务器。","inLanguage":"zh-Hans","dateModified":"2026-07-08","mainEntityOfPage":"https://relayium.com/zh/guides/back-up-a-server-over-ssh","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"文件会经过 Relayium 的服务器吗?","acceptedAnswer":{"@type":"Answer","text":"不会。push 和 pull 完全通过你自己的 SSH 连接运行。Relayium 的服务器完全不参与,也不需要账号。"}},{"@type":"Question","name":"服务器需要装 relayium 吗?","acceptedAnswer":{"@type":"Answer","text":"这是可选的。远端装了 relayium 就能用原生协议——支持断点续传,并对每个文件做 SHA-256 校验。没装的话,relayium 会退回到通过 SSH 传输 tar 流,依然可用,只是每个文件都会完整发送一次。"}},{"@type":"Question","name":"它怎么选择使用哪个 SSH 密钥和端口?","acceptedAnswer":{"@type":"Answer","text":"它会像 ssh 一样读取你的 ~/.ssh/config,所以主机别名、密钥和端口都会被自动识别。你也可以在每条命令里用 -i 指定身份文件、用 -p 指定端口来覆盖它们。"}},{"@type":"Question","name":"这比 rsync 快吗?","acceptedAnswer":{"@type":"Answer","text":"在推送到自己服务器这件事上,速度和通过 SSH 的 rsync 差不多;重点不是要跑赢 rsync,而是给你一个同时能做跨网络传输和服务器到服务器传输、并且有同样续传与完整性保证的工具。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <h1>用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</h1>
+      <p class="updated">最近更新: 2026-07-08</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh">English</a><a href="/zh/guides/back-up-a-server-over-ssh" aria-current="true">中文</a><a href="/ja/guides/back-up-a-server-over-ssh">日本語</a><a href="/ko/guides/back-up-a-server-over-ssh">한국어</a><a href="/de/guides/back-up-a-server-over-ssh">Deutsch</a><a href="/fr/guides/back-up-a-server-over-ssh">Français</a></nav>
+      <p class="lead">如果你已经能用 ssh 访问某台机器——VPS、家庭服务器、NAS、工作站——就可以用 Relayium CLI 把文件备份过去,不需要搭建同步服务,也不需要账号。传输走的是你现有的 SSH 连接,字节直接进你的服务器,从不经过 Relayium。</p>
+      <p class="lead">本文将介绍如何 push 和 pull 目录、断点续传与完整性校验能带来什么,以及如何用 cron 定时运行它。</p>
+      <h2>把一个目录 push 到你的服务器</h2>
+      <p>push 接受一个或多个源以及一个 scp 风格的目标地址。Relayium 会用你平常的密钥和配置通过 SSH 连接,然后把文件流式传输到目标目录:</p>
+      <pre><code># copy a local folder to the server
+relayium push ./photos user@your-server:backups/
+
+# choose an SSH key and a non-default port
+relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</code></pre>
+      <ul><li>它会复用你的 ~/.ssh/config,所以你已经设置好的主机别名、密钥和端口都能直接生效。</li><li>如果服务器上装了 relayium,就会使用原生协议:逐文件断点续传,并对每个文件做 SHA-256 校验。</li><li>如果没装,则会退回到把 tar 流通过管道传给远端,所以即使是一台没有 relayium 的裸服务器也能用。</li></ul>
+      <h2>把文件 pull 回来</h2>
+      <p>恢复就是把同一条命令反过来:给出一个远程源和一个本地目标目录。这就是恢复备份,或者把服务器的输出同步到笔记本电脑的方法:</p>
+      <pre><code>relayium pull user@your-server:backups/ ./restore</code></pre>
+      <h2>内置断点续传与完整性校验</h2>
+      <p>备份往往体积很大,网络也常常掉线。当两端都装了 relayium 时,中断的传输会在下次运行时从中断处继续,而不是重新发送全部内容,并且每个文件都会用 SHA-256 哈希做端到端校验——落到服务器上的内容与你发送的逐字节一致。</p>
+      <p>如果你想放弃续传、做一次干净的完整重发,加上 --no-resume 即可。</p>
+      <ul><li>续传需要远端装有 relayium(原生协议);tar 兜底方案总是完整发送。</li><li>SHA-256 校验会自动运行;一旦不匹配就会报告,该文件会被标记为失败。</li></ul>
+      <h2>用 cron 定时运行</h2>
+      <p>因为 push 是一条使用你 SSH 密钥的非交互式命令,可以直接放进 cron 做定期备份。给它指定一个没有口令的密钥(或者用 agent),并把输出记录下来以便查看失败:</p>
+      <pre><code># back up every night at 2am — add to your crontab (crontab -e)
+0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@your-server:backups/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1</code></pre>
+      <ul><li>配合续传,一个被中断的夜间任务下一晚会自动接着传。</li><li>只要有文件未通过完整性校验,命令就会以非零状态退出,这样 cron 的失败邮件通知就能发现问题。</li></ul>
+      <h2>常见问题</h2>
+      <h3>文件会经过 Relayium 的服务器吗?</h3>
+      <p>不会。push 和 pull 完全通过你自己的 SSH 连接运行。Relayium 的服务器完全不参与,也不需要账号。</p>
+      <h3>服务器需要装 relayium 吗?</h3>
+      <p>这是可选的。远端装了 relayium 就能用原生协议——支持断点续传,并对每个文件做 SHA-256 校验。没装的话,relayium 会退回到通过 SSH 传输 tar 流,依然可用,只是每个文件都会完整发送一次。</p>
+      <h3>它怎么选择使用哪个 SSH 密钥和端口?</h3>
+      <p>它会像 ssh 一样读取你的 ~/.ssh/config,所以主机别名、密钥和端口都会被自动识别。你也可以在每条命令里用 -i 指定身份文件、用 -p 指定端口来覆盖它们。</p>
+      <h3>这比 rsync 快吗?</h3>
+      <p>在推送到自己服务器这件事上,速度和通过 SSH 的 rsync 差不多;重点不是要跑赢 rsync,而是给你一个同时能做跨网络传输和服务器到服务器传输、并且有同样续传与完整性保证的工具。</p>
+      <div class="ctacard">
+        <p>用最直接的方式备份你的下一个目录——通过你自己的 SSH,支持断点续传、完整性校验,而且免费。</p>
+        <a class="cta" href="/cli">获取 CLI</a>
+      </div>
+      <h2>继续阅读</h2>
+      <ul class="related"><li><a href="/zh/compare/snapdrop">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/transfer-files-android-to-iphone">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud">如何不用网盘传输大文件</a></li><li><a href="/zh/guides/transfer-files-from-terminal">用 Relayium CLI 从终端传输文件</a></li><li><a href="/zh/guides/send-a-file-to-someone">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/server-to-server-transfers">用 Relayium CLI 实现服务器到服务器直传（守护进程直连）</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=zh">← Relayium</a>
+        <a href="/zh/privacy">隐私政策</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>
