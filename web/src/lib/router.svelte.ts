@@ -7,10 +7,13 @@
 import { parseCodeParam, CROSS_PATH, DOWNLOAD_PREFIX } from "./transfer-link";
 import { clearRoom } from "./room.svelte";
 
-export type Route = "lan" | "cross" | "offline" | "download" | "me";
+export type Route = "lan" | "cross" | "offline" | "download" | "me" | "cli";
 
 /** Personal center path. Login-gated page; not part of the transfer flows. */
 export const ME_PATH = "/me";
+
+/** CLI docs page (static content; not a transfer flow). */
+export const CLI_PATH = "/cli";
 
 /** Path of the async stored-transfer page (login-gated; the paid tier lives here). */
 export const OFFLINE_PATH = "/offline-transfer";
@@ -24,6 +27,7 @@ export function routeFromLocation(pathname: string, hash: string): Route {
   if (pathname === CROSS_PATH) return "cross";
   if (pathname === OFFLINE_PATH) return "offline";
   if (pathname === ME_PATH) return "me";
+  if (pathname === CLI_PATH) return "cli";
   return "lan";
 }
 
@@ -60,7 +64,11 @@ export function navigate(r: Route): void {
   if (r === route) return; // already on this tab — don't tear down the room / abort a transfer
   if (navGuard && !navGuard()) return; // e.g. user declined the "interrupt transfer?" confirm
   const pathname =
-    r === "cross" ? CROSS_PATH : r === "offline" ? OFFLINE_PATH : r === "me" ? ME_PATH : "/";
+    r === "cross" ? CROSS_PATH
+    : r === "offline" ? OFFLINE_PATH
+    : r === "me" ? ME_PATH
+    : r === "cli" ? CLI_PATH
+    : "/";
   clearRoom(); // leaving a 2-peer code room rebinds the socket via App's effect
   history.pushState({}, "", pathname);
   route = r;

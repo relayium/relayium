@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
-  routeFromLocation as rfl, downloadId, CROSS_PATH,
+  routeFromLocation as rfl, downloadId, CROSS_PATH, CLI_PATH,
   navigate, currentRoute, setNavGuard, syncRouteFromLocation,
 } from "./router.svelte";
 
@@ -13,6 +13,12 @@ describe("routeFromLocation", () => {
   });
   it("ignores non-code hashes", () => {
     expect(rfl("/", "#other=1")).toBe("lan");
+  });
+  it("is cli on the /cli path", () => {
+    expect(rfl(CLI_PATH, "")).toBe("cli");
+  });
+  it("a pairing code still wins over /cli", () => {
+    expect(rfl("/cli", "#c=424242")).toBe("cross");
   });
 });
 
