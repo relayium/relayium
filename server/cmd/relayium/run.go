@@ -5,23 +5,28 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/relayium/relayium/internal/sshx"
 	"github.com/relayium/relayium/internal/xfer"
 )
 
-const usage = `relayium — SSH-native file transfer
+const usage = `relayium — file transfer
 
 usage:
   relayium push <src...> [user@]host:dest    push files to a server you can ssh into
+  relayium push <src...> relayium://host[:port]  push straight to a listening peer (daemon direct)
   relayium pull [user@]host:src <dest>       pull files from such a server
   relayium send <src...> <code>              send to a peer over a pairing code (cross-network)
   relayium receive <code> [destdir]          receive such a transfer
+  relayium serve [--dir D] [--port N] [--once]   listen for daemon-direct pushes
+  relayium id                                print this host's fingerprint
 
 flags (after the subcommand):
-  -i <file>     ssh identity file
-  -p <port>     ssh port
-  --no-resume   disable resuming partial files
+  -i <file>       ssh identity file
+  -p <port>       ssh port
+  --no-resume     disable resuming partial files
+  --config-dir D  identity/trust directory (daemon direct; default ~/.config/relayium)
 `
 
 // duplex adapts a separate reader and writer into one io.ReadWriter (used to
@@ -46,6 +51,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runSendCross(args[1:], stdout, stderr)
 	case "receive":
 		return runReceiveCross(args[1:], stdout, stderr)
+	case "serve":
+		return runServe(args[1:], stdout, stderr)
+	case "id":
+		return runID(args[1:], stdout, stderr)
 	case "__recv":
 		return runRecv(args[1:], stdout, stderr)
 	case "__send":
@@ -60,9 +69,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 }
 
 type sshFlags struct {
-	identity string
-	port     int
-	noResume bool
+	identity  string
+	port      int
+	noResume  bool
+	configDir string
 }
 
 func runPush(args []string, stdout, stderr io.Writer) int {
@@ -77,6 +87,11 @@ func runPush(args []string, stdout, stderr io.Writer) int {
 	}
 	destArg := rest[len(rest)-1]
 	srcArgs := rest[:len(rest)-1]
+	// A relayium:// target is a daemon-direct push (server-to-server, no SSH);
+	// everything else keeps the SSH path below unchanged.
+	if strings.HasPrefix(destArg, daemonScheme) {
+		return pushDaemon(destArg, srcArgs, f.configDir, f.noResume, stdout, stderr)
+	}
 	dest, err := xfer.ParseEndpoint(destArg)
 	if err != nil {
 		fmt.Fprintln(stderr, err)

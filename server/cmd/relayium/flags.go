@@ -10,6 +10,7 @@ func parseFlagsStd(args []string) (sshFlags, []string, error) {
 	fs.StringVar(&f.identity, "i", "", "ssh identity file")
 	fs.IntVar(&f.port, "p", 0, "ssh port")
 	fs.BoolVar(&f.noResume, "no-resume", false, "disable resume")
+	fs.StringVar(&f.configDir, "config-dir", "", "identity/trust directory (daemon direct)")
 	if err := fs.Parse(args); err != nil {
 		return f, nil, err
 	}

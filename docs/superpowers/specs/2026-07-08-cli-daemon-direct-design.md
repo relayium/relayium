@@ -1,7 +1,10 @@
 # Relayium CLI — Daemon Direct Mode (Spec)
 
 Date: 2026-07-08
-Status: Design approved, pending implementation plan
+Status: Implemented (2026-07-08). `serve` / `id` / `push relayium://…` shipped on
+branch `cli-daemon-direct`; `internal/secure` persistent identity + `internal/trust`
+added. See §8 tests: `internal/secure/identity_test.go`, `internal/trust/trust_test.go`,
+`cmd/relayium/daemon_e2e_test.go`, `cmd/relayium/daemon_test.go`.
 
 ## 1. Motivation
 
