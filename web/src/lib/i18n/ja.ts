@@ -113,7 +113,8 @@ const ja: Messages = {
     del: "削除",
     confirmDel: "このファイルリンクを削除しますか？相手はダウンロードできなくなります。",
   },
-  nav: { lanTab: "LAN 転送", crossTab: "リアルタイム直接転送", offlineTab: "非同期転送" },
+  nav: { lanTab: "LAN 転送", crossTab: "リアルタイム直接転送", offlineTab: "非同期転送", cliTab: "CLI" },
+  cli: { subtitle: "ターミナルからファイルを転送 — エンドツーエンド暗号化、セルフホスト可能。" },
   crossnet: {
     realtimeTitle: "リアルタイム直接転送",
     realtimeSub: "両者が今オンライン · P2P · ファイルはサーバーを経由しません",

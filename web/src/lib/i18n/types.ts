@@ -133,7 +133,8 @@ export interface Messages {
     del: string; // delete button
     confirmDel: string; // confirm() before deleting a file
   };
-  nav: { lanTab: string; crossTab: string; offlineTab: string };
+  nav: { lanTab: string; crossTab: string; offlineTab: string; cliTab: string };
+  cli: { subtitle: string };
   crossnet: {
     realtimeTitle: string;
     realtimeSub: string;

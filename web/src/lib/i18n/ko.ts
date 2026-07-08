@@ -113,7 +113,8 @@ const ko: Messages = {
     del: "삭제",
     confirmDel: "이 파일 링크를 삭제할까요? 상대방은 더 이상 다운로드할 수 없습니다.",
   },
-  nav: { lanTab: "LAN 전송", crossTab: "실시간 직접 전송", offlineTab: "비동기 전송" },
+  nav: { lanTab: "LAN 전송", crossTab: "실시간 직접 전송", offlineTab: "비동기 전송", cliTab: "CLI" },
+  cli: { subtitle: "터미널에서 파일 전송 — 종단간 암호화, 자체 호스팅 가능." },
   crossnet: {
     realtimeTitle: "실시간 직접 전송",
     realtimeSub: "양쪽 모두 온라인 · P2P · 파일은 서버를 거치지 않습니다",
