@@ -26,8 +26,12 @@ relayium receive 123456 ./downloads`;
   const daemonListenCmd = `# on the LISTENER
 relayium serve --dir ~/inbox      # long-running; --once to accept one transfer
 relayium id                       # prints THIS host's fingerprint`;
-  const daemonAuthCmd = `# on the listener: authorize a pusher by its fingerprint
-echo "<pusher-fingerprint>" >> ~/.config/relayium/authorized_fingerprints`;
+  const daemonAuthCmd = `# on the LISTENER, first push from a new peer prompts:
+Incoming push from 203.0.113.7  (fingerprint 74318e3b…)
+Accept and remember this peer? [y/N] y
+
+# no terminal (a systemd service)? pre-authorize instead:
+relayium authorize 74318e3b…`;
   const daemonPushCmd = `# on the PUSHER
 relayium push ./file.zip relayium://host.example.com
 # first connect is trusted on first use (TOFU) and pinned in known_hosts;
@@ -137,7 +141,7 @@ relayium push ./file.zip relayium://host.example.com
       </li>
       <li>
         <strong>{t.cliPage.step2Label}</strong> {t.cliPage.step2Body}
-        <CommandBlock code={daemonAuthCmd} title="listener · authorize" />
+        <CommandBlock code={daemonAuthCmd} title="listener · approve" />
       </li>
       <li>
         <strong>{t.cliPage.step3Label}</strong> {t.cliPage.step3Body}

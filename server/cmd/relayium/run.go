@@ -20,7 +20,9 @@ usage:
   relayium send <src...> <code>              send to a peer over a pairing code (cross-network)
   relayium receive <code> [destdir]          receive such a transfer
   relayium serve [--dir D] [--port N] [--once]   listen for daemon-direct pushes
+                                             (in a terminal, approve each new peer on first push)
   relayium id                                print this host's fingerprint
+  relayium authorize <fingerprint>          pre-authorize a pusher (for non-interactive serve)
   relayium version                          print the CLI version
 
 flags (after the subcommand):
@@ -56,6 +58,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runServe(args[1:], stdout, stderr)
 	case "id":
 		return runID(args[1:], stdout, stderr)
+	case "authorize":
+		return runAuthorize(args[1:], stdout, stderr)
 	case "version", "--version", "-version":
 		return runVersion(stdout)
 	case "__recv":

@@ -98,11 +98,11 @@ func loadIdentity(keyPath, crtPath string) (*Identity, error) {
 	return &Identity{TLSCert: cert, Fingerprint: hex.EncodeToString(sum[:])}, nil
 }
 
-// ServerSet completes a TLS 1.3 server handshake, requiring a client cert and
-// admitting the peer only if its fingerprint is a member of allow. The peer's
-// fingerprint is returned even on failure, so the caller can log a rejected
-// (unauthorized) peer.
-func ServerSet(conn net.Conn, id *Identity, allow map[string]bool) (*tls.Conn, string, error) {
+// ServerAny completes a TLS 1.3 server handshake, requiring a client cert but
+// accepting any, and reports the peer's fingerprint. Authorization is the
+// caller's decision — allow-list membership, or interactive approval — made
+// after the handshake and before any file data is read.
+func ServerAny(conn net.Conn, id *Identity) (*tls.Conn, string, error) {
 	var peerFP string
 	cfg := &tls.Config{
 		Certificates: []tls.Certificate{id.TLSCert},
@@ -114,9 +114,6 @@ func ServerSet(conn net.Conn, id *Identity, allow map[string]bool) (*tls.Conn, s
 			}
 			sum := sha256.Sum256(rawCerts[0])
 			peerFP = hex.EncodeToString(sum[:])
-			if !allow[peerFP] {
-				return fmt.Errorf("secure: peer %s is not authorized", peerFP)
-			}
 			return nil
 		},
 	}

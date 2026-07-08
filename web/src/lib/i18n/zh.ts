@@ -152,9 +152,9 @@ const zh: Messages = {
       "适用于你掌控的、彼此已知地址的两台主机：一台监听，另一台通过锁定的 TLS 1.3 直接推送过去。无中继、无 SSH、无需配对码——信任基于公钥，只需设置一次。三个步骤：",
     step1Label: "监听端：",
     step1Body: "启动 serve，并用 relayium id 打印本机的指纹。",
-    step2Label: "授权推送端：",
+    step2Label: "首次推送时授权：",
     step2Body:
-      "把推送端的 relayium id 指纹加入监听端的允许列表(空列表会拒绝所有人)。",
+      "在终端里，监听端会显示新推送端的地址和指纹，并询问你是否授权——回答 y 即可记住，之后的推送就会静默放行。以服务方式运行(没有终端)？用 relayium authorize 预先授权。",
     step3Label: "推送端：",
     step3Body:
       "push 到 relayium://host。监听端的密钥首次使用即被信任，并锁定在 known_hosts 中；之后若指纹发生变化会被拒绝(而不是被静默接受)。",

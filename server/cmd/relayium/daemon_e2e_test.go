@@ -15,8 +15,9 @@ import (
 )
 
 // daemonServe spins up serveLoop on an ephemeral loopback port with the given
-// allow-set and returns the port plus a channel carrying the loop's exit code.
-func daemonServe(t *testing.T, serverDir, recvDir string, allow map[string]bool) (int, <-chan int) {
+// allow-set and approval callback, returning the port plus a channel carrying
+// the loop's exit code. approve nil ⇒ unknown peers are rejected.
+func daemonServe(t *testing.T, serverDir, recvDir string, allow map[string]bool, approve func(remote, fp string) bool) (int, <-chan int) {
 	t.Helper()
 	id, err := secure.LoadOrCreateIdentity(serverDir)
 	if err != nil {
@@ -28,9 +29,13 @@ func daemonServe(t *testing.T, serverDir, recvDir string, allow map[string]bool)
 	}
 	t.Cleanup(func() { ln.Close() })
 	port := ln.Addr().(*net.TCPAddr).Port
+	h := &serveHandler{
+		id: id, allow: allow, dir: recvDir, cfgDir: serverDir,
+		approve: approve, stdout: io.Discard, stderr: io.Discard,
+	}
 	done := make(chan int, 1)
 	go func() {
-		done <- serveLoop(ln, id, allow, recvDir, true /*once*/, false, io.Discard, io.Discard)
+		done <- serveLoop(ln, h, true /*once*/)
 	}()
 	return port, done
 }
@@ -56,7 +61,7 @@ func TestDaemonPushHappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	port, done := daemonServe(t, serverDir, recvDir, map[string]bool{pusher.Fingerprint: true})
+	port, done := daemonServe(t, serverDir, recvDir, map[string]bool{pusher.Fingerprint: true}, nil)
 
 	src := writeSrc(t, "hello.txt", "daemon direct!")
 	var o, e bytes.Buffer
@@ -82,8 +87,8 @@ func TestDaemonPushUnauthorizedRejected(t *testing.T) {
 	serverDir := t.TempDir()
 	recvDir := t.TempDir()
 
-	// Empty allow-set ⇒ pusher not authorized.
-	port, done := daemonServe(t, serverDir, recvDir, map[string]bool{})
+	// Empty allow-set and no approval callback ⇒ pusher rejected.
+	port, done := daemonServe(t, serverDir, recvDir, map[string]bool{}, nil)
 
 	src := writeSrc(t, "nope.txt", "should not land")
 	var o, e bytes.Buffer
@@ -105,7 +110,7 @@ func TestDaemonPushKnownHostsMismatch(t *testing.T) {
 	recvDir := t.TempDir()
 
 	pusher, _ := secure.LoadOrCreateIdentity(pusherDir)
-	port, done := daemonServe(t, serverDir, recvDir, map[string]bool{pusher.Fingerprint: true})
+	port, done := daemonServe(t, serverDir, recvDir, map[string]bool{pusher.Fingerprint: true}, nil)
 
 	// Pre-pin a WRONG fingerprint for this host:port.
 	hostport := "127.0.0.1:" + strconv.Itoa(port)
@@ -132,6 +137,67 @@ func TestDaemonPushKnownHostsMismatch(t *testing.T) {
 	waitCode(t, done)
 	if _, err := os.Stat(filepath.Join(recvDir, "x.txt")); !os.IsNotExist(err) {
 		t.Fatal("no file should land on a mismatch")
+	}
+}
+
+func TestDaemonPushInteractiveApprove(t *testing.T) {
+	pusherDir := t.TempDir()
+	serverDir := t.TempDir()
+	recvDir := t.TempDir()
+
+	pusher, _ := secure.LoadOrCreateIdentity(pusherDir)
+
+	// Empty allow-set, but an approval callback that says yes — simulating the
+	// operator answering "y" at the terminal on first push.
+	var approvedIP, approvedFP string
+	approve := func(remote, fp string) bool {
+		approvedIP, approvedFP = remote, fp
+		return true
+	}
+	port, done := daemonServe(t, serverDir, recvDir, map[string]bool{}, approve)
+
+	src := writeSrc(t, "first.txt", "approve me")
+	var o, e bytes.Buffer
+	rc := Run([]string{"push", "--config-dir", pusherDir, src, daemonTarget(port)}, &o, &e)
+	if rc != 0 {
+		t.Fatalf("approved push exited %d: %s", rc, e.String())
+	}
+	if got := waitCode(t, done); got != 0 {
+		t.Fatalf("serve exited %d", got)
+	}
+	// The file landed.
+	if got, err := os.ReadFile(filepath.Join(recvDir, "first.txt")); err != nil || string(got) != "approve me" {
+		t.Fatalf("received = %q err=%v", got, err)
+	}
+	// The callback saw the pusher's real fingerprint and a non-empty address.
+	if approvedFP != pusher.Fingerprint {
+		t.Fatalf("approve saw fp %q, want %q", approvedFP, pusher.Fingerprint)
+	}
+	if approvedIP == "" {
+		t.Fatal("approve should receive the peer's remote address")
+	}
+	// Crucially, the approved fingerprint was persisted, so a future push passes
+	// without any prompt.
+	set, err := trust.LoadAuthorized(serverDir)
+	if err != nil || !set[pusher.Fingerprint] {
+		t.Fatalf("approved fingerprint not persisted to authorized_fingerprints (set=%v err=%v)", set, err)
+	}
+}
+
+func TestAuthorizeCommand(t *testing.T) {
+	dir := t.TempDir()
+	fp := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	var o, e bytes.Buffer
+	if rc := Run([]string{"authorize", "--config-dir", dir, fp}, &o, &e); rc != 0 {
+		t.Fatalf("authorize rc=%d: %s", rc, e.String())
+	}
+	if set, _ := trust.LoadAuthorized(dir); !set[fp] {
+		t.Fatalf("fingerprint not authorized: %v", set)
+	}
+	// A non-hex / wrong-length argument is rejected.
+	var o2, e2 bytes.Buffer
+	if rc := Run([]string{"authorize", "--config-dir", dir, "not-a-fingerprint"}, &o2, &e2); rc == 0 {
+		t.Fatal("invalid fingerprint should be rejected")
 	}
 }
 

@@ -29,21 +29,6 @@ relayium id                       # prints THIS host's fingerprint`,
       ],
     },
     {
-      heading: "Set up trust once",
-      body: [
-        "Trust is mutual and based on certificate fingerprints, like SSH keys. The listener only accepts pushers it has been told about: add the pusher's relayium id output to the listener's allow-list. An empty allow-list rejects everyone.",
-      ],
-      code: [
-        `# on the LISTENER: authorize a specific pusher by its fingerprint
-echo "<pusher-fingerprint>" >> ~/.config/relayium/authorized_fingerprints`,
-      ],
-      bullets: [
-        "Get the pusher's fingerprint by running relayium id on the pushing machine.",
-        "Identity and trust files live in ~/.config/relayium/ (override with --config-dir, e.g. /etc/relayium for a service).",
-        "The pusher, in turn, learns the listener's key on first connect (trust on first use) and pins it in known_hosts.",
-      ],
-    },
-    {
       heading: "Push to the listener",
       body: [
         "From the other server, push to a relayium:// address. The first connection pins the listener's fingerprint; every connection after that verifies it, and a changed fingerprint is refused rather than silently accepted — so a swapped key or a man-in-the-middle is caught, not trusted.",
@@ -58,6 +43,37 @@ relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
       bullets: [
         "No relay and no fallback: if the listener isn't reachable, the push fails — file bytes never route through anyone else.",
         "The same transfer engine as the other modes: resumable, with a per-file SHA-256 check.",
+      ],
+    },
+    {
+      heading: "Approve the pusher on first push",
+      body: [
+        "In a terminal you don't pre-share anything. The first time a new machine pushes to your listener, serve shows you where it's from and its fingerprint and asks you to approve it — like SSH's first-connect prompt, but on the receiving side:",
+      ],
+      code: [
+        `# on the LISTENER, when a new peer pushes:
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+      ],
+      bullets: [
+        "Answer y and that fingerprint is remembered in authorized_fingerprints; every later push from the same machine then goes through silently.",
+        "The fingerprint is a machine's stable identity (it survives restarts and IP changes), so approving is a one-time step per pusher.",
+        "The pusher, in turn, learns the listener's key on first connect (trust on first use) and pins it in known_hosts.",
+      ],
+    },
+    {
+      heading: "Automate it (or run without a terminal)",
+      body: [
+        "Because an approved fingerprint is remembered, later pushes need no prompt — so relayium push drops straight into cron, a deploy script, or CI for encrypted, integrity-checked, resumable server-to-server sync. When serve runs without a terminal (a systemd service, a pipe) it can't prompt, so it rejects unknown pushers; pre-authorize them instead. Get the fingerprint from the pusher's relayium id, or copy it from the \"rejected unauthorized peer …\" line in the serve log, then:",
+      ],
+      code: [
+        `# on the LISTENER: pre-authorize a pusher without a prompt
+relayium authorize 74318e3b...`,
+      ],
+      bullets: [
+        "Identity and trust files live in ~/.config/relayium/ (override with --config-dir, e.g. /etc/relayium for a service).",
+        "authorize is idempotent — running it again for the same fingerprint is a no-op.",
       ],
     },
     {
@@ -91,6 +107,10 @@ WantedBy=multi-user.target`,
       {
         q: "How is daemon direct different from push over SSH?",
         a: "push over SSH tunnels the transfer through your SSH connection and needs an SSH account on the remote. Daemon direct needs no SSH and no account — the two servers authenticate each other by certificate fingerprint over pinned TLS, which is lighter when both machines are yours.",
+      },
+      {
+        q: "Do I have to copy fingerprints around by hand?",
+        a: "No. In a terminal, serve prompts you to approve each new pusher on its first push — showing its address and fingerprint — and remembers it, so later pushes are silent. You only reach for relayium id or relayium authorize for non-interactive setups like a systemd service, where there's no one to answer the prompt.",
       },
       {
         q: "Where are the identity and trust files?",
@@ -140,21 +160,6 @@ relayium id                       # prints THIS host's fingerprint`,
       ],
     },
     {
-      heading: "一次性建立信任",
-      body: [
-        "信任是双向的，基于证书指纹，就像 SSH 密钥一样。监听端只接受它被告知过的推送方：把推送方的 relayium id 输出加入监听端的允许列表。空的允许列表会拒绝所有人。",
-      ],
-      code: [
-        `# on the LISTENER: authorize a specific pusher by its fingerprint
-echo "<pusher-fingerprint>" >> ~/.config/relayium/authorized_fingerprints`,
-      ],
-      bullets: [
-        "在推送方机器上运行 relayium id 获取推送方的指纹。",
-        "身份和信任文件存放在 ~/.config/relayium/ 中（可用 --config-dir 覆盖，例如作为服务时用 /etc/relayium）。",
-        "推送方则在首次连接时获知监听端的密钥（首次使用即信任），并将其锁定在 known_hosts 中。",
-      ],
-    },
-    {
       heading: "向监听端推送",
       body: [
         "从另一台服务器，推送到一个 relayium:// 地址。第一次连接会锁定监听端的指纹；此后每次连接都会校验它，指纹一旦变化就会被拒绝而不是被默默接受——因此密钥被替换或中间人攻击会被发现，而不是被信任。",
@@ -169,6 +174,37 @@ relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
       bullets: [
         "没有中继，也没有回退：如果监听端无法到达，推送就会失败——文件字节永远不会经过其他任何人转发。",
         "使用与其他模式相同的传输引擎：可续传，并对每个文件做 SHA-256 校验。",
+      ],
+    },
+    {
+      heading: "批准首次推送的推送方",
+      body: [
+        "在终端里，你不需要预先共享任何东西。当一台新机器第一次向你的监听端推送时，serve 会显示它的来源和指纹，并请你批准它——就像 SSH 首次连接时的提示，只不过是在接收方这一侧：",
+      ],
+      code: [
+        `# on the LISTENER, when a new peer pushes:
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+      ],
+      bullets: [
+        "回答 y，该指纹就会被记录到 authorized_fingerprints 中；此后同一台机器的每次推送都会静默通过。",
+        "指纹是一台机器的稳定身份（重启和 IP 变化都不受影响），因此批准对每个推送方来说只是一次性的步骤。",
+        "推送方则在首次连接时获知监听端的密钥（首次使用即信任），并将其锁定在 known_hosts 中。",
+      ],
+    },
+    {
+      heading: "实现自动化（或在没有终端的环境下运行）",
+      body: [
+        "由于已批准的指纹会被记住，后续推送不再需要确认——因此 relayium push 可以直接接入 cron、部署脚本或 CI，实现加密、可校验完整性、可续传的服务器到服务器同步。当 serve 在没有终端的环境下运行（作为 systemd 服务、通过管道）时，它无法弹出提示，因此会拒绝未知的推送方；这时应改为预先授权它们。可以从推送方的 relayium id 获取指纹，或者从 serve 日志中 “rejected unauthorized peer …” 那一行复制它，然后：",
+      ],
+      code: [
+        `# on the LISTENER: pre-authorize a pusher without a prompt
+relayium authorize 74318e3b...`,
+      ],
+      bullets: [
+        "身份和信任文件存放在 ~/.config/relayium/ 中（可用 --config-dir 覆盖，例如作为服务时用 /etc/relayium）。",
+        "authorize 是幂等的——对同一个指纹再次运行它不会有任何效果。",
       ],
     },
     {
@@ -202,6 +238,10 @@ WantedBy=multi-user.target`,
       {
         q: "守护进程直连和通过 SSH 推送有什么不同？",
         a: "通过 SSH 推送会把传输隧道进你的 SSH 连接，并且需要在远端有一个 SSH 账号。守护进程直连不需要 SSH，也不需要账号——两台服务器通过锁定的 TLS，用证书指纹互相验证身份，当两台机器都是你自己的时候，这样更轻量。",
+      },
+      {
+        q: "我需要手动到处复制指纹吗？",
+        a: "不需要。在终端中，serve 会在每个新推送方首次推送时提示你批准它——显示其地址和指纹——并记住它，因此后续推送是静默的。只有在没有终端的非交互式场景（比如作为 systemd 服务运行，没有人来回应提示）时，你才需要用到 relayium id 或 relayium authorize。",
       },
       {
         q: "身份和信任文件在哪里？",
@@ -251,21 +291,6 @@ relayium id                       # prints THIS host's fingerprint`,
       ],
     },
     {
-      heading: "信頼関係を一度だけ設定する",
-      body: [
-        "信頼は相互的で、SSH の鍵と同様、証明書のフィンガープリントに基づきます。リスナーは、あらかじめ伝えられたプッシュ側だけを受け入れます。プッシュ側の relayium id の出力をリスナーの許可リストに追加してください。許可リストが空だと誰も拒否されます。",
-      ],
-      code: [
-        `# on the LISTENER: authorize a specific pusher by its fingerprint
-echo "<pusher-fingerprint>" >> ~/.config/relayium/authorized_fingerprints`,
-      ],
-      bullets: [
-        "プッシュ側のマシンで relayium id を実行し、プッシュ側のフィンガープリントを取得します。",
-        "アイデンティティと信頼のファイルは ~/.config/relayium/ にあります(サービスとして使う場合など、--config-dir で /etc/relayium などに上書きできます)。",
-        "プッシュ側は、初回接続時にリスナーの鍵を学習し(信頼オンファーストユース)、known_hosts に固定します。",
-      ],
-    },
-    {
       heading: "リスナーへプッシュする",
       body: [
         "もう一方のサーバーから、relayium:// アドレスへプッシュします。最初の接続でリスナーのフィンガープリントが固定され、以降の接続はすべてそれを検証します。フィンガープリントが変わった場合は黙って受け入れられるのではなく拒否されます——鍵のすり替えや中間者攻撃はそのまま信頼されるのではなく、検知されます。",
@@ -280,6 +305,37 @@ relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
       bullets: [
         "リレーもフォールバックもありません。リスナーに到達できなければプッシュは失敗します——ファイルのバイト列が他の誰かを経由することは決してありません。",
         "他のモードと同じ転送エンジンです。再開可能で、ファイルごとに SHA-256 チェックが行われます。",
+      ],
+    },
+    {
+      heading: "初回プッシュ時にプッシュ側を承認する",
+      body: [
+        "ターミナルでは、事前に何かを共有しておく必要はありません。新しいマシンが初めてあなたのリスナーへプッシュすると、serve はその送信元とフィンガープリントを表示し、承認するかどうかを尋ねます——SSH の初回接続時のプロンプトに似ていますが、受信側で行われる点が異なります:",
+      ],
+      code: [
+        `# on the LISTENER, when a new peer pushes:
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+      ],
+      bullets: [
+        "y と答えると、そのフィンガープリントが authorized_fingerprints に記録されます。以降、同じマシンからのプッシュはすべて確認なしで通過します。",
+        "フィンガープリントはそのマシンの安定したアイデンティティであり(再起動や IP の変更を経ても変わりません)、承認はプッシュ側ごとに一度だけで済みます。",
+        "プッシュ側は、初回接続時にリスナーの鍵を学習し(信頼オンファーストユース)、known_hosts に固定します。",
+      ],
+    },
+    {
+      heading: "自動化する(またはターミナルなしで実行する)",
+      body: [
+        "承認済みのフィンガープリントは記憶されるため、以降のプッシュにはプロンプトが不要になります——そのため relayium push は cron、デプロイスクリプト、CI にそのまま組み込め、暗号化・整合性チェック済み・再開可能なサーバー間同期を実現します。serve がターミナルなしで動作している場合(systemd サービスやパイプなど)はプロンプトを出せないため、未知のプッシュ側を拒否します。その場合は事前に承認してください。フィンガープリントはプッシュ側で relayium id を実行して取得するか、serve のログにある「rejected unauthorized peer …」の行からコピーし、次のように実行します:",
+      ],
+      code: [
+        `# on the LISTENER: pre-authorize a pusher without a prompt
+relayium authorize 74318e3b...`,
+      ],
+      bullets: [
+        "アイデンティティと信頼のファイルは ~/.config/relayium/ にあります(サービスとして使う場合など、--config-dir で /etc/relayium などに上書きできます)。",
+        "authorize は冪等です——同じフィンガープリントに対して再度実行しても何も起こりません。",
       ],
     },
     {
@@ -313,6 +369,10 @@ WantedBy=multi-user.target`,
       {
         q: "デーモン直結は SSH 経由の push と何が違いますか?",
         a: "SSH 経由の push は転送を SSH 接続のトンネルに通し、リモート側に SSH アカウントが必要です。デーモン直結には SSH もアカウントも不要です——2台のサーバーは固定された TLS 上で証明書のフィンガープリントによって互いを認証します。両方のマシンが自分のものである場合、これはより軽量です。",
+      },
+      {
+        q: "フィンガープリントを手作業でコピーして回る必要がありますか?",
+        a: "いいえ。ターミナルでは、serve が新しいプッシュ側の初回プッシュ時にその住所とフィンガープリントを表示し、承認するかどうかを尋ね、それを記憶します。そのため以降のプッシュは確認なしで進みます。relayium id や relayium authorize が必要になるのは、systemd サービスのようにプロンプトに応答する人がいない非対話的な環境を設定する場合だけです。",
       },
       {
         q: "アイデンティティと信頼のファイルはどこにありますか?",
@@ -362,21 +422,6 @@ relayium id                       # prints THIS host's fingerprint`,
       ],
     },
     {
-      heading: "신뢰를 한 번만 설정하기",
-      body: [
-        "신뢰는 SSH 키처럼 인증서 핑거프린트를 기반으로 하며 상호적입니다. 리스너는 자신에게 알려진 푸시하는 쪽만 받아들입니다. 푸시하는 쪽의 relayium id 출력을 리스너의 허용 목록에 추가하세요. 허용 목록이 비어 있으면 누구도 받아들이지 않습니다.",
-      ],
-      code: [
-        `# on the LISTENER: authorize a specific pusher by its fingerprint
-echo "<pusher-fingerprint>" >> ~/.config/relayium/authorized_fingerprints`,
-      ],
-      bullets: [
-        "푸시하는 쪽 기기에서 relayium id를 실행해 푸시하는 쪽의 핑거프린트를 얻으세요.",
-        "신원 및 신뢰 파일은 ~/.config/relayium/에 있습니다(서비스로 쓸 때는 --config-dir로 /etc/relayium 같은 곳으로 재정의할 수 있습니다).",
-        "푸시하는 쪽은 첫 연결 시 리스너의 키를 알게 되고(첫 사용 시 신뢰), 이를 known_hosts에 고정합니다.",
-      ],
-    },
-    {
       heading: "리스너로 푸시하기",
       body: [
         "다른 서버에서 relayium:// 주소로 푸시하세요. 첫 연결에서 리스너의 핑거프린트가 고정되고, 이후 모든 연결은 이를 검증합니다. 핑거프린트가 바뀌면 조용히 받아들여지는 대신 거부됩니다——그래서 키가 바뀌었거나 중간자 공격이 있으면 신뢰되는 대신 발견됩니다.",
@@ -391,6 +436,37 @@ relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
       bullets: [
         "릴레이도 폴백도 없습니다. 리스너에 도달할 수 없으면 푸시는 실패합니다——파일 바이트는 결코 다른 누군가를 거쳐 전달되지 않습니다.",
         "다른 모드와 동일한 전송 엔진입니다. 재개 가능하며 파일별 SHA-256 검사를 수행합니다.",
+      ],
+    },
+    {
+      heading: "첫 푸시 시 푸시하는 쪽 승인하기",
+      body: [
+        "터미널에서는 아무것도 미리 공유할 필요가 없습니다. 새 기기가 리스너로 처음 푸시하면, serve는 그 출처와 핑거프린트를 보여주고 승인할지 물어봅니다——SSH의 첫 연결 프롬프트와 비슷하지만, 받는 쪽에서 이루어진다는 점이 다릅니다:",
+      ],
+      code: [
+        `# on the LISTENER, when a new peer pushes:
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+      ],
+      bullets: [
+        "y라고 답하면 그 핑거프린트가 authorized_fingerprints에 기록됩니다. 이후 같은 기기에서의 모든 푸시는 조용히 통과합니다.",
+        "핑거프린트는 기기의 안정적인 신원이므로(재시작이나 IP 변경에도 유지됩니다), 승인은 푸시하는 쪽마다 한 번만 하면 되는 단계입니다.",
+        "푸시하는 쪽은 첫 연결 시 리스너의 키를 알게 되고(첫 사용 시 신뢰), 이를 known_hosts에 고정합니다.",
+      ],
+    },
+    {
+      heading: "자동화하기(또는 터미널 없이 실행하기)",
+      body: [
+        "승인된 핑거프린트는 기억되므로 이후의 푸시에는 확인이 필요 없습니다——따라서 relayium push는 cron, 배포 스크립트, CI에 곧바로 연결되어 암호화되고 무결성이 검증되며 재개 가능한 서버 간 동기화를 제공합니다. serve가 터미널 없이 실행될 때(systemd 서비스, 파이프 등)는 프롬프트를 띄울 수 없으므로 알 수 없는 푸시하는 쪽을 거부합니다. 대신 미리 승인해 두세요. 핑거프린트는 푸시하는 쪽에서 relayium id로 얻거나, serve 로그의 “rejected unauthorized peer …” 줄에서 복사한 뒤 다음을 실행하세요:",
+      ],
+      code: [
+        `# on the LISTENER: pre-authorize a pusher without a prompt
+relayium authorize 74318e3b...`,
+      ],
+      bullets: [
+        "신원 및 신뢰 파일은 ~/.config/relayium/에 있습니다(서비스로 쓸 때는 --config-dir로 /etc/relayium 같은 곳으로 재정의할 수 있습니다).",
+        "authorize는 멱등적입니다——같은 핑거프린트에 대해 다시 실행해도 아무 효과가 없습니다.",
       ],
     },
     {
@@ -424,6 +500,10 @@ WantedBy=multi-user.target`,
       {
         q: "데몬 다이렉트는 SSH를 통한 push와 어떻게 다른가요?",
         a: "SSH를 통한 push는 전송을 SSH 연결 터널로 통과시키며 원격에 SSH 계정이 필요합니다. 데몬 다이렉트는 SSH도 계정도 필요 없습니다——두 서버는 고정된 TLS를 통해 인증서 핑거프린트로 서로를 인증하며, 두 기기가 모두 당신 것일 때 더 가볍습니다.",
+      },
+      {
+        q: "핑거프린트를 손으로 일일이 복사해서 옮겨야 하나요?",
+        a: "아니요. 터미널에서는 serve가 각 새 푸시하는 쪽의 첫 푸시 시 주소와 핑거프린트를 보여주며 승인할지 물어보고, 이를 기억합니다. 그래서 이후의 푸시는 조용히 진행됩니다. relayium id나 relayium authorize가 필요한 경우는 systemd 서비스처럼 프롬프트에 답할 사람이 없는 비대화형 설정뿐입니다.",
       },
       {
         q: "신원 및 신뢰 파일은 어디에 있나요?",
@@ -473,21 +553,6 @@ relayium id                       # prints THIS host's fingerprint`,
       ],
     },
     {
-      heading: "Vertrauen einmalig einrichten",
-      body: [
-        "Vertrauen ist gegenseitig und basiert auf Zertifikats-Fingerprints, ähnlich wie SSH-Schlüssel. Der Listener akzeptiert nur Pusher, von denen er weiß: Trage die relayium-id-Ausgabe des Pushers in die Allow-Liste des Listeners ein. Eine leere Allow-Liste weist jeden zurück.",
-      ],
-      code: [
-        `# on the LISTENER: authorize a specific pusher by its fingerprint
-echo "<pusher-fingerprint>" >> ~/.config/relayium/authorized_fingerprints`,
-      ],
-      bullets: [
-        "Hole den Fingerprint des Pushers, indem du relayium id auf der pushenden Maschine ausführst.",
-        "Identitäts- und Vertrauensdateien liegen in ~/.config/relayium/ (mit --config-dir überschreibbar, z. B. /etc/relayium für einen Dienst).",
-        "Der Pusher wiederum lernt den Schlüssel des Listeners beim ersten Verbinden (Vertrauen bei erster Nutzung) und pinnt ihn in known_hosts.",
-      ],
-    },
-    {
       heading: "Zum Listener pushen",
       body: [
         "Push vom anderen Server aus an eine relayium://-Adresse. Die erste Verbindung pinnt den Fingerprint des Listeners; jede folgende Verbindung überprüft ihn, und ein geänderter Fingerprint wird abgelehnt statt stillschweigend akzeptiert — ein ausgetauschter Schlüssel oder ein Man-in-the-Middle wird so erkannt, nicht vertraut.",
@@ -502,6 +567,37 @@ relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
       bullets: [
         "Kein Relay und kein Fallback: Ist der Listener nicht erreichbar, schlägt der Push fehl — die Datei-Bytes laufen nie über irgendjemand anderen.",
         "Dieselbe Übertragungs-Engine wie die anderen Modi: fortsetzbar, mit einer SHA-256-Prüfung pro Datei.",
+      ],
+    },
+    {
+      heading: "Den Pusher beim ersten Push genehmigen",
+      body: [
+        "In einem Terminal musst du nichts vorab teilen. Wenn eine neue Maschine zum ersten Mal zu deinem Listener pusht, zeigt serve dir, woher sie kommt und ihren Fingerprint, und bittet dich, sie zu genehmigen — wie die Erstverbindungs-Abfrage von SSH, nur auf der Empfängerseite:",
+      ],
+      code: [
+        `# on the LISTENER, when a new peer pushes:
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+      ],
+      bullets: [
+        "Antworte mit y, und dieser Fingerprint wird in authorized_fingerprints gespeichert; jeder spätere Push von derselben Maschine läuft dann stillschweigend durch.",
+        "Der Fingerprint ist die stabile Identität einer Maschine (er übersteht Neustarts und IP-Wechsel), sodass die Genehmigung pro Pusher nur einmal nötig ist.",
+        "Der Pusher wiederum lernt den Schlüssel des Listeners beim ersten Verbinden (Vertrauen bei erster Nutzung) und pinnt ihn in known_hosts.",
+      ],
+    },
+    {
+      heading: "Automatisieren (oder ohne Terminal betreiben)",
+      body: [
+        "Weil ein genehmigter Fingerprint gespeichert bleibt, brauchen spätere Pushes keine Abfrage mehr — relayium push lässt sich also direkt in cron, ein Deploy-Skript oder CI einbinden, für verschlüsselte, integritätsgeprüfte, fortsetzbare Server-zu-Server-Synchronisation. Läuft serve ohne Terminal (ein systemd-Dienst, eine Pipe), kann es nicht nachfragen und lehnt daher unbekannte Pusher ab; genehmige sie stattdessen im Voraus. Hol dir den Fingerprint über relayium id auf der Pusher-Seite, oder kopiere ihn aus der Zeile „rejected unauthorized peer …“ im serve-Log, dann:",
+      ],
+      code: [
+        `# on the LISTENER: pre-authorize a pusher without a prompt
+relayium authorize 74318e3b...`,
+      ],
+      bullets: [
+        "Identitäts- und Vertrauensdateien liegen in ~/.config/relayium/ (mit --config-dir überschreibbar, z. B. /etc/relayium für einen Dienst).",
+        "authorize ist idempotent — es erneut für denselben Fingerprint auszuführen, ist ein No-op.",
       ],
     },
     {
@@ -535,6 +631,10 @@ WantedBy=multi-user.target`,
       {
         q: "Wie unterscheidet sich Daemon Direct von push über SSH?",
         a: "push über SSH tunnelt die Übertragung durch deine SSH-Verbindung und braucht ein SSH-Konto auf der Gegenseite. Daemon Direct braucht weder SSH noch ein Konto — die beiden Server authentifizieren sich gegenseitig per Zertifikats-Fingerprint über gepinntes TLS, was leichtgewichtiger ist, wenn beide Maschinen dir gehören.",
+      },
+      {
+        q: "Muss ich Fingerprints von Hand herumkopieren?",
+        a: "Nein. In einem Terminal fordert dich serve auf, jeden neuen Pusher bei seinem ersten Push zu genehmigen — zeigt dabei seine Adresse und seinen Fingerprint — und merkt sich das, sodass spätere Pushes stillschweigend ablaufen. Du greifst nur bei nicht-interaktiven Setups wie einem systemd-Dienst zu relayium id oder relayium authorize, wo niemand da ist, um die Abfrage zu beantworten.",
       },
       {
         q: "Wo liegen die Identitäts- und Vertrauensdateien?",
@@ -584,21 +684,6 @@ relayium id                       # prints THIS host's fingerprint`,
       ],
     },
     {
-      heading: "Établir la confiance une seule fois",
-      body: [
-        "La confiance est mutuelle et repose sur des empreintes de certificat, comme les clés SSH. L'écouteur n'accepte que les émetteurs dont il a connaissance : ajoutez la sortie de relayium id de l'émetteur à la liste d'autorisation de l'écouteur. Une liste d'autorisation vide rejette tout le monde.",
-      ],
-      code: [
-        `# on the LISTENER: authorize a specific pusher by its fingerprint
-echo "<pusher-fingerprint>" >> ~/.config/relayium/authorized_fingerprints`,
-      ],
-      bullets: [
-        "Obtenez l'empreinte de l'émetteur en exécutant relayium id sur la machine qui envoie.",
-        "Les fichiers d'identité et de confiance se trouvent dans ~/.config/relayium/ (à surcharger avec --config-dir, par exemple /etc/relayium pour un service).",
-        "L'émetteur, de son côté, découvre la clé de l'écouteur à la première connexion (confiance à la première utilisation) et l'épingle dans known_hosts.",
-      ],
-    },
-    {
       heading: "Envoyer vers l'écouteur",
       body: [
         "Depuis l'autre serveur, envoyez vers une adresse relayium://. La première connexion épingle l'empreinte de l'écouteur ; chaque connexion suivante la vérifie, et une empreinte modifiée est refusée plutôt qu'acceptée silencieusement — une clé remplacée ou une attaque de l'homme du milieu est ainsi détectée, pas approuvée.",
@@ -613,6 +698,37 @@ relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
       bullets: [
         "Aucun relais et aucun repli : si l'écouteur n'est pas joignable, l'envoi échoue — les octets du fichier ne transitent jamais par qui que ce soit d'autre.",
         "Le même moteur de transfert que les autres modes : reprenable, avec une vérification SHA-256 par fichier.",
+      ],
+    },
+    {
+      heading: "Approuver l'émetteur au premier envoi",
+      body: [
+        "Dans un terminal, vous n'avez rien à partager à l'avance. La première fois qu'une nouvelle machine envoie vers votre écouteur, serve vous montre d'où elle vient et son empreinte, puis vous demande de l'approuver — comme l'invite de première connexion de SSH, mais côté récepteur :",
+      ],
+      code: [
+        `# on the LISTENER, when a new peer pushes:
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+      ],
+      bullets: [
+        "Répondez y et cette empreinte est mémorisée dans authorized_fingerprints ; chaque envoi ultérieur depuis la même machine passe alors silencieusement.",
+        "L'empreinte est l'identité stable d'une machine (elle survit aux redémarrages et aux changements d'IP), donc l'approbation n'est qu'une étape ponctuelle par émetteur.",
+        "L'émetteur, de son côté, découvre la clé de l'écouteur à la première connexion (confiance à la première utilisation) et l'épingle dans known_hosts.",
+      ],
+    },
+    {
+      heading: "Automatiser (ou exécuter sans terminal)",
+      body: [
+        "Comme une empreinte approuvée est mémorisée, les envois suivants ne demandent plus de confirmation — relayium push s'intègre donc directement dans cron, un script de déploiement ou la CI pour une synchronisation serveur à serveur chiffrée, vérifiée en intégrité et reprenable. Quand serve tourne sans terminal (un service systemd, un pipe), il ne peut pas demander confirmation et rejette donc les émetteurs inconnus ; autorisez-les plutôt à l'avance. Récupérez l'empreinte via relayium id côté émetteur, ou copiez-la depuis la ligne « rejected unauthorized peer … » du journal de serve, puis :",
+      ],
+      code: [
+        `# on the LISTENER: pre-authorize a pusher without a prompt
+relayium authorize 74318e3b...`,
+      ],
+      bullets: [
+        "Les fichiers d'identité et de confiance se trouvent dans ~/.config/relayium/ (à surcharger avec --config-dir, par exemple /etc/relayium pour un service).",
+        "authorize est idempotent — l'exécuter à nouveau pour la même empreinte ne fait rien.",
       ],
     },
     {
@@ -646,6 +762,10 @@ WantedBy=multi-user.target`,
       {
         q: "En quoi le daemon direct diffère-t-il de push via SSH ?",
         a: "push via SSH fait transiter le transfert par votre connexion SSH et nécessite un compte SSH sur la machine distante. Le daemon direct ne nécessite ni SSH ni compte — les deux serveurs s'authentifient mutuellement par empreinte de certificat via TLS épinglé, ce qui est plus léger quand les deux machines vous appartiennent.",
+      },
+      {
+        q: "Dois-je recopier les empreintes à la main ?",
+        a: "Non. Dans un terminal, serve vous invite à approuver chaque nouvel émetteur lors de son premier envoi — en affichant son adresse et son empreinte — et s'en souvient, si bien que les envois suivants sont silencieux. Vous n'avez recours à relayium id ou relayium authorize que pour des configurations non interactives, comme un service systemd, où personne n'est là pour répondre à l'invite.",
       },
       {
         q: "Où se trouvent les fichiers d'identité et de confiance ?",

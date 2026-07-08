@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
+	"strings"
+
+	"golang.org/x/term"
 
 	"github.com/relayium/relayium/internal/secure"
 	"github.com/relayium/relayium/internal/trust"
@@ -47,9 +51,25 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+
+	h := &serveHandler{
+		id: id, allow: allow, dir: f.dir, noResume: f.noResume, cfgDir: cfgDir,
+		stdout: stdout, stderr: stderr,
+	}
+	// In an interactive terminal, an unknown pusher is approved on first push and
+	// remembered. Under systemd or a pipe (no TTY) there is no one to ask, so an
+	// unknown pusher is rejected — pre-authorize with `relayium authorize`.
+	if stdinIsTTY() {
+		h.approve = func(remote, fp string) bool { return promptApprove(os.Stdin, stderr, remote, fp) }
+	}
+
 	if len(allow) == 0 {
-		fmt.Fprintf(stderr, "warning: no authorized fingerprints; all pushes will be rejected.\n"+
-			"  add a peer's fingerprint to %s (peer prints it with `relayium id`)\n", trust.AuthorizedPath(cfgDir))
+		if h.approve != nil {
+			fmt.Fprintf(stderr, "no authorized peers yet — you'll be asked to approve each new peer on its first push.\n")
+		} else {
+			fmt.Fprintf(stderr, "warning: no authorized peers and no terminal to approve on; all pushes will be rejected.\n"+
+				"  pre-authorize with `relayium authorize <fingerprint>` (peer prints it with `relayium id`).\n")
+		}
 	}
 
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", f.port))
@@ -61,20 +81,35 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stderr, "relayium serve: listening on %s, receiving into %s (fingerprint %s)\n",
 		ln.Addr(), f.dir, id.Fingerprint)
 
-	return serveLoop(ln, id, allow, f.dir, f.once, f.noResume, stdout, stderr)
+	return serveLoop(ln, h, f.once)
+}
+
+// serveHandler carries everything one serve invocation needs to authorize and
+// receive pushes. allow is mutated in place as new peers are approved.
+type serveHandler struct {
+	id       *secure.Identity
+	allow    map[string]bool
+	dir      string
+	noResume bool
+	cfgDir   string
+	// approve is consulted for an unknown fingerprint; nil (or false) rejects it.
+	// It receives the peer's remote address and fingerprint.
+	approve func(remote, fp string) bool
+	stdout  io.Writer
+	stderr  io.Writer
 }
 
 // serveLoop accepts and handles connections serially. With once it returns after
 // the first handled connection (0 on success, 1 otherwise); otherwise it runs
 // until Accept fails.
-func serveLoop(ln net.Listener, id *secure.Identity, allow map[string]bool, dir string, once, noResume bool, stdout, stderr io.Writer) int {
+func serveLoop(ln net.Listener, h *serveHandler, once bool) int {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			fmt.Fprintln(stderr, err)
+			fmt.Fprintln(h.stderr, err)
 			return 1
 		}
-		ok := serveConn(conn, id, allow, dir, noResume, stdout, stderr)
+		ok := h.serve(conn)
 		if once {
 			if ok {
 				return 0
@@ -84,34 +119,109 @@ func serveLoop(ln net.Listener, id *secure.Identity, allow map[string]bool, dir 
 	}
 }
 
-// serveConn runs one pinned-TLS server handshake with allow-set authorization,
-// then receives the pushed batch. It never lets one bad peer take down serve.
-func serveConn(conn net.Conn, id *secure.Identity, allow map[string]bool, dir string, noResume bool, stdout, stderr io.Writer) bool {
+// serve runs one pinned-TLS server handshake, authorizes the peer (allow-list
+// membership, or interactive approval that remembers the fingerprint), then
+// receives the pushed batch. No file data is read until the peer is authorized,
+// and one bad peer never takes down serve.
+func (h *serveHandler) serve(conn net.Conn) bool {
 	defer conn.Close()
 	remote := conn.RemoteAddr()
 
-	tconn, fp, err := secure.ServerSet(conn, id, allow)
+	tconn, fp, err := secure.ServerAny(conn, h.id)
 	if err != nil {
-		// An out-of-set fingerprint fails the handshake; distinguish it from a
-		// transport/TLS error so the operator sees who was rejected.
-		if fp != "" && !allow[fp] {
-			fmt.Fprintf(stderr, "rejected unauthorized peer %s from %s\n", fp, remote)
-		} else {
-			fmt.Fprintf(stderr, "handshake failed from %s: %v\n", remote, err)
-		}
+		fmt.Fprintf(h.stderr, "handshake failed from %s: %v\n", remote, err)
 		return false
 	}
 	defer tconn.Close()
 
-	rep, err := xfer.Receive(tconn, dir, xfer.RecvOpts{NoResume: noResume})
+	if !h.allow[fp] {
+		if h.approve == nil || !h.approve(remote.String(), fp) {
+			fmt.Fprintf(h.stderr, "rejected unauthorized peer %s from %s\n", fp, remote)
+			return false
+		}
+		// Approved: remember the fingerprint so future pushes pass silently
+		// (this is what makes cron/script automation work after a one-time yes).
+		if err := trust.AddAuthorized(h.cfgDir, fp); err != nil {
+			fmt.Fprintf(h.stderr, "warning: could not persist fingerprint to %s: %v\n", trust.AuthorizedPath(h.cfgDir), err)
+		}
+		h.allow[fp] = true
+		fmt.Fprintf(h.stderr, "authorized %s (added to %s)\n", fp, trust.AuthorizedPath(h.cfgDir))
+	}
+
+	rep, err := xfer.Receive(tconn, h.dir, xfer.RecvOpts{NoResume: h.noResume})
 	if err != nil {
-		fmt.Fprintf(stderr, "receive from %s (%s): %v\n", fp, remote, err)
+		fmt.Fprintf(h.stderr, "receive from %s (%s): %v\n", fp, remote, err)
 		return false
 	}
 	if len(rep.Failed) > 0 {
-		fmt.Fprintf(stderr, "%d file(s) failed integrity check from %s: %v\n", len(rep.Failed), fp, rep.Failed)
+		fmt.Fprintf(h.stderr, "%d file(s) failed integrity check from %s: %v\n", len(rep.Failed), fp, rep.Failed)
 		return false
 	}
-	fmt.Fprintf(stdout, "received %d file(s), %d bytes from %s\n", rep.Files, rep.Bytes, fp)
+	fmt.Fprintf(h.stdout, "received %d file(s), %d bytes from %s\n", rep.Files, rep.Bytes, fp)
+	return true
+}
+
+// promptApprove asks the operator on the terminal whether to accept and remember
+// an unknown peer, showing its address and fingerprint. A bare Enter means no.
+func promptApprove(stdin io.Reader, out io.Writer, remote, fp string) bool {
+	fmt.Fprintf(out, "\nIncoming push from %s\n  fingerprint: %s\nAccept and remember this peer? [y/N] ", remote, fp)
+	var ans string
+	fmt.Fscanln(stdin, &ans)
+	switch ans {
+	case "y", "Y", "yes", "Yes", "YES":
+		return true
+	}
+	return false
+}
+
+// stdinIsTTY reports whether standard input is an interactive terminal, so serve
+// only prompts when there is a human to answer. It uses a real isatty check, so
+// a pipe or systemd's /dev/null stdin correctly reads as non-interactive.
+func stdinIsTTY() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
+}
+
+// runAuthorize adds a pusher's fingerprint to this host's allow-list, for the
+// non-interactive (systemd) case where serve can't prompt.
+func runAuthorize(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("authorize", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	var configDir string
+	fs.StringVar(&configDir, "config-dir", "", "identity/trust directory")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintln(stderr, "authorize needs <fingerprint> (the pusher prints it with `relayium id`)")
+		return 2
+	}
+	fp := strings.ToLower(strings.TrimSpace(fs.Arg(0)))
+	if !isFingerprint(fp) {
+		fmt.Fprintf(stderr, "not a valid fingerprint: %q (want the 64 hex chars from `relayium id`)\n", fs.Arg(0))
+		return 2
+	}
+	cfgDir, err := resolveConfigDir(configDir)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if err := trust.AddAuthorized(cfgDir, fp); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "authorized %s\n", fp)
+	return 0
+}
+
+// isFingerprint reports whether s is a 64-char lowercase hex string (a SHA-256).
+func isFingerprint(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			return false
+		}
+	}
 	return true
 }

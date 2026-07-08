@@ -152,9 +152,9 @@ const de: Messages = {
       "Für zwei Hosts unter deiner Kontrolle, die die Adresse der jeweils anderen bereits kennen: Einer lauscht, der andere pusht direkt dorthin über gepinntes TLS 1.3. Kein Relay, kein SSH, kein Code — Vertrauen basiert auf Public-Key, einmalig eingerichtet. Drei Schritte:",
     step1Label: "Listener:",
     step1Body: "serve starten und den Fingerprint dieses Hosts mit relayium id ausgeben.",
-    step2Label: "Pusher autorisieren:",
+    step2Label: "Beim ersten Push autorisieren:",
     step2Body:
-      "den relayium id-Fingerprint des Pushers zur Allow-Liste des Listeners hinzufügen (eine leere Liste weist alle ab).",
+      "in einem Terminal zeigt der Listener Adresse und Fingerprint des neuen Pushers an und bittet um Bestätigung — antworte mit y, dann wird es gemerkt und spätere Pushes laufen ohne Rückfrage. Läuft es als Dienst (kein Terminal)? Dann mit relayium authorize vorab autorisieren.",
     step3Label: "Pusher:",
     step3Body:
       "push zu relayium://host. Der Schlüssel des Listeners wird beim ersten Gebrauch vertraut und in known_hosts gepinnt; eine spätere Änderung des Fingerprints wird abgelehnt (nicht stillschweigend akzeptiert).",

@@ -152,9 +152,9 @@ const en: Messages = {
       "For two hosts you control that already know each other's address: one listens, the other pushes straight to it over pinned TLS 1.3. No relay, no SSH, no code — trust is public-key, set up once. Three steps:",
     step1Label: "Listener:",
     step1Body: "start serve and print this host's fingerprint with relayium id.",
-    step2Label: "Authorize the pusher:",
+    step2Label: "Approve on first push:",
     step2Body:
-      "add the pusher's relayium id fingerprint to the listener's allow-list (an empty list rejects everyone).",
+      "in a terminal, the listener shows the new pusher's address and fingerprint and asks you to approve it — answer y and it's remembered, so later pushes are silent. Running as a service (no terminal)? pre-authorize with relayium authorize.",
     step3Label: "Pusher:",
     step3Body:
       "push to relayium://host. The listener's key is trusted on first use and pinned in known_hosts; a later fingerprint change is refused (not silently accepted).",

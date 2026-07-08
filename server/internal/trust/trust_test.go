@@ -76,6 +76,30 @@ DDD444
 	}
 }
 
+func TestAddAuthorizedAppendsAndDedups(t *testing.T) {
+	dir := t.TempDir()
+	if err := AddAuthorized(dir, "AAA111"); err != nil {
+		t.Fatal(err)
+	}
+	// Adding again (any case, with whitespace) is a no-op.
+	if err := AddAuthorized(dir, "  aaa111  "); err != nil {
+		t.Fatal(err)
+	}
+	if err := AddAuthorized(dir, "bbb222"); err != nil {
+		t.Fatal(err)
+	}
+	set, err := LoadAuthorized(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(set) != 2 || !set["aaa111"] || !set["bbb222"] {
+		t.Fatalf("set = %v, want {aaa111, bbb222}", set)
+	}
+	if err := AddAuthorized(dir, ""); err == nil {
+		t.Fatal("empty fingerprint should error")
+	}
+}
+
 func TestLoadAuthorizedMissingFileEmpty(t *testing.T) {
 	set, err := LoadAuthorized(t.TempDir())
 	if err != nil {

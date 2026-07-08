@@ -53,61 +53,31 @@ func TestBadKeyPermsRejected(t *testing.T) {
 	}
 }
 
-func TestServerSetAdmitsInSetRejectsOutOfSet(t *testing.T) {
-	client, _ := LoadOrCreateIdentity(t.TempDir())
-	server, _ := LoadOrCreateIdentity(t.TempDir())
-
-	// In-set: server admits the client.
-	if !roundtripServerSet(t, client, server, map[string]bool{client.Fingerprint: true}) {
-		t.Fatal("in-set client was rejected")
-	}
-	// Out-of-set: server rejects (empty allow-list).
-	if roundtripServerSet(t, client, server, map[string]bool{}) {
-		t.Fatal("out-of-set client was admitted")
-	}
-}
-
-// roundtripServerSet dials ClientAny → ServerSet over a pipe and reports whether
-// the server accepted (handshake succeeded).
-func roundtripServerSet(t *testing.T, client, server *Identity, allow map[string]bool) bool {
-	t.Helper()
-	c1, c2 := net.Pipe()
-	srvOK := make(chan bool, 1)
-	go func() {
-		s, fp, err := ServerSet(c2, server, allow)
-		if err == nil {
-			s.Close()
-		}
-		// fp is always reported, even on rejection.
-		if fp != client.Fingerprint {
-			t.Errorf("ServerSet reported fp %q, want %q", fp, client.Fingerprint)
-		}
-		srvOK <- err == nil
-	}()
-	c, _, err := ClientAny(c1, client)
-	if err == nil {
-		c.Close()
-	}
-	return <-srvOK
-}
-
-func TestClientAnyReportsPeerFingerprint(t *testing.T) {
+func TestServerAnyAndClientAnyReportFingerprints(t *testing.T) {
 	client, _ := LoadOrCreateIdentity(t.TempDir())
 	server, _ := LoadOrCreateIdentity(t.TempDir())
 
 	c1, c2 := net.Pipe()
+	srvFP := make(chan string, 1)
 	go func() {
-		s, _, err := ServerSet(c2, server, map[string]bool{client.Fingerprint: true})
+		s, fp, err := ServerAny(c2, server)
 		if err == nil {
 			s.Close()
 		}
+		srvFP <- fp
 	}()
-	c, gotFP, err := ClientAny(c1, client)
+	c, gotServerFP, err := ClientAny(c1, client)
 	if err != nil {
 		t.Fatalf("ClientAny: %v", err)
 	}
 	c.Close()
-	if gotFP != server.Fingerprint {
-		t.Fatalf("ClientAny reported peer fp %q, want %q", gotFP, server.Fingerprint)
+
+	// ServerAny admits any client cert and reports its fingerprint...
+	if got := <-srvFP; got != client.Fingerprint {
+		t.Fatalf("ServerAny reported client fp %q, want %q", got, client.Fingerprint)
+	}
+	// ...and ClientAny reports the server's fingerprint.
+	if gotServerFP != server.Fingerprint {
+		t.Fatalf("ClientAny reported server fp %q, want %q", gotServerFP, server.Fingerprint)
 	}
 }

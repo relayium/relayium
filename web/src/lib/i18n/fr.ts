@@ -152,9 +152,9 @@ const fr: Messages = {
       "Pour deux hôtes que vous contrôlez et qui connaissent déjà l'adresse l'un de l'autre : l'un écoute, l'autre lui envoie directement (push) via TLS 1.3 épinglé. Pas de relais, pas de SSH, pas de code — la confiance repose sur une clé publique, configurée une seule fois. Trois étapes :",
     step1Label: "Récepteur :",
     step1Body: "lancez serve et affichez l'empreinte de cet hôte avec relayium id.",
-    step2Label: "Autoriser l'expéditeur :",
+    step2Label: "Autoriser au premier push :",
     step2Body:
-      "ajoutez l'empreinte relayium id de l'expéditeur à la liste d'autorisation du récepteur (une liste vide rejette tout le monde).",
+      "dans un terminal, le récepteur affiche l'adresse et l'empreinte du nouvel expéditeur et vous demande de l'approuver — répondez y et c'est mémorisé, les push suivants passent alors sans confirmation. Vous l'exécutez comme service (pas de terminal) ? Autorisez-le à l'avance avec relayium authorize.",
     step3Label: "Expéditeur :",
     step3Body:
       "faites push vers relayium://host. La clé du récepteur est approuvée à la première utilisation et épinglée dans known_hosts ; un changement d'empreinte ultérieur est refusé (jamais accepté silencieusement).",

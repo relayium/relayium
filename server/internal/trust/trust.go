@@ -106,3 +106,30 @@ func LoadAuthorized(dir string) (map[string]bool, error) {
 
 // AuthorizedPath returns the serve-side allow-list path, for user-facing hints.
 func AuthorizedPath(dir string) string { return filepath.Join(dir, authorizedFile) }
+
+// AddAuthorized appends fp to dir/authorized_fingerprints (creating it and dir),
+// unless it is already present. It is safe to call on a running serve to grow
+// the allow-list. The fingerprint is normalised to lowercase.
+func AddAuthorized(dir, fp string) error {
+	fp = strings.ToLower(strings.TrimSpace(fp))
+	if fp == "" {
+		return errors.New("trust: empty fingerprint")
+	}
+	set, err := LoadAuthorized(dir)
+	if err != nil {
+		return err
+	}
+	if set[fp] {
+		return nil // already authorized — no-op
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(filepath.Join(dir, authorizedFile), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = fmt.Fprintln(f, fp)
+	return err
+}
