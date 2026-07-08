@@ -122,6 +122,72 @@ const en: Messages = {
     blurb: "Install a self-hostable, end-to-end-encrypted transfer CLI in one command.",
     cta: "Explore the CLI →",
   },
+  cliPage: {
+    badges: ["Completely free", "End-to-end encrypted", "Self-hostable"],
+    freenote:
+      "Your files travel directly between machines and never pass through Relayium's servers — only a small rendezvous handshake does, and only for send/receive.",
+    installH2: "Install",
+    installIntro: "One command downloads a prebuilt binary for your OS and puts it on your PATH:",
+    installReleases: "Download a prebuilt binary from the releases page →",
+    installBuild: "Or build from source:",
+    installHelp: "Then run relayium --help to see every command.",
+    whichH2: "Which mode?",
+    whichIntro: "Relayium moves files three ways. Pick by where the other end is:",
+    pickWhen: [
+      "To a server you can SSH into",
+      "To another person, cross-network",
+      "Between two servers you own",
+    ],
+    mode1Title: "push / pull — over your own SSH",
+    mode1Tag: "free",
+    mode1Body:
+      "Copy files to (or from) any machine you can already ssh into — a VPS, a home server, a workstation. Bytes travel over your SSH connection and never touch Relayium's servers; you need no account. If relayium is installed on the remote it uses the native protocol (per-file resume + SHA-256), otherwise it falls back to a plain tar stream.",
+    mode2Title: "send / receive — by pairing code",
+    mode2Tag: "free · direct P2P",
+    mode2Body:
+      "Send to another person across networks. Agree on a short code out of band (say it over a call — it's any short string), then one side sends and the other receives. The connection is direct peer-to-peer: only a small rendezvous handshake passes through Relayium to introduce the two ends — the file bytes never do. If both ends are behind strict NAT and can't connect directly, the transfer simply fails (the CLI has no relay). Both terminals print a 6-digit SAS code — compare them to rule out a man-in-the-middle (add --verify to require confirmation before any bytes move).",
+    mode3Title: "daemon direct — server to server",
+    mode3Tag: "free",
+    mode3Body:
+      "For two hosts you control that already know each other's address: one listens, the other pushes straight to it over pinned TLS 1.3. No relay, no SSH, no code — trust is public-key, set up once. Three steps:",
+    step1Label: "Listener:",
+    step1Body: "start serve and print this host's fingerprint with relayium id.",
+    step2Label: "Authorize the pusher:",
+    step2Body:
+      "add the pusher's relayium id fingerprint to the listener's allow-list (an empty list rejects everyone).",
+    step3Label: "Pusher:",
+    step3Body:
+      "push to relayium://host. The listener's key is trusted on first use and pinned in known_hosts; a later fingerprint change is refused (not silently accepted).",
+    refH2: "Reference",
+    flagsH3: "Common flags",
+    thFlag: "Flag",
+    thApplies: "Applies to",
+    thMeaning: "Meaning",
+    flagMeanings: [
+      "Directory to receive into (default: current dir)",
+      "Daemon TCP port (default: 9031)",
+      "Handle a single transfer, then exit",
+      "Disable resuming partial files",
+      "Identity + trust directory (default: ~/.config/relayium)",
+      "SSH identity (key) file",
+      "SSH port",
+      "Require confirming the SAS code before transferring",
+    ],
+    trustH3: "Trust & identity files",
+    trustIntro:
+      "Stored in ~/.config/relayium/ (override with --config-dir, e.g. /etc/relayium for a systemd service):",
+    fileDescs: [
+      "this host's persistent identity (auto-generated, key kept 0600).",
+      "fingerprints of listeners you've pushed to (TOFU, pinned thereafter).",
+      "on a listener, the pushers allowed to connect.",
+    ],
+    integrityH3: "Integrity & resume",
+    integrityNote:
+      "Every file is verified end-to-end with SHA-256, and an interrupted transfer resumes from where it stopped on the next run (disable with --no-resume).",
+    footerSource: "Source on GitHub ↗",
+    footerReleases: "Releases",
+    footerBrowser: "Prefer the browser? It's the home page.",
+  },
   crossnet: {
     realtimeTitle: "Realtime direct",
     realtimeSub: "Both online now · peer-to-peer · files never touch the server",

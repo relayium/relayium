@@ -122,6 +122,72 @@ const de: Messages = {
     blurb: "Installiere eine selbst-hostbare, Ende-zu-Ende-verschlüsselte Transfer-CLI mit einem Befehl.",
     cta: "CLI entdecken →",
   },
+  cliPage: {
+    badges: ["Komplett kostenlos", "Ende-zu-Ende-verschlüsselt", "Selbst hostbar"],
+    freenote:
+      "Deine Dateien wandern direkt zwischen den Rechnern und laufen nie über Relayiums Server — nur ein kleiner Rendezvous-Handshake tut das, und auch nur bei send/receive.",
+    installH2: "Installation",
+    installIntro: "Ein Befehl lädt ein vorgebautes Binary für dein Betriebssystem herunter und legt es in deinen PATH:",
+    installReleases: "Vorgebautes Binary von der Releases-Seite herunterladen →",
+    installBuild: "Oder aus dem Quellcode bauen:",
+    installHelp: "Führe dann relayium --help aus, um alle Befehle zu sehen.",
+    whichH2: "Welcher Modus?",
+    whichIntro: "Relayium überträgt Dateien auf drei Arten. Wähle je nachdem, wo die Gegenstelle ist:",
+    pickWhen: [
+      "Zu einem Server, in den du dich per SSH einloggen kannst",
+      "Zu einer anderen Person, netzwerkübergreifend",
+      "Zwischen zwei Servern, die dir gehören",
+    ],
+    mode1Title: "push / pull — über dein eigenes SSH",
+    mode1Tag: "kostenlos",
+    mode1Body:
+      "Kopiere Dateien zu (oder von) jeder Maschine, in die du dich bereits per ssh einloggen kannst — ein VPS, ein Heimserver, eine Workstation. Die Bytes laufen über deine SSH-Verbindung und berühren Relayiums Server nie; du brauchst kein Konto. Ist relayium auf der Gegenseite installiert, wird das native Protokoll genutzt (dateiweise Wiederaufnahme + SHA-256), andernfalls fällt es auf einen einfachen tar-Stream zurück.",
+    mode2Title: "send / receive — per Pairing-Code",
+    mode2Tag: "kostenlos · direktes P2P",
+    mode2Body:
+      "Sende netzwerkübergreifend an eine andere Person. Vereinbart außerhalb des Kanals einen kurzen Code (etwa am Telefon — ein beliebiger kurzer String), dann sendet die eine Seite und die andere empfängt. Die Verbindung ist direktes Peer-to-Peer: Nur ein kleiner Rendezvous-Handshake läuft über Relayium, um die beiden Enden einander vorzustellen — die Dateibytes nie. Sind beide Enden hinter strengem NAT und können sich nicht direkt verbinden, schlägt die Übertragung schlicht fehl (die CLI hat kein Relay). Beide Terminals zeigen einen 6-stelligen SAS-Code an — vergleicht sie, um einen Man-in-the-Middle auszuschließen (mit --verify wird eine Bestätigung verlangt, bevor überhaupt Bytes fließen).",
+    mode3Title: "daemon direct — Server zu Server",
+    mode3Tag: "kostenlos",
+    mode3Body:
+      "Für zwei Hosts unter deiner Kontrolle, die die Adresse der jeweils anderen bereits kennen: Einer lauscht, der andere pusht direkt dorthin über gepinntes TLS 1.3. Kein Relay, kein SSH, kein Code — Vertrauen basiert auf Public-Key, einmalig eingerichtet. Drei Schritte:",
+    step1Label: "Listener:",
+    step1Body: "serve starten und den Fingerprint dieses Hosts mit relayium id ausgeben.",
+    step2Label: "Pusher autorisieren:",
+    step2Body:
+      "den relayium id-Fingerprint des Pushers zur Allow-Liste des Listeners hinzufügen (eine leere Liste weist alle ab).",
+    step3Label: "Pusher:",
+    step3Body:
+      "push zu relayium://host. Der Schlüssel des Listeners wird beim ersten Gebrauch vertraut und in known_hosts gepinnt; eine spätere Änderung des Fingerprints wird abgelehnt (nicht stillschweigend akzeptiert).",
+    refH2: "Referenz",
+    flagsH3: "Gängige Flags",
+    thFlag: "Flag",
+    thApplies: "Gilt für",
+    thMeaning: "Bedeutung",
+    flagMeanings: [
+      "Zielverzeichnis für den Empfang (Standard: aktuelles Verzeichnis)",
+      "TCP-Port des Daemons (Standard: 9031)",
+      "Eine einzelne Übertragung abwickeln, dann beenden",
+      "Wiederaufnahme unvollständiger Dateien deaktivieren",
+      "Identitäts- und Trust-Verzeichnis (Standard: ~/.config/relayium)",
+      "SSH-Identitätsdatei (Key)",
+      "SSH-Port",
+      "Bestätigung des SAS-Codes vor der Übertragung verlangen",
+    ],
+    trustH3: "Vertrauens- und Identitätsdateien",
+    trustIntro:
+      "Gespeichert in ~/.config/relayium/ (überschreibbar mit --config-dir, z. B. /etc/relayium für einen systemd-Dienst):",
+    fileDescs: [
+      "die dauerhafte Identität dieses Hosts (automatisch erzeugt, Key bleibt 0600).",
+      "Fingerprints von Listenern, zu denen du schon gepusht hast (TOFU, danach gepinnt).",
+      "bei einem Listener: die Pusher, die sich verbinden dürfen.",
+    ],
+    integrityH3: "Integrität & Wiederaufnahme",
+    integrityNote:
+      "Jede Datei wird Ende-zu-Ende mit SHA-256 verifiziert, und eine unterbrochene Übertragung wird beim nächsten Lauf genau dort fortgesetzt, wo sie stehen blieb (deaktivierbar mit --no-resume).",
+    footerSource: "Quellcode auf GitHub ↗",
+    footerReleases: "Releases",
+    footerBrowser: "Lieber im Browser? Das ist die Startseite.",
+  },
   crossnet: {
     realtimeTitle: "Echtzeit-Direktübertragung",
     realtimeSub: "Beide jetzt online · Peer-to-Peer · Dateien berühren nie den Server",

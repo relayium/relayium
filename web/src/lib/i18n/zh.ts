@@ -122,6 +122,72 @@ const zh: Messages = {
     blurb: "一行命令装上端到端加密、可自托管的传输 CLI。",
     cta: "了解 CLI →",
   },
+  cliPage: {
+    badges: ["完全免费", "端到端加密", "可自托管"],
+    freenote:
+      "你的文件直接在机器之间传输，绝不经过 Relayium 的服务器——只有一次很小的会合握手会经过，且仅用于 send/receive。",
+    installH2: "安装",
+    installIntro: "一行命令即可下载适配你操作系统的预编译二进制，并加入 PATH：",
+    installReleases: "从发布页下载预编译二进制 →",
+    installBuild: "或从源码构建：",
+    installHelp: "然后运行 relayium --help 查看所有命令。",
+    whichH2: "选哪种模式？",
+    whichIntro: "Relayium 提供三种传输方式，按对方所在的位置选择：",
+    pickWhen: [
+      "传到一台你能 SSH 进去的服务器",
+      "跨网络传给另一个人",
+      "在你自己拥有的两台服务器之间",
+    ],
+    mode1Title: "push / pull —— 走你自己的 SSH",
+    mode1Tag: "免费",
+    mode1Body:
+      "把文件复制到(或从)任何你已能 ssh 进去的机器——VPS、家用服务器、工作站都可以。字节走你的 SSH 连接，绝不经过 Relayium 的服务器；不需要账号。如果远程也装了 relayium，会使用原生协议(逐文件断点续传 + SHA-256)，否则会退化为普通的 tar 流。",
+    mode2Title: "send / receive —— 通过配对码",
+    mode2Tag: "免费 · 直连 P2P",
+    mode2Body:
+      "跨网络发送给另一个人。双方线下约定一个短码(电话里念一下即可，任意短字符串都行)，一方 send、一方 receive。连接是点对点直连：只有一次很小的会合握手经过 Relayium 用来撮合两端——文件字节绝不经过。如果双方都在严格 NAT 之后、无法直连，传输就会直接失败(CLI 没有中继)。两端终端都会打印一个 6 位 SAS 码——核对一下以排除中间人攻击(加上 --verify 可要求在传输任何字节前先确认)。",
+    mode3Title: "daemon direct —— 服务器对服务器",
+    mode3Tag: "免费",
+    mode3Body:
+      "适用于你掌控的、彼此已知地址的两台主机：一台监听，另一台通过锁定的 TLS 1.3 直接推送过去。无中继、无 SSH、无需配对码——信任基于公钥，只需设置一次。三个步骤：",
+    step1Label: "监听端：",
+    step1Body: "启动 serve，并用 relayium id 打印本机的指纹。",
+    step2Label: "授权推送端：",
+    step2Body:
+      "把推送端的 relayium id 指纹加入监听端的允许列表(空列表会拒绝所有人)。",
+    step3Label: "推送端：",
+    step3Body:
+      "push 到 relayium://host。监听端的密钥首次使用即被信任，并锁定在 known_hosts 中；之后若指纹发生变化会被拒绝(而不是被静默接受)。",
+    refH2: "参考",
+    flagsH3: "常用参数",
+    thFlag: "参数",
+    thApplies: "适用于",
+    thMeaning: "含义",
+    flagMeanings: [
+      "接收文件的目录(默认：当前目录)",
+      "守护进程的 TCP 端口(默认：9031)",
+      "只处理一次传输，然后退出",
+      "禁用断点续传",
+      "身份与信任目录(默认：~/.config/relayium)",
+      "SSH 身份(密钥)文件",
+      "SSH 端口",
+      "传输前要求确认 SAS 码",
+    ],
+    trustH3: "信任与身份文件",
+    trustIntro:
+      "存放在 ~/.config/relayium/ 中(可用 --config-dir 覆盖，例如给 systemd 服务用 /etc/relayium)：",
+    fileDescs: [
+      "本机的持久身份(自动生成，密钥权限保持 0600)。",
+      "你推送过的监听端的指纹(TOFU 首次信任，此后锁定)。",
+      "在监听端上，允许连接的推送端列表。",
+    ],
+    integrityH3: "完整性与续传",
+    integrityNote:
+      "每个文件都通过 SHA-256 做端到端校验，传输中断后下次运行会从断点处继续(可用 --no-resume 禁用)。",
+    footerSource: "GitHub 源码 ↗",
+    footerReleases: "发布版本",
+    footerBrowser: "更喜欢浏览器？首页就是。",
+  },
   crossnet: {
     realtimeTitle: "实时直传",
     realtimeSub: "对方此刻在线 · 点对点直连 · 文件不经服务器",

@@ -122,6 +122,72 @@ const fr: Messages = {
     blurb: "Installez une CLI de transfert chiffrée de bout en bout et auto-hébergeable en une seule commande.",
     cta: "Découvrir la CLI →",
   },
+  cliPage: {
+    badges: ["Entièrement gratuit", "Chiffré de bout en bout", "Auto-hébergeable"],
+    freenote:
+      "Vos fichiers voyagent directement entre les machines et ne passent jamais par les serveurs de Relayium — seule une petite poignée de main de mise en relation y transite, et uniquement pour send/receive.",
+    installH2: "Installation",
+    installIntro: "Une seule commande télécharge un binaire précompilé pour votre OS et l'ajoute à votre PATH :",
+    installReleases: "Télécharger un binaire précompilé depuis la page des releases →",
+    installBuild: "Ou compiler depuis les sources :",
+    installHelp: "Puis lancez relayium --help pour voir toutes les commandes.",
+    whichH2: "Quel mode choisir ?",
+    whichIntro: "Relayium déplace les fichiers de trois façons. Choisissez selon où se trouve l'autre bout :",
+    pickWhen: [
+      "Vers un serveur accessible en SSH",
+      "Vers une autre personne, entre réseaux différents",
+      "Entre deux serveurs qui vous appartiennent",
+    ],
+    mode1Title: "push / pull — via votre propre SSH",
+    mode1Tag: "gratuit",
+    mode1Body:
+      "Copiez des fichiers vers (ou depuis) toute machine où vous pouvez déjà vous connecter en ssh — un VPS, un serveur personnel, un poste de travail. Les octets transitent par votre connexion SSH et ne touchent jamais les serveurs de Relayium ; aucun compte n'est nécessaire. Si relayium est installé sur la machine distante, il utilise le protocole natif (reprise par fichier + SHA-256), sinon il bascule sur un simple flux tar.",
+    mode2Title: "send / receive — par code d'appairage",
+    mode2Tag: "gratuit · P2P direct",
+    mode2Body:
+      "Envoyez à une autre personne au-delà des réseaux. Mettez-vous d'accord sur un code court par un autre canal (dites-le au téléphone — n'importe quelle chaîne courte convient), puis un côté envoie (send) et l'autre reçoit (receive). La connexion est directe en pair-à-pair : seule une petite poignée de main de mise en relation transite par Relayium pour présenter les deux extrémités — les octets du fichier, eux, jamais. Si les deux extrémités sont derrière un NAT strict et ne peuvent pas se connecter directement, le transfert échoue simplement (la CLI ne dispose d'aucun relais). Les deux terminaux affichent un code SAS à 6 chiffres — comparez-les pour écarter tout risque d'attaque de l'homme du milieu (ajoutez --verify pour exiger une confirmation avant tout transfert d'octets).",
+    mode3Title: "daemon direct — serveur à serveur",
+    mode3Tag: "gratuit",
+    mode3Body:
+      "Pour deux hôtes que vous contrôlez et qui connaissent déjà l'adresse l'un de l'autre : l'un écoute, l'autre lui envoie directement (push) via TLS 1.3 épinglé. Pas de relais, pas de SSH, pas de code — la confiance repose sur une clé publique, configurée une seule fois. Trois étapes :",
+    step1Label: "Récepteur :",
+    step1Body: "lancez serve et affichez l'empreinte de cet hôte avec relayium id.",
+    step2Label: "Autoriser l'expéditeur :",
+    step2Body:
+      "ajoutez l'empreinte relayium id de l'expéditeur à la liste d'autorisation du récepteur (une liste vide rejette tout le monde).",
+    step3Label: "Expéditeur :",
+    step3Body:
+      "faites push vers relayium://host. La clé du récepteur est approuvée à la première utilisation et épinglée dans known_hosts ; un changement d'empreinte ultérieur est refusé (jamais accepté silencieusement).",
+    refH2: "Référence",
+    flagsH3: "Options courantes",
+    thFlag: "Option",
+    thApplies: "S'applique à",
+    thMeaning: "Signification",
+    flagMeanings: [
+      "Répertoire de réception (par défaut : le répertoire courant)",
+      "Port TCP du daemon (par défaut : 9031)",
+      "Traiter un seul transfert, puis quitter",
+      "Désactiver la reprise des fichiers partiels",
+      "Répertoire d'identité et de confiance (par défaut : ~/.config/relayium)",
+      "Fichier d'identité SSH (clé)",
+      "Port SSH",
+      "Exiger la confirmation du code SAS avant le transfert",
+    ],
+    trustH3: "Fichiers de confiance et d'identité",
+    trustIntro:
+      "Stockés dans ~/.config/relayium/ (à surcharger avec --config-dir, par exemple /etc/relayium pour un service systemd) :",
+    fileDescs: [
+      "l'identité persistante de cet hôte (générée automatiquement, clé conservée en 0600).",
+      "les empreintes des récepteurs vers lesquels vous avez fait push (TOFU, épinglées ensuite).",
+      "sur un récepteur, les expéditeurs autorisés à se connecter.",
+    ],
+    integrityH3: "Intégrité et reprise",
+    integrityNote:
+      "Chaque fichier est vérifié de bout en bout avec SHA-256, et un transfert interrompu reprend là où il s'est arrêté au prochain lancement (désactivable avec --no-resume).",
+    footerSource: "Code source sur GitHub ↗",
+    footerReleases: "Releases",
+    footerBrowser: "Vous préférez le navigateur ? C'est la page d'accueil.",
+  },
   crossnet: {
     realtimeTitle: "Transfert direct en temps réel",
     realtimeSub: "Les deux en ligne · pair-à-pair · les fichiers ne passent jamais par le serveur",

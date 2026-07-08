@@ -122,6 +122,72 @@ const ko: Messages = {
     blurb: "종단간 암호화, 자체 호스팅 가능한 전송 CLI를 명령어 하나로 설치하세요.",
     cta: "CLI 살펴보기 →",
   },
+  cliPage: {
+    badges: ["완전 무료", "종단간 암호화", "자체 호스팅 가능"],
+    freenote:
+      "파일은 두 기기 사이에서 직접 오가며 Relayium 서버를 거치지 않습니다 — 오직 작은 랑데부 핸드셰이크만 서버를 거치며, 이는 send/receive에서만 사용됩니다.",
+    installH2: "설치",
+    installIntro: "명령어 하나로 사용 중인 OS용 사전 빌드된 바이너리를 내려받아 PATH에 등록합니다:",
+    installReleases: "릴리스 페이지에서 사전 빌드된 바이너리 내려받기 →",
+    installBuild: "또는 소스에서 직접 빌드하기:",
+    installHelp: "이후 relayium --help로 모든 명령어를 확인하세요.",
+    whichH2: "어떤 모드를 쓸까?",
+    whichIntro: "Relayium은 세 가지 방식으로 파일을 옮깁니다. 상대가 어디에 있는지에 따라 선택하세요:",
+    pickWhen: [
+      "SSH로 접속 가능한 서버로 보낼 때",
+      "네트워크가 다른 상대방에게 보낼 때",
+      "직접 소유한 두 서버 사이에서 옮길 때",
+    ],
+    mode1Title: "push / pull — 내 SSH를 통해",
+    mode1Tag: "무료",
+    mode1Body:
+      "이미 ssh로 접속 가능한 모든 머신 — VPS, 홈 서버, 워크스테이션 — 으로(또는 그곳에서) 파일을 복사합니다. 데이터는 SSH 연결을 통해 오가며 Relayium 서버는 전혀 거치지 않고, 계정도 필요 없습니다. 원격지에 relayium이 설치되어 있으면 네이티브 프로토콜(파일별 재개 + SHA-256)을 사용하고, 없으면 일반 tar 스트림으로 대체됩니다.",
+    mode2Title: "send / receive — 페어링 코드로",
+    mode2Tag: "무료 · 직접 P2P",
+    mode2Body:
+      "네트워크를 넘어 다른 사람에게 보냅니다. 짧은 코드를 다른 채널로 미리 합의한 뒤(통화로 불러줘도 되며, 어떤 짧은 문자열이든 상관없습니다) 한쪽이 보내고 다른 쪽이 받습니다. 연결은 직접 피어투피어 방식입니다 — 두 끝을 연결해 주는 작은 랑데부 핸드셰이크만 Relayium을 거치고, 파일 데이터는 절대 거치지 않습니다. 양쪽 모두 엄격한 NAT 뒤에 있어 직접 연결이 불가능하면 전송은 그대로 실패합니다(CLI에는 중계 기능이 없습니다). 양쪽 터미널에 6자리 SAS 코드가 표시되니 비교해서 중간자 공격이 없는지 확인하세요(--verify를 추가하면 데이터 전송 전 확인을 필수로 만듭니다).",
+    mode3Title: "daemon direct — 서버 대 서버",
+    mode3Tag: "무료",
+    mode3Body:
+      "서로의 주소를 이미 알고 있는, 직접 관리하는 두 호스트를 위한 방식입니다. 한쪽이 대기하고, 다른 쪽이 고정된 TLS 1.3 위에서 그쪽으로 바로 밀어 넣습니다. 중계도 SSH도 코드도 필요 없이, 공개키 기반 신뢰를 한 번만 설정하면 됩니다. 세 단계입니다:",
+    step1Label: "리스너:",
+    step1Body: "serve를 시작하고 relayium id로 이 호스트의 지문을 출력합니다.",
+    step2Label: "푸셔 승인:",
+    step2Body:
+      "푸셔의 relayium id 지문을 리스너의 허용 목록에 추가합니다(빈 목록은 모든 접속을 거부합니다).",
+    step3Label: "푸셔:",
+    step3Body:
+      "relayium://host로 push합니다. 리스너의 키는 첫 사용 시 신뢰되어 known_hosts에 고정되며, 이후 지문이 바뀌면 조용히 받아들이지 않고 거부됩니다.",
+    refH2: "레퍼런스",
+    flagsH3: "자주 쓰는 플래그",
+    thFlag: "플래그",
+    thApplies: "적용 대상",
+    thMeaning: "의미",
+    flagMeanings: [
+      "받을 디렉터리(기본값: 현재 디렉터리)",
+      "데몬 TCP 포트(기본값: 9031)",
+      "전송 한 건만 처리하고 종료",
+      "부분 파일 재개 비활성화",
+      "신원 + 신뢰 디렉터리(기본값: ~/.config/relayium)",
+      "SSH 신원(키) 파일",
+      "SSH 포트",
+      "전송 전 SAS 코드 확인을 필수로 요구",
+    ],
+    trustH3: "신뢰 및 신원 파일",
+    trustIntro:
+      "~/.config/relayium/에 저장됩니다(--config-dir로 재정의 가능, 예: systemd 서비스라면 /etc/relayium):",
+    fileDescs: [
+      "이 호스트의 영구 신원(자동 생성, 키는 0600으로 유지).",
+      "push한 적 있는 리스너들의 지문(TOFU, 이후 고정됨).",
+      "리스너에서, 접속을 허용한 푸셔 목록.",
+    ],
+    integrityH3: "무결성 및 재개",
+    integrityNote:
+      "모든 파일은 SHA-256으로 종단간 검증되며, 중단된 전송은 다음 실행 시 멈춘 지점부터 재개됩니다(--no-resume으로 비활성화 가능).",
+    footerSource: "GitHub에서 소스 보기 ↗",
+    footerReleases: "릴리스",
+    footerBrowser: "브라우저가 더 편하신가요? 홈페이지를 이용하세요.",
+  },
   crossnet: {
     realtimeTitle: "실시간 직접 전송",
     realtimeSub: "양쪽 모두 온라인 · P2P · 파일은 서버를 거치지 않습니다",

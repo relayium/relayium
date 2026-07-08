@@ -140,6 +140,50 @@ export interface Messages {
   offlineTitle: string;
   cli: { subtitle: string };
   cliCallout: { heading: string; blurb: string; cta: string };
+  // /cli docs page body. Command blocks stay literal English (code); only prose
+  // and labels are localised. Arrays keep a fixed length matching CliPage.svelte:
+  // badges 3, pickWhen 3, flagMeanings 8, fileDescs 3.
+  cliPage: {
+    badges: string[];
+    freenote: string;
+    installH2: string;
+    installIntro: string;
+    installReleases: string;
+    installBuild: string;
+    installHelp: string;
+    whichH2: string;
+    whichIntro: string;
+    pickWhen: string[];
+    mode1Title: string;
+    mode1Tag: string;
+    mode1Body: string;
+    mode2Title: string;
+    mode2Tag: string;
+    mode2Body: string;
+    mode3Title: string;
+    mode3Tag: string;
+    mode3Body: string;
+    step1Label: string;
+    step1Body: string;
+    step2Label: string;
+    step2Body: string;
+    step3Label: string;
+    step3Body: string;
+    refH2: string;
+    flagsH3: string;
+    thFlag: string;
+    thApplies: string;
+    thMeaning: string;
+    flagMeanings: string[];
+    trustH3: string;
+    trustIntro: string;
+    fileDescs: string[];
+    integrityH3: string;
+    integrityNote: string;
+    footerSource: string;
+    footerReleases: string;
+    footerBrowser: string;
+  };
   crossnet: {
     realtimeTitle: string;
     realtimeSub: string;
