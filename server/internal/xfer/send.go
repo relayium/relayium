@@ -10,25 +10,27 @@ import (
 
 type SendOpts struct {
 	Progress func(path string, sent, total int64)
+	Sync     bool // sync mode: set Hello.Sync and honor the receiver's Skip
+	Delete   bool // mirror: set Hello.Delete
 }
 
 type Report struct {
-	Files  int
-	Bytes  int64
-	Failed []string
+	Files   int
+	Bytes   int64
+	Skipped int // sync mode: files the receiver already had, not sent
+	Failed  []string
 }
 
 // Send transmits the manifest's files over rw (a duplex stream, typically the
 // SSH stdio pipe). srcs[i] is the local path for m.Files[i].
 func Send(rw io.ReadWriter, m Manifest, srcs []string, opts SendOpts) (Report, error) {
-	if err := WriteJSON(rw, MsgHello, Hello{Version: WireVersion, Mode: "push"}); err != nil {
+	if err := WriteJSON(rw, MsgHello, Hello{Version: WireVersion, Mode: "push", Sync: opts.Sync, Delete: opts.Delete}); err != nil {
 		return Report{}, err
 	}
 	if err := WriteJSON(rw, MsgManifest, m); err != nil {
 		return Report{}, err
 	}
 
-	// Read the receiver's resume state (empty in this task; used in Task 5).
 	var rs ResumeState
 	if _, err := ReadJSON(rw, &rs); err != nil {
 		return Report{}, err
@@ -39,9 +41,17 @@ func Send(rw io.ReadWriter, m Manifest, srcs []string, opts SendOpts) (Report, e
 			offsets[e.Index] = e.Have
 		}
 	}
+	skip := make(map[int]bool, len(rs.Skip))
+	for _, i := range rs.Skip {
+		skip[i] = true
+	}
 
 	var rep Report
 	for i, f := range m.Files {
+		if skip[i] {
+			rep.Skipped++
+			continue
+		}
 		if err := sendFile(rw, i, f, srcs[i], offsets[i], opts); err != nil {
 			return rep, err
 		}
