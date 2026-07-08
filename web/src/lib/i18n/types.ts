@@ -185,6 +185,8 @@ export interface Messages {
     footerBrowser: string;
     guidesH2: string;
     guides: string[];
+    syncH2: string;
+    syncNote: string;
   };
   crossnet: {
     realtimeTitle: string;

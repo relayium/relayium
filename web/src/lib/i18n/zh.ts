@@ -194,6 +194,8 @@ const zh: Messages = {
       "把文件发给别人",
       "服务器到服务器传输",
     ],
+    syncH2: "保持文件夹同步",
+    syncNote: "用增量同步单向镜像一个文件夹——只传改动过的文件。加 --delete 连删除一起镜像,加 --watch 实时重新同步。SSH 和 daemon direct 都支持。",
   },
   crossnet: {
     realtimeTitle: "实时直传",

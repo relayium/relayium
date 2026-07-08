@@ -194,6 +194,8 @@ const en: Messages = {
       "Send a file to someone",
       "Server-to-server transfers",
     ],
+    syncH2: "Keep a folder in sync",
+    syncNote: "Mirror a folder one-way with incremental sync — only changed files transfer. Add --delete to mirror removals, --watch to re-sync in real time. Works over SSH and daemon direct.",
   },
   crossnet: {
     realtimeTitle: "Realtime direct",

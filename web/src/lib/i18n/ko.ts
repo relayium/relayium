@@ -194,6 +194,8 @@ const ko: Messages = {
       "다른 사람에게 파일 보내기",
       "서버 간 전송",
     ],
+    syncH2: "폴더 동기화 유지",
+    syncNote: "증분 동기화로 폴더를 단방향 미러링 — 변경된 파일만 전송합니다. --delete로 삭제까지 미러링, --watch로 실시간 재동기화. SSH와 daemon direct 모두에서 작동합니다.",
   },
   crossnet: {
     realtimeTitle: "실시간 직접 전송",

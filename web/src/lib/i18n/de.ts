@@ -195,6 +195,8 @@ const de: Messages = {
       "Eine Datei an jemanden senden",
       "Server-zu-Server-Übertragungen",
     ],
+    syncH2: "Einen Ordner synchron halten",
+    syncNote: "Einen Ordner per inkrementeller Synchronisierung einseitig spiegeln — nur geänderte Dateien werden übertragen. Mit --delete werden auch Löschungen gespiegelt, mit --watch wird in Echtzeit neu synchronisiert. Funktioniert über SSH und daemon direct.",
   },
   crossnet: {
     realtimeTitle: "Echtzeit-Direktübertragung",

@@ -51,6 +51,7 @@ relayium authorize 74318e3b…`;
     { flag: "-p <n>", who: "push / pull" },
     { flag: "--verify", who: "send / receive" },
   ];
+  const syncCmd = "relayium sync ./site relayium://receiver.example.com --delete --watch";
   const fileNames = ["id.key / id.crt", "known_hosts", "authorized_fingerprints"];
   const guideSlugs = [
     "guides/transfer-files-from-terminal",
@@ -145,6 +146,13 @@ relayium authorize 74318e3b…`;
         <CommandBlock code={daemonAuthCmd} title="receiver · approve" />
       </li>
     </ol>
+  </div>
+
+  <!-- Sync -->
+  <div class="block">
+    <h2>{t.cliPage.syncH2}</h2>
+    <p>{t.cliPage.syncNote}</p>
+    <CommandBlock code={syncCmd} title="sync a folder" />
   </div>
 
   <!-- Guides -->

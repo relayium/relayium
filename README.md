@@ -67,7 +67,13 @@ Three transfer modes:
 
 - **`push` / `pull` over your own SSH** — `relayium push ./photos user@host:backups/` (bytes travel over SSH; no Relayium account).
 - **`send` / `receive` by pairing code** — `relayium send ./file.zip 123456` / `relayium receive 123456` (cross-network; direct peer-to-peer — a small rendezvous handshake introduces the two ends, the file goes straight between them; no relay).
-- **`serve` + `push relayium://` daemon direct** — `relayium serve --dir ~/inbox` then `relayium push ./file relayium://host` (server-to-server over pinned TLS; no relay, no SSH, no code — trust is set up with `relayium id` + `authorized_fingerprints`).
+- **`serve` + `push relayium://` daemon direct** — `relayium serve --dir ~/inbox` then `relayium push ./file relayium://host` (server-to-server over pinned TLS; no relay, no SSH, no code — the listener approves each new pusher on its first push and remembers it).
+
+Keep a folder mirrored with **`sync`** — incremental (only changed files transfer), optionally `--delete` to mirror and `--watch` to re-sync in real time:
+
+```sh
+relayium sync ./site relayium://host --delete --watch
+```
 
 Full docs at [relayium.com/cli](https://relayium.com/cli); prebuilt binaries on the [releases page](https://github.com/relayium/relayium/releases).
 

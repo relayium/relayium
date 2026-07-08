@@ -194,6 +194,8 @@ const ja: Messages = {
       "誰かにファイルを送る",
       "サーバー間の転送",
     ],
+    syncH2: "フォルダを同期し続ける",
+    syncNote: "増分同期でフォルダを一方向にミラー——変更されたファイルだけを転送します。--delete で削除もミラー、--watch でリアルタイムに再同期。SSH と daemon direct の両方で動作します。",
   },
   crossnet: {
     realtimeTitle: "リアルタイム直接転送",

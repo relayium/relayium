@@ -195,6 +195,8 @@ const fr: Messages = {
       "Envoyer un fichier à quelqu'un",
       "Transferts de serveur à serveur",
     ],
+    syncH2: "Garder un dossier synchronisé",
+    syncNote: "Miroir unidirectionnel d'un dossier par synchronisation incrémentielle — seuls les fichiers modifiés sont transférés. Ajoutez --delete pour refléter les suppressions, --watch pour resynchroniser en temps réel. Fonctionne via SSH et daemon direct.",
   },
   crossnet: {
     realtimeTitle: "Transfert direct en temps réel",
