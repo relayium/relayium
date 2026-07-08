@@ -42,11 +42,6 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 		return Report{}, err
 	}
 
-	skip := make(map[int]bool, len(rs.Skip))
-	for _, i := range rs.Skip {
-		skip[i] = true
-	}
-
 	var rep Report
 	var res Result
 	res.OK = true
@@ -62,11 +57,6 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 			return rep, err
 		}
 		sum, werr := writeFileBody(rw, dest, f, fs.Offset)
-		if werr == nil && hello.Sync {
-			// Preserve the source mtime so a later sync can skip this file.
-			tm := time.Unix(f.ModTime, 0)
-			_ = os.Chtimes(dest, tm, tm)
-		}
 
 		var fh FileHash
 		if _, err := ReadJSON(rw, &fh); err != nil {
@@ -76,6 +66,11 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 			res.OK = false
 			res.Failed = append(res.Failed, f.Path)
 		} else {
+			if hello.Sync {
+				// Preserve the source mtime so a later sync can skip this file.
+				tm := time.Unix(f.ModTime, 0)
+				_ = os.Chtimes(dest, tm, tm)
+			}
 			rep.Files++
 			rep.Bytes += f.Size
 		}
