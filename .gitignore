@@ -1,6 +1,7 @@
 # Go
 server/relayium-server
 server/relayium
+/dist/
 # Node
 node_modules/
 web/node_modules/
