@@ -115,6 +115,11 @@ const ja: Messages = {
   },
   nav: { lanTab: "LAN 転送", crossTab: "リアルタイム直接転送", offlineTab: "非同期転送", cliTab: "CLI" },
   cli: { subtitle: "ターミナルからファイルを転送 — エンドツーエンド暗号化、セルフホスト可能。" },
+  cliCallout: {
+    heading: "ターミナル派ですか？",
+    blurb: "エンドツーエンド暗号化・セルフホスト可能な転送 CLI を 1 コマンドでインストール。",
+    cta: "CLI を見る →",
+  },
   crossnet: {
     realtimeTitle: "リアルタイム直接転送",
     realtimeSub: "両者が今オンライン · P2P · ファイルはサーバーを経由しません",

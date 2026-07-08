@@ -115,6 +115,11 @@ const de: Messages = {
   },
   nav: { lanTab: "LAN-Übertragung", crossTab: "Echtzeit-Direkt", offlineTab: "Asynchron senden", cliTab: "CLI" },
   cli: { subtitle: "Dateien vom Terminal übertragen — Ende-zu-Ende-verschlüsselt, selbst hostbar." },
+  cliCallout: {
+    heading: "Lieber das Terminal?",
+    blurb: "Installiere eine selbst-hostbare, Ende-zu-Ende-verschlüsselte Transfer-CLI mit einem Befehl.",
+    cta: "CLI entdecken →",
+  },
   crossnet: {
     realtimeTitle: "Echtzeit-Direktübertragung",
     realtimeSub: "Beide jetzt online · Peer-to-Peer · Dateien berühren nie den Server",

@@ -115,6 +115,11 @@ const zh: Messages = {
   },
   nav: { lanTab: "局域网传输", crossTab: "实时直传", offlineTab: "异步传输", cliTab: "CLI" },
   cli: { subtitle: "在终端里传文件 —— 端到端加密，可自托管。" },
+  cliCallout: {
+    heading: "更喜欢命令行？",
+    blurb: "一行命令装上端到端加密、可自托管的传输 CLI。",
+    cta: "了解 CLI →",
+  },
   crossnet: {
     realtimeTitle: "实时直传",
     realtimeSub: "对方此刻在线 · 点对点直连 · 文件不经服务器",

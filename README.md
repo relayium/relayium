@@ -53,6 +53,22 @@ is **how seriously we take end-to-end encryption**:
 - ⚡ **No install, ever** — just open a URL. All realtime transfers (LAN, or cross-network via a pairing code and the join link/QR it generates) need **no account**; only stored download links require the sender to sign in.
 - 🪶 **Tiny footprint** — one static SPA + a single Go binary for signaling.
 
+## Command-line client (CLI)
+
+Prefer the terminal? Install the self-hostable, end-to-end-encrypted CLI in one command:
+
+```sh
+curl -fsSL https://relayium.com/install.sh | sh
+```
+
+Three transfer modes:
+
+- **`push` / `pull` over your own SSH** — `relayium push ./photos user@host:backups/` (bytes travel over SSH; no Relayium account).
+- **`send` / `receive` by pairing code** — `relayium send ./file.zip 123456` / `relayium receive 123456` (cross-network; direct when reachable, metered relay as fallback).
+- **`serve` + `push relayium://` daemon direct** — `relayium serve --dir ~/inbox` then `relayium push ./file relayium://host` (server-to-server over pinned TLS; no relay, no SSH, no code — trust is set up with `relayium id` + `authorized_fingerprints`).
+
+Full docs at [relayium.com/cli](https://relayium.com/cli); prebuilt binaries on the [releases page](https://github.com/relayium/relayium/releases).
+
 ## How does Relayium compare?
 
 |                          | **Relayium**            | AirDrop          | WeTransfer / Drive | Snapdrop / PairDrop |
@@ -160,7 +176,7 @@ Same-LAN / same-public-IP only at M0 (no TURN relay yet — see the roadmap).
 - **M2 — Cross-network relay:** TURN/relay and NAT traversal, plus encrypted temporary staging when the peer is
   offline. *(This is where server bandwidth starts costing money — the cost model will be documented honestly.)*
 - **M3 — Protocol spec + multi-client:** write the wire protocol down as a spec and reuse it from a CLI and mobile;
-  extend `send` to stdin, Docker images, the clipboard — toward "TCP between developers."
+  extend `send` to stdin, Docker images, the clipboard — toward "TCP between developers." *(CLI shipped — see [Command-line client](#command-line-client-cli); stdin/Docker/clipboard still ahead.)*
 
 **Self-hosting:** a root [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) build a
 single self-contained image (`docker compose up -d --build`). See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).

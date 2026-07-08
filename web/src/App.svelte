@@ -50,6 +50,7 @@
   import Hero from "./lib/Hero.svelte";
   import DownloadPage from "./lib/DownloadPage.svelte";
   import FeatureStrip from "./lib/FeatureStrip.svelte";
+  import CliCallout from "./lib/CliCallout.svelte";
   import HowToSteps from "./lib/HowToSteps.svelte";
   import UseCases from "./lib/UseCases.svelte";
   import Faq from "./lib/Faq.svelte";
@@ -1287,6 +1288,7 @@
     </section>
 
     <FeatureStrip />
+    <CliCallout />
     <UseCases />
     <Faq />
 

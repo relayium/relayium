@@ -115,6 +115,11 @@ const fr: Messages = {
   },
   nav: { lanTab: "Transfert LAN", crossTab: "Direct en temps réel", offlineTab: "Transfert asynchrone", cliTab: "CLI" },
   cli: { subtitle: "Transférez des fichiers depuis votre terminal — chiffré de bout en bout, auto-hébergeable." },
+  cliCallout: {
+    heading: "Vous préférez le terminal ?",
+    blurb: "Installez une CLI de transfert chiffrée de bout en bout et auto-hébergeable en une seule commande.",
+    cta: "Découvrir la CLI →",
+  },
   crossnet: {
     realtimeTitle: "Transfert direct en temps réel",
     realtimeSub: "Les deux en ligne · pair-à-pair · les fichiers ne passent jamais par le serveur",

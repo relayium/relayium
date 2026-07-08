@@ -135,6 +135,7 @@ export interface Messages {
   };
   nav: { lanTab: string; crossTab: string; offlineTab: string; cliTab: string };
   cli: { subtitle: string };
+  cliCallout: { heading: string; blurb: string; cta: string };
   crossnet: {
     realtimeTitle: string;
     realtimeSub: string;
