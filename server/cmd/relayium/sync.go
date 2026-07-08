@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"os/signal"
 	"strings"
+	"time"
 
 	"github.com/relayium/relayium/internal/sshx"
 	"github.com/relayium/relayium/internal/xfer"
@@ -41,8 +45,22 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 	if !watch {
 		return once()
 	}
-	// Task 6 replaces this with the fsnotify watch loop.
-	return once()
+	// Watch mode: sync once, then re-sync (debounced) on any change under the sources.
+	if code := once(); code != 0 {
+		fmt.Fprintln(stderr, "initial sync failed; watching for changes anyway")
+	}
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+	err := xfer.WatchDirs(ctx, srcs, 800*time.Millisecond, func() {
+		if code := once(); code != 0 {
+			fmt.Fprintln(stderr, "sync failed; will retry on next change")
+		}
+	})
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	return 0
 }
 
 type syncFlags struct {

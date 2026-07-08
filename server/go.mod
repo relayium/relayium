@@ -4,6 +4,7 @@ go 1.26.3
 
 require (
 	github.com/coder/websocket v1.8.15
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/pquerna/otp v1.5.0
 	github.com/redis/go-redis/v9 v9.21.0
