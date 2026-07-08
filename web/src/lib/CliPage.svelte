@@ -57,6 +57,7 @@ relayium push ./file.zip relayium://host.example.com
     "cli/send-a-file-to-someone",
     "cli/server-to-server-transfers",
   ];
+  const guideIcons = ["🚀", "🔑", "🔗", "🖧"];
   const guideUrl = (slug: string) => (lang() === "en" ? `/${slug}` : `/${lang()}/${slug}`);
 </script>
 
@@ -148,11 +149,15 @@ relayium push ./file.zip relayium://host.example.com
   <!-- Guides -->
   <div class="block">
     <h2>{t.cliPage.guidesH2}</h2>
-    <ul class="guides">
+    <div class="guide-cards">
       {#each guideSlugs as slug, i (slug)}
-        <li><a href={guideUrl(slug)}>{t.cliPage.guides[i]} →</a></li>
+        <a class="guide-card" href={guideUrl(slug)}>
+          <span class="g" aria-hidden="true">{guideIcons[i]}</span>
+          <span class="gt">{t.cliPage.guides[i]}</span>
+          <span class="arr" aria-hidden="true">→</span>
+        </a>
       {/each}
-    </ul>
+    </div>
   </div>
 
   <!-- Reference -->
@@ -400,21 +405,42 @@ relayium push ./file.zip relayium://host.example.com
     padding-left: 1.2em;
   }
 
-  .guides {
-    list-style: none;
-    padding: 0;
-    margin: var(--space-3) 0 0;
+  .guide-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+    margin-top: var(--space-3);
   }
-  .guides li {
-    margin: var(--space-2) 0;
-  }
-  .guides a {
-    color: var(--accent);
+  .guide-card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text-h);
     text-decoration: none;
-    font-size: var(--fs-body);
+    transition: border-color 0.13s;
   }
-  .guides a:hover {
-    text-decoration: underline;
+  .guide-card:hover {
+    border-color: var(--accent-border);
+  }
+  .guide-card .g {
+    font-size: 22px;
+  }
+  .guide-card .gt {
+    flex: 1;
+    font-weight: 600;
+    font-size: var(--fs-sm);
+  }
+  .guide-card .arr {
+    color: var(--accent);
+  }
+  @media (max-width: 620px) {
+    .guide-cards {
+      grid-template-columns: 1fr;
+    }
   }
 
   /* Inline code (filenames in the trust-files list) + links */
