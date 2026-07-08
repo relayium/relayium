@@ -8,10 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type RecvOpts struct {
-	NoResume bool
+	NoResume    bool
+	AllowDelete bool // sync mode: honor a Hello.Delete mirror request
 }
 
 // Receive accepts a pushed batch into destDir. It reads the manifest, reports
@@ -30,21 +32,26 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 		return Report{}, err
 	}
 
-	// Report resume state: partial on-disk files let the sender skip ahead.
-	// With NoResume, we send an empty state so the sender always re-sends in
-	// full (the receiver truncates at offset 0 rather than trusting a prefix).
 	rs := ResumeState{}
-	if !opts.NoResume {
+	if hello.Sync {
+		rs = syncStateFor(destDir, m)
+	} else if !opts.NoResume {
 		rs = resumeStateFor(destDir, m)
 	}
 	if err := WriteJSON(rw, MsgResume, rs); err != nil {
 		return Report{}, err
 	}
 
+	skip := make(map[int]bool, len(rs.Skip))
+	for _, i := range rs.Skip {
+		skip[i] = true
+	}
+
 	var rep Report
 	var res Result
 	res.OK = true
-	for range m.Files {
+	expected := len(m.Files) - len(rs.Skip)
+	for k := 0; k < expected; k++ {
 		var fs FileStart
 		if _, err := ReadJSON(rw, &fs); err != nil {
 			return rep, err
@@ -55,6 +62,11 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 			return rep, err
 		}
 		sum, werr := writeFileBody(rw, dest, f, fs.Offset)
+		if werr == nil && hello.Sync {
+			// Preserve the source mtime so a later sync can skip this file.
+			tm := time.Unix(f.ModTime, 0)
+			_ = os.Chtimes(dest, tm, tm)
+		}
 
 		var fh FileHash
 		if _, err := ReadJSON(rw, &fh); err != nil {
@@ -68,6 +80,9 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 			rep.Bytes += f.Size
 		}
 	}
+
+	// (Task 5 will insert --delete handling here, before the Result write.)
+
 	rep.Failed = res.Failed
 	return rep, WriteJSON(rw, MsgResult, res)
 }
@@ -86,6 +101,30 @@ func resumeStateFor(destDir string, m Manifest) ResumeState {
 		info, err := os.Stat(dest)
 		if err != nil {
 			continue // absent → full send
+		}
+		if info.Size() > 0 && info.Size() < f.Size {
+			rs.Entries = append(rs.Entries, ResumeEntry{Index: i, Have: info.Size()})
+		}
+	}
+	return rs
+}
+
+// syncStateFor is resumeStateFor plus skip detection: a manifest file whose
+// on-disk copy matches by size and modification time is skipped (not sent).
+func syncStateFor(destDir string, m Manifest) ResumeState {
+	var rs ResumeState
+	for i, f := range m.Files {
+		dest, err := safeJoin(destDir, f.Path)
+		if err != nil {
+			continue
+		}
+		info, err := os.Stat(dest)
+		if err != nil {
+			continue // absent → full send
+		}
+		if info.Size() == f.Size && info.ModTime().Unix() == f.ModTime {
+			rs.Skip = append(rs.Skip, i)
+			continue
 		}
 		if info.Size() > 0 && info.Size() < f.Size {
 			rs.Entries = append(rs.Entries, ResumeEntry{Index: i, Have: info.Size()})
