@@ -19,91 +19,65 @@ const defaultServer = "wss://relayium.com"
 type crossFlags struct {
 	server    string
 	advertise string
-	relayOnly bool
 	verify    bool
 }
 
-// crossnetConn joins the code room, runs the handshake, establishes a direct or
-// relayed stream, wraps it in pinned TLS, prints the SAS, and returns the conn.
-func crossnetConn(ctx context.Context, code, name string, f crossFlags, stderr io.Writer) (*tls.Conn, bool, error) {
+// crossnetConn joins the code room, runs the handshake, races a direct
+// connection, wraps it in pinned TLS, prints the SAS, and returns the conn.
+// The CLI is direct-only: file bytes never pass through Relayium's servers, so
+// if no direct connection can be raced the transfer fails (there is no relay).
+func crossnetConn(ctx context.Context, code, name string, f crossFlags, stderr io.Writer) (*tls.Conn, error) {
 	id, err := secure.NewIdentity()
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	sess, err := rzvous.Join(ctx, f.server, code, name)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	defer sess.Close()
 
 	ln, err := net.Listen("tcp", ":0")
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	defer ln.Close()
 	port := ln.Addr().(*net.TCPAddr).Port
 
 	hs, err := rzvous.DoHandshake(ctx, sess, id, connect.LocalCandidates(port, f.advertise))
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 
 	fmt.Fprintf(stderr, "SAS: %s  (compare on both ends)\n", hs.SAS)
 	if f.verify {
 		if !confirmSAS(stderr) {
-			return nil, false, fmt.Errorf("SAS not confirmed; aborting")
+			return nil, fmt.Errorf("SAS not confirmed; aborting")
 		}
 	}
 
-	raw, viaRelay, err := connect.Establish(ctx, connect.EstablishParams{
-		Listener:       ln,
-		PeerCandidates: hs.PeerCandidates,
-		DialTimeout:    3 * time.Second,
-		DirectWindow:   4 * time.Second,
-		ServerURL:      f.server,
-		Code:           code,
-		RelayOnly:      f.relayOnly,
-		PreferAccept:   hs.IsServer,
-	})
+	// Race a direct connection within the window. Reachable / server-to-server
+	// peers connect directly; if none can be raced, the transfer fails — the CLI
+	// never proxies file bytes through Relayium.
+	dctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	raw, err := connect.RaceDirect(dctx, ln, hs.PeerCandidates, 3*time.Second, hs.IsServer)
+	cancel()
 	if err != nil {
-		return nil, false, err
+		return nil, fmt.Errorf("no direct connection to the peer (both ends behind strict NAT?): %w", err)
 	}
 
-	secureWrap := func(c net.Conn) (*tls.Conn, error) {
-		if hs.IsServer {
-			return secure.Server(c, id, hs.PeerFingerprint)
-		}
-		return secure.Client(c, id, hs.PeerFingerprint)
+	var tconn *tls.Conn
+	if hs.IsServer {
+		tconn, err = secure.Server(raw, id, hs.PeerFingerprint)
+	} else {
+		tconn, err = secure.Client(raw, id, hs.PeerFingerprint)
 	}
-
-	tconn, err := secureWrap(raw)
 	if err != nil {
 		raw.Close()
-		if viaRelay {
-			// A relay-path TLS failure is fatal: the relay is the last resort.
-			return nil, false, err
-		}
-		// Belt-and-suspenders: a direct connection whose pinned-TLS handshake
-		// fails (e.g. residual glare, or a half-open direct path) must not abort
-		// the transfer — fall back to the metered relay and try the handshake
-		// there with the same role.
-		raw, err = connect.DialRelay(ctx, f.server, code)
-		if err != nil {
-			return nil, false, err
-		}
-		viaRelay = true
-		tconn, err = secureWrap(raw)
-		if err != nil {
-			raw.Close()
-			return nil, false, err
-		}
+		return nil, err
 	}
-	if viaRelay {
-		fmt.Fprintln(stderr, "path: relay (metered)")
-	} else {
-		fmt.Fprintln(stderr, "path: direct (free)")
-	}
-	return tconn, viaRelay, nil
+	fmt.Fprintln(stderr, "path: direct")
+	return tconn, nil
 }
 
 func runSendCross(args []string, stdout, stderr io.Writer) int {
@@ -125,7 +99,7 @@ func runSendCross(args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	conn, _, err := crossnetConn(ctx, code, "sender", f, stderr)
+	conn, err := crossnetConn(ctx, code, "sender", f, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -156,7 +130,7 @@ func runReceiveCross(args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	conn, _, err := crossnetConn(ctx, code, "receiver", f, stderr)
+	conn, err := crossnetConn(ctx, code, "receiver", f, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

@@ -34,9 +34,9 @@ relayium push ./file.zip relayium://host.example.com
 # if the listener's fingerprint later changes, the push refuses and warns.`;
 
   const badges = [
+    "Completely free",
     "End-to-end encrypted",
     "Self-hostable",
-    "Single Go binary",
     "macOS · Linux · Windows",
   ];
 
@@ -66,6 +66,10 @@ relayium push ./file.zip relayium://host.example.com
     <ul class="badges">
       {#each badges as b (b)}<li>{b}</li>{/each}
     </ul>
+    <p class="freenote">
+      Your files travel <strong>directly</strong> between machines and never pass through Relayium's
+      servers — only a small rendezvous handshake does, and only for <code>send</code>/<code>receive</code>.
+    </p>
   </header>
 
   <!-- Install -->
@@ -117,13 +121,14 @@ relayium push ./file.zip relayium://host.example.com
     <div class="mode-head">
       <span class="g" aria-hidden="true">🔗</span>
       <h2>send / receive — by pairing code</h2>
-      <span class="tag">direct free · relay metered</span>
+      <span class="tag free">free · direct P2P</span>
     </div>
     <p>
       Send to another person across networks. Agree on a short <em>code</em> out of band (say it over a
-      call — it's any short string), then one side sends and the other receives. Relayium races a
-      <strong>direct</strong> connection first (free); if NAT blocks it, it falls back to a metered relay.
-      Either way the transfer is end-to-end encrypted, and both terminals print a 6-digit
+      call — it's any short string), then one side sends and the other receives. The connection is
+      <strong>direct peer-to-peer</strong>: only a small rendezvous handshake passes through Relayium to
+      introduce the two ends — the file bytes never do. If both ends are behind strict NAT and can't
+      connect directly, the transfer simply fails (the CLI has no relay). Both terminals print a 6-digit
       <strong>SAS</strong> code — compare them to rule out a man-in-the-middle (add <code>--verify</code>
       to require confirmation before any bytes move).
     </p>
@@ -256,6 +261,13 @@ relayium push ./file.zip relayium://host.example.com
     border: 1px solid var(--border);
     border-radius: 999px;
     background: var(--surface-2);
+  }
+  .freenote {
+    color: var(--text);
+    font-size: var(--fs-sm);
+    line-height: 1.6;
+    max-width: 54ch;
+    margin: var(--space-4) auto 0;
   }
 
   /* Generic blocks */

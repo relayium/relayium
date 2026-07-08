@@ -10,7 +10,6 @@ func parseCrossFlags(args []string) (crossFlags, []string, error) {
 	var f crossFlags
 	fs.StringVar(&f.server, "server", defaultServer, "Relayium server base URL (self-host)")
 	fs.StringVar(&f.advertise, "advertise", "", "host:port to advertise as a direct endpoint")
-	fs.BoolVar(&f.relayOnly, "relay-only", false, "skip direct dial, use the relay")
 	fs.BoolVar(&f.verify, "verify", false, "require SAS confirmation before transfer")
 	if err := fs.Parse(args); err != nil {
 		return f, nil, err

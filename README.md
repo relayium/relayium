@@ -61,10 +61,12 @@ Prefer the terminal? Install the self-hostable, end-to-end-encrypted CLI in one 
 curl -fsSL https://relayium.com/install.sh | sh
 ```
 
+**Completely free — and direct.** The CLI connects your machines directly; file bytes never pass through Relayium's servers. Only `send`/`receive` touches our servers at all, and only for a tiny rendezvous handshake (never the file).
+
 Three transfer modes:
 
 - **`push` / `pull` over your own SSH** — `relayium push ./photos user@host:backups/` (bytes travel over SSH; no Relayium account).
-- **`send` / `receive` by pairing code** — `relayium send ./file.zip 123456` / `relayium receive 123456` (cross-network; direct when reachable, metered relay as fallback).
+- **`send` / `receive` by pairing code** — `relayium send ./file.zip 123456` / `relayium receive 123456` (cross-network; direct peer-to-peer — a small rendezvous handshake introduces the two ends, the file goes straight between them; no relay).
 - **`serve` + `push relayium://` daemon direct** — `relayium serve --dir ~/inbox` then `relayium push ./file relayium://host` (server-to-server over pinned TLS; no relay, no SSH, no code — trust is set up with `relayium id` + `authorized_fingerprints`).
 
 Full docs at [relayium.com/cli](https://relayium.com/cli); prebuilt binaries on the [releases page](https://github.com/relayium/relayium/releases).
