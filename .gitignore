@@ -4,3 +4,8 @@ server/relayium-server
 node_modules/
 web/node_modules/
 web/dist/
+
+# auto-deploy runtime state (server-local, never committed)
+/web/dist
+/web/releases/
+/.deployed-sha
