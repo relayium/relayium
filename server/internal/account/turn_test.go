@@ -1,14 +1,17 @@
 package account
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -264,6 +267,49 @@ func TestICEVerifiedOwnerGetsRelay(t *testing.T) {
 	servers := iceServersFromBody(t, resp)
 	if !hasTURN(servers) {
 		t.Fatalf("verified owner should get TURN, got %+v", servers)
+	}
+}
+
+// relayErrStore wraps a real store but forces UserRelayedSince to error, to
+// exercise the fail-open metering path. All other methods delegate.
+type relayErrStore struct{ *SQLiteStore }
+
+func (relayErrStore) UserRelayedSince(context.Context, string, int64) (int64, error) {
+	return 0, fmt.Errorf("redis down")
+}
+
+func TestICEMeteringReadErrorFailsOpenWithAlert(t *testing.T) {
+	base := newTestStore(t)
+	u, err := base.UpsertUserByEmail(context.Background(), "v@example.com", "V")
+	if err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	if err := base.SetEmailVerified(context.Background(), u.ID); err != nil {
+		t.Fatalf("verify user: %v", err)
+	}
+
+	var logbuf bytes.Buffer
+	log.SetOutput(&logbuf)
+	defer log.SetOutput(os.Stderr)
+
+	svc := NewService(relayErrStore{base}, &capturingMailer{}, Config{
+		TURNCredTTL:      time.Hour,
+		STUNURLs:         []string{"stun:stun.example.com:3478"},
+		TURNURLs:         []string{"turn:turn.example.com:3478"},
+		TURNSecret:       "secret",
+		RelayMonthlyFree: 2 << 30,
+	})
+	svc.SetPairCodeOwner(ownerResolver(u.ID, "424242"))
+	ts := httptest.NewServer(svc.Routes())
+	defer ts.Close()
+
+	resp, _ := ts.Client().Get(ts.URL + "/api/ice?code=424242")
+	servers := iceServersFromBody(t, resp)
+	if !hasTURN(servers) {
+		t.Fatalf("metering read error must fail-open to relay, got %+v", servers)
+	}
+	if !strings.Contains(logbuf.String(), "metering read failed") {
+		t.Fatalf("expected a metering-blind alert log, got %q", logbuf.String())
 	}
 }
 

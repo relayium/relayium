@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"fmt"
+	"log"
 	"net/http"
 )
 
@@ -68,7 +69,10 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 	if validCode {
 		st := s.resolveSettings(r.Context())
 		since, _ := monthRange(periodOf(now.Unix()))
-		if used, err := s.store.UserRelayedSince(r.Context(), owner, since); err == nil && used >= st.RelayMonthlyFree {
+		used, err := s.store.UserRelayedSince(r.Context(), owner, since)
+		if err != nil {
+			log.Printf("relay metering read failed for owner %s: %v (fail-open, issuing relay)", owner, err)
+		} else if used >= st.RelayMonthlyFree {
 			validCode = false
 			relayDenied = "quota"
 		}
