@@ -5,6 +5,11 @@ export const DEFAULT_LANG = "en";
 export const LANG_LABELS = {
   en: "English", zh: "中文", ja: "日本語", ko: "한국어", de: "Deutsch", fr: "Français",
 };
+
+// Footer link label for the Guides hub, per language.
+export const GUIDES_LABELS = {
+  en: "Guides", zh: "使用指南", ja: "ガイド", ko: "가이드", de: "Anleitungen", fr: "Guides",
+};
 export const BCP47 = { en: "en", zh: "zh-Hans", ja: "ja", ko: "ko", de: "de", fr: "fr" };
 // Open Graph wants language_TERRITORY with an underscore, not BCP47.
 export const OG_LOCALE = { en: "en_US", zh: "zh_CN", ja: "ja_JP", ko: "ko_KR", de: "de_DE", fr: "fr_FR" };

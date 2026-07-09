@@ -41,4 +41,9 @@ describe("buildLandingPages", () => {
     });
     expect(html).toContain('href="/zh/compare/snapdrop"');
   });
+
+  it("links the Guides hub in the footer", () => {
+    const zh = pages.find((p) => p.path === "zh/index.html").html;
+    expect(zh).toContain('href="/zh/guides">使用指南<');
+  });
 });

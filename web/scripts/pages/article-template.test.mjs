@@ -56,6 +56,11 @@ describe("buildArticlePages", () => {
     const en = pages.find((p) => p.path === "compare/snapdrop/index.html").html;
     expect(en).toContain('<a href="/privacy">Privacy</a>');
   });
+
+  it("links the Guides hub in the footer", () => {
+    const en = pages.find((p) => p.path === "compare/snapdrop/index.html").html;
+    expect(en).toContain('href="/guides">Guides<');
+  });
 });
 
 describe("buildSitemap homepage lastmod", () => {
