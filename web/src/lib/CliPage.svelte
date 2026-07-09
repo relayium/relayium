@@ -28,7 +28,8 @@ relayium serve --dir ~/inbox      # --once to accept one transfer; --port to cha
   const daemonPushCmd = `# on the SENDER
 relayium push ./file.zip relayium://receiver.example.com`;
   const daemonAuthCmd = `# on the RECEIVER, the first push prompts:
-Incoming push from 203.0.113.7  (fingerprint 74318e3b…)
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
 Accept and remember this peer? [y/N] y
 
 # no terminal (a systemd service)? pre-authorize instead:
@@ -45,11 +46,14 @@ relayium authorize 74318e3b…`;
     { flag: "--dir <d>", who: "serve" },
     { flag: "--port <n>", who: "serve, relayium://" },
     { flag: "--once", who: "serve" },
-    { flag: "--no-resume", who: "all" },
-    { flag: "--config-dir <d>", who: "serve / push / id" },
-    { flag: "-i <file>", who: "push / pull" },
-    { flag: "-p <n>", who: "push / pull" },
+    { flag: "--no-resume", who: "push / pull / serve" },
+    { flag: "--config-dir <d>", who: "serve / push / sync / id / authorize" },
+    { flag: "-i <file>", who: "push / pull / sync" },
+    { flag: "-p <n>", who: "push / pull / sync" },
     { flag: "--verify", who: "send / receive" },
+    { flag: "--delete", who: "sync" },
+    { flag: "--watch", who: "sync" },
+    { flag: "--allow-delete", who: "serve" },
   ];
   const syncCmd = "relayium sync ./site relayium://receiver.example.com --delete --watch";
   const fileNames = ["id.key / id.crt", "known_hosts", "authorized_fingerprints"];
@@ -58,8 +62,9 @@ relayium authorize 74318e3b…`;
     "guides/back-up-a-server-over-ssh",
     "guides/send-a-file-to-someone",
     "guides/server-to-server-transfers",
+    "guides/sync-a-large-folder-between-servers",
   ];
-  const guideIcons = ["🚀", "🔑", "🔗", "🖧"];
+  const guideIcons = ["🚀", "🔑", "🔗", "🖧", "🔁"];
   const guideUrl = (slug: string) => (lang() === "en" ? `/${slug}` : `/${lang()}/${slug}`);
 </script>
 

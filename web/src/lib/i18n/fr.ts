@@ -43,6 +43,7 @@ const fr: Messages = {
   dragSendMany: "Déposez sur un appareil pour envoyer",
   pickHint: (m) => `Cliquez pour choisir · ou déposez ici (jusqu’à ${m})`,
   footer: "Chiffré de bout en bout (X25519 + AES-256-GCM) · le serveur de signalisation ne relaie que les infos de connexion et ne voit jamais le contenu des fichiers",
+  offlineFooter: "Chiffré dans votre navigateur avec AES-256-GCM avant l'envoi · le serveur ne stocke que du chiffré qu'il ne peut pas déchiffrer — la clé de déchiffrement ne vit que dans le lien.",
   busy: "Un transfert est déjà en cours — veuillez attendre qu’il se termine",
   tooMany: (m, n) => `Jusqu’à ${m} fichiers à la fois ; ${n} en trop ignoré(s)`,
   titleDefault: "Relayium — transfert de fichiers chiffré de bout en bout",
@@ -141,7 +142,7 @@ const fr: Messages = {
     mode1Title: "push / pull — via votre propre SSH",
     mode1Tag: "gratuit",
     mode1Body:
-      "Copiez des fichiers vers (ou depuis) toute machine où vous pouvez déjà vous connecter en ssh — un VPS, un serveur personnel, un poste de travail. Les octets transitent par votre connexion SSH et ne touchent jamais les serveurs de Relayium ; aucun compte n'est nécessaire. Si relayium est installé sur la machine distante, il utilise le protocole natif (reprise par fichier + SHA-256), sinon il bascule sur un simple flux tar.",
+      "Copiez des fichiers vers (ou depuis) toute machine où vous pouvez déjà vous connecter en ssh — un VPS, un serveur personnel, un poste de travail. Les octets transitent par votre connexion SSH et ne touchent jamais les serveurs de Relayium ; aucun compte n'est nécessaire. Si relayium est installé sur la machine distante, il utilise le protocole natif (reprise par fichier + SHA-256) ; push bascule sur un simple flux tar quand ce n'est pas le cas, mais pull nécessite toujours relayium sur la machine distante.",
     mode2Title: "send / receive — par code d'appairage",
     mode2Tag: "gratuit · P2P direct",
     mode2Body:
@@ -173,6 +174,9 @@ const fr: Messages = {
       "Fichier d'identité SSH (clé)",
       "Port SSH",
       "Exiger la confirmation du code SAS avant le transfert",
+      "Refléter les suppressions de la source vers le récepteur",
+      "Continuer de s'exécuter et resynchroniser à chaque changement",
+      "Autoriser le --delete d'un expéditeur sync à réellement supprimer des fichiers",
     ],
     trustH3: "Fichiers de confiance et d'identité",
     trustIntro:
@@ -194,6 +198,7 @@ const fr: Messages = {
       "Sauvegarder un serveur via SSH",
       "Envoyer un fichier à quelqu'un",
       "Transferts de serveur à serveur",
+      "Synchroniser un grand dossier entre serveurs",
     ],
     syncH2: "Garder un dossier synchronisé",
     syncNote: "Miroir unidirectionnel d'un dossier par synchronisation incrémentielle — seuls les fichiers modifiés sont transférés. Ajoutez --delete pour refléter les suppressions, --watch pour resynchroniser en temps réel. Fonctionne via SSH et daemon direct.",
@@ -203,8 +208,8 @@ const fr: Messages = {
     realtimeSub: "Les deux en ligne · pair-à-pair · les fichiers ne passent jamais par le serveur",
     realtimeFoot: "Le destinataire n'a pas besoin de compte · chiffré de bout en bout",
     signInToSend: "Connectez-vous pour envoyer d'un réseau à l'autre. La personne qui reçoit n'a jamais besoin de compte.",
-    relayQuotaWarn: "Vous avez épuisé le trafic de relais de ce mois-ci. Une connexion directe pair-à-pair fonctionne toujours — seul le relais de secours est indisponible. Passez à une offre supérieure pour rétablir le relais.",
-    relayQuotaFail: "Connexion directe impossible et le trafic de relais de ce mois-ci est épuisé — aucun relais de secours. Utilisez plutôt un lien de téléchargement, ou passez à une offre supérieure pour réactiver le relais.",
+    relayQuotaWarn: "Vous avez épuisé le trafic de relais de ce mois-ci. Une connexion directe pair-à-pair fonctionne toujours — seul le relais de secours est indisponible. Il se réinitialise au début du mois prochain ; pour envoyer maintenant, utilisez plutôt un lien de téléchargement.",
+    relayQuotaFail: "Connexion directe impossible, et le trafic de relais de ce mois-ci est épuisé — aucun relais de secours. Il se réinitialise au début du mois prochain ; utilisez plutôt un lien de téléchargement.",
   },
   offline: {
     tagline: "Chiffré dans votre navigateur, puis stocké · le serveur ne détient que du chiffré",

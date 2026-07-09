@@ -43,6 +43,7 @@ const en: Messages = {
   dragSendMany: "Drop onto a device to send",
   pickHint: (m) => `Click to choose files · or drop them here (up to ${m})`,
   footer: "End-to-end encrypted (X25519 + AES-256-GCM) · the signaling server only relays connection info and never sees file contents",
+  offlineFooter: "Encrypted in your browser with AES-256-GCM before upload · the server stores only ciphertext it can't decrypt — the decryption key lives solely in the link.",
   busy: "A transfer is already in progress — please wait for it to finish",
   tooMany: (m, n) => `Up to ${m} files at a time; ignored the extra ${n}`,
   titleDefault: "Relayium — end-to-end encrypted file transfer",
@@ -141,7 +142,7 @@ const en: Messages = {
     mode1Title: "push / pull — over your own SSH",
     mode1Tag: "free",
     mode1Body:
-      "Copy files to (or from) any machine you can already ssh into — a VPS, a home server, a workstation. Bytes travel over your SSH connection and never touch Relayium's servers; you need no account. If relayium is installed on the remote it uses the native protocol (per-file resume + SHA-256), otherwise it falls back to a plain tar stream.",
+      "Copy files to (or from) any machine you can already ssh into — a VPS, a home server, a workstation. Bytes travel over your SSH connection and never touch Relayium's servers; you need no account. If relayium is installed on the remote it uses the native protocol (per-file resume + SHA-256); push falls back to a plain tar stream when it isn't, but pull always needs relayium installed on the remote.",
     mode2Title: "send / receive — by pairing code",
     mode2Tag: "free · direct P2P",
     mode2Body:
@@ -172,6 +173,9 @@ const en: Messages = {
       "SSH identity (key) file",
       "SSH port",
       "Require confirming the SAS code before transferring",
+      "Mirror deletions from source to the receiver",
+      "Keep running and re-sync on any change",
+      "Permit a sync sender's --delete to actually remove files",
     ],
     trustH3: "Trust & identity files",
     trustIntro:
@@ -193,6 +197,7 @@ const en: Messages = {
       "Back up a server over SSH",
       "Send a file to someone",
       "Server-to-server transfers",
+      "Sync a large folder between servers",
     ],
     syncH2: "Keep a folder in sync",
     syncNote: "Mirror a folder one-way with incremental sync — only changed files transfer. Add --delete to mirror removals, --watch to re-sync in real time. Works over SSH and daemon direct.",
@@ -202,8 +207,8 @@ const en: Messages = {
     realtimeSub: "Both online now · peer-to-peer · files never touch the server",
     realtimeFoot: "Recipient needs no account · end-to-end encrypted",
     signInToSend: "Sign in to send across networks. The person receiving never needs an account.",
-    relayQuotaWarn: "You've used up this month's relay traffic. A direct peer-to-peer connection still works — only the relay fallback is unavailable. Upgrade to restore relaying.",
-    relayQuotaFail: "Couldn't connect directly, and this month's relay traffic is used up — no relay to fall back on. Try a download link instead, or upgrade to re-enable relaying.",
+    relayQuotaWarn: "You've used up this month's relay traffic. A direct peer-to-peer connection still works — only the relay fallback is unavailable. It resets at the start of next month; to send now, try a stored download link instead.",
+    relayQuotaFail: "Couldn't connect directly, and this month's relay traffic is used up — no relay to fall back on. It resets at the start of next month; try a stored download link instead.",
   },
   offline: {
     tagline: "Encrypted in your browser, then stored · the server only ever holds ciphertext",

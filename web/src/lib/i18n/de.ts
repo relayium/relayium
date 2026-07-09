@@ -43,6 +43,7 @@ const de: Messages = {
   dragSendMany: "Zum Senden auf ein Gerät ziehen",
   pickHint: (m) => `Zum Auswählen klicken · oder hierher ziehen (bis zu ${m})`,
   footer: "Ende-zu-Ende-verschlüsselt (X25519 + AES-256-GCM) · der Signalisierungsserver leitet nur Verbindungsdaten weiter und sieht nie Dateiinhalte",
+  offlineFooter: "Vor dem Hochladen im Browser mit AES-256-GCM verschlüsselt · der Server speichert nur Chiffretext, den er nicht entschlüsseln kann — der Schlüssel existiert einzig im Link.",
   busy: "Eine Übertragung läuft bereits – bitte warten Sie, bis sie abgeschlossen ist",
   tooMany: (m, n) => `Maximal ${m} Dateien auf einmal; ${n} überzählige ignoriert`,
   titleDefault: "Relayium — Ende-zu-Ende-verschlüsselte Dateiübertragung",
@@ -141,7 +142,7 @@ const de: Messages = {
     mode1Title: "push / pull — über dein eigenes SSH",
     mode1Tag: "kostenlos",
     mode1Body:
-      "Kopiere Dateien zu (oder von) jeder Maschine, in die du dich bereits per ssh einloggen kannst — ein VPS, ein Heimserver, eine Workstation. Die Bytes laufen über deine SSH-Verbindung und berühren Relayiums Server nie; du brauchst kein Konto. Ist relayium auf der Gegenseite installiert, wird das native Protokoll genutzt (dateiweise Wiederaufnahme + SHA-256), andernfalls fällt es auf einen einfachen tar-Stream zurück.",
+      "Kopiere Dateien zu (oder von) jeder Maschine, in die du dich bereits per ssh einloggen kannst — ein VPS, ein Heimserver, eine Workstation. Die Bytes laufen über deine SSH-Verbindung und berühren Relayiums Server nie; du brauchst kein Konto. Ist relayium auf der Gegenseite installiert, wird das native Protokoll genutzt (dateiweise Wiederaufnahme + SHA-256); push fällt auf einen einfachen tar-Stream zurück, wenn das nicht der Fall ist, aber pull benötigt immer relayium auf der Gegenseite.",
     mode2Title: "send / receive — per Pairing-Code",
     mode2Tag: "kostenlos · direktes P2P",
     mode2Body:
@@ -173,6 +174,9 @@ const de: Messages = {
       "SSH-Identitätsdatei (Key)",
       "SSH-Port",
       "Bestätigung des SAS-Codes vor der Übertragung verlangen",
+      "Löschungen von der Quelle zum Empfänger spiegeln",
+      "Weiterlaufen und bei jeder Änderung neu synchronisieren",
+      "Erlaubt, dass --delete eines sync-Senders tatsächlich Dateien löscht",
     ],
     trustH3: "Vertrauens- und Identitätsdateien",
     trustIntro:
@@ -194,6 +198,7 @@ const de: Messages = {
       "Einen Server über SSH sichern",
       "Eine Datei an jemanden senden",
       "Server-zu-Server-Übertragungen",
+      "Einen großen Ordner zwischen Servern synchronisieren",
     ],
     syncH2: "Einen Ordner synchron halten",
     syncNote: "Einen Ordner per inkrementeller Synchronisierung einseitig spiegeln — nur geänderte Dateien werden übertragen. Mit --delete werden auch Löschungen gespiegelt, mit --watch wird in Echtzeit neu synchronisiert. Funktioniert über SSH und daemon direct.",
@@ -203,8 +208,8 @@ const de: Messages = {
     realtimeSub: "Beide jetzt online · Peer-to-Peer · Dateien berühren nie den Server",
     realtimeFoot: "Empfänger braucht kein Konto · Ende-zu-Ende-verschlüsselt",
     signInToSend: "Zum netzwerkübergreifenden Senden anmelden. Die empfangende Person braucht nie ein Konto.",
-    relayQuotaWarn: "Das Relay-Kontingent dieses Monats ist aufgebraucht. Eine direkte Peer-to-Peer-Verbindung funktioniert weiterhin — nur der Relay-Rückfall steht nicht zur Verfügung. Upgraden, um das Relay wiederherzustellen.",
-    relayQuotaFail: "Direkte Verbindung fehlgeschlagen und das Relay-Kontingent dieses Monats ist aufgebraucht — kein Relay als Rückfall. Nutze stattdessen einen Download-Link oder upgrade, um das Relay wieder zu aktivieren.",
+    relayQuotaWarn: "Das Relay-Kontingent dieses Monats ist aufgebraucht. Eine direkte Peer-to-Peer-Verbindung funktioniert weiterhin — nur der Relay-Rückfall steht nicht zur Verfügung. Es wird zu Beginn des nächsten Monats zurückgesetzt; nutze in der Zwischenzeit einen Download-Link, um jetzt zu senden.",
+    relayQuotaFail: "Direkte Verbindung fehlgeschlagen, und das Relay-Kontingent dieses Monats ist aufgebraucht — kein Relay als Rückfall. Es wird zu Beginn des nächsten Monats zurückgesetzt; nutze stattdessen einen Download-Link.",
   },
   offline: {
     tagline: "Im Browser verschlüsselt, dann zwischengespeichert · der Server hält nur Chiffretext",

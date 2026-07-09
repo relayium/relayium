@@ -63,6 +63,7 @@ export interface Messages {
   pickSendTo: (name: string) => string; // prominent single-peer send label
   generating: string; // transient "creating…" state while a code/link is minted
   footer: string;
+  offlineFooter: string; // async page's own footer: random-key AES-256-GCM, ciphertext durably stored (NOT the LAN/realtime X25519 footer)
   busy: string;
   tooMany: (max: number, n: number) => string;
   titleDefault: string;

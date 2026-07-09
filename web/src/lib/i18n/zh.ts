@@ -43,6 +43,7 @@ const zh: Messages = {
   dragSendMany: "拖到某台设备上发送",
   pickHint: (m) => `点击选择文件 · 或拖放到此处（最多 ${m} 个）`,
   footer: "端到端加密（X25519 + AES-256-GCM）· 信令服务器只转发连接信息，看不到文件内容",
+  offlineFooter: "上传前先在浏览器用 AES-256-GCM 加密 · 服务器只保存无法解密的密文——解密密钥只存在于链接中",
   busy: "已有传输进行中，请等待完成",
   tooMany: (m, n) => `一次最多 ${m} 个文件，已忽略多余的 ${n} 个`,
   titleDefault: "Relayium — 端到端加密文件传输",
@@ -141,7 +142,7 @@ const zh: Messages = {
     mode1Title: "push / pull —— 走你自己的 SSH",
     mode1Tag: "免费",
     mode1Body:
-      "把文件复制到(或从)任何你已能 ssh 进去的机器——VPS、家用服务器、工作站都可以。字节走你的 SSH 连接，绝不经过 Relayium 的服务器；不需要账号。如果远程也装了 relayium，会使用原生协议(逐文件断点续传 + SHA-256)，否则会退化为普通的 tar 流。",
+      "把文件复制到(或从)任何你已能 ssh 进去的机器——VPS、家用服务器、工作站都可以。字节走你的 SSH 连接，绝不经过 Relayium 的服务器；不需要账号。如果远程也装了 relayium，会使用原生协议(逐文件断点续传 + SHA-256)；push 在远程未安装 relayium 时会退化为普通的 tar 流，但 pull 始终需要远程装有 relayium。",
     mode2Title: "send / receive —— 通过配对码",
     mode2Tag: "免费 · 直连 P2P",
     mode2Body:
@@ -172,6 +173,9 @@ const zh: Messages = {
       "SSH 身份(密钥)文件",
       "SSH 端口",
       "传输前要求确认 SAS 码",
+      "将源端的删除同步镜像到接收端",
+      "保持运行，有改动就自动重新同步",
+      "允许 sync 发送端的 --delete 真正删除文件",
     ],
     trustH3: "信任与身份文件",
     trustIntro:
@@ -193,6 +197,7 @@ const zh: Messages = {
       "通过 SSH 备份服务器",
       "把文件发给别人",
       "服务器到服务器传输",
+      "在服务器之间同步大文件夹",
     ],
     syncH2: "保持文件夹同步",
     syncNote: "用增量同步单向镜像一个文件夹——只传改动过的文件。加 --delete 连删除一起镜像,加 --watch 实时重新同步。SSH 和 daemon direct 都支持。",
@@ -202,8 +207,8 @@ const zh: Messages = {
     realtimeSub: "对方此刻在线 · 点对点直连 · 文件不经服务器",
     realtimeFoot: "接收方无需账号 · 端到端加密",
     signInToSend: "登录后即可跨网络发送。接收方无需账号。",
-    relayQuotaWarn: "本月中继流量已用尽。点对点直连仍可用——仅中继兜底不可用。升级后恢复中继。",
-    relayQuotaFail: "直连失败,且本月中继流量已用尽——无中继可兜底。可改用下载链接,或升级以恢复中继。",
+    relayQuotaWarn: "本月中继流量已用尽。点对点直连仍可用——仅中继兜底不可用。下月初重置；现在要发送，可改用下载链接。",
+    relayQuotaFail: "直连失败,且本月中继流量已用尽——无中继可兜底。下月初重置；可改用下载链接。",
   },
   offline: {
     tagline: "浏览器先加密再暂存 · 服务器只保存无法解密的密文",
