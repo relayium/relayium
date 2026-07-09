@@ -26,7 +26,11 @@ func newFileServer(t *testing.T) (*httptest.Server, *Service, *SQLiteStore, *cap
 	svc := NewService(store, mail, Config{
 		BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute,
 		EnableMagic: true,
-		MaxFileSize: 1024, DailyQuota: 4096, DefaultTTL: 3600, MaxTTL: 7200,
+		// DailyQuota is well above minBillableBytes (64 KiB, see files.go) so
+		// ordinary small test uploads aren't rejected by the M3a billing floor;
+		// tests that specifically exercise quota exhaustion build their own
+		// tight-quota server via newFileServerWithQuota instead.
+		MaxFileSize: 1024, DailyQuota: 8 << 20, DefaultTTL: 3600, MaxTTL: 7200,
 	})
 	disk, err := storage.NewDiskStore(t.TempDir())
 	if err != nil {
@@ -123,7 +127,10 @@ func TestUploadOversizeIs413(t *testing.T) {
 }
 
 func TestUploadOverQuotaIs429(t *testing.T) {
-	ts, _, store, mail := newFileServer(t)
+	// Own tight-quota server: newFileServer's default is now well above
+	// minBillableBytes (see its comment), so quota-exhaustion tests build a
+	// small quota locally via newFileServerWithQuota instead.
+	ts, _, store, mail := newFileServerWithQuota(t, 4096, 1024)
 	cookie := loginCookie(t, ts, mail, "quota@example.com")
 	u, _ := store.UpsertUserByEmail(context.Background(), "quota@example.com", "")
 	// Pre-fill the rolling window to within 100 bytes of the 4096 quota.
@@ -315,14 +322,18 @@ func TestBurnBlobConcurrentSingleDelivery(t *testing.T) {
 // the recorded total exceed the quota. Pre-fix, each request read a stale usage
 // sum and they collectively busted the cap.
 func TestConcurrentUploadsRespectQuota(t *testing.T) {
-	ts, _, store, mail := newFileServer(t) // MaxFileSize 1024, DailyQuota 4096
+	const (
+		n     = 16
+		each  = 1000                 // actual ciphertext bytes; each < minBillableBytes (64 KiB)
+		quota = 4 * minBillableBytes // exactly 4 billed (floored) slots
+	)
+	// Every upload here is billed at the 64 KiB floor (M3a), not its actual 1000
+	// bytes, so the quota is sized in floored slots via newFileServerWithQuota
+	// rather than the shared newFileServer's byte-scale default.
+	ts, _, store, mail := newFileServerWithQuota(t, quota, 1024)
 	cookie := loginCookie(t, ts, mail, "qrace@example.com")
 	u, _ := store.UpsertUserByEmail(context.Background(), "qrace@example.com", "")
 
-	const (
-		n    = 16
-		each = 1000 // fits under MaxFileSize; 4 fit the 4096 quota
-	)
 	var accepted int64
 	var wg sync.WaitGroup
 	start := make(chan struct{})
@@ -346,14 +357,14 @@ func TestConcurrentUploadsRespectQuota(t *testing.T) {
 	wg.Wait()
 
 	total, _ := store.UserUploadedSince(context.Background(), u.ID, 0)
-	if total > 4096 {
-		t.Fatalf("recorded upload total %d exceeds quota 4096", total)
+	if total > quota {
+		t.Fatalf("recorded upload total %d exceeds quota %d", total, quota)
 	}
-	if accepted*each != total {
-		t.Fatalf("accepted*each=%d != recorded total=%d", accepted*each, total)
+	if accepted*minBillableBytes != total {
+		t.Fatalf("accepted*minBillableBytes=%d != recorded total=%d", accepted*minBillableBytes, total)
 	}
 	if accepted != 4 {
-		t.Fatalf("accepted uploads = %d, want 4 (4*1000 <= 4096 < 5*1000)", accepted)
+		t.Fatalf("accepted uploads = %d, want 4 (4*64KiB fits quota, 5th doesn't)", accepted)
 	}
 }
 

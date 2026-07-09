@@ -15,6 +15,11 @@ const (
 	maxManifestBytes = 64 * 1024
 )
 
+// minBillableBytes floors each upload's quota debit (M3a). A near-zero object
+// still costs 64 KiB of the DailyQuota, which caps object COUNT (~DailyQuota/64KiB
+// per day) without a separate hard row limit; actual stored size is unaffected.
+const minBillableBytes = 64 << 10
+
 // errTooLarge is returned by cappedReader once the upload exceeds the live
 // max_file_size; it propagates out of BlobStore.Put so no oversize blob commits.
 var errTooLarge = errors.New("account: upload exceeds max file size")
@@ -118,8 +123,15 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	// fits, and record the event in one transaction. This closes the read/record
 	// race where concurrent uploads each see a stale sum and collectively bust the
 	// quota. Reserve first, then commit the file — if either fails, drop the blob.
+	// The debit is billed at max(size, minBillableBytes): a near-zero object
+	// still costs the 64 KiB floor, indirectly capping object count; the stored
+	// row/stats below stay at the actual size.
+	billed := size
+	if billed < minBillableBytes {
+		billed = minBillableBytes
+	}
 	ok, err := s.store.ReserveUpload(r.Context(),
-		UploadEvent{ID: newID(), UserID: u.ID, Bytes: size, UploadedAt: now},
+		UploadEvent{ID: newID(), UserID: u.ID, Bytes: billed, UploadedAt: now},
 		now-dayWindow, st.DailyQuota)
 	if err != nil {
 		_ = s.blobs.Delete(r.Context(), blobKey)
