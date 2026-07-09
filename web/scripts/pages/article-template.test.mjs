@@ -61,6 +61,18 @@ describe("buildArticlePages", () => {
     const en = pages.find((p) => p.path === "compare/snapdrop/index.html").html;
     expect(en).toContain('href="/guides">Guides<');
   });
+
+  it("footer order: Relayium link, then Guides, then Privacy", () => {
+    const en = pages.find((p) => p.path === "compare/snapdrop/index.html").html;
+    const relayiumIdx = en.indexOf(">← Relayium<");
+    const guidesIdx = en.indexOf('href="/guides">Guides<');
+    const privacyIdx = en.indexOf('href="/privacy">Privacy<');
+    expect(relayiumIdx).toBeGreaterThan(-1);
+    expect(guidesIdx).toBeGreaterThan(-1);
+    expect(privacyIdx).toBeGreaterThan(-1);
+    expect(relayiumIdx).toBeLessThan(guidesIdx);
+    expect(guidesIdx).toBeLessThan(privacyIdx);
+  });
 });
 
 describe("buildSitemap homepage lastmod", () => {

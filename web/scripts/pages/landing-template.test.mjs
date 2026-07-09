@@ -46,4 +46,16 @@ describe("buildLandingPages", () => {
     const zh = pages.find((p) => p.path === "zh/index.html").html;
     expect(zh).toContain('href="/zh/guides">使用指南<');
   });
+
+  it("footer order: Relayium link, then Guides, then Privacy", () => {
+    const zh = pages.find((p) => p.path === "zh/index.html").html;
+    const relayiumIdx = zh.indexOf(">← Relayium<");
+    const guidesIdx = zh.indexOf('href="/zh/guides">使用指南<');
+    const privacyIdx = zh.indexOf('href="/zh/privacy">隐私政策<');
+    expect(relayiumIdx).toBeGreaterThan(-1);
+    expect(guidesIdx).toBeGreaterThan(-1);
+    expect(privacyIdx).toBeGreaterThan(-1);
+    expect(relayiumIdx).toBeLessThan(guidesIdx);
+    expect(guidesIdx).toBeLessThan(privacyIdx);
+  });
 });
