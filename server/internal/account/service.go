@@ -82,6 +82,8 @@ type Service struct {
 	iceLimiter rateLimiter
 	// registerLimiter caps POST /api/auth/register attempts per IP (H2a). nil = unlimited.
 	registerLimiter rateLimiter
+	// uploadSem caps concurrent in-flight POST /api/files per account (M1).
+	uploadSem *uploadSem
 }
 
 // rateLimiter is the minimal per-key limiter account needs; *signal.RateLimiter
@@ -92,7 +94,8 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 	svc := &Service{store: store, mailer: mailer, cfg: cfg, now: time.Now,
 		adminSessions: map[string]int64{}, adminLogins: newLoginThrottle(),
 		pwLogins: newLoginThrottle(), magicRequests: newLoginThrottle(),
-		verifyRequests: newLoginThrottle(), resetRequests: newLoginThrottle()}
+		verifyRequests: newLoginThrottle(), resetRequests: newLoginThrottle(),
+		uploadSem: newUploadSem(maxConcurrentUploadsPerUser)}
 	svc.clientIP = clientIP
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
 	return svc

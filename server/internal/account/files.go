@@ -50,6 +50,14 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
 		return
 	}
+	// M1: cap concurrent uploads per account so a burst of parallel writes can't
+	// pile MaxFileSize each onto disk before the quota refuses them.
+	if !s.uploadSem.acquire(u.ID) {
+		w.Header().Set("Retry-After", "1")
+		http.Error(w, "too many concurrent uploads", http.StatusTooManyRequests)
+		return
+	}
+	defer s.uploadSem.release(u.ID)
 	st := s.resolveSettings(r.Context())
 	burn := r.URL.Query().Get("burnAfterRead") == "1"
 	reqTTL, _ := strconv.ParseInt(r.URL.Query().Get("ttl"), 10, 64)
