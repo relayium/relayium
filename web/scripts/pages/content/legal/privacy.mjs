@@ -20,11 +20,11 @@ const en = {
     {
       heading: "What an account stores (only if you sign in)",
       body: [
-        "Signing in is optional and only unlocks stored download links; every realtime transfer (LAN, or a pairing code and its join link) is account-free. If you sign in, we store the minimum needed to run an account:",
+        "Same-network (LAN) transfers need no account. Sending across networks with a pairing code requires the sender to sign in — the person receiving never needs an account. Creating a stored download link also requires signing in. If you sign in, we store the minimum needed to run an account:",
       ],
       bullets: [
         "Your email address and a display name.",
-        "Which sign-in method you used (Google, or an email magic link). Magic-link tokens are stored only as a hash, never in clear text.",
+        "Which sign-in method you used (Google, an email magic link, or email + password). Magic-link tokens are stored only as a hash, never in clear text; if you set a password, we store only its bcrypt hash, never the password itself.",
         "A login session, kept in a secure, httpOnly cookie.",
         "Devices you register, as a random device id and a device name (e.g. your platform name).",
       ],
@@ -52,7 +52,7 @@ const en = {
     {
       heading: "Cross-network relay (TURN)",
       body: [
-        "When two devices cannot connect directly across networks, the encrypted stream is relayed through a TURN server. The relay still cannot read your files — they remain end-to-end encrypted. For operating the service we record only the total number of relayed bytes, kept anonymously and never tied to an account. We never inspect relayed content.",
+        "When two devices cannot connect directly across networks, the encrypted stream is relayed through a TURN server. The relay still cannot read your files — they remain end-to-end encrypted. We record the number of relayed bytes per account, to enforce a monthly relay allowance and prevent abuse — we never inspect what is relayed, only the byte count.",
       ],
     },
     {
@@ -108,10 +108,10 @@ const zh = {
     },
     {
       heading: "账号会存储什么(仅在你登录时)",
-      body: ["登录是可选的,仅用于解锁托管下载链接；所有实时传输(局域网,或配对码及其加入链接)都无需账号。如果你登录,我们只存储运行账号所必需的最少信息:"],
+      body: ["同一网络(局域网)内的传输无需账号。跨网络使用配对码传输时,需要发送方登录——接收方始终无需账号。创建暂存下载链接同样需要登录。如果你登录,我们只存储运行账号所必需的最少信息:"],
       bullets: [
         "你的邮箱地址和一个显示名。",
-        "你使用的登录方式(Google,或邮箱魔法链接)。魔法链接令牌只以哈希形式存储,绝不明文保存。",
+        "你使用的登录方式(Google、邮箱魔法链接,或邮箱+密码)。魔法链接令牌只以哈希形式存储,绝不明文保存;如果你设置了密码,我们只存储其 bcrypt 哈希值,绝不存储密码本身。",
         "登录会话,保存在安全的 httpOnly cookie 中。",
         "你注册的设备,以一个随机设备 id 和设备名(例如你的平台名称)的形式。",
       ],
@@ -135,7 +135,7 @@ const zh = {
     {
       heading: "跨网络中继(TURN)",
       body: [
-        "当两台设备无法跨网络直接连接时,加密流会通过 TURN 服务器中继。中继依然无法读取你的文件——它们始终保持端到端加密。出于运营目的,我们仅记录中继的总字节数,且以匿名方式保存,绝不与任何账号关联。我们绝不检查中继内容。",
+        "当两台设备无法跨网络直接连接时,加密流会通过 TURN 服务器中继。中继依然无法读取你的文件——它们始终保持端到端加密。我们按账号记录中继字节数,用于执行每月中继额度限制并防止滥用——我们绝不检查中继的内容,只记录字节数。",
       ],
     },
     {
@@ -190,11 +190,11 @@ const ja = {
     {
       heading: "アカウントに保存される情報（サインインした場合のみ）",
       body: [
-        "サインインは任意で、保存型ダウンロードリンクにのみ必要です。すべてのリアルタイム転送（LAN、またはペアリングコードとその参加リンク）はアカウント不要です。サインインした場合、アカウントの運用に必要な最小限の情報のみを保存します：",
+        "同一ネットワーク(LAN)内の転送はアカウント不要です。ペアリングコードを使ってネットワークをまたいで送信する場合は、送信者のサインインが必要です——受信者はアカウント不要のままです。保存型ダウンロードリンクの作成にもサインインが必要です。サインインした場合、アカウントの運用に必要な最小限の情報のみを保存します：",
       ],
       bullets: [
         "メールアドレスと表示名。",
-        "使用したサインイン方法（Google、またはメールマジックリンク）。マジックリンクのトークンはハッシュ値のみ保存され、平文では保存されません。",
+        "使用したサインイン方法（Google、メールマジックリンク、またはメール+パスワード）。マジックリンクのトークンはハッシュ値のみ保存され、平文では保存されません。パスワードを設定した場合も、その bcrypt ハッシュのみを保存し、パスワード自体は保存しません。",
         "ログインセッション。安全なhttpOnlyクッキーに保存されます。",
         "登録したデバイス。ランダムなデバイスIDとデバイス名（例：プラットフォーム名）で管理されます。",
       ],
@@ -222,7 +222,7 @@ const ja = {
     {
       heading: "クロスネットワーク中継（TURN）",
       body: [
-        "2台のデバイスがネットワークをまたいで直接接続できない場合、暗号化されたストリームはTURNサーバーを経由して中継されます。中継サーバーはあなたのファイルを読み取ることができません——エンドツーエンド暗号化が維持されます。サービスの運用上、中継バイトの合計のみを記録し、どのアカウントにも紐付けず匿名で保存します。中継されたコンテンツを検査することはありません。",
+        "2台のデバイスがネットワークをまたいで直接接続できない場合、暗号化されたストリームはTURNサーバーを経由して中継されます。中継サーバーはあなたのファイルを読み取ることができません——エンドツーエンド暗号化が維持されます。月間中継割り当ての管理と不正利用の防止のため、中継バイト数はアカウントごとに記録します——中継内容を検査することはなく、記録するのはバイト数のみです。",
       ],
     },
     {
@@ -279,11 +279,11 @@ const ko = {
     {
       heading: "계정에 저장되는 정보(로그인한 경우에만)",
       body: [
-        "로그인은 선택 사항이며 저장형 다운로드 링크에만 필요합니다. 모든 실시간 전송(LAN, 또는 페어링 코드와 그 참여 링크)은 계정이 필요 없습니다. 로그인하면 계정 운영에 필요한 최소한의 정보만 저장합니다:",
+        "동일 네트워크(LAN) 내 전송은 계정이 필요 없습니다. 페어링 코드로 네트워크를 넘나들며 전송하려면 발신자가 로그인해야 합니다——수신자는 여전히 계정이 필요 없습니다. 저장형 다운로드 링크를 만드는 데도 로그인이 필요합니다. 로그인하면 계정 운영에 필요한 최소한의 정보만 저장합니다:",
       ],
       bullets: [
         "이메일 주소와 표시 이름.",
-        "사용한 로그인 방식(Google 또는 이메일 매직 링크). 매직 링크 토큰은 해시값으로만 저장되며 평문으로는 저장되지 않습니다.",
+        "사용한 로그인 방식(Google, 이메일 매직 링크, 또는 이메일+비밀번호). 매직 링크 토큰은 해시값으로만 저장되며 평문으로는 저장되지 않습니다. 비밀번호를 설정한 경우에도 bcrypt 해시값만 저장하며 비밀번호 자체는 저장하지 않습니다.",
         "로그인 세션. 안전한 httpOnly 쿠키에 보관됩니다.",
         "등록한 장치. 임의 장치 ID와 장치 이름(예: 플랫폼 이름)으로 관리됩니다.",
       ],
@@ -311,7 +311,7 @@ const ko = {
     {
       heading: "크로스 네트워크 릴레이(TURN)",
       body: [
-        "두 장치가 네트워크를 가로질러 직접 연결할 수 없는 경우, 암호화된 스트림이 TURN 서버를 통해 중계됩니다. 릴레이 서버는 여전히 파일을 읽을 수 없습니다——엔드 투 엔드 암호화가 유지됩니다. 서비스 운영을 위해 릴레이 바이트 총량만 기록하며, 어떤 계정에도 연결하지 않고 익명으로 보관합니다. 중계된 콘텐츠를 검사하지 않습니다.",
+        "두 장치가 네트워크를 가로질러 직접 연결할 수 없는 경우, 암호화된 스트림이 TURN 서버를 통해 중계됩니다. 릴레이 서버는 여전히 파일을 읽을 수 없습니다——엔드 투 엔드 암호화가 유지됩니다. 월간 릴레이 허용량을 적용하고 남용을 방지하기 위해 계정별로 릴레이된 바이트 수를 기록합니다——중계 내용은 절대 검사하지 않으며, 오직 바이트 수만 기록합니다.",
       ],
     },
     {
@@ -368,11 +368,11 @@ const de = {
     {
       heading: "Was ein Konto speichert (nur wenn Sie angemeldet sind)",
       body: [
-        "Die Anmeldung ist optional und schaltet nur gespeicherte Download-Links frei; jede Echtzeitübertragung (LAN oder ein Pairing-Code samt Beitrittslink) kommt ohne Konto aus. Bei einer Anmeldung speichern wir nur das für den Kontobetrieb notwendige Minimum:",
+        "Übertragungen im selben Netzwerk (LAN) benötigen kein Konto. Für den Versand über Netzwerke hinweg per Pairing-Code muss sich die sendende Person anmelden — die empfangende Person benötigt weiterhin kein Konto. Auch das Erstellen eines gespeicherten Download-Links erfordert eine Anmeldung. Bei einer Anmeldung speichern wir nur das für den Kontobetrieb notwendige Minimum:",
       ],
       bullets: [
         "Ihre E-Mail-Adresse und ein Anzeigename.",
-        "Die verwendete Anmeldemethode (Google oder ein E-Mail-Magic-Link). Magic-Link-Tokens werden ausschließlich als Hash gespeichert, niemals im Klartext.",
+        "Die verwendete Anmeldemethode (Google, ein E-Mail-Magic-Link oder E-Mail + Passwort). Magic-Link-Tokens werden ausschließlich als Hash gespeichert, niemals im Klartext; falls Sie ein Passwort festlegen, speichern wir nur dessen bcrypt-Hash, niemals das Passwort selbst.",
         "Eine Anmeldesitzung, gespeichert in einem sicheren httpOnly-Cookie.",
         "Registrierte Geräte, bestehend aus einer zufälligen Geräte-ID und einem Gerätenamen (z. B. Ihr Plattformname).",
       ],
@@ -400,7 +400,7 @@ const de = {
     {
       heading: "Netzwerkübergreifende Weiterleitung (TURN)",
       body: [
-        "Wenn sich zwei Geräte nicht direkt über verschiedene Netzwerke verbinden können, wird der verschlüsselte Datenstrom über einen TURN-Server weitergeleitet. Die Weiterleitung kann Ihre Dateien dennoch nicht lesen — sie bleiben Ende-zu-Ende-verschlüsselt. Für den Betrieb des Dienstes erfassen wir lediglich die Gesamtzahl der weitergeleiteten Bytes, anonym gespeichert und keinem Konto zugeordnet. Weitergeleitete Inhalte werden von uns nie eingesehen.",
+        "Wenn sich zwei Geräte nicht direkt über verschiedene Netzwerke verbinden können, wird der verschlüsselte Datenstrom über einen TURN-Server weitergeleitet. Die Weiterleitung kann Ihre Dateien dennoch nicht lesen — sie bleiben Ende-zu-Ende-verschlüsselt. Wir erfassen die Anzahl weitergeleiteter Bytes pro Konto, um ein monatliches Weiterleitungskontingent durchzusetzen und Missbrauch zu verhindern — wir sehen niemals ein, was weitergeleitet wird, sondern nur die Byte-Anzahl.",
       ],
     },
     {
@@ -457,11 +457,11 @@ const fr = {
     {
       heading: "Ce que stocke un compte (uniquement si vous vous connectez)",
       body: [
-        "La connexion est facultative et ne sert qu'à débloquer les liens de téléchargement stockés ; tout transfert en temps réel (réseau local, ou un code d'appairage et son lien de participation) ne demande aucun compte. En cas de connexion, nous stockons le strict minimum nécessaire au fonctionnement du compte :",
+        "Les transferts sur le même réseau (local) ne nécessitent aucun compte. L'envoi entre réseaux différents via un code d'appairage exige que l'expéditeur se connecte — la personne qui reçoit n'a jamais besoin de compte. La création d'un lien de téléchargement stocké exige elle aussi une connexion. En cas de connexion, nous stockons le strict minimum nécessaire au fonctionnement du compte :",
       ],
       bullets: [
         "Votre adresse e-mail et un nom d'affichage.",
-        "La méthode de connexion utilisée (Google ou un lien magique par e-mail). Les jetons de lien magique sont stockés uniquement sous forme de hachage, jamais en clair.",
+        "La méthode de connexion utilisée (Google, un lien magique par e-mail, ou e-mail + mot de passe). Les jetons de lien magique sont stockés uniquement sous forme de hachage, jamais en clair ; si vous définissez un mot de passe, nous ne stockons que son hachage bcrypt, jamais le mot de passe lui-même.",
         "Une session de connexion, conservée dans un cookie sécurisé httpOnly.",
         "Les appareils que vous enregistrez, sous la forme d'un identifiant d'appareil aléatoire et d'un nom d'appareil (par ex. le nom de votre plateforme).",
       ],
@@ -489,7 +489,7 @@ const fr = {
     {
       heading: "Relais inter-réseau (TURN)",
       body: [
-        "Lorsque deux appareils ne peuvent pas se connecter directement entre différents réseaux, le flux chiffré est relayé via un serveur TURN. Le relais ne peut toujours pas lire vos fichiers — ils restent chiffrés de bout en bout. Pour l'exploitation du service, nous enregistrons uniquement le nombre total d'octets relayés, conservé de façon anonyme et jamais lié à un compte. Nous n'inspectons jamais le contenu relayé.",
+        "Lorsque deux appareils ne peuvent pas se connecter directement entre différents réseaux, le flux chiffré est relayé via un serveur TURN. Le relais ne peut toujours pas lire vos fichiers — ils restent chiffrés de bout en bout. Nous enregistrons le nombre d'octets relayés par compte, afin d'appliquer un quota de relais mensuel et de prévenir les abus — nous n'inspectons jamais ce qui est relayé, seulement le nombre d'octets.",
       ],
     },
     {

@@ -28,7 +28,7 @@ const en = {
     {
       heading: "Accounts",
       body: [
-        "An account is optional and only needed for async stored transfers (creating download links). You are responsible for keeping access to your email and account secure. You may delete your account at any time.",
+        "Same-network (LAN) transfers need no account. Sending across networks with a pairing code requires the sender to sign in — the person receiving never needs an account. Creating a stored download link also requires an account. You are responsible for keeping access to your email and account secure. You may request deletion of your account and its data at any time by contacting support@relayium.com.",
       ],
     },
     {
@@ -99,7 +99,7 @@ const zh = {
     {
       heading: "账号",
       body: [
-        "账号是可选的,仅异步暂存传输(创建下载链接)时需要。你有责任妥善保管你的邮箱和账号访问权限。你可以随时删除你的账号。",
+        "同一网络(局域网)内的传输无需账号。跨网络使用配对码传输时,需要发送方登录——接收方始终无需账号。创建暂存下载链接同样需要账号。你有责任妥善保管你的邮箱和账号访问权限。你可以随时联系 support@relayium.com,要求删除你的账号及其数据。",
       ],
     },
     {
@@ -171,7 +171,7 @@ const ja = {
     {
       heading: "アカウント",
       body: [
-        "アカウントは任意で、非同期の一時保存転送（ダウンロードリンクの作成）にのみ必要です。メールアドレスとアカウントへのアクセスを安全に保つ責任はあなたにあります。アカウントはいつでも削除できます。",
+        "同一ネットワーク(LAN)内の転送はアカウント不要です。ペアリングコードを使ってネットワークをまたいで送信する場合は、送信者のサインインが必要です——受信者はアカウント不要のままです。保存型ダウンロードリンクの作成にもアカウントが必要です。メールアドレスとアカウントへのアクセスを安全に保つ責任はあなたにあります。support@relayium.com までご連絡いただければ、いつでもアカウントとそのデータの削除を依頼できます。",
       ],
     },
     {
@@ -245,7 +245,7 @@ const ko = {
     {
       heading: "계정",
       body: [
-        "계정은 선택 사항이며 비동기 임시 보관 전송(다운로드 링크 생성)에만 필요합니다. 이메일 주소와 계정에 대한 접근을 안전하게 관리할 책임은 귀하에게 있습니다. 계정은 언제든지 삭제할 수 있습니다.",
+        "동일 네트워크(LAN) 내 전송은 계정이 필요 없습니다. 페어링 코드로 네트워크를 넘나들며 전송하려면 발신자가 로그인해야 합니다——수신자는 여전히 계정이 필요 없습니다. 저장형 다운로드 링크를 만드는 데도 계정이 필요합니다. 이메일 주소와 계정에 대한 접근을 안전하게 관리할 책임은 귀하에게 있습니다. support@relayium.com으로 연락하시면 언제든지 계정과 그 데이터의 삭제를 요청할 수 있습니다.",
       ],
     },
     {
@@ -319,7 +319,7 @@ const de = {
     {
       heading: "Konten",
       body: [
-        "Ein Konto ist optional und wird nur für asynchrone zwischengespeicherte Übertragungen (das Erstellen von Download-Links) benötigt. Sie sind dafür verantwortlich, den Zugang zu Ihrer E-Mail-Adresse und Ihrem Konto zu sichern. Sie können Ihr Konto jederzeit löschen.",
+        "Übertragungen im selben Netzwerk (LAN) benötigen kein Konto. Für den Versand über Netzwerke hinweg per Pairing-Code muss sich die sendende Person anmelden — die empfangende Person benötigt weiterhin kein Konto. Auch das Erstellen eines gespeicherten Download-Links erfordert ein Konto. Sie sind dafür verantwortlich, den Zugang zu Ihrer E-Mail-Adresse und Ihrem Konto zu sichern. Sie können jederzeit die Löschung Ihres Kontos und der zugehörigen Daten beantragen, indem Sie uns unter support@relayium.com kontaktieren.",
       ],
     },
     {
@@ -393,7 +393,7 @@ const fr = {
     {
       heading: "Comptes",
       body: [
-        "Un compte est facultatif et n'est nécessaire que pour les transferts stockés asynchrones (la création de liens de téléchargement). Vous êtes responsable de la sécurisation de l'accès à votre adresse e-mail et à votre compte. Vous pouvez supprimer votre compte à tout moment.",
+        "Les transferts sur le même réseau (local) ne nécessitent aucun compte. L'envoi entre réseaux différents via un code d'appairage exige que l'expéditeur se connecte — la personne qui reçoit n'a jamais besoin de compte. La création d'un lien de téléchargement stocké exige elle aussi un compte. Vous êtes responsable de la sécurisation de l'accès à votre adresse e-mail et à votre compte. Vous pouvez demander la suppression de votre compte et de ses données à tout moment en nous contactant à support@relayium.com.",
       ],
     },
     {

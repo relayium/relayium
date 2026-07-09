@@ -52,7 +52,7 @@ const en = {
       ],
       bullets: [
         "The relay forwards only ciphertext — it cannot read your files, which stay end-to-end encrypted.",
-        "For operating the service we record only the total number of relayed bytes, kept anonymously and never tied to an account.",
+        "We record the number of relayed bytes per account, to enforce a monthly relay allowance and prevent abuse — we never inspect what is relayed, only the byte count.",
         "We never inspect relayed content.",
       ],
     },
@@ -64,7 +64,7 @@ const en = {
       bullets: [
         "The server stores only ciphertext, plus the ciphertext size and timestamps for quota and cleanup — never plaintext, filenames, or keys.",
         "Anyone with the full link can decrypt, so treat the link like the file itself and share it over a trusted channel.",
-        "Links can be set to expire (1, 3, or 7 days) or to burn after the first complete download.",
+        "Links can be set to expire (1 hour, 1, 3, or 7 days) or to burn after the first complete download.",
       ],
     },
     {
@@ -80,7 +80,7 @@ const en = {
       ],
       bullets: [
         "A compromised device or browser on either end — malware, a hostile browser extension, or someone reading the screen.",
-        "Metadata the server necessarily handles: that a transfer happened, its size and timing, and — for a stored download link — the account that created it.",
+        "Metadata the server necessarily handles: that a transfer happened, its size and timing, and — for a stored download link or a cross-network pairing-code transfer — the account that created or sent it.",
         "A recipient choosing to keep or forward the files after they have received them.",
         "Sharing a download link over an untrusted channel, since the decryption key travels inside the link.",
       ],
@@ -158,7 +158,7 @@ const zh = {
       ],
       bullets: [
         "中继只转发密文——它无法读取你的文件，文件始终保持端到端加密。",
-        "出于运营目的，我们仅记录中继的总字节数，且以匿名方式保存，绝不与任何账号关联。",
+        "我们按账号记录中继字节数，用于执行每月中继额度限制并防止滥用——我们绝不检查中继的内容，只记录字节数。",
         "我们绝不检查中继内容。",
       ],
     },
@@ -170,7 +170,7 @@ const zh = {
       bullets: [
         "服务器只存储密文，外加用于配额与清理的密文大小和时间戳——绝不存明文、文件名或密钥。",
         "任何拿到完整链接的人都能解密，因此请把链接本身当作文件对待，通过可信渠道分享。",
-        "链接可设置有效期（1、3 或 7 天），或设为首次完整下载后即焚。",
+        "链接可设置有效期（1 小时、1、3 或 7 天），或设为首次完整下载后即焚。",
       ],
     },
     {
@@ -186,7 +186,7 @@ const zh = {
       ],
       bullets: [
         "任一端设备或浏览器被攻陷——恶意软件、恶意浏览器扩展，或有人偷看屏幕。",
-        "服务器必然会接触到的元数据：曾发生过一次传输、其大小与时间，以及（若为托管下载链接）创建它的账号。",
+        "服务器必然会接触到的元数据：曾发生过一次传输、其大小与时间，以及（若为暂存下载链接或跨网络配对码传输）创建或发起它的账号。",
         "接收方在收到文件后选择保留或转发。",
         "通过不可信渠道分享下载链接，因为解密密钥就在链接里。",
       ],
@@ -264,7 +264,7 @@ const ja = {
       ],
       bullets: [
         "中継サーバーは暗号文のみを転送します。ファイルを読むことはできず、エンドツーエンド暗号化が維持されます。",
-        "サービス運用のため、中継バイトの合計のみを記録し、どのアカウントにも紐付けず匿名で保存します。",
+        "月間中継割り当ての管理と不正利用の防止のため、中継バイト数はアカウントごとに記録します——中継内容を検査することはなく、記録するのはバイト数のみです。",
         "中継されたコンテンツを検査することはありません。",
       ],
     },
@@ -276,7 +276,7 @@ const ja = {
       bullets: [
         "サーバーが保存するのは暗号文と、クォータおよびクリーンアップのための暗号文サイズとタイムスタンプだけで、平文・ファイル名・鍵は決して保存しません。",
         "完全なリンクを持つ人は誰でも復号できるため、リンクをファイルそのものと同様に扱い、信頼できる経路で共有してください。",
-        "リンクには有効期限（1、3、または 7 日）を設定するか、最初の完全なダウンロード後に消える設定にできます。",
+        "リンクには有効期限（1 時間、1、3、または 7 日）を設定するか、最初の完全なダウンロード後に消える設定にできます。",
       ],
     },
     {
@@ -292,7 +292,7 @@ const ja = {
       ],
       bullets: [
         "いずれかの端末側のデバイスやブラウザの侵害——マルウェア、悪意ある拡張機能、あるいは画面を覗き見る人。",
-        "サーバーが必然的に扱うメタデータ：転送が行われた事実、そのサイズと時刻、そして（保存型ダウンロードリンクの場合）作成したアカウント。",
+        "サーバーが必然的に扱うメタデータ：転送が行われた事実、そのサイズと時刻、そして（保存型ダウンロードリンク、またはペアリングコードによるクロスネットワーク転送の場合）作成または送信したアカウント。",
         "受信者がファイルを受け取った後に保持または転送することを選ぶこと。",
         "復号鍵がリンク内に含まれるため、信頼できない経路でダウンロードリンクを共有すること。",
       ],
@@ -370,7 +370,7 @@ const ko = {
       ],
       bullets: [
         "중계 서버는 암호문만 전달합니다. 파일을 읽을 수 없으며 종단간 암호화가 유지됩니다.",
-        "서비스 운영을 위해 중계 바이트 총량만 기록하며, 어떤 계정에도 연결하지 않고 익명으로 보관합니다.",
+        "월간 릴레이 허용량을 적용하고 남용을 방지하기 위해 계정별로 릴레이된 바이트 수를 기록합니다——중계 내용은 절대 검사하지 않으며, 오직 바이트 수만 기록합니다.",
         "중계된 콘텐츠를 검사하지 않습니다.",
       ],
     },
@@ -382,7 +382,7 @@ const ko = {
       bullets: [
         "서버는 암호문과, 할당량 및 정리를 위한 암호문 크기와 타임스탬프만 저장하며, 평문·파일 이름·키는 절대 저장하지 않습니다.",
         "완전한 링크를 가진 사람은 누구나 복호화할 수 있으므로, 링크를 파일 자체처럼 취급하고 신뢰할 수 있는 경로로 공유하십시오.",
-        "링크는 만료(1, 3, 또는 7일)를 설정하거나 첫 번째 완전한 다운로드 후 소멸되도록 설정할 수 있습니다.",
+        "링크는 만료(1시간, 1, 3, 또는 7일)를 설정하거나 첫 번째 완전한 다운로드 후 소멸되도록 설정할 수 있습니다.",
       ],
     },
     {
@@ -398,7 +398,7 @@ const ko = {
       ],
       bullets: [
         "어느 한쪽 기기나 브라우저의 침해 — 멀웨어, 악성 브라우저 확장 프로그램, 또는 화면을 훔쳐보는 사람.",
-        "서버가 필연적으로 다루는 메타데이터: 전송이 일어났다는 사실, 그 크기와 시각, 그리고 (저장형 다운로드 링크의 경우) 이를 생성한 계정.",
+        "서버가 필연적으로 다루는 메타데이터: 전송이 일어났다는 사실, 그 크기와 시각, 그리고 (저장형 다운로드 링크 또는 페어링 코드를 통한 크로스 네트워크 전송의 경우) 이를 생성하거나 전송한 계정.",
         "수신자가 파일을 받은 후 보관하거나 전달하기로 선택하는 것.",
         "복호화 키가 링크 안에 담겨 이동하므로, 신뢰할 수 없는 경로로 다운로드 링크를 공유하는 것.",
       ],
@@ -476,7 +476,7 @@ const de = {
       ],
       bullets: [
         "Die Weiterleitung übermittelt nur Chiffretext — sie kann Ihre Dateien nicht lesen, die Ende-zu-Ende-verschlüsselt bleiben.",
-        "Für den Betrieb des Dienstes erfassen wir nur die Gesamtzahl der weitergeleiteten Bytes, anonym gespeichert und keinem Konto zugeordnet.",
+        "Wir erfassen die Anzahl weitergeleiteter Bytes pro Konto, um ein monatliches Weiterleitungskontingent durchzusetzen und Missbrauch zu verhindern — wir sehen niemals ein, was weitergeleitet wird, sondern nur die Byte-Anzahl.",
         "Weitergeleitete Inhalte sehen wir nie ein.",
       ],
     },
@@ -488,7 +488,7 @@ const de = {
       bullets: [
         "Der Server speichert nur Chiffretext sowie die Chiffretextgröße und Zeitstempel für Kontingent und Bereinigung — niemals Klartext, Dateinamen oder Schlüssel.",
         "Jeder mit dem vollständigen Link kann entschlüsseln; behandeln Sie den Link daher wie die Datei selbst und teilen Sie ihn über einen vertrauenswürdigen Kanal.",
-        "Links können so eingestellt werden, dass sie ablaufen (1, 3 oder 7 Tage) oder nach dem ersten vollständigen Download verfallen.",
+        "Links können so eingestellt werden, dass sie ablaufen (1 Stunde, 1, 3 oder 7 Tage) oder nach dem ersten vollständigen Download verfallen.",
       ],
     },
     {
@@ -504,7 +504,7 @@ const de = {
       ],
       bullets: [
         "Einem kompromittierten Gerät oder Browser an einem der beiden Enden — Schadsoftware, einer bösartigen Browsererweiterung oder jemandem, der auf den Bildschirm sieht.",
-        "Metadaten, die der Server zwangsläufig verarbeitet: dass eine Übertragung stattfand, deren Größe und Zeitpunkt und — bei einem gespeicherten Download-Link — das Konto, das ihn erstellt hat.",
+        "Metadaten, die der Server zwangsläufig verarbeitet: dass eine Übertragung stattfand, deren Größe und Zeitpunkt und — bei einem gespeicherten Download-Link oder einer netzwerkübergreifenden Pairing-Code-Übertragung — das Konto, das ihn erstellt oder gesendet hat.",
         "Einem Empfänger, der sich entscheidet, die Dateien nach Erhalt zu behalten oder weiterzuleiten.",
         "Dem Teilen eines Download-Links über einen nicht vertrauenswürdigen Kanal, da der Entschlüsselungsschlüssel im Link mitreist.",
       ],
@@ -582,7 +582,7 @@ const fr = {
       ],
       bullets: [
         "Le relais ne transmet que du chiffré — il ne peut pas lire vos fichiers, qui restent chiffrés de bout en bout.",
-        "Pour l'exploitation du service, nous enregistrons uniquement le nombre total d'octets relayés, conservé de façon anonyme et jamais lié à un compte.",
+        "Nous enregistrons le nombre d'octets relayés par compte, afin d'appliquer un quota de relais mensuel et de prévenir les abus — nous n'inspectons jamais ce qui est relayé, seulement le nombre d'octets.",
         "Nous n'inspectons jamais le contenu relayé.",
       ],
     },
@@ -594,7 +594,7 @@ const fr = {
       bullets: [
         "Le serveur ne stocke que du chiffré, plus la taille du chiffré et des horodatages pour les quotas et le nettoyage — jamais de clair, de noms de fichiers ni de clés.",
         "Quiconque possède le lien complet peut déchiffrer ; traitez donc le lien comme le fichier lui-même et partagez-le par un canal de confiance.",
-        "Les liens peuvent être réglés pour expirer (1, 3 ou 7 jours) ou pour s'effacer après le premier téléchargement complet.",
+        "Les liens peuvent être réglés pour expirer (1 heure, 1, 3 ou 7 jours) ou pour s'effacer après le premier téléchargement complet.",
       ],
     },
     {
@@ -610,7 +610,7 @@ const fr = {
       ],
       bullets: [
         "Un appareil ou un navigateur compromis à l'une des extrémités — logiciel malveillant, extension de navigateur hostile, ou quelqu'un qui regarde l'écran.",
-        "Les métadonnées que le serveur traite nécessairement : le fait qu'un transfert a eu lieu, sa taille et son horodatage, et — pour un lien de téléchargement stocké — le compte qui l'a créé.",
+        "Les métadonnées que le serveur traite nécessairement : le fait qu'un transfert a eu lieu, sa taille et son horodatage, et — pour un lien de téléchargement stocké ou un transfert inter-réseaux par code d'appairage — le compte qui l'a créé ou envoyé.",
         "Un destinataire qui choisit de conserver ou de transmettre les fichiers après les avoir reçus.",
         "Le partage d'un lien de téléchargement par un canal non fiable, puisque la clé de déchiffrement voyage dans le lien.",
       ],
