@@ -1,6 +1,9 @@
 package signal
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 // Conn is the hub's view of a connection; the real websocket adapter implements it.
 type Conn interface {
@@ -12,19 +15,43 @@ type Conn interface {
 // Tunable.
 const maxRooms = 5000
 
+// rosterDebounce coalesces roster broadcasts to at most one per room per window
+// (leading edge + trailing flush), damping churn from rapid Join/Leave. Tunable.
+const rosterDebounce = 200 * time.Millisecond
+
 type peer struct {
 	id   string
 	name string
 	conn Conn
 }
 
+type roomBroadcast struct {
+	nextAllowed time.Time // earliest instant a new leading broadcast may fire
+	pending     bool      // a change occurred inside the window, not yet broadcast
+	armed       bool      // a trailing timer is scheduled
+}
+
 type Hub struct {
-	mu    sync.Mutex
-	rooms map[string]map[string]*peer // room key -> peer id -> peer
+	mu        sync.Mutex
+	rooms     map[string]map[string]*peer // room key -> peer id -> peer
+	bcast     map[string]*roomBroadcast   // room key -> debounce state
+	now       func() time.Time
+	afterFunc func(time.Duration, func())
 }
 
 func NewHub() *Hub {
-	return &Hub{rooms: make(map[string]map[string]*peer)}
+	return newHub(time.Now, func(d time.Duration, f func()) { time.AfterFunc(d, f) })
+}
+
+// newHub builds a Hub with an injectable clock and timer so the roster debounce
+// is deterministically testable without wall-clock sleeps.
+func newHub(now func() time.Time, after func(time.Duration, func())) *Hub {
+	return &Hub{
+		rooms:     make(map[string]map[string]*peer),
+		bcast:     make(map[string]*roomBroadcast),
+		now:       now,
+		afterFunc: after,
+	}
 }
 
 func (h *Hub) Join(room, id, name string, c Conn) {
@@ -52,7 +79,7 @@ func (h *Hub) JoinLimited(room, id, name string, c Conn, max int, clientIP strin
 	h.mu.Unlock()
 
 	c.Send(Envelope{Type: TypeWelcome, Name: id, IP: clientIP})
-	h.broadcastRoster(room)
+	h.scheduleRoster(room)
 	return true
 }
 
@@ -65,7 +92,7 @@ func (h *Hub) Leave(room, id string) {
 		}
 	}
 	h.mu.Unlock()
-	h.broadcastRoster(room)
+	h.scheduleRoster(room)
 }
 
 func (h *Hub) Relay(room string, e Envelope) {
@@ -93,4 +120,67 @@ func (h *Hub) broadcastRoster(room string) {
 	for _, c := range conns {
 		c.Send(Envelope{Type: TypePeers, Peers: roster})
 	}
+}
+
+// scheduleRoster requests a roster broadcast for room, coalescing to at most one
+// per rosterDebounce window. The lock is released before afterFunc/broadcastRoster
+// so a synchronous test timer cannot deadlock.
+func (h *Hub) scheduleRoster(room string) {
+	h.mu.Lock()
+	rb := h.bcast[room]
+	if rb == nil {
+		rb = &roomBroadcast{}
+		h.bcast[room] = rb
+	}
+	now := h.now()
+	if !now.Before(rb.nextAllowed) {
+		rb.nextAllowed = now.Add(rosterDebounce)
+		rb.pending = false
+		h.mu.Unlock()
+		h.broadcastRoster(room)
+		h.pruneBcast(room)
+		return
+	}
+	rb.pending = true
+	arm := !rb.armed
+	if arm {
+		rb.armed = true
+	}
+	delay := rb.nextAllowed.Sub(now)
+	h.mu.Unlock()
+	if arm {
+		h.afterFunc(delay, func() { h.flushRoster(room) })
+	}
+}
+
+// flushRoster fires the trailing broadcast at the end of a window when changes
+// coalesced during it.
+func (h *Hub) flushRoster(room string) {
+	h.mu.Lock()
+	rb := h.bcast[room]
+	if rb == nil {
+		h.mu.Unlock()
+		return
+	}
+	rb.armed = false
+	if !rb.pending {
+		h.mu.Unlock()
+		return
+	}
+	rb.pending = false
+	rb.nextAllowed = h.now().Add(rosterDebounce)
+	h.mu.Unlock()
+	h.broadcastRoster(room)
+	h.pruneBcast(room)
+}
+
+// pruneBcast drops debounce state for a room that is now empty and idle, keeping
+// the bcast map bounded.
+func (h *Hub) pruneBcast(room string) {
+	h.mu.Lock()
+	rb := h.bcast[room]
+	if rb != nil && !rb.pending && !rb.armed && h.rooms[room] == nil {
+		delete(h.bcast, room)
+	}
+	h.mu.Unlock()
 }

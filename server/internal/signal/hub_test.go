@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 )
 
 type fakeConn struct {
@@ -23,8 +24,71 @@ func (f *fakeConn) last() Envelope {
 	return f.sent[len(f.sent)-1]
 }
 
+// countType counts how many envelopes of a given type a fakeConn has received.
+func countType(f *fakeConn, typ string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, e := range f.sent {
+		if e.Type == typ {
+			n++
+		}
+	}
+	return n
+}
+
+// syncHub runs the roster timer inline so tests that assert on the roster after a
+// second same-room mutation see it immediately (debounce is behavior-preserving
+// when the trailing timer fires synchronously).
+func syncHub() *Hub {
+	return newHub(time.Now, func(_ time.Duration, f func()) { f() })
+}
+
+func TestRosterBroadcastDebounced(t *testing.T) {
+	now := time.Unix(1000, 0)
+	var pending []func()
+	after := func(_ time.Duration, f func()) { pending = append(pending, f) }
+	h := newHub(func() time.Time { return now }, after)
+
+	a, b, c := &fakeConn{}, &fakeConn{}, &fakeConn{}
+	h.JoinLimited("t:room", "a", "A", a, 0, "") // leading edge → immediate broadcast
+	h.JoinLimited("t:room", "b", "B", b, 0, "") // within window → coalesced
+	h.JoinLimited("t:room", "c", "C", c, 0, "") // within window → coalesced
+
+	if got := countType(a, TypePeers); got != 1 {
+		t.Fatalf("during the window a should have exactly 1 roster broadcast (leading), got %d", got)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("a burst must arm exactly one trailing timer, got %d", len(pending))
+	}
+
+	now = now.Add(rosterDebounce) // advance past the window and fire the trailing timer
+	pending[0]()
+
+	if got := countType(a, TypePeers); got != 2 {
+		t.Fatalf("after the trailing flush a should have 2 roster broadcasts, got %d", got)
+	}
+	if last := a.last(); last.Type != TypePeers || len(last.Peers) != 3 {
+		t.Fatalf("final roster must list all 3 peers, got %+v", last)
+	}
+}
+
+func TestRosterSingleChangeBroadcastsPromptly(t *testing.T) {
+	now := time.Unix(2000, 0)
+	armed := 0
+	h := newHub(func() time.Time { return now }, func(_ time.Duration, _ func()) { armed++ })
+	a := &fakeConn{}
+	h.JoinLimited("t:room", "a", "A", a, 0, "")
+	if got := countType(a, TypePeers); got != 1 {
+		t.Fatalf("a single change must broadcast immediately, got %d", got)
+	}
+	if armed != 0 {
+		t.Fatalf("a single change must not arm a trailing timer, got %d", armed)
+	}
+}
+
 func TestJoinSendsWelcomeAndRoster(t *testing.T) {
-	h := NewHub()
+	h := syncHub()
 	a := &fakeConn{}
 	h.Join("ip1", "a", "Alice", a)
 	if a.sent[0].Type != TypeWelcome || a.sent[0].Name != "a" {
@@ -48,7 +112,7 @@ func TestJoinLimitedStampsWelcomeWithClientIP(t *testing.T) {
 }
 
 func TestWelcomeIPNotInRoster(t *testing.T) {
-	h := NewHub()
+	h := syncHub()
 	a, b := &fakeConn{}, &fakeConn{}
 	h.JoinLimited("t:room", "a", "Alice", a, 0, "198.51.100.9")
 	h.JoinLimited("t:room", "b", "Bob", b, 0, "203.0.113.7")
@@ -81,7 +145,7 @@ func TestRelayGoesOnlyToTarget(t *testing.T) {
 }
 
 func TestLeaveRebroadcastsRoster(t *testing.T) {
-	h := NewHub()
+	h := syncHub()
 	a, b := &fakeConn{}, &fakeConn{}
 	h.Join("ip1", "a", "A", a)
 	h.Join("ip1", "b", "B", b)
@@ -102,7 +166,7 @@ func TestRoomsAreIsolated(t *testing.T) {
 }
 
 func TestJoinLimitedEnforcesCapacity(t *testing.T) {
-	h := NewHub()
+	h := syncHub()
 	a, b, c := &fakeConn{}, &fakeConn{}, &fakeConn{}
 	if !h.JoinLimited("t:room", "a", "A", a, 2, "") {
 		t.Fatalf("first join should be admitted")
