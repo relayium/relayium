@@ -101,6 +101,7 @@ const ko: Messages = {
     forgotPasswordLink: "비밀번호를 잊으셨나요?",
     resetPasswordSend: "재설정 링크 보내기",
     resetPasswordSent: "해당 이메일이 등록되어 있다면 재설정 링크를 보냈습니다. 메일함을 확인해 주세요.",
+    checkSpamHint: "이메일을 받지 못하셨나요? 스팸/정크 폴더를 확인하고 noreply@relayium.com을(를) 연락처에 추가한 후 다시 시도해 주세요.",
   },
   me: {
     title: "마이페이지",

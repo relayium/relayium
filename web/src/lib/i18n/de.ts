@@ -101,6 +101,7 @@ const de: Messages = {
     forgotPasswordLink: "Passwort vergessen?",
     resetPasswordSend: "Link zum Zurücksetzen senden",
     resetPasswordSent: "Falls diese E-Mail registriert ist, haben wir einen Link zum Zurücksetzen gesendet — bitte prüfen Sie Ihr Postfach.",
+    checkSpamHint: "Keine E-Mail erhalten? Bitte prüfen Sie Ihren Spam-/Junk-Ordner und fügen Sie noreply@relayium.com zu Ihren Kontakten hinzu, dann versuchen Sie es erneut.",
   },
   me: {
     title: "Mein Bereich",

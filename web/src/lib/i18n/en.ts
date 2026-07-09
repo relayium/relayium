@@ -101,6 +101,7 @@ const en: Messages = {
     forgotPasswordLink: "Forgot password?",
     resetPasswordSend: "Send reset link",
     resetPasswordSent: "If that email is registered, we've sent a reset link — check your inbox.",
+    checkSpamHint: "Didn't get the email? Check your spam/junk folder and add noreply@relayium.com to your contacts, then try again.",
   },
   me: {
     title: "Personal center",

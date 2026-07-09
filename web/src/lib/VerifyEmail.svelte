@@ -55,6 +55,7 @@
     <button type="button" class="btn-link" onclick={() => navigate("lan")}>{t.verifyEmail.backHome}</button>
   {:else}
     <p class="msg err">{t.verifyEmail.invalidTitle}</p>
+    <p class="hint">{t.account.checkSpamHint}</p>
     <form class="resend" onsubmit={(e) => { e.preventDefault(); onResend(); }}>
       <input type="email" name="email" autocomplete="username" bind:value={resendEmail} placeholder={t.account.email} />
       {#if resendAck}<p class="hint">{t.account.resendVerificationSent}</p>{/if}

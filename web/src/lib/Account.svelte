@@ -252,6 +252,7 @@
       {:else if registeredEmail}
         <div class="menu">
           <p class="hint">{t.account.verifySentBody(registeredEmail)}</p>
+          <p class="hint">{t.account.checkSpamHint}</p>
           {#if resendAck}<p class="hint">{t.account.resendVerificationSent}</p>{/if}
           <button type="button" class="btn btn-ghost" disabled={resendDisabled} onclick={() => onResend(registeredEmail)}>
             {t.account.resendVerification}
@@ -265,6 +266,7 @@
         <form class="menu" onsubmit={(e) => { e.preventDefault(); onForgot(); }}>
           {#if forgotSent}
             <p class="hint">{t.account.resetPasswordSent}</p>
+            <p class="hint">{t.account.checkSpamHint}</p>
           {:else}
             <input type="email" name="email" autocomplete="username"
                    bind:value={email} placeholder={t.account.email} use:focusOnMount />
@@ -283,6 +285,7 @@
                  bind:value={password} placeholder={t.account.password} />
           {#if unverifiedEmail}
             <p class="hint">{t.account.unverifiedNotice}</p>
+            <p class="hint">{t.account.checkSpamHint}</p>
             {#if resendAck}<p class="hint">{t.account.resendVerificationSent}</p>{/if}
             <button type="button" class="btn-link" disabled={resendDisabled} onclick={() => onResend(unverifiedEmail)}>
               {t.account.resendVerificationBtn}

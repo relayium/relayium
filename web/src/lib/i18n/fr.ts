@@ -101,6 +101,7 @@ const fr: Messages = {
     forgotPasswordLink: "Mot de passe oublié ?",
     resetPasswordSend: "Envoyer le lien de réinitialisation",
     resetPasswordSent: "Si cet e-mail est enregistré, nous avons envoyé un lien de réinitialisation — consultez votre boîte mail.",
+    checkSpamHint: "Vous n'avez pas reçu l'e-mail ? Vérifiez votre dossier spam/indésirables et ajoutez noreply@relayium.com à vos contacts, puis réessayez.",
   },
   me: {
     title: "Espace personnel",

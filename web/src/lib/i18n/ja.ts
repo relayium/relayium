@@ -101,6 +101,7 @@ const ja: Messages = {
     forgotPasswordLink: "パスワードをお忘れですか？",
     resetPasswordSend: "リセットリンクを送信",
     resetPasswordSent: "このメールが登録済みの場合、リセットリンクを送信しました。メールをご確認ください。",
+    checkSpamHint: "メールが届きませんか？迷惑メール（スパム）フォルダをご確認のうえ、noreply@relayium.com を連絡先に追加してから再度お試しください。",
   },
   me: {
     title: "マイページ",

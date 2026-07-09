@@ -101,6 +101,7 @@ const zh: Messages = {
     forgotPasswordLink: "忘记密码？",
     resetPasswordSend: "发送重置链接",
     resetPasswordSent: "如果该邮箱已注册，我们已发送重置链接，请查收。",
+    checkSpamHint: "没收到邮件？请检查垃圾邮件／垃圾箱文件夹，并将 noreply@relayium.com 加入白名单后重试。",
   },
   me: {
     title: "个人中心",

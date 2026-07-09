@@ -121,6 +121,7 @@ export interface Messages {
     forgotPasswordLink: string; // "忘记密码？" link on the login form
     resetPasswordSend: string; // submit button on the forgot-password panel
     resetPasswordSent: string; // neutral post-submit message (never reveals account existence)
+    checkSpamHint: string; // muted follow-up under any "we emailed you" state: check spam + allowlist noreply@relayium.com. Also reused (via t.account.*) on VerifyEmail.svelte's invalid-token panel.
   };
   me: {
     title: string;
