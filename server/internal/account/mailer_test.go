@@ -31,3 +31,26 @@ func TestLogMailerWritesLink(t *testing.T) {
 		t.Fatalf("log missing link/email: %q", buf.String())
 	}
 }
+
+// captureMailer records the most recent link per kind for assertions.
+type captureMailer struct {
+	magic, verify, reset string
+}
+
+func (m *captureMailer) SendMagicLink(_ context.Context, _, link string) error {
+	m.magic = link
+	return nil
+}
+func (m *captureMailer) SendVerifyEmail(_ context.Context, _, link string) error {
+	m.verify = link
+	return nil
+}
+func (m *captureMailer) SendPasswordReset(_ context.Context, _, link string) error {
+	m.reset = link
+	return nil
+}
+
+func TestCaptureMailerSatisfiesInterface(t *testing.T) {
+	var _ Mailer = &captureMailer{}
+	var _ Mailer = &LogMailer{Log: nil} // interface conformance only
+}

@@ -23,6 +23,22 @@ func (m *capturingMailer) SendMagicLink(_ context.Context, _, link string) error
 	return nil
 }
 
+func (m *capturingMailer) SendVerifyEmail(_ context.Context, _, link string) error {
+	m.mu.Lock()
+	m.lastLink = link
+	m.count++
+	m.mu.Unlock()
+	return nil
+}
+
+func (m *capturingMailer) SendPasswordReset(_ context.Context, _, link string) error {
+	m.mu.Lock()
+	m.lastLink = link
+	m.count++
+	m.mu.Unlock()
+	return nil
+}
+
 func (m *capturingMailer) sends() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
