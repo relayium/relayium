@@ -72,6 +72,11 @@ type Service struct {
 	resetRequests     *loginThrottle              // per email+IP forgot-password limiter
 	blobs             storage.BlobStore           // nil until SetBlobStore; stored-transfer disabled when nil
 	pairCodeOwner     func(string) (string, bool) // resolves a live code to its owner userID; nil until wired
+	// clientIP resolves the request's rate-limit key IP. Defaults to the
+	// package clientIP (trusts XFF's left entry — legacy behavior kept so
+	// existing tests are unchanged); main.go injects signal.IPExtractor.IP,
+	// which only trusts XFF from configured/loopback proxies (H3).
+	clientIP func(*http.Request) string
 }
 
 func NewService(store Store, mailer Mailer, cfg Config) *Service {
@@ -79,6 +84,7 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 		adminSessions: map[string]int64{}, adminLogins: newLoginThrottle(),
 		pwLogins: newLoginThrottle(), magicRequests: newLoginThrottle(),
 		verifyRequests: newLoginThrottle(), resetRequests: newLoginThrottle()}
+	svc.clientIP = clientIP
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
 	return svc
 }
@@ -91,6 +97,15 @@ func (s *Service) SetBlobStore(b storage.BlobStore) { s.blobs = b }
 // live code to its owning account — TURN is issued (and relay billed) for that
 // owner. Called once at startup.
 func (s *Service) SetPairCodeOwner(fn func(string) (string, bool)) { s.pairCodeOwner = fn }
+
+// SetClientIP overrides how per-IP rate-limit keys are derived. main.go
+// injects the trusted-proxy-aware signal.IPExtractor.IP so a forged
+// X-Forwarded-For from an untrusted peer can't dodge the throttles (H3).
+func (s *Service) SetClientIP(fn func(*http.Request) string) {
+	if fn != nil {
+		s.clientIP = fn
+	}
+}
 
 func randToken() string {
 	b := make([]byte, 32)

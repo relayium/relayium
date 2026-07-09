@@ -222,6 +222,7 @@ func main() {
 		// TURN credentials for them — otherwise code transfers are STUN-only
 		// and fail across strict NATs.
 		acct.SetPairCodeOwner(pairReg.OwnerOf)
+		acct.SetClientIP(ipx.IP) // H3: trusted-proxy-aware rate-limit keys
 		// /api/pair requires a logged-in owner: the receiver still joins the code
 		// room anonymously via /ws?code= and /api/ice?code=, but minting a
 		// cross-network rendezvous code needs an account for attribution.

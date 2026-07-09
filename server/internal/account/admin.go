@@ -118,7 +118,7 @@ func (s *Service) isAdminReq(r *http.Request) bool {
 }
 
 func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
-	ip := clientIP(r)
+	ip := s.clientIP(r)
 	if s.adminLogins.locked(ip, s.now()) {
 		s.renderAdminLogin(w, http.StatusTooManyRequests, "尝试过于频繁，请稍后再试")
 		return

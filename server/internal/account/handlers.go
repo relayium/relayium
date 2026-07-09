@@ -205,7 +205,7 @@ func (s *Service) handleMagicRequest(w http.ResponseWriter, r *http.Request) {
 	// sending. Always respond 200 regardless — of send success, unknown email, or
 	// throttle state — so neither account existence nor the limit leaks.
 	if email != "" {
-		key := email + "|" + clientIP(r)
+		key := email + "|" + s.clientIP(r)
 		if !s.magicRequests.locked(key, s.now()) {
 			s.magicRequests.recordFail(key, s.now())
 			_ = s.RequestMagicLink(r.Context(), email)
@@ -360,7 +360,7 @@ func (s *Service) handlePasswordLogin(w http.ResponseWriter, r *http.Request) {
 	// Throttle brute force per email+IP. Keying on both (not email alone) still
 	// caps a single source's guessing while denying an attacker the ability to
 	// lock a victim out of their own account from unrelated IPs.
-	key := normEmail(in.Email) + "|" + clientIP(r)
+	key := normEmail(in.Email) + "|" + s.clientIP(r)
 	if s.pwLogins.locked(key, s.now()) {
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts, try again later"})
 		return
@@ -424,7 +424,7 @@ func (s *Service) handleResendVerification(w http.ResponseWriter, r *http.Reques
 	// Anti-enumeration + anti-bomb: throttle per email+IP; only resend when the
 	// account exists AND is still unverified; always respond 200.
 	if email != "" {
-		key := email + "|" + clientIP(r)
+		key := email + "|" + s.clientIP(r)
 		if !s.verifyRequests.locked(key, s.now()) {
 			s.verifyRequests.recordFail(key, s.now())
 			if uid, _, ok, _ := s.store.GetCredentials(r.Context(), email); ok {
@@ -446,7 +446,7 @@ func (s *Service) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewDecoder(r.Body).Decode(&in)
 	email := normEmail(in.Email)
 	if email != "" {
-		key := email + "|" + clientIP(r)
+		key := email + "|" + s.clientIP(r)
 		if !s.resetRequests.locked(key, s.now()) {
 			s.resetRequests.recordFail(key, s.now())
 			_ = s.RequestPasswordReset(r.Context(), email)
