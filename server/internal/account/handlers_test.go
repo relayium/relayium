@@ -224,20 +224,16 @@ func TestPasswordRegisterLoginAndMethods(t *testing.T) {
 		t.Fatalf("disabled magic should 404, got %d", resp.StatusCode)
 	}
 
-	// 注册成功 => 200 + session cookie。
+	// 注册成功 => 200（不再下发 session cookie；改发验证邮件）。
 	resp, _ = client.Post(ts.URL+"/api/auth/register", "application/json",
 		strings.NewReader(`{"email":"u@example.com","password":"longenough1"}`))
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("register: %d", resp.StatusCode)
 	}
-	var cookie *http.Cookie
-	for _, c := range resp.Cookies() {
-		if c.Name == sessionCookie {
-			cookie = c
-		}
-	}
-	if cookie == nil {
-		t.Fatalf("register set no session cookie")
+	// 账号初始未验证，登录前先标记验证（验证流程本身由 verify_flow_test.go 覆盖）。
+	uid, _, _, _ := store.GetCredentials(context.Background(), "u@example.com")
+	if err := store.SetEmailVerified(context.Background(), uid); err != nil {
+		t.Fatalf("verify: %v", err)
 	}
 
 	// 重复注册 => 409。
@@ -282,7 +278,8 @@ func TestMethodsReflectsEnabledFlags(t *testing.T) {
 }
 
 func TestChangePasswordEndpoint(t *testing.T) {
-	svc := NewService(newTestStore(t), &capturingMailer{}, Config{
+	store := newTestStore(t)
+	svc := NewService(store, &capturingMailer{}, Config{
 		BaseURL: "http://example.test", SessionTTL: time.Hour,
 	})
 	ts := httptest.NewServer(svc.Routes())
@@ -290,14 +287,23 @@ func TestChangePasswordEndpoint(t *testing.T) {
 	client := ts.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
-	// 注册取得 session cookie。
+	// 注册（不再下发 cookie），标记邮箱验证后用密码登录取得 session cookie。
 	resp, _ := client.Post(ts.URL+"/api/auth/register", "application/json",
 		strings.NewReader(`{"email":"e@example.com","password":"oldpassword1"}`))
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("register: %d", resp.StatusCode)
 	}
+	uid, _, _, _ := store.GetCredentials(context.Background(), "e@example.com")
+	if err := store.SetEmailVerified(context.Background(), uid); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	login, _ := client.Post(ts.URL+"/api/auth/password/login", "application/json",
+		strings.NewReader(`{"email":"e@example.com","password":"oldpassword1"}`))
+	if login.StatusCode != http.StatusOK {
+		t.Fatalf("login: %d", login.StatusCode)
+	}
 	var cookie *http.Cookie
-	for _, c := range resp.Cookies() {
+	for _, c := range login.Cookies() {
 		if c.Name == sessionCookie {
 			cookie = c
 		}
@@ -416,6 +422,11 @@ func TestPasswordLoginSuccessResetsThrottle(t *testing.T) {
 
 	_, _ = client.Post(ts.URL+"/api/auth/register", "application/json",
 		strings.NewReader(`{"email":"reset@example.com","password":"correcthorse1"}`))
+	// 账号初始未验证；标记验证后其成功登录才会 200（用于测试限流在成功后重置）。
+	uid, _, _, _ := store.GetCredentials(context.Background(), "reset@example.com")
+	if err := store.SetEmailVerified(context.Background(), uid); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
 
 	login := func(pw string) int {
 		r, _ := client.Post(ts.URL+"/api/auth/password/login", "application/json",

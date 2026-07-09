@@ -45,7 +45,7 @@ func (m *capturingMailer) sends() int {
 	return m.count
 }
 
-func newTestService(t *testing.T) (*Service, *capturingMailer) {
+func newMagicTestService(t *testing.T) (*Service, *capturingMailer) {
 	t.Helper()
 	store := newTestStore(t)
 	mail := &capturingMailer{}
@@ -58,7 +58,7 @@ func newTestService(t *testing.T) (*Service, *capturingMailer) {
 }
 
 func TestMagicLinkRoundTripIssuesSession(t *testing.T) {
-	svc, mail := newTestService(t)
+	svc, mail := newMagicTestService(t)
 	ctx := context.Background()
 	if err := svc.RequestMagicLink(ctx, "G@Example.com"); err != nil {
 		t.Fatalf("request: %v", err)
@@ -88,7 +88,7 @@ func TestMagicLinkRoundTripIssuesSession(t *testing.T) {
 }
 
 func TestExpiredSessionInvalid(t *testing.T) {
-	svc, _ := newTestService(t)
+	svc, _ := newMagicTestService(t)
 	ctx := context.Background()
 	u, _ := svc.store.UpsertUserByEmail(ctx, "h@example.com", "H")
 	base := time.Unix(1000, 0)

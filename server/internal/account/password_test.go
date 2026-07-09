@@ -18,16 +18,17 @@ func TestRegisterThenLoginRoundTrip(t *testing.T) {
 	svc := newPwService(t)
 	ctx := context.Background()
 
-	sess, err := svc.Register(ctx, "New@Example.com", "hunter2hunter", "New User")
+	u, err := svc.Register(ctx, "New@Example.com", "hunter2hunter", "New User")
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	u, ok, err := svc.ValidateSession(ctx, sess.ID)
-	if err != nil || !ok {
-		t.Fatalf("session invalid after register: ok=%v err=%v", ok, err)
-	}
 	if u.Email != "new@example.com" {
 		t.Fatalf("email not normalized: %q", u.Email)
+	}
+	// Register no longer issues a session and the account starts unverified;
+	// mark it verified so the login assertions below exercise the password path.
+	if err := svc.store.SetEmailVerified(ctx, u.ID); err != nil {
+		t.Fatalf("verify: %v", err)
 	}
 
 	// 正确密码登录成功。
@@ -62,11 +63,17 @@ func TestRegisterRejectsWeakAndDuplicate(t *testing.T) {
 func TestChangePasswordExistingUser(t *testing.T) {
 	svc := newPwService(t)
 	ctx := context.Background()
-	sess, err := svc.Register(ctx, "c@example.com", "oldpassword1", "C")
+	u, err := svc.Register(ctx, "c@example.com", "oldpassword1", "C")
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	u, _, _ := svc.ValidateSession(ctx, sess.ID)
+	if err := svc.store.SetEmailVerified(ctx, u.ID); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	sess, err := svc.IssueSession(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
 
 	// 旧密码错 => ErrBadCredentials。
 	if err := svc.ChangePassword(ctx, u, sess.ID, "wrongold12", "newpassword1"); !errors.Is(err, ErrBadCredentials) {
@@ -100,6 +107,10 @@ func TestChangePasswordSetsForPasswordlessUser(t *testing.T) {
 	if err := svc.ChangePassword(ctx, u, "no-session", "", "freshpass12"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
+	// 该账号（Google/魔法用户）邮箱尚未验证，先标记验证再走密码登录路径。
+	if err := svc.store.SetEmailVerified(ctx, u.ID); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
 	if _, err := svc.Login(ctx, "g@example.com", "freshpass12"); err != nil {
 		t.Fatalf("login after set: %v", err)
 	}
@@ -108,8 +119,15 @@ func TestChangePasswordSetsForPasswordlessUser(t *testing.T) {
 func TestChangePasswordRevokesOtherSessions(t *testing.T) {
 	svc := newPwService(t)
 	ctx := context.Background()
-	sess, _ := svc.Register(ctx, "r@example.com", "oldpassword1", "R")
-	u, _, _ := svc.ValidateSession(ctx, sess.ID)
+	u, err := svc.Register(ctx, "r@example.com", "oldpassword1", "R")
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	// Register no longer returns a session; mint the "current" session directly.
+	sess, err := svc.IssueSession(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("issue current: %v", err)
+	}
 	// 第二个会话（另一台设备）。
 	other, err := svc.IssueSession(ctx, u.ID)
 	if err != nil {

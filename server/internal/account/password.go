@@ -16,34 +16,41 @@ var (
 	ErrBadCredentials = errors.New("account: invalid credentials")
 	// ErrWeakPassword 表示密码短于 minPasswordLen。
 	ErrWeakPassword = errors.New("account: password too short")
+	// ErrEmailUnverified 表示账密正确但邮箱尚未验证，禁止登录。
+	ErrEmailUnverified = errors.New("account: email not verified")
+	// ErrInvalidToken 表示验证/重置 token 无效或已过期。
+	ErrInvalidToken = errors.New("account: invalid or expired token")
 )
 
-// Register 创建（或为已有无密码账号补设）密码并登录。同一邮箱已设密码时拒绝。
-func (s *Service) Register(ctx context.Context, email, password, displayName string) (Session, error) {
+// Register 创建密码账号（初始未验证）并发送验证邮件。不发 session：用户须先验证。
+func (s *Service) Register(ctx context.Context, email, password, displayName string) (User, error) {
 	email = normEmail(email)
 	if len(password) < minPasswordLen {
-		return Session{}, ErrWeakPassword
+		return User{}, ErrWeakPassword
 	}
 	if _, _, ok, err := s.store.GetCredentials(ctx, email); err != nil {
-		return Session{}, err
+		return User{}, err
 	} else if ok {
-		return Session{}, ErrEmailTaken
+		return User{}, ErrEmailTaken
 	}
 	u, err := s.store.UpsertUserByEmail(ctx, email, displayName)
 	if err != nil {
-		return Session{}, err
+		return User{}, err
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return Session{}, err
+		return User{}, err
 	}
 	if err := s.store.SetPassword(ctx, u.ID, string(hash)); err != nil {
-		return Session{}, err
+		return User{}, err
 	}
 	if err := s.store.LinkIdentity(ctx, "password", email, u.ID); err != nil {
-		return Session{}, err
+		return User{}, err
 	}
-	return s.IssueSession(ctx, u.ID)
+	if err := s.SendVerifyEmail(ctx, u); err != nil {
+		return User{}, err
+	}
+	return u, nil
 }
 
 // Login 校验邮箱+密码并签发会话。任何失败都返回 ErrBadCredentials。
@@ -58,6 +65,11 @@ func (s *Service) Login(ctx context.Context, email, password string) (Session, e
 	}
 	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
 		return Session{}, ErrBadCredentials
+	}
+	if verified, err := s.store.EmailVerified(ctx, uid); err != nil {
+		return Session{}, err
+	} else if !verified {
+		return Session{}, ErrEmailUnverified
 	}
 	return s.IssueSession(ctx, uid)
 }

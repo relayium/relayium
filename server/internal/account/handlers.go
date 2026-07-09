@@ -327,7 +327,11 @@ func (s *Service) handleRegister(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	sess, err := s.Register(r.Context(), in.Email, in.Password, in.DisplayName)
+	// Register no longer issues a session: it creates an unverified account and
+	// emails a verification link. Task 8 rewrites this handler fully; for now we
+	// just report that verification was sent so the package builds and the new
+	// no-session behaviour is honoured.
+	_, err := s.Register(r.Context(), in.Email, in.Password, in.DisplayName)
 	switch {
 	case errors.Is(err, ErrWeakPassword):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})
@@ -339,13 +343,7 @@ func (s *Service) handleRegister(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	u, err := s.store.GetUserByID(r.Context(), sess.UserID)
-	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
-	s.setSessionCookie(w, sess)
-	s.writeUser(r.Context(), w, http.StatusOK, u)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "verification_sent"})
 }
 
 func (s *Service) handlePasswordLogin(w http.ResponseWriter, r *http.Request) {
