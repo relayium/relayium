@@ -31,7 +31,7 @@ const en = {
       heading: "How Relayium bridges the gap",
       body: [
         "Relayium runs entirely in a modern web browser with nothing to install, so any two devices that can open a web page can transfer to each other regardless of platform: Windows, macOS, Linux, Android and iOS all interoperate. On the same Wi-Fi, both devices open relayium.com and discover each other automatically; on different networks you connect with a short pairing code instead.",
-        "The transfer itself goes directly peer-to-peer over WebRTC whenever possible, with a second, independent encryption layer on top: an X25519 key exchange derives a key used for per-chunk AES-256-GCM, and that key never reaches any server. Both devices show the same 6-digit verification code (a Short Authentication String) so you can confirm no one sits in the middle, and each file is checked end-to-end with a SHA-256 hash. You can send up to 10 files per batch, realtime transfers need no account, and if the connection drops the transfer can resume instead of restarting.",
+        "The transfer itself goes directly peer-to-peer over WebRTC whenever possible, with a second, independent encryption layer on top: an X25519 key exchange derives a key used for per-chunk AES-256-GCM, and that key never reaches any server. Both devices show the same 6-digit verification code (a Short Authentication String) so you can confirm no one sits in the middle, and each file is checked end-to-end with a SHA-256 hash. You can send up to 1,000 files per batch; on the same network no account is needed, and sending across networks with a pairing code requires the sender to sign in — the receiver never needs an account. If the connection drops, the transfer can resume instead of restarting.",
       ],
     },
     {
@@ -52,7 +52,7 @@ const en = {
         "Across networks: AirDrop is nearby-only; Relayium connects on the same Wi-Fi or across networks with a pairing code.",
         "Encryption: both are encrypted; Relayium adds X25519 + AES-256-GCM with a 6-digit code you verify and per-file SHA-256 checks.",
         "Large files on mobile: AirDrop is smoother; Relayium suggests keeping browser transfers under about 200 MB on iOS, while Chrome/Edge on desktop have no size cap.",
-        "Account: neither needs an account for realtime sharing; Relayium only asks the sender to sign in to create a stored download link.",
+        "Account: AirDrop never needs one; Relayium needs no account on the same network, but the sender must sign in to pair across networks or to create a stored download link — the receiver never needs an account.",
       ],
     },
   ],
@@ -65,7 +65,7 @@ const en = {
       },
       {
         q: "How do I send a file from an iPhone to a Windows PC?",
-        a: "Open relayium.com in a browser on both devices. On the same Wi-Fi they discover each other automatically; otherwise enter the pairing code shown on one device into the other. Pick up to 10 files, confirm the 6-digit verification code matches on both screens, and the transfer runs directly between them.",
+        a: "Open relayium.com in a browser on both devices. On the same Wi-Fi they discover each other automatically; otherwise enter the pairing code shown on one device into the other, which requires the sender to sign in. Pick up to 1,000 files, confirm the 6-digit verification code matches on both screens, and the transfer runs directly between them.",
       },
       {
         q: "Do I need to install an app?",
@@ -74,7 +74,7 @@ const en = {
     ],
   },
   cta: {
-    text: "Send between Apple and everything else — no install, and no account needed for realtime transfers.",
+    text: "Send between Apple and everything else — no install, and no account needed on the same network.",
     button: "Try Relayium now",
   },
   relatedHeading: "Keep reading",
@@ -108,7 +108,7 @@ const zh = {
       heading: "Relayium 如何填补这道空缺",
       body: [
         "Relayium 完全运行在现代浏览器里，无需安装任何软件，因此只要两台设备都能打开网页，无论平台都能互传：Windows、macOS、Linux、Android 与 iOS 全部互通。在同一 Wi-Fi 下，两台设备打开 relayium.com 就能自动相互发现；不在同一网络时，则用一段配对码来连接。",
-        "只要条件允许，传输本身会通过 WebRTC 点对点直连，并在其上叠加一层独立加密：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，这把密钥从不发送给任何服务器。两台设备会显示同一段 6 位校验码（SAS），你可据此确认没有人插在中间；每个文件还会用 SHA-256 做端到端完整性校验。每批最多可发送 10 个文件，实时传输无需账号，若连接中断，传输还能断点续传而不必从头再来。",
+        "只要条件允许，传输本身会通过 WebRTC 点对点直连，并在其上叠加一层独立加密：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，这把密钥从不发送给任何服务器。两台设备会显示同一段 6 位校验码（SAS），你可据此确认没有人插在中间；每个文件还会用 SHA-256 做端到端完整性校验。每批最多可发送 1,000 个文件；同一网络下无需账号，跨网络用配对码传输则需要发送方登录——接收方始终无需账号。若连接中断，传输还能断点续传而不必从头再来。",
       ],
     },
     {
@@ -129,7 +129,7 @@ const zh = {
         "跨网络：AirDrop 只能就近；Relayium 在同一 Wi-Fi 或用配对码跨网络都能连。",
         "加密：两者都加密；Relayium 额外叠加 X25519 + AES-256-GCM，配以你亲自核对的 6 位校验码和逐文件 SHA-256 校验。",
         "移动端大文件：AirDrop 更顺滑；Relayium 建议在 iOS 浏览器上把单次传输控制在约 200 MB 以内，而桌面端 Chrome/Edge 无大小上限。",
-        "账号：两者的实时分享都无需账号；Relayium 仅在生成存储下载链接时要求发送方登录。",
+        "账号：AirDrop 从不需要账号；Relayium 在同一网络下无需账号，但跨网络配对或生成存储下载链接时需要发送方登录——接收方始终无需账号。",
       ],
     },
   ],
@@ -142,7 +142,7 @@ const zh = {
       },
       {
         q: "iPhone 上的文件怎么传到 Windows 电脑？",
-        a: "在两台设备的浏览器里都打开 relayium.com。同一 Wi-Fi 下它们会自动相互发现；否则把一台设备上显示的配对码输入到另一台。选好最多 10 个文件，核对两块屏幕上的 6 位校验码一致，传输就会在两者之间直接进行。",
+        a: "在两台设备的浏览器里都打开 relayium.com。同一 Wi-Fi 下它们会自动相互发现；否则把一台设备上显示的配对码输入到另一台，这需要发送方先登录。选好最多 1,000 个文件，核对两块屏幕上的 6 位校验码一致，传输就会在两者之间直接进行。",
       },
       {
         q: "需要安装 App 吗？",
@@ -151,7 +151,7 @@ const zh = {
     ],
   },
   cta: {
-    text: "在 Apple 与其他一切设备之间互传——无需安装，实时传输也无需账号。",
+    text: "在 Apple 与其他一切设备之间互传——无需安装，同一网络下也无需账号。",
     button: "立即试用 Relayium",
   },
   relatedHeading: "继续阅读",
@@ -185,7 +185,7 @@ const ja = {
       heading: "Relayium がその空白を埋める方法",
       body: [
         "Relayium は最新のブラウザだけで完全に動作し、インストールは不要です。ですからウェブページを開ける2台の端末なら、プラットフォームを問わず相互に転送できます。Windows・macOS・Linux・Android・iOS がすべて相互運用します。同じ Wi-Fi では両方が relayium.com を開けば自動的に相手を発見し、異なるネットワークでは代わりに短いペアリングコードで接続します。",
-        "転送自体は可能な限り WebRTC で P2P 直接に行われ、その上に独立した2つ目の暗号化層を重ねます。X25519 の鍵交換で導出した鍵をブロックごとの AES-256-GCM に使い、その鍵はどのサーバーにも届きません。両方の端末が同じ6桁の検証コード（ショート認証文字列、SAS）を表示するので、間に誰もいないことを確認でき、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。1バッチで最大10ファイルを送れ、リアルタイム転送にアカウントは不要で、接続が切れても最初からではなく再開できます。",
+        "転送自体は可能な限り WebRTC で P2P 直接に行われ、その上に独立した2つ目の暗号化層を重ねます。X25519 の鍵交換で導出した鍵をブロックごとの AES-256-GCM に使い、その鍵はどのサーバーにも届きません。両方の端末が同じ6桁の検証コード（ショート認証文字列、SAS）を表示するので、間に誰もいないことを確認でき、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。1バッチで最大1,000ファイルを送れます。同じネットワークならアカウントは不要で、ネットワークをまたいでペアリングコードで送る場合は送信側のサインインが必要です——受信側はどちらの場合もアカウント不要です。接続が切れても最初からではなく再開できます。",
       ],
     },
     {
@@ -206,7 +206,7 @@ const ja = {
         "ネットワーク越え：AirDrop は近接のみ。Relayium は同じ Wi-Fi でも、ペアリングコードでネットワークをまたいでも接続。",
         "暗号化：どちらも暗号化。Relayium はさらに X25519 + AES-256-GCM を重ね、あなたが照合する6桁コードとファイルごとの SHA-256 チェックを備える。",
         "モバイルの大きなファイル：AirDrop の方が滑らか。Relayium は iOS のブラウザ転送を約 200 MB 以内に抑えることを勧め、デスクトップの Chrome/Edge にはサイズ上限がない。",
-        "アカウント：リアルタイム共有はどちらも不要。Relayium は保存型ダウンロードリンクの作成時のみ送信側のサインインを求める。",
+        "アカウント：AirDrop は常に不要。Relayium は同じネットワークなら不要だが、ネットワークをまたぐペアリングや保存型ダウンロードリンクの作成には送信側のサインインが要る——受信側はどちらの場合もアカウント不要。",
       ],
     },
   ],
@@ -219,7 +219,7 @@ const ja = {
       },
       {
         q: "iPhone から Windows PC へファイルを送るには？",
-        a: "両方の端末のブラウザで relayium.com を開きます。同じ Wi-Fi なら自動的に相手を発見し、そうでなければ一方に表示されたペアリングコードをもう一方に入力します。最大10ファイルを選び、両画面の6桁の検証コードが一致するのを確認すれば、転送は両者の間で直接行われます。",
+        a: "両方の端末のブラウザで relayium.com を開きます。同じ Wi-Fi なら自動的に相手を発見し、そうでなければ一方に表示されたペアリングコードをもう一方に入力します（これには送信側のサインインが必要です）。最大1,000ファイルを選び、両画面の6桁の検証コードが一致するのを確認すれば、転送は両者の間で直接行われます。",
       },
       {
         q: "アプリのインストールは必要ですか？",
@@ -228,7 +228,7 @@ const ja = {
     ],
   },
   cta: {
-    text: "Apple とそれ以外のすべての間で転送——インストール不要、リアルタイム転送はアカウントも不要です。",
+    text: "Apple とそれ以外のすべての間で転送——インストール不要、同じネットワークならアカウントも不要です。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -262,7 +262,7 @@ const ko = {
       heading: "Relayium이 그 빈틈을 메우는 방법",
       body: [
         "Relayium은 최신 브라우저에서 설치 없이 완전히 동작하므로, 웹 페이지를 열 수 있는 두 기기라면 플랫폼과 상관없이 서로 전송할 수 있습니다. Windows·macOS·Linux·Android·iOS가 모두 상호 운용됩니다. 같은 Wi-Fi에서는 두 기기가 relayium.com을 열면 자동으로 서로를 발견하고, 다른 네트워크에서는 대신 짧은 페어링 코드로 연결합니다.",
-        "전송 자체는 가능한 경우 WebRTC로 P2P 직접 이루어지며, 그 위에 독립적인 두 번째 암호화 계층을 얹습니다. X25519 키 교환으로 도출한 키를 블록별 AES-256-GCM에 사용하고, 이 키는 어떤 서버에도 도달하지 않습니다. 두 기기가 동일한 6자리 검증 코드(짧은 인증 문자열, SAS)를 표시하므로 사이에 아무도 없음을 확인할 수 있고, 각 파일은 SHA-256 해시로 종단간 검증됩니다. 한 배치에 최대 10개 파일을 보낼 수 있고, 실시간 전송에는 계정이 필요 없으며, 연결이 끊겨도 처음부터가 아니라 이어서 재개할 수 있습니다.",
+        "전송 자체는 가능한 경우 WebRTC로 P2P 직접 이루어지며, 그 위에 독립적인 두 번째 암호화 계층을 얹습니다. X25519 키 교환으로 도출한 키를 블록별 AES-256-GCM에 사용하고, 이 키는 어떤 서버에도 도달하지 않습니다. 두 기기가 동일한 6자리 검증 코드(짧은 인증 문자열, SAS)를 표시하므로 사이에 아무도 없음을 확인할 수 있고, 각 파일은 SHA-256 해시로 종단간 검증됩니다. 한 배치에 최대 1,000개 파일을 보낼 수 있습니다. 같은 네트워크에서는 계정이 필요 없고, 페어링 코드로 네트워크를 넘어 보낼 때는 보내는 쪽의 로그인이 필요합니다 — 받는 쪽은 어느 경우든 계정이 필요 없습니다. 연결이 끊겨도 처음부터가 아니라 이어서 재개할 수 있습니다.",
       ],
     },
     {
@@ -283,7 +283,7 @@ const ko = {
         "네트워크 넘기: AirDrop은 근접만; Relayium은 같은 Wi-Fi에서도, 페어링 코드로 네트워크를 넘어서도 연결된다.",
         "암호화: 둘 다 암호화됨; Relayium은 그 위에 X25519 + AES-256-GCM을 더하고, 직접 대조하는 6자리 코드와 파일별 SHA-256 검사를 갖춘다.",
         "모바일의 큰 파일: AirDrop이 더 매끄럽다; Relayium은 iOS 브라우저 전송을 약 200 MB 이내로 유지하길 권하고, 데스크톱 Chrome/Edge에는 크기 상한이 없다.",
-        "계정: 실시간 공유에는 둘 다 계정이 필요 없다; Relayium은 저장형 다운로드 링크를 만들 때만 보내는 쪽의 로그인을 요구한다.",
+        "계정: AirDrop은 언제나 필요 없다; Relayium은 같은 네트워크에서는 필요 없지만, 네트워크를 넘는 페어링이나 저장형 다운로드 링크를 만들 때는 보내는 쪽의 로그인이 필요하다 — 받는 쪽은 어느 경우든 계정이 필요 없다.",
       ],
     },
   ],
@@ -296,7 +296,7 @@ const ko = {
       },
       {
         q: "iPhone에서 Windows PC로 파일을 보내려면?",
-        a: "두 기기의 브라우저에서 relayium.com을 엽니다. 같은 Wi-Fi라면 자동으로 서로를 발견하고, 아니면 한 기기에 표시된 페어링 코드를 다른 기기에 입력합니다. 최대 10개 파일을 고르고 두 화면의 6자리 검증 코드가 일치하는지 확인하면, 전송이 두 기기 사이에서 직접 이루어집니다.",
+        a: "두 기기의 브라우저에서 relayium.com을 엽니다. 같은 Wi-Fi라면 자동으로 서로를 발견하고, 아니면 한 기기에 표시된 페어링 코드를 다른 기기에 입력합니다(이때 보내는 쪽의 로그인이 필요합니다). 최대 1,000개 파일을 고르고 두 화면의 6자리 검증 코드가 일치하는지 확인하면, 전송이 두 기기 사이에서 직접 이루어집니다.",
       },
       {
         q: "앱을 설치해야 하나요?",
@@ -305,7 +305,7 @@ const ko = {
     ],
   },
   cta: {
-    text: "Apple과 그 밖의 모든 것 사이에서 전송하세요 — 설치 불필요, 실시간 전송에는 계정도 필요 없습니다.",
+    text: "Apple과 그 밖의 모든 것 사이에서 전송하세요 — 설치 불필요, 같은 네트워크에서는 계정도 필요 없습니다.",
     button: "지금 Relayium 사용해보기",
   },
   relatedHeading: "계속 읽기",
@@ -339,7 +339,7 @@ const de = {
       heading: "Wie Relayium die Lücke schließt",
       body: [
         "Relayium läuft vollständig in einem modernen Webbrowser, ohne Installation, sodass zwei beliebige Geräte, die eine Webseite öffnen können, unabhängig von der Plattform miteinander übertragen: Windows, macOS, Linux, Android und iOS arbeiten alle zusammen. Im selben WLAN öffnen beide Geräte relayium.com und erkennen einander automatisch; in verschiedenen Netzwerken verbindest du dich stattdessen mit einem kurzen Pairing-Code.",
-        "Die Übertragung selbst läuft nach Möglichkeit direkt Peer-to-Peer über WebRTC, mit einer zweiten, unabhängigen Verschlüsselungsschicht darüber: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, und dieser Schlüssel erreicht nie einen Server. Beide Geräte zeigen denselben sechsstelligen Prüfcode (einen Short Authentication String, SAS), sodass du bestätigen kannst, dass niemand dazwischensitzt, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft. Du kannst bis zu 10 Dateien pro Stapel senden, Echtzeitübertragungen brauchen kein Konto, und bricht die Verbindung ab, kann die Übertragung fortgesetzt statt neu gestartet werden.",
+        "Die Übertragung selbst läuft nach Möglichkeit direkt Peer-to-Peer über WebRTC, mit einer zweiten, unabhängigen Verschlüsselungsschicht darüber: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, und dieser Schlüssel erreicht nie einen Server. Beide Geräte zeigen denselben sechsstelligen Prüfcode (einen Short Authentication String, SAS), sodass du bestätigen kannst, dass niemand dazwischensitzt, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft. Du kannst bis zu 1.000 Dateien pro Stapel senden. Im selben Netz ist kein Konto nötig; beim Senden über Netzwerke hinweg per Pairing-Code muss sich der Absender anmelden — der Empfänger braucht in beiden Fällen kein Konto. Bricht die Verbindung ab, kann die Übertragung fortgesetzt statt neu gestartet werden.",
       ],
     },
     {
@@ -360,7 +360,7 @@ const de = {
         "Netzwerkübergreifend: AirDrop nur in der Nähe; Relayium verbindet im selben WLAN oder über Netzwerke hinweg per Pairing-Code.",
         "Verschlüsselung: beide sind verschlüsselt; Relayium legt X25519 + AES-256-GCM darüber, mit einem sechsstelligen Code, den du prüfst, und SHA-256-Prüfungen je Datei.",
         "Große Dateien mobil: AirDrop ist geschmeidiger; Relayium empfiehlt, Browser-Übertragungen auf iOS unter etwa 200 MB zu halten, während Chrome/Edge auf dem Desktop keine Größenbegrenzung haben.",
-        "Konto: für Echtzeit-Sharing braucht keines ein Konto; Relayium bittet den Absender nur zum Erstellen eines gespeicherten Download-Links um die Anmeldung.",
+        "Konto: AirDrop braucht nie eines; Relayium braucht im selben Netz keines, verlangt aber die Anmeldung des Absenders für Pairing über Netzwerke hinweg oder zum Erstellen eines gespeicherten Download-Links — der Empfänger braucht nie ein Konto.",
       ],
     },
   ],
@@ -373,7 +373,7 @@ const de = {
       },
       {
         q: "Wie sende ich eine Datei von einem iPhone an einen Windows-PC?",
-        a: "Öffne relayium.com in einem Browser auf beiden Geräten. Im selben WLAN erkennen sie einander automatisch; sonst gibst du den auf einem Gerät angezeigten Pairing-Code im anderen ein. Wähle bis zu 10 Dateien, prüfe, ob der sechsstellige Code auf beiden Bildschirmen übereinstimmt, und die Übertragung läuft direkt zwischen ihnen.",
+        a: "Öffne relayium.com in einem Browser auf beiden Geräten. Im selben WLAN erkennen sie einander automatisch; sonst gibst du den auf einem Gerät angezeigten Pairing-Code im anderen ein — dafür muss sich der Absender anmelden. Wähle bis zu 1.000 Dateien, prüfe, ob der sechsstellige Code auf beiden Bildschirmen übereinstimmt, und die Übertragung läuft direkt zwischen ihnen.",
       },
       {
         q: "Muss ich eine App installieren?",
@@ -382,7 +382,7 @@ const de = {
     ],
   },
   cta: {
-    text: "Übertrage zwischen Apple und allem anderen — keine Installation, für Echtzeitübertragungen kein Konto nötig.",
+    text: "Übertrage zwischen Apple und allem anderen — keine Installation, im selben Netz kein Konto nötig.",
     button: "Relayium jetzt ausprobieren",
   },
   relatedHeading: "Weiterlesen",
@@ -416,7 +416,7 @@ const fr = {
       heading: "Comment Relayium comble le manque",
       body: [
         "Relayium fonctionne entièrement dans un navigateur moderne, sans rien à installer, si bien que deux appareils capables d'ouvrir une page web peuvent se transférer des fichiers quelle que soit la plateforme : Windows, macOS, Linux, Android et iOS s'entendent tous. Sur le même Wi-Fi, les deux appareils ouvrent relayium.com et se découvrent automatiquement ; sur des réseaux différents, vous vous connectez plutôt avec un court code d'appairage.",
-        "Le transfert lui-même se fait directement en pair-à-pair via WebRTC chaque fois que possible, avec une seconde couche de chiffrement indépendante par-dessus : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, et cette clé n'atteint jamais aucun serveur. Les deux appareils affichent le même code de vérification à 6 chiffres (une chaîne d'authentification courte, SAS), ce qui vous permet de confirmer que personne ne s'intercale, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256. Vous pouvez envoyer jusqu'à 10 fichiers par lot, les transferts en temps réel ne demandent aucun compte, et si la connexion tombe, le transfert peut reprendre au lieu de recommencer.",
+        "Le transfert lui-même se fait directement en pair-à-pair via WebRTC chaque fois que possible, avec une seconde couche de chiffrement indépendante par-dessus : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, et cette clé n'atteint jamais aucun serveur. Les deux appareils affichent le même code de vérification à 6 chiffres (une chaîne d'authentification courte, SAS), ce qui vous permet de confirmer que personne ne s'intercale, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256. Vous pouvez envoyer jusqu'à 1 000 fichiers par lot. Sur le même réseau, aucun compte n'est nécessaire ; envoyer entre réseaux différents avec un code d'appairage exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte. Si la connexion tombe, le transfert peut reprendre au lieu de recommencer.",
       ],
     },
     {
@@ -437,7 +437,7 @@ const fr = {
         "Entre réseaux : AirDrop est de proximité uniquement ; Relayium se connecte sur le même Wi-Fi ou entre réseaux avec un code d'appairage.",
         "Chiffrement : les deux sont chiffrés ; Relayium ajoute X25519 + AES-256-GCM par-dessus, avec un code à 6 chiffres que vous vérifiez et des contrôles SHA-256 par fichier.",
         "Gros fichiers sur mobile : AirDrop est plus fluide ; Relayium conseille de garder les transferts navigateur sous environ 200 Mo sur iOS, alors que Chrome/Edge sur ordinateur n'ont aucune limite de taille.",
-        "Compte : aucun n'a besoin de compte pour le partage en temps réel ; Relayium ne demande à l'expéditeur de se connecter que pour créer un lien de téléchargement stocké.",
+        "Compte : AirDrop n'en a jamais besoin ; Relayium n'en demande pas sur le même réseau, mais l'expéditeur doit se connecter pour s'appairer entre réseaux différents ou pour créer un lien de téléchargement stocké — le destinataire n'a jamais besoin de compte.",
       ],
     },
   ],
@@ -450,7 +450,7 @@ const fr = {
       },
       {
         q: "Comment envoyer un fichier d'un iPhone vers un PC Windows ?",
-        a: "Ouvrez relayium.com dans un navigateur sur les deux appareils. Sur le même Wi-Fi, ils se découvrent automatiquement ; sinon, saisissez le code d'appairage affiché sur un appareil dans l'autre. Choisissez jusqu'à 10 fichiers, vérifiez que le code à 6 chiffres correspond sur les deux écrans, et le transfert s'effectue directement entre eux.",
+        a: "Ouvrez relayium.com dans un navigateur sur les deux appareils. Sur le même Wi-Fi, ils se découvrent automatiquement ; sinon, saisissez le code d'appairage affiché sur un appareil dans l'autre — cela exige que l'expéditeur se connecte. Choisissez jusqu'à 1 000 fichiers, vérifiez que le code à 6 chiffres correspond sur les deux écrans, et le transfert s'effectue directement entre eux.",
       },
       {
         q: "Dois-je installer une application ?",
@@ -459,7 +459,7 @@ const fr = {
     ],
   },
   cta: {
-    text: "Transférez entre Apple et tout le reste — sans installation, et sans compte pour les transferts en temps réel.",
+    text: "Transférez entre Apple et tout le reste — sans installation, et sans compte sur le même réseau.",
     button: "Essayer Relayium maintenant",
   },
   relatedHeading: "À lire ensuite",

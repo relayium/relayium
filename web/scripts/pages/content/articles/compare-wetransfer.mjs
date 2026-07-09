@@ -31,7 +31,7 @@ const en = {
       heading: "Realtime transfers with no size cap",
       body: [
         "Because nothing is stored on a server, the practical file-size limit comes from your own browser. In Chrome or Edge, Relayium streams incoming data straight to disk, so there is effectively no size cap — multi-gigabyte videos and project archives are fine.",
-        "Firefox and Safari do not yet offer the same streaming download, so there the browser buffers the file in memory; keep those transfers under about 200 MB for a smooth experience. Realtime transfers need no account at all: open relayium.com on both devices, pick up to 10 files, verify the code, and send. If a connection drops mid-way, the transfer resumes instead of starting over, and when a direct link is impossible it falls back to an encrypted TURN relay that only ever sees ciphertext.",
+        "Firefox and Safari do not yet offer the same streaming download, so there the browser buffers the file in memory; keep those transfers under about 200 MB for a smooth experience. On the same network, realtime transfers need no account: open relayium.com on both devices, pick up to 1,000 files, verify the code, and send. Sending across networks with a pairing code requires the sender to sign in — the recipient never needs an account. If a connection drops mid-way, the transfer resumes instead of starting over, and when a direct link is impossible it falls back to an encrypted TURN relay that only ever sees ciphertext.",
       ],
     },
     {
@@ -74,7 +74,7 @@ const en = {
     ],
   },
   cta: {
-    text: "Send a large file right now — no size cap, no install, and no account for realtime transfers.",
+    text: "Send a large file right now — no size cap, no install, and no account needed on the same network.",
     button: "Try Relayium now",
   },
   relatedHeading: "Keep reading",
@@ -108,7 +108,7 @@ const zh = {
       heading: "无大小上限的实时传输",
       body: [
         "因为不在服务器上存储任何东西，实际的文件大小上限取决于你自己的浏览器。在 Chrome 或 Edge 中，Relayium 会把接收的数据直接流式写入磁盘，所以基本没有大小上限——几 GB 的视频和工程压缩包都没问题。",
-        "Firefox 和 Safari 目前还不支持同样的流式下载，因此浏览器会把文件缓冲在内存里；这类传输建议保持在约 200 MB 以内以获得顺滑体验。实时传输完全无需账号：在两台设备上打开 relayium.com，最多选 10 个文件，核对校验码，然后发送。若连接中途断开，传输会断点续传而非从头再来；当无法直连时，会退回到加密的 TURN 中继，而中继只能看到密文。",
+        "Firefox 和 Safari 目前还不支持同样的流式下载，因此浏览器会把文件缓冲在内存里；这类传输建议保持在约 200 MB 以内以获得顺滑体验。同一网络下实时传输无需账号：在两台设备上打开 relayium.com，最多选 1,000 个文件，核对校验码，然后发送。跨网络用配对码传输则需要发送方登录——接收方始终无需账号。若连接中途断开，传输会断点续传而非从头再来；当无法直连时，会退回到加密的 TURN 中继，而中继只能看到密文。",
       ],
     },
     {
@@ -151,7 +151,7 @@ const zh = {
     ],
   },
   cta: {
-    text: "现在就发一个大文件——无大小上限、无需安装，实时传输也无需账号。",
+    text: "现在就发一个大文件——无大小上限、无需安装，同一网络下也无需账号。",
     button: "立即试用 Relayium",
   },
   relatedHeading: "继续阅读",
@@ -185,7 +185,7 @@ const ja = {
       heading: "サイズ上限のないリアルタイム転送",
       body: [
         "サーバーに何も保存しないため、実用上のファイルサイズ上限は自分のブラウザ次第です。Chrome や Edge では、Relayium は受信データをそのままディスクにストリーミングするので、事実上サイズ上限はありません——数ギガバイトの動画やプロジェクトのアーカイブも問題ありません。",
-        "Firefox と Safari は同じストリーミングダウンロードにまだ対応していないため、ブラウザはファイルをメモリにバッファします。快適に使うにはそうした転送を約 200 MB 以内に抑えてください。リアルタイム転送にアカウントは一切不要です。両方の端末で relayium.com を開き、最大10ファイルを選び、コードを照合して送ります。途中で接続が切れても、転送は最初からではなく再開します。直接接続が不可能なときは暗号化された TURN リレーにフォールバックし、リレーは暗号文しか見ません。",
+        "Firefox と Safari は同じストリーミングダウンロードにまだ対応していないため、ブラウザはファイルをメモリにバッファします。快適に使うにはそうした転送を約 200 MB 以内に抑えてください。同じネットワークならリアルタイム転送にアカウントは不要です。両方の端末で relayium.com を開き、最大1,000ファイルを選び、コードを照合して送ります。ネットワークをまたいでペアリングコードで送る場合は送信側のサインインが必要です——受信側はどちらの場合もアカウント不要です。途中で接続が切れても、転送は最初からではなく再開します。直接接続が不可能なときは暗号化された TURN リレーにフォールバックし、リレーは暗号文しか見ません。",
       ],
     },
     {
@@ -228,7 +228,7 @@ const ja = {
     ],
   },
   cta: {
-    text: "今すぐ大容量ファイルを送ってみてください——サイズ上限なし、インストール不要、リアルタイム転送はアカウントも不要です。",
+    text: "今すぐ大容量ファイルを送ってみてください——サイズ上限なし、インストール不要、同じネットワークならアカウントも不要です。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -262,7 +262,7 @@ const ko = {
       heading: "크기 제한 없는 실시간 전송",
       body: [
         "서버에 아무것도 저장하지 않기 때문에, 실질적인 파일 크기 제한은 자신의 브라우저에서 옵니다. Chrome이나 Edge에서는 Relayium이 들어오는 데이터를 곧바로 디스크로 스트리밍하므로 사실상 크기 제한이 없습니다——수 기가바이트의 동영상과 프로젝트 아카이브도 괜찮습니다.",
-        "Firefox와 Safari는 아직 같은 스트리밍 다운로드를 제공하지 않아 브라우저가 파일을 메모리에 버퍼링합니다. 이런 전송은 원활한 경험을 위해 약 200 MB 이내로 유지하세요. 실시간 전송에는 계정이 전혀 필요 없습니다. 두 기기에서 relayium.com을 열고, 최대 10개 파일을 고르고, 코드를 대조한 뒤 보냅니다. 도중에 연결이 끊겨도 전송은 처음부터가 아니라 이어서 재개됩니다. 직접 연결이 불가능할 때는 암호화된 TURN 릴레이로 폴백하며, 릴레이는 암호문만 봅니다.",
+        "Firefox와 Safari는 아직 같은 스트리밍 다운로드를 제공하지 않아 브라우저가 파일을 메모리에 버퍼링합니다. 이런 전송은 원활한 경험을 위해 약 200 MB 이내로 유지하세요. 같은 네트워크에서는 실시간 전송에 계정이 필요 없습니다. 두 기기에서 relayium.com을 열고, 최대 1,000개 파일을 고르고, 코드를 대조한 뒤 보냅니다. 페어링 코드로 네트워크를 넘어 보낼 때는 보내는 쪽의 로그인이 필요합니다 — 받는 쪽은 어느 경우든 계정이 필요 없습니다. 도중에 연결이 끊겨도 전송은 처음부터가 아니라 이어서 재개됩니다. 직접 연결이 불가능할 때는 암호화된 TURN 릴레이로 폴백하며, 릴레이는 암호문만 봅니다.",
       ],
     },
     {
@@ -305,7 +305,7 @@ const ko = {
     ],
   },
   cta: {
-    text: "지금 대용량 파일을 보내보세요——크기 제한 없이, 설치 없이, 실시간 전송에는 계정도 필요 없습니다.",
+    text: "지금 대용량 파일을 보내보세요——크기 제한 없이, 설치 없이, 같은 네트워크에서는 계정도 필요 없습니다.",
     button: "지금 Relayium 사용해보기",
   },
   relatedHeading: "계속 읽기",
@@ -339,7 +339,7 @@ const de = {
       heading: "Echtzeitübertragungen ohne Größenlimit",
       body: [
         "Da nichts auf einem Server gespeichert wird, kommt die praktische Dateigrößengrenze von deinem eigenen Browser. In Chrome oder Edge streamt Relayium eingehende Daten direkt auf die Festplatte, sodass es faktisch kein Größenlimit gibt — mehrere Gigabyte große Videos und Projektarchive sind kein Problem.",
-        "Firefox und Safari bieten denselben Streaming-Download noch nicht, dort puffert der Browser die Datei im Arbeitsspeicher; halte solche Übertragungen für ein flüssiges Erlebnis unter etwa 200 MB. Echtzeitübertragungen brauchen überhaupt kein Konto: Öffne relayium.com auf beiden Geräten, wähle bis zu 10 Dateien, prüfe den Code und sende. Bricht eine Verbindung mittendrin ab, wird die Übertragung fortgesetzt statt neu gestartet, und ist eine Direktverbindung unmöglich, weicht sie auf ein verschlüsseltes TURN-Relay aus, das nur Chiffretext sieht.",
+        "Firefox und Safari bieten denselben Streaming-Download noch nicht, dort puffert der Browser die Datei im Arbeitsspeicher; halte solche Übertragungen für ein flüssiges Erlebnis unter etwa 200 MB. Im selben Netz brauchen Echtzeitübertragungen kein Konto: Öffne relayium.com auf beiden Geräten, wähle bis zu 1.000 Dateien, prüfe den Code und sende. Beim Senden über Netzwerke hinweg per Pairing-Code muss sich der Absender anmelden — der Empfänger braucht in beiden Fällen kein Konto. Bricht eine Verbindung mittendrin ab, wird die Übertragung fortgesetzt statt neu gestartet, und ist eine Direktverbindung unmöglich, weicht sie auf ein verschlüsseltes TURN-Relay aus, das nur Chiffretext sieht.",
       ],
     },
     {
@@ -382,7 +382,7 @@ const de = {
     ],
   },
   cta: {
-    text: "Sende jetzt eine große Datei — kein Größenlimit, keine Installation und für Echtzeitübertragungen kein Konto.",
+    text: "Sende jetzt eine große Datei — kein Größenlimit, keine Installation und im selben Netz kein Konto.",
     button: "Relayium jetzt ausprobieren",
   },
   relatedHeading: "Weiterlesen",
@@ -416,7 +416,7 @@ const fr = {
       heading: "Des transferts en temps réel sans limite de taille",
       body: [
         "Comme rien n'est stocké sur un serveur, la limite pratique de taille vient de votre propre navigateur. Dans Chrome ou Edge, Relayium diffuse les données entrantes directement sur le disque, il n'y a donc en pratique aucune limite de taille — des vidéos et archives de projet de plusieurs gigaoctets passent sans souci.",
-        "Firefox et Safari n'offrent pas encore le même téléchargement en flux, si bien que le navigateur y met le fichier en mémoire tampon ; gardez ces transferts sous environ 200 Mo pour une expérience fluide. Les transferts en temps réel ne demandent aucun compte : ouvrez relayium.com sur les deux appareils, choisissez jusqu'à 10 fichiers, vérifiez le code, et envoyez. Si une connexion tombe en cours de route, le transfert reprend au lieu de recommencer, et quand une liaison directe est impossible, il bascule vers un relais TURN chiffré qui ne voit que du texte chiffré.",
+        "Firefox et Safari n'offrent pas encore le même téléchargement en flux, si bien que le navigateur y met le fichier en mémoire tampon ; gardez ces transferts sous environ 200 Mo pour une expérience fluide. Sur le même réseau, les transferts en temps réel ne demandent aucun compte : ouvrez relayium.com sur les deux appareils, choisissez jusqu'à 1 000 fichiers, vérifiez le code, et envoyez. Envoyer entre réseaux différents avec un code d'appairage exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte. Si une connexion tombe en cours de route, le transfert reprend au lieu de recommencer, et quand une liaison directe est impossible, il bascule vers un relais TURN chiffré qui ne voit que du texte chiffré.",
       ],
     },
     {
@@ -459,7 +459,7 @@ const fr = {
     ],
   },
   cta: {
-    text: "Envoyez un gros fichier maintenant — sans limite de taille, sans installation, et sans compte pour les transferts en temps réel.",
+    text: "Envoyez un gros fichier maintenant — sans limite de taille, sans installation, et sans compte sur le même réseau.",
     button: "Essayer Relayium maintenant",
   },
   relatedHeading: "À lire ensuite",

@@ -21,7 +21,7 @@ const en = {
       bullets: [
         "On the computer, open relayium.com in any modern browser (Chrome, Edge, Firefox or Safari).",
         "On the phone, open relayium.com too. On the same network, the two devices discover each other automatically.",
-        "On the computer, drag files straight onto the page, or click to pick them — up to 10 files per batch. You can drop a whole folder and Relayium keeps its structure.",
+        "On the computer, drag files straight onto the page, or click to pick them — up to 1,000 files per batch. You can drop a whole folder and Relayium keeps its structure.",
         "Pick the phone as the destination and start. Both devices show the same 6-digit verification code (SAS); glance at them, confirm they match, and the files fly over.",
         "On the phone, save the received files. No account is needed for a realtime transfer like this.",
       ],
@@ -30,7 +30,7 @@ const en = {
       heading: "Not on the same network? Use a pairing code",
       body: [
         "Your phone is on mobile data and your PC is on home Wi-Fi? That is fine — Relayium is built to reach across networks, not only the same one.",
-        "Instead of automatic discovery, the sender gets a short pairing code (or the join link it generates). Enter the code on the other device and the two connect directly, peer-to-peer, whenever the networks allow it. When a direct path is impossible, the encrypted stream falls back to a TURN relay — the relay only ever sees ciphertext, so the transfer stays end-to-end encrypted. If the connection drops mid-way, the transfer can resume instead of starting over.",
+        "Instead of automatic discovery, the sender gets a short pairing code (or the join link it generates) and signs in to generate it — the person receiving never needs an account. Enter the code on the other device and the two connect directly, peer-to-peer, whenever the networks allow it. When a direct path is impossible, the encrypted stream falls back to a TURN relay — the relay only ever sees ciphertext, so the transfer stays end-to-end encrypted. If the connection drops mid-way, the transfer can resume instead of starting over.",
       ],
     },
     {
@@ -56,7 +56,7 @@ const en = {
         "USB cable: reliable and fast, but you need the right cable, and phone-to-PC file access can be fiddly (especially iPhone to Windows). It is wired, not wireless.",
         "Bluetooth: truly cable-free, but slow — sending a few large photos can take minutes, and it is impractical for videos or large batches.",
         "Chat apps or emailing yourself (WeChat, Telegram, mail): convenient if you already have them open, but most impose size limits, may re-compress photos, and route your files through a third-party server rather than keeping them private.",
-        "Relayium: wireless, no install, no account for realtime transfers, no re-compression (byte-for-byte with a per-file SHA-256 integrity check), and end-to-end encrypted with a verification code you can check yourself.",
+        "Relayium: wireless, no install, no account needed on the same network (only the sender signs in to pair across networks), no re-compression (byte-for-byte with a per-file SHA-256 integrity check), and end-to-end encrypted with a verification code you can check yourself.",
       ],
     },
   ],
@@ -78,7 +78,7 @@ const en = {
     ],
   },
   cta: {
-    text: "Open Relayium on your computer and your phone and send your first file wirelessly — no cable, no install, no account needed.",
+    text: "Open Relayium on your computer and your phone and send your first file wirelessly — no cable, no install, no account needed on the same network.",
     button: "Try Relayium now",
   },
   relatedHeading: "Keep reading",
@@ -102,7 +102,7 @@ const zh = {
       bullets: [
         "在电脑上用任意现代浏览器（Chrome、Edge、Firefox 或 Safari）打开 relayium.com。",
         "在手机上同样打开 relayium.com。在同一网络里，两台设备会自动发现彼此。",
-        "在电脑上，把文件直接拖到页面上，或点击选择——每批最多 10 个文件。你也可以整个文件夹拖进去，Relayium 会保留其结构。",
+        "在电脑上，把文件直接拖到页面上，或点击选择——每批最多 1,000 个文件。你也可以整个文件夹拖进去，Relayium 会保留其结构。",
         "选中手机作为目标并开始。两台设备会显示同一段 6 位校验码（SAS）；瞄一眼，确认一致，文件就飞过去了。",
         "在手机上保存收到的文件。像这样的实时传输无需账号。",
       ],
@@ -111,7 +111,7 @@ const zh = {
       heading: "不在同一网络？用配对码",
       body: [
         "手机用的是移动数据，电脑连的是家里的 Wi-Fi？没关系——Relayium 生来就支持跨网络，而不只是同一个网络。",
-        "此时不再自动发现，而是发送方拿到一个短配对码（或它生成的加入链接）。在另一台设备上输入这个码，两者就点对点直连，只要网络条件允许就直传。当无法直连时，加密数据流会退回到 TURN 中继——中继只能看到密文，因此传输始终保持端到端加密。若中途断开，传输可以断点续传，而不必从头再来。",
+        "此时不再自动发现，而是发送方登录后拿到一个短配对码（或它生成的加入链接）——接收方始终无需账号。在另一台设备上输入这个码，两者就点对点直连，只要网络条件允许就直传。当无法直连时，加密数据流会退回到 TURN 中继——中继只能看到密文，因此传输始终保持端到端加密。若中途断开，传输可以断点续传，而不必从头再来。",
       ],
     },
     {
@@ -137,7 +137,7 @@ const zh = {
         "数据线：可靠又快，但你得有合适的线，而且手机到电脑的文件访问有时挺麻烦（尤其 iPhone 到 Windows）。它是有线的，不是无线。",
         "蓝牙：真正免线，但慢——发几张大照片就可能要好几分钟，传视频或大批文件很不现实。",
         "聊天软件或给自己发邮件（微信、Telegram、邮箱）：如果已经开着，用起来方便，但大多有大小限制、可能重新压缩照片，而且会把文件经由第三方服务器中转，而非保持私密。",
-        "Relayium：无线、免安装、实时传输免账号、不重新压缩（字节级传输并对每个文件做 SHA-256 完整性校验），且端到端加密，还带一个你能亲自核对的校验码。",
+        "Relayium：无线、免安装、同一网络下免账号（跨网络配对仅需发送方登录）、不重新压缩（字节级传输并对每个文件做 SHA-256 完整性校验），且端到端加密，还带一个你能亲自核对的校验码。",
       ],
     },
   ],
@@ -159,7 +159,7 @@ const zh = {
     ],
   },
   cta: {
-    text: "在电脑和手机上同时打开 Relayium，无线发出你的第一个文件——不用数据线，不用安装，也不用账号。",
+    text: "在电脑和手机上同时打开 Relayium，无线发出你的第一个文件——不用数据线，不用安装，同一网络下也不用账号。",
     button: "立即试用 Relayium",
   },
   relatedHeading: "继续阅读",
@@ -183,7 +183,7 @@ const ja = {
       bullets: [
         "パソコンで、任意の最新ブラウザ（Chrome、Edge、Firefox、Safari）で relayium.com を開きます。",
         "スマホでも relayium.com を開きます。同じネットワークなら、2台は自動的に互いを発見します。",
-        "パソコンで、ファイルをページ上に直接ドラッグするか、クリックして選びます——1バッチ最大10ファイル。フォルダごとドロップしても Relayium は構造を保ちます。",
+        "パソコンで、ファイルをページ上に直接ドラッグするか、クリックして選びます——1バッチ最大1,000ファイル。フォルダごとドロップしても Relayium は構造を保ちます。",
         "宛先にスマホを選んで開始します。両方の端末が同じ6桁の検証コード（SAS）を表示します。ちらっと見て一致を確かめれば、ファイルが飛んでいきます。",
         "スマホで受け取ったファイルを保存します。このようなリアルタイム転送にアカウントは不要です。",
       ],
@@ -192,7 +192,7 @@ const ja = {
       heading: "同じネットワークにない？ペアリングコードを使う",
       body: [
         "スマホはモバイル通信、PC は自宅の Wi-Fi？大丈夫です——Relayium は同じネットワークだけでなく、ネットワークをまたいで届くように作られています。",
-        "この場合は自動発見ではなく、送信側が短いペアリングコード（またはそれが生成する参加リンク）を受け取ります。もう一方の端末でそのコードを入力すると、ネットワークが許す限り2台は P2P で直接つながります。直接の経路が不可能なときは、暗号化ストリームが TURN リレーにフォールバックしますが、リレーが見るのは暗号文だけなので、転送はエンドツーエンド暗号化のままです。途中で切れても、転送は最初からではなく再開できます。",
+        "この場合は自動発見ではなく、送信側がサインインして短いペアリングコード（またはそれが生成する参加リンク）を受け取ります——受信側はアカウント不要です。もう一方の端末でそのコードを入力すると、ネットワークが許す限り2台は P2P で直接つながります。直接の経路が不可能なときは、暗号化ストリームが TURN リレーにフォールバックしますが、リレーが見るのは暗号文だけなので、転送はエンドツーエンド暗号化のままです。途中で切れても、転送は最初からではなく再開できます。",
       ],
     },
     {
@@ -218,7 +218,7 @@ const ja = {
         "USB ケーブル：信頼できて速いですが、合うケーブルが要り、スマホから PC へのファイルアクセスは面倒なこともあります（特に iPhone から Windows）。有線であって無線ではありません。",
         "Bluetooth：本当にケーブル不要ですが遅く——大きな写真を数枚送るだけで数分かかることもあり、動画や大量のバッチには非現実的です。",
         "チャットアプリや自分宛メール（LINE、Telegram、メール）：すでに開いていれば便利ですが、多くはサイズ制限があり、写真を再圧縮することもあり、しかもファイルを第三者のサーバー経由で送るため私的なまま保てません。",
-        "Relayium：無線、インストール不要、リアルタイム転送はアカウント不要、再圧縮なし（ファイルごとの SHA-256 整合性チェック付きでバイト単位）、そして自分で確認できる検証コード付きのエンドツーエンド暗号化。",
+        "Relayium：無線、インストール不要、同じネットワークならアカウント不要（ネットワークをまたぐペアリングは送信側のサインインのみ）、再圧縮なし（ファイルごとの SHA-256 整合性チェック付きでバイト単位）、そして自分で確認できる検証コード付きのエンドツーエンド暗号化。",
       ],
     },
   ],
@@ -240,7 +240,7 @@ const ja = {
     ],
   },
   cta: {
-    text: "パソコンとスマホで Relayium を開き、最初のファイルを無線で送ってみてください——ケーブルも、インストールも、アカウントも不要です。",
+    text: "パソコンとスマホで Relayium を開き、最初のファイルを無線で送ってみてください——ケーブルもインストールも不要、同じネットワークならアカウントも不要です。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -264,7 +264,7 @@ const ko = {
       bullets: [
         "컴퓨터에서 최신 브라우저(Chrome, Edge, Firefox 또는 Safari)로 relayium.com을 엽니다.",
         "휴대폰에서도 relayium.com을 엽니다. 같은 네트워크라면 두 기기가 자동으로 서로를 찾습니다.",
-        "컴퓨터에서 파일을 페이지 위로 바로 드래그하거나 클릭해 고릅니다 — 배치당 최대 10개. 폴더째 드롭해도 Relayium이 구조를 유지합니다.",
+        "컴퓨터에서 파일을 페이지 위로 바로 드래그하거나 클릭해 고릅니다 — 배치당 최대 1,000개. 폴더째 드롭해도 Relayium이 구조를 유지합니다.",
         "대상으로 휴대폰을 고르고 시작합니다. 두 기기가 동일한 6자리 검증 코드(SAS)를 표시합니다. 힐끗 보고 일치를 확인하면 파일이 날아갑니다.",
         "휴대폰에서 받은 파일을 저장합니다. 이런 실시간 전송에는 계정이 필요 없습니다.",
       ],
@@ -273,7 +273,7 @@ const ko = {
       heading: "같은 네트워크가 아니라면? 페어링 코드를 쓰세요",
       body: [
         "휴대폰은 모바일 데이터, PC는 집 Wi-Fi인가요? 괜찮습니다 — Relayium은 같은 네트워크뿐 아니라 네트워크를 넘나들며 닿도록 만들어졌습니다.",
-        "이 경우 자동 탐색 대신 보내는 쪽이 짧은 페어링 코드(또는 그것이 생성하는 참여 링크)를 받습니다. 상대 기기에 그 코드를 입력하면 네트워크가 허락하는 한 두 기기가 P2P로 직접 연결됩니다. 직접 경로가 불가능할 때는 암호화된 스트림이 TURN 릴레이로 폴백하지만, 릴레이는 암호문만 보므로 전송은 종단간 암호화를 유지합니다. 도중에 끊겨도 전송은 처음부터가 아니라 이어서 재개할 수 있습니다.",
+        "이 경우 자동 탐색 대신 보내는 쪽이 로그인해서 짧은 페어링 코드(또는 그것이 생성하는 참여 링크)를 받습니다 — 받는 쪽은 계정이 필요 없습니다. 상대 기기에 그 코드를 입력하면 네트워크가 허락하는 한 두 기기가 P2P로 직접 연결됩니다. 직접 경로가 불가능할 때는 암호화된 스트림이 TURN 릴레이로 폴백하지만, 릴레이는 암호문만 보므로 전송은 종단간 암호화를 유지합니다. 도중에 끊겨도 전송은 처음부터가 아니라 이어서 재개할 수 있습니다.",
       ],
     },
     {
@@ -299,7 +299,7 @@ const ko = {
         "USB 케이블: 믿음직하고 빠르지만 맞는 케이블이 필요하고, 휴대폰에서 PC로의 파일 접근이 번거로울 수 있습니다(특히 iPhone에서 Windows). 무선이 아니라 유선입니다.",
         "블루투스: 정말로 케이블이 없지만 느립니다 — 큰 사진 몇 장 보내는 데 몇 분이 걸리기도 하고, 동영상이나 대량 배치에는 비현실적입니다.",
         "채팅 앱이나 자신에게 메일(카카오톡, Telegram, 메일): 이미 열려 있으면 편하지만 대부분 크기 제한이 있고, 사진을 다시 압축하기도 하며, 파일을 제3자 서버를 거쳐 보내 사적으로 유지되지 않습니다.",
-        "Relayium: 무선, 설치 불필요, 실시간 전송은 계정 불필요, 재압축 없음(파일별 SHA-256 무결성 검사와 함께 바이트 단위), 그리고 직접 확인할 수 있는 검증 코드가 있는 종단간 암호화.",
+        "Relayium: 무선, 설치 불필요, 같은 네트워크에서는 계정 불필요(네트워크를 넘는 페어링은 보내는 쪽 로그인만 필요), 재압축 없음(파일별 SHA-256 무결성 검사와 함께 바이트 단위), 그리고 직접 확인할 수 있는 검증 코드가 있는 종단간 암호화.",
       ],
     },
   ],
@@ -321,7 +321,7 @@ const ko = {
     ],
   },
   cta: {
-    text: "컴퓨터와 휴대폰에서 Relayium을 열고 첫 파일을 무선으로 보내 보세요 — 케이블도, 설치도, 계정도 필요 없습니다.",
+    text: "컴퓨터와 휴대폰에서 Relayium을 열고 첫 파일을 무선으로 보내 보세요 — 케이블도 설치도 필요 없고, 같은 네트워크에서는 계정도 필요 없습니다.",
     button: "지금 Relayium 사용해보기",
   },
   relatedHeading: "계속 읽기",
@@ -345,7 +345,7 @@ const de = {
       bullets: [
         "Öffne am Computer relayium.com in einem beliebigen modernen Browser (Chrome, Edge, Firefox oder Safari).",
         "Öffne relayium.com auch auf dem Handy. Im selben Netz erkennen sich die beiden Geräte automatisch.",
-        "Ziehe am Computer Dateien direkt auf die Seite oder klicke, um sie auszuwählen — bis zu 10 Dateien pro Stapel. Du kannst einen ganzen Ordner ablegen, und Relayium behält dessen Struktur bei.",
+        "Ziehe am Computer Dateien direkt auf die Seite oder klicke, um sie auszuwählen — bis zu 1.000 Dateien pro Stapel. Du kannst einen ganzen Ordner ablegen, und Relayium behält dessen Struktur bei.",
         "Wähle das Handy als Ziel und starte. Beide Geräte zeigen denselben sechsstelligen Prüfcode (SAS); ein kurzer Blick, bestätige die Übereinstimmung, und die Dateien fliegen hinüber.",
         "Speichere die empfangenen Dateien auf dem Handy. Für eine solche Echtzeitübertragung ist kein Konto nötig.",
       ],
@@ -354,7 +354,7 @@ const de = {
       heading: "Nicht im selben Netz? Nimm einen Pairing-Code",
       body: [
         "Das Handy ist im Mobilfunknetz und der PC im heimischen WLAN? Kein Problem — Relayium ist darauf ausgelegt, über Netzwerke hinweg zu reichen, nicht nur im selben.",
-        "Statt automatischer Erkennung erhält der Absender einen kurzen Pairing-Code (oder den erzeugten Beitrittslink). Gib den Code auf dem anderen Gerät ein, und die beiden verbinden sich direkt Peer-to-Peer, sofern die Netzwerke es zulassen. Ist ein direkter Weg unmöglich, weicht der verschlüsselte Datenstrom auf ein TURN-Relay aus — das Relay sieht nur Chiffretext, sodass die Übertragung Ende-zu-Ende-verschlüsselt bleibt. Bricht die Verbindung mittendrin ab, kann die Übertragung fortgesetzt werden, statt neu zu beginnen.",
+        "Statt automatischer Erkennung meldet sich der Absender an und erhält einen kurzen Pairing-Code (oder den erzeugten Beitrittslink) — der Empfänger braucht dabei nie ein Konto. Gib den Code auf dem anderen Gerät ein, und die beiden verbinden sich direkt Peer-to-Peer, sofern die Netzwerke es zulassen. Ist ein direkter Weg unmöglich, weicht der verschlüsselte Datenstrom auf ein TURN-Relay aus — das Relay sieht nur Chiffretext, sodass die Übertragung Ende-zu-Ende-verschlüsselt bleibt. Bricht die Verbindung mittendrin ab, kann die Übertragung fortgesetzt werden, statt neu zu beginnen.",
       ],
     },
     {
@@ -380,7 +380,7 @@ const de = {
         "USB-Kabel: zuverlässig und schnell, aber du brauchst das richtige Kabel, und der Dateizugriff vom Handy zum PC kann fummelig sein (besonders iPhone zu Windows). Es ist kabelgebunden, nicht drahtlos.",
         "Bluetooth: wirklich kabellos, aber langsam — schon ein paar große Fotos können Minuten dauern, und für Videos oder große Stapel ist es unpraktisch.",
         "Chat-Apps oder E-Mail an sich selbst (WhatsApp, Telegram, Mail): praktisch, wenn schon geöffnet, aber die meisten haben Größenbeschränkungen, komprimieren Fotos womöglich neu und leiten deine Dateien über einen fremden Server, statt sie privat zu halten.",
-        "Relayium: drahtlos, ohne Installation, ohne Konto für Echtzeitübertragungen, ohne Neukomprimierung (byteweise mit SHA-256-Integritätsprüfung je Datei) und Ende-zu-Ende-verschlüsselt mit einem Prüfcode, den du selbst kontrollieren kannst.",
+        "Relayium: drahtlos, ohne Installation, im selben Netz ohne Konto (nur der Absender meldet sich für Pairing über Netzwerke hinweg an), ohne Neukomprimierung (byteweise mit SHA-256-Integritätsprüfung je Datei) und Ende-zu-Ende-verschlüsselt mit einem Prüfcode, den du selbst kontrollieren kannst.",
       ],
     },
   ],
@@ -402,7 +402,7 @@ const de = {
     ],
   },
   cta: {
-    text: "Öffne Relayium auf deinem Computer und deinem Handy und sende deine erste Datei drahtlos — kein Kabel, keine Installation, kein Konto nötig.",
+    text: "Öffne Relayium auf deinem Computer und deinem Handy und sende deine erste Datei drahtlos — kein Kabel, keine Installation, im selben Netz kein Konto nötig.",
     button: "Relayium jetzt ausprobieren",
   },
   relatedHeading: "Weiterlesen",
@@ -426,7 +426,7 @@ const fr = {
       bullets: [
         "Sur l'ordinateur, ouvrez relayium.com dans n'importe quel navigateur moderne (Chrome, Edge, Firefox ou Safari).",
         "Sur le téléphone, ouvrez relayium.com aussi. Sur le même réseau, les deux appareils se découvrent automatiquement.",
-        "Sur l'ordinateur, glissez les fichiers directement sur la page, ou cliquez pour les choisir — jusqu'à 10 fichiers par lot. Vous pouvez déposer un dossier entier et Relayium en conserve la structure.",
+        "Sur l'ordinateur, glissez les fichiers directement sur la page, ou cliquez pour les choisir — jusqu'à 1 000 fichiers par lot. Vous pouvez déposer un dossier entier et Relayium en conserve la structure.",
         "Choisissez le téléphone comme destination et lancez. Les deux appareils affichent le même code de vérification à 6 chiffres (SAS) ; un coup d'œil, confirmez qu'ils concordent, et les fichiers filent.",
         "Sur le téléphone, enregistrez les fichiers reçus. Aucun compte n'est nécessaire pour un transfert en temps réel comme celui-ci.",
       ],
@@ -435,7 +435,7 @@ const fr = {
       heading: "Pas sur le même réseau ? Utilisez un code d'appairage",
       body: [
         "Votre téléphone est en données mobiles et votre PC sur le Wi-Fi de la maison ? Aucun souci — Relayium est conçu pour atteindre à travers les réseaux, pas seulement le même.",
-        "Au lieu de la découverte automatique, l'expéditeur obtient un court code d'appairage (ou le lien de participation qu'il génère). Saisissez le code sur l'autre appareil et les deux se connectent directement, en pair-à-pair, chaque fois que les réseaux le permettent. Quand une voie directe est impossible, le flux chiffré bascule vers un relais TURN — le relais ne voit que du texte chiffré, donc le transfert reste chiffré de bout en bout. Si la connexion se coupe en cours de route, le transfert peut reprendre au lieu de tout recommencer.",
+        "Au lieu de la découverte automatique, l'expéditeur se connecte et obtient un court code d'appairage (ou le lien de participation qu'il génère) — le destinataire n'a jamais besoin de compte. Saisissez le code sur l'autre appareil et les deux se connectent directement, en pair-à-pair, chaque fois que les réseaux le permettent. Quand une voie directe est impossible, le flux chiffré bascule vers un relais TURN — le relais ne voit que du texte chiffré, donc le transfert reste chiffré de bout en bout. Si la connexion se coupe en cours de route, le transfert peut reprendre au lieu de tout recommencer.",
       ],
     },
     {
@@ -461,7 +461,7 @@ const fr = {
         "Câble USB : fiable et rapide, mais il faut le bon câble, et l'accès aux fichiers du téléphone vers le PC peut être capricieux (surtout iPhone vers Windows). C'est filaire, pas sans fil.",
         "Bluetooth : vraiment sans câble, mais lent — envoyer quelques grandes photos peut prendre des minutes, et c'est impraticable pour des vidéos ou de gros lots.",
         "Applis de messagerie ou e-mail à soi-même (WhatsApp, Telegram, mail) : pratique si c'est déjà ouvert, mais la plupart imposent des limites de taille, peuvent recompresser les photos, et font transiter vos fichiers par un serveur tiers au lieu de les garder privés.",
-        "Relayium : sans fil, sans installation, sans compte pour les transferts en temps réel, sans recompression (octet pour octet avec une vérification d'intégrité SHA-256 par fichier), et chiffré de bout en bout avec un code de vérification que vous pouvez contrôler vous-même.",
+        "Relayium : sans fil, sans installation, sans compte sur le même réseau (l'expéditeur se connecte seulement pour s'appairer entre réseaux différents), sans recompression (octet pour octet avec une vérification d'intégrité SHA-256 par fichier), et chiffré de bout en bout avec un code de vérification que vous pouvez contrôler vous-même.",
       ],
     },
   ],
@@ -483,7 +483,7 @@ const fr = {
     ],
   },
   cta: {
-    text: "Ouvrez Relayium sur votre ordinateur et votre téléphone et envoyez votre premier fichier sans fil — sans câble, sans installation, sans compte.",
+    text: "Ouvrez Relayium sur votre ordinateur et votre téléphone et envoyez votre premier fichier sans fil — sans câble, sans installation, et sans compte sur le même réseau.",
     button: "Essayer Relayium maintenant",
   },
   relatedHeading: "À lire ensuite",

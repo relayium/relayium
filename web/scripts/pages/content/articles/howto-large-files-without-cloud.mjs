@@ -17,19 +17,19 @@ const en = {
       heading: "Why direct transfer wins for big files",
       body: [
         "With cloud storage a large file crosses the network twice — up to the server, then back down to the recipient — and sits against a storage quota in between. A direct peer-to-peer transfer crosses the network once, from sender to receiver, with nothing stored in the middle.",
-        "Relayium runs entirely in the browser, so there is nothing to install on either end. It works on Windows, macOS, Linux, Android and iOS, and realtime transfers need no account — you just open relayium.com on both devices and connect.",
+        "Relayium runs entirely in the browser, so there is nothing to install on either end. It works on Windows, macOS, Linux, Android and iOS. On the same network realtime transfers need no account; sending across networks with a pairing code just asks the sender to sign in — you just open relayium.com on both devices and connect.",
       ],
     },
     {
       heading: "No size cap in realtime mode",
       body: [
         "Realtime transfers have no server-side size limit, because there is no server holding the file. The practical ceiling is set by the receiving browser, not by us.",
-        "On Chrome and Edge the incoming file is streamed straight to disk as it arrives, so it never has to fit in memory — this is the combination to use for very large files, comfortably into the tens of gigabytes. A batch can hold up to 10 files, and each one is verified end-to-end with a SHA-256 hash, so what lands on disk is byte-for-byte what you sent.",
+        "On Chrome and Edge the incoming file is streamed straight to disk as it arrives, so it never has to fit in memory — this is the combination to use for very large files, comfortably into the tens of gigabytes. A batch can hold up to 1,000 files, and each one is verified end-to-end with a SHA-256 hash, so what lands on disk is byte-for-byte what you sent.",
       ],
       bullets: [
         "Chrome or Edge on the receiving side: files stream to disk, so there is effectively no size cap.",
         "Firefox and Safari buffer the file in memory instead, so keep individual files under about 200 MB there.",
-        "Up to 10 files per batch, each checked with its own SHA-256 hash on arrival.",
+        "Up to 1,000 files per batch, each checked with its own SHA-256 hash on arrival.",
       ],
     },
     {
@@ -65,7 +65,7 @@ const en = {
     ],
   },
   cta: {
-    text: "Move your next multi-gigabyte file the direct way — no install, and no account for realtime transfers.",
+    text: "Move your next multi-gigabyte file the direct way — no install, and no account needed on the same network.",
     button: "Try Relayium now",
   },
   relatedHeading: "Keep reading",
@@ -85,19 +85,19 @@ const zh = {
       heading: "大文件为什么直连更划算",
       body: [
         "用网盘时，一个大文件要两次跨越网络——先上传到服务器，再下载到对方——中间还占着存储配额。而点对点直连只跨越网络一次，从发送方直达接收方，中途什么都不存。",
-        "Relayium 完全在浏览器里运行，两端都无需安装任何软件。它支持 Windows、macOS、Linux、Android 和 iOS，实时传输也无需账号——只要两台设备都打开 relayium.com 连上即可。",
+        "Relayium 完全在浏览器里运行，两端都无需安装任何软件。它支持 Windows、macOS、Linux、Android 和 iOS。同一网络下实时传输无需账号；跨网络用配对码传输只需发送方登录一下——只要两台设备都打开 relayium.com 连上即可。",
       ],
     },
     {
       heading: "实时模式没有大小上限",
       body: [
         "实时传输没有服务器端的大小限制，因为根本没有服务器在保存文件。实际的上限由接收端的浏览器决定，而不是由我们决定。",
-        "在 Chrome 和 Edge 上，进入的文件会随着到达即时流式写入磁盘，因此从不需要装进内存——这正是传超大文件该用的组合，轻松到几十 GB。每批最多可放 10 个文件，每个都用 SHA-256 做端到端校验，所以落到磁盘上的与你发出的逐字节一致。",
+        "在 Chrome 和 Edge 上，进入的文件会随着到达即时流式写入磁盘，因此从不需要装进内存——这正是传超大文件该用的组合，轻松到几十 GB。每批最多可放 1,000 个文件，每个都用 SHA-256 做端到端校验，所以落到磁盘上的与你发出的逐字节一致。",
       ],
       bullets: [
         "接收端用 Chrome 或 Edge：文件流式写盘，因此实际上没有大小上限。",
         "Firefox 和 Safari 会改用内存缓冲，所以在这两个浏览器上，单个文件请控制在约 200 MB 以内。",
-        "每批最多 10 个文件，每个到达时都用各自的 SHA-256 校验。",
+        "每批最多 1,000 个文件，每个到达时都用各自的 SHA-256 校验。",
       ],
     },
     {
@@ -133,7 +133,7 @@ const zh = {
     ],
   },
   cta: {
-    text: "用直连的方式传下一个几 GB 的大文件——无需安装，实时传输也无需账号。",
+    text: "用直连的方式传下一个几 GB 的大文件——无需安装，同一网络下也无需账号。",
     button: "立即试用 Relayium",
   },
   relatedHeading: "继续阅读",
@@ -153,19 +153,19 @@ const ja = {
       heading: "大きなファイルで直接転送が有利な理由",
       body: [
         "クラウドストレージでは大きなファイルがネットワークを2回横断します——サーバーへアップロードし、相手へダウンロードで——その間ストレージ容量も消費します。P2P の直接転送はネットワークを1回だけ、送信者から受信者へ横断し、途中には何も保存しません。",
-        "Relayium は完全にブラウザ内で動作するため、どちらの端末にもインストールは不要です。Windows、macOS、Linux、Android、iOS で動き、リアルタイム転送にアカウントは要りません——両方の端末で relayium.com を開いて接続するだけです。",
+        "Relayium は完全にブラウザ内で動作するため、どちらの端末にもインストールは不要です。Windows、macOS、Linux、Android、iOS で動きます。同じネットワークならリアルタイム転送にアカウントは要りません。ネットワークをまたいでペアリングコードで送る場合も送信側がサインインするだけです——両方の端末で relayium.com を開いて接続するだけです。",
       ],
     },
     {
       heading: "リアルタイムモードにはサイズ上限がない",
       body: [
         "リアルタイム転送にはサーバー側のサイズ制限がありません。ファイルを保持するサーバーが存在しないからです。実際の上限は受信側のブラウザが決めるもので、私たちが決めるものではありません。",
-        "Chrome と Edge では、届いたファイルは到着に合わせてそのままディスクへストリーミングされるため、メモリに収める必要がありません——これが非常に大きなファイルに使うべき組み合わせで、数十 GB まで余裕です。1バッチには最大10ファイルを入れられ、それぞれが SHA-256 ハッシュでエンドツーエンドに検証されるので、ディスクに残るものは送ったものとバイト単位で同一です。",
+        "Chrome と Edge では、届いたファイルは到着に合わせてそのままディスクへストリーミングされるため、メモリに収める必要がありません——これが非常に大きなファイルに使うべき組み合わせで、数十 GB まで余裕です。1バッチには最大1,000ファイルを入れられ、それぞれが SHA-256 ハッシュでエンドツーエンドに検証されるので、ディスクに残るものは送ったものとバイト単位で同一です。",
       ],
       bullets: [
         "受信側が Chrome または Edge：ファイルはディスクへストリーミングされるため、実質的にサイズ上限はありません。",
         "Firefox と Safari は代わりにファイルをメモリにバッファするため、そこでは個々のファイルを約 200 MB 以内に抑えてください。",
-        "1バッチ最大10ファイル、それぞれ到着時に固有の SHA-256 ハッシュで検証されます。",
+        "1バッチ最大1,000ファイル、それぞれ到着時に固有の SHA-256 ハッシュで検証されます。",
       ],
     },
     {
@@ -201,7 +201,7 @@ const ja = {
     ],
   },
   cta: {
-    text: "次の数ギガバイトのファイルを直接の方法で送りましょう——インストール不要、リアルタイム転送はアカウントも不要です。",
+    text: "次の数ギガバイトのファイルを直接の方法で送りましょう——インストール不要、同じネットワークならアカウントも不要です。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -221,19 +221,19 @@ const ko = {
       heading: "대용량 파일에 직접 전송이 유리한 이유",
       body: [
         "클라우드 스토리지에서는 대용량 파일이 네트워크를 두 번 건넙니다——서버로 업로드, 다시 상대에게 다운로드——그 사이 스토리지 할당량도 차지합니다. P2P 직접 전송은 네트워크를 한 번만, 보내는 쪽에서 받는 쪽으로 건너며 중간에 아무것도 저장하지 않습니다.",
-        "Relayium은 완전히 브라우저에서 동작하므로 양쪽 모두 설치할 것이 없습니다. Windows, macOS, Linux, Android, iOS에서 작동하고 실시간 전송에는 계정이 필요 없습니다——두 기기에서 relayium.com을 열어 연결하기만 하면 됩니다.",
+        "Relayium은 완전히 브라우저에서 동작하므로 양쪽 모두 설치할 것이 없습니다. Windows, macOS, Linux, Android, iOS에서 작동합니다. 같은 네트워크에서는 실시간 전송에 계정이 필요 없고, 페어링 코드로 네트워크를 넘어 보낼 때도 보내는 쪽이 로그인만 하면 됩니다——두 기기에서 relayium.com을 열어 연결하기만 하면 됩니다.",
       ],
     },
     {
       heading: "실시간 모드에는 크기 제한이 없다",
       body: [
         "실시간 전송에는 서버 측 크기 제한이 없습니다. 파일을 담아 두는 서버가 없기 때문입니다. 실질적인 상한은 받는 쪽 브라우저가 정하며, 우리가 정하는 것이 아닙니다.",
-        "Chrome과 Edge에서는 들어오는 파일이 도착하는 대로 곧바로 디스크로 스트리밍되므로 메모리에 담을 필요가 없습니다——이것이 아주 큰 파일에 써야 할 조합이며, 수십 GB까지 여유롭습니다. 한 배치에 최대 10개 파일을 담을 수 있고, 각각 SHA-256 해시로 종단간 검증되므로 디스크에 남는 것은 보낸 것과 바이트 단위로 동일합니다.",
+        "Chrome과 Edge에서는 들어오는 파일이 도착하는 대로 곧바로 디스크로 스트리밍되므로 메모리에 담을 필요가 없습니다——이것이 아주 큰 파일에 써야 할 조합이며, 수십 GB까지 여유롭습니다. 한 배치에 최대 1,000개 파일을 담을 수 있고, 각각 SHA-256 해시로 종단간 검증되므로 디스크에 남는 것은 보낸 것과 바이트 단위로 동일합니다.",
       ],
       bullets: [
         "받는 쪽이 Chrome 또는 Edge: 파일이 디스크로 스트리밍되므로 사실상 크기 제한이 없습니다.",
         "Firefox와 Safari는 대신 파일을 메모리에 버퍼링하므로, 그 브라우저에서는 개별 파일을 약 200 MB 이내로 유지하세요.",
-        "배치당 최대 10개 파일, 각각 도착 시 고유한 SHA-256 해시로 검증됩니다.",
+        "배치당 최대 1,000개 파일, 각각 도착 시 고유한 SHA-256 해시로 검증됩니다.",
       ],
     },
     {
@@ -269,7 +269,7 @@ const ko = {
     ],
   },
   cta: {
-    text: "다음 수 기가바이트 파일을 직접 방식으로 보내세요 — 설치 불필요, 실시간 전송에는 계정도 필요 없습니다.",
+    text: "다음 수 기가바이트 파일을 직접 방식으로 보내세요 — 설치 불필요, 같은 네트워크에서는 계정도 필요 없습니다.",
     button: "지금 Relayium 사용해보기",
   },
   relatedHeading: "계속 읽기",
@@ -289,19 +289,19 @@ const de = {
       heading: "Warum die Direktübertragung bei großen Dateien gewinnt",
       body: [
         "Bei Cloud-Speicher überquert eine große Datei das Netz zweimal — hoch zum Server, dann wieder herunter zur empfangenden Person — und belastet dazwischen ein Speicherkontingent. Eine direkte Peer-to-Peer-Übertragung überquert das Netz einmal, vom Absender zum Empfänger, ohne dass etwas dazwischen gespeichert wird.",
-        "Relayium läuft vollständig im Browser, es gibt also auf keiner Seite etwas zu installieren. Es funktioniert unter Windows, macOS, Linux, Android und iOS, und Echtzeitübertragungen brauchen kein Konto — du öffnest einfach relayium.com auf beiden Geräten und verbindest sie.",
+        "Relayium läuft vollständig im Browser, es gibt also auf keiner Seite etwas zu installieren. Es funktioniert unter Windows, macOS, Linux, Android und iOS. Im selben Netz brauchen Echtzeitübertragungen kein Konto; beim Senden über Netzwerke hinweg per Pairing-Code muss sich nur der Absender anmelden — du öffnest einfach relayium.com auf beiden Geräten und verbindest sie.",
       ],
     },
     {
       heading: "Keine Größenbeschränkung im Echtzeitmodus",
       body: [
         "Echtzeitübertragungen haben keine serverseitige Größenbeschränkung, weil kein Server die Datei hält. Die praktische Obergrenze setzt der empfangende Browser, nicht wir.",
-        "In Chrome und Edge wird die eingehende Datei beim Eintreffen direkt auf die Festplatte gestreamt, muss also nie in den Speicher passen — das ist die Kombination für sehr große Dateien, bequem bis in den zweistelligen Gigabyte-Bereich. Ein Stapel fasst bis zu 10 Dateien, und jede wird per SHA-256-Hash Ende-zu-Ende geprüft, sodass das, was auf der Festplatte landet, Byte für Byte dem entspricht, was du gesendet hast.",
+        "In Chrome und Edge wird die eingehende Datei beim Eintreffen direkt auf die Festplatte gestreamt, muss also nie in den Speicher passen — das ist die Kombination für sehr große Dateien, bequem bis in den zweistelligen Gigabyte-Bereich. Ein Stapel fasst bis zu 1.000 Dateien, und jede wird per SHA-256-Hash Ende-zu-Ende geprüft, sodass das, was auf der Festplatte landet, Byte für Byte dem entspricht, was du gesendet hast.",
       ],
       bullets: [
         "Chrome oder Edge auf der Empfangsseite: Dateien werden auf die Festplatte gestreamt, es gibt also praktisch keine Größenbeschränkung.",
         "Firefox und Safari puffern die Datei stattdessen im Speicher, halte dort einzelne Dateien unter etwa 200 MB.",
-        "Bis zu 10 Dateien pro Stapel, jede beim Eintreffen mit ihrem eigenen SHA-256-Hash geprüft.",
+        "Bis zu 1.000 Dateien pro Stapel, jede beim Eintreffen mit ihrem eigenen SHA-256-Hash geprüft.",
       ],
     },
     {
@@ -337,7 +337,7 @@ const de = {
     ],
   },
   cta: {
-    text: "Bewege deine nächste mehrere Gigabyte große Datei auf dem direkten Weg — keine Installation und für Echtzeitübertragungen kein Konto.",
+    text: "Bewege deine nächste mehrere Gigabyte große Datei auf dem direkten Weg — keine Installation und im selben Netz kein Konto.",
     button: "Relayium jetzt ausprobieren",
   },
   relatedHeading: "Weiterlesen",
@@ -357,19 +357,19 @@ const fr = {
       heading: "Pourquoi le transfert direct l'emporte pour les gros fichiers",
       body: [
         "Avec le stockage cloud, un gros fichier traverse le réseau deux fois — jusqu'au serveur, puis de nouveau vers le destinataire — et pèse sur un quota de stockage entre les deux. Un transfert pair-à-pair direct traverse le réseau une seule fois, de l'expéditeur au destinataire, sans rien stocker au milieu.",
-        "Relayium fonctionne entièrement dans le navigateur, il n'y a donc rien à installer d'un côté ou de l'autre. Il marche sous Windows, macOS, Linux, Android et iOS, et les transferts en temps réel ne demandent aucun compte — il suffit d'ouvrir relayium.com sur les deux appareils et de les connecter.",
+        "Relayium fonctionne entièrement dans le navigateur, il n'y a donc rien à installer d'un côté ou de l'autre. Il marche sous Windows, macOS, Linux, Android et iOS. Sur le même réseau, les transferts en temps réel ne demandent aucun compte ; envoyer entre réseaux différents avec un code d'appairage exige seulement que l'expéditeur se connecte — il suffit d'ouvrir relayium.com sur les deux appareils et de les connecter.",
       ],
     },
     {
       heading: "Aucune limite de taille en mode temps réel",
       body: [
         "Les transferts en temps réel n'ont aucune limite de taille côté serveur, parce qu'aucun serveur ne détient le fichier. Le plafond pratique est fixé par le navigateur qui reçoit, pas par nous.",
-        "Sur Chrome et Edge, le fichier entrant est diffusé directement sur le disque à mesure qu'il arrive, il n'a donc jamais à tenir en mémoire — c'est la combinaison à utiliser pour de très gros fichiers, aisément jusqu'à des dizaines de gigaoctets. Un lot peut contenir jusqu'à 10 fichiers, et chacun est vérifié de bout en bout par une empreinte SHA-256, de sorte que ce qui arrive sur le disque est identique octet pour octet à ce que vous avez envoyé.",
+        "Sur Chrome et Edge, le fichier entrant est diffusé directement sur le disque à mesure qu'il arrive, il n'a donc jamais à tenir en mémoire — c'est la combinaison à utiliser pour de très gros fichiers, aisément jusqu'à des dizaines de gigaoctets. Un lot peut contenir jusqu'à 1 000 fichiers, et chacun est vérifié de bout en bout par une empreinte SHA-256, de sorte que ce qui arrive sur le disque est identique octet pour octet à ce que vous avez envoyé.",
       ],
       bullets: [
         "Chrome ou Edge côté réception : les fichiers sont diffusés sur le disque, il n'y a donc pratiquement aucune limite de taille.",
         "Firefox et Safari mettent le fichier en mémoire tampon à la place, gardez-y les fichiers individuels sous environ 200 Mo.",
-        "Jusqu'à 10 fichiers par lot, chacun vérifié à l'arrivée par sa propre empreinte SHA-256.",
+        "Jusqu'à 1 000 fichiers par lot, chacun vérifié à l'arrivée par sa propre empreinte SHA-256.",
       ],
     },
     {
@@ -405,7 +405,7 @@ const fr = {
     ],
   },
   cta: {
-    text: "Déplacez votre prochain fichier de plusieurs gigaoctets par la voie directe — sans installation, et sans compte pour les transferts en temps réel.",
+    text: "Déplacez votre prochain fichier de plusieurs gigaoctets par la voie directe — sans installation, et sans compte sur le même réseau.",
     button: "Essayer Relayium maintenant",
   },
   relatedHeading: "À lire ensuite",

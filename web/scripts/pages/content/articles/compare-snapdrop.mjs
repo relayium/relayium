@@ -42,7 +42,7 @@ const en = {
       heading: "Beyond the LAN",
       body: [
         "Relayium is designed to work across networks, not only on the same Wi-Fi. You can connect two devices with a pairing code (or the join link it generates), and the transfer still goes directly peer-to-peer whenever possible.",
-        "When a direct connection is impossible, the encrypted stream falls back to a TURN relay — but the relay only ever sees ciphertext, so the transfer stays end-to-end encrypted. There is also an optional stored download-link mode: your browser encrypts the files with AES-256-GCM and the decryption key lives only in the URL fragment, so the server stores zero-knowledge ciphertext it cannot read. Realtime transfers need no account; only stored download links require the sender to sign in. Transfers that drop mid-way can resume instead of restarting.",
+        "When a direct connection is impossible, the encrypted stream falls back to a TURN relay — but the relay only ever sees ciphertext, so the transfer stays end-to-end encrypted. There is also an optional stored download-link mode: your browser encrypts the files with AES-256-GCM and the decryption key lives only in the URL fragment, so the server stores zero-knowledge ciphertext it cannot read. On the same network, no account is needed; sending across networks with a pairing code requires the sender to sign in — the person receiving never needs an account, and the same is true for stored download links. Transfers that drop mid-way can resume instead of restarting.",
       ],
     },
     {
@@ -56,7 +56,7 @@ const en = {
         "Across networks: Relayium connects by pairing code (or the join link it generates) with an encrypted TURN fallback; LAN discovery is the primary path for Snapdrop.",
         "Storage mode: Relayium offers optional zero-knowledge stored download links; the others are realtime-only.",
         "Resume: Relayium can resume an interrupted transfer instead of starting over.",
-        "Batch: Relayium sends up to 10 files per batch with a per-file SHA-256 integrity check.",
+        "Batch: Relayium sends up to 1,000 files per batch with a per-file SHA-256 integrity check.",
       ],
     },
   ],
@@ -78,7 +78,7 @@ const en = {
     ],
   },
   cta: {
-    text: "See how the application-layer encryption feels in practice — no install, no account needed for realtime transfers.",
+    text: "See how the application-layer encryption feels in practice — no install, and no account needed on the same network.",
     button: "Try Relayium now",
   },
   relatedHeading: "Keep reading",
@@ -123,7 +123,7 @@ const zh = {
       heading: "走出局域网",
       body: [
         "Relayium 从设计上就支持跨网络工作，而不只是同一个 Wi-Fi。你可以用配对码（或它生成的加入链接）连接两台设备，只要条件允许，传输依然点对点直连。",
-        "当无法直连时，加密数据流会退回到 TURN 中继——但中继只能看到密文，因此传输始终保持端到端加密。此外还有可选的存储下载链接模式：浏览器先用 AES-256-GCM 加密文件，解密密钥只存在于 URL 片段里，服务器只保存无法解读的零知识密文。实时传输无需账号；只有下载链接需要发送方登录。中途断开的传输可以断点续传，而不必从头再来。",
+        "当无法直连时，加密数据流会退回到 TURN 中继——但中继只能看到密文，因此传输始终保持端到端加密。此外还有可选的存储下载链接模式：浏览器先用 AES-256-GCM 加密文件，解密密钥只存在于 URL 片段里，服务器只保存无法解读的零知识密文。同一网络下无需账号；跨网络用配对码传输则需要发送方登录——接收方无论哪种方式都无需账号，存储下载链接也同样需要发送方登录。中途断开的传输可以断点续传，而不必从头再来。",
       ],
     },
     {
@@ -137,7 +137,7 @@ const zh = {
         "跨网络：Relayium 可用配对码（或它生成的加入链接）连接，并有加密的 TURN 兜底；Snapdrop 主要依赖局域网发现。",
         "存储模式：Relayium 提供可选的零知识存储下载链接；另两者只有实时模式。",
         "断点续传：Relayium 可在传输中断后续传，而非重来。",
-        "批量：Relayium 每批最多发送 10 个文件，并对每个文件做 SHA-256 完整性校验。",
+        "批量：Relayium 每批最多发送 1,000 个文件，并对每个文件做 SHA-256 完整性校验。",
       ],
     },
   ],
@@ -159,7 +159,7 @@ const zh = {
     ],
   },
   cta: {
-    text: "亲自体验应用层加密的实际感受——无需安装，实时传输也无需账号。",
+    text: "亲自体验应用层加密的实际感受——无需安装，同一网络下也无需账号。",
     button: "立即试用 Relayium",
   },
   relatedHeading: "继续阅读",
@@ -204,7 +204,7 @@ const ja = {
       heading: "LAN を越えて",
       body: [
         "Relayium は同じ Wi-Fi だけでなく、ネットワークをまたいで動くよう設計されています。ペアリングコード（またはそれが生成する参加リンク）で2台の端末を接続でき、可能な限り転送は P2P で直接行われます。",
-        "直接接続が不可能なときは、暗号化ストリームが TURN リレーにフォールバックしますが、リレーが見るのは暗号文だけなので、転送はエンドツーエンド暗号化のままです。任意の保存型ダウンロードリンクもあります。ブラウザが AES-256-GCM でファイルを暗号化し、復号鍵は URL フラグメントにだけ存在するため、サーバーは読めないゼロ知識の暗号文を保存します。リアルタイム転送にアカウントは不要で、保存型ダウンロードリンクの作成にのみ送信側のサインインが必要です。途中で切れた転送は最初からではなく再開できます。",
+        "直接接続が不可能なときは、暗号化ストリームが TURN リレーにフォールバックしますが、リレーが見るのは暗号文だけなので、転送はエンドツーエンド暗号化のままです。任意の保存型ダウンロードリンクもあります。ブラウザが AES-256-GCM でファイルを暗号化し、復号鍵は URL フラグメントにだけ存在するため、サーバーは読めないゼロ知識の暗号文を保存します。同じネットワークならアカウントは不要です。ネットワークをまたいでペアリングコードで送る場合は送信側のサインインが必要です——受信側はどちらの場合もアカウント不要で、保存型ダウンロードリンクの作成にも送信側のサインインが必要です。途中で切れた転送は最初からではなく再開できます。",
       ],
     },
     {
@@ -218,7 +218,7 @@ const ja = {
         "ネットワーク越え：Relayium はペアリングコード（またはその参加リンク）で接続し、暗号化された TURN フォールバックを持つ。Snapdrop は主に LAN 発見に依存。",
         "保存モード：Relayium は任意のゼロ知識保存ダウンロードリンクを提供。他はリアルタイムのみ。",
         "再開：Relayium は中断した転送を最初からやり直さずに再開できる。",
-        "バッチ：Relayium は1バッチ最大10ファイルを送り、ファイルごとに SHA-256 整合性チェックを行う。",
+        "バッチ：Relayium は1バッチ最大1,000ファイルを送り、ファイルごとに SHA-256 整合性チェックを行う。",
       ],
     },
   ],
@@ -240,7 +240,7 @@ const ja = {
     ],
   },
   cta: {
-    text: "アプリケーション層の暗号化の実際の感触を体験してください——インストール不要、リアルタイム転送はアカウントも不要です。",
+    text: "アプリケーション層の暗号化の実際の感触を体験してください——インストール不要、同じネットワークならアカウントも不要です。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -285,7 +285,7 @@ const ko = {
       heading: "LAN을 넘어서",
       body: [
         "Relayium은 같은 Wi-Fi뿐 아니라 네트워크를 넘나들며 작동하도록 설계되었습니다. 페어링 코드(또는 그것이 생성하는 참여 링크)로 두 기기를 연결할 수 있고, 가능한 경우 전송은 여전히 P2P로 직접 이루어집니다.",
-        "직접 연결이 불가능할 때는 암호화된 스트림이 TURN 릴레이로 폴백하지만, 릴레이는 암호문만 볼 수 있어 전송은 종단간 암호화를 유지합니다. 선택적인 저장형 다운로드 링크 모드도 있습니다. 브라우저가 AES-256-GCM으로 파일을 암호화하고 복호화 키는 URL 프래그먼트에만 존재하므로, 서버는 읽을 수 없는 영지식 암호문을 저장합니다. 실시간 전송에는 계정이 필요 없고, 저장형 다운로드 링크 생성에만 보내는 쪽의 로그인이 필요합니다. 도중에 끊긴 전송은 처음부터가 아니라 이어서 재개할 수 있습니다.",
+        "직접 연결이 불가능할 때는 암호화된 스트림이 TURN 릴레이로 폴백하지만, 릴레이는 암호문만 볼 수 있어 전송은 종단간 암호화를 유지합니다. 선택적인 저장형 다운로드 링크 모드도 있습니다. 브라우저가 AES-256-GCM으로 파일을 암호화하고 복호화 키는 URL 프래그먼트에만 존재하므로, 서버는 읽을 수 없는 영지식 암호문을 저장합니다. 같은 네트워크에서는 계정이 필요 없습니다. 페어링 코드로 네트워크를 넘어 보낼 때는 보내는 쪽의 로그인이 필요합니다 — 받는 쪽은 어느 경우든 계정이 필요 없고, 저장형 다운로드 링크 생성에도 보내는 쪽의 로그인이 필요합니다. 도중에 끊긴 전송은 처음부터가 아니라 이어서 재개할 수 있습니다.",
       ],
     },
     {
@@ -299,7 +299,7 @@ const ko = {
         "네트워크 넘기: Relayium은 페어링 코드(또는 그 참여 링크)로 연결하고 암호화된 TURN 폴백을 가짐; Snapdrop은 주로 LAN 탐색에 의존.",
         "저장 모드: Relayium은 선택적 영지식 저장 다운로드 링크를 제공; 나머지는 실시간 전용.",
         "재개: Relayium은 중단된 전송을 처음부터 다시 하지 않고 이어받을 수 있음.",
-        "일괄: Relayium은 배치당 최대 10개 파일을 보내며 파일별 SHA-256 무결성 검사를 함.",
+        "일괄: Relayium은 배치당 최대 1,000개 파일을 보내며 파일별 SHA-256 무결성 검사를 함.",
       ],
     },
   ],
@@ -321,7 +321,7 @@ const ko = {
     ],
   },
   cta: {
-    text: "애플리케이션 계층 암호화가 실제로 어떤지 직접 확인해 보세요 — 설치 불필요, 실시간 전송에는 계정도 필요 없습니다.",
+    text: "애플리케이션 계층 암호화가 실제로 어떤지 직접 확인해 보세요 — 설치 불필요, 같은 네트워크에서는 계정도 필요 없습니다.",
     button: "지금 Relayium 사용해보기",
   },
   relatedHeading: "계속 읽기",
@@ -366,7 +366,7 @@ const de = {
       heading: "Über das LAN hinaus",
       body: [
         "Relayium ist darauf ausgelegt, netzwerkübergreifend zu funktionieren, nicht nur im selben WLAN. Du kannst zwei Geräte per Pairing-Code (oder den erzeugten Beitrittslink) verbinden, und die Übertragung läuft nach Möglichkeit weiterhin direkt Peer-to-Peer.",
-        "Ist eine Direktverbindung unmöglich, weicht der verschlüsselte Datenstrom auf ein TURN-Relay aus — doch das Relay sieht nur Chiffretext, sodass die Übertragung Ende-zu-Ende-verschlüsselt bleibt. Es gibt außerdem einen optionalen Modus mit gespeichertem Download-Link: Der Browser verschlüsselt die Dateien mit AES-256-GCM, und der Entschlüsselungsschlüssel liegt nur im URL-Fragment, sodass der Server nur Zero-Knowledge-Chiffretext speichert, den er nicht lesen kann. Echtzeitübertragungen brauchen kein Konto; nur gespeicherte Download-Links erfordern die Anmeldung des Absenders. Abgebrochene Übertragungen können fortgesetzt statt neu gestartet werden.",
+        "Ist eine Direktverbindung unmöglich, weicht der verschlüsselte Datenstrom auf ein TURN-Relay aus — doch das Relay sieht nur Chiffretext, sodass die Übertragung Ende-zu-Ende-verschlüsselt bleibt. Es gibt außerdem einen optionalen Modus mit gespeichertem Download-Link: Der Browser verschlüsselt die Dateien mit AES-256-GCM, und der Entschlüsselungsschlüssel liegt nur im URL-Fragment, sodass der Server nur Zero-Knowledge-Chiffretext speichert, den er nicht lesen kann. Im selben Netz ist kein Konto nötig; beim Senden über Netzwerke hinweg per Pairing-Code muss sich der Absender anmelden — der Empfänger braucht in beiden Fällen kein Konto, ebenso wenig wie bei gespeicherten Download-Links, die ebenfalls die Anmeldung des Absenders erfordern. Abgebrochene Übertragungen können fortgesetzt statt neu gestartet werden.",
       ],
     },
     {
@@ -380,7 +380,7 @@ const de = {
         "Netzwerkübergreifend: Relayium verbindet per Pairing-Code (oder dessen Beitrittslink) mit verschlüsseltem TURN-Fallback; bei Snapdrop ist die LAN-Erkennung der Hauptweg.",
         "Speichermodus: Relayium bietet optionale Zero-Knowledge-Download-Links; die anderen sind nur Echtzeit.",
         "Fortsetzen: Relayium kann eine unterbrochene Übertragung fortsetzen, statt neu zu beginnen.",
-        "Stapel: Relayium sendet bis zu 10 Dateien pro Stapel mit einer SHA-256-Integritätsprüfung je Datei.",
+        "Stapel: Relayium sendet bis zu 1.000 Dateien pro Stapel mit einer SHA-256-Integritätsprüfung je Datei.",
       ],
     },
   ],
@@ -402,7 +402,7 @@ const de = {
     ],
   },
   cta: {
-    text: "Erlebe, wie sich die Verschlüsselung auf Anwendungsebene in der Praxis anfühlt — keine Installation, für Echtzeitübertragungen kein Konto nötig.",
+    text: "Erlebe, wie sich die Verschlüsselung auf Anwendungsebene in der Praxis anfühlt — keine Installation, im selben Netz kein Konto nötig.",
     button: "Relayium jetzt ausprobieren",
   },
   relatedHeading: "Weiterlesen",
@@ -447,7 +447,7 @@ const fr = {
       heading: "Au-delà du réseau local",
       body: [
         "Relayium est conçu pour fonctionner entre réseaux, pas seulement sur le même Wi-Fi. Vous pouvez connecter deux appareils par code d'appairage (ou le lien de participation qu'il génère), et le transfert reste en pair-à-pair direct chaque fois que possible.",
-        "Quand une connexion directe est impossible, le flux chiffré bascule vers un relais TURN — mais le relais ne voit que du texte chiffré, donc le transfert reste chiffré de bout en bout. Il existe aussi un mode optionnel de lien de téléchargement stocké : le navigateur chiffre les fichiers en AES-256-GCM et la clé de déchiffrement ne vit que dans le fragment de l'URL, si bien que le serveur ne stocke qu'un texte chiffré à divulgation nulle qu'il ne peut pas lire. Les transferts en temps réel ne demandent aucun compte ; seuls les liens de téléchargement stockés exigent que l'expéditeur se connecte. Les transferts interrompus en cours de route peuvent reprendre au lieu de tout recommencer.",
+        "Quand une connexion directe est impossible, le flux chiffré bascule vers un relais TURN — mais le relais ne voit que du texte chiffré, donc le transfert reste chiffré de bout en bout. Il existe aussi un mode optionnel de lien de téléchargement stocké : le navigateur chiffre les fichiers en AES-256-GCM et la clé de déchiffrement ne vit que dans le fragment de l'URL, si bien que le serveur ne stocke qu'un texte chiffré à divulgation nulle qu'il ne peut pas lire. Sur le même réseau, aucun compte n'est nécessaire ; envoyer entre réseaux différents avec un code d'appairage exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte, et il en va de même pour les liens de téléchargement stockés. Les transferts interrompus en cours de route peuvent reprendre au lieu de tout recommencer.",
       ],
     },
     {
@@ -461,7 +461,7 @@ const fr = {
         "Entre réseaux : Relayium se connecte par code d'appairage (ou son lien de participation) avec un repli TURN chiffré ; pour Snapdrop, la découverte sur le réseau local est la voie principale.",
         "Mode de stockage : Relayium propose des liens de téléchargement stockés à divulgation nulle en option ; les autres sont uniquement en temps réel.",
         "Reprise : Relayium peut reprendre un transfert interrompu au lieu de recommencer.",
-        "Lot : Relayium envoie jusqu'à 10 fichiers par lot avec une vérification d'intégrité SHA-256 par fichier.",
+        "Lot : Relayium envoie jusqu'à 1 000 fichiers par lot avec une vérification d'intégrité SHA-256 par fichier.",
       ],
     },
   ],
@@ -483,7 +483,7 @@ const fr = {
     ],
   },
   cta: {
-    text: "Découvrez ce que donne le chiffrement au niveau applicatif en pratique — sans installation, sans compte pour les transferts en temps réel.",
+    text: "Découvrez ce que donne le chiffrement au niveau applicatif en pratique — sans installation, sans compte sur le même réseau.",
     button: "Essayer Relayium maintenant",
   },
   relatedHeading: "À lire ensuite",

@@ -5,7 +5,7 @@
 const zh = {
   title: "Relayium — 端到端加密的点对点文件传输",
   description:
-    "Relayium 是开源、端到端加密的点对点文件传输工具。在浏览器里两台设备直连，文件不经过服务器，无需安装、无需账号即可实时传输。",
+    "Relayium 是开源、端到端加密的点对点文件传输工具。在浏览器里两台设备直连，文件不经过服务器，无需安装即可实时传输；同一网络下无需账号，跨网络配对时仅发送方需登录。",
   hero: {
     h1: "端到端加密的点对点文件传输",
     pitch:
@@ -16,7 +16,7 @@ const zh = {
     heading: "四步完成一次传输",
     steps: [
       "两台设备用现代浏览器打开 relayium.com。",
-      "一方选择或拖入要发送的文件（每批最多 10 个）。",
+      "一方选择或拖入要发送的文件（每批最多 1,000 个）。",
       "双方核对屏幕上同一段 6 位校验码（SAS），确认一致以排除中间人。",
       "建立点对点直连，文件逐块经 AES-256-GCM 加密传输，并对每个文件做 SHA-256 完整性校验。",
     ],
@@ -42,7 +42,7 @@ const zh = {
       },
       {
         title: "免费开源",
-        desc: "MIT 许可，协议与全部前后端代码都在 GitHub 公开；实时传输完全免登录。",
+        desc: "MIT 许可，协议与全部前后端代码都在 GitHub 公开；同一网络下实时传输免登录，跨网络配对码传输仅发送方需登录。",
       },
     ],
   },
@@ -68,7 +68,7 @@ const zh = {
     items: [
       {
         q: "免费吗？",
-        a: "免费。Relayium 采用 MIT 许可开源，实时传输完全免登录、无任何费用。",
+        a: "免费。Relayium 采用 MIT 许可开源，完全无任何费用；同一网络下实时传输无需登录，跨网络配对码传输仅发送方需登录，接收方始终无需账号。",
       },
       {
         q: "文件会上传到服务器吗？",
@@ -84,7 +84,7 @@ const zh = {
       },
       {
         q: "文件有大小限制吗？",
-        a: "实时直传采用流式传输，理论上没有硬性大小上限（Chrome、Edge 直接流式落盘；Firefox、Safari 在内存中缓冲，建议单文件不超过约 200 MB）。每批最多 10 个文件。",
+        a: "实时直传采用流式传输，理论上没有硬性大小上限（Chrome、Edge 直接流式落盘；Firefox、Safari 在内存中缓冲，建议单文件不超过约 200 MB）。每批最多 1,000 个文件。",
       },
       {
         q: "和 Snapdrop 有什么区别？",
@@ -99,7 +99,7 @@ const zh = {
 const ja = {
   title: "Relayium — エンドツーエンド暗号化のP2Pファイル転送",
   description:
-    "Relayiumはオープンソースでエンドツーエンド暗号化のP2Pファイル転送ツールです。ブラウザで2台の端末を直結し、ファイルはサーバーを経由しません。インストールもアカウントも不要で、リアルタイムに転送できます。",
+    "Relayiumはオープンソースでエンドツーエンド暗号化のP2Pファイル転送ツールです。ブラウザで2台の端末を直結し、ファイルはサーバーを経由しません。インストール不要でリアルタイムに転送でき、同じネットワークならアカウントも不要です（ネットワークをまたぐペアリングは送信側のサインインのみ必要）。",
   hero: {
     h1: "エンドツーエンド暗号化のP2Pファイル転送",
     pitch:
@@ -110,7 +110,7 @@ const ja = {
     heading: "4ステップで転送",
     steps: [
       "2台の端末でモダンブラウザから relayium.com を開きます。",
-      "片方が送るファイルを選ぶかドラッグします（1回につき最大10個）。",
+      "片方が送るファイルを選ぶかドラッグします（1回につき最大1,000個）。",
       "両方の画面に表示される同じ6桁の検証コード（SAS）を照合し、一致を確認して中間者を排除します。",
       "P2P直結を確立し、ファイルはチャンクごとにAES-256-GCMで暗号化して転送、各ファイルはSHA-256で完全性を検証します。",
     ],
@@ -136,7 +136,7 @@ const ja = {
       },
       {
         title: "無料でオープンソース",
-        desc: "MITライセンス。プロトコルとすべてのコードはGitHubで公開。リアルタイム転送はログイン不要です。",
+        desc: "MITライセンス。プロトコルとすべてのコードはGitHubで公開。同じネットワークならリアルタイム転送はログイン不要、ネットワークをまたぐペアリングコードでの転送は送信側のみサインインが必要です。",
       },
     ],
   },
@@ -162,7 +162,7 @@ const ja = {
     items: [
       {
         q: "無料ですか？",
-        a: "無料です。RelayiumはMITライセンスのオープンソースで、リアルタイム転送はログイン不要、料金も一切かかりません。",
+        a: "無料です。RelayiumはMITライセンスのオープンソースで、料金は一切かかりません。同じネットワークならリアルタイム転送はログイン不要で、ネットワークをまたぐペアリングコードでの転送は送信側のみサインインが必要です。受信側はどちらの場合もアカウント不要です。",
       },
       {
         q: "ファイルはサーバーにアップロードされますか？",
@@ -178,7 +178,7 @@ const ja = {
       },
       {
         q: "ファイルサイズの制限はありますか？",
-        a: "リアルタイム直接転送はストリーミングのため、実用上のサイズ上限はありません（Chrome・Edgeはディスクへ直接ストリーミング、Firefox・Safariはメモリにバッファするため1ファイル約200MBまでを推奨）。1回につき最大10ファイルです。",
+        a: "リアルタイム直接転送はストリーミングのため、実用上のサイズ上限はありません（Chrome・Edgeはディスクへ直接ストリーミング、Firefox・Safariはメモリにバッファするため1ファイル約200MBまでを推奨）。1回につき最大1,000ファイルです。",
       },
       {
         q: "Snapdropとの違いは？",
@@ -193,7 +193,7 @@ const ja = {
 const ko = {
   title: "Relayium — 종단간 암호화 P2P 파일 전송",
   description:
-    "Relayium은 오픈소스이자 종단간 암호화된 P2P 파일 전송 도구입니다. 브라우저에서 두 기기를 직접 연결하며 파일은 서버를 거치지 않습니다. 설치나 계정 없이 실시간으로 전송할 수 있습니다.",
+    "Relayium은 오픈소스이자 종단간 암호화된 P2P 파일 전송 도구입니다. 브라우저에서 두 기기를 직접 연결하며 파일은 서버를 거치지 않습니다. 설치 없이 실시간으로 전송할 수 있고, 같은 네트워크에서는 계정도 필요 없습니다(네트워크를 넘는 페어링은 보내는 쪽 로그인만 필요).",
   hero: {
     h1: "종단간 암호화 P2P 파일 전송",
     pitch:
@@ -204,7 +204,7 @@ const ko = {
     heading: "4단계로 전송",
     steps: [
       "두 기기에서 최신 브라우저로 relayium.com에 접속합니다.",
-      "한쪽이 보낼 파일을 선택하거나 끌어다 놓습니다(한 번에 최대 10개).",
+      "한쪽이 보낼 파일을 선택하거나 끌어다 놓습니다(한 번에 최대 1,000개).",
       "양쪽 화면에 표시되는 동일한 6자리 검증 코드(SAS)를 대조해 일치를 확인하고 중간자를 차단합니다.",
       "P2P 직접 연결을 맺고, 파일은 청크마다 AES-256-GCM으로 암호화되어 전송되며 각 파일은 SHA-256으로 무결성을 검증합니다.",
     ],
@@ -230,7 +230,7 @@ const ko = {
       },
       {
         title: "무료 오픈소스",
-        desc: "MIT 라이선스로 프로토콜과 모든 코드가 GitHub에 공개되어 있으며, 실시간 전송은 로그인이 필요 없습니다.",
+        desc: "MIT 라이선스로 프로토콜과 모든 코드가 GitHub에 공개되어 있습니다. 같은 네트워크에서는 실시간 전송에 로그인이 필요 없고, 네트워크를 넘는 페어링 코드 전송은 보내는 쪽만 로그인하면 됩니다.",
       },
     ],
   },
@@ -256,7 +256,7 @@ const ko = {
     items: [
       {
         q: "무료인가요?",
-        a: "무료입니다. Relayium은 MIT 라이선스의 오픈소스이며, 실시간 전송은 로그인 없이 아무 비용 없이 사용할 수 있습니다.",
+        a: "무료입니다. Relayium은 MIT 라이선스의 오픈소스이며 비용은 전혀 들지 않습니다. 같은 네트워크에서는 실시간 전송에 로그인이 필요 없고, 네트워크를 넘는 페어링 코드 전송은 보내는 쪽만 로그인하면 됩니다 — 받는 쪽은 어느 경우든 계정이 필요 없습니다.",
       },
       {
         q: "파일이 서버에 업로드되나요?",
@@ -272,7 +272,7 @@ const ko = {
       },
       {
         q: "파일 크기 제한이 있나요?",
-        a: "실시간 직접 전송은 스트리밍 방식이라 실질적인 크기 상한이 없습니다(Chrome·Edge는 디스크로 바로 스트리밍하고, Firefox·Safari는 메모리에 버퍼링하므로 파일당 약 200MB 이하를 권장). 한 번에 최대 10개 파일입니다.",
+        a: "실시간 직접 전송은 스트리밍 방식이라 실질적인 크기 상한이 없습니다(Chrome·Edge는 디스크로 바로 스트리밍하고, Firefox·Safari는 메모리에 버퍼링하므로 파일당 약 200MB 이하를 권장). 한 번에 최대 1,000개 파일입니다.",
       },
       {
         q: "Snapdrop과 무엇이 다른가요?",
@@ -287,7 +287,7 @@ const ko = {
 const de = {
   title: "Relayium — Ende-zu-Ende-verschlüsselte P2P-Dateiübertragung",
   description:
-    "Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug für Peer-to-Peer-Dateiübertragung. Zwei Geräte verbinden sich direkt im Browser, Dateien erreichen nie den Server — ohne Installation, ohne Konto, in Echtzeit.",
+    "Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug für Peer-to-Peer-Dateiübertragung. Zwei Geräte verbinden sich direkt im Browser, Dateien erreichen nie den Server — ohne Installation, in Echtzeit. Im selben Netz ist kein Konto nötig; für Pairing über Netzwerke hinweg meldet sich nur der Absender an.",
   hero: {
     h1: "Ende-zu-Ende-verschlüsselte P2P-Dateiübertragung",
     pitch:
@@ -298,7 +298,7 @@ const de = {
     heading: "In vier Schritten übertragen",
     steps: [
       "Öffne relayium.com auf beiden Geräten in einem modernen Browser.",
-      "Eine Seite wählt die zu sendenden Dateien aus oder zieht sie hinein (bis zu 10 pro Vorgang).",
+      "Eine Seite wählt die zu sendenden Dateien aus oder zieht sie hinein (bis zu 1.000 pro Vorgang).",
       "Vergleiche auf beiden Bildschirmen denselben 6-stelligen Prüfcode (SAS) und bestätige die Übereinstimmung, um einen Mittelsmann auszuschließen.",
       "Eine direkte P2P-Verbindung wird aufgebaut; Dateien werden Chunk für Chunk mit AES-256-GCM verschlüsselt übertragen, jede Datei per SHA-256 auf Integrität geprüft.",
     ],
@@ -324,7 +324,7 @@ const de = {
       },
       {
         title: "Kostenlos & Open Source",
-        desc: "MIT-Lizenz; Protokoll und der gesamte Code liegen offen auf GitHub. Echtzeitübertragungen brauchen kein Konto.",
+        desc: "MIT-Lizenz; Protokoll und der gesamte Code liegen offen auf GitHub. Im selben Netz brauchen Echtzeitübertragungen kein Konto; für Pairing über Netzwerke hinweg meldet sich nur der Absender an.",
       },
     ],
   },
@@ -350,7 +350,7 @@ const de = {
     items: [
       {
         q: "Ist es kostenlos?",
-        a: "Ja. Relayium ist Open Source unter der MIT-Lizenz; Echtzeitübertragungen sind ohne Anmeldung und ohne jede Gebühr nutzbar.",
+        a: "Ja. Relayium ist Open Source unter der MIT-Lizenz und ohne jede Gebühr nutzbar. Im selben Netz sind Echtzeitübertragungen ohne Anmeldung möglich; für Pairing über Netzwerke hinweg meldet sich nur der Absender an — der Empfänger braucht in beiden Fällen kein Konto.",
       },
       {
         q: "Werden meine Dateien auf einen Server hochgeladen?",
@@ -366,7 +366,7 @@ const de = {
       },
       {
         q: "Gibt es eine Größenbeschränkung?",
-        a: "Die Echtzeit-Direktübertragung streamt die Daten, daher gibt es in der Praxis keine harte Größengrenze (Chrome und Edge streamen direkt auf die Festplatte; Firefox und Safari puffern im Speicher, daher werden ca. 200 MB pro Datei empfohlen). Maximal 10 Dateien pro Vorgang.",
+        a: "Die Echtzeit-Direktübertragung streamt die Daten, daher gibt es in der Praxis keine harte Größengrenze (Chrome und Edge streamen direkt auf die Festplatte; Firefox und Safari puffern im Speicher, daher werden ca. 200 MB pro Datei empfohlen). Maximal 1.000 Dateien pro Vorgang.",
       },
       {
         q: "Was ist der Unterschied zu Snapdrop?",
@@ -381,7 +381,7 @@ const de = {
 const fr = {
   title: "Relayium — Transfert de fichiers P2P chiffré de bout en bout",
   description:
-    "Relayium est un outil open source de transfert de fichiers pair-à-pair chiffré de bout en bout. Deux appareils se connectent directement dans le navigateur, les fichiers ne passent jamais par le serveur — sans installation, sans compte, en temps réel.",
+    "Relayium est un outil open source de transfert de fichiers pair-à-pair chiffré de bout en bout. Deux appareils se connectent directement dans le navigateur, les fichiers ne passent jamais par le serveur — sans installation, en temps réel. Sur le même réseau, aucun compte n'est nécessaire ; pour s'appairer entre réseaux différents, seul l'expéditeur se connecte.",
   hero: {
     h1: "Transfert de fichiers P2P chiffré de bout en bout",
     pitch:
@@ -392,7 +392,7 @@ const fr = {
     heading: "Transférer en quatre étapes",
     steps: [
       "Ouvrez relayium.com sur les deux appareils dans un navigateur moderne.",
-      "Un côté sélectionne ou glisse les fichiers à envoyer (jusqu'à 10 par lot).",
+      "Un côté sélectionne ou glisse les fichiers à envoyer (jusqu'à 1 000 par lot).",
       "Comparez sur les deux écrans le même code de vérification à 6 chiffres (SAS) et confirmez la correspondance pour écarter tout homme du milieu.",
       "Une connexion directe pair-à-pair s'établit ; les fichiers sont transférés bloc par bloc, chiffrés en AES-256-GCM, et chaque fichier est vérifié en intégrité via SHA-256.",
     ],
@@ -418,7 +418,7 @@ const fr = {
       },
       {
         title: "Gratuit et open source",
-        desc: "Licence MIT ; le protocole et tout le code sont publics sur GitHub. Les transferts en temps réel ne nécessitent aucun compte.",
+        desc: "Licence MIT ; le protocole et tout le code sont publics sur GitHub. Sur le même réseau, les transferts en temps réel ne nécessitent aucun compte ; pour s'appairer entre réseaux différents, seul l'expéditeur se connecte.",
       },
     ],
   },
@@ -444,7 +444,7 @@ const fr = {
     items: [
       {
         q: "Est-ce gratuit ?",
-        a: "Oui. Relayium est open source sous licence MIT ; les transferts en temps réel s'utilisent sans connexion et sans aucun frais.",
+        a: "Oui. Relayium est open source sous licence MIT et s'utilise sans aucun frais. Sur le même réseau, les transferts en temps réel ne demandent aucune connexion ; pour s'appairer entre réseaux différents, seul l'expéditeur doit se connecter — le destinataire n'a jamais besoin de compte.",
       },
       {
         q: "Mes fichiers sont-ils téléversés sur un serveur ?",
@@ -460,7 +460,7 @@ const fr = {
       },
       {
         q: "Y a-t-il une limite de taille ?",
-        a: "Le transfert direct en temps réel diffuse les données en flux, il n'y a donc en pratique aucune limite stricte de taille (Chrome et Edge écrivent directement sur le disque ; Firefox et Safari mettent en mémoire tampon, environ 200 Mo par fichier sont conseillés). Jusqu'à 10 fichiers par lot.",
+        a: "Le transfert direct en temps réel diffuse les données en flux, il n'y a donc en pratique aucune limite stricte de taille (Chrome et Edge écrivent directement sur le disque ; Firefox et Safari mettent en mémoire tampon, environ 200 Mo par fichier sont conseillés). Jusqu'à 1 000 fichiers par lot.",
       },
       {
         q: "Quelle différence avec Snapdrop ?",
