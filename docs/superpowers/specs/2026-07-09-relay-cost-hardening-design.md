@@ -33,7 +33,7 @@ coturn 部署脚本 `deploy/coturn-setup.sh` 当前也**未设**任何 coturn �
 ### Layer 0 —— 云 egress 账单告警 / 硬上限(唯一真正的月度字节天花板)
 
 - 在每台 relay 主机所在云厂商配置**带宽 / egress 预算告警**,三档:50% / 80% / 100%(以"数十 GB/月"折算的金额或流量为基准)。
-- 到 100% 档挂一个**自动动作**:停 coturn 服务或用防火墙断掉 relay 端口(3478/5349),STUN 不受影响。
+- 到 100% 档挂一个**自动动作**:停 coturn 服务或用防火墙断掉 relay 端口(3478/5349)。注意 STUN 和 TURN 同用一个 coturn 进程与端口(3478),停掉这台主机的 coturn 会连带停掉它的 STUN,不是只停 TURN;但系统级 STUN 不受影响 —— 客户端还有默认公共 STUN(`stun:stun.l.google.com:19302`,`RELAYIUM_STUN_URLS` 默认值)和池里其它 relay 主机的 STUN,可打洞/同网络传输照常工作,只是这台主机的付费 relay 转发停了。
 - 与代码完全无关,是"下面全失效也不会收到惊吓账单"的最后一道墙。
 - 交付物: `deploy/coturn.md` 增补"每 relay 主机的账单告警 + 到顶自动停 coturn"的 runbook(具体云厂商动作由部署者按其平台实现,文档给出通用步骤与推荐阈值)。
 
