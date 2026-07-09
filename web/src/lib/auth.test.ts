@@ -39,15 +39,17 @@ describe("auth", () => {
     expect(m).toEqual({ password: true, google: false, magic: false });
   });
 
-  it("register sets the session user on success", async () => {
+  it("register reports verification_sent without logging the user in", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({
       ok: true, status: 200,
-      json: async () => ({ user: { id: "u9", email: "r@b.com", displayName: "" } }),
+      json: async () => ({ status: "verification_sent", email: "r@b.com" }),
     })) as unknown as typeof fetch);
     const { register, session } = await import("./auth.svelte");
     const res = await register("r@b.com", "longenough1");
     expect(res.ok).toBe(true);
-    expect(session().user?.email).toBe("r@b.com");
+    expect(res.status).toBe("verification_sent");
+    expect(res.email).toBe("r@b.com");
+    expect(session().user).toBeNull();
   });
 
   it("register surfaces server error on 409", async () => {
@@ -91,6 +93,68 @@ describe("network resilience", () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("Failed to fetch"); }) as unknown as typeof fetch);
     const res = await passwordLogin("a@b.com", "longenough1");
     expect(res).toEqual({ ok: false, error: "network" });
+  });
+});
+
+describe("email verification + password reset", () => {
+  it("passwordLogin distinguishes email_unverified (403) from a generic error", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: false, status: 403,
+      json: async () => ({ error: "email_unverified", email: "a@b.com" }),
+    })) as unknown as typeof fetch);
+    const res = await passwordLogin("a@b.com", "longenough1");
+    expect(res.ok).toBe(false);
+    expect(res.unverified).toBe(true);
+    expect(res.email).toBe("a@b.com");
+  });
+
+  it("verifyEmail sets the session user from the returned user on success", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true, status: 200,
+      json: async () => ({ user: { id: "u2", email: "v@b.com", displayName: "" } }),
+    })) as unknown as typeof fetch);
+    const { verifyEmail, session } = await import("./auth.svelte");
+    const res = await verifyEmail("tok123");
+    expect(res.ok).toBe(true);
+    expect(session().user?.email).toBe("v@b.com");
+  });
+
+  it("verifyEmail surfaces invalid_token distinctly", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: false, status: 400,
+      json: async () => ({ error: "invalid_token" }),
+    })) as unknown as typeof fetch);
+    const { verifyEmail } = await import("./auth.svelte");
+    const res = await verifyEmail("bad-token");
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe("invalid_token");
+  });
+
+  it("resendVerification and forgotPassword resolve without throwing even offline", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("offline"); }) as unknown as typeof fetch);
+    const { resendVerification, forgotPassword } = await import("./auth.svelte");
+    await expect(resendVerification("a@b.com")).resolves.toBeUndefined();
+    await expect(forgotPassword("a@b.com")).resolves.toBeUndefined();
+  });
+
+  it("resetPassword sets the session user on success and surfaces invalid_token on failure", async () => {
+    const { resetPassword, session } = await import("./auth.svelte");
+
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: false, status: 400,
+      json: async () => ({ error: "invalid_token" }),
+    })) as unknown as typeof fetch);
+    const bad = await resetPassword("bad-token", "newpassword1");
+    expect(bad.ok).toBe(false);
+    expect(bad.error).toBe("invalid_token");
+
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true, status: 200,
+      json: async () => ({ user: { id: "u3", email: "r2@b.com", displayName: "" } }),
+    })) as unknown as typeof fetch);
+    const good = await resetPassword("tok456", "newpassword1");
+    expect(good.ok).toBe(true);
+    expect(session().user?.email).toBe("r2@b.com");
   });
 });
 

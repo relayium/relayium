@@ -82,10 +82,11 @@ export async function fetchAuthMethods(): Promise<AuthMethods> {
   return { password: true, google: false, magic: false };
 }
 
-async function postCredentials(
+// Shared shape for endpoints that, on success, receive {user} and set the
+// session cookie — verifyEmail/resetPassword today, passwordLogin below.
+async function postForUser(
   path: string,
-  email: string,
-  password: string,
+  payload: Record<string, string>,
 ): Promise<{ ok: boolean; error?: string }> {
   let res: Response;
   try {
@@ -93,7 +94,7 @@ async function postCredentials(
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(payload),
     });
   } catch {
     // Never reached the server (offline / DNS / CORS) — a structured error the
@@ -114,12 +115,132 @@ async function postCredentials(
   return { ok: false, error };
 }
 
-export function register(email: string, password: string) {
-  return postCredentials("/api/auth/register", email, password);
+// Flat like the rest of this module's result shapes (ok + optional error) —
+// `status`/`email` are only populated on success.
+export interface RegisterResult {
+  ok: boolean;
+  status?: "verification_sent";
+  email?: string;
+  error?: string;
 }
 
-export function passwordLogin(email: string, password: string) {
-  return postCredentials("/api/auth/password/login", email, password);
+// Registration only queues a verification email — the server does NOT set a
+// session cookie or return a user, so the caller must show a "check your
+// email" state rather than treating this like a login.
+export async function register(
+  email: string,
+  password: string,
+  displayName = "",
+): Promise<RegisterResult> {
+  let res: Response;
+  try {
+    res = await fetch("/api/auth/register", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, displayName }),
+    });
+  } catch {
+    return { ok: false, error: "network" };
+  }
+  if (res.ok) {
+    const body = (await res.json()) as { status: "verification_sent"; email: string };
+    return { ok: true, status: "verification_sent", email: body.email };
+  }
+  let error = "error";
+  try {
+    error = ((await res.json()) as { error?: string }).error ?? error;
+  } catch {
+    /* non-JSON body */
+  }
+  return { ok: false, error };
+}
+
+// Flat like RegisterResult — `unverified`/`email` are only populated when the
+// server rejected the login as HTTP 403 email_unverified, distinguishing it
+// from a generic "wrong email/password" (401) so the UI can offer a resend.
+export interface LoginResult {
+  ok: boolean;
+  unverified?: boolean;
+  email?: string;
+  error?: string;
+}
+
+export async function passwordLogin(email: string, password: string): Promise<LoginResult> {
+  let res: Response;
+  try {
+    res = await fetch("/api/auth/password/login", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+  } catch {
+    return { ok: false, error: "network" };
+  }
+  if (res.ok) {
+    const body = (await res.json()) as { user: SessionUser };
+    user = body.user;
+    return { ok: true };
+  }
+  let payload: { error?: string; email?: string } = {};
+  try {
+    payload = (await res.json()) as { error?: string; email?: string };
+  } catch {
+    /* non-JSON body */
+  }
+  // A 403 email_unverified is not a generic auth failure — the UI shows a
+  // resend affordance instead of "wrong email/password".
+  if (res.status === 403 && payload.error === "email_unverified") {
+    return { ok: false, unverified: true, email: payload.email ?? email };
+  }
+  return { ok: false, error: payload.error ?? "error" };
+}
+
+// Verifies the emailed token; on success the server sets the session cookie
+// and returns {user}, which updates the current-user store just like
+// passwordLogin does.
+export async function verifyEmail(token: string): Promise<{ ok: boolean; error?: string }> {
+  return postForUser("/api/auth/email/verify", { token });
+}
+
+// Fire-and-forget resend; the server always answers 200 (anti-enumeration —
+// it does not reveal whether the address exists or is already verified).
+export async function resendVerification(email: string): Promise<void> {
+  try {
+    await fetch("/api/auth/email/resend", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+  } catch {
+    /* best-effort; the caller shows a generic "check your email" regardless */
+  }
+}
+
+// Fire-and-forget forgot-password request; the server always answers 200 for
+// the same anti-enumeration reason as resendVerification.
+export async function forgotPassword(email: string): Promise<void> {
+  try {
+    await fetch("/api/auth/password/forgot", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
+// On success the server sets the session cookie and returns {user}; update
+// the current-user store just like passwordLogin/verifyEmail do.
+export async function resetPassword(
+  token: string,
+  newPassword: string,
+): Promise<{ ok: boolean; error?: string }> {
+  return postForUser("/api/auth/password/reset", { token, newPassword });
 }
 
 export async function changePassword(
