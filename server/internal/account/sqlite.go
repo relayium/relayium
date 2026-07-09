@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS users (
   id           TEXT PRIMARY KEY,
   email        TEXT UNIQUE NOT NULL,
   display_name TEXT,
-  created_at   INTEGER NOT NULL
+  created_at   INTEGER NOT NULL,
+  canonical_email TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS identities (
   provider TEXT NOT NULL,
@@ -152,6 +153,19 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
+	// canonical_email backs the anti-Sybil register dedupe (H2b). Freshly added
+	// (err==nil) → backfill every existing row's canonical form once; duplicate
+	// column name → already migrated, skip.
+	if _, err := db.ExecContext(context.Background(),
+		`ALTER TABLE users ADD COLUMN canonical_email TEXT NOT NULL DEFAULT ''`); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column name") {
+			db.Close()
+			return nil, err
+		}
+	} else if err := backfillCanonicalEmail(context.Background(), db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	// The transfers table backed the retired share-link mode (one-time
 	// rendezvous tokens). Dropping it is idempotent and safe: tokens lived
 	// at most one hour, so nothing in an existing deployment still needs it.
@@ -161,6 +175,38 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		return nil, err
 	}
 	return &SQLiteStore{db: db}, nil
+}
+
+// backfillCanonicalEmail populates canonical_email for pre-existing rows the
+// one time the column is created. Runs on a freshly-migrated legacy DB only.
+func backfillCanonicalEmail(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx, `SELECT id, email FROM users`)
+	if err != nil {
+		return err
+	}
+	type ue struct{ id, email string }
+	var all []ue
+	for rows.Next() {
+		var u ue
+		if err := rows.Scan(&u.id, &u.email); err != nil {
+			rows.Close()
+			return err
+		}
+		all = append(all, u)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for _, u := range all {
+		if _, err := db.ExecContext(ctx,
+			`UPDATE users SET canonical_email = ? WHERE id = ?`,
+			canonicalEmail(u.email), u.id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *SQLiteStore) Close() error { return s.db.Close() }
@@ -189,9 +235,27 @@ func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName 
 	}
 	u = User{ID: newID(), Email: email, DisplayName: displayName, CreatedAt: time.Now().Unix()}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO users (id, email, display_name, created_at) VALUES (?, ?, ?, ?)`,
-		u.ID, u.Email, u.DisplayName, u.CreatedAt)
+		`INSERT INTO users (id, email, display_name, created_at, canonical_email) VALUES (?, ?, ?, ?, ?)`,
+		u.ID, u.Email, u.DisplayName, u.CreatedAt, canonicalEmail(email))
 	return u, err
+}
+
+// UserByCanonicalEmail finds any existing account whose canonical_email matches
+// (H2b register dedupe). Multiple legacy exact-emails may share a canonical form,
+// so this returns the first match only — enough to answer "does one exist".
+func (s *SQLiteStore) UserByCanonicalEmail(ctx context.Context, canonical string) (User, bool, error) {
+	var u User
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, email, display_name, created_at, email_verified
+		   FROM users WHERE canonical_email = ? LIMIT 1`, canonical,
+	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified)
+	if err == sql.ErrNoRows {
+		return User{}, false, nil
+	}
+	if err != nil {
+		return User{}, false, err
+	}
+	return u, true, nil
 }
 
 func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (User, error) {

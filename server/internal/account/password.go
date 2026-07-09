@@ -39,6 +39,15 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 	} else if ok {
 		return User{}, ErrEmailTaken
 	}
+	// H2b: reject a new registration whose canonical form (strip +tag; gmail dot-fold)
+	// already belongs to an account, defeating "a+1@gmail / a.b@gmail" Sybil mint.
+	// Same ErrEmailTaken → identical 409 response as an exact-duplicate, so existence
+	// is not leaked any differently.
+	if u, ok, err := s.store.UserByCanonicalEmail(ctx, canonicalEmail(email)); err != nil {
+		return User{}, err
+	} else if ok && u.ID != "" {
+		return User{}, ErrEmailTaken
+	}
 	u, err := s.store.UpsertUserByEmail(ctx, email, displayName)
 	if err != nil {
 		return User{}, err

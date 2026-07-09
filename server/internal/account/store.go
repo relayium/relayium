@@ -173,6 +173,11 @@ type Store interface {
 	GetUserByIdentity(ctx context.Context, provider, subject string) (User, bool, error)
 	SetPassword(ctx context.Context, userID, passwordHash string) error
 	GetCredentials(ctx context.Context, email string) (userID, passwordHash string, ok bool, err error)
+	// UserByCanonicalEmail looks up an account by its folded canonical email form
+	// (H2b anti-Sybil register dedupe: strips +tag for all domains, dot-folds
+	// gmail.com/googlemail.com). Distinct from normEmail, which stays exact for
+	// login/identity.
+	UserByCanonicalEmail(ctx context.Context, canonical string) (User, bool, error)
 	HasPassword(ctx context.Context, userID string) (bool, error)
 	EmailVerified(ctx context.Context, userID string) (bool, error)
 	SetEmailVerified(ctx context.Context, userID string) error
