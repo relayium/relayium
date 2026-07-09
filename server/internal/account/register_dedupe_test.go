@@ -123,9 +123,9 @@ func TestBackfillCanonicalEmailComputesRealValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows := []struct{ id, email string }{
-		{"old-1", "a.b+tag@gmail.com"},   // gmail: dot-fold + strip tag -> ab@gmail.com
-		{"old-2", "c+work@example.com"},  // non-gmail: strip tag only -> c@example.com
-		{"old-3", "d.e@example.com"},     // non-gmail: dots NOT folded -> d.e@example.com
+		{"old-1", "a.b+tag@gmail.com"},  // gmail: dot-fold + strip tag -> ab@gmail.com
+		{"old-2", "c+work@example.com"}, // non-gmail: strip tag only -> c@example.com
+		{"old-3", "d.e@example.com"},    // non-gmail: dots NOT folded -> d.e@example.com
 	}
 	for i, r := range rows {
 		if _, err := raw.ExecContext(ctx,
