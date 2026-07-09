@@ -66,8 +66,13 @@ func (w *wsConn) Send(e Envelope) {
 // ServeWS handles one websocket client for its whole lifetime.
 func ServeWS(h *Hub, idgen func() string) func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, clientIP string) {
 	return func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, clientIP string) {
+		// Explicit single-frame cap: a real signaling frame is a few KB. Anything
+		// larger is rejected by coder/websocket at read time (ends the loop).
+		c.SetReadLimit(maxFrameBytes)
+
 		id := idgen()
 		conn := newWSConn(ctx, c)
+		lim := newConnLimiter(time.Now)
 		joined := false
 		defer func() {
 			if joined {
@@ -116,6 +121,11 @@ func ServeWS(h *Hub, idgen func() string) func(ctx context.Context, c *websocket
 					}
 				}
 			case TypeSignal:
+				// Count the raw frame bytes; join frames are never counted.
+				if ok, reason := lim.admit(len(data)); !ok {
+					_ = c.Close(websocket.StatusPolicyViolation, reason)
+					return
+				}
 				e.From = id
 				h.Relay(room, e)
 			}
