@@ -134,7 +134,6 @@ const ja: Messages = {
     minHint: "8 文字以上",
     submitBtn: "パスワードを再設定",
     successBody: "パスワードを再設定しました。ログイン中…",
-    invalidTitle: "リンクが無効か、期限切れです。",
     invalidBody: "リンクが無効か期限切れです。もう一度リセットを申請してください。",
     errGeneric: "エラーが発生しました。もう一度お試しください。",
     backHome: "ホームに戻る",

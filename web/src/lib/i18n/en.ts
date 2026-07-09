@@ -134,7 +134,6 @@ const en: Messages = {
     minHint: "At least 8 characters",
     submitBtn: "Reset password",
     successBody: "Password reset — signing you in…",
-    invalidTitle: "This link is invalid or has expired.",
     invalidBody: "This link is invalid or has expired. Please request a new one.",
     errGeneric: "Something went wrong. Please try again.",
     backHome: "Back to home",

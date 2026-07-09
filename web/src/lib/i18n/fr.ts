@@ -134,7 +134,6 @@ const fr: Messages = {
     minHint: "Au moins 8 caractères",
     submitBtn: "Réinitialiser le mot de passe",
     successBody: "Mot de passe réinitialisé — connexion en cours…",
-    invalidTitle: "Ce lien n'est pas valide ou a expiré.",
     invalidBody: "Ce lien n'est pas valide ou a expiré. Veuillez en demander un nouveau.",
     errGeneric: "Une erreur s'est produite. Veuillez réessayer.",
     backHome: "Retour à l'accueil",

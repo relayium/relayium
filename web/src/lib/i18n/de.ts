@@ -134,7 +134,6 @@ const de: Messages = {
     minHint: "Mindestens 8 Zeichen",
     submitBtn: "Passwort zurücksetzen",
     successBody: "Passwort zurückgesetzt — du wirst angemeldet…",
-    invalidTitle: "Dieser Link ist ungültig oder abgelaufen.",
     invalidBody: "Dieser Link ist ungültig oder abgelaufen. Bitte fordere einen neuen an.",
     errGeneric: "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
     backHome: "Zurück zur Startseite",

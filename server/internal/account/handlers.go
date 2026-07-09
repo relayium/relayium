@@ -339,6 +339,8 @@ func (s *Service) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})
 	case errors.Is(err, ErrEmailTaken):
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "email already registered"})
+	case errors.Is(err, ErrInvalidEmail):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_email"})
 	case err != nil:
 		http.Error(w, "server error", http.StatusInternalServerError)
 	default:

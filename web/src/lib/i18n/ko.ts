@@ -134,7 +134,6 @@ const ko: Messages = {
     minHint: "8자 이상",
     submitBtn: "비밀번호 재설정",
     successBody: "비밀번호가 재설정되었습니다. 로그인 중…",
-    invalidTitle: "링크가 유효하지 않거나 만료되었습니다.",
     invalidBody: "링크가 유효하지 않거나 만료되었습니다. 재설정을 다시 요청해 주세요.",
     errGeneric: "문제가 발생했습니다. 다시 시도해 주세요.",
     backHome: "홈으로",

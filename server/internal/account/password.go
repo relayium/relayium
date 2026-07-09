@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"errors"
+	"net/mail"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -20,11 +21,16 @@ var (
 	ErrEmailUnverified = errors.New("account: email not verified")
 	// ErrInvalidToken 表示验证/重置 token 无效或已过期。
 	ErrInvalidToken = errors.New("account: invalid or expired token")
+	// ErrInvalidEmail 表示邮箱地址格式不合法。
+	ErrInvalidEmail = errors.New("account: invalid email address")
 )
 
 // Register 创建密码账号（初始未验证）并发送验证邮件。不发 session：用户须先验证。
 func (s *Service) Register(ctx context.Context, email, password, displayName string) (User, error) {
 	email = normEmail(email)
+	if _, err := mail.ParseAddress(email); err != nil {
+		return User{}, ErrInvalidEmail
+	}
 	if len(password) < minPasswordLen {
 		return User{}, ErrWeakPassword
 	}

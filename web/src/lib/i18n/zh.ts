@@ -134,7 +134,6 @@ const zh: Messages = {
     minHint: "至少 8 位字符",
     submitBtn: "重置密码",
     successBody: "密码已重置，正在进入…",
-    invalidTitle: "链接无效或已过期",
     invalidBody: "链接无效或已过期，请重新申请重置。",
     errGeneric: "出错了，请重试。",
     backHome: "返回首页",

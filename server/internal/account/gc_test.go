@@ -76,6 +76,12 @@ func TestGCSweepReclaimsSessionsAndMagicTokens(t *testing.T) {
 	_ = store.CreateMagicToken(ctx, MagicToken{TokenHash: "mused", Email: "gc@example.com", CreatedAt: 1, ExpiresAt: 9000000})
 	_, _, _ = store.UseMagicToken(ctx, "mused", 200)
 
+	// Email tokens: one live, one expired, one used.
+	_ = store.CreateEmailToken(ctx, EmailToken{TokenHash: "elive", UserID: u.ID, Email: "gc@example.com", Purpose: "verify", CreatedAt: 1, ExpiresAt: 9000000})
+	_ = store.CreateEmailToken(ctx, EmailToken{TokenHash: "eexp", UserID: u.ID, Email: "gc@example.com", Purpose: "verify", CreatedAt: 1, ExpiresAt: 100})
+	_ = store.CreateEmailToken(ctx, EmailToken{TokenHash: "eused", UserID: u.ID, Email: "gc@example.com", Purpose: "verify", CreatedAt: 1, ExpiresAt: 9000000})
+	_, _, _ = store.UseEmailToken(ctx, "eused", "verify", 200)
+
 	g := &GC{Store: store, Blobs: disk, Now: func() int64 { return 1000000 }, Log: log.New(io.Discard, "", 0)}
 	g.sweep(ctx)
 
@@ -93,5 +99,11 @@ func TestGCSweepReclaimsSessionsAndMagicTokens(t *testing.T) {
 	_ = store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM magic_tokens`).Scan(&mtCount)
 	if mtCount != 1 {
 		t.Fatalf("magic tokens after sweep = %d, want 1", mtCount)
+	}
+	// Only the live, unused email token remains.
+	var etCount int
+	_ = store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM email_tokens`).Scan(&etCount)
+	if etCount != 1 {
+		t.Fatalf("email tokens after sweep = %d, want 1", etCount)
 	}
 }

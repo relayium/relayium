@@ -156,7 +156,6 @@ export interface Messages {
     minHint: string; // client-side password-length hint under the new-password field
     submitBtn: string;
     successBody: string; // token accepted, new password set, session cookie set, redirecting home
-    invalidTitle: string; // token rejected (expired / already used / malformed)
     invalidBody: string; // fuller explanation + prompts a fresh forgot-password request
     errGeneric: string; // any other server error on submit
     backHome: string; // link back to the app

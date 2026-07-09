@@ -48,6 +48,9 @@ func (g *GC) sweep(ctx context.Context) {
 	if err := g.Store.DeleteSpentMagicTokens(ctx, now); err != nil {
 		g.Log.Printf("gc: delete spent magic tokens: %v", err)
 	}
+	if err := g.Store.DeleteSpentEmailTokens(ctx, now); err != nil {
+		g.Log.Printf("gc: delete spent email tokens: %v", err)
+	}
 }
 
 // Run sweeps once immediately, then every interval until ctx is cancelled.

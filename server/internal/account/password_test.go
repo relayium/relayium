@@ -60,6 +60,21 @@ func TestRegisterRejectsWeakAndDuplicate(t *testing.T) {
 	}
 }
 
+func TestRegisterRejectsInvalidEmail(t *testing.T) {
+	svc := newPwService(t)
+	ctx := context.Background()
+
+	if _, err := svc.Register(ctx, "not-an-email", "supersecret", ""); !errors.Is(err, ErrInvalidEmail) {
+		t.Fatalf("invalid email: want ErrInvalidEmail, got %v", err)
+	}
+	// No user/credentials row should have been created for the malformed address.
+	if _, _, ok, err := svc.store.GetCredentials(ctx, "not-an-email"); err != nil {
+		t.Fatalf("get credentials: %v", err)
+	} else if ok {
+		t.Fatal("register with invalid email must not create credentials")
+	}
+}
+
 func TestChangePasswordExistingUser(t *testing.T) {
 	svc := newPwService(t)
 	ctx := context.Background()
