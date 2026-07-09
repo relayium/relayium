@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium 对比 scp：更简单的 SSH 文件传输 · Relayium</title>
+    <meta name="description" content="scp 通用且预装在几乎所有系统上。Relayium 的 push/pull 走同一条 SSH，但增加了断点续传、SHA-256 校验、进度显示，以及针对裸机服务器的兜底方案。一次客观的对比。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/zh/compare/scp" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/scp" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/scp" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/scp" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/scp" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/scp" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/scp" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/scp" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Relayium 对比 scp：更简单的 SSH 文件传输" />
+    <meta property="og:description" content="scp 通用且预装在几乎所有系统上。Relayium 的 push/pull 走同一条 SSH，但增加了断点续传、SHA-256 校验、进度显示，以及针对裸机服务器的兜底方案。一次客观的对比。" />
+    <meta property="og:url" content="https://relayium.com/zh/compare/scp" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium 对比 scp：更简单的 SSH 文件传输" />
+    <meta name="twitter:description" content="scp 通用且预装在几乎所有系统上。Relayium 的 push/pull 走同一条 SSH，但增加了断点续传、SHA-256 校验、进度显示，以及针对裸机服务器的兜底方案。一次客观的对比。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 scp：更简单的 SSH 文件传输","description":"scp 通用且预装在几乎所有系统上。Relayium 的 push/pull 走同一条 SSH，但增加了断点续传、SHA-256 校验、进度显示，以及针对裸机服务器的兜底方案。一次客观的对比。","inLanguage":"zh-Hans","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/zh/compare/scp","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Relayium 的 CLI 需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。push/pull 使用你自己的 SSH 访问权限，方式和 scp 完全一样——CLI 的任何模式都不需要 Relayium 账号，也不需要登录。"}},{"@type":"Question","name":"如果远程服务器没装 Relayium，push 还能用吗？","acceptedAnswer":{"@type":"Answer","text":"可以。push 会先检测，如果 relayium 不在，就会退化为通过同一条 SSH 连接传输一段普通的 tar 流，因此在裸机服务器上依然可用。这个兜底只属于 push——pull 始终需要远程已经装好 relayium，因为在 pull 里远程要充当发送方。"}},{"@type":"Question","name":"用起来真的和 scp 一样简单吗？","acceptedAnswer":{"@type":"Answer","text":"命令形式很相近：relayium push src user@host:dest，对应 scp -r src user@host:dest。区别只会在出问题时体现出来——连接掉线时会续传而不是重来，且每个文件到达后都会做校验和验证。"}},{"@type":"Question","name":"什么时候该直接用 scp？","acceptedAnswer":{"@type":"Answer","text":"对于真正的一次性拷贝——不需要续传，不需要校验，也不想引入额外的二进制——scp 本来就在那里，是更简单的选择。它也是快速脚本里更稳妥的默认项，不想引入新依赖时尤其如此。"}},{"@type":"Question","name":"Relayium 的 CLI 免费吗？","acceptedAnswer":{"@type":"Answer","text":"完全免费——没有付费档位，MIT 许可并开源，每种模式都是两端直接连接。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <h1>Relayium 对比 scp：更简单的 SSH 文件传输</h1>
+      <p class="updated">最近更新: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/compare/scp">English</a><a href="/zh/compare/scp" aria-current="true">中文</a><a href="/ja/compare/scp">日本語</a><a href="/ko/compare/scp">한국어</a><a href="/de/compare/scp">Deutsch</a><a href="/fr/compare/scp">Français</a></nav>
+      <p class="lead">几十年来，scp 一直是通过 SSH 传文件的默认方式：几乎装在你会用到的每一台类 Unix 机器上，人人都熟悉它的用法，而且一直很好用。没必要假装不是这样——scp 的地位是实至名归的。</p>
+      <p class="lead">Relayium 的 CLI 并不是要取代 SSH，而是搭在你已经拥有的同一条 SSH 访问权限之上。push 和 pull 使用你的 SSH 连接的方式和 scp 一样，但补上了几件 scp 从未打算做的事：接续中断的传输、用校验和验证每个文件、显示真实进度，以及在远程什么都没安装的情况下依然能用。</p>
+      <h2>scp 确实更简单的场景</h2>
+      <p>有必要坦白说：在很多任务里，scp 就是对的工具，加任何别的东西反而是负担。</p>
+      <ul><li>它已经装好了——不用下载任何二进制，不用做任何配置，几乎你会 SSH 进去的每台服务器上都有。</li><li>它久经考验。几十年的使用积累、行为清晰可预期，每个系统管理员都已经熟悉它的参数。</li><li>对于真正的一次性任务——现在就复制这一个文件——直接敲 scp file.txt user@host:path，比安装任何东西都省事。</li><li>对于不想引入 OpenSSH 之外任何依赖的快速、一次性脚本，它是理想之选。</li></ul>
+      <h2>push / pull：同一条 SSH，加上断点续传、校验和进度</h2>
+      <p>relayium push 和 relayium pull 走的是与 scp 完全相同的 SSH 访问——同一台主机、同一把密钥、同一个端口。区别在于连接建立之后发生了什么。</p>
+      <p>每个文件到达后都会用 SHA-256 哈希做端到端校验，因此一个看起来完成了的传输，其内容确实和发出的一字不差。如果传输被打断——连接掉线、笔记本合上盖子——重新运行同一条命令会从中断处接着传，而不是全部重传，全程还能看到逐文件的真实进度，而不是悄无声息地拷贝。</p>
+      <p>实际使用上最大的差别，是远程没装 relayium 时会发生什么。push 会自动检测，如果没装，就退化为通过同一条 SSH 连接把一个普通的 tar 归档流传到对端并执行 tar -x——因此 push 在完全裸机的服务器上依然可用，事先无需安装任何东西。这个兜底只属于 push：pull 始终需要远程已经装好 relayium，因为在 pull 里，远程机器才是充当发送方的一端。</p>
+      <pre><code>relayium push ./photos user@your-server:backups/</code></pre>
+      <pre><code>relayium pull user@your-server:backups/ ./restore</code></pre>
+      <h2>超越 SSH：daemon-direct 与跨网络配对</h2>
+      <p>scp 只能在你拥有 SSH 访问权限的地方使用。Relayium 的 CLI 又加了两种 scp 没有对应能力的传输方式。</p>
+      <p>relayium serve 能把你拥有的一台机器变成一个 daemon-direct 目标，通过锁定的 TLS 1.3 访问——无需 SSH、无需 22 端口，信任建立在第一次连接时（可交互批准，或用 relayium authorize 提前授权以支持无人值守），此后一直锁定。用 relayium:// 地址直接向它 push。</p>
+      <p>如果要发给一个你完全没有 SSH 访问权限、身处互联网另一端的人，relayium send / receive 则改用一个简短代码来配对两台电脑——直连点对点，并在两端都打印一段验证码（SAS），传输开始前双方核对确认。这种场景 scp 完全无解，你首先得有 SSH 访问权限才行。</p>
+      <pre><code>relayium push ./build relayium://your-server</code></pre>
+      <pre><code>relayium send ./report.pdf ABCD-1234</code></pre>
+      <h2>文件夹镜像：sync 对比反复运行 scp -r</h2>
+      <p>反复用 scp -r 拷贝整个目录，意味着每次都要重传所有内容，也没有“发生了什么变化”或“该删除什么”的概念。relayium sync 在 push/pull 或 daemon-direct 之上构建增量单向镜像：只传发生变化的文件；--delete 会删除目标端上源端已经消失的文件；--watch 会在本地文件变化时实时持续重新同步——不需要额外的定时任务。</p>
+      <pre><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
+      <h2>功能一览对比</h2>
+      <p>把最关键的差别并排列出：</p>
+      <ul><li>可用性：scp 几乎预装在所有服务器上；Relayium 的 CLI 是单一二进制，一条命令安装一次即可。</li><li>断点续传：scp 中断的传输要从头开始；push/pull 会从中断处继续。</li><li>完整性：scp 事后不会校验内容；Relayium 的每次传输都会做逐文件的 SHA-256 校验。</li><li>裸机服务器：scp 不需要任何额外东西；远程未装 relayium 时，push 通过 tar 兜底同样能用（pull 需要远程装有 relayium，没有兜底）。</li><li>超越 SSH：scp 只能走 SSH；Relayium 还提供 daemon-direct（锁定 TLS，无需 SSH）以及完全不需要 SSH 访问权限的跨网络配对码传输（send/receive）。</li><li>文件夹镜像：scp -r 每次都重传所有内容；relayium sync 支持 --delete 与 --watch 的增量镜像。</li><li>费用与许可：两者都免费；scp 随 OpenSSH 一起提供，Relayium 的 CLI 采用 MIT 许可并开源。</li></ul>
+      <h2>常见问题</h2>
+      <h3>Relayium 的 CLI 需要账号吗？</h3>
+      <p>不需要。push/pull 使用你自己的 SSH 访问权限，方式和 scp 完全一样——CLI 的任何模式都不需要 Relayium 账号，也不需要登录。</p>
+      <h3>如果远程服务器没装 Relayium，push 还能用吗？</h3>
+      <p>可以。push 会先检测，如果 relayium 不在，就会退化为通过同一条 SSH 连接传输一段普通的 tar 流，因此在裸机服务器上依然可用。这个兜底只属于 push——pull 始终需要远程已经装好 relayium，因为在 pull 里远程要充当发送方。</p>
+      <h3>用起来真的和 scp 一样简单吗？</h3>
+      <p>命令形式很相近：relayium push src user@host:dest，对应 scp -r src user@host:dest。区别只会在出问题时体现出来——连接掉线时会续传而不是重来，且每个文件到达后都会做校验和验证。</p>
+      <h3>什么时候该直接用 scp？</h3>
+      <p>对于真正的一次性拷贝——不需要续传，不需要校验，也不想引入额外的二进制——scp 本来就在那里，是更简单的选择。它也是快速脚本里更稳妥的默认项，不想引入新依赖时尤其如此。</p>
+      <h3>Relayium 的 CLI 免费吗？</h3>
+      <p>完全免费——没有付费档位，MIT 许可并开源，每种模式都是两端直接连接。</p>
+      <div class="ctacard">
+        <p>安装免费的 Relayium CLI，在你已有的 SSH 访问权限上试试 push 或 pull。</p>
+        <a class="cta" href="/cli">获取 CLI</a>
+      </div>
+      <h2>继续阅读</h2>
+      <ul class="related"><li><a href="/zh/compare/snapdrop">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/transfer-files-android-to-iphone">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud">如何不用网盘传输大文件</a></li><li><a href="/zh/guides/transfer-files-from-terminal">用 Relayium CLI 从终端传输文件</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/guides/send-a-file-to-someone">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/server-to-server-transfers">用 Relayium CLI 实现服务器到服务器直传（守护进程直连）</a></li><li><a href="/zh/guides/sync-a-large-folder-between-servers">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li><li><a href="/zh/how-to/share-a-file-with-an-expiring-link">用会过期的安全链接分享文件</a></li><li><a href="/zh/guides/self-host-relayium">自托管 Relayium：运行属于你自己的文件传输服务器</a></li><li><a href="/zh/how-to/send-files-between-two-computers-over-the-internet">如何通过互联网在两台电脑之间传文件</a></li><li><a href="/zh/compare/croc">Relayium 对比 croc：从终端加密传输文件</a></li><li><a href="/zh/guides/how-relayium-encrypts-your-files">Relayium 如何对文件端到端加密</a></li><li><a href="/zh/compare/google-drive">Relayium 对比 Google Drive：发送文件更直接</a></li><li><a href="/zh/compare/rsync">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</a></li><li><a href="/zh/compare/firefox-send">2026 年最佳 Firefox Send 替代品</a></li><li><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code">扫描二维码传输文件</a></li><li><a href="/zh/guides/receive-files-from-the-command-line">在命令行接收文件</a></li><li><a href="/zh/how-to/send-a-folder">如何直接发送整个文件夹，而不只是文件</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/how-to/automate-server-backups">用 cron 任务自动化加密的服务器备份</a></li><li><a href="/zh/compare/localsend">Relayium 对比 LocalSend：局域网传输该选哪个</a></li><li><a href="/zh/compare/magic-wormhole">Relayium 对比 magic-wormhole：命令行文件传输</a></li><li><a href="/zh/compare/nextcloud">Relayium 对比 Nextcloud：发送文件该选谁</a></li><li><a href="/zh/compare/dropbox">Relayium 对比 Dropbox：发送单个文件更直接</a></li><li><a href="/zh/how-to/airdrop-for-windows-and-android">Windows、Linux、Android 的隔空投送替代方案</a></li><li><a href="/zh/how-to/transfer-files-between-mac-and-windows">如何在 Mac 和 Windows 电脑之间传输文件</a></li><li><a href="/zh/how-to/send-files-on-the-same-wifi">同一 Wi-Fi 下的设备之间互传文件</a></li><li><a href="/zh/guides/what-is-peer-to-peer-file-transfer">什么是点对点（P2P）文件传输？</a></li><li><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet">在网上发送文件到底安全吗?</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=zh">← Relayium</a>
+        <a href="/zh/guides">使用指南</a>
+        <a href="/zh/privacy">隐私政策</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

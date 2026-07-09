@@ -27,6 +27,21 @@ import guidesHowEncryptionWorks from "./pages/content/articles/guides-how-encryp
 import compareGoogleDrive from "./pages/content/articles/compare-google-drive.mjs";
 import compareRsync from "./pages/content/articles/compare-rsync.mjs";
 import compareFirefoxSend from "./pages/content/articles/compare-firefox-send.mjs";
+import howtoTransferByQrCode from "./pages/content/articles/howto-transfer-by-qr-code.mjs";
+import guidesReceiveFromCli from "./pages/content/articles/guides-receive-from-cli.mjs";
+import howtoSendAFolder from "./pages/content/articles/howto-send-a-folder.mjs";
+import guidesAlwaysOnService from "./pages/content/articles/guides-always-on-service.mjs";
+import howtoAutomateServerBackups from "./pages/content/articles/howto-automate-server-backups.mjs";
+import compareLocalsend from "./pages/content/articles/compare-localsend.mjs";
+import compareScp from "./pages/content/articles/compare-scp.mjs";
+import compareMagicWormhole from "./pages/content/articles/compare-magic-wormhole.mjs";
+import compareNextcloud from "./pages/content/articles/compare-nextcloud.mjs";
+import compareDropbox from "./pages/content/articles/compare-dropbox.mjs";
+import howtoAirdropForWindowsAndroid from "./pages/content/articles/howto-airdrop-for-windows-android.mjs";
+import howtoMacToWindows from "./pages/content/articles/howto-mac-to-windows.mjs";
+import howtoSameWifi from "./pages/content/articles/howto-same-wifi.mjs";
+import guidesWhatIsP2pFileTransfer from "./pages/content/articles/guides-what-is-p2p-file-transfer.mjs";
+import guidesIsItSafe from "./pages/content/articles/guides-is-it-safe.mjs";
 import {
   buildLegalPages,
   buildLandingPages,
@@ -60,6 +75,21 @@ const articles = [
   compareGoogleDrive,
   compareRsync,
   compareFirefoxSend,
+  howtoTransferByQrCode,
+  guidesReceiveFromCli,
+  howtoSendAFolder,
+  guidesAlwaysOnService,
+  howtoAutomateServerBackups,
+  compareLocalsend,
+  compareScp,
+  compareMagicWormhole,
+  compareNextcloud,
+  compareDropbox,
+  howtoAirdropForWindowsAndroid,
+  howtoMacToWindows,
+  howtoSameWifi,
+  guidesWhatIsP2pFileTransfer,
+  guidesIsItSafe,
 ];
 
 async function main() {

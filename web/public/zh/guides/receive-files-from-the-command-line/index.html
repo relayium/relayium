@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>在命令行接收文件 · Relayium</title>
+    <meta name="description" content="用 Relayium CLI 接收文件的三种方式：receive 接收跨网络的配对码发送，serve 作为监听收件箱接收守护进程直连推送，或者 pull 从你已能 SSH 登录的服务器取回文件。免费，无需账号。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/zh/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/receive-files-from-the-command-line" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="在命令行接收文件" />
+    <meta property="og:description" content="用 Relayium CLI 接收文件的三种方式：receive 接收跨网络的配对码发送，serve 作为监听收件箱接收守护进程直连推送，或者 pull 从你已能 SSH 登录的服务器取回文件。免费，无需账号。" />
+    <meta property="og:url" content="https://relayium.com/zh/guides/receive-files-from-the-command-line" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="在命令行接收文件" />
+    <meta name="twitter:description" content="用 Relayium CLI 接收文件的三种方式：receive 接收跨网络的配对码发送，serve 作为监听收件箱接收守护进程直连推送，或者 pull 从你已能 SSH 登录的服务器取回文件。免费，无需账号。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"在命令行接收文件","description":"用 Relayium CLI 接收文件的三种方式：receive 接收跨网络的配对码发送，serve 作为监听收件箱接收守护进程直连推送，或者 pull 从你已能 SSH 登录的服务器取回文件。免费，无需账号。","inLanguage":"zh-Hans","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/zh/guides/receive-files-from-the-command-line","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"接收文件需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。三种方式——receive、serve、pull——都完全免费，两端都不需要 Relayium 账号。"}},{"@type":"Question","name":"relayium receive 和浏览器的配对码互通吗？","acceptedAnswer":{"@type":"Answer","text":"不互通。CLI 的配对码协议和 relayium.com 浏览器端的加入链接、二维码流程是分开的——它们的握手方式不同，目前也无法互相通信。这是路线图上的事，现在还不能指望。"}},{"@type":"Question","name":"如果一台未知机器向我的 serve 监听端推送会怎样？","acceptedAnswer":{"@type":"Answer","text":"在终端中，会在它首次推送时提示你按地址和指纹批准，批准结果会被记住。没有终端时——比如作为 systemd 服务或 cron 任务——没有人来回应，未知推送方会被拒绝；应先用 relayium authorize \u003cfingerprint> 预先授权。"}},{"@type":"Question","name":"能从一台没装 relayium 的服务器 pull 吗？","acceptedAnswer":{"@type":"Answer","text":"不能。pull 始终需要远程装有 relayium；不像 push 那样有 tar 兜底方案。请先在远程安装 relayium。"}},{"@type":"Question","name":"relayium 把我的身份和受信任的对端存在哪里？","acceptedAnswer":{"@type":"Answer","text":"默认在 ~/.config/relayium 中——在任何涉及身份或信任的命令上，都可以用 --config-dir 覆盖这个位置。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <h1>在命令行接收文件</h1>
+      <p class="updated">最近更新: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/receive-files-from-the-command-line">English</a><a href="/zh/guides/receive-files-from-the-command-line" aria-current="true">中文</a><a href="/ja/guides/receive-files-from-the-command-line">日本語</a><a href="/ko/guides/receive-files-from-the-command-line">한국어</a><a href="/de/guides/receive-files-from-the-command-line">Deutsch</a><a href="/fr/guides/receive-files-from-the-command-line">Français</a></nav>
+      <p class="lead">发送只是故事的一半——迟早你也会是接收方：同事想跨网络给你一个文件，你自己的一台机器想把东西交给另一台，或者你想主动从你管理的服务器上取点东西回来。Relayium CLI 用三个不同的命令覆盖这三种情形，而且都不需要账号。</p>
+      <p class="lead">对方用配对码推给你时用 receive；想要一个常驻收件箱、让受信任的机器随时可以推送过来时用 serve；而你主动去连接一台已能 SSH 登录的服务器取文件时用 pull。</p>
+      <h2>三种接收方式，各自适用于什么场景</h2>
+      <p>用哪个命令，取决于谁在发起传输，以及两台机器是怎么互相认识的：</p>
+      <ul><li>relayium receive &lt;code&gt; [destdir] ——对方用你们线下约定好的配对码跨网络发给你。直接点对点，用 SAS 码验证。</li><li>relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——这台机器监听守护进程直连的 relayium:// 推送，默认端口 9031。</li><li>relayium pull [user@]host:src &lt;dest&gt; ——你主动通过 SSH 连接到一台你已能登录的服务器，把文件取回来。</li></ul>
+      <h2>receive：对方跨网络把文件发给你</h2>
+      <p>这是 relayium send 的接收端。对方选一个简短的码，并通过你们都信任的渠道告诉你——打个电话、发条消息——然后在他那边运行 relayium send &lt;path&gt; &lt;code&gt;。你则用同一个码运行 receive：</p>
+      <pre><code>relayium receive 428571
+
+# or into a specific directory
+relayium receive 428571 ./downloads</code></pre>
+      <ul><li>连接是直接点对点、端到端加密的；一旦连上，两边的终端会打印出同一个 SAS（简短认证串）——和发送方对一下，确保中间没有人。</li><li>不指定目标目录时，文件会落到当前目录。</li><li>和 send 一样只走直连：如果两个网络之间找不到直连路径，传输会失败，而不会经中继转发。</li><li>这是 CLI 自己的配对码协议——目前和 relayium.com 浏览器端的配对码或二维码流程互不通用；未来也许会支持，但现在还不能指望。</li><li>接收方无论在哪个网络上，都不需要账号。</li></ul>
+      <h2>serve：把这台机器变成一个监听收件箱</h2>
+      <p>serve 的方向正相反：不是你去连别人，而是其他机器通过 relayium:// 直接推送给你——专为你已经信任的机器设计，比如你自己的笔记本推给一台 NAS，或者构建服务器把产物投递到你的机器上——走的是锁定的 TLS 1.3 连接，无需 SSH，无需中转撮合。</p>
+      <pre><code>relayium serve
+
+# a specific directory, port, and allowing delete requests
+relayium serve --dir ~/incoming --port 9031 --allow-delete</code></pre>
+      <ul><li>新机器第一次向你推送时，serve（在终端中运行时）会显示它的地址和指纹，并请你批准一次；之后同一指纹的推送会静默通过。</li><li>没有终端时——比如作为 systemd 服务、无 TTY 的脚本——没有人来回应提示，未知推送方会被直接拒绝。这种情况下应改为预先授权，用推送方通过 relayium id 打印出的指纹：</li></ul>
+      <h2>为无人值守的 serve 预先授权</h2>
+      <p>对于无人值守运行的 serve（systemd、后台脚本），让推送方运行 relayium id 打印出它的指纹，然后在接收方这边提前批准它：</p>
+      <pre><code>relayium authorize &lt;fingerprint&gt;</code></pre>
+      <ul><li>--dir 设置文件落地的位置（默认为当前目录）；--once 只接受一次传输就退出；--allow-delete 允许推送方的 --delete（镜像）请求真正在这里删除文件，默认关闭。</li><li>--config-dir（默认 ~/.config/relayium）是这台主机的身份和已授权指纹列表所在的位置——如果把 serve 作为专用服务运行，可以覆盖它。</li></ul>
+      <h2>pull：主动从你能 SSH 登录的服务器取文件</h2>
+      <p>pull 是 push 的镜像：不是等别人发东西给你，而是你通过已有的 SSH 权限主动连过去，把文件取回来。</p>
+      <pre><code>relayium pull user@host:/path/to/files ./local-dest</code></pre>
+      <ul><li>和 push 不同，pull 始终需要远程已经装有 relayium——从裸机服务器 pull 没有 tar 兜底方案。如果远程还没装，先在那边用 curl -fsSL https://relayium.com/install.sh | sh 安装。</li><li>文件会用逐文件 SHA-256 校验，中断后会自动续传（加 --no-resume 可以禁用）。</li><li>-i 和 -p 的行为和 ssh 自己的 -i/-p 一样，用于指定身份文件或端口。</li></ul>
+      <h2>常见问题</h2>
+      <h3>接收文件需要账号吗？</h3>
+      <p>不需要。三种方式——receive、serve、pull——都完全免费，两端都不需要 Relayium 账号。</p>
+      <h3>relayium receive 和浏览器的配对码互通吗？</h3>
+      <p>不互通。CLI 的配对码协议和 relayium.com 浏览器端的加入链接、二维码流程是分开的——它们的握手方式不同，目前也无法互相通信。这是路线图上的事，现在还不能指望。</p>
+      <h3>如果一台未知机器向我的 serve 监听端推送会怎样？</h3>
+      <p>在终端中，会在它首次推送时提示你按地址和指纹批准，批准结果会被记住。没有终端时——比如作为 systemd 服务或 cron 任务——没有人来回应，未知推送方会被拒绝；应先用 relayium authorize &lt;fingerprint&gt; 预先授权。</p>
+      <h3>能从一台没装 relayium 的服务器 pull 吗？</h3>
+      <p>不能。pull 始终需要远程装有 relayium；不像 push 那样有 tar 兜底方案。请先在远程安装 relayium。</p>
+      <h3>relayium 把我的身份和受信任的对端存在哪里？</h3>
+      <p>默认在 ~/.config/relayium 中——在任何涉及身份或信任的命令上，都可以用 --config-dir 覆盖这个位置。</p>
+      <div class="ctacard">
+        <p>准备好接收第一次传输了吗？装上 CLI，选择 receive、serve 或 pull。</p>
+        <a class="cta" href="/cli">获取 CLI</a>
+      </div>
+      <h2>继续阅读</h2>
+      <ul class="related"><li><a href="/zh/compare/snapdrop">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/transfer-files-android-to-iphone">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud">如何不用网盘传输大文件</a></li><li><a href="/zh/guides/transfer-files-from-terminal">用 Relayium CLI 从终端传输文件</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/guides/send-a-file-to-someone">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/server-to-server-transfers">用 Relayium CLI 实现服务器到服务器直传（守护进程直连）</a></li><li><a href="/zh/guides/sync-a-large-folder-between-servers">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li><li><a href="/zh/how-to/share-a-file-with-an-expiring-link">用会过期的安全链接分享文件</a></li><li><a href="/zh/guides/self-host-relayium">自托管 Relayium：运行属于你自己的文件传输服务器</a></li><li><a href="/zh/how-to/send-files-between-two-computers-over-the-internet">如何通过互联网在两台电脑之间传文件</a></li><li><a href="/zh/compare/croc">Relayium 对比 croc：从终端加密传输文件</a></li><li><a href="/zh/guides/how-relayium-encrypts-your-files">Relayium 如何对文件端到端加密</a></li><li><a href="/zh/compare/google-drive">Relayium 对比 Google Drive：发送文件更直接</a></li><li><a href="/zh/compare/rsync">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</a></li><li><a href="/zh/compare/firefox-send">2026 年最佳 Firefox Send 替代品</a></li><li><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code">扫描二维码传输文件</a></li><li><a href="/zh/how-to/send-a-folder">如何直接发送整个文件夹，而不只是文件</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/how-to/automate-server-backups">用 cron 任务自动化加密的服务器备份</a></li><li><a href="/zh/compare/localsend">Relayium 对比 LocalSend：局域网传输该选哪个</a></li><li><a href="/zh/compare/scp">Relayium 对比 scp：更简单的 SSH 文件传输</a></li><li><a href="/zh/compare/magic-wormhole">Relayium 对比 magic-wormhole：命令行文件传输</a></li><li><a href="/zh/compare/nextcloud">Relayium 对比 Nextcloud：发送文件该选谁</a></li><li><a href="/zh/compare/dropbox">Relayium 对比 Dropbox：发送单个文件更直接</a></li><li><a href="/zh/how-to/airdrop-for-windows-and-android">Windows、Linux、Android 的隔空投送替代方案</a></li><li><a href="/zh/how-to/transfer-files-between-mac-and-windows">如何在 Mac 和 Windows 电脑之间传输文件</a></li><li><a href="/zh/how-to/send-files-on-the-same-wifi">同一 Wi-Fi 下的设备之间互传文件</a></li><li><a href="/zh/guides/what-is-peer-to-peer-file-transfer">什么是点对点（P2P）文件传输？</a></li><li><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet">在网上发送文件到底安全吗?</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=zh">← Relayium</a>
+        <a href="/zh/guides">使用指南</a>
+        <a href="/zh/privacy">隐私政策</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium vs Nextcloud for sending files · Relayium</title>
+    <meta name="description" content="An honest comparison of Relayium and Nextcloud. Nextcloud is a full self-hosted cloud platform for durable storage; Relayium is a focused transfer tool — direct P2P or a zero-knowledge expiring link, with a lightweight single-container self-host." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/compare/nextcloud" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/nextcloud" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/nextcloud" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/nextcloud" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/nextcloud" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/nextcloud" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/nextcloud" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/nextcloud" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Relayium vs Nextcloud for sending files" />
+    <meta property="og:description" content="An honest comparison of Relayium and Nextcloud. Nextcloud is a full self-hosted cloud platform for durable storage; Relayium is a focused transfer tool — direct P2P or a zero-knowledge expiring link, with a lightweight single-container self-host." />
+    <meta property="og:url" content="https://relayium.com/compare/nextcloud" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium vs Nextcloud for sending files" />
+    <meta name="twitter:description" content="An honest comparison of Relayium and Nextcloud. Nextcloud is a full self-hosted cloud platform for durable storage; Relayium is a focused transfer tool — direct P2P or a zero-knowledge expiring link, with a lightweight single-container self-host." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs Nextcloud for sending files","description":"An honest comparison of Relayium and Nextcloud. Nextcloud is a full self-hosted cloud platform for durable storage; Relayium is a focused transfer tool — direct P2P or a zero-knowledge expiring link, with a lightweight single-container self-host.","inLanguage":"en","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/compare/nextcloud","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Should I use Nextcloud instead of Relayium?","acceptedAnswer":{"@type":"Answer","text":"If you want a permanent, synced home for your files — photos, documents, a shared team drive — yes, that's exactly what Nextcloud is built for. Relayium isn't a replacement for that; it's for the narrower job of getting a file from one person to another, quickly and privately."}},{"@type":"Question","name":"Does Relayium store my files the way Nextcloud does?","acceptedAnswer":{"@type":"Answer","text":"No. In realtime mode nothing is stored anywhere — the file goes directly between devices. Stored links keep zero-knowledge ciphertext only until they expire (1 hour to 7 days) or are downloaded once with burn-after-read, not indefinitely like a Nextcloud share."}},{"@type":"Question","name":"Do I need an account?","acceptedAnswer":{"@type":"Answer","text":"On the same network, no. Sending across networks with a pairing code, or creating a stored link, requires the sender to sign in; the recipient never needs an account. Nextcloud requires an account (or a share link from one) for every user who accesses it."}},{"@type":"Question","name":"Can I self-host Relayium too?","acceptedAnswer":{"@type":"Answer","text":"Yes. Unlike Nextcloud's multi-service stack, Relayium's server is a single container: one docker compose command runs the whole thing, with an optional TURN relay profile for cross-network NAT traversal."}},{"@type":"Question","name":"Is Relayium free?","acceptedAnswer":{"@type":"Answer","text":"Yes — free and open source under the MIT license, with no paid tier. Nextcloud's core server software is also free and open source; some hosting and support options from Nextcloud GmbH are paid."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>Relayium vs Nextcloud for sending files</h1>
+      <p class="updated">Last updated: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/compare/nextcloud" aria-current="true">English</a><a href="/zh/compare/nextcloud">中文</a><a href="/ja/compare/nextcloud">日本語</a><a href="/ko/compare/nextcloud">한국어</a><a href="/de/compare/nextcloud">Deutsch</a><a href="/fr/compare/nextcloud">Français</a></nav>
+      <p class="lead">Nextcloud turned self-hosting into a real alternative to Google Drive or Dropbox: your own files, your own sync across every device, your own calendar and contacts, all under a domain you control. It&#39;s genuinely powerful software, and if what you want is a permanent home for your files, Nextcloud is the right tool for the job.</p>
+      <p class="lead">This article compares the two fairly. Nextcloud is built to store your data indefinitely and keep it in sync — that scope is its strength, and it comes with real setup and maintenance: a web server, a database, a PHP runtime, and ongoing updates for the platform and its apps. Relayium solves a narrower problem: getting a file from one person to another, either directly with nothing stored at all, or through a link that expires. If you need durable cloud storage, Nextcloud is the better fit. If you just need to move a file, Relayium is lighter.</p>
+      <h2>What Nextcloud does well</h2>
+      <p>Nextcloud is a complete self-hosted cloud suite: file storage with desktop and mobile sync clients, calendars, contacts, an office suite, chat, and a large app ecosystem on top. Once it&#39;s running, it behaves like a private Google Workspace — files live there permanently, sync automatically across devices, and stay available whenever you need them.</p>
+      <p>That&#39;s a genuinely different job than sending a file. Nextcloud is the right choice when you want a permanent, shared home for your data: a team drive, a photo library, a place your household or company keeps files long-term.</p>
+      <h2>Where they differ: a storage platform vs a transfer tool</h2>
+      <p>Because Nextcloud does so much, running it means running a real application platform: a web server, a database (MySQL, PostgreSQL, or SQLite), a PHP runtime, scheduled cron jobs, and periodic updates to the core and whichever apps you&#39;ve installed. That&#39;s a fair trade for everything you get, but it&#39;s ongoing work, and you&#39;re the one planning storage capacity for everything you keep there.</p>
+      <p>Relayium doesn&#39;t try to be a storage platform. It&#39;s scoped to moving files from one place to another — realtime peer-to-peer, or a link that expires. Its self-hosted server is a single container: one Go binary that serves the app and keeps a small SQLite database plus, for stored links, encrypted blobs it cannot read. That command is the whole setup; an optional profile adds a TURN relay for cross-network NAT traversal. If all you need is to get a file from A to B, that&#39;s a lot less to run and keep updated.</p>
+      <pre><code>docker compose up -d --build</code></pre>
+      <h2>Direct P2P transfers, nothing stored</h2>
+      <p>Relayium&#39;s realtime mode sends files straight between two devices over an encrypted peer-to-peer channel — Nextcloud has no equivalent, since every Nextcloud share is uploaded to and downloaded from your server. An X25519 key exchange derives a key for AES-256-GCM, both devices show a matching 6-digit verification code (SAS) to rule out a man-in-the-middle, and each file is checked end-to-end with a SHA-256 hash.</p>
+      <p>On the same network this needs no account at all: open relayium.com on both devices, pick up to 1,000 files, verify the code, and send. Sending across networks with a pairing code requires the sender to sign in — the recipient never needs an account. If a connection drops mid-transfer it resumes instead of restarting, and when a direct path isn&#39;t possible it falls back to an encrypted TURN relay that only ever sees ciphertext.</p>
+      <h2>When the recipient is offline: zero-knowledge stored links</h2>
+      <p>Realtime transfer needs both people online at once, which is where Nextcloud&#39;s always-on server has a real edge. Relayium covers that case too, without giving up privacy: your browser generates a random AES-256-GCM key, encrypts the files with it before anything leaves your device, and the key lives only in the URL fragment — the part after the # that browsers never send to a server. The server stores ciphertext it cannot decrypt.</p>
+      <p>Creating a stored link requires the sender to sign in; the recipient needs no account to download. Each link can be set to expire after 1 hour, 1 day, 3 days, or 7 days, or to burn after the first complete download — it isn&#39;t meant to be a permanent home for the file like a Nextcloud share, it&#39;s meant to disappear.</p>
+      <h2>Feature comparison at a glance</h2>
+      <p>The differences that matter most, side by side:</p>
+      <ul><li>Purpose: Nextcloud is a full cloud platform for durable, synced storage; Relayium is a focused tool for direct transfer or an expiring link.</li><li>Where files live: Nextcloud keeps your files on the server for as long as you want; Relayium&#39;s realtime mode never stores them at all, and stored links expire or burn after one download.</li><li>Self-host footprint: Nextcloud needs a web server, database, PHP runtime, and ongoing app updates; Relayium&#39;s self-host is a single container (docker compose up -d --build) plus an optional TURN relay for cross-network transfers.</li><li>Accounts: Nextcloud needs an account for every user who accesses it; Relayium needs none for same-network transfers, only the sender signs in for cross-network pairing or stored links, and recipients never need one.</li><li>Encryption: Relayium&#39;s realtime mode is end-to-end with a 6-digit SAS code and never touches a server; stored links are zero-knowledge with a random key that never leaves the URL fragment. Nextcloud shares are uploaded to and downloaded from your server, protected by TLS in transit and whatever encryption-at-rest you configure.</li><li>Cost and openness: Relayium is free and MIT-licensed at github.com/relayium/relayium; Nextcloud&#39;s server software is also free and open source (AGPL), with paid hosting and support available from Nextcloud GmbH and partners.</li></ul>
+      <h2>Frequently asked questions</h2>
+      <h3>Should I use Nextcloud instead of Relayium?</h3>
+      <p>If you want a permanent, synced home for your files — photos, documents, a shared team drive — yes, that&#39;s exactly what Nextcloud is built for. Relayium isn&#39;t a replacement for that; it&#39;s for the narrower job of getting a file from one person to another, quickly and privately.</p>
+      <h3>Does Relayium store my files the way Nextcloud does?</h3>
+      <p>No. In realtime mode nothing is stored anywhere — the file goes directly between devices. Stored links keep zero-knowledge ciphertext only until they expire (1 hour to 7 days) or are downloaded once with burn-after-read, not indefinitely like a Nextcloud share.</p>
+      <h3>Do I need an account?</h3>
+      <p>On the same network, no. Sending across networks with a pairing code, or creating a stored link, requires the sender to sign in; the recipient never needs an account. Nextcloud requires an account (or a share link from one) for every user who accesses it.</p>
+      <h3>Can I self-host Relayium too?</h3>
+      <p>Yes. Unlike Nextcloud&#39;s multi-service stack, Relayium&#39;s server is a single container: one docker compose command runs the whole thing, with an optional TURN relay profile for cross-network NAT traversal.</p>
+      <h3>Is Relayium free?</h3>
+      <p>Yes — free and open source under the MIT license, with no paid tier. Nextcloud&#39;s core server software is also free and open source; some hosting and support options from Nextcloud GmbH are paid.</p>
+      <div class="ctacard">
+        <p>Send a file directly, or share a zero-knowledge link that expires — no cloud storage account required on the same network.</p>
+        <a class="cta" href="/">Try Relayium now</a>
+      </div>
+      <h2>Keep reading</h2>
+      <ul class="related"><li><a href="/compare/snapdrop">Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</a></li><li><a href="/compare/airdrop">Relayium vs AirDrop: a cross-platform AirDrop alternative</a></li><li><a href="/compare/wetransfer">Relayium vs WeTransfer: send large files without the server</a></li><li><a href="/how-to/transfer-files-android-to-iphone">How to transfer files from Android to iPhone (no cable)</a></li><li><a href="/how-to/send-files-pc-to-phone-wirelessly">Send files from PC to phone wirelessly, no cable or app</a></li><li><a href="/how-to/send-large-files-without-cloud">How to send large files without the cloud</a></li><li><a href="/guides/transfer-files-from-terminal">Transfer files from the terminal with the Relayium CLI</a></li><li><a href="/guides/back-up-a-server-over-ssh">Back up files to your own server over SSH with the Relayium CLI</a></li><li><a href="/guides/send-a-file-to-someone">Send a file to someone across networks with the Relayium CLI</a></li><li><a href="/guides/server-to-server-transfers">Server-to-server transfers with the Relayium CLI (daemon direct)</a></li><li><a href="/guides/sync-a-large-folder-between-servers">Sync a large folder between two servers (resumable, in the background)</a></li><li><a href="/how-to/share-a-file-with-an-expiring-link">Share a file with a secure, expiring download link</a></li><li><a href="/guides/self-host-relayium">Self-host Relayium: run your own file-transfer server</a></li><li><a href="/how-to/send-files-between-two-computers-over-the-internet">Send files between two computers over the internet</a></li><li><a href="/compare/croc">Relayium vs croc: encrypted file transfer from the terminal</a></li><li><a href="/guides/how-relayium-encrypts-your-files">How Relayium encrypts your files end-to-end</a></li><li><a href="/compare/google-drive">Relayium vs Google Drive for sending files</a></li><li><a href="/compare/rsync">Relayium vs rsync: sync folders without the SSH setup</a></li><li><a href="/compare/firefox-send">The best Firefox Send alternative in 2026</a></li><li><a href="/how-to/transfer-files-by-scanning-a-qr-code">Transfer files by scanning a QR code</a></li><li><a href="/guides/receive-files-from-the-command-line">Receive files from the command line</a></li><li><a href="/how-to/send-a-folder">How to send a whole folder, not just files</a></li><li><a href="/guides/run-relayium-as-an-always-on-service">Run Relayium as an always-on receive service</a></li><li><a href="/how-to/automate-server-backups">Automate encrypted server backups with a cron job</a></li><li><a href="/compare/localsend">Relayium vs LocalSend: which local file transfer to use</a></li><li><a href="/compare/scp">Relayium vs scp: simpler file transfer over SSH</a></li><li><a href="/compare/magic-wormhole">Relayium vs magic-wormhole: CLI file transfer</a></li><li><a href="/compare/dropbox">Relayium vs Dropbox for sending a file</a></li><li><a href="/how-to/airdrop-for-windows-and-android">AirDrop for Windows, Linux and Android</a></li><li><a href="/how-to/transfer-files-between-mac-and-windows">Transfer files between a Mac and a Windows PC</a></li><li><a href="/how-to/send-files-on-the-same-wifi">Send files between devices on the same Wi-Fi</a></li><li><a href="/guides/what-is-peer-to-peer-file-transfer">What is peer-to-peer file transfer?</a></li><li><a href="/guides/is-it-safe-to-send-files-over-the-internet">Is it safe to send files over the internet?</a></li><li><a href="/">Relayium</a></li></ul>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/guides">Guides</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

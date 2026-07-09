@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>如何直接发送整个文件夹，而不只是文件 · Relayium</title>
+    <meta name="description" content="在浏览器里直接选中整个文件夹发送——保留相对路径，一批最多 1,000 个文件，每个都用 SHA-256 校验。发送前无需先打包压缩。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/zh/how-to/send-a-folder" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-a-folder" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-a-folder" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-a-folder" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-a-folder" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-a-folder" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-a-folder" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-a-folder" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="如何直接发送整个文件夹，而不只是文件" />
+    <meta property="og:description" content="在浏览器里直接选中整个文件夹发送——保留相对路径，一批最多 1,000 个文件，每个都用 SHA-256 校验。发送前无需先打包压缩。" />
+    <meta property="og:url" content="https://relayium.com/zh/how-to/send-a-folder" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="如何直接发送整个文件夹，而不只是文件" />
+    <meta name="twitter:description" content="在浏览器里直接选中整个文件夹发送——保留相对路径，一批最多 1,000 个文件，每个都用 SHA-256 校验。发送前无需先打包压缩。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"如何直接发送整个文件夹，而不只是文件","description":"在浏览器里直接选中整个文件夹发送——保留相对路径，一批最多 1,000 个文件，每个都用 SHA-256 校验。发送前无需先打包压缩。","inLanguage":"zh-Hans","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/zh/how-to/send-a-folder","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"能从 iPhone 或 iPad 发送文件夹吗？","acceptedAnswer":{"@type":"Answer","text":"作为发送方不行——iOS 上的 Safari 没有文件夹选择器，只能选单个文件，所以目前发送文件夹要在桌面版 Chrome、Edge 或 Firefox 上进行。但 iPhone 或 iPad 完全可以正常接收文件夹，会以 .zip 形式收到。"}},{"@type":"Question","name":"子文件夹和文件结构会保留吗？","acceptedAnswer":{"@type":"Answer","text":"会。Relayium 保留每个文件的相对路径，包括嵌套的子文件夹，所以到达的文件夹和你选中的那个结构完全一致。"}},{"@type":"Question","name":"一个文件夹最多能发送多少文件？","acceptedAnswer":{"@type":"Answer","text":"单批最多 1,000 个文件，每个文件到达时都会各自用 SHA-256 哈希校验。"}},{"@type":"Question","name":"对方收到的是真正的文件夹还是一个 .zip？","acceptedAnswer":{"@type":"Answer","text":"取决于对方的浏览器。Chrome 和 Edge 会把文件直接写入对方选定的目录。Firefox 和 Safari 会收到一个仅存储的 .zip（不超过 4 GiB），解压后就是相同的文件夹结构。"}},{"@type":"Question","name":"发送文件夹需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"同一网络下不需要。跨网络用配对码发送需要发送方登录，但无论哪种情况接收方都不需要账号。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <h1>如何直接发送整个文件夹，而不只是文件</h1>
+      <p class="updated">最近更新: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-a-folder">English</a><a href="/zh/how-to/send-a-folder" aria-current="true">中文</a><a href="/ja/how-to/send-a-folder">日本語</a><a href="/ko/how-to/send-a-folder">한국어</a><a href="/de/how-to/send-a-folder">Deutsch</a><a href="/fr/how-to/send-a-folder">Français</a></nav>
+      <p class="lead">发送一个项目和发送一个文件不是一回事——你手上是一个套着子文件夹的文件夹，一个一个复制粘贴会丢掉让它有意义的结构。先打包压缩也行，但那意味着在开始传输之前要先绕道用一个压缩工具。</p>
+      <p class="lead">Relayium 让你直接选中文件夹整体发送。浏览器会遍历整棵目录树，完整保留每个文件的相对路径，然后把它流式传给对方——无论最终是点对点、什么都不存，还是生成一个可以留到以后取用的链接。</p>
+      <h2>选文件夹，而不是一堆散文件</h2>
+      <p>不必一个个选文件，直接选中文件夹本身即可。Relayium 会在浏览器里遍历整个目录树，保留每个文件的相对路径——子文件夹、嵌套的子文件夹，全都保留——所以对方收到的东西和你出发时的目录结构一致。</p>
+      <p>目前这在桌面版 Chrome、Edge 和 Firefox 上可用。在 iOS 上不行：iPhone 和 iPad 上 Safari 的文件选择器没有办法选中文件夹，只能选单个文件，所以发送文件夹暂时是桌面端的功能。</p>
+      <ul><li>单批最多 1,000 个文件。</li><li>每个文件都用各自的 SHA-256 哈希做端到端校验，确保到达的内容和你发出的完全一致。</li><li>可以拖放，也可以用文件夹选择按钮——不需要先打包压缩。</li></ul>
+      <h2>对方收到的是什么</h2>
+      <p>文件夹如何送达取决于接收端的浏览器。Chrome 和 Edge 可以把文件直接写入接收者选定的目录，文件夹会原样出现在磁盘上——不需要额外步骤。</p>
+      <p>Firefox 和 Safari 没有这个能力，所以它们收到的是一个仅存储（不压缩）的 .zip 压缩包，解压后就是完全相同的文件夹结构。它保持在 4 GiB 以内（不支持 ZIP64），这足以覆盖绝大多数项目文件夹和照片、文档集合——如果更大，就拆成两次发送。</p>
+      <h2>实时传输，或留个链接稍后取</h2>
+      <p>如果双方能同时在线，直接发送文件夹即可——它走点对点，中途不会存在任何服务器上。这是最快的方式，同一网络下不需要账号；跨网络用配对码发送只需要发送方登录一下，接收方任何情况下都不需要账号。</p>
+      <p>如果对方现在不在，可以改为创建一个存储链接。你的浏览器会在上传前用一把只存在于链接本身的随机 AES-256-GCM 密钥加密文件夹里的文件，服务器只保存它读不懂的密文。创建链接需要发送方登录；可以设置 1 小时、1 天、3 天或 7 天后过期，也可以设置为首次下载后即焚。</p>
+      <h2>常见问题</h2>
+      <h3>能从 iPhone 或 iPad 发送文件夹吗？</h3>
+      <p>作为发送方不行——iOS 上的 Safari 没有文件夹选择器，只能选单个文件，所以目前发送文件夹要在桌面版 Chrome、Edge 或 Firefox 上进行。但 iPhone 或 iPad 完全可以正常接收文件夹，会以 .zip 形式收到。</p>
+      <h3>子文件夹和文件结构会保留吗？</h3>
+      <p>会。Relayium 保留每个文件的相对路径，包括嵌套的子文件夹，所以到达的文件夹和你选中的那个结构完全一致。</p>
+      <h3>一个文件夹最多能发送多少文件？</h3>
+      <p>单批最多 1,000 个文件，每个文件到达时都会各自用 SHA-256 哈希校验。</p>
+      <h3>对方收到的是真正的文件夹还是一个 .zip？</h3>
+      <p>取决于对方的浏览器。Chrome 和 Edge 会把文件直接写入对方选定的目录。Firefox 和 Safari 会收到一个仅存储的 .zip（不超过 4 GiB），解压后就是相同的文件夹结构。</p>
+      <h3>发送文件夹需要账号吗？</h3>
+      <p>同一网络下不需要。跨网络用配对码发送需要发送方登录，但无论哪种情况接收方都不需要账号。</p>
+      <div class="ctacard">
+        <p>选中一个文件夹，原样发出去——结构完整，每个文件都经过校验。</p>
+        <a class="cta" href="/?lang=zh">立即试用 Relayium</a>
+      </div>
+      <h2>继续阅读</h2>
+      <ul class="related"><li><a href="/zh/compare/snapdrop">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/transfer-files-android-to-iphone">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud">如何不用网盘传输大文件</a></li><li><a href="/zh/guides/transfer-files-from-terminal">用 Relayium CLI 从终端传输文件</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/guides/send-a-file-to-someone">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/server-to-server-transfers">用 Relayium CLI 实现服务器到服务器直传（守护进程直连）</a></li><li><a href="/zh/guides/sync-a-large-folder-between-servers">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li><li><a href="/zh/how-to/share-a-file-with-an-expiring-link">用会过期的安全链接分享文件</a></li><li><a href="/zh/guides/self-host-relayium">自托管 Relayium：运行属于你自己的文件传输服务器</a></li><li><a href="/zh/how-to/send-files-between-two-computers-over-the-internet">如何通过互联网在两台电脑之间传文件</a></li><li><a href="/zh/compare/croc">Relayium 对比 croc：从终端加密传输文件</a></li><li><a href="/zh/guides/how-relayium-encrypts-your-files">Relayium 如何对文件端到端加密</a></li><li><a href="/zh/compare/google-drive">Relayium 对比 Google Drive：发送文件更直接</a></li><li><a href="/zh/compare/rsync">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</a></li><li><a href="/zh/compare/firefox-send">2026 年最佳 Firefox Send 替代品</a></li><li><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code">扫描二维码传输文件</a></li><li><a href="/zh/guides/receive-files-from-the-command-line">在命令行接收文件</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/how-to/automate-server-backups">用 cron 任务自动化加密的服务器备份</a></li><li><a href="/zh/compare/localsend">Relayium 对比 LocalSend：局域网传输该选哪个</a></li><li><a href="/zh/compare/scp">Relayium 对比 scp：更简单的 SSH 文件传输</a></li><li><a href="/zh/compare/magic-wormhole">Relayium 对比 magic-wormhole：命令行文件传输</a></li><li><a href="/zh/compare/nextcloud">Relayium 对比 Nextcloud：发送文件该选谁</a></li><li><a href="/zh/compare/dropbox">Relayium 对比 Dropbox：发送单个文件更直接</a></li><li><a href="/zh/how-to/airdrop-for-windows-and-android">Windows、Linux、Android 的隔空投送替代方案</a></li><li><a href="/zh/how-to/transfer-files-between-mac-and-windows">如何在 Mac 和 Windows 电脑之间传输文件</a></li><li><a href="/zh/how-to/send-files-on-the-same-wifi">同一 Wi-Fi 下的设备之间互传文件</a></li><li><a href="/zh/guides/what-is-peer-to-peer-file-transfer">什么是点对点（P2P）文件传输？</a></li><li><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet">在网上发送文件到底安全吗?</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=zh">← Relayium</a>
+        <a href="/zh/guides">使用指南</a>
+        <a href="/zh/privacy">隐私政策</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Receive files from the command line · Relayium</title>
+    <meta name="description" content="Three ways to receive a file with the Relayium CLI: receive a cross-network pairing-code send, serve as a listening drop box for daemon-direct pushes, or pull from a server you can already ssh into. Free, no account." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/receive-files-from-the-command-line" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Receive files from the command line" />
+    <meta property="og:description" content="Three ways to receive a file with the Relayium CLI: receive a cross-network pairing-code send, serve as a listening drop box for daemon-direct pushes, or pull from a server you can already ssh into. Free, no account." />
+    <meta property="og:url" content="https://relayium.com/guides/receive-files-from-the-command-line" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Receive files from the command line" />
+    <meta name="twitter:description" content="Three ways to receive a file with the Relayium CLI: receive a cross-network pairing-code send, serve as a listening drop box for daemon-direct pushes, or pull from a server you can already ssh into. Free, no account." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Receive files from the command line","description":"Three ways to receive a file with the Relayium CLI: receive a cross-network pairing-code send, serve as a listening drop box for daemon-direct pushes, or pull from a server you can already ssh into. Free, no account.","inLanguage":"en","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/guides/receive-files-from-the-command-line","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Do I need an account to receive files?","acceptedAnswer":{"@type":"Answer","text":"No. All three ways — receive, serve, and pull — are completely free and need no Relayium account, on either end."}},{"@type":"Question","name":"Does relayium receive interoperate with the browser's pairing code?","acceptedAnswer":{"@type":"Answer","text":"No. The CLI's pairing-code protocol is separate from the browser's join-link and QR flow at relayium.com — they use different handshakes and don't talk to each other today. That's on the roadmap, not something you can rely on yet."}},{"@type":"Question","name":"What happens if an unknown machine pushes to my serve listener?","acceptedAnswer":{"@type":"Answer","text":"In a terminal, you're prompted to approve it by address and fingerprint on its first push, and the approval is remembered. Without a terminal — a systemd service, a cron job — there's no one to ask, so an unrecognized pusher is rejected; pre-authorize it first with relayium authorize \u003cfingerprint>."}},{"@type":"Question","name":"Can I pull from a server that doesn't have relayium installed?","acceptedAnswer":{"@type":"Answer","text":"No. pull always needs relayium on the remote end; there's no tar fallback the way there is for push. Install relayium there first."}},{"@type":"Question","name":"Where does relayium keep my identity and trusted peers?","acceptedAnswer":{"@type":"Answer","text":"In ~/.config/relayium by default — override the location with --config-dir on any command that touches identity or trust."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>Receive files from the command line</h1>
+      <p class="updated">Last updated: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/receive-files-from-the-command-line" aria-current="true">English</a><a href="/zh/guides/receive-files-from-the-command-line">中文</a><a href="/ja/guides/receive-files-from-the-command-line">日本語</a><a href="/ko/guides/receive-files-from-the-command-line">한국어</a><a href="/de/guides/receive-files-from-the-command-line">Deutsch</a><a href="/fr/guides/receive-files-from-the-command-line">Français</a></nav>
+      <p class="lead">Sending is only half the story — sooner or later you&#39;re on the receiving end: a colleague wants to hand you a file across the internet, one of your own machines wants to hand off to another, or you want to reach out and grab something from a server you administer. The Relayium CLI covers all three with a different command for each, and none of them need an account.</p>
+      <p class="lead">Pick receive when someone else is pushing to you by pairing code, serve when you want a standing inbox that trusted machines can push to any time, and pull when you&#39;re the one reaching out to a server you can already ssh into.</p>
+      <h2>Three ways to receive, and when each applies</h2>
+      <p>Which command you run depends on who&#39;s starting the transfer and how the two machines know each other:</p>
+      <ul><li>relayium receive &lt;code&gt; [destdir] — someone sends to you across networks using a pairing code you agreed on out of band. Direct peer-to-peer, verified with a SAS code.</li><li>relayium serve [--dir D] [--port N] [--once] [--allow-delete] — this machine listens for daemon-direct relayium:// pushes, on port 9031 by default.</li><li>relayium pull [user@]host:src &lt;dest&gt; — you reach out over SSH to a server you can already log into and fetch files back.</li></ul>
+      <h2>receive: someone sends you a file across networks</h2>
+      <p>This is the receiving half of relayium send. The other person picks a short code and tells you what it is over any channel you both trust — a call, a chat message — then runs relayium send &lt;path&gt; &lt;code&gt; on their end. You run receive with the same code:</p>
+      <pre><code>relayium receive 428571
+
+# or into a specific directory
+relayium receive 428571 ./downloads</code></pre>
+      <ul><li>The connection is direct, peer-to-peer, and end-to-end encrypted; both terminals print the same SAS (short authentication string) once connected — compare it with the sender to be sure no one is in the middle.</li><li>No destination given: files land in the current directory.</li><li>Same direct-only rule as send: if no direct path can be found between the two networks, the transfer fails rather than routing through a relay.</li><li>This is the CLI&#39;s own pairing-code protocol — it doesn&#39;t interoperate with the browser&#39;s pairing code or QR flow at relayium.com today; that&#39;s a possible future addition, not something you can rely on yet.</li><li>The receiver never needs an account, on any network.</li></ul>
+      <h2>serve: turn this machine into a listening drop box</h2>
+      <p>serve works the other way around: instead of you reaching out, other machines push straight to you over relayium:// — built for machines you already trust, like your own laptop pushing to a NAS, or a build server dropping artifacts on a box you own — over a pinned TLS 1.3 connection, no SSH, no rendezvous.</p>
+      <pre><code>relayium serve
+
+# a specific directory, port, and allowing delete requests
+relayium serve --dir ~/incoming --port 9031 --allow-delete</code></pre>
+      <ul><li>The first time a new machine pushes to you, serve (running in a terminal) shows its address and fingerprint and asks you to approve it once; after that, pushes from the same fingerprint go through silently.</li><li>Without a terminal — a systemd service, a script with no TTY — there&#39;s no one to ask, so an unrecognized pusher is rejected outright. Pre-authorize it instead, using the fingerprint the pusher prints with relayium id:</li></ul>
+      <h2>Pre-authorize for unattended serve</h2>
+      <p>For a serve that runs unattended (systemd, a background script), have the pusher run relayium id to print its fingerprint, then approve it ahead of time from the receiving side:</p>
+      <pre><code>relayium authorize &lt;fingerprint&gt;</code></pre>
+      <ul><li>--dir sets where files land (default the current directory); --once accepts a single transfer and exits; --allow-delete lets an incoming --delete (mirror) request actually remove files here, and is off by default.</li><li>--config-dir (default ~/.config/relayium) is where this host&#39;s identity and its authorized-fingerprints list live — override it if you&#39;re running serve as a dedicated service.</li></ul>
+      <h2>pull: reach out and fetch from a server you can ssh into</h2>
+      <p>pull is the mirror of push: instead of waiting for someone to send you something, you reach out over your existing SSH access and fetch files back.</p>
+      <pre><code>relayium pull user@host:/path/to/files ./local-dest</code></pre>
+      <ul><li>Unlike push, pull always needs relayium already installed on the remote — there&#39;s no tar fallback for pulling from a bare server. If the remote doesn&#39;t have it yet, install it there first with curl -fsSL https://relayium.com/install.sh | sh.</li><li>Files are verified with a per-file SHA-256 check and resume automatically if interrupted (add --no-resume to disable).</li><li>-i and -p behave like ssh&#39;s own -i/-p, for a specific identity file or port.</li></ul>
+      <h2>Frequently asked questions</h2>
+      <h3>Do I need an account to receive files?</h3>
+      <p>No. All three ways — receive, serve, and pull — are completely free and need no Relayium account, on either end.</p>
+      <h3>Does relayium receive interoperate with the browser&#39;s pairing code?</h3>
+      <p>No. The CLI&#39;s pairing-code protocol is separate from the browser&#39;s join-link and QR flow at relayium.com — they use different handshakes and don&#39;t talk to each other today. That&#39;s on the roadmap, not something you can rely on yet.</p>
+      <h3>What happens if an unknown machine pushes to my serve listener?</h3>
+      <p>In a terminal, you&#39;re prompted to approve it by address and fingerprint on its first push, and the approval is remembered. Without a terminal — a systemd service, a cron job — there&#39;s no one to ask, so an unrecognized pusher is rejected; pre-authorize it first with relayium authorize &lt;fingerprint&gt;.</p>
+      <h3>Can I pull from a server that doesn&#39;t have relayium installed?</h3>
+      <p>No. pull always needs relayium on the remote end; there&#39;s no tar fallback the way there is for push. Install relayium there first.</p>
+      <h3>Where does relayium keep my identity and trusted peers?</h3>
+      <p>In ~/.config/relayium by default — override the location with --config-dir on any command that touches identity or trust.</p>
+      <div class="ctacard">
+        <p>Ready to receive your first transfer? Install the CLI and pick receive, serve, or pull.</p>
+        <a class="cta" href="/cli">Get the CLI</a>
+      </div>
+      <h2>Keep reading</h2>
+      <ul class="related"><li><a href="/compare/snapdrop">Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</a></li><li><a href="/compare/airdrop">Relayium vs AirDrop: a cross-platform AirDrop alternative</a></li><li><a href="/compare/wetransfer">Relayium vs WeTransfer: send large files without the server</a></li><li><a href="/how-to/transfer-files-android-to-iphone">How to transfer files from Android to iPhone (no cable)</a></li><li><a href="/how-to/send-files-pc-to-phone-wirelessly">Send files from PC to phone wirelessly, no cable or app</a></li><li><a href="/how-to/send-large-files-without-cloud">How to send large files without the cloud</a></li><li><a href="/guides/transfer-files-from-terminal">Transfer files from the terminal with the Relayium CLI</a></li><li><a href="/guides/back-up-a-server-over-ssh">Back up files to your own server over SSH with the Relayium CLI</a></li><li><a href="/guides/send-a-file-to-someone">Send a file to someone across networks with the Relayium CLI</a></li><li><a href="/guides/server-to-server-transfers">Server-to-server transfers with the Relayium CLI (daemon direct)</a></li><li><a href="/guides/sync-a-large-folder-between-servers">Sync a large folder between two servers (resumable, in the background)</a></li><li><a href="/how-to/share-a-file-with-an-expiring-link">Share a file with a secure, expiring download link</a></li><li><a href="/guides/self-host-relayium">Self-host Relayium: run your own file-transfer server</a></li><li><a href="/how-to/send-files-between-two-computers-over-the-internet">Send files between two computers over the internet</a></li><li><a href="/compare/croc">Relayium vs croc: encrypted file transfer from the terminal</a></li><li><a href="/guides/how-relayium-encrypts-your-files">How Relayium encrypts your files end-to-end</a></li><li><a href="/compare/google-drive">Relayium vs Google Drive for sending files</a></li><li><a href="/compare/rsync">Relayium vs rsync: sync folders without the SSH setup</a></li><li><a href="/compare/firefox-send">The best Firefox Send alternative in 2026</a></li><li><a href="/how-to/transfer-files-by-scanning-a-qr-code">Transfer files by scanning a QR code</a></li><li><a href="/how-to/send-a-folder">How to send a whole folder, not just files</a></li><li><a href="/guides/run-relayium-as-an-always-on-service">Run Relayium as an always-on receive service</a></li><li><a href="/how-to/automate-server-backups">Automate encrypted server backups with a cron job</a></li><li><a href="/compare/localsend">Relayium vs LocalSend: which local file transfer to use</a></li><li><a href="/compare/scp">Relayium vs scp: simpler file transfer over SSH</a></li><li><a href="/compare/magic-wormhole">Relayium vs magic-wormhole: CLI file transfer</a></li><li><a href="/compare/nextcloud">Relayium vs Nextcloud for sending files</a></li><li><a href="/compare/dropbox">Relayium vs Dropbox for sending a file</a></li><li><a href="/how-to/airdrop-for-windows-and-android">AirDrop for Windows, Linux and Android</a></li><li><a href="/how-to/transfer-files-between-mac-and-windows">Transfer files between a Mac and a Windows PC</a></li><li><a href="/how-to/send-files-on-the-same-wifi">Send files between devices on the same Wi-Fi</a></li><li><a href="/guides/what-is-peer-to-peer-file-transfer">What is peer-to-peer file transfer?</a></li><li><a href="/guides/is-it-safe-to-send-files-over-the-internet">Is it safe to send files over the internet?</a></li><li><a href="/">Relayium</a></li></ul>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/guides">Guides</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

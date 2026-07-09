@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>インターネットでファイルを送るのは安全か · Relayium</title>
+    <meta name="description" content="メール添付・クラウドリンク・USBメモリそれぞれの本当のリスク、「エンドツーエンドで暗号化」と「ゼロ知識」が実際に意味すること、そして転送ツールを信頼する前に確認すべきことを平易に解説します。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ja/guides/is-it-safe-to-send-files-over-the-internet" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/is-it-safe-to-send-files-over-the-internet" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/is-it-safe-to-send-files-over-the-internet" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/is-it-safe-to-send-files-over-the-internet" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/is-it-safe-to-send-files-over-the-internet" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/is-it-safe-to-send-files-over-the-internet" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/is-it-safe-to-send-files-over-the-internet" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/is-it-safe-to-send-files-over-the-internet" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="インターネットでファイルを送るのは安全か" />
+    <meta property="og:description" content="メール添付・クラウドリンク・USBメモリそれぞれの本当のリスク、「エンドツーエンドで暗号化」と「ゼロ知識」が実際に意味すること、そして転送ツールを信頼する前に確認すべきことを平易に解説します。" />
+    <meta property="og:url" content="https://relayium.com/ja/guides/is-it-safe-to-send-files-over-the-internet" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="インターネットでファイルを送るのは安全か" />
+    <meta name="twitter:description" content="メール添付・クラウドリンク・USBメモリそれぞれの本当のリスク、「エンドツーエンドで暗号化」と「ゼロ知識」が実際に意味すること、そして転送ツールを信頼する前に確認すべきことを平易に解説します。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"インターネットでファイルを送るのは安全か","description":"メール添付・クラウドリンク・USBメモリそれぞれの本当のリスク、「エンドツーエンドで暗号化」と「ゼロ知識」が実際に意味すること、そして転送ツールを信頼する前に確認すべきことを平易に解説します。","inLanguage":"ja","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/ja/guides/is-it-safe-to-send-files-over-the-internet","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"機密性の高いファイルをメールで送っても安全ですか?","acceptedAnswer":{"@type":"Answer","text":"メールは機密ファイルの転送のために設計されたものではありません。添付ファイルは送受信双方のメールサーバーに日常的に保存・スキャン・バックアップされ、転送されたメッセージはあなたが意図しなかった人の目に触れることがあります。重要度の低いファイルなら問題ありませんが、機密性の高いものには、エンドツーエンド暗号化を備えたツールがこうした露出を取り除きます。"}},{"@type":"Question","name":"「ゼロ知識」とは実際には何を意味しますか?","acceptedAnswer":{"@type":"Answer","text":"あなたのデータを保存する側が、それを読むための鍵を一度も渡されていないということです。暗号化はアップロードの前にあなたの端末上で行われ、鍵はサーバーが決して目にしない場所——たとえば URL フラグメント——にのみ存在します。そのためサーバー上にあるのは、構造的に復号できない暗号文であり、単に「見ないと約束された」データではありません。"}},{"@type":"Question","name":"パスワード付きZIPファイルで十分ですか?","acceptedAnswer":{"@type":"Answer","text":"何もしないよりはましですが、そのパスワードはしばしばファイルと同じ経路——たとえば同じメールスレッド——で送られてしまい、それが保護を無効にしてしまいます。また ZIP の暗号化実装は製品によって強度に大きな差があります。エンドツーエンド暗号化を前提としたツールは、そもそも共有パスワードを必要としないため、この弱点そのものを取り除きます。"}},{"@type":"Question","name":"Relayium は私のファイルのコピーを保持しますか?","acceptedAnswer":{"@type":"Answer","text":"リアルタイムモードでは保持しません——ファイルは2つのブラウザ間を直接ストリーミングされ、何も保存されません。保存リンクの場合、サーバーが持つのは読むことのできない暗号文だけで、リンクが期限切れになるか、「初回ダウンロード後に消去」を選んでいれば一度ダウンロードされるまでの間だけ保持されます。"}},{"@type":"Question","name":"ファイルの送受信にアカウントは必要ですか?","acceptedAnswer":{"@type":"Answer","text":"同一ネットワーク内であれば、どちらの側もアカウントは不要です。ペアリングコードでネットワークをまたいで送る場合や、保存リンクを作成する場合は送信者のサインインが必要ですが、どちらの方式でも受信者にはアカウントが一切必要ありません。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <h1>インターネットでファイルを送るのは安全か</h1>
+      <p class="updated">最終更新: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/is-it-safe-to-send-files-over-the-internet">English</a><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet">中文</a><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet" aria-current="true">日本語</a><a href="/ko/guides/is-it-safe-to-send-files-over-the-internet">한국어</a><a href="/de/guides/is-it-safe-to-send-files-over-the-internet">Deutsch</a><a href="/fr/guides/is-it-safe-to-send-files-over-the-internet">Français</a></nav>
+      <p class="lead">「このファイルを送っても大丈夫だろうか」と立ち止まって考えるのは、ごく自然な疑問です。確定申告書でも、契約書でも、人に見られたくない写真でも同じです。このガイドは、普段使っているツールを怖がらせるためのものではありません。メールで送る、クラウドフォルダに置く、USBメモリで持ち歩く——それぞれの場合に実際に何が起きるのか、「エンドツーエンドで暗号化されている」「ゼロ知識」という言葉が実際に何を約束しているのか、そして大切なものをどんなツールに預けるにせよ、その前に何を確認すべきかを、平易な言葉で説明します。</p>
+      <p class="lead">専門知識は一切必要ありません。読み終える頃には、どんな転送方法に対しても——このページで紹介するものも含めて——どんな質問をすればよいかが分かるはずです。</p>
+      <h2>ファイルが実際に危険にさらされる場面:日常に潜むリスク</h2>
+      <p>メールの添付ファイルは、送信者と受信者それぞれのメールプロバイダのサーバーを通過します。どちらもスパム対策や災害復旧のために、メッセージを日常的にスキャンし、索引を作り、バックアップします——あなたが送ったことすら忘れてしまったずっと後になっても。メールが一度でも転送されれば、ファイルは意図しなかった相手の目の前に現れ、すべてのコピーが消えたことを確認する術はありません。</p>
+      <p>クラウドストレージのリンクは便利ですが、あなたが取り消すのを忘れない限り、たいてい効き続けます。「リンクを知っている全員」というのは、その URL がどれだけ推測しにくいかにすぎず、短縮リンクや不用意な転送によって簡単に崩れます。ファイルの安全性は、その共有自体だけでなく、それが置かれているアカウント全体の安全性も引き継ぎます。</p>
+      <p>USBメモリはオフラインなので安全に感じられますが、まさにそこが落とし穴です。ほとんどのドライブはデフォルトで暗号化されておらず、ノートPCのバッグやレンタカーに置き忘れれば、拾った人はパスワードなしで平文をそのまま手にすることになります。</p>
+      <p>無料の公開アップロードサイトは、AからBへファイルを届けるという目の前の問題は解決しますが、その後どうなるかはほとんど説明されません——どれくらい保存されるのか、スキャンされるのか、誰かが偶然見つけるかもしれないのか、そのサイトがどうやって運営費をまかなっているのか(広告収入で運営されているファイルホスティングサイトには、トラッカーやさらに悪質なものを紛れ込ませてきた前例があります)。</p>
+      <ul><li>メール:メールサーバーに保存・スキャンされ、自分のコントロールを超えて転送されやすい</li><li>クラウドリンク:取り消すまで有効であり続け、アカウント全体のセキュリティを引き継ぐ</li><li>USBメモリ:デフォルトでは暗号化されておらず、紛失や置き忘れが起きやすい</li><li>無料アップロードサイト:保存やスキャンの方針が不透明なことが多い</li></ul>
+      <h2>「エンドツーエンドで暗号化」と「ゼロ知識」が実際に意味すること</h2>
+      <p>多くのサービスは「暗号化されている」と謳いますが、それが意味するのはサーバーへの接続が暗号化されているだけ——標準的な HTTPS/TLS で、あなたの銀行が使っているのと同じ錠前アイコンです。これはネットワーク上の盗聴に対する本物の保護ですが、サーバーで止まります。ファイルが到着すれば、サービス自体がそれを読むことができます。鍵を持っているからです。多くの日常的なツールはまさにそこで止まっています。</p>
+      <p>エンドツーエンド暗号化はもっと強いことを意味します。ファイルはあなたの端末を離れる前に暗号化され、その鍵を持つのは送信者と意図した受信者だけです。それを運ぶサービス——サーバーも中継も、途中にある何もかも——はその鍵を一度も持ちません。だから、どう求められても平文を持つことがありません。</p>
+      <p>「ゼロ知識」は関連する概念で、通常はリアルタイムで送るものではなく、保存されるものに使われます。サーバー上に静かに置かれているデータでさえ、その暗号化に使われた鍵はサーバー自身に一度も渡されていません。だから運営者は、データがどれだけ長く置かれていても、それを読む手段を持ちません。</p>
+      <ul><li>単に「暗号化」というだけでは、サーバーまでの TLS を指すだけのことが多く、提供者はファイルを読めてしまいます。</li><li>「エンドツーエンドで暗号化」とは、送信者と受信者だけが鍵を持つことを意味します。</li><li>「ゼロ知識」とは、保存中であってもサーバーが構造的に復号できないデータしか持たないことを意味します。</li></ul>
+      <h2>転送ツールを信頼する前に、実際に確認すべきこと</h2>
+      <p>ウェブサイトの宣伝文句より、いくつかの具体的な質問のほうがずっと役に立ちます。</p>
+      <ul><li>「暗号化」とだけ書かれているか(単なる TLS かもしれません)、それとも明確に「エンドツーエンドで暗号化」と書かれているか(送信者と受信者だけが鍵を持つ)?</li><li>接続が改ざんされていないことを確認する方法があるか——信頼するしかない錠前アイコンだけでなく、自分で照合するコードがあるか?</li><li>ファイルの完全性がチェックされ、壊れたり改ざんされたりしたファイルが、何ごともなかったかのように届いてしまわないか?</li><li>コードはオープンソースで監査可能か、それとも主張は単に信じるしかない宣伝文句か?</li><li>送受信の際、その転送に本当に必要な以上の身元情報を差し出すことを求められないか?</li><li>何かが保存される場合、それには明確で有限の寿命——有効期限やダウンロード後の削除——があるか、それとも無期限にそこに置かれ続けるのか?</li></ul>
+      <h2>Relayium はこれらにどう答えるか</h2>
+      <p>双方が同時にオンラインであるリアルタイム転送では、Relayium は各デバイスに新しい X25519 鍵ペアを生成させ、両ブラウザの内部にのみ存在する共有 AES-256-GCM 鍵を導出します——この鍵は Relayium 自身のサーバーに送られることはありません。画面に表示される短い検証コード(SAS)によって、双方は鍵が中間の不正なサーバーによってすり替えられていないことを確認でき、各ファイルの SHA-256 ハッシュがエンドツーエンドで照合されるため、破損した転送が何ごともなかったように見えることはありません。この仕組みの詳細をさらに知りたい場合は、より深く解説した「Relayium がファイルをエンドツーエンドで暗号化する仕組み」をご覧ください。</p>
+      <p>受信者がまだオンラインでないとき、保存型のダウンロードリンクは本当に異なるゼロ知識方式を使います。あなたのブラウザは1つのランダムな AES-256-GCM 鍵を生成し、何かがアップロードされる前にそれでファイルを暗号化します。この鍵はサーバーには一切送られません——リンクの URL フラグメント、つまり # の後ろの部分にのみ存在し、ブラウザはこの部分を決して送信しません。結果としてサーバーが持つのは、復号する術のない暗号文と、あなたが選んだ有効期限(1時間、1日、3日、7日、または最初のダウンロード完了後に消去)だけです。</p>
+      <p>2台のデバイス間で直接接続ができない場合、暗号化されたストリームは失敗する代わりに TURN 中継にフォールバックします——その中継もやはり暗号文しか見ることがなく、読める形のファイルを見ることは決してありません。</p>
+      <p>これらはどれも、あなたが主張を鵜呑みにする必要はありません。Relayium のクライアントとサーバーのコードは MIT ライセンスのもとオープンソースで公開されており、宣伝を信じるのではなく、誰でも読んで監査できます。</p>
+      <ul><li>同一ネットワーク内の転送にはアカウントが一切不要です。</li><li>ペアリングコードでネットワークをまたいで送る場合や、保存リンクを作成する場合は送信者のサインインが必要です——受信者にはアカウントが一切必要ありません。</li></ul>
+      <h2>暗号化がすべてではない——それでも大切ないくつかの習慣</h2>
+      <p>強力な暗号化は転送中と保存中のファイルを守りますが、リンクを間違った宛先に送ってしまうことまでは防げません。共有リンクはファイルそのものだと思って扱い、どこか公開の場に貼らないようにしましょう。</p>
+      <p>本当に機密性の高い内容については、あと数秒手間をかけて、通話で検証コードを声に出して読み合わせるか、対面で照合しましょう。隣り合った2つの画面が両方とも欺かれていないと信じるだけでは十分ではありません。</p>
+      <p>そして、どれほど暗号化がしっかりしていても、すでに侵害された端末上で露出しているファイルを転送ツールが守ることはできません。優れた暗号化は、両端そのものが信頼できることを前提としています。だからといって、ファイルを送ること自体に神経質になる必要はありません。ただ、暗号化がどこまでをカバーし、どこからはカバーしないのかを知っておく価値がある、というだけです。</p>
+      <h2>よくある質問</h2>
+      <h3>機密性の高いファイルをメールで送っても安全ですか?</h3>
+      <p>メールは機密ファイルの転送のために設計されたものではありません。添付ファイルは送受信双方のメールサーバーに日常的に保存・スキャン・バックアップされ、転送されたメッセージはあなたが意図しなかった人の目に触れることがあります。重要度の低いファイルなら問題ありませんが、機密性の高いものには、エンドツーエンド暗号化を備えたツールがこうした露出を取り除きます。</p>
+      <h3>「ゼロ知識」とは実際には何を意味しますか?</h3>
+      <p>あなたのデータを保存する側が、それを読むための鍵を一度も渡されていないということです。暗号化はアップロードの前にあなたの端末上で行われ、鍵はサーバーが決して目にしない場所——たとえば URL フラグメント——にのみ存在します。そのためサーバー上にあるのは、構造的に復号できない暗号文であり、単に「見ないと約束された」データではありません。</p>
+      <h3>パスワード付きZIPファイルで十分ですか?</h3>
+      <p>何もしないよりはましですが、そのパスワードはしばしばファイルと同じ経路——たとえば同じメールスレッド——で送られてしまい、それが保護を無効にしてしまいます。また ZIP の暗号化実装は製品によって強度に大きな差があります。エンドツーエンド暗号化を前提としたツールは、そもそも共有パスワードを必要としないため、この弱点そのものを取り除きます。</p>
+      <h3>Relayium は私のファイルのコピーを保持しますか?</h3>
+      <p>リアルタイムモードでは保持しません——ファイルは2つのブラウザ間を直接ストリーミングされ、何も保存されません。保存リンクの場合、サーバーが持つのは読むことのできない暗号文だけで、リンクが期限切れになるか、「初回ダウンロード後に消去」を選んでいれば一度ダウンロードされるまでの間だけ保持されます。</p>
+      <h3>ファイルの送受信にアカウントは必要ですか?</h3>
+      <p>同一ネットワーク内であれば、どちらの側もアカウントは不要です。ペアリングコードでネットワークをまたいで送る場合や、保存リンクを作成する場合は送信者のサインインが必要ですが、どちらの方式でも受信者にはアカウントが一切必要ありません。</p>
+      <div class="ctacard">
+        <p>あるツールが本当に謳い文句どおりに守ってくれているのか気になりますか?転送を始めて、検証コードとゼロ知識のリンクを自分の目で確かめてください。</p>
+        <a class="cta" href="/?lang=ja">Relayium を今すぐ試す</a>
+      </div>
+      <h2>続けて読む</h2>
+      <ul class="related"><li><a href="/ja/compare/snapdrop">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/compare/wetransfer">Relayium と WeTransfer の比較：サーバーを介さず大容量を送る</a></li><li><a href="/ja/how-to/transfer-files-android-to-iphone">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/how-to/send-large-files-without-cloud">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/guides/transfer-files-from-terminal">Relayium CLI でターミナルからファイルを転送する</a></li><li><a href="/ja/guides/back-up-a-server-over-ssh">Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</a></li><li><a href="/ja/guides/send-a-file-to-someone">Relayium CLI でネットワークを越えて誰かにファイルを送る</a></li><li><a href="/ja/guides/server-to-server-transfers">Relayium CLI でサーバー間転送(デーモン直結)</a></li><li><a href="/ja/guides/sync-a-large-folder-between-servers">2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド)</a></li><li><a href="/ja/how-to/share-a-file-with-an-expiring-link">期限付きの安全なダウンロードリンクでファイルを共有する</a></li><li><a href="/ja/guides/self-host-relayium">Relayium をセルフホスト：自分専用のファイル転送サーバーを運用</a></li><li><a href="/ja/how-to/send-files-between-two-computers-over-the-internet">インターネット経由で2台のPC間にファイルを送る方法</a></li><li><a href="/ja/compare/croc">Relayium と croc の比較：ターミナルから暗号化転送</a></li><li><a href="/ja/guides/how-relayium-encrypts-your-files">Relayium がファイルをエンドツーエンドで暗号化する仕組み</a></li><li><a href="/ja/compare/google-drive">Relayium と Google Drive の比較：ファイル送信をもっと直接に</a></li><li><a href="/ja/compare/rsync">Relayium vs rsync: SSH 設定なしでフォルダーを同期</a></li><li><a href="/ja/compare/firefox-send">2026年、最良の Firefox Send 代替サービス</a></li><li><a href="/ja/how-to/transfer-files-by-scanning-a-qr-code">QR コードをスキャンしてファイルを転送する</a></li><li><a href="/ja/guides/receive-files-from-the-command-line">コマンドラインでファイルを受信する</a></li><li><a href="/ja/how-to/send-a-folder">ファイルではなくフォルダごと送る方法</a></li><li><a href="/ja/guides/run-relayium-as-an-always-on-service">Relayium を常時稼働の受信サービスとして実行する</a></li><li><a href="/ja/how-to/automate-server-backups">cron で暗号化されたサーバーバックアップを自動化する</a></li><li><a href="/ja/compare/localsend">Relayium と LocalSend の比較：ローカル転送はどちらを使う？</a></li><li><a href="/ja/compare/scp">Relayium と scp の比較：よりシンプルな SSH 転送</a></li><li><a href="/ja/compare/magic-wormhole">Relayium と magic-wormhole の比較：CLI ファイル転送</a></li><li><a href="/ja/compare/nextcloud">Relayium と Nextcloud の比較：ファイル送信にどちらを選ぶか</a></li><li><a href="/ja/compare/dropbox">Relayium と Dropbox の比較：1ファイルの送信をもっと直接に</a></li><li><a href="/ja/how-to/airdrop-for-windows-and-android">Windows・Linux・Android 向け AirDrop 代替</a></li><li><a href="/ja/how-to/transfer-files-between-mac-and-windows">Mac と Windows パソコン間でファイルを転送する方法</a></li><li><a href="/ja/how-to/send-files-on-the-same-wifi">同じ Wi-Fi 上の端末間でファイルを送る</a></li><li><a href="/ja/guides/what-is-peer-to-peer-file-transfer">P2P（ピアツーピア）ファイル転送とは？</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ja">← Relayium</a>
+        <a href="/ja/guides">ガイド</a>
+        <a href="/ja/privacy">プライバシーポリシー</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Envoyer des fichiers entre appareils sur le même Wi-Fi · Relayium</title>
+    <meta name="description" content="Comment envoyer des fichiers entre n&#39;importe quels appareils sur le même Wi-Fi ou réseau local — sans compte, sans code d&#39;appairage, ouvrez simplement relayium.com sur les deux et transférez directement, chiffré de bout en bout." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/fr/how-to/send-files-on-the-same-wifi" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-files-on-the-same-wifi" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-files-on-the-same-wifi" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-files-on-the-same-wifi" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-files-on-the-same-wifi" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-files-on-the-same-wifi" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-files-on-the-same-wifi" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-files-on-the-same-wifi" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Envoyer des fichiers entre appareils sur le même Wi-Fi" />
+    <meta property="og:description" content="Comment envoyer des fichiers entre n&#39;importe quels appareils sur le même Wi-Fi ou réseau local — sans compte, sans code d&#39;appairage, ouvrez simplement relayium.com sur les deux et transférez directement, chiffré de bout en bout." />
+    <meta property="og:url" content="https://relayium.com/fr/how-to/send-files-on-the-same-wifi" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Envoyer des fichiers entre appareils sur le même Wi-Fi" />
+    <meta name="twitter:description" content="Comment envoyer des fichiers entre n&#39;importe quels appareils sur le même Wi-Fi ou réseau local — sans compte, sans code d&#39;appairage, ouvrez simplement relayium.com sur les deux et transférez directement, chiffré de bout en bout." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Envoyer des fichiers entre appareils sur le même Wi-Fi","description":"Comment envoyer des fichiers entre n'importe quels appareils sur le même Wi-Fi ou réseau local — sans compte, sans code d'appairage, ouvrez simplement relayium.com sur les deux et transférez directement, chiffré de bout en bout.","inLanguage":"fr","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/fr/how-to/send-files-on-the-same-wifi","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Ai-je besoin d'un compte pour envoyer des fichiers sur le même Wi-Fi ?","acceptedAnswer":{"@type":"Answer","text":"Non. Les transferts sur le même réseau ne nécessitent ni compte ni code d'appairage d'aucun côté — ouvrez simplement relayium.com sur chaque appareil."}},{"@type":"Question","name":"Comment Relayium sait-il quels appareils sont sur mon réseau ?","acceptedAnswer":{"@type":"Answer","text":"Les appareils connectés au même réseau partagent généralement la même adresse IP publique, et Relayium regroupe automatiquement les appareils dont l'IP publique correspond dans la même salle, sans code requis."}},{"@type":"Question","name":"Plus de deux appareils peuvent-ils se voir en même temps ?","acceptedAnswer":{"@type":"Answer","text":"Oui. Les salles du même réseau ne sont pas limitées à une paire : tout appareil qui ouvre relayium.com depuis ce réseau peut apparaître et recevoir des fichiers, pratique pour partager avec plusieurs personnes dans la même pièce ou le même bureau."}},{"@type":"Question","name":"Le transfert est-il quand même chiffré s'il ne quitte jamais mon réseau ?","acceptedAnswer":{"@type":"Answer","text":"Oui. Chaque transfert sur le même réseau utilise le même échange de clés X25519 et le même chiffrement AES-256-GCM qu'un transfert entre réseaux différents, avec un code de vérification que vous pouvez contrôler vous-même et une vérification d'intégrité SHA-256 par fichier."}},{"@type":"Question","name":"Et si un appareil est en Wi-Fi et l'autre en données mobiles ?","acceptedAnswer":{"@type":"Answer","text":"Ils ne sont alors pas sur le même réseau, et la découverte automatique ne les connectera pas. Utilisez plutôt un code d'appairage — l'expéditeur se connecte pour le créer, le destinataire n'a pas besoin de compte, et les deux appareils se connectent quand même directement."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=fr">Relayium</a></header>
+      <h1>Envoyer des fichiers entre appareils sur le même Wi-Fi</h1>
+      <p class="updated">Dernière mise à jour: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-on-the-same-wifi">English</a><a href="/zh/how-to/send-files-on-the-same-wifi">中文</a><a href="/ja/how-to/send-files-on-the-same-wifi">日本語</a><a href="/ko/how-to/send-files-on-the-same-wifi">한국어</a><a href="/de/how-to/send-files-on-the-same-wifi">Deutsch</a><a href="/fr/how-to/send-files-on-the-same-wifi" aria-current="true">Français</a></nav>
+      <p class="lead">Si deux appareils ou plus sont sur le même Wi-Fi ou réseau local, envoyer un fichier entre eux ne devrait exiger ni compte, ni code, ni détour par le cloud. Relayium détecte quand des appareils partagent un réseau et les laisse se connecter directement, dans le navigateur, sans rien à créer nulle part.</p>
+      <p class="lead">Ce guide couvre le cas générique du même réseau — n&#39;importe quels appareils, n&#39;importe quels systèmes d&#39;exploitation, même plus de deux à la fois. Si vous avez en tête une paire d&#39;appareils précise, consultez les guides dédiés pour PC vers téléphone, Mac vers Windows, ou un flux façon AirDrop pour Windows/Linux/Android, liés à la fin.</p>
+      <h2>Comment fonctionne la détection du même réseau</h2>
+      <p>Relayium ne vous demande rien à saisir pour trouver les appareils à proximité. Quand votre navigateur ouvre relayium.com sans code d&#39;appairage, le serveur vous place dans une salle basée sur le réseau depuis lequel vous vous connectez — en pratique, les appareils qui partagent la même adresse IP publique (le même Wi-Fi à la maison, au bureau, sur un campus, ou le même point d&#39;accès mobile) atterrissent automatiquement dans la même salle.</p>
+      <p>Cette salle n&#39;est pas limitée à deux participants : elle contient autant d&#39;appareils qu&#39;il y en a à ouvrir le site depuis ce réseau, si bien qu&#39;un bureau entier d&#39;ordinateurs portables ou une salle de classe de téléphones peuvent tous se voir en même temps, pas seulement une paire.</p>
+      <h2>Étape par étape</h2>
+      <p>Tout le flux se déroule dans le navigateur — rien à installer sur aucun appareil.</p>
+      <ul><li>Connectez chaque appareil que vous voulez utiliser au même Wi-Fi ou réseau local.</li><li>Sur chaque appareil, ouvrez relayium.com dans un navigateur moderne (Chrome, Edge, Firefox ou Safari).</li><li>Les appareils de ce réseau apparaissent automatiquement les uns aux autres — aucun code, aucune connexion, aucun compte d&#39;aucun côté.</li><li>Choisissez un fichier ou un dossier entier (jusqu&#39;à 1 000 fichiers par lot) et sélectionnez, dans la liste, l&#39;appareil qui doit le recevoir.</li><li>Les deux appareils affichent le même code de vérification court (SAS). Un coup d&#39;œil sur chaque écran, confirmez qu&#39;ils concordent, et le transfert démarre.</li><li>Les fichiers passent directement d&#39;un appareil à l&#39;autre ; enregistrez-les une fois arrivés.</li></ul>
+      <h2>Pourquoi c&#39;est rapide : aucun serveur au milieu</h2>
+      <p>Comme les deux appareils sont déjà sur le même réseau, Relayium les connecte directement en pair-à-pair — les octets voyagent sur votre Wi-Fi local d&#39;un appareil à l&#39;autre et ne font jamais l&#39;aller-retour par un serveur Relayium. Rien à téléverser, rien à attendre en téléchargement ; la vitesse n&#39;est limitée que par votre réseau local, généralement bien plus rapide qu&#39;une connexion internet dans un sens ou dans l&#39;autre.</p>
+      <p>C&#39;est aussi pourquoi aucun compte n&#39;intervient d&#39;aucun côté : tout le monde étant déjà sur le même réseau de confiance, Relayium n&#39;a pas besoin d&#39;une connexion pour savoir qui peut se connecter à qui.</p>
+      <h2>Toujours chiffré de bout en bout</h2>
+      <p>Être sur le même réseau ne veut pas dire que le transfert circule en clair. Relayium négocie un échange de clés X25519 entre les deux appareils et chiffre chaque bloc avec AES-256-GCM ; cette clé n&#39;est jamais vue par aucun serveur, y compris le propre serveur de signalisation de Relayium, qui aide seulement les appareils à se trouver. Le code de vérification court (SAS) affiché sur les deux écrans vous permet de confirmer visuellement que la connexion est bien entre vos deux appareils, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256, pour savoir qu&#39;il est arrivé intact, octet pour octet.</p>
+      <h2>Si un appareil est sur un réseau différent</h2>
+      <p>Le mode même réseau ne fonctionne que quand les appareils partagent réellement un réseau — un téléphone en données mobiles, un ordinateur portable sur un autre Wi-Fi, ou un appareil derrière un autre routeur n&#39;apparaîtra pas automatiquement. Dans ce cas, Relayium prend aussi en charge la connexion entre réseaux différents avec un court code d&#39;appairage : l&#39;expéditeur se connecte pour générer le code (ou un QR code / lien), le destinataire n&#39;a jamais besoin de compte, et le transfert se connecte toujours directement, en pair-à-pair, chaque fois que les réseaux le permettent — ne basculant vers un relais chiffré que lorsqu&#39;une voie directe est impossible.</p>
+      <h2>Questions fréquentes</h2>
+      <h3>Ai-je besoin d&#39;un compte pour envoyer des fichiers sur le même Wi-Fi ?</h3>
+      <p>Non. Les transferts sur le même réseau ne nécessitent ni compte ni code d&#39;appairage d&#39;aucun côté — ouvrez simplement relayium.com sur chaque appareil.</p>
+      <h3>Comment Relayium sait-il quels appareils sont sur mon réseau ?</h3>
+      <p>Les appareils connectés au même réseau partagent généralement la même adresse IP publique, et Relayium regroupe automatiquement les appareils dont l&#39;IP publique correspond dans la même salle, sans code requis.</p>
+      <h3>Plus de deux appareils peuvent-ils se voir en même temps ?</h3>
+      <p>Oui. Les salles du même réseau ne sont pas limitées à une paire : tout appareil qui ouvre relayium.com depuis ce réseau peut apparaître et recevoir des fichiers, pratique pour partager avec plusieurs personnes dans la même pièce ou le même bureau.</p>
+      <h3>Le transfert est-il quand même chiffré s&#39;il ne quitte jamais mon réseau ?</h3>
+      <p>Oui. Chaque transfert sur le même réseau utilise le même échange de clés X25519 et le même chiffrement AES-256-GCM qu&#39;un transfert entre réseaux différents, avec un code de vérification que vous pouvez contrôler vous-même et une vérification d&#39;intégrité SHA-256 par fichier.</p>
+      <h3>Et si un appareil est en Wi-Fi et l&#39;autre en données mobiles ?</h3>
+      <p>Ils ne sont alors pas sur le même réseau, et la découverte automatique ne les connectera pas. Utilisez plutôt un code d&#39;appairage — l&#39;expéditeur se connecte pour le créer, le destinataire n&#39;a pas besoin de compte, et les deux appareils se connectent quand même directement.</p>
+      <div class="ctacard">
+        <p>Ouvrez Relayium sur deux appareils (ou plus) sur le même Wi-Fi et envoyez votre premier fichier — sans compte, sans code nécessaire.</p>
+        <a class="cta" href="/?lang=fr">Essayer Relayium maintenant</a>
+      </div>
+      <h2>À lire ensuite</h2>
+      <ul class="related"><li><a href="/fr/compare/snapdrop">Relayium vs Snapdrop et PairDrop : quel transfert P2P sécurisé ?</a></li><li><a href="/fr/compare/airdrop">Relayium vs AirDrop : une alternative multiplateforme</a></li><li><a href="/fr/compare/wetransfer">Relayium vs WeTransfer : envoyer de gros fichiers sans serveur</a></li><li><a href="/fr/how-to/transfer-files-android-to-iphone">Transférer des fichiers d&#39;Android vers iPhone (sans câble)</a></li><li><a href="/fr/how-to/send-files-pc-to-phone-wirelessly">Envoyer des fichiers du PC au téléphone sans fil, sans câble ni appli</a></li><li><a href="/fr/how-to/send-large-files-without-cloud">Envoyer de gros fichiers sans le cloud</a></li><li><a href="/fr/guides/transfer-files-from-terminal">Transférer des fichiers depuis le terminal avec la CLI Relayium</a></li><li><a href="/fr/guides/back-up-a-server-over-ssh">Sauvegarder des fichiers sur son propre serveur via SSH avec la CLI Relayium</a></li><li><a href="/fr/guides/send-a-file-to-someone">Envoyer un fichier à quelqu&#39;un à travers les réseaux avec la CLI Relayium</a></li><li><a href="/fr/guides/server-to-server-transfers">Transferts serveur à serveur avec la CLI Relayium (daemon direct)</a></li><li><a href="/fr/guides/sync-a-large-folder-between-servers">Synchroniser un gros dossier entre deux serveurs (reprenable, en arrière-plan)</a></li><li><a href="/fr/how-to/share-a-file-with-an-expiring-link">Partager un fichier avec un lien de téléchargement à expiration</a></li><li><a href="/fr/guides/self-host-relayium">Auto-héberger Relayium : gérez votre propre serveur de transfert</a></li><li><a href="/fr/how-to/send-files-between-two-computers-over-the-internet">Envoyer des fichiers entre deux ordinateurs par Internet</a></li><li><a href="/fr/compare/croc">Relayium vs croc : transfert de fichiers chiffré en terminal</a></li><li><a href="/fr/guides/how-relayium-encrypts-your-files">Comment Relayium chiffre vos fichiers de bout en bout</a></li><li><a href="/fr/compare/google-drive">Relayium vs Google Drive pour envoyer des fichiers</a></li><li><a href="/fr/compare/rsync">Relayium vs rsync : synchroniser des dossiers sans configurer SSH</a></li><li><a href="/fr/compare/firefox-send">La meilleure alternative à Firefox Send en 2026</a></li><li><a href="/fr/how-to/transfer-files-by-scanning-a-qr-code">Transférer des fichiers en scannant un code QR</a></li><li><a href="/fr/guides/receive-files-from-the-command-line">Recevoir des fichiers depuis la ligne de commande</a></li><li><a href="/fr/how-to/send-a-folder">Envoyer un dossier entier, pas seulement des fichiers</a></li><li><a href="/fr/guides/run-relayium-as-an-always-on-service">Faire tourner Relayium en service de réception permanent</a></li><li><a href="/fr/how-to/automate-server-backups">Automatiser les sauvegardes serveur chiffrées avec une tâche cron</a></li><li><a href="/fr/compare/localsend">Relayium vs LocalSend : quel transfert local choisir</a></li><li><a href="/fr/compare/scp">Relayium vs scp : transfert plus simple par SSH</a></li><li><a href="/fr/compare/magic-wormhole">Relayium vs magic-wormhole : transfert de fichiers CLI</a></li><li><a href="/fr/compare/nextcloud">Relayium vs Nextcloud pour l&#39;envoi de fichiers</a></li><li><a href="/fr/compare/dropbox">Relayium vs Dropbox pour envoyer un fichier</a></li><li><a href="/fr/how-to/airdrop-for-windows-and-android">AirDrop pour Windows, Linux et Android</a></li><li><a href="/fr/how-to/transfer-files-between-mac-and-windows">Transférer des fichiers entre un Mac et un PC Windows</a></li><li><a href="/fr/guides/what-is-peer-to-peer-file-transfer">Qu&#39;est-ce que le transfert de fichiers pair à pair ?</a></li><li><a href="/fr/guides/is-it-safe-to-send-files-over-the-internet">Est-il sûr d&#39;envoyer des fichiers sur Internet ?</a></li><li><a href="/fr/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=fr">← Relayium</a>
+        <a href="/fr/guides">Guides</a>
+        <a href="/fr/privacy">Confidentialité</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

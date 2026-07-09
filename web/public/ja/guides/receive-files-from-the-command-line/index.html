@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>コマンドラインでファイルを受信する · Relayium</title>
+    <meta name="description" content="Relayium CLI でファイルを受信する3つの方法: ネットワークを越えたペアリングコード送信を receive で受け取る、デーモン直結のプッシュを待ち受ける serve、すでに SSH でログインできるサーバーから取り込む pull。無料、アカウント不要。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ja/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/receive-files-from-the-command-line" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="コマンドラインでファイルを受信する" />
+    <meta property="og:description" content="Relayium CLI でファイルを受信する3つの方法: ネットワークを越えたペアリングコード送信を receive で受け取る、デーモン直結のプッシュを待ち受ける serve、すでに SSH でログインできるサーバーから取り込む pull。無料、アカウント不要。" />
+    <meta property="og:url" content="https://relayium.com/ja/guides/receive-files-from-the-command-line" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="コマンドラインでファイルを受信する" />
+    <meta name="twitter:description" content="Relayium CLI でファイルを受信する3つの方法: ネットワークを越えたペアリングコード送信を receive で受け取る、デーモン直結のプッシュを待ち受ける serve、すでに SSH でログインできるサーバーから取り込む pull。無料、アカウント不要。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"コマンドラインでファイルを受信する","description":"Relayium CLI でファイルを受信する3つの方法: ネットワークを越えたペアリングコード送信を receive で受け取る、デーモン直結のプッシュを待ち受ける serve、すでに SSH でログインできるサーバーから取り込む pull。無料、アカウント不要。","inLanguage":"ja","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/ja/guides/receive-files-from-the-command-line","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"ファイルを受信するのにアカウントは必要ですか?","acceptedAnswer":{"@type":"Answer","text":"いいえ。receive、serve、pull の3つすべてが完全に無料で、どちら側にも Relayium アカウントは不要です。"}},{"@type":"Question","name":"relayium receive はブラウザのペアリングコードと相互運用しますか?","acceptedAnswer":{"@type":"Answer","text":"しません。CLI のペアリングコード・プロトコルは、relayium.com のブラウザ側の参加リンクや QR フローとは別物です——ハンドシェイクの方式が異なり、現時点では互いに通信しません。それはロードマップ上の話であり、今はまだ頼れるものではありません。"}},{"@type":"Question","name":"未知のマシンが自分の serve リスナーへプッシュしてきたらどうなりますか?","acceptedAnswer":{"@type":"Answer","text":"ターミナルでは、初回のプッシュ時に住所とフィンガープリントを見せて承認するかどうか尋ねられ、その承認は記憶されます。ターミナルがない場合——systemd サービスや cron ジョブ——確認する相手がいないため、未知のプッシュ側は拒否されます。先に relayium authorize \u003cfingerprint> で事前承認してください。"}},{"@type":"Question","name":"relayium がインストールされていないサーバーから pull できますか?","acceptedAnswer":{"@type":"Answer","text":"できません。pull は常にリモート側に relayium が必要です——push にあるような tar フォールバックはありません。先にリモートへ relayium をインストールしてください。"}},{"@type":"Question","name":"relayium は自分のアイデンティティと信頼済みの相手をどこに保存しますか?","acceptedAnswer":{"@type":"Answer","text":"デフォルトでは ~/.config/relayium にあります——アイデンティティや信頼に関わるどのコマンドでも --config-dir でこの場所を上書きできます。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <h1>コマンドラインでファイルを受信する</h1>
+      <p class="updated">最終更新: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/receive-files-from-the-command-line">English</a><a href="/zh/guides/receive-files-from-the-command-line">中文</a><a href="/ja/guides/receive-files-from-the-command-line" aria-current="true">日本語</a><a href="/ko/guides/receive-files-from-the-command-line">한국어</a><a href="/de/guides/receive-files-from-the-command-line">Deutsch</a><a href="/fr/guides/receive-files-from-the-command-line">Français</a></nav>
+      <p class="lead">送信は話の半分にすぎません——いずれあなたが受け取る側になります。同僚がインターネット越しにファイルを渡したいとき、自分のマシン同士で受け渡ししたいとき、あるいは自分が管理するサーバーから何かを取りに行きたいとき。Relayium CLI はそれぞれに異なるコマンドで、この3つすべてに対応しています。どれもアカウントは不要です。</p>
+      <p class="lead">相手がペアリングコードであなたへプッシュしてくるなら receive、信頼できるマシンがいつでもプッシュできる常設の受信箱が欲しいなら serve、そしてあなた自身がすでに SSH でログインできるサーバーへ出向くなら pull を選びます。</p>
+      <h2>受信の3つの方法と、それぞれが当てはまる場面</h2>
+      <p>どのコマンドを使うかは、誰が転送を始めるのか、そして2台のマシンがどう互いを知っているかによって決まります:</p>
+      <ul><li>relayium receive &lt;code&gt; [destdir] ——相手が、あなたたちが帯域外で決めたペアリングコードを使ってネットワークを越えて送ってきます。直接ピアツーピアで、SAS コードで検証します。</li><li>relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——このマシンがデーモン直結の relayium:// プッシュを待ち受けます。デフォルトのポートは 9031 です。</li><li>relayium pull [user@]host:src &lt;dest&gt; ——あなた自身がすでにログインできるサーバーへ SSH で出向き、ファイルを取り込みます。</li></ul>
+      <h2>receive: 相手がネットワークを越えてファイルを送ってくる</h2>
+      <p>これは relayium send の受信側です。相手は短いコードを選び、通話やチャットなど二人が信頼できる手段でそれを伝え、自分の側で relayium send &lt;path&gt; &lt;code&gt; を実行します。あなたは同じコードで receive を実行します:</p>
+      <pre><code>relayium receive 428571
+
+# or into a specific directory
+relayium receive 428571 ./downloads</code></pre>
+      <ul><li>接続は直接のピアツーピアでエンドツーエンドに暗号化されています。接続後、両方のターミナルに同じ SAS(short authentication string)が表示されます——送信側と見比べて、中間に誰もいないことを確認してください。</li><li>宛先を指定しない場合、ファイルはカレントディレクトリに置かれます。</li><li>send と同じく直接接続のみのルールです。2つのネットワークの間に直接の経路が見つからなければ、リレー経由で送るのではなく転送が失敗します。</li><li>これは CLI 独自のペアリングコード・プロトコルです——現時点では relayium.com のブラウザ側のペアリングコードや QR フローとは相互運用しません。将来追加される可能性はありますが、今はまだ頼れるものではありません。</li><li>受信側はどのネットワークにいても、アカウントは一切不要です。</li></ul>
+      <h2>serve: このマシンを待ち受け型の受信箱にする</h2>
+      <p>serve は逆方向に動作します。あなたが出向くのではなく、他のマシンが relayium:// 経由で直接あなたへプッシュしてきます——自分のノート PC が NAS へプッシュする、ビルドサーバーが成果物を自分のマシンへ落とすなど、すでに信頼しているマシン向けです。固定された TLS 1.3 接続で、SSH も集合場所も不要です。</p>
+      <pre><code>relayium serve
+
+# a specific directory, port, and allowing delete requests
+relayium serve --dir ~/incoming --port 9031 --allow-delete</code></pre>
+      <ul><li>新しいマシンが初めてあなたへプッシュすると、serve は(ターミナルで実行している場合)その住所とフィンガープリントを表示し、一度だけ承認するよう求めます。以降、同じフィンガープリントからのプッシュは黙って通過します。</li><li>ターミナルがない場合——systemd サービスや TTY のないスクリプト——確認する相手がいないため、未知のプッシュ側はそのまま拒否されます。代わりに、プッシュ側が relayium id で表示するフィンガープリントを使って事前に承認してください:</li></ul>
+      <h2>無人稼働の serve のために事前承認する</h2>
+      <p>無人で動作する serve(systemd、バックグラウンドスクリプト)では、プッシュ側に relayium id を実行させてフィンガープリントを表示させ、受信側であらかじめそれを承認しておきます:</p>
+      <pre><code>relayium authorize &lt;fingerprint&gt;</code></pre>
+      <ul><li>--dir はファイルの置き場所を設定します(デフォルトはカレントディレクトリ)。--once は1回の転送だけ受け入れて終了します。--allow-delete は受信した --delete(ミラー)要求によって実際にここでファイルを削除できるようにするもので、デフォルトでは無効です。</li><li>--config-dir(デフォルト ~/.config/relayium)は、このホストのアイデンティティと承認済みフィンガープリントのリストが置かれる場所です——serve を専用サービスとして動かす場合は上書きしてください。</li></ul>
+      <h2>pull: すでに SSH でログインできるサーバーから取り込む</h2>
+      <p>pull は push の鏡像です。誰かが何かを送ってくるのを待つのではなく、すでに持っている SSH アクセスを使って自分から出向き、ファイルを取り込みます。</p>
+      <pre><code>relayium pull user@host:/path/to/files ./local-dest</code></pre>
+      <ul><li>push と異なり、pull は常にリモート側にすでに relayium がインストールされている必要があります——素のサーバーから pull するための tar フォールバックはありません。リモートにまだ入っていない場合は、先に curl -fsSL https://relayium.com/install.sh | sh でインストールしてください。</li><li>ファイルはファイルごとの SHA-256 チェックで検証され、中断しても自動的に再開します(--no-resume で無効化できます)。</li><li>-i と -p は ssh 自体の -i/-p と同様に、特定のアイデンティティファイルやポートを指定するために使えます。</li></ul>
+      <h2>よくある質問</h2>
+      <h3>ファイルを受信するのにアカウントは必要ですか?</h3>
+      <p>いいえ。receive、serve、pull の3つすべてが完全に無料で、どちら側にも Relayium アカウントは不要です。</p>
+      <h3>relayium receive はブラウザのペアリングコードと相互運用しますか?</h3>
+      <p>しません。CLI のペアリングコード・プロトコルは、relayium.com のブラウザ側の参加リンクや QR フローとは別物です——ハンドシェイクの方式が異なり、現時点では互いに通信しません。それはロードマップ上の話であり、今はまだ頼れるものではありません。</p>
+      <h3>未知のマシンが自分の serve リスナーへプッシュしてきたらどうなりますか?</h3>
+      <p>ターミナルでは、初回のプッシュ時に住所とフィンガープリントを見せて承認するかどうか尋ねられ、その承認は記憶されます。ターミナルがない場合——systemd サービスや cron ジョブ——確認する相手がいないため、未知のプッシュ側は拒否されます。先に relayium authorize &lt;fingerprint&gt; で事前承認してください。</p>
+      <h3>relayium がインストールされていないサーバーから pull できますか?</h3>
+      <p>できません。pull は常にリモート側に relayium が必要です——push にあるような tar フォールバックはありません。先にリモートへ relayium をインストールしてください。</p>
+      <h3>relayium は自分のアイデンティティと信頼済みの相手をどこに保存しますか?</h3>
+      <p>デフォルトでは ~/.config/relayium にあります——アイデンティティや信頼に関わるどのコマンドでも --config-dir でこの場所を上書きできます。</p>
+      <div class="ctacard">
+        <p>最初の受信をしてみましょう。CLI をインストールして、receive、serve、pull のいずれかを選んでください。</p>
+        <a class="cta" href="/cli">CLI を入手する</a>
+      </div>
+      <h2>続けて読む</h2>
+      <ul class="related"><li><a href="/ja/compare/snapdrop">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/compare/wetransfer">Relayium と WeTransfer の比較：サーバーを介さず大容量を送る</a></li><li><a href="/ja/how-to/transfer-files-android-to-iphone">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/how-to/send-large-files-without-cloud">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/guides/transfer-files-from-terminal">Relayium CLI でターミナルからファイルを転送する</a></li><li><a href="/ja/guides/back-up-a-server-over-ssh">Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</a></li><li><a href="/ja/guides/send-a-file-to-someone">Relayium CLI でネットワークを越えて誰かにファイルを送る</a></li><li><a href="/ja/guides/server-to-server-transfers">Relayium CLI でサーバー間転送(デーモン直結)</a></li><li><a href="/ja/guides/sync-a-large-folder-between-servers">2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド)</a></li><li><a href="/ja/how-to/share-a-file-with-an-expiring-link">期限付きの安全なダウンロードリンクでファイルを共有する</a></li><li><a href="/ja/guides/self-host-relayium">Relayium をセルフホスト：自分専用のファイル転送サーバーを運用</a></li><li><a href="/ja/how-to/send-files-between-two-computers-over-the-internet">インターネット経由で2台のPC間にファイルを送る方法</a></li><li><a href="/ja/compare/croc">Relayium と croc の比較：ターミナルから暗号化転送</a></li><li><a href="/ja/guides/how-relayium-encrypts-your-files">Relayium がファイルをエンドツーエンドで暗号化する仕組み</a></li><li><a href="/ja/compare/google-drive">Relayium と Google Drive の比較：ファイル送信をもっと直接に</a></li><li><a href="/ja/compare/rsync">Relayium vs rsync: SSH 設定なしでフォルダーを同期</a></li><li><a href="/ja/compare/firefox-send">2026年、最良の Firefox Send 代替サービス</a></li><li><a href="/ja/how-to/transfer-files-by-scanning-a-qr-code">QR コードをスキャンしてファイルを転送する</a></li><li><a href="/ja/how-to/send-a-folder">ファイルではなくフォルダごと送る方法</a></li><li><a href="/ja/guides/run-relayium-as-an-always-on-service">Relayium を常時稼働の受信サービスとして実行する</a></li><li><a href="/ja/how-to/automate-server-backups">cron で暗号化されたサーバーバックアップを自動化する</a></li><li><a href="/ja/compare/localsend">Relayium と LocalSend の比較：ローカル転送はどちらを使う？</a></li><li><a href="/ja/compare/scp">Relayium と scp の比較：よりシンプルな SSH 転送</a></li><li><a href="/ja/compare/magic-wormhole">Relayium と magic-wormhole の比較：CLI ファイル転送</a></li><li><a href="/ja/compare/nextcloud">Relayium と Nextcloud の比較：ファイル送信にどちらを選ぶか</a></li><li><a href="/ja/compare/dropbox">Relayium と Dropbox の比較：1ファイルの送信をもっと直接に</a></li><li><a href="/ja/how-to/airdrop-for-windows-and-android">Windows・Linux・Android 向け AirDrop 代替</a></li><li><a href="/ja/how-to/transfer-files-between-mac-and-windows">Mac と Windows パソコン間でファイルを転送する方法</a></li><li><a href="/ja/how-to/send-files-on-the-same-wifi">同じ Wi-Fi 上の端末間でファイルを送る</a></li><li><a href="/ja/guides/what-is-peer-to-peer-file-transfer">P2P（ピアツーピア）ファイル転送とは？</a></li><li><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet">インターネットでファイルを送るのは安全か</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ja">← Relayium</a>
+        <a href="/ja/guides">ガイド</a>
+        <a href="/ja/privacy">プライバシーポリシー</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

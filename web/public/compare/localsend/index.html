@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium vs LocalSend: which local file transfer to use · Relayium</title>
+    <meta name="description" content="An honest comparison of Relayium and LocalSend. LocalSend is a great open-source app installed on each device; Relayium does the same LAN transfer in the browser — no install — plus cross-network and a CLI." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/compare/localsend" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/localsend" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/localsend" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/localsend" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/localsend" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/localsend" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/localsend" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/localsend" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Relayium vs LocalSend: which local file transfer to use" />
+    <meta property="og:description" content="An honest comparison of Relayium and LocalSend. LocalSend is a great open-source app installed on each device; Relayium does the same LAN transfer in the browser — no install — plus cross-network and a CLI." />
+    <meta property="og:url" content="https://relayium.com/compare/localsend" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium vs LocalSend: which local file transfer to use" />
+    <meta name="twitter:description" content="An honest comparison of Relayium and LocalSend. LocalSend is a great open-source app installed on each device; Relayium does the same LAN transfer in the browser — no install — plus cross-network and a CLI." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs LocalSend: which local file transfer to use","description":"An honest comparison of Relayium and LocalSend. LocalSend is a great open-source app installed on each device; Relayium does the same LAN transfer in the browser — no install — plus cross-network and a CLI.","inLanguage":"en","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/compare/localsend","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Do I need to install anything to use Relayium on the same network?","acceptedAnswer":{"@type":"Answer","text":"No. Open relayium.com in a browser on both devices while they're on the same network and they see each other automatically — no app, no account, no pairing code."}},{"@type":"Question","name":"Does LocalSend need an internet connection?","acceptedAnswer":{"@type":"Answer","text":"No — that's one of its strengths. LocalSend works entirely over the local network with no server involved, so it keeps working even with no internet at all."}},{"@type":"Question","name":"Can Relayium send files to someone on a different network?","acceptedAnswer":{"@type":"Answer","text":"Yes. Create a pairing code (or share the join link it generates) and the other device connects from anywhere, still peer-to-peer whenever possible. The sender needs to sign in for this; the recipient never does."}},{"@type":"Question","name":"Is Relayium open source?","acceptedAnswer":{"@type":"Answer","text":"Yes, MIT-licensed, with the full protocol and code public at github.com/relayium/relayium — the same kind of openness that makes LocalSend trustworthy."}},{"@type":"Question","name":"Which one is more private?","acceptedAnswer":{"@type":"Answer","text":"Both keep same-network transfers off a public server. LocalSend secures its local transport; Relayium adds an independent, application-layer encryption channel with a SAS code both sides can verify, on the LAN or across networks."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>Relayium vs LocalSend: which local file transfer to use</h1>
+      <p class="updated">Last updated: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/compare/localsend" aria-current="true">English</a><a href="/zh/compare/localsend">中文</a><a href="/ja/compare/localsend">日本語</a><a href="/ko/compare/localsend">한국어</a><a href="/de/compare/localsend">Deutsch</a><a href="/fr/compare/localsend">Français</a></nav>
+      <p class="lead">LocalSend is a genuinely good, well-loved app: free, open source, cross-platform, and built to move files between devices on the same local network with no server and no account, ever. A lot of people rely on it as an AirDrop-like tool for Windows, Linux and Android.</p>
+      <p class="lead">This article compares it fairly with Relayium, which tackles the same same-network problem a different way — no app to install, running right in your browser — and then goes further, reaching across networks and offering a command-line tool LocalSend doesn&#39;t have.</p>
+      <h2>What LocalSend does well</h2>
+      <p>LocalSend is a free, open-source app for Windows, macOS, Linux, Android and iOS. Install it once on each device, and it automatically discovers other LocalSend instances on the same Wi-Fi or LAN using an encrypted local transport — no server anywhere, no internet connection required, no account.</p>
+      <p>It supports drag-and-drop, sending whole folders, and an optional PIN for sending on networks you don&#39;t fully trust.</p>
+      <ul><li>Cross-platform native apps for Windows, macOS, Linux, Android and iOS — install once, then it just works.</li><li>Completely offline by design: no server, no internet connection, and no account, ever — it only needs devices on the same local network.</li><li>Optional PIN protection for sending on untrusted networks, plus drag-and-drop and whole-folder transfers.</li><li>A dedicated app icon and OS-level share-sheet integration, which a browser tab can&#39;t offer.</li></ul>
+      <h2>Where Relayium differs: nothing to install, right in the browser</h2>
+      <p>Relayium takes the opposite approach to the same same-network problem: instead of installing an app on every device, you open relayium.com in a browser you already have. Two devices on the same network land in the same room automatically — the server derives the room from the shared network, with no pairing code and no account needed on either side.</p>
+      <p>That LAN room supports any number of peers at once, not just a pair, and drag-and-drop or folder selection works the same way a native app would — just without the install step.</p>
+      <h2>Beyond the LAN: cross-network transfer and a CLI</h2>
+      <p>LocalSend is local-network only by design — it has no way to reach a device on a different network or across the internet. Relayium adds that: create a pairing code (or share the join link it generates), and the other side connects from anywhere, direct peer-to-peer whenever possible.</p>
+      <p>Creating a cross-network pairing code requires the sender to sign in; the person receiving never needs an account. Every realtime transfer — LAN or cross-network — is encrypted end-to-end at the application layer: an X25519 key exchange derives a key used for AES-256-GCM, a 6-digit SAS code lets both sides confirm no server sits in the middle, and each file is verified with a SHA-256 hash. When a direct connection isn&#39;t possible, an encrypted TURN relay carries ciphertext it cannot read.</p>
+      <p>For anyone scripting transfers to a server, there&#39;s also a CLI — push/pull over SSH or daemon-direct, incremental folder sync, and send/receive by pairing code — something a LAN-only app doesn&#39;t offer.</p>
+      <h2>When LocalSend is the better pick</h2>
+      <p>If you never want to open a browser at all — say, moving files on a network with genuinely no internet access, or you just want a permanent app icon and OS share-sheet integration — LocalSend&#39;s dedicated app is the better fit. It&#39;s mature, works fully offline in the strictest sense, and its PIN mode is a nice extra layer on networks you don&#39;t fully trust.</p>
+      <h2>Feature comparison at a glance</h2>
+      <p>The differences that matter most, side by side:</p>
+      <ul><li>Install: LocalSend needs an app on every device; Relayium&#39;s same-network mode needs nothing beyond a browser.</li><li>Network reach: LocalSend is local-network only; Relayium also connects across different networks with a pairing code.</li><li>Encryption: LocalSend secures its local transport; Relayium adds an independent application-layer X25519 + AES-256-GCM channel with a SAS verification code, even on the LAN.</li><li>Accounts: LocalSend never needs one; Relayium&#39;s LAN mode needs none either — only the sender signs in for cross-network transfers.</li><li>Automation: Relayium ships a CLI for SSH push/pull, incremental sync, and an always-on receive service; LocalSend is app-only.</li></ul>
+      <h2>Frequently asked questions</h2>
+      <h3>Do I need to install anything to use Relayium on the same network?</h3>
+      <p>No. Open relayium.com in a browser on both devices while they&#39;re on the same network and they see each other automatically — no app, no account, no pairing code.</p>
+      <h3>Does LocalSend need an internet connection?</h3>
+      <p>No — that&#39;s one of its strengths. LocalSend works entirely over the local network with no server involved, so it keeps working even with no internet at all.</p>
+      <h3>Can Relayium send files to someone on a different network?</h3>
+      <p>Yes. Create a pairing code (or share the join link it generates) and the other device connects from anywhere, still peer-to-peer whenever possible. The sender needs to sign in for this; the recipient never does.</p>
+      <h3>Is Relayium open source?</h3>
+      <p>Yes, MIT-licensed, with the full protocol and code public at github.com/relayium/relayium — the same kind of openness that makes LocalSend trustworthy.</p>
+      <h3>Which one is more private?</h3>
+      <p>Both keep same-network transfers off a public server. LocalSend secures its local transport; Relayium adds an independent, application-layer encryption channel with a SAS code both sides can verify, on the LAN or across networks.</p>
+      <div class="ctacard">
+        <p>See how a same-network transfer feels with nothing to install — just open the page on both devices.</p>
+        <a class="cta" href="/">Try Relayium now</a>
+      </div>
+      <h2>Keep reading</h2>
+      <ul class="related"><li><a href="/compare/snapdrop">Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</a></li><li><a href="/compare/airdrop">Relayium vs AirDrop: a cross-platform AirDrop alternative</a></li><li><a href="/compare/wetransfer">Relayium vs WeTransfer: send large files without the server</a></li><li><a href="/how-to/transfer-files-android-to-iphone">How to transfer files from Android to iPhone (no cable)</a></li><li><a href="/how-to/send-files-pc-to-phone-wirelessly">Send files from PC to phone wirelessly, no cable or app</a></li><li><a href="/how-to/send-large-files-without-cloud">How to send large files without the cloud</a></li><li><a href="/guides/transfer-files-from-terminal">Transfer files from the terminal with the Relayium CLI</a></li><li><a href="/guides/back-up-a-server-over-ssh">Back up files to your own server over SSH with the Relayium CLI</a></li><li><a href="/guides/send-a-file-to-someone">Send a file to someone across networks with the Relayium CLI</a></li><li><a href="/guides/server-to-server-transfers">Server-to-server transfers with the Relayium CLI (daemon direct)</a></li><li><a href="/guides/sync-a-large-folder-between-servers">Sync a large folder between two servers (resumable, in the background)</a></li><li><a href="/how-to/share-a-file-with-an-expiring-link">Share a file with a secure, expiring download link</a></li><li><a href="/guides/self-host-relayium">Self-host Relayium: run your own file-transfer server</a></li><li><a href="/how-to/send-files-between-two-computers-over-the-internet">Send files between two computers over the internet</a></li><li><a href="/compare/croc">Relayium vs croc: encrypted file transfer from the terminal</a></li><li><a href="/guides/how-relayium-encrypts-your-files">How Relayium encrypts your files end-to-end</a></li><li><a href="/compare/google-drive">Relayium vs Google Drive for sending files</a></li><li><a href="/compare/rsync">Relayium vs rsync: sync folders without the SSH setup</a></li><li><a href="/compare/firefox-send">The best Firefox Send alternative in 2026</a></li><li><a href="/how-to/transfer-files-by-scanning-a-qr-code">Transfer files by scanning a QR code</a></li><li><a href="/guides/receive-files-from-the-command-line">Receive files from the command line</a></li><li><a href="/how-to/send-a-folder">How to send a whole folder, not just files</a></li><li><a href="/guides/run-relayium-as-an-always-on-service">Run Relayium as an always-on receive service</a></li><li><a href="/how-to/automate-server-backups">Automate encrypted server backups with a cron job</a></li><li><a href="/compare/scp">Relayium vs scp: simpler file transfer over SSH</a></li><li><a href="/compare/magic-wormhole">Relayium vs magic-wormhole: CLI file transfer</a></li><li><a href="/compare/nextcloud">Relayium vs Nextcloud for sending files</a></li><li><a href="/compare/dropbox">Relayium vs Dropbox for sending a file</a></li><li><a href="/how-to/airdrop-for-windows-and-android">AirDrop for Windows, Linux and Android</a></li><li><a href="/how-to/transfer-files-between-mac-and-windows">Transfer files between a Mac and a Windows PC</a></li><li><a href="/how-to/send-files-on-the-same-wifi">Send files between devices on the same Wi-Fi</a></li><li><a href="/guides/what-is-peer-to-peer-file-transfer">What is peer-to-peer file transfer?</a></li><li><a href="/guides/is-it-safe-to-send-files-over-the-internet">Is it safe to send files over the internet?</a></li><li><a href="/">Relayium</a></li></ul>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/guides">Guides</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

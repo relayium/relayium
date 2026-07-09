@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Run Relayium as an always-on receive service · Relayium</title>
+    <meta name="description" content="Keep relayium serve running so any peer can push to you at any time — daemon-direct over pinned TLS. Covers first-push approval, pre-authorizing fingerprints for systemd, --allow-delete, and a sample unit file." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/run-relayium-as-an-always-on-service" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Run Relayium as an always-on receive service" />
+    <meta property="og:description" content="Keep relayium serve running so any peer can push to you at any time — daemon-direct over pinned TLS. Covers first-push approval, pre-authorizing fingerprints for systemd, --allow-delete, and a sample unit file." />
+    <meta property="og:url" content="https://relayium.com/guides/run-relayium-as-an-always-on-service" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Run Relayium as an always-on receive service" />
+    <meta name="twitter:description" content="Keep relayium serve running so any peer can push to you at any time — daemon-direct over pinned TLS. Covers first-push approval, pre-authorizing fingerprints for systemd, --allow-delete, and a sample unit file." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Run Relayium as an always-on receive service","description":"Keep relayium serve running so any peer can push to you at any time — daemon-direct over pinned TLS. Covers first-push approval, pre-authorizing fingerprints for systemd, --allow-delete, and a sample unit file.","inLanguage":"en","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/guides/run-relayium-as-an-always-on-service","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"What port does serve listen on by default?","acceptedAnswer":{"@type":"Answer","text":"9031. Change it with --port on both the listener (serve --port N) and the pusher's target (relayium://host:N)."}},{"@type":"Question","name":"Do I have to approve every single push by hand?","acceptedAnswer":{"@type":"Answer","text":"Only the first push from a given fingerprint, and only when serve is running with a terminal attached. It's remembered after that. Running serve non-interactively (systemd, a pipe) skips the prompt entirely and rejects unknown peers — pre-authorize them with relayium authorize instead."}},{"@type":"Question","name":"Can a sender delete files on my always-on receiver?","acceptedAnswer":{"@type":"Answer","text":"Only if you started serve with --allow-delete and the sender is running sync --delete. Without --allow-delete, deletions are silently skipped and everything else still transfers."}},{"@type":"Question","name":"Is running an always-on receiver free?","acceptedAnswer":{"@type":"Answer","text":"Yes. relayium serve is part of the free, self-hostable CLI — no account, no paid tier, on either side of the connection."}},{"@type":"Question","name":"Where does serve keep its identity and peer list?","acceptedAnswer":{"@type":"Answer","text":"In ~/.config/relayium by default (id.key/id.crt for this host's identity, authorized_fingerprints for the allow-list). Point --config-dir somewhere fixed, like /etc/relayium, for a systemd service."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>Run Relayium as an always-on receive service</h1>
+      <p class="updated">Last updated: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service" aria-current="true">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service">Français</a></nav>
+      <p class="lead">relayium serve --once handles a single incoming transfer and exits — fine for a one-off pull. But if you want a machine to be a standing drop point — a home server that backups land on overnight, a build box that CI pushes artifacts to, a NAS your phone can send photos to whenever — you want serve running all the time, not started by hand for each transfer.</p>
+      <p class="lead">This guide covers starting a long-running listener, approving who&#39;s allowed to push to it, pre-authorizing peers for the cases where no one&#39;s at the terminal, running it under systemd, and letting a sync --delete sender mirror deletions.</p>
+      <h2>Start the listener</h2>
+      <p>serve listens for daemon-direct pushes (relayium://host:port) over a pinned TLS 1.3 connection and writes what it receives into a directory. Nothing needs to be pre-shared to start it — no fingerprints to copy, no server to register:</p>
+      <pre><code>relayium serve --dir ~/inbox
+relayium serve --dir /srv/drop --port 9040   # non-default port
+relayium serve --dir ~/inbox --allow-delete  # let a sync --delete sender mirror deletions</code></pre>
+      <ul><li>--dir sets where files land (defaults to the current directory).</li><li>--port sets the listening port (defaults to 9031); open it on your firewall if the sender is elsewhere.</li><li>With no --once, serve keeps running and accepting pushes until you stop it or a process manager restarts it — that&#39;s what makes it an always-on service.</li></ul>
+      <h2>Approve who&#39;s allowed to push</h2>
+      <p>The first time a new peer pushes, serve — if it&#39;s running in a terminal — shows you where the push came from and its fingerprint and asks you to approve it, the same way SSH asks about an unknown host on first connect:</p>
+      <pre><code>Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y</code></pre>
+      <ul><li>Answer y once and that fingerprint is written to authorized_fingerprints; every later push from the same machine goes through with no prompt.</li><li>A fingerprint identifies a machine, not a network address, so it survives the sender&#39;s IP changing.</li><li>This is interactive by design — it needs someone at the keyboard, which won&#39;t be true once serve moves to systemd (next).</li></ul>
+      <h2>Pre-authorize peers for non-interactive setups</h2>
+      <p>When serve has no terminal to prompt on — a systemd service, a background process, a pipe — it can&#39;t ask, so it rejects any fingerprint it doesn&#39;t already recognize. Authorize peers ahead of time instead. On the machine that will push, run relayium id to print its fingerprint; on the receiver, add it before the first push arrives:</p>
+      <pre><code># on the machine that will PUSH: print its fingerprint
+relayium id
+
+# on this always-on RECEIVER: authorize it in advance
+relayium authorize 74318e3b...</code></pre>
+      <ul><li>authorize is idempotent — running it again for a fingerprint you already trust does nothing.</li><li>Identity and trust files live under --config-dir, defaulting to ~/.config/relayium (id.key/id.crt is this host&#39;s identity, authorized_fingerprints is the peer allow-list).</li></ul>
+      <h2>Run it under systemd</h2>
+      <p>For a service that survives reboots and crashes, hand serve to systemd. Point --config-dir at a fixed path so the host&#39;s identity and its authorized-peer list stay put across restarts:</p>
+      <pre><code># /etc/systemd/system/relayium-serve.service
+[Unit]
+Description=Relayium always-on receiver
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/relayium serve --dir /srv/drop --port 9031 --config-dir /etc/relayium --allow-delete
+Restart=always
+User=relayium
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+      <ul><li>Before enabling the service, run relayium authorize &lt;fingerprint&gt; for every peer that should be able to push — the service itself can&#39;t prompt.</li><li>systemctl enable --now relayium-serve starts it and brings it back on every boot.</li><li>Keep /etc/relayium/id.key readable only by the service user; relayium refuses to load a key with looser permissions.</li></ul>
+      <h2>Let a sync --delete sender mirror deletions</h2>
+      <p>By default serve only ever adds or updates files — a sender running sync --delete against it still copies new and changed files, but any deletions it asks for are skipped, with a warning logged on the receiver. Start serve with --allow-delete to opt in to true mirroring, where files removed on the sender&#39;s side are removed here too:</p>
+      <pre><code>relayium serve --dir /srv/mirror --allow-delete</code></pre>
+      <ul><li>--allow-delete is a receiver-side opt-in; the sender still has to ask for it with sync --delete.</li><li>Without it, nothing is ever deleted on this machine, no matter what a sender requests.</li></ul>
+      <h2>Frequently asked questions</h2>
+      <h3>What port does serve listen on by default?</h3>
+      <p>9031. Change it with --port on both the listener (serve --port N) and the pusher&#39;s target (relayium://host:N).</p>
+      <h3>Do I have to approve every single push by hand?</h3>
+      <p>Only the first push from a given fingerprint, and only when serve is running with a terminal attached. It&#39;s remembered after that. Running serve non-interactively (systemd, a pipe) skips the prompt entirely and rejects unknown peers — pre-authorize them with relayium authorize instead.</p>
+      <h3>Can a sender delete files on my always-on receiver?</h3>
+      <p>Only if you started serve with --allow-delete and the sender is running sync --delete. Without --allow-delete, deletions are silently skipped and everything else still transfers.</p>
+      <h3>Is running an always-on receiver free?</h3>
+      <p>Yes. relayium serve is part of the free, self-hostable CLI — no account, no paid tier, on either side of the connection.</p>
+      <h3>Where does serve keep its identity and peer list?</h3>
+      <p>In ~/.config/relayium by default (id.key/id.crt for this host&#39;s identity, authorized_fingerprints for the allow-list). Point --config-dir somewhere fixed, like /etc/relayium, for a systemd service.</p>
+      <div class="ctacard">
+        <p>Turn any machine you own into an always-on, free receiver — direct pushes over pinned TLS, no relay involved.</p>
+        <a class="cta" href="/cli">Get the CLI</a>
+      </div>
+      <h2>Keep reading</h2>
+      <ul class="related"><li><a href="/compare/snapdrop">Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</a></li><li><a href="/compare/airdrop">Relayium vs AirDrop: a cross-platform AirDrop alternative</a></li><li><a href="/compare/wetransfer">Relayium vs WeTransfer: send large files without the server</a></li><li><a href="/how-to/transfer-files-android-to-iphone">How to transfer files from Android to iPhone (no cable)</a></li><li><a href="/how-to/send-files-pc-to-phone-wirelessly">Send files from PC to phone wirelessly, no cable or app</a></li><li><a href="/how-to/send-large-files-without-cloud">How to send large files without the cloud</a></li><li><a href="/guides/transfer-files-from-terminal">Transfer files from the terminal with the Relayium CLI</a></li><li><a href="/guides/back-up-a-server-over-ssh">Back up files to your own server over SSH with the Relayium CLI</a></li><li><a href="/guides/send-a-file-to-someone">Send a file to someone across networks with the Relayium CLI</a></li><li><a href="/guides/server-to-server-transfers">Server-to-server transfers with the Relayium CLI (daemon direct)</a></li><li><a href="/guides/sync-a-large-folder-between-servers">Sync a large folder between two servers (resumable, in the background)</a></li><li><a href="/how-to/share-a-file-with-an-expiring-link">Share a file with a secure, expiring download link</a></li><li><a href="/guides/self-host-relayium">Self-host Relayium: run your own file-transfer server</a></li><li><a href="/how-to/send-files-between-two-computers-over-the-internet">Send files between two computers over the internet</a></li><li><a href="/compare/croc">Relayium vs croc: encrypted file transfer from the terminal</a></li><li><a href="/guides/how-relayium-encrypts-your-files">How Relayium encrypts your files end-to-end</a></li><li><a href="/compare/google-drive">Relayium vs Google Drive for sending files</a></li><li><a href="/compare/rsync">Relayium vs rsync: sync folders without the SSH setup</a></li><li><a href="/compare/firefox-send">The best Firefox Send alternative in 2026</a></li><li><a href="/how-to/transfer-files-by-scanning-a-qr-code">Transfer files by scanning a QR code</a></li><li><a href="/guides/receive-files-from-the-command-line">Receive files from the command line</a></li><li><a href="/how-to/send-a-folder">How to send a whole folder, not just files</a></li><li><a href="/how-to/automate-server-backups">Automate encrypted server backups with a cron job</a></li><li><a href="/compare/localsend">Relayium vs LocalSend: which local file transfer to use</a></li><li><a href="/compare/scp">Relayium vs scp: simpler file transfer over SSH</a></li><li><a href="/compare/magic-wormhole">Relayium vs magic-wormhole: CLI file transfer</a></li><li><a href="/compare/nextcloud">Relayium vs Nextcloud for sending files</a></li><li><a href="/compare/dropbox">Relayium vs Dropbox for sending a file</a></li><li><a href="/how-to/airdrop-for-windows-and-android">AirDrop for Windows, Linux and Android</a></li><li><a href="/how-to/transfer-files-between-mac-and-windows">Transfer files between a Mac and a Windows PC</a></li><li><a href="/how-to/send-files-on-the-same-wifi">Send files between devices on the same Wi-Fi</a></li><li><a href="/guides/what-is-peer-to-peer-file-transfer">What is peer-to-peer file transfer?</a></li><li><a href="/guides/is-it-safe-to-send-files-over-the-internet">Is it safe to send files over the internet?</a></li><li><a href="/">Relayium</a></li></ul>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/guides">Guides</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

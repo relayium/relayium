@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium vs Dropbox for sending a file · Relayium</title>
+    <meta name="description" content="A fair comparison for handing off one file: Dropbox is excellent for durable sync and shared links, but the file ends up living in an account. Relayium sends it directly, peer-to-peer, or via a zero-knowledge link that expires." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/compare/dropbox" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/dropbox" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/dropbox" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/dropbox" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/dropbox" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/dropbox" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/dropbox" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/dropbox" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Relayium vs Dropbox for sending a file" />
+    <meta property="og:description" content="A fair comparison for handing off one file: Dropbox is excellent for durable sync and shared links, but the file ends up living in an account. Relayium sends it directly, peer-to-peer, or via a zero-knowledge link that expires." />
+    <meta property="og:url" content="https://relayium.com/compare/dropbox" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium vs Dropbox for sending a file" />
+    <meta name="twitter:description" content="A fair comparison for handing off one file: Dropbox is excellent for durable sync and shared links, but the file ends up living in an account. Relayium sends it directly, peer-to-peer, or via a zero-knowledge link that expires." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs Dropbox for sending a file","description":"A fair comparison for handing off one file: Dropbox is excellent for durable sync and shared links, but the file ends up living in an account. Relayium sends it directly, peer-to-peer, or via a zero-knowledge link that expires.","inLanguage":"en","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/compare/dropbox","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Does the file sit in an account like it would with Dropbox?","acceptedAnswer":{"@type":"Answer","text":"Not with realtime transfer — the file moves directly between devices and is never stored on a server. A download link does store something server-side, but only zero-knowledge ciphertext the server can't decrypt, and it expires (1h/1d/3d/7d) or burns after the first download."}},{"@type":"Question","name":"Does my recipient need to sign up for anything?","acceptedAnswer":{"@type":"Answer","text":"No. On the same network, neither side needs an account. Sending across networks by pairing code, or creating a stored download link, requires the sender to sign in — the recipient never needs an account, in either case."}},{"@type":"Question","name":"Is there a file size limit?","acceptedAnswer":{"@type":"Answer","text":"Realtime transfers handle up to 1,000 files per batch with no server-side size cap — Chrome and Edge stream straight to disk for tens of gigabytes, while Firefox and Safari buffer in memory, so keep those under roughly 200 MB. Stored links count against a quota tied to the sender's account."}},{"@type":"Question","name":"Is Relayium free to use instead of a Dropbox plan?","acceptedAnswer":{"@type":"Answer","text":"Yes. Relayium is free and open source under the MIT license, with the full protocol and code at github.com/relayium/relayium — there's no paid tier gating bigger or faster transfers."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>Relayium vs Dropbox for sending a file</h1>
+      <p class="updated">Last updated: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/compare/dropbox" aria-current="true">English</a><a href="/zh/compare/dropbox">中文</a><a href="/ja/compare/dropbox">日本語</a><a href="/ko/compare/dropbox">한국어</a><a href="/de/compare/dropbox">Deutsch</a><a href="/fr/compare/dropbox">Français</a></nav>
+      <p class="lead">Dropbox earns its reputation. It syncs a folder across every machine you own, keeps a version history when you overwrite something by accident, and makes it painless to hand a whole project folder to a client with a shared-link invite. If you want a working folder that just stays in sync, Dropbox does that job well and this isn&#39;t an argument against using it that way.</p>
+      <p class="lead">The friction shows up on a narrower job: you have one file, one recipient, and no ongoing need for it to live anywhere afterward — a signed PDF, a video export, a zip of photos. Dropbox still asks you to drop that file into your account, generate a share link, and think about who else has access to that folder. Relayium is built for that narrower job specifically: the file goes straight to the other person&#39;s device, or it becomes a link that decrypts only in their browser and disappears on a schedule you set.</p>
+      <h2>What Dropbox is genuinely good at</h2>
+      <p>Dropbox&#39;s core strength is that a folder you rely on is always current everywhere: edit a file on your laptop and it&#39;s already updated on your phone by the time you check. Selective sync, LAN sync for large local transfers, and file-recovery/version history all serve that same goal — a durable, dependable place for files you keep coming back to.</p>
+      <p>Shared folders and Dropbox Paper make it a solid pick for ongoing collaboration, and its link-sharing is genuinely convenient for small teams that already live in Dropbox day to day. None of that is what Relayium is trying to be — Relayium doesn&#39;t sync a folder or keep a working copy of anything.</p>
+      <h2>The gap: a share link still means an account holds the file</h2>
+      <p>To send one file through Dropbox, it first has to be inside Dropbox — uploaded to your account, sitting in a folder, before you generate a shareable link for it. That link points at a copy Dropbox is storing on your behalf, readable by Dropbox&#39;s own infrastructure and staying there until you go back and delete the file or revoke the link yourself.</p>
+      <p>For a one-off send, that&#39;s a lot of standing infrastructure for a file nobody needs to keep. Relayium&#39;s realtime mode skips storage entirely for the common case: bytes move directly between the sender&#39;s and recipient&#39;s devices over an end-to-end encrypted peer-to-peer connection, and the file is never written to a server at all. When you do want a link — because the recipient isn&#39;t online right now — the stored-link mode keeps a property Dropbox&#39;s sharing doesn&#39;t have: your browser generates a random AES-256-GCM key and encrypts the file with it before upload, and that key lives only in the URL fragment (the part after the #, which browsers never transmit to a server). Dropbox&#39;s servers can technically read what&#39;s in your account; Relayium&#39;s server, for a stored link, holds only ciphertext it has no way to decrypt.</p>
+      <h2>Realtime send: the file never touches a server</h2>
+      <p>When both people are online at the same time, realtime direct transfer sends up to 1,000 files in a single batch straight from one device to the other — no upload step, and nothing stored in between. Both sides get a matching 6-digit verification code (SAS) to catch any man-in-the-middle, every file is checked with a SHA-256 hash end to end, and a dropped connection resumes instead of restarting the whole thing.</p>
+      <p>There&#39;s no server-side size cap; the real ceiling is the receiving browser. Chrome and Edge stream incoming data directly to disk, so tens of gigabytes are no problem, while Firefox and Safari buffer in memory, so keep those transfers under roughly 200 MB. On the same network — say, sending to a coworker&#39;s laptop across the office Wi-Fi — no account is needed at all. Sending across different networks uses a pairing code and requires the sender to sign in; the recipient never needs an account either way. When a direct connection isn&#39;t possible, it falls back to an encrypted TURN relay that only ever sees ciphertext.</p>
+      <h2>When you need a link instead: zero-knowledge, self-expiring</h2>
+      <p>Sometimes a link genuinely is the right tool — the recipient is asleep in another time zone, or you want one URL to paste into an email instead of coordinating a live session. Relayium&#39;s stored-link mode is built for exactly that, without giving up the privacy of realtime mode.</p>
+      <p>You pick how long it lives — 1 hour, 1 day, 3 days, or 7 days — or set it to burn after the first completed download, so there&#39;s no lingering copy to remember to clean up. Creating the link requires the sender to sign in (it counts against a storage quota on the account), but the recipient just opens it and downloads — no Dropbox-style account required on their end. Because the decryption key never leaves the URL fragment, Relayium&#39;s server for a stored link is structurally unable to read what&#39;s inside it, which is a different guarantee than a Dropbox share link, where Dropbox&#39;s own infrastructure can technically decrypt the file it&#39;s hosting.</p>
+      <h2>Side-by-side</h2>
+      <p>The differences most relevant to a one-off send:</p>
+      <ul><li>Purpose: Dropbox is durable, always-synced storage built for folders you keep working in; Relayium is built for handing off one file — realtime P2P or a self-expiring link, nothing left behind.</li><li>Where the file ends up: a Dropbox share link points at a copy that stays in your account until you delete it; Relayium realtime never stores the file, and stored links auto-expire (1h/1d/3d/7d) or burn after the first download.</li><li>Who can read it: Dropbox&#39;s infrastructure can technically decrypt files in your account; Relayium&#39;s stored links are zero-knowledge — the key exists only in the URL fragment, so the server holds ciphertext it can&#39;t read.</li><li>Accounts: Dropbox requires an account to upload and share; Relayium needs no account at all on the same network, and only the sender signs in for cross-network or stored-link sending — the recipient never needs one.</li><li>Size limits: Dropbox is bounded by your plan&#39;s storage quota; Relayium realtime has no server-side cap (Chrome/Edge stream to disk for tens of GB; keep Firefox/Safari under ~200 MB).</li><li>Cost and openness: Relayium is free and MIT-licensed at github.com/relayium/relayium, running in the browser on Windows, macOS, Linux, Android, and iOS with nothing to install.</li></ul>
+      <h2>Frequently asked questions</h2>
+      <h3>Does the file sit in an account like it would with Dropbox?</h3>
+      <p>Not with realtime transfer — the file moves directly between devices and is never stored on a server. A download link does store something server-side, but only zero-knowledge ciphertext the server can&#39;t decrypt, and it expires (1h/1d/3d/7d) or burns after the first download.</p>
+      <h3>Does my recipient need to sign up for anything?</h3>
+      <p>No. On the same network, neither side needs an account. Sending across networks by pairing code, or creating a stored download link, requires the sender to sign in — the recipient never needs an account, in either case.</p>
+      <h3>Is there a file size limit?</h3>
+      <p>Realtime transfers handle up to 1,000 files per batch with no server-side size cap — Chrome and Edge stream straight to disk for tens of gigabytes, while Firefox and Safari buffer in memory, so keep those under roughly 200 MB. Stored links count against a quota tied to the sender&#39;s account.</p>
+      <h3>Is Relayium free to use instead of a Dropbox plan?</h3>
+      <p>Yes. Relayium is free and open source under the MIT license, with the full protocol and code at github.com/relayium/relayium — there&#39;s no paid tier gating bigger or faster transfers.</p>
+      <div class="ctacard">
+        <p>Send the file directly, without putting it in anyone&#39;s account — no size cap, no install, and no account needed on the same network.</p>
+        <a class="cta" href="/">Try Relayium now</a>
+      </div>
+      <h2>Keep reading</h2>
+      <ul class="related"><li><a href="/compare/snapdrop">Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</a></li><li><a href="/compare/airdrop">Relayium vs AirDrop: a cross-platform AirDrop alternative</a></li><li><a href="/compare/wetransfer">Relayium vs WeTransfer: send large files without the server</a></li><li><a href="/how-to/transfer-files-android-to-iphone">How to transfer files from Android to iPhone (no cable)</a></li><li><a href="/how-to/send-files-pc-to-phone-wirelessly">Send files from PC to phone wirelessly, no cable or app</a></li><li><a href="/how-to/send-large-files-without-cloud">How to send large files without the cloud</a></li><li><a href="/guides/transfer-files-from-terminal">Transfer files from the terminal with the Relayium CLI</a></li><li><a href="/guides/back-up-a-server-over-ssh">Back up files to your own server over SSH with the Relayium CLI</a></li><li><a href="/guides/send-a-file-to-someone">Send a file to someone across networks with the Relayium CLI</a></li><li><a href="/guides/server-to-server-transfers">Server-to-server transfers with the Relayium CLI (daemon direct)</a></li><li><a href="/guides/sync-a-large-folder-between-servers">Sync a large folder between two servers (resumable, in the background)</a></li><li><a href="/how-to/share-a-file-with-an-expiring-link">Share a file with a secure, expiring download link</a></li><li><a href="/guides/self-host-relayium">Self-host Relayium: run your own file-transfer server</a></li><li><a href="/how-to/send-files-between-two-computers-over-the-internet">Send files between two computers over the internet</a></li><li><a href="/compare/croc">Relayium vs croc: encrypted file transfer from the terminal</a></li><li><a href="/guides/how-relayium-encrypts-your-files">How Relayium encrypts your files end-to-end</a></li><li><a href="/compare/google-drive">Relayium vs Google Drive for sending files</a></li><li><a href="/compare/rsync">Relayium vs rsync: sync folders without the SSH setup</a></li><li><a href="/compare/firefox-send">The best Firefox Send alternative in 2026</a></li><li><a href="/how-to/transfer-files-by-scanning-a-qr-code">Transfer files by scanning a QR code</a></li><li><a href="/guides/receive-files-from-the-command-line">Receive files from the command line</a></li><li><a href="/how-to/send-a-folder">How to send a whole folder, not just files</a></li><li><a href="/guides/run-relayium-as-an-always-on-service">Run Relayium as an always-on receive service</a></li><li><a href="/how-to/automate-server-backups">Automate encrypted server backups with a cron job</a></li><li><a href="/compare/localsend">Relayium vs LocalSend: which local file transfer to use</a></li><li><a href="/compare/scp">Relayium vs scp: simpler file transfer over SSH</a></li><li><a href="/compare/magic-wormhole">Relayium vs magic-wormhole: CLI file transfer</a></li><li><a href="/compare/nextcloud">Relayium vs Nextcloud for sending files</a></li><li><a href="/how-to/airdrop-for-windows-and-android">AirDrop for Windows, Linux and Android</a></li><li><a href="/how-to/transfer-files-between-mac-and-windows">Transfer files between a Mac and a Windows PC</a></li><li><a href="/how-to/send-files-on-the-same-wifi">Send files between devices on the same Wi-Fi</a></li><li><a href="/guides/what-is-peer-to-peer-file-transfer">What is peer-to-peer file transfer?</a></li><li><a href="/guides/is-it-safe-to-send-files-over-the-internet">Is it safe to send files over the internet?</a></li><li><a href="/">Relayium</a></li></ul>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/guides">Guides</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

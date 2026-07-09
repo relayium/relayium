@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mac와 Windows PC 사이에서 파일 전송하는 방법 · Relayium</title>
+    <meta name="description" content="USB 드라이브도, 공유 폴더도, 클라우드 업로드도 없이 macOS와 Windows 사이에서 파일을 보내는 방법. 같은 네트워크에서도 인터넷 너머로도 가능하며, 두 운영체제 모두 설치할 것이 없습니다." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ko/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Mac와 Windows PC 사이에서 파일 전송하는 방법" />
+    <meta property="og:description" content="USB 드라이브도, 공유 폴더도, 클라우드 업로드도 없이 macOS와 Windows 사이에서 파일을 보내는 방법. 같은 네트워크에서도 인터넷 너머로도 가능하며, 두 운영체제 모두 설치할 것이 없습니다." />
+    <meta property="og:url" content="https://relayium.com/ko/how-to/transfer-files-between-mac-and-windows" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Mac와 Windows PC 사이에서 파일 전송하는 방법" />
+    <meta name="twitter:description" content="USB 드라이브도, 공유 폴더도, 클라우드 업로드도 없이 macOS와 Windows 사이에서 파일을 보내는 방법. 같은 네트워크에서도 인터넷 너머로도 가능하며, 두 운영체제 모두 설치할 것이 없습니다." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Mac와 Windows PC 사이에서 파일 전송하는 방법","description":"USB 드라이브도, 공유 폴더도, 클라우드 업로드도 없이 macOS와 Windows 사이에서 파일을 보내는 방법. 같은 네트워크에서도 인터넷 너머로도 가능하며, 두 운영체제 모두 설치할 것이 없습니다.","inLanguage":"ko","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/ko/how-to/transfer-files-between-mac-and-windows","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"Mac이나 Windows PC에 뭔가 설치해야 하나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. Relayium은 macOS와 Windows 모두에서 전적으로 브라우저에서 동작합니다. 각 기기에서 relayium.com을 열면 준비 끝입니다 — 어느 쪽이든 다운로드는 필요 없습니다. 같은 네트워크에서는 전송에 계정이 전혀 필요 없고, 인터넷 너머 페어링도 보내는 쪽이 로그인만 하면 됩니다."}},{"@type":"Question","name":"두 컴퓨터가 반드시 같은 네트워크에 있어야 하나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 같은 네트워크는 두 기기가 자동으로 서로를 찾기 때문에 가장 빠르지만, 페어링 코드는 서로 다른 도시에 있는 Mac과 Windows PC도 인터넷 너머로 똑같이 연결해 줍니다. 어느 쪽이든 전송은 종단간 암호화를 유지합니다. 네트워크를 넘는 경로는 보내는 쪽이 먼저 로그인하기만 하면 되고, 받는 쪽은 계정이 필요 없습니다."}},{"@type":"Question","name":"개별 파일뿐 아니라 폴더 전체를 보낼 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"네. 폴더를 끌어다 놓으면 Relayium이 배치당 최대 1,000개 파일을 폴더 구조를 유지하며 보냅니다. Windows의 Chrome과 Edge는 선택한 디렉터리에 곧바로 기록합니다. 받는 쪽 브라우저가 폴더를 직접 기록하지 못하면, 같은 구조의 단일 .zip으로 도착합니다."}},{"@type":"Question","name":"Mac에서 Windows로 넘어갈 때 파일 권한, 줄바꿈, 파일명이 망가지나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. Relayium은 각 파일의 정확한 바이트를 옮기고 SHA-256 해시로 종단간 검증합니다 — 줄바꿈, 인코딩, 파일명은 건드리지 않습니다. 애플리케이션 수준의 변환이 필요할 만한 것(텍스트 파일의 CRLF와 LF 차이 등)도 파일 자체가 변경되지 않으므로 영향받지 않습니다."}},{"@type":"Question","name":"크기 제한이 있나요?","acceptedAnswer":{"@type":"Answer","text":"배치당 최대 1,000개 파일입니다. 직접 전송에는 서버 측 크기 제한이 없습니다 — Chrome과 Edge는 곧바로 디스크로 스트리밍합니다 — 하지만 Firefox와 Safari는 메모리에 버퍼링하므로 그 둘에서는 한 번의 전송을 약 200MB 이내로 유지하세요."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ko">Relayium</a></header>
+      <h1>Mac와 Windows PC 사이에서 파일 전송하는 방법</h1>
+      <p class="updated">마지막 업데이트: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-between-mac-and-windows">English</a><a href="/zh/how-to/transfer-files-between-mac-and-windows">中文</a><a href="/ja/how-to/transfer-files-between-mac-and-windows">日本語</a><a href="/ko/how-to/transfer-files-between-mac-and-windows" aria-current="true">한국어</a><a href="/de/how-to/transfer-files-between-mac-and-windows">Deutsch</a><a href="/fr/how-to/transfer-files-between-mac-and-windows">Français</a></nav>
+      <p class="lead">Mac과 PC는 기본적으로 같은 파일 공유 언어를 쓰지 않습니다. AirDrop은 애플 전용이고, Windows의 네트워크 공유는 두 기기가 일치하는 작업 그룹이나 도메인에 있어야 하는데, 둘 다 5분 만에 뚝딱 설정할 수 있는 것이 아닙니다 — MacBook의 프로젝트 폴더 하나를 Windows 데스크톱으로 옮기고 싶을 뿐인데도 말이죠.</p>
+      <p class="lead">Relayium은 이 호환성 문제 전체를 우회합니다. Mac과 Windows PC의 브라우저에서 같은 페이지를 열면 파일이 그 사이에서 직접 전송됩니다 — 종단간 암호화, 두 운영체제 모두 설치할 것이 없습니다. 같은 네트워크에서는 계정조차 필요 없고, 페어링 코드로 인터넷 너머로 보낼 때도 보내는 쪽이 로그인만 하면 됩니다. 아래에서 양방향의 정확한 방법을 설명합니다.</p>
+      <h2>시작하기 전에 필요한 것</h2>
+      <p>Mac이나 PC 어느 쪽에도 설치할 것이 없습니다. 같은 네트워크에서는 가입할 것도 없습니다 — 브라우저가 모든 걸 처리합니다.</p>
+      <ul><li>Safari나 Chrome을 쓰는 Mac과 Edge나 Chrome을 쓰는 Windows PC — 어느 쪽이든 최신 브라우저면 됩니다.</li><li>가장 간단한 방법은 두 기기를 같은 Wi-Fi나 유선 네트워크에 연결하는 것입니다. 서로 다른 장소에 있어도 페어링 코드로 이어줄 수 있습니다.</li><li>보내려는 파일이나 폴더 — 배치당 최대 1,000개 파일.</li></ul>
+      <h2>Mac과 PC가 같은 네트워크에 있을 때</h2>
+      <p>두 컴퓨터가 같은 사무실이나 가정 네트워크에 있다면, 이것이 파일을 옮기는 가장 빠른 방법입니다 — 공유 드라이브를 마운트할 필요도, 권한과 씨름할 필요도 없습니다.</p>
+      <ul><li>Mac에서 브라우저로 relayium.com을 엽니다. Windows PC에서도 같은 주소를 엽니다.</li><li>각 기기가 상대에게 근처 기기로 나타납니다 — Windows 작업 그룹 설정도, macOS 파일 공유 활성화도 필요 없습니다.</li><li>보내는 컴퓨터에서 다른 쪽을 탭한 다음, 보낼 파일(또는 폴더 전체)을 고릅니다.</li><li>양쪽 화면에 같은 짧은 검증 코드가 표시됩니다. 양쪽이 일치하는지 확인하세요 — 이는 두 컴퓨터 사이의 연결이 직접적이며 중간에 아무것도 거치지 않았음을 확인해 줍니다.</li><li>받는 쪽에서 수락하면 전송이 즉시 시작되어 디스크로 곧바로 스트리밍됩니다.</li></ul>
+      <h2>Mac과 PC가 다른 네트워크에 있을 때</h2>
+      <p>집에서 작업 중인데 다른 컴퓨터는 사무실에 있거나, 그냥 다른 Wi-Fi에 연결되어 있나요? 페어링 코드는 Mac과 Windows PC를 방을 넘어서뿐 아니라 인터넷 너머로도 연결해 줍니다.</p>
+      <p>보내는 컴퓨터가 짧은 페어링 코드(또는 공유 링크)를 생성하면, 다른 기기에서 입력해 연결합니다. 직접 경로가 가능한 한 전송은 여전히 P2P로 직접 이루어지고, 그렇지 않으면 암호화된 TURN 릴레이로 폴백하는데, 릴레이는 암호문만 볼 수 있습니다. 큰 폴더를 전송하다가 중간에 연결이 끊겨도 처음부터가 아니라 이어서 재개됩니다. 이 방식은 보내는 쪽의 로그인이 필요합니다 — 받는 쪽은 계정이 필요 없습니다.</p>
+      <h2>개별 파일뿐 아니라 폴더 전체 보내기</h2>
+      <p>프로젝트 폴더를 Mac에서 Windows로(또는 반대로) 옮기려면 보통 먼저 압축해야 합니다. Relayium은 폴더를 구조 그대로 유지하며 직접 보낼 수 있습니다.</p>
+      <ul><li>Mac에서는 폴더를 끌어다 놓거나 파일 선택 창에서 고릅니다 — 배치당 최대 1,000개 파일.</li><li>Edge나 Chrome을 쓰는 Windows PC에서는 들어오는 폴더가 선택한 디렉터리에 구조 그대로 곧바로 기록됩니다.</li><li>받는 쪽 브라우저가 폴더를 직접 기록하는 기능을 지원하지 않으면, 폴더는 같은 구조로 풀리는 단일 .zip으로 도착합니다.</li></ul>
+      <h2>Mac과 Windows 사이에서 파일을 옮기는 다른 방법</h2>
+      <p>Relayium만이 선택지는 아닙니다 — 흔한 대안들의 솔직한 절충점입니다:</p>
+      <ul><li>USB 드라이브는 오프라인에서 쓸 수 있지만, macOS와 Windows가 파일 시스템에서 항상 맞지는 않아 재포맷이 필요할 수 있고, 챙겨야 할 물건이 하나 더 생깁니다.</li><li>Windows 네트워크 공유(SMB)는 Mac에도 닿지만, 일회성 전송을 위해 작업 그룹, 권한, 방화벽 규칙을 설정하는 건 전송 자체보다 손이 더 갑니다.</li><li>클라우드 드라이브(OneDrive, iCloud, Google 드라이브)는 상대가 오프라인이어도 되지만, 파일을 올렸다가 다시 내려받게 되고, 저장 용량을 차지하며, 제공자가 사본을 보관합니다.</li><li>이메일과 채팅 앱은 편리하지만 보통 첨부 크기를 제한하고, 파일 공유는 종단간 암호화가 아닙니다.</li></ul>
+      <h2>파일에 뭔가 바뀌는 게 있나요?</h2>
+      <p>없습니다. Relayium은 원본 바이트를 있는 그대로 정확히 전송합니다 — 재압축도, 재포맷도 없고, 두 운영체제 사이에서 줄바꿈이나 파일명이 바뀌지도 않습니다.</p>
+      <p>각 파일은 SHA-256 해시로 종단간 검증되므로, Windows PC(또는 Mac)에 도착한 것은 다른 쪽 컴퓨터에서 나간 것과 동일함이 확인됩니다. 큰 파일도 잘 처리됩니다. Chrome과 Edge는 크기 제한 없이 다운로드를 곧바로 디스크로 스트리밍하고, Firefox와 Safari는 메모리에 버퍼링하므로 그 둘에서는 한 번의 전송을 약 200MB 이내로 유지하세요.</p>
+      <h2>자주 묻는 질문</h2>
+      <h3>Mac이나 Windows PC에 뭔가 설치해야 하나요?</h3>
+      <p>아니요. Relayium은 macOS와 Windows 모두에서 전적으로 브라우저에서 동작합니다. 각 기기에서 relayium.com을 열면 준비 끝입니다 — 어느 쪽이든 다운로드는 필요 없습니다. 같은 네트워크에서는 전송에 계정이 전혀 필요 없고, 인터넷 너머 페어링도 보내는 쪽이 로그인만 하면 됩니다.</p>
+      <h3>두 컴퓨터가 반드시 같은 네트워크에 있어야 하나요?</h3>
+      <p>아니요. 같은 네트워크는 두 기기가 자동으로 서로를 찾기 때문에 가장 빠르지만, 페어링 코드는 서로 다른 도시에 있는 Mac과 Windows PC도 인터넷 너머로 똑같이 연결해 줍니다. 어느 쪽이든 전송은 종단간 암호화를 유지합니다. 네트워크를 넘는 경로는 보내는 쪽이 먼저 로그인하기만 하면 되고, 받는 쪽은 계정이 필요 없습니다.</p>
+      <h3>개별 파일뿐 아니라 폴더 전체를 보낼 수 있나요?</h3>
+      <p>네. 폴더를 끌어다 놓으면 Relayium이 배치당 최대 1,000개 파일을 폴더 구조를 유지하며 보냅니다. Windows의 Chrome과 Edge는 선택한 디렉터리에 곧바로 기록합니다. 받는 쪽 브라우저가 폴더를 직접 기록하지 못하면, 같은 구조의 단일 .zip으로 도착합니다.</p>
+      <h3>Mac에서 Windows로 넘어갈 때 파일 권한, 줄바꿈, 파일명이 망가지나요?</h3>
+      <p>아니요. Relayium은 각 파일의 정확한 바이트를 옮기고 SHA-256 해시로 종단간 검증합니다 — 줄바꿈, 인코딩, 파일명은 건드리지 않습니다. 애플리케이션 수준의 변환이 필요할 만한 것(텍스트 파일의 CRLF와 LF 차이 등)도 파일 자체가 변경되지 않으므로 영향받지 않습니다.</p>
+      <h3>크기 제한이 있나요?</h3>
+      <p>배치당 최대 1,000개 파일입니다. 직접 전송에는 서버 측 크기 제한이 없습니다 — Chrome과 Edge는 곧바로 디스크로 스트리밍합니다 — 하지만 Firefox와 Safari는 메모리에 버퍼링하므로 그 둘에서는 한 번의 전송을 약 200MB 이내로 유지하세요.</p>
+      <div class="ctacard">
+        <p>Mac과 Windows PC 양쪽에서 Relayium을 열고 첫 파일을 보내 보세요 — 설치 불필요, 같은 네트워크에서는 계정도 필요 없습니다.</p>
+        <a class="cta" href="/?lang=ko">지금 Relayium 사용해보기</a>
+      </div>
+      <h2>계속 읽기</h2>
+      <ul class="related"><li><a href="/ko/compare/snapdrop">Relayium vs Snapdrop·PairDrop: 어떤 P2P 파일 전송이 더 안전할까?</a></li><li><a href="/ko/compare/airdrop">Relayium vs AirDrop: 크로스플랫폼 에어드롭 대안</a></li><li><a href="/ko/compare/wetransfer">Relayium vs WeTransfer: 서버 없이 대용량 파일 보내기</a></li><li><a href="/ko/how-to/transfer-files-android-to-iphone">안드로이드에서 아이폰으로 파일 전송하는 방법 (케이블 없이)</a></li><li><a href="/ko/how-to/send-files-pc-to-phone-wirelessly">PC에서 폰으로 무선 파일 전송: 케이블도 앱도 필요 없이</a></li><li><a href="/ko/how-to/send-large-files-without-cloud">클라우드 없이 대용량 파일 보내는 방법</a></li><li><a href="/ko/guides/transfer-files-from-terminal">Relayium CLI로 터미널에서 파일 전송하기</a></li><li><a href="/ko/guides/back-up-a-server-over-ssh">Relayium CLI로 SSH를 통해 자신의 서버에 파일 백업하기</a></li><li><a href="/ko/guides/send-a-file-to-someone">Relayium CLI로 네트워크를 넘어 상대에게 파일 보내기</a></li><li><a href="/ko/guides/server-to-server-transfers">Relayium CLI로 서버 간 전송(데몬 다이렉트)</a></li><li><a href="/ko/guides/sync-a-large-folder-between-servers">두 서버 사이에서 큰 폴더 동기화하기(재개 가능, 백그라운드)</a></li><li><a href="/ko/how-to/share-a-file-with-an-expiring-link">만료되는 안전한 다운로드 링크로 파일 공유하기</a></li><li><a href="/ko/guides/self-host-relayium">Relayium 셀프 호스팅: 나만의 파일 전송 서버 운영하기</a></li><li><a href="/ko/how-to/send-files-between-two-computers-over-the-internet">인터넷으로 컴퓨터 두 대 사이에 파일 보내는 방법</a></li><li><a href="/ko/compare/croc">Relayium vs croc: 터미널에서 암호화 파일 전송</a></li><li><a href="/ko/guides/how-relayium-encrypts-your-files">Relayium이 파일을 종단간 암호화하는 방식</a></li><li><a href="/ko/compare/google-drive">Relayium vs Google Drive: 파일을 더 직접적으로 보내기</a></li><li><a href="/ko/compare/rsync">Relayium vs rsync: SSH 설정 없이 폴더 동기화하기</a></li><li><a href="/ko/compare/firefox-send">2026년 최고의 Firefox Send 대안</a></li><li><a href="/ko/how-to/transfer-files-by-scanning-a-qr-code">QR 코드를 스캔해서 파일 전송하기</a></li><li><a href="/ko/guides/receive-files-from-the-command-line">명령줄에서 파일 받기</a></li><li><a href="/ko/how-to/send-a-folder">파일이 아니라 폴더째로 보내는 방법</a></li><li><a href="/ko/guides/run-relayium-as-an-always-on-service">Relayium을 상시 실행되는 수신 서비스로 운영하기</a></li><li><a href="/ko/how-to/automate-server-backups">cron 작업으로 암호화된 서버 백업 자동화하기</a></li><li><a href="/ko/compare/localsend">Relayium vs LocalSend: 로컬 파일 전송, 무엇을 쓸까</a></li><li><a href="/ko/compare/scp">Relayium vs scp: 더 간단한 SSH 파일 전송</a></li><li><a href="/ko/compare/magic-wormhole">Relayium vs magic-wormhole: CLI 파일 전송</a></li><li><a href="/ko/compare/nextcloud">Relayium vs Nextcloud: 파일 전송에는 무엇을 써야 할까</a></li><li><a href="/ko/compare/dropbox">Relayium vs Dropbox: 파일 하나를 더 직접적으로 보내기</a></li><li><a href="/ko/how-to/airdrop-for-windows-and-android">Windows·Linux·Android용 AirDrop 대안</a></li><li><a href="/ko/how-to/send-files-on-the-same-wifi">같은 Wi-Fi에 있는 기기끼리 파일 보내기</a></li><li><a href="/ko/guides/what-is-peer-to-peer-file-transfer">P2P(피어투피어) 파일 전송이란?</a></li><li><a href="/ko/guides/is-it-safe-to-send-files-over-the-internet">인터넷으로 파일을 보내도 안전할까요?</a></li><li><a href="/ko/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ko">← Relayium</a>
+        <a href="/ko/guides">가이드</a>
+        <a href="/ko/privacy">개인정보 처리방침</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

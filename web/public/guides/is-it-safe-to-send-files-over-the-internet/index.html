@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Is it safe to send files over the internet? · Relayium</title>
+    <meta name="description" content="What actually goes wrong with email, cloud links, and USB drives — what &quot;end-to-end encrypted&quot; and &quot;zero-knowledge&quot; really mean, and what to check before trusting a transfer tool." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/guides/is-it-safe-to-send-files-over-the-internet" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/is-it-safe-to-send-files-over-the-internet" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/is-it-safe-to-send-files-over-the-internet" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/is-it-safe-to-send-files-over-the-internet" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/is-it-safe-to-send-files-over-the-internet" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/is-it-safe-to-send-files-over-the-internet" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/is-it-safe-to-send-files-over-the-internet" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/is-it-safe-to-send-files-over-the-internet" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Is it safe to send files over the internet?" />
+    <meta property="og:description" content="What actually goes wrong with email, cloud links, and USB drives — what &quot;end-to-end encrypted&quot; and &quot;zero-knowledge&quot; really mean, and what to check before trusting a transfer tool." />
+    <meta property="og:url" content="https://relayium.com/guides/is-it-safe-to-send-files-over-the-internet" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Is it safe to send files over the internet?" />
+    <meta name="twitter:description" content="What actually goes wrong with email, cloud links, and USB drives — what &quot;end-to-end encrypted&quot; and &quot;zero-knowledge&quot; really mean, and what to check before trusting a transfer tool." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Is it safe to send files over the internet?","description":"What actually goes wrong with email, cloud links, and USB drives — what \"end-to-end encrypted\" and \"zero-knowledge\" really mean, and what to check before trusting a transfer tool.","inLanguage":"en","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/guides/is-it-safe-to-send-files-over-the-internet","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Is it safe to email a sensitive file?","acceptedAnswer":{"@type":"Answer","text":"Email isn't designed for confidential file transfer — attachments are commonly retained, scanned, and backed up by mail servers on both ends, and a forwarded message can put the file in front of people you never intended. It's fine for low-stakes files; for anything sensitive, a tool with end-to-end encryption removes that exposure."}},{"@type":"Question","name":"What does \"zero-knowledge\" actually mean?","acceptedAnswer":{"@type":"Answer","text":"That the party storing your data was never given the key to read it. The encryption happens on your device before anything uploads, and the key lives only somewhere the server never sees — like a URL fragment — so what sits on the server is ciphertext it structurally cannot decrypt, not just data it promises not to look at."}},{"@type":"Question","name":"Is a password-protected zip file good enough?","acceptedAnswer":{"@type":"Answer","text":"It's better than nothing, but the password often travels the same way as the file — in the same email thread, for instance — which undoes the protection, and zip encryption implementations vary widely in strength. A tool built around end-to-end encryption removes that weak link by never needing a shared password at all."}},{"@type":"Question","name":"Does Relayium keep a copy of my files?","acceptedAnswer":{"@type":"Answer","text":"In realtime mode, no — the file streams directly between the two browsers and nothing is stored. For a stored link, the server holds only encrypted ciphertext it cannot read, until the link expires or is downloaded once if you chose burn-after-read."}},{"@type":"Question","name":"Do I need an account to send or receive a file?","acceptedAnswer":{"@type":"Answer","text":"On the same network, neither side needs an account. Sending across networks by pairing code, or creating a stored link, requires the sender to sign in — but the person receiving never needs an account, whichever mode is used."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>Is it safe to send files over the internet?</h1>
+      <p class="updated">Last updated: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/is-it-safe-to-send-files-over-the-internet" aria-current="true">English</a><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet">中文</a><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet">日本語</a><a href="/ko/guides/is-it-safe-to-send-files-over-the-internet">한국어</a><a href="/de/guides/is-it-safe-to-send-files-over-the-internet">Deutsch</a><a href="/fr/guides/is-it-safe-to-send-files-over-the-internet">Français</a></nav>
+      <p class="lead">&quot;Is it safe to send this file?&quot; is a reasonable question to stop and ask, whether it&#39;s a tax return, a contract, or just photos you&#39;d rather stayed private. This guide isn&#39;t about scaring you off common tools — it&#39;s about walking through, plainly, what actually happens to a file when you email it, drop it in a cloud folder, or carry it on a USB stick, what the phrases &quot;end-to-end encrypted&quot; and &quot;zero-knowledge&quot; actually promise, and what to check before you trust any tool with something you care about.</p>
+      <p class="lead">None of this requires a technical background. By the end, you&#39;ll know what questions to ask — of any transfer method, including this one.</p>
+      <h2>Where files actually go wrong: the everyday risks</h2>
+      <p>Email attachments pass through your mail provider&#39;s servers and the recipient&#39;s, both of which commonly scan, index, and back up messages for spam filtering and disaster recovery — long after you&#39;ve forgotten you sent it. Forward the email once, and the file is in front of someone you never intended, with no way to know every copy is gone.</p>
+      <p>Cloud storage links are convenient, but a link usually keeps working until you remember to revoke it, and &quot;anyone with the link&quot; is only as private as an unguessable URL — which a link-shortening service or a careless forward can undo. The file also inherits the security of the whole account it sits in, not just the share itself.</p>
+      <p>A USB stick feels safe because it&#39;s offline, but that&#39;s exactly the gap: most drives aren&#39;t encrypted by default, so a stick left in a laptop bag or a rental car hands over the plaintext to whoever finds it, no password required.</p>
+      <p>Free public upload sites solve the immediate problem — get a file from A to B — but rarely say what happens next: how long it&#39;s kept, whether it&#39;s scanned, who might stumble on it, or how the site pays its bills (ad-funded file hosts have a track record of bundling trackers or worse).</p>
+      <ul><li>Email: retained and scanned by mail servers, easy to forward beyond your control</li><li>Cloud links: keep working until revoked, and inherit the whole account&#39;s security</li><li>USB drives: unencrypted by default, easy to lose or leave behind</li><li>Free upload sites: retention and scanning practices are usually unclear</li></ul>
+      <h2>What &quot;end-to-end encrypted&quot; and &quot;zero-knowledge&quot; actually mean</h2>
+      <p>Plenty of services say &quot;encrypted&quot; and mean only that the connection to their server is encrypted — standard HTTPS/TLS, the same padlock icon your bank uses. That&#39;s real protection against someone eavesdropping on the network, but it stops at the server: once your file arrives, the service itself can read it, because it holds the key. A lot of everyday tools stop exactly there.</p>
+      <p>End-to-end encryption means something stronger: the file is encrypted before it leaves your device, with a key that only the sender and the intended recipient ever hold. The service that carries it — the server, the relay, anything in between — never has the key, so it never has the plaintext, no matter how it&#39;s asked.</p>
+      <p>&quot;Zero-knowledge&quot; is a related idea usually applied to something stored rather than sent live: even data sitting at rest on a server was encrypted with a key the server itself was never given, so the operator has no way to read it, ever, no matter how long it stays there.</p>
+      <ul><li>&quot;Encrypted&quot; alone often just means TLS to the server — the provider can still read the file.</li><li>&quot;End-to-end encrypted&quot; means only sender and recipient hold the key.</li><li>&quot;Zero-knowledge&quot; means the server holds data it structurally cannot decrypt, even at rest.</li></ul>
+      <h2>What to actually check before trusting a transfer tool</h2>
+      <p>The marketing language on a website is worth less than a few concrete questions:</p>
+      <ul><li>Does it say &quot;encrypted&quot; (could mean just TLS) or specifically &quot;end-to-end encrypted&quot; (only sender and recipient hold the key)?</li><li>Is there a way to verify the connection wasn&#39;t tampered with — a code you compare, not just a padlock icon you have to trust?</li><li>Is the file&#39;s integrity checked, so a corrupted or altered file doesn&#39;t arrive silently wrong?</li><li>Is the code open source and auditable, or are the claims just marketing you have to take on faith?</li><li>Does sending or receiving require handing over more identity than the transfer actually needs?</li><li>If anything is stored, does it have a clear, finite lifetime — an expiry or delete-after-download — instead of sitting there indefinitely?</li></ul>
+      <h2>How Relayium answers each of these</h2>
+      <p>For a live transfer, with both people online at once, Relayium generates a fresh X25519 key pair on each device and derives a shared AES-256-GCM key that exists only inside the two browsers — it&#39;s never sent to Relayium&#39;s own servers. A short on-screen verification code (a SAS) lets both sides confirm the keys weren&#39;t swapped by a dishonest server in the middle, and each file&#39;s SHA-256 hash is checked end to end so a corrupted transfer doesn&#39;t arrive looking fine. The mechanics of exactly how that works are covered in more depth in &quot;How Relayium encrypts your files end-to-end&quot;, if you want to go further than this page.</p>
+      <p>When the recipient isn&#39;t online yet, a stored download link uses a genuinely different, zero-knowledge design: your browser generates a random AES-256-GCM key and encrypts the files with it before anything uploads. That key is never sent to the server — it lives only in the link&#39;s URL fragment, the part after #, which browsers never transmit. The server ends up holding ciphertext it has no way to decrypt, plus an expiry you choose: 1 hour, 1 day, 3 days, 7 days, or burn after the first completed download.</p>
+      <p>When a direct connection between two devices isn&#39;t possible, the encrypted stream falls back to a TURN relay rather than failing — and that relay only ever sees ciphertext too, never a readable file.</p>
+      <p>None of this asks you to trust a claim on faith: Relayium&#39;s client and server code is open source under the MIT license, so it can be read and audited rather than taken on faith.</p>
+      <ul><li>Same-network transfers need no account at all.</li><li>Sending across networks by pairing code, or creating a stored link, needs the sender to sign in — the recipient never needs an account.</li></ul>
+      <h2>Encryption isn&#39;t the whole story — a few habits still matter</h2>
+      <p>Strong encryption protects a file in transit and at rest, but it can&#39;t stop you from sending a link to the wrong address — treat a share link like the file itself, and don&#39;t post it somewhere public.</p>
+      <p>For anything genuinely sensitive, take the extra few seconds to compare a verification code out loud on a call, or in person, rather than trusting that two matching screens next to each other haven&#39;t both been fooled.</p>
+      <p>And no transfer tool, however well encrypted, protects a file that&#39;s already exposed on a device that&#39;s compromised — good encryption assumes the two ends themselves are trustworthy. None of this is a reason to be paranoid about sending files; it&#39;s just worth knowing what encryption does and doesn&#39;t cover.</p>
+      <h2>Frequently asked questions</h2>
+      <h3>Is it safe to email a sensitive file?</h3>
+      <p>Email isn&#39;t designed for confidential file transfer — attachments are commonly retained, scanned, and backed up by mail servers on both ends, and a forwarded message can put the file in front of people you never intended. It&#39;s fine for low-stakes files; for anything sensitive, a tool with end-to-end encryption removes that exposure.</p>
+      <h3>What does &quot;zero-knowledge&quot; actually mean?</h3>
+      <p>That the party storing your data was never given the key to read it. The encryption happens on your device before anything uploads, and the key lives only somewhere the server never sees — like a URL fragment — so what sits on the server is ciphertext it structurally cannot decrypt, not just data it promises not to look at.</p>
+      <h3>Is a password-protected zip file good enough?</h3>
+      <p>It&#39;s better than nothing, but the password often travels the same way as the file — in the same email thread, for instance — which undoes the protection, and zip encryption implementations vary widely in strength. A tool built around end-to-end encryption removes that weak link by never needing a shared password at all.</p>
+      <h3>Does Relayium keep a copy of my files?</h3>
+      <p>In realtime mode, no — the file streams directly between the two browsers and nothing is stored. For a stored link, the server holds only encrypted ciphertext it cannot read, until the link expires or is downloaded once if you chose burn-after-read.</p>
+      <h3>Do I need an account to send or receive a file?</h3>
+      <p>On the same network, neither side needs an account. Sending across networks by pairing code, or creating a stored link, requires the sender to sign in — but the person receiving never needs an account, whichever mode is used.</p>
+      <div class="ctacard">
+        <p>Curious whether a tool actually protects what it claims to? Start a transfer and see the verification code and the zero-knowledge link for yourself.</p>
+        <a class="cta" href="/">Try Relayium now</a>
+      </div>
+      <h2>Keep reading</h2>
+      <ul class="related"><li><a href="/compare/snapdrop">Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</a></li><li><a href="/compare/airdrop">Relayium vs AirDrop: a cross-platform AirDrop alternative</a></li><li><a href="/compare/wetransfer">Relayium vs WeTransfer: send large files without the server</a></li><li><a href="/how-to/transfer-files-android-to-iphone">How to transfer files from Android to iPhone (no cable)</a></li><li><a href="/how-to/send-files-pc-to-phone-wirelessly">Send files from PC to phone wirelessly, no cable or app</a></li><li><a href="/how-to/send-large-files-without-cloud">How to send large files without the cloud</a></li><li><a href="/guides/transfer-files-from-terminal">Transfer files from the terminal with the Relayium CLI</a></li><li><a href="/guides/back-up-a-server-over-ssh">Back up files to your own server over SSH with the Relayium CLI</a></li><li><a href="/guides/send-a-file-to-someone">Send a file to someone across networks with the Relayium CLI</a></li><li><a href="/guides/server-to-server-transfers">Server-to-server transfers with the Relayium CLI (daemon direct)</a></li><li><a href="/guides/sync-a-large-folder-between-servers">Sync a large folder between two servers (resumable, in the background)</a></li><li><a href="/how-to/share-a-file-with-an-expiring-link">Share a file with a secure, expiring download link</a></li><li><a href="/guides/self-host-relayium">Self-host Relayium: run your own file-transfer server</a></li><li><a href="/how-to/send-files-between-two-computers-over-the-internet">Send files between two computers over the internet</a></li><li><a href="/compare/croc">Relayium vs croc: encrypted file transfer from the terminal</a></li><li><a href="/guides/how-relayium-encrypts-your-files">How Relayium encrypts your files end-to-end</a></li><li><a href="/compare/google-drive">Relayium vs Google Drive for sending files</a></li><li><a href="/compare/rsync">Relayium vs rsync: sync folders without the SSH setup</a></li><li><a href="/compare/firefox-send">The best Firefox Send alternative in 2026</a></li><li><a href="/how-to/transfer-files-by-scanning-a-qr-code">Transfer files by scanning a QR code</a></li><li><a href="/guides/receive-files-from-the-command-line">Receive files from the command line</a></li><li><a href="/how-to/send-a-folder">How to send a whole folder, not just files</a></li><li><a href="/guides/run-relayium-as-an-always-on-service">Run Relayium as an always-on receive service</a></li><li><a href="/how-to/automate-server-backups">Automate encrypted server backups with a cron job</a></li><li><a href="/compare/localsend">Relayium vs LocalSend: which local file transfer to use</a></li><li><a href="/compare/scp">Relayium vs scp: simpler file transfer over SSH</a></li><li><a href="/compare/magic-wormhole">Relayium vs magic-wormhole: CLI file transfer</a></li><li><a href="/compare/nextcloud">Relayium vs Nextcloud for sending files</a></li><li><a href="/compare/dropbox">Relayium vs Dropbox for sending a file</a></li><li><a href="/how-to/airdrop-for-windows-and-android">AirDrop for Windows, Linux and Android</a></li><li><a href="/how-to/transfer-files-between-mac-and-windows">Transfer files between a Mac and a Windows PC</a></li><li><a href="/how-to/send-files-on-the-same-wifi">Send files between devices on the same Wi-Fi</a></li><li><a href="/guides/what-is-peer-to-peer-file-transfer">What is peer-to-peer file transfer?</a></li><li><a href="/">Relayium</a></li></ul>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/guides">Guides</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

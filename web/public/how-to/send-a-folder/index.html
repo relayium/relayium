@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>How to send a whole folder, not just files · Relayium</title>
+    <meta name="description" content="Pick a whole folder in the browser and send it in one batch — relative paths preserved, up to 1,000 files, each verified with SHA-256. No zipping required beforehand." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/how-to/send-a-folder" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-a-folder" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-a-folder" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-a-folder" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-a-folder" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-a-folder" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-a-folder" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-a-folder" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="How to send a whole folder, not just files" />
+    <meta property="og:description" content="Pick a whole folder in the browser and send it in one batch — relative paths preserved, up to 1,000 files, each verified with SHA-256. No zipping required beforehand." />
+    <meta property="og:url" content="https://relayium.com/how-to/send-a-folder" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="How to send a whole folder, not just files" />
+    <meta name="twitter:description" content="Pick a whole folder in the browser and send it in one batch — relative paths preserved, up to 1,000 files, each verified with SHA-256. No zipping required beforehand." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"How to send a whole folder, not just files","description":"Pick a whole folder in the browser and send it in one batch — relative paths preserved, up to 1,000 files, each verified with SHA-256. No zipping required beforehand.","inLanguage":"en","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/how-to/send-a-folder","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Can I send a folder from an iPhone or iPad?","acceptedAnswer":{"@type":"Answer","text":"Not as the sender — iOS's Safari has no folder picker, only individual files, so folder sending currently works from desktop Chrome, Edge, or Firefox. An iPhone or iPad can still receive a folder just fine, as a .zip."}},{"@type":"Question","name":"Are subfolders and file structure preserved?","acceptedAnswer":{"@type":"Answer","text":"Yes. Relayium keeps every file's relative path, including nested subfolders, so the folder that arrives has the same layout as the one you picked."}},{"@type":"Question","name":"How many files can a folder send hold?","acceptedAnswer":{"@type":"Answer","text":"Up to 1,000 files in a single batch, each individually verified with a SHA-256 hash on arrival."}},{"@type":"Question","name":"Does the recipient get an actual folder or a .zip?","acceptedAnswer":{"@type":"Answer","text":"It depends on their browser. Chrome and Edge write the files straight into a directory they choose. Firefox and Safari receive one store-only .zip (under 4 GiB) that unpacks into the same folder structure."}},{"@type":"Question","name":"Do I need an account to send a folder?","acceptedAnswer":{"@type":"Answer","text":"Not on the same network. Sending across networks with a pairing code needs the sender to sign in, but the receiver never needs an account either way."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>How to send a whole folder, not just files</h1>
+      <p class="updated">Last updated: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-a-folder" aria-current="true">English</a><a href="/zh/how-to/send-a-folder">中文</a><a href="/ja/how-to/send-a-folder">日本語</a><a href="/ko/how-to/send-a-folder">한국어</a><a href="/de/how-to/send-a-folder">Deutsch</a><a href="/fr/how-to/send-a-folder">Français</a></nav>
+      <p class="lead">Sending a project isn&#39;t the same as sending a file — you have a folder full of subfolders, and copy-pasting each piece individually loses the structure that makes it useful. Zipping it first works, but it means a detour through a compression tool before you can even start.</p>
+      <p class="lead">Relayium lets you pick a folder directly and send it as-is. The browser walks the whole tree, keeps every relative path intact, and streams it to the other side — whether that ends up peer-to-peer with nothing stored, or as a link you can leave for later.</p>
+      <h2>Pick a folder, not a pile of files</h2>
+      <p>Instead of selecting files one by one, choose the folder itself. Relayium walks the directory tree in the browser and keeps every file&#39;s relative path — subfolders, nested subfolders, all of it — so what arrives on the other end has the same layout you started with.</p>
+      <p>This works today in desktop Chrome, Edge, and Firefox. It doesn&#39;t work on iOS: Safari&#39;s file picker on iPhone and iPad has no way to select a folder, only individual files, so folder sending is a desktop feature for now.</p>
+      <ul><li>Up to 1,000 files in a single batch.</li><li>Every file is verified end-to-end with its own SHA-256 hash, so what lands matches exactly what you sent.</li><li>Works from drag-and-drop or a folder picker button — no need to zip anything first.</li></ul>
+      <h2>What the other person gets</h2>
+      <p>How the folder arrives depends on the receiving browser. Chrome and Edge can write files straight into a directory the recipient chooses, so the folder shows up on disk exactly as it left — no extra step.</p>
+      <p>Firefox and Safari don&#39;t have that capability, so instead they receive one store-only .zip archive that unpacks to the exact same folder structure. It stays under 4 GiB (no ZIP64 support), which covers the vast majority of project folders and photo or document sets — for anything bigger, split into two sends.</p>
+      <h2>Realtime, or a link for later</h2>
+      <p>If you can both be online at the same time, send the folder directly — it goes peer-to-peer and nothing is stored on any server in between. This is the fastest path and needs no account if you&#39;re on the same network; sending across networks with a pairing code just needs the sender to sign in, and the receiver never needs an account at all.</p>
+      <p>If the other person isn&#39;t around right now, create a stored link instead. Your browser encrypts the folder&#39;s files before upload with a random AES-256-GCM key that only ever lives in the link itself, so the server holds ciphertext it can&#39;t read. Creating a link needs the sender to sign in; set it to expire in 1 hour, 1 day, 3 days, or 7 days, or make it burn after the first download.</p>
+      <h2>Frequently asked questions</h2>
+      <h3>Can I send a folder from an iPhone or iPad?</h3>
+      <p>Not as the sender — iOS&#39;s Safari has no folder picker, only individual files, so folder sending currently works from desktop Chrome, Edge, or Firefox. An iPhone or iPad can still receive a folder just fine, as a .zip.</p>
+      <h3>Are subfolders and file structure preserved?</h3>
+      <p>Yes. Relayium keeps every file&#39;s relative path, including nested subfolders, so the folder that arrives has the same layout as the one you picked.</p>
+      <h3>How many files can a folder send hold?</h3>
+      <p>Up to 1,000 files in a single batch, each individually verified with a SHA-256 hash on arrival.</p>
+      <h3>Does the recipient get an actual folder or a .zip?</h3>
+      <p>It depends on their browser. Chrome and Edge write the files straight into a directory they choose. Firefox and Safari receive one store-only .zip (under 4 GiB) that unpacks into the same folder structure.</p>
+      <h3>Do I need an account to send a folder?</h3>
+      <p>Not on the same network. Sending across networks with a pairing code needs the sender to sign in, but the receiver never needs an account either way.</p>
+      <div class="ctacard">
+        <p>Pick a folder and send it exactly as it is — structure intact, every file verified.</p>
+        <a class="cta" href="/">Try Relayium now</a>
+      </div>
+      <h2>Keep reading</h2>
+      <ul class="related"><li><a href="/compare/snapdrop">Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</a></li><li><a href="/compare/airdrop">Relayium vs AirDrop: a cross-platform AirDrop alternative</a></li><li><a href="/compare/wetransfer">Relayium vs WeTransfer: send large files without the server</a></li><li><a href="/how-to/transfer-files-android-to-iphone">How to transfer files from Android to iPhone (no cable)</a></li><li><a href="/how-to/send-files-pc-to-phone-wirelessly">Send files from PC to phone wirelessly, no cable or app</a></li><li><a href="/how-to/send-large-files-without-cloud">How to send large files without the cloud</a></li><li><a href="/guides/transfer-files-from-terminal">Transfer files from the terminal with the Relayium CLI</a></li><li><a href="/guides/back-up-a-server-over-ssh">Back up files to your own server over SSH with the Relayium CLI</a></li><li><a href="/guides/send-a-file-to-someone">Send a file to someone across networks with the Relayium CLI</a></li><li><a href="/guides/server-to-server-transfers">Server-to-server transfers with the Relayium CLI (daemon direct)</a></li><li><a href="/guides/sync-a-large-folder-between-servers">Sync a large folder between two servers (resumable, in the background)</a></li><li><a href="/how-to/share-a-file-with-an-expiring-link">Share a file with a secure, expiring download link</a></li><li><a href="/guides/self-host-relayium">Self-host Relayium: run your own file-transfer server</a></li><li><a href="/how-to/send-files-between-two-computers-over-the-internet">Send files between two computers over the internet</a></li><li><a href="/compare/croc">Relayium vs croc: encrypted file transfer from the terminal</a></li><li><a href="/guides/how-relayium-encrypts-your-files">How Relayium encrypts your files end-to-end</a></li><li><a href="/compare/google-drive">Relayium vs Google Drive for sending files</a></li><li><a href="/compare/rsync">Relayium vs rsync: sync folders without the SSH setup</a></li><li><a href="/compare/firefox-send">The best Firefox Send alternative in 2026</a></li><li><a href="/how-to/transfer-files-by-scanning-a-qr-code">Transfer files by scanning a QR code</a></li><li><a href="/guides/receive-files-from-the-command-line">Receive files from the command line</a></li><li><a href="/guides/run-relayium-as-an-always-on-service">Run Relayium as an always-on receive service</a></li><li><a href="/how-to/automate-server-backups">Automate encrypted server backups with a cron job</a></li><li><a href="/compare/localsend">Relayium vs LocalSend: which local file transfer to use</a></li><li><a href="/compare/scp">Relayium vs scp: simpler file transfer over SSH</a></li><li><a href="/compare/magic-wormhole">Relayium vs magic-wormhole: CLI file transfer</a></li><li><a href="/compare/nextcloud">Relayium vs Nextcloud for sending files</a></li><li><a href="/compare/dropbox">Relayium vs Dropbox for sending a file</a></li><li><a href="/how-to/airdrop-for-windows-and-android">AirDrop for Windows, Linux and Android</a></li><li><a href="/how-to/transfer-files-between-mac-and-windows">Transfer files between a Mac and a Windows PC</a></li><li><a href="/how-to/send-files-on-the-same-wifi">Send files between devices on the same Wi-Fi</a></li><li><a href="/guides/what-is-peer-to-peer-file-transfer">What is peer-to-peer file transfer?</a></li><li><a href="/guides/is-it-safe-to-send-files-over-the-internet">Is it safe to send files over the internet?</a></li><li><a href="/">Relayium</a></li></ul>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/guides">Guides</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

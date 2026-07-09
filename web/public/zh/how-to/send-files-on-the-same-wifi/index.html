@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>同一 Wi-Fi 下的设备之间互传文件 · Relayium</title>
+    <meta name="description" content="如何在同一 Wi-Fi 或局域网下的任意设备之间传文件——无需账号，无需配对码，两端都打开 relayium.com 即可直传，全程端到端加密。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/zh/how-to/send-files-on-the-same-wifi" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-files-on-the-same-wifi" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-files-on-the-same-wifi" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-files-on-the-same-wifi" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-files-on-the-same-wifi" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-files-on-the-same-wifi" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-files-on-the-same-wifi" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-files-on-the-same-wifi" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="同一 Wi-Fi 下的设备之间互传文件" />
+    <meta property="og:description" content="如何在同一 Wi-Fi 或局域网下的任意设备之间传文件——无需账号，无需配对码，两端都打开 relayium.com 即可直传，全程端到端加密。" />
+    <meta property="og:url" content="https://relayium.com/zh/how-to/send-files-on-the-same-wifi" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="同一 Wi-Fi 下的设备之间互传文件" />
+    <meta name="twitter:description" content="如何在同一 Wi-Fi 或局域网下的任意设备之间传文件——无需账号，无需配对码，两端都打开 relayium.com 即可直传，全程端到端加密。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"同一 Wi-Fi 下的设备之间互传文件","description":"如何在同一 Wi-Fi 或局域网下的任意设备之间传文件——无需账号，无需配对码，两端都打开 relayium.com 即可直传，全程端到端加密。","inLanguage":"zh-Hans","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/zh/how-to/send-files-on-the-same-wifi","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"在同一 Wi-Fi 下传文件需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。同网络传输两端都无需账号，也无需配对码——每台设备打开 relayium.com 就行。"}},{"@type":"Question","name":"Relayium 怎么知道哪些设备在我的网络里？","acceptedAnswer":{"@type":"Answer","text":"同网络下的设备通常共享同一个公网 IP，Relayium 会自动把公网 IP 相同的设备归到同一个房间里，无需任何验证码。"}},{"@type":"Question","name":"能不能同时有两台以上的设备互相看见？","acceptedAnswer":{"@type":"Answer","text":"可以。同网络房间不限于一对一——从该网络打开 relayium.com 的每台设备都能出现并接收文件，适合同一个房间或办公室里给多个人分享。"}},{"@type":"Question","name":"如果传输从未离开我的网络，还是加密的吗？","acceptedAnswer":{"@type":"Answer","text":"是的。每一次同网络传输都使用和跨网络传输一样的 X25519 密钥交换与 AES-256-GCM 加密，有你能亲自核对的校验码，还有逐文件的 SHA-256 完整性校验。"}},{"@type":"Question","name":"如果一台设备用 Wi-Fi，另一台用移动数据怎么办？","acceptedAnswer":{"@type":"Answer","text":"那它们就不在同一网络，自动发现连不上。改用配对码：发送方登录后创建配对码，接收方无需账号，两台设备依然可以直接连接。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <h1>同一 Wi-Fi 下的设备之间互传文件</h1>
+      <p class="updated">最近更新: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-on-the-same-wifi">English</a><a href="/zh/how-to/send-files-on-the-same-wifi" aria-current="true">中文</a><a href="/ja/how-to/send-files-on-the-same-wifi">日本語</a><a href="/ko/how-to/send-files-on-the-same-wifi">한국어</a><a href="/de/how-to/send-files-on-the-same-wifi">Deutsch</a><a href="/fr/how-to/send-files-on-the-same-wifi">Français</a></nav>
+      <p class="lead">如果两台或多台设备在同一个 Wi-Fi 或局域网里，它们之间传文件本不该需要账号、验证码，或绕道云端。Relayium 能识别设备是否处于同一网络，并让它们在浏览器里直接互连，什么都不用注册。</p>
+      <p class="lead">本文讲的是通用的同网络场景——任意设备、任意操作系统，甚至可以同时超过两台。如果你心里想的是某个具体设备组合，可以看文末链接的专门指南：电脑传手机、Mac 传 Windows，或面向 Windows/Linux/Android 的 AirDrop 式方案。</p>
+      <h2>同网络是怎么被识别的</h2>
+      <p>Relayium 不需要你输入任何东西来发现附近的设备。当你的浏览器不带配对码打开 relayium.com 时，服务器会根据你所连接的网络把你放进一个房间——实际上，共享同一个公网 IP 的设备（比如同一个家庭、办公室、校园 Wi-Fi，或同一个手机热点）会自动落入同一个房间。</p>
+      <p>这个房间不限于两个人：从该网络打开网站的设备有多少，房间里就能容纳多少台，所以一整桌笔记本电脑，或一个教室的手机，都能同时互相看见，不只是一对一。</p>
+      <h2>分步操作</h2>
+      <p>整个流程都在浏览器里完成——任何设备都不用装 App。</p>
+      <ul><li>把你要用到的每台设备都连接到同一个 Wi-Fi 或局域网。</li><li>在每台设备上用现代浏览器（Chrome、Edge、Firefox 或 Safari）打开 relayium.com。</li><li>同网络下的设备会自动互相出现——两端都无需验证码，无需登录，无需账号。</li><li>选好文件或整个文件夹（每批最多 1,000 个文件），再从列表里选出要接收的那台设备。</li><li>两台设备会显示同一段简短的校验码（SAS）。分别瞄一眼，确认一致，传输就开始了。</li><li>文件直接从一台设备传到另一台；到达后保存即可。</li></ul>
+      <h2>为什么这么快：中间没有服务器</h2>
+      <p>由于两台设备本来就在同一网络里，Relayium 会让它们直接点对点连接——字节在你本地 Wi-Fi 上从一台设备流向另一台，从不绕道 Relayium 的服务器往返。没有什么要上传，也没有什么要等下载；速度只受你本地网络的限制，通常比任何方向的公网连接快得多。</p>
+      <p>这也是为什么两端都不需要账号：既然大家已经在同一个可信网络里，Relayium 不需要靠登录来判断谁能连谁。</p>
+      <h2>依然是端到端加密</h2>
+      <p>在同一网络下不代表传输就是明文的。Relayium 会在两台设备之间协商 X25519 密钥交换，并用 AES-256-GCM 对每个数据块加密；这把密钥不会被任何服务器看到，包括 Relayium 自己的信令服务器——它只负责帮设备找到彼此。两块屏幕显示的同一段简短校验码（SAS）能让你亲眼确认这条连接确实建立在你的两台设备之间，而每个文件还会用 SHA-256 做端到端校验，让你确信它是逐字节完整到达的。</p>
+      <h2>如果某台设备在别的网络上</h2>
+      <p>同网络模式只在设备真正共享同一网络时才生效——用移动数据的手机、连着另一个 Wi-Fi 的笔记本，或在另一台路由器后面的设备，都不会自动出现。这种情况下，Relayium 也支持用一个短配对码跨网络连接：发送方登录后生成配对码（或二维码/链接），接收方始终无需账号，只要网络条件允许，传输依然是点对点直连——只有在无法直连时才会退回到加密中继。</p>
+      <h2>常见问题</h2>
+      <h3>在同一 Wi-Fi 下传文件需要账号吗？</h3>
+      <p>不需要。同网络传输两端都无需账号，也无需配对码——每台设备打开 relayium.com 就行。</p>
+      <h3>Relayium 怎么知道哪些设备在我的网络里？</h3>
+      <p>同网络下的设备通常共享同一个公网 IP，Relayium 会自动把公网 IP 相同的设备归到同一个房间里，无需任何验证码。</p>
+      <h3>能不能同时有两台以上的设备互相看见？</h3>
+      <p>可以。同网络房间不限于一对一——从该网络打开 relayium.com 的每台设备都能出现并接收文件，适合同一个房间或办公室里给多个人分享。</p>
+      <h3>如果传输从未离开我的网络，还是加密的吗？</h3>
+      <p>是的。每一次同网络传输都使用和跨网络传输一样的 X25519 密钥交换与 AES-256-GCM 加密，有你能亲自核对的校验码，还有逐文件的 SHA-256 完整性校验。</p>
+      <h3>如果一台设备用 Wi-Fi，另一台用移动数据怎么办？</h3>
+      <p>那它们就不在同一网络，自动发现连不上。改用配对码：发送方登录后创建配对码，接收方无需账号，两台设备依然可以直接连接。</p>
+      <div class="ctacard">
+        <p>在同一 Wi-Fi 下的任意两台（或更多）设备上打开 Relayium，发出你的第一个文件——无需账号，无需验证码。</p>
+        <a class="cta" href="/?lang=zh">立即试用 Relayium</a>
+      </div>
+      <h2>继续阅读</h2>
+      <ul class="related"><li><a href="/zh/compare/snapdrop">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/transfer-files-android-to-iphone">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud">如何不用网盘传输大文件</a></li><li><a href="/zh/guides/transfer-files-from-terminal">用 Relayium CLI 从终端传输文件</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/guides/send-a-file-to-someone">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/server-to-server-transfers">用 Relayium CLI 实现服务器到服务器直传（守护进程直连）</a></li><li><a href="/zh/guides/sync-a-large-folder-between-servers">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li><li><a href="/zh/how-to/share-a-file-with-an-expiring-link">用会过期的安全链接分享文件</a></li><li><a href="/zh/guides/self-host-relayium">自托管 Relayium：运行属于你自己的文件传输服务器</a></li><li><a href="/zh/how-to/send-files-between-two-computers-over-the-internet">如何通过互联网在两台电脑之间传文件</a></li><li><a href="/zh/compare/croc">Relayium 对比 croc：从终端加密传输文件</a></li><li><a href="/zh/guides/how-relayium-encrypts-your-files">Relayium 如何对文件端到端加密</a></li><li><a href="/zh/compare/google-drive">Relayium 对比 Google Drive：发送文件更直接</a></li><li><a href="/zh/compare/rsync">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</a></li><li><a href="/zh/compare/firefox-send">2026 年最佳 Firefox Send 替代品</a></li><li><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code">扫描二维码传输文件</a></li><li><a href="/zh/guides/receive-files-from-the-command-line">在命令行接收文件</a></li><li><a href="/zh/how-to/send-a-folder">如何直接发送整个文件夹，而不只是文件</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/how-to/automate-server-backups">用 cron 任务自动化加密的服务器备份</a></li><li><a href="/zh/compare/localsend">Relayium 对比 LocalSend：局域网传输该选哪个</a></li><li><a href="/zh/compare/scp">Relayium 对比 scp：更简单的 SSH 文件传输</a></li><li><a href="/zh/compare/magic-wormhole">Relayium 对比 magic-wormhole：命令行文件传输</a></li><li><a href="/zh/compare/nextcloud">Relayium 对比 Nextcloud：发送文件该选谁</a></li><li><a href="/zh/compare/dropbox">Relayium 对比 Dropbox：发送单个文件更直接</a></li><li><a href="/zh/how-to/airdrop-for-windows-and-android">Windows、Linux、Android 的隔空投送替代方案</a></li><li><a href="/zh/how-to/transfer-files-between-mac-and-windows">如何在 Mac 和 Windows 电脑之间传输文件</a></li><li><a href="/zh/guides/what-is-peer-to-peer-file-transfer">什么是点对点（P2P）文件传输？</a></li><li><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet">在网上发送文件到底安全吗?</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=zh">← Relayium</a>
+        <a href="/zh/guides">使用指南</a>
+        <a href="/zh/privacy">隐私政策</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

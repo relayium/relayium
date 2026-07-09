@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dateien per QR-Code-Scan übertragen · Relayium</title>
+    <meta name="description" content="Dateien per QR-Code-Scan senden: Der QR gehört zu einem Pairing-Code, die Übertragung verbindet direkt, Ende-zu-Ende-verschlüsselt. Keine App, kein Konto für die scannende Person." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/de/how-to/transfer-files-by-scanning-a-qr-code" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/transfer-files-by-scanning-a-qr-code" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/transfer-files-by-scanning-a-qr-code" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/transfer-files-by-scanning-a-qr-code" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/transfer-files-by-scanning-a-qr-code" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/transfer-files-by-scanning-a-qr-code" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/transfer-files-by-scanning-a-qr-code" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/transfer-files-by-scanning-a-qr-code" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Dateien per QR-Code-Scan übertragen" />
+    <meta property="og:description" content="Dateien per QR-Code-Scan senden: Der QR gehört zu einem Pairing-Code, die Übertragung verbindet direkt, Ende-zu-Ende-verschlüsselt. Keine App, kein Konto für die scannende Person." />
+    <meta property="og:url" content="https://relayium.com/de/how-to/transfer-files-by-scanning-a-qr-code" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="de_DE" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Dateien per QR-Code-Scan übertragen" />
+    <meta name="twitter:description" content="Dateien per QR-Code-Scan senden: Der QR gehört zu einem Pairing-Code, die Übertragung verbindet direkt, Ende-zu-Ende-verschlüsselt. Keine App, kein Konto für die scannende Person." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Dateien per QR-Code-Scan übertragen","description":"Dateien per QR-Code-Scan senden: Der QR gehört zu einem Pairing-Code, die Übertragung verbindet direkt, Ende-zu-Ende-verschlüsselt. Keine App, kein Konto für die scannende Person.","inLanguage":"de","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/de/how-to/transfer-files-by-scanning-a-qr-code","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Braucht die scannende Person ein Relayium-Konto?","acceptedAnswer":{"@type":"Answer","text":"Nein. Nur der Absender meldet sich an, um den Pairing-Code und dessen QR zu erstellen. Wer ihn scannt, tritt lediglich dem bereits erstellten Raum bei — kein Konto, keine Anmeldung, nichts zu installieren."}},{"@type":"Question","name":"Was steckt eigentlich im QR-Code?","acceptedAnswer":{"@type":"Answer","text":"Derselbe Beitrittslink, den auch der Button „Link kopieren“ liefert — eine relayium.com-URL mit dem eingebetteten Pairing-Code. Scannen öffnet einfach diesen Link im Browser, der automatisch dem Raum beitritt."}},{"@type":"Question","name":"Ist das Scannen des QR-Codes genauso sicher wie das Eintippen des Codes?","acceptedAnswer":{"@type":"Answer","text":"Ja, die Verbindung ist in beiden Fällen identisch. Beide Geräte handeln weiterhin einen X25519-Schlüsselaustausch aus, verschlüsseln mit AES-256-GCM und zeigen einen übereinstimmenden SAS-Prüfcode, den ihr vor dem Vertrauen kontrollieren solltet. Der QR-Code ändert nur, wie ihr in den Raum kommt, nicht wie die Übertragung abgesichert ist."}},{"@type":"Question","name":"Was, wenn sich der QR-Code nicht scannen lässt?","acceptedAnswer":{"@type":"Answer","text":"Nichts geht verloren — dieselbe Pairing-Karte zeigt den rohen Code und einen kopierbaren Link, auf unterstützten Geräten zusätzlich einen Teilen-Button. Jeder davon führt in denselben Raum wie der QR-Code."}},{"@type":"Question","name":"Funktioniert das auch über unterschiedliche Netzwerke hinweg, etwa Handy mit Mobilfunk und PC im heimischen WLAN?","acceptedAnswer":{"@type":"Answer","text":"Ja. Das ist von Grund auf der netzwerkübergreifende Pairing-Ablauf, er funktioniert also unabhängig davon, ob beide Geräte im selben Netz sind. Relayium verbindet sie direkt, wann immer möglich, und weicht nur dann auf ein verschlüsseltes Relay aus, wenn kein direkter Weg möglich ist."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=de">Relayium</a></header>
+      <h1>Dateien per QR-Code-Scan übertragen</h1>
+      <p class="updated">Zuletzt aktualisiert: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-by-scanning-a-qr-code">English</a><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code">中文</a><a href="/ja/how-to/transfer-files-by-scanning-a-qr-code">日本語</a><a href="/ko/how-to/transfer-files-by-scanning-a-qr-code">한국어</a><a href="/de/how-to/transfer-files-by-scanning-a-qr-code" aria-current="true">Deutsch</a><a href="/fr/how-to/transfer-files-by-scanning-a-qr-code">Français</a></nav>
+      <p class="lead">Einen sechsstelligen Code einzutippen geht schnell, doch Scannen geht noch schneller — die Handykamera aufs Display richten, und die Übertragung steht, bevor man den Code fertig eingetippt hätte. Genau deshalb zeigt Relayiums Pairing-Ansicht neben jedem Pairing-Code auch einen QR-Code an.</p>
+      <p class="lead">Das ist der netzwerkübergreifende Ablauf: Er funktioniert, egal ob beide Geräte im selben WLAN oder auf entgegengesetzten Seiten der Welt sind. Der QR-Code ist nur eine Abkürzung in diesen Ablauf hinein — der Code und der Link darunter funktionieren genauso, wenn Scannen gerade unpraktisch ist.</p>
+      <h2>Code erstellen, QR erhalten</h2>
+      <p>Öffne auf dem sendenden Gerät relayium.com und melde dich an — das Erstellen eines Pairing-Codes ist die einzige Stelle, an der Relayium ein Konto verlangt, weil der Code jemandem gehören muss. Wähle eine Datei, einen Ordner oder verbinde dich zunächst ganz ohne eingereihte Dateien.</p>
+      <p>Relayium erzeugt einen kurzen Zahlencode und rendert direkt daneben einen QR-Code. Der QR-Code kodiert nichts Neues — es ist derselbe Beitrittslink, den auch der Button „Link kopieren“ liefert, nur als scanbares Quadrat statt als Text dargestellt. Wer diesen Link öffnet, landet direkt in deinem Pairing-Raum.</p>
+      <h2>Einfach scannen — keine App, kein Konto</h2>
+      <p>Öffne auf dem anderen Gerät die Kamera-App (oder einen beliebigen QR-Scanner) und richte sie aufs Display. Ein Tipp auf die erscheinende Benachrichtigung öffnet den Link im Browser, der automatisch dem Raum beitritt — die scannende Person braucht nichts einzutippen, kein relayium.com-Konto und nichts zu installieren.</p>
+      <p>Ist gerade keine Kamera griffbereit, funktioniert derselbe Link ebenso, in einen beliebigen Browser eingefügt, und der sechsstellige Code funktioniert genauso, in das Feld „Code eingeben“ auf relayium.com getippt. Der QR-Code ist eine Annehmlichkeit obendrauf, kein eigener Mechanismus — nimm, was gerade am einfachsten ist.</p>
+      <h2>Was nach dem Scannen passiert</h2>
+      <p>Scannen bringt die beiden Geräte lediglich in denselben Raum; die Übertragung selbst unterscheidet sich nicht von jeder anderen Pairing-Code-Sitzung. Die Geräte handeln eine direkte Peer-to-Peer-Verbindung aus und leiten mit einem X25519-Schlüsselaustausch einen gemeinsamen Schlüssel ab, bevor jeder Block mit AES-256-GCM verschlüsselt wird.</p>
+      <p>Beide Bildschirme zeigen denselben kurzen Prüfcode (SAS) — vergleicht beide und bestätigt die Übereinstimmung, bevor ihr der Verbindung vertraut; so entlarvt man ein böswilliges Relay in der Mitte. Ist zwischen den beiden Netzwerken kein direkter Weg möglich, weicht der verschlüsselte Datenstrom auf ein TURN-Relay aus, das stets nur Chiffretext sieht, niemals eure Dateien. Jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft, und eine unterbrochene Verbindung kann fortgesetzt statt neu gestartet werden.</p>
+      <h2>Wenn das Scannen nicht klappt</h2>
+      <p>Die Kamera fokussiert nicht, das Licht ist schlecht, oder ein Gerät hat gerade keine Kamera griffbereit — nichts davon sollte die Übertragung aufhalten. Die Pairing-Karte auf dem sendenden Gerät zeigt zusätzlich Kopier-Buttons für den rohen Code und den Link (sowie einen Teilen-Button auf unterstützten Geräten) sowie einen Countdown bis zum Ablauf des Codes.</p>
+      <p>Tippe den Code neu ein, füge den Link ein, oder verschicke ihn über die Teilen-Funktion auf einem anderen Weg (Chat, AirDrop, was auch immer gerade am schnellsten ist) — jeder Weg führt in denselben Raum und ergibt dieselbe direkte, verschlüsselte Verbindung. Der QR-Code ist einer von mehreren Einstiegspunkten, nie eine Voraussetzung.</p>
+      <h2>Häufige Fragen</h2>
+      <h3>Braucht die scannende Person ein Relayium-Konto?</h3>
+      <p>Nein. Nur der Absender meldet sich an, um den Pairing-Code und dessen QR zu erstellen. Wer ihn scannt, tritt lediglich dem bereits erstellten Raum bei — kein Konto, keine Anmeldung, nichts zu installieren.</p>
+      <h3>Was steckt eigentlich im QR-Code?</h3>
+      <p>Derselbe Beitrittslink, den auch der Button „Link kopieren“ liefert — eine relayium.com-URL mit dem eingebetteten Pairing-Code. Scannen öffnet einfach diesen Link im Browser, der automatisch dem Raum beitritt.</p>
+      <h3>Ist das Scannen des QR-Codes genauso sicher wie das Eintippen des Codes?</h3>
+      <p>Ja, die Verbindung ist in beiden Fällen identisch. Beide Geräte handeln weiterhin einen X25519-Schlüsselaustausch aus, verschlüsseln mit AES-256-GCM und zeigen einen übereinstimmenden SAS-Prüfcode, den ihr vor dem Vertrauen kontrollieren solltet. Der QR-Code ändert nur, wie ihr in den Raum kommt, nicht wie die Übertragung abgesichert ist.</p>
+      <h3>Was, wenn sich der QR-Code nicht scannen lässt?</h3>
+      <p>Nichts geht verloren — dieselbe Pairing-Karte zeigt den rohen Code und einen kopierbaren Link, auf unterstützten Geräten zusätzlich einen Teilen-Button. Jeder davon führt in denselben Raum wie der QR-Code.</p>
+      <h3>Funktioniert das auch über unterschiedliche Netzwerke hinweg, etwa Handy mit Mobilfunk und PC im heimischen WLAN?</h3>
+      <p>Ja. Das ist von Grund auf der netzwerkübergreifende Pairing-Ablauf, er funktioniert also unabhängig davon, ob beide Geräte im selben Netz sind. Relayium verbindet sie direkt, wann immer möglich, und weicht nur dann auf ein verschlüsseltes Relay aus, wenn kein direkter Weg möglich ist.</p>
+      <div class="ctacard">
+        <p>Öffne Relayium, erstelle einen Code und scanne den QR-Code mit einem anderen Gerät — die scannende Person braucht keine App und kein Konto.</p>
+        <a class="cta" href="/?lang=de">Relayium jetzt ausprobieren</a>
+      </div>
+      <h2>Weiterlesen</h2>
+      <ul class="related"><li><a href="/de/compare/snapdrop">Relayium vs. Snapdrop &amp; PairDrop: welche sichere P2P-Übertragung?</a></li><li><a href="/de/compare/airdrop">Relayium vs. AirDrop: eine plattformübergreifende Alternative</a></li><li><a href="/de/compare/wetransfer">Relayium vs. WeTransfer: große Dateien ohne Server senden</a></li><li><a href="/de/how-to/transfer-files-android-to-iphone">Dateien von Android auf iPhone übertragen (ohne Kabel)</a></li><li><a href="/de/how-to/send-files-pc-to-phone-wirelessly">Dateien vom PC drahtlos aufs Handy senden — ohne Kabel, ohne App</a></li><li><a href="/de/how-to/send-large-files-without-cloud">Große Dateien ohne Cloud versenden</a></li><li><a href="/de/guides/transfer-files-from-terminal">Dateien vom Terminal aus übertragen mit der Relayium CLI</a></li><li><a href="/de/guides/back-up-a-server-over-ssh">Dateien über SSH auf dem eigenen Server sichern mit der Relayium CLI</a></li><li><a href="/de/guides/send-a-file-to-someone">Mit der Relayium CLI eine Datei über Netzwerke hinweg an jemanden senden</a></li><li><a href="/de/guides/server-to-server-transfers">Server-zu-Server-Übertragungen mit der Relayium CLI (Daemon Direct)</a></li><li><a href="/de/guides/sync-a-large-folder-between-servers">Einen großen Ordner zwischen zwei Servern synchronisieren (fortsetzbar, im Hintergrund)</a></li><li><a href="/de/how-to/share-a-file-with-an-expiring-link">Eine Datei mit einem sicheren, ablaufenden Link teilen</a></li><li><a href="/de/guides/self-host-relayium">Relayium selbst hosten: eigener Dateiübertragungs-Server</a></li><li><a href="/de/how-to/send-files-between-two-computers-over-the-internet">Dateien über das Internet zwischen zwei Computern senden</a></li><li><a href="/de/compare/croc">Relayium vs. croc: verschlüsselte Dateiübertragung im Terminal</a></li><li><a href="/de/guides/how-relayium-encrypts-your-files">Wie Relayium Ihre Dateien Ende-zu-Ende verschlüsselt</a></li><li><a href="/de/compare/google-drive">Relayium vs. Google Drive: Dateien direkter versenden</a></li><li><a href="/de/compare/rsync">Relayium vs. rsync: Ordner synchronisieren ohne SSH-Setup</a></li><li><a href="/de/compare/firefox-send">Die beste Firefox-Send-Alternative 2026</a></li><li><a href="/de/guides/receive-files-from-the-command-line">Dateien über die Kommandozeile empfangen</a></li><li><a href="/de/how-to/send-a-folder">Einen ganzen Ordner senden, nicht nur Dateien</a></li><li><a href="/de/guides/run-relayium-as-an-always-on-service">Relayium als dauerhaft laufenden Empfangsdienst betreiben</a></li><li><a href="/de/how-to/automate-server-backups">Verschlüsselte Server-Backups mit einem Cron-Job automatisieren</a></li><li><a href="/de/compare/localsend">Relayium vs. LocalSend: welche lokale Dateiübertragung?</a></li><li><a href="/de/compare/scp">Relayium vs. scp: einfachere Dateiübertragung über SSH</a></li><li><a href="/de/compare/magic-wormhole">Relayium vs. magic-wormhole: Dateiübertragung per CLI</a></li><li><a href="/de/compare/nextcloud">Relayium vs. Nextcloud zum Versenden von Dateien</a></li><li><a href="/de/compare/dropbox">Relayium vs. Dropbox: eine Datei direkter versenden</a></li><li><a href="/de/how-to/airdrop-for-windows-and-android">AirDrop-Alternative für Windows, Linux, Android</a></li><li><a href="/de/how-to/transfer-files-between-mac-and-windows">Dateien zwischen Mac und Windows-PC übertragen</a></li><li><a href="/de/how-to/send-files-on-the-same-wifi">Dateien zwischen Geräten im selben WLAN senden</a></li><li><a href="/de/guides/what-is-peer-to-peer-file-transfer">Was ist Peer-to-Peer-Dateiübertragung?</a></li><li><a href="/de/guides/is-it-safe-to-send-files-over-the-internet">Ist es sicher, Dateien über das Internet zu senden?</a></li><li><a href="/de/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=de">← Relayium</a>
+        <a href="/de/guides">Anleitungen</a>
+        <a href="/de/privacy">Datenschutz</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

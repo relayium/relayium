@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium を常時稼働の受信サービスとして実行する · Relayium</title>
+    <meta name="description" content="relayium serve を常時起動しておけば、どのピアからでもいつでもプッシュを受け取れます——固定された TLS 上のデーモン直結です。初回プッシュの承認、systemd 向けのフィンガープリント事前承認、--allow-delete、サンプルのユニットファイルまでを扱います。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ja/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/run-relayium-as-an-always-on-service" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Relayium を常時稼働の受信サービスとして実行する" />
+    <meta property="og:description" content="relayium serve を常時起動しておけば、どのピアからでもいつでもプッシュを受け取れます——固定された TLS 上のデーモン直結です。初回プッシュの承認、systemd 向けのフィンガープリント事前承認、--allow-delete、サンプルのユニットファイルまでを扱います。" />
+    <meta property="og:url" content="https://relayium.com/ja/guides/run-relayium-as-an-always-on-service" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium を常時稼働の受信サービスとして実行する" />
+    <meta name="twitter:description" content="relayium serve を常時起動しておけば、どのピアからでもいつでもプッシュを受け取れます——固定された TLS 上のデーモン直結です。初回プッシュの承認、systemd 向けのフィンガープリント事前承認、--allow-delete、サンプルのユニットファイルまでを扱います。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium を常時稼働の受信サービスとして実行する","description":"relayium serve を常時起動しておけば、どのピアからでもいつでもプッシュを受け取れます——固定された TLS 上のデーモン直結です。初回プッシュの承認、systemd 向けのフィンガープリント事前承認、--allow-delete、サンプルのユニットファイルまでを扱います。","inLanguage":"ja","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/ja/guides/run-relayium-as-an-always-on-service","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"serve はデフォルトでどのポートを待ち受けますか?","acceptedAnswer":{"@type":"Answer","text":"9031 です。リスナー側(serve --port N)と送信側の宛先(relayium://host:N)の両方を --port で変更できます。"}},{"@type":"Question","name":"すべてのプッシュを手動で承認する必要がありますか?","acceptedAnswer":{"@type":"Answer","text":"あるフィンガープリントの最初のプッシュだけです。しかもそれは serve が端末付きで動いているときだけ表示されます。それ以降は記憶されます。serve を非対話的(systemd、パイプ)に動かす場合、プロンプトはまったく出ず未知のピアは拒否されます——その場合は relayium authorize で事前に承認してください。"}},{"@type":"Question","name":"送信側は私の常時稼働の受信機上のファイルを削除できますか?","acceptedAnswer":{"@type":"Answer","text":"serve を --allow-delete 付きで起動し、かつ送信側が sync --delete を実行している場合に限ります。--allow-delete がなければ削除は静かにスキップされ、それ以外は通常どおり転送されます。"}},{"@type":"Question","name":"常時稼働の受信サービスを動かすのは無料ですか?","acceptedAnswer":{"@type":"Answer","text":"はい。relayium serve は無料でセルフホスト可能な CLI の一部です——接続のどちら側もアカウントは不要で、有料プランもありません。"}},{"@type":"Question","name":"serve はアイデンティティとピアリストをどこに保存しますか?","acceptedAnswer":{"@type":"Answer","text":"デフォルトでは ~/.config/relayium です(id.key/id.crt はこのホストのアイデンティティ、authorized_fingerprints は許可リスト)。systemd サービスの場合は --config-dir を /etc/relayium のような固定の場所に向けてください。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <h1>Relayium を常時稼働の受信サービスとして実行する</h1>
+      <p class="updated">最終更新: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service" aria-current="true">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service">Français</a></nav>
+      <p class="lead">relayium serve --once は1回の受信を処理して終了します——たまに1回だけ pull する用途には十分です。しかし、あるマシンを常駐の受け皿にしたい場合——毎晩バックアップが届くホームサーバー、CI がビルド成果物をプッシュするビルドマシン、スマートフォンからいつでも写真を送れる NAS——には、毎回手動で起動するのではなく、serve をずっと動かし続けたいはずです。</p>
+      <p class="lead">本ガイドでは、長時間稼働するリスナーの起動、誰にプッシュを許可するかの承認、端末の前に誰もいない場合のためのピア事前承認、systemd 下での実行、そして sync --delete を使う送信側に削除をミラーさせる方法を扱います。</p>
+      <h2>リスナーを起動する</h2>
+      <p>serve は固定された TLS 1.3 接続上でデーモン直結のプッシュ(relayium://host:port)を待ち受け、受け取った内容をあるディレクトリへ書き込みます。起動するのに事前共有は何も必要ありません——コピーしておくフィンガープリントも、登録しておくサーバーもありません:</p>
+      <pre><code>relayium serve --dir ~/inbox
+relayium serve --dir /srv/drop --port 9040   # non-default port
+relayium serve --dir ~/inbox --allow-delete  # let a sync --delete sender mirror deletions</code></pre>
+      <ul><li>--dir はファイルの置き場所を設定します(デフォルトはカレントディレクトリ)。</li><li>--port は待ち受けポートを設定します(デフォルトは 9031)。送信側が別の場所にいる場合はファイアウォールで開放してください。</li><li>--once を付けなければ、serve は停止させるかプロセスマネージャーが再起動するまで動き続け、プッシュを受け入れ続けます——これが常時稼働サービスたる所以です。</li></ul>
+      <h2>誰にプッシュを許可するか承認する</h2>
+      <p>新しいピアが初めてプッシュすると、serve がターミナルで動いていれば、そのプッシュがどこから来たか、フィンガープリントは何かを表示し、承認するかどうかを尋ねます——SSH が初めての接続先を尋ねるのと同じ要領です:</p>
+      <pre><code>Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y</code></pre>
+      <ul><li>一度 y と答えれば、そのフィンガープリントは authorized_fingerprints に書き込まれます。以降、同じマシンからのプッシュはプロンプトなしで通過します。</li><li>フィンガープリントはネットワークアドレスではなくマシンそのものを識別するため、送信側の IP が変わっても有効です。</li><li>この手順は本質的に対話的です——キーボードの前に誰かが必要ですが、serve が systemd に移行すると(次の項目)それは成り立たなくなります。</li></ul>
+      <h2>非対話的な環境のためにピアを事前承認する</h2>
+      <p>serve がプロンプトを出せる端末を持たない場合——systemd サービス、バックグラウンドプロセス、パイプなど——尋ねることができないため、まだ認識していないフィンガープリントはすべて拒否します。代わりに事前にピアを承認しておきます。プッシュする側のマシンで relayium id を実行してフィンガープリントを表示し、受信側では最初のプッシュが届く前にそれを追加します:</p>
+      <pre><code># on the machine that will PUSH: print its fingerprint
+relayium id
+
+# on this always-on RECEIVER: authorize it in advance
+relayium authorize 74318e3b...</code></pre>
+      <ul><li>authorize は冪等です——すでに信頼しているフィンガープリントに対して再度実行しても何も起きません。</li><li>アイデンティティと信頼のファイルは --config-dir で指定したディレクトリにあり、デフォルトは ~/.config/relayium です(id.key/id.crt はこのホストのアイデンティティ、authorized_fingerprints はピアの許可リスト)。</li></ul>
+      <h2>systemd の下で実行する</h2>
+      <p>再起動やクラッシュをまたいで生き残るサービスにするには、serve を systemd に任せます。--config-dir を固定パスに向けて、ホストのアイデンティティとピア許可リストが再起動をまたいでも維持されるようにします:</p>
+      <pre><code># /etc/systemd/system/relayium-serve.service
+[Unit]
+Description=Relayium always-on receiver
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/relayium serve --dir /srv/drop --port 9031 --config-dir /etc/relayium --allow-delete
+Restart=always
+User=relayium
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+      <ul><li>このサービスを有効化する前に、プッシュを許可すべきすべてのピアに対して relayium authorize &lt;fingerprint&gt; を実行しておいてください——サービス自体はプロンプトを出せません。</li><li>systemctl enable --now relayium-serve で起動し、起動のたびに復帰するようにします。</li><li>/etc/relayium/id.key はサービスユーザーだけが読めるようにしてください。権限が緩い鍵は relayium が読み込みを拒否します。</li></ul>
+      <h2>sync --delete を使う送信側に削除をミラーさせる</h2>
+      <p>デフォルトでは serve はファイルの追加・更新しか行いません——送信側が sync --delete を実行しても、新規・変更ファイルはコピーされますが、要求された削除はスキップされ、受信側に警告がログ出力されます。真のミラーリングを有効にするには --allow-delete を付けて serve を起動します。これにより送信側で削除されたファイルはこちらでも削除されます:</p>
+      <pre><code>relayium serve --dir /srv/mirror --allow-delete</code></pre>
+      <ul><li>--allow-delete は受信側で有効にするオプトインです。送信側は引き続き sync --delete で削除を要求する必要があります。</li><li>このオプションを付けなければ、送信側が何を要求しても、このマシン上のファイルが削除されることはありません。</li></ul>
+      <h2>よくある質問</h2>
+      <h3>serve はデフォルトでどのポートを待ち受けますか?</h3>
+      <p>9031 です。リスナー側(serve --port N)と送信側の宛先(relayium://host:N)の両方を --port で変更できます。</p>
+      <h3>すべてのプッシュを手動で承認する必要がありますか?</h3>
+      <p>あるフィンガープリントの最初のプッシュだけです。しかもそれは serve が端末付きで動いているときだけ表示されます。それ以降は記憶されます。serve を非対話的(systemd、パイプ)に動かす場合、プロンプトはまったく出ず未知のピアは拒否されます——その場合は relayium authorize で事前に承認してください。</p>
+      <h3>送信側は私の常時稼働の受信機上のファイルを削除できますか?</h3>
+      <p>serve を --allow-delete 付きで起動し、かつ送信側が sync --delete を実行している場合に限ります。--allow-delete がなければ削除は静かにスキップされ、それ以外は通常どおり転送されます。</p>
+      <h3>常時稼働の受信サービスを動かすのは無料ですか?</h3>
+      <p>はい。relayium serve は無料でセルフホスト可能な CLI の一部です——接続のどちら側もアカウントは不要で、有料プランもありません。</p>
+      <h3>serve はアイデンティティとピアリストをどこに保存しますか?</h3>
+      <p>デフォルトでは ~/.config/relayium です(id.key/id.crt はこのホストのアイデンティティ、authorized_fingerprints は許可リスト)。systemd サービスの場合は --config-dir を /etc/relayium のような固定の場所に向けてください。</p>
+      <div class="ctacard">
+        <p>あなたが所有するどのマシンでも、無料の常時稼働受信機にできます——固定された TLS 上の直接プッシュで、リレーは一切介在しません。</p>
+        <a class="cta" href="/cli">CLI を入手する</a>
+      </div>
+      <h2>続けて読む</h2>
+      <ul class="related"><li><a href="/ja/compare/snapdrop">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/compare/wetransfer">Relayium と WeTransfer の比較：サーバーを介さず大容量を送る</a></li><li><a href="/ja/how-to/transfer-files-android-to-iphone">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/how-to/send-large-files-without-cloud">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/guides/transfer-files-from-terminal">Relayium CLI でターミナルからファイルを転送する</a></li><li><a href="/ja/guides/back-up-a-server-over-ssh">Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</a></li><li><a href="/ja/guides/send-a-file-to-someone">Relayium CLI でネットワークを越えて誰かにファイルを送る</a></li><li><a href="/ja/guides/server-to-server-transfers">Relayium CLI でサーバー間転送(デーモン直結)</a></li><li><a href="/ja/guides/sync-a-large-folder-between-servers">2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド)</a></li><li><a href="/ja/how-to/share-a-file-with-an-expiring-link">期限付きの安全なダウンロードリンクでファイルを共有する</a></li><li><a href="/ja/guides/self-host-relayium">Relayium をセルフホスト：自分専用のファイル転送サーバーを運用</a></li><li><a href="/ja/how-to/send-files-between-two-computers-over-the-internet">インターネット経由で2台のPC間にファイルを送る方法</a></li><li><a href="/ja/compare/croc">Relayium と croc の比較：ターミナルから暗号化転送</a></li><li><a href="/ja/guides/how-relayium-encrypts-your-files">Relayium がファイルをエンドツーエンドで暗号化する仕組み</a></li><li><a href="/ja/compare/google-drive">Relayium と Google Drive の比較：ファイル送信をもっと直接に</a></li><li><a href="/ja/compare/rsync">Relayium vs rsync: SSH 設定なしでフォルダーを同期</a></li><li><a href="/ja/compare/firefox-send">2026年、最良の Firefox Send 代替サービス</a></li><li><a href="/ja/how-to/transfer-files-by-scanning-a-qr-code">QR コードをスキャンしてファイルを転送する</a></li><li><a href="/ja/guides/receive-files-from-the-command-line">コマンドラインでファイルを受信する</a></li><li><a href="/ja/how-to/send-a-folder">ファイルではなくフォルダごと送る方法</a></li><li><a href="/ja/how-to/automate-server-backups">cron で暗号化されたサーバーバックアップを自動化する</a></li><li><a href="/ja/compare/localsend">Relayium と LocalSend の比較：ローカル転送はどちらを使う？</a></li><li><a href="/ja/compare/scp">Relayium と scp の比較：よりシンプルな SSH 転送</a></li><li><a href="/ja/compare/magic-wormhole">Relayium と magic-wormhole の比較：CLI ファイル転送</a></li><li><a href="/ja/compare/nextcloud">Relayium と Nextcloud の比較：ファイル送信にどちらを選ぶか</a></li><li><a href="/ja/compare/dropbox">Relayium と Dropbox の比較：1ファイルの送信をもっと直接に</a></li><li><a href="/ja/how-to/airdrop-for-windows-and-android">Windows・Linux・Android 向け AirDrop 代替</a></li><li><a href="/ja/how-to/transfer-files-between-mac-and-windows">Mac と Windows パソコン間でファイルを転送する方法</a></li><li><a href="/ja/how-to/send-files-on-the-same-wifi">同じ Wi-Fi 上の端末間でファイルを送る</a></li><li><a href="/ja/guides/what-is-peer-to-peer-file-transfer">P2P（ピアツーピア）ファイル転送とは？</a></li><li><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet">インターネットでファイルを送るのは安全か</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ja">← Relayium</a>
+        <a href="/ja/guides">ガイド</a>
+        <a href="/ja/privacy">プライバシーポリシー</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QR コードをスキャンしてファイルを転送する · Relayium</title>
+    <meta name="description" content="Relayium で QR コードをスキャンしてファイルを送る方法。ペアリングコードを作成し、表示された QR をスキャンするだけで、直接かつエンドツーエンド暗号化された転送が始まります。スキャンする側はアプリもアカウントも不要です。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ja/how-to/transfer-files-by-scanning-a-qr-code" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/transfer-files-by-scanning-a-qr-code" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/transfer-files-by-scanning-a-qr-code" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/transfer-files-by-scanning-a-qr-code" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/transfer-files-by-scanning-a-qr-code" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/transfer-files-by-scanning-a-qr-code" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/transfer-files-by-scanning-a-qr-code" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/transfer-files-by-scanning-a-qr-code" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="QR コードをスキャンしてファイルを転送する" />
+    <meta property="og:description" content="Relayium で QR コードをスキャンしてファイルを送る方法。ペアリングコードを作成し、表示された QR をスキャンするだけで、直接かつエンドツーエンド暗号化された転送が始まります。スキャンする側はアプリもアカウントも不要です。" />
+    <meta property="og:url" content="https://relayium.com/ja/how-to/transfer-files-by-scanning-a-qr-code" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="QR コードをスキャンしてファイルを転送する" />
+    <meta name="twitter:description" content="Relayium で QR コードをスキャンしてファイルを送る方法。ペアリングコードを作成し、表示された QR をスキャンするだけで、直接かつエンドツーエンド暗号化された転送が始まります。スキャンする側はアプリもアカウントも不要です。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"QR コードをスキャンしてファイルを転送する","description":"Relayium で QR コードをスキャンしてファイルを送る方法。ペアリングコードを作成し、表示された QR をスキャンするだけで、直接かつエンドツーエンド暗号化された転送が始まります。スキャンする側はアプリもアカウントも不要です。","inLanguage":"ja","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/ja/how-to/transfer-files-by-scanning-a-qr-code","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"QR コードをスキャンする側にも Relayium のアカウントが必要ですか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。ペアリングコードとその QR コードを作成するのは送信側だけがサインインすれば済みます。スキャンする側はすでに作られたルームに参加するだけで、アカウントもサインアップも、インストールするものも何もありません。"}},{"@type":"Question","name":"QR コードには実際には何が入っていますか？","acceptedAnswer":{"@type":"Answer","text":"「リンクをコピー」ボタンでコピーされるのと同じ参加リンクです——ペアリングコードが埋め込まれた relayium.com の URL です。スキャンするとブラウザでそのリンクが開き、自動的にルームに参加します。"}},{"@type":"Question","name":"QR コードのスキャンはコードを入力するのと同じくらい安全ですか？","acceptedAnswer":{"@type":"Answer","text":"はい、どちらの方法でも接続はまったく同一です。両端末は依然として X25519 鍵交換をネゴシエートし、AES-256-GCM で暗号化し、転送を信頼する前に確認すべき一致した SAS 検証コードを表示します。QR コードが変えるのはルームへの入り方だけで、転送の安全性は変わりません。"}},{"@type":"Question","name":"QR コードがスキャンできない場合は？","acceptedAnswer":{"@type":"Answer","text":"何も失われません——同じペアリングカードに生のコードとコピー可能なリンクが表示され、対応端末では共有シートのボタンもあります。どれを使っても QR コードと同じルームに入れます。"}},{"@type":"Question","name":"スマホがモバイル通信、PC が自宅 Wi-Fi のように、異なるネットワーク間でも使えますか？","acceptedAnswer":{"@type":"Answer","text":"はい。これはもともとネットワークをまたぐペアリング方式なので、2台が同じネットワークであってもなくても動作します。可能なときは Relayium が直接接続し、直接経路が取れないときだけ暗号化されたリレーにフォールバックします。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <h1>QR コードをスキャンしてファイルを転送する</h1>
+      <p class="updated">最終更新: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-by-scanning-a-qr-code">English</a><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code">中文</a><a href="/ja/how-to/transfer-files-by-scanning-a-qr-code" aria-current="true">日本語</a><a href="/ko/how-to/transfer-files-by-scanning-a-qr-code">한국어</a><a href="/de/how-to/transfer-files-by-scanning-a-qr-code">Deutsch</a><a href="/fr/how-to/transfer-files-by-scanning-a-qr-code">Français</a></nav>
+      <p class="lead">6桁のコードを入力するのも速いですが、スキャンならさらに速いです。スマホのカメラを画面に向けるだけで、コードを入力し終える前に転送の準備が整います。Relayium のペアリング画面がペアリングコードと並べて QR コードを表示するのは、まさにこのためです。</p>
+      <p class="lead">これはネットワークをまたぐ転送方式で、同じ Wi-Fi でも、地球の反対側同士でも動作します。QR コードはこの方式への近道にすぎません——スキャンが不便なら、その下にあるコードやリンクもまったく同じように使えます。</p>
+      <h2>コードを作ると QR も表示される</h2>
+      <p>送信側の端末で relayium.com を開いてサインインします——ペアリングコードの作成は、Relayium が唯一アカウントを求める場面です。コードは誰かに帰属している必要があるからです。ファイル、フォルダを選ぶか、ファイルなしでまず接続だけ済ませることもできます。</p>
+      <p>Relayium は短い数字コードを発行し、その隣に QR コードを描画します。QR コードは何か新しい情報を含んでいるわけではなく、「リンクをコピー」ボタンで得られるのと同じ参加リンクを、テキストではなくスキャン可能な四角形として表示しているだけです。そのリンクを開いた人は、そのままペアリングルームに入ります。</p>
+      <h2>スキャンするだけ——アプリもアカウントも不要</h2>
+      <p>もう一方の端末でカメラアプリ（または任意の QR スキャナー）を開き、画面に向けます。表示された通知をタップするとブラウザでリンクが開き、自動的にルームに参加します——スキャンする側は入力も relayium.com のアカウントも不要で、インストールするものも何もありません。</p>
+      <p>カメラが使えない場合も、同じリンクを任意のブラウザに貼り付ければ使えますし、6桁のコードを relayium.com の「コードを入力」欄に打ち込んでも同様に使えます。QR コードはこの両方の上に重ねられた利便性にすぎず、別の仕組みではありません——その場でやりやすい方を選んでください。</p>
+      <h2>スキャン後に起きること</h2>
+      <p>スキャンは2台の端末を同じルームに入れるだけで、転送そのものは他のペアリングコードのセッションと変わりません。両端末は直接の P2P 接続をネゴシエートし、X25519 鍵交換で共有鍵を導出したうえで、各チャンクを AES-256-GCM で暗号化します。</p>
+      <p>両方の画面に同じ短い検証コード（SAS）が表示されるので、両方を見比べて一致を確認してから接続を信頼してください——これが、間に悪意あるリレーが入り込んでいないかを見抜く方法です。2つのネットワーク間で直接経路が取れない場合、暗号化ストリームは TURN リレーにフォールバックしますが、リレーが見るのは常に暗号文だけで、ファイルの中身を見ることはありません。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証され、接続が切れても最初からではなく再開できます。</p>
+      <h2>スキャンできないときは</h2>
+      <p>カメラのピントが合わない、照明が悪い、あるいは片方の端末にそもそもカメラがない——そうした事情で転送が止まる必要はありません。送信側のペアリングカードには、生のコードとリンクをコピーするボタン（対応端末では共有シートのボタンも）に加えて、コードの失効までのカウントダウンも表示されます。</p>
+      <p>コードを打ち直す、リンクを貼り付ける、あるいは共有シートで別の方法（チャットや AirDrop など、いちばん速いもの）で送る——どの経路をたどっても同じルームに入り、同じ直接かつ暗号化された接続が得られます。QR コードは複数ある入口の一つにすぎず、必須ではありません。</p>
+      <h2>よくある質問</h2>
+      <h3>QR コードをスキャンする側にも Relayium のアカウントが必要ですか？</h3>
+      <p>いいえ。ペアリングコードとその QR コードを作成するのは送信側だけがサインインすれば済みます。スキャンする側はすでに作られたルームに参加するだけで、アカウントもサインアップも、インストールするものも何もありません。</p>
+      <h3>QR コードには実際には何が入っていますか？</h3>
+      <p>「リンクをコピー」ボタンでコピーされるのと同じ参加リンクです——ペアリングコードが埋め込まれた relayium.com の URL です。スキャンするとブラウザでそのリンクが開き、自動的にルームに参加します。</p>
+      <h3>QR コードのスキャンはコードを入力するのと同じくらい安全ですか？</h3>
+      <p>はい、どちらの方法でも接続はまったく同一です。両端末は依然として X25519 鍵交換をネゴシエートし、AES-256-GCM で暗号化し、転送を信頼する前に確認すべき一致した SAS 検証コードを表示します。QR コードが変えるのはルームへの入り方だけで、転送の安全性は変わりません。</p>
+      <h3>QR コードがスキャンできない場合は？</h3>
+      <p>何も失われません——同じペアリングカードに生のコードとコピー可能なリンクが表示され、対応端末では共有シートのボタンもあります。どれを使っても QR コードと同じルームに入れます。</p>
+      <h3>スマホがモバイル通信、PC が自宅 Wi-Fi のように、異なるネットワーク間でも使えますか？</h3>
+      <p>はい。これはもともとネットワークをまたぐペアリング方式なので、2台が同じネットワークであってもなくても動作します。可能なときは Relayium が直接接続し、直接経路が取れないときだけ暗号化されたリレーにフォールバックします。</p>
+      <div class="ctacard">
+        <p>Relayium を開いてコードを作成し、別の端末で QR コードのスキャンを試してみてください——スキャンする側はアプリもアカウントも不要です。</p>
+        <a class="cta" href="/?lang=ja">Relayium を今すぐ試す</a>
+      </div>
+      <h2>続けて読む</h2>
+      <ul class="related"><li><a href="/ja/compare/snapdrop">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/compare/wetransfer">Relayium と WeTransfer の比較：サーバーを介さず大容量を送る</a></li><li><a href="/ja/how-to/transfer-files-android-to-iphone">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/how-to/send-large-files-without-cloud">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/guides/transfer-files-from-terminal">Relayium CLI でターミナルからファイルを転送する</a></li><li><a href="/ja/guides/back-up-a-server-over-ssh">Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</a></li><li><a href="/ja/guides/send-a-file-to-someone">Relayium CLI でネットワークを越えて誰かにファイルを送る</a></li><li><a href="/ja/guides/server-to-server-transfers">Relayium CLI でサーバー間転送(デーモン直結)</a></li><li><a href="/ja/guides/sync-a-large-folder-between-servers">2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド)</a></li><li><a href="/ja/how-to/share-a-file-with-an-expiring-link">期限付きの安全なダウンロードリンクでファイルを共有する</a></li><li><a href="/ja/guides/self-host-relayium">Relayium をセルフホスト：自分専用のファイル転送サーバーを運用</a></li><li><a href="/ja/how-to/send-files-between-two-computers-over-the-internet">インターネット経由で2台のPC間にファイルを送る方法</a></li><li><a href="/ja/compare/croc">Relayium と croc の比較：ターミナルから暗号化転送</a></li><li><a href="/ja/guides/how-relayium-encrypts-your-files">Relayium がファイルをエンドツーエンドで暗号化する仕組み</a></li><li><a href="/ja/compare/google-drive">Relayium と Google Drive の比較：ファイル送信をもっと直接に</a></li><li><a href="/ja/compare/rsync">Relayium vs rsync: SSH 設定なしでフォルダーを同期</a></li><li><a href="/ja/compare/firefox-send">2026年、最良の Firefox Send 代替サービス</a></li><li><a href="/ja/guides/receive-files-from-the-command-line">コマンドラインでファイルを受信する</a></li><li><a href="/ja/how-to/send-a-folder">ファイルではなくフォルダごと送る方法</a></li><li><a href="/ja/guides/run-relayium-as-an-always-on-service">Relayium を常時稼働の受信サービスとして実行する</a></li><li><a href="/ja/how-to/automate-server-backups">cron で暗号化されたサーバーバックアップを自動化する</a></li><li><a href="/ja/compare/localsend">Relayium と LocalSend の比較：ローカル転送はどちらを使う？</a></li><li><a href="/ja/compare/scp">Relayium と scp の比較：よりシンプルな SSH 転送</a></li><li><a href="/ja/compare/magic-wormhole">Relayium と magic-wormhole の比較：CLI ファイル転送</a></li><li><a href="/ja/compare/nextcloud">Relayium と Nextcloud の比較：ファイル送信にどちらを選ぶか</a></li><li><a href="/ja/compare/dropbox">Relayium と Dropbox の比較：1ファイルの送信をもっと直接に</a></li><li><a href="/ja/how-to/airdrop-for-windows-and-android">Windows・Linux・Android 向け AirDrop 代替</a></li><li><a href="/ja/how-to/transfer-files-between-mac-and-windows">Mac と Windows パソコン間でファイルを転送する方法</a></li><li><a href="/ja/how-to/send-files-on-the-same-wifi">同じ Wi-Fi 上の端末間でファイルを送る</a></li><li><a href="/ja/guides/what-is-peer-to-peer-file-transfer">P2P（ピアツーピア）ファイル転送とは？</a></li><li><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet">インターネットでファイルを送るのは安全か</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ja">← Relayium</a>
+        <a href="/ja/guides">ガイド</a>
+        <a href="/ja/privacy">プライバシーポリシー</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

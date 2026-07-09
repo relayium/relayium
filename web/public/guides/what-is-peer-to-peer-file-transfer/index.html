@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>What is peer-to-peer file transfer? · Relayium</title>
+    <meta name="description" content="A plain-language explainer of P2P file transfer: how it differs from uploading to a server, how a direct WebRTC connection is found, and why it&#39;s private and fast." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/guides/what-is-peer-to-peer-file-transfer" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/what-is-peer-to-peer-file-transfer" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/what-is-peer-to-peer-file-transfer" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/what-is-peer-to-peer-file-transfer" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/what-is-peer-to-peer-file-transfer" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/what-is-peer-to-peer-file-transfer" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/what-is-peer-to-peer-file-transfer" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/what-is-peer-to-peer-file-transfer" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="What is peer-to-peer file transfer?" />
+    <meta property="og:description" content="A plain-language explainer of P2P file transfer: how it differs from uploading to a server, how a direct WebRTC connection is found, and why it&#39;s private and fast." />
+    <meta property="og:url" content="https://relayium.com/guides/what-is-peer-to-peer-file-transfer" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="What is peer-to-peer file transfer?" />
+    <meta name="twitter:description" content="A plain-language explainer of P2P file transfer: how it differs from uploading to a server, how a direct WebRTC connection is found, and why it&#39;s private and fast." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"What is peer-to-peer file transfer?","description":"A plain-language explainer of P2P file transfer: how it differs from uploading to a server, how a direct WebRTC connection is found, and why it's private and fast.","inLanguage":"en","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/guides/what-is-peer-to-peer-file-transfer","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Is peer-to-peer the same as end-to-end encrypted?","acceptedAnswer":{"@type":"Answer","text":"They're related but not identical. P2P describes the network path — bytes going directly between two devices. Encryption describes whether those bytes are unreadable to anyone in between. Relayium's realtime transfers are both: a direct (or relayed-but-encrypted) path, with the file sealed end-to-end regardless of which path it takes."}},{"@type":"Question","name":"Does a P2P transfer ever touch a server at all?","acceptedAnswer":{"@type":"Answer","text":"A small signaling server helps the two devices find each other's address — but it only ever sees connection-setup information, never file bytes. If a direct path can't be found, a TURN relay forwards the encrypted file data, but even then it only handles ciphertext it can't decrypt."}},{"@type":"Question","name":"Why would a direct connection fail in the first place?","acceptedAnswer":{"@type":"Answer","text":"Some networks — often strict corporate firewalls or certain mobile carrier NATs — are built in a way that makes it impossible to discover a reachable address from outside information alone. That's rarer than it sounds, but when it happens, a relay is what keeps the transfer working instead of failing outright."}},{"@type":"Question","name":"Is P2P transfer slower when it falls back to a relay?","acceptedAnswer":{"@type":"Answer","text":"It can add some latency, since the relay is an extra hop the data passes through and it's a shared server rather than a dedicated one. But it's still generally faster than an upload-then-download flow, since there's no wait for the file to fully land on a server before the download side can start."}},{"@type":"Question","name":"Do both people need an account for a P2P transfer?","acceptedAnswer":{"@type":"Answer","text":"Two devices on the same network need no account at all. Sending across networks by pairing code needs the sender to sign in, but the person receiving never needs an account either way."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>What is peer-to-peer file transfer?</h1>
+      <p class="updated">Last updated: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/what-is-peer-to-peer-file-transfer" aria-current="true">English</a><a href="/zh/guides/what-is-peer-to-peer-file-transfer">中文</a><a href="/ja/guides/what-is-peer-to-peer-file-transfer">日本語</a><a href="/ko/guides/what-is-peer-to-peer-file-transfer">한국어</a><a href="/de/guides/what-is-peer-to-peer-file-transfer">Deutsch</a><a href="/fr/guides/what-is-peer-to-peer-file-transfer">Français</a></nav>
+      <p class="lead">&quot;Peer-to-peer&quot; gets used loosely, so here&#39;s what it actually means for a file transfer: your file goes straight from one device to the other, not up to a company&#39;s server and back down. No stop in the middle where a copy could sit.</p>
+      <p class="lead">That sounds simple, but the internet isn&#39;t built for two random devices to just find each other and talk directly — most connections are hidden behind routers and firewalls that were never designed to be reached from outside. This page explains, in plain terms, how a direct connection actually gets made, when it can&#39;t be made, and what that means for your privacy and speed. Relayium is used as the concrete example throughout, since it&#39;s a working implementation of exactly this.</p>
+      <h2>P2P vs. the usual way: cutting out the middle stop</h2>
+      <p>Most &quot;send a file&quot; tools work by uploading: your file goes from your device up to the company&#39;s server, gets stored there, and the other person downloads it back down. That&#39;s two hops, and for a while, a full copy of your file sits on someone else&#39;s storage — even if it&#39;s deleted later.</p>
+      <p>Peer-to-peer transfer skips that stop. Once a connection is open between your device and the other person&#39;s, the file&#39;s bytes flow directly across that one hop and nowhere else. There&#39;s no server-side copy to store, to secure, or to eventually delete, because it was never uploaded in the first place.</p>
+      <ul><li>Upload-based transfer: your device to a server to their device — two hops, a stored copy in between.</li><li>Peer-to-peer transfer: your device straight to their device — one hop, nothing stored.</li><li>In Relayium, this is realtime mode: open the site on both devices, connect, and the file streams directly, browser to browser.</li></ul>
+      <h2>How two devices actually find each other: STUN</h2>
+      <p>Here&#39;s the part that isn&#39;t obvious: your device almost certainly doesn&#39;t know its own address as seen from the outside internet — it sits behind a home router or a mobile carrier&#39;s network address translation (NAT), which hides it behind a shared public IP and reassigns ports on the fly. The other device is in the same situation. Neither one can just &quot;dial&quot; the other directly without first figuring out what address would actually reach it.</p>
+      <p>That&#39;s what STUN (Session Traversal Utilities for NAT) is for. Each device briefly asks a small, lightweight STUN server one question: &quot;what address and port do you see me coming from?&quot; The answer tells it its own public-facing address — not the file, not any content, just enough network information to describe a path back to it. Both devices exchange this information (via a signaling step that only carries connection-setup details, never file bytes) and then try to open a direct path to each other&#39;s address. In a large share of real-world cases — especially two devices on the same Wi-Fi, or NATs that behave predictably — this works, and a fully direct connection opens.</p>
+      <ul><li>STUN only ever learns and shares network addresses — never file contents, filenames, or encryption keys.</li><li>Relayium uses WebRTC for this, the same direct-connection technology built into every modern browser for video calls — repurposed here to move file bytes instead of video frames.</li><li>Two devices on the same network (no code needed) typically connect the most directly of all, since there&#39;s often no NAT in the way at all.</li></ul>
+      <h2>When a direct path can&#39;t be found: the TURN relay</h2>
+      <p>Sometimes STUN isn&#39;t enough. Some NATs — especially on stricter corporate networks or certain mobile carriers — are unpredictable enough that no direct path can be discovered from outside information alone. If both devices are behind that kind of NAT, a genuinely direct connection just isn&#39;t possible; something has to relay the traffic in between.</p>
+      <p>That&#39;s what TURN (Traversal Using Relays around NAT) is: a fallback relay server that both devices connect to when a direct path fails. It&#39;s not a workaround or a compromise on privacy so much as a necessity of how some networks are built — but it&#39;s worth being precise about what it does and doesn&#39;t see. In Relayium, the file is already encrypted end-to-end before it reaches the relay, so the relay only ever forwards ciphertext — sealed data it has no key to open. It moves bytes; it cannot read them.</p>
+      <ul><li>TURN is only used when a direct path genuinely can&#39;t be found — it&#39;s a fallback, not the default.</li><li>The relay forwards ciphertext only; it never has the decryption key and can&#39;t read file contents, filenames, or anything else about what&#39;s inside.</li><li>Whether a given transfer went direct or through a relay is visible in Relayium&#39;s connection diagnostics, for anyone curious to check.</li></ul>
+      <h2>Why this matters: privacy and speed</h2>
+      <p>The privacy case is straightforward: when the file&#39;s bytes only ever cross one hop, straight between two devices, there&#39;s no server-side storage step where a copy could sit, get logged, or get accessed by anyone else — because it was never put there. That&#39;s a structurally different guarantee than &quot;we promise to delete it eventually.&quot;</p>
+      <p>The speed case follows the same logic. An upload-then-download transfer has to cross the network twice — once up, once down — and often waits on the sending side to fully finish before the receiving side can start. A direct connection crosses the network once, and data can stream continuously between the two devices as fast as the slower connection allows, without a server in the middle limiting throughput or adding its own latency.</p>
+      <h2>How Relayium puts this together</h2>
+      <p>Open relayium.com on two devices on the same network and they typically find each other automatically — no account, no code, nothing to install; that&#39;s the LAN case where STUN often isn&#39;t even needed. Sending across the internet to someone on a different network uses a pairing code: the sender signs in, generates a code (or shares a link, with an optional QR code to scan), and once the other person joins, the same STUN-then-TURN-if-needed process runs to open a direct or relayed connection — the receiver never needs an account either way.</p>
+      <p>Either way, once the connection is open, up to 1,000 files in a batch stream directly across it, each independently verified with a SHA-256 hash so you know what arrived matches exactly what was sent. If real-time isn&#39;t possible — say, the other person is offline — that&#39;s a genuinely different mode (a zero-knowledge stored link), not peer-to-peer, and worth understanding separately.</p>
+      <h2>Frequently asked questions</h2>
+      <h3>Is peer-to-peer the same as end-to-end encrypted?</h3>
+      <p>They&#39;re related but not identical. P2P describes the network path — bytes going directly between two devices. Encryption describes whether those bytes are unreadable to anyone in between. Relayium&#39;s realtime transfers are both: a direct (or relayed-but-encrypted) path, with the file sealed end-to-end regardless of which path it takes.</p>
+      <h3>Does a P2P transfer ever touch a server at all?</h3>
+      <p>A small signaling server helps the two devices find each other&#39;s address — but it only ever sees connection-setup information, never file bytes. If a direct path can&#39;t be found, a TURN relay forwards the encrypted file data, but even then it only handles ciphertext it can&#39;t decrypt.</p>
+      <h3>Why would a direct connection fail in the first place?</h3>
+      <p>Some networks — often strict corporate firewalls or certain mobile carrier NATs — are built in a way that makes it impossible to discover a reachable address from outside information alone. That&#39;s rarer than it sounds, but when it happens, a relay is what keeps the transfer working instead of failing outright.</p>
+      <h3>Is P2P transfer slower when it falls back to a relay?</h3>
+      <p>It can add some latency, since the relay is an extra hop the data passes through and it&#39;s a shared server rather than a dedicated one. But it&#39;s still generally faster than an upload-then-download flow, since there&#39;s no wait for the file to fully land on a server before the download side can start.</p>
+      <h3>Do both people need an account for a P2P transfer?</h3>
+      <p>Two devices on the same network need no account at all. Sending across networks by pairing code needs the sender to sign in, but the person receiving never needs an account either way.</p>
+      <div class="ctacard">
+        <p>Curious what it feels like? Open Relayium on two devices and watch a direct connection form in real time.</p>
+        <a class="cta" href="/">Try Relayium now</a>
+      </div>
+      <h2>Keep reading</h2>
+      <ul class="related"><li><a href="/compare/snapdrop">Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</a></li><li><a href="/compare/airdrop">Relayium vs AirDrop: a cross-platform AirDrop alternative</a></li><li><a href="/compare/wetransfer">Relayium vs WeTransfer: send large files without the server</a></li><li><a href="/how-to/transfer-files-android-to-iphone">How to transfer files from Android to iPhone (no cable)</a></li><li><a href="/how-to/send-files-pc-to-phone-wirelessly">Send files from PC to phone wirelessly, no cable or app</a></li><li><a href="/how-to/send-large-files-without-cloud">How to send large files without the cloud</a></li><li><a href="/guides/transfer-files-from-terminal">Transfer files from the terminal with the Relayium CLI</a></li><li><a href="/guides/back-up-a-server-over-ssh">Back up files to your own server over SSH with the Relayium CLI</a></li><li><a href="/guides/send-a-file-to-someone">Send a file to someone across networks with the Relayium CLI</a></li><li><a href="/guides/server-to-server-transfers">Server-to-server transfers with the Relayium CLI (daemon direct)</a></li><li><a href="/guides/sync-a-large-folder-between-servers">Sync a large folder between two servers (resumable, in the background)</a></li><li><a href="/how-to/share-a-file-with-an-expiring-link">Share a file with a secure, expiring download link</a></li><li><a href="/guides/self-host-relayium">Self-host Relayium: run your own file-transfer server</a></li><li><a href="/how-to/send-files-between-two-computers-over-the-internet">Send files between two computers over the internet</a></li><li><a href="/compare/croc">Relayium vs croc: encrypted file transfer from the terminal</a></li><li><a href="/guides/how-relayium-encrypts-your-files">How Relayium encrypts your files end-to-end</a></li><li><a href="/compare/google-drive">Relayium vs Google Drive for sending files</a></li><li><a href="/compare/rsync">Relayium vs rsync: sync folders without the SSH setup</a></li><li><a href="/compare/firefox-send">The best Firefox Send alternative in 2026</a></li><li><a href="/how-to/transfer-files-by-scanning-a-qr-code">Transfer files by scanning a QR code</a></li><li><a href="/guides/receive-files-from-the-command-line">Receive files from the command line</a></li><li><a href="/how-to/send-a-folder">How to send a whole folder, not just files</a></li><li><a href="/guides/run-relayium-as-an-always-on-service">Run Relayium as an always-on receive service</a></li><li><a href="/how-to/automate-server-backups">Automate encrypted server backups with a cron job</a></li><li><a href="/compare/localsend">Relayium vs LocalSend: which local file transfer to use</a></li><li><a href="/compare/scp">Relayium vs scp: simpler file transfer over SSH</a></li><li><a href="/compare/magic-wormhole">Relayium vs magic-wormhole: CLI file transfer</a></li><li><a href="/compare/nextcloud">Relayium vs Nextcloud for sending files</a></li><li><a href="/compare/dropbox">Relayium vs Dropbox for sending a file</a></li><li><a href="/how-to/airdrop-for-windows-and-android">AirDrop for Windows, Linux and Android</a></li><li><a href="/how-to/transfer-files-between-mac-and-windows">Transfer files between a Mac and a Windows PC</a></li><li><a href="/how-to/send-files-on-the-same-wifi">Send files between devices on the same Wi-Fi</a></li><li><a href="/guides/is-it-safe-to-send-files-over-the-internet">Is it safe to send files over the internet?</a></li><li><a href="/">Relayium</a></li></ul>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/guides">Guides</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>
