@@ -30,6 +30,8 @@ type Config struct {
 	BaseURL         string
 	SessionTTL      time.Duration
 	MagicTTL        time.Duration
+	VerifyTTL       time.Duration // email verification link lifetime (default 24h)
+	ResetTTL        time.Duration // password reset link lifetime (default 1h)
 	STUNURLs        []string
 	TURNURLs        []string
 	TURNSecret      string
@@ -66,6 +68,8 @@ type Service struct {
 	adminLogins       *loginThrottle
 	pwLogins          *loginThrottle              // per email+IP failed password-login limiter
 	magicRequests     *loginThrottle              // per email+IP magic-link request rate limiter
+	verifyRequests    *loginThrottle              // per email+IP resend-verification limiter
+	resetRequests     *loginThrottle              // per email+IP forgot-password limiter
 	blobs             storage.BlobStore           // nil until SetBlobStore; stored-transfer disabled when nil
 	pairCodeOwner     func(string) (string, bool) // resolves a live code to its owner userID; nil until wired
 }
@@ -73,7 +77,8 @@ type Service struct {
 func NewService(store Store, mailer Mailer, cfg Config) *Service {
 	svc := &Service{store: store, mailer: mailer, cfg: cfg, now: time.Now,
 		adminSessions: map[string]int64{}, adminLogins: newLoginThrottle(),
-		pwLogins: newLoginThrottle(), magicRequests: newLoginThrottle()}
+		pwLogins: newLoginThrottle(), magicRequests: newLoginThrottle(),
+		verifyRequests: newLoginThrottle(), resetRequests: newLoginThrottle()}
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
 	return svc
 }

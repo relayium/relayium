@@ -72,7 +72,7 @@ func main() {
 	googleID := flag.String("google-id", envStr("RELAYIUM_GOOGLE_ID", ""), "Google OAuth client ID")
 	googleSecret := flag.String("google-secret", envStr("RELAYIUM_GOOGLE_SECRET", ""), "Google OAuth client secret")
 	smtpAddr := flag.String("smtp-addr", envStr("RELAYIUM_SMTP_ADDR", ""), "SMTP host:port (empty = log magic links instead of emailing)")
-	smtpFrom := flag.String("smtp-from", envStr("RELAYIUM_SMTP_FROM", "no-reply@relayium.com"), "magic link From address")
+	smtpFrom := flag.String("smtp-from", envStr("RELAYIUM_SMTP_FROM", "noreply@relayium.com"), "magic link From address")
 	smtpUser := flag.String("smtp-user", envStr("RELAYIUM_SMTP_USER", ""), "SMTP username (set with -smtp-pass for authenticated providers; empty = unauthenticated relay)")
 	smtpPass := flag.String("smtp-pass", envStr("RELAYIUM_SMTP_PASS", ""), "SMTP password (used with -smtp-user)")
 	turnSecret := flag.String("turn-secret", envStr("RELAYIUM_TURN_SECRET", ""), "coturn static-auth-secret (empty disables TURN)")
@@ -186,6 +186,8 @@ func main() {
 			BaseURL:          *baseURL,
 			SessionTTL:       720 * time.Hour, // 30 days
 			MagicTTL:         15 * time.Minute,
+			VerifyTTL:        24 * time.Hour,
+			ResetTTL:         time.Hour,
 			GoogleClientID:   *googleID,
 			GoogleSecret:     *googleSecret,
 			GoogleRedirect:   *baseURL + "/api/auth/google/callback",
