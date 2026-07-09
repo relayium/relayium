@@ -28,32 +28,73 @@ func TestWorkerRecordsLastEvent(t *testing.T) {
 	}
 }
 
-// TestWatchdogWarnsOnSilence drives checkSilence directly (no sleeping) and
-// asserts it warns once the pipe has gone quiet past the silence window, but
-// stays quiet right after a fresh event.
-func TestWatchdogWarnsOnSilence(t *testing.T) {
+// TestWatchdogNoEventsYetStaysQuietBeforeWindow verifies a freshly started
+// worker (no metering event ever recorded) does NOT warn on every tick — only
+// once it has been up longer than the silence window with still nothing
+// received. A just-started server with no traffic yet is normal, not an
+// alarm.
+func TestWatchdogNoEventsYetStaysQuietBeforeWindow(t *testing.T) {
+	buf := &bytes.Buffer{}
+	sink := &fakeSink{}
+	w := &Worker{Sink: sink, Now: func() int64 { return 1000 }, Log: log.New(buf, "", 0)}
+
+	start := int64(1000)
+	silence := 5 * time.Minute
+
+	// Right at start: no warning.
+	w.checkSilence(start, start, silence)
+	if buf.Len() != 0 {
+		t.Fatalf("expected no warning immediately after start, got log: %q", buf.String())
+	}
+
+	// Still within the silence window: no warning.
+	w.checkSilence(start, start+int64(silence.Seconds())-1, silence)
+	if buf.Len() != 0 {
+		t.Fatalf("expected no warning before silence window elapses, got log: %q", buf.String())
+	}
+}
+
+// TestWatchdogNoEventsYetWarnsAfterWindow verifies that once the process has
+// been up longer than the silence window with still no event ever recorded,
+// checkSilence does warn.
+func TestWatchdogNoEventsYetWarnsAfterWindow(t *testing.T) {
+	buf := &bytes.Buffer{}
+	sink := &fakeSink{}
+	w := &Worker{Sink: sink, Now: func() int64 { return 1000 }, Log: log.New(buf, "", 0)}
+
+	start := int64(1000)
+	silence := 5 * time.Minute
+	now := start + int64(silence.Seconds()) + 1
+
+	w.checkSilence(start, now, silence)
+	if !strings.Contains(buf.String(), "no metering events") {
+		t.Fatalf("expected silence warning once uptime exceeds the window with no events, got log: %q", buf.String())
+	}
+}
+
+// TestWatchdogGoneQuietAfterEvents drives checkSilence directly (no sleeping)
+// and asserts the already-correct "gone quiet after events" branch still
+// warns once the pipe has gone silent past the silence window, and stays
+// quiet right after a fresh event.
+func TestWatchdogGoneQuietAfterEvents(t *testing.T) {
 	buf := &bytes.Buffer{}
 	sink := &fakeSink{}
 	var clk int64 = 1000
 	w := &Worker{Sink: sink, Now: func() int64 { return atomic.LoadInt64(&clk) }, Log: log.New(buf, "", 0)}
 
-	// No event ever recorded: must warn.
-	w.checkSilence(1000, 5*time.Minute)
-	if !strings.Contains(buf.String(), "no metering events") && !strings.Contains(buf.String(), "no relay events") {
-		t.Fatalf("expected silence warning with no prior event, got log: %q", buf.String())
-	}
+	silence := 5 * time.Minute
 
 	// Fresh event: must NOT warn right after.
-	buf.Reset()
 	w.handle(context.Background(), UsageEvent{AllocID: "a1", Username: "1000:tok", RelayedBytes: 42})
-	w.checkSilence(w.LastEventUnix(), 5*time.Minute)
+	w.checkSilence(w.LastEventUnix(), w.LastEventUnix(), silence)
 	if buf.Len() != 0 {
 		t.Fatalf("expected no warning right after an event, got log: %q", buf.String())
 	}
 
 	// Time advances well past the silence window since the last event: must warn.
 	buf.Reset()
-	w.checkSilence(w.LastEventUnix()+int64((5*time.Minute).Seconds())+1, 5*time.Minute)
+	now := w.LastEventUnix() + int64(silence.Seconds()) + 1
+	w.checkSilence(w.LastEventUnix(), now, silence)
 	if !strings.Contains(buf.String(), "no relay events") {
 		t.Fatalf("expected silence warning after window elapses, got log: %q", buf.String())
 	}

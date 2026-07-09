@@ -122,13 +122,17 @@ func (w *Worker) handle(ctx context.Context, ev UsageEvent) {
 
 // checkSilence warns once when metering is wired but has gone quiet for longer
 // than silence — the common blinding case (routine restart / reconnect window),
-// which UserRelayedSince would otherwise under-count with no signal.
-func (w *Worker) checkSilence(now int64, silence time.Duration) {
+// which UserRelayedSince would otherwise under-count with no signal. When no
+// event has ever arrived (last == 0), it only warns once the process has been
+// up longer than silence with still nothing received: a freshly started
+// server naturally has no events yet, so it must not alarm on every tick
+// before that window has elapsed.
+func (w *Worker) checkSilence(start, now int64, silence time.Duration) {
 	last := w.lastEventUnix.Load()
 	if last == 0 {
-		// No event ever; only warn once the process has been up past the window
-		// (caller passes a monotonic "now"; here we treat 0-last as "warn").
-		w.Log.Printf("metering: WARNING no metering events received yet (pipe may be down)")
+		if now-start > int64(silence.Seconds()) {
+			w.Log.Printf("metering: WARNING no metering events received yet (pipe may be down)")
+		}
 		return
 	}
 	if now-last > int64(silence.Seconds()) {
@@ -140,12 +144,13 @@ func (w *Worker) checkSilence(now int64, silence time.Duration) {
 func (w *Worker) Watchdog(ctx context.Context, check, silence time.Duration) {
 	t := time.NewTicker(check)
 	defer t.Stop()
+	start := w.Now()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			w.checkSilence(w.Now(), silence)
+			w.checkSilence(start, w.Now(), silence)
 		}
 	}
 }
