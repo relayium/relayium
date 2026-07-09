@@ -128,6 +128,20 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
+	// email_verified 是本次新增列。首次成功 ALTER（err==nil）说明刚建列，
+	// 此刻把所有存量老用户一次性兜底为已验证（避免现网用户被"必须验证才能登录"锁死）。
+	// 之后新注册的行按 DEFAULT 0 走验证流程；列已存在时幂等跳过。
+	if _, err := db.ExecContext(context.Background(),
+		`ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0`); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column name") {
+			db.Close()
+			return nil, err
+		}
+	} else if _, err := db.ExecContext(context.Background(),
+		`UPDATE users SET email_verified = 1`); err != nil {
+		db.Close()
+		return nil, err
+	}
 	// The transfers table backed the retired share-link mode (one-time
 	// rendezvous tokens). Dropping it is idempotent and safe: tokens lived
 	// at most one hour, so nothing in an existing deployment still needs it.
@@ -155,8 +169,8 @@ func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName 
 	email = normEmail(email)
 	var u User
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, email, display_name, created_at FROM users WHERE email = ?`, email,
-	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt)
+		`SELECT id, email, display_name, created_at, email_verified FROM users WHERE email = ?`, email,
+	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified)
 	if err == nil {
 		return u, nil
 	}
@@ -173,8 +187,8 @@ func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName 
 func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (User, error) {
 	var u User
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, email, display_name, created_at FROM users WHERE id = ?`, id,
-	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt)
+		`SELECT id, email, display_name, created_at, email_verified FROM users WHERE id = ?`, id,
+	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified)
 	if err == sql.ErrNoRows {
 		return User{}, ErrNotFound
 	}
@@ -383,6 +397,22 @@ func (s *SQLiteStore) HasPassword(ctx context.Context, userID string) (bool, err
 		return false, err
 	}
 	return hash.Valid && hash.String != "", nil
+}
+
+func (s *SQLiteStore) EmailVerified(ctx context.Context, userID string) (bool, error) {
+	var v bool
+	err := s.db.QueryRowContext(ctx,
+		`SELECT email_verified FROM users WHERE id = ?`, userID).Scan(&v)
+	if err == sql.ErrNoRows {
+		return false, ErrNotFound
+	}
+	return v, err
+}
+
+func (s *SQLiteStore) SetEmailVerified(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET email_verified = 1 WHERE id = ?`, userID)
+	return err
 }
 
 func (s *SQLiteStore) GetCredentials(ctx context.Context, email string) (string, string, bool, error) {
