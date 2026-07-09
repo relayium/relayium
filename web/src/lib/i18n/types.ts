@@ -113,6 +113,14 @@ export interface Messages {
     errCurrentWrong: string;
     errMismatch: string;
     personalCenter: string; // menu entry → /me
+    verifySentBody: (email: string) => string; // "check your email" panel body after register
+    resendVerification: string; // resend button label on the "check your email" panel
+    resendVerificationBtn: string; // resend button label on the inline unverified-login notice
+    resendVerificationSent: string; // ack shown after a resend click
+    unverifiedNotice: string; // inline notice when passwordLogin returns unverified
+    forgotPasswordLink: string; // "忘记密码？" link on the login form
+    resetPasswordSend: string; // submit button on the forgot-password panel
+    resetPasswordSent: string; // neutral post-submit message (never reveals account existence)
   };
   me: {
     title: string;

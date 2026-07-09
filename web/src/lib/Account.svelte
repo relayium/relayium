@@ -4,6 +4,7 @@
     session, refreshSession, logout, localDeviceId,
     googleLoginUrl, requestMagicLink,
     register, passwordLogin, fetchAuthMethods, changePassword, type AuthMethods,
+    resendVerification, forgotPassword,
   } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate } from "./router.svelte";
@@ -12,10 +13,24 @@
   let { open = $bindable(false) }: { open?: boolean } = $props();
   let email = $state("");
   let password = $state("");
-  let mode = $state<"login" | "register">("login");
+  let mode = $state<"login" | "register" | "forgot">("login");
   let error = $state("");
   let submitting = $state(false); // in-flight guard for the password login/register form
   let methods = $state<AuthMethods>({ password: true, google: false, magic: false });
+
+  // Register no longer logs the user in — it only queues a verification email —
+  // so a successful register switches the form to this "check your email" panel.
+  let registeredEmail = $state("");
+  // Set when passwordLogin comes back {unverified:true}; shows an inline resend
+  // notice instead of the generic wrong-email/password error.
+  let unverifiedEmail = $state("");
+  // Shared by both resend affordances above (they're never shown at once).
+  let resendDisabled = $state(false);
+  let resendAck = $state(false);
+
+  // Forgot-password panel state.
+  let forgotBusy = $state(false);
+  let forgotSent = $state(false);
 
   // magic-link 备用入口（仅当后端开启）
   let magicSent = $state(false);
@@ -36,6 +51,14 @@
       curPw = "";
       newPw = "";
       confirmPw = "";
+      mode = "login";
+      error = "";
+      registeredEmail = "";
+      unverifiedEmail = "";
+      resendDisabled = false;
+      resendAck = false;
+      forgotBusy = false;
+      forgotSent = false;
     }
   });
 
@@ -97,21 +120,59 @@
   async function onSubmit() {
     if (submitting) return; // guard against double-submit while a request is in flight
     error = "";
+    unverifiedEmail = "";
     if (!email || !password) return;
     submitting = true;
     try {
-      const res = mode === "register"
-        ? await register(email, password)
-        : await passwordLogin(email, password);
-      if (res.ok) {
-        open = false;
-        password = "";
-        claimDevice();
+      if (mode === "register") {
+        const res = await register(email, password);
+        if (res.ok) {
+          // No session is created on register — show the "check your email"
+          // panel instead of logging the user in.
+          registeredEmail = res.email ?? email;
+          password = "";
+        } else {
+          error = mapError(res.error);
+        }
       } else {
-        error = mapError(res.error);
+        const res = await passwordLogin(email, password);
+        if (res.ok) {
+          open = false;
+          password = "";
+          claimDevice();
+        } else if (res.unverified) {
+          unverifiedEmail = res.email ?? email;
+        } else {
+          error = mapError(res.error);
+        }
       }
     } finally {
       submitting = false;
+    }
+  }
+
+  // Shared by the register-success panel and the inline unverified-login
+  // notice — both call resendVerification and disable their button for ~30s.
+  async function onResend(target: string) {
+    if (resendDisabled || !target) return;
+    resendDisabled = true;
+    resendAck = true;
+    try {
+      await resendVerification(target);
+    } finally {
+      setTimeout(() => { resendDisabled = false; }, 30_000);
+    }
+  }
+
+  async function onForgot() {
+    if (forgotBusy || !email) return;
+    forgotBusy = true;
+    try {
+      await forgotPassword(email);
+    } finally {
+      // Always show the neutral message — never reveal whether the account exists.
+      forgotSent = true;
+      forgotBusy = false;
     }
   }
 
@@ -188,6 +249,31 @@
           <button class="btn btn-ghost" onclick={() => { open = false; navigate("me"); }}>{t.account.personalCenter}</button>
           <button class="btn btn-ghost" onclick={onLogout}>{t.account.signOut}</button>
         </div>
+      {:else if registeredEmail}
+        <div class="menu">
+          <p class="hint">{t.account.verifySentBody(registeredEmail)}</p>
+          {#if resendAck}<p class="hint">{t.account.resendVerificationSent}</p>{/if}
+          <button type="button" class="btn btn-ghost" disabled={resendDisabled} onclick={() => onResend(registeredEmail)}>
+            {t.account.resendVerification}
+          </button>
+          <button type="button" class="btn-link"
+                  onclick={() => { registeredEmail = ""; resendAck = false; resendDisabled = false; mode = "login"; }}>
+            {t.account.toLogin}
+          </button>
+        </div>
+      {:else if mode === "forgot"}
+        <form class="menu" onsubmit={(e) => { e.preventDefault(); onForgot(); }}>
+          {#if forgotSent}
+            <p class="hint">{t.account.resetPasswordSent}</p>
+          {:else}
+            <input type="email" name="email" autocomplete="username"
+                   bind:value={email} placeholder={t.account.email} use:focusOnMount />
+            <button type="submit" class="btn btn-primary" disabled={forgotBusy}>{t.account.resetPasswordSend}</button>
+          {/if}
+          <button type="button" class="btn-link" onclick={() => { mode = "login"; forgotSent = false; error = ""; }}>
+            {t.account.toLogin}
+          </button>
+        </form>
       {:else}
         <form class="menu" onsubmit={(e) => { e.preventDefault(); onSubmit(); }}>
           <input type="email" name="email" autocomplete="username"
@@ -195,13 +281,25 @@
           <input type="password" name="password"
                  autocomplete={mode === "register" ? "new-password" : "current-password"}
                  bind:value={password} placeholder={t.account.password} />
+          {#if unverifiedEmail}
+            <p class="hint">{t.account.unverifiedNotice}</p>
+            {#if resendAck}<p class="hint">{t.account.resendVerificationSent}</p>{/if}
+            <button type="button" class="btn-link" disabled={resendDisabled} onclick={() => onResend(unverifiedEmail)}>
+              {t.account.resendVerificationBtn}
+            </button>
+          {/if}
           {#if error}<p class="err">{error}</p>{/if}
           <button type="submit" class="btn btn-primary" disabled={submitting}>
             {mode === "register" ? t.account.createAccount : t.account.logInBtn}
           </button>
-          <button type="button" class="btn-link" onclick={() => { mode = mode === "register" ? "login" : "register"; error = ""; }}>
+          <button type="button" class="btn-link" onclick={() => { mode = mode === "register" ? "login" : "register"; error = ""; unverifiedEmail = ""; }}>
             {mode === "register" ? t.account.toLogin : t.account.toRegister}
           </button>
+          {#if mode === "login"}
+            <button type="button" class="btn-link" onclick={() => { mode = "forgot"; error = ""; unverifiedEmail = ""; }}>
+              {t.account.forgotPasswordLink}
+            </button>
+          {/if}
 
           {#if methods.google || methods.magic}
             <div class="sep">{t.account.or}</div>
