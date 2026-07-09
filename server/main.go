@@ -96,6 +96,8 @@ func main() {
 	relayMonthlyFree := flag.Int64("relay-monthly-free", envInt64("RELAYIUM_RELAY_MONTHLY_FREE", 2<<30),
 		"interim per-user monthly TURN-relay allowance in bytes (default 2 GiB); superseded by per-plan quota later")
 	trustedProxies := flag.String("trusted-proxies", envStr("RELAYIUM_TRUSTED_PROXIES", ""), "comma-separated CIDRs (or IPs) of reverse proxies whose X-Forwarded-For is trusted; empty (default) ignores XFF and uses the direct peer IP")
+	blobDiskMax := flag.Int64("blob-disk-max", envInt64("RELAYIUM_BLOB_DISK_MAX", 0),
+		"global blob-volume high-water mark in bytes; new uploads 503 once used >= this (0 disables the global soft cap)")
 	flag.Parse()
 
 	if *genAdminTOTP {
@@ -243,6 +245,12 @@ func main() {
 			log.Printf("WARNING: open blob dir %q: %v — stored transfers disabled", *blobDir, derr)
 		} else {
 			acct.SetBlobStore(disk)
+			// M3b: global disk soft cap over the blob volume (0 = disabled).
+			if *blobDiskMax > 0 {
+				blobPath := *blobDir
+				acct.SetDiskGuard(func() (uint64, uint64, error) { return storage.DiskUsage(blobPath) }, *blobDiskMax)
+				log.Printf("global blob-disk soft cap: 503 once %d bytes used on %s volume", *blobDiskMax, blobPath)
+			}
 			// Sweep temp files orphaned by a crash mid-Put (write→rename); the GC
 			// never reaps these. Anything older than an hour can't be an in-flight
 			// upload, so it is safe to delete at startup.

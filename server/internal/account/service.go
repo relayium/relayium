@@ -84,6 +84,10 @@ type Service struct {
 	registerLimiter rateLimiter
 	// uploadSem caps concurrent in-flight POST /api/files per account (M1).
 	uploadSem *uploadSem
+	// diskUsage reads the blob volume's current usage; nil disables the global
+	// disk soft cap (M3b). blobDiskMax<=0 also disables it even if diskUsage is set.
+	diskUsage   func() (used, total uint64, err error)
+	blobDiskMax int64
 }
 
 // rateLimiter is the minimal per-key limiter account needs; *signal.RateLimiter
@@ -104,6 +108,14 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 // SetBlobStore wires the ciphertext blob backend for stored transfers. Called
 // once at startup when the DB (and thus account features) are available.
 func (s *Service) SetBlobStore(b storage.BlobStore) { s.blobs = b }
+
+// SetDiskGuard enables the global blob-volume soft cap (M3b): when usage reports
+// used >= maxBytes, new uploads are refused with 503. maxBytes<=0 or a nil usage
+// func disables the guard. usage errors fail open (log + allow).
+func (s *Service) SetDiskGuard(usage func() (used, total uint64, err error), maxBytes int64) {
+	s.diskUsage = usage
+	s.blobDiskMax = maxBytes
+}
 
 // SetPairCodeOwner wires the pairing-code registry so /api/ice can resolve a
 // live code to its owning account — TURN is issued (and relay billed) for that

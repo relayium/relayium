@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 )
@@ -63,6 +64,19 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		return
 	}
 	defer s.uploadSem.release(u.ID)
+
+	// M3b: global blob-volume soft cap. Per-account quota × unbounded accounts is
+	// still unbounded, so refuse new uploads once the volume crosses the high-water
+	// mark. A usage read error fails open (never block every upload on one Statfs blip).
+	if s.diskUsage != nil && s.blobDiskMax > 0 {
+		if used, _, err := s.diskUsage(); err != nil {
+			log.Printf("disk-usage check failed: %v (fail-open, accepting upload)", err)
+		} else if used >= uint64(s.blobDiskMax) {
+			http.Error(w, "storage temporarily full", http.StatusServiceUnavailable)
+			return
+		}
+	}
+
 	st := s.resolveSettings(r.Context())
 	burn := r.URL.Query().Get("burnAfterRead") == "1"
 	reqTTL, _ := strconv.ParseInt(r.URL.Query().Get("ttl"), 10, 64)
