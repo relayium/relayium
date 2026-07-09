@@ -662,7 +662,7 @@ In `web/scripts/pages/article-template.mjs`, add `GUIDES_LABELS` to the `shared.
 
 - [ ] **Step 5: Add the link to the landing footer**
 
-In `web/scripts/pages/landing-template.mjs`, add `GUIDES_LABELS` to the `shared.mjs` import, then insert the Guides link into the `<footer>` (after the security link, before GitHub):
+In `web/scripts/pages/landing-template.mjs`, add `GUIDES_LABELS` to the `shared.mjs` import, then insert the Guides link into the `<footer>` right after the Relayium link and before Privacy — matching the article footer's placement so both footers group Guides with the brand link, ahead of the legal cluster:
 
 ```js
       <footer>
