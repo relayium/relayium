@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ガイド · Relayium</title>
+    <meta name="description" content="Relayium でファイルを転送するためのステップバイステップのガイドと比較。ターミナル、スマホ間、サーバー間、他ツールとの比較まで。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ja/guides" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="ガイド · Relayium" />
+    <meta property="og:description" content="Relayium でファイルを転送するためのステップバイステップのガイドと比較。ターミナル、スマホ間、サーバー間、他ツールとの比較まで。" />
+    <meta property="og:url" content="https://relayium.com/ja/guides" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="ガイド · Relayium" />
+    <meta name="twitter:description" content="Relayium でファイルを転送するためのステップバイステップのガイドと比較。ターミナル、スマホ間、サーバー間、他ツールとの比較まで。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"CollectionPage","name":"ガイド","description":"Relayium でファイルを転送するためのステップバイステップのガイドと比較。ターミナル、スマホ間、サーバー間、他ツールとの比較まで。","inLanguage":"ja","url":"https://relayium.com/ja/guides","mainEntity":{"@type":"ItemList","itemListElement":[{"@type":"ListItem","position":1,"url":"https://relayium.com/ja/guides/transfer-files-from-terminal","name":"Relayium CLI でターミナルからファイルを転送する"},{"@type":"ListItem","position":2,"url":"https://relayium.com/ja/guides/back-up-a-server-over-ssh","name":"Relayium CLI と SSH で自分のサーバーにファイルをバックアップする"},{"@type":"ListItem","position":3,"url":"https://relayium.com/ja/guides/send-a-file-to-someone","name":"Relayium CLI でネットワークを越えて誰かにファイルを送る"},{"@type":"ListItem","position":4,"url":"https://relayium.com/ja/guides/server-to-server-transfers","name":"Relayium CLI でサーバー間転送(デーモン直結)"},{"@type":"ListItem","position":5,"url":"https://relayium.com/ja/guides/sync-a-large-folder-between-servers","name":"2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド)"},{"@type":"ListItem","position":6,"url":"https://relayium.com/ja/how-to/transfer-files-android-to-iphone","name":"Android から iPhone へファイルを転送する方法（ケーブル不要）"},{"@type":"ListItem","position":7,"url":"https://relayium.com/ja/how-to/send-files-pc-to-phone-wirelessly","name":"PC からスマホへ無線でファイル転送：ケーブルもアプリも不要"},{"@type":"ListItem","position":8,"url":"https://relayium.com/ja/how-to/send-large-files-without-cloud","name":"クラウドを使わずに大きなファイルを送る方法"},{"@type":"ListItem","position":9,"url":"https://relayium.com/ja/compare/snapdrop","name":"Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？"},{"@type":"ListItem","position":10,"url":"https://relayium.com/ja/compare/airdrop","name":"Relayium と AirDrop の比較：クロスプラットフォームな代替"},{"@type":"ListItem","position":11,"url":"https://relayium.com/ja/compare/wetransfer","name":"Relayium と WeTransfer の比較：サーバーを介さず大容量を送る"}]}}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.guidelist{list-style:none;padding:0}.guidelist li{margin:8px 0}.guidelist a{color:var(--accent);text-decoration:none;font-size:18px}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <h1>ガイド</h1>
+      <p class="lead">Relayium でのファイル転送のすべて——ターミナル操作、スマホ間転送、他ツールとの率直な比較。</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides">English</a><a href="/zh/guides">中文</a><a href="/ja/guides" aria-current="true">日本語</a><a href="/ko/guides">한국어</a><a href="/de/guides">Deutsch</a><a href="/fr/guides">Français</a></nav>
+      <h2>ガイド</h2>
+      <ul class="guidelist"><li><a href="/ja/guides/transfer-files-from-terminal">Relayium CLI でターミナルからファイルを転送する</a></li><li><a href="/ja/guides/back-up-a-server-over-ssh">Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</a></li><li><a href="/ja/guides/send-a-file-to-someone">Relayium CLI でネットワークを越えて誰かにファイルを送る</a></li><li><a href="/ja/guides/server-to-server-transfers">Relayium CLI でサーバー間転送(デーモン直結)</a></li><li><a href="/ja/guides/sync-a-large-folder-between-servers">2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド)</a></li></ul>
+      <h2>ハウツー</h2>
+      <ul class="guidelist"><li><a href="/ja/how-to/transfer-files-android-to-iphone">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/how-to/send-large-files-without-cloud">クラウドを使わずに大きなファイルを送る方法</a></li></ul>
+      <h2>比較</h2>
+      <ul class="guidelist"><li><a href="/ja/compare/snapdrop">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/compare/wetransfer">Relayium と WeTransfer の比較：サーバーを介さず大容量を送る</a></li></ul>
+      <footer>
+        <a href="/?lang=ja">← Relayium</a>
+        <a href="/ja/privacy">プライバシーポリシー</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

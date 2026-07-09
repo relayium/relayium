@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import privacy from "./content/legal/privacy.mjs";
 import terms from "./content/legal/terms.mjs";
-import { buildLegalPages, buildSitemap, articleGroupsByLang } from "./build-pages.mjs";
+import { buildLegalPages, buildSitemap, articleGroupsByLang, buildGuidesIndexPages } from "./build-pages.mjs";
 import { landingUrl, landingPath, ctaHref, validateLangs, LANDING_LANGS } from "./shared.mjs";
+import guidesIndex from "./content/guides-index.mjs";
 
 const docs = [privacy, terms];
 
@@ -89,5 +90,30 @@ describe("articleGroupsByLang", () => {
 
   it("uses the language-specific title", () => {
     expect(groups.zh.guides[0].title).toBe("guide-zh");
+  });
+});
+
+describe("buildGuidesIndexPages", () => {
+  const pages = buildGuidesIndexPages(guidesIndex, articleGroupsByLang(fakeArticles));
+
+  it("produces one page per language at the guides path", () => {
+    expect(pages.length).toBe(6);
+    expect(pages.map((p) => p.path)).toContain("guides/index.html");
+    expect(pages.map((p) => p.path)).toContain("zh/guides/index.html");
+  });
+
+  it("renders the localized H1 and links the grouped articles", () => {
+    const zh = pages.find((p) => p.path === "zh/guides/index.html");
+    expect(zh.html).toContain("<h1>使用指南</h1>");
+    expect(zh.html).toContain('href="/zh/guides/y"');
+    expect(zh.html).toContain('href="/zh/compare/snapdrop"');
+  });
+});
+
+describe("buildSitemap with guidesIndex", () => {
+  const xml = buildSitemap(docs, { home: true, guidesIndex });
+  it("adds the six hub URLs", () => {
+    expect(xml).toContain("<loc>https://relayium.com/guides</loc>");
+    expect(xml).toContain("<loc>https://relayium.com/fr/guides</loc>");
   });
 });

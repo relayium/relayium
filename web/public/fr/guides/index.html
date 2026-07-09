@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Guides · Relayium</title>
+    <meta name="description" content="Guides pas à pas et comparatifs pour transférer des fichiers avec Relayium — depuis le terminal, entre téléphones, de serveur à serveur, et face aux autres outils." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/fr/guides" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Guides · Relayium" />
+    <meta property="og:description" content="Guides pas à pas et comparatifs pour transférer des fichiers avec Relayium — depuis le terminal, entre téléphones, de serveur à serveur, et face aux autres outils." />
+    <meta property="og:url" content="https://relayium.com/fr/guides" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Guides · Relayium" />
+    <meta name="twitter:description" content="Guides pas à pas et comparatifs pour transférer des fichiers avec Relayium — depuis le terminal, entre téléphones, de serveur à serveur, et face aux autres outils." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"CollectionPage","name":"Guides","description":"Guides pas à pas et comparatifs pour transférer des fichiers avec Relayium — depuis le terminal, entre téléphones, de serveur à serveur, et face aux autres outils.","inLanguage":"fr","url":"https://relayium.com/fr/guides","mainEntity":{"@type":"ItemList","itemListElement":[{"@type":"ListItem","position":1,"url":"https://relayium.com/fr/guides/transfer-files-from-terminal","name":"Transférer des fichiers depuis le terminal avec la CLI Relayium"},{"@type":"ListItem","position":2,"url":"https://relayium.com/fr/guides/back-up-a-server-over-ssh","name":"Sauvegarder des fichiers sur son propre serveur via SSH avec la CLI Relayium"},{"@type":"ListItem","position":3,"url":"https://relayium.com/fr/guides/send-a-file-to-someone","name":"Envoyer un fichier à quelqu'un à travers les réseaux avec la CLI Relayium"},{"@type":"ListItem","position":4,"url":"https://relayium.com/fr/guides/server-to-server-transfers","name":"Transferts serveur à serveur avec la CLI Relayium (daemon direct)"},{"@type":"ListItem","position":5,"url":"https://relayium.com/fr/guides/sync-a-large-folder-between-servers","name":"Synchroniser un gros dossier entre deux serveurs (reprenable, en arrière-plan)"},{"@type":"ListItem","position":6,"url":"https://relayium.com/fr/how-to/transfer-files-android-to-iphone","name":"Transférer des fichiers d'Android vers iPhone (sans câble)"},{"@type":"ListItem","position":7,"url":"https://relayium.com/fr/how-to/send-files-pc-to-phone-wirelessly","name":"Envoyer des fichiers du PC au téléphone sans fil, sans câble ni appli"},{"@type":"ListItem","position":8,"url":"https://relayium.com/fr/how-to/send-large-files-without-cloud","name":"Envoyer de gros fichiers sans le cloud"},{"@type":"ListItem","position":9,"url":"https://relayium.com/fr/compare/snapdrop","name":"Relayium vs Snapdrop et PairDrop : quel transfert P2P sécurisé ?"},{"@type":"ListItem","position":10,"url":"https://relayium.com/fr/compare/airdrop","name":"Relayium vs AirDrop : une alternative multiplateforme"},{"@type":"ListItem","position":11,"url":"https://relayium.com/fr/compare/wetransfer","name":"Relayium vs WeTransfer : envoyer de gros fichiers sans serveur"}]}}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.guidelist{list-style:none;padding:0}.guidelist li{margin:8px 0}.guidelist a{color:var(--accent);text-decoration:none;font-size:18px}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=fr">Relayium</a></header>
+      <h1>Guides</h1>
+      <p class="lead">Tout pour transférer des fichiers avec Relayium — tutoriels en terminal, transferts entre téléphones et comparatifs honnêtes avec d&#39;autres outils.</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides">English</a><a href="/zh/guides">中文</a><a href="/ja/guides">日本語</a><a href="/ko/guides">한국어</a><a href="/de/guides">Deutsch</a><a href="/fr/guides" aria-current="true">Français</a></nav>
+      <h2>Guides</h2>
+      <ul class="guidelist"><li><a href="/fr/guides/transfer-files-from-terminal">Transférer des fichiers depuis le terminal avec la CLI Relayium</a></li><li><a href="/fr/guides/back-up-a-server-over-ssh">Sauvegarder des fichiers sur son propre serveur via SSH avec la CLI Relayium</a></li><li><a href="/fr/guides/send-a-file-to-someone">Envoyer un fichier à quelqu&#39;un à travers les réseaux avec la CLI Relayium</a></li><li><a href="/fr/guides/server-to-server-transfers">Transferts serveur à serveur avec la CLI Relayium (daemon direct)</a></li><li><a href="/fr/guides/sync-a-large-folder-between-servers">Synchroniser un gros dossier entre deux serveurs (reprenable, en arrière-plan)</a></li></ul>
+      <h2>Tutoriels</h2>
+      <ul class="guidelist"><li><a href="/fr/how-to/transfer-files-android-to-iphone">Transférer des fichiers d&#39;Android vers iPhone (sans câble)</a></li><li><a href="/fr/how-to/send-files-pc-to-phone-wirelessly">Envoyer des fichiers du PC au téléphone sans fil, sans câble ni appli</a></li><li><a href="/fr/how-to/send-large-files-without-cloud">Envoyer de gros fichiers sans le cloud</a></li></ul>
+      <h2>Comparatifs</h2>
+      <ul class="guidelist"><li><a href="/fr/compare/snapdrop">Relayium vs Snapdrop et PairDrop : quel transfert P2P sécurisé ?</a></li><li><a href="/fr/compare/airdrop">Relayium vs AirDrop : une alternative multiplateforme</a></li><li><a href="/fr/compare/wetransfer">Relayium vs WeTransfer : envoyer de gros fichiers sans serveur</a></li></ul>
+      <footer>
+        <a href="/?lang=fr">← Relayium</a>
+        <a href="/fr/privacy">Confidentialité</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

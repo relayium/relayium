@@ -7,6 +7,7 @@ import privacy from "./pages/content/legal/privacy.mjs";
 import terms from "./pages/content/legal/terms.mjs";
 import security from "./pages/content/legal/security.mjs";
 import landing from "./pages/content/landing.mjs";
+import guidesIndex from "./pages/content/guides-index.mjs";
 import compareSnapdrop from "./pages/content/articles/compare-snapdrop.mjs";
 import compareAirdrop from "./pages/content/articles/compare-airdrop.mjs";
 import compareWetransfer from "./pages/content/articles/compare-wetransfer.mjs";
@@ -22,8 +23,10 @@ import {
   buildLegalPages,
   buildLandingPages,
   buildArticlePages,
+  buildGuidesIndexPages,
   buildSitemap,
   articleLinksByLang,
+  articleGroupsByLang,
 } from "./pages/build-pages.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -48,6 +51,7 @@ async function main() {
     ...buildLegalPages(legalDocs),
     ...buildLandingPages(landing, articleLinksByLang(articles)),
     ...buildArticlePages(articles),
+    ...buildGuidesIndexPages(guidesIndex, articleGroupsByLang(articles)),
   ];
   for (const page of pages) {
     const abs = join(publicDir, page.path);
@@ -56,7 +60,7 @@ async function main() {
   }
   await writeFile(
     join(publicDir, "sitemap.xml"),
-    buildSitemap(legalDocs, { home: true, landing, articles }),
+    buildSitemap(legalDocs, { home: true, landing, articles, guidesIndex }),
     "utf8"
   );
   console.log(`gen-pages: wrote ${pages.length} pages + sitemap.xml to public/`);

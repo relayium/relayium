@@ -3,6 +3,7 @@ import { LANGS, LANDING_LANGS, SITE, pagePath, urlPath, absUrl, landingUrl, land
 import { renderLegalPage } from "./legal-template.mjs";
 import { renderLandingPage } from "./landing-template.mjs";
 import { renderArticlePage } from "./article-template.mjs";
+import { renderGuidesIndexPage } from "./guides-index-template.mjs";
 
 export function buildLegalPages(docs) {
   const out = [];
@@ -64,14 +65,28 @@ export function articleGroupsByLang(articles) {
   );
 }
 
-export function buildSitemap(docs, { home = true, landing = null, articles = [] } = {}) {
+export function buildGuidesIndexPages(guidesIndex, groupsByLang) {
+  validateLangs("guides-index", guidesIndex.langs);
+  return LANGS.map((lang) => ({
+    path: pagePath("guides", lang),
+    html: renderGuidesIndexPage({ lang, doc: guidesIndex.langs[lang], groups: groupsByLang[lang] }),
+  }));
+}
+
+export function buildSitemap(docs, { home = true, landing = null, articles = [], guidesIndex = null } = {}) {
   const urls = [];
   const newest = [
     ...docs.map((d) => d.langs.en.updated),
     ...(landing ? [landing.updated] : []),
     ...articles.map((a) => a.updated),
+    ...(guidesIndex ? [guidesIndex.updated] : []),
   ].sort().at(-1);
   if (home) urls.push({ loc: SITE.origin + "/", lastmod: newest, priority: "1.0", changefreq: "weekly" });
+  if (guidesIndex) {
+    for (const lang of LANGS) {
+      urls.push({ loc: absUrl(urlPath("guides", lang)), lastmod: guidesIndex.updated, priority: "0.5", changefreq: "monthly" });
+    }
+  }
   if (landing) {
     for (const lang of LANDING_LANGS) {
       urls.push({ loc: absUrl(landingUrl(lang)), lastmod: landing.updated, priority: "0.8", changefreq: "weekly" });
