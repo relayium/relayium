@@ -8,6 +8,8 @@ import (
 	"context"
 	"log"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/relayium/relayium/internal/account"
 )
@@ -33,11 +35,28 @@ type Sink interface {
 }
 
 // Worker consumes usage events and records them. Now is injected for testability.
+//
+// Residual: if the app is down for an allocation's ENTIRE lifetime AND that
+// allocation closes during the outage, its bytes are unrecoverable — pub/sub
+// is fire-and-forget and no closed-allocation history is queryable. The
+// reconcile pass (see Reconcile) only covers allocations still live when it
+// runs; Watchdog only surfaces that the pipe has gone silent, it cannot
+// recover what was lost while it was down.
 type Worker struct {
 	Sink Sink
 	Now  func() int64
 	Log  *log.Logger
+
+	lastEventUnix atomic.Int64
+	eventCount    atomic.Int64
 }
+
+// LastEventUnix returns the unix-seconds timestamp of the last successfully
+// recorded usage event, or 0 if none has been recorded yet.
+func (w *Worker) LastEventUnix() int64 { return w.lastEventUnix.Load() }
+
+// EventCount returns the number of usage events successfully recorded so far.
+func (w *Worker) EventCount() int64 { return w.eventCount.Load() }
 
 // Run consumes events until the source channel closes or ctx is cancelled.
 func (w *Worker) Run(ctx context.Context, src StatsSource) error {
@@ -95,5 +114,77 @@ func (w *Worker) handle(ctx context.Context, ev UsageEvent) {
 	}
 	if err := w.Sink.RecordUsage(ctx, rec); err != nil {
 		w.Log.Printf("metering: record alloc %s failed: %v", ev.AllocID, err)
+		return
+	}
+	w.lastEventUnix.Store(rec.RecordedAt)
+	w.eventCount.Add(1)
+}
+
+// checkSilence warns once when metering is wired but has gone quiet for longer
+// than silence — the common blinding case (routine restart / reconnect window),
+// which UserRelayedSince would otherwise under-count with no signal.
+func (w *Worker) checkSilence(now int64, silence time.Duration) {
+	last := w.lastEventUnix.Load()
+	if last == 0 {
+		// No event ever; only warn once the process has been up past the window
+		// (caller passes a monotonic "now"; here we treat 0-last as "warn").
+		w.Log.Printf("metering: WARNING no metering events received yet (pipe may be down)")
+		return
+	}
+	if now-last > int64(silence.Seconds()) {
+		w.Log.Printf("metering: WARNING no relay events for %ds (last=%d); coturn→redis pipe may be down", now-last, last)
+	}
+}
+
+// Watchdog periodically flags a silent metering pipe until ctx is cancelled.
+func (w *Worker) Watchdog(ctx context.Context, check, silence time.Duration) {
+	t := time.NewTicker(check)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			w.checkSilence(w.Now(), silence)
+		}
+	}
+}
+
+// AllocationLister yields the CURRENT cumulative totals of live coturn
+// allocations, used to fill pub/sub gaps. Implemented over the coturn CLI in
+// a follow-up if the version supports it; nil disables reconciliation.
+type AllocationLister interface {
+	LiveAllocations(ctx context.Context) ([]UsageEvent, error)
+}
+
+// Reconcile pulls current cumulative totals for live allocations and records
+// them (keep-max upsert dedupes against pub/sub events), filling gaps where a
+// total_traffic message was missed. Best-effort: a lister error is returned to
+// the loop, which logs and retries next tick. Only allocations still live when
+// this runs can be recovered this way; see the Worker doc for the residual.
+func (w *Worker) Reconcile(ctx context.Context, lister AllocationLister) error {
+	evs, err := lister.LiveAllocations(ctx)
+	if err != nil {
+		return err
+	}
+	for _, ev := range evs {
+		w.handle(ctx, ev)
+	}
+	return nil
+}
+
+// ReconcileLoop runs Reconcile on a fixed interval until ctx is cancelled.
+func (w *Worker) ReconcileLoop(ctx context.Context, lister AllocationLister, every time.Duration) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if err := w.Reconcile(ctx, lister); err != nil {
+				w.Log.Printf("metering: reconcile pass failed: %v", err)
+			}
+		}
 	}
 }

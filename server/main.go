@@ -283,6 +283,10 @@ func main() {
 					time.Sleep(5 * time.Second)
 				}
 			}()
+			// M2: warn if metering is enabled but the coturn→redis pipe goes silent
+			// (routine restart / reconnect gap is the common blinding case).
+			const meterSilenceWarn = 5 * time.Minute
+			go worker.Watchdog(context.Background(), time.Minute, meterSilenceWarn)
 			log.Printf("metering: ingesting coturn relay stats from redis %s", *redisAddr)
 		}
 		mux.Handle("/api/", acct.Routes())

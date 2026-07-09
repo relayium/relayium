@@ -82,6 +82,21 @@ func TestWorkerKeepsMaxPerAlloc(t *testing.T) {
 	}
 }
 
+// TestWorkerOutOfOrderKeepsMax pins the verified cumulative-idempotent
+// behavior: coturn may republish an allocation's cumulative total_traffic
+// out of order (e.g. a duplicate/replayed lower reading after a higher one),
+// and the keep-max upsert must not double-count or regress the total.
+func TestWorkerOutOfOrderKeepsMax(t *testing.T) {
+	sink := &fakeSink{}
+	runWith(t, sink, []UsageEvent{
+		{AllocID: "a1", Username: "1000:tok", RelayedBytes: 999},
+		{AllocID: "a1", Username: "1000:tok", RelayedBytes: 100},
+	})
+	if len(sink.recorded) != 1 || sink.recorded[0].RelayedBytes != 999 {
+		t.Fatalf("out-of-order keep-max record wrong: %+v", sink.recorded)
+	}
+}
+
 func TestSplitAttrib(t *testing.T) {
 	cases := []struct{ in, user, code string }{
 		{"deadbeefcafe.424242", "deadbeefcafe", "424242"}, // new format
