@@ -42,6 +42,12 @@ func (s *Service) stunServers() []ICEServer {
 // to relay across strict/symmetric NATs. It always returns 200 and never
 // reveals code validity.
 func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
+	// H1: brute-forcing the 6-digit pairing code (10^6 space, 15-min TTL) would
+	// steal a victim's TURN credentials; cap per-IP attempts. 5/min/IP.
+	if s.iceLimiter != nil && !s.iceLimiter.Allow(s.clientIP(r)) {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
+		return
+	}
 	servers := s.stunServers()
 	code := r.URL.Query().Get("code")
 	owner := ""

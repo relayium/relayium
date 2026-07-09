@@ -147,6 +147,9 @@ func main() {
 	// the 10^6 code space while allowing a real recipient to reload a few times.
 	wsCodeLimiter := signal.NewRateLimiter(30, time.Minute, func() int64 { return time.Now().Unix() })
 	go wsCodeLimiter.Run(context.Background(), time.Minute)
+	// H1: /api/ice pairing-code → TURN-credential endpoint. 5/min/IP.
+	iceLimiter := signal.NewRateLimiter(5, time.Minute, func() int64 { return time.Now().Unix() })
+	go iceLimiter.Run(context.Background(), time.Minute)
 
 	store, dbErr := account.OpenSQLite(*dbPath)
 
@@ -223,6 +226,7 @@ func main() {
 		// and fail across strict NATs.
 		acct.SetPairCodeOwner(pairReg.OwnerOf)
 		acct.SetClientIP(ipx.IP) // H3: trusted-proxy-aware rate-limit keys
+		acct.SetICELimiter(iceLimiter)
 		// /api/pair requires a logged-in owner: the receiver still joins the code
 		// room anonymously via /ws?code= and /api/ice?code=, but minting a
 		// cross-network rendezvous code needs an account for attribution.

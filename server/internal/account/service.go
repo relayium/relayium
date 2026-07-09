@@ -77,7 +77,16 @@ type Service struct {
 	// existing tests are unchanged); main.go injects signal.IPExtractor.IP,
 	// which only trusts XFF from configured/loopback proxies (H3).
 	clientIP func(*http.Request) string
+	// iceLimiter caps /api/ice attempts per IP (H1: brute-forcing the 6-digit
+	// pairing code would steal a victim's TURN credentials). nil = unlimited.
+	iceLimiter rateLimiter
+	// registerLimiter caps POST /api/auth/register attempts per IP (H2a). nil = unlimited.
+	registerLimiter rateLimiter
 }
+
+// rateLimiter is the minimal per-key limiter account needs; *signal.RateLimiter
+// satisfies it. Declared locally so the account package need not import signal.
+type rateLimiter interface{ Allow(key string) bool }
 
 func NewService(store Store, mailer Mailer, cfg Config) *Service {
 	svc := &Service{store: store, mailer: mailer, cfg: cfg, now: time.Now,
@@ -106,6 +115,12 @@ func (s *Service) SetClientIP(fn func(*http.Request) string) {
 		s.clientIP = fn
 	}
 }
+
+// SetICELimiter caps /api/ice at N/window/IP (H1: 5/min). nil = unlimited.
+func (s *Service) SetICELimiter(rl rateLimiter) { s.iceLimiter = rl }
+
+// SetRegisterLimiter caps POST /api/auth/register per IP (H2a: 5/min). nil = unlimited.
+func (s *Service) SetRegisterLimiter(rl rateLimiter) { s.registerLimiter = rl }
 
 func randToken() string {
 	b := make([]byte, 32)
