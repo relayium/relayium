@@ -67,6 +67,10 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/auth/register", s.handleRegister)
 	mux.HandleFunc("POST /api/auth/password/login", s.handlePasswordLogin)
 	mux.HandleFunc("POST /api/auth/password/change", s.RequireSession(s.handleChangePassword))
+	mux.HandleFunc("POST /api/auth/email/verify", s.handleEmailVerify)
+	mux.HandleFunc("POST /api/auth/email/resend", s.handleResendVerification)
+	mux.HandleFunc("POST /api/auth/password/forgot", s.handleForgotPassword)
+	mux.HandleFunc("POST /api/auth/password/reset", s.handleResetPassword)
 	mux.HandleFunc("GET /api/auth/methods", s.handleAuthMethods)
 	if s.cfg.EnableMagic {
 		mux.HandleFunc("POST /api/auth/magic/request", s.handleMagicRequest)
@@ -269,7 +273,8 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user": map[string]any{
-			"id": u.ID, "email": u.Email, "displayName": u.DisplayName, "hasPassword": hasPass,
+			"id": u.ID, "email": u.Email, "displayName": u.DisplayName,
+			"hasPassword": hasPass, "emailVerified": u.EmailVerified,
 		},
 	})
 }
@@ -312,7 +317,8 @@ func (s *Service) writeUser(ctx context.Context, w http.ResponseWriter, code int
 	hasPass, _ := s.store.HasPassword(ctx, u.ID)
 	writeJSON(w, code, map[string]any{
 		"user": map[string]any{
-			"id": u.ID, "email": u.Email, "displayName": u.DisplayName, "hasPassword": hasPass,
+			"id": u.ID, "email": u.Email, "displayName": u.DisplayName,
+			"hasPassword": hasPass, "emailVerified": u.EmailVerified,
 		},
 	})
 }
@@ -327,23 +333,17 @@ func (s *Service) handleRegister(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	// Register no longer issues a session: it creates an unverified account and
-	// emails a verification link. Task 8 rewrites this handler fully; for now we
-	// just report that verification was sent so the package builds and the new
-	// no-session behaviour is honoured.
 	_, err := s.Register(r.Context(), in.Email, in.Password, in.DisplayName)
 	switch {
 	case errors.Is(err, ErrWeakPassword):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})
-		return
 	case errors.Is(err, ErrEmailTaken):
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "email already registered"})
-		return
 	case err != nil:
 		http.Error(w, "server error", http.StatusInternalServerError)
-		return
+	default:
+		writeJSON(w, http.StatusOK, map[string]string{"status": "verification_sent", "email": normEmail(in.Email)})
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "verification_sent"})
 }
 
 func (s *Service) handlePasswordLogin(w http.ResponseWriter, r *http.Request) {
@@ -369,11 +369,111 @@ func (s *Service) handlePasswordLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 		return
 	}
+	if errors.Is(err, ErrEmailUnverified) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "email_unverified", "email": normEmail(in.Email)})
+		return
+	}
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
 	s.pwLogins.reset(key)
+	u, err := s.store.GetUserByID(r.Context(), sess.UserID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	s.setSessionCookie(w, sess)
+	s.writeUser(r.Context(), w, http.StatusOK, u)
+}
+
+func (s *Service) handleEmailVerify(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Token == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	sess, err := s.VerifyEmail(r.Context(), in.Token)
+	if errors.Is(err, ErrInvalidToken) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_token"})
+		return
+	}
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	u, err := s.store.GetUserByID(r.Context(), sess.UserID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	s.setSessionCookie(w, sess)
+	s.writeUser(r.Context(), w, http.StatusOK, u)
+}
+
+func (s *Service) handleResendVerification(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Email string `json:"email"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&in)
+	email := normEmail(in.Email)
+	// Anti-enumeration + anti-bomb: throttle per email+IP; only resend when the
+	// account exists AND is still unverified; always respond 200.
+	if email != "" {
+		key := email + "|" + clientIP(r)
+		if !s.verifyRequests.locked(key, s.now()) {
+			s.verifyRequests.recordFail(key, s.now())
+			if uid, _, ok, _ := s.store.GetCredentials(r.Context(), email); ok {
+				if verified, _ := s.store.EmailVerified(r.Context(), uid); !verified {
+					if u, err := s.store.GetUserByID(r.Context(), uid); err == nil {
+						_ = s.SendVerifyEmail(r.Context(), u)
+					}
+				}
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+}
+
+func (s *Service) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Email string `json:"email"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&in)
+	email := normEmail(in.Email)
+	if email != "" {
+		key := email + "|" + clientIP(r)
+		if !s.resetRequests.locked(key, s.now()) {
+			s.resetRequests.recordFail(key, s.now())
+			_ = s.RequestPasswordReset(r.Context(), email)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+}
+
+func (s *Service) handleResetPassword(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Token       string `json:"token"`
+		NewPassword string `json:"newPassword"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Token == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	sess, err := s.ResetPassword(r.Context(), in.Token, in.NewPassword)
+	switch {
+	case errors.Is(err, ErrWeakPassword):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})
+		return
+	case errors.Is(err, ErrInvalidToken):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_token"})
+		return
+	case err != nil:
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
 	u, err := s.store.GetUserByID(r.Context(), sess.UserID)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
