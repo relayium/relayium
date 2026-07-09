@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Auto-héberger Relayium : gérez votre propre serveur de transfert · Relayium</title>
+    <meta name="description" content="Faites tourner toute la pile Relayium vous-même avec une seule commande Docker — votre propre domaine, vos propres données, aucun compte requis. Couvre les clés d&#39;environnement, le relais TURN optionnel et le paramétrage de la CLI." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/fr/guides/self-host-relayium" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/self-host-relayium" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/self-host-relayium" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/self-host-relayium" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/self-host-relayium" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/self-host-relayium" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/self-host-relayium" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/self-host-relayium" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Auto-héberger Relayium : gérez votre propre serveur de transfert" />
+    <meta property="og:description" content="Faites tourner toute la pile Relayium vous-même avec une seule commande Docker — votre propre domaine, vos propres données, aucun compte requis. Couvre les clés d&#39;environnement, le relais TURN optionnel et le paramétrage de la CLI." />
+    <meta property="og:url" content="https://relayium.com/fr/guides/self-host-relayium" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Auto-héberger Relayium : gérez votre propre serveur de transfert" />
+    <meta name="twitter:description" content="Faites tourner toute la pile Relayium vous-même avec une seule commande Docker — votre propre domaine, vos propres données, aucun compte requis. Couvre les clés d&#39;environnement, le relais TURN optionnel et le paramétrage de la CLI." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Auto-héberger Relayium : gérez votre propre serveur de transfert","description":"Faites tourner toute la pile Relayium vous-même avec une seule commande Docker — votre propre domaine, vos propres données, aucun compte requis. Couvre les clés d'environnement, le relais TURN optionnel et le paramétrage de la CLI.","inLanguage":"fr","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/fr/guides/self-host-relayium","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Dois-je configurer TURN ?","acceptedAnswer":{"@type":"Answer","text":"Seulement si vous voulez que les transferts en temps réel entre réseaux différents fonctionnent à travers des NAT stricts. Les transferts sur le même réseau, le push/pull basé sur SSH et le daemon-direct fonctionnent tous sans TURN — TURN sert uniquement au NAT traversal sur le chemin du code d'appairage entre réseaux différents."}},{"@type":"Question","name":"La CLI reste-t-elle gratuite si je m'auto-héberge ?","acceptedAnswer":{"@type":"Answer","text":"Oui. Qu'elle parle à relayium.com ou à un serveur que vous exploitez vous-même, la CLI est entièrement gratuite et ne nécessite aucun compte — --server la fait simplement pointer vers votre instance."}},{"@type":"Question","name":"Puis-je utiliser mon propre domaine et mon propre certificat TLS ?","acceptedAnswer":{"@type":"Answer","text":"Oui. L'image Docker écoute elle-même en HTTP simple sur :8080 ; placez nginx ou Caddy devant avec votre propre domaine et votre certificat (par exemple via certbot/Let's Encrypt). docs/DEPLOYMENT.md contient une configuration nginx complète à reprendre telle quelle."}},{"@type":"Question","name":"Quelles données mon serveur auto-hébergé stocke-t-il ?","acceptedAnswer":{"@type":"Answer","text":"Une base SQLite (comptes, sessions) sous RELAYIUM_DB et, pour les transferts stockés/basés sur un lien, des blobs chiffrés sous RELAYIUM_BLOB_DIR que le serveur lui-même ne peut pas déchiffrer. Les transferts pair-à-pair en temps réel ne sont stockés nulle part — le serveur ne fait que relayer la poignée de main de signalisation."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=fr">Relayium</a></header>
+      <h1>Auto-héberger Relayium : gérez votre propre serveur de transfert</h1>
+      <p class="updated">Dernière mise à jour: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/self-host-relayium">English</a><a href="/zh/guides/self-host-relayium">中文</a><a href="/ja/guides/self-host-relayium">日本語</a><a href="/ko/guides/self-host-relayium">한국어</a><a href="/de/guides/self-host-relayium">Deutsch</a><a href="/fr/guides/self-host-relayium" aria-current="true">Français</a></nav>
+      <p class="lead">Relayium est sous licence MIT et open source, et le serveur est une image unique et autonome — pas de base de données externe, pas de bucket de stockage tiers, rien à quoi s&#39;inscrire. Si vous préférez tout faire tourner vous-même plutôt que dépendre de relayium.com, ce guide vous fait monter un serveur avec Docker et paramètre la CLI pour qu&#39;elle s&#39;y connecte.</p>
+      <p class="lead">S&#39;auto-héberger vous donne un contrôle total sur l&#39;emplacement de vos données, votre propre domaine et certificat TLS, et aucune dépendance aux décisions opérationnelles de quelqu&#39;un d&#39;autre. Tout ce qui suit s&#39;appuie sur des fichiers réellement présents dans le dépôt — docker-compose.yml, server/.env.example et docs/DEPLOYMENT.md — donc rien ici n&#39;est un indicateur ou un réglage qui n&#39;existe pas réellement.</p>
+      <h2>Pourquoi s&#39;auto-héberger</h2>
+      <p>Les transferts en temps réel de Relayium sont déjà pair-à-pair et chiffrés de bout en bout, donc le serveur ne voit jamais les octets de vos fichiers dans ce cas. Mais il conserve bien votre compte et — pour les transferts stockés/basés sur un lien — des blobs chiffrés ainsi qu&#39;une petite base SQLite. S&#39;auto-héberger signifie que ces données vivent sur une infrastructure que vous contrôlez, sous votre propre domaine, sans que les décisions opérationnelles de quelqu&#39;un d&#39;autre n&#39;interviennent.</p>
+      <p>Le projet étant sous licence MIT et open source (github.com/relayium/relayium), vous pouvez lire exactement ce que fait le serveur avant de lui confier quoi que ce soit, et le forker ou le modifier librement.</p>
+      <h2>Démarrage rapide avec Docker</h2>
+      <p>La racine du dépôt fournit un Dockerfile et un docker-compose.yml qui construisent une seule image autonome — un binaire Go statique servant l&#39;application web précompilée, donc aucun Node, chaîne d&#39;outils Go ou nginx séparés n&#39;est requis juste pour le faire tourner :</p>
+      <pre><code>docker compose up -d --build</code></pre>
+      <ul><li>C&#39;est tout le serveur, à l&#39;écoute sur :8080. En production, placez nginx ou Caddy devant pour le TLS — voir docs/DEPLOYMENT.md pour une configuration nginx complète.</li><li>La configuration de l&#39;appli provient d&#39;un fichier server/.env optionnel plus le bloc environment: dans docker-compose.yml. Chaque réglage a une clé RELAYIUM_* correspondante — copiez server/.env.example comme point de départ.</li><li>Les quatre clés qui comptent pour un déploiement de base : RELAYIUM_ADDR (adresse d&#39;écoute), RELAYIUM_STATIC (chemin vers l&#39;application web compilée), RELAYIUM_DB (chemin du fichier SQLite) et RELAYIUM_BLOB_DIR (où est écrit le chiffré des liens stockés). docker-compose.yml définit déjà des valeurs par défaut raisonnables pour ces quatre clés et les persiste dans un volume nommé.</li></ul>
+      <h2>Ajouter un relais TURN pour les transferts entre réseaux</h2>
+      <p>Les transferts sur le même réseau (LAN) et le push/pull basé sur SSH fonctionnent sans rien de plus. Les transferts en temps réel entre réseaux différents (deux appareils derrière des NAT différents) nécessitent parfois un relais TURN pour établir un chemin — le relais ne voit jamais que du chiffré, jamais le contenu de vos fichiers.</p>
+      <p>docker-compose.yml a un profil relay optionnel qui démarre coturn (le serveur TURN) et une petite instance Redis pour la mesure des octets relayés, aux côtés du serveur principal :</p>
+      <pre><code>RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build</code></pre>
+      <ul><li>coturn a besoin de la véritable IP publique de l&#39;hôte et d&#39;une plage de ports UDP ouverte pour fonctionner — voir docs/coturn.md pour la configuration complète (avec un script d&#39;installation en une commande) et docs/enable-turn.md pour dépanner un échec limité au NAT traversal.</li><li>Sans --profile relay ni RELAYIUM_TURN_SECRET, le serveur fonctionne quand même parfaitement — les transferts entre réseaux différents basculent simplement sur STUN seul, ce qui fonctionne pour les NAT les plus simples mais pas pour les plus stricts.</li></ul>
+      <h2>Paramétrer la CLI pour votre serveur</h2>
+      <p>Par défaut, la CLI Relayium utilise le serveur de rendez-vous de relayium.com pour le send/receive entre réseaux différents. Passez --server pour utiliser le vôtre à la place :</p>
+      <pre><code>relayium send ./report.pdf --server https://your-domain</code></pre>
+      <pre><code>relayium receive --server https://your-domain</code></pre>
+      <ul><li>Quel que soit le serveur utilisé, la CLI est gratuite et ne nécessite aucun compte — --server change seulement le serveur de rendez-vous avec lequel elle communique pour la poignée de main du code d&#39;appairage.</li><li>push/pull (via votre propre SSH) ainsi que serve + le push daemon-direct relayium://host ne touchent jamais relayium.com, auto-hébergé ou non — ils se connectent directement à la machine distante que vous indiquez.</li></ul>
+      <h2>Questions fréquentes</h2>
+      <h3>Dois-je configurer TURN ?</h3>
+      <p>Seulement si vous voulez que les transferts en temps réel entre réseaux différents fonctionnent à travers des NAT stricts. Les transferts sur le même réseau, le push/pull basé sur SSH et le daemon-direct fonctionnent tous sans TURN — TURN sert uniquement au NAT traversal sur le chemin du code d&#39;appairage entre réseaux différents.</p>
+      <h3>La CLI reste-t-elle gratuite si je m&#39;auto-héberge ?</h3>
+      <p>Oui. Qu&#39;elle parle à relayium.com ou à un serveur que vous exploitez vous-même, la CLI est entièrement gratuite et ne nécessite aucun compte — --server la fait simplement pointer vers votre instance.</p>
+      <h3>Puis-je utiliser mon propre domaine et mon propre certificat TLS ?</h3>
+      <p>Oui. L&#39;image Docker écoute elle-même en HTTP simple sur :8080 ; placez nginx ou Caddy devant avec votre propre domaine et votre certificat (par exemple via certbot/Let&#39;s Encrypt). docs/DEPLOYMENT.md contient une configuration nginx complète à reprendre telle quelle.</p>
+      <h3>Quelles données mon serveur auto-hébergé stocke-t-il ?</h3>
+      <p>Une base SQLite (comptes, sessions) sous RELAYIUM_DB et, pour les transferts stockés/basés sur un lien, des blobs chiffrés sous RELAYIUM_BLOB_DIR que le serveur lui-même ne peut pas déchiffrer. Les transferts pair-à-pair en temps réel ne sont stockés nulle part — le serveur ne fait que relayer la poignée de main de signalisation.</p>
+      <div class="ctacard">
+        <p>Installez la CLI Relayium gratuite et faites-la pointer vers votre propre serveur avec --server.</p>
+        <a class="cta" href="/cli">Obtenir la CLI</a>
+      </div>
+      <h2>À lire ensuite</h2>
+      <ul class="related"><li><a href="/fr/compare/snapdrop">Relayium vs Snapdrop et PairDrop : quel transfert P2P sécurisé ?</a></li><li><a href="/fr/compare/airdrop">Relayium vs AirDrop : une alternative multiplateforme</a></li><li><a href="/fr/compare/wetransfer">Relayium vs WeTransfer : envoyer de gros fichiers sans serveur</a></li><li><a href="/fr/how-to/transfer-files-android-to-iphone">Transférer des fichiers d&#39;Android vers iPhone (sans câble)</a></li><li><a href="/fr/how-to/send-files-pc-to-phone-wirelessly">Envoyer des fichiers du PC au téléphone sans fil, sans câble ni appli</a></li><li><a href="/fr/how-to/send-large-files-without-cloud">Envoyer de gros fichiers sans le cloud</a></li><li><a href="/fr/guides/transfer-files-from-terminal">Transférer des fichiers depuis le terminal avec la CLI Relayium</a></li><li><a href="/fr/guides/back-up-a-server-over-ssh">Sauvegarder des fichiers sur son propre serveur via SSH avec la CLI Relayium</a></li><li><a href="/fr/guides/send-a-file-to-someone">Envoyer un fichier à quelqu&#39;un à travers les réseaux avec la CLI Relayium</a></li><li><a href="/fr/guides/server-to-server-transfers">Transferts serveur à serveur avec la CLI Relayium (daemon direct)</a></li><li><a href="/fr/guides/sync-a-large-folder-between-servers">Synchroniser un gros dossier entre deux serveurs (reprenable, en arrière-plan)</a></li><li><a href="/fr/how-to/share-a-file-with-an-expiring-link">Partager un fichier avec un lien de téléchargement à expiration</a></li><li><a href="/fr/how-to/send-files-between-two-computers-over-the-internet">Envoyer des fichiers entre deux ordinateurs par Internet</a></li><li><a href="/fr/compare/croc">Relayium vs croc : transfert de fichiers chiffré en terminal</a></li><li><a href="/fr/guides/how-relayium-encrypts-your-files">Comment Relayium chiffre vos fichiers de bout en bout</a></li><li><a href="/fr/compare/google-drive">Relayium vs Google Drive pour envoyer des fichiers</a></li><li><a href="/fr/compare/rsync">Relayium vs rsync : synchroniser des dossiers sans configurer SSH</a></li><li><a href="/fr/compare/firefox-send">La meilleure alternative à Firefox Send en 2026</a></li><li><a href="/fr/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=fr">← Relayium</a>
+        <a href="/fr/guides">Guides</a>
+        <a href="/fr/privacy">Confidentialité</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

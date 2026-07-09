@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>インターネット経由で2台のPC間にファイルを送る方法 · Relayium</title>
+    <meta name="description" content="インターネットを介して2台のパソコン間で直接ファイルを送る手順ガイド。P2P直接接続、クラウドへのアップロード不要、インストール不要、全行程エンドツーエンド暗号化。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ja/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="インターネット経由で2台のPC間にファイルを送る方法" />
+    <meta property="og:description" content="インターネットを介して2台のパソコン間で直接ファイルを送る手順ガイド。P2P直接接続、クラウドへのアップロード不要、インストール不要、全行程エンドツーエンド暗号化。" />
+    <meta property="og:url" content="https://relayium.com/ja/how-to/send-files-between-two-computers-over-the-internet" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="インターネット経由で2台のPC間にファイルを送る方法" />
+    <meta name="twitter:description" content="インターネットを介して2台のパソコン間で直接ファイルを送る手順ガイド。P2P直接接続、クラウドへのアップロード不要、インストール不要、全行程エンドツーエンド暗号化。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"インターネット経由で2台のPC間にファイルを送る方法","description":"インターネットを介して2台のパソコン間で直接ファイルを送る手順ガイド。P2P直接接続、クラウドへのアップロード不要、インストール不要、全行程エンドツーエンド暗号化。","inLanguage":"ja","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/ja/how-to/send-files-between-two-computers-over-the-internet","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"本当に P2P 直接接続ですか、それともファイルはサーバーを経由しますか？","acceptedAnswer":{"@type":"Answer","text":"直接接続が可能な場合、ファイルは一方のブラウザからもう一方のブラウザへそのまま流れ、サーバーに保存されることはありません。直接経路が確立できない場合（片側に厳格なファイアウォールや NAT がある場合）のみリレーにフォールバックしますが、その場合でもリレーが見るのは暗号文だけで、ファイル自体を見ることはありません。"}},{"@type":"Question","name":"双方ともアカウントが必要ですか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。同じネットワーク上では、どちらの側もアカウントは不要です。ネットワークをまたぐ場合、送信する側はペアリングコードを作成するためにサインインします——これは Relayium がコードを発行・管理するために必要です——ですが受信する側は、コードを入力するにせよリンクを開くにせよ、アカウントは一切不要です。"}},{"@type":"Question","name":"異なるネットワークや国をまたいでも使えますか？","acceptedAnswer":{"@type":"Answer","text":"はい。ペアリングコードはまさにこのケースのために存在します。同じローカルネットワークにない2台のパソコンが、世界のどこにいても P2P で直接接続し、直接経路が不可能な場合にのみ暗号化されたリレーにフォールバックします。"}},{"@type":"Question","name":"ファイルサイズや送れるファイル数に制限はありますか？","acceptedAnswer":{"@type":"Answer","text":"1バッチで最大1,000ファイルまで送れます。サーバーが強制するサイズ上限はなく、限界は受信側のブラウザが扱える範囲で決まります。Chrome や Edge（ディスクへストリーミング）では事実上無制限、Firefox や Safari（メモリにバッファ）では1ファイルあたり約200MBほどです。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <h1>インターネット経由で2台のPC間にファイルを送る方法</h1>
+      <p class="updated">最終更新: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-between-two-computers-over-the-internet">English</a><a href="/zh/how-to/send-files-between-two-computers-over-the-internet">中文</a><a href="/ja/how-to/send-files-between-two-computers-over-the-internet" aria-current="true">日本語</a><a href="/ko/how-to/send-files-between-two-computers-over-the-internet">한국어</a><a href="/de/how-to/send-files-between-two-computers-over-the-internet">Deutsch</a><a href="/fr/how-to/send-files-between-two-computers-over-the-internet">Français</a></nav>
+      <p class="lead">別のパソコンにファイルを送るには、たいていまずどこかにアップロードして——クラウドドライブ、メールの添付、チャットアプリ——相手が無事に取り出せることを願うことになります。Relayium はその手順を省きます。世界のどこにいても、あなたのブラウザと相手のブラウザを直接つなぎ、ファイルをそのまま流します。</p>
+      <p class="lead">本ガイドは2つのケース——同じネットワーク上の2台と、まったく別のネットワーク（別の家、別のオフィス、別の国）にある2台——を扱い、それぞれの側が何をすればよいかを正確に示します。</p>
+      <h2>直接方式：クラウドを介さない</h2>
+      <p>Relayium は relayium.com でブラウザ内だけで動作します。どちらのパソコンにもインストールするものはなく、あなたと相手の間にサードパーティのストレージは存在しません。直接接続が可能な場合、ファイルは一方のブラウザからもう一方のブラウザへそのまま流れ、サーバーに書き込まれることはありません。</p>
+      <p>これが重要なのは2つの理由からです。速度（他人のアップロード／ダウンロード割り当てに足を引っ張られない）と、プライバシー（どこかの会社のサーバーにファイルのコピーが残り、要求されたり、漏えいしたり、忘れ去られたりする心配がない）です。</p>
+      <h2>同じネットワーク vs. インターネットをまたぐ</h2>
+      <p>2台とも同じ Wi-Fi や LAN にあれば、Relayium は自動的に互いを見つけます——両方で relayium.com を開くだけで、どちらの側もアカウントは不要です。</p>
+      <p>2台が別々のネットワークにある場合——たとえば自宅のデスクトップと遠方にいる同僚のノートPCなど——自動発見はインターネットをまたげないため、Relayium は代わりに短いペアリングコードを使います。送信する側がサインインしてそのコードを発行し、受信する側はコードを入力するにせよ、生成されたリンクを開くにせよ、アカウントは一切不要です。</p>
+      <h2>手順:インターネット経由でファイルを送る</h2>
+      <p>別々のネットワークにある2台のパソコンの場合の全体の流れです。</p>
+      <ul><li>送信側のパソコンで relayium.com を開き、サインインします。</li><li>送るファイルまたはフォルダを選びます——1バッチ最大1,000ファイル。Relayium が6桁のペアリングコード（対応する参加リンク／QRコード付き）を発行します。</li><li>そのコードやリンクを都合の良い方法で相手に伝えます——読み上げる、テキストメッセージで送る、チャットに貼り付けるなど。</li><li>受信側のパソコンで、リンクを開くか、relayium.com を開いて6桁のコードを入力します。こちら側にサインインは不要です。</li><li>両方の画面に同じ短い検証コード（SAS）が表示されます。一致を確認してください——これは接続が本当に2人の間だけで、間に誰も入っていないことを確認するものです——その後、転送が自動的に始まります。</li></ul>
+      <h2>ファイアウォールや厳格な NAT の裏側にいる場合:リレーへのフォールバック</h2>
+      <p>多くの家庭やオフィスのネットワークでは、2つのブラウザが互いを認識すれば直接接続できます。ただし、企業のファイアウォールや厳格な NAT がそれを阻む場合もあります。その場合 Relayium は失敗する代わりに TURN リレーにフォールバックし、暗号化されたストリームを運びます。</p>
+      <p>リレーが見るのは常に暗号文だけです。ファイルは送信側ブラウザを離れる前にすでにエンドツーエンドで暗号化されており（X25519 鍵交換と AES-256-GCM）、リレーはインターネット上の見知らぬパソコンと同様、中身を読み取ることはできません。途中で接続が切れても、転送は最初からではなく再開されます。</p>
+      <h2>何ファイルまで、どのくらいの大きさまで</h2>
+      <p>1バッチで最大1,000ファイル、フォルダ構造も含めて送れます。サーバー側にサイズ上限はなく、実質的な上限は受信側のブラウザによって決まります。</p>
+      <p>Chrome と Edge は受信データをそのままディスクへストリーミングするので、数ギガバイトのファイルでも問題ありません。Firefox と Safari はファイルをメモリにバッファするため、これらでは1ファイルをおおよそ200MB以内に収めてください。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるため、届いたものが送られたものとバイト単位で一致しているとわかります。</p>
+      <h2>よくある質問</h2>
+      <h3>本当に P2P 直接接続ですか、それともファイルはサーバーを経由しますか？</h3>
+      <p>直接接続が可能な場合、ファイルは一方のブラウザからもう一方のブラウザへそのまま流れ、サーバーに保存されることはありません。直接経路が確立できない場合（片側に厳格なファイアウォールや NAT がある場合）のみリレーにフォールバックしますが、その場合でもリレーが見るのは暗号文だけで、ファイル自体を見ることはありません。</p>
+      <h3>双方ともアカウントが必要ですか？</h3>
+      <p>いいえ。同じネットワーク上では、どちらの側もアカウントは不要です。ネットワークをまたぐ場合、送信する側はペアリングコードを作成するためにサインインします——これは Relayium がコードを発行・管理するために必要です——ですが受信する側は、コードを入力するにせよリンクを開くにせよ、アカウントは一切不要です。</p>
+      <h3>異なるネットワークや国をまたいでも使えますか？</h3>
+      <p>はい。ペアリングコードはまさにこのケースのために存在します。同じローカルネットワークにない2台のパソコンが、世界のどこにいても P2P で直接接続し、直接経路が不可能な場合にのみ暗号化されたリレーにフォールバックします。</p>
+      <h3>ファイルサイズや送れるファイル数に制限はありますか？</h3>
+      <p>1バッチで最大1,000ファイルまで送れます。サーバーが強制するサイズ上限はなく、限界は受信側のブラウザが扱える範囲で決まります。Chrome や Edge（ディスクへストリーミング）では事実上無制限、Firefox や Safari（メモリにバッファ）では1ファイルあたり約200MBほどです。</p>
+      <div class="ctacard">
+        <p>両方のパソコンで Relayium を開き、インターネット経由で最初のファイルを送ってみてください——クラウドへのアップロードも、インストールも不要で、受信側は常にアカウント不要です。</p>
+        <a class="cta" href="/?lang=ja">Relayium を今すぐ試す</a>
+      </div>
+      <h2>続けて読む</h2>
+      <ul class="related"><li><a href="/ja/compare/snapdrop">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/compare/wetransfer">Relayium と WeTransfer の比較：サーバーを介さず大容量を送る</a></li><li><a href="/ja/how-to/transfer-files-android-to-iphone">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/how-to/send-large-files-without-cloud">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/guides/transfer-files-from-terminal">Relayium CLI でターミナルからファイルを転送する</a></li><li><a href="/ja/guides/back-up-a-server-over-ssh">Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</a></li><li><a href="/ja/guides/send-a-file-to-someone">Relayium CLI でネットワークを越えて誰かにファイルを送る</a></li><li><a href="/ja/guides/server-to-server-transfers">Relayium CLI でサーバー間転送(デーモン直結)</a></li><li><a href="/ja/guides/sync-a-large-folder-between-servers">2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド)</a></li><li><a href="/ja/how-to/share-a-file-with-an-expiring-link">期限付きの安全なダウンロードリンクでファイルを共有する</a></li><li><a href="/ja/guides/self-host-relayium">Relayium をセルフホスト：自分専用のファイル転送サーバーを運用</a></li><li><a href="/ja/compare/croc">Relayium と croc の比較：ターミナルから暗号化転送</a></li><li><a href="/ja/guides/how-relayium-encrypts-your-files">Relayium がファイルをエンドツーエンドで暗号化する仕組み</a></li><li><a href="/ja/compare/google-drive">Relayium と Google Drive の比較：ファイル送信をもっと直接に</a></li><li><a href="/ja/compare/rsync">Relayium vs rsync: SSH 設定なしでフォルダーを同期</a></li><li><a href="/ja/compare/firefox-send">2026年、最良の Firefox Send 代替サービス</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ja">← Relayium</a>
+        <a href="/ja/guides">ガイド</a>
+        <a href="/ja/privacy">プライバシーポリシー</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

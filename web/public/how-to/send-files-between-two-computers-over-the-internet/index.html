@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Send files between two computers over the internet · Relayium</title>
+    <meta name="description" content="A step-by-step guide to sending files directly between two computers over the internet — peer-to-peer, no cloud upload, no install, and end-to-end encrypted the whole way." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Send files between two computers over the internet" />
+    <meta property="og:description" content="A step-by-step guide to sending files directly between two computers over the internet — peer-to-peer, no cloud upload, no install, and end-to-end encrypted the whole way." />
+    <meta property="og:url" content="https://relayium.com/how-to/send-files-between-two-computers-over-the-internet" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Send files between two computers over the internet" />
+    <meta name="twitter:description" content="A step-by-step guide to sending files directly between two computers over the internet — peer-to-peer, no cloud upload, no install, and end-to-end encrypted the whole way." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Send files between two computers over the internet","description":"A step-by-step guide to sending files directly between two computers over the internet — peer-to-peer, no cloud upload, no install, and end-to-end encrypted the whole way.","inLanguage":"en","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/how-to/send-files-between-two-computers-over-the-internet","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Is it really peer-to-peer, or does the file pass through a server?","acceptedAnswer":{"@type":"Answer","text":"When a direct connection is possible, the file streams straight from one browser to the other and is never stored on a server. Only when a direct path can't be established (a strict firewall or NAT on one side) does it fall back to a relay — and even then the relay only ever sees encrypted ciphertext, never the file itself."}},{"@type":"Question","name":"Do both people need an account?","acceptedAnswer":{"@type":"Answer","text":"No. On the same network, neither side needs an account. Across different networks, the person sending signs in to create the pairing code — that's what lets Relayium mint and manage the code — but the person receiving never needs an account, whether they type in the code or just open the link."}},{"@type":"Question","name":"Does it work across different networks and countries?","acceptedAnswer":{"@type":"Answer","text":"Yes. The pairing code exists specifically for this case: two computers that aren't on the same local network connect directly, peer-to-peer, wherever each one is in the world, falling back to an encrypted relay only when a direct path isn't possible."}},{"@type":"Question","name":"Is there a limit on file size or how many files I can send?","acceptedAnswer":{"@type":"Answer","text":"You can send up to 1,000 files in a single batch. There's no size cap enforced by the server — the limit is what the receiving browser can handle: essentially unlimited in Chrome or Edge (streamed to disk), and around 200 MB per file in Firefox or Safari (buffered in memory)."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>Send files between two computers over the internet</h1>
+      <p class="updated">Last updated: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-between-two-computers-over-the-internet" aria-current="true">English</a><a href="/zh/how-to/send-files-between-two-computers-over-the-internet">中文</a><a href="/ja/how-to/send-files-between-two-computers-over-the-internet">日本語</a><a href="/ko/how-to/send-files-between-two-computers-over-the-internet">한국어</a><a href="/de/how-to/send-files-between-two-computers-over-the-internet">Deutsch</a><a href="/fr/how-to/send-files-between-two-computers-over-the-internet">Français</a></nav>
+      <p class="lead">Sending a file to another computer usually means uploading it somewhere first — a cloud drive, an email attachment, a chat app — and hoping the recipient can get it back out again. Relayium skips that step: it connects your browser directly to theirs, wherever in the world they are, and streams the file straight across.</p>
+      <p class="lead">This guide covers both cases — two computers on the same network, and two computers on completely different networks (different homes, offices, countries) — and shows exactly what each side needs to do.</p>
+      <h2>The direct approach: no cloud in the middle</h2>
+      <p>Relayium runs entirely in the browser at relayium.com. There is nothing to install on either computer, and no third-party storage sits between you and the recipient: when a direct connection is possible, the file goes from one browser to the other and is never written to a server.</p>
+      <p>That matters for two reasons: speed (you are not bottlenecked by someone else&#39;s upload/download quota) and privacy (no copy of your file sits on a company&#39;s servers waiting to be requested, breached, or forgotten about).</p>
+      <h2>Same network vs. across the internet</h2>
+      <p>If both computers are on the same Wi-Fi or LAN, Relayium finds them automatically — open relayium.com on both, and no account is needed on either side.</p>
+      <p>If the two computers are on different networks — your desktop at home and a colleague&#39;s laptop across the country, for instance — automatic discovery cannot reach across the internet, so Relayium uses a short pairing code instead. The person sending signs in to mint that code; the person receiving never needs an account, whether they type the code in or just open the link it generates.</p>
+      <h2>Step by step: send a file across the internet</h2>
+      <p>Here is the full flow for two computers on different networks:</p>
+      <ul><li>On the sending computer, open relayium.com and sign in.</li><li>Pick the files or the folder to send — up to 1,000 files per batch. Relayium mints a 6-digit pairing code (and a matching join link/QR).</li><li>Share that code or link with the other person however is convenient — read it out, text it, paste it in chat.</li><li>On the receiving computer, open the link, or open relayium.com and type in the 6-digit code. No sign-in required on this side.</li><li>Both screens now show the same short verification code (SAS). Check that they match — this confirms the connection is genuinely between the two of you, with no one in between — then the transfer starts automatically.</li></ul>
+      <h2>Behind a firewall or strict NAT? The relay fallback</h2>
+      <p>Most home and office networks let two browsers connect directly once they know about each other. Some corporate firewalls or strict NATs block that, though — in which case Relayium falls back to a TURN relay to carry the encrypted stream instead of failing outright.</p>
+      <p>The relay only ever sees ciphertext: the file is encrypted end-to-end (X25519 key exchange plus AES-256-GCM) before it ever leaves the sending browser, so the relay cannot read it any more than a random computer on the internet could. If the connection drops partway through, the transfer resumes instead of starting over.</p>
+      <h2>How many files, and how large</h2>
+      <p>You can send up to 1,000 files in one batch, folder structure included. There is no server-side size cap — the practical ceiling is set by the receiving browser.</p>
+      <p>Chrome and Edge stream incoming data straight to disk, so multi-gigabyte files are fine. Firefox and Safari buffer the file in memory instead, so on those keep a single file to roughly 200 MB or less. Each file is also checked end-to-end with a SHA-256 hash, so you know what arrives is byte-for-byte what was sent.</p>
+      <h2>Frequently asked questions</h2>
+      <h3>Is it really peer-to-peer, or does the file pass through a server?</h3>
+      <p>When a direct connection is possible, the file streams straight from one browser to the other and is never stored on a server. Only when a direct path can&#39;t be established (a strict firewall or NAT on one side) does it fall back to a relay — and even then the relay only ever sees encrypted ciphertext, never the file itself.</p>
+      <h3>Do both people need an account?</h3>
+      <p>No. On the same network, neither side needs an account. Across different networks, the person sending signs in to create the pairing code — that&#39;s what lets Relayium mint and manage the code — but the person receiving never needs an account, whether they type in the code or just open the link.</p>
+      <h3>Does it work across different networks and countries?</h3>
+      <p>Yes. The pairing code exists specifically for this case: two computers that aren&#39;t on the same local network connect directly, peer-to-peer, wherever each one is in the world, falling back to an encrypted relay only when a direct path isn&#39;t possible.</p>
+      <h3>Is there a limit on file size or how many files I can send?</h3>
+      <p>You can send up to 1,000 files in a single batch. There&#39;s no size cap enforced by the server — the limit is what the receiving browser can handle: essentially unlimited in Chrome or Edge (streamed to disk), and around 200 MB per file in Firefox or Safari (buffered in memory).</p>
+      <div class="ctacard">
+        <p>Open Relayium on both computers and send your first file across the internet — no cloud upload, no install, and the recipient never needs an account.</p>
+        <a class="cta" href="/">Try Relayium now</a>
+      </div>
+      <h2>Keep reading</h2>
+      <ul class="related"><li><a href="/compare/snapdrop">Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</a></li><li><a href="/compare/airdrop">Relayium vs AirDrop: a cross-platform AirDrop alternative</a></li><li><a href="/compare/wetransfer">Relayium vs WeTransfer: send large files without the server</a></li><li><a href="/how-to/transfer-files-android-to-iphone">How to transfer files from Android to iPhone (no cable)</a></li><li><a href="/how-to/send-files-pc-to-phone-wirelessly">Send files from PC to phone wirelessly, no cable or app</a></li><li><a href="/how-to/send-large-files-without-cloud">How to send large files without the cloud</a></li><li><a href="/guides/transfer-files-from-terminal">Transfer files from the terminal with the Relayium CLI</a></li><li><a href="/guides/back-up-a-server-over-ssh">Back up files to your own server over SSH with the Relayium CLI</a></li><li><a href="/guides/send-a-file-to-someone">Send a file to someone across networks with the Relayium CLI</a></li><li><a href="/guides/server-to-server-transfers">Server-to-server transfers with the Relayium CLI (daemon direct)</a></li><li><a href="/guides/sync-a-large-folder-between-servers">Sync a large folder between two servers (resumable, in the background)</a></li><li><a href="/how-to/share-a-file-with-an-expiring-link">Share a file with a secure, expiring download link</a></li><li><a href="/guides/self-host-relayium">Self-host Relayium: run your own file-transfer server</a></li><li><a href="/compare/croc">Relayium vs croc: encrypted file transfer from the terminal</a></li><li><a href="/guides/how-relayium-encrypts-your-files">How Relayium encrypts your files end-to-end</a></li><li><a href="/compare/google-drive">Relayium vs Google Drive for sending files</a></li><li><a href="/compare/rsync">Relayium vs rsync: sync folders without the SSH setup</a></li><li><a href="/compare/firefox-send">The best Firefox Send alternative in 2026</a></li><li><a href="/">Relayium</a></li></ul>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/guides">Guides</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

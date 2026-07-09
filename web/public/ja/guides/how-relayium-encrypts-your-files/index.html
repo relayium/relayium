@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium がファイルをエンドツーエンドで暗号化する仕組み · Relayium</title>
+    <meta name="description" content="Relayium がファイルをどう守るかを平易に解説。リアルタイム転送は X25519 と AES-256-GCM、不正なサーバーを見破る6桁の検証コード、そしてゼロ知識の保存リンク。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ja/guides/how-relayium-encrypts-your-files" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/how-relayium-encrypts-your-files" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/how-relayium-encrypts-your-files" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/how-relayium-encrypts-your-files" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/how-relayium-encrypts-your-files" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/how-relayium-encrypts-your-files" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/how-relayium-encrypts-your-files" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/how-relayium-encrypts-your-files" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Relayium がファイルをエンドツーエンドで暗号化する仕組み" />
+    <meta property="og:description" content="Relayium がファイルをどう守るかを平易に解説。リアルタイム転送は X25519 と AES-256-GCM、不正なサーバーを見破る6桁の検証コード、そしてゼロ知識の保存リンク。" />
+    <meta property="og:url" content="https://relayium.com/ja/guides/how-relayium-encrypts-your-files" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium がファイルをエンドツーエンドで暗号化する仕組み" />
+    <meta name="twitter:description" content="Relayium がファイルをどう守るかを平易に解説。リアルタイム転送は X25519 と AES-256-GCM、不正なサーバーを見破る6桁の検証コード、そしてゼロ知識の保存リンク。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium がファイルをエンドツーエンドで暗号化する仕組み","description":"Relayium がファイルをどう守るかを平易に解説。リアルタイム転送は X25519 と AES-256-GCM、不正なサーバーを見破る6桁の検証コード、そしてゼロ知識の保存リンク。","inLanguage":"ja","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/ja/guides/how-relayium-encrypts-your-files","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"Relayium は私のファイルを読めますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。リアルタイムモードでは、暗号鍵は両方のデバイスで独立に導出され、デバイスの外に出ることはありません——Relayium のサーバーがその鍵やファイルの中身を目にすることは一切ありません。保存リンクの場合、鍵は URL フラグメントにのみ存在し、ブラウザはそれをどのサーバーにも送信しないため、サーバーは復号できない暗号文しか持ちません。"}},{"@type":"Question","name":"サーバーは実際には何を見ているのですか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイムモードでは、2台のデバイスを引き合わせるために必要な接続確立情報だけを見ます——ファイルのバイトは一切見ません。保存リンクの場合、暗号文とサイズ・有効期限といった管理情報を見ます——平文やファイル名、復号鍵を見ることは一切ありません。"}},{"@type":"Question","name":"TURN 中継は弱点になりませんか？","acceptedAnswer":{"@type":"Answer","text":"それは直接接続ができない場合にのみ使われるフォールバックであり、常に暗号文しか扱いません——鍵を持たないため、中継している内容を読むことはできません。Relayium は中継したバイト数をあなたのアカウントの月間割り当てに対して数えますが、中身を検査することはありません。"}},{"@type":"Question","name":"Relayium はオープンソースですか？","acceptedAnswer":{"@type":"Answer","text":"はい。プロトコル設計とクライアント・サーバーの全コードは MIT ライセンスのもと GitHub で公開されているため、ここで説明した暗号方式は信じるしかないものではなく、独自に監査できます。"}},{"@type":"Question","name":"画面上の2つの検証コードが一致しない場合はどうすればいいですか？","acceptedAnswer":{"@type":"Answer","text":"転送を中止してください。コードが一致しないということは、コミット後開示の検証が失敗したことを意味し、単なる不具合ではなく中間者の存在を示している可能性があります——理由が分かるまで先に進まないでください。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <h1>Relayium がファイルをエンドツーエンドで暗号化する仕組み</h1>
+      <p class="updated">最終更新: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/how-relayium-encrypts-your-files">English</a><a href="/zh/guides/how-relayium-encrypts-your-files">中文</a><a href="/ja/guides/how-relayium-encrypts-your-files" aria-current="true">日本語</a><a href="/ko/guides/how-relayium-encrypts-your-files">한국어</a><a href="/de/guides/how-relayium-encrypts-your-files">Deutsch</a><a href="/fr/guides/how-relayium-encrypts-your-files">Français</a></nav>
+      <p class="lead">「Relayium は安全なの？」というのは当然の疑問です——どのファイル転送ツールもプライバシーを守ると謳っています。このページでは、Relayium が実際にどうやってファイルを守っているのかを平易な言葉で説明します。信じるかどうかではなく、自分で判断できるように。</p>
+      <p class="lead">実は2つの異なる暗号方式が使われています。理由は状況が2つあるからです。今まさにオンラインの相手にファイルをリアルタイムで送る場合と、あとで受け取ってもらうためにダウンロードリンクを残しておく場合です。どちらもサーバーをファイルから締め出しますが、そこへの至り方は異なります——どちらがどの場面に当てはまるのか、知っておく価値があります。</p>
+      <h2>リアルタイム転送：2台のデバイスがサーバーには見えない秘密を共有する</h2>
+      <p>リアルタイムでファイルを送るとき——双方がオンラインで、ブラウザ同士——Relayium はまず各デバイスに X25519 で新しい鍵ペアを生成させます。これは現代の安全なメッセージングで広く使われている楕円曲線鍵交換と同じ方式です（技術的には libsodium の crypto_kx）。各デバイスは秘密鍵を自分だけに留め、公開鍵だけを相手に送ります。</p>
+      <p>この2つの公開鍵から、各デバイスはそれぞれ独立に同じ共有秘密を計算します——これは秘密がどこかへ送られたからではなく、楕円曲線鍵交換という仕組みそのものによって成り立つ処理です。その共有秘密は、両ブラウザ内にのみ存在する AES-256-GCM 鍵になります。ファイルの各チャンクは、送信側デバイスを離れる前にこの鍵と一意のノンスで封印されるため、ネットワークを通過するもの——2台のブラウザが互いを見つける手助けをしたシグナリングサーバーも含めて——は暗号文しか目にしません。</p>
+      <ul><li>転送ごとに新しい鍵ペアが生成され、セッションをまたいで再利用されることはありません。</li><li>共有される AES-256-GCM 鍵は各デバイスで独立に導出され、Relayium 自身のサーバーを含め、どこにも送信されません。</li><li>暗号化は WebRTC 自体のトランスポート層セキュリティの上、アプリケーション層で行われるため、トランスポート層が侵害されても有効性を保ちます。</li></ul>
+      <h2>不正なサーバーを見破る6桁のコード</h2>
+      <p>ここには正直に触れておくべき細部があります。WebRTC 標準の暗号化（DTLS）は、2台のデバイスを引き合わせるシグナリングサーバー経由で鍵のフィンガープリントを交換します。もしそのサーバーが不正であれば、理論上は中間に入って自分の鍵にすり替えることができます——典型的な中間者攻撃で、しかもどちらのブラウザもすぐには気づきません。</p>
+      <p>Relayium はこの隙を短い検証コードで塞ぎます。両方のデバイスは双方の公開鍵から同じ6桁の Short Authentication String（SAS）を導出し、画面に表示します。2つのコードが一致すれば鍵はすり替えられておらず、中間には誰もいません。しかし単純な6桁のコードは約20ビットしかなく、原理的には双方の本物の鍵を見た攻撃者が一致するコードを総当たりで作り出そうとする余地があります。それを防ぐため、Relayium はコミット後開示ハンドシェイクを使います。各側はまず自分の鍵に対するハッシュを送ってコミットし、相手のコミットメントを受け取ってから初めて本物の鍵を開示します。この順序によって、悪意あるサーバーは本物の鍵を見る前に盲目的に偽の鍵をコミットせざるを得ず、後から衝突する鍵を選ぶことはできません。だから短いコードは信頼できるままなのです。</p>
+      <ul><li>最も強い保証を得るには、隣り合った2つの画面を目で見比べるだけでなく、通話でコードを読み上げるか、対面で照合してください。</li><li>2つのコードが一致しない場合は中止してください。誰かが接続を傍受している可能性を示すサインです。</li></ul>
+      <h2>届いたものが送ったものと寸分違わないことを確認する</h2>
+      <p>暗号化は機密性を守りますが、途中で何も壊れたり改ざんされたりしていないことを自動的に証明するわけではありません。Relayium はそれを別途確認します。各チャンクには独自の AES-GCM 認証タグが付いており、改ざんされたチャンクはそもそも復号に失敗します。それに加えて、各ファイルの送信中、双方がその平文内容に対して SHA-256 ハッシュを継続的に計算します。ファイルが終わると、送信側のハッシュが受信側のものと照合されます。一致すればディスクに届いたものは送られたものとバイト単位で同一であり、一致しなければそのファイルは黙って受け入れられるのではなく、フラグが立てられます。</p>
+      <h2>保存リンク：一度だけ生成され、リンクの中にしか存在しない別の鍵</h2>
+      <p>リアルタイム転送には双方が同時にオンラインである必要があります。それができないとき、Relayium は代わりに保存型のダウンロードリンクを提供します——これは本当に異なる仕組みを使っているので、上記のリアルタイム方式と混同しないでください。</p>
+      <p>ここには鍵交換がありません。まだ交換する相手のデバイスが存在しないからです。代わりに、あなたのブラウザは1つのランダムな AES-256-GCM 鍵を生成し、何かがアップロードされる前にそれでファイルを暗号化します。この鍵はサーバーには一切送られません——ダウンロードリンクの # という文字の後ろに付加される、いわゆる URL フラグメントに置かれます。この部分のアドレスはブラウザが意図的にサーバーへ送信しないものです。結果としてサーバーが保存するのは、復号する術のない暗号文と、暗号文のサイズや有効期限のタイムスタンプといった管理情報だけです。フラグメントを含む完全なリンクを開いた人は誰でも、自分のブラウザ内でローカルにファイルを復号できます。それを持たない人には、サーバー上の中身の分からない塊が見えるだけです。これがゼロ知識という部分です。サーバーは暗号化されたファイルを保持していても、それを読む手段を一度も持たないのです。</p>
+      <ul><li>保存リンクの作成には送信者のサインインが必要ですが、ダウンロードのためにリンクを開くのに必要になることはありません。</li><li>リンクは1時間、1日、3日、7日で失効するよう設定するか、最初のダウンロード完了後に消えるよう設定できます。</li><li>完全なリンクはファイルそのものとして扱ってください——それを持つ人は誰でも復号できるため、ファイルを共有するのと同じ慎重さで共有してください。</li></ul>
+      <h2>サーバーが見えるもの、見えないもの</h2>
+      <p>サーバーがこの仕組みのどこに位置しているのかを正確に説明しておく価値があります。「エンドツーエンドで暗号化されている」という主張は口にするのは簡単でも、正確に言うのは意外と難しいからです。リアルタイムモードでは、ファイル自体は Relayium のサーバーに一切触れません——2台のブラウザ間を直接ストリーミングされます。シグナリングサーバーの役割は、接続確立のためのメッセージ（WebRTC が直接リンクを確立するのに必要な SDP/ICE の技術情報)を中継し、2台のデバイスが互いを見つけられるようにすることに限られます。ファイルの内容やファイル名、鍵を目にすることは一切ありません。</p>
+      <p>直接接続ができない場合——双方が制限の厳しい NAT やファイアウォールの内側にある場合——暗号化ストリームは失敗する代わりに TURN 中継サーバーにフォールバックします。中継が転送するのは暗号文だけです。鍵を持たないため、そこを通過する内容を復号することはできません。中継が行うのは、送信側アカウントの月間中継割り当てに対して中継したバイト数を数えることだけで、それは純粋に計量と不正利用防止のためであり、中身を検査することは決してありません。</p>
+      <h2>よくある質問</h2>
+      <h3>Relayium は私のファイルを読めますか？</h3>
+      <p>いいえ。リアルタイムモードでは、暗号鍵は両方のデバイスで独立に導出され、デバイスの外に出ることはありません——Relayium のサーバーがその鍵やファイルの中身を目にすることは一切ありません。保存リンクの場合、鍵は URL フラグメントにのみ存在し、ブラウザはそれをどのサーバーにも送信しないため、サーバーは復号できない暗号文しか持ちません。</p>
+      <h3>サーバーは実際には何を見ているのですか？</h3>
+      <p>リアルタイムモードでは、2台のデバイスを引き合わせるために必要な接続確立情報だけを見ます——ファイルのバイトは一切見ません。保存リンクの場合、暗号文とサイズ・有効期限といった管理情報を見ます——平文やファイル名、復号鍵を見ることは一切ありません。</p>
+      <h3>TURN 中継は弱点になりませんか？</h3>
+      <p>それは直接接続ができない場合にのみ使われるフォールバックであり、常に暗号文しか扱いません——鍵を持たないため、中継している内容を読むことはできません。Relayium は中継したバイト数をあなたのアカウントの月間割り当てに対して数えますが、中身を検査することはありません。</p>
+      <h3>Relayium はオープンソースですか？</h3>
+      <p>はい。プロトコル設計とクライアント・サーバーの全コードは MIT ライセンスのもと GitHub で公開されているため、ここで説明した暗号方式は信じるしかないものではなく、独自に監査できます。</p>
+      <h3>画面上の2つの検証コードが一致しない場合はどうすればいいですか？</h3>
+      <p>転送を中止してください。コードが一致しないということは、コミット後開示の検証が失敗したことを意味し、単なる不具合ではなく中間者の存在を示している可能性があります——理由が分かるまで先に進まないでください。</p>
+      <div class="ctacard">
+        <p>実際にどう見えるか気になりますか？転送を開始して、検証コードが表示される様子を自分の目で確かめてください。</p>
+        <a class="cta" href="/?lang=ja">Relayium を今すぐ試す</a>
+      </div>
+      <h2>続けて読む</h2>
+      <ul class="related"><li><a href="/ja/compare/snapdrop">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/compare/wetransfer">Relayium と WeTransfer の比較：サーバーを介さず大容量を送る</a></li><li><a href="/ja/how-to/transfer-files-android-to-iphone">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/how-to/send-large-files-without-cloud">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/guides/transfer-files-from-terminal">Relayium CLI でターミナルからファイルを転送する</a></li><li><a href="/ja/guides/back-up-a-server-over-ssh">Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</a></li><li><a href="/ja/guides/send-a-file-to-someone">Relayium CLI でネットワークを越えて誰かにファイルを送る</a></li><li><a href="/ja/guides/server-to-server-transfers">Relayium CLI でサーバー間転送(デーモン直結)</a></li><li><a href="/ja/guides/sync-a-large-folder-between-servers">2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド)</a></li><li><a href="/ja/how-to/share-a-file-with-an-expiring-link">期限付きの安全なダウンロードリンクでファイルを共有する</a></li><li><a href="/ja/guides/self-host-relayium">Relayium をセルフホスト：自分専用のファイル転送サーバーを運用</a></li><li><a href="/ja/how-to/send-files-between-two-computers-over-the-internet">インターネット経由で2台のPC間にファイルを送る方法</a></li><li><a href="/ja/compare/croc">Relayium と croc の比較：ターミナルから暗号化転送</a></li><li><a href="/ja/compare/google-drive">Relayium と Google Drive の比較：ファイル送信をもっと直接に</a></li><li><a href="/ja/compare/rsync">Relayium vs rsync: SSH 設定なしでフォルダーを同期</a></li><li><a href="/ja/compare/firefox-send">2026年、最良の Firefox Send 代替サービス</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ja">← Relayium</a>
+        <a href="/ja/guides">ガイド</a>
+        <a href="/ja/privacy">プライバシーポリシー</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

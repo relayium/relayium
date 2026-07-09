@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium vs. rsync: Ordner synchronisieren ohne SSH-Setup · Relayium</title>
+    <meta name="description" content="Ein fairer Vergleich: rsync ist der ausgereifte, mächtige Standard zum Spiegeln von Ordnern; Relayium sync tauscht einen Teil dieser Macht gegen weniger Einrichtungsaufwand und funktioniert netzwerkübergreifend ohne SSH-Server." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/de/compare/rsync" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/rsync" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/rsync" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/rsync" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/rsync" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/rsync" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/rsync" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/rsync" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Relayium vs. rsync: Ordner synchronisieren ohne SSH-Setup" />
+    <meta property="og:description" content="Ein fairer Vergleich: rsync ist der ausgereifte, mächtige Standard zum Spiegeln von Ordnern; Relayium sync tauscht einen Teil dieser Macht gegen weniger Einrichtungsaufwand und funktioniert netzwerkübergreifend ohne SSH-Server." />
+    <meta property="og:url" content="https://relayium.com/de/compare/rsync" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="de_DE" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium vs. rsync: Ordner synchronisieren ohne SSH-Setup" />
+    <meta name="twitter:description" content="Ein fairer Vergleich: rsync ist der ausgereifte, mächtige Standard zum Spiegeln von Ordnern; Relayium sync tauscht einen Teil dieser Macht gegen weniger Einrichtungsaufwand und funktioniert netzwerkübergreifend ohne SSH-Server." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs. rsync: Ordner synchronisieren ohne SSH-Setup","description":"Ein fairer Vergleich: rsync ist der ausgereifte, mächtige Standard zum Spiegeln von Ordnern; Relayium sync tauscht einen Teil dieser Macht gegen weniger Einrichtungsaufwand und funktioniert netzwerkübergreifend ohne SSH-Server.","inLanguage":"de","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/de/compare/rsync","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Kann sync rsync vollständig ersetzen?","acceptedAnswer":{"@type":"Answer","text":"Nein. Es macht nur einseitiges Spiegeln und hat keinen blockweisen Delta-Algorithmus wie rsync — eine Datei mit anderer Größe oder anderem Zeitstempel wird komplett neu übertragen, und es gibt deutlich weniger Flags als bei rsync. Wenn du bidirektionale Synchronisation, feingranulare Filterkontrolle brauchst oder dich auf rsyncs ausgereiftes Ökosystem verlassen willst, ist rsync weiterhin das bessere Werkzeug."}},{"@type":"Question","name":"Braucht sync einen SSH-Server?","acceptedAnswer":{"@type":"Answer","text":"Nein. Daemon Direct (relayium://host:port) überspringt SSH komplett: eine gepinnte TLS-Verbindung, authentifiziert über den Fingerprint des Empfängers, einmal genehmigt und danach gemerkt. Du kannst auch über SSH gehen (user@host:path), dann muss relayium aber auf der Gegenseite installiert sein — und anders als bei push gibt es für sync keinen tar-Fallback."}},{"@type":"Question","name":"Löscht sync Dateien, die ich aus der Quelle entfernt habe?","acceptedAnswer":{"@type":"Answer","text":"Nur wenn du --delete übergibst und der Empfänger sein serve mit --allow-delete betreibt. Andernfalls wird die Löschanfrage abgelehnt und an den Sender zurückgemeldet, statt stillschweigend ignoriert zu werden."}},{"@type":"Question","name":"Kann ich in Echtzeit fortlaufend synchronisieren?","acceptedAnswer":{"@type":"Answer","text":"Ja, mit --watch. Nach dem ersten Spiegeln läuft sync weiter und spiegelt (entprellt) erneut, sobald sich eine Datei unter der Quelle ändert."}},{"@type":"Question","name":"Ist das kostenlos?","acceptedAnswer":{"@type":"Answer","text":"Ja. Die Relayium-CLI ist vollständig kostenlos, und kein Modus — sync eingeschlossen — braucht ein Konto."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=de">Relayium</a></header>
+      <h1>Relayium vs. rsync: Ordner synchronisieren ohne SSH-Setup</h1>
+      <p class="updated">Zuletzt aktualisiert: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/compare/rsync">English</a><a href="/zh/compare/rsync">中文</a><a href="/ja/compare/rsync">日本語</a><a href="/ko/compare/rsync">한국어</a><a href="/de/compare/rsync" aria-current="true">Deutsch</a><a href="/fr/compare/rsync">Français</a></nav>
+      <p class="lead">rsync spiegelt seit 1996 Ordner, und das aus gutem Grund: bidirektionale Synchronisation, ein Delta-Algorithmus mit Rolling-Checksum, der nur die tatsächlich veränderten Bytes innerhalb einer Datei überträgt, und Jahrzehnte an Flags für jeden Grenzfall. Wenn du schon SSH-Zugang hast und rsync kennst, ist es sehr schwer zu schlagen.</p>
+      <p class="lead">Relayiums sync-Befehl deckt eine engere Aufgabe ab — einen einseitigen inkrementellen Spiegel —, entfernt aber einen Schritt, den rsync als bereits erledigt voraussetzt: das Einrichten von SSH. sync läuft über SSH, falls vorhanden, oder verbindet zwei Maschinen direkt, ganz ohne SSH-Server. Dieser Artikel vergleicht beide ehrlich: sync ist kein vollständiger Ersatz für rsync, und die FAQ sagt das unumwunden.</p>
+      <h2>Was rsync richtig macht</h2>
+      <p>rsync ist bidirektional — jede Seite kann die Quelle sein — und sein Delta-Transfer-Algorithmus vergleicht Blöcke einer Datei per Rolling-Checksum, sodass eine kleine Änderung an einer riesigen Datei nur die veränderten Blöcke sendet, nicht die ganze Datei erneut. Zusammen mit Jahrzehnten an Flags (--exclude, --link-dest für Hardlink-Snapshots, Kompression, Bandbreitenlimits und mehr) macht das rsync zum richtigen Werkzeug für sehr viele Aufgaben.</p>
+      <p>Es ist außerdem überall vorhanden: Die meisten Linux- und macOS-Systeme bringen es mit, und es läuft über eine SSH-Verbindung, die wahrscheinlich schon konfiguriert ist. Nichts davon versucht Relayium sync zu ersetzen.</p>
+      <h2>Was Relayium sync stattdessen macht</h2>
+      <p>relayium sync &lt;Quelle...&gt; &lt;Ziel&gt; [--delete] [--watch] ist ein einseitiger inkrementeller Spiegel: Er vergleicht Größe und Änderungszeit jeder Datei, überspringt, was schon übereinstimmt, und sendet den Rest.</p>
+      <p>Es funktioniert über zwei Transportwege. Zeigst du auf user@host:/dest, läuft es über SSH — relayium muss dafür aber schon auf der Gegenseite installiert sein; anders als bei push gibt es für sync keinen tar-Fallback. Zeigst du stattdessen auf relayium://host[:port], wird SSH komplett übersprungen: eine gepinnte TLS-1.3-Verbindung direkt zu einem relayium serve-Listener auf der anderen Maschine, authentifiziert über deren Fingerprint (einmal genehmigt, danach gemerkt). Dieser zweite Weg ist der eigentliche Komfort: kein sshd einzurichten, keine SSH-Schlüssel zu verwalten — nur zwei Maschinen mit installiertem relayium und einem offenen Port dazwischen.</p>
+      <pre><code>relayium sync ./photos user@host:/backup/photos       # over SSH</code></pre>
+      <pre><code>relayium sync ./photos relayium://203.0.113.9:9031    # daemon direct, no SSH</code></pre>
+      <h2>Löschungen und fortlaufende Synchronisation</h2>
+      <p>Standardmäßig fügt sync nur hinzu und aktualisiert — es löscht nie von sich aus etwas. Übergib --delete, um auch Löschungen zu spiegeln, aber der Empfänger muss dem zustimmen: Er muss mit relayium serve --allow-delete laufen. Ist das nicht der Fall, wird die Löschanfrage abgelehnt und an den Sender zurückgemeldet, statt sie stillschweigend zu ignorieren.</p>
+      <p>Für einen Ordner, der sich fortlaufend ändert, hält --watch sync nach dem ersten Durchlauf am Laufen und spiegelt erneut, sobald sich eine Datei unter der Quelle ändert — dafür hat rsync nichts Eingebautes; normalerweise greift man zu einem Cron-Job oder einem Wrapper wie lsyncd.</p>
+      <pre><code>relayium serve --dir /backup --port 9031 --allow-delete</code></pre>
+      <pre><code>relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch</code></pre>
+      <h2>Integrität, Fortsetzung und die ehrlichen Grenzen</h2>
+      <p>Jede Datei wird Ende-zu-Ende mit einem SHA-256-Hash geprüft, und eine mitten in einer Datei abgebrochene Übertragung setzt beim bereits auf der Platte liegenden Byte-Offset fort, statt neu zu beginnen — aus denselben Gründen nützlich wie bei rsync.</p>
+      <p>Klar sein sollte, was Fortsetzen nicht ist: nicht rsyncs Delta-Algorithmus. Ist eine Datei bereits vollständig vorhanden, hat aber eine andere Größe oder einen anderen Zeitstempel, überträgt sync sie komplett erneut, statt veränderte Blöcke darin zu diffen. Bei einer einzelnen riesigen Datei, die sich häufig geringfügig ändert, bewegt rsyncs Delta-Transfer weniger Daten. sync behandelt außerdem nur reguläre Dateien — Symlinks und Spezialdateien werden übersprungen, wer darauf angewiesen ist, muss das separat handhaben.</p>
+      <h2>Wann rsync noch immer das bessere Werkzeug ist</h2>
+      <p>Wähle rsync, wenn die Synchronisation in beide Richtungen gehen muss, wenn SSH bereits eingerichtet ist und du keinen weiteren Daemon willst, wenn du feingranulare Kontrolle brauchst (Ausschlüsse, Filter, Hardlink-Snapshots, Bandbreitenlimits, Kompression), oder wenn sich eine Datei häufig geringfügig ändert und Delta-Transfer echte Bandbreite spart. Relayium sync versucht nichts davon abzudecken.</p>
+      <ul><li>Nur einseitig: sync spiegelt Quelle → Ziel; rsync kann in beide Richtungen.</li><li>Kein Delta-Transfer: sync sendet eine veränderte Datei komplett neu; rsyncs Rolling-Checksum sendet nur veränderte Blöcke.</li><li>Weniger Optionen: rsync hat Jahrzehnte an Flags für Filterung, Kompression und Snapshots; sync hat --delete und --watch.</li><li>Wo Relayium sync gewinnt: kein SSH-Server nötig (Daemon Direct), gepinntes TLS mit Fingerprint-Authentifizierung, Echtzeit-Resync mit --watch, und es ist für jeden Übertragungsmodus kostenlos und ohne Konto.</li></ul>
+      <h2>Häufige Fragen</h2>
+      <h3>Kann sync rsync vollständig ersetzen?</h3>
+      <p>Nein. Es macht nur einseitiges Spiegeln und hat keinen blockweisen Delta-Algorithmus wie rsync — eine Datei mit anderer Größe oder anderem Zeitstempel wird komplett neu übertragen, und es gibt deutlich weniger Flags als bei rsync. Wenn du bidirektionale Synchronisation, feingranulare Filterkontrolle brauchst oder dich auf rsyncs ausgereiftes Ökosystem verlassen willst, ist rsync weiterhin das bessere Werkzeug.</p>
+      <h3>Braucht sync einen SSH-Server?</h3>
+      <p>Nein. Daemon Direct (relayium://host:port) überspringt SSH komplett: eine gepinnte TLS-Verbindung, authentifiziert über den Fingerprint des Empfängers, einmal genehmigt und danach gemerkt. Du kannst auch über SSH gehen (user@host:path), dann muss relayium aber auf der Gegenseite installiert sein — und anders als bei push gibt es für sync keinen tar-Fallback.</p>
+      <h3>Löscht sync Dateien, die ich aus der Quelle entfernt habe?</h3>
+      <p>Nur wenn du --delete übergibst und der Empfänger sein serve mit --allow-delete betreibt. Andernfalls wird die Löschanfrage abgelehnt und an den Sender zurückgemeldet, statt stillschweigend ignoriert zu werden.</p>
+      <h3>Kann ich in Echtzeit fortlaufend synchronisieren?</h3>
+      <p>Ja, mit --watch. Nach dem ersten Spiegeln läuft sync weiter und spiegelt (entprellt) erneut, sobald sich eine Datei unter der Quelle ändert.</p>
+      <h3>Ist das kostenlos?</h3>
+      <p>Ja. Die Relayium-CLI ist vollständig kostenlos, und kein Modus — sync eingeschlossen — braucht ein Konto.</p>
+      <div class="ctacard">
+        <p>Spiegle einen Ordner zwischen zwei eigenen Maschinen — ganz ohne SSH-Server.</p>
+        <a class="cta" href="/cli">CLI holen</a>
+      </div>
+      <h2>Weiterlesen</h2>
+      <ul class="related"><li><a href="/de/compare/snapdrop">Relayium vs. Snapdrop &amp; PairDrop: welche sichere P2P-Übertragung?</a></li><li><a href="/de/compare/airdrop">Relayium vs. AirDrop: eine plattformübergreifende Alternative</a></li><li><a href="/de/compare/wetransfer">Relayium vs. WeTransfer: große Dateien ohne Server senden</a></li><li><a href="/de/how-to/transfer-files-android-to-iphone">Dateien von Android auf iPhone übertragen (ohne Kabel)</a></li><li><a href="/de/how-to/send-files-pc-to-phone-wirelessly">Dateien vom PC drahtlos aufs Handy senden — ohne Kabel, ohne App</a></li><li><a href="/de/how-to/send-large-files-without-cloud">Große Dateien ohne Cloud versenden</a></li><li><a href="/de/guides/transfer-files-from-terminal">Dateien vom Terminal aus übertragen mit der Relayium CLI</a></li><li><a href="/de/guides/back-up-a-server-over-ssh">Dateien über SSH auf dem eigenen Server sichern mit der Relayium CLI</a></li><li><a href="/de/guides/send-a-file-to-someone">Mit der Relayium CLI eine Datei über Netzwerke hinweg an jemanden senden</a></li><li><a href="/de/guides/server-to-server-transfers">Server-zu-Server-Übertragungen mit der Relayium CLI (Daemon Direct)</a></li><li><a href="/de/guides/sync-a-large-folder-between-servers">Einen großen Ordner zwischen zwei Servern synchronisieren (fortsetzbar, im Hintergrund)</a></li><li><a href="/de/how-to/share-a-file-with-an-expiring-link">Eine Datei mit einem sicheren, ablaufenden Link teilen</a></li><li><a href="/de/guides/self-host-relayium">Relayium selbst hosten: eigener Dateiübertragungs-Server</a></li><li><a href="/de/how-to/send-files-between-two-computers-over-the-internet">Dateien über das Internet zwischen zwei Computern senden</a></li><li><a href="/de/compare/croc">Relayium vs. croc: verschlüsselte Dateiübertragung im Terminal</a></li><li><a href="/de/guides/how-relayium-encrypts-your-files">Wie Relayium Ihre Dateien Ende-zu-Ende verschlüsselt</a></li><li><a href="/de/compare/google-drive">Relayium vs. Google Drive: Dateien direkter versenden</a></li><li><a href="/de/compare/firefox-send">Die beste Firefox-Send-Alternative 2026</a></li><li><a href="/de/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=de">← Relayium</a>
+        <a href="/de/guides">Anleitungen</a>
+        <a href="/de/privacy">Datenschutz</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>期限付きの安全なダウンロードリンクでファイルを共有する · Relayium</title>
+    <meta name="description" content="ブラウザでファイルを暗号化し、サーバーが復号できないリンクを作成。有効期限は1時間・1日・3日・7日、または初回ダウンロード後に消去から選べます——準備ができたときに送れます。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ja/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="期限付きの安全なダウンロードリンクでファイルを共有する" />
+    <meta property="og:description" content="ブラウザでファイルを暗号化し、サーバーが復号できないリンクを作成。有効期限は1時間・1日・3日・7日、または初回ダウンロード後に消去から選べます——準備ができたときに送れます。" />
+    <meta property="og:url" content="https://relayium.com/ja/how-to/share-a-file-with-an-expiring-link" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="期限付きの安全なダウンロードリンクでファイルを共有する" />
+    <meta name="twitter:description" content="ブラウザでファイルを暗号化し、サーバーが復号できないリンクを作成。有効期限は1時間・1日・3日・7日、または初回ダウンロード後に消去から選べます——準備ができたときに送れます。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"期限付きの安全なダウンロードリンクでファイルを共有する","description":"ブラウザでファイルを暗号化し、サーバーが復号できないリンクを作成。有効期限は1時間・1日・3日・7日、または初回ダウンロード後に消去から選べます——準備ができたときに送れます。","inLanguage":"ja","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/ja/how-to/share-a-file-with-an-expiring-link","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"リンクを送る相手にアカウントは必要ですか?","acceptedAnswer":{"@type":"Answer","text":"いいえ。`#` の後の部分を含む完全なリンクを持っている人なら誰でも開いてファイルをダウンロードできます。リンクを作成するときにサインインが必要なのは送信側だけです。"}},{"@type":"Question","name":"Relayium は私のファイルを読めますか?","acceptedAnswer":{"@type":"Answer","text":"いいえ。あなたのブラウザは、何かをアップロードする前にランダムに生成した AES-256-GCM 鍵でファイルを暗号化し、その鍵は URL フラグメントにしか存在せず、サーバーには決して届きません。サーバーが保存するのは復号する方法のない暗号文だけです——ゼロ知識設計です。"}},{"@type":"Question","name":"リンクはどのくらい持ちますか?","acceptedAnswer":{"@type":"Answer","text":"リンクを作成するときに選べます: 1時間、1日、3日、7日、あるいは固定の期限の代わりに初回の完全なダウンロード後に消去するよう設定できます。その時点を過ぎるとリンクは機能しなくなります。"}},{"@type":"Question","name":"初回ダウンロード後の消去で、ファイルは本当になくなりますか?","acceptedAnswer":{"@type":"Answer","text":"初回ダウンロード後の消去は、まさに1回きりのダウンロードのために設計されています。受信者がファイルのダウンロードを終えた時点で、それ以降にリンクを開いても機能しなくなるため、こっそり二度目を見られることはありません。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <h1>期限付きの安全なダウンロードリンクでファイルを共有する</h1>
+      <p class="updated">最終更新: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/share-a-file-with-an-expiring-link">English</a><a href="/zh/how-to/share-a-file-with-an-expiring-link">中文</a><a href="/ja/how-to/share-a-file-with-an-expiring-link" aria-current="true">日本語</a><a href="/ko/how-to/share-a-file-with-an-expiring-link">한국어</a><a href="/de/how-to/share-a-file-with-an-expiring-link">Deutsch</a><a href="/fr/how-to/share-a-file-with-an-expiring-link">Français</a></nav>
+      <p class="lead">すべての転送で、相手が今すぐ待っているとは限りません。受信者が寝ていたり、飛行機の中だったり、あるいはただリンクをメッセージに貼って自分のことに戻りたいだけかもしれません。そのために Relayium にはもう一つのモードがあります。開いている別のブラウザへファイルをその場でストリーミングする代わりに、あなたの手元でファイルを暗号化し、暗号文だけをアップロードして、いつでも送れるリンクを渡します——ダウンロードのタイミングは受信者自身のスケジュール次第です。</p>
+      <p class="lead">本ガイドでは、こうしたリンクの作成方法、有効期限と「初回ダウンロード後に消去」オプション、そしてゼロ知識設計が実際に何を意味するかを説明します。正直な制約も含めて——リンクの作成には送信側のサインインが必要で、リンクはストレージ容量を消費します。</p>
+      <h2>保存型リンク vs リアルタイム: どちらを使うか</h2>
+      <p>Relayium のリアルタイムモードは、開いている2つのブラウザタブの間で直接ファイルを転送します——速く、どこにも保存されませんが、双方が同時にオンラインである必要があります。保存型の期限付きリンクはその逆です。あなたのブラウザが暗号化を行い結果を一度アップロードすれば、受信者は数分後、数時間後、あるいは数日後でも、自分の都合でリンクを開けます。</p>
+      <p>相手がいつ空くか分からないとき、同じファイルを複数人に送りたいとき、あるいはメールやチャットに貼り付けてそれで終わりにしたいときに、保存型リンクを使ってください。</p>
+      <h2>リンクの作成方法</h2>
+      <p>リンクの作成は、すべてブラウザ内でいくつかの手順を踏むだけです。</p>
+      <ul><li>relayium.com を開き、リンク/オフラインモードに切り替える。</li><li>サインインする——アカウントが必要なのは送信側だけで、受信側は不要。</li><li>ファイルを1つ以上選ぶ。</li><li>必要なら有効期限を設定するか、初回ダウンロード後に消去をオンにする。</li><li>ブラウザが暗号化してからアップロードするのを待つ——進行バーが両方の段階を示す。</li><li>リンクをコピー(またはQRコードをスキャン)して、好きな方法で送る。</li></ul>
+      <h2>有効期限と初回ダウンロード後の消去</h2>
+      <p>どのリンクにも寿命が必要です——永久に有効なままにしておくのは、一度きりの受け渡しの趣旨に反します。リンクを作成するとき、どれだけ有効にしておくかを選べますし、一度使われたら即座に消えるよう設定することもできます。</p>
+      <p>初回ダウンロード後の消去とは、受信者がダウンロードを完了した瞬間にリンクが機能しなくなるということです。ファイルが機微な内容で、一人に一度だけ見せて、その後は何も残したくないときに便利です。どちらを選んでも、受信者はダウンロードページでリアルタイムのカウントダウンを見られるので、残り時間(またはダウンロード回数)がわかります。</p>
+      <ul><li>1時間</li><li>1日(既定値)</li><li>3日</li><li>7日</li><li>または: 固定の期限の代わりに、初回の完全なダウンロード後に消去</li></ul>
+      <h2>ゼロ知識保証と、その限界</h2>
+      <p>リンクを作成するとき実際に起きていることはこうです。あなたのブラウザはランダムな AES-256-GCM 鍵を生成します——これは Relayium のリアルタイムモードとは異なる仕組みで、リアルタイムモードは X25519 で2つの端末間の鍵を協議します。保存リンクの鍵はローカルで生成され、誰とも協議する必要がありません。その鍵は、何かが端末を離れる前にファイル本体とファイル名のリストを暗号化し、ダウンロードリンクの `#` の後に付加されます——ここはブラウザが決してどのサーバーにも送信しない URL の部分です。サーバーは渡された暗号文を、暗号文だけを保存します。鍵を一切受け取らないため、それを復号する方法がありません。</p>
+      <p>この設計には知っておくべき現実的なトレードオフがあります。リンク自体が鍵の唯一のコピーなので、それを失うとパスワードリセットのようなものは存在せず、サーバー上のデータは永久に読めなくなります。リンクの作成には送信側がサインインしている必要があり、削除または期限切れになるまで各リンクはアカウントのストレージ容量を消費します。そして「ゼロ知識」がここで何を意味するかは正確に言っておく価値があります——暗号文は作成からダウンロードまでの間、実際に Relayium のサーバーに保存されています。ただ、あなたのブラウザを一度も離れなかった鍵がなければ読めない、というだけです。</p>
+      <h2>よくある質問</h2>
+      <h3>リンクを送る相手にアカウントは必要ですか?</h3>
+      <p>いいえ。`#` の後の部分を含む完全なリンクを持っている人なら誰でも開いてファイルをダウンロードできます。リンクを作成するときにサインインが必要なのは送信側だけです。</p>
+      <h3>Relayium は私のファイルを読めますか?</h3>
+      <p>いいえ。あなたのブラウザは、何かをアップロードする前にランダムに生成した AES-256-GCM 鍵でファイルを暗号化し、その鍵は URL フラグメントにしか存在せず、サーバーには決して届きません。サーバーが保存するのは復号する方法のない暗号文だけです——ゼロ知識設計です。</p>
+      <h3>リンクはどのくらい持ちますか?</h3>
+      <p>リンクを作成するときに選べます: 1時間、1日、3日、7日、あるいは固定の期限の代わりに初回の完全なダウンロード後に消去するよう設定できます。その時点を過ぎるとリンクは機能しなくなります。</p>
+      <h3>初回ダウンロード後の消去で、ファイルは本当になくなりますか?</h3>
+      <p>初回ダウンロード後の消去は、まさに1回きりのダウンロードのために設計されています。受信者がファイルのダウンロードを終えた時点で、それ以降にリンクを開いても機能しなくなるため、こっそり二度目を見られることはありません。</p>
+      <div class="ctacard">
+        <p>ファイルの準備はできているけれど、相手がまだ待っていない? ブラウザで期限付きリンクを作成して、準備ができたときに送りましょう。</p>
+        <a class="cta" href="/?lang=ja">Relayium を今すぐ試す</a>
+      </div>
+      <h2>続けて読む</h2>
+      <ul class="related"><li><a href="/ja/compare/snapdrop">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/compare/wetransfer">Relayium と WeTransfer の比較：サーバーを介さず大容量を送る</a></li><li><a href="/ja/how-to/transfer-files-android-to-iphone">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/how-to/send-large-files-without-cloud">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/guides/transfer-files-from-terminal">Relayium CLI でターミナルからファイルを転送する</a></li><li><a href="/ja/guides/back-up-a-server-over-ssh">Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</a></li><li><a href="/ja/guides/send-a-file-to-someone">Relayium CLI でネットワークを越えて誰かにファイルを送る</a></li><li><a href="/ja/guides/server-to-server-transfers">Relayium CLI でサーバー間転送(デーモン直結)</a></li><li><a href="/ja/guides/sync-a-large-folder-between-servers">2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド)</a></li><li><a href="/ja/guides/self-host-relayium">Relayium をセルフホスト：自分専用のファイル転送サーバーを運用</a></li><li><a href="/ja/how-to/send-files-between-two-computers-over-the-internet">インターネット経由で2台のPC間にファイルを送る方法</a></li><li><a href="/ja/compare/croc">Relayium と croc の比較：ターミナルから暗号化転送</a></li><li><a href="/ja/guides/how-relayium-encrypts-your-files">Relayium がファイルをエンドツーエンドで暗号化する仕組み</a></li><li><a href="/ja/compare/google-drive">Relayium と Google Drive の比較：ファイル送信をもっと直接に</a></li><li><a href="/ja/compare/rsync">Relayium vs rsync: SSH 設定なしでフォルダーを同期</a></li><li><a href="/ja/compare/firefox-send">2026年、最良の Firefox Send 代替サービス</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ja">← Relayium</a>
+        <a href="/ja/guides">ガイド</a>
+        <a href="/ja/privacy">プライバシーポリシー</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

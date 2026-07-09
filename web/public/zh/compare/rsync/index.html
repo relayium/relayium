@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium 对比 rsync：无需配置 SSH 也能同步文件夹 · Relayium</title>
+    <meta name="description" content="客观对比 Relayium sync 与 rsync：rsync 是成熟强大的黄金标准，Relayium sync 用一部分能力换取更简单的配置，并且跨网络无需搭建 SSH 服务。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/zh/compare/rsync" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/rsync" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/rsync" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/rsync" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/rsync" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/rsync" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/rsync" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/rsync" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Relayium 对比 rsync：无需配置 SSH 也能同步文件夹" />
+    <meta property="og:description" content="客观对比 Relayium sync 与 rsync：rsync 是成熟强大的黄金标准，Relayium sync 用一部分能力换取更简单的配置，并且跨网络无需搭建 SSH 服务。" />
+    <meta property="og:url" content="https://relayium.com/zh/compare/rsync" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium 对比 rsync：无需配置 SSH 也能同步文件夹" />
+    <meta name="twitter:description" content="客观对比 Relayium sync 与 rsync：rsync 是成熟强大的黄金标准，Relayium sync 用一部分能力换取更简单的配置，并且跨网络无需搭建 SSH 服务。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 rsync：无需配置 SSH 也能同步文件夹","description":"客观对比 Relayium sync 与 rsync：rsync 是成熟强大的黄金标准，Relayium sync 用一部分能力换取更简单的配置，并且跨网络无需搭建 SSH 服务。","inLanguage":"zh-Hans","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/zh/compare/rsync","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"sync 能完全替代 rsync 吗？","acceptedAnswer":{"@type":"Answer","text":"不能。它只做单向镜像，也没有 rsync 那种基于数据块的增量算法——大小或时间戳变化的文件会被整个重传，参数也远少于 rsync。如果你需要双向同步、精细的过滤控制，或者依赖 rsync 成熟的生态，rsync 仍然是更好的工具。"}},{"@type":"Question","name":"sync 需要 SSH 服务吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。守护进程直连（relayium://host:port）完全跳过 SSH：用锁定的 TLS 连接，通过接收方的指纹认证，批准一次之后就会被记住。你也可以选择走 SSH（user@host:path），前提是远端已经装了 relayium——但和 push 不同，sync 没有 tar 兜底。"}},{"@type":"Question","name":"sync 会删除源端已经移除的文件吗？","acceptedAnswer":{"@type":"Answer","text":"只有在你传了 --delete、并且接收方的 serve 是以 --allow-delete 启动时才会。否则删除请求会被拒绝，并回报给发送方，不会被静默忽略。"}},{"@type":"Question","name":"能做到实时持续同步吗？","acceptedAnswer":{"@type":"Answer","text":"可以，加上 --watch。完成首次镜像之后 sync 会继续运行，只要源目录下有文件变化（有防抖），就会重新镜像。"}},{"@type":"Question","name":"这是免费的吗？","acceptedAnswer":{"@type":"Answer","text":"是的。Relayium CLI 完全免费，包括 sync 在内的任何模式都不需要账号。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <h1>Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</h1>
+      <p class="updated">最近更新: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/compare/rsync">English</a><a href="/zh/compare/rsync" aria-current="true">中文</a><a href="/ja/compare/rsync">日本語</a><a href="/ko/compare/rsync">한국어</a><a href="/de/compare/rsync">Deutsch</a><a href="/fr/compare/rsync">Français</a></nav>
+      <p class="lead">rsync 自 1996 年起就在镜像文件夹，这是有原因的：双向同步、用滚动校验和只传输文件内部真正变化的字节的增量算法，以及几十年积累下来、覆盖各种边界情况的参数。如果你已经有 SSH 访问权限并且熟悉 rsync，它很难被超越。</p>
+      <p class="lead">Relayium 的 sync 命令只覆盖一个更窄的场景——单向增量镜像——但它省掉了 rsync 默认你已经做好的一步：搭建 SSH。它既可以跑在你已有的 SSH 之上，也可以让两台机器直接连接，完全不需要 SSH 服务。本文客观对比两者：sync 不是 rsync 的完整替代品，FAQ 里也会直说这一点。</p>
+      <h2>rsync 做对了什么</h2>
+      <p>rsync 是双向的——任意一端都可以作为源——它的增量传输算法用滚动校验和比较文件的数据块，因此对一个巨大文件做的小修改只会发送变化的数据块，而不是整个文件重传。再加上几十年积累的参数（--exclude、用于硬链接快照的 --link-dest、压缩、带宽限制等等），让它能胜任很多工作。</p>
+      <p>它也无处不在：大多数 Linux 和 macOS 系统自带 rsync，并且能跑在你大概率已经配置好的 SSH 连接上。这些都不是 Relayium sync 想要取代的东西。</p>
+      <h2>Relayium sync 换了一种做法</h2>
+      <p>relayium sync &lt;源...&gt; &lt;目标&gt; [--delete] [--watch] 是单向增量镜像：它比较每个文件的大小和修改时间，跳过已经一致的文件，只发送其余的。</p>
+      <p>它支持两种传输方式。指向 user@host:/dest 时走 SSH——但远端必须已经装好 relayium；和 push 不同，sync 没有 tar 兜底方案。指向 relayium://host[:port] 时则完全不需要 SSH：直接用锁定的 TLS 1.3 连接到对端机器上运行的 relayium serve 监听端，通过对端的指纹认证（首次批准，之后记住）。第二种方式才是真正的便利所在：不用配置 sshd，不用管理 SSH 密钥，只要两台机器都装了 relayium，并且之间有一个端口互通即可。</p>
+      <pre><code>relayium sync ./photos user@host:/backup/photos       # over SSH</code></pre>
+      <pre><code>relayium sync ./photos relayium://203.0.113.9:9031    # daemon direct, no SSH</code></pre>
+      <h2>删除与持续同步</h2>
+      <p>默认情况下 sync 只新增和更新——绝不会自作主张删除任何东西。加上 --delete 才会镜像删除，但接收方必须主动开启：它必须以 relayium serve --allow-delete 运行。如果没有，删除请求会被拒绝并回报给发送方，而不是悄悄被忽略。</p>
+      <p>对于持续变化的文件夹，--watch 会让 sync 在第一次同步之后继续运行，只要源目录下有文件变化就重新镜像——这一点 rsync 并没有内置支持，通常你得借助 cron 任务或 lsyncd 这类封装工具。</p>
+      <pre><code>relayium serve --dir /backup --port 9031 --allow-delete</code></pre>
+      <pre><code>relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch</code></pre>
+      <h2>完整性、续传，以及诚实的局限</h2>
+      <p>每个文件都会用 SHA-256 做端到端校验，传到一半被打断的传输会从磁盘上已有的字节偏移续传，而不是重新开始——这一点和 rsync 的续传出于同样的道理。</p>
+      <p>但要说清楚续传不是什么：它不是 rsync 的增量算法。如果一个文件已经完整存在，只是大小或时间戳不同，sync 会把它整个重传，而不是去比对内部变化的数据块。对于一个经常发生小改动的巨大文件，rsync 的增量传输会传更少的数据。sync 也只处理常规文件——符号链接和特殊文件会被跳过，依赖它们的场景需要另外处理。</p>
+      <h2>什么时候 rsync 仍是更好的工具</h2>
+      <p>当你需要双向同步、已经配好 SSH 不想再跑一个守护进程、需要精细控制（排除规则、过滤器、硬链接快照、带宽限制、压缩），或者某个文件经常发生小改动、增量传输能省下实打实的带宽时，选 rsync。这些都不是 Relayium sync 想要覆盖的场景。</p>
+      <ul><li>仅单向：sync 只从源镜像到目标；rsync 可以双向进行。</li><li>没有增量传输：sync 会整个重传变化的文件；rsync 的滚动校验和只发送变化的数据块。</li><li>参数更少：rsync 有几十年积累的过滤、压缩、快照参数；sync 只有 --delete 和 --watch。</li><li>Relayium sync 的优势：不需要 SSH 服务（守护进程直连）、带指纹认证的锁定 TLS、用 --watch 实时重新同步，并且所有传输模式都免费、无需账号。</li></ul>
+      <h2>常见问题</h2>
+      <h3>sync 能完全替代 rsync 吗？</h3>
+      <p>不能。它只做单向镜像，也没有 rsync 那种基于数据块的增量算法——大小或时间戳变化的文件会被整个重传，参数也远少于 rsync。如果你需要双向同步、精细的过滤控制，或者依赖 rsync 成熟的生态，rsync 仍然是更好的工具。</p>
+      <h3>sync 需要 SSH 服务吗？</h3>
+      <p>不需要。守护进程直连（relayium://host:port）完全跳过 SSH：用锁定的 TLS 连接，通过接收方的指纹认证，批准一次之后就会被记住。你也可以选择走 SSH（user@host:path），前提是远端已经装了 relayium——但和 push 不同，sync 没有 tar 兜底。</p>
+      <h3>sync 会删除源端已经移除的文件吗？</h3>
+      <p>只有在你传了 --delete、并且接收方的 serve 是以 --allow-delete 启动时才会。否则删除请求会被拒绝，并回报给发送方，不会被静默忽略。</p>
+      <h3>能做到实时持续同步吗？</h3>
+      <p>可以，加上 --watch。完成首次镜像之后 sync 会继续运行，只要源目录下有文件变化（有防抖），就会重新镜像。</p>
+      <h3>这是免费的吗？</h3>
+      <p>是的。Relayium CLI 完全免费，包括 sync 在内的任何模式都不需要账号。</p>
+      <div class="ctacard">
+        <p>在你自己的两台机器之间镜像一个文件夹——不需要 SSH 服务。</p>
+        <a class="cta" href="/cli">获取 CLI</a>
+      </div>
+      <h2>继续阅读</h2>
+      <ul class="related"><li><a href="/zh/compare/snapdrop">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/transfer-files-android-to-iphone">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud">如何不用网盘传输大文件</a></li><li><a href="/zh/guides/transfer-files-from-terminal">用 Relayium CLI 从终端传输文件</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/guides/send-a-file-to-someone">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/server-to-server-transfers">用 Relayium CLI 实现服务器到服务器直传（守护进程直连）</a></li><li><a href="/zh/guides/sync-a-large-folder-between-servers">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li><li><a href="/zh/how-to/share-a-file-with-an-expiring-link">用会过期的安全链接分享文件</a></li><li><a href="/zh/guides/self-host-relayium">自托管 Relayium：运行属于你自己的文件传输服务器</a></li><li><a href="/zh/how-to/send-files-between-two-computers-over-the-internet">如何通过互联网在两台电脑之间传文件</a></li><li><a href="/zh/compare/croc">Relayium 对比 croc：从终端加密传输文件</a></li><li><a href="/zh/guides/how-relayium-encrypts-your-files">Relayium 如何对文件端到端加密</a></li><li><a href="/zh/compare/google-drive">Relayium 对比 Google Drive：发送文件更直接</a></li><li><a href="/zh/compare/firefox-send">2026 年最佳 Firefox Send 替代品</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=zh">← Relayium</a>
+        <a href="/zh/guides">使用指南</a>
+        <a href="/zh/privacy">隐私政策</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

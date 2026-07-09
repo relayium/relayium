@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>인터넷으로 컴퓨터 두 대 사이에 파일 보내는 방법 · Relayium</title>
+    <meta name="description" content="인터넷을 통해 두 컴퓨터 사이에서 파일을 직접 보내는 단계별 가이드 — P2P 직접 연결, 클라우드 업로드 없이, 설치 없이, 전 과정 종단간 암호화." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ko/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-files-between-two-computers-over-the-internet" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="인터넷으로 컴퓨터 두 대 사이에 파일 보내는 방법" />
+    <meta property="og:description" content="인터넷을 통해 두 컴퓨터 사이에서 파일을 직접 보내는 단계별 가이드 — P2P 직접 연결, 클라우드 업로드 없이, 설치 없이, 전 과정 종단간 암호화." />
+    <meta property="og:url" content="https://relayium.com/ko/how-to/send-files-between-two-computers-over-the-internet" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="인터넷으로 컴퓨터 두 대 사이에 파일 보내는 방법" />
+    <meta name="twitter:description" content="인터넷을 통해 두 컴퓨터 사이에서 파일을 직접 보내는 단계별 가이드 — P2P 직접 연결, 클라우드 업로드 없이, 설치 없이, 전 과정 종단간 암호화." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"인터넷으로 컴퓨터 두 대 사이에 파일 보내는 방법","description":"인터넷을 통해 두 컴퓨터 사이에서 파일을 직접 보내는 단계별 가이드 — P2P 직접 연결, 클라우드 업로드 없이, 설치 없이, 전 과정 종단간 암호화.","inLanguage":"ko","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/ko/how-to/send-files-between-two-computers-over-the-internet","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"정말로 P2P 직접 연결인가요, 아니면 파일이 서버를 거치나요?","acceptedAnswer":{"@type":"Answer","text":"직접 연결이 가능할 때는 파일이 한 브라우저에서 다른 브라우저로 곧장 흐르며 서버에 저장되지 않습니다. 직접 경로를 만들 수 없을 때(한쪽에 엄격한 방화벽이나 NAT가 있을 때)만 릴레이로 폴백하는데, 그때도 릴레이는 암호문만 볼 뿐 파일 자체는 볼 수 없습니다."}},{"@type":"Question","name":"양쪽 모두 계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 같은 네트워크에서는 양쪽 다 계정이 필요 없습니다. 네트워크를 넘나들 때는 보내는 쪽이 페어링 코드를 만들기 위해 로그인해야 합니다 — 이는 Relayium이 코드를 발급하고 관리하는 데 필요한 절차입니다 — 하지만 받는 쪽은 코드를 입력하든 링크를 열든 계정이 전혀 필요 없습니다."}},{"@type":"Question","name":"서로 다른 네트워크나 나라를 넘나들어도 되나요?","acceptedAnswer":{"@type":"Answer","text":"네. 페어링 코드는 바로 이런 경우를 위한 것입니다. 같은 로컬 네트워크에 있지 않은 두 컴퓨터가 세상 어디에 있든 P2P로 직접 연결되며, 직접 경로가 불가능할 때만 암호화된 릴레이로 폴백합니다."}},{"@type":"Question","name":"파일 크기나 개수에 제한이 있나요?","acceptedAnswer":{"@type":"Answer","text":"한 배치에 최대 1,000개의 파일을 보낼 수 있습니다. 서버가 강제하는 크기 상한은 없으며, 한계는 받는 쪽 브라우저가 감당할 수 있는 정도로 정해집니다. Chrome이나 Edge(디스크로 스트리밍)에서는 사실상 무제한이고, Firefox나 Safari(메모리 버퍼링)에서는 파일당 약 200MB 정도입니다."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ko">Relayium</a></header>
+      <h1>인터넷으로 컴퓨터 두 대 사이에 파일 보내는 방법</h1>
+      <p class="updated">마지막 업데이트: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-between-two-computers-over-the-internet">English</a><a href="/zh/how-to/send-files-between-two-computers-over-the-internet">中文</a><a href="/ja/how-to/send-files-between-two-computers-over-the-internet">日本語</a><a href="/ko/how-to/send-files-between-two-computers-over-the-internet" aria-current="true">한국어</a><a href="/de/how-to/send-files-between-two-computers-over-the-internet">Deutsch</a><a href="/fr/how-to/send-files-between-two-computers-over-the-internet">Français</a></nav>
+      <p class="lead">다른 컴퓨터에 파일을 보내려면 보통 먼저 어딘가에 올려야 합니다 — 클라우드 드라이브, 메일 첨부, 채팅 앱 — 그리고 상대가 무사히 다시 꺼낼 수 있길 바라야 합니다. Relayium은 이 단계를 건너뜁니다. 세상 어디에 있든 당신의 브라우저와 상대의 브라우저를 직접 연결해 파일을 곧장 흘려보냅니다.</p>
+      <p class="lead">이 가이드는 두 가지 경우 — 같은 네트워크의 컴퓨터 두 대, 그리고 완전히 다른 네트워크(다른 집, 다른 사무실, 다른 나라)에 있는 컴퓨터 두 대 — 를 모두 다루고, 각 쪽이 정확히 무엇을 해야 하는지 보여줍니다.</p>
+      <h2>직접 연결 방식: 중간에 클라우드가 없다</h2>
+      <p>Relayium은 relayium.com에서 브라우저 안에서만 동작합니다. 어느 컴퓨터에도 설치할 것이 없고, 당신과 상대 사이에 제3자 저장소가 끼어들지 않습니다. 직접 연결이 가능할 때 파일은 한 브라우저에서 다른 브라우저로 곧장 흐르며, 서버에 저장되는 일이 없습니다.</p>
+      <p>이것이 중요한 이유는 두 가지입니다. 속도(다른 사람의 업로드/다운로드 할당량에 발목 잡히지 않음)와 개인정보 보호(어느 회사 서버에 파일 사본이 남아 요청되거나 유출되거나 방치될 걱정이 없음)입니다.</p>
+      <h2>같은 네트워크 vs. 인터넷을 넘나드는 경우</h2>
+      <p>두 컴퓨터가 같은 Wi-Fi나 LAN에 있다면 Relayium이 자동으로 서로를 찾습니다 — 양쪽에서 relayium.com을 열기만 하면 되고, 어느 쪽도 계정이 필요 없습니다.</p>
+      <p>두 컴퓨터가 서로 다른 네트워크에 있다면 — 예를 들어 집의 데스크톱과 먼 곳에 있는 동료의 노트북 — 자동 탐색은 인터넷을 넘어설 수 없으므로 Relayium은 대신 짧은 페어링 코드를 씁니다. 보내는 쪽이 로그인해서 그 코드를 발급받고, 받는 쪽은 코드를 입력하든 생성된 링크를 열든 계정이 전혀 필요 없습니다.</p>
+      <h2>단계별로 따라 하기: 인터넷으로 파일 보내기</h2>
+      <p>서로 다른 네트워크에 있는 두 컴퓨터의 전체 흐름은 다음과 같습니다.</p>
+      <ul><li>보내는 쪽 컴퓨터에서 relayium.com을 열고 로그인합니다.</li><li>보낼 파일이나 폴더를 고릅니다 — 배치당 최대 1,000개. Relayium이 6자리 페어링 코드(그리고 짝을 이루는 참여 링크/QR)를 발급합니다.</li><li>그 코드나 링크를 편한 방법으로 상대에게 전달합니다 — 불러주거나, 문자로 보내거나, 채팅에 붙여넣거나.</li><li>받는 쪽 컴퓨터에서 링크를 열거나, relayium.com을 열고 6자리 코드를 입력합니다. 이쪽은 로그인이 필요 없습니다.</li><li>이제 양쪽 화면에 동일한 짧은 검증 코드(SAS)가 표시됩니다. 일치하는지 확인하세요 — 이는 연결이 정말로 두 사람 사이에서만 이루어지고 중간에 아무도 없음을 확인해 줍니다 — 그러면 전송이 자동으로 시작됩니다.</li></ul>
+      <h2>방화벽이나 엄격한 NAT 뒤에 있다면: 릴레이 폴백</h2>
+      <p>대부분의 가정·사무실 네트워크는 두 브라우저가 서로를 알게 되면 직접 연결할 수 있습니다. 하지만 일부 회사 방화벽이나 엄격한 NAT는 이를 막기도 합니다 — 이때 Relayium은 그냥 실패하는 대신 TURN 릴레이로 폴백해 암호화된 스트림을 대신 전달합니다.</p>
+      <p>릴레이는 항상 암호문만 봅니다. 파일은 보내는 쪽 브라우저를 떠나기 전에 이미 종단간 암호화되어 있으므로(X25519 키 교환과 AES-256-GCM), 릴레이는 인터넷의 아무 컴퓨터나 마찬가지로 내용을 읽을 수 없습니다. 도중에 연결이 끊겨도 전송은 처음부터가 아니라 이어서 재개됩니다.</p>
+      <h2>몇 개까지, 얼마나 큰 파일까지</h2>
+      <p>한 배치에 폴더 구조를 포함해 최대 1,000개의 파일을 보낼 수 있습니다. 서버 쪽에는 크기 상한이 없으며, 실제 한계는 받는 쪽 브라우저가 결정합니다.</p>
+      <p>Chrome과 Edge는 들어오는 데이터를 곧장 디스크로 스트리밍하므로 수 기가바이트짜리 파일도 문제없습니다. Firefox와 Safari는 파일을 메모리에 버퍼링하므로 이들에서는 한 파일을 대략 200MB 이내로 유지하세요. 각 파일은 SHA-256 해시로 종단간 검증되므로 도착한 파일이 보낸 파일과 바이트 단위로 같다는 것을 알 수 있습니다.</p>
+      <h2>자주 묻는 질문</h2>
+      <h3>정말로 P2P 직접 연결인가요, 아니면 파일이 서버를 거치나요?</h3>
+      <p>직접 연결이 가능할 때는 파일이 한 브라우저에서 다른 브라우저로 곧장 흐르며 서버에 저장되지 않습니다. 직접 경로를 만들 수 없을 때(한쪽에 엄격한 방화벽이나 NAT가 있을 때)만 릴레이로 폴백하는데, 그때도 릴레이는 암호문만 볼 뿐 파일 자체는 볼 수 없습니다.</p>
+      <h3>양쪽 모두 계정이 필요한가요?</h3>
+      <p>아니요. 같은 네트워크에서는 양쪽 다 계정이 필요 없습니다. 네트워크를 넘나들 때는 보내는 쪽이 페어링 코드를 만들기 위해 로그인해야 합니다 — 이는 Relayium이 코드를 발급하고 관리하는 데 필요한 절차입니다 — 하지만 받는 쪽은 코드를 입력하든 링크를 열든 계정이 전혀 필요 없습니다.</p>
+      <h3>서로 다른 네트워크나 나라를 넘나들어도 되나요?</h3>
+      <p>네. 페어링 코드는 바로 이런 경우를 위한 것입니다. 같은 로컬 네트워크에 있지 않은 두 컴퓨터가 세상 어디에 있든 P2P로 직접 연결되며, 직접 경로가 불가능할 때만 암호화된 릴레이로 폴백합니다.</p>
+      <h3>파일 크기나 개수에 제한이 있나요?</h3>
+      <p>한 배치에 최대 1,000개의 파일을 보낼 수 있습니다. 서버가 강제하는 크기 상한은 없으며, 한계는 받는 쪽 브라우저가 감당할 수 있는 정도로 정해집니다. Chrome이나 Edge(디스크로 스트리밍)에서는 사실상 무제한이고, Firefox나 Safari(메모리 버퍼링)에서는 파일당 약 200MB 정도입니다.</p>
+      <div class="ctacard">
+        <p>두 컴퓨터 모두에서 Relayium을 열고 인터넷으로 첫 파일을 보내 보세요 — 클라우드 업로드도, 설치도 필요 없고, 받는 쪽은 언제나 계정이 필요 없습니다.</p>
+        <a class="cta" href="/?lang=ko">지금 Relayium 사용해보기</a>
+      </div>
+      <h2>계속 읽기</h2>
+      <ul class="related"><li><a href="/ko/compare/snapdrop">Relayium vs Snapdrop·PairDrop: 어떤 P2P 파일 전송이 더 안전할까?</a></li><li><a href="/ko/compare/airdrop">Relayium vs AirDrop: 크로스플랫폼 에어드롭 대안</a></li><li><a href="/ko/compare/wetransfer">Relayium vs WeTransfer: 서버 없이 대용량 파일 보내기</a></li><li><a href="/ko/how-to/transfer-files-android-to-iphone">안드로이드에서 아이폰으로 파일 전송하는 방법 (케이블 없이)</a></li><li><a href="/ko/how-to/send-files-pc-to-phone-wirelessly">PC에서 폰으로 무선 파일 전송: 케이블도 앱도 필요 없이</a></li><li><a href="/ko/how-to/send-large-files-without-cloud">클라우드 없이 대용량 파일 보내는 방법</a></li><li><a href="/ko/guides/transfer-files-from-terminal">Relayium CLI로 터미널에서 파일 전송하기</a></li><li><a href="/ko/guides/back-up-a-server-over-ssh">Relayium CLI로 SSH를 통해 자신의 서버에 파일 백업하기</a></li><li><a href="/ko/guides/send-a-file-to-someone">Relayium CLI로 네트워크를 넘어 상대에게 파일 보내기</a></li><li><a href="/ko/guides/server-to-server-transfers">Relayium CLI로 서버 간 전송(데몬 다이렉트)</a></li><li><a href="/ko/guides/sync-a-large-folder-between-servers">두 서버 사이에서 큰 폴더 동기화하기(재개 가능, 백그라운드)</a></li><li><a href="/ko/how-to/share-a-file-with-an-expiring-link">만료되는 안전한 다운로드 링크로 파일 공유하기</a></li><li><a href="/ko/guides/self-host-relayium">Relayium 셀프 호스팅: 나만의 파일 전송 서버 운영하기</a></li><li><a href="/ko/compare/croc">Relayium vs croc: 터미널에서 암호화 파일 전송</a></li><li><a href="/ko/guides/how-relayium-encrypts-your-files">Relayium이 파일을 종단간 암호화하는 방식</a></li><li><a href="/ko/compare/google-drive">Relayium vs Google Drive: 파일을 더 직접적으로 보내기</a></li><li><a href="/ko/compare/rsync">Relayium vs rsync: SSH 설정 없이 폴더 동기화하기</a></li><li><a href="/ko/compare/firefox-send">2026년 최고의 Firefox Send 대안</a></li><li><a href="/ko/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ko">← Relayium</a>
+        <a href="/ko/guides">가이드</a>
+        <a href="/ko/privacy">개인정보 처리방침</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

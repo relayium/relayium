@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Eine Datei mit einem sicheren, ablaufenden Link teilen · Relayium</title>
+    <meta name="description" content="Verschlüssele eine Datei in deinem Browser und erhalte einen Link, den der Server nicht entschlüsseln kann. Wähle 1 Stunde, 1 Tag, 3 oder 7 Tage Gültigkeit oder Löschung nach dem ersten Download — sende ihn, wenn du bereit bist." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/de/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Eine Datei mit einem sicheren, ablaufenden Link teilen" />
+    <meta property="og:description" content="Verschlüssele eine Datei in deinem Browser und erhalte einen Link, den der Server nicht entschlüsseln kann. Wähle 1 Stunde, 1 Tag, 3 oder 7 Tage Gültigkeit oder Löschung nach dem ersten Download — sende ihn, wenn du bereit bist." />
+    <meta property="og:url" content="https://relayium.com/de/how-to/share-a-file-with-an-expiring-link" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="de_DE" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Eine Datei mit einem sicheren, ablaufenden Link teilen" />
+    <meta name="twitter:description" content="Verschlüssele eine Datei in deinem Browser und erhalte einen Link, den der Server nicht entschlüsseln kann. Wähle 1 Stunde, 1 Tag, 3 oder 7 Tage Gültigkeit oder Löschung nach dem ersten Download — sende ihn, wenn du bereit bist." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Eine Datei mit einem sicheren, ablaufenden Link teilen","description":"Verschlüssele eine Datei in deinem Browser und erhalte einen Link, den der Server nicht entschlüsseln kann. Wähle 1 Stunde, 1 Tag, 3 oder 7 Tage Gültigkeit oder Löschung nach dem ersten Download — sende ihn, wenn du bereit bist.","inLanguage":"de","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/de/how-to/share-a-file-with-an-expiring-link","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Braucht die Person, der ich den Link schicke, ein Konto?","acceptedAnswer":{"@type":"Answer","text":"Nein. Wer den vollständigen Link hat — einschließlich des Teils nach dem `#` — kann ihn öffnen und die Dateien herunterladen. Nur der Absender muss sich anmelden, um den Link überhaupt zu erstellen."}},{"@type":"Question","name":"Kann Relayium meine Datei lesen?","acceptedAnswer":{"@type":"Answer","text":"Nein. Dein Browser verschlüsselt die Dateien mit einem zufällig erzeugten AES-256-GCM-Schlüssel, bevor irgendetwas hochgeladen wird, und dieser Schlüssel existiert nur im URL-Fragment, das den Server nie erreicht. Der Server speichert Chiffretext, den er nicht entschlüsseln kann — ein Zero-Knowledge-Design."}},{"@type":"Question","name":"Wie lange bleiben Links gültig?","acceptedAnswer":{"@type":"Answer","text":"Du entscheidest beim Erstellen: 1 Stunde, 1 Tag, 3 Tage oder 7 Tage, oder du stellst statt einer festen Frist Löschung nach dem ersten vollständigen Download ein. Danach funktioniert der Link nicht mehr."}},{"@type":"Question","name":"Ist die Datei nach Löschung nach dem ersten Download wirklich weg?","acceptedAnswer":{"@type":"Answer","text":"Löschung nach dem ersten Download ist genau für einen einzigen Download gedacht: Sobald die empfangende Person den Download abgeschlossen hat, funktioniert der Link für niemanden mehr, der ihn danach öffnet — er kann also nicht heimlich ein zweites Mal angesehen werden."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=de">Relayium</a></header>
+      <h1>Eine Datei mit einem sicheren, ablaufenden Link teilen</h1>
+      <p class="updated">Zuletzt aktualisiert: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/share-a-file-with-an-expiring-link">English</a><a href="/zh/how-to/share-a-file-with-an-expiring-link">中文</a><a href="/ja/how-to/share-a-file-with-an-expiring-link">日本語</a><a href="/ko/how-to/share-a-file-with-an-expiring-link">한국어</a><a href="/de/how-to/share-a-file-with-an-expiring-link" aria-current="true">Deutsch</a><a href="/fr/how-to/share-a-file-with-an-expiring-link">Français</a></nav>
+      <p class="lead">Nicht bei jeder Übertragung wartet jemand auf der anderen Seite. Vielleicht schläft die empfangende Person, sitzt im Flugzeug, oder du willst einfach einen Link in eine Nachricht fallen lassen und mit deinem Tag weitermachen. Dafür hat Relayium einen zweiten Modus: Statt eine Datei live an einen anderen geöffneten Browser zu streamen, verschlüsselt er die Datei bei dir, lädt nur den Chiffretext hoch und gibt dir einen Link, den du jederzeit versenden kannst — der Download findet nach dem Zeitplan der empfangenden Person statt.</p>
+      <p class="lead">Diese Anleitung zeigt, wie man einen solchen Link erstellt, die Optionen für Ablauf und Löschung nach dem ersten Download, und was das Zero-Knowledge-Design in der Praxis tatsächlich bedeutet — einschließlich der ehrlichen Grenzen: Zum Erstellen eines Links muss sich der Absender anmelden, und Links zählen gegen ein Speicherkontingent.</p>
+      <h2>Gespeicherte Links vs. Echtzeit: wann was nutzen</h2>
+      <p>Relayiums Echtzeitmodus überträgt eine Datei direkt zwischen zwei geöffneten Browser-Tabs — schnell, und nirgendwo gespeichert, aber beide Personen müssen gleichzeitig online sein. Ein gespeicherter, ablaufender Link kehrt diesen Kompromiss um: Dein Browser übernimmt die Verschlüsselung und lädt das Ergebnis einmal hoch, und die empfangende Person kann den Link Minuten, Stunden oder Tage später öffnen, zu ihrer eigenen Zeit.</p>
+      <p>Nutze einen gespeicherten Link, wenn du nicht genau weißt, wann die andere Person Zeit hat, wenn du dieselbe Datei an mehr als eine Person senden willst, oder wenn du einfach etwas willst, das du in eine E-Mail oder einen Chat einfügen kannst und fertig bist.</p>
+      <h2>So erstellst du einen Link</h2>
+      <p>Einen Link zu erstellen dauert ein paar Schritte, alle im Browser:</p>
+      <ul><li>Öffne relayium.com und wechsle in den Link-/Offline-Modus.</li><li>Melde dich an — nur der Absender braucht ein Konto, die empfangende Person nie.</li><li>Wähle eine oder mehrere Dateien.</li><li>Stelle optional ein Ablauffenster ein oder aktiviere Löschung nach dem ersten Download.</li><li>Warte, während der Browser die Dateien verschlüsselt und dann hochlädt — ein Fortschrittsbalken zeigt beide Phasen.</li><li>Kopiere den Link (oder scanne den QR-Code) und verschicke ihn, wie du willst.</li></ul>
+      <h2>Ablauf und Löschung nach dem ersten Download</h2>
+      <p>Jeder Link braucht eine Lebensdauer — einen für immer aktiv zu lassen, widerspricht dem Sinn einer einmaligen Übertragung. Beim Erstellen eines Links wählst du, wie lange er gültig bleiben soll, oder du stellst ihn so ein, dass er nach der ersten Nutzung sofort verschwindet.</p>
+      <p>Löschung nach dem ersten Download bedeutet, dass der Link nicht mehr funktioniert, sobald die empfangende Person den Download abgeschlossen hat — nützlich, wenn die Datei sensibel ist und du willst, dass genau eine Person sie genau einmal sieht und danach nichts offen bleibt. In beiden Fällen sieht die empfangende Person auf der Download-Seite einen laufenden Countdown, sodass klar ist, wie viel Zeit (oder wie viele Downloads) noch bleiben.</p>
+      <ul><li>1 Stunde</li><li>1 Tag (Standard)</li><li>3 Tage</li><li>7 Tage</li><li>Oder: Löschung nach dem ersten vollständigen Download statt einer festen Frist</li></ul>
+      <h2>Die Zero-Knowledge-Garantie — und ihre Grenzen</h2>
+      <p>So läuft es tatsächlich ab, wenn du einen Link erstellst: Dein Browser erzeugt einen zufälligen AES-256-GCM-Schlüssel — ein anderer Mechanismus als bei Relayiums Echtzeitmodus, der per X25519 einen Schlüssel zwischen zwei Geräten aushandelt; der Schlüssel eines gespeicherten Links wird lokal erzeugt, ohne dass etwas ausgehandelt werden muss. Dieser Schlüssel verschlüsselt deine Dateien und die Liste der Dateinamen, bevor irgendetwas dein Gerät verlässt, und wird nach einem `#` an den Download-Link angehängt — ein Teil der URL, den Browser nie an einen Server senden. Der Server speichert genau den Chiffretext, den er erhält, und nur diesen; er kann ihn nicht entschlüsseln, weil er den Schlüssel niemals bekommt.</p>
+      <p>Dieses Design hat reale Kompromisse, die man kennen sollte. Der Link selbst ist die einzige Kopie des Schlüssels — verlierst du ihn, gibt es kein Zurücksetzen des Passworts; die Daten auf dem Server werden dauerhaft unlesbar. Zum Erstellen eines Links muss der Absender angemeldet sein, und jeder Link zählt gegen das Speicherkontingent deines Kontos, bis er gelöscht wird oder abläuft. Und es lohnt sich, genau zu sein, was „Zero-Knowledge“ hier bedeutet: Der Chiffretext wird zwischen Erstellung und Download tatsächlich auf Relayiums Server gespeichert — er ist nur unlesbar ohne den Schlüssel, der deinen Browser nie verlassen hat.</p>
+      <h2>Häufige Fragen</h2>
+      <h3>Braucht die Person, der ich den Link schicke, ein Konto?</h3>
+      <p>Nein. Wer den vollständigen Link hat — einschließlich des Teils nach dem `#` — kann ihn öffnen und die Dateien herunterladen. Nur der Absender muss sich anmelden, um den Link überhaupt zu erstellen.</p>
+      <h3>Kann Relayium meine Datei lesen?</h3>
+      <p>Nein. Dein Browser verschlüsselt die Dateien mit einem zufällig erzeugten AES-256-GCM-Schlüssel, bevor irgendetwas hochgeladen wird, und dieser Schlüssel existiert nur im URL-Fragment, das den Server nie erreicht. Der Server speichert Chiffretext, den er nicht entschlüsseln kann — ein Zero-Knowledge-Design.</p>
+      <h3>Wie lange bleiben Links gültig?</h3>
+      <p>Du entscheidest beim Erstellen: 1 Stunde, 1 Tag, 3 Tage oder 7 Tage, oder du stellst statt einer festen Frist Löschung nach dem ersten vollständigen Download ein. Danach funktioniert der Link nicht mehr.</p>
+      <h3>Ist die Datei nach Löschung nach dem ersten Download wirklich weg?</h3>
+      <p>Löschung nach dem ersten Download ist genau für einen einzigen Download gedacht: Sobald die empfangende Person den Download abgeschlossen hat, funktioniert der Link für niemanden mehr, der ihn danach öffnet — er kann also nicht heimlich ein zweites Mal angesehen werden.</p>
+      <div class="ctacard">
+        <p>Datei fertig, aber gerade wartet niemand auf der anderen Seite? Erstelle einen ablaufenden Link im Browser und schick ihn, wenn du bereit bist.</p>
+        <a class="cta" href="/?lang=de">Relayium jetzt ausprobieren</a>
+      </div>
+      <h2>Weiterlesen</h2>
+      <ul class="related"><li><a href="/de/compare/snapdrop">Relayium vs. Snapdrop &amp; PairDrop: welche sichere P2P-Übertragung?</a></li><li><a href="/de/compare/airdrop">Relayium vs. AirDrop: eine plattformübergreifende Alternative</a></li><li><a href="/de/compare/wetransfer">Relayium vs. WeTransfer: große Dateien ohne Server senden</a></li><li><a href="/de/how-to/transfer-files-android-to-iphone">Dateien von Android auf iPhone übertragen (ohne Kabel)</a></li><li><a href="/de/how-to/send-files-pc-to-phone-wirelessly">Dateien vom PC drahtlos aufs Handy senden — ohne Kabel, ohne App</a></li><li><a href="/de/how-to/send-large-files-without-cloud">Große Dateien ohne Cloud versenden</a></li><li><a href="/de/guides/transfer-files-from-terminal">Dateien vom Terminal aus übertragen mit der Relayium CLI</a></li><li><a href="/de/guides/back-up-a-server-over-ssh">Dateien über SSH auf dem eigenen Server sichern mit der Relayium CLI</a></li><li><a href="/de/guides/send-a-file-to-someone">Mit der Relayium CLI eine Datei über Netzwerke hinweg an jemanden senden</a></li><li><a href="/de/guides/server-to-server-transfers">Server-zu-Server-Übertragungen mit der Relayium CLI (Daemon Direct)</a></li><li><a href="/de/guides/sync-a-large-folder-between-servers">Einen großen Ordner zwischen zwei Servern synchronisieren (fortsetzbar, im Hintergrund)</a></li><li><a href="/de/guides/self-host-relayium">Relayium selbst hosten: eigener Dateiübertragungs-Server</a></li><li><a href="/de/how-to/send-files-between-two-computers-over-the-internet">Dateien über das Internet zwischen zwei Computern senden</a></li><li><a href="/de/compare/croc">Relayium vs. croc: verschlüsselte Dateiübertragung im Terminal</a></li><li><a href="/de/guides/how-relayium-encrypts-your-files">Wie Relayium Ihre Dateien Ende-zu-Ende verschlüsselt</a></li><li><a href="/de/compare/google-drive">Relayium vs. Google Drive: Dateien direkter versenden</a></li><li><a href="/de/compare/rsync">Relayium vs. rsync: Ordner synchronisieren ohne SSH-Setup</a></li><li><a href="/de/compare/firefox-send">Die beste Firefox-Send-Alternative 2026</a></li><li><a href="/de/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=de">← Relayium</a>
+        <a href="/de/guides">Anleitungen</a>
+        <a href="/de/privacy">Datenschutz</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

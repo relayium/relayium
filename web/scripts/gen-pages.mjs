@@ -19,6 +19,14 @@ import cliBackupSsh from "./pages/content/articles/cli-backup-server-ssh.mjs";
 import cliSendToSomeone from "./pages/content/articles/cli-send-to-someone.mjs";
 import cliServerToServer from "./pages/content/articles/cli-server-to-server.mjs";
 import cliSyncLargeFolder from "./pages/content/articles/cli-sync-large-folder.mjs";
+import howtoShareFileExpiringLink from "./pages/content/articles/howto-share-file-expiring-link.mjs";
+import guidesSelfHost from "./pages/content/articles/guides-self-host.mjs";
+import howtoSendFilesBetweenComputers from "./pages/content/articles/howto-send-files-between-computers.mjs";
+import compareCroc from "./pages/content/articles/compare-croc.mjs";
+import guidesHowEncryptionWorks from "./pages/content/articles/guides-how-encryption-works.mjs";
+import compareGoogleDrive from "./pages/content/articles/compare-google-drive.mjs";
+import compareRsync from "./pages/content/articles/compare-rsync.mjs";
+import compareFirefoxSend from "./pages/content/articles/compare-firefox-send.mjs";
 import {
   buildLegalPages,
   buildLandingPages,
@@ -44,6 +52,14 @@ const articles = [
   cliSendToSomeone,
   cliServerToServer,
   cliSyncLargeFolder,
+  howtoShareFileExpiringLink,
+  guidesSelfHost,
+  howtoSendFilesBetweenComputers,
+  compareCroc,
+  guidesHowEncryptionWorks,
+  compareGoogleDrive,
+  compareRsync,
+  compareFirefoxSend,
 ];
 
 async function main() {

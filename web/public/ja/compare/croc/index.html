@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium と croc の比較：ターミナルから暗号化転送 · Relayium</title>
+    <meta name="description" content="Relayium と croc はどちらも無料・オープンソースで暗号化された CLI の P2P 転送ツールです。それぞれどこで優れているかを公平に比較します。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ja/compare/croc" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/croc" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/croc" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/croc" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/croc" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/croc" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/croc" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/croc" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Relayium と croc の比較：ターミナルから暗号化転送" />
+    <meta property="og:description" content="Relayium と croc はどちらも無料・オープンソースで暗号化された CLI の P2P 転送ツールです。それぞれどこで優れているかを公平に比較します。" />
+    <meta property="og:url" content="https://relayium.com/ja/compare/croc" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium と croc の比較：ターミナルから暗号化転送" />
+    <meta name="twitter:description" content="Relayium と croc はどちらも無料・オープンソースで暗号化された CLI の P2P 転送ツールです。それぞれどこで優れているかを公平に比較します。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium と croc の比較：ターミナルから暗号化転送","description":"Relayium と croc はどちらも無料・オープンソースで暗号化された CLI の P2P 転送ツールです。それぞれどこで優れているかを公平に比較します。","inLanguage":"ja","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/ja/compare/croc","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"Relayium の CLI は無料ですか？","acceptedAnswer":{"@type":"Answer","text":"はい、完全に無料です。有料プランはなく、計測するものもありません——どのモードでも両端が直接つながり、CLI は MIT ライセンスでオープンソースです。"}},{"@type":"Question","name":"アカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。push/pull は自分の SSH アクセスを使い、daemon-direct はマシン間のピン留めされた TLS 証明書の信頼を使い、send/receive は事前に合意した短いコードを使います。いずれも Relayium アカウントには触れません。"}},{"@type":"Question","name":"CLI のペアリングコードは Relayium のブラウザ版と使えますか？","acceptedAnswer":{"@type":"Answer","text":"現時点ではリアルタイムのペアリング転送はできません——CLI の send/receive は独自の直接ハンドシェイクを使っており、ブラウザの WebRTC ベースのペアリングフローとは別物なので、今は相互運用できません。ブラウザだけを使って相手にファイルを渡したい場合は、Relayium の保存型ダウンロードリンクか、ブラウザ版自体のペアリングコードモードを使ってください。"}},{"@type":"Question","name":"セルフホストできますか？","acceptedAnswer":{"@type":"Answer","text":"はい。Relayium のサーバーは Docker イメージとして配布されており（docker compose up -d --build）、CLI の send/receive も --server https://your-domain で自分のインスタンスを指定できます——自分で croc のリレーを運用するのと同じ発想です。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <h1>Relayium と croc の比較：ターミナルから暗号化転送</h1>
+      <p class="updated">最終更新: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/compare/croc">English</a><a href="/zh/compare/croc">中文</a><a href="/ja/compare/croc" aria-current="true">日本語</a><a href="/ko/compare/croc">한국어</a><a href="/de/compare/croc">Deutsch</a><a href="/fr/compare/croc">Français</a></nav>
+      <p class="lead">croc はターミナル間でファイルを送る、最も愛されているツールの一つです。短く覚えやすいコードフレーズ、PAKE による鍵交換、それだけでちゃんと動きます。Relayium CLI も同じ仕事を目指し、同じ考え方で作られています——無料、オープンソース、エンドツーエンドで暗号化され、どのモードでもアカウントは不要です。</p>
+      <p class="lead">これは批判の記事ではありません。croc の評判はふさわしいものです。両者の共通点、Relayium CLI がすでに運用しているサーバーとも話せるために持つ追加の力、そして croc の方が正直シンプルな場合を、率直に比較します。</p>
+      <h2>Relayium と croc の共通点</h2>
+      <p>まず重なる部分から。実はかなり多いです。どちらも一度インストールすれば済む小さな単一バイナリで、完全無料で有料プランはなく、寛容なライセンスでオープンソース化されているため、ファイルに触れるコードをすべて読むことができます。</p>
+      <ul><li>転送にアカウントは不要——両端しか知らない短いコードだけで、互いを見つけ鍵に合意できます。</li><li>転送中はエンドツーエンドで暗号化：間にあるリレーやランデブーポイントがファイルの中身を見ることは決してありません。</li><li>中断した転送は最初からではなく続きから再開でき、届いたものが送ったものと一致することも両者とも検証します。</li><li>クロスプラットフォーム：macOS、Linux、Windows。</li></ul>
+      <h2>SSH と daemon-direct：すでに運用しているサーバーと話す</h2>
+      <p>ここが実用上いちばん大きな違いです。croc は一つの流れを中心に作られています——コードフレーズを入れて、コードフレーズを伝える。Relayium CLI は、すでに持っているインフラを活かす2つの方法をさらに追加しています。</p>
+      <p>relayium push / pull は既存の SSH アクセスを再利用するため、新しく信頼するものも共有するコードもありません。push は relayium がまったくインストールされていないサーバーに対しても動作し、SSH 接続上の単純な tar ストリームにフォールバックします——このフォールバックは push 専用です。pull は常にリモートに relayium が必要です。そこでは pull が送信側として動作するためです。</p>
+      <p>relayium serve は、所有する任意のマシンを daemon-direct のターゲットに変え、ピン留めされた TLS 1.3 経由で、SSH もコードフレーズもなしにアクセスできます——信頼は最初の接続時に成立し（対話的に承認するか、無人運用向けに事前承認しておく）、以後はピン留めされます。SSH のホスト鍵と同じ考え方です。</p>
+      <pre><code>relayium push ./photos user@your-server:backups/</code></pre>
+      <pre><code>relayium serve --dir ~/incoming</code></pre>
+      <pre><code>relayium push ./build relayium://your-server</code></pre>
+      <h2>フォルダ同期と、二重に確認する検証コード</h2>
+      <p>croc はファイルのバッチを送って終了します——相手側を更新するには再度送るしかなく、何を削除すべきかという概念もありません。Relayium CLI は relayium sync を追加し、上記どちらの転送方式の上でも動く増分の一方向ミラーリングを行います。変化した分だけを送り、--delete はソース側から消えたファイルを宛先側からも削除します（daemon は --allow-delete 付きで起動している場合のみこれに従うため、受信側が自らオプトインする必要があります）。--watch はファイルの変化に応じてリアルタイムに再同期し続け、cron ジョブは不要です。</p>
+      <p>一回限りのネットワークをまたぐ転送では、relayium send / receive が croc のコードフレーズと同じ役割を果たし、短いコードで2台のコンピュータをペアリングします。直接の P2P で行われ、両端に短い検証コード（Short Authentication String）を表示するので、バイトが動き出す前に誰も間に入っていないことを目視で確認できます——正直に言うべき点として、このモードは直接接続専用なので、両端が直接経路を見つけられない場合はリレーにフォールバックせず、そのまま失敗します。</p>
+      <pre><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
+      <h2>croc の方がシンプルな場合</h2>
+      <p>croc の方がその仕事に向いている、本当のケースもあります。率直に述べる価値があります。</p>
+      <ul><li>今すぐ1つのファイルを友人に渡したいだけで、手間は最小限にしたい——到達すべきサーバーも不要で、両端で何かを設定する必要もありません。</li><li>厳格な NAT の内側にいて直接経路を開く方法がない：croc のリレーはどのみち暗号化ストリームを運ぶので、転送はいずれにせよ完了します。Relayium の send / receive は直接接続専用で、その状況では失敗し得ます（push/pull や、到達可能なサーバーへの daemon-direct は直接 P2P のホップに依存しないため、引き続き使えます）。</li><li>フォルダのミラーリングも SSH との統合も、長時間動き続けるリスナーも必要ない——croc は各端で1つの即席コマンドだけで、他に考えることはありません。</li><li>croc の大きく成熟したコミュニティと長年の実運用実績をすでに信頼している。</li></ul>
+      <h2>機能の一覧比較</h2>
+      <p>最も重要な違いを並べて示します。</p>
+      <ul><li>サーバーとの対話：Relayium は SSH アクセス（push/pull）またはピン留めされた TLS の daemon を再利用；croc には SSH との統合がなく、両端に croc をインストールしてコードフレーズを共有する必要があります。</li><li>フォルダ同期：relayium sync は --delete と --watch を伴う増分ミラーリングを行う；croc はバッチを送って終了し、ミラーや削除の概念はありません。</li><li>直接経路がない場合：croc のリレーは暗号化ストリームを運ぶので転送は完了する；Relayium の send/receive は直接接続専用です。</li><li>検証：どちらもエンドツーエンドで暗号化される；Relayium の send/receive はさらに、転送開始前に双方が照合する短いコードを表示します。</li><li>セルフホスト：どちらもセルフホスト可能——croc のリレーは小さな単独バイナリ；Relayium のサーバーはウェブアプリも動かしており、CLI の send/receive も --server で自分のインスタンスを指定できます。</li><li>ライセンスと費用：どちらも MIT ライセンスで完全に無料、どちらもアカウント不要です。</li></ul>
+      <h2>よくある質問</h2>
+      <h3>Relayium の CLI は無料ですか？</h3>
+      <p>はい、完全に無料です。有料プランはなく、計測するものもありません——どのモードでも両端が直接つながり、CLI は MIT ライセンスでオープンソースです。</p>
+      <h3>アカウントは必要ですか？</h3>
+      <p>いいえ。push/pull は自分の SSH アクセスを使い、daemon-direct はマシン間のピン留めされた TLS 証明書の信頼を使い、send/receive は事前に合意した短いコードを使います。いずれも Relayium アカウントには触れません。</p>
+      <h3>CLI のペアリングコードは Relayium のブラウザ版と使えますか？</h3>
+      <p>現時点ではリアルタイムのペアリング転送はできません——CLI の send/receive は独自の直接ハンドシェイクを使っており、ブラウザの WebRTC ベースのペアリングフローとは別物なので、今は相互運用できません。ブラウザだけを使って相手にファイルを渡したい場合は、Relayium の保存型ダウンロードリンクか、ブラウザ版自体のペアリングコードモードを使ってください。</p>
+      <h3>セルフホストできますか？</h3>
+      <p>はい。Relayium のサーバーは Docker イメージとして配布されており（docker compose up -d --build）、CLI の send/receive も --server https://your-domain で自分のインスタンスを指定できます——自分で croc のリレーを運用するのと同じ発想です。</p>
+      <div class="ctacard">
+        <p>無料の Relayium CLI をインストールして push、sync、send を試してみましょう——アカウント不要で、croc と同じくらいすぐに始められます。</p>
+        <a class="cta" href="/cli">CLI を入手</a>
+      </div>
+      <h2>続けて読む</h2>
+      <ul class="related"><li><a href="/ja/compare/snapdrop">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/compare/wetransfer">Relayium と WeTransfer の比較：サーバーを介さず大容量を送る</a></li><li><a href="/ja/how-to/transfer-files-android-to-iphone">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/how-to/send-large-files-without-cloud">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/guides/transfer-files-from-terminal">Relayium CLI でターミナルからファイルを転送する</a></li><li><a href="/ja/guides/back-up-a-server-over-ssh">Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</a></li><li><a href="/ja/guides/send-a-file-to-someone">Relayium CLI でネットワークを越えて誰かにファイルを送る</a></li><li><a href="/ja/guides/server-to-server-transfers">Relayium CLI でサーバー間転送(デーモン直結)</a></li><li><a href="/ja/guides/sync-a-large-folder-between-servers">2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド)</a></li><li><a href="/ja/how-to/share-a-file-with-an-expiring-link">期限付きの安全なダウンロードリンクでファイルを共有する</a></li><li><a href="/ja/guides/self-host-relayium">Relayium をセルフホスト：自分専用のファイル転送サーバーを運用</a></li><li><a href="/ja/how-to/send-files-between-two-computers-over-the-internet">インターネット経由で2台のPC間にファイルを送る方法</a></li><li><a href="/ja/guides/how-relayium-encrypts-your-files">Relayium がファイルをエンドツーエンドで暗号化する仕組み</a></li><li><a href="/ja/compare/google-drive">Relayium と Google Drive の比較：ファイル送信をもっと直接に</a></li><li><a href="/ja/compare/rsync">Relayium vs rsync: SSH 設定なしでフォルダーを同期</a></li><li><a href="/ja/compare/firefox-send">2026年、最良の Firefox Send 代替サービス</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ja">← Relayium</a>
+        <a href="/ja/guides">ガイド</a>
+        <a href="/ja/privacy">プライバシーポリシー</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

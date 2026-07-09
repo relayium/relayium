@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Share a file with a secure, expiring download link · Relayium</title>
+    <meta name="description" content="Encrypt a file in your browser and get a link the server can&#39;t decrypt. Choose 1 hour, 1 day, 3 days, or 7 days, or burn after the first download, then send it whenever you&#39;re ready." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/share-a-file-with-an-expiring-link" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Share a file with a secure, expiring download link" />
+    <meta property="og:description" content="Encrypt a file in your browser and get a link the server can&#39;t decrypt. Choose 1 hour, 1 day, 3 days, or 7 days, or burn after the first download, then send it whenever you&#39;re ready." />
+    <meta property="og:url" content="https://relayium.com/how-to/share-a-file-with-an-expiring-link" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Share a file with a secure, expiring download link" />
+    <meta name="twitter:description" content="Encrypt a file in your browser and get a link the server can&#39;t decrypt. Choose 1 hour, 1 day, 3 days, or 7 days, or burn after the first download, then send it whenever you&#39;re ready." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Share a file with a secure, expiring download link","description":"Encrypt a file in your browser and get a link the server can't decrypt. Choose 1 hour, 1 day, 3 days, or 7 days, or burn after the first download, then send it whenever you're ready.","inLanguage":"en","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/how-to/share-a-file-with-an-expiring-link","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Does the person I send the link to need an account?","acceptedAnswer":{"@type":"Answer","text":"No. Anyone with the full link — including the part after the `#` — can open it and download the files. Only the sender needs to sign in to create the link in the first place."}},{"@type":"Question","name":"Can Relayium read my file?","acceptedAnswer":{"@type":"Answer","text":"No. Your browser encrypts the files with a random AES-256-GCM key before anything is uploaded, and that key lives only in the URL fragment, which never reaches the server. The server stores ciphertext it has no way to decrypt — a zero-knowledge design."}},{"@type":"Question","name":"How long do links last?","acceptedAnswer":{"@type":"Answer","text":"You choose when you create the link: 1 hour, 1 day, 3 days, or 7 days, or you can set it to burn after the first complete download instead of a fixed expiry. After that point the link stops working."}},{"@type":"Question","name":"Is the file really gone after burn-after-read?","acceptedAnswer":{"@type":"Answer","text":"Burn-after-read is designed for exactly one download: once the recipient finishes downloading the file, the link stops working for anyone who opens it afterward, so it can't quietly be viewed a second time."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>Share a file with a secure, expiring download link</h1>
+      <p class="updated">Last updated: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/share-a-file-with-an-expiring-link" aria-current="true">English</a><a href="/zh/how-to/share-a-file-with-an-expiring-link">中文</a><a href="/ja/how-to/share-a-file-with-an-expiring-link">日本語</a><a href="/ko/how-to/share-a-file-with-an-expiring-link">한국어</a><a href="/de/how-to/share-a-file-with-an-expiring-link">Deutsch</a><a href="/fr/how-to/share-a-file-with-an-expiring-link">Français</a></nav>
+      <p class="lead">Not every transfer has someone waiting on the other end. Maybe the recipient is asleep, on a flight, or you just want to drop a link in a message and move on with your day. For that, Relayium has a second mode: instead of streaming a file live to another open browser, it encrypts the file where you are, uploads only the ciphertext, and hands you a link you can send whenever — the download happens on the recipient&#39;s own schedule.</p>
+      <p class="lead">This guide walks through creating one of these links, the expiry and burn-after-read options, and exactly what the zero-knowledge design means in practice — including the honest limits: creating a link needs the sender to sign in, and links count against a storage quota.</p>
+      <h2>Stored links vs. realtime: when to use which</h2>
+      <p>Relayium&#39;s realtime mode streams a file directly between two open browser tabs — fast, and nothing is stored anywhere, but both people need to be online together. A stored, expiring link flips that trade-off: your browser does the encryption and uploads the result once, and the recipient can open the link minutes, hours, or days later, on their own time.</p>
+      <p>Use a stored link when you don&#39;t know exactly when the other person will be free, when you&#39;re sending the same file to more than one person, or when you just want something you can paste into an email or chat and be done with it.</p>
+      <h2>How to create a link</h2>
+      <p>Creating a link takes a few steps, all in the browser:</p>
+      <ul><li>Open relayium.com and switch to the link/offline mode.</li><li>Sign in — only the sender needs an account; the recipient never will.</li><li>Choose one or more files.</li><li>Optionally set an expiry window, or turn on burn-after-read.</li><li>Wait while the browser encrypts, then uploads, the files — a progress bar shows both phases.</li><li>Copy the link (or scan the QR code) and send it however you like.</li></ul>
+      <h2>Expiry and burn-after-read</h2>
+      <p>Every link needs a lifetime — leaving one live forever isn&#39;t the point of a one-off transfer. When you create a link you pick how long it should stay valid, or you can set it to disappear as soon as it&#39;s been used once.</p>
+      <p>Burn-after-read means the link stops working the moment the recipient finishes downloading — useful when the file is sensitive and you want exactly one person, one time, with nothing left dangling afterward. Either way, the recipient sees a live countdown on the download page, so they know how much time (or how many downloads) is left.</p>
+      <ul><li>1 hour</li><li>1 day (the default)</li><li>3 days</li><li>7 days</li><li>Or: burn after the first complete download, instead of a fixed time</li></ul>
+      <h2>The zero-knowledge guarantee, and its limits</h2>
+      <p>Here&#39;s what actually happens when you create a link. Your browser generates a random AES-256-GCM key — a different mechanism from Relayium&#39;s realtime mode, which negotiates a key between two devices with X25519; a stored link&#39;s key is generated locally, with nothing to negotiate. That key encrypts your files and the list of filenames before anything leaves your device, and it&#39;s appended to the download link after a `#` — a part of the URL that browsers never send to any server. The server stores the ciphertext it&#39;s given, and only the ciphertext; it has no way to decrypt it, because it never receives the key.</p>
+      <p>That design has real trade-offs worth knowing. The link itself is the only copy of the key, so if you lose it, there&#39;s no password reset — the data on the server becomes permanently unreadable. Creating a link requires the sender to be signed in, and every link counts against your account&#39;s storage quota until it&#39;s deleted or expires. And it&#39;s worth being precise about what &quot;zero-knowledge&quot; means here: the ciphertext is genuinely stored on Relayium&#39;s server between creation and download — it&#39;s just unreadable without the key that never left your browser.</p>
+      <h2>Frequently asked questions</h2>
+      <h3>Does the person I send the link to need an account?</h3>
+      <p>No. Anyone with the full link — including the part after the `#` — can open it and download the files. Only the sender needs to sign in to create the link in the first place.</p>
+      <h3>Can Relayium read my file?</h3>
+      <p>No. Your browser encrypts the files with a random AES-256-GCM key before anything is uploaded, and that key lives only in the URL fragment, which never reaches the server. The server stores ciphertext it has no way to decrypt — a zero-knowledge design.</p>
+      <h3>How long do links last?</h3>
+      <p>You choose when you create the link: 1 hour, 1 day, 3 days, or 7 days, or you can set it to burn after the first complete download instead of a fixed expiry. After that point the link stops working.</p>
+      <h3>Is the file really gone after burn-after-read?</h3>
+      <p>Burn-after-read is designed for exactly one download: once the recipient finishes downloading the file, the link stops working for anyone who opens it afterward, so it can&#39;t quietly be viewed a second time.</p>
+      <div class="ctacard">
+        <p>Have a file ready but no one waiting on the other end? Create an expiring link in your browser and send it whenever you&#39;re ready.</p>
+        <a class="cta" href="/">Try Relayium now</a>
+      </div>
+      <h2>Keep reading</h2>
+      <ul class="related"><li><a href="/compare/snapdrop">Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</a></li><li><a href="/compare/airdrop">Relayium vs AirDrop: a cross-platform AirDrop alternative</a></li><li><a href="/compare/wetransfer">Relayium vs WeTransfer: send large files without the server</a></li><li><a href="/how-to/transfer-files-android-to-iphone">How to transfer files from Android to iPhone (no cable)</a></li><li><a href="/how-to/send-files-pc-to-phone-wirelessly">Send files from PC to phone wirelessly, no cable or app</a></li><li><a href="/how-to/send-large-files-without-cloud">How to send large files without the cloud</a></li><li><a href="/guides/transfer-files-from-terminal">Transfer files from the terminal with the Relayium CLI</a></li><li><a href="/guides/back-up-a-server-over-ssh">Back up files to your own server over SSH with the Relayium CLI</a></li><li><a href="/guides/send-a-file-to-someone">Send a file to someone across networks with the Relayium CLI</a></li><li><a href="/guides/server-to-server-transfers">Server-to-server transfers with the Relayium CLI (daemon direct)</a></li><li><a href="/guides/sync-a-large-folder-between-servers">Sync a large folder between two servers (resumable, in the background)</a></li><li><a href="/guides/self-host-relayium">Self-host Relayium: run your own file-transfer server</a></li><li><a href="/how-to/send-files-between-two-computers-over-the-internet">Send files between two computers over the internet</a></li><li><a href="/compare/croc">Relayium vs croc: encrypted file transfer from the terminal</a></li><li><a href="/guides/how-relayium-encrypts-your-files">How Relayium encrypts your files end-to-end</a></li><li><a href="/compare/google-drive">Relayium vs Google Drive for sending files</a></li><li><a href="/compare/rsync">Relayium vs rsync: sync folders without the SSH setup</a></li><li><a href="/compare/firefox-send">The best Firefox Send alternative in 2026</a></li><li><a href="/">Relayium</a></li></ul>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/guides">Guides</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

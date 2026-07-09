@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium と Google Drive の比較：ファイル送信をもっと直接に · Relayium</title>
+    <meta name="description" content="公平な比較。Google Drive は永続的な保存に優れますが、送るとなるとアップロードと権限管理が必要です。Relayium はピアツーピアで直接送るか、ゼロ知識・自動失効リンクで送ります。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ja/compare/google-drive" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/google-drive" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/google-drive" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/google-drive" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/google-drive" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/google-drive" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/google-drive" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/google-drive" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Relayium と Google Drive の比較：ファイル送信をもっと直接に" />
+    <meta property="og:description" content="公平な比較。Google Drive は永続的な保存に優れますが、送るとなるとアップロードと権限管理が必要です。Relayium はピアツーピアで直接送るか、ゼロ知識・自動失効リンクで送ります。" />
+    <meta property="og:url" content="https://relayium.com/ja/compare/google-drive" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium と Google Drive の比較：ファイル送信をもっと直接に" />
+    <meta name="twitter:description" content="公平な比較。Google Drive は永続的な保存に優れますが、送るとなるとアップロードと権限管理が必要です。Relayium はピアツーピアで直接送るか、ゼロ知識・自動失効リンクで送ります。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium と Google Drive の比較：ファイル送信をもっと直接に","description":"公平な比較。Google Drive は永続的な保存に優れますが、送るとなるとアップロードと権限管理が必要です。Relayium はピアツーピアで直接送るか、ゼロ知識・自動失効リンクで送ります。","inLanguage":"ja","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/ja/compare/google-drive","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"Relayium は Google Drive のようにファイルを保存しますか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイムモードでは保存しません——ファイルは端末間を直接移動し、サーバーには一切保存されません。ダウンロードリンクを作成した場合、サーバーは何かを保存しますが、それは復号できないゼロ知識の暗号文だけです。リンクは失効するか（1時間/1日/3日/7日）、最初のダウンロード後に消去されます。"}},{"@type":"Question","name":"アカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"同じネットワーク内ではアカウントは一切不要です。ペアリングコードでネットワークをまたいで送信する場合や、保存ダウンロードリンクを作成する場合は、送信側のサインインが必要です。どちらの場合も受信側は常にアカウント不要です。"}},{"@type":"Question","name":"サイズに上限はありますか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイム転送は1バッチにつき最大1,000ファイルまで扱え、サーバー側のサイズ上限はありません——Chrome と Edge は数十ギガバイトまでそのままディスクにストリーミングし、Firefox と Safari はメモリにバッファするため約200MB以内に抑えてください。保存リンクはアカウントに紐づく容量枠に計上されます。"}},{"@type":"Question","name":"Relayium は無料ですか？","acceptedAnswer":{"@type":"Answer","text":"はい。Relayium は MIT ライセンスの無料オープンソースで、プロトコルとコードのすべてが github.com/relayium/relayium にあります。より大きく、より速い転送を解放する有料プランはありません。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <h1>Relayium と Google Drive の比較：ファイル送信をもっと直接に</h1>
+      <p class="updated">最終更新: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/compare/google-drive">English</a><a href="/zh/compare/google-drive">中文</a><a href="/ja/compare/google-drive" aria-current="true">日本語</a><a href="/ko/compare/google-drive">한국어</a><a href="/de/compare/google-drive">Deutsch</a><a href="/fr/compare/google-drive">Français</a></nav>
+      <p class="lead">Google Drive は本当に優れた製品です。ファイルは一箇所にまとまり、端末間で同期され、バックアップされ、チームでの共同編集も簡単です。何度も戻ってくるファイルの置き場所が必要なら、Drive は妥当な選択肢であり、本記事はそれをやめさせようとするものではありません。</p>
+      <p class="lead">しかし多くの人が Drive を使っている場面は、実は一度きりの受け渡しです——友人に動画を送る、クライアントに契約書を送る、同僚にデータセットを送る——永続的な保存ではありません。その特定の作業のためだけに、コピーを Google のサーバーへアップロードし、誰が見られるかを設定するのは、必要以上の手間です。Relayium はまさにその受け渡しのために作られています。ファイルを2台の端末間で直接送るか、受信者だけが復号できるリンクで送ります。</p>
+      <h2>Google Drive が優れている点</h2>
+      <p>Drive の強みは永続性と協業です。アップロードしたファイルはそこに残り続けます——スマートフォン、ノートパソコン、Web の間で同期されながら——削除するまで。これはまさに、作業用フォルダやチーム共有ドライブ、リアルタイムで共同編集する文書に求められることです。</p>
+      <p>保存についても気前が良く、手間がかかりません。十分な無料枠、自動バックアップ、バージョン履歴、これまで保存したすべてを対象にした検索。これらは Relayium が置き換えようとしているものではありません。</p>
+      <h2>違いはどこか：送ることと保存することは同じ作業ではない</h2>
+      <p>Drive で1つのファイルを送るには、コピーを Google のインフラにアップロードし、誰が開けるかを決めます——特定の人の Google アカウント、または「リンクを知っている全員」。共有設定を間違えると、ファイルが届かなくなるか、意図したより公開範囲が広くなります。いずれにせよ、コピーはあなたが後で削除しに戻るまで、Google のサーバー上に無期限に存在し続けます。</p>
+      <p>Relayium はよくあるケースで、この保存という手順を省きます。リアルタイムモードは、エンドツーエンドで暗号化された P2P 接続を通じて、送信者と受信者の端末間でバイトを直接動かします——ファイル自体はサーバーに一切保存されません。受信者がオフラインで、それでもリンクが欲しいときは、保存リンクモードが Drive にはないゼロ知識の性質を保ちます。ブラウザはアップロード前にランダムな AES-256-GCM 鍵でファイルを暗号化し、その鍵は URL フラグメント（# の後の部分。ブラウザが決してサーバーへ送らない部分）にだけ存在します。Google のサーバーは Drive 上のファイルを保持し、技術的には読むことができます。一方 Relayium のサーバーは、保存リンクについては復号できない暗号文しか保持しません。</p>
+      <h2>リアルタイム：サーバーには何も保存されない</h2>
+      <p>典型的なケース——両者が今まさにオンライン——では、リアルタイム直接転送は最大1,000ファイルを1バッチとして端末間で直接送り、アップロードの手順もなく、途中で何も保存されません。両方の端末は一致する6桁の検証コード（SAS）を表示して中間者を排除し、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。接続が切れても、転送は最初からではなく再開します。</p>
+      <p>サーバー側のサイズ上限はないため、実用上の限界は受信側のブラウザ次第です。Chrome と Edge は受信データをそのままディスクにストリーミングし、数十ギガバイトでも問題なく扱えます。Firefox と Safari はメモリにバッファするため、そうした転送は約200MB以内に抑えてください。同じネットワーク内ではアカウントは一切不要です。ネットワークをまたぐ送信にはペアリングコードを使い、送信側のサインインが必要です——ただしどちらのネットワーク構成でも、受信側は常にアカウント不要です。直接接続ができない場合は、暗号化された TURN リレーにフォールバックし、リレーは暗号文しか見ません。</p>
+      <h2>それでもリンクが欲しいときは：ゼロ知識の保存リンク</h2>
+      <p>リンクが本当に必要な場面もあります——受信者がオンラインでない、あるいはどこにでも貼れる1つの URL が欲しいときです。Relayium の保存リンクモードは、リアルタイムモードのプライバシーを犠牲にせずこのケースをカバーします。</p>
+      <p>有効期限は1時間・1日・3日・7日から選ぶか、最初のダウンロード完了後に消去する設定にできます。リンクの作成には送信側のサインインが必要です（アカウントの保存容量枠に計上されます）が、受信側はリンクを開いてダウンロードするだけでアカウントは不要です。復号鍵が URL フラグメントから外に出ることは決してないため、Google のモデルと Relayium の保存リンクのモデルには核心的な違いがあります。Google は Drive にホストされたファイルを技術的に復号できますが、Relayium のサーバーは保存リンクについて構造的にそれができません。</p>
+      <h2>機能の一覧比較</h2>
+      <p>最も重要な違いを並べて示します。</p>
+      <ul><li>目的：Google Drive は協業機能を備えた常時利用可能な永続ストレージ；Relayium は一度きりの送信のために作られている——リアルタイム P2P か、自動失効するリンク。</li><li>ファイルの置き場所：Drive はあなたが削除するまでコピーを Google のサーバーに無期限に保持；Relayium のリアルタイムはファイルを一切保存せず、保存リンクは自動失効（1時間/1日/3日/7日）または初回ダウンロード後に消去。</li><li>誰が読めるか：Google のインフラは技術的に Drive 上のファイルを復号できる；Relayium の保存リンクはゼロ知識で、鍵は URL フラグメントにだけ存在し、サーバーは読めない暗号文を保持する。</li><li>アカウント：Drive は送信側に Google アカウントを要求し、共有設定によっては受信側にも必要；Relayium は同一ネットワークではアカウント不要、ネットワークをまたぐ送信や保存リンクの作成では送信側のみサインインが必要——受信側は常にアカウント不要。</li><li>サイズ上限：Drive はあなたの保存容量枠に制約される；Relayium のリアルタイムはサーバー側の上限なし（Chrome/Edge は数十GBまでディスクへストリーミング、Firefox/Safari は約200MB以内に）。</li><li>費用と開放性：Relayium は無料で MIT ライセンス、github.com/relayium/relayium にあり、ブラウザで Windows・macOS・Linux・Android・iOS で動作し、インストール不要。</li></ul>
+      <h2>よくある質問</h2>
+      <h3>Relayium は Google Drive のようにファイルを保存しますか？</h3>
+      <p>リアルタイムモードでは保存しません——ファイルは端末間を直接移動し、サーバーには一切保存されません。ダウンロードリンクを作成した場合、サーバーは何かを保存しますが、それは復号できないゼロ知識の暗号文だけです。リンクは失効するか（1時間/1日/3日/7日）、最初のダウンロード後に消去されます。</p>
+      <h3>アカウントは必要ですか？</h3>
+      <p>同じネットワーク内ではアカウントは一切不要です。ペアリングコードでネットワークをまたいで送信する場合や、保存ダウンロードリンクを作成する場合は、送信側のサインインが必要です。どちらの場合も受信側は常にアカウント不要です。</p>
+      <h3>サイズに上限はありますか？</h3>
+      <p>リアルタイム転送は1バッチにつき最大1,000ファイルまで扱え、サーバー側のサイズ上限はありません——Chrome と Edge は数十ギガバイトまでそのままディスクにストリーミングし、Firefox と Safari はメモリにバッファするため約200MB以内に抑えてください。保存リンクはアカウントに紐づく容量枠に計上されます。</p>
+      <h3>Relayium は無料ですか？</h3>
+      <p>はい。Relayium は MIT ライセンスの無料オープンソースで、プロトコルとコードのすべてが github.com/relayium/relayium にあります。より大きく、より速い転送を解放する有料プランはありません。</p>
+      <div class="ctacard">
+        <p>誰のクラウドにもアップロードせず、ファイルを直接送ってみてください——サイズ上限なし、インストール不要、同じネットワークならアカウントも不要です。</p>
+        <a class="cta" href="/?lang=ja">Relayium を今すぐ試す</a>
+      </div>
+      <h2>続けて読む</h2>
+      <ul class="related"><li><a href="/ja/compare/snapdrop">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/compare/wetransfer">Relayium と WeTransfer の比較：サーバーを介さず大容量を送る</a></li><li><a href="/ja/how-to/transfer-files-android-to-iphone">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/how-to/send-large-files-without-cloud">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/guides/transfer-files-from-terminal">Relayium CLI でターミナルからファイルを転送する</a></li><li><a href="/ja/guides/back-up-a-server-over-ssh">Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</a></li><li><a href="/ja/guides/send-a-file-to-someone">Relayium CLI でネットワークを越えて誰かにファイルを送る</a></li><li><a href="/ja/guides/server-to-server-transfers">Relayium CLI でサーバー間転送(デーモン直結)</a></li><li><a href="/ja/guides/sync-a-large-folder-between-servers">2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド)</a></li><li><a href="/ja/how-to/share-a-file-with-an-expiring-link">期限付きの安全なダウンロードリンクでファイルを共有する</a></li><li><a href="/ja/guides/self-host-relayium">Relayium をセルフホスト：自分専用のファイル転送サーバーを運用</a></li><li><a href="/ja/how-to/send-files-between-two-computers-over-the-internet">インターネット経由で2台のPC間にファイルを送る方法</a></li><li><a href="/ja/compare/croc">Relayium と croc の比較：ターミナルから暗号化転送</a></li><li><a href="/ja/guides/how-relayium-encrypts-your-files">Relayium がファイルをエンドツーエンドで暗号化する仕組み</a></li><li><a href="/ja/compare/rsync">Relayium vs rsync: SSH 設定なしでフォルダーを同期</a></li><li><a href="/ja/compare/firefox-send">2026年、最良の Firefox Send 代替サービス</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ja">← Relayium</a>
+        <a href="/ja/guides">ガイド</a>
+        <a href="/ja/privacy">プライバシーポリシー</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

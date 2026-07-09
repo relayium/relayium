@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>How Relayium encrypts your files end-to-end · Relayium</title>
+    <meta name="description" content="How Relayium protects your files: X25519 and AES-256-GCM for live transfers, a six-digit code that catches a dishonest server, and zero-knowledge stored links." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/guides/how-relayium-encrypts-your-files" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/how-relayium-encrypts-your-files" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/how-relayium-encrypts-your-files" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/how-relayium-encrypts-your-files" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/how-relayium-encrypts-your-files" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/how-relayium-encrypts-your-files" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/how-relayium-encrypts-your-files" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/how-relayium-encrypts-your-files" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="How Relayium encrypts your files end-to-end" />
+    <meta property="og:description" content="How Relayium protects your files: X25519 and AES-256-GCM for live transfers, a six-digit code that catches a dishonest server, and zero-knowledge stored links." />
+    <meta property="og:url" content="https://relayium.com/guides/how-relayium-encrypts-your-files" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="How Relayium encrypts your files end-to-end" />
+    <meta name="twitter:description" content="How Relayium protects your files: X25519 and AES-256-GCM for live transfers, a six-digit code that catches a dishonest server, and zero-knowledge stored links." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"How Relayium encrypts your files end-to-end","description":"How Relayium protects your files: X25519 and AES-256-GCM for live transfers, a six-digit code that catches a dishonest server, and zero-knowledge stored links.","inLanguage":"en","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/guides/how-relayium-encrypts-your-files","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Can Relayium read my files?","acceptedAnswer":{"@type":"Answer","text":"No. In realtime mode, the encryption key is derived independently on both devices and never leaves them — Relayium's servers never see it or the file contents. For stored links, the key lives only in the URL fragment, which browsers never send to any server, so the server only ever holds ciphertext it cannot decrypt."}},{"@type":"Question","name":"What does the server actually see?","acceptedAnswer":{"@type":"Answer","text":"In realtime mode, only the connection-setup information needed to introduce two devices to each other — never file bytes. For stored links, it sees ciphertext plus bookkeeping like size and expiry time — never the plaintext, filenames, or the decryption key."}},{"@type":"Question","name":"Is the TURN relay a weak point?","acceptedAnswer":{"@type":"Answer","text":"It's a fallback used only when a direct connection isn't possible, and it only ever handles ciphertext — it has no key, so it can't read what it's relaying. Relayium counts the bytes it relays against your account's monthly allowance, but never inspects their contents."}},{"@type":"Question","name":"Is Relayium open source?","acceptedAnswer":{"@type":"Answer","text":"Yes. The protocol design and all client and server code are public on GitHub under the MIT license, so the cryptography described here can be independently audited rather than taken on trust."}},{"@type":"Question","name":"What if the two verification codes on screen don't match?","acceptedAnswer":{"@type":"Answer","text":"Stop the transfer. A mismatch means the commit-then-reveal check failed, which points to a possible man-in-the-middle rather than a benign glitch — don't proceed until you understand why."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>How Relayium encrypts your files end-to-end</h1>
+      <p class="updated">Last updated: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/how-relayium-encrypts-your-files" aria-current="true">English</a><a href="/zh/guides/how-relayium-encrypts-your-files">中文</a><a href="/ja/guides/how-relayium-encrypts-your-files">日本語</a><a href="/ko/guides/how-relayium-encrypts-your-files">한국어</a><a href="/de/guides/how-relayium-encrypts-your-files">Deutsch</a><a href="/fr/guides/how-relayium-encrypts-your-files">Français</a></nav>
+      <p class="lead">&quot;Is Relayium secure?&quot; is a fair question — every file-transfer tool claims to be private. This page walks through exactly how Relayium keeps files private, in plain language, so you can judge the claim instead of taking it on faith.</p>
+      <p class="lead">There are two different encryption schemes at work, because there are two different situations: sending a file live to someone who is online right now, and leaving a download link for someone to pick up later. Both keep the server locked out of your file, but they get there in different ways — and it&#39;s worth knowing which one applies when.</p>
+      <h2>Live transfers: two devices agree on a secret the server never sees</h2>
+      <p>When you send a file in realtime — both people online, browser to browser — Relayium starts by having each device generate a fresh key pair using X25519, the same elliptic-curve key exchange used across modern secure messaging (technically, libsodium&#39;s crypto_kx). Each device keeps its private key to itself and sends only its public key to the other side.</p>
+      <p>From those two public keys, each device independently computes the same shared secret — a process that works precisely because of how elliptic-curve key exchange is built, not because the secret was sent anywhere. That shared secret becomes an AES-256-GCM key that exists only inside the two browsers. Every chunk of the file is sealed with that key and a unique nonce before it ever leaves the sender&#39;s device, so anything crossing the network — including the signaling server that helped the two browsers find each other — sees only ciphertext.</p>
+      <ul><li>A new key pair is generated for every transfer — nothing is reused across sessions.</li><li>The shared AES-256-GCM key is derived independently on each device; it is never transmitted anywhere, including to Relayium&#39;s own servers.</li><li>Encryption happens at the application layer, on top of WebRTC&#39;s own transport security, so it holds even if that transport layer were ever compromised.</li></ul>
+      <h2>The 6-digit code that catches a dishonest server</h2>
+      <p>There&#39;s a subtlety worth being honest about. WebRTC&#39;s own built-in encryption (DTLS) exchanges key fingerprints through the signaling server that introduces the two devices to each other. If that server were dishonest, it could in theory sit in the middle and swap in its own keys — a classic man-in-the-middle attack — without either browser immediately noticing.</p>
+      <p>Relayium closes that gap with a short verification code. Both devices derive the same 6-digit Short Authentication String (SAS) from their two public keys and display it on screen. If the codes match, the keys weren&#39;t swapped, and no one is in the middle. But a plain 6-digit code is only about 20 bits, which in principle a well-positioned attacker could try to brute-force into matching after seeing both real keys. To prevent that, Relayium uses a commit-then-reveal handshake: each side first sends a hash committing to its key, and only reveals the real key after receiving the other side&#39;s commitment. That ordering means a malicious server has to commit to a fake key blind, before it has seen the real one — it cannot pick a colliding key after the fact, so the short code stays trustworthy.</p>
+      <ul><li>For the strongest guarantee, read the code aloud over a call or compare it in person, not just by eye on two screens next to each other.</li><li>If the two codes don&#39;t match, stop — treat it as a sign someone may be intercepting the connection.</li></ul>
+      <h2>Making sure what arrives is exactly what was sent</h2>
+      <p>Encryption protects secrecy, but it doesn&#39;t automatically prove nothing got corrupted or tampered with along the way. Relayium checks that separately: each chunk carries its own AES-GCM authentication tag, so a modified chunk fails to decrypt outright. On top of that, as each file is sent, both sides compute a running SHA-256 hash over its plaintext contents; when the file finishes, the sender&#39;s hash is compared against the receiver&#39;s. If they match, what landed on disk is byte-for-byte what was sent — if they don&#39;t, the file is flagged rather than silently accepted.</p>
+      <h2>Stored links: a different key, generated once, held only in the link</h2>
+      <p>Realtime transfer needs both people online at the same time. When that&#39;s not possible, Relayium offers a stored download link instead — and this uses a genuinely different mechanism, worth not confusing with the realtime one above.</p>
+      <p>There&#39;s no key exchange here, because there&#39;s no second device to exchange with yet. Instead, your browser generates a single random AES-256-GCM key and uses it to encrypt the files before anything is uploaded. That key is never sent to the server at all — it&#39;s appended to the download link after a # character, in what&#39;s called the URL fragment, a part of the address that browsers deliberately never transmit to a server. The server ends up storing only ciphertext it has no way to decrypt, plus bookkeeping like the ciphertext&#39;s size and an expiry timestamp. Anyone who opens the full link — fragment included — can decrypt the file locally in their browser; anyone without it just sees an opaque blob on the server. That&#39;s the zero-knowledge part: the server holds the encrypted file without ever holding the means to read it.</p>
+      <ul><li>Creating a stored link requires the sender to sign in; opening one to download never does.</li><li>Links can be set to expire after 1 hour, 1 day, 3 days, or 7 days, or to burn after the first completed download.</li><li>Treat the full link like the file itself — anyone who has it can decrypt it, so share it the way you&#39;d share the file.</li></ul>
+      <h2>What the server can see — and what it can&#39;t</h2>
+      <p>It&#39;s worth spelling out exactly where the server sits in all of this, because &quot;end-to-end encrypted&quot; is a claim that&#39;s easy to make and harder to make precisely. In realtime mode, the file itself never touches Relayium&#39;s servers at all — it streams directly between the two browsers. The signaling server&#39;s job is limited to relaying connection-setup messages (the technical SDP/ICE information WebRTC needs to establish a direct link) so the two devices can find each other; it never sees file contents, filenames, or keys.</p>
+      <p>When a direct connection isn&#39;t possible — both sides behind restrictive NATs or firewalls — the encrypted stream falls back to a TURN relay server instead of failing outright. The relay only ever forwards ciphertext; it has no key and cannot decrypt what passes through it. What it does do is count the bytes it relays against the sending account&#39;s monthly relay allowance, purely for metering and abuse prevention — never inspecting what&#39;s inside.</p>
+      <h2>Frequently asked questions</h2>
+      <h3>Can Relayium read my files?</h3>
+      <p>No. In realtime mode, the encryption key is derived independently on both devices and never leaves them — Relayium&#39;s servers never see it or the file contents. For stored links, the key lives only in the URL fragment, which browsers never send to any server, so the server only ever holds ciphertext it cannot decrypt.</p>
+      <h3>What does the server actually see?</h3>
+      <p>In realtime mode, only the connection-setup information needed to introduce two devices to each other — never file bytes. For stored links, it sees ciphertext plus bookkeeping like size and expiry time — never the plaintext, filenames, or the decryption key.</p>
+      <h3>Is the TURN relay a weak point?</h3>
+      <p>It&#39;s a fallback used only when a direct connection isn&#39;t possible, and it only ever handles ciphertext — it has no key, so it can&#39;t read what it&#39;s relaying. Relayium counts the bytes it relays against your account&#39;s monthly allowance, but never inspects their contents.</p>
+      <h3>Is Relayium open source?</h3>
+      <p>Yes. The protocol design and all client and server code are public on GitHub under the MIT license, so the cryptography described here can be independently audited rather than taken on trust.</p>
+      <h3>What if the two verification codes on screen don&#39;t match?</h3>
+      <p>Stop the transfer. A mismatch means the commit-then-reveal check failed, which points to a possible man-in-the-middle rather than a benign glitch — don&#39;t proceed until you understand why.</p>
+      <div class="ctacard">
+        <p>Curious what it looks like in practice? Start a transfer and watch the verification code appear for yourself.</p>
+        <a class="cta" href="/">Try Relayium now</a>
+      </div>
+      <h2>Keep reading</h2>
+      <ul class="related"><li><a href="/compare/snapdrop">Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</a></li><li><a href="/compare/airdrop">Relayium vs AirDrop: a cross-platform AirDrop alternative</a></li><li><a href="/compare/wetransfer">Relayium vs WeTransfer: send large files without the server</a></li><li><a href="/how-to/transfer-files-android-to-iphone">How to transfer files from Android to iPhone (no cable)</a></li><li><a href="/how-to/send-files-pc-to-phone-wirelessly">Send files from PC to phone wirelessly, no cable or app</a></li><li><a href="/how-to/send-large-files-without-cloud">How to send large files without the cloud</a></li><li><a href="/guides/transfer-files-from-terminal">Transfer files from the terminal with the Relayium CLI</a></li><li><a href="/guides/back-up-a-server-over-ssh">Back up files to your own server over SSH with the Relayium CLI</a></li><li><a href="/guides/send-a-file-to-someone">Send a file to someone across networks with the Relayium CLI</a></li><li><a href="/guides/server-to-server-transfers">Server-to-server transfers with the Relayium CLI (daemon direct)</a></li><li><a href="/guides/sync-a-large-folder-between-servers">Sync a large folder between two servers (resumable, in the background)</a></li><li><a href="/how-to/share-a-file-with-an-expiring-link">Share a file with a secure, expiring download link</a></li><li><a href="/guides/self-host-relayium">Self-host Relayium: run your own file-transfer server</a></li><li><a href="/how-to/send-files-between-two-computers-over-the-internet">Send files between two computers over the internet</a></li><li><a href="/compare/croc">Relayium vs croc: encrypted file transfer from the terminal</a></li><li><a href="/compare/google-drive">Relayium vs Google Drive for sending files</a></li><li><a href="/compare/rsync">Relayium vs rsync: sync folders without the SSH setup</a></li><li><a href="/compare/firefox-send">The best Firefox Send alternative in 2026</a></li><li><a href="/">Relayium</a></li></ul>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/guides">Guides</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

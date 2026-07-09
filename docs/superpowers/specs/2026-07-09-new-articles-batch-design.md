@@ -120,8 +120,11 @@ CLI/self-host articles (2, 4, 5-partial); omit (defaults to the app) for the bro
 - **Keyword:** croc alternative / encrypted CLI file transfer.
 - **Angle:** both are free, open-source, encrypted CLI P2P tools. Fair comparison; Relayium's extra
   surface: SSH `push`/`pull` (works against a bare server via tar fallback for push), daemon-direct
-  `relayium://` over pinned TLS, incremental folder `sync` (`--delete`/`--watch`), self-hostable server,
-  and browser interop. **Relayium-side claims must match the audit; describe croc accurately/fairly.**
+  `relayium://` over pinned TLS, incremental folder `sync` (`--delete`/`--watch`), and a self-hostable
+  server. **Relayium-side claims must match the audit; describe croc accurately/fairly.**
+  CORRECTION (found during writing): the CLI pairing-code mode does NOT interoperate with the browser's
+  today (different handshakes, shared rendezvous only) — do not claim "browser interop"; the FAQ states it
+  honestly as not-yet/roadmap.
 - **Sections:** what they share; where Relayium differs (the modes above); when croc is the simpler pick.
   **FAQ:** is Relayium's CLI free (yes); does it need an account (no); can it talk to a browser (yes, via
   pairing code); can I self-host. CTA → `/cli`.
