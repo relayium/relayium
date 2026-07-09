@@ -44,6 +44,18 @@ type MagicToken struct {
 	UsedAt    int64 // 0 = unused
 }
 
+// EmailToken is a one-time verification or password-reset token. Only its hash
+// is stored. Purpose is "verify" or "reset".
+type EmailToken struct {
+	TokenHash string
+	UserID    string
+	Email     string
+	Purpose   string
+	CreatedAt int64
+	ExpiresAt int64
+	UsedAt    int64 // 0 = unused
+}
+
 // Device is a browser (later: a CLI) registered under a user. Static registry only;
 // online presence/rendezvous belongs to the cross-network spec, not here.
 type Device struct {
@@ -174,6 +186,10 @@ type Store interface {
 	CreateMagicToken(ctx context.Context, t MagicToken) error
 	UseMagicToken(ctx context.Context, tokenHash string, now int64) (MagicToken, bool, error)
 	DeleteSpentMagicTokens(ctx context.Context, now int64) error
+	// email tokens (verify + reset)
+	CreateEmailToken(ctx context.Context, t EmailToken) error
+	UseEmailToken(ctx context.Context, tokenHash, purpose string, now int64) (EmailToken, bool, error)
+	DeleteSpentEmailTokens(ctx context.Context, now int64) error
 	// devices
 	UpsertDevice(ctx context.Context, d Device) (Device, error)
 	ListDevices(ctx context.Context, userID string) ([]Device, error)

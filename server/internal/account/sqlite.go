@@ -100,6 +100,16 @@ CREATE TABLE IF NOT EXISTS usage_monthly (
   PRIMARY KEY (user_id, period)
 );
 CREATE INDEX IF NOT EXISTS idx_usage_monthly_period ON usage_monthly(period);
+CREATE TABLE IF NOT EXISTS email_tokens (
+  token_hash TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id),
+  email      TEXT NOT NULL,
+  purpose    TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  used_at    INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_email_tokens_user ON email_tokens(user_id);
 `
 
 func OpenSQLite(dsn string) (*SQLiteStore, error) {
@@ -296,6 +306,39 @@ func (s *SQLiteStore) UseMagicToken(ctx context.Context, tokenHash string, now i
 func (s *SQLiteStore) DeleteSpentMagicTokens(ctx context.Context, now int64) error {
 	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM magic_tokens WHERE used_at <> 0 OR expires_at < ?`, now)
+	return err
+}
+
+func (s *SQLiteStore) CreateEmailToken(ctx context.Context, t EmailToken) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO email_tokens (token_hash, user_id, email, purpose, created_at, expires_at, used_at)
+		 VALUES (?, ?, ?, ?, ?, ?, 0)`,
+		t.TokenHash, t.UserID, normEmail(t.Email), t.Purpose, t.CreatedAt, t.ExpiresAt)
+	return err
+}
+
+func (s *SQLiteStore) UseEmailToken(ctx context.Context, tokenHash, purpose string, now int64) (EmailToken, bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE email_tokens SET used_at = ?
+		 WHERE token_hash = ? AND purpose = ? AND used_at = 0 AND expires_at > ?`,
+		now, tokenHash, purpose, now)
+	if err != nil {
+		return EmailToken{}, false, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return EmailToken{}, false, nil
+	}
+	var t EmailToken
+	err = s.db.QueryRowContext(ctx,
+		`SELECT token_hash, user_id, email, purpose, created_at, expires_at, used_at
+		   FROM email_tokens WHERE token_hash = ?`, tokenHash,
+	).Scan(&t.TokenHash, &t.UserID, &t.Email, &t.Purpose, &t.CreatedAt, &t.ExpiresAt, &t.UsedAt)
+	return t, err == nil, err
+}
+
+func (s *SQLiteStore) DeleteSpentEmailTokens(ctx context.Context, now int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM email_tokens WHERE used_at <> 0 OR expires_at < ?`, now)
 	return err
 }
 
