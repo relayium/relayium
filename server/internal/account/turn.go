@@ -50,11 +50,21 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 	}
 	now := s.now()
 	expiry := now.Add(s.cfg.TURNCredTTL).Unix()
+	relayDenied := ""
+
+	// Sybil dampener: only a verified account may consume paid relay bandwidth.
+	// Deny only when we positively know the email is unverified; on any read
+	// error, fall through (fail-open) so a DB blip never blocks a real user.
+	if validCode {
+		if verified, err := s.store.EmailVerified(r.Context(), owner); err == nil && !verified {
+			validCode = false
+			relayDenied = "unverified"
+		}
+	}
 
 	// Interim relay cap: withhold TURN when the code's owner is over the monthly
 	// free relay allowance. On a read error, fail open (issue TURN) rather than
 	// blocking a legit transfer. Per-plan quota (billing phase-1) supersedes this.
-	relayDenied := ""
 	if validCode {
 		st := s.resolveSettings(r.Context())
 		since, _ := monthRange(periodOf(now.Unix()))

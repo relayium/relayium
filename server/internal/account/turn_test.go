@@ -233,6 +233,40 @@ func TestICEUnderCapIncludesTurn(t *testing.T) {
 	}
 }
 
+func TestICEUnverifiedOwnerDeniedRelay(t *testing.T) {
+	ts, svc, store := newICEServer(t, "secret")
+	u, err := store.UpsertUserByEmail(context.Background(), "unv@example.com", "U")
+	if err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	// u is unverified by default (email_verified = 0).
+	svc.SetPairCodeOwner(ownerResolver(u.ID, "424242"))
+
+	resp, _ := ts.Client().Get(ts.URL + "/api/ice?code=424242")
+	servers := iceServersFromBody(t, resp)
+	if hasTURN(servers) {
+		t.Fatalf("unverified owner must be STUN-only, got %+v", servers)
+	}
+}
+
+func TestICEVerifiedOwnerGetsRelay(t *testing.T) {
+	ts, svc, store := newICEServer(t, "secret")
+	u, err := store.UpsertUserByEmail(context.Background(), "v@example.com", "V")
+	if err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	if err := store.SetEmailVerified(context.Background(), u.ID); err != nil {
+		t.Fatalf("verify user: %v", err)
+	}
+	svc.SetPairCodeOwner(ownerResolver(u.ID, "424242"))
+
+	resp, _ := ts.Client().Get(ts.URL + "/api/ice?code=424242")
+	servers := iceServersFromBody(t, resp)
+	if !hasTURN(servers) {
+		t.Fatalf("verified owner should get TURN, got %+v", servers)
+	}
+}
+
 func relaysFromBody(t *testing.T, resp *http.Response) []relayEntry {
 	t.Helper()
 	var out struct {
