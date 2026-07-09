@@ -49,6 +49,21 @@ export function articleLinksByLang(articles) {
   );
 }
 
+const CATEGORY_KEY = { guides: "guides", "how-to": "howTo", compare: "compare" };
+
+export function articleGroupsByLang(articles) {
+  return Object.fromEntries(
+    LANGS.map((lang) => {
+      const groups = { guides: [], howTo: [], compare: [] };
+      for (const a of articles) {
+        const key = CATEGORY_KEY[a.slug.split("/")[0]];
+        if (key) groups[key].push({ slug: a.slug, title: a.langs[lang].title });
+      }
+      return [lang, groups];
+    })
+  );
+}
+
 export function buildSitemap(docs, { home = true, landing = null, articles = [] } = {}) {
   const urls = [];
   const newest = [

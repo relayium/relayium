@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import privacy from "./content/legal/privacy.mjs";
 import terms from "./content/legal/terms.mjs";
-import { buildLegalPages, buildSitemap } from "./build-pages.mjs";
+import { buildLegalPages, buildSitemap, articleGroupsByLang } from "./build-pages.mjs";
 import { landingUrl, landingPath, ctaHref, validateLangs, LANDING_LANGS } from "./shared.mjs";
 
 const docs = [privacy, terms];
@@ -62,5 +62,32 @@ describe("buildSitemap lastmod", () => {
     const xml = buildSitemap(docs, { home: true });
     expect(xml).toContain(`<lastmod>${privacy.langs.en.updated}</lastmod>`);
     expect(xml).not.toContain("2026-06-29");
+  });
+});
+
+const fakeArticles = [
+  { slug: "compare/snapdrop", updated: "2026-07-01", langs: Object.fromEntries(
+      ["en","zh","ja","ko","de","fr"].map((l) => [l, { title: `snap-${l}` }])) },
+  { slug: "how-to/x", updated: "2026-07-02", langs: Object.fromEntries(
+      ["en","zh","ja","ko","de","fr"].map((l) => [l, { title: `howto-${l}` }])) },
+  { slug: "guides/y", updated: "2026-07-03", langs: Object.fromEntries(
+      ["en","zh","ja","ko","de","fr"].map((l) => [l, { title: `guide-${l}` }])) },
+];
+
+describe("articleGroupsByLang", () => {
+  const groups = articleGroupsByLang(fakeArticles);
+
+  it("has all six languages", () => {
+    expect(Object.keys(groups).sort()).toEqual(["de","en","fr","ja","ko","zh"]);
+  });
+
+  it("buckets each article by slug prefix into guides/howTo/compare", () => {
+    expect(groups.en.compare.map((a) => a.slug)).toEqual(["compare/snapdrop"]);
+    expect(groups.en.howTo.map((a) => a.slug)).toEqual(["how-to/x"]);
+    expect(groups.en.guides.map((a) => a.slug)).toEqual(["guides/y"]);
+  });
+
+  it("uses the language-specific title", () => {
+    expect(groups.zh.guides[0].title).toBe("guide-zh");
   });
 });
