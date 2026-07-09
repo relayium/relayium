@@ -13,7 +13,7 @@ func newTestService(t *testing.T) (*Service, *captureMailer) {
 	m := &captureMailer{}
 	svc := NewService(st, m, Config{
 		BaseURL:    "https://relayium.com",
-		SessionTTL: time.Hour, VerifyTTL: 24 * time.Hour, ResetTTL: time.Hour,
+		SessionTTL: time.Hour, MagicTTL: 15 * time.Minute, VerifyTTL: 24 * time.Hour, ResetTTL: time.Hour,
 	})
 	return svc, m
 }
@@ -67,5 +67,20 @@ func TestVerifyBadTokenRejected(t *testing.T) {
 	svc, _ := newTestService(t)
 	if _, err := svc.VerifyEmail(ctx, "not-a-real-token"); err != ErrInvalidToken {
 		t.Fatalf("want ErrInvalidToken, got %v", err)
+	}
+}
+
+func TestMagicLinkMarksVerified(t *testing.T) {
+	ctx := context.Background()
+	svc, m := newTestService(t)
+	if err := svc.RequestMagicLink(ctx, "magic@example.com"); err != nil {
+		t.Fatalf("request magic link: %v", err)
+	}
+	sess, err := svc.VerifyMagicLink(ctx, tokenFromLink(t, m.magic))
+	if err != nil {
+		t.Fatalf("verify magic link: %v", err)
+	}
+	if v, _ := svc.store.EmailVerified(ctx, sess.UserID); !v {
+		t.Fatal("magic-link login should mark email verified")
 	}
 }

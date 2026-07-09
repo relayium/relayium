@@ -77,6 +77,10 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		err = s.store.LinkIdentity(r.Context(), "google", sub, u.ID)
 	}
+	if err == nil {
+		// Google only reaches this path with verified == true (checked above).
+		err = s.store.SetEmailVerified(r.Context(), u.ID)
+	}
 	if err != nil {
 		http.Redirect(w, r, "/?login=error", http.StatusFound)
 		return

@@ -181,5 +181,8 @@ func (s *Service) VerifyMagicLink(ctx context.Context, rawToken string) (Session
 	if err := s.store.LinkIdentity(ctx, "email", tok.Email, u.ID); err != nil {
 		return Session{}, err
 	}
+	if err := s.store.SetEmailVerified(ctx, u.ID); err != nil {
+		return Session{}, err
+	}
 	return s.IssueSession(ctx, u.ID)
 }

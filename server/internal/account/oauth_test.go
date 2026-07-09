@@ -47,6 +47,9 @@ func TestGoogleCallbackCreatesSession(t *testing.T) {
 	if !ok || u.Email != "gmail@example.com" {
 		t.Fatalf("identity not linked/normalized: ok=%v u=%+v", ok, u)
 	}
+	if v, _ := store.EmailVerified(context.Background(), u.ID); !v {
+		t.Fatal("google login should mark email verified")
+	}
 }
 
 func TestGoogleCallbackRejectsBadState(t *testing.T) {
