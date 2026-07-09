@@ -71,7 +71,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>Relayium&#39;s realtime mode works the other way around. Bytes flow directly between the two devices over an encrypted peer-to-peer channel and are never parked on a server, so there is no server-side size cap to hit. On top of the WebRTC transport, Relayium adds its own layer: an X25519 key exchange derives a key for per-chunk AES-256-GCM, both devices show a matching 6-digit verification code (SAS) to rule out a man-in-the-middle, and each file is checked end-to-end with a SHA-256 hash.</p>
       <h2>Realtime transfers with no size cap</h2>
       <p>Because nothing is stored on a server, the practical file-size limit comes from your own browser. In Chrome or Edge, Relayium streams incoming data straight to disk, so there is effectively no size cap — multi-gigabyte videos and project archives are fine.</p>
-      <p>Firefox and Safari do not yet offer the same streaming download, so there the browser buffers the file in memory; keep those transfers under about 200 MB for a smooth experience. Realtime transfers need no account at all: open relayium.com on both devices, pick up to 10 files, verify the code, and send. If a connection drops mid-way, the transfer resumes instead of starting over, and when a direct link is impossible it falls back to an encrypted TURN relay that only ever sees ciphertext.</p>
+      <p>Firefox and Safari do not yet offer the same streaming download, so there the browser buffers the file in memory; keep those transfers under about 200 MB for a smooth experience. On the same network, realtime transfers need no account: open relayium.com on both devices, pick up to 1,000 files, verify the code, and send. Sending across networks with a pairing code requires the sender to sign in — the recipient never needs an account. If a connection drops mid-way, the transfer resumes instead of starting over, and when a direct link is impossible it falls back to an encrypted TURN relay that only ever sees ciphertext.</p>
       <h2>When the recipient is offline: zero-knowledge stored links</h2>
       <p>Realtime transfer needs both people present, which is the one thing WeTransfer&#39;s link model does better. So Relayium offers the same async convenience without giving up privacy: a stored download link.</p>
       <p>Your browser encrypts the files with AES-256-GCM before upload, and the decryption key lives only in the URL fragment — the part after the # that browsers never send to the server. The server therefore stores zero-knowledge ciphertext it cannot read, and the recipient does not need an account to download. Creating such a link requires the sender to sign in, and each link can be set to expire or to burn after the first download.</p>
@@ -86,7 +86,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>Is Relayium free?</h3>
       <p>Yes. Relayium is free and open source under the MIT license, with the full protocol and code at github.com/relayium/relayium. There is no paid tier to unlock larger realtime transfers — the size headroom comes from streaming to disk in the browser, not from a subscription.</p>
       <div class="ctacard">
-        <p>Send a large file right now — no size cap, no install, and no account for realtime transfers.</p>
+        <p>Send a large file right now — no size cap, no install, and no account needed on the same network.</p>
         <a class="cta" href="/">Try Relayium now</a>
       </div>
       <h2>Keep reading</h2>

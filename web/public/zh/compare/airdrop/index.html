@@ -27,7 +27,7 @@
     <meta name="twitter:title" content="Relayium 对比 AirDrop：跨平台的隔空投送替代方案" />
     <meta name="twitter:description" content="客观看待 AirDrop 与 Relayium。AirDrop 在 Apple 生态内体验出色；Relayium 在任意浏览器里运行，让 Windows、Android、Linux 设备也能与 iPhone、Mac 互传。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 AirDrop：跨平台的隔空投送替代方案","description":"客观看待 AirDrop 与 Relayium。AirDrop 在 Apple 生态内体验出色；Relayium 在任意浏览器里运行，让 Windows、Android、Linux 设备也能与 iPhone、Mac 互传。","inLanguage":"zh-Hans","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/zh/compare/airdrop","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Windows 有 AirDrop 吗？","acceptedAnswer":{"@type":"Answer","text":"没有——AirDrop 是 Apple 设备专属，没有 Windows 客户端。Relayium 就是那条跨平台的替代路径：它在任意浏览器里运行，Windows 电脑与 iPhone 或 Mac 互发互收，和两台 Apple 设备之间一样轻松。"}},{"@type":"Question","name":"iPhone 上的文件怎么传到 Windows 电脑？","acceptedAnswer":{"@type":"Answer","text":"在两台设备的浏览器里都打开 relayium.com。同一 Wi-Fi 下它们会自动相互发现；否则把一台设备上显示的配对码输入到另一台。选好最多 10 个文件，核对两块屏幕上的 6 位校验码一致，传输就会在两者之间直接进行。"}},{"@type":"Question","name":"需要安装 App 吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。Relayium 就是一个网页——在任何操作系统上、任何一台设备上都无需安装。它采用 MIT 许可，免费且开源，代码公开在 github.com/relayium/relayium，你可以审计它或自建实例。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 AirDrop：跨平台的隔空投送替代方案","description":"客观看待 AirDrop 与 Relayium。AirDrop 在 Apple 生态内体验出色；Relayium 在任意浏览器里运行，让 Windows、Android、Linux 设备也能与 iPhone、Mac 互传。","inLanguage":"zh-Hans","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/zh/compare/airdrop","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Windows 有 AirDrop 吗？","acceptedAnswer":{"@type":"Answer","text":"没有——AirDrop 是 Apple 设备专属，没有 Windows 客户端。Relayium 就是那条跨平台的替代路径：它在任意浏览器里运行，Windows 电脑与 iPhone 或 Mac 互发互收，和两台 Apple 设备之间一样轻松。"}},{"@type":"Question","name":"iPhone 上的文件怎么传到 Windows 电脑？","acceptedAnswer":{"@type":"Answer","text":"在两台设备的浏览器里都打开 relayium.com。同一 Wi-Fi 下它们会自动相互发现；否则把一台设备上显示的配对码输入到另一台，这需要发送方先登录。选好最多 1,000 个文件，核对两块屏幕上的 6 位校验码一致，传输就会在两者之间直接进行。"}},{"@type":"Question","name":"需要安装 App 吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。Relayium 就是一个网页——在任何操作系统上、任何一台设备上都无需安装。它采用 MIT 许可，免费且开源，代码公开在 github.com/relayium/relayium，你可以审计它或自建实例。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -71,22 +71,22 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>而这正是多数人会撞上的空缺：iPhone 里的照片要发到 Windows 电脑、Android 视频要传给 Mac，或者文件要在 Linux 工作站与 iPad 之间往返。常见的绕路办法——数据线、给自己发邮件、或上传到网盘再下载——都更慢，而且要让文件经过别人的服务器。</p>
       <h2>Relayium 如何填补这道空缺</h2>
       <p>Relayium 完全运行在现代浏览器里，无需安装任何软件，因此只要两台设备都能打开网页，无论平台都能互传：Windows、macOS、Linux、Android 与 iOS 全部互通。在同一 Wi-Fi 下，两台设备打开 relayium.com 就能自动相互发现；不在同一网络时，则用一段配对码来连接。</p>
-      <p>只要条件允许，传输本身会通过 WebRTC 点对点直连，并在其上叠加一层独立加密：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，这把密钥从不发送给任何服务器。两台设备会显示同一段 6 位校验码（SAS），你可据此确认没有人插在中间；每个文件还会用 SHA-256 做端到端完整性校验。每批最多可发送 10 个文件，实时传输无需账号，若连接中断，传输还能断点续传而不必从头再来。</p>
+      <p>只要条件允许，传输本身会通过 WebRTC 点对点直连，并在其上叠加一层独立加密：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，这把密钥从不发送给任何服务器。两台设备会显示同一段 6 位校验码（SAS），你可据此确认没有人插在中间；每个文件还会用 SHA-256 做端到端完整性校验。每批最多可发送 1,000 个文件；同一网络下无需账号，跨网络用配对码传输则需要发送方登录——接收方始终无需账号。若连接中断，传输还能断点续传而不必从头再来。</p>
       <h2>在 iPhone 和 iPad 上的诚实局限</h2>
       <p>这一点得坦诚说明：在移动端浏览器里接收大文件，不如原生 AirDrop 那样顺滑。Safari 与 Firefox 会把收到的文件缓冲在内存里，因此在 iPhone 或 iPad 上，最好把单次传输控制在约 200 MB 以内，留在浏览器能承载的范围内。</p>
       <p>在桌面端情况更好：Chrome 与 Edge 可以直接流式写入磁盘，从而彻底取消大小上限，大文件也能顺畅传输而不占满内存。当无法直连时，加密数据流会退回到 TURN 中继，而中继只能看到密文，因此始终保持端到端加密。此外还有可选的存储下载链接模式——浏览器先用 AES-256-GCM 加密文件，密钥只存在于 URL 片段里，服务器只保存无法解读的零知识密文；生成这样的链接需要发送方登录，而实时传输则不需要。</p>
       <h2>AirDrop 与 Relayium 一览对比</h2>
       <p>把最关键的差别并排列出：</p>
-      <ul><li>平台：AirDrop 仅限 Apple；Relayium 在浏览器里横跨 Windows、macOS、Linux、Android 与 iOS。</li><li>安装：AirDrop 内建于 Apple 系统；Relayium 无需 App、无需安装，一个网页即可。</li><li>跨网络：AirDrop 只能就近；Relayium 在同一 Wi-Fi 或用配对码跨网络都能连。</li><li>加密：两者都加密；Relayium 额外叠加 X25519 + AES-256-GCM，配以你亲自核对的 6 位校验码和逐文件 SHA-256 校验。</li><li>移动端大文件：AirDrop 更顺滑；Relayium 建议在 iOS 浏览器上把单次传输控制在约 200 MB 以内，而桌面端 Chrome/Edge 无大小上限。</li><li>账号：两者的实时分享都无需账号；Relayium 仅在生成存储下载链接时要求发送方登录。</li></ul>
+      <ul><li>平台：AirDrop 仅限 Apple；Relayium 在浏览器里横跨 Windows、macOS、Linux、Android 与 iOS。</li><li>安装：AirDrop 内建于 Apple 系统；Relayium 无需 App、无需安装，一个网页即可。</li><li>跨网络：AirDrop 只能就近；Relayium 在同一 Wi-Fi 或用配对码跨网络都能连。</li><li>加密：两者都加密；Relayium 额外叠加 X25519 + AES-256-GCM，配以你亲自核对的 6 位校验码和逐文件 SHA-256 校验。</li><li>移动端大文件：AirDrop 更顺滑；Relayium 建议在 iOS 浏览器上把单次传输控制在约 200 MB 以内，而桌面端 Chrome/Edge 无大小上限。</li><li>账号：AirDrop 从不需要账号；Relayium 在同一网络下无需账号，但跨网络配对或生成存储下载链接时需要发送方登录——接收方始终无需账号。</li></ul>
       <h2>常见问题</h2>
       <h3>Windows 有 AirDrop 吗？</h3>
       <p>没有——AirDrop 是 Apple 设备专属，没有 Windows 客户端。Relayium 就是那条跨平台的替代路径：它在任意浏览器里运行，Windows 电脑与 iPhone 或 Mac 互发互收，和两台 Apple 设备之间一样轻松。</p>
       <h3>iPhone 上的文件怎么传到 Windows 电脑？</h3>
-      <p>在两台设备的浏览器里都打开 relayium.com。同一 Wi-Fi 下它们会自动相互发现；否则把一台设备上显示的配对码输入到另一台。选好最多 10 个文件，核对两块屏幕上的 6 位校验码一致，传输就会在两者之间直接进行。</p>
+      <p>在两台设备的浏览器里都打开 relayium.com。同一 Wi-Fi 下它们会自动相互发现；否则把一台设备上显示的配对码输入到另一台，这需要发送方先登录。选好最多 1,000 个文件，核对两块屏幕上的 6 位校验码一致，传输就会在两者之间直接进行。</p>
       <h3>需要安装 App 吗？</h3>
       <p>不需要。Relayium 就是一个网页——在任何操作系统上、任何一台设备上都无需安装。它采用 MIT 许可，免费且开源，代码公开在 github.com/relayium/relayium，你可以审计它或自建实例。</p>
       <div class="ctacard">
-        <p>在 Apple 与其他一切设备之间互传——无需安装，实时传输也无需账号。</p>
+        <p>在 Apple 与其他一切设备之间互传——无需安装，同一网络下也无需账号。</p>
         <a class="cta" href="/?lang=zh">立即试用 Relayium</a>
       </div>
       <h2>继续阅读</h2>

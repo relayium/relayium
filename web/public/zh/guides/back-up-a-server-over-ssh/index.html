@@ -27,7 +27,7 @@
     <meta name="twitter:title" content="用 Relayium CLI 通过 SSH 把文件备份到自己的服务器" />
     <meta name="twitter:description" content="用 relayium push 和 pull 把目录复制或同步到你已经能用 ssh 连接的服务器——支持断点续传、完整性校验,而且免费。字节通过你自己的 SSH 连接传输,从不经过 Relayium 的服务器。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 通过 SSH 把文件备份到自己的服务器","description":"用 relayium push 和 pull 把目录复制或同步到你已经能用 ssh 连接的服务器——支持断点续传、完整性校验,而且免费。字节通过你自己的 SSH 连接传输,从不经过 Relayium 的服务器。","inLanguage":"zh-Hans","dateModified":"2026-07-08","mainEntityOfPage":"https://relayium.com/zh/guides/back-up-a-server-over-ssh","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"文件会经过 Relayium 的服务器吗?","acceptedAnswer":{"@type":"Answer","text":"不会。push 和 pull 完全通过你自己的 SSH 连接运行。Relayium 的服务器完全不参与,也不需要账号。"}},{"@type":"Question","name":"服务器需要装 relayium 吗?","acceptedAnswer":{"@type":"Answer","text":"这是可选的。远端装了 relayium 就能用原生协议——支持断点续传,并对每个文件做 SHA-256 校验。没装的话,relayium 会退回到通过 SSH 传输 tar 流,依然可用,只是每个文件都会完整发送一次。"}},{"@type":"Question","name":"它怎么选择使用哪个 SSH 密钥和端口?","acceptedAnswer":{"@type":"Answer","text":"它会像 ssh 一样读取你的 ~/.ssh/config,所以主机别名、密钥和端口都会被自动识别。你也可以在每条命令里用 -i 指定身份文件、用 -p 指定端口来覆盖它们。"}},{"@type":"Question","name":"这比 rsync 快吗?","acceptedAnswer":{"@type":"Answer","text":"在推送到自己服务器这件事上,速度和通过 SSH 的 rsync 差不多;重点不是要跑赢 rsync,而是给你一个同时能做跨网络传输和服务器到服务器传输、并且有同样续传与完整性保证的工具。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 通过 SSH 把文件备份到自己的服务器","description":"用 relayium push 和 pull 把目录复制或同步到你已经能用 ssh 连接的服务器——支持断点续传、完整性校验,而且免费。字节通过你自己的 SSH 连接传输,从不经过 Relayium 的服务器。","inLanguage":"zh-Hans","dateModified":"2026-07-08","mainEntityOfPage":"https://relayium.com/zh/guides/back-up-a-server-over-ssh","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"文件会经过 Relayium 的服务器吗?","acceptedAnswer":{"@type":"Answer","text":"不会。push 和 pull 完全通过你自己的 SSH 连接运行。Relayium 的服务器完全不参与,也不需要账号。"}},{"@type":"Question","name":"服务器需要装 relayium 吗?","acceptedAnswer":{"@type":"Answer","text":"要看方向。对 push 来说这是可选的:远端装了 relayium 就能用原生协议——支持断点续传,并对每个文件做 SHA-256 校验;没装的话,push 会退回到通过 SSH 传输 tar 流,依然可用,只是每个文件都会完整发送一次。对 pull 来说这是必须的:pull 始终需要远端装有 relayium(没有 tar 兜底方案),请先在远端装好它。"}},{"@type":"Question","name":"它怎么选择使用哪个 SSH 密钥和端口?","acceptedAnswer":{"@type":"Answer","text":"它会像 ssh 一样读取你的 ~/.ssh/config,所以主机别名、密钥和端口都会被自动识别。你也可以在每条命令里用 -i 指定身份文件、用 -p 指定端口来覆盖它们。"}},{"@type":"Question","name":"这比 rsync 快吗?","acceptedAnswer":{"@type":"Answer","text":"在推送到自己服务器这件事上,速度和通过 SSH 的 rsync 差不多;重点不是要跑赢 rsync,而是给你一个同时能做跨网络传输和服务器到服务器传输、并且有同样续传与完整性保证的工具。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -74,6 +74,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</c
       <h2>把文件 pull 回来</h2>
       <p>恢复就是把同一条命令反过来:给出一个远程源和一个本地目标目录。这就是恢复备份,或者把服务器的输出同步到笔记本电脑的方法:</p>
       <pre><code>relayium pull user@your-server:backups/ ./restore</code></pre>
+      <ul><li>和 push 不同,pull 始终需要远端已经装好 relayium——它没有 tar 兜底方案,如果远端没装,请先装好。</li></ul>
       <h2>内置断点续传与完整性校验</h2>
       <p>备份往往体积很大,网络也常常掉线。当两端都装了 relayium 时,中断的传输会在下次运行时从中断处继续,而不是重新发送全部内容,并且每个文件都会用 SHA-256 哈希做端到端校验——落到服务器上的内容与你发送的逐字节一致。</p>
       <p>如果你想放弃续传、做一次干净的完整重发,加上 --no-resume 即可。</p>
@@ -87,7 +88,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</c
       <h3>文件会经过 Relayium 的服务器吗?</h3>
       <p>不会。push 和 pull 完全通过你自己的 SSH 连接运行。Relayium 的服务器完全不参与,也不需要账号。</p>
       <h3>服务器需要装 relayium 吗?</h3>
-      <p>这是可选的。远端装了 relayium 就能用原生协议——支持断点续传,并对每个文件做 SHA-256 校验。没装的话,relayium 会退回到通过 SSH 传输 tar 流,依然可用,只是每个文件都会完整发送一次。</p>
+      <p>要看方向。对 push 来说这是可选的:远端装了 relayium 就能用原生协议——支持断点续传,并对每个文件做 SHA-256 校验;没装的话,push 会退回到通过 SSH 传输 tar 流,依然可用,只是每个文件都会完整发送一次。对 pull 来说这是必须的:pull 始终需要远端装有 relayium(没有 tar 兜底方案),请先在远端装好它。</p>
       <h3>它怎么选择使用哪个 SSH 密钥和端口?</h3>
       <p>它会像 ssh 一样读取你的 ~/.ssh/config,所以主机别名、密钥和端口都会被自动识别。你也可以在每条命令里用 -i 指定身份文件、用 -p 指定端口来覆盖它们。</p>
       <h3>这比 rsync 快吗?</h3>

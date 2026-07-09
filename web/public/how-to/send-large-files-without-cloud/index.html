@@ -65,11 +65,11 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="lead">Relayium takes the direct route. The file streams straight from your browser to the recipient&#39;s over an encrypted peer-to-peer channel, so it never lands on a server in between. This guide shows how to move big files that way, and is honest about the two real limits: which browsers can handle unlimited sizes, and the fact that both people usually need to be online at the same time.</p>
       <h2>Why direct transfer wins for big files</h2>
       <p>With cloud storage a large file crosses the network twice — up to the server, then back down to the recipient — and sits against a storage quota in between. A direct peer-to-peer transfer crosses the network once, from sender to receiver, with nothing stored in the middle.</p>
-      <p>Relayium runs entirely in the browser, so there is nothing to install on either end. It works on Windows, macOS, Linux, Android and iOS, and realtime transfers need no account — you just open relayium.com on both devices and connect.</p>
+      <p>Relayium runs entirely in the browser, so there is nothing to install on either end. It works on Windows, macOS, Linux, Android and iOS. On the same network realtime transfers need no account; sending across networks with a pairing code just asks the sender to sign in — you just open relayium.com on both devices and connect.</p>
       <h2>No size cap in realtime mode</h2>
       <p>Realtime transfers have no server-side size limit, because there is no server holding the file. The practical ceiling is set by the receiving browser, not by us.</p>
-      <p>On Chrome and Edge the incoming file is streamed straight to disk as it arrives, so it never has to fit in memory — this is the combination to use for very large files, comfortably into the tens of gigabytes. A batch can hold up to 10 files, and each one is verified end-to-end with a SHA-256 hash, so what lands on disk is byte-for-byte what you sent.</p>
-      <ul><li>Chrome or Edge on the receiving side: files stream to disk, so there is effectively no size cap.</li><li>Firefox and Safari buffer the file in memory instead, so keep individual files under about 200 MB there.</li><li>Up to 10 files per batch, each checked with its own SHA-256 hash on arrival.</li></ul>
+      <p>On Chrome and Edge the incoming file is streamed straight to disk as it arrives, so it never has to fit in memory — this is the combination to use for very large files, comfortably into the tens of gigabytes. A batch can hold up to 1,000 files, and each one is verified end-to-end with a SHA-256 hash, so what lands on disk is byte-for-byte what you sent.</p>
+      <ul><li>Chrome or Edge on the receiving side: files stream to disk, so there is effectively no size cap.</li><li>Firefox and Safari buffer the file in memory instead, so keep individual files under about 200 MB there.</li><li>Up to 1,000 files per batch, each checked with its own SHA-256 hash on arrival.</li></ul>
       <h2>Resume instead of restarting</h2>
       <p>Big transfers take time, and time is when Wi-Fi drops, laptops sleep, and phones switch networks. Relayium is built for that: if the connection breaks partway through, the transfer resumes from where it left off instead of starting the whole file over.</p>
       <p>Connectivity is handled the same way. The transfer goes directly peer-to-peer whenever possible; when two networks cannot reach each other directly, the encrypted stream falls back to a TURN relay. The relay only ever sees ciphertext, so even the fallback path stays end-to-end encrypted.</p>
@@ -84,7 +84,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>How is my privacy protected for large files?</h3>
       <p>Realtime transfers are end-to-end encrypted with an X25519 key exchange and per-chunk AES-256-GCM, and that key never reaches any server. Both devices show a 6-digit verification code to confirm no one is in the middle, and each file is checked with a SHA-256 hash. Even when a TURN relay is needed, it only sees ciphertext.</p>
       <div class="ctacard">
-        <p>Move your next multi-gigabyte file the direct way — no install, and no account for realtime transfers.</p>
+        <p>Move your next multi-gigabyte file the direct way — no install, and no account needed on the same network.</p>
         <a class="cta" href="/">Try Relayium now</a>
       </div>
       <h2>Keep reading</h2>

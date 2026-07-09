@@ -27,7 +27,7 @@
     <meta name="twitter:title" content="Android から iPhone へファイルを転送する方法（ケーブル不要）" />
     <meta name="twitter:description" content="写真・動画・書類を Android から iPhone へブラウザで送る手順を解説。AirDrop もケーブルもクラウドへのアップロードも不要。両方の端末で Relayium を開くだけです。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Android から iPhone へファイルを転送する方法（ケーブル不要）","description":"写真・動画・書類を Android から iPhone へブラウザで送る手順を解説。AirDrop もケーブルもクラウドへのアップロードも不要。両方の端末で Relayium を開くだけです。","inLanguage":"ja","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/ja/how-to/transfer-files-android-to-iphone","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"どちらのスマホにもアプリのインストールは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。Relayium は Android でも iPhone でもすべてブラウザで動作します。各端末で relayium.com を開けば準備完了です——リアルタイム転送にアカウントもダウンロードも不要です。任意で PWA としてホーム画面に追加できますが、それはショートカットにすぎません。"}},{"@type":"Question","name":"両方のスマホが同じ Wi-Fi にある必要がありますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。同じネットワークは端末が自動的に互いを見つけるため最速の経路ですが、ペアリングコードなら2台のスマホを異なるネットワークをまたいで接続できます——一方がモバイルデータ、もう一方が Wi-Fi でも大丈夫です。どちらの場合も転送はエンドツーエンド暗号化のままです。"}},{"@type":"Question","name":"写真は圧縮されたり変更されたりしますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。元のファイルは圧縮なしでバイト単位で転送され、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるため、iPhone に届くものは Android から送ったものとビット単位で同一です。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Android から iPhone へファイルを転送する方法（ケーブル不要）","description":"写真・動画・書類を Android から iPhone へブラウザで送る手順を解説。AirDrop もケーブルもクラウドへのアップロードも不要。両方の端末で Relayium を開くだけです。","inLanguage":"ja","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/ja/how-to/transfer-files-android-to-iphone","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"どちらのスマホにもアプリのインストールは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。Relayium は Android でも iPhone でもすべてブラウザで動作します。各端末で relayium.com を開けば準備完了です——どちらの方法でもダウンロードは不要です。同じネットワークならリアルタイム転送にアカウントは不要で、ネットワークをまたぐペアリングも送信側がサインインするだけです。任意で PWA としてホーム画面に追加できますが、それはショートカットにすぎません。"}},{"@type":"Question","name":"両方のスマホが同じ Wi-Fi にある必要がありますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。同じネットワークは端末が自動的に互いを見つけるため最速の経路ですが、ペアリングコードなら2台のスマホを異なるネットワークをまたいで接続できます——一方がモバイルデータ、もう一方が Wi-Fi でも大丈夫です。どちらの場合も転送はエンドツーエンド暗号化のままですが、ネットワークをまたぐペアリングには送信側のサインインが必要です——受信側はアカウント不要です。"}},{"@type":"Question","name":"写真は圧縮されたり変更されたりしますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。元のファイルは圧縮なしでバイト単位で転送され、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるため、iPhone に届くものは Android から送ったものとビット単位で同一です。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -62,16 +62,16 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="updated">最終更新: 2026-07-03</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-android-to-iphone">English</a><a href="/zh/how-to/transfer-files-android-to-iphone">中文</a><a href="/ja/how-to/transfer-files-android-to-iphone" aria-current="true">日本語</a><a href="/ko/how-to/transfer-files-android-to-iphone">한국어</a><a href="/de/how-to/transfer-files-android-to-iphone">Deutsch</a><a href="/fr/how-to/transfer-files-android-to-iphone">Français</a></nav>
       <p class="lead">Android と iPhone は AirDrop を共有していないため、写真を数枚や動画を1本やり取りするだけでも、USB ケーブル、画質を圧縮するチャットアプリ、あるいはクラウドドライブへのアップロードとダウンロードの往復に頼りがちです。どれも本来より遅く、面倒です。</p>
-      <p class="lead">Relayium はそれをすべて省きます。2台のスマホが同じ Web ページを開き、互いを見つけ、ファイルは端末間で直接転送されます——エンドツーエンド暗号化、アプリのインストール不要、リアルタイム転送ならアカウントも不要です。本記事で手順を順に説明します。</p>
+      <p class="lead">Relayium はそれをすべて省きます。2台のスマホが同じ Web ページを開き、互いを見つけ、ファイルは端末間で直接転送されます——エンドツーエンド暗号化、アプリのインストール不要。同じネットワークならアカウントも不要で、ネットワークをまたいでペアリングコードで送る場合も送信側がサインインするだけです。本記事で手順を順に説明します。</p>
       <h2>始める前に必要なもの</h2>
-      <p>インストールも登録も不要です。リアルタイム転送は両方の端末のブラウザからそのまま使えます。</p>
-      <ul><li>Chrome（または任意の最新ブラウザ）が入った Android 端末と、Safari を使う iPhone——どちらも最新の状態に。</li><li>最速の経路は、両方の端末を同じ Wi-Fi ネットワークに置くことです。無理でも大丈夫——ペアリングコードは異なるネットワークをまたいでも機能します。</li><li>送りたいファイル、1バッチあたり最大10個。</li></ul>
+      <p>インストールは不要です。同じネットワークなら登録も不要——リアルタイム転送は両方の端末のブラウザからそのまま使えます。</p>
+      <ul><li>Chrome（または任意の最新ブラウザ）が入った Android 端末と、Safari を使う iPhone——どちらも最新の状態に。</li><li>最速の経路は、両方の端末を同じ Wi-Fi ネットワークに置くことです。無理でも大丈夫——ペアリングコードは異なるネットワークをまたいでも機能します。</li><li>送りたいファイル、1バッチあたり最大1,000個。</li></ul>
       <h2>手順：両方の端末が同じ Wi-Fi の場合</h2>
       <p>これが最もシンプルな経路です。同じネットワークなら2台のスマホが自動的に互いを見つけるので、入力はほとんどありません。</p>
-      <ul><li>Android 端末と iPhone の両方で、ブラウザから relayium.com を開きます。</li><li>各端末はもう一方に近くの端末として表示されます。送信側のスマホで、受信側をタップします。</li><li>送るファイルを選びます——1バッチ最大10個——またはそのままドラッグして入れます。</li><li>両方の画面に同じ6桁のコードが表示されます。一致するか確認してください。これは、間にサーバーが入り込んでいないことを示す検証コードです。</li><li>受信側の iPhone で承認するとファイルが直接転送され、端末に保存されます。</li></ul>
+      <ul><li>Android 端末と iPhone の両方で、ブラウザから relayium.com を開きます。</li><li>各端末はもう一方に近くの端末として表示されます。送信側のスマホで、受信側をタップします。</li><li>送るファイルを選びます——1バッチ最大1,000個——またはそのままドラッグして入れます。</li><li>両方の画面に同じ6桁のコードが表示されます。一致するか確認してください。これは、間にサーバーが入り込んでいないことを示す検証コードです。</li><li>受信側の iPhone で承認するとファイルが直接転送され、端末に保存されます。</li></ul>
       <h2>異なるネットワークの場合は？ ペアリングコードを使う</h2>
       <p>同じ Wi-Fi である必要はありません。スマホが別々のネットワーク——一方はモバイルデータ、もう一方は自宅の Wi-Fi——にあっても、Relayium はペアリングコードで両者を接続できます。</p>
-      <p>送信側の端末が短いペアリングコードを表示するので、もう一方のスマホで入力します（または生成された共有リンクを開きます）。可能な限り転送は P2P で直接行われ、直接の経路が使えないときは暗号化された TURN リレーにフォールバックしますが、リレーが見るのは暗号文だけです——どちらの場合も転送はエンドツーエンド暗号化のままです。途中で接続が切れても、最初からではなく再開できます。</p>
+      <p>送信側の端末が短いペアリングコードを表示するので、もう一方のスマホで入力します（または生成された共有リンクを開きます）。可能な限り転送は P2P で直接行われ、直接の経路が使えないときは暗号化された TURN リレーにフォールバックしますが、リレーが見るのは暗号文だけです——どちらの場合も転送はエンドツーエンド暗号化のままです。途中で接続が切れても、最初からではなく再開できます。この方法で送るには送信側のサインインが必要です——受信側はアカウント不要です。</p>
       <h2>Android と iPhone の間でファイルを移す他の方法</h2>
       <p>Relayium だけが選択肢ではありません。代替手段の正直なトレードオフを知っておく価値があります。</p>
       <ul><li>Google のクイック共有や SHAREit のようなサードパーティ製アプリは高速ですが、両方のスマホにインストールが必要で、クイック共有は iPhone には届きません。</li><li>クラウドドライブ（Google ドライブ、iCloud、Dropbox）は相手がオフラインでも使えますが、同じファイルをアップロードして再びダウンロードと2回動かすことになり、容量を消費し、提供元がコピーを保持します。</li><li>チャットアプリやメールはどこにでもありますが、たいてい写真を再圧縮し、添付サイズを制限し、ファイル共有はエンドツーエンド暗号化されていません。</li><li>USB ケーブルは確実ですが、USB-C と Lightning の間に適切なアダプターが必要で、多くのファイル形式では間にパソコンも要ります。</li></ul>
@@ -80,13 +80,13 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>それを裏づけるため、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるので、届いた写真や動画は送ったものと必ず同一です。大きなファイルもうまく扱えます。Chrome と Edge ではダウンロードがサイズ上限なしでそのままディスクにストリーミングされ、Firefox と Safari はメモリにバッファするため、その2つでは1回の転送を約200MB以内に抑えてください。</p>
       <h2>よくある質問</h2>
       <h3>どちらのスマホにもアプリのインストールは必要ですか？</h3>
-      <p>いいえ。Relayium は Android でも iPhone でもすべてブラウザで動作します。各端末で relayium.com を開けば準備完了です——リアルタイム転送にアカウントもダウンロードも不要です。任意で PWA としてホーム画面に追加できますが、それはショートカットにすぎません。</p>
+      <p>いいえ。Relayium は Android でも iPhone でもすべてブラウザで動作します。各端末で relayium.com を開けば準備完了です——どちらの方法でもダウンロードは不要です。同じネットワークならリアルタイム転送にアカウントは不要で、ネットワークをまたぐペアリングも送信側がサインインするだけです。任意で PWA としてホーム画面に追加できますが、それはショートカットにすぎません。</p>
       <h3>両方のスマホが同じ Wi-Fi にある必要がありますか？</h3>
-      <p>いいえ。同じネットワークは端末が自動的に互いを見つけるため最速の経路ですが、ペアリングコードなら2台のスマホを異なるネットワークをまたいで接続できます——一方がモバイルデータ、もう一方が Wi-Fi でも大丈夫です。どちらの場合も転送はエンドツーエンド暗号化のままです。</p>
+      <p>いいえ。同じネットワークは端末が自動的に互いを見つけるため最速の経路ですが、ペアリングコードなら2台のスマホを異なるネットワークをまたいで接続できます——一方がモバイルデータ、もう一方が Wi-Fi でも大丈夫です。どちらの場合も転送はエンドツーエンド暗号化のままですが、ネットワークをまたぐペアリングには送信側のサインインが必要です——受信側はアカウント不要です。</p>
       <h3>写真は圧縮されたり変更されたりしますか？</h3>
       <p>いいえ。元のファイルは圧縮なしでバイト単位で転送され、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるため、iPhone に届くものは Android から送ったものとビット単位で同一です。</p>
       <div class="ctacard">
-        <p>両方のスマホで Relayium を開いて、最初のファイルを送ってみましょう——インストール不要、リアルタイム転送はアカウントも不要です。</p>
+        <p>両方のスマホで Relayium を開いて、最初のファイルを送ってみましょう——インストール不要、同じネットワークならアカウントも不要です。</p>
         <a class="cta" href="/?lang=ja">Relayium を今すぐ試す</a>
       </div>
       <h2>続けて読む</h2>
