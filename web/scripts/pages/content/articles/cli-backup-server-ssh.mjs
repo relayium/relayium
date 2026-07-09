@@ -37,6 +37,9 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
         "Restoring is the same command in reverse: give a remote source and a local destination directory. This is how you recover a backup, or sync a server's output down to your laptop:",
       ],
       code: ["relayium pull user@your-server:backups/ ./restore"],
+      bullets: [
+        "Unlike push, pull always needs relayium already installed on the remote — it has no tar fallback, so install it there first if it's missing.",
+      ],
     },
     {
       heading: "Resume and integrity come built in",
@@ -73,7 +76,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
       },
       {
         q: "Does the server need relayium installed?",
-        a: "It's optional. With relayium on the remote you get the native protocol — resumable transfers and per-file SHA-256 checks. Without it, relayium falls back to a tar stream over SSH, which still works but always sends each file in full.",
+        a: "It depends on the direction. For push, it's optional: with relayium on the remote you get the native protocol — resumable transfers and per-file SHA-256 checks — and without it, push falls back to a plain tar stream over SSH, which still works but always sends each file in full. For pull, it's required: pull always needs relayium on the remote (it has no tar fallback), so install it there first.",
       },
       {
         q: "How does it choose which SSH key and port to use?",
@@ -127,6 +130,9 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
         "恢复就是把同一条命令反过来:给出一个远程源和一个本地目标目录。这就是恢复备份,或者把服务器的输出同步到笔记本电脑的方法:",
       ],
       code: ["relayium pull user@your-server:backups/ ./restore"],
+      bullets: [
+        "和 push 不同,pull 始终需要远端已经装好 relayium——它没有 tar 兜底方案,如果远端没装,请先装好。",
+      ],
     },
     {
       heading: "内置断点续传与完整性校验",
@@ -163,7 +169,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
       },
       {
         q: "服务器需要装 relayium 吗?",
-        a: "这是可选的。远端装了 relayium 就能用原生协议——支持断点续传,并对每个文件做 SHA-256 校验。没装的话,relayium 会退回到通过 SSH 传输 tar 流,依然可用,只是每个文件都会完整发送一次。",
+        a: "要看方向。对 push 来说这是可选的:远端装了 relayium 就能用原生协议——支持断点续传,并对每个文件做 SHA-256 校验;没装的话,push 会退回到通过 SSH 传输 tar 流,依然可用,只是每个文件都会完整发送一次。对 pull 来说这是必须的:pull 始终需要远端装有 relayium(没有 tar 兜底方案),请先在远端装好它。",
       },
       {
         q: "它怎么选择使用哪个 SSH 密钥和端口?",
@@ -217,6 +223,9 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
         "復元は同じコマンドを逆にするだけです。リモートのソースとローカルの宛先ディレクトリを指定します。これがバックアップを復元したり、サーバーの出力をノート PC に同期したりする方法です:",
       ],
       code: ["relayium pull user@your-server:backups/ ./restore"],
+      bullets: [
+        "push と異なり、pull は常にリモートに relayium がすでにインストールされている必要があります——tar フォールバックがないため、なければ先にそちらへインストールしてください。",
+      ],
     },
     {
       heading: "再開と整合性が標準で備わっている",
@@ -253,7 +262,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
       },
       {
         q: "サーバーに relayium のインストールは必要ですか?",
-        a: "任意です。リモートに relayium があればネイティブプロトコルが使え、再開可能な転送とファイルごとの SHA-256 チェックが得られます。なければ relayium は SSH 上の tar ストリームにフォールバックし、それでも動作しますが、各ファイルは常に全体が送信されます。",
+        a: "方向によります。push の場合は任意です。リモートに relayium があればネイティブプロトコルが使え、再開可能な転送とファイルごとの SHA-256 チェックが得られます。なければ push は SSH 上の tar ストリームにフォールバックし、それでも動作しますが、各ファイルは常に全体が送信されます。pull の場合は必須です。pull は常にリモート側の relayium を必要とし(tar フォールバックはありません)、先にリモートへインストールしておいてください。",
       },
       {
         q: "どの SSH 鍵とポートを使うかはどう決まりますか?",
@@ -307,6 +316,9 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
         "복원은 같은 명령을 반대로 실행하는 것과 같습니다. 원격 소스와 로컬 대상 디렉터리를 지정하세요. 백업을 복구하거나 서버의 출력을 노트북으로 동기화할 때 이렇게 합니다:",
       ],
       code: ["relayium pull user@your-server:backups/ ./restore"],
+      bullets: [
+        "push와 달리 pull은 항상 원격지에 relayium이 이미 설치되어 있어야 합니다 — tar 대체 방식이 없으므로, 설치되어 있지 않다면 먼저 그곳에 설치하세요.",
+      ],
     },
     {
       heading: "재개와 무결성이 기본으로 내장되어 있다",
@@ -343,7 +355,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
       },
       {
         q: "서버에 relayium이 설치되어 있어야 하나요?",
-        a: "선택 사항입니다. 원격에 relayium이 있으면 네이티브 프로토콜을 사용할 수 있습니다 — 재개 가능한 전송과 파일별 SHA-256 검사입니다. 없으면 relayium은 SSH를 통한 tar 스트림으로 대체되며, 여전히 동작하지만 각 파일을 항상 전체 전송합니다.",
+        a: "방향에 따라 다릅니다. push의 경우 선택 사항입니다. 원격에 relayium이 있으면 네이티브 프로토콜을 사용할 수 있습니다 — 재개 가능한 전송과 파일별 SHA-256 검사입니다. 없으면 push는 SSH를 통한 tar 스트림으로 대체되며, 여전히 동작하지만 각 파일을 항상 전체 전송합니다. pull의 경우 필수입니다. pull은 항상 원격지에 relayium이 있어야 하며(tar 대체 방식 없음), 먼저 원격지에 설치해 두세요.",
       },
       {
         q: "어떤 SSH 키와 포트를 사용할지 어떻게 정하나요?",
@@ -397,6 +409,9 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
         "Das Wiederherstellen ist derselbe Befehl umgekehrt: Gib eine Remote-Quelle und ein lokales Zielverzeichnis an. So stellst du ein Backup wieder her oder synchronisierst die Ausgabe eines Servers auf deinen Laptop herunter:",
       ],
       code: ["relayium pull user@your-server:backups/ ./restore"],
+      bullets: [
+        "Anders als push braucht pull immer bereits installiertes relayium auf der Gegenseite — es gibt keinen tar-Fallback, installiere es also dort zuerst, falls es fehlt.",
+      ],
     },
     {
       heading: "Fortsetzen und Integrität sind eingebaut",
@@ -433,7 +448,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
       },
       {
         q: "Muss auf dem Server relayium installiert sein?",
-        a: "Das ist optional. Mit relayium auf der Gegenseite bekommst du das native Protokoll — fortsetzbare Übertragungen und SHA-256-Prüfungen je Datei. Ohne das weicht relayium auf einen tar-Stream über SSH aus, der weiterhin funktioniert, aber jede Datei stets vollständig sendet.",
+        a: "Das hängt von der Richtung ab. Bei push ist es optional: Mit relayium auf der Gegenseite bekommst du das native Protokoll — fortsetzbare Übertragungen und SHA-256-Prüfungen je Datei —, und ohne das weicht push auf einen tar-Stream über SSH aus, der weiterhin funktioniert, aber jede Datei stets vollständig sendet. Bei pull ist es erforderlich: pull braucht immer relayium auf der Gegenseite (keinen tar-Fallback), installiere es dort also zuerst.",
       },
       {
         q: "Wie wählt es aus, welchen SSH-Schlüssel und welchen Port es nutzt?",
@@ -487,6 +502,9 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
         "La restauration est la même commande en sens inverse : indiquez une source distante et un répertoire de destination local. C'est ainsi que vous récupérez une sauvegarde, ou que vous synchronisez la sortie d'un serveur vers votre portable :",
       ],
       code: ["relayium pull user@your-server:backups/ ./restore"],
+      bullets: [
+        "Contrairement à push, pull a toujours besoin de relayium déjà installé côté distant — il n'a pas de repli tar, installez-le donc là-bas d'abord s'il manque.",
+      ],
     },
     {
       heading: "Reprise et intégrité intégrées d'office",
@@ -523,7 +541,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
       },
       {
         q: "Le serveur a-t-il besoin de relayium installé ?",
-        a: "C'est optionnel. Avec relayium côté distant, vous obtenez le protocole natif — transferts reprenables et vérifications SHA-256 par fichier. Sans cela, relayium bascule sur un flux tar via SSH, qui fonctionne toujours mais renvoie systématiquement chaque fichier en entier.",
+        a: "Cela dépend du sens. Pour push, c'est optionnel : avec relayium côté distant, vous obtenez le protocole natif — transferts reprenables et vérifications SHA-256 par fichier — et sans cela, push bascule sur un flux tar via SSH, qui fonctionne toujours mais renvoie systématiquement chaque fichier en entier. Pour pull, c'est requis : pull a toujours besoin de relayium côté distant (aucun repli tar), installez-le donc là-bas au préalable.",
       },
       {
         q: "Comment choisit-il quelle clé SSH et quel port utiliser ?",

@@ -43,9 +43,9 @@ const en = {
       ],
       code: ["relayium push ./photos user@your-server:backups/"],
       bullets: [
-        "If relayium is installed on the remote too, it uses the native protocol (resumable, per-file SHA-256).",
-        "If not, it falls back to a plain tar stream, so it still works on a bare server.",
-        "Pull the same files back with: relayium pull user@your-server:backups/ ./restore",
+        "If relayium is installed on the remote too, push uses the native protocol (resumable, per-file SHA-256).",
+        "push falls back to a plain tar stream when relayium isn't on the remote, so it works even against a bare server — that fallback is push-only.",
+        "Pull the same files back with: relayium pull user@your-server:backups/ ./restore — pull always needs relayium on the remote (it has no tar fallback), so install it there first.",
       ],
     },
     {
@@ -125,9 +125,9 @@ const zh = {
       ],
       code: ["relayium push ./photos user@your-server:backups/"],
       bullets: [
-        "如果远程也装了 relayium，就会使用原生协议（可续传、逐文件 SHA-256）。",
-        "如果没装，就会退化为普通的 tar 流，因此在裸机服务器上依然可用。",
-        "用这个命令把同样的文件取回来：relayium pull user@your-server:backups/ ./restore",
+        "如果远程也装了 relayium，push 就会使用原生协议（可续传、逐文件 SHA-256）。",
+        "如果远程没装 relayium，push 会退化为普通的 tar 流，因此在裸机服务器上依然可用——这个兜底只属于 push。",
+        "用这个命令把同样的文件取回来：relayium pull user@your-server:backups/ ./restore——pull 始终需要远程装有 relayium（没有 tar 兜底），请先在远程装好它。",
       ],
     },
     {
@@ -207,9 +207,9 @@ const ja = {
       ],
       code: ["relayium push ./photos user@your-server:backups/"],
       bullets: [
-        "リモートにも relayium がインストールされていれば、ネイティブプロトコル（再開可能、ファイル単位の SHA-256）が使われます。",
-        "インストールされていなければ、単純な tar ストリームにフォールバックするため、裸のサーバーでも動作します。",
-        "同じファイルを次のコマンドで取り戻せます: relayium pull user@your-server:backups/ ./restore",
+        "リモートにも relayium がインストールされていれば、push はネイティブプロトコル（再開可能、ファイル単位の SHA-256）を使います。",
+        "リモートに relayium がなければ、push は単純な tar ストリームにフォールバックするため、裸のサーバーでも動作します——このフォールバックは push だけの機能です。",
+        "同じファイルを次のコマンドで取り戻せます: relayium pull user@your-server:backups/ ./restore——pull は常にリモートの relayium を必要とし（tar フォールバックはありません）、先にリモートへインストールしておいてください。",
       ],
     },
     {
@@ -289,9 +289,9 @@ const ko = {
       ],
       code: ["relayium push ./photos user@your-server:backups/"],
       bullets: [
-        "원격지에도 relayium이 설치되어 있으면 네이티브 프로토콜(재개 가능, 파일별 SHA-256)을 사용합니다.",
-        "설치되어 있지 않으면 일반 tar 스트림으로 대체되므로, 아무것도 설치되지 않은 서버에서도 동작합니다.",
-        "다음 명령어로 같은 파일을 다시 가져올 수 있습니다: relayium pull user@your-server:backups/ ./restore",
+        "원격지에도 relayium이 설치되어 있으면 push는 네이티브 프로토콜(재개 가능, 파일별 SHA-256)을 사용합니다.",
+        "원격지에 relayium이 없으면 push는 일반 tar 스트림으로 대체되므로, 아무것도 설치되지 않은 서버에서도 동작합니다 — 이 대체 방식은 push에서만 제공됩니다.",
+        "다음 명령어로 같은 파일을 다시 가져올 수 있습니다: relayium pull user@your-server:backups/ ./restore — pull은 항상 원격지에 relayium이 있어야 하며(tar 대체 방식 없음), 먼저 원격지에 설치해 두세요.",
       ],
     },
     {
@@ -371,9 +371,9 @@ const de = {
       ],
       code: ["relayium push ./photos user@your-server:backups/"],
       bullets: [
-        "Ist relayium auch auf der Gegenseite installiert, nutzt es das native Protokoll (wiederaufnehmbar, dateiweises SHA-256).",
-        "Ist es das nicht, fällt es auf einen einfachen tar-Stream zurück, sodass es auch auf einem nackten Server funktioniert.",
-        "Hole dieselben Dateien mit folgendem Befehl zurück: relayium pull user@your-server:backups/ ./restore",
+        "Ist relayium auch auf der Gegenseite installiert, nutzt push das native Protokoll (wiederaufnehmbar, dateiweises SHA-256).",
+        "Ist relayium dort nicht installiert, fällt push auf einen einfachen tar-Stream zurück, sodass es auch auf einem nackten Server funktioniert — dieser Fallback existiert nur bei push.",
+        "Hole dieselben Dateien mit folgendem Befehl zurück: relayium pull user@your-server:backups/ ./restore — pull braucht immer relayium auf der Gegenseite (keinen tar-Fallback), installiere es dort also zuerst.",
       ],
     },
     {
@@ -453,9 +453,9 @@ const fr = {
       ],
       code: ["relayium push ./photos user@your-server:backups/"],
       bullets: [
-        "Si relayium est aussi installé sur la machine distante, il utilise le protocole natif (reprenable, SHA-256 par fichier).",
-        "Sinon, il bascule sur un simple flux tar, ce qui fonctionne donc même sur un serveur nu.",
-        "Récupérez les mêmes fichiers avec : relayium pull user@your-server:backups/ ./restore",
+        "Si relayium est aussi installé sur la machine distante, push utilise le protocole natif (reprenable, SHA-256 par fichier).",
+        "Sinon, push bascule sur un simple flux tar, ce qui fonctionne donc même sur un serveur nu — ce repli n'existe que pour push.",
+        "Récupérez les mêmes fichiers avec : relayium pull user@your-server:backups/ ./restore — pull a toujours besoin de relayium sur la machine distante (aucun repli tar), installez-le donc là-bas au préalable.",
       ],
     },
     {
