@@ -50,7 +50,7 @@ is **how seriously we take end-to-end encryption**:
 - 📦 **Multi-file batches** (up to 10) — streamed straight to disk; large files don't get buffered in memory.
 - ✅ **Per-file SHA-256 integrity check** on the receiving end.
 - 🌐 **6 languages** — English, 中文, 日本語, 한국어, Deutsch, Français — auto-detected, switchable.
-- ⚡ **No install, ever** — just open a URL. All realtime transfers (LAN, or cross-network via a pairing code and the join link/QR it generates) need **no account**; only stored download links require the sender to sign in.
+- ⚡ **No install, ever** — just open a URL. Realtime transfers on the same LAN need **no account** at all; cross-network transfers via a pairing code (and the join link/QR it generates) need the **sender** to sign in (the receiver never does); stored download links also require the sender to sign in.
 - 🪶 **Tiny footprint** — one static SPA + a single Go binary for signaling.
 
 ## Command-line client (CLI)
@@ -86,13 +86,13 @@ Full docs at [relayium.com/cli](https://relayium.com/cli); prebuilt binaries on 
 | End-to-end encrypted     | ✅ X25519 + AES-256-GCM | ✅               | ❌ / at rest only  | ⚠️ DTLS only        |
 | MITM verification (SAS)  | ✅ 6-digit code         | n/a              | n/a                | ❌                  |
 | No install               | ✅                      | ✅               | ⚠️ size limits      | ✅                  |
-| No account               | ✅ realtime\*           | ✅               | ⚠️ size limits      | ✅                  |
+| No account               | ⚠️ LAN\*                | ✅               | ⚠️ size limits      | ✅                  |
 | Server-imposed size cap  | ❌ none                 | ❌ none          | ✅ (e.g. 2 GB free) | ❌ none             |
 | Open source              | ✅ MIT                  | ❌               | ❌                 | ✅                  |
 
-\* Realtime transfers need no account — over the LAN, or cross-network via a pairing code (and the join
-link/QR it generates). Creating a **stored download link** requires the sender to sign in (recipients
-never need an account).
+\* Realtime transfers over the **same LAN** need no account at all. Cross-network transfers via a **pairing
+code** (and the join link/QR it generates) require the **sender** to sign in — the receiver never needs an
+account. Creating a **stored download link** also requires the sender to sign in.
 
 The gap from Snapdrop/PairDrop is the **application-layer E2E + SAS**: WebRTC's DTLS fingerprints are
 exchanged *through the signaling server*, so a malicious server could MITM them. Relayium adds an
@@ -173,7 +173,9 @@ for an actual two-device transfer, serve the built `dist/` from the Go server as
 | Firefox        |    ✅    | Buffered in memory (Blob download) — keep files under ~200 MB.         |
 | Safari         |    ✅    | Buffered in memory (Blob download) — keep files under ~200 MB.         |
 
-Same-LAN / same-public-IP only at M0 (no TURN relay yet — see the roadmap).
+Same-LAN / same-public-IP transfers work with no account. Cross-network transfers (different networks/public
+IPs) work too, via a pairing code, using STUN and — when a direct connection isn't possible — an encrypted
+TURN relay that only ever sees ciphertext; this requires the sender to sign in.
 
 ## Roadmap
 
@@ -181,8 +183,10 @@ Same-LAN / same-public-IP only at M0 (no TURN relay yet — see the roadmap).
   multi-file batches, streaming to disk, i18n.
 - **M1 — Developer experience + persistent identity:** pair devices once and trust them forever (no code each
   time), directories & multi-file, resumable transfers, concurrent chunks.
-- **M2 — Cross-network relay:** TURN/relay and NAT traversal, plus encrypted temporary staging when the peer is
-  offline. *(This is where server bandwidth starts costing money — the cost model will be documented honestly.)*
+- **M2 — Cross-network relay:** TURN/relay and NAT traversal for pairing-code transfers across different
+  networks. *(Shipped — cross-network pairing-code transfers go through STUN/TURN, gated by sender sign-in.
+  Encrypted temporary staging when the peer is offline is still ahead; TURN relay bandwidth is metered — the
+  cost model will be documented honestly.)*
 - **M3 — Protocol spec + multi-client:** write the wire protocol down as a spec and reuse it from a CLI and mobile;
   extend `send` to stdin, Docker images, the clipboard — toward "TCP between developers." *(CLI shipped — see [Command-line client](#command-line-client-cli); stdin/Docker/clipboard still ahead.)*
 
@@ -212,8 +216,9 @@ relayium/
 ## FAQ
 
 **Is Relayium free?**
-Yes — free and open source under the MIT license. No install, ever. All realtime transfers (LAN, or a
-pairing code and its join link) need no account; only creating a stored download link requires the sender to sign in.
+Yes — free and open source under the MIT license. No install, ever. Same-LAN realtime transfers need no
+account; cross-network transfers via a pairing code require the sender to sign in (the receiver never does);
+creating a stored download link also requires the sender to sign in.
 
 **Do my files get uploaded to a server?**
 No. File bytes stream directly between the two devices over the WebRTC DataChannel and never pass through
@@ -232,7 +237,9 @@ No server-imposed limit. In Chrome/Edge files stream straight to disk (size boun
 In Firefox/Safari they're buffered in memory, so keep them under ~200 MB.
 
 **Can I send across different networks / over the internet?**
-Not yet — M0 works on the same network (same public IP). Cross-network relay (TURN) is on the [roadmap](#roadmap).
+Yes — via a pairing code, using STUN and, when a direct connection isn't possible, an encrypted TURN relay
+that only ever sees ciphertext (it can't decrypt your files). This requires the sender to sign in. See the
+[Security page](https://relayium.com/security).
 
 **How is this different from Snapdrop or PairDrop?**
 Same browser + WebRTC + LAN idea, but Relayium adds an application-layer E2E encryption layer

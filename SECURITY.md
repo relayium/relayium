@@ -39,11 +39,13 @@ Especially valuable areas to scrutinize:
   signaling server can observe or tamper with, and whether the SAS reliably catches a MITM.
 - **Admin dashboard auth** (`server/internal/account/admin.go`, `totp.go`, `throttle.go`) — the optional
   TOTP 2FA gate on `/admin` login; see [`docs/admin-2fa.md`](docs/admin-2fa.md) for the deployer setup guide.
+- **TURN/relay credentials and metering** (`server/internal/account/turn.go`, `server/internal/metering/`) —
+  ephemeral TURN-REST credential issuance, the multi-relay pool, and relay-usage/quota attribution for
+  cross-network pairing-code transfers.
 
 Out of scope for now (known limitations, documented in [`docs/TESTING.md`](docs/TESTING.md)):
 
 - Denial-of-service against the public demo's signaling server.
-- Cross-NAT / TURN relay (not implemented yet — M2).
 - Persistent device identity (not implemented yet — M1).
 
 ## Disclosure
