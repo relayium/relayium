@@ -7,7 +7,7 @@
 import { parseCodeParam, CROSS_PATH, DOWNLOAD_PREFIX } from "./transfer-link";
 import { clearRoom } from "./room.svelte";
 
-export type Route = "lan" | "cross" | "offline" | "download" | "me" | "cli";
+export type Route = "lan" | "cross" | "offline" | "download" | "me" | "cli" | "verify-email" | "reset-password";
 
 /** Personal center path. Login-gated page; not part of the transfer flows. */
 export const ME_PATH = "/me";
@@ -17,6 +17,14 @@ export const CLI_PATH = "/cli";
 
 /** Path of the async stored-transfer page (login-gated; the paid tier lives here). */
 export const OFFLINE_PATH = "/offline-transfer";
+
+/** Email-verification landing page. The backend's verification email links here
+ *  with ?token=<t>; not part of the transfer flows. */
+export const VERIFY_EMAIL_PATH = "/verify-email";
+
+/** Password-reset landing page. The backend's reset email links here with
+ *  ?token=<t>; not part of the transfer flows. */
+export const RESET_PASSWORD_PATH = "/reset-password";
 
 export { CROSS_PATH };
 
@@ -28,6 +36,8 @@ export function routeFromLocation(pathname: string, hash: string): Route {
   if (pathname === OFFLINE_PATH) return "offline";
   if (pathname === ME_PATH) return "me";
   if (pathname === CLI_PATH) return "cli";
+  if (pathname === VERIFY_EMAIL_PATH) return "verify-email";
+  if (pathname === RESET_PASSWORD_PATH) return "reset-password";
   return "lan";
 }
 
@@ -68,6 +78,8 @@ export function navigate(r: Route): void {
     : r === "offline" ? OFFLINE_PATH
     : r === "me" ? ME_PATH
     : r === "cli" ? CLI_PATH
+    : r === "verify-email" ? VERIFY_EMAIL_PATH
+    : r === "reset-password" ? RESET_PASSWORD_PATH
     : "/";
   clearRoom(); // leaving a 2-peer code room rebinds the socket via App's effect
   history.pushState({}, "", pathname);

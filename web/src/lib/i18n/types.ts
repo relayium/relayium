@@ -142,6 +142,25 @@ export interface Messages {
     del: string; // delete button
     confirmDel: string; // confirm() before deleting a file
   };
+  // /verify-email — landing page for the emailed verification link (?token=).
+  verifyEmail: {
+    checking: string; // transient state while the token is being verified
+    successBody: string; // token accepted, session cookie set, redirecting home
+    noToken: string; // opened without a ?token= param
+    invalidTitle: string; // token rejected (expired / already used / malformed)
+    backHome: string; // link back to the app
+  };
+  // /reset-password — landing page for the emailed reset link (?token=).
+  resetPassword: {
+    noToken: string; // opened without a ?token= param
+    minHint: string; // client-side password-length hint under the new-password field
+    submitBtn: string;
+    successBody: string; // token accepted, new password set, session cookie set, redirecting home
+    invalidTitle: string; // token rejected (expired / already used / malformed)
+    invalidBody: string; // fuller explanation + prompts a fresh forgot-password request
+    errGeneric: string; // any other server error on submit
+    backHome: string; // link back to the app
+  };
   nav: { lanTab: string; crossTab: string; offlineTab: string; cliTab: string };
   // Full page headings for the cross/offline pages. The nav.*Tab strings are the
   // short pill labels; these are the descriptive <h1> titles.

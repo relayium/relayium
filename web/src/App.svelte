@@ -45,6 +45,8 @@
   import OfflinePage from "./lib/OfflinePage.svelte";
   import MePage from "./lib/MePage.svelte";
   import CliPage from "./lib/CliPage.svelte";
+  import VerifyEmail from "./lib/VerifyEmail.svelte";
+  import ResetPassword from "./lib/ResetPassword.svelte";
   import Nav from "./lib/Nav.svelte";
   import { currentRoute, syncRouteFromLocation, downloadId, navigate, setNavGuard } from "./lib/router.svelte";
   import Hero from "./lib/Hero.svelte";
@@ -192,6 +194,7 @@
   // realtime peer is connected. Never on the download page.
   const surfaceShown = $derived(
     currentRoute() === "download" || currentRoute() === "offline" || currentRoute() === "me" || currentRoute() === "cli"
+    || currentRoute() === "verify-email" || currentRoute() === "reset-password"
       ? false
       : currentRoute() === "cross"
         ? showTransfer
@@ -1262,6 +1265,10 @@
     <MePage />
   {:else if currentRoute() === "cli"}
     <CliPage />
+  {:else if currentRoute() === "verify-email"}
+    <VerifyEmail />
+  {:else if currentRoute() === "reset-password"}
+    <ResetPassword />
   {:else}
     <Hero {connState} {unsupported} {selfName} {selfIP} />
 

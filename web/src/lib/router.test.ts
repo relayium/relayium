@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   routeFromLocation as rfl, downloadId, CROSS_PATH, CLI_PATH,
+  VERIFY_EMAIL_PATH, RESET_PASSWORD_PATH,
   navigate, currentRoute, setNavGuard, syncRouteFromLocation,
 } from "./router.svelte";
 
@@ -19,6 +20,19 @@ describe("routeFromLocation", () => {
   });
   it("a pairing code still wins over /cli", () => {
     expect(rfl("/cli", "#c=424242")).toBe("cross");
+  });
+});
+
+describe("routeFromLocation email-verification pages", () => {
+  it("is verify-email on the /verify-email path", () => {
+    expect(rfl(VERIFY_EMAIL_PATH, "")).toBe("verify-email");
+  });
+  it("is reset-password on the /reset-password path", () => {
+    expect(rfl(RESET_PASSWORD_PATH, "")).toBe("reset-password");
+  });
+  it("a pairing code still wins over either path", () => {
+    expect(rfl(VERIFY_EMAIL_PATH, "#c=424242")).toBe("cross");
+    expect(rfl(RESET_PASSWORD_PATH, "#c=424242")).toBe("cross");
   });
 });
 
@@ -91,5 +105,14 @@ describe("navigate", () => {
     setNavGuard(() => true);
     navigate("cross");
     expect(currentRoute()).toBe("cross");
+  });
+
+  it("switches to verify-email and reset-password and back to their paths", () => {
+    navigate("verify-email");
+    expect(currentRoute()).toBe("verify-email");
+    expect(location.pathname).toBe(VERIFY_EMAIL_PATH);
+    navigate("reset-password");
+    expect(currentRoute()).toBe("reset-password");
+    expect(location.pathname).toBe(RESET_PASSWORD_PATH);
   });
 });

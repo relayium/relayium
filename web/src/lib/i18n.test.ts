@@ -79,6 +79,20 @@ describe("i18n completeness", () => {
       expect(m.crossnet.relayQuotaFail, `${code}.crossnet.relayQuotaFail`).toBeTruthy();
     }
   });
+
+  it("every language has the /verify-email and /reset-password strings", () => {
+    for (const { code } of LANGS) {
+      const m = messages[code];
+      expect(m.verifyEmail.checking, `${code}.verifyEmail.checking`).toBeTruthy();
+      expect(m.verifyEmail.successBody, `${code}.verifyEmail.successBody`).toBeTruthy();
+      expect(m.verifyEmail.noToken, `${code}.verifyEmail.noToken`).toBeTruthy();
+      expect(m.verifyEmail.invalidTitle, `${code}.verifyEmail.invalidTitle`).toBeTruthy();
+      expect(m.resetPassword.noToken, `${code}.resetPassword.noToken`).toBeTruthy();
+      expect(m.resetPassword.submitBtn, `${code}.resetPassword.submitBtn`).toBeTruthy();
+      expect(m.resetPassword.successBody, `${code}.resetPassword.successBody`).toBeTruthy();
+      expect(m.resetPassword.invalidBody, `${code}.resetPassword.invalidBody`).toBeTruthy();
+    }
+  });
 });
 
 describe("detect", () => {
