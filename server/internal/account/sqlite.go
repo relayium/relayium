@@ -166,6 +166,17 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
+	// Non-unique: two legacy accounts may already share a canonical form (see H2b
+	// dedupe rationale), so this can never be UNIQUE without risking a startup-time
+	// migration failure on existing data. Created here (after the ALTER above), not
+	// in the top-level schema string, because the column doesn't exist yet on a
+	// legacy DB until that ALTER runs — creating the index any earlier would fail
+	// with "no such column" on every upgrade.
+	if _, err := db.ExecContext(context.Background(),
+		`CREATE INDEX IF NOT EXISTS idx_users_canonical_email ON users(canonical_email)`); err != nil {
+		db.Close()
+		return nil, err
+	}
 	// The transfers table backed the retired share-link mode (one-time
 	// rendezvous tokens). Dropping it is idempotent and safe: tokens lived
 	// at most one hour, so nothing in an existing deployment still needs it.
@@ -256,6 +267,43 @@ func (s *SQLiteStore) UserByCanonicalEmail(ctx context.Context, canonical string
 		return User{}, false, err
 	}
 	return u, true, nil
+}
+
+// InsertUserDedupedByCanonical checks canonical_email and inserts the new user
+// inside one transaction (H2b anti-Sybil register dedupe). With
+// db.SetMaxOpenConns(1) the pool hands out a single physical connection, so a
+// second concurrent call's BeginTx blocks until the first Commits/Rollbacks —
+// the same serialization ReserveUpload relies on — meaning the SELECT a second
+// caller sees always reflects the first caller's already-committed INSERT (or
+// its rollback), never a stale pre-insert snapshot.
+func (s *SQLiteStore) InsertUserDedupedByCanonical(ctx context.Context, email, displayName, canonical string) (User, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return User{}, false, err
+	}
+	defer tx.Rollback() // no-op after a successful Commit
+
+	var existing string
+	err = tx.QueryRowContext(ctx,
+		`SELECT id FROM users WHERE canonical_email = ? LIMIT 1`, canonical,
+	).Scan(&existing)
+	if err != nil && err != sql.ErrNoRows {
+		return User{}, false, err
+	}
+	if err == nil {
+		return User{}, true, nil
+	}
+
+	u := User{ID: newID(), Email: email, DisplayName: displayName, CreatedAt: time.Now().Unix()}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO users (id, email, display_name, created_at, canonical_email) VALUES (?, ?, ?, ?, ?)`,
+		u.ID, u.Email, u.DisplayName, u.CreatedAt, canonical); err != nil {
+		return User{}, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return User{}, false, err
+	}
+	return u, false, nil
 }
 
 func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (User, error) {

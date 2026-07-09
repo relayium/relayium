@@ -41,16 +41,17 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 	}
 	// H2b: reject a new registration whose canonical form (strip +tag; gmail dot-fold)
 	// already belongs to an account, defeating "a+1@gmail / a.b@gmail" Sybil mint.
-	// Same ErrEmailTaken → identical 409 response as an exact-duplicate, so existence
-	// is not leaked any differently.
-	if u, ok, err := s.store.UserByCanonicalEmail(ctx, canonicalEmail(email)); err != nil {
-		return User{}, err
-	} else if ok && u.ID != "" {
-		return User{}, ErrEmailTaken
-	}
-	u, err := s.store.UpsertUserByEmail(ctx, email, displayName)
+	// The check and the insert happen atomically inside one transaction (see
+	// InsertUserDedupedByCanonical) — a separate check-then-insert pair here would
+	// leave a TOCTOU race letting N concurrent registrations for the same canonical
+	// form all pass. Same ErrEmailTaken → identical 409 response as an
+	// exact-duplicate, so existence is not leaked any differently.
+	u, taken, err := s.store.InsertUserDedupedByCanonical(ctx, email, displayName, canonicalEmail(email))
 	if err != nil {
 		return User{}, err
+	}
+	if taken {
+		return User{}, ErrEmailTaken
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {

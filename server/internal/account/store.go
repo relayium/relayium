@@ -178,6 +178,15 @@ type Store interface {
 	// gmail.com/googlemail.com). Distinct from normEmail, which stays exact for
 	// login/identity.
 	UserByCanonicalEmail(ctx context.Context, canonical string) (User, bool, error)
+	// InsertUserDedupedByCanonical atomically checks-then-inserts a new user by
+	// canonical email form in a single transaction, closing the TOCTOU race a
+	// separate UserByCanonicalEmail-then-UpsertUserByEmail pair leaves open:
+	// concurrent Register calls for canonicalization-equivalent addresses (e.g.
+	// a+x@gmail.com / a+y@gmail.com / a.b@gmail.com) can otherwise all read "not
+	// taken" before any of them inserts. taken=true means some existing row
+	// (any exact email) already owns this canonical form; nothing was written and
+	// the returned User is the zero value.
+	InsertUserDedupedByCanonical(ctx context.Context, email, displayName, canonical string) (u User, taken bool, err error)
 	HasPassword(ctx context.Context, userID string) (bool, error)
 	EmailVerified(ctx context.Context, userID string) (bool, error)
 	SetEmailVerified(ctx context.Context, userID string) error

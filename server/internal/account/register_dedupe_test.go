@@ -2,8 +2,12 @@ package account
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"path/filepath"
 	"testing"
+
+	_ "modernc.org/sqlite"
 )
 
 // TestRegisterCanonicalDedupeGmail covers the classic Gmail Sybil mint: dot-fold
@@ -89,5 +93,66 @@ func TestRegisterCanonicalDedupeSetsColumnOnInsert(t *testing.T) {
 	}
 	if u.Email != "legacy+tag@gmail.com" {
 		t.Fatalf("unexpected user returned: %+v", u)
+	}
+}
+
+// TestBackfillCanonicalEmailComputesRealValues exercises the actual migration
+// path (like TestGrandfatherExistingUsers): a genuine pre-canonical_email
+// `users` table, populated directly (bypassing OpenSQLite), then opened
+// through OpenSQLite so the ALTER + backfillCanonicalEmail genuinely fire. It
+// asserts each row's resulting canonical_email against canonicalEmail(email)
+// directly, so a mutant backfill (e.g. one that copies email verbatim, or
+// blanks the column, or dot-folds non-gmail domains) fails this test even
+// though every other suite in this package only ever checks email_verified on
+// the same migration.
+func TestBackfillCanonicalEmailComputesRealValues(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "backfill.db")
+
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const preMigrationSchema = `CREATE TABLE users (
+		id           TEXT PRIMARY KEY,
+		email        TEXT UNIQUE NOT NULL,
+		display_name TEXT,
+		created_at   INTEGER NOT NULL
+	)`
+	if _, err := raw.ExecContext(ctx, preMigrationSchema); err != nil {
+		t.Fatal(err)
+	}
+	rows := []struct{ id, email string }{
+		{"old-1", "a.b+tag@gmail.com"},   // gmail: dot-fold + strip tag -> ab@gmail.com
+		{"old-2", "c+work@example.com"},  // non-gmail: strip tag only -> c@example.com
+		{"old-3", "d.e@example.com"},     // non-gmail: dots NOT folded -> d.e@example.com
+	}
+	for i, r := range rows {
+		if _, err := raw.ExecContext(ctx,
+			`INSERT INTO users (id, email, display_name, created_at) VALUES (?, ?, ?, ?)`,
+			r.id, r.email, "", int64(1000+i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	st, err := OpenSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	for _, r := range rows {
+		want := canonicalEmail(r.email)
+		var got string
+		if err := st.db.QueryRowContext(ctx,
+			`SELECT canonical_email FROM users WHERE id = ?`, r.id).Scan(&got); err != nil {
+			t.Fatalf("query %s: %v", r.id, err)
+		}
+		if got != want {
+			t.Fatalf("row %s (%s): canonical_email = %q, want %q", r.id, r.email, got, want)
+		}
 	}
 }
