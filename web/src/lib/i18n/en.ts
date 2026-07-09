@@ -353,14 +353,7 @@ const en: Messages = {
     offlineCta: "Async transfer →",
   },
   legal: { privacy: "Privacy Policy", terms: "Terms of Service", security: "Security" },
-  learn: {
-    compareSnapdrop: "vs Snapdrop",
-    compareAirdrop: "vs AirDrop",
-    compareWetransfer: "vs WeTransfer",
-    howtoAndroidIphone: "Android ↔ iPhone",
-    howtoPcPhone: "PC to phone wirelessly",
-    howtoLargeFiles: "Large files without the cloud",
-  },
+  learn: { hub: "Guides" },
 };
 
 

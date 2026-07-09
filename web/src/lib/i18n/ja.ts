@@ -353,14 +353,7 @@ const ja: Messages = {
     offlineCta: "非同期転送 →",
   },
   legal: { privacy: "プライバシーポリシー", terms: "利用規約", security: "セキュリティ" },
-  learn: {
-    compareSnapdrop: "Snapdrop と比較",
-    compareAirdrop: "AirDrop と比較",
-    compareWetransfer: "WeTransfer と比較",
-    howtoAndroidIphone: "Android→iPhone 転送",
-    howtoPcPhone: "PC→スマホ 無線転送",
-    howtoLargeFiles: "クラウド不要で大容量送信",
-  },
+  learn: { hub: "ガイド" },
 };
 
 

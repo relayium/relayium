@@ -353,14 +353,7 @@ const ko: Messages = {
     offlineCta: "비동기 전송 →",
   },
   legal: { privacy: "개인정보 처리방침", terms: "이용약관", security: "보안" },
-  learn: {
-    compareSnapdrop: "Snapdrop 비교",
-    compareAirdrop: "AirDrop 비교",
-    compareWetransfer: "WeTransfer 비교",
-    howtoAndroidIphone: "안드로이드 ↔ 아이폰 전송",
-    howtoPcPhone: "PC→폰 무선 전송",
-    howtoLargeFiles: "클라우드 없이 대용량 전송",
-  },
+  learn: { hub: "가이드" },
 };
 
 

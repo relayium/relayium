@@ -294,15 +294,8 @@ export interface Messages {
   crossPitch: string; // one-line pitch under the realtime page header
   homeCross: { title: string; desc: string; realtimeCta: string; offlineCta: string }; // homepage → the two cross-network pages
   legal: { privacy: string; terms: string; security: string };
-  // Short footer labels linking to the generated static articles/landing pages.
-  learn: {
-    compareSnapdrop: string;
-    compareAirdrop: string;
-    compareWetransfer: string;
-    howtoAndroidIphone: string;
-    howtoPcPhone: string;
-    howtoLargeFiles: string;
-  };
+  // Footer link label for the generated static Guides hub page.
+  learn: { hub: string };
 }
 
 export function legalUrl(slug: "privacy" | "terms" | "security", l: Lang): string {

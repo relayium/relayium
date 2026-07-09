@@ -131,11 +131,9 @@ describe("pageUrl", () => {
 });
 
 describe("learn strings", () => {
-  it("every language has all six learn labels", () => {
+  it("every language has a non-empty hub label", () => {
     for (const { code } of LANGS) {
-      const learn = messages[code].learn;
-      expect(Object.keys(learn).length).toBe(6);
-      for (const v of Object.values(learn)) expect(v.length).toBeGreaterThan(0);
+      expect(messages[code].learn.hub.length).toBeGreaterThan(0);
     }
   });
 });

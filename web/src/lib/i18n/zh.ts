@@ -353,14 +353,7 @@ const zh: Messages = {
     offlineCta: "异步传输 →",
   },
   legal: { privacy: "隐私政策", terms: "服务条款", security: "安全说明" },
-  learn: {
-    compareSnapdrop: "对比 Snapdrop",
-    compareAirdrop: "对比 AirDrop",
-    compareWetransfer: "对比 WeTransfer",
-    howtoAndroidIphone: "安卓 ↔ iPhone 互传",
-    howtoPcPhone: "电脑无线传手机",
-    howtoLargeFiles: "不经云端传大文件",
-  },
+  learn: { hub: "使用指南" },
 };
 
 

@@ -1300,12 +1300,7 @@
         <a href="https://github.com/relayium/relayium" target="_blank" rel="noopener noreferrer">GitHub</a>
       </nav>
       <nav class="legal" aria-label="Guides">
-        <a href={pageUrl("compare/snapdrop", lang())}>{t.learn.compareSnapdrop}</a>
-        <a href={pageUrl("compare/airdrop", lang())}>{t.learn.compareAirdrop}</a>
-        <a href={pageUrl("compare/wetransfer", lang())}>{t.learn.compareWetransfer}</a>
-        <a href={pageUrl("how-to/transfer-files-android-to-iphone", lang())}>{t.learn.howtoAndroidIphone}</a>
-        <a href={pageUrl("how-to/send-files-pc-to-phone-wirelessly", lang())}>{t.learn.howtoPcPhone}</a>
-        <a href={pageUrl("how-to/send-large-files-without-cloud", lang())}>{t.learn.howtoLargeFiles}</a>
+        <a href={pageUrl("guides", lang())}>{t.learn.hub}</a>
       </nav>
       <span class="fineprint">{t.footer}</span>
     </footer>

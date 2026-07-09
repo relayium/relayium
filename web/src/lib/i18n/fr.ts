@@ -354,14 +354,7 @@ const fr: Messages = {
     offlineCta: "Transfert asynchrone →",
   },
   legal: { privacy: "Politique de confidentialité", terms: "Conditions d'utilisation", security: "Sécurité" },
-  learn: {
-    compareSnapdrop: "vs Snapdrop",
-    compareAirdrop: "vs AirDrop",
-    compareWetransfer: "vs WeTransfer",
-    howtoAndroidIphone: "Android ↔ iPhone",
-    howtoPcPhone: "PC vers mobile sans fil",
-    howtoLargeFiles: "Gros fichiers sans le cloud",
-  },
+  learn: { hub: "Guides" },
 };
 
 
