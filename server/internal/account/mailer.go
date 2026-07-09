@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/mail"
 	"net/smtp"
 	"strings"
+	"time"
 )
 
 // Mailer sends the magic-link email. Abstracted so dev uses a log and prod uses SMTP.
@@ -58,13 +60,19 @@ func NewSMTPMailer(addr, from, user, pass string) *SMTPMailer {
 	return m
 }
 
-// send builds a text+HTML multipart/alternative message and delivers it via SMTP.
-func (m *SMTPMailer) send(to, subject, text, html string) error {
+// buildMessage assembles a well-formed text+HTML multipart/alternative message.
+// It includes Date and Message-ID headers: both are effectively required by
+// RFC 5322 / RFC 2822, and mail filters (e.g. docker-mailserver's amavis) reject
+// a message that lacks them as a bad header — which is exactly what silently
+// quarantined the first verification emails.
+func (m *SMTPMailer) buildMessage(to, subject, text, html string) []byte {
 	boundary := "relayium-boundary-8f2a1c"
 	var b strings.Builder
 	b.WriteString("From: " + m.From + "\r\n")
 	b.WriteString("To: " + to + "\r\n")
 	b.WriteString("Subject: " + subject + "\r\n")
+	b.WriteString("Date: " + time.Now().Format(time.RFC1123Z) + "\r\n")
+	b.WriteString("Message-ID: <" + randToken() + "@" + smtpDomain(m.From, m.Addr) + ">\r\n")
 	b.WriteString("MIME-Version: 1.0\r\n")
 	b.WriteString("Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n\r\n")
 	b.WriteString("--" + boundary + "\r\n")
@@ -74,10 +82,30 @@ func (m *SMTPMailer) send(to, subject, text, html string) error {
 	b.WriteString("Content-Type: text/html; charset=UTF-8\r\n\r\n")
 	b.WriteString(html + "\r\n\r\n")
 	b.WriteString("--" + boundary + "--\r\n")
-	if err := smtp.SendMail(m.Addr, m.Auth, m.From, []string{to}, []byte(b.String())); err != nil {
+	return []byte(b.String())
+}
+
+// send builds a text+HTML multipart/alternative message and delivers it via SMTP.
+func (m *SMTPMailer) send(to, subject, text, html string) error {
+	if err := smtp.SendMail(m.Addr, m.Auth, m.From, []string{to}, m.buildMessage(to, subject, text, html)); err != nil {
 		return fmt.Errorf("send mail: %w", err)
 	}
 	return nil
+}
+
+// smtpDomain derives the Message-ID right-hand-side domain from the From address
+// (its part after '@'), falling back to the SMTP host, then "localhost". A
+// globally-unique Message-ID is what RFC 5322 wants and what filters check for.
+func smtpDomain(from, addr string) string {
+	if a, err := mail.ParseAddress(from); err == nil {
+		if i := strings.LastIndex(a.Address, "@"); i >= 0 && i+1 < len(a.Address) {
+			return a.Address[i+1:]
+		}
+	}
+	if host, _, err := net.SplitHostPort(addr); err == nil && host != "" {
+		return host
+	}
+	return "localhost"
 }
 
 func (m *SMTPMailer) SendMagicLink(_ context.Context, email, link string) error {
