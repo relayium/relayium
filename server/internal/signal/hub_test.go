@@ -1,6 +1,7 @@
 package signal
 
 import (
+	"strconv"
 	"sync"
 	"testing"
 )
@@ -119,6 +120,24 @@ func TestJoinLimitedEnforcesCapacity(t *testing.T) {
 	// The room still has exactly the two admitted peers in its roster.
 	if got := b.last(); got.Type != TypePeers || len(got.Peers) != 2 {
 		t.Fatalf("roster should be 2 after rejection: %+v", got)
+	}
+}
+
+func TestJoinLimitedGlobalRoomCap(t *testing.T) {
+	h := NewHub()
+	for i := 0; i < maxRooms; i++ {
+		room := "r" + strconv.Itoa(i)
+		if !h.JoinLimited(room, "a", "A", &fakeConn{}, 0, "") {
+			t.Fatalf("room %d under the cap must be admitted", i)
+		}
+	}
+	// A brand-new room beyond the cap is rejected...
+	if h.JoinLimited("overflow", "x", "X", &fakeConn{}, 0, "") {
+		t.Fatal("a new room beyond maxRooms must be rejected")
+	}
+	// ...but an already-existing room still admits new peers.
+	if !h.JoinLimited("r0", "b", "B", &fakeConn{}, 0, "") {
+		t.Fatal("an existing room must still admit peers at the cap")
 	}
 }
 

@@ -7,6 +7,11 @@ type Conn interface {
 	Send(Envelope)
 }
 
+// maxRooms bounds the total number of concurrent signaling rooms so the hub
+// cannot be driven to exhaust memory by opening unbounded distinct rooms.
+// Tunable.
+const maxRooms = 5000
+
 type peer struct {
 	id   string
 	name string
@@ -33,6 +38,10 @@ func (h *Hub) Join(room, id, name string, c Conn) {
 func (h *Hub) JoinLimited(room, id, name string, c Conn, max int, clientIP string) bool {
 	h.mu.Lock()
 	if h.rooms[room] == nil {
+		if len(h.rooms) >= maxRooms {
+			h.mu.Unlock()
+			return false // global room cap: refuse to create a new room
+		}
 		h.rooms[room] = make(map[string]*peer)
 	}
 	if max > 0 && len(h.rooms[room]) >= max {
