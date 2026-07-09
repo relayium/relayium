@@ -324,6 +324,12 @@ func (s *Service) writeUser(ctx context.Context, w http.ResponseWriter, code int
 }
 
 func (s *Service) handleRegister(w http.ResponseWriter, r *http.Request) {
+	// H2a: POST /api/auth/register sends one verification email per new address,
+	// so an un-limited endpoint is an email bomb + Sybil mint. 5/min/IP.
+	if s.registerLimiter != nil && !s.registerLimiter.Allow(s.clientIP(r)) {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
+		return
+	}
 	var in struct {
 		Email       string `json:"email"`
 		Password    string `json:"password"`

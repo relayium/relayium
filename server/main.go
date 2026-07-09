@@ -150,6 +150,9 @@ func main() {
 	// H1: /api/ice pairing-code → TURN-credential endpoint. 5/min/IP.
 	iceLimiter := signal.NewRateLimiter(5, time.Minute, func() int64 { return time.Now().Unix() })
 	go iceLimiter.Run(context.Background(), time.Minute)
+	// H2a: register endpoint (email-bomb + Sybil surface). 5/min/IP.
+	registerLimiter := signal.NewRateLimiter(5, time.Minute, func() int64 { return time.Now().Unix() })
+	go registerLimiter.Run(context.Background(), time.Minute)
 
 	store, dbErr := account.OpenSQLite(*dbPath)
 
@@ -227,6 +230,7 @@ func main() {
 		acct.SetPairCodeOwner(pairReg.OwnerOf)
 		acct.SetClientIP(ipx.IP) // H3: trusted-proxy-aware rate-limit keys
 		acct.SetICELimiter(iceLimiter)
+		acct.SetRegisterLimiter(registerLimiter)
 		// /api/pair requires a logged-in owner: the receiver still joins the code
 		// room anonymously via /ws?code= and /api/ice?code=, but minting a
 		// cross-network rendezvous code needs an account for attribution.
