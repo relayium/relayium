@@ -24,6 +24,8 @@ import (
 	"github.com/relayium/relayium/internal/storage"
 )
 
+const lanMaxPeers = 50 // LAN room peer cap (H4); tunable.
+
 func newID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
@@ -131,6 +133,9 @@ func main() {
 
 	hub := signal.NewHub()
 	handle := signal.ServeWS(hub, newID)
+	// Per-IP concurrent /ws connection cap (H4). Acquired after the room is
+	// resolved and before the websocket upgrade; released when the handler returns.
+	ipConns := signal.NewIPConnLimiter()
 
 	// Anonymous, login-free pairing: short numeric codes for cross-network
 	// realtime rendezvous. Pure in-memory — works even if the DB is unavailable.
@@ -163,14 +168,20 @@ func main() {
 		}
 		if lan {
 			room = ipx.RoomKey(r)
-			maxPeers = 0 // LAN: unlimited
+			maxPeers = lanMaxPeers // LAN: capped (was unlimited)
 		}
+		ip := ipx.IP(r)
+		if !ipConns.Acquire(ip) {
+			http.Error(w, "too many connections", http.StatusTooManyRequests)
+			return
+		}
+		defer ipConns.Release(ip)
 		c, err := websocket.Accept(w, r, nil)
 		if err != nil {
 			return
 		}
 		ctx := r.Context()
-		handle(ctx, c, room, maxPeers, ipx.IP(r))
+		handle(ctx, c, room, maxPeers, ip)
 		_ = c.Close(websocket.StatusNormalClosure, "")
 	})
 	if dbErr != nil {
