@@ -40,11 +40,11 @@ func TestTouchNodeKeepMaxAndOnline(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()
 	n, _ := st.UpsertNode(ctx, Node{OwnerType: "fleet", URLs: []string{"turn:x:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1})
-	if err := st.TouchNode(ctx, n.ID, 500, 0, 2000); err != nil {
+	if err := st.TouchNode(ctx, n.ID, 500, 0, 0, 0, 2000); err != nil {
 		t.Fatalf("touch: %v", err)
 	}
 	// keep-max: a lower relayed value must not decrease the stored counter.
-	if err := st.TouchNode(ctx, n.ID, 300, 0, 2500); err != nil {
+	if err := st.TouchNode(ctx, n.ID, 300, 0, 0, 0, 2500); err != nil {
 		t.Fatalf("touch2: %v", err)
 	}
 	online, err := st.OnlineNodes(ctx, 2400) // since 2400 -> last_seen 2500 qualifies

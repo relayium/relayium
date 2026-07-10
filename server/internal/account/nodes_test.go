@@ -47,6 +47,29 @@ func TestNodeRegisterAuth(t *testing.T) {
 	}
 }
 
+func TestNodeRegisterStorageFields(t *testing.T) {
+	s := nodeService(t, "fleet-secret")
+	mux := http.NewServeMux()
+	s.RegisterNodeRoutes(mux)
+	body, _ := json.Marshal(nodeRegisterReq{
+		TURNSecret: "sek", URLs: []string{"turn:1.2.3.4:3478"}, Capabilities: []string{"relay", "storage"},
+		StorageURL: "http://1.2.3.4:8081", StorageSecret: "ss", StorageTotal: 20 << 30, StorageFree: 10 << 30,
+	})
+	r := httptest.NewRequest("POST", "/api/nodes/register", bytes.NewReader(body))
+	r.Header.Set("Authorization", "Bearer fleet-secret")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("register: %d", w.Code)
+	}
+	var resp nodeRegisterResp
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	got, ok, _ := s.store.GetNode(context.Background(), resp.NodeID)
+	if !ok || !got.StorageEnabled || got.StorageURL != "http://1.2.3.4:8081" || got.StorageFree != 10<<30 {
+		t.Fatalf("persisted node = %+v ok=%v", got, ok)
+	}
+}
+
 func TestNodeHeartbeatRecordsUsage(t *testing.T) {
 	s := nodeService(t, "fleet-secret")
 	// register first

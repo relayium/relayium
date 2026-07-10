@@ -19,6 +19,10 @@ type GC struct {
 	Blobs storage.BlobStore
 	Now   func() int64
 	Log   *log.Logger
+
+	// BlobFor resolves the blob store for a file's node_id (central-local or a
+	// remote node). When nil, GC falls back to Blobs (SP1 behavior).
+	BlobFor func(ctx context.Context, nodeID string) (storage.BlobStore, error)
 }
 
 func (g *GC) sweep(ctx context.Context) {
@@ -29,13 +33,14 @@ func (g *GC) sweep(ctx context.Context) {
 		return
 	}
 	for _, f := range expired {
-		if g.Blobs != nil {
-			_ = g.Blobs.Delete(ctx, f.BlobKey)
+		if err := g.deleteBlob(ctx, f.NodeID, f.BlobKey); err != nil {
+			_ = g.Store.EnqueueNodeDelete(ctx, f.BlobKey, f.NodeID, now)
 		}
 		if err := g.Store.DeleteStoredFile(ctx, f.ID); err != nil {
 			g.Log.Printf("gc: delete file %s: %v", f.ID, err)
 		}
 	}
+	g.drainPending(ctx)
 	if err := g.Store.PruneUploadEvents(ctx, now-pruneMargin); err != nil {
 		g.Log.Printf("gc: prune upload events: %v", err)
 	}
@@ -50,6 +55,38 @@ func (g *GC) sweep(ctx context.Context) {
 	}
 	if err := g.Store.DeleteSpentEmailTokens(ctx, now); err != nil {
 		g.Log.Printf("gc: delete spent email tokens: %v", err)
+	}
+}
+
+func (g *GC) deleteBlob(ctx context.Context, nodeID, blobKey string) error {
+	if g.BlobFor != nil {
+		bs, err := g.BlobFor(ctx, nodeID)
+		if err != nil {
+			return err
+		}
+		return bs.Delete(ctx, blobKey)
+	}
+	if g.Blobs != nil {
+		return g.Blobs.Delete(ctx, blobKey) // SP1 fallback
+	}
+	return nil
+}
+
+// drainPending retries orphaned node deletes recorded when a node was
+// unreachable at expiry; each success clears its row, each failure stays queued.
+func (g *GC) drainPending(ctx context.Context) {
+	pend, err := g.Store.ListPendingNodeDeletes(ctx)
+	if err != nil {
+		g.Log.Printf("gc: list pending node deletes: %v", err)
+		return
+	}
+	for _, p := range pend {
+		if err := g.deleteBlob(ctx, p.NodeID, p.BlobKey); err != nil {
+			continue // node still unreachable; retry next sweep
+		}
+		if err := g.Store.DeletePendingNodeDelete(ctx, p.BlobKey, p.NodeID); err != nil {
+			g.Log.Printf("gc: clear pending delete %s@%s: %v", p.BlobKey, p.NodeID, err)
+		}
 	}
 }
 

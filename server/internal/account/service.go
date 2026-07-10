@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -91,6 +92,14 @@ type Service struct {
 	// disk soft cap (M3b). blobDiskMax<=0 also disables it even if diskUsage is set.
 	diskUsage   func() (used, total uint64, err error)
 	blobDiskMax int64
+	// nodeHTTP is used for central->node blob calls (RemoteBlobStore); a
+	// ResponseHeaderTimeout guards against a stuck node, but there is
+	// deliberately no total request timeout since blob bodies are large
+	// streams.
+	nodeHTTP *http.Client
+	// pickN returns a random index in [0,n); overridable in tests for
+	// deterministic node selection in placeUpload.
+	pickN func(int) int
 }
 
 // rateLimiter is the minimal per-key limiter account needs; *signal.RateLimiter
@@ -105,6 +114,18 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 		uploadSem: newUploadSem(maxConcurrentUploadsPerUser)}
 	svc.clientIP = clientIP
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
+	svc.nodeHTTP = &http.Client{Transport: &http.Transport{
+		ResponseHeaderTimeout: 15 * time.Second,
+		// no total timeout: blob bodies are large streams
+	}}
+	svc.pickN = func(n int) int {
+		if n <= 0 {
+			return 0
+		}
+		b := make([]byte, 8)
+		_, _ = rand.Read(b)
+		return int(binary.BigEndian.Uint64(b) % uint64(n))
+	}
 	return svc
 }
 

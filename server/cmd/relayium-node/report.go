@@ -11,12 +11,16 @@ import (
 
 // JSON bodies — tags MUST match the central handlers (internal/account/nodes.go).
 type registerBody struct {
-	NodeID       string   `json:"nodeID"`
-	TURNSecret   string   `json:"turnSecret"`
-	URLs         []string `json:"urls"`
-	Region       string   `json:"region"`
-	Version      string   `json:"version"`
-	Capabilities []string `json:"capabilities"`
+	NodeID        string   `json:"nodeID"`
+	TURNSecret    string   `json:"turnSecret"`
+	URLs          []string `json:"urls"`
+	Region        string   `json:"region"`
+	Version       string   `json:"version"`
+	Capabilities  []string `json:"capabilities"`
+	StorageURL    string   `json:"storageURL"`
+	StorageSecret string   `json:"storageSecret"`
+	StorageTotal  int64    `json:"storageTotal"`
+	StorageFree   int64    `json:"storageFree"`
 }
 
 type registerResp struct {
@@ -36,6 +40,8 @@ type heartbeatBody struct {
 	Usage        []usageItem `json:"usage"`
 	RelayedTotal int64       `json:"relayedTotal"`
 	StoredBytes  int64       `json:"storedBytes"`
+	StorageTotal int64       `json:"storageTotal"`
+	StorageFree  int64       `json:"storageFree"`
 }
 
 type reporter struct {

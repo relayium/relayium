@@ -12,15 +12,17 @@ import (
 )
 
 type config struct {
-	CentralURL string
-	NodeToken  string
-	Region     string
-	PublicIP   string
-	Realm      string
-	StateDir   string
-	TURNPort   int
-	MinPort    int
-	MaxPort    int
+	CentralURL  string
+	NodeToken   string
+	Region      string
+	PublicIP    string
+	Realm       string
+	StateDir    string
+	TURNPort    int
+	MinPort     int
+	MaxPort     int
+	StorageDir  string
+	StoragePort int
 }
 
 func env(k, def string) string {
@@ -41,6 +43,8 @@ func parseConfig() (config, error) {
 	flag.IntVar(&c.TURNPort, "turn-port", 3478, "TURN listening UDP port")
 	flag.IntVar(&c.MinPort, "min-port", 49152, "relay UDP range low")
 	flag.IntVar(&c.MaxPort, "max-port", 65535, "relay UDP range high")
+	flag.StringVar(&c.StorageDir, "storage-dir", env("RELAYIUM_NODE_STORAGE_DIR", ""), "blob storage dir; empty disables node storage")
+	flag.IntVar(&c.StoragePort, "storage-port", 8081, "TCP port for the node blob HTTP server")
 	flag.Parse()
 
 	var missing []string

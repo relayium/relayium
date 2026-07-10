@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/pion/turn/v4"
+	"github.com/relayium/relayium/internal/storage"
 )
 
 // version is stamped by goreleaser via -ldflags; a dev build reports "dev".
@@ -64,6 +65,16 @@ func (g *countingGenerator) AllocatePacketConn(network string, requestedPort int
 
 func (g *countingGenerator) AllocateConn(network string, requestedPort int) (net.Conn, net.Addr, error) {
 	return g.inner.AllocateConn(network, requestedPort) // TCP relay unused; not counted in SP1
+}
+
+// storageReport wraps storage.DiskUsage to report the node's blob-dir capacity
+// for register/heartbeat.
+func storageReport(dir string) (total, free int64, err error) {
+	used, tot, err := storage.DiskUsage(dir) // used, total, err
+	if err != nil {
+		return 0, 0, err
+	}
+	return int64(tot), int64(tot - used), nil
 }
 
 func run(c config, st nodeState) error {
@@ -123,9 +134,37 @@ func run(c config, st nodeState) error {
 	rp := newReporter(c.CentralURL, c.NodeToken)
 	urls := []string{fmt.Sprintf("turn:%s:%d", publicIP, c.TURNPort)}
 
+	var storageURL, storageSecret string
+	var storTotal, storFree int64
+	if c.StorageDir != "" {
+		ds, derr := storage.NewDiskStore(c.StorageDir)
+		if derr != nil {
+			return fmt.Errorf("open storage dir %s: %w", c.StorageDir, derr)
+		}
+		storageSecret = st.StorageSecret
+		blobSrv := &http.Server{Addr: fmt.Sprintf(":%d", c.StoragePort), Handler: newBlobHandler(ds, storageSecret)}
+		go func() {
+			if err := blobSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("relayium-node: blob server exited: %v", err)
+			}
+		}()
+		defer blobSrv.Close()
+		storageURL = fmt.Sprintf("http://%s:%d", publicIP, c.StoragePort)
+		if t, f, uerr := storageReport(c.StorageDir); uerr == nil {
+			storTotal, storFree = t, f
+		}
+		log.Printf("relayium-node: storage enabled, serving blobs on %s", storageURL)
+	}
+
+	capabilities := []string{"relay"}
+	if storageURL != "" {
+		capabilities = append(capabilities, "storage")
+	}
 	nodeID, interval, err := rp.register(registerBody{
 		NodeID: st.NodeID, TURNSecret: st.TURNSecret, URLs: urls,
-		Region: c.Region, Version: version, Capabilities: []string{"relay"},
+		Region: c.Region, Version: version, Capabilities: capabilities,
+		StorageURL: storageURL, StorageSecret: storageSecret,
+		StorageTotal: storTotal, StorageFree: storFree,
 	})
 	if err != nil {
 		return fmt.Errorf("register with central: %w", err)
@@ -151,12 +190,12 @@ func run(c config, st nodeState) error {
 			log.Printf("relayium-node: shutting down")
 			return nil
 		case <-ticker.C:
-			sendHeartbeat(rp, nodeID, reg)
+			sendHeartbeat(rp, nodeID, reg, c.StorageDir)
 		}
 	}
 }
 
-func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry) {
+func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir string) {
 	samples := reg.snapshot()
 	usage := make([]usageItem, 0, len(samples))
 	var total int64
@@ -167,7 +206,18 @@ func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry) {
 		usage = append(usage, usageItem{AllocID: s.AllocID, Username: s.Username, RelayedBytes: s.RelayedBytes})
 		total += s.RelayedBytes
 	}
-	if err := rp.heartbeat(heartbeatBody{NodeID: nodeID, Status: "ok", Usage: usage, RelayedTotal: total, StoredBytes: 0}); err != nil {
+	var storedBytes, storTotal, storFree int64
+	if storageDir != "" {
+		if t, f, err := storageReport(storageDir); err == nil {
+			storTotal, storFree = t, f
+			storedBytes = t - f // blob-dir (filesystem) used bytes
+		}
+	}
+	body := heartbeatBody{
+		NodeID: nodeID, Status: "ok", Usage: usage, RelayedTotal: total,
+		StoredBytes: storedBytes, StorageTotal: storTotal, StorageFree: storFree,
+	}
+	if err := rp.heartbeat(body); err != nil {
 		log.Printf("relayium-node: heartbeat failed (will retry): %v", err)
 	}
 }

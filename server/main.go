@@ -269,10 +269,11 @@ func main() {
 				log.Printf("WARNING: seed settings: %v", err)
 			}
 			gc := &account.GC{
-				Store: store,
-				Blobs: disk,
-				Now:   func() int64 { return time.Now().Unix() },
-				Log:   log.Default(),
+				Store:   store,
+				Blobs:   disk,
+				Now:     func() int64 { return time.Now().Unix() },
+				Log:     log.Default(),
+				BlobFor: acct.BlobForNode,
 			}
 			go gc.Run(context.Background(), 10*time.Minute)
 			log.Printf("stored transfers enabled: blobs in %s", *blobDir)
