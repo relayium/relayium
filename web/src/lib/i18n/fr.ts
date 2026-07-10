@@ -50,6 +50,8 @@ const fr: Messages = {
   busy: "Un transfert est déjà en cours — veuillez attendre qu’il se termine",
   tooMany: (m, n) => `Jusqu’à ${m} fichiers à la fois ; ${n} en trop ignoré(s)`,
   titleDefault: "Relayium — transfert de fichiers chiffré de bout en bout",
+  descDefault:
+    "Relayium est un outil open source de transfert de fichiers pair-à-pair chiffré de bout en bout. Deux appareils se connectent directement dans le navigateur, les fichiers ne passent jamais par le serveur — sans installation, en temps réel. Sur le même réseau, aucun compte n'est nécessaire ; pour s'appairer entre réseaux différents, seul l'expéditeur se connecte.",
   titleCross: "Transfert de fichiers inter-réseaux — temps réel, chiffré de bout en bout | Relayium",
   titleOffline: "Lien de fichier chiffré — téléversez maintenant, téléchargez plus tard | Relayium",
   descCross: "Envoyez des fichiers entre réseaux avec un code à 6 chiffres — transfert en temps réel, chiffré de bout en bout ; le relais ne voit que du texte chiffré, jamais le contenu des fichiers.",

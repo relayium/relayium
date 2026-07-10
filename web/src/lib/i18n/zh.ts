@@ -50,6 +50,8 @@ const zh: Messages = {
   busy: "已有传输进行中，请等待完成",
   tooMany: (m, n) => `一次最多 ${m} 个文件，已忽略多余的 ${n} 个`,
   titleDefault: "Relayium — 端到端加密文件传输",
+  descDefault:
+    "Relayium 是开源、端到端加密的点对点文件传输工具。在浏览器里两台设备直连，文件不经过服务器，无需安装即可实时传输；同一网络下无需账号，跨网络配对时仅发送方需登录。",
   titleCross: "跨网络文件传输 — 实时端到端加密 | Relayium",
   titleOffline: "加密文件链接 — 现在上传，稍后下载 | Relayium",
   descCross: "用 6 位数字码跨网络传输文件——实时传输、端到端加密；中转服务器只能看到密文，看不到文件内容。",

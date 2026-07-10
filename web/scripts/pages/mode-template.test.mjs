@@ -35,7 +35,7 @@ describe("buildModePages", () => {
     expect(zh).toContain('hreflang="x-default" href="https://relayium.com/cross-network"');
     expect(zh).toContain('hreflang="ja" href="https://relayium.com/ja/cross-network"');
     expect(zh).toContain('"@type":"FAQPage"');
-    expect(zh).toContain('<html lang="zh"');
+    expect(zh).toContain('<html lang="zh-Hans"');
   });
 
   it("CTA links to the SPA mode route with language preset", () => {

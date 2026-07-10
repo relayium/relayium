@@ -101,7 +101,7 @@ export function renderModePage({ slug, lang, doc, updated, articleLinks = [] }) 
   const ogImage = SITE.origin + "/og-image.jpg";
 
   return `<!doctype html>
-<html lang="${lang}">
+<html lang="${BCP47[lang]}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

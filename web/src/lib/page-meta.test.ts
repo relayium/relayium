@@ -16,6 +16,12 @@ describe("pageMeta", () => {
     expect(c.description).toBe(m.descCross);
     expect(o.description).toBe(m.descOffline);
   });
+
+  it("canonicalPath points cross/offline at their own route, else home", () => {
+    expect(pageMeta("cross", m).canonicalPath).toBe("/cross-network");
+    expect(pageMeta("offline", m).canonicalPath).toBe("/offline-transfer");
+    expect(pageMeta("lan", m).canonicalPath).toBe("/");
+  });
 });
 
 describe("SSG slugs match router paths", () => {

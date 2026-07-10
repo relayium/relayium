@@ -230,6 +230,9 @@
       : meta.title;
     const md = document.querySelector('meta[name="description"]');
     if (md) md.setAttribute("content", meta.description);
+    const canon = location.origin + meta.canonicalPath;
+    document.querySelector('link[rel="canonical"]')?.setAttribute("href", canon);
+    document.querySelector('meta[property="og:url"]')?.setAttribute("content", canon);
   });
 
   // Notify when a transfer finishes and the user is on another tab/app, so a long
