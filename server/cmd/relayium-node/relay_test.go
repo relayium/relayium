@@ -34,3 +34,15 @@ func TestCredentialExpiry(t *testing.T) {
 		t.Fatal("malformed username treated as expired")
 	}
 }
+
+// storageReport wraps storage.DiskUsage to report the node's blob-dir capacity
+// for register/heartbeat; this pins its (total, free) arithmetic.
+func TestStorageReport(t *testing.T) {
+	total, free, err := storageReport(t.TempDir())
+	if err != nil {
+		t.Fatalf("storageReport: %v", err)
+	}
+	if total == 0 || free == 0 || free > total {
+		t.Fatalf("implausible total=%d free=%d", total, free)
+	}
+}
