@@ -24,7 +24,10 @@ func TestBlobHandlerRoundTripAndAuth(t *testing.T) {
 		if auth != "" {
 			req.Header.Set("Authorization", auth)
 		}
-		resp, _ := http.DefaultClient.Do(req)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("do: %v", err)
+		}
 		defer resp.Body.Close()
 		return resp.StatusCode
 	}
