@@ -151,6 +151,9 @@ func main() {
 	// the 10^6 code space while allowing a real recipient to reload a few times.
 	wsCodeLimiter := signal.NewRateLimiter(30, time.Minute, func() int64 { return time.Now().Unix() })
 	go wsCodeLimiter.Run(context.Background(), time.Minute)
+	// Global (non-per-IP) breaker on INVALID pairing-code join attempts: sheds
+	// brute-force load and signals attacks. It never affects valid-code joins.
+	guessBreaker := signal.NewGuessBreaker(200, time.Minute, 30*time.Second, func() int64 { return time.Now().Unix() })
 	// H1: /api/ice pairing-code → TURN-credential endpoint. 5/min/IP.
 	iceLimiter := signal.NewRateLimiter(5, time.Minute, func() int64 { return time.Now().Unix() })
 	go iceLimiter.Run(context.Background(), time.Minute)
@@ -173,6 +176,17 @@ func main() {
 		}
 		room, maxPeers, lan, ok := signal.RoomFor(code, pairReg.Validate)
 		if !ok {
+			// Invalid/expired code = a guess. Feed the global breaker; when it is
+			// open, shed with 429 and a throttled WARN. Valid codes are unaffected.
+			if code != "" {
+				if open, logNow := guessBreaker.RecordInvalid(); open {
+					if logNow {
+						log.Printf("WARNING: pairing-code guess breaker OPEN — shedding invalid /ws?code= joins")
+					}
+					http.Error(w, "too many pairing attempts", http.StatusTooManyRequests)
+					return
+				}
+			}
 			http.Error(w, "invalid or expired pairing code", http.StatusForbidden)
 			return
 		}

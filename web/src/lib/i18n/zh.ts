@@ -49,6 +49,9 @@ const zh: Messages = {
   titleDefault: "Relayium — 端到端加密文件传输",
   reconnecting: "连接已断开，正在重连…",
   confirmLeave: "当前有传输正在进行，切换会中断它。确定要继续吗？",
+  confirmRecv: (n) => `${n} 想接收文件`,
+  confirmRecvSend: "发送",
+  confirmRecvCancel: "取消",
   status: {
     connecting: "正在建立加密连接…",
     waitingAccept: "等待对方确认接收…",

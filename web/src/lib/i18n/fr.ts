@@ -49,6 +49,9 @@ const fr: Messages = {
   titleDefault: "Relayium — transfert de fichiers chiffré de bout en bout",
   reconnecting: "Connexion perdue — reconnexion…",
   confirmLeave: "Un transfert est en cours. Changer l'interrompra. Continuer ?",
+  confirmRecv: (n) => `${n} veut recevoir`,
+  confirmRecvSend: "Envoyer",
+  confirmRecvCancel: "Annuler",
   status: {
     connecting: "Établissement d’une connexion chiffrée…",
     waitingAccept: "En attente de l’acceptation du destinataire…",
