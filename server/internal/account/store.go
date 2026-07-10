@@ -17,6 +17,9 @@ type User struct {
 	DisplayName   string
 	CreatedAt     int64
 	EmailVerified bool
+	// OnlyOwnNodes restricts this user's transfers to their own self-hosted
+	// nodes (SP3 BYO nodes), excluding the shared fleet.
+	OnlyOwnNodes bool
 }
 
 // Identity links an external auth subject (google sub, or the email itself) to a user.
@@ -239,6 +242,8 @@ type Store interface {
 	HasPassword(ctx context.Context, userID string) (bool, error)
 	EmailVerified(ctx context.Context, userID string) (bool, error)
 	SetEmailVerified(ctx context.Context, userID string) error
+	// SetOnlyOwnNodes toggles the BYO-nodes-only restriction (SP3) for a user.
+	SetOnlyOwnNodes(ctx context.Context, userID string, on bool) error
 	// sessions
 	CreateSession(ctx context.Context, s Session) error
 	GetSession(ctx context.Context, id string) (Session, bool, error)
@@ -305,6 +310,14 @@ type Store interface {
 	StorageNodes(ctx context.Context, since, minFree int64) ([]Node, error)
 	OnlineNodes(ctx context.Context, since int64) ([]Node, error)
 	ListNodes(ctx context.Context) ([]Node, error)
+	// UserNodes returns a user's own (owner_type='user') nodes seen since `since`.
+	UserNodes(ctx context.Context, userID string, since int64) ([]Node, error)
+	// UserNodesAll returns all of a user's own nodes regardless of last_seen,
+	// for the dashboard list (which shows offline nodes too).
+	UserNodesAll(ctx context.Context, userID string) ([]Node, error)
+	// UserStorageNodes is UserNodes filtered to storage-enabled nodes with at
+	// least minFree bytes free.
+	UserStorageNodes(ctx context.Context, userID string, since, minFree int64) ([]Node, error)
 	// pending_node_deletes (orphan-retry queue for GC when a node's DELETE fails)
 	EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error
 	ListPendingNodeDeletes(ctx context.Context) ([]PendingNodeDelete, error)

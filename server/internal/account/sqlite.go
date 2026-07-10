@@ -184,6 +184,9 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// (fleet-relay vs. BYO own-node relay, which must not count against quota).
 		`ALTER TABLE usage_events ADD COLUMN node_id TEXT`,
 		`ALTER TABLE usage_events ADD COLUMN billable INTEGER NOT NULL DEFAULT 1`,
+		// SP3: only_own_nodes restricts a user's transfers to their own
+		// self-hosted nodes, excluding the shared fleet.
+		`ALTER TABLE users ADD COLUMN only_own_nodes INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -360,13 +363,20 @@ func (s *SQLiteStore) InsertUserDedupedByCanonical(ctx context.Context, email, d
 
 func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (User, error) {
 	var u User
+	var strict int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, email, display_name, created_at, email_verified FROM users WHERE id = ?`, id,
-	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified)
+		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes FROM users WHERE id = ?`, id,
+	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &strict)
 	if err == sql.ErrNoRows {
 		return User{}, ErrNotFound
 	}
+	u.OnlyOwnNodes = strict != 0
 	return u, err
+}
+
+func (s *SQLiteStore) SetOnlyOwnNodes(ctx context.Context, userID string, on bool) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET only_own_nodes = ? WHERE id = ?`, b2i(on), userID)
+	return err
 }
 
 func (s *SQLiteStore) LinkIdentity(ctx context.Context, provider, subject, userID string) error {
@@ -1152,6 +1162,29 @@ func (s *SQLiteStore) OnlineNodes(ctx context.Context, since int64) ([]Node, err
 
 func (s *SQLiteStore) ListNodes(ctx context.Context) ([]Node, error) {
 	return s.queryNodes(ctx, `SELECT `+nodeCols+` FROM nodes ORDER BY last_seen_at DESC`)
+}
+
+// UserNodes returns a user's own (owner_type='user') nodes online since `since`.
+func (s *SQLiteStore) UserNodes(ctx context.Context, userID string, since int64) ([]Node, error) {
+	return s.queryNodes(ctx,
+		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? AND last_seen_at >= ? ORDER BY last_seen_at DESC`,
+		userID, since)
+}
+
+// UserNodesAll returns all of a user's own nodes regardless of last_seen, for
+// the dashboard list (which shows offline nodes too).
+func (s *SQLiteStore) UserNodesAll(ctx context.Context, userID string) ([]Node, error) {
+	return s.queryNodes(ctx,
+		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? ORDER BY last_seen_at DESC`,
+		userID)
+}
+
+// UserStorageNodes is UserNodes filtered to storage-enabled nodes with at
+// least minFree bytes free.
+func (s *SQLiteStore) UserStorageNodes(ctx context.Context, userID string, since, minFree int64) ([]Node, error) {
+	return s.queryNodes(ctx,
+		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? AND last_seen_at >= ? AND storage_enabled=1 AND storage_free >= ? ORDER BY last_seen_at DESC`,
+		userID, since, minFree)
 }
 
 func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]Node, error) {
