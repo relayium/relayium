@@ -145,6 +145,20 @@ type Node struct {
 	StorageFree    int64
 }
 
+// NodeToken is a per-user credential a BYO node presents as its bearer. The
+// plaintext is shown once at mint; only its sha256 hash is stored. Binding to a
+// node_id links it for per-node revoke/delete.
+type NodeToken struct {
+	ID         string
+	TokenHash  string
+	UserID     string
+	NodeID     string
+	Name       string
+	CreatedAt  int64
+	LastUsedAt int64
+	RevokedAt  int64
+}
+
 // PendingNodeDelete is a blob whose owning node was unreachable when its file
 // expired/was deleted; GC retries the node DELETE each sweep until it succeeds,
 // reclaiming the orphan under the no-replication model.
@@ -293,4 +307,11 @@ type Store interface {
 	EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error
 	ListPendingNodeDeletes(ctx context.Context) ([]PendingNodeDelete, error)
 	DeletePendingNodeDelete(ctx context.Context, blobKey, nodeID string) error
+	// node_tokens (per-user BYO-node bearer credentials; SP3)
+	CreateNodeToken(ctx context.Context, t NodeToken) error
+	NodeTokenByHash(ctx context.Context, hash string) (NodeToken, bool, error)
+	BindNodeToken(ctx context.Context, id, nodeID string) error
+	ListNodeTokensByUser(ctx context.Context, userID string) ([]NodeToken, error)
+	RevokeNodeToken(ctx context.Context, id, userID string, at int64) error
+	TouchNodeTokenUsed(ctx context.Context, id string, at int64) error
 }
