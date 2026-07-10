@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>把 Relayium 变成常驻接收服务 · Relayium</title>
-    <meta name="description" content="让 relayium serve 一直运行，这样任何对端都能随时向你推送——基于锁定 TLS 的守护进程直连。涵盖首次推送批准、为 systemd 预先授权指纹、--allow-delete，以及一份示例服务单元文件。" />
+    <meta name="description" content="让 relayium serve 一直运行，这样任何对端都能随时向你推送——基于锁定 TLS 的守护进程直连。涵盖首次推送批准、预先授权指纹、在 systemd（Linux）或 launchd（macOS）下开机自启，以及 --allow-delete。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/zh/guides/run-relayium-as-an-always-on-service" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/run-relayium-as-an-always-on-service" />
@@ -19,15 +19,15 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:title" content="把 Relayium 变成常驻接收服务" />
-    <meta property="og:description" content="让 relayium serve 一直运行，这样任何对端都能随时向你推送——基于锁定 TLS 的守护进程直连。涵盖首次推送批准、为 systemd 预先授权指纹、--allow-delete，以及一份示例服务单元文件。" />
+    <meta property="og:description" content="让 relayium serve 一直运行，这样任何对端都能随时向你推送——基于锁定 TLS 的守护进程直连。涵盖首次推送批准、预先授权指纹、在 systemd（Linux）或 launchd（macOS）下开机自启，以及 --allow-delete。" />
     <meta property="og:url" content="https://relayium.com/zh/guides/run-relayium-as-an-always-on-service" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="把 Relayium 变成常驻接收服务" />
-    <meta name="twitter:description" content="让 relayium serve 一直运行，这样任何对端都能随时向你推送——基于锁定 TLS 的守护进程直连。涵盖首次推送批准、为 systemd 预先授权指纹、--allow-delete，以及一份示例服务单元文件。" />
+    <meta name="twitter:description" content="让 relayium serve 一直运行，这样任何对端都能随时向你推送——基于锁定 TLS 的守护进程直连。涵盖首次推送批准、预先授权指纹、在 systemd（Linux）或 launchd（macOS）下开机自启，以及 --allow-delete。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"把 Relayium 变成常驻接收服务","description":"让 relayium serve 一直运行，这样任何对端都能随时向你推送——基于锁定 TLS 的守护进程直连。涵盖首次推送批准、为 systemd 预先授权指纹、--allow-delete，以及一份示例服务单元文件。","inLanguage":"zh-Hans","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/zh/guides/run-relayium-as-an-always-on-service","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"serve 默认监听哪个端口？","acceptedAnswer":{"@type":"Answer","text":"9031。可以用 --port 同时修改监听端（serve --port N）和推送方的目标地址（relayium://host:N）。"}},{"@type":"Question","name":"我必须手动批准每一次推送吗？","acceptedAnswer":{"@type":"Answer","text":"只需要批准某个指纹的第一次推送，而且仅当 serve 是在带终端的环境下运行时才会提示。此后它会被记住。如果 serve 以非交互方式运行（systemd、管道），就完全不会出现提示，而是直接拒绝未知对端——这时应改为用 relayium authorize 预先授权它们。"}},{"@type":"Question","name":"发送方可以删除我这台常驻接收机上的文件吗？","acceptedAnswer":{"@type":"Answer","text":"只有当你以 --allow-delete 启动了 serve，并且发送方在运行 sync --delete 时才可以。如果没有 --allow-delete，删除操作会被静默跳过，其余内容照常传输。"}},{"@type":"Question","name":"运行一个常驻接收服务是免费的吗？","acceptedAnswer":{"@type":"Answer","text":"是的。relayium serve 是免费、可自托管的 CLI 的一部分——连接的任何一方都不需要账号，也没有付费档位。"}},{"@type":"Question","name":"serve 把身份和对端列表存在哪里？","acceptedAnswer":{"@type":"Answer","text":"默认在 ~/.config/relayium 中（id.key/id.crt 是这台主机的身份，authorized_fingerprints 是允许列表）。对于 systemd 服务，可以把 --config-dir 指向一个固定位置，例如 /etc/relayium。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"把 Relayium 变成常驻接收服务","description":"让 relayium serve 一直运行，这样任何对端都能随时向你推送——基于锁定 TLS 的守护进程直连。涵盖首次推送批准、预先授权指纹、在 systemd（Linux）或 launchd（macOS）下开机自启，以及 --allow-delete。","inLanguage":"zh-Hans","dateModified":"2026-07-10","mainEntityOfPage":"https://relayium.com/zh/guides/run-relayium-as-an-always-on-service","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"serve 默认监听哪个端口？","acceptedAnswer":{"@type":"Answer","text":"9031。可以用 --port 同时修改监听端（serve --port N）和推送方的目标地址（relayium://host:N）。"}},{"@type":"Question","name":"我必须手动批准每一次推送吗？","acceptedAnswer":{"@type":"Answer","text":"只需要批准某个指纹的第一次推送，而且仅当 serve 是在带终端的环境下运行时才会提示。此后它会被记住。如果 serve 以非交互方式运行（systemd、管道），就完全不会出现提示，而是直接拒绝未知对端——这时应改为用 relayium authorize 预先授权它们。"}},{"@type":"Question","name":"发送方可以删除我这台常驻接收机上的文件吗？","acceptedAnswer":{"@type":"Answer","text":"只有当你以 --allow-delete 启动了 serve，并且发送方在运行 sync --delete 时才可以。如果没有 --allow-delete，删除操作会被静默跳过，其余内容照常传输。"}},{"@type":"Question","name":"运行一个常驻接收服务是免费的吗？","acceptedAnswer":{"@type":"Answer","text":"是的。relayium serve 是免费、可自托管的 CLI 的一部分——连接的任何一方都不需要账号，也没有付费档位。"}},{"@type":"Question","name":"serve 把身份和对端列表存在哪里？","acceptedAnswer":{"@type":"Answer","text":"默认在 ~/.config/relayium 中（id.key/id.crt 是这台主机的身份，authorized_fingerprints 是允许列表）。对于 systemd 服务，可以把 --config-dir 指向一个固定位置，例如 /etc/relayium。"}},{"@type":"Question","name":"在 macOS 上怎么让 serve 开机自启？","acceptedAnswer":{"@type":"Answer","text":"macOS 没有 systemd——用 launchd。把 serve 装成 /Library/LaunchDaemons 里的 LaunchDaemon（开机启动；设置 UserName 以你的身份运行），或 ~/Library/LaunchAgents 里的 LaunchAgent（登录时启动）。本指南给了一份可直接改的 plist；没有 Homebrew 服务。由于 launchd 不给 serve 终端弹提示，请先用 relayium authorize 预先授权推送方。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -59,7 +59,7 @@ footer a{color:var(--text-h);text-decoration:none}
     <div class="wrap">
       <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <h1>把 Relayium 变成常驻接收服务</h1>
-      <p class="updated">最近更新: 2026-07-09</p>
+      <p class="updated">最近更新: 2026-07-10</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service" aria-current="true">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service">Français</a></nav>
       <p class="lead">relayium serve --once 只处理一次传入的传输就退出——适合偶尔拉取一次的场景。但如果你想让某台机器成为一个常驻的落地点——一台每晚接收备份的家庭服务器、一台 CI 会推送构建产物的构建机、一台随时能接收手机照片的 NAS——你会想让 serve 一直运行，而不是每次传输都手动启动它。</p>
       <p class="lead">本指南涵盖启动一个长期运行的监听端、批准谁可以向它推送、为没有人守在终端前的场景预先授权对端、在 systemd 下运行它，以及让使用 sync --delete 的发送方镜像删除操作。</p>
@@ -98,6 +98,42 @@ User=relayium
 [Install]
 WantedBy=multi-user.target</code></pre>
       <ul><li>在启用该服务之前，先为每一个应该能够推送的对端运行 relayium authorize &lt;fingerprint&gt;——服务本身无法弹出提示。</li><li>systemctl enable --now relayium-serve 会启动它，并让它在每次开机时自动恢复运行。</li><li>让 /etc/relayium/id.key 只能被服务用户读取；权限过于宽松时 relayium 会拒绝加载该密钥。</li></ul>
+      <h2>在 macOS 上开机自启（launchd）</h2>
+      <p>macOS 没有 systemd——它的服务管理器是 launchd。要让 serve 在 Mac 上常驻（比如一台常开、当落地点用的 Mac mini），把它装成 LaunchDaemon，这样开机即启动、无需任何人登录。设置 UserName 让它以你自己的身份（而非 root）运行，并给 --dir 和 --config-dir 绝对路径，这样它的身份和信任文件仍留在你自己的 ~/.config/relayium 里：</p>
+      <pre><code>&lt;!-- /Library/LaunchDaemons/com.relayium.serve.plist  (replace YOU with your macOS username) --&gt;
+&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;!DOCTYPE plist PUBLIC &quot;-//Apple//DTD PLIST 1.0//EN&quot; &quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd&quot;&gt;
+&lt;plist version=&quot;1.0&quot;&gt;
+&lt;dict&gt;
+  &lt;key&gt;Label&lt;/key&gt;              &lt;string&gt;com.relayium.serve&lt;/string&gt;
+  &lt;key&gt;UserName&lt;/key&gt;           &lt;string&gt;YOU&lt;/string&gt;
+  &lt;key&gt;ProgramArguments&lt;/key&gt;
+  &lt;array&gt;
+    &lt;string&gt;/usr/local/bin/relayium&lt;/string&gt;
+    &lt;string&gt;serve&lt;/string&gt;
+    &lt;string&gt;--dir&lt;/string&gt;         &lt;string&gt;/Users/YOU/inbox&lt;/string&gt;
+    &lt;string&gt;--port&lt;/string&gt;        &lt;string&gt;9031&lt;/string&gt;
+    &lt;string&gt;--config-dir&lt;/string&gt;  &lt;string&gt;/Users/YOU/.config/relayium&lt;/string&gt;
+    &lt;string&gt;--allow-delete&lt;/string&gt;
+  &lt;/array&gt;
+  &lt;key&gt;RunAtLoad&lt;/key&gt;   &lt;true/&gt;
+  &lt;key&gt;KeepAlive&lt;/key&gt;   &lt;true/&gt;
+  &lt;key&gt;StandardOutPath&lt;/key&gt;    &lt;string&gt;/Users/YOU/relayium-serve.log&lt;/string&gt;
+  &lt;key&gt;StandardErrorPath&lt;/key&gt;  &lt;string&gt;/Users/YOU/relayium-serve.log&lt;/string&gt;
+&lt;/dict&gt;
+&lt;/plist&gt;</code></pre>
+      <pre><code># 1) authorize each pusher first — launchd gives serve no terminal to prompt on:
+relayium authorize &lt;fingerprint&gt;     # get the fingerprint from the pusher&#39;s  relayium id
+
+# 2) save the plist above to that path, then load it (root-owned, starts at boot):
+sudo chown root:wheel /Library/LaunchDaemons/com.relayium.serve.plist
+sudo launchctl bootstrap system /Library/LaunchDaemons/com.relayium.serve.plist
+
+# check it&#39;s running / follow logs / stop it:
+sudo launchctl print system/com.relayium.serve | grep state
+tail -f ~/relayium-serve.log
+sudo launchctl bootout system/com.relayium.serve</code></pre>
+      <ul><li>launchd 不给 serve 终端，所以它无法弹出提示——请先为每个推送方运行 relayium authorize &lt;fingerprint&gt;，跟 systemd 一样。指纹来自那台机器的 relayium id。</li><li>KeepAlive 会在 serve 崩溃时把它重新拉起；RunAtLoad 加上放在 /Library/LaunchDaemons 的 LaunchDaemon，会在开机时（无需登录）启动它——正适合一台无人值守的 Mac mini。</li><li>想要登录级的服务？把同一份 plist（去掉 UserName 键）放到 ~/Library/LaunchAgents/，用 launchctl bootstrap gui/$(id -u) &lt;path&gt; 加载——它会在你登录时启动，而不是开机时。</li><li>如果开了 macOS 应用防火墙，请允许 relayium 的传入连接（系统设置 → 网络 → 防火墙），否则发往你端口的推送会被拦截。</li></ul>
       <h2>让 sync --delete 的发送方镜像删除操作</h2>
       <p>默认情况下，serve 只会新增或更新文件——即使发送方对它运行 sync --delete，新增和修改过的文件依然会被复制，但它请求的删除操作会被跳过，接收方会记录一条警告。用 --allow-delete 启动 serve 即可选择启用真正的镜像同步，让发送方那边删除的文件在这里也被删除：</p>
       <pre><code>relayium serve --dir /srv/mirror --allow-delete</code></pre>
@@ -113,6 +149,8 @@ WantedBy=multi-user.target</code></pre>
       <p>是的。relayium serve 是免费、可自托管的 CLI 的一部分——连接的任何一方都不需要账号，也没有付费档位。</p>
       <h3>serve 把身份和对端列表存在哪里？</h3>
       <p>默认在 ~/.config/relayium 中（id.key/id.crt 是这台主机的身份，authorized_fingerprints 是允许列表）。对于 systemd 服务，可以把 --config-dir 指向一个固定位置，例如 /etc/relayium。</p>
+      <h3>在 macOS 上怎么让 serve 开机自启？</h3>
+      <p>macOS 没有 systemd——用 launchd。把 serve 装成 /Library/LaunchDaemons 里的 LaunchDaemon（开机启动；设置 UserName 以你的身份运行），或 ~/Library/LaunchAgents 里的 LaunchAgent（登录时启动）。本指南给了一份可直接改的 plist；没有 Homebrew 服务。由于 launchd 不给 serve 终端弹提示，请先用 relayium authorize 预先授权推送方。</p>
       <div class="ctacard">
         <p>把你拥有的任何一台机器变成一个免费的常驻接收方——基于锁定 TLS 的直接推送，不经过任何中继。</p>
         <a class="cta" href="/cli">获取 CLI</a>

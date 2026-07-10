@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Relayium als dauerhaft laufenden Empfangsdienst betreiben · Relayium</title>
-    <meta name="description" content="Lass relayium serve durchgehend laufen, damit jeder Peer dir jederzeit etwas pushen kann — Daemon Direct über gepinntes TLS. Behandelt die Genehmigung beim ersten Push, das Vorab-Autorisieren von Fingerprints für systemd, --allow-delete und eine Beispiel-Unit-Datei." />
+    <meta name="description" content="Halten Sie relayium serve am Laufen, damit jeder Peer Ihnen jederzeit etwas pushen kann — daemon-direct über gepinntes TLS. Behandelt die Freigabe des ersten Push, das Vorab-Autorisieren von Fingerprints, den Start beim Booten unter systemd (Linux) oder launchd (macOS) sowie --allow-delete." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/de/guides/run-relayium-as-an-always-on-service" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/run-relayium-as-an-always-on-service" />
@@ -19,15 +19,15 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:title" content="Relayium als dauerhaft laufenden Empfangsdienst betreiben" />
-    <meta property="og:description" content="Lass relayium serve durchgehend laufen, damit jeder Peer dir jederzeit etwas pushen kann — Daemon Direct über gepinntes TLS. Behandelt die Genehmigung beim ersten Push, das Vorab-Autorisieren von Fingerprints für systemd, --allow-delete und eine Beispiel-Unit-Datei." />
+    <meta property="og:description" content="Halten Sie relayium serve am Laufen, damit jeder Peer Ihnen jederzeit etwas pushen kann — daemon-direct über gepinntes TLS. Behandelt die Freigabe des ersten Push, das Vorab-Autorisieren von Fingerprints, den Start beim Booten unter systemd (Linux) oder launchd (macOS) sowie --allow-delete." />
     <meta property="og:url" content="https://relayium.com/de/guides/run-relayium-as-an-always-on-service" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:locale" content="de_DE" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Relayium als dauerhaft laufenden Empfangsdienst betreiben" />
-    <meta name="twitter:description" content="Lass relayium serve durchgehend laufen, damit jeder Peer dir jederzeit etwas pushen kann — Daemon Direct über gepinntes TLS. Behandelt die Genehmigung beim ersten Push, das Vorab-Autorisieren von Fingerprints für systemd, --allow-delete und eine Beispiel-Unit-Datei." />
+    <meta name="twitter:description" content="Halten Sie relayium serve am Laufen, damit jeder Peer Ihnen jederzeit etwas pushen kann — daemon-direct über gepinntes TLS. Behandelt die Freigabe des ersten Push, das Vorab-Autorisieren von Fingerprints, den Start beim Booten unter systemd (Linux) oder launchd (macOS) sowie --allow-delete." />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium als dauerhaft laufenden Empfangsdienst betreiben","description":"Lass relayium serve durchgehend laufen, damit jeder Peer dir jederzeit etwas pushen kann — Daemon Direct über gepinntes TLS. Behandelt die Genehmigung beim ersten Push, das Vorab-Autorisieren von Fingerprints für systemd, --allow-delete und eine Beispiel-Unit-Datei.","inLanguage":"de","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/de/guides/run-relayium-as-an-always-on-service","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Auf welchem Port lauscht serve standardmäßig?","acceptedAnswer":{"@type":"Answer","text":"9031. Ändere ihn mit --port sowohl beim Listener (serve --port N) als auch beim Ziel des Senders (relayium://host:N)."}},{"@type":"Question","name":"Muss ich jeden einzelnen Push von Hand genehmigen?","acceptedAnswer":{"@type":"Answer","text":"Nur den ersten Push eines bestimmten Fingerprints, und nur, wenn serve mit angeschlossenem Terminal läuft. Danach wird er sich gemerkt. Läuft serve nicht-interaktiv (systemd, eine Pipe), entfällt die Nachfrage komplett, und unbekannte Peers werden abgelehnt — autorisiere sie stattdessen vorab mit relayium authorize."}},{"@type":"Question","name":"Kann ein Sender Dateien auf meinem dauerhaft laufenden Empfänger löschen?","acceptedAnswer":{"@type":"Answer","text":"Nur wenn du serve mit --allow-delete gestartet hast und der Sender sync --delete ausführt. Ohne --allow-delete werden Löschungen stillschweigend übersprungen, alles andere wird trotzdem übertragen."}},{"@type":"Question","name":"Ist der Betrieb eines dauerhaft laufenden Empfängers kostenlos?","acceptedAnswer":{"@type":"Answer","text":"Ja. relayium serve ist Teil der kostenlosen, selbst hostbaren CLI — auf keiner Seite der Verbindung ist ein Konto oder eine kostenpflichtige Stufe nötig."}},{"@type":"Question","name":"Wo bewahrt serve Identität und Peer-Liste auf?","acceptedAnswer":{"@type":"Answer","text":"Standardmäßig in ~/.config/relayium (id.key/id.crt für die Identität dieses Hosts, authorized_fingerprints für die Allow-Liste). Richte --config-dir für einen systemd-Dienst auf einen festen Ort wie /etc/relayium."}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium als dauerhaft laufenden Empfangsdienst betreiben","description":"Halten Sie relayium serve am Laufen, damit jeder Peer Ihnen jederzeit etwas pushen kann — daemon-direct über gepinntes TLS. Behandelt die Freigabe des ersten Push, das Vorab-Autorisieren von Fingerprints, den Start beim Booten unter systemd (Linux) oder launchd (macOS) sowie --allow-delete.","inLanguage":"de","dateModified":"2026-07-10","mainEntityOfPage":"https://relayium.com/de/guides/run-relayium-as-an-always-on-service","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Auf welchem Port lauscht serve standardmäßig?","acceptedAnswer":{"@type":"Answer","text":"9031. Ändere ihn mit --port sowohl beim Listener (serve --port N) als auch beim Ziel des Senders (relayium://host:N)."}},{"@type":"Question","name":"Muss ich jeden einzelnen Push von Hand genehmigen?","acceptedAnswer":{"@type":"Answer","text":"Nur den ersten Push eines bestimmten Fingerprints, und nur, wenn serve mit angeschlossenem Terminal läuft. Danach wird er sich gemerkt. Läuft serve nicht-interaktiv (systemd, eine Pipe), entfällt die Nachfrage komplett, und unbekannte Peers werden abgelehnt — autorisiere sie stattdessen vorab mit relayium authorize."}},{"@type":"Question","name":"Kann ein Sender Dateien auf meinem dauerhaft laufenden Empfänger löschen?","acceptedAnswer":{"@type":"Answer","text":"Nur wenn du serve mit --allow-delete gestartet hast und der Sender sync --delete ausführt. Ohne --allow-delete werden Löschungen stillschweigend übersprungen, alles andere wird trotzdem übertragen."}},{"@type":"Question","name":"Ist der Betrieb eines dauerhaft laufenden Empfängers kostenlos?","acceptedAnswer":{"@type":"Answer","text":"Ja. relayium serve ist Teil der kostenlosen, selbst hostbaren CLI — auf keiner Seite der Verbindung ist ein Konto oder eine kostenpflichtige Stufe nötig."}},{"@type":"Question","name":"Wo bewahrt serve Identität und Peer-Liste auf?","acceptedAnswer":{"@type":"Answer","text":"Standardmäßig in ~/.config/relayium (id.key/id.crt für die Identität dieses Hosts, authorized_fingerprints für die Allow-Liste). Richte --config-dir für einen systemd-Dienst auf einen festen Ort wie /etc/relayium."}},{"@type":"Question","name":"Wie starte ich serve beim Booten unter macOS?","acceptedAnswer":{"@type":"Answer","text":"macOS hat kein systemd — verwenden Sie launchd. Installieren Sie serve als LaunchDaemon in /Library/LaunchDaemons (startet beim Booten; setzen Sie UserName, damit es als Sie läuft) oder als LaunchAgent in ~/Library/LaunchAgents (startet bei der Anmeldung). Dieser Leitfaden enthält ein fertiges, editierbares plist; einen Homebrew-Dienst gibt es nicht. Autorisieren Sie Absender vorab mit relayium authorize, da launchd serve kein Terminal für Rückfragen gibt."}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -59,7 +59,7 @@ footer a{color:var(--text-h);text-decoration:none}
     <div class="wrap">
       <header><span class="logo">⇌</span><a href="/?lang=de">Relayium</a></header>
       <h1>Relayium als dauerhaft laufenden Empfangsdienst betreiben</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-09</p>
+      <p class="updated">Zuletzt aktualisiert: 2026-07-10</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service" aria-current="true">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service">Français</a></nav>
       <p class="lead">relayium serve --once nimmt eine eingehende Übertragung entgegen und beendet sich dann — gut für ein gelegentliches Pull. Willst du aber eine Maschine zu einer dauerhaften Anlaufstelle machen — einen Heimserver, auf dem nachts Backups landen, eine Build-Maschine, zu der CI Artefakte pusht, ein NAS, an das dein Handy jederzeit Fotos schicken kann —, soll serve durchgehend laufen, statt für jede Übertragung von Hand gestartet zu werden.</p>
       <p class="lead">Diese Anleitung behandelt das Starten eines dauerhaft laufenden Listeners, das Genehmigen, wer pushen darf, das Vorab-Autorisieren von Peers für den Fall, dass niemand am Terminal sitzt, den Betrieb unter systemd sowie das Zulassen, dass ein sync --delete-Sender Löschungen spiegelt.</p>
@@ -98,6 +98,42 @@ User=relayium
 [Install]
 WantedBy=multi-user.target</code></pre>
       <ul><li>Bevor du den Dienst aktivierst, führe relayium authorize &lt;fingerprint&gt; für jeden Peer aus, der pushen dürfen soll — der Dienst selbst kann nicht nachfragen.</li><li>systemctl enable --now relayium-serve startet ihn und bringt ihn bei jedem Boot wieder hoch.</li><li>Halte /etc/relayium/id.key nur für den Dienstbenutzer lesbar; relayium verweigert das Laden eines Schlüssels mit zu lockeren Berechtigungen.</li></ul>
+      <h2>Beim Booten unter macOS starten (launchd)</h2>
+      <p>macOS hat kein systemd — sein Dienstmanager ist launchd. Um serve auf einem Mac dauerhaft laufen zu lassen (etwa auf einem Mac mini, der als Ablagepunkt eingeschaltet bleibt), installieren Sie es als LaunchDaemon, damit es beim Booten startet, noch bevor sich jemand anmeldet. Setzen Sie UserName, damit es als Sie und nicht als root läuft, und geben Sie --dir und --config-dir absolute Pfade an, damit Identität und Vertrauensdateien in Ihrem eigenen ~/.config/relayium bleiben:</p>
+      <pre><code>&lt;!-- /Library/LaunchDaemons/com.relayium.serve.plist  (replace YOU with your macOS username) --&gt;
+&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;!DOCTYPE plist PUBLIC &quot;-//Apple//DTD PLIST 1.0//EN&quot; &quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd&quot;&gt;
+&lt;plist version=&quot;1.0&quot;&gt;
+&lt;dict&gt;
+  &lt;key&gt;Label&lt;/key&gt;              &lt;string&gt;com.relayium.serve&lt;/string&gt;
+  &lt;key&gt;UserName&lt;/key&gt;           &lt;string&gt;YOU&lt;/string&gt;
+  &lt;key&gt;ProgramArguments&lt;/key&gt;
+  &lt;array&gt;
+    &lt;string&gt;/usr/local/bin/relayium&lt;/string&gt;
+    &lt;string&gt;serve&lt;/string&gt;
+    &lt;string&gt;--dir&lt;/string&gt;         &lt;string&gt;/Users/YOU/inbox&lt;/string&gt;
+    &lt;string&gt;--port&lt;/string&gt;        &lt;string&gt;9031&lt;/string&gt;
+    &lt;string&gt;--config-dir&lt;/string&gt;  &lt;string&gt;/Users/YOU/.config/relayium&lt;/string&gt;
+    &lt;string&gt;--allow-delete&lt;/string&gt;
+  &lt;/array&gt;
+  &lt;key&gt;RunAtLoad&lt;/key&gt;   &lt;true/&gt;
+  &lt;key&gt;KeepAlive&lt;/key&gt;   &lt;true/&gt;
+  &lt;key&gt;StandardOutPath&lt;/key&gt;    &lt;string&gt;/Users/YOU/relayium-serve.log&lt;/string&gt;
+  &lt;key&gt;StandardErrorPath&lt;/key&gt;  &lt;string&gt;/Users/YOU/relayium-serve.log&lt;/string&gt;
+&lt;/dict&gt;
+&lt;/plist&gt;</code></pre>
+      <pre><code># 1) authorize each pusher first — launchd gives serve no terminal to prompt on:
+relayium authorize &lt;fingerprint&gt;     # get the fingerprint from the pusher&#39;s  relayium id
+
+# 2) save the plist above to that path, then load it (root-owned, starts at boot):
+sudo chown root:wheel /Library/LaunchDaemons/com.relayium.serve.plist
+sudo launchctl bootstrap system /Library/LaunchDaemons/com.relayium.serve.plist
+
+# check it&#39;s running / follow logs / stop it:
+sudo launchctl print system/com.relayium.serve | grep state
+tail -f ~/relayium-serve.log
+sudo launchctl bootout system/com.relayium.serve</code></pre>
+      <ul><li>launchd gibt serve kein Terminal, es kann also nicht nachfragen — führen Sie für jeden Absender zuerst relayium authorize &lt;fingerprint&gt; aus, genau wie bei systemd. Der Fingerprint stammt aus dem relayium id jener Maschine.</li><li>KeepAlive startet serve neu, falls es abstürzt; RunAtLoad zusammen mit einem LaunchDaemon in /Library/LaunchDaemons startet es beim Booten ohne Anmeldung — genau das Richtige für einen kopflosen Mac mini.</li><li>Lieber einen anmeldungsbezogenen Dienst? Legen Sie dasselbe plist (ohne den UserName-Schlüssel) in ~/Library/LaunchAgents/ ab und laden Sie es mit launchctl bootstrap gui/$(id -u) &lt;path&gt; — es startet bei Ihrer Anmeldung statt beim Booten.</li><li>Wenn die Anwendungs-Firewall von macOS aktiv ist, erlauben Sie eingehende Verbindungen für relayium (Systemeinstellungen → Netzwerk → Firewall), sonst werden Pushes an Ihren Port blockiert.</li></ul>
       <h2>Einem sync --delete-Sender erlauben, Löschungen zu spiegeln</h2>
       <p>Standardmäßig fügt serve nur Dateien hinzu oder aktualisiert sie — führt ein Sender sync --delete dagegen aus, werden neue und geänderte Dateien trotzdem kopiert, aber angeforderte Löschungen werden übersprungen und auf dem Empfänger als Warnung protokolliert. Starte serve mit --allow-delete, um echtes Spiegeln zu aktivieren, bei dem auf der Senderseite gelöschte Dateien auch hier gelöscht werden:</p>
       <pre><code>relayium serve --dir /srv/mirror --allow-delete</code></pre>
@@ -113,6 +149,8 @@ WantedBy=multi-user.target</code></pre>
       <p>Ja. relayium serve ist Teil der kostenlosen, selbst hostbaren CLI — auf keiner Seite der Verbindung ist ein Konto oder eine kostenpflichtige Stufe nötig.</p>
       <h3>Wo bewahrt serve Identität und Peer-Liste auf?</h3>
       <p>Standardmäßig in ~/.config/relayium (id.key/id.crt für die Identität dieses Hosts, authorized_fingerprints für die Allow-Liste). Richte --config-dir für einen systemd-Dienst auf einen festen Ort wie /etc/relayium.</p>
+      <h3>Wie starte ich serve beim Booten unter macOS?</h3>
+      <p>macOS hat kein systemd — verwenden Sie launchd. Installieren Sie serve als LaunchDaemon in /Library/LaunchDaemons (startet beim Booten; setzen Sie UserName, damit es als Sie läuft) oder als LaunchAgent in ~/Library/LaunchAgents (startet bei der Anmeldung). Dieser Leitfaden enthält ein fertiges, editierbares plist; einen Homebrew-Dienst gibt es nicht. Autorisieren Sie Absender vorab mit relayium authorize, da launchd serve kein Terminal für Rückfragen gibt.</p>
       <div class="ctacard">
         <p>Mach aus jeder Maschine, die dir gehört, einen kostenlosen, dauerhaft laufenden Empfänger — direkte Pushes über gepinntes TLS, ganz ohne Relay.</p>
         <a class="cta" href="/cli">CLI holen</a>
