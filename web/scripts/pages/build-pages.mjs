@@ -1,9 +1,10 @@
 // web/scripts/pages/build-pages.mjs — pure builders (no disk IO).
-import { LANGS, LANDING_LANGS, SITE, pagePath, urlPath, absUrl, landingUrl, landingPath, validateLangs } from "./shared.mjs";
+import { LANGS, LANDING_LANGS, DEFAULT_LANG, SITE, pagePath, urlPath, absUrl, landingUrl, landingPath, validateLangs } from "./shared.mjs";
 import { renderLegalPage } from "./legal-template.mjs";
 import { renderLandingPage } from "./landing-template.mjs";
 import { renderArticlePage } from "./article-template.mjs";
 import { renderGuidesIndexPage } from "./guides-index-template.mjs";
+import { renderModePage } from "./mode-template.mjs";
 
 export function buildLegalPages(docs) {
   const out = [];
@@ -73,13 +74,22 @@ export function buildGuidesIndexPages(guidesIndex, groupsByLang) {
   }));
 }
 
-export function buildSitemap(docs, { home = true, landing = null, articles = [], guidesIndex = null } = {}) {
+export function buildModePages(modeDef, { slug }) {
+  validateLangs(`mode:${slug}`, modeDef.langs, LANDING_LANGS);
+  return LANDING_LANGS.map((lang) => ({
+    path: pagePath(slug, lang),
+    html: renderModePage({ slug, lang, doc: modeDef.langs[lang], updated: modeDef.updated }),
+  }));
+}
+
+export function buildSitemap(docs, { home = true, landing = null, articles = [], guidesIndex = null, modes = [] } = {}) {
   const urls = [];
   const newest = [
     ...docs.map((d) => d.langs.en.updated),
     ...(landing ? [landing.updated] : []),
     ...articles.map((a) => a.updated),
     ...(guidesIndex ? [guidesIndex.updated] : []),
+    ...modes.map((m) => m.def.updated),
   ].sort().at(-1);
   if (home) urls.push({ loc: SITE.origin + "/", lastmod: newest, priority: "1.0", changefreq: "weekly" });
   if (guidesIndex) {
@@ -100,6 +110,12 @@ export function buildSitemap(docs, { home = true, landing = null, articles = [],
   for (const article of articles) {
     for (const lang of LANGS) {
       urls.push({ loc: absUrl(urlPath(article.slug, lang)), lastmod: article.updated, priority: "0.6", changefreq: "monthly" });
+    }
+  }
+  for (const { def, slug } of modes) {
+    urls.push({ loc: absUrl(urlPath(slug, DEFAULT_LANG)), lastmod: def.updated, priority: "0.8", changefreq: "weekly" }); // english SPA route
+    for (const lang of LANDING_LANGS) {
+      urls.push({ loc: absUrl(urlPath(slug, lang)), lastmod: def.updated, priority: "0.8", changefreq: "weekly" });
     }
   }
   const body = urls
