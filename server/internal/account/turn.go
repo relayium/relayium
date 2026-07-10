@@ -93,48 +93,70 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 	// metering attributes relay bytes to the owning account.
 	token := owner + "." + code
 
+	// Strict mode ("only my nodes") withholds our fleet pool and legacy TURN,
+	// offering only the owner's own self-hosted nodes. Computed once and reused
+	// by both the legacy top-level entry and the relay-pool block below. A read
+	// error (including user-not-found) falls back to non-strict — the reliable
+	// default that never accidentally strands a transfer without relay.
+	strict := false
+	if validCode {
+		if u, err := s.store.GetUserByID(r.Context(), owner); err == nil {
+			strict = u.OnlyOwnNodes
+		}
+	}
+
 	// Legacy single TURN stays in the top-level iceServers so older clients (that
-	// don't read `relays`) keep working unchanged.
-	if validCode && s.cfg.TURNSecret != "" && len(s.cfg.TURNURLs) > 0 {
+	// don't read `relays`) keep working unchanged. Withheld in strict mode.
+	if validCode && !strict && s.cfg.TURNSecret != "" && len(s.cfg.TURNURLs) > 0 {
 		servers = append(servers, turnCredentials(s.cfg.TURNSecret, token, expiry, s.cfg.TURNURLs))
 	}
 
 	resp := map[string]any{"iceServers": servers}
 
-	// Multi-relay pool: online self-registered fleet nodes ∪ legacy static
-	// RELAYIUM_TURN_RELAYS. Each entry carries its own ephemeral credential so the
-	// client can measure RTT and pick the fastest. Dynamic nodes win a shared id.
+	// Multi-relay pool: the owner's own nodes are always included (free
+	// self-hosted relay); the fleet pool (online self-registered fleet nodes ∪
+	// legacy static RELAYIUM_TURN_RELAYS) is unioned in only when not strict.
+	// Each entry carries its own ephemeral credential so the client can measure
+	// RTT and pick the fastest. Dynamic nodes win a shared id.
 	if validCode {
 		relays := make([]relayEntry, 0)
 		seen := map[string]bool{}
-
 		since := now.Add(-nodeOnlineWindow).Unix()
-		if nodes, err := s.store.OnlineNodes(r.Context(), since); err != nil {
-			log.Printf("ice: OnlineNodes read failed: %v (falling back to static pool)", err)
-		} else {
-			for _, n := range nodes {
+
+		// The owner's own nodes (free relay), always included.
+		if own, err := s.store.UserNodes(r.Context(), owner, since); err == nil {
+			for _, n := range own {
 				if n.ID == "" || n.TURNSecret == "" || len(n.URLs) == 0 {
 					continue
 				}
-				relays = append(relays, relayEntry{
-					ID:         n.ID,
-					Region:     n.Region,
-					ICEServers: []ICEServer{turnCredentials(n.TURNSecret, token, expiry, n.URLs)},
-				})
+				relays = append(relays, relayEntry{ID: n.ID, Region: n.Region,
+					ICEServers: []ICEServer{turnCredentials(n.TURNSecret, token, expiry, n.URLs)}})
 				seen[n.ID] = true
 			}
+		} else {
+			log.Printf("ice: UserNodes read failed: %v (own-node routing skipped)", err)
 		}
 
-		for _, rc := range s.cfg.TURNRelays {
-			if rc.ID == "" || rc.Secret == "" || len(rc.URLs) == 0 || seen[rc.ID] {
-				continue // skip misconfigured or already-covered-by-a-dynamic-node
+		if !strict {
+			if nodes, err := s.store.OnlineNodes(r.Context(), since); err == nil {
+				for _, n := range nodes {
+					if n.ID == "" || n.TURNSecret == "" || len(n.URLs) == 0 || seen[n.ID] {
+						continue
+					}
+					relays = append(relays, relayEntry{ID: n.ID, Region: n.Region,
+						ICEServers: []ICEServer{turnCredentials(n.TURNSecret, token, expiry, n.URLs)}})
+					seen[n.ID] = true
+				}
+			} else {
+				log.Printf("ice: OnlineNodes read failed: %v (static-only)", err)
 			}
-			relays = append(relays, relayEntry{
-				ID:         rc.ID,
-				Region:     rc.Region,
-				STUN:       rc.STUN,
-				ICEServers: []ICEServer{turnCredentials(rc.Secret, token, expiry, rc.URLs)},
-			})
+			for _, rc := range s.cfg.TURNRelays {
+				if rc.ID == "" || rc.Secret == "" || len(rc.URLs) == 0 || seen[rc.ID] {
+					continue // skip misconfigured or already-covered-by-a-dynamic-node
+				}
+				relays = append(relays, relayEntry{ID: rc.ID, Region: rc.Region, STUN: rc.STUN,
+					ICEServers: []ICEServer{turnCredentials(rc.Secret, token, expiry, rc.URLs)}})
+			}
 		}
 		if len(relays) > 0 {
 			resp["relays"] = relays
