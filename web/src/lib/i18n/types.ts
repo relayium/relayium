@@ -70,6 +70,11 @@ export interface Messages {
   busy: string;
   tooMany: (max: number, n: number) => string;
   titleDefault: string;
+  descDefault?: string; // home <meta description>; falls back to titleDefault when absent
+  titleCross: string; // <title> for the cross-network (realtime) route
+  titleOffline: string; // <title> for the offline-transfer (stored-link) route
+  descCross: string; // <meta description> for the cross-network route
+  descOffline: string; // <meta description> for the offline-transfer route
   reconnecting: string; // signalling socket dropped, trying to reconnect
   confirmLeave: string; // confirm() before an action would interrupt an active transfer
   confirmRecv: (name: string) => string; // "<name> wants to receive"
