@@ -21,7 +21,7 @@ func TestNodeStorageFieldsAndStorageNodes(t *testing.T) {
 	if err != nil || !ok || got.StorageURL != "http://1.2.3.4:8081" || got.StorageSecret != "ss" || !got.StorageEnabled {
 		t.Fatalf("getnode: %+v ok=%v err=%v", got, ok, err)
 	}
-	// TouchNode updates free/total (not monotonic) and keep-maxes stored_bytes.
+	// TouchNode updates free/total/stored_bytes (all live, not monotonic).
 	if err := st.TouchNode(ctx, n.ID, 0, 500, 20<<30, 8<<30, 2000); err != nil {
 		t.Fatalf("touch: %v", err)
 	}
@@ -59,6 +59,24 @@ func TestStoredFileNodeIDRoundTrip(t *testing.T) {
 	g2, _ := st.GetStoredFile(ctx, "f2")
 	if g2.NodeID != "" {
 		t.Fatalf("want empty NodeID, got %q", g2.NodeID)
+	}
+}
+
+func TestTouchNodeStoredBytesIsGauge(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	n, _ := st.UpsertNode(ctx, Node{OwnerType: "fleet", URLs: []string{"turn:x:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1})
+	st.TouchNode(ctx, n.ID, 100, 900, 20<<30, 10<<30, 1000)
+	st.TouchNode(ctx, n.ID, 50, 300, 20<<30, 15<<30, 2000) // stored drops 900->300, relayed keep-max 100
+	got, _, _ := st.GetNode(ctx, n.ID)
+	if got.StoredBytes != 300 {
+		t.Fatalf("stored_bytes should track live value (gauge), got %d want 300", got.StoredBytes)
+	}
+	if got.RelayedBytes != 100 {
+		t.Fatalf("relayed_bytes should keep-max, got %d want 100", got.RelayedBytes)
+	}
+	if got.StorageFree != 15<<30 {
+		t.Fatalf("storage_free got %d", got.StorageFree)
 	}
 }
 

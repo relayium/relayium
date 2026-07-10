@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 // RemoteBlobStore is a BlobStore that proxies to a relay node's HTTP blob
@@ -28,15 +29,26 @@ func (r *RemoteBlobStore) url(key string) string { return r.baseURL + "/blob/" +
 // can surface it verbatim even when the HTTP transport masks it.
 type errCapturingReader struct {
 	r   io.Reader
+	mu  sync.Mutex
 	err error
 }
 
 func (e *errCapturingReader) Read(p []byte) (int, error) {
 	n, err := e.r.Read(p)
-	if err != nil && err != io.EOF && e.err == nil {
-		e.err = err
+	if err != nil && err != io.EOF {
+		e.mu.Lock()
+		if e.err == nil {
+			e.err = err
+		}
+		e.mu.Unlock()
 	}
 	return n, err
+}
+
+func (e *errCapturingReader) readerErr() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.err
 }
 
 func (r *RemoteBlobStore) Put(ctx context.Context, key string, body io.Reader) (int64, error) {
@@ -47,8 +59,8 @@ func (r *RemoteBlobStore) Put(ctx context.Context, key string, body io.Reader) (
 	}
 	req.Header.Set("Authorization", "Bearer "+r.secret)
 	resp, err := r.hc.Do(req)
-	if er.err != nil {
-		return 0, er.err // the source reader failed (e.g. cappedReader errTooLarge) — surface it verbatim
+	if rerr := er.readerErr(); rerr != nil {
+		return 0, rerr // the source reader failed (e.g. cappedReader errTooLarge) — surface it verbatim
 	}
 	if err != nil {
 		return 0, err

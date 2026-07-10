@@ -1095,13 +1095,15 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	return n, nil
 }
 
-// TouchNode records a heartbeat: relayed/stored bytes are cumulative counters
-// (keep-MAX, never decrease), while storage_total/storage_free are live
-// snapshots of the node's disk state and are not monotonic, so they are SET.
+// TouchNode records a heartbeat: relayed_bytes is a cumulative counter
+// (keep-MAX, never decrease), while stored_bytes is a live gauge of the
+// node's current whole-volume usage and storage_total/storage_free are live
+// snapshots of the node's disk state; none of those three are monotonic, so
+// they are SET.
 func (s *SQLiteStore) TouchNode(ctx context.Context, id string, relayedBytes, storedBytes, storageTotal, storageFree, at int64) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE nodes SET last_seen_at=?,
-		   relayed_bytes=MAX(relayed_bytes, ?), stored_bytes=MAX(stored_bytes, ?),
+		   relayed_bytes=MAX(relayed_bytes, ?), stored_bytes=?,
 		   storage_total=?, storage_free=? WHERE id=?`,
 		at, relayedBytes, storedBytes, storageTotal, storageFree, id)
 	return err

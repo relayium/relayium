@@ -130,7 +130,9 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	capped := &cappedReader{r: br, max: st.MaxFileSize}
 	size, err := bs.Put(r.Context(), blobKey, capped)
 	if err != nil {
-		// Put cleans up its temp file on error, so nothing is committed.
+		// Best-effort reclaim: a committed-but-response-lost blob would otherwise
+		// orphan on node disk (no row, no pending-delete entry).
+		_ = bs.Delete(r.Context(), blobKey)
 		if errors.Is(err, errTooLarge) {
 			http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
 			return
@@ -249,7 +251,10 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	if sf.BurnAfterRead {
 		// Already claimed after the blob opened; this is cleanup of the now-spent
 		// ciphertext+row.
-		_ = bs.Delete(r.Context(), sf.BlobKey)
+		if derr := bs.Delete(r.Context(), sf.BlobKey); derr != nil {
+			// Node unreachable: record the orphan so GC retries; still remove the row.
+			_ = s.store.EnqueueNodeDelete(r.Context(), sf.BlobKey, sf.NodeID, s.now().Unix())
+		}
 		_ = s.store.DeleteStoredFile(r.Context(), sf.ID)
 	} else {
 		_ = s.store.IncDownloadCount(r.Context(), sf.ID)
