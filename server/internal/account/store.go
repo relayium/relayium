@@ -327,6 +327,9 @@ type Store interface {
 	EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error
 	ListPendingNodeDeletes(ctx context.Context) ([]PendingNodeDelete, error)
 	DeletePendingNodeDelete(ctx context.Context, blobKey, nodeID string) error
+	// DeletePendingNodeDeletesOlderThan evicts orphan-retry rows enqueued
+	// before `before`: a permanently-dead node would otherwise retry forever.
+	DeletePendingNodeDeletesOlderThan(ctx context.Context, before int64) error
 	// node_tokens (per-user BYO-node bearer credentials; SP3)
 	CreateNodeToken(ctx context.Context, t NodeToken) error
 	NodeTokenByHash(ctx context.Context, hash string) (NodeToken, bool, error)

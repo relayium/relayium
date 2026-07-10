@@ -1262,6 +1262,13 @@ func (s *SQLiteStore) DeletePendingNodeDelete(ctx context.Context, blobKey, node
 	return err
 }
 
+// DeletePendingNodeDeletesOlderThan evicts orphan-retry rows enqueued before
+// `before`, so a permanently-dead node's rows don't accumulate forever.
+func (s *SQLiteStore) DeletePendingNodeDeletesOlderThan(ctx context.Context, before int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM pending_node_deletes WHERE enqueued_at < ?`, before)
+	return err
+}
+
 func (s *SQLiteStore) CreateNodeToken(ctx context.Context, t NodeToken) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO node_tokens (id, token_hash, user_id, node_id, name, created_at) VALUES (?,?,?,?,?,?)`,
