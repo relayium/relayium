@@ -31,6 +31,8 @@ const ja: Messages = {
   fileCounter: (i, n) => `ファイル ${i}/${n}`,
   close: "閉じる",
   cancel: "キャンセル",
+  dialogConfirm: "確認",
+  dialogCancel: "キャンセル",
   share: "共有",
   startOver: "← やり直す",
   peersTitle: "近くのデバイス",
@@ -42,6 +44,7 @@ const ja: Messages = {
   dragSendOne: (name) => `${name} に送信するには離してください`,
   dragSendMany: "送信先のデバイスにドロップしてください",
   pickHint: (m) => `クリックしてファイルを選択 · またはここにドロップ（最大 ${m} 個）`,
+  maxSize: (s) => `最大 ${s}`,
   footer: "エンドツーエンド暗号化（X25519 + AES-256-GCM）· シグナリングサーバーは接続情報のみを中継し、ファイルの内容は見えません",
   offlineFooter: "アップロード前にブラウザ内で AES-256-GCM により暗号化 · サーバーは復号できない暗号文のみを保持——復号キーはリンクの中にのみ存在します",
   busy: "すでに転送が進行中です。完了するまでお待ちください",
@@ -405,6 +408,9 @@ const ja: Messages = {
   },
   legal: { privacy: "プライバシーポリシー", terms: "利用規約", security: "セキュリティ" },
   learn: { hub: "ガイド" },
+  historyTitle: "最近の転送",
+  historyEmpty: "まだ転送履歴はありません",
+  historyClear: "クリア",
 };
 
 

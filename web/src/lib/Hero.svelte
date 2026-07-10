@@ -1,8 +1,32 @@
 <script lang="ts">
   import { lang, messages, type Messages } from "./i18n.svelte";
-  let { connState, unsupported, selfName, selfIP }:
-    { connState: "connecting" | "ready" | "reconnecting"; unsupported: boolean; selfName: string; selfIP: string } = $props();
+  let { connState, unsupported, selfName, selfIP, onRename }:
+    { connState: "connecting" | "ready" | "reconnecting"; unsupported: boolean; selfName: string; selfIP: string; onRename: (name: string) => void } = $props();
   const t = $derived<Messages>(messages[lang()]);
+
+  // Inline rename: click the device name to edit it in place. Every locale's
+  // t.connected(name) puts the name at the very end of the sentence, so the
+  // prefix is just the full string with the name trimmed off — no separate
+  // "sentence template" is needed per language.
+  let editing = $state(false);
+  let draft = $state("");
+
+  function startEdit() {
+    draft = selfName;
+    editing = true;
+  }
+  function commit() {
+    if (!editing) return;
+    editing = false;
+    onRename(draft);
+  }
+  function cancelEdit() {
+    editing = false;
+  }
+  function focusAndSelect(node: HTMLInputElement) {
+    node.focus();
+    node.select();
+  }
 </script>
 
 <header class="hero">
@@ -14,7 +38,18 @@
     {#if unsupported}
       {t.unavailable}
     {:else if connState === "ready"}
-      {t.connected(selfName)}
+      {@const full = t.connected(selfName)}
+      {@const prefix = selfName && full.endsWith(selfName) ? full.slice(0, full.length - selfName.length) : full + " "}
+      {prefix}{#if editing}<input
+          class="name-edit"
+          bind:value={draft}
+          use:focusAndSelect
+          onkeydown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); commit(); }
+            else if (e.key === "Escape") { e.preventDefault(); cancelEdit(); }
+          }}
+          onblur={commit}
+        />{:else}<button type="button" class="name-btn" onclick={startEdit}>{selfName}</button>{/if}
       {#if selfIP}
         <span class="sep">·</span>
         <span class="ip">{t.ipLabel} {selfIP}</span>
@@ -44,6 +79,15 @@
     font-size: var(--fs-sm); margin-top: var(--space-5);
     padding: var(--space-2) var(--space-4); border-radius: 999px;
     border: 1px solid var(--border); background: var(--surface-2);
+  }
+  .name-btn {
+    font: inherit; color: inherit; background: none; border: none; padding: 0;
+    cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px;
+  }
+  .name-btn:hover { color: var(--accent); }
+  .name-edit {
+    font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--accent);
+    border-radius: 4px; padding: 0 var(--space-1); width: 12ch; max-width: 40vw;
   }
   .sep { color: var(--border); }
   .ip { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }

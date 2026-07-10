@@ -31,6 +31,8 @@ const fr: Messages = {
   fileCounter: (i, n) => `Fichier ${i}/${n}`,
   close: "Fermer",
   cancel: "Annuler",
+  dialogConfirm: "Confirmer",
+  dialogCancel: "Annuler",
   share: "Partager",
   startOver: "← Recommencer",
   peersTitle: "Appareils à proximité",
@@ -42,6 +44,7 @@ const fr: Messages = {
   dragSendOne: (name) => `Relâchez pour envoyer à ${name}`,
   dragSendMany: "Déposez sur un appareil pour envoyer",
   pickHint: (m) => `Cliquez pour choisir · ou déposez ici (jusqu’à ${m})`,
+  maxSize: (s) => `Max ${s}`,
   footer: "Chiffré de bout en bout (X25519 + AES-256-GCM) · le serveur de signalisation ne relaie que les infos de connexion et ne voit jamais le contenu des fichiers",
   offlineFooter: "Chiffré dans votre navigateur avec AES-256-GCM avant l'envoi · le serveur ne stocke que du chiffré qu'il ne peut pas déchiffrer — la clé de déchiffrement ne vit que dans le lien.",
   busy: "Un transfert est déjà en cours — veuillez attendre qu’il se termine",
@@ -406,6 +409,9 @@ const fr: Messages = {
   },
   legal: { privacy: "Politique de confidentialité", terms: "Conditions d'utilisation", security: "Sécurité" },
   learn: { hub: "Guides" },
+  historyTitle: "Transferts récents",
+  historyEmpty: "Aucun transfert pour l'instant",
+  historyClear: "Effacer",
 };
 
 

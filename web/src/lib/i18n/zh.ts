@@ -31,6 +31,8 @@ const zh: Messages = {
   fileCounter: (i, n) => `文件 ${i}/${n}`,
   close: "关闭",
   cancel: "取消",
+  dialogConfirm: "确定",
+  dialogCancel: "取消",
   share: "分享",
   startOver: "← 重新选择",
   peersTitle: "附近的设备",
@@ -42,6 +44,7 @@ const zh: Messages = {
   dragSendOne: (name) => `松手发送给 ${name}`,
   dragSendMany: "拖到某台设备上发送",
   pickHint: (m) => `点击选择文件 · 或拖放到此处（最多 ${m} 个）`,
+  maxSize: (s) => `最大 ${s}`,
   footer: "端到端加密（X25519 + AES-256-GCM）· 信令服务器只转发连接信息，看不到文件内容",
   offlineFooter: "上传前先在浏览器用 AES-256-GCM 加密 · 服务器只保存无法解密的密文——解密密钥只存在于链接中",
   busy: "已有传输进行中，请等待完成",
@@ -405,6 +408,9 @@ const zh: Messages = {
   },
   legal: { privacy: "隐私政策", terms: "服务条款", security: "安全说明" },
   learn: { hub: "使用指南" },
+  historyTitle: "最近传输",
+  historyEmpty: "暂无记录",
+  historyClear: "清空",
 };
 
 

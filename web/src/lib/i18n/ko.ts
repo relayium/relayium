@@ -31,6 +31,8 @@ const ko: Messages = {
   fileCounter: (i, n) => `파일 ${i}/${n}`,
   close: "닫기",
   cancel: "취소",
+  dialogConfirm: "확인",
+  dialogCancel: "취소",
   share: "공유",
   startOver: "← 다시 선택",
   peersTitle: "주변 기기",
@@ -42,6 +44,7 @@ const ko: Messages = {
   dragSendOne: (name) => `놓으면 ${name}에게 전송`,
   dragSendMany: "보낼 기기 위에 놓으세요",
   pickHint: (m) => `클릭하여 파일 선택 · 또는 여기에 드롭(최대 ${m}개)`,
+  maxSize: (s) => `최대 ${s}`,
   footer: "종단간 암호화(X25519 + AES-256-GCM) · 시그널링 서버는 연결 정보만 중계하며 파일 내용은 보지 못합니다",
   offlineFooter: "업로드 전에 브라우저에서 AES-256-GCM으로 암호화 · 서버는 복호화할 수 없는 암호문만 보관합니다——복호화 키는 오직 링크 안에만 있습니다",
   busy: "이미 전송이 진행 중입니다. 완료될 때까지 기다려 주세요",
@@ -405,6 +408,9 @@ const ko: Messages = {
   },
   legal: { privacy: "개인정보 처리방침", terms: "이용약관", security: "보안" },
   learn: { hub: "가이드" },
+  historyTitle: "최근 전송",
+  historyEmpty: "아직 전송 기록이 없습니다",
+  historyClear: "지우기",
 };
 
 

@@ -87,6 +87,7 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("PATCH /api/devices/{id}", s.RequireSession(s.handleRenameDevice))
 	mux.HandleFunc("DELETE /api/devices/{id}", s.RequireSession(s.handleDeleteDevice))
 	mux.HandleFunc("GET /api/ice", s.handleICE)
+	mux.HandleFunc("GET /api/config", s.handleConfig)
 	mux.HandleFunc("GET /api/usage", s.RequireSession(s.handleUsage))
 	mux.HandleFunc("GET /api/stats", s.RequireSession(s.handleStats))
 	// BYO user node management (SP3): session-authed, CSRF-guarded like the
@@ -98,6 +99,18 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("PUT /api/me/strict-nodes", s.RequireSession(s.handleStrictNodes))
 	s.registerFileRoutes(mux)
 	return mux
+}
+
+// handleConfig exposes the effective stored-transfer limits so clients can
+// show upfront size/TTL hints without guessing. Public — no session required.
+func (s *Service) handleConfig(w http.ResponseWriter, r *http.Request) {
+	st := s.resolveSettings(r.Context())
+	writeJSON(w, http.StatusOK, map[string]int64{
+		"maxFileSize": st.MaxFileSize,
+		"dailyQuota":  st.DailyQuota,
+		"defaultTTL":  st.DefaultTTL,
+		"maxTTL":      st.MaxTTL,
+	})
 }
 
 func (s *Service) handleListDevices(w http.ResponseWriter, r *http.Request, u User) {

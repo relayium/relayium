@@ -12,6 +12,7 @@
   import { wsURL } from "./lib/transfer-link";
   import { roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
   import { connect, connectResume, summarizeStats, PeerBusyError, type InboundSignal, type Conn, type ConnPath, type RtcConfig, type ConnDiagnostics } from "./lib/webrtc";
+  import { applyRename } from "./lib/apply-rename";
   import { createWakeLock } from "./lib/wakelock";
   import { registerServiceWorker, drainSharedFiles } from "./lib/share-target";
   import { requestNotifyPermission, notifyTransfer } from "./lib/notify";
@@ -35,6 +36,7 @@
     type ResumePoint,
   } from "./lib/transfer";
   import { pickSaveTarget, type SaveTarget, type FileSink } from "./lib/filesink";
+  import { recordTransfer, loadHistory, clearHistory, type HistEntry } from "./lib/history";
   import { fetchIceConfig, hasTurnServer, measureRelays, pickRelay, type RelayEntry } from "./lib/ice";
   import type { Peer } from "./lib/protocol";
   import { lang, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
@@ -72,6 +74,11 @@
     speed: number; // bytes/sec
   }
 
+  // Concise label for a completed transfer's history entry: the first file's
+  // name, plus a "+N" count when the batch had more than one.
+  const xferLabel = (x: Xfer) =>
+    x.files.length === 1 ? x.files[0].name : `${x.files[0]?.name ?? "?"} +${x.files.length - 1}`;
+
   // Reactive state
   let connState = $state<"connecting" | "ready" | "reconnecting">("connecting");
   let unsupported = $state(false);
@@ -84,6 +91,10 @@
   let incoming = $state<Incoming | null>(null); // pending receive awaiting accept/reject
   let recv = $state<Xfer | null>(null);
   let send = $state<Xfer | null>(null);
+  // Client-local "recent transfers" log (localStorage-backed, this device only).
+  // Refreshed after each recorded completion and on clear — never read live from
+  // storage during render.
+  let history = $state<HistEntry[]>(loadHistory());
   // A receive whose connection dropped mid-transfer, waiting for the sender to
   // re-offer so it can resume. Non-reactive: it's a coordination handle for the
   // signalling router, not UI state. See beginReceive's resume closure.
@@ -160,10 +171,15 @@
   // here (broadcasts fire on measure-done and on peer-join instead), so there is no
   // ping-pong loop.
   function onPeerRelayRtt(from: string, data: unknown) {
-    const m = (data as { relayRtt?: Record<string, number> }).relayRtt;
-    if (!m || from === selfId) return;
-    peerRelayRtt = m;
-    selectedRelayId = pickRelay(myRelayRtt, peerRelayRtt);
+    const d = data as { relayRtt?: Record<string, number>; rename?: string };
+    const m = d.relayRtt;
+    if (m && from !== selfId) {
+      peerRelayRtt = m;
+      selectedRelayId = pickRelay(myRelayRtt, peerRelayRtt);
+    }
+    if (typeof d.rename === "string") {
+      peers = applyRename(peers, from, d.rename);
+    }
   }
   let acceptFn: (() => void) | null = null;
   let rejectFn: (() => void) | null = null;
@@ -218,12 +234,32 @@
   let recvNotified = false;
   $effect(() => {
     const s = send;
-    if (s?.done) { if (!sendNotified) { sendNotified = true; void notifyTransfer(statusText(messages[lang()], s)); } }
+    if (s?.done) {
+      if (!sendNotified) {
+        sendNotified = true;
+        void notifyTransfer(statusText(messages[lang()], s));
+        // Record exactly once per completed transfer, reusing this same one-shot
+        // gate (client-local, best-effort — never touches the server).
+        if (s.ok) {
+          recordTransfer({ name: xferLabel(s), size: s.total, direction: "send", peer: nameOf(s.peer) });
+          history = loadHistory();
+        }
+      }
+    }
     else sendNotified = false;
   });
   $effect(() => {
     const r = recv;
-    if (r?.done) { if (!recvNotified) { recvNotified = true; void notifyTransfer(statusText(messages[lang()], r)); } }
+    if (r?.done) {
+      if (!recvNotified) {
+        recvNotified = true;
+        void notifyTransfer(statusText(messages[lang()], r));
+        if (r.ok) {
+          recordTransfer({ name: xferLabel(r), size: r.total, direction: "recv", peer: nameOf(r.peer) });
+          history = loadHistory();
+        }
+      }
+    }
     else recvNotified = false;
   });
 
@@ -545,9 +581,26 @@
   function nameOf(peerId: string): string {
     return peers.find((p) => p.id === peerId)?.name ?? peerId.slice(0, 6);
   }
+  // User-initiated rename of this device: persist under the same key deviceName()
+  // reads, then tell every visible peer so their roster picks up the new name too.
+  // An empty (post-trim) name is a no-op — keeps whatever name was already set.
+  function commitName(next: string) {
+    const name = next.trim().slice(0, 64);
+    if (!name) return;
+    selfName = name;
+    try { localStorage.setItem(DEVICE_NAME_KEY, name); } catch { /* ignore */ }
+    for (const p of visiblePeers) signaling.sendSignal(p.id, { rename: name });
+  }
   function flash(msg: string) {
     notice = msg;
     setTimeout(() => { if (notice === msg) notice = ""; }, 3500);
+  }
+  function clearHistoryPanel() {
+    clearHistory();
+    history = loadHistory();
+  }
+  function historyWhen(at: number): string {
+    return new Date(at).toLocaleString();
   }
 
   // ── RECEIVE ──────────────────────────────────────────────────────────────────
@@ -1304,7 +1357,7 @@
   {:else if currentRoute() === "reset-password"}
     <ResetPassword />
   {:else}
-    <Hero {connState} {unsupported} {selfName} {selfIP} />
+    <Hero {connState} {unsupported} {selfName} {selfIP} onRename={commitName} />
 
   {#if notice}
     <div class="toast" role="status" aria-live="polite">{notice}</div>
@@ -1314,6 +1367,25 @@
     <div class="banner error">{t.unsupported}</div>
   {:else}
     {@render transferSurface()}
+
+    <section class="card history">
+      <details>
+        <summary>{t.historyTitle}</summary>
+        {#if history.length}
+          <ul class="filelist">
+            {#each history as e (e.id)}
+              <li>
+                <span class="fname">{e.direction === "send" ? "↑" : "↓"} {e.name} · {e.peer}</span>
+                <span class="fsize">{formatSize(e.size)} · {historyWhen(e.at)}</span>
+              </li>
+            {/each}
+          </ul>
+          <button type="button" class="btn btn-ghost history-clear" onclick={clearHistoryPanel}>{t.historyClear}</button>
+        {:else}
+          <p class="history-empty">{t.historyEmpty}</p>
+        {/if}
+      </details>
+    </section>
 
     <HowToSteps maxFiles={MAX_FILES} />
 
@@ -1440,6 +1512,11 @@
   .filelist li:last-child { border-bottom: none; }
   .fname { color: var(--text-h); word-break: break-all; }
   .fsize { color: var(--text); white-space: nowrap; }
+
+  .history summary { cursor: pointer; font-weight: 600; color: var(--text-h); }
+  .history .filelist { margin-top: 12px; }
+  .history-empty { margin: 12px 0 0; font-size: 13.5px; color: var(--text); }
+  .history-clear { margin-top: 4px; font-size: 13px; padding: 6px 12px; }
   .sas {
     font-size: 13.5px; margin-bottom: 14px; padding: 10px 12px;
     border-radius: 10px; background: var(--accent-bg); border: 1px solid var(--accent-border);

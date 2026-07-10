@@ -51,6 +51,8 @@ export interface Messages {
   fileCounter: (i: number, n: number) => string;
   close: string;
   cancel: string; // abort an in-progress transfer and return to idle
+  dialogConfirm: string; // ConfirmModal's affirmative button label
+  dialogCancel: string; // ConfirmModal's dismiss button label
   share: string; // Web Share button label (opens the OS share sheet for a link)
   startOver: string; // leave the current room and return to the method choices
   peersTitle: string;
@@ -60,6 +62,7 @@ export interface Messages {
   dragSendOne: (name: string) => string;
   dragSendMany: string;
   pickHint: (max: number) => string;
+  maxSize: (size: string) => string; // upload max-size hint shown near the file picker, e.g. "Max 200 MB"
   pickSendTo: (name: string) => string; // prominent single-peer send label
   generating: string; // transient "creating…" state while a code/link is minted
   footer: string;
@@ -345,6 +348,10 @@ export interface Messages {
   legal: { privacy: string; terms: string; security: string };
   // Footer link label for the generated static Guides hub page.
   learn: { hub: string };
+  // Client-local "recent transfers" panel (localStorage-backed, this device only).
+  historyTitle: string;
+  historyEmpty: string;
+  historyClear: string;
 }
 
 export function legalUrl(slug: "privacy" | "terms" | "security", l: Lang): string {

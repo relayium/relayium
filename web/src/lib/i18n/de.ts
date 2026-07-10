@@ -31,6 +31,8 @@ const de: Messages = {
   fileCounter: (i, n) => `Datei ${i}/${n}`,
   close: "Schließen",
   cancel: "Abbrechen",
+  dialogConfirm: "Bestätigen",
+  dialogCancel: "Abbrechen",
   share: "Teilen",
   startOver: "← Von vorn",
   peersTitle: "Geräte in der Nähe",
@@ -42,6 +44,7 @@ const de: Messages = {
   dragSendOne: (name) => `Loslassen, um an ${name} zu senden`,
   dragSendMany: "Zum Senden auf ein Gerät ziehen",
   pickHint: (m) => `Zum Auswählen klicken · oder hierher ziehen (bis zu ${m})`,
+  maxSize: (s) => `Max. ${s}`,
   footer: "Ende-zu-Ende-verschlüsselt (X25519 + AES-256-GCM) · der Signalisierungsserver leitet nur Verbindungsdaten weiter und sieht nie Dateiinhalte",
   offlineFooter: "Vor dem Hochladen im Browser mit AES-256-GCM verschlüsselt · der Server speichert nur Chiffretext, den er nicht entschlüsseln kann — der Schlüssel existiert einzig im Link.",
   busy: "Eine Übertragung läuft bereits – bitte warten Sie, bis sie abgeschlossen ist",
@@ -406,6 +409,9 @@ const de: Messages = {
   },
   legal: { privacy: "Datenschutzerklärung", terms: "Nutzungsbedingungen", security: "Sicherheit" },
   learn: { hub: "Anleitungen" },
+  historyTitle: "Letzte Übertragungen",
+  historyEmpty: "Noch keine Übertragungen",
+  historyClear: "Löschen",
 };
 
 

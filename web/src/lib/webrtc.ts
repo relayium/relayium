@@ -35,6 +35,9 @@ export interface InboundSignal {
    *  sender fail fast with a "peer busy" message instead of waiting out the ICE
    *  timeout and mislabelling it a connection failure. */
   busy?: boolean;
+  /** Peer renamed itself; the roster entry for that peer id should be updated to
+   *  this display name. Opaque to the WebRTC handlers (like relayRtt/busy). */
+  rename?: string;
 }
 
 /** The peer declined a fresh offer because it is mid-transfer (one at a time).

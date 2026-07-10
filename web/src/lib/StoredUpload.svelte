@@ -1,9 +1,21 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { uploadFile, buildDownloadLink, UploadError } from "./stored-file";
   import { canShare, share } from "./share";
   import { lang, messages, type Messages } from "./i18n.svelte";
+  import { maxSizeHint } from "./max-size";
 
   const t = $derived<Messages>(messages[lang()]);
+
+  let cfg = $state<{ maxFileSize?: number }>({});
+  const hint = $derived(maxSizeHint(cfg.maxFileSize ?? 0));
+
+  onMount(() => {
+    fetch("/api/config")
+      .then((r) => r.json())
+      .then((c) => { cfg = c; })
+      .catch(() => { /* size hint is optional — upload still works without it */ });
+  });
 
   let burn = $state(false);
   let ttl = $state(86400); // default 1 day
@@ -95,6 +107,7 @@
     <input type="file" multiple disabled={busy} onchange={onPick} />
     <span>{busy ? t.stored.uploading : t.stored.pick}</span>
   </label>
+  {#if hint}<span class="max-hint">{t.maxSize(hint)}</span>{/if}
 
   {#if busy}
     <div class="bar" role="progressbar" aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"><div class="fill" style:width="{progress}%"></div></div>
@@ -126,6 +139,7 @@
   .pick:hover { border-color: var(--accent-border); }
   .pick.disabled { opacity: .6; cursor: not-allowed; }
   .pick input[type="file"] { display: none; }
+  .max-hint { display: block; margin-top: var(--space-2); font-size: var(--fs-xs); color: var(--text); }
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; margin-top: var(--space-3); }
   .fill { height: 100%; background: linear-gradient(90deg, var(--accent), #6d28d9); transition: width .2s; }
   .phase { margin: var(--space-2) 0 0; font-size: var(--fs-xs); color: var(--text); }

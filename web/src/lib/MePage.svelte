@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import Account from "./Account.svelte";
+  import ConfirmModal from "./ConfirmModal.svelte";
+  import { confirmDialog } from "./confirm-dialog.svelte";
   import { session, refreshSession } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate } from "./router.svelte";
@@ -86,7 +88,7 @@
   }
 
   async function deleteNode(id: string) {
-    if (!confirm(t.me.confirmDelNode)) return;
+    if (!(await confirmDialog(t.me.confirmDelNode))) return;
     const res = await fetch(`/api/nodes/${id}`, { method: "DELETE", credentials: "include" });
     if (res.ok) nodes = nodes.filter((n) => n.id !== id);
   }
@@ -104,7 +106,7 @@
   }
 
   async function del(id: string) {
-    if (!confirm(t.me.confirmDel)) return;
+    if (!(await confirmDialog(t.me.confirmDel))) return;
     const res = await fetch(`/api/files/${id}`, { method: "DELETE", credentials: "include" });
     if (res.ok) {
       files = files.filter((f) => f.id !== id);
@@ -144,6 +146,7 @@
 </script>
 
 <section class="me">
+  <ConfirmModal />
   <div class="acct"><Account bind:open={loginOpen} /></div>
 
   <header class="me-head">
