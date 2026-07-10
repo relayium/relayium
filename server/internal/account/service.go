@@ -57,6 +57,9 @@ type Config struct {
 	// NodeToken is the fleet bootstrap bearer token relay nodes present to
 	// /api/nodes/*. Empty disables the node API (endpoints return 404).
 	NodeToken string
+	// EnableUserNodes serves the per-user node token path (BYO nodes) even when
+	// the shared fleet NodeToken is empty.
+	EnableUserNodes bool
 }
 
 type Service struct {

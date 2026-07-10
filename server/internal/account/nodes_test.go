@@ -108,3 +108,58 @@ func TestNodeHeartbeatRecordsUsage(t *testing.T) {
 		t.Fatalf("unknown node: got %d", w.Code)
 	}
 }
+
+func TestNodeOwnerFleetAndUser(t *testing.T) {
+	st := newTestStore(t)
+	u, _ := st.UpsertUserByEmail(context.Background(), "own@x.com", "o")
+	// user token "usertok" -> hash stored
+	st.CreateNodeToken(context.Background(), NodeToken{ID: "t1", TokenHash: hashToken("usertok"), UserID: u.ID, Name: "n", CreatedAt: 1})
+	s := &Service{store: st, cfg: Config{NodeToken: "fleetsecret", EnableUserNodes: true}, now: func() time.Time { return time.Unix(5, 0) }}
+
+	req := func(bearer string) *http.Request {
+		r := httptest.NewRequest("POST", "/", nil)
+		if bearer != "" {
+			r.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		return r
+	}
+	if ot, _, ok := s.nodeOwner(req("fleetsecret")); !ok || ot != "fleet" {
+		t.Fatalf("fleet: %q ok=%v", ot, ok)
+	}
+	ot, uid, ok := s.nodeOwner(req("usertok"))
+	if !ok || ot != "user" || uid != u.ID {
+		t.Fatalf("user: %q %q ok=%v", ot, uid, ok)
+	}
+	if _, _, ok := s.nodeOwner(req("garbage")); ok {
+		t.Fatal("unknown token must not resolve")
+	}
+}
+
+func TestRegisterUserNodeSetsOwner(t *testing.T) {
+	st := newTestStore(t)
+	u, _ := st.UpsertUserByEmail(context.Background(), "reg@x.com", "r")
+	st.CreateNodeToken(context.Background(), NodeToken{ID: "t1", TokenHash: hashToken("usertok"), UserID: u.ID, Name: "n", CreatedAt: 1})
+	s := &Service{store: st, cfg: Config{EnableUserNodes: true}, now: func() time.Time { return time.Unix(5, 0) }}
+	mux := http.NewServeMux()
+	s.RegisterNodeRoutes(mux)
+
+	body, _ := json.Marshal(nodeRegisterReq{TURNSecret: "sek", URLs: []string{"turn:1.2.3.4:3478"}})
+	r := httptest.NewRequest("POST", "/api/nodes/register", bytes.NewReader(body))
+	r.Header.Set("Authorization", "Bearer usertok")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("register: %d", w.Code)
+	}
+	var resp nodeRegisterResp
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	n, _, _ := st.GetNode(context.Background(), resp.NodeID)
+	if n.OwnerType != "user" || n.OwnerUserID != u.ID {
+		t.Fatalf("node owner = %q/%q", n.OwnerType, n.OwnerUserID)
+	}
+	// token bound to the node
+	list, _ := st.ListNodeTokensByUser(context.Background(), u.ID)
+	if len(list) != 1 || list[0].NodeID != resp.NodeID {
+		t.Fatalf("token not bound: %+v", list)
+	}
+}

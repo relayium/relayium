@@ -52,11 +52,30 @@ type nodeHeartbeatReq struct {
 // only when a fleet NodeToken is configured. They are bearer-authenticated and
 // therefore mount on the root mux (bypassing the cookie CSRF guard).
 func (s *Service) RegisterNodeRoutes(mux *http.ServeMux) {
-	if s.cfg.NodeToken == "" {
+	if s.cfg.NodeToken == "" && !s.cfg.EnableUserNodes {
 		return
 	}
 	mux.HandleFunc("POST /api/nodes/register", s.handleNodeRegister)
 	mux.HandleFunc("POST /api/nodes/heartbeat", s.handleNodeHeartbeat)
+}
+
+// nodeOwner resolves the bearer token to a node owner: the shared fleet token,
+// or a per-user node token (hashed lookup). ok=false → 401.
+func (s *Service) nodeOwner(r *http.Request) (ownerType, ownerUserID string, ok bool) {
+	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if tok == "" {
+		return "", "", false
+	}
+	if s.cfg.NodeToken != "" && subtle.ConstantTimeCompare([]byte(tok), []byte(s.cfg.NodeToken)) == 1 {
+		return "fleet", "", true
+	}
+	if s.cfg.EnableUserNodes {
+		if nt, found, err := s.store.NodeTokenByHash(r.Context(), hashToken(tok)); err == nil && found {
+			_ = s.store.TouchNodeTokenUsed(r.Context(), nt.ID, s.now().Unix())
+			return "user", nt.UserID, true
+		}
+	}
+	return "", "", false
 }
 
 // containsCap reports whether caps includes want.
@@ -79,7 +98,8 @@ func (s *Service) nodeAuthorized(r *http.Request) bool {
 }
 
 func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
-	if !s.nodeAuthorized(r) {
+	ownerType, ownerUserID, ok := s.nodeOwner(r)
+	if !ok {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
@@ -94,8 +114,9 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	now := s.now().Unix()
 	n := Node{
-		ID: req.NodeID, OwnerType: "fleet", Region: req.Region, URLs: req.URLs,
-		TURNSecret: req.TURNSecret, Version: req.Version, CreatedAt: now, LastSeenAt: now,
+		ID: req.NodeID, OwnerType: ownerType, OwnerUserID: ownerUserID,
+		Region: req.Region, URLs: req.URLs, TURNSecret: req.TURNSecret, Version: req.Version,
+		CreatedAt: now, LastSeenAt: now,
 		StorageURL: req.StorageURL, StorageSecret: req.StorageSecret,
 		StorageEnabled: containsCap(req.Capabilities, "storage"),
 		StorageTotal:   req.StorageTotal, StorageFree: req.StorageFree,
@@ -104,6 +125,13 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
+	}
+	// Bind a user token to its node for per-node revoke/delete.
+	if ownerType == "user" {
+		tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if nt, found, e := s.store.NodeTokenByHash(r.Context(), hashToken(tok)); e == nil && found {
+			_ = s.store.BindNodeToken(r.Context(), nt.ID, saved.ID)
+		}
 	}
 	writeJSON(w, http.StatusOK, nodeRegisterResp{NodeID: saved.ID, HeartbeatInterval: nodeHeartbeatInterval})
 }
