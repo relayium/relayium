@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bring your own node: use Relayium relay &amp; storage for free · Relayium</title>
+    <meta name="description" content="Attach your own relay/storage node to your Relayium account with one command. Your transfers then run through your node — not our metered servers — so they&#39;re free, and the data stays on hardware you control." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/bring-your-own-node" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Bring your own node: use Relayium relay &amp; storage for free" />
+    <meta property="og:description" content="Attach your own relay/storage node to your Relayium account with one command. Your transfers then run through your node — not our metered servers — so they&#39;re free, and the data stays on hardware you control." />
+    <meta property="og:url" content="https://relayium.com/guides/bring-your-own-node" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Bring your own node: use Relayium relay &amp; storage for free" />
+    <meta name="twitter:description" content="Attach your own relay/storage node to your Relayium account with one command. Your transfers then run through your node — not our metered servers — so they&#39;re free, and the data stays on hardware you control." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Bring your own node: use Relayium relay & storage for free","description":"Attach your own relay/storage node to your Relayium account with one command. Your transfers then run through your node — not our metered servers — so they're free, and the data stays on hardware you control.","inLanguage":"en","dateModified":"2026-07-10","mainEntityOfPage":"https://relayium.com/guides/bring-your-own-node","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"I got \"relayium-node: command not found\" — what went wrong?","acceptedAnswer":{"@type":"Answer","text":"You ran the relayium-node binary before installing it. Use the one-line install command from the account page (the curl … | sudo … sh form): it downloads the binary, puts it on your PATH, and starts it as a service. You never install relayium-node separately."}},{"@type":"Question","name":"Does the node stay online after a reboot?","acceptedAnswer":{"@type":"Answer","text":"Yes. The installer registers a systemd service that is enabled on boot and set to Restart=always, so it comes back after a reboot and restarts itself if it crashes. Nothing extra to run."}},{"@type":"Question","name":"How is this different from self-hosting Relayium?","acceptedAnswer":{"@type":"Answer","text":"Bring-your-own-node keeps your normal relayium.com account and apps and just adds a node you own to carry your traffic. Self-hosting runs the entire server stack (accounts, web app, signaling) on your own domain — see the \"Self-host Relayium\" guide for that."}},{"@type":"Question","name":"Can anyone else use my node or see my data?","acceptedAnswer":{"@type":"Answer","text":"No. A node is bound to your account by its token and only carries your account's traffic. Realtime transfers are end-to-end encrypted and stored blobs are ciphertext your node can't read. Your data and node configuration are only ever usable by you."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <h1>Bring your own node: use Relayium relay &amp; storage for free</h1>
+      <p class="updated">Last updated: 2026-07-10</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/bring-your-own-node" aria-current="true">English</a><a href="/zh/guides/bring-your-own-node">中文</a><a href="/ja/guides/bring-your-own-node">日本語</a><a href="/ko/guides/bring-your-own-node">한국어</a><a href="/de/guides/bring-your-own-node">Deutsch</a><a href="/fr/guides/bring-your-own-node">Français</a></nav>
+      <p class="lead">Cross-network transfers and stored links use relay bandwidth and disk that cost us money, so they run on a free allowance and are paid past it. There&#39;s a way around that: run your own relay/storage node, bind it to your account, and your transfers flow through your node instead of ours — nothing metered, nothing billed.</p>
+      <p class="lead">This is different from self-hosting the whole Relayium server. You keep using your normal relayium.com account and the same apps; you&#39;re just adding a node you own to carry your traffic. This guide takes you from a fresh Linux box to an online node in about five minutes.</p>
+      <h2>Why run your own node</h2>
+      <p>Two reasons. First, cost: a node you own carries your relay and storage traffic directly, so it never touches our metered infrastructure and there is nothing to bill — your usage is free no matter how large.</p>
+      <p>Second, control: the relayed bytes and stored blobs live on hardware you run, under your own operational control. Realtime transfers stay end-to-end encrypted the whole way, so even your own node only ever sees ciphertext.</p>
+      <h2>What you need</h2>
+      <p>A Linux server reachable from the internet — a cheap VPS or an always-on box at home both work. You&#39;ll need root (or sudo), and the ability to open a few inbound ports. Both amd64 and arm64 are supported.</p>
+      <h2>Step 1 — get your install command</h2>
+      <p>Sign in at relayium.com, open the account page (/me), scroll to My Nodes, and click Add node. You&#39;ll get a one-time install command with a token baked in — the token is shown only once, so copy it right away. It looks like this:</p>
+      <pre><code>curl -fsSL https://relayium.com/install-node.sh | sudo RELAYIUM_CENTRAL_URL=https://relayium.com RELAYIUM_NODE_TOKEN=&lt;your-token&gt; RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh</code></pre>
+      <ul><li>The &lt;your-token&gt; part is filled in for you on the account page — don&#39;t paste the placeholder above literally.</li><li>RELAYIUM_NODE_STORAGE_DIR turns on blob storage as well as relay. Leave it off (omit the variable) if you only want the node to relay, not store.</li></ul>
+      <h2>Step 2 — run it on your server, as root</h2>
+      <p>Paste the command on your server. It pipes our installer into sh: the installer downloads and checksum-verifies the relayium-node binary, installs it to /usr/local/bin, writes a systemd service, and starts it. The leading sudo is why it can install the service; if you&#39;re already root it&#39;s a harmless no-op.</p>
+      <p>Because it&#39;s a systemd service, the node is enabled on boot and restarts itself if it ever crashes — it stays online across reboots with nothing more to do. If you see `relayium-node: command not found`, you ran the binary directly instead of the installer above — the one-line command is what puts the binary in place.</p>
+      <ul><li>Check it started: `systemctl status relayium-node` (should read active/running).</li><li>Confirm boot-persistence: `systemctl is-enabled relayium-node` (should read enabled).</li><li>Watch logs live: `journalctl -u relayium-node -f`.</li></ul>
+      <h2>Step 3 — open the inbound ports</h2>
+      <p>Being online (a heartbeat to relayium.com) only needs outbound access, which you already have. But for peers to actually relay through and store on your node, its inbound ports must be reachable. If the host runs a firewall, open them — with ufw that&#39;s:</p>
+      <pre><code>sudo ufw allow 3478/udp        # TURN
+sudo ufw allow 8081/tcp        # storage
+sudo ufw allow 49152:65535/udp # relay</code></pre>
+      <ul><li>3478/udp is the TURN port peers use to relay; 8081/tcp is the blob-storage HTTP port; 49152–65535/udp is the relay media range.</li><li>On a cloud VPS, also allow these in the provider&#39;s security group / network firewall, not just ufw.</li></ul>
+      <h2>Step 4 — confirm and route through it</h2>
+      <p>Back on the account page, your node appears under My Nodes and flips to Online within about 30 seconds. From then on your account&#39;s transfers prefer your own node automatically.</p>
+      <p>To force it — never fall back to our shared infrastructure — turn on &quot;Only use my own nodes for relay/storage&quot; on the same page. With that on, if none of your nodes are online a transfer fails rather than quietly using ours.</p>
+      <h2>Frequently asked questions</h2>
+      <h3>I got &quot;relayium-node: command not found&quot; — what went wrong?</h3>
+      <p>You ran the relayium-node binary before installing it. Use the one-line install command from the account page (the curl … | sudo … sh form): it downloads the binary, puts it on your PATH, and starts it as a service. You never install relayium-node separately.</p>
+      <h3>Does the node stay online after a reboot?</h3>
+      <p>Yes. The installer registers a systemd service that is enabled on boot and set to Restart=always, so it comes back after a reboot and restarts itself if it crashes. Nothing extra to run.</p>
+      <h3>How is this different from self-hosting Relayium?</h3>
+      <p>Bring-your-own-node keeps your normal relayium.com account and apps and just adds a node you own to carry your traffic. Self-hosting runs the entire server stack (accounts, web app, signaling) on your own domain — see the &quot;Self-host Relayium&quot; guide for that.</p>
+      <h3>Can anyone else use my node or see my data?</h3>
+      <p>No. A node is bound to your account by its token and only carries your account&#39;s traffic. Realtime transfers are end-to-end encrypted and stored blobs are ciphertext your node can&#39;t read. Your data and node configuration are only ever usable by you.</p>
+      <div class="ctacard">
+        <p>Sign in, open your account page, and add your first node in under a minute.</p>
+        <a class="cta" href="/me">Open the account page</a>
+      </div>
+      <h2>Keep reading</h2>
+      <ul class="related"><li><a href="/compare/snapdrop">Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</a></li><li><a href="/compare/airdrop">Relayium vs AirDrop: a cross-platform AirDrop alternative</a></li><li><a href="/compare/wetransfer">Relayium vs WeTransfer: send large files without the server</a></li><li><a href="/how-to/transfer-files-android-to-iphone">How to transfer files from Android to iPhone (no cable)</a></li><li><a href="/how-to/send-files-pc-to-phone-wirelessly">Send files from PC to phone wirelessly, no cable or app</a></li><li><a href="/how-to/send-large-files-without-cloud">How to send large files without the cloud</a></li><li><a href="/guides/transfer-files-from-terminal">Transfer files from the terminal with the Relayium CLI</a></li><li><a href="/guides/back-up-a-server-over-ssh">Back up files to your own server over SSH with the Relayium CLI</a></li><li><a href="/guides/send-a-file-to-someone">Send a file to someone across networks with the Relayium CLI</a></li><li><a href="/guides/server-to-server-transfers">Server-to-server transfers with the Relayium CLI (daemon direct)</a></li><li><a href="/guides/sync-a-large-folder-between-servers">Sync a large folder between two servers (resumable, in the background)</a></li><li><a href="/how-to/share-a-file-with-an-expiring-link">Share a file with a secure, expiring download link</a></li><li><a href="/guides/self-host-relayium">Self-host Relayium: run your own file-transfer server</a></li><li><a href="/how-to/send-files-between-two-computers-over-the-internet">Send files between two computers over the internet</a></li><li><a href="/compare/croc">Relayium vs croc: encrypted file transfer from the terminal</a></li><li><a href="/guides/how-relayium-encrypts-your-files">How Relayium encrypts your files end-to-end</a></li><li><a href="/compare/google-drive">Relayium vs Google Drive for sending files</a></li><li><a href="/compare/rsync">Relayium vs rsync: sync folders without the SSH setup</a></li><li><a href="/compare/firefox-send">The best Firefox Send alternative in 2026</a></li><li><a href="/how-to/transfer-files-by-scanning-a-qr-code">Transfer files by scanning a QR code</a></li><li><a href="/guides/receive-files-from-the-command-line">Receive files from the command line</a></li><li><a href="/how-to/send-a-folder">How to send a whole folder, not just files</a></li><li><a href="/guides/run-relayium-as-an-always-on-service">Run Relayium as an always-on receive service</a></li><li><a href="/how-to/automate-server-backups">Automate encrypted server backups with a cron job</a></li><li><a href="/compare/localsend">Relayium vs LocalSend: which local file transfer to use</a></li><li><a href="/compare/scp">Relayium vs scp: simpler file transfer over SSH</a></li><li><a href="/compare/magic-wormhole">Relayium vs magic-wormhole: CLI file transfer</a></li><li><a href="/compare/nextcloud">Relayium vs Nextcloud for sending files</a></li><li><a href="/compare/dropbox">Relayium vs Dropbox for sending a file</a></li><li><a href="/how-to/airdrop-for-windows-and-android">AirDrop for Windows, Linux and Android</a></li><li><a href="/how-to/transfer-files-between-mac-and-windows">Transfer files between a Mac and a Windows PC</a></li><li><a href="/how-to/send-files-on-the-same-wifi">Send files between devices on the same Wi-Fi</a></li><li><a href="/guides/what-is-peer-to-peer-file-transfer">What is peer-to-peer file transfer?</a></li><li><a href="/guides/is-it-safe-to-send-files-over-the-internet">Is it safe to send files over the internet?</a></li><li><a href="/">Relayium</a></li></ul>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/guides">Guides</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

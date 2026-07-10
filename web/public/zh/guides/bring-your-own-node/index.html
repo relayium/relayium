@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>自建节点：免费使用 Relayium 的中转与存储 · Relayium</title>
+    <meta name="description" content="用一条命令把你自己的中转/存储节点绑定到 Relayium 账号。之后你的传输全部走你自己的节点、不经过我们的计量服务器——因此免费，数据也留在你自己掌控的硬件上。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/zh/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/bring-your-own-node" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="自建节点：免费使用 Relayium 的中转与存储" />
+    <meta property="og:description" content="用一条命令把你自己的中转/存储节点绑定到 Relayium 账号。之后你的传输全部走你自己的节点、不经过我们的计量服务器——因此免费，数据也留在你自己掌控的硬件上。" />
+    <meta property="og:url" content="https://relayium.com/zh/guides/bring-your-own-node" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="自建节点：免费使用 Relayium 的中转与存储" />
+    <meta name="twitter:description" content="用一条命令把你自己的中转/存储节点绑定到 Relayium 账号。之后你的传输全部走你自己的节点、不经过我们的计量服务器——因此免费，数据也留在你自己掌控的硬件上。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"自建节点：免费使用 Relayium 的中转与存储","description":"用一条命令把你自己的中转/存储节点绑定到 Relayium 账号。之后你的传输全部走你自己的节点、不经过我们的计量服务器——因此免费，数据也留在你自己掌控的硬件上。","inLanguage":"zh-Hans","dateModified":"2026-07-10","mainEntityOfPage":"https://relayium.com/zh/guides/bring-your-own-node","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"我遇到「relayium-node: command not found」，哪里错了？","acceptedAnswer":{"@type":"Answer","text":"你在安装之前就运行了 relayium-node 二进制。请用账户页给的那条一行安装命令（curl … | sudo … sh 形式）：它会下载二进制、放到 PATH 上，并作为服务启动。你从不需要单独安装 relayium-node。"}},{"@type":"Question","name":"重启之后节点还会在线吗？","acceptedAnswer":{"@type":"Answer","text":"会。安装脚本注册了一个 systemd 服务，开机自启且设为 Restart=always，所以重启后会自动回来，崩溃也会自愈。无需额外操作。"}},{"@type":"Question","name":"这跟自托管 Relayium 有什么区别？","acceptedAnswer":{"@type":"Answer","text":"自建节点保留你平常的 relayium.com 账号和客户端，只是多接一个你自己的节点来承载流量。自托管则是在你自己的域名上运行整套服务端（账号、Web 应用、信令）——那个见「自托管 Relayium」指南。"}},{"@type":"Question","name":"别人能用我的节点或看到我的数据吗？","acceptedAnswer":{"@type":"Answer","text":"不能。节点通过令牌绑定到你的账号，只承载你账号的流量。实时传输端到端加密，存储的数据块是你的节点也读不了的密文。你的数据和节点配置只为你自己所用。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <h1>自建节点：免费使用 Relayium 的中转与存储</h1>
+      <p class="updated">最近更新: 2026-07-10</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/bring-your-own-node">English</a><a href="/zh/guides/bring-your-own-node" aria-current="true">中文</a><a href="/ja/guides/bring-your-own-node">日本語</a><a href="/ko/guides/bring-your-own-node">한국어</a><a href="/de/guides/bring-your-own-node">Deutsch</a><a href="/fr/guides/bring-your-own-node">Français</a></nav>
+      <p class="lead">跨网络传输和存储型链接会消耗中继带宽和磁盘，这对我们是有成本的，所以它们按免费额度提供、超出后收费。但有个绕过办法：自己搭一个中转/存储节点，绑定到你的账号，之后你的传输就走你自己的节点而不是我们的——不计量、不收费。</p>
+      <p class="lead">这跟「自托管整套 Relayium 服务端」不是一回事。你依然用你平常的 relayium.com 账号、同样的客户端；只是多接了一个你自己名下的节点来承载你的流量。本指南带你从一台全新的 Linux 服务器，到节点上线，大约五分钟。</p>
+      <h2>为什么要自建节点</h2>
+      <p>两个理由。其一是成本：你自己的节点直接承载你的中转和存储流量，完全不碰我们的计量设施，也就没有任何可计费的东西——无论用量多大都免费。</p>
+      <p>其二是掌控：中转的字节和存储的数据块都落在你自己运行的硬件上，由你自己运维。实时传输全程端到端加密，所以即便是你自己的节点，看到的也只是密文。</p>
+      <h2>你需要什么</h2>
+      <p>一台能从公网访问的 Linux 服务器——便宜的 VPS 或家里常开的机器都行。你需要 root（或 sudo）权限，以及放通几个入站端口的能力。amd64 和 arm64 都支持。</p>
+      <h2>第一步 —— 拿到你的安装命令</h2>
+      <p>在 relayium.com 登录，打开账户页（/me），滚动到「我的节点」，点「添加节点」。你会得到一条内嵌令牌的一次性安装命令——令牌只显示这一次，请立即复制。它长这样：</p>
+      <pre><code>curl -fsSL https://relayium.com/install-node.sh | sudo RELAYIUM_CENTRAL_URL=https://relayium.com RELAYIUM_NODE_TOKEN=&lt;your-token&gt; RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh</code></pre>
+      <ul><li>其中 &lt;your-token&gt; 会在账户页里替你填好——不要直接照抄上面的占位符。</li><li>RELAYIUM_NODE_STORAGE_DIR 会同时开启存储（不只是中转）。如果你只想让节点中转、不存储，去掉这个变量即可。</li></ul>
+      <h2>第二步 —— 在你的服务器上以 root 运行</h2>
+      <p>把命令粘到你的服务器上。它会把我们的安装脚本管道给 sh：脚本下载并校验 relayium-node 二进制、装到 /usr/local/bin、写好 systemd 服务并启动它。开头的 sudo 就是它能安装服务的原因；如果你本来就是 root，sudo 是无副作用的空操作。</p>
+      <p>因为它是 systemd 服务，节点会开机自启，崩溃后也会自动重启——无需额外操作就能一直在线。如果你看到 `relayium-node: command not found`，说明你直接运行了二进制、而不是上面的安装命令——正是那条一行命令把二进制装好的。</p>
+      <ul><li>确认已启动：`systemctl status relayium-node`（应为 active/running）。</li><li>确认开机自启：`systemctl is-enabled relayium-node`（应为 enabled）。</li><li>实时看日志：`journalctl -u relayium-node -f`。</li></ul>
+      <h2>第三步 —— 放通入站端口</h2>
+      <p>「在线」（向 relayium.com 发心跳）只需要出站访问，你已经有了。但要让别人真正通过你的节点中转、往上存储，它的入站端口必须可达。如果这台主机开了防火墙，就放通它们——用 ufw 就是：</p>
+      <pre><code>sudo ufw allow 3478/udp        # TURN
+sudo ufw allow 8081/tcp        # storage
+sudo ufw allow 49152:65535/udp # relay</code></pre>
+      <ul><li>3478/udp 是别人用来中继的 TURN 端口；8081/tcp 是存储的 HTTP 端口；49152–65535/udp 是中继媒体端口段。</li><li>在云 VPS 上，还要在服务商的安全组 / 网络防火墙里放通这些端口，不只是 ufw。</li></ul>
+      <h2>第四步 —— 确认并让流量走它</h2>
+      <p>回到账户页，你的节点会出现在「我的节点」里，约 30 秒内变为「在线」。从此你账号的传输会自动优先使用你自己的节点。</p>
+      <p>想强制生效——绝不回落到我们的公共设施——就在同一页打开「仅使用我自己的节点中转/存储」。开启后，若你的节点都不在线，传输会失败，而不是悄悄用我们的。</p>
+      <h2>常见问题</h2>
+      <h3>我遇到「relayium-node: command not found」，哪里错了？</h3>
+      <p>你在安装之前就运行了 relayium-node 二进制。请用账户页给的那条一行安装命令（curl … | sudo … sh 形式）：它会下载二进制、放到 PATH 上，并作为服务启动。你从不需要单独安装 relayium-node。</p>
+      <h3>重启之后节点还会在线吗？</h3>
+      <p>会。安装脚本注册了一个 systemd 服务，开机自启且设为 Restart=always，所以重启后会自动回来，崩溃也会自愈。无需额外操作。</p>
+      <h3>这跟自托管 Relayium 有什么区别？</h3>
+      <p>自建节点保留你平常的 relayium.com 账号和客户端，只是多接一个你自己的节点来承载流量。自托管则是在你自己的域名上运行整套服务端（账号、Web 应用、信令）——那个见「自托管 Relayium」指南。</p>
+      <h3>别人能用我的节点或看到我的数据吗？</h3>
+      <p>不能。节点通过令牌绑定到你的账号，只承载你账号的流量。实时传输端到端加密，存储的数据块是你的节点也读不了的密文。你的数据和节点配置只为你自己所用。</p>
+      <div class="ctacard">
+        <p>登录，打开账户页，一分钟内添加你的第一个节点。</p>
+        <a class="cta" href="/me">打开账户页</a>
+      </div>
+      <h2>继续阅读</h2>
+      <ul class="related"><li><a href="/zh/compare/snapdrop">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/transfer-files-android-to-iphone">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud">如何不用网盘传输大文件</a></li><li><a href="/zh/guides/transfer-files-from-terminal">用 Relayium CLI 从终端传输文件</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/guides/send-a-file-to-someone">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/server-to-server-transfers">用 Relayium CLI 实现服务器到服务器直传（守护进程直连）</a></li><li><a href="/zh/guides/sync-a-large-folder-between-servers">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li><li><a href="/zh/how-to/share-a-file-with-an-expiring-link">用会过期的安全链接分享文件</a></li><li><a href="/zh/guides/self-host-relayium">自托管 Relayium：运行属于你自己的文件传输服务器</a></li><li><a href="/zh/how-to/send-files-between-two-computers-over-the-internet">如何通过互联网在两台电脑之间传文件</a></li><li><a href="/zh/compare/croc">Relayium 对比 croc：从终端加密传输文件</a></li><li><a href="/zh/guides/how-relayium-encrypts-your-files">Relayium 如何对文件端到端加密</a></li><li><a href="/zh/compare/google-drive">Relayium 对比 Google Drive：发送文件更直接</a></li><li><a href="/zh/compare/rsync">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</a></li><li><a href="/zh/compare/firefox-send">2026 年最佳 Firefox Send 替代品</a></li><li><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code">扫描二维码传输文件</a></li><li><a href="/zh/guides/receive-files-from-the-command-line">在命令行接收文件</a></li><li><a href="/zh/how-to/send-a-folder">如何直接发送整个文件夹，而不只是文件</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/how-to/automate-server-backups">用 cron 任务自动化加密的服务器备份</a></li><li><a href="/zh/compare/localsend">Relayium 对比 LocalSend：局域网传输该选哪个</a></li><li><a href="/zh/compare/scp">Relayium 对比 scp：更简单的 SSH 文件传输</a></li><li><a href="/zh/compare/magic-wormhole">Relayium 对比 magic-wormhole：命令行文件传输</a></li><li><a href="/zh/compare/nextcloud">Relayium 对比 Nextcloud：发送文件该选谁</a></li><li><a href="/zh/compare/dropbox">Relayium 对比 Dropbox：发送单个文件更直接</a></li><li><a href="/zh/how-to/airdrop-for-windows-and-android">Windows、Linux、Android 的隔空投送替代方案</a></li><li><a href="/zh/how-to/transfer-files-between-mac-and-windows">如何在 Mac 和 Windows 电脑之间传输文件</a></li><li><a href="/zh/how-to/send-files-on-the-same-wifi">同一 Wi-Fi 下的设备之间互传文件</a></li><li><a href="/zh/guides/what-is-peer-to-peer-file-transfer">什么是点对点（P2P）文件传输？</a></li><li><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet">在网上发送文件到底安全吗?</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=zh">← Relayium</a>
+        <a href="/zh/guides">使用指南</a>
+        <a href="/zh/privacy">隐私政策</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>
