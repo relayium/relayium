@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Transfert de fichiers inter-réseaux — temps réel, chiffré de bout en bout, pair-à-pair (Relayium)</title>
+    <meta name="description" content="Envoyez des fichiers d&#39;un appareil à l&#39;autre entre réseaux différents avec un code d&#39;appairage à 6 chiffres. Temps réel, pair-à-pair, chiffré de bout en bout ; un relais TURN n&#39;intervient que lorsqu&#39;une connexion directe est impossible, et il ne transporte que du contenu chiffré." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/fr/cross-network" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/cross-network" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/cross-network" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/cross-network" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/cross-network" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/cross-network" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/cross-network" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/cross-network" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Transfert de fichiers inter-réseaux — temps réel, chiffré de bout en bout, pair-à-pair (Relayium)" />
+    <meta property="og:description" content="Envoyez des fichiers d&#39;un appareil à l&#39;autre entre réseaux différents avec un code d&#39;appairage à 6 chiffres. Temps réel, pair-à-pair, chiffré de bout en bout ; un relais TURN n&#39;intervient que lorsqu&#39;une connexion directe est impossible, et il ne transporte que du contenu chiffré." />
+    <meta property="og:url" content="https://relayium.com/fr/cross-network" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Transfert de fichiers inter-réseaux — temps réel, chiffré de bout en bout, pair-à-pair (Relayium)" />
+    <meta name="twitter:description" content="Envoyez des fichiers d&#39;un appareil à l&#39;autre entre réseaux différents avec un code d&#39;appairage à 6 chiffres. Temps réel, pair-à-pair, chiffré de bout en bout ; un relais TURN n&#39;intervient que lorsqu&#39;une connexion directe est impossible, et il ne transporte que du contenu chiffré." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"Transfert de fichiers inter-réseaux — temps réel, chiffré de bout en bout, pair-à-pair (Relayium)","description":"Envoyez des fichiers d'un appareil à l'autre entre réseaux différents avec un code d'appairage à 6 chiffres. Temps réel, pair-à-pair, chiffré de bout en bout ; un relais TURN n'intervient que lorsqu'une connexion directe est impossible, et il ne transporte que du contenu chiffré.","url":"https://relayium.com/fr/cross-network","inLanguage":"fr","dateModified":"2026-07-10","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Mes fichiers passent-ils par votre serveur ?","acceptedAnswer":{"@type":"Answer","text":"En mode temps réel, non — les fichiers circulent en pair-à-pair. Seulement lorsqu'une connexion directe est impossible, un relais TURN chiffré transporte un contenu chiffré qu'il ne peut pas lire."}},{"@type":"Question","name":"Un code est-il obligatoire ?","acceptedAnswer":{"@type":"Answer","text":"Oui : un code à 6 chiffres (ou son lien d'accès/QR), valable 15 minutes, appaire les deux appareils entre réseaux différents."}},{"@type":"Question","name":"Faut-il un compte ?","acceptedAnswer":{"@type":"Answer","text":"L'expéditeur se connecte pour générer un code ; le destinataire rejoint de façon anonyme."}},{"@type":"Question","name":"Est-ce chiffré de bout en bout ?","acceptedAnswer":{"@type":"Answer","text":"Oui — X25519 et AES-256-GCM par bloc, vérifié avec le code SAS."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:820px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:38px;letter-spacing:-.5px;margin:40px 0 12px}
+h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.pitch{font-size:20px;margin:0 0 24px;max-width:42em}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:8px 0}
+ol.steps{margin:12px 0;padding-left:22px}ol.steps li{margin:10px 0}
+.cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.why li b,.compare h3{color:var(--text-h)}
+.learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
+footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=fr">Relayium</a></header>
+      
+      <h1>Transfert inter-réseaux, toujours pair-à-pair</h1>
+      <p class="pitch">Deux appareils sur des réseaux différents s&#39;appairent avec un code à 6 chiffres (ou son lien/QR). Les fichiers circulent directement via un canal WebRTC chiffré ; seulement lorsqu&#39;une connexion directe est impossible, un relais TURN chiffré transporte le contenu chiffré.</p>
+      <a class="cta" href="/cross-network?lang=fr">Démarrer le transfert</a>
+
+      <h2>Transférer en quatre étapes</h2>
+      <ol class="steps">
+        <li>L&#39;expéditeur se connecte et génère un code d&#39;appairage à 6 chiffres (ou partage son lien d&#39;accès/QR).</li>
+        <li>Le destinataire ouvre le lien ou saisit le code — aucun compte n&#39;est nécessaire pour recevoir.</li>
+        <li>Les deux parties vérifient le même code SAS à 6 chiffres à l&#39;écran pour écarter tout homme du milieu.</li>
+        <li>Les fichiers circulent en pair-à-pair, chiffrés en AES-256-GCM par bloc ; un relais TURN ne transporte que le contenu chiffré si aucune connexion directe n&#39;existe.</li>
+      </ol>
+
+      <h2>Pourquoi Relayium</h2>
+      <ul class="why">
+        <li><b>Chiffré de bout en bout</b> — Échange de clés X25519 et AES-256-GCM par bloc ; les clés sont négociées uniquement entre les deux appareils, le serveur ne peut donc pas déchiffrer.</li>
+        <li><b>SAS contre l&#39;homme du milieu</b> — Les deux écrans affichent le même code à 6 chiffres ; le faire correspondre déjoue même un serveur de signalisation compromis.</li>
+        <li><b>Direct quand c&#39;est possible</b> — Les fichiers circulent d&#39;appareil à appareil via WebRTC ; le relais n&#39;est qu&#39;un repli chiffré pour les cas de NAT symétrique où le hole-punching échoue.</li>
+        <li><b>Multiplateforme</b> — Windows, macOS, Linux, Android, iOS — un navigateur moderne suffit, rien à installer.</li>
+        <li><b>Gratuit</b> — Le transfert en temps réel est gratuit ; générer un code exige que l&#39;expéditeur soit connecté (pour l&#39;attribution), le destinataire rejoint de façon anonyme.</li>
+      </ul>
+
+      <h2>En comparaison</h2>
+      <div class="compare">
+      <h3>Face à AirDrop</h3>
+      <p>AirDrop est réservé aux appareils Apple ; Relayium appaire Windows, Android, iPhone et Mac entre réseaux différents avec un simple navigateur.</p>
+      <h3>Face à Snapdrop / PairDrop</h3>
+      <p>Ceux-ci ne fonctionnent que sur le même réseau ; Relayium ajoute l&#39;appairage inter-réseaux ainsi qu&#39;un chiffrement de bout en bout au niveau applicatif et un code SAS, si bien qu&#39;un serveur de signalisation malveillant ne peut pas espionner.</p>
+      </div>
+
+      <h2>Questions fréquentes</h2>
+      <h3>Mes fichiers passent-ils par votre serveur ?</h3>
+      <p>En mode temps réel, non — les fichiers circulent en pair-à-pair. Seulement lorsqu&#39;une connexion directe est impossible, un relais TURN chiffré transporte un contenu chiffré qu&#39;il ne peut pas lire.</p>
+      <h3>Un code est-il obligatoire ?</h3>
+      <p>Oui : un code à 6 chiffres (ou son lien d&#39;accès/QR), valable 15 minutes, appaire les deux appareils entre réseaux différents.</p>
+      <h3>Faut-il un compte ?</h3>
+      <p>L&#39;expéditeur se connecte pour générer un code ; le destinataire rejoint de façon anonyme.</p>
+      <h3>Est-ce chiffré de bout en bout ?</h3>
+      <p>Oui — X25519 et AES-256-GCM par bloc, vérifié avec le code SAS.</p>
+
+      
+      <footer>
+        <a href="/?lang=fr">← Relayium</a>
+        <a href="/fr/privacy">Confidentialité</a>
+        <a href="/fr/terms">Conditions d&#39;utilisation</a>
+        <a href="/fr/security">Sécurité</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>
