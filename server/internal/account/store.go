@@ -121,6 +121,24 @@ type UploadEvent struct {
 	UploadedAt int64
 }
 
+// Node is one registered relay node (SP1: fleet-owned pion/turn relay). urls are
+// the node's turn: URLs; turn_secret is its static-auth-secret (so /api/ice can
+// mint ephemeral credentials it will validate). relayed_bytes/stored_bytes are the
+// node's own cumulative, keep-max counters fed from heartbeats.
+type Node struct {
+	ID           string
+	OwnerType    string // "fleet" (SP3 adds "user")
+	OwnerUserID  string // "" for fleet
+	Region       string
+	URLs         []string
+	TURNSecret   string
+	Version      string
+	RelayedBytes int64
+	StoredBytes  int64
+	CreatedAt    int64
+	LastSeenAt   int64
+}
+
 // Setting is one admin-editable integer config value (bytes or seconds).
 type Setting struct {
 	Key       string
@@ -249,4 +267,9 @@ type Store interface {
 	GetSetting(ctx context.Context, key string) (int64, bool, error)
 	SetSetting(ctx context.Context, key string, value, at int64) error
 	ListSettings(ctx context.Context) ([]Setting, error)
+	// relay nodes (self-reporting fleet telemetry)
+	UpsertNode(ctx context.Context, n Node) (Node, error)
+	TouchNode(ctx context.Context, id string, relayedBytes, storedBytes, at int64) error
+	OnlineNodes(ctx context.Context, since int64) ([]Node, error)
+	ListNodes(ctx context.Context) ([]Node, error)
 }

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -111,6 +112,20 @@ CREATE TABLE IF NOT EXISTS email_tokens (
   used_at    INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_email_tokens_user ON email_tokens(user_id);
+CREATE TABLE IF NOT EXISTS nodes (
+  id            TEXT PRIMARY KEY,
+  owner_type    TEXT NOT NULL,
+  owner_user_id TEXT,
+  region        TEXT,
+  urls          TEXT NOT NULL,
+  turn_secret   TEXT NOT NULL,
+  version       TEXT,
+  relayed_bytes INTEGER NOT NULL DEFAULT 0,
+  stored_bytes  INTEGER NOT NULL DEFAULT 0,
+  created_at    INTEGER NOT NULL,
+  last_seen_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_nodes_last_seen ON nodes(last_seen_at);
 `
 
 func OpenSQLite(dsn string) (*SQLiteStore, error) {
@@ -1009,6 +1024,82 @@ func (s *SQLiteStore) ListSettings(ctx context.Context) ([]Setting, error) {
 			return nil, err
 		}
 		out = append(out, st)
+	}
+	return out, rows.Err()
+}
+
+// nullStr converts an empty string to SQL NULL (used for optional TEXT columns
+// like nodes.owner_user_id, which is "" for fleet-owned nodes).
+func nullStr(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
+	if n.ID == "" {
+		n.ID = newID()
+	}
+	urls, err := json.Marshal(n.URLs)
+	if err != nil {
+		return Node{}, err
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO nodes (id, owner_type, owner_user_id, region, urls, turn_secret, version, relayed_bytes, stored_bytes, created_at, last_seen_at)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?)
+		 ON CONFLICT(id) DO UPDATE SET
+		   owner_type=excluded.owner_type, owner_user_id=excluded.owner_user_id,
+		   region=excluded.region, urls=excluded.urls, turn_secret=excluded.turn_secret,
+		   version=excluded.version, last_seen_at=excluded.last_seen_at`,
+		n.ID, n.OwnerType, nullStr(n.OwnerUserID), n.Region, string(urls), n.TURNSecret,
+		n.Version, n.RelayedBytes, n.StoredBytes, n.CreatedAt, n.LastSeenAt)
+	if err != nil {
+		return Node{}, err
+	}
+	return n, nil
+}
+
+func (s *SQLiteStore) TouchNode(ctx context.Context, id string, relayedBytes, storedBytes, at int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE nodes SET last_seen_at=?,
+		   relayed_bytes=MAX(relayed_bytes, ?), stored_bytes=MAX(stored_bytes, ?)
+		 WHERE id=?`, at, relayedBytes, storedBytes, id)
+	return err
+}
+
+func (s *SQLiteStore) OnlineNodes(ctx context.Context, since int64) ([]Node, error) {
+	return s.queryNodes(ctx,
+		`SELECT id, owner_type, owner_user_id, region, urls, turn_secret, version, relayed_bytes, stored_bytes, created_at, last_seen_at
+		   FROM nodes WHERE owner_type='fleet' AND last_seen_at >= ? ORDER BY last_seen_at DESC`, since)
+}
+
+func (s *SQLiteStore) ListNodes(ctx context.Context) ([]Node, error) {
+	return s.queryNodes(ctx,
+		`SELECT id, owner_type, owner_user_id, region, urls, turn_secret, version, relayed_bytes, stored_bytes, created_at, last_seen_at
+		   FROM nodes ORDER BY last_seen_at DESC`)
+}
+
+func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]Node, error) {
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Node
+	for rows.Next() {
+		var n Node
+		var ownerUser sql.NullString
+		var urls string
+		if err := rows.Scan(&n.ID, &n.OwnerType, &ownerUser, &n.Region, &urls, &n.TURNSecret,
+			&n.Version, &n.RelayedBytes, &n.StoredBytes, &n.CreatedAt, &n.LastSeenAt); err != nil {
+			return nil, err
+		}
+		n.OwnerUserID = ownerUser.String
+		if err := json.Unmarshal([]byte(urls), &n.URLs); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
 	}
 	return out, rows.Err()
 }
