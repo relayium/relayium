@@ -176,7 +176,7 @@ func TestICEWithholdsTurnOverCap(t *testing.T) {
 		t.Fatalf("SetSetting: %v", err)
 	}
 	if err := store.RecordUsage(ctx, UsageEvent{
-		AllocID: "x", Token: "424242", UserID: "owner-1", RelayedBytes: 500, RecordedAt: now,
+		AllocID: "x", Token: "424242", UserID: "owner-1", RelayedBytes: 500, RecordedAt: now, Billable: true,
 	}); err != nil {
 		t.Fatalf("RecordUsage: %v", err)
 	}
@@ -212,7 +212,7 @@ func TestICEUnderCapIncludesTurn(t *testing.T) {
 		t.Fatalf("SetSetting: %v", err)
 	}
 	if err := store.RecordUsage(ctx, UsageEvent{
-		AllocID: "y", Token: "424242", UserID: "owner-1", RelayedBytes: 500, RecordedAt: now,
+		AllocID: "y", Token: "424242", UserID: "owner-1", RelayedBytes: 500, RecordedAt: now, Billable: true,
 	}); err != nil {
 		t.Fatalf("RecordUsage: %v", err)
 	}

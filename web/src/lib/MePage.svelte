@@ -5,6 +5,8 @@
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate } from "./router.svelte";
   import { formatSize, formatRemaining } from "./format";
+  import { nodeRunCommand } from "./nodes";
+  import CommandBlock from "./CommandBlock.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
   let loginOpen = $state(false);
@@ -17,6 +19,11 @@
     id: string; size: number; createdAt: number; expiresAt: number;
     burnAfterRead: boolean; downloadCount: number;
   }
+  interface NodeRow {
+    id: string; region: string; online: boolean;
+    relayedBytes: number; storedBytes: number;
+    storageFree: number; storageTotal: number; lastSeen: number;
+  }
 
   let stats = $state<Stats | null>(null);
   let files = $state<FileRow[]>([]);
@@ -24,21 +31,76 @@
   let nowSec = $state(Math.floor(Date.now() / 1000));
   let loadedFor = ""; // user id we last loaded data for; guards against refetch loops
 
+  // "My Nodes" — BYO relay node section.
+  let nodes = $state<NodeRow[]>([]);
+  let strict = $state(false);
+  let addingNode = $state(false); // add-node mini-form open
+  let newNodeName = $state("");
+  let newToken = $state<string | null>(null); // shown exactly once, right after provisioning
+
+  async function loadNodes() {
+    try {
+      const res = await fetch("/api/nodes/mine", { credentials: "include" });
+      nodes = res.ok ? ((await res.json()).nodes ?? []) : [];
+    } catch {
+      nodes = [];
+    }
+  }
+
   async function load() {
     loading = true;
     try {
-      const [sr, fr] = await Promise.all([
+      const [sr, fr, mr] = await Promise.all([
         fetch("/api/stats", { credentials: "include" }),
         fetch("/api/files", { credentials: "include" }),
+        fetch("/api/me", { credentials: "include" }),
       ]);
       stats = sr.ok ? await sr.json() : null;
       files = fr.ok ? ((await fr.json()).files ?? []) : [];
+      strict = mr.ok ? Boolean((await mr.json()).user?.onlyOwnNodes) : false;
     } catch {
       stats = null;
       files = [];
+      strict = false;
     } finally {
       loading = false;
     }
+    await loadNodes();
+  }
+
+  async function addNode() {
+    const name = newNodeName.trim();
+    const res = await fetch("/api/nodes/provision", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (res.ok) {
+      const body = (await res.json()) as { token: string };
+      newToken = body.token;
+      newNodeName = "";
+      addingNode = false;
+      await loadNodes();
+    }
+  }
+
+  async function deleteNode(id: string) {
+    if (!confirm(t.me.confirmDelNode)) return;
+    const res = await fetch(`/api/nodes/${id}`, { method: "DELETE", credentials: "include" });
+    if (res.ok) nodes = nodes.filter((n) => n.id !== id);
+  }
+
+  async function toggleStrict() {
+    const next = !strict;
+    strict = next; // optimistic — matches the checkbox the user just clicked
+    const res = await fetch("/api/me/strict-nodes", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ onlyOwnNodes: next }),
+    });
+    if (!res.ok) strict = !next; // revert on failure
   }
 
   async function del(id: string) {
@@ -69,6 +131,7 @@
     if (!uid) {
       loadedFor = "";
       stats = null; files = []; loading = false;
+      nodes = []; strict = false; newToken = null; addingNode = false;
     }
   });
 
@@ -143,6 +206,52 @@
         </ul>
       {/if}
     </section>
+
+    <section class="nodes">
+      <div class="nodes-head">
+        <h2>{t.me.nodesTitle}</h2>
+        <label class="strict">
+          <input type="checkbox" checked={strict} onchange={toggleStrict} />
+          {t.me.strictLabel}
+        </label>
+      </div>
+      <p class="hint">{t.me.strictHint}</p>
+
+      {#if newToken}
+        <div class="token-reveal">
+          <p class="hint">{t.me.tokenNote}</p>
+          <CommandBlock code={nodeRunCommand(newToken, location.origin)} title="relayium-node" />
+          <button class="btn btn-primary" onclick={() => (newToken = null)}>{t.me.tokenDone}</button>
+        </div>
+      {:else if addingNode}
+        <form class="add-form" onsubmit={(e) => { e.preventDefault(); addNode(); }}>
+          <input type="text" bind:value={newNodeName} placeholder={t.me.nodeNamePlaceholder} />
+          <button type="submit" class="btn btn-primary">{t.me.addNodeSubmit}</button>
+          <button type="button" class="btn-link" onclick={() => { addingNode = false; newNodeName = ""; }}>
+            {t.me.addNodeCancel}
+          </button>
+        </form>
+      {:else}
+        <button class="btn btn-ghost" onclick={() => (addingNode = true)}>{t.me.addNode}</button>
+      {/if}
+
+      {#if nodes.length === 0}
+        <p class="muted">{t.me.nodesEmpty}</p>
+      {:else}
+        <ul class="nodelist">
+          {#each nodes as n (n.id)}
+            <li>
+              <span class="dot" class:on={n.online} aria-label={n.online ? t.me.nodeOnline : t.me.nodeOffline}></span>
+              <span class="nid">{n.region || "—"} · #{n.id.slice(0, 8)}</span>
+              <span class="nstat">{t.me.nodeRelayed(formatSize(n.relayedBytes))} ({t.me.nodeFreeTag})</span>
+              <span class="nstat">{t.me.nodeStored(formatSize(n.storedBytes))} ({t.me.nodeFreeTag})</span>
+              <span class="nstat">{t.me.nodeStorageFree(formatSize(n.storageFree), formatSize(n.storageTotal))}</span>
+              <button class="del" onclick={() => deleteNode(n.id)} aria-label={t.me.delNode}>{t.me.delNode}</button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
   {/if}
 </section>
 
@@ -201,6 +310,32 @@
     padding: 2px 10px; transition: border-color .13s, color .13s;
   }
   .del:hover { border-color: var(--danger); color: var(--danger); }
+
+  .nodes { margin-top: var(--space-6); }
+  .nodes-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 10px; margin-bottom: var(--space-2); }
+  .nodes-head h2 { font-size: var(--fs-h3); margin: 0; }
+  .strict { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text); cursor: pointer; }
+  .nodes > .hint { margin: 0 0 var(--space-3); font-size: var(--fs-xs); color: var(--text); }
+
+  .add-form { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
+  .add-form input {
+    padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); border: 1px solid var(--border);
+    font: inherit; font-size: var(--fs-xs); background: var(--social-bg); color: var(--text-h);
+  }
+
+  .token-reveal { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-3); }
+  .token-reveal .hint { margin: 0; font-size: var(--fs-xs); color: var(--text); }
+
+  .nodelist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  .nodelist li {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+    padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--social-bg); font-size: var(--fs-xs);
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text); opacity: .4; flex: none; }
+  .dot.on { background: var(--accent); opacity: 1; }
+  .nid { font-family: ui-monospace, monospace; color: var(--text-h); }
+  .nstat { color: var(--text); }
 
   @media (max-width: 520px) {
     .exp { margin-left: 0; }

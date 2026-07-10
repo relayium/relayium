@@ -91,6 +91,11 @@ func (w *Worker) handle(ctx context.Context, ev UsageEvent) {
 		UserID:       userID,
 		RelayedBytes: ev.RelayedBytes,
 		RecordedAt:   w.Now(),
+		// The central coturn relay is our fleet infrastructure, so bytes it
+		// relays are billable against the user's monthly quota (see
+		// account.UserRelayedSince, which sums billable=1 rows only).
+		// NodeID is left unset: coturn is not a registered self-hosted node.
+		Billable: true,
 	}
 	if err := w.Sink.RecordUsage(ctx, rec); err != nil {
 		w.Log.Printf("metering: record alloc %s failed: %v", ev.AllocID, err)

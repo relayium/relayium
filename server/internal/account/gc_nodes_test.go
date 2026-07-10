@@ -71,3 +71,22 @@ func TestGCOrphanQueue(t *testing.T) {
 		t.Fatalf("pending node deletes after drain = %+v, want empty", pend)
 	}
 }
+
+// TestGCEvictsAgedPendingDeletes: a pending_node_deletes row for a
+// permanently-dead node would otherwise retry forever every sweep. GC must
+// evict rows older than pendingDeleteMaxAge so the table stays bounded.
+func TestGCEvictsAgedPendingDeletes(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	st.EnqueueNodeDelete(ctx, "bk-old", "dead-node", 1000) // enqueued long ago
+	st.EnqueueNodeDelete(ctx, "bk-new", "dead-node", 9_000_000)
+	// before = now - 7d; with now large, bk-old is aged out, bk-new survives.
+	before := int64(9_000_000) - int64(7*24*3600)
+	if err := st.DeletePendingNodeDeletesOlderThan(ctx, before); err != nil {
+		t.Fatalf("evict: %v", err)
+	}
+	list, _ := st.ListPendingNodeDeletes(ctx)
+	if len(list) != 1 || list[0].BlobKey != "bk-new" {
+		t.Fatalf("aged eviction wrong: %+v", list)
+	}
+}

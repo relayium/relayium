@@ -132,6 +132,17 @@ CREATE TABLE IF NOT EXISTS pending_node_deletes (
   enqueued_at INTEGER NOT NULL,
   PRIMARY KEY (blob_key, node_id)
 );
+CREATE TABLE IF NOT EXISTS node_tokens (
+  id           TEXT PRIMARY KEY,
+  token_hash   TEXT NOT NULL UNIQUE,
+  user_id      TEXT NOT NULL REFERENCES users(id),
+  node_id      TEXT,
+  name         TEXT,
+  created_at   INTEGER NOT NULL,
+  last_used_at INTEGER NOT NULL DEFAULT 0,
+  revoked_at   INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_node_tokens_user ON node_tokens(user_id);
 `
 
 func OpenSQLite(dsn string) (*SQLiteStore, error) {
@@ -169,6 +180,13 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`ALTER TABLE nodes ADD COLUMN storage_total INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE nodes ADD COLUMN storage_free INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE stored_files ADD COLUMN node_id TEXT`,
+		// SP3: usage_events gains node_id (which node reported this) + billable
+		// (fleet-relay vs. BYO own-node relay, which must not count against quota).
+		`ALTER TABLE usage_events ADD COLUMN node_id TEXT`,
+		`ALTER TABLE usage_events ADD COLUMN billable INTEGER NOT NULL DEFAULT 1`,
+		// SP3: only_own_nodes restricts a user's transfers to their own
+		// self-hosted nodes, excluding the shared fleet.
+		`ALTER TABLE users ADD COLUMN only_own_nodes INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -345,13 +363,20 @@ func (s *SQLiteStore) InsertUserDedupedByCanonical(ctx context.Context, email, d
 
 func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (User, error) {
 	var u User
+	var strict int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, email, display_name, created_at, email_verified FROM users WHERE id = ?`, id,
-	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified)
+		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes FROM users WHERE id = ?`, id,
+	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &strict)
 	if err == sql.ErrNoRows {
 		return User{}, ErrNotFound
 	}
+	u.OnlyOwnNodes = strict != 0
 	return u, err
+}
+
+func (s *SQLiteStore) SetOnlyOwnNodes(ctx context.Context, userID string, on bool) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET only_own_nodes = ? WHERE id = ?`, b2i(on), userID)
+	return err
 }
 
 func (s *SQLiteStore) LinkIdentity(ctx context.Context, provider, subject, userID string) error {
@@ -541,12 +566,12 @@ func (s *SQLiteStore) DeleteDevice(ctx context.Context, id, userID string) error
 
 func (s *SQLiteStore) RecordUsage(ctx context.Context, e UsageEvent) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO usage_events (alloc_id, token, user_id, relayed_bytes, recorded_at)
-		 VALUES (?, ?, ?, ?, ?)
+		`INSERT INTO usage_events (alloc_id, token, user_id, relayed_bytes, recorded_at, node_id, billable)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(alloc_id) DO UPDATE SET
 		   relayed_bytes = MAX(relayed_bytes, excluded.relayed_bytes),
 		   recorded_at = excluded.recorded_at`,
-		e.AllocID, e.Token, e.UserID, e.RelayedBytes, e.RecordedAt)
+		e.AllocID, e.Token, e.UserID, e.RelayedBytes, e.RecordedAt, nullStr(e.NodeID), b2i(e.Billable))
 	return err
 }
 
@@ -566,7 +591,7 @@ func (s *SQLiteStore) UserUsageTotal(ctx context.Context, userID string) (int64,
 func (s *SQLiteStore) UserRelayedSince(ctx context.Context, userID string, since int64) (int64, error) {
 	var total int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT COALESCE(SUM(relayed_bytes),0) FROM usage_events WHERE user_id = ? AND recorded_at >= ?`,
+		`SELECT COALESCE(SUM(relayed_bytes),0) FROM usage_events WHERE user_id = ? AND recorded_at >= ? AND billable = 1`,
 		userID, since).Scan(&total)
 	return total, err
 }
@@ -1139,6 +1164,43 @@ func (s *SQLiteStore) ListNodes(ctx context.Context) ([]Node, error) {
 	return s.queryNodes(ctx, `SELECT `+nodeCols+` FROM nodes ORDER BY last_seen_at DESC`)
 }
 
+// UserNodes returns a user's own (owner_type='user') nodes online since `since`.
+func (s *SQLiteStore) UserNodes(ctx context.Context, userID string, since int64) ([]Node, error) {
+	return s.queryNodes(ctx,
+		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? AND last_seen_at >= ? ORDER BY last_seen_at DESC`,
+		userID, since)
+}
+
+// UserNodesAll returns all of a user's own nodes regardless of last_seen, for
+// the dashboard list (which shows offline nodes too).
+func (s *SQLiteStore) UserNodesAll(ctx context.Context, userID string) ([]Node, error) {
+	return s.queryNodes(ctx,
+		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? ORDER BY last_seen_at DESC`,
+		userID)
+}
+
+// UserStorageNodes is UserNodes filtered to storage-enabled nodes with at
+// least minFree bytes free.
+func (s *SQLiteStore) UserStorageNodes(ctx context.Context, userID string, since, minFree int64) ([]Node, error) {
+	return s.queryNodes(ctx,
+		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? AND last_seen_at >= ? AND storage_enabled=1 AND storage_free >= ? ORDER BY last_seen_at DESC`,
+		userID, since, minFree)
+}
+
+// DeleteNode removes a user-owned node, owner-scoped.
+func (s *SQLiteStore) DeleteNode(ctx context.Context, id, ownerUserID string) error {
+	// Owner-scoped: only delete a node this user owns.
+	res, err := s.db.ExecContext(ctx, `DELETE FROM nodes WHERE id = ? AND owner_user_id = ?`, id, ownerUserID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	_, _ = s.db.ExecContext(ctx, `DELETE FROM pending_node_deletes WHERE node_id = ?`, id)
+	return nil
+}
+
 func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]Node, error) {
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -1197,5 +1259,80 @@ func (s *SQLiteStore) ListPendingNodeDeletes(ctx context.Context) ([]PendingNode
 
 func (s *SQLiteStore) DeletePendingNodeDelete(ctx context.Context, blobKey, nodeID string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM pending_node_deletes WHERE blob_key=? AND node_id=?`, blobKey, nodeID)
+	return err
+}
+
+// DeletePendingNodeDeletesOlderThan evicts orphan-retry rows enqueued before
+// `before`, so a permanently-dead node's rows don't accumulate forever.
+func (s *SQLiteStore) DeletePendingNodeDeletesOlderThan(ctx context.Context, before int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM pending_node_deletes WHERE enqueued_at < ?`, before)
+	return err
+}
+
+func (s *SQLiteStore) CreateNodeToken(ctx context.Context, t NodeToken) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO node_tokens (id, token_hash, user_id, node_id, name, created_at) VALUES (?,?,?,?,?,?)`,
+		t.ID, t.TokenHash, t.UserID, nullStr(t.NodeID), t.Name, t.CreatedAt)
+	return err
+}
+
+// NodeTokenByHash resolves a node's bearer token by its hash. ok=false for
+// both an absent hash and a revoked one — callers cannot distinguish the two,
+// which is intentional (no oracle for "does this hash exist").
+func (s *SQLiteStore) NodeTokenByHash(ctx context.Context, hash string) (NodeToken, bool, error) {
+	var t NodeToken
+	var nodeID sql.NullString
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, token_hash, user_id, node_id, name, created_at, last_used_at, revoked_at
+		   FROM node_tokens WHERE token_hash = ? AND revoked_at = 0`, hash).
+		Scan(&t.ID, &t.TokenHash, &t.UserID, &nodeID, &t.Name, &t.CreatedAt, &t.LastUsedAt, &t.RevokedAt)
+	if err == sql.ErrNoRows {
+		return NodeToken{}, false, nil
+	}
+	if err != nil {
+		return NodeToken{}, false, err
+	}
+	t.NodeID = nodeID.String
+	return t, true, nil
+}
+
+func (s *SQLiteStore) BindNodeToken(ctx context.Context, id, nodeID string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE node_tokens SET node_id = ? WHERE id = ?`, nodeID, id)
+	return err
+}
+
+func (s *SQLiteStore) ListNodeTokensByUser(ctx context.Context, userID string) ([]NodeToken, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, token_hash, user_id, node_id, name, created_at, last_used_at, revoked_at
+		   FROM node_tokens WHERE user_id = ? AND revoked_at = 0 ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []NodeToken
+	for rows.Next() {
+		var t NodeToken
+		var nodeID sql.NullString
+		if err := rows.Scan(&t.ID, &t.TokenHash, &t.UserID, &nodeID, &t.Name, &t.CreatedAt, &t.LastUsedAt, &t.RevokedAt); err != nil {
+			return nil, err
+		}
+		t.NodeID = nodeID.String
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// RevokeNodeToken is owner-scoped: it only revokes when user_id matches and
+// the token is not already revoked, so a non-owner's call is a silent no-op
+// (nil error, zero rows affected) rather than an error.
+func (s *SQLiteStore) RevokeNodeToken(ctx context.Context, id, userID string, at int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE node_tokens SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at = 0`,
+		at, id, userID)
+	return err
+}
+
+func (s *SQLiteStore) TouchNodeTokenUsed(ctx context.Context, id string, at int64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE node_tokens SET last_used_at = ? WHERE id = ?`, at, id)
 	return err
 }

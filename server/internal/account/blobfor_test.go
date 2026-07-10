@@ -90,17 +90,17 @@ func TestPlaceUploadPicksNodeOrFallsBack(t *testing.T) {
 		nodeHTTP: http.DefaultClient, cfg: Config{MaxFileSize: 1 << 20},
 		pickN: func(n int) int { return 0 }}
 
-	// No storage nodes -> central fallback ("", local blobs).
-	id, _ := s.placeUpload(ctx)
-	if id != "" {
-		t.Fatalf("want central fallback, got node %q", id)
+	// No storage nodes -> central fallback ("", local blobs, billable).
+	id, _, billable, err := s.placeUpload(ctx, "nobody")
+	if id != "" || !billable || err != nil {
+		t.Fatalf("want central fallback billable, got node %q billable=%v err=%v", id, billable, err)
 	}
 
-	// One eligible node -> chosen.
+	// One eligible fleet node -> chosen (billable, since it's not the user's own).
 	n, _ := st.UpsertNode(ctx, Node{OwnerType: "fleet", URLs: []string{"turn:x:3478"}, TURNSecret: "t",
 		StorageEnabled: true, StorageURL: "http://x:8081", StorageSecret: "ss", StorageFree: 100 << 30, CreatedAt: 1, LastSeenAt: 1000})
-	id, _ = s.placeUpload(ctx)
-	if id != n.ID {
-		t.Fatalf("want node %q, got %q", n.ID, id)
+	id, _, billable, err = s.placeUpload(ctx, "nobody")
+	if id != n.ID || !billable || err != nil {
+		t.Fatalf("want node %q billable, got %q billable=%v err=%v", n.ID, id, billable, err)
 	}
 }

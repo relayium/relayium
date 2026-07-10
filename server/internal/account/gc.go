@@ -12,6 +12,10 @@ import (
 // rolling-window sum never loses a row it still needs.
 const pruneMargin = int64(90000) // 25h
 
+// pendingDeleteMaxAge bounds the orphan-retry queue: a permanently-dead node's
+// pending_node_deletes rows would otherwise retry forever and never self-clean.
+const pendingDeleteMaxAge = int64(7 * 24 * 3600) // 7 days
+
 // GC periodically deletes expired stored files (and their blobs) and prunes the
 // upload-events ledger. Modeled on metering.Worker; Now is injected for tests.
 type GC struct {
@@ -87,6 +91,9 @@ func (g *GC) drainPending(ctx context.Context) {
 		if err := g.Store.DeletePendingNodeDelete(ctx, p.BlobKey, p.NodeID); err != nil {
 			g.Log.Printf("gc: clear pending delete %s@%s: %v", p.BlobKey, p.NodeID, err)
 		}
+	}
+	if err := g.Store.DeletePendingNodeDeletesOlderThan(ctx, g.Now()-pendingDeleteMaxAge); err != nil {
+		g.Log.Printf("gc: evict aged pending deletes: %v", err)
 	}
 }
 

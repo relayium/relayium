@@ -17,6 +17,9 @@ type User struct {
 	DisplayName   string
 	CreatedAt     int64
 	EmailVerified bool
+	// OnlyOwnNodes restricts this user's transfers to their own self-hosted
+	// nodes (SP3 BYO nodes), excluding the shared fleet.
+	OnlyOwnNodes bool
 }
 
 // Identity links an external auth subject (google sub, or the email itself) to a user.
@@ -75,6 +78,8 @@ type UsageEvent struct {
 	UserID       string
 	RelayedBytes int64
 	RecordedAt   int64
+	NodeID       string
+	Billable     bool
 }
 
 // StoredFile is one zero-knowledge stored-transfer object's lifecycle row. The
@@ -143,6 +148,20 @@ type Node struct {
 	StorageEnabled bool
 	StorageTotal   int64
 	StorageFree    int64
+}
+
+// NodeToken is a per-user credential a BYO node presents as its bearer. The
+// plaintext is shown once at mint; only its sha256 hash is stored. Binding to a
+// node_id links it for per-node revoke/delete.
+type NodeToken struct {
+	ID         string
+	TokenHash  string
+	UserID     string
+	NodeID     string
+	Name       string
+	CreatedAt  int64
+	LastUsedAt int64
+	RevokedAt  int64
 }
 
 // PendingNodeDelete is a blob whose owning node was unreachable when its file
@@ -223,6 +242,8 @@ type Store interface {
 	HasPassword(ctx context.Context, userID string) (bool, error)
 	EmailVerified(ctx context.Context, userID string) (bool, error)
 	SetEmailVerified(ctx context.Context, userID string) error
+	// SetOnlyOwnNodes toggles the BYO-nodes-only restriction (SP3) for a user.
+	SetOnlyOwnNodes(ctx context.Context, userID string, on bool) error
 	// sessions
 	CreateSession(ctx context.Context, s Session) error
 	GetSession(ctx context.Context, id string) (Session, bool, error)
@@ -289,8 +310,31 @@ type Store interface {
 	StorageNodes(ctx context.Context, since, minFree int64) ([]Node, error)
 	OnlineNodes(ctx context.Context, since int64) ([]Node, error)
 	ListNodes(ctx context.Context) ([]Node, error)
+	// UserNodes returns a user's own (owner_type='user') nodes seen since `since`.
+	UserNodes(ctx context.Context, userID string, since int64) ([]Node, error)
+	// UserNodesAll returns all of a user's own nodes regardless of last_seen,
+	// for the dashboard list (which shows offline nodes too).
+	UserNodesAll(ctx context.Context, userID string) ([]Node, error)
+	// UserStorageNodes is UserNodes filtered to storage-enabled nodes with at
+	// least minFree bytes free.
+	UserStorageNodes(ctx context.Context, userID string, since, minFree int64) ([]Node, error)
+	// DeleteNode removes a user-owned node, scoped to its owner: only a node
+	// with owner_user_id == ownerUserID is deleted, so a non-owner's call and a
+	// missing id are indistinguishable (both ErrNotFound). Also clears the
+	// node's pending_node_deletes entries.
+	DeleteNode(ctx context.Context, id, ownerUserID string) error
 	// pending_node_deletes (orphan-retry queue for GC when a node's DELETE fails)
 	EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error
 	ListPendingNodeDeletes(ctx context.Context) ([]PendingNodeDelete, error)
 	DeletePendingNodeDelete(ctx context.Context, blobKey, nodeID string) error
+	// DeletePendingNodeDeletesOlderThan evicts orphan-retry rows enqueued
+	// before `before`: a permanently-dead node would otherwise retry forever.
+	DeletePendingNodeDeletesOlderThan(ctx context.Context, before int64) error
+	// node_tokens (per-user BYO-node bearer credentials; SP3)
+	CreateNodeToken(ctx context.Context, t NodeToken) error
+	NodeTokenByHash(ctx context.Context, hash string) (NodeToken, bool, error)
+	BindNodeToken(ctx context.Context, id, nodeID string) error
+	ListNodeTokensByUser(ctx context.Context, userID string) ([]NodeToken, error)
+	RevokeNodeToken(ctx context.Context, id, userID string, at int64) error
+	TouchNodeTokenUsed(ctx context.Context, id string, at int64) error
 }

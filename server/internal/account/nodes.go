@@ -52,11 +52,30 @@ type nodeHeartbeatReq struct {
 // only when a fleet NodeToken is configured. They are bearer-authenticated and
 // therefore mount on the root mux (bypassing the cookie CSRF guard).
 func (s *Service) RegisterNodeRoutes(mux *http.ServeMux) {
-	if s.cfg.NodeToken == "" {
+	if s.cfg.NodeToken == "" && !s.cfg.EnableUserNodes {
 		return
 	}
 	mux.HandleFunc("POST /api/nodes/register", s.handleNodeRegister)
 	mux.HandleFunc("POST /api/nodes/heartbeat", s.handleNodeHeartbeat)
+}
+
+// nodeOwner resolves the bearer token to a node owner: the shared fleet token,
+// or a per-user node token (hashed lookup). ok=false → 401.
+func (s *Service) nodeOwner(r *http.Request) (ownerType, ownerUserID string, ok bool) {
+	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if tok == "" {
+		return "", "", false
+	}
+	if s.cfg.NodeToken != "" && subtle.ConstantTimeCompare([]byte(tok), []byte(s.cfg.NodeToken)) == 1 {
+		return "fleet", "", true
+	}
+	if s.cfg.EnableUserNodes {
+		if nt, found, err := s.store.NodeTokenByHash(r.Context(), hashToken(tok)); err == nil && found {
+			_ = s.store.TouchNodeTokenUsed(r.Context(), nt.ID, s.now().Unix())
+			return "user", nt.UserID, true
+		}
+	}
+	return "", "", false
 }
 
 // containsCap reports whether caps includes want.
@@ -69,17 +88,9 @@ func containsCap(caps []string, want string) bool {
 	return false
 }
 
-// nodeAuthorized constant-time-compares the request's bearer token to NodeToken.
-func (s *Service) nodeAuthorized(r *http.Request) bool {
-	if s.cfg.NodeToken == "" {
-		return false
-	}
-	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	return subtle.ConstantTimeCompare([]byte(tok), []byte(s.cfg.NodeToken)) == 1
-}
-
 func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
-	if !s.nodeAuthorized(r) {
+	ownerType, ownerUserID, ok := s.nodeOwner(r)
+	if !ok {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
@@ -92,10 +103,27 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "turnSecret and urls required"})
 		return
 	}
+	// Prevent node-ID takeover: a re-register of an existing node id must come from
+	// the SAME owner. A fleet token may only re-register a fleet node; a user token
+	// may only re-register its own user node. Unknown ids fall through as new nodes.
+	if req.NodeID != "" {
+		if existing, found, gerr := s.store.GetNode(r.Context(), req.NodeID); gerr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+			return
+		} else if found {
+			mismatch := existing.OwnerType != ownerType ||
+				(ownerType == "user" && existing.OwnerUserID != ownerUserID)
+			if mismatch {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "node id belongs to another owner"})
+				return
+			}
+		}
+	}
 	now := s.now().Unix()
 	n := Node{
-		ID: req.NodeID, OwnerType: "fleet", Region: req.Region, URLs: req.URLs,
-		TURNSecret: req.TURNSecret, Version: req.Version, CreatedAt: now, LastSeenAt: now,
+		ID: req.NodeID, OwnerType: ownerType, OwnerUserID: ownerUserID,
+		Region: req.Region, URLs: req.URLs, TURNSecret: req.TURNSecret, Version: req.Version,
+		CreatedAt: now, LastSeenAt: now,
 		StorageURL: req.StorageURL, StorageSecret: req.StorageSecret,
 		StorageEnabled: containsCap(req.Capabilities, "storage"),
 		StorageTotal:   req.StorageTotal, StorageFree: req.StorageFree,
@@ -105,17 +133,24 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
+	// Bind a user token to its node for per-node revoke/delete.
+	if ownerType == "user" {
+		tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if nt, found, e := s.store.NodeTokenByHash(r.Context(), hashToken(tok)); e == nil && found {
+			_ = s.store.BindNodeToken(r.Context(), nt.ID, saved.ID)
+		}
+	}
 	writeJSON(w, http.StatusOK, nodeRegisterResp{NodeID: saved.ID, HeartbeatInterval: nodeHeartbeatInterval})
 }
 
-// handleNodeHeartbeat trusts the reported usage[]: any holder of the shared fleet
-// NodeToken can attribute arbitrary relayed bytes to any user (forging attribution
-// or exhausting a victim's monthly relay allowance). This is within SP1's stated
-// trust boundary — fleet nodes are ours — but NodeToken is one shared secret on
-// every node box, so a single compromised node can corrupt all users' central quota.
-// SP3 should scope credentials per node and/or sign usage. Tracked as accepted risk.
+// handleNodeHeartbeat trusts the reported usage[]: any holder of a valid node
+// credential (fleet token or a user's own node token) can report relayed bytes
+// for its allocations. A fleet node's relay is billable against the attributed
+// user's quota; a BYO user node's relay is free (own-node), and it may only
+// attribute to its own owner — cross-user attribution is dropped.
 func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
-	if !s.nodeAuthorized(r) {
+	ownerType, ownerUserID, ok := s.nodeOwner(r)
+	if !ok {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
@@ -129,24 +164,22 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A node unknown to us (DB reset / never registered) is told to re-register
-	// with 410 Gone. We check existence via ListNodes (fleet is dozens of rows);
-	// swap for a GetNode(id) store method if the fleet ever grows large.
-	nodes, err := s.store.ListNodes(r.Context())
+	// with 410 Gone.
+	node, known, err := s.store.GetNode(r.Context(), req.NodeID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
-	}
-	known := false
-	for _, n := range nodes {
-		if n.ID == req.NodeID {
-			known = true
-			break
-		}
 	}
 	if !known {
 		writeJSON(w, http.StatusGone, map[string]string{"error": "unknown node, re-register"})
 		return
 	}
+	// A user token may only heartbeat a node it owns (a fleet token may heartbeat any fleet node).
+	if ownerType == "user" && (node.OwnerType != "user" || node.OwnerUserID != ownerUserID) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not your node"})
+		return
+	}
+	billable := node.OwnerType == "fleet"
 	now := s.now().Unix()
 	if err := s.store.TouchNode(r.Context(), req.NodeID, req.RelayedTotal, req.StoredBytes, req.StorageTotal, req.StorageFree, now); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
@@ -159,9 +192,14 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		userID, code := relayusage.SplitAttrib(token)
+		// A user-owned node may only attribute usage to its own owner.
+		if node.OwnerType == "user" && userID != node.OwnerUserID {
+			log.Printf("node %s: dropping cross-user attribution to %s", req.NodeID, userID)
+			continue
+		}
 		if err := s.store.RecordUsage(r.Context(), UsageEvent{
-			AllocID: u.AllocID, Token: code, UserID: userID,
-			RelayedBytes: u.RelayedBytes, RecordedAt: now,
+			AllocID: u.AllocID, Token: code, UserID: userID, RelayedBytes: u.RelayedBytes,
+			RecordedAt: now, NodeID: req.NodeID, Billable: billable,
 		}); err != nil {
 			// Log-and-continue: one bad alloc must not drop the rest.
 			log.Printf("node %s heartbeat: record alloc %s failed: %v", req.NodeID, u.AllocID, err)

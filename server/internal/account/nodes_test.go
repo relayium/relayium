@@ -108,3 +108,156 @@ func TestNodeHeartbeatRecordsUsage(t *testing.T) {
 		t.Fatalf("unknown node: got %d", w.Code)
 	}
 }
+
+func TestNodeOwnerFleetAndUser(t *testing.T) {
+	st := newTestStore(t)
+	u, _ := st.UpsertUserByEmail(context.Background(), "own@x.com", "o")
+	// user token "usertok" -> hash stored
+	st.CreateNodeToken(context.Background(), NodeToken{ID: "t1", TokenHash: hashToken("usertok"), UserID: u.ID, Name: "n", CreatedAt: 1})
+	s := &Service{store: st, cfg: Config{NodeToken: "fleetsecret", EnableUserNodes: true}, now: func() time.Time { return time.Unix(5, 0) }}
+
+	req := func(bearer string) *http.Request {
+		r := httptest.NewRequest("POST", "/", nil)
+		if bearer != "" {
+			r.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		return r
+	}
+	if ot, _, ok := s.nodeOwner(req("fleetsecret")); !ok || ot != "fleet" {
+		t.Fatalf("fleet: %q ok=%v", ot, ok)
+	}
+	ot, uid, ok := s.nodeOwner(req("usertok"))
+	if !ok || ot != "user" || uid != u.ID {
+		t.Fatalf("user: %q %q ok=%v", ot, uid, ok)
+	}
+	if _, _, ok := s.nodeOwner(req("garbage")); ok {
+		t.Fatal("unknown token must not resolve")
+	}
+}
+
+func TestRegisterUserNodeSetsOwner(t *testing.T) {
+	st := newTestStore(t)
+	u, _ := st.UpsertUserByEmail(context.Background(), "reg@x.com", "r")
+	st.CreateNodeToken(context.Background(), NodeToken{ID: "t1", TokenHash: hashToken("usertok"), UserID: u.ID, Name: "n", CreatedAt: 1})
+	s := &Service{store: st, cfg: Config{EnableUserNodes: true}, now: func() time.Time { return time.Unix(5, 0) }}
+	mux := http.NewServeMux()
+	s.RegisterNodeRoutes(mux)
+
+	body, _ := json.Marshal(nodeRegisterReq{TURNSecret: "sek", URLs: []string{"turn:1.2.3.4:3478"}})
+	r := httptest.NewRequest("POST", "/api/nodes/register", bytes.NewReader(body))
+	r.Header.Set("Authorization", "Bearer usertok")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("register: %d", w.Code)
+	}
+	var resp nodeRegisterResp
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	n, _, _ := st.GetNode(context.Background(), resp.NodeID)
+	if n.OwnerType != "user" || n.OwnerUserID != u.ID {
+		t.Fatalf("node owner = %q/%q", n.OwnerType, n.OwnerUserID)
+	}
+	// token bound to the node
+	list, _ := st.ListNodeTokensByUser(context.Background(), u.ID)
+	if len(list) != 1 || list[0].NodeID != resp.NodeID {
+		t.Fatalf("token not bound: %+v", list)
+	}
+}
+
+func TestHeartbeatBillableAndCrossUserReject(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	owner, _ := st.UpsertUserByEmail(ctx, "hbo@x.com", "o")
+	// a user-owned node
+	n, _ := st.UpsertNode(ctx, Node{ID: "un", OwnerType: "user", OwnerUserID: owner.ID, URLs: []string{"turn:x:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1})
+	st.CreateNodeToken(ctx, NodeToken{ID: "t1", TokenHash: hashToken("utok"), UserID: owner.ID, NodeID: "un", Name: "n", CreatedAt: 1})
+	s := &Service{store: st, cfg: Config{EnableUserNodes: true}, now: func() time.Time { return time.Unix(50, 0) }}
+	mux := http.NewServeMux()
+	s.RegisterNodeRoutes(mux)
+
+	// own-user usage -> recorded non-billable; a DIFFERENT user's attribution -> dropped
+	hb := nodeHeartbeatReq{NodeID: n.ID, Status: "ok", Usage: []nodeUsage{
+		{AllocID: "a1", Username: "9999:" + owner.ID + ".code", RelayedBytes: 4000},
+		{AllocID: "a2", Username: "9999:victim.code", RelayedBytes: 7000},
+	}}
+	body, _ := json.Marshal(hb)
+	r := httptest.NewRequest("POST", "/api/nodes/heartbeat", bytes.NewReader(body))
+	r.Header.Set("Authorization", "Bearer utok")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("heartbeat: %d", w.Code)
+	}
+	// owner's own usage recorded but non-billable -> quota sum stays 0
+	if q, _ := st.UserRelayedSince(ctx, owner.ID, 0); q != 0 {
+		t.Fatalf("own-node relay must be non-billable, quota=%d", q)
+	}
+	// victim got nothing (cross-user attribution dropped)
+	if q, _ := st.UserRelayedSince(ctx, "victim", 0); q != 0 {
+		t.Fatalf("cross-user attribution must be dropped, victim quota=%d", q)
+	}
+}
+
+// A user token must not be able to heartbeat a node it does not own (403).
+func TestHeartbeatUserTokenForeignNode(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	owner, _ := st.UpsertUserByEmail(ctx, "own2@x.com", "o")
+	attacker, _ := st.UpsertUserByEmail(ctx, "atk@x.com", "a")
+	// node owned by `owner`; token belongs to `attacker`.
+	n, _ := st.UpsertNode(ctx, Node{ID: "victimnode", OwnerType: "user", OwnerUserID: owner.ID, URLs: []string{"turn:x:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1})
+	st.CreateNodeToken(ctx, NodeToken{ID: "ta", TokenHash: hashToken("atktok"), UserID: attacker.ID, Name: "n", CreatedAt: 1})
+	s := &Service{store: st, cfg: Config{EnableUserNodes: true}, now: func() time.Time { return time.Unix(50, 0) }}
+	mux := http.NewServeMux()
+	s.RegisterNodeRoutes(mux)
+
+	body, _ := json.Marshal(nodeHeartbeatReq{NodeID: n.ID, Status: "ok"})
+	r := httptest.NewRequest("POST", "/api/nodes/heartbeat", bytes.NewReader(body))
+	r.Header.Set("Authorization", "Bearer atktok")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("foreign-node heartbeat: want 403, got %d", w.Code)
+	}
+}
+
+func TestRegisterRejectsNodeIDTakeover(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	victim, _ := st.UpsertUserByEmail(ctx, "v@x.com", "v")
+	attacker, _ := st.UpsertUserByEmail(ctx, "a@x.com", "a")
+	// An existing FLEET node with a known id.
+	st.UpsertNode(ctx, Node{ID: "fleet-1", OwnerType: "fleet", URLs: []string{"turn:f:3478"}, TURNSecret: "fs", CreatedAt: 1, LastSeenAt: 1})
+	// An existing USER node owned by victim.
+	st.UpsertNode(ctx, Node{ID: "victim-node", OwnerType: "user", OwnerUserID: victim.ID, URLs: []string{"turn:v:3478"}, TURNSecret: "vs", CreatedAt: 1, LastSeenAt: 1})
+	st.CreateNodeToken(ctx, NodeToken{ID: "at", TokenHash: hashToken("atktok"), UserID: attacker.ID, Name: "n", CreatedAt: 1})
+
+	s := &Service{store: st, cfg: Config{EnableUserNodes: true}, now: func() time.Time { return time.Unix(5, 0) }}
+	mux := http.NewServeMux()
+	s.RegisterNodeRoutes(mux)
+
+	reg := func(nodeID string) int {
+		body, _ := json.Marshal(nodeRegisterReq{NodeID: nodeID, TURNSecret: "x", URLs: []string{"turn:x:3478"}})
+		r := httptest.NewRequest("POST", "/api/nodes/register", bytes.NewReader(body))
+		r.Header.Set("Authorization", "Bearer atktok")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		return w.Code
+	}
+	// Attacker (user token) cannot take over a fleet node id...
+	if code := reg("fleet-1"); code != http.StatusForbidden {
+		t.Fatalf("fleet takeover: want 403, got %d", code)
+	}
+	// ...nor another user's node id.
+	if code := reg("victim-node"); code != http.StatusForbidden {
+		t.Fatalf("cross-user takeover: want 403, got %d", code)
+	}
+	// The fleet node's owner is untouched.
+	if n, _, _ := st.GetNode(ctx, "fleet-1"); n.OwnerType != "fleet" || n.OwnerUserID != "" {
+		t.Fatalf("fleet node owner was mutated: %q/%q", n.OwnerType, n.OwnerUserID)
+	}
+	// A brand-new id from the attacker registers fine (owned by attacker).
+	if code := reg("brand-new-id"); code != http.StatusOK {
+		t.Fatalf("new-id register: want 200, got %d", code)
+	}
+}

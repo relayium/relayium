@@ -67,7 +67,11 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	}
 	defer s.uploadSem.release(u.ID)
 
-	nodeID, bs := s.placeUpload(r.Context())
+	nodeID, bs, billable, perr := s.placeUpload(r.Context(), u.ID)
+	if errors.Is(perr, errStrictNoNode) {
+		http.Error(w, "your storage node is offline", http.StatusServiceUnavailable)
+		return
+	}
 
 	// M3b: global blob-volume soft cap. Per-account quota × unbounded accounts is
 	// still unbounded, so refuse new uploads once the volume crosses the high-water
@@ -111,7 +115,9 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	// declared body already overflows the remaining daily quota, reject before
 	// touching disk. Content-Length is client-supplied, so it is trusted only to
 	// fail fast — never to admit; the authoritative gate is ReserveUpload below.
-	if r.ContentLength > 0 {
+	// Own-node uploads (billable=false) use the user's own disk, not our
+	// DailyQuota, so this pre-check does not apply to them.
+	if billable && r.ContentLength > 0 {
 		declared := r.ContentLength - 4 - int64(mlen) // ciphertext bytes (minus framing)
 		if declared > 0 {
 			used, err := s.store.UserUploadedSince(r.Context(), u.ID, now-dayWindow)
@@ -148,22 +154,26 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	// The debit is billed at max(size, minBillableBytes): a near-zero object
 	// still costs the 64 KiB floor, indirectly capping object count; the stored
 	// row/stats below stay at the actual size.
-	billed := size
-	if billed < minBillableBytes {
-		billed = minBillableBytes
-	}
-	ok, err := s.store.ReserveUpload(r.Context(),
-		UploadEvent{ID: newID(), UserID: u.ID, Bytes: billed, UploadedAt: now},
-		now-dayWindow, st.DailyQuota)
-	if err != nil {
-		_ = bs.Delete(r.Context(), blobKey)
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
-	if !ok {
-		_ = bs.Delete(r.Context(), blobKey)
-		http.Error(w, "daily quota exceeded", http.StatusTooManyRequests)
-		return
+	// Own-node uploads (billable=false) skip this entirely: they never reserved
+	// against the daily quota, so there is nothing to refund on failure below.
+	if billable {
+		billed := size
+		if billed < minBillableBytes {
+			billed = minBillableBytes
+		}
+		ok, err := s.store.ReserveUpload(r.Context(),
+			UploadEvent{ID: newID(), UserID: u.ID, Bytes: billed, UploadedAt: now},
+			now-dayWindow, st.DailyQuota)
+		if err != nil {
+			_ = bs.Delete(r.Context(), blobKey)
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			_ = bs.Delete(r.Context(), blobKey)
+			http.Error(w, "daily quota exceeded", http.StatusTooManyRequests)
+			return
+		}
 	}
 	id := newID()
 	sf := StoredFile{
