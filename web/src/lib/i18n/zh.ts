@@ -44,6 +44,7 @@ const zh: Messages = {
   dragSendOne: (name) => `松手发送给 ${name}`,
   dragSendMany: "拖到某台设备上发送",
   pickHint: (m) => `点击选择文件 · 或拖放到此处（最多 ${m} 个）`,
+  maxSize: (s) => `最大 ${s}`,
   footer: "端到端加密（X25519 + AES-256-GCM）· 信令服务器只转发连接信息，看不到文件内容",
   offlineFooter: "上传前先在浏览器用 AES-256-GCM 加密 · 服务器只保存无法解密的密文——解密密钥只存在于链接中",
   busy: "已有传输进行中，请等待完成",

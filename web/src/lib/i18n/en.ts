@@ -44,6 +44,7 @@ const en: Messages = {
   dragSendOne: (name) => `Release to send to ${name}`,
   dragSendMany: "Drop onto a device to send",
   pickHint: (m) => `Click to choose files · or drop them here (up to ${m})`,
+  maxSize: (s) => `Max ${s}`,
   footer: "End-to-end encrypted (X25519 + AES-256-GCM) · the signaling server only relays connection info and never sees file contents",
   offlineFooter: "Encrypted in your browser with AES-256-GCM before upload · the server stores only ciphertext it can't decrypt — the decryption key lives solely in the link.",
   busy: "A transfer is already in progress — please wait for it to finish",

@@ -62,6 +62,7 @@ export interface Messages {
   dragSendOne: (name: string) => string;
   dragSendMany: string;
   pickHint: (max: number) => string;
+  maxSize: (size: string) => string; // upload max-size hint shown near the file picker, e.g. "Max 200 MB"
   pickSendTo: (name: string) => string; // prominent single-peer send label
   generating: string; // transient "creating…" state while a code/link is minted
   footer: string;
