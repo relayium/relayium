@@ -15,12 +15,16 @@ import (
 const nodeHeartbeatInterval = 30
 
 type nodeRegisterReq struct {
-	NodeID       string   `json:"nodeID"`
-	TURNSecret   string   `json:"turnSecret"`
-	URLs         []string `json:"urls"`
-	Region       string   `json:"region"`
-	Version      string   `json:"version"`
-	Capabilities []string `json:"capabilities"`
+	NodeID        string   `json:"nodeID"`
+	TURNSecret    string   `json:"turnSecret"`
+	URLs          []string `json:"urls"`
+	Region        string   `json:"region"`
+	Version       string   `json:"version"`
+	Capabilities  []string `json:"capabilities"`
+	StorageURL    string   `json:"storageURL"`
+	StorageSecret string   `json:"storageSecret"`
+	StorageTotal  int64    `json:"storageTotal"`
+	StorageFree   int64    `json:"storageFree"`
 }
 
 type nodeRegisterResp struct {
@@ -40,6 +44,8 @@ type nodeHeartbeatReq struct {
 	Usage        []nodeUsage `json:"usage"`
 	RelayedTotal int64       `json:"relayedTotal"`
 	StoredBytes  int64       `json:"storedBytes"`
+	StorageTotal int64       `json:"storageTotal"`
+	StorageFree  int64       `json:"storageFree"`
 }
 
 // RegisterNodeRoutes mounts the node register/heartbeat endpoints on mux, but
@@ -51,6 +57,16 @@ func (s *Service) RegisterNodeRoutes(mux *http.ServeMux) {
 	}
 	mux.HandleFunc("POST /api/nodes/register", s.handleNodeRegister)
 	mux.HandleFunc("POST /api/nodes/heartbeat", s.handleNodeHeartbeat)
+}
+
+// containsCap reports whether caps includes want.
+func containsCap(caps []string, want string) bool {
+	for _, c := range caps {
+		if c == want {
+			return true
+		}
+	}
+	return false
 }
 
 // nodeAuthorized constant-time-compares the request's bearer token to NodeToken.
@@ -80,6 +96,9 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 	n := Node{
 		ID: req.NodeID, OwnerType: "fleet", Region: req.Region, URLs: req.URLs,
 		TURNSecret: req.TURNSecret, Version: req.Version, CreatedAt: now, LastSeenAt: now,
+		StorageURL: req.StorageURL, StorageSecret: req.StorageSecret,
+		StorageEnabled: containsCap(req.Capabilities, "storage"),
+		StorageTotal:   req.StorageTotal, StorageFree: req.StorageFree,
 	}
 	saved, err := s.store.UpsertNode(r.Context(), n)
 	if err != nil {
@@ -129,11 +148,7 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := s.now().Unix()
-	// storageTotal/storageFree are 0 here: the SP1 heartbeat payload doesn't
-	// carry them yet (Task 3 adds the SP2 storage self-report to this handler).
-	// Zeroing them is harmless for SP1's relay-only fleet, which never sets
-	// storage_enabled.
-	if err := s.store.TouchNode(r.Context(), req.NodeID, req.RelayedTotal, req.StoredBytes, 0, 0, now); err != nil {
+	if err := s.store.TouchNode(r.Context(), req.NodeID, req.RelayedTotal, req.StoredBytes, req.StorageTotal, req.StorageFree, now); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
