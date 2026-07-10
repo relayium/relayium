@@ -7,7 +7,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 )
+
+// nodeOnlineWindow bounds how long since its last heartbeat a node is still
+// offered in the pool. 3x the node heartbeat interval (nodeHeartbeatInterval).
+const nodeOnlineWindow = 90 * time.Second
 
 // ICEServer is one entry of an RTCConfiguration.iceServers list, serialized to
 // the shape the browser's RTCPeerConnection expects.
@@ -96,13 +101,33 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 
 	resp := map[string]any{"iceServers": servers}
 
-	// Multi-relay pool: one self-contained entry per relay, each with its own
-	// ephemeral credential, so the client can measure and pick the fastest.
-	if validCode && len(s.cfg.TURNRelays) > 0 {
-		relays := make([]relayEntry, 0, len(s.cfg.TURNRelays))
+	// Multi-relay pool: online self-registered fleet nodes ∪ legacy static
+	// RELAYIUM_TURN_RELAYS. Each entry carries its own ephemeral credential so the
+	// client can measure RTT and pick the fastest. Dynamic nodes win a shared id.
+	if validCode {
+		relays := make([]relayEntry, 0)
+		seen := map[string]bool{}
+
+		since := now.Add(-nodeOnlineWindow).Unix()
+		if nodes, err := s.store.OnlineNodes(r.Context(), since); err != nil {
+			log.Printf("ice: OnlineNodes read failed: %v (falling back to static pool)", err)
+		} else {
+			for _, n := range nodes {
+				if n.ID == "" || n.TURNSecret == "" || len(n.URLs) == 0 {
+					continue
+				}
+				relays = append(relays, relayEntry{
+					ID:         n.ID,
+					Region:     n.Region,
+					ICEServers: []ICEServer{turnCredentials(n.TURNSecret, token, expiry, n.URLs)},
+				})
+				seen[n.ID] = true
+			}
+		}
+
 		for _, rc := range s.cfg.TURNRelays {
-			if rc.ID == "" || rc.Secret == "" || len(rc.URLs) == 0 {
-				continue // skip a misconfigured relay rather than emitting a dead entry
+			if rc.ID == "" || rc.Secret == "" || len(rc.URLs) == 0 || seen[rc.ID] {
+				continue // skip misconfigured or already-covered-by-a-dynamic-node
 			}
 			relays = append(relays, relayEntry{
 				ID:         rc.ID,

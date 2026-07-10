@@ -28,6 +28,7 @@ type adminHomeData struct {
 	PrevHref   string            // empty = no previous page
 	NextHref   string            // empty = no next page
 	SortHref   map[string]string // column key ("created"/"email"/"relayed"/"upload"/"download"/"storage") -> sort link on click
+	Nodes      []adminNodeView
 	Settings   adminSettingsView
 }
 
@@ -107,6 +108,21 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <div class="card"><div class="n">{{bytes .Metrics.UploadBytes}}</div><div class="l">上传 · {{period .Period}}</div></div>
 <div class="card"><div class="n">{{bytes .Metrics.DownloadBytes}}</div><div class="l">下载 · {{period .Period}}</div></div>
 <div class="card"><div class="n">{{bytes .Metrics.RelayBytes}}</div><div class="l">中继 · {{period .Period}}</div></div>
+</section>
+
+<section class="nodes">
+<h2>中继节点（{{len .Nodes}}）</h2>
+<table>
+<thead><tr><th>ID</th><th>区域</th><th>状态</th><th>中继字节</th><th>存储字节</th><th>版本</th></tr></thead>
+<tbody>
+{{range .Nodes}}
+<tr>
+<td>{{.ID}}</td><td>{{.Region}}</td>
+<td>{{if .Online}}在线{{else}}离线{{end}}</td>
+<td>{{bytes .RelayedBytes}}</td><td>{{bytes .StoredBytes}}</td><td>{{.Version}}</td>
+</tr>
+{{end}}
+</tbody></table>
 </section>
 
 <section class="settings">

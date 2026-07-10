@@ -13,13 +13,29 @@ builds:
     ldflags:
       - -s -w -X main.version={{ .Version }}
 
+  - id: relayium-node
+    dir: server
+    main: ./cmd/relayium-node
+    binary: relayium-node
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
 archives:
   - id: relayium
+    ids: [relayium]
     name_template: "relayium_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
     format_overrides:
       - goos: windows
         formats: [zip]
+  - id: relayium-node
+    ids: [relayium-node]
+    name_template: "relayium-node_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
 
 checksum:
   name_template: "checksums.txt"

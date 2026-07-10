@@ -53,6 +53,9 @@ type Config struct {
 	// RelayMonthlyFree is the interim per-user monthly TURN-relay allowance in
 	// bytes; superseded by a per-plan quota later.
 	RelayMonthlyFree int64
+	// NodeToken is the fleet bootstrap bearer token relay nodes present to
+	// /api/nodes/*. Empty disables the node API (endpoints return 404).
+	NodeToken string
 }
 
 type Service struct {
