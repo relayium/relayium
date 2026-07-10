@@ -89,6 +89,12 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, nodeRegisterResp{NodeID: saved.ID, HeartbeatInterval: nodeHeartbeatInterval})
 }
 
+// handleNodeHeartbeat trusts the reported usage[]: any holder of the shared fleet
+// NodeToken can attribute arbitrary relayed bytes to any user (forging attribution
+// or exhausting a victim's monthly relay allowance). This is within SP1's stated
+// trust boundary — fleet nodes are ours — but NodeToken is one shared secret on
+// every node box, so a single compromised node can corrupt all users' central quota.
+// SP3 should scope credentials per node and/or sign usage. Tracked as accepted risk.
 func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 	if !s.nodeAuthorized(r) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})

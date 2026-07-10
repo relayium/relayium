@@ -26,6 +26,14 @@ case "$arch" in
   *) err "unsupported arch '$arch'" ;;
 esac
 
+if command -v sha256sum >/dev/null 2>&1; then
+  sha() { sha256sum "$1" | awk '{print $1}'; }
+elif command -v shasum >/dev/null 2>&1; then
+  sha() { shasum -a 256 "$1" | awk '{print $1}'; }
+else
+  err "need sha256sum or shasum"
+fi
+
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 # relayium-node ships in its own archive, separate from the relayium CLI's
@@ -33,6 +41,13 @@ trap 'rm -rf "$tmp"' EXIT
 asset="relayium-node_${os}_${arch}.tar.gz"
 echo "downloading ${asset} ..."
 curl -fsSL "${BASE_URL}/${asset}" -o "$tmp/a.tar.gz" || err "download failed"
+curl -fsSL "${BASE_URL}/checksums.txt" -o "$tmp/checksums.txt" || err "checksum list download failed"
+
+want=$(grep " ${asset}$" "$tmp/checksums.txt" | awk '{print $1}')
+[ -n "$want" ] || err "no checksum listed for ${asset}"
+got=$(sha "$tmp/a.tar.gz")
+[ "$want" = "$got" ] || err "checksum mismatch (expected ${want}, got ${got})"
+
 tar -xzf "$tmp/a.tar.gz" -C "$tmp"
 [ -f "$tmp/relayium-node" ] || err "relayium-node not found in archive"
 install -m 0755 "$tmp/relayium-node" "${INSTALL_DIR}/relayium-node"

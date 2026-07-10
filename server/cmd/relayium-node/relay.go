@@ -104,7 +104,10 @@ func run(c config, st nodeState) error {
 		},
 		EventHandler: turn.EventHandler{
 			OnAllocationCreated: func(srcAddr, dstAddr net.Addr, protocol, username, realm string, relayAddr net.Addr, requestedPort int) {
-				reg.tag(relayAddr, username) // relayAddr joins the counter to the username
+				reg.created(srcAddr, relayAddr, username) // join counter (by relayAddr) to username; index by srcAddr
+			},
+			OnAllocationDeleted: func(srcAddr, dstAddr net.Addr, protocol, username, realm string) {
+				reg.closeAlloc(srcAddr) // stop re-reporting; evicted after one final flush
 			},
 		},
 		PacketConnConfigs: []turn.PacketConnConfig{{
