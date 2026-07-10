@@ -2,6 +2,7 @@ package account
 
 import (
 	"crypto/subtle"
+	"log"
 	"math"
 	"net/http"
 	"net/url"
@@ -15,6 +16,31 @@ const (
 	adminSessionTTL   = 12 * time.Hour
 	adminUsersPerPage = 50
 )
+
+// adminNodeView is a Node prepared for the admin template (online flag derived
+// from last_seen against nodeOnlineWindow).
+type adminNodeView struct {
+	ID           string
+	Region       string
+	Version      string
+	Online       bool
+	RelayedBytes int64
+	StoredBytes  int64
+	LastSeenAt   int64
+}
+
+func nodeViews(nodes []Node, now time.Time) []adminNodeView {
+	cutoff := now.Add(-nodeOnlineWindow).Unix()
+	out := make([]adminNodeView, 0, len(nodes))
+	for _, n := range nodes {
+		out = append(out, adminNodeView{
+			ID: n.ID, Region: n.Region, Version: n.Version,
+			Online:       n.LastSeenAt >= cutoff,
+			RelayedBytes: n.RelayedBytes, StoredBytes: n.StoredBytes, LastSeenAt: n.LastSeenAt,
+		})
+	}
+	return out
+}
 
 // adminListHref builds a /admin list link, keeping only non-default params, URL-encoded.
 func adminListHref(search, sort, dir, period string, page int) string {
@@ -244,11 +270,19 @@ func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		next = adminListHref(search, sortBy, dir, period, page+1)
 	}
 
+	var nodeVs []adminNodeView
+	if ns, nerr := s.store.ListNodes(r.Context()); nerr != nil {
+		log.Printf("admin: ListNodes failed: %v", nerr)
+	} else {
+		nodeVs = nodeViews(ns, s.now())
+	}
+
 	st := s.resolveSettings(r.Context())
 	data := adminHomeData{
 		Metrics: metrics, Users: rows, Total: total, Page: page, TotalPages: totalPages,
 		Search: search, Sort: sortBy, Dir: dir, Period: period, Months: months,
 		PrevHref: prev, NextHref: next, SortHref: sortHref,
+		Nodes: nodeVs,
 		Settings: adminSettingsView{
 			MaxFileSizeMB:      st.MaxFileSize / (1024 * 1024),
 			DailyQuotaMB:       st.DailyQuota / (1024 * 1024),
