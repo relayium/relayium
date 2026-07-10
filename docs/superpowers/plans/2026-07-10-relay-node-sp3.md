@@ -462,11 +462,34 @@ func TestHeartbeatBillableAndCrossUserReject(t *testing.T) {
 		t.Fatalf("cross-user attribution must be dropped, victim quota=%d", q)
 	}
 }
+
+// A user token must not be able to heartbeat a node it does not own (403).
+func TestHeartbeatUserTokenForeignNode(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	owner, _ := st.UpsertUserByEmail(ctx, "own2@x.com", "o")
+	attacker, _ := st.UpsertUserByEmail(ctx, "atk@x.com", "a")
+	// node owned by `owner`; token belongs to `attacker`.
+	n, _ := st.UpsertNode(ctx, Node{ID: "victimnode", OwnerType: "user", OwnerUserID: owner.ID, URLs: []string{"turn:x:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1})
+	st.CreateNodeToken(ctx, NodeToken{ID: "ta", TokenHash: hashToken("atktok"), UserID: attacker.ID, Name: "n", CreatedAt: 1})
+	s := &Service{store: st, cfg: Config{EnableUserNodes: true}, now: func() time.Time { return time.Unix(50, 0) }}
+	mux := http.NewServeMux()
+	s.RegisterNodeRoutes(mux)
+
+	body, _ := json.Marshal(nodeHeartbeatReq{NodeID: n.ID, Status: "ok"})
+	r := httptest.NewRequest("POST", "/api/nodes/heartbeat", bytes.NewReader(body))
+	r.Header.Set("Authorization", "Bearer atktok")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("foreign-node heartbeat: want 403, got %d", w.Code)
+	}
+}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd server && go test ./internal/account/ -run 'UserRelayedSinceBillable|HeartbeatBillable'`
+Run: `cd server && go test ./internal/account/ -run 'UserRelayedSinceBillable|Heartbeat'`
 Expected: FAIL.
 
 - [ ] **Step 3: `UsageEvent` fields + ALTER + `RecordUsage` + `UserRelayedSince`**
@@ -500,9 +523,19 @@ Update `UserRelayedSince` to sum billable only:
 ```
 (`b2i` is the existing bool→int helper used by `CreateStoredFile`.)
 
-- [ ] **Step 4: Heartbeat derives billable + rejects cross-user + uses GetNode**
+- [ ] **Step 4: Heartbeat auth accepts user tokens + derives billable + rejects cross-user + uses GetNode**
 
-In `nodes.go` `handleNodeHeartbeat`, replace the SP1 `ListNodes` existence scan with a single `GetNode`, and thread billable + cross-user reject into the usage loop:
+**Heartbeat auth fix (required — a BYO user node must be able to heartbeat, not just register):** the SP1 `handleNodeHeartbeat` guards with `if !s.nodeAuthorized(r)` (fleet-token only), so a user-owned node's heartbeat would 401. Replace that guard with the owner resolver, and (once the node is looked up) verify a user token only heartbeats a node IT owns:
+```go
+	ownerType, ownerUserID, ok := s.nodeOwner(r)
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+```
+(Replace the `if !s.nodeAuthorized(r) { ... }` block with the above. `nodeAuthorized` may now be unused — remove it if so, or leave it if another caller remains.)
+
+Then replace the SP1 `ListNodes` existence scan with a single `GetNode`, verify token/node ownership, and thread billable + cross-user reject into the usage loop:
 ```go
 	node, known, err := s.store.GetNode(r.Context(), req.NodeID)
 	if err != nil {
@@ -511,6 +544,11 @@ In `nodes.go` `handleNodeHeartbeat`, replace the SP1 `ListNodes` existence scan 
 	}
 	if !known {
 		writeJSON(w, http.StatusGone, map[string]string{"error": "unknown node, re-register"})
+		return
+	}
+	// A user token may only heartbeat a node it owns (a fleet token may heartbeat any fleet node).
+	if ownerType == "user" && (node.OwnerType != "user" || node.OwnerUserID != ownerUserID) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not your node"})
 		return
 	}
 	billable := node.OwnerType == "fleet"
