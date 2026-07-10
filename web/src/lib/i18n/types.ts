@@ -142,6 +142,24 @@ export interface Messages {
     expiringSoon: string; // <1h marker
     del: string; // delete button
     confirmDel: string; // confirm() before deleting a file
+    nodesTitle: string; // "My Nodes" section heading
+    nodesEmpty: string; // no BYO relay nodes registered yet
+    strictLabel: string; // checkbox: restrict this account to only its own nodes
+    strictHint: string; // one-line explanation under the strict-mode checkbox
+    addNode: string; // "Add node" button
+    nodeNamePlaceholder: string; // placeholder for the new-node name field
+    addNodeSubmit: string; // confirm button inside the add-node mini-form
+    addNodeCancel: string; // cancel button inside the add-node mini-form
+    tokenNote: string; // instruction shown above the one-time paste-in command
+    tokenDone: string; // "Done" button that clears the one-time token from memory
+    nodeOnline: string; // online-status label
+    nodeOffline: string; // offline-status label
+    nodeRelayed: (bytes: string) => string; // relayed-traffic figure through this node
+    nodeStored: (bytes: string) => string; // bytes stored on this node
+    nodeFreeTag: string; // "(free)" tag next to relayed/stored figures — own-node traffic isn't billed
+    nodeStorageFree: (free: string, total: string) => string; // "X free of Y" disk line
+    delNode: string; // remove-node button
+    confirmDelNode: string; // confirm() before removing a node
   };
   // /verify-email — landing page for the emailed verification link (?token=).
   verifyEmail: {
