@@ -22,3 +22,11 @@ func TestNodeViewsOnlineFlag(t *testing.T) {
 		t.Fatal("stale node should be offline")
 	}
 }
+
+func TestNodeViewsStorage(t *testing.T) {
+	now := time.Unix(10000, 0)
+	views := nodeViews([]Node{{ID: "n", LastSeenAt: now.Unix(), StorageEnabled: true, StorageTotal: 20 << 30, StorageFree: 5 << 30, StoredBytes: 3 << 30}}, now)
+	if !views[0].StorageEnabled || views[0].StorageFree != 5<<30 || views[0].StoredBytes != 3<<30 {
+		t.Fatalf("view=%+v", views[0])
+	}
+}

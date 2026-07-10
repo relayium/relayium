@@ -20,13 +20,16 @@ const (
 // adminNodeView is a Node prepared for the admin template (online flag derived
 // from last_seen against nodeOnlineWindow).
 type adminNodeView struct {
-	ID           string
-	Region       string
-	Version      string
-	Online       bool
-	RelayedBytes int64
-	StoredBytes  int64
-	LastSeenAt   int64
+	ID             string
+	Region         string
+	Version        string
+	Online         bool
+	RelayedBytes   int64
+	StoredBytes    int64
+	StorageEnabled bool
+	StorageTotal   int64
+	StorageFree    int64
+	LastSeenAt     int64
 }
 
 func nodeViews(nodes []Node, now time.Time) []adminNodeView {
@@ -35,8 +38,13 @@ func nodeViews(nodes []Node, now time.Time) []adminNodeView {
 	for _, n := range nodes {
 		out = append(out, adminNodeView{
 			ID: n.ID, Region: n.Region, Version: n.Version,
-			Online:       n.LastSeenAt >= cutoff,
-			RelayedBytes: n.RelayedBytes, StoredBytes: n.StoredBytes, LastSeenAt: n.LastSeenAt,
+			Online:         n.LastSeenAt >= cutoff,
+			RelayedBytes:   n.RelayedBytes,
+			StoredBytes:    n.StoredBytes,
+			StorageEnabled: n.StorageEnabled,
+			StorageTotal:   n.StorageTotal,
+			StorageFree:    n.StorageFree,
+			LastSeenAt:     n.LastSeenAt,
 		})
 	}
 	return out

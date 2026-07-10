@@ -113,13 +113,16 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <section class="nodes">
 <h2>中继节点（{{len .Nodes}}）</h2>
 <table>
-<thead><tr><th>ID</th><th>区域</th><th>状态</th><th>中继字节</th><th>存储字节</th><th>版本</th></tr></thead>
+<thead><tr><th>ID</th><th>区域</th><th>状态</th><th>中继字节</th><th>存储</th><th>剩余/总量</th><th>版本</th></tr></thead>
 <tbody>
 {{range .Nodes}}
 <tr>
 <td>{{.ID}}</td><td>{{.Region}}</td>
 <td>{{if .Online}}在线{{else}}离线{{end}}</td>
-<td>{{bytes .RelayedBytes}}</td><td>{{bytes .StoredBytes}}</td><td>{{.Version}}</td>
+<td>{{bytes .RelayedBytes}}</td>
+<td>{{if .StorageEnabled}}{{bytes .StoredBytes}}{{else}}—{{end}}</td>
+<td>{{if .StorageEnabled}}{{bytes .StorageFree}} / {{bytes .StorageTotal}}{{else}}—{{end}}</td>
+<td>{{.Version}}</td>
 </tr>
 {{end}}
 </tbody></table>
