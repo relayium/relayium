@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Netzwerkübergreifende Dateiübertragung — Echtzeit, Ende-zu-Ende-verschlüsselt | Relayium</title>
+    <meta name="description" content="Übertrage Dateien mit einem 6-stelligen Kopplungscode zwischen Geräten in unterschiedlichen Netzwerken. Ende-zu-Ende-verschlüsselt — die Übertragung läuft über Relayiums schnelles Relay, das ausschließlich Chiffretext transportiert, den es nicht lesen kann. Verifiziert per SAS-Code, sodass selbst ein kompromittiertes Relay nicht mithören kann." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/de/cross-network" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/cross-network" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/cross-network" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/cross-network" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/cross-network" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/cross-network" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/cross-network" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/cross-network" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Netzwerkübergreifende Dateiübertragung — Echtzeit, Ende-zu-Ende-verschlüsselt | Relayium" />
+    <meta property="og:description" content="Übertrage Dateien mit einem 6-stelligen Kopplungscode zwischen Geräten in unterschiedlichen Netzwerken. Ende-zu-Ende-verschlüsselt — die Übertragung läuft über Relayiums schnelles Relay, das ausschließlich Chiffretext transportiert, den es nicht lesen kann. Verifiziert per SAS-Code, sodass selbst ein kompromittiertes Relay nicht mithören kann." />
+    <meta property="og:url" content="https://relayium.com/de/cross-network" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="de_DE" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Netzwerkübergreifende Dateiübertragung — Echtzeit, Ende-zu-Ende-verschlüsselt | Relayium" />
+    <meta name="twitter:description" content="Übertrage Dateien mit einem 6-stelligen Kopplungscode zwischen Geräten in unterschiedlichen Netzwerken. Ende-zu-Ende-verschlüsselt — die Übertragung läuft über Relayiums schnelles Relay, das ausschließlich Chiffretext transportiert, den es nicht lesen kann. Verifiziert per SAS-Code, sodass selbst ein kompromittiertes Relay nicht mithören kann." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"Netzwerkübergreifende Dateiübertragung — Echtzeit, Ende-zu-Ende-verschlüsselt | Relayium","description":"Übertrage Dateien mit einem 6-stelligen Kopplungscode zwischen Geräten in unterschiedlichen Netzwerken. Ende-zu-Ende-verschlüsselt — die Übertragung läuft über Relayiums schnelles Relay, das ausschließlich Chiffretext transportiert, den es nicht lesen kann. Verifiziert per SAS-Code, sodass selbst ein kompromittiertes Relay nicht mithören kann.","url":"https://relayium.com/de/cross-network","inLanguage":"de","dateModified":"2026-07-10","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Laufen meine Dateien über euren Server?","acceptedAnswer":{"@type":"Answer","text":"Der verschlüsselte Datenstrom läuft über Relayiums Relay, um eine zuverlässige netzwerkübergreifende Verbindung zu ermöglichen — da alles Ende-zu-Ende-verschlüsselt ist, sieht das Relay dabei nur Chiffretext, den es nicht lesen kann."}},{"@type":"Question","name":"Ist ein Code erforderlich?","acceptedAnswer":{"@type":"Answer","text":"Ja: Ein 6-stelliger Code (oder dessen Beitrittslink/QR), 15 Minuten gültig, koppelt die beiden Geräte über Netzwerke hinweg."}},{"@type":"Question","name":"Brauche ich ein Konto?","acceptedAnswer":{"@type":"Answer","text":"Der Absender meldet sich an, um einen Code zu erzeugen; der Empfänger tritt anonym bei."}},{"@type":"Question","name":"Ist es Ende-zu-Ende-verschlüsselt?","acceptedAnswer":{"@type":"Answer","text":"Ja — X25519 plus AES-256-GCM pro Chunk, verifiziert mit dem SAS-Code; weder das Relay noch der Server können entschlüsseln."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:820px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:38px;letter-spacing:-.5px;margin:40px 0 12px}
+h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.pitch{font-size:20px;margin:0 0 24px;max-width:42em}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:8px 0}
+ol.steps{margin:12px 0;padding-left:22px}ol.steps li{margin:10px 0}
+.cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.why li b,.compare h3{color:var(--text-h)}
+.learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
+footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=de">Relayium</a></header>
+      
+      <h1>Netzwerkübergreifende Dateiübertragung, Ende-zu-Ende-verschlüsselt</h1>
+      <p class="pitch">Zwei Geräte in unterschiedlichen Netzwerken koppeln sich mit einem 6-stelligen Code (oder dessen Beitrittslink/QR). Dateien fließen über einen verschlüsselten Kanal durch Relayiums schnelles Relay — das Relay sieht dabei ausschließlich Chiffretext, die Schlüssel verlassen nie die beiden Geräte.</p>
+      <a class="cta" href="/cross-network?lang=de">Übertragung starten</a>
+
+      <h2>In vier Schritten übertragen</h2>
+      <ol class="steps">
+        <li>Der Absender meldet sich an und erzeugt einen 6-stelligen Kopplungscode (oder teilt dessen Beitrittslink/QR).</li>
+        <li>Der Empfänger öffnet den Link oder gibt den Code ein — zum Empfangen ist kein Konto nötig.</li>
+        <li>Beide Seiten vergleichen denselben 6-stelligen SAS-Code auf dem Bildschirm, um einen Mittelsmann auszuschließen.</li>
+        <li>Dateien werden Ende-zu-Ende-verschlüsselt gestreamt (Chunk für Chunk mit AES-256-GCM) — über Relayiums schnelles Relay, das nur Chiffretext transportiert, den es nicht entschlüsseln kann.</li>
+      </ol>
+
+      <h2>Warum Relayium</h2>
+      <ul class="why">
+        <li><b>Ende-zu-Ende-verschlüsselt</b> — X25519-Schlüsselaustausch und AES-256-GCM pro Chunk; die Schlüssel werden ausschließlich zwischen den beiden Geräten ausgehandelt, weder das Relay noch der Server können entschlüsseln.</li>
+        <li><b>SAS gegen Man-in-the-Middle</b> — Beide Bildschirme zeigen denselben 6-stelligen Code; stimmt er überein, ist ein Mittelsmann ausgeschlossen — selbst ein kompromittiertes Relay oder ein kompromittierter Signalisierungsserver kann sich nicht einschleichen.</li>
+        <li><b>Relay sieht nur Chiffretext</b> — Netzwerkübergreifende Übertragungen laufen über ein schnelles Relay, damit die Verbindung über jedes NAT hinweg zuverlässig zustande kommt — dabei transportiert es ausschließlich Chiffretext, nie deine Schlüssel oder Klartext.</li>
+        <li><b>Plattformübergreifend</b> — Windows, macOS, Linux, Android, iOS — ein moderner Browser genügt, keine Installation nötig.</li>
+        <li><b>Kostenlos</b> — Kostenlos nutzbar innerhalb eines monatlichen Relay-Kontingents; für einen Code muss sich der Absender anmelden, der Empfänger tritt anonym bei.</li>
+      </ul>
+
+      <h2>Im Vergleich</h2>
+      <div class="compare">
+      <h3>Gegenüber AirDrop</h3>
+      <p>AirDrop funktioniert nur zwischen Apple-Geräten und nur in unmittelbarer Nähe; Relayium koppelt Windows, Android, iPhone und Mac netzwerkübergreifend, Ende-zu-Ende-verschlüsselt, mit nur einem Browser.</p>
+      <h3>Gegenüber Snapdrop / PairDrop</h3>
+      <p>Diese funktionieren nur im selben Netzwerk; Relayium ergänzt netzwerkübergreifendes Koppeln plus Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und den SAS-Code, sodass selbst ein kompromittiertes Relay oder ein kompromittierter Signalisierungsserver nicht mithören kann.</p>
+      </div>
+
+      <h2>Häufige Fragen</h2>
+      <h3>Laufen meine Dateien über euren Server?</h3>
+      <p>Der verschlüsselte Datenstrom läuft über Relayiums Relay, um eine zuverlässige netzwerkübergreifende Verbindung zu ermöglichen — da alles Ende-zu-Ende-verschlüsselt ist, sieht das Relay dabei nur Chiffretext, den es nicht lesen kann.</p>
+      <h3>Ist ein Code erforderlich?</h3>
+      <p>Ja: Ein 6-stelliger Code (oder dessen Beitrittslink/QR), 15 Minuten gültig, koppelt die beiden Geräte über Netzwerke hinweg.</p>
+      <h3>Brauche ich ein Konto?</h3>
+      <p>Der Absender meldet sich an, um einen Code zu erzeugen; der Empfänger tritt anonym bei.</p>
+      <h3>Ist es Ende-zu-Ende-verschlüsselt?</h3>
+      <p>Ja — X25519 plus AES-256-GCM pro Chunk, verifiziert mit dem SAS-Code; weder das Relay noch der Server können entschlüsseln.</p>
+
+      
+      <footer>
+        <a href="/?lang=de">← Relayium</a>
+        <a href="/de/privacy">Datenschutz</a>
+        <a href="/de/terms">Nutzungsbedingungen</a>
+        <a href="/de/security">Sicherheit</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

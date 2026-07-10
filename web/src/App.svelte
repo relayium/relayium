@@ -40,6 +40,7 @@
   import { fetchIceConfig, hasTurnServer, measureRelays, pickRelay, type RelayEntry } from "./lib/ice";
   import type { Peer } from "./lib/protocol";
   import { lang, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
+  import { pageMeta } from "./lib/page-meta";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
   import { outbox, setOutbox, takeOutbox, clearOutbox } from "./lib/outbox.svelte";
   import { shouldConfirmBeforeSend } from "./lib/confirm-send";
@@ -218,12 +219,20 @@
         : !unsupported,
   );
 
-  // Reflect transfer progress in the tab title (follows the language switch).
+  // Reflect transfer progress in the tab title (follows the language switch), and
+  // set the per-route <title>/<meta description> otherwise (SEO for the
+  // cross-network/offline-transfer product modes).
   $effect(() => {
     const x = (send && !send.done && send) || (recv && !recv.done && recv);
+    const meta = pageMeta(currentRoute(), messages[lang()]);
     document.title = x
       ? `${pct(x)}% ${x.dir === "send" ? "↑" : "↓"} · Relayium`
-      : messages[lang()].titleDefault;
+      : meta.title;
+    const md = document.querySelector('meta[name="description"]');
+    if (md) md.setAttribute("content", meta.description);
+    const canon = location.origin + meta.canonicalPath;
+    document.querySelector('link[rel="canonical"]')?.setAttribute("href", canon);
+    document.querySelector('meta[property="og:url"]')?.setAttribute("content", canon);
   });
 
   // Notify when a transfer finishes and the user is on another tab/app, so a long

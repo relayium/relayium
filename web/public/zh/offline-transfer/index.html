@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>加密文件链接——先上传，后下载，零知识（Relayium）</title>
+    <meta name="description" content="在浏览器里加密后上传文件，分享一个下载链接。服务器只保存它无法解密的密文——密钥就在链接里。可选阅后即焚与有效期。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/zh/offline-transfer" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/offline-transfer" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/offline-transfer" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/offline-transfer" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/offline-transfer" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/offline-transfer" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/offline-transfer" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/offline-transfer" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="加密文件链接——先上传，后下载，零知识（Relayium）" />
+    <meta property="og:description" content="在浏览器里加密后上传文件，分享一个下载链接。服务器只保存它无法解密的密文——密钥就在链接里。可选阅后即焚与有效期。" />
+    <meta property="og:url" content="https://relayium.com/zh/offline-transfer" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="加密文件链接——先上传，后下载，零知识（Relayium）" />
+    <meta name="twitter:description" content="在浏览器里加密后上传文件，分享一个下载链接。服务器只保存它无法解密的密文——密钥就在链接里。可选阅后即焚与有效期。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"加密文件链接——先上传，后下载，零知识（Relayium）","description":"在浏览器里加密后上传文件，分享一个下载链接。服务器只保存它无法解密的密文——密钥就在链接里。可选阅后即焚与有效期。","url":"https://relayium.com/zh/offline-transfer","inLanguage":"zh-Hans","dateModified":"2026-07-10","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"服务器能读到我的文件吗？","acceptedAnswer":{"@type":"Answer","text":"不能——文件在你的浏览器里完成加密；服务器只保存密文，密钥永远不会到达服务器。"}},{"@type":"Question","name":"密钥在哪里？","acceptedAnswer":{"@type":"Answer","text":"在链接的片段里（# 之后）。浏览器不会把片段发送给服务器，因此只有拿到完整链接的人才能解密。"}},{"@type":"Question","name":"需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"上传需要（会占用存储空间）。下载不需要——只要有链接即可。"}},{"@type":"Question","name":"能设置成只能下载一次吗？","acceptedAnswer":{"@type":"Answer","text":"可以——开启阅后即焚，并设置有效期。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:820px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:38px;letter-spacing:-.5px;margin:40px 0 12px}
+h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.pitch{font-size:20px;margin:0 0 24px;max-width:42em}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:8px 0}
+ol.steps{margin:12px 0;padding-left:22px}ol.steps li{margin:10px 0}
+.cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.why li b,.compare h3{color:var(--text-h)}
+.learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
+footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      
+      <h1>把文件变成一个加密链接发出去</h1>
+      <p class="pitch">当对方不在线时，先上传，再分享一个链接。你的浏览器会在上传前加密文件；服务器只保存它无法读取的密文——密钥始终只存在于链接里。</p>
+      <a class="cta" href="/offline-transfer?lang=zh">上传文件</a>
+
+      <h2>四步完成一次传输</h2>
+      <ol class="steps">
+        <li>登录后选择一个文件——你的浏览器会在文件离开设备前于本地完成加密。</li>
+        <li>服务器只保存密文；解密密钥保留在链接片段中，绝不会发送给服务器。</li>
+        <li>分享这个下载链接（可选阅后即焚，以及你设定的有效期）。</li>
+        <li>接收方打开链接后，其浏览器会获取密文，并用链接中的密钥解密。</li>
+      </ol>
+
+      <h2>为什么选择 Relayium</h2>
+      <ul class="why">
+        <li><b>零知识</b> — 文件在浏览器里完成加密；服务器只经手它无法解密的密文。</li>
+        <li><b>密钥就在链接里</b> — 解密密钥存放在 URL 片段（# 之后），浏览器绝不会把它发送给服务器。</li>
+        <li><b>阅后即焚 + 有效期</b> — 可选择在首次下载后删除文件，也可设置有效期，到期后文件即消失。</li>
+        <li><b>接收方无需账号</b> — 任何拿到链接的人都能下载；只有上传方需要登录。</li>
+        <li><b>异步场景的补充</b> — 当对方暂时不在线时使用；若双方同时在线，可改用实时跨网络传输。</li>
+      </ul>
+
+      <h2>与其他方式相比</h2>
+      <div class="compare">
+      <h3>对比 WeTransfer / Dropbox 链接</h3>
+      <p>那些服务能在服务器端读取你的文件；Relayium 的服务器只保存它无法解密的密文——密钥始终留在链接里。</p>
+      <h3>对比实时模式</h3>
+      <p>实时模式点对点直连，需要双方同时在线；这种模式则加密存储，方便接收方之后再取。</p>
+      </div>
+
+      <h2>常见问题</h2>
+      <h3>服务器能读到我的文件吗？</h3>
+      <p>不能——文件在你的浏览器里完成加密；服务器只保存密文，密钥永远不会到达服务器。</p>
+      <h3>密钥在哪里？</h3>
+      <p>在链接的片段里（# 之后）。浏览器不会把片段发送给服务器，因此只有拿到完整链接的人才能解密。</p>
+      <h3>需要账号吗？</h3>
+      <p>上传需要（会占用存储空间）。下载不需要——只要有链接即可。</p>
+      <h3>能设置成只能下载一次吗？</h3>
+      <p>可以——开启阅后即焚，并设置有效期。</p>
+
+      
+      <footer>
+        <a href="/?lang=zh">← Relayium</a>
+        <a href="/zh/privacy">隐私政策</a>
+        <a href="/zh/terms">服务条款</a>
+        <a href="/zh/security">安全说明</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

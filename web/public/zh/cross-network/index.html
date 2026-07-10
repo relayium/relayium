@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>跨网络文件传输——实时、端到端加密 | Relayium</title>
+    <meta name="description" content="用 6 位配对码，让两台设备跨网络互传文件。端到端加密：文件经由 Relayium 的快速中继转发，中继只经手无法解密的密文；并以 SAS 校验码验证，即便中继被入侵也无法窃听。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/zh/cross-network" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/cross-network" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/cross-network" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/cross-network" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/cross-network" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/cross-network" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/cross-network" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/cross-network" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="跨网络文件传输——实时、端到端加密 | Relayium" />
+    <meta property="og:description" content="用 6 位配对码，让两台设备跨网络互传文件。端到端加密：文件经由 Relayium 的快速中继转发，中继只经手无法解密的密文；并以 SAS 校验码验证，即便中继被入侵也无法窃听。" />
+    <meta property="og:url" content="https://relayium.com/zh/cross-network" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="跨网络文件传输——实时、端到端加密 | Relayium" />
+    <meta name="twitter:description" content="用 6 位配对码，让两台设备跨网络互传文件。端到端加密：文件经由 Relayium 的快速中继转发，中继只经手无法解密的密文；并以 SAS 校验码验证，即便中继被入侵也无法窃听。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"跨网络文件传输——实时、端到端加密 | Relayium","description":"用 6 位配对码，让两台设备跨网络互传文件。端到端加密：文件经由 Relayium 的快速中继转发，中继只经手无法解密的密文；并以 SAS 校验码验证，即便中继被入侵也无法窃听。","url":"https://relayium.com/zh/cross-network","inLanguage":"zh-Hans","dateModified":"2026-07-10","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"文件会经过你们的服务器吗？","acceptedAnswer":{"@type":"Answer","text":"加密数据流会经由 Relayium 的中继转发，以实现跨网络的可靠连接——但由于端到端加密，中继只能看到它无法解密的密文。"}},{"@type":"Question","name":"一定要用配对码吗？","acceptedAnswer":{"@type":"Answer","text":"是的：6 位配对码（或其加入链接/二维码）有效期 15 分钟，用于让两台设备跨网络配对。"}},{"@type":"Question","name":"需要注册账号吗？","acceptedAnswer":{"@type":"Answer","text":"发送方需登录才能生成配对码；接收方可匿名加入。"}},{"@type":"Question","name":"是端到端加密的吗？","acceptedAnswer":{"@type":"Answer","text":"是——采用 X25519 密钥交换 + 每块 AES-256-GCM 加密，并通过 SAS 校验码核验，中继与服务器均无法解密。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:820px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:38px;letter-spacing:-.5px;margin:40px 0 12px}
+h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.pitch{font-size:20px;margin:0 0 24px;max-width:42em}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:8px 0}
+ol.steps{margin:12px 0;padding-left:22px}ol.steps li{margin:10px 0}
+.cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.why li b,.compare h3{color:var(--text-h)}
+.learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
+footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      
+      <h1>跨网络文件传输，端到端加密</h1>
+      <p class="pitch">两台设备身处不同网络，用 6 位配对码（或其加入链接/二维码）完成配对。文件通过加密通道流动，途经 Relayium 的快速中继转发——中继只能看到密文，密钥始终只留在两台设备之间。</p>
+      <a class="cta" href="/cross-network?lang=zh">开始传输</a>
+
+      <h2>四步完成一次传输</h2>
+      <ol class="steps">
+        <li>发送方登录后生成一个 6 位配对码（也可分享其加入链接/二维码）。</li>
+        <li>接收方打开链接或输入配对码即可——接收无需账号。</li>
+        <li>双方核对屏幕上同一段 6 位 SAS 校验码，确认一致以排除中间人。</li>
+        <li>文件端到端加密流式传输（逐块 AES-256-GCM），经由 Relayium 的快速中继转发；中继只经手它无法解密的密文。</li>
+      </ol>
+
+      <h2>为什么选择 Relayium</h2>
+      <ul class="why">
+        <li><b>端到端加密</b> — X25519 密钥交换 + 每块 AES-256-GCM 加密，密钥只在两台设备间协商，中继与服务器均无法解密。</li>
+        <li><b>SAS 防中间人</b> — 两边屏幕显示同一段 6 位校验码，核对一致即可排除中间人——即便中继或信令服务器被入侵也无法得逞。</li>
+        <li><b>中继只经手密文</b> — 跨网络传输经由快速中继转发，以在任何 NAT 环境下都能可靠连接——中继只经手密文，从不接触你的密钥或明文。</li>
+        <li><b>跨平台</b> — Windows、macOS、Linux、Android、iOS——只要有现代浏览器，无需安装任何 App。</li>
+        <li><b>免费</b> — 在每月中继流量额度内免费使用；生成配对码需发送方登录，接收方可匿名加入。</li>
+      </ul>
+
+      <h2>与其他方式相比</h2>
+      <div class="compare">
+      <h3>对比 AirDrop</h3>
+      <p>AirDrop 仅限 Apple 设备之间使用，且需彼此靠近；Relayium 能让 Windows、Android、iPhone 与 Mac 跨网络端到端加密互传，只需一个浏览器。</p>
+      <h3>对比 Snapdrop / PairDrop</h3>
+      <p>它们仅限同一网络内使用；Relayium 在此之上增加了跨网络配对，以及应用层端到端加密 + SAS 校验码，即便中继或信令服务器被入侵也无法窃听。</p>
+      </div>
+
+      <h2>常见问题</h2>
+      <h3>文件会经过你们的服务器吗？</h3>
+      <p>加密数据流会经由 Relayium 的中继转发，以实现跨网络的可靠连接——但由于端到端加密，中继只能看到它无法解密的密文。</p>
+      <h3>一定要用配对码吗？</h3>
+      <p>是的：6 位配对码（或其加入链接/二维码）有效期 15 分钟，用于让两台设备跨网络配对。</p>
+      <h3>需要注册账号吗？</h3>
+      <p>发送方需登录才能生成配对码；接收方可匿名加入。</p>
+      <h3>是端到端加密的吗？</h3>
+      <p>是——采用 X25519 密钥交换 + 每块 AES-256-GCM 加密，并通过 SAS 校验码核验，中继与服务器均无法解密。</p>
+
+      
+      <footer>
+        <a href="/?lang=zh">← Relayium</a>
+        <a href="/zh/privacy">隐私政策</a>
+        <a href="/zh/terms">服务条款</a>
+        <a href="/zh/security">安全说明</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

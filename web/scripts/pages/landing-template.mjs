@@ -3,7 +3,9 @@
 // independent of the Vite asset graph and fully crawlable with JS disabled.
 import { LANGS, LANG_LABELS, GUIDES_LABELS, BCP47, OG_LOCALE, SITE, landingUrl, ctaHref, urlPath, absUrl, esc } from "./shared.mjs";
 
-const STYLE = `
+// Exported so mode-template.mjs (and any other landing-style page) can reuse the
+// exact same inline stylesheet + page-shell classes instead of forking them.
+export const STYLE = `
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
 *{box-sizing:border-box}
