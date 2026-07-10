@@ -31,6 +31,8 @@ const ko: Messages = {
   fileCounter: (i, n) => `파일 ${i}/${n}`,
   close: "닫기",
   cancel: "취소",
+  dialogConfirm: "확인",
+  dialogCancel: "취소",
   share: "공유",
   startOver: "← 다시 선택",
   peersTitle: "주변 기기",

@@ -51,6 +51,8 @@ export interface Messages {
   fileCounter: (i: number, n: number) => string;
   close: string;
   cancel: string; // abort an in-progress transfer and return to idle
+  dialogConfirm: string; // ConfirmModal's affirmative button label
+  dialogCancel: string; // ConfirmModal's dismiss button label
   share: string; // Web Share button label (opens the OS share sheet for a link)
   startOver: string; // leave the current room and return to the method choices
   peersTitle: string;

@@ -31,6 +31,8 @@ const zh: Messages = {
   fileCounter: (i, n) => `文件 ${i}/${n}`,
   close: "关闭",
   cancel: "取消",
+  dialogConfirm: "确定",
+  dialogCancel: "取消",
   share: "分享",
   startOver: "← 重新选择",
   peersTitle: "附近的设备",

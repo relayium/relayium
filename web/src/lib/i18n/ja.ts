@@ -31,6 +31,8 @@ const ja: Messages = {
   fileCounter: (i, n) => `ファイル ${i}/${n}`,
   close: "閉じる",
   cancel: "キャンセル",
+  dialogConfirm: "確認",
+  dialogCancel: "キャンセル",
   share: "共有",
   startOver: "← やり直す",
   peersTitle: "近くのデバイス",

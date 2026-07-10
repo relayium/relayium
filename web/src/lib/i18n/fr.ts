@@ -31,6 +31,8 @@ const fr: Messages = {
   fileCounter: (i, n) => `Fichier ${i}/${n}`,
   close: "Fermer",
   cancel: "Annuler",
+  dialogConfirm: "Confirmer",
+  dialogCancel: "Annuler",
   share: "Partager",
   startOver: "← Recommencer",
   peersTitle: "Appareils à proximité",
