@@ -1,17 +1,18 @@
 // Package metering ingests coturn's per-allocation relay accounting and
 // records it keyed by pairing code, attributed to the code's owner when the
-// username token carries one (see splitAttrib). The Redis dependency lives
-// in redis.go; this file is Redis-free and unit-testable with fakes.
+// username token carries one (see relayusage.SplitAttrib). The Redis
+// dependency lives in redis.go; this file is Redis-free and unit-testable
+// with fakes.
 package metering
 
 import (
 	"context"
 	"log"
-	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/relayium/relayium/internal/account"
+	"github.com/relayium/relayium/internal/relayusage"
 )
 
 // UsageEvent is one coturn allocation's relay accounting as ingested from a
@@ -77,34 +78,13 @@ func (w *Worker) Run(ctx context.Context, src StatsSource) error {
 	}
 }
 
-// tokenFromUsername returns the token after the first ':' in "<expiry>:<token>",
-// or "" if the username is malformed.
-func tokenFromUsername(username string) string {
-	parts := strings.SplitN(username, ":", 2)
-	if len(parts) != 2 || parts[1] == "" {
-		return ""
-	}
-	return parts[1]
-}
-
-// splitAttrib splits a coturn-username token "<userID>.<code>" into its parts.
-// A token with no '.' (legacy anonymous codes) yields ("", token), keeping global
-// relay accounting working without attribution.
-func splitAttrib(token string) (userID, code string) {
-	parts := strings.SplitN(token, ".", 2)
-	if len(parts) == 2 {
-		return parts[0], parts[1]
-	}
-	return "", token
-}
-
 func (w *Worker) handle(ctx context.Context, ev UsageEvent) {
-	token := tokenFromUsername(ev.Username)
+	token := relayusage.TokenFromUsername(ev.Username)
 	if token == "" {
 		w.Log.Printf("metering: skip alloc %s, malformed username %q", ev.AllocID, ev.Username)
 		return
 	}
-	userID, code := splitAttrib(token)
+	userID, code := relayusage.SplitAttrib(token)
 	rec := account.UsageEvent{
 		AllocID:      ev.AllocID,
 		Token:        code,

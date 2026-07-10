@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/relayium/relayium/internal/account"
+	"github.com/relayium/relayium/internal/relayusage"
 )
 
 type fakeSource struct{ events []UsageEvent }
@@ -104,9 +105,9 @@ func TestSplitAttrib(t *testing.T) {
 		{"", "", ""},
 	}
 	for _, c := range cases {
-		u, code := splitAttrib(c.in)
+		u, code := relayusage.SplitAttrib(c.in)
 		if u != c.user || code != c.code {
-			t.Fatalf("splitAttrib(%q) = (%q,%q), want (%q,%q)", c.in, u, code, c.user, c.code)
+			t.Fatalf("relayusage.SplitAttrib(%q) = (%q,%q), want (%q,%q)", c.in, u, code, c.user, c.code)
 		}
 	}
 }
