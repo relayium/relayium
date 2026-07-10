@@ -11,8 +11,9 @@ import (
 // nodeState is the node's persistent local identity. TURNSecret is generated
 // once and never leaves the box except to central over TLS at registration.
 type nodeState struct {
-	NodeID     string `json:"nodeID"`
-	TURNSecret string `json:"turnSecret"`
+	NodeID        string `json:"nodeID"`
+	TURNSecret    string `json:"turnSecret"`
+	StorageSecret string `json:"storageSecret"`
 }
 
 func statePath(dir string) string { return filepath.Join(dir, "state.json") }
@@ -36,6 +37,11 @@ func loadState(dir string) (nodeState, error) {
 		return nodeState{}, rerr
 	}
 	st := nodeState{TURNSecret: hex.EncodeToString(secret)}
+	sk := make([]byte, 32)
+	if _, rerr := rand.Read(sk); rerr != nil {
+		return nodeState{}, rerr
+	}
+	st.StorageSecret = hex.EncodeToString(sk)
 	if serr := saveState(dir, st); serr != nil {
 		return nodeState{}, serr
 	}
