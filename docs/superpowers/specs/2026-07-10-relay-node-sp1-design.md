@@ -278,8 +278,13 @@ stored_bytes (humanized; 0 in SP1), version, last_seen (relative). Read-only in 
 - **pion/turn smoke (best-effort):** a loopback allocation relays a datagram and the wrapper
   counts it; skipped in CI if UDP sandboxing blocks it.
 
-## Open implementation questions (resolve in the plan/impl, not blocking)
+## Resolved implementation questions
 
-- Exact pion v4 hook for associating relayed bytes with a username (see note in Component 1).
-- Where the shared username-parsing helper lives (`internal/relayusage` vs exported
-  `internal/metering` funcs).
+- **Associating relayed bytes with a username — RESOLVED.** pion/turn v4's
+  `EventHandler.OnAllocationCreated(srcAddr, dstAddr, protocol, username, realm, relayAddr,
+  requestedPort)` supplies the `relayAddr ↔ username` join. A custom `RelayAddressGenerator`
+  wraps each allocated relay `net.PacketConn` in a byte-counter keyed by the returned
+  `relayAddr`; the event handler then tags that counter with the `username`. No per-packet
+  hook or username inference is needed.
+- **Shared username-parsing helper — RESOLVED.** Lives in a new `internal/relayusage`
+  package; the metering worker is refactored to call it (one source of truth).
