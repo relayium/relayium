@@ -142,7 +142,7 @@ const en: Messages = {
     nodeNamePlaceholder: "Node name, e.g. \"home NAS\"",
     addNodeSubmit: "Create",
     addNodeCancel: "Cancel",
-    tokenNote: "Paste this command on your own box and run it — the token is shown only this once, so copy it now.",
+    tokenNote: "Run this command as root (or with sudo) on your own box — it downloads and installs relayium-node and starts it as a background service, nothing to install beforehand. The token is shown only this once, so copy it now.",
     tokenDone: "Done",
     nodeOnline: "Online",
     nodeOffline: "Offline",

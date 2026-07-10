@@ -142,7 +142,7 @@ const ko: Messages = {
     nodeNamePlaceholder: "노드 이름 (예: 집 NAS)",
     addNodeSubmit: "생성",
     addNodeCancel: "취소",
-    tokenNote: "아래 명령을 본인 서버에 붙여넣고 실행하세요 — 토큰은 이번 한 번만 표시되니 지금 바로 복사하세요.",
+    tokenNote: "아래 명령을 본인 서버에서 root(또는 sudo)로 실행하세요 — relayium-node를 자동으로 내려받아 설치하고 백그라운드 서비스로 시작합니다. 미리 설치할 필요가 없습니다. 토큰은 이번 한 번만 표시되니 지금 바로 복사하세요.",
     tokenDone: "완료",
     nodeOnline: "온라인",
     nodeOffline: "오프라인",

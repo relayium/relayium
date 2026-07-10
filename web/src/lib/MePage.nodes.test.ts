@@ -11,7 +11,18 @@ describe("nodeRunCommand", () => {
   it("produces a single-line, paste-in shell command", () => {
     const cmd = nodeRunCommand("abc", "http://localhost:8080");
     expect(cmd).not.toContain("\n");
-    expect(cmd).toContain("relayium-node");
+  });
+
+  it("installs via the hosted installer rather than assuming the binary exists", () => {
+    const cmd = nodeRunCommand("abc", "https://relayium.com");
+    expect(cmd).toContain("curl -fsSL https://relayium.com/install-node.sh");
+    expect(cmd).toMatch(/\|\s*RELAYIUM_/); // pipes env into the installer
+    expect(cmd).toContain("| ");
+  });
+
+  it("enables blob storage so the node relays and stores", () => {
+    const cmd = nodeRunCommand("abc", "https://relayium.com");
+    expect(cmd).toContain("RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs");
   });
 
   it("differs per token so a stale copy can't be reused silently", () => {

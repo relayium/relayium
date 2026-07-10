@@ -142,7 +142,7 @@ const ja: Messages = {
     nodeNamePlaceholder: "ノード名（例: 自宅NAS）",
     addNodeSubmit: "作成",
     addNodeCancel: "キャンセル",
-    tokenNote: "下のコマンドを自分のマシンにコピーして実行してください——トークンはこの一度しか表示されません。今すぐコピーしてください。",
+    tokenNote: "下のコマンドを自分のマシンで root（または sudo）で実行してください——relayium-node を自動でダウンロード・インストールし、バックグラウンドサービスとして起動します。事前のインストールは不要です。トークンはこの一度しか表示されません。今すぐコピーしてください。",
     tokenDone: "完了",
     nodeOnline: "オンライン",
     nodeOffline: "オフライン",

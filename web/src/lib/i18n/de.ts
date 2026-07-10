@@ -142,7 +142,7 @@ const de: Messages = {
     nodeNamePlaceholder: "Knotenname, z. B. „Heim-NAS“",
     addNodeSubmit: "Erstellen",
     addNodeCancel: "Abbrechen",
-    tokenNote: "Füge diesen Befehl auf deinem eigenen Server ein und führe ihn aus — das Token wird nur dieses eine Mal angezeigt, also kopiere es jetzt.",
+    tokenNote: "Führe diesen Befehl als root (oder mit sudo) auf deinem eigenen Server aus — er lädt relayium-node herunter, installiert es und startet es als Hintergrunddienst, nichts muss vorher installiert werden. Das Token wird nur dieses eine Mal angezeigt, also kopiere es jetzt.",
     tokenDone: "Fertig",
     nodeOnline: "Online",
     nodeOffline: "Offline",

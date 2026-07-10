@@ -142,7 +142,7 @@ const fr: Messages = {
     nodeNamePlaceholder: "Nom du nœud, ex. « NAS à la maison »",
     addNodeSubmit: "Créer",
     addNodeCancel: "Annuler",
-    tokenNote: "Collez cette commande sur votre propre machine et exécutez-la — le jeton ne s'affiche qu'une seule fois, copiez-le maintenant.",
+    tokenNote: "Exécutez cette commande en root (ou avec sudo) sur votre propre machine — elle télécharge et installe relayium-node puis le démarre comme service en arrière-plan, rien à installer au préalable. Le jeton ne s'affiche qu'une seule fois, copiez-le maintenant.",
     tokenDone: "Terminé",
     nodeOnline: "En ligne",
     nodeOffline: "Hors ligne",

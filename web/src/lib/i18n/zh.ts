@@ -142,7 +142,7 @@ const zh: Messages = {
     nodeNamePlaceholder: "节点名称，例如「家里的 NAS」",
     addNodeSubmit: "创建",
     addNodeCancel: "取消",
-    tokenNote: "把下面这条命令粘贴到你自己的主机上运行——令牌只显示这一次，请立即复制保存。",
+    tokenNote: "在你自己的主机上以 root（或 sudo）运行下面这条命令——它会自动下载安装 relayium-node 并作为后台服务启动，无需事先安装。令牌只显示这一次，请立即复制保存。",
     tokenDone: "完成",
     nodeOnline: "在线",
     nodeOffline: "离线",
