@@ -220,3 +220,44 @@ func TestHeartbeatUserTokenForeignNode(t *testing.T) {
 		t.Fatalf("foreign-node heartbeat: want 403, got %d", w.Code)
 	}
 }
+
+func TestRegisterRejectsNodeIDTakeover(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	victim, _ := st.UpsertUserByEmail(ctx, "v@x.com", "v")
+	attacker, _ := st.UpsertUserByEmail(ctx, "a@x.com", "a")
+	// An existing FLEET node with a known id.
+	st.UpsertNode(ctx, Node{ID: "fleet-1", OwnerType: "fleet", URLs: []string{"turn:f:3478"}, TURNSecret: "fs", CreatedAt: 1, LastSeenAt: 1})
+	// An existing USER node owned by victim.
+	st.UpsertNode(ctx, Node{ID: "victim-node", OwnerType: "user", OwnerUserID: victim.ID, URLs: []string{"turn:v:3478"}, TURNSecret: "vs", CreatedAt: 1, LastSeenAt: 1})
+	st.CreateNodeToken(ctx, NodeToken{ID: "at", TokenHash: hashToken("atktok"), UserID: attacker.ID, Name: "n", CreatedAt: 1})
+
+	s := &Service{store: st, cfg: Config{EnableUserNodes: true}, now: func() time.Time { return time.Unix(5, 0) }}
+	mux := http.NewServeMux()
+	s.RegisterNodeRoutes(mux)
+
+	reg := func(nodeID string) int {
+		body, _ := json.Marshal(nodeRegisterReq{NodeID: nodeID, TURNSecret: "x", URLs: []string{"turn:x:3478"}})
+		r := httptest.NewRequest("POST", "/api/nodes/register", bytes.NewReader(body))
+		r.Header.Set("Authorization", "Bearer atktok")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		return w.Code
+	}
+	// Attacker (user token) cannot take over a fleet node id...
+	if code := reg("fleet-1"); code != http.StatusForbidden {
+		t.Fatalf("fleet takeover: want 403, got %d", code)
+	}
+	// ...nor another user's node id.
+	if code := reg("victim-node"); code != http.StatusForbidden {
+		t.Fatalf("cross-user takeover: want 403, got %d", code)
+	}
+	// The fleet node's owner is untouched.
+	if n, _, _ := st.GetNode(ctx, "fleet-1"); n.OwnerType != "fleet" || n.OwnerUserID != "" {
+		t.Fatalf("fleet node owner was mutated: %q/%q", n.OwnerType, n.OwnerUserID)
+	}
+	// A brand-new id from the attacker registers fine (owned by attacker).
+	if code := reg("brand-new-id"); code != http.StatusOK {
+		t.Fatalf("new-id register: want 200, got %d", code)
+	}
+}

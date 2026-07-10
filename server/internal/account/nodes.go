@@ -103,6 +103,22 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "turnSecret and urls required"})
 		return
 	}
+	// Prevent node-ID takeover: a re-register of an existing node id must come from
+	// the SAME owner. A fleet token may only re-register a fleet node; a user token
+	// may only re-register its own user node. Unknown ids fall through as new nodes.
+	if req.NodeID != "" {
+		if existing, found, gerr := s.store.GetNode(r.Context(), req.NodeID); gerr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+			return
+		} else if found {
+			mismatch := existing.OwnerType != ownerType ||
+				(ownerType == "user" && existing.OwnerUserID != ownerUserID)
+			if mismatch {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "node id belongs to another owner"})
+				return
+			}
+		}
+	}
 	now := s.now().Unix()
 	n := Node{
 		ID: req.NodeID, OwnerType: ownerType, OwnerUserID: ownerUserID,
