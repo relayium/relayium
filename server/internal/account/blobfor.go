@@ -25,6 +25,11 @@ func (s *Service) blobFor(ctx context.Context, nodeID string) (storage.BlobStore
 	return storage.NewRemoteBlobStore(n.StorageURL, n.StorageSecret, s.nodeHTTP), nil
 }
 
+// BlobForNode is the exported resolver GC (wired from main) uses.
+func (s *Service) BlobForNode(ctx context.Context, nodeID string) (storage.BlobStore, error) {
+	return s.blobFor(ctx, nodeID)
+}
+
 // placeUpload chooses where a new upload's ciphertext should land: a random
 // eligible storage node, or central-local ("") when none is available. Headroom
 // is one MaxFileSize so a near-full node is not chosen.
