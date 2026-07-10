@@ -1187,6 +1187,20 @@ func (s *SQLiteStore) UserStorageNodes(ctx context.Context, userID string, since
 		userID, since, minFree)
 }
 
+// DeleteNode removes a user-owned node, owner-scoped.
+func (s *SQLiteStore) DeleteNode(ctx context.Context, id, ownerUserID string) error {
+	// Owner-scoped: only delete a node this user owns.
+	res, err := s.db.ExecContext(ctx, `DELETE FROM nodes WHERE id = ? AND owner_user_id = ?`, id, ownerUserID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	_, _ = s.db.ExecContext(ctx, `DELETE FROM pending_node_deletes WHERE node_id = ?`, id)
+	return nil
+}
+
 func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]Node, error) {
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {

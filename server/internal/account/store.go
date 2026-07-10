@@ -318,6 +318,11 @@ type Store interface {
 	// UserStorageNodes is UserNodes filtered to storage-enabled nodes with at
 	// least minFree bytes free.
 	UserStorageNodes(ctx context.Context, userID string, since, minFree int64) ([]Node, error)
+	// DeleteNode removes a user-owned node, scoped to its owner: only a node
+	// with owner_user_id == ownerUserID is deleted, so a non-owner's call and a
+	// missing id are indistinguishable (both ErrNotFound). Also clears the
+	// node's pending_node_deletes entries.
+	DeleteNode(ctx context.Context, id, ownerUserID string) error
 	// pending_node_deletes (orphan-retry queue for GC when a node's DELETE fails)
 	EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error
 	ListPendingNodeDeletes(ctx context.Context) ([]PendingNodeDelete, error)

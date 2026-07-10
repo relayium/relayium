@@ -89,6 +89,13 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("GET /api/ice", s.handleICE)
 	mux.HandleFunc("GET /api/usage", s.RequireSession(s.handleUsage))
 	mux.HandleFunc("GET /api/stats", s.RequireSession(s.handleStats))
+	// BYO user node management (SP3): session-authed, CSRF-guarded like the
+	// rest of routeMux — distinct from the bearer-authed /api/nodes/register
+	// and /api/nodes/heartbeat mounted directly on the root mux.
+	mux.HandleFunc("POST /api/nodes/provision", s.RequireSession(s.handleProvisionNode))
+	mux.HandleFunc("GET /api/nodes/mine", s.RequireSession(s.handleMyNodes))
+	mux.HandleFunc("DELETE /api/nodes/{id}", s.RequireSession(s.handleDeleteMyNode))
+	mux.HandleFunc("PUT /api/me/strict-nodes", s.RequireSession(s.handleStrictNodes))
 	s.registerFileRoutes(mux)
 	return mux
 }
@@ -275,6 +282,7 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {
 		"user": map[string]any{
 			"id": u.ID, "email": u.Email, "displayName": u.DisplayName,
 			"hasPassword": hasPass, "emailVerified": u.EmailVerified,
+			"onlyOwnNodes": u.OnlyOwnNodes,
 		},
 	})
 }
