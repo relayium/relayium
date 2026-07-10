@@ -112,6 +112,24 @@ func TestSplitAttrib(t *testing.T) {
 	}
 }
 
+// TestHandleRecordsBillable is a regression test for a quota-bypass bug:
+// Worker.handle built account.UsageEvent without setting Billable, so coturn
+// relayed bytes were persisted as billable=0 and silently excluded from
+// account.UserRelayedSince's SUM(...) WHERE billable=1 — coturn relay usage
+// stopped counting against the user's monthly quota. The coturn relay is our
+// fleet infrastructure, so its usage must always be billable.
+func TestHandleRecordsBillable(t *testing.T) {
+	sink := &fakeSink{}
+	w := &Worker{Sink: sink, Now: func() int64 { return 42 }, Log: log.New(io.Discard, "", 0)}
+	w.handle(context.Background(), UsageEvent{AllocID: "a1", Username: "999:deadbeef.424242", RelayedBytes: 500})
+	if len(sink.recorded) != 1 {
+		t.Fatalf("want 1 usage row, got %d", len(sink.recorded))
+	}
+	if got := sink.recorded[0].Billable; !got {
+		t.Fatalf("recorded.Billable = %v, want true (coturn relay usage must count against quota)", got)
+	}
+}
+
 func TestHandleAttributesOwner(t *testing.T) {
 	sink := &fakeSink{}
 	w := &Worker{Sink: sink, Now: func() int64 { return 42 }, Log: log.New(io.Discard, "", 0)}
