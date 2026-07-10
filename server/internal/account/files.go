@@ -65,10 +65,14 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	}
 	defer s.uploadSem.release(u.ID)
 
+	nodeID, bs := s.placeUpload(r.Context())
+
 	// M3b: global blob-volume soft cap. Per-account quota × unbounded accounts is
 	// still unbounded, so refuse new uploads once the volume crosses the high-water
 	// mark. A usage read error fails open (never block every upload on one Statfs blip).
-	if s.diskUsage != nil && s.blobDiskMax > 0 {
+	// Applies only to central-local placement: a node-routed upload never touches
+	// central disk, so it must not be blocked by central disk being full.
+	if nodeID == "" && s.diskUsage != nil && s.blobDiskMax > 0 {
 		if used, _, err := s.diskUsage(); err != nil {
 			log.Printf("disk-usage check failed: %v (fail-open, accepting upload)", err)
 		} else if used >= uint64(s.blobDiskMax) {
@@ -122,7 +126,7 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 
 	blobKey := randToken()
 	capped := &cappedReader{r: br, max: st.MaxFileSize}
-	size, err := s.blobs.Put(r.Context(), blobKey, capped)
+	size, err := bs.Put(r.Context(), blobKey, capped)
 	if err != nil {
 		// Put cleans up its temp file on error, so nothing is committed.
 		if errors.Is(err, errTooLarge) {
@@ -148,22 +152,22 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		UploadEvent{ID: newID(), UserID: u.ID, Bytes: billed, UploadedAt: now},
 		now-dayWindow, st.DailyQuota)
 	if err != nil {
-		_ = s.blobs.Delete(r.Context(), blobKey)
+		_ = bs.Delete(r.Context(), blobKey)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
 	if !ok {
-		_ = s.blobs.Delete(r.Context(), blobKey)
+		_ = bs.Delete(r.Context(), blobKey)
 		http.Error(w, "daily quota exceeded", http.StatusTooManyRequests)
 		return
 	}
 	id := newID()
 	sf := StoredFile{
 		ID: id, UserID: u.ID, BlobKey: blobKey, EncManifest: encManifest,
-		Size: size, BurnAfterRead: burn, CreatedAt: now, ExpiresAt: now + ttl,
+		Size: size, BurnAfterRead: burn, CreatedAt: now, ExpiresAt: now + ttl, NodeID: nodeID,
 	}
 	if err := s.store.CreateStoredFile(r.Context(), sf); err != nil {
-		_ = s.blobs.Delete(r.Context(), blobKey)
+		_ = bs.Delete(r.Context(), blobKey)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
