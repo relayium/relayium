@@ -3,20 +3,19 @@
 // route (/cross-network), so only the five non-English locales are generated
 // here — see build-pages.mjs's buildModePages + gen-pages.mjs wiring.
 //
-// Terminology mirrors src/lib/i18n/*.ts (pairing code / SAS / TURN relay
+// Terminology mirrors src/lib/i18n/*.ts (pairing code / SAS / relay
 // wording) for consistency with the app UI.
 //
 // ── English master (source of truth for translation + accuracy) ──
-// title: "Cross-network file transfer — realtime, end-to-end encrypted, peer-to-peer (Relayium)"
+// title: "Cross-network file transfer — realtime, end-to-end encrypted | Relayium"
 // description: "Send files device-to-device across different networks with a
-//   6-digit pairing code. Realtime peer-to-peer, end-to-end encrypted; a TURN
-//   relay is used only when a direct path is impossible, and it relays
-//   ciphertext only."
-// hero.h1: "Cross-network transfer, still peer-to-peer"
+//   6-digit pairing code. End-to-end encrypted over a fast relay that carries
+//   only ciphertext it can't read — verified with a SAS code so even a
+//   compromised relay can't eavesdrop."
+// hero.h1: "Cross-network file transfer, end-to-end encrypted"
 // hero.pitch: "Two devices on different networks pair with a 6-digit code (or
-//   its link/QR). Files stream directly over an encrypted WebRTC channel;
-//   only when a direct path is impossible does an encrypted TURN relay carry
-//   the ciphertext."
+//   its link/QR). Files stream over an encrypted channel through a fast relay
+//   that only ever sees ciphertext — your keys never leave the two devices."
 // hero.cta: "Start a transfer"
 // how.steps:
 //   1. "The sender signs in and mints a 6-digit pairing code (or shares its
@@ -25,47 +24,51 @@
 //      receive."
 //   3. "Both sides verify the same 6-digit SAS on screen to rule out a
 //      man-in-the-middle."
-//   4. "Files stream peer-to-peer, AES-256-GCM per chunk; a TURN relay
-//      carries only ciphertext if no direct path exists."
+//   4. "Files stream end-to-end encrypted (AES-256-GCM per chunk) through
+//      Relayium's fast relay, which carries only ciphertext it can't read."
 // why.items:
 //   - "End-to-end encrypted" / "X25519 key exchange + per-chunk AES-256-GCM;
-//     keys are negotiated only between the two devices, so the server can't
-//     decrypt."
+//     keys are negotiated only between the two devices, so neither the relay
+//     nor the server can decrypt."
 //   - "SAS anti-MITM" / "Both screens show the same 6-digit code; matching it
-//     defeats even a compromised signaling server."
-//   - "Direct when possible" / "Files flow device-to-device over WebRTC; the
-//     relay is a ciphertext-only fallback for symmetric-NAT cases."
+//     defeats even a compromised relay or signaling server."
+//   - "Relay sees only ciphertext" / "Cross-network transfers travel through
+//     a fast relay for a reliable connection across any NAT — and it only
+//     ever carries ciphertext, never your keys or plaintext."
 //   - "Cross-platform" / "Windows, macOS, Linux, Android, iOS — any modern
 //     browser, nothing to install."
-//   - "Free" / "Realtime transfer is free; minting a code needs the sender
-//     logged in (for attribution), the receiver joins anonymously."
+//   - "Free" / "Free to use within a monthly relay allowance; minting a code
+//     needs the sender signed in, the receiver joins anonymously."
 // compare.items:
-//   - "vs AirDrop" / "AirDrop is Apple-only; Relayium pairs Windows, Android,
-//     iPhone and Mac across different networks with just a browser."
+//   - "vs AirDrop" / "AirDrop is Apple-only and same-vicinity; Relayium
+//     connects Windows, Android, iPhone and Mac across different networks,
+//     end-to-end encrypted, with just a browser."
 //   - "vs Snapdrop/PairDrop" / "Those are same-network only; Relayium adds
-//     cross-network pairing plus app-layer E2E + SAS so a malicious signaling
-//     server can't eavesdrop."
+//     cross-network pairing plus app-layer E2E + a SAS code, so even a
+//     compromised relay or signaling server can't eavesdrop."
 // faq.items:
-//   - "Do my files go through your server?" / "In realtime mode, no — files
-//     stream peer-to-peer. Only when a direct path is impossible does an
-//     encrypted TURN relay carry ciphertext it can't read."
+//   - "Do my files go through a server?" / "The encrypted stream travels
+//     through Relayium's relay for a reliable cross-network connection —
+//     but it's end-to-end encrypted, so the relay only ever sees ciphertext
+//     it can't read."
 //   - "Is a code required?" / "Yes: a 6-digit code (or its join link/QR),
 //     valid 15 minutes, pairs the two devices across networks."
 //   - "Do I need an account?" / "The sender signs in to mint a code; the
 //     receiver joins anonymously."
 //   - "Is it end-to-end encrypted?" / "Yes — X25519 + per-chunk AES-256-GCM,
-//     verified with the SAS code."
+//     verified with the SAS code, so neither the relay nor the server can
+//     decrypt."
 // learnHeading: "Learn more"
 // footer: {privacy, terms, security} — reuse landing.mjs's per-locale labels.
 
 const zh = {
-  title: "跨网络文件传输——实时点对点，端到端加密（Relayium）",
+  title: "跨网络文件传输——实时、端到端加密 | Relayium",
   description:
-    "用 6 位配对码，让两台设备跨网络直接互传文件。实时点对点、端到端加密；仅当无法直连时才会启用 TURN 中继兜底，且中继只经手密文。",
+    "用 6 位配对码，让两台设备跨网络互传文件。端到端加密：文件经由 Relayium 的快速中继转发，中继只经手无法解密的密文；并以 SAS 校验码验证，即便中继被入侵也无法窃听。",
   hero: {
-    h1: "跨网络传输，依然点对点",
+    h1: "跨网络文件传输，端到端加密",
     pitch:
-      "两台设备身处不同网络，用 6 位配对码（或其加入链接/二维码）完成配对。文件直接通过加密的 WebRTC 通道流动；只有在无法直连时，才由加密 TURN 中继转发密文。",
+      "两台设备身处不同网络，用 6 位配对码（或其加入链接/二维码）完成配对。文件通过加密通道流动，途经 Relayium 的快速中继转发——中继只能看到密文，密钥始终只留在两台设备之间。",
     cta: "开始传输",
   },
   how: {
@@ -74,7 +77,7 @@ const zh = {
       "发送方登录后生成一个 6 位配对码（也可分享其加入链接/二维码）。",
       "接收方打开链接或输入配对码即可——接收无需账号。",
       "双方核对屏幕上同一段 6 位 SAS 校验码，确认一致以排除中间人。",
-      "文件点对点流式传输，逐块 AES-256-GCM 加密；若无法直连，则由 TURN 中继仅转发密文。",
+      "文件端到端加密流式传输（逐块 AES-256-GCM），经由 Relayium 的快速中继转发；中继只经手它无法解密的密文。",
     ],
   },
   why: {
@@ -82,15 +85,15 @@ const zh = {
     items: [
       {
         title: "端到端加密",
-        desc: "X25519 密钥交换 + 每块 AES-256-GCM 加密，密钥只在两台设备间协商，服务器无法解密。",
+        desc: "X25519 密钥交换 + 每块 AES-256-GCM 加密，密钥只在两台设备间协商，中继与服务器均无法解密。",
       },
       {
         title: "SAS 防中间人",
-        desc: "两边屏幕显示同一段 6 位校验码，核对一致即可排除中间人——即便信令服务器被入侵也无法得逞。",
+        desc: "两边屏幕显示同一段 6 位校验码，核对一致即可排除中间人——即便中继或信令服务器被入侵也无法得逞。",
       },
       {
-        title: "能直连就直连",
-        desc: "文件通过 WebRTC 在设备间直接流动；仅在对称 NAT 等打洞失败的场景下，才会退回到只转发密文的中继兜底。",
+        title: "中继只经手密文",
+        desc: "跨网络传输经由快速中继转发，以在任何 NAT 环境下都能可靠连接——中继只经手密文，从不接触你的密钥或明文。",
       },
       {
         title: "跨平台",
@@ -98,7 +101,7 @@ const zh = {
       },
       {
         title: "免费",
-        desc: "实时传输免费；生成配对码需发送方登录（用于归属），接收方可匿名加入。",
+        desc: "在每月中继流量额度内免费使用；生成配对码需发送方登录，接收方可匿名加入。",
       },
     ],
   },
@@ -107,11 +110,11 @@ const zh = {
     items: [
       {
         title: "对比 AirDrop",
-        body: "AirDrop 仅限 Apple 设备之间；Relayium 能让 Windows、Android、iPhone 与 Mac 跨网络配对，只需一个浏览器。",
+        body: "AirDrop 仅限 Apple 设备之间使用，且需彼此靠近；Relayium 能让 Windows、Android、iPhone 与 Mac 跨网络端到端加密互传，只需一个浏览器。",
       },
       {
         title: "对比 Snapdrop / PairDrop",
-        body: "它们仅限同一网络；Relayium 在此之上增加了跨网络配对，以及应用层端到端加密 + SAS 校验码，即便信令服务器被恶意控制也无法窃听。",
+        body: "它们仅限同一网络内使用；Relayium 在此之上增加了跨网络配对，以及应用层端到端加密 + SAS 校验码，即便中继或信令服务器被入侵也无法窃听。",
       },
     ],
   },
@@ -120,7 +123,7 @@ const zh = {
     items: [
       {
         q: "文件会经过你们的服务器吗？",
-        a: "实时模式下不会——文件点对点流式传输。只有当无法直连时，才会由加密 TURN 中继转发密文，中继本身无法解密。",
+        a: "加密数据流会经由 Relayium 的中继转发，以实现跨网络的可靠连接——但由于端到端加密，中继只能看到它无法解密的密文。",
       },
       {
         q: "一定要用配对码吗？",
@@ -132,7 +135,7 @@ const zh = {
       },
       {
         q: "是端到端加密的吗？",
-        a: "是——采用 X25519 密钥交换 + 每块 AES-256-GCM 加密，并通过 SAS 校验码核验。",
+        a: "是——采用 X25519 密钥交换 + 每块 AES-256-GCM 加密，并通过 SAS 校验码核验，中继与服务器均无法解密。",
       },
     ],
   },
@@ -141,13 +144,13 @@ const zh = {
 };
 
 const ja = {
-  title: "ネットワークをまたぐファイル転送——リアルタイム・エンドツーエンド暗号化・P2P（Relayium）",
+  title: "ネットワークをまたぐファイル転送——リアルタイム・エンドツーエンド暗号化 | Relayium",
   description:
-    "6桁のペアリングコードで、異なるネットワークの2台の端末が直接ファイルをやり取りします。リアルタイムP2P・エンドツーエンド暗号化。直接接続が不可能な場合のみTURNリレーを使い、リレーは暗号文しか扱いません。",
+    "6桁のペアリングコードで、異なるネットワークの2台の端末間でファイルを送受信します。エンドツーエンドで暗号化し、Relayiumの高速リレーを経由します——リレーは復号できない暗号文しか扱いません。SASコードで検証するため、リレーが侵害されていても盗聴されません。",
   hero: {
-    h1: "ネットワークをまたいでも、やっぱりP2P",
+    h1: "ネットワークをまたぐファイル転送、エンドツーエンド暗号化",
     pitch:
-      "異なるネットワーク上の2台の端末が、6桁のコード（またはその参加リンク/QR）でペアリングします。ファイルは暗号化されたWebRTCチャネルを通じて直接流れます。直接接続ができない場合に限り、暗号化されたTURNリレーが暗号文を運びます。",
+      "異なるネットワーク上の2台の端末が、6桁のコード（またはその参加リンク/QR）でペアリングします。ファイルは暗号化されたチャネルを通じて、Relayiumの高速リレーを経由して流れます——リレーが目にするのは暗号文だけで、鍵は常に2台の端末間にとどまります。",
     cta: "転送を始める",
   },
   how: {
@@ -156,7 +159,7 @@ const ja = {
       "送信側がサインインし、6桁のペアリングコードを発行します（参加リンク/QRの共有も可能）。",
       "受信側はリンクを開くかコードを入力するだけ——受信にアカウントは不要です。",
       "両方の画面に表示される同じ6桁のSASコードを照合し、中間者がいないことを確認します。",
-      "ファイルはP2Pでストリーミング転送され、チャンクごとにAES-256-GCMで暗号化されます。直接接続できない場合のみ、TURNリレーが暗号文だけを運びます。",
+      "ファイルはエンドツーエンドで暗号化され（チャンクごとにAES-256-GCM）、Relayiumの高速リレーを経由してストリーミング転送されます。リレーは復号できない暗号文しか扱いません。",
     ],
   },
   why: {
@@ -164,15 +167,15 @@ const ja = {
     items: [
       {
         title: "エンドツーエンド暗号化",
-        desc: "X25519鍵交換とチャンクごとのAES-256-GCM。鍵は2台の端末間だけでネゴシエートされ、サーバーは復号できません。",
+        desc: "X25519鍵交換とチャンクごとのAES-256-GCM。鍵は2台の端末間だけでネゴシエートされ、リレーもサーバーも復号できません。",
       },
       {
         title: "SASで中間者攻撃を防止",
-        desc: "両方の画面に同じ6桁のコードが表示されます。一致を確認すれば、シグナリングサーバーが侵害されていても中間者攻撃を防げます。",
+        desc: "両方の画面に同じ6桁のコードが表示されます。一致を確認すれば、リレーやシグナリングサーバーが侵害されていても中間者攻撃を防げます。",
       },
       {
-        title: "可能な限り直接接続",
-        desc: "ファイルはWebRTCで端末間を直接流れます。シンメトリックNATなどでホールパンチングに失敗した場合のみ、暗号文だけを運ぶリレーにフォールバックします。",
+        title: "リレーは暗号文しか扱わない",
+        desc: "ネットワークをまたぐ転送は、あらゆるNAT環境でも確実に接続できるよう高速リレーを経由します——リレーが扱うのは常に暗号文のみで、鍵や平文に触れることはありません。",
       },
       {
         title: "クロスプラットフォーム",
@@ -180,7 +183,7 @@ const ja = {
       },
       {
         title: "無料",
-        desc: "リアルタイム転送は無料です。コードの発行には送信側のサインインが必要（帰属のため）で、受信側は匿名のまま参加できます。",
+        desc: "月々の中継トラフィック枠の範囲内で無料で利用できます。コードの発行には送信側のサインインが必要で、受信側は匿名のまま参加できます。",
       },
     ],
   },
@@ -189,11 +192,11 @@ const ja = {
     items: [
       {
         title: "AirDropとの比較",
-        body: "AirDropはApple製品同士に限られます。RelayiumはブラウザだけでWindows・Android・iPhone・Macをネットワークをまたいでペアリングできます。",
+        body: "AirDropはApple製品同士、かつ近接している場合に限られます。RelayiumはブラウザだけでWindows・Android・iPhone・Macをネットワークをまたいでエンドツーエンド暗号化しながらペアリングできます。",
       },
       {
         title: "Snapdrop / PairDropとの比較",
-        body: "それらは同一ネットワーク限定です。Relayiumはネットワークをまたぐペアリングに加え、アプリケーション層のエンドツーエンド暗号化とSASコードを備え、悪意あるシグナリングサーバーでも盗聴できません。",
+        body: "それらは同一ネットワーク限定です。Relayiumはネットワークをまたぐペアリングに加え、アプリケーション層のエンドツーエンド暗号化とSASコードを備え、リレーやシグナリングサーバーが侵害されていても盗聴できません。",
       },
     ],
   },
@@ -202,7 +205,7 @@ const ja = {
     items: [
       {
         q: "ファイルは御社のサーバーを経由しますか？",
-        a: "リアルタイムモードでは経由しません——ファイルはP2Pでストリーミングされます。直接接続が不可能な場合のみ、暗号化されたTURNリレーが復号できない暗号文を運びます。",
+        a: "暗号化されたデータストリームはRelayiumのリレーを経由し、ネットワークをまたいでも確実に接続できるようにしています——ただしエンドツーエンドで暗号化されているため、リレーが目にするのは復号できない暗号文だけです。",
       },
       {
         q: "コードは必須ですか？",
@@ -214,7 +217,7 @@ const ja = {
       },
       {
         q: "エンドツーエンド暗号化されていますか？",
-        a: "はい——X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、SASコードで検証します。",
+        a: "はい——X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、SASコードで検証します。リレーもサーバーも復号できません。",
       },
     ],
   },
@@ -223,13 +226,13 @@ const ja = {
 };
 
 const ko = {
-  title: "네트워크를 넘는 파일 전송 — 실시간, 종단간 암호화, P2P (Relayium)",
+  title: "네트워크를 넘는 파일 전송 — 실시간, 종단간 암호화 | Relayium",
   description:
-    "6자리 페어링 코드로 서로 다른 네트워크에 있는 두 기기가 파일을 직접 주고받습니다. 실시간 P2P, 종단간 암호화. 직접 연결이 불가능할 때만 TURN 중계를 사용하며, 중계는 암호문만 전달합니다.",
+    "6자리 페어링 코드로 서로 다른 네트워크에 있는 두 기기가 파일을 주고받습니다. 종단간 암호화——파일은 Relayium의 빠른 중계를 거치지만, 중계는 복호화할 수 없는 암호문만 다룹니다. SAS 코드로 검증하므로 중계가 침해되어도 도청할 수 없습니다.",
   hero: {
-    h1: "네트워크를 넘어도, 여전히 P2P",
+    h1: "네트워크를 넘는 파일 전송, 종단간 암호화",
     pitch:
-      "서로 다른 네트워크에 있는 두 기기가 6자리 코드(또는 참여 링크/QR)로 페어링합니다. 파일은 암호화된 WebRTC 채널을 통해 직접 흐릅니다. 직접 연결이 불가능할 때만 암호화된 TURN 중계가 암호문을 전달합니다.",
+      "서로 다른 네트워크에 있는 두 기기가 6자리 코드(또는 참여 링크/QR)로 페어링합니다. 파일은 암호화된 채널을 통해 Relayium의 빠른 중계를 거쳐 전송됩니다——중계는 암호문만 볼 수 있으며, 키는 항상 두 기기 사이에만 머무릅니다.",
     cta: "전송 시작",
   },
   how: {
@@ -238,7 +241,7 @@ const ko = {
       "보내는 쪽이 로그인한 뒤 6자리 페어링 코드를 생성합니다(참여 링크/QR 공유도 가능).",
       "받는 쪽은 링크를 열거나 코드를 입력하기만 하면 됩니다 — 받는 데는 계정이 필요 없습니다.",
       "양쪽 화면에 표시되는 동일한 6자리 SAS 코드를 대조해 중간자가 없는지 확인합니다.",
-      "파일은 P2P로 스트리밍되며 청크마다 AES-256-GCM으로 암호화됩니다. 직접 연결이 불가능할 때만 TURN 중계가 암호문만 전달합니다.",
+      "파일은 종단간 암호화되어(청크마다 AES-256-GCM) Relayium의 빠른 중계를 거쳐 스트리밍됩니다. 중계는 복호화할 수 없는 암호문만 전달합니다.",
     ],
   },
   why: {
@@ -246,15 +249,15 @@ const ko = {
     items: [
       {
         title: "종단간 암호화",
-        desc: "X25519 키 교환과 청크별 AES-256-GCM. 키는 두 기기 사이에서만 협상되어 서버는 복호화할 수 없습니다.",
+        desc: "X25519 키 교환과 청크별 AES-256-GCM. 키는 두 기기 사이에서만 협상되어 중계도 서버도 복호화할 수 없습니다.",
       },
       {
         title: "SAS로 중간자 공격 차단",
-        desc: "양쪽 화면에 동일한 6자리 코드가 표시됩니다. 서로 대조하면 시그널링 서버가 침해되어도 중간자 공격을 막을 수 있습니다.",
+        desc: "양쪽 화면에 동일한 6자리 코드가 표시됩니다. 서로 대조하면 중계나 시그널링 서버가 침해되어도 중간자 공격을 막을 수 있습니다.",
       },
       {
-        title: "가능하면 직접 연결",
-        desc: "파일은 WebRTC를 통해 기기 간에 직접 흐릅니다. 대칭 NAT 등으로 홀 펀칭에 실패한 경우에만 암호문만 전달하는 중계로 전환됩니다.",
+        title: "중계는 암호문만 전달",
+        desc: "네트워크를 넘는 전송은 어떤 NAT 환경에서도 안정적으로 연결되도록 빠른 중계를 거칩니다——중계는 항상 암호문만 다루며, 키나 평문에는 접근하지 않습니다.",
       },
       {
         title: "크로스 플랫폼",
@@ -262,7 +265,7 @@ const ko = {
       },
       {
         title: "무료",
-        desc: "실시간 전송은 무료입니다. 코드 생성에는 보내는 쪽의 로그인이 필요하며(귀속을 위해), 받는 쪽은 익명으로 참여합니다.",
+        desc: "월별 중계 트래픽 한도 내에서 무료로 이용할 수 있습니다. 코드 생성에는 보내는 쪽의 로그인이 필요하며, 받는 쪽은 익명으로 참여합니다.",
       },
     ],
   },
@@ -271,11 +274,11 @@ const ko = {
     items: [
       {
         title: "AirDrop과 비교",
-        body: "AirDrop은 Apple 기기끼리만 가능합니다. Relayium은 브라우저만으로 Windows, Android, iPhone, Mac을 네트워크를 넘어 페어링합니다.",
+        body: "AirDrop은 Apple 기기끼리, 그것도 가까운 거리에서만 가능합니다. Relayium은 브라우저만으로 Windows, Android, iPhone, Mac을 네트워크를 넘어 종단간 암호화로 페어링합니다.",
       },
       {
         title: "Snapdrop / PairDrop과 비교",
-        body: "이들은 같은 네트워크에서만 동작합니다. Relayium은 네트워크를 넘는 페어링에 더해 애플리케이션 계층의 종단간 암호화와 SAS 코드를 갖춰, 악의적인 시그널링 서버도 도청할 수 없습니다.",
+        body: "이들은 같은 네트워크에서만 동작합니다. Relayium은 네트워크를 넘는 페어링에 더해 애플리케이션 계층의 종단간 암호화와 SAS 코드를 갖춰, 중계나 시그널링 서버가 침해되어도 도청할 수 없습니다.",
       },
     ],
   },
@@ -284,7 +287,7 @@ const ko = {
     items: [
       {
         q: "파일이 서버를 거치나요?",
-        a: "실시간 모드에서는 아닙니다 — 파일은 P2P로 스트리밍됩니다. 직접 연결이 불가능할 때만 암호화된 TURN 중계가 복호화할 수 없는 암호문을 전달합니다.",
+        a: "암호화된 데이터 스트림은 Relayium의 중계를 거쳐 네트워크를 넘는 안정적인 연결을 제공합니다——다만 종단간 암호화되어 있어 중계는 복호화할 수 없는 암호문만 볼 수 있습니다.",
       },
       {
         q: "코드가 꼭 필요한가요?",
@@ -296,7 +299,7 @@ const ko = {
       },
       {
         q: "종단간 암호화인가요?",
-        a: "네 — X25519 키 교환과 청크별 AES-256-GCM 암호화를 사용하며 SAS 코드로 검증합니다.",
+        a: "네 — X25519 키 교환과 청크별 AES-256-GCM 암호화를 사용하며 SAS 코드로 검증합니다. 중계도 서버도 복호화할 수 없습니다.",
       },
     ],
   },
@@ -305,13 +308,13 @@ const ko = {
 };
 
 const de = {
-  title: "Netzwerkübergreifende Dateiübertragung — Echtzeit, Ende-zu-Ende-verschlüsselt, Peer-to-Peer (Relayium)",
+  title: "Netzwerkübergreifende Dateiübertragung — Echtzeit, Ende-zu-Ende-verschlüsselt | Relayium",
   description:
-    "Übertrage Dateien mit einem 6-stelligen Kopplungscode direkt zwischen Geräten in unterschiedlichen Netzwerken. Echtzeit-Peer-to-Peer, Ende-zu-Ende-verschlüsselt; ein TURN-Relay kommt nur zum Einsatz, wenn eine direkte Verbindung unmöglich ist, und transportiert ausschließlich Chiffretext.",
+    "Übertrage Dateien mit einem 6-stelligen Kopplungscode zwischen Geräten in unterschiedlichen Netzwerken. Ende-zu-Ende-verschlüsselt — die Übertragung läuft über Relayiums schnelles Relay, das ausschließlich Chiffretext transportiert, den es nicht lesen kann. Verifiziert per SAS-Code, sodass selbst ein kompromittiertes Relay nicht mithören kann.",
   hero: {
-    h1: "Netzwerkübergreifend übertragen, trotzdem Peer-to-Peer",
+    h1: "Netzwerkübergreifende Dateiübertragung, Ende-zu-Ende-verschlüsselt",
     pitch:
-      "Zwei Geräte in unterschiedlichen Netzwerken koppeln sich mit einem 6-stelligen Code (oder dessen Beitrittslink/QR). Dateien fließen direkt über einen verschlüsselten WebRTC-Kanal; nur wenn eine direkte Verbindung unmöglich ist, transportiert ein verschlüsseltes TURN-Relay den Chiffretext.",
+      "Zwei Geräte in unterschiedlichen Netzwerken koppeln sich mit einem 6-stelligen Code (oder dessen Beitrittslink/QR). Dateien fließen über einen verschlüsselten Kanal durch Relayiums schnelles Relay — das Relay sieht dabei ausschließlich Chiffretext, die Schlüssel verlassen nie die beiden Geräte.",
     cta: "Übertragung starten",
   },
   how: {
@@ -320,7 +323,7 @@ const de = {
       "Der Absender meldet sich an und erzeugt einen 6-stelligen Kopplungscode (oder teilt dessen Beitrittslink/QR).",
       "Der Empfänger öffnet den Link oder gibt den Code ein — zum Empfangen ist kein Konto nötig.",
       "Beide Seiten vergleichen denselben 6-stelligen SAS-Code auf dem Bildschirm, um einen Mittelsmann auszuschließen.",
-      "Dateien werden Peer-to-Peer gestreamt, Chunk für Chunk mit AES-256-GCM verschlüsselt; ist keine direkte Verbindung möglich, transportiert ein TURN-Relay nur den Chiffretext.",
+      "Dateien werden Ende-zu-Ende-verschlüsselt gestreamt (Chunk für Chunk mit AES-256-GCM) — über Relayiums schnelles Relay, das nur Chiffretext transportiert, den es nicht entschlüsseln kann.",
     ],
   },
   why: {
@@ -328,15 +331,15 @@ const de = {
     items: [
       {
         title: "Ende-zu-Ende-verschlüsselt",
-        desc: "X25519-Schlüsselaustausch und AES-256-GCM pro Chunk; die Schlüssel werden ausschließlich zwischen den beiden Geräten ausgehandelt, der Server kann nicht entschlüsseln.",
+        desc: "X25519-Schlüsselaustausch und AES-256-GCM pro Chunk; die Schlüssel werden ausschließlich zwischen den beiden Geräten ausgehandelt, weder das Relay noch der Server können entschlüsseln.",
       },
       {
         title: "SAS gegen Man-in-the-Middle",
-        desc: "Beide Bildschirme zeigen denselben 6-stelligen Code; stimmt er überein, ist ein Mittelsmann ausgeschlossen — selbst ein kompromittierter Signalisierungsserver kann sich nicht einschleichen.",
+        desc: "Beide Bildschirme zeigen denselben 6-stelligen Code; stimmt er überein, ist ein Mittelsmann ausgeschlossen — selbst ein kompromittiertes Relay oder ein kompromittierter Signalisierungsserver kann sich nicht einschleichen.",
       },
       {
-        title: "Direkt, wenn möglich",
-        desc: "Dateien fließen über WebRTC direkt von Gerät zu Gerät; nur wenn das Hole-Punching etwa bei symmetrischem NAT scheitert, springt das Relay als reiner Chiffretext-Fallback ein.",
+        title: "Relay sieht nur Chiffretext",
+        desc: "Netzwerkübergreifende Übertragungen laufen über ein schnelles Relay, damit die Verbindung über jedes NAT hinweg zuverlässig zustande kommt — dabei transportiert es ausschließlich Chiffretext, nie deine Schlüssel oder Klartext.",
       },
       {
         title: "Plattformübergreifend",
@@ -344,7 +347,7 @@ const de = {
       },
       {
         title: "Kostenlos",
-        desc: "Echtzeitübertragung ist kostenlos; für einen Code muss sich der Absender anmelden (zur Zuordnung), der Empfänger tritt anonym bei.",
+        desc: "Kostenlos nutzbar innerhalb eines monatlichen Relay-Kontingents; für einen Code muss sich der Absender anmelden, der Empfänger tritt anonym bei.",
       },
     ],
   },
@@ -353,11 +356,11 @@ const de = {
     items: [
       {
         title: "Gegenüber AirDrop",
-        body: "AirDrop funktioniert nur zwischen Apple-Geräten; Relayium koppelt Windows, Android, iPhone und Mac netzwerkübergreifend mit nur einem Browser.",
+        body: "AirDrop funktioniert nur zwischen Apple-Geräten und nur in unmittelbarer Nähe; Relayium koppelt Windows, Android, iPhone und Mac netzwerkübergreifend, Ende-zu-Ende-verschlüsselt, mit nur einem Browser.",
       },
       {
         title: "Gegenüber Snapdrop / PairDrop",
-        body: "Diese funktionieren nur im selben Netzwerk; Relayium ergänzt netzwerkübergreifendes Koppeln plus Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und den SAS-Code, sodass ein böswilliger Signalisierungsserver nicht mithören kann.",
+        body: "Diese funktionieren nur im selben Netzwerk; Relayium ergänzt netzwerkübergreifendes Koppeln plus Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und den SAS-Code, sodass selbst ein kompromittiertes Relay oder ein kompromittierter Signalisierungsserver nicht mithören kann.",
       },
     ],
   },
@@ -366,7 +369,7 @@ const de = {
     items: [
       {
         q: "Laufen meine Dateien über euren Server?",
-        a: "Im Echtzeitmodus nein — Dateien werden Peer-to-Peer gestreamt. Nur wenn eine direkte Verbindung unmöglich ist, transportiert ein verschlüsseltes TURN-Relay Chiffretext, den es nicht lesen kann.",
+        a: "Der verschlüsselte Datenstrom läuft über Relayiums Relay, um eine zuverlässige netzwerkübergreifende Verbindung zu ermöglichen — da alles Ende-zu-Ende-verschlüsselt ist, sieht das Relay dabei nur Chiffretext, den es nicht lesen kann.",
       },
       {
         q: "Ist ein Code erforderlich?",
@@ -378,7 +381,7 @@ const de = {
       },
       {
         q: "Ist es Ende-zu-Ende-verschlüsselt?",
-        a: "Ja — X25519 plus AES-256-GCM pro Chunk, verifiziert mit dem SAS-Code.",
+        a: "Ja — X25519 plus AES-256-GCM pro Chunk, verifiziert mit dem SAS-Code; weder das Relay noch der Server können entschlüsseln.",
       },
     ],
   },
@@ -387,13 +390,13 @@ const de = {
 };
 
 const fr = {
-  title: "Transfert de fichiers inter-réseaux — temps réel, chiffré de bout en bout, pair-à-pair (Relayium)",
+  title: "Transfert de fichiers inter-réseaux — temps réel, chiffré de bout en bout | Relayium",
   description:
-    "Envoyez des fichiers d'un appareil à l'autre entre réseaux différents avec un code d'appairage à 6 chiffres. Temps réel, pair-à-pair, chiffré de bout en bout ; un relais TURN n'intervient que lorsqu'une connexion directe est impossible, et il ne transporte que du contenu chiffré.",
+    "Envoyez des fichiers d'un appareil à l'autre entre réseaux différents avec un code d'appairage à 6 chiffres. Chiffré de bout en bout — le flux transite par le relais rapide de Relayium, qui ne transporte que du contenu chiffré qu'il ne peut pas lire, vérifié par un code SAS afin que même un relais compromis ne puisse pas espionner.",
   hero: {
-    h1: "Transfert inter-réseaux, toujours pair-à-pair",
+    h1: "Transfert de fichiers inter-réseaux, chiffré de bout en bout",
     pitch:
-      "Deux appareils sur des réseaux différents s'appairent avec un code à 6 chiffres (ou son lien/QR). Les fichiers circulent directement via un canal WebRTC chiffré ; seulement lorsqu'une connexion directe est impossible, un relais TURN chiffré transporte le contenu chiffré.",
+      "Deux appareils sur des réseaux différents s'appairent avec un code à 6 chiffres (ou son lien/QR). Les fichiers circulent via un canal chiffré à travers le relais rapide de Relayium — le relais ne voit jamais que du contenu chiffré, les clés ne quittent jamais les deux appareils.",
     cta: "Démarrer le transfert",
   },
   how: {
@@ -402,7 +405,7 @@ const fr = {
       "L'expéditeur se connecte et génère un code d'appairage à 6 chiffres (ou partage son lien d'accès/QR).",
       "Le destinataire ouvre le lien ou saisit le code — aucun compte n'est nécessaire pour recevoir.",
       "Les deux parties vérifient le même code SAS à 6 chiffres à l'écran pour écarter tout homme du milieu.",
-      "Les fichiers circulent en pair-à-pair, chiffrés en AES-256-GCM par bloc ; un relais TURN ne transporte que le contenu chiffré si aucune connexion directe n'existe.",
+      "Les fichiers sont transférés chiffrés de bout en bout (AES-256-GCM par bloc) via le relais rapide de Relayium, qui ne transporte que du contenu chiffré qu'il ne peut pas lire.",
     ],
   },
   why: {
@@ -410,15 +413,15 @@ const fr = {
     items: [
       {
         title: "Chiffré de bout en bout",
-        desc: "Échange de clés X25519 et AES-256-GCM par bloc ; les clés sont négociées uniquement entre les deux appareils, le serveur ne peut donc pas déchiffrer.",
+        desc: "Échange de clés X25519 et AES-256-GCM par bloc ; les clés sont négociées uniquement entre les deux appareils, ni le relais ni le serveur ne peuvent donc déchiffrer.",
       },
       {
         title: "SAS contre l'homme du milieu",
-        desc: "Les deux écrans affichent le même code à 6 chiffres ; le faire correspondre déjoue même un serveur de signalisation compromis.",
+        desc: "Les deux écrans affichent le même code à 6 chiffres ; le faire correspondre déjoue même un relais ou un serveur de signalisation compromis.",
       },
       {
-        title: "Direct quand c'est possible",
-        desc: "Les fichiers circulent d'appareil à appareil via WebRTC ; le relais n'est qu'un repli chiffré pour les cas de NAT symétrique où le hole-punching échoue.",
+        title: "Le relais ne voit que du chiffré",
+        desc: "Les transferts inter-réseaux passent par un relais rapide pour garantir une connexion fiable à travers n'importe quel NAT — il ne transporte que du contenu chiffré, jamais vos clés ni du texte en clair.",
       },
       {
         title: "Multiplateforme",
@@ -426,7 +429,7 @@ const fr = {
       },
       {
         title: "Gratuit",
-        desc: "Le transfert en temps réel est gratuit ; générer un code exige que l'expéditeur soit connecté (pour l'attribution), le destinataire rejoint de façon anonyme.",
+        desc: "Gratuit dans la limite d'un quota mensuel de trafic relais ; générer un code exige que l'expéditeur soit connecté, le destinataire rejoint de façon anonyme.",
       },
     ],
   },
@@ -435,11 +438,11 @@ const fr = {
     items: [
       {
         title: "Face à AirDrop",
-        body: "AirDrop est réservé aux appareils Apple ; Relayium appaire Windows, Android, iPhone et Mac entre réseaux différents avec un simple navigateur.",
+        body: "AirDrop est réservé aux appareils Apple et à la proximité immédiate ; Relayium appaire Windows, Android, iPhone et Mac entre réseaux différents, chiffré de bout en bout, avec un simple navigateur.",
       },
       {
         title: "Face à Snapdrop / PairDrop",
-        body: "Ceux-ci ne fonctionnent que sur le même réseau ; Relayium ajoute l'appairage inter-réseaux ainsi qu'un chiffrement de bout en bout au niveau applicatif et un code SAS, si bien qu'un serveur de signalisation malveillant ne peut pas espionner.",
+        body: "Ceux-ci ne fonctionnent que sur le même réseau ; Relayium ajoute l'appairage inter-réseaux ainsi qu'un chiffrement de bout en bout au niveau applicatif et un code SAS, si bien qu'un relais ou un serveur de signalisation compromis ne peut pas espionner.",
       },
     ],
   },
@@ -448,7 +451,7 @@ const fr = {
     items: [
       {
         q: "Mes fichiers passent-ils par votre serveur ?",
-        a: "En mode temps réel, non — les fichiers circulent en pair-à-pair. Seulement lorsqu'une connexion directe est impossible, un relais TURN chiffré transporte un contenu chiffré qu'il ne peut pas lire.",
+        a: "Le flux chiffré transite par le relais de Relayium pour garantir une connexion inter-réseaux fiable — mais tout est chiffré de bout en bout, donc le relais ne voit jamais que du contenu chiffré qu'il ne peut pas lire.",
       },
       {
         q: "Un code est-il obligatoire ?",
@@ -460,7 +463,7 @@ const fr = {
       },
       {
         q: "Est-ce chiffré de bout en bout ?",
-        a: "Oui — X25519 et AES-256-GCM par bloc, vérifié avec le code SAS.",
+        a: "Oui — X25519 et AES-256-GCM par bloc, vérifié avec le code SAS ; ni le relais ni le serveur ne peuvent déchiffrer.",
       },
     ],
   },
