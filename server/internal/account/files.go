@@ -9,6 +9,8 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+
+	"github.com/relayium/relayium/internal/storage"
 )
 
 const (
@@ -202,14 +204,29 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	// Burn-after-read: atomically claim the single download BEFORE streaming a
-	// byte. Concurrent GETs race on one UPDATE; only the winner proceeds, the rest
-	// 404. Claiming up front means even an interrupted transfer spends the one
-	// shot — that is the burn contract, and it closes the TOCTOU where two GETs
-	// both streamed the full plaintext before either marked it consumed.
+	bs, err := s.blobFor(r.Context(), sf.NodeID)
+	if err != nil {
+		http.Error(w, "storage node unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	rc, err := bs.Get(r.Context(), sf.BlobKey)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		// Node exists but is unreachable: the file's single copy is offline.
+		http.Error(w, "storage node offline, try again later", http.StatusServiceUnavailable)
+		return
+	}
+	defer rc.Close()
+
+	// Burn-after-read: claim the single download only AFTER the blob opened, so an
+	// offline node never burns the shot. Concurrent GETs race on ClaimBurnDownload;
+	// only the winner streams, the rest 404.
 	if sf.BurnAfterRead {
-		claimed, err := s.store.ClaimBurnDownload(r.Context(), sf.ID, s.now().Unix())
-		if err != nil {
+		claimed, cerr := s.store.ClaimBurnDownload(r.Context(), sf.ID, s.now().Unix())
+		if cerr != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
@@ -218,12 +235,6 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	rc, err := s.blobs.Get(r.Context(), sf.BlobKey)
-	if err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-	defer rc.Close()
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", strconv.FormatInt(sf.Size, 10))
 	n, err := io.Copy(w, rc)
@@ -236,8 +247,9 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	_ = s.store.AddDownloadStat(r.Context(), sf.UserID, sf.Size)
 	_ = s.store.RecordMeter(r.Context(), sf.UserID, MeterDownload, sf.Size, s.now().Unix())
 	if sf.BurnAfterRead {
-		// Already claimed up front; this is cleanup of the now-spent ciphertext+row.
-		_ = s.blobs.Delete(r.Context(), sf.BlobKey)
+		// Already claimed after the blob opened; this is cleanup of the now-spent
+		// ciphertext+row.
+		_ = bs.Delete(r.Context(), sf.BlobKey)
 		_ = s.store.DeleteStoredFile(r.Context(), sf.ID)
 	} else {
 		_ = s.store.IncDownloadCount(r.Context(), sf.ID)
@@ -272,8 +284,13 @@ func (s *Service) handleDeleteFile(w http.ResponseWriter, r *http.Request, u Use
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	if s.blobs != nil {
-		_ = s.blobs.Delete(r.Context(), sf.BlobKey)
+	if bs, berr := s.blobFor(r.Context(), sf.NodeID); berr == nil {
+		if derr := bs.Delete(r.Context(), sf.BlobKey); derr != nil {
+			// Node unreachable: record the orphan so GC retries; still remove the row.
+			_ = s.store.EnqueueNodeDelete(r.Context(), sf.BlobKey, sf.NodeID, s.now().Unix())
+		}
+	} else {
+		_ = s.store.EnqueueNodeDelete(r.Context(), sf.BlobKey, sf.NodeID, s.now().Unix())
 	}
 	if err := s.store.DeleteStoredFile(r.Context(), sf.ID); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
