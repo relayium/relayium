@@ -9,8 +9,9 @@
   import CrossSell from "./CrossSell.svelte";
   import { enterRoom } from "./room.svelte";
   import { clearOutbox } from "./outbox.svelte";
-  import { lang, messages, legalUrl, type Messages } from "./i18n.svelte";
+  import { lang, messages, type Messages } from "./i18n.svelte";
   import Account from "./Account.svelte";
+  import PageFooter from "./PageFooter.svelte";
 
   let { roomCode = "", linkDead = false, showTransfer = false, relayDenied = "", transferSurface, dismissLan }:
     { roomCode?: string; linkDead?: boolean; showTransfer?: boolean; relayDenied?: string; transferSurface?: Snippet; dismissLan?: () => void } = $props();
@@ -85,15 +86,7 @@
     <Faq />
   {/if}
 
-  <footer>
-    <nav class="legal">
-      <a href={legalUrl("security", lang())}>{t.legal.security}</a>
-      <a href={legalUrl("privacy", lang())}>{t.legal.privacy}</a>
-      <a href={legalUrl("terms", lang())}>{t.legal.terms}</a>
-      <a href="https://github.com/relayium/relayium" target="_blank" rel="noopener noreferrer">GitHub</a>
-    </nav>
-    <span class="fineprint">{t.footer}</span>
-  </footer>
+  <PageFooter fineprint={t.footer} />
 </section>
 
 <style>
@@ -133,14 +126,4 @@
   }
   .startover:hover { border-color: var(--accent-border); color: var(--text-h); }
   .foot { margin: var(--space-1) 0 0; font-size: 12px; color: var(--text); text-align: center; }
-
-  footer {
-    margin-top: var(--space-8); padding-top: var(--space-5); border-top: 1px solid var(--border);
-    display: flex; flex-direction: column; align-items: center; gap: var(--space-3);
-    font-size: 12.5px; color: var(--text); text-align: center;
-  }
-  footer .legal { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
-  footer .legal a { color: var(--text-h); text-decoration: none; }
-  footer .legal a:hover { color: var(--accent); }
-  footer .fineprint { max-width: 60ch; }
 </style>

@@ -9,7 +9,8 @@
   import UseCases from "./UseCases.svelte";
   import Faq from "./Faq.svelte";
   import { session } from "./auth.svelte";
-  import { lang, messages, legalUrl, type Messages } from "./i18n.svelte";
+  import { lang, messages, type Messages } from "./i18n.svelte";
+  import PageFooter from "./PageFooter.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
   let loginOpen = $state(false);
@@ -48,15 +49,7 @@
   <UseCases />
   <Faq />
 
-  <footer>
-    <nav class="legal">
-      <a href={legalUrl("security", lang())}>{t.legal.security}</a>
-      <a href={legalUrl("privacy", lang())}>{t.legal.privacy}</a>
-      <a href={legalUrl("terms", lang())}>{t.legal.terms}</a>
-      <a href="https://github.com/relayium/relayium" target="_blank" rel="noopener noreferrer">GitHub</a>
-    </nav>
-    <span class="fineprint">{t.offlineFooter}</span>
-  </footer>
+  <PageFooter fineprint={t.offlineFooter} />
 </section>
 
 <style>
@@ -85,14 +78,4 @@
 
   .signin { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
   .signin .hint { margin: 0; font-size: var(--fs-xs); color: var(--text); text-align: center; }
-
-  footer {
-    margin-top: var(--space-8); padding-top: var(--space-5); border-top: 1px solid var(--border);
-    display: flex; flex-direction: column; align-items: center; gap: var(--space-3);
-    font-size: 12.5px; color: var(--text); text-align: center;
-  }
-  footer .legal { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
-  footer .legal a { color: var(--text-h); text-decoration: none; }
-  footer .legal a:hover { color: var(--accent); }
-  footer .fineprint { max-width: 60ch; }
 </style>
