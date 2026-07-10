@@ -70,10 +70,3 @@ func main() {
 		log.Fatalf("relayium-node: %v", err)
 	}
 }
-
-// run is a TEMPORARY stub so the package builds. Task 9 replaces this with
-// the real pion/turn relay wiring (moved to relay.go).
-func run(c config, st nodeState) error {
-	log.Printf("relayium-node: config ok (central=%s region=%s state=%s) — relay wiring pending (Task 9)", c.CentralURL, c.Region, c.StateDir)
-	return nil
-}
