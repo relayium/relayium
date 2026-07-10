@@ -12,6 +12,7 @@
   import { wsURL } from "./lib/transfer-link";
   import { roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
   import { connect, connectResume, summarizeStats, PeerBusyError, type InboundSignal, type Conn, type ConnPath, type RtcConfig, type ConnDiagnostics } from "./lib/webrtc";
+  import { applyRename } from "./lib/apply-rename";
   import { createWakeLock } from "./lib/wakelock";
   import { registerServiceWorker, drainSharedFiles } from "./lib/share-target";
   import { requestNotifyPermission, notifyTransfer } from "./lib/notify";
@@ -160,10 +161,15 @@
   // here (broadcasts fire on measure-done and on peer-join instead), so there is no
   // ping-pong loop.
   function onPeerRelayRtt(from: string, data: unknown) {
-    const m = (data as { relayRtt?: Record<string, number> }).relayRtt;
-    if (!m || from === selfId) return;
-    peerRelayRtt = m;
-    selectedRelayId = pickRelay(myRelayRtt, peerRelayRtt);
+    const d = data as { relayRtt?: Record<string, number>; rename?: string };
+    const m = d.relayRtt;
+    if (m && from !== selfId) {
+      peerRelayRtt = m;
+      selectedRelayId = pickRelay(myRelayRtt, peerRelayRtt);
+    }
+    if (typeof d.rename === "string") {
+      peers = applyRename(peers, from, d.rename);
+    }
   }
   let acceptFn: (() => void) | null = null;
   let rejectFn: (() => void) | null = null;
@@ -544,6 +550,16 @@
   }
   function nameOf(peerId: string): string {
     return peers.find((p) => p.id === peerId)?.name ?? peerId.slice(0, 6);
+  }
+  // User-initiated rename of this device: persist under the same key deviceName()
+  // reads, then tell every visible peer so their roster picks up the new name too.
+  // An empty (post-trim) name is a no-op — keeps whatever name was already set.
+  function commitName(next: string) {
+    const name = next.trim().slice(0, 64);
+    if (!name) return;
+    selfName = name;
+    try { localStorage.setItem(DEVICE_NAME_KEY, name); } catch { /* ignore */ }
+    for (const p of visiblePeers) signaling.sendSignal(p.id, { rename: name });
   }
   function flash(msg: string) {
     notice = msg;
@@ -1304,7 +1320,7 @@
   {:else if currentRoute() === "reset-password"}
     <ResetPassword />
   {:else}
-    <Hero {connState} {unsupported} {selfName} {selfIP} />
+    <Hero {connState} {unsupported} {selfName} {selfIP} onRename={commitName} />
 
   {#if notice}
     <div class="toast" role="status" aria-live="polite">{notice}</div>
