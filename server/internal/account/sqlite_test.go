@@ -205,9 +205,9 @@ func TestUserRelayedSince(t *testing.T) {
 	ctx := context.Background()
 	u, _ := s.UpsertUserByEmail(ctx, "r@example.com", "R")
 
-	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a1", Token: "c1", UserID: u.ID, RelayedBytes: 100, RecordedAt: 1000})
-	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a2", Token: "c2", UserID: u.ID, RelayedBytes: 250, RecordedAt: 2000})
-	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a3", Token: "c3", UserID: "other", RelayedBytes: 999, RecordedAt: 2000})
+	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a1", Token: "c1", UserID: u.ID, RelayedBytes: 100, RecordedAt: 1000, Billable: true})
+	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a2", Token: "c2", UserID: u.ID, RelayedBytes: 250, RecordedAt: 2000, Billable: true})
+	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a3", Token: "c3", UserID: "other", RelayedBytes: 999, RecordedAt: 2000, Billable: true})
 
 	// since=1500 → only the 250 event counts; "other" user excluded.
 	got, err := s.UserRelayedSince(ctx, u.ID, 1500)

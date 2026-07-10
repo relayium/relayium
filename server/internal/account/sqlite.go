@@ -180,6 +180,10 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`ALTER TABLE nodes ADD COLUMN storage_total INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE nodes ADD COLUMN storage_free INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE stored_files ADD COLUMN node_id TEXT`,
+		// SP3: usage_events gains node_id (which node reported this) + billable
+		// (fleet-relay vs. BYO own-node relay, which must not count against quota).
+		`ALTER TABLE usage_events ADD COLUMN node_id TEXT`,
+		`ALTER TABLE usage_events ADD COLUMN billable INTEGER NOT NULL DEFAULT 1`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -552,12 +556,12 @@ func (s *SQLiteStore) DeleteDevice(ctx context.Context, id, userID string) error
 
 func (s *SQLiteStore) RecordUsage(ctx context.Context, e UsageEvent) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO usage_events (alloc_id, token, user_id, relayed_bytes, recorded_at)
-		 VALUES (?, ?, ?, ?, ?)
+		`INSERT INTO usage_events (alloc_id, token, user_id, relayed_bytes, recorded_at, node_id, billable)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(alloc_id) DO UPDATE SET
 		   relayed_bytes = MAX(relayed_bytes, excluded.relayed_bytes),
 		   recorded_at = excluded.recorded_at`,
-		e.AllocID, e.Token, e.UserID, e.RelayedBytes, e.RecordedAt)
+		e.AllocID, e.Token, e.UserID, e.RelayedBytes, e.RecordedAt, nullStr(e.NodeID), b2i(e.Billable))
 	return err
 }
 
@@ -577,7 +581,7 @@ func (s *SQLiteStore) UserUsageTotal(ctx context.Context, userID string) (int64,
 func (s *SQLiteStore) UserRelayedSince(ctx context.Context, userID string, since int64) (int64, error) {
 	var total int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT COALESCE(SUM(relayed_bytes),0) FROM usage_events WHERE user_id = ? AND recorded_at >= ?`,
+		`SELECT COALESCE(SUM(relayed_bytes),0) FROM usage_events WHERE user_id = ? AND recorded_at >= ? AND billable = 1`,
 		userID, since).Scan(&total)
 	return total, err
 }

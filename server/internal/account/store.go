@@ -75,6 +75,8 @@ type UsageEvent struct {
 	UserID       string
 	RelayedBytes int64
 	RecordedAt   int64
+	NodeID       string
+	Billable     bool
 }
 
 // StoredFile is one zero-knowledge stored-transfer object's lifecycle row. The
