@@ -126,6 +126,12 @@ CREATE TABLE IF NOT EXISTS nodes (
   last_seen_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_nodes_last_seen ON nodes(last_seen_at);
+CREATE TABLE IF NOT EXISTS pending_node_deletes (
+  blob_key    TEXT NOT NULL,
+  node_id     TEXT NOT NULL,
+  enqueued_at INTEGER NOT NULL,
+  PRIMARY KEY (blob_key, node_id)
+);
 `
 
 func OpenSQLite(dsn string) (*SQLiteStore, error) {
@@ -153,6 +159,22 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		!strings.Contains(err.Error(), "duplicate column name") {
 		db.Close()
 		return nil, err
+	}
+	// SP2: node storage fields + stored_files.node_id, added after the initial
+	// nodes/stored_files schemas. Same idempotent-ALTER pattern as above.
+	for _, alter := range []string{
+		`ALTER TABLE nodes ADD COLUMN storage_url TEXT`,
+		`ALTER TABLE nodes ADD COLUMN storage_secret TEXT`,
+		`ALTER TABLE nodes ADD COLUMN storage_enabled INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE nodes ADD COLUMN storage_total INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE nodes ADD COLUMN storage_free INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE stored_files ADD COLUMN node_id TEXT`,
+	} {
+		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
+			!strings.Contains(err.Error(), "duplicate column name") {
+			db.Close()
+			return nil, err
+		}
 	}
 	// email_verified 是本次新增列。首次成功 ALTER（err==nil）说明刚建列，
 	// 此刻把所有存量老用户一次性兜底为已验证（避免现网用户被"必须验证才能登录"锁死）。
@@ -753,23 +775,25 @@ type rowScanner interface{ Scan(dest ...any) error }
 func scanStoredFile(sc rowScanner) (StoredFile, error) {
 	var f StoredFile
 	var burn int
+	var nodeID sql.NullString
 	err := sc.Scan(&f.ID, &f.UserID, &f.BlobKey, &f.EncManifest, &f.Size,
-		&burn, &f.CreatedAt, &f.ExpiresAt, &f.DownloadedAt, &f.DownloadCount)
+		&burn, &f.CreatedAt, &f.ExpiresAt, &f.DownloadedAt, &nodeID, &f.DownloadCount)
 	f.BurnAfterRead = burn != 0
+	f.NodeID = nodeID.String
 	return f, err
 }
 
 // storedFileCols is the INSERT column list (CreateStoredFile). storedFileSelectCols
 // adds download_count, which defaults to 0 on insert and is only ever read back.
-const storedFileCols = `id, user_id, blob_key, enc_manifest, size, burn_after_read, created_at, expires_at, downloaded_at`
+const storedFileCols = `id, user_id, blob_key, enc_manifest, size, burn_after_read, created_at, expires_at, downloaded_at, node_id`
 const storedFileSelectCols = storedFileCols + `, download_count`
 
 func (s *SQLiteStore) CreateStoredFile(ctx context.Context, f StoredFile) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO stored_files (`+storedFileCols+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		f.ID, f.UserID, f.BlobKey, f.EncManifest, f.Size,
-		b2i(f.BurnAfterRead), f.CreatedAt, f.ExpiresAt, f.DownloadedAt)
+		b2i(f.BurnAfterRead), f.CreatedAt, f.ExpiresAt, f.DownloadedAt, nullStr(f.NodeID))
 	return err
 }
 
@@ -1037,6 +1061,13 @@ func nullStr(s string) any {
 	return s
 }
 
+// nodeCols is the SELECT column list shared by every node read path
+// (UpsertNode's return, GetNode, StorageNodes, ListNodes, OnlineNodes), so the
+// column order stays in lockstep with queryNodes's scan.
+const nodeCols = `id, owner_type, owner_user_id, region, urls, turn_secret, version,
+  relayed_bytes, stored_bytes, created_at, last_seen_at,
+  storage_url, storage_secret, storage_enabled, storage_total, storage_free`
+
 func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	if n.ID == "" {
 		n.ID = newID()
@@ -1046,38 +1077,64 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 		return Node{}, err
 	}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO nodes (id, owner_type, owner_user_id, region, urls, turn_secret, version, relayed_bytes, stored_bytes, created_at, last_seen_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?)
+		`INSERT INTO nodes (`+nodeCols+`)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   owner_type=excluded.owner_type, owner_user_id=excluded.owner_user_id,
 		   region=excluded.region, urls=excluded.urls, turn_secret=excluded.turn_secret,
-		   version=excluded.version, last_seen_at=excluded.last_seen_at`,
+		   version=excluded.version, last_seen_at=excluded.last_seen_at,
+		   storage_url=excluded.storage_url, storage_secret=excluded.storage_secret,
+		   storage_enabled=excluded.storage_enabled, storage_total=excluded.storage_total,
+		   storage_free=excluded.storage_free`,
 		n.ID, n.OwnerType, nullStr(n.OwnerUserID), n.Region, string(urls), n.TURNSecret,
-		n.Version, n.RelayedBytes, n.StoredBytes, n.CreatedAt, n.LastSeenAt)
+		n.Version, n.RelayedBytes, n.StoredBytes, n.CreatedAt, n.LastSeenAt,
+		nullStr(n.StorageURL), nullStr(n.StorageSecret), b2i(n.StorageEnabled), n.StorageTotal, n.StorageFree)
 	if err != nil {
 		return Node{}, err
 	}
 	return n, nil
 }
 
-func (s *SQLiteStore) TouchNode(ctx context.Context, id string, relayedBytes, storedBytes, at int64) error {
+// TouchNode records a heartbeat: relayed/stored bytes are cumulative counters
+// (keep-MAX, never decrease), while storage_total/storage_free are live
+// snapshots of the node's disk state and are not monotonic, so they are SET.
+func (s *SQLiteStore) TouchNode(ctx context.Context, id string, relayedBytes, storedBytes, storageTotal, storageFree, at int64) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE nodes SET last_seen_at=?,
-		   relayed_bytes=MAX(relayed_bytes, ?), stored_bytes=MAX(stored_bytes, ?)
-		 WHERE id=?`, at, relayedBytes, storedBytes, id)
+		   relayed_bytes=MAX(relayed_bytes, ?), stored_bytes=MAX(stored_bytes, ?),
+		   storage_total=?, storage_free=? WHERE id=?`,
+		at, relayedBytes, storedBytes, storageTotal, storageFree, id)
 	return err
+}
+
+func (s *SQLiteStore) GetNode(ctx context.Context, id string) (Node, bool, error) {
+	nodes, err := s.queryNodes(ctx, `SELECT `+nodeCols+` FROM nodes WHERE id = ?`, id)
+	if err != nil {
+		return Node{}, false, err
+	}
+	if len(nodes) == 0 {
+		return Node{}, false, nil
+	}
+	return nodes[0], true, nil
+}
+
+// StorageNodes returns fleet storage nodes that are online since `since` and
+// have at least minFree bytes free — candidates for placing a new node-backed
+// blob.
+func (s *SQLiteStore) StorageNodes(ctx context.Context, since, minFree int64) ([]Node, error) {
+	return s.queryNodes(ctx,
+		`SELECT `+nodeCols+` FROM nodes
+		   WHERE owner_type='fleet' AND storage_enabled=1 AND last_seen_at >= ? AND storage_free >= ?
+		   ORDER BY last_seen_at DESC`, since, minFree)
 }
 
 func (s *SQLiteStore) OnlineNodes(ctx context.Context, since int64) ([]Node, error) {
 	return s.queryNodes(ctx,
-		`SELECT id, owner_type, owner_user_id, region, urls, turn_secret, version, relayed_bytes, stored_bytes, created_at, last_seen_at
-		   FROM nodes WHERE owner_type='fleet' AND last_seen_at >= ? ORDER BY last_seen_at DESC`, since)
+		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='fleet' AND last_seen_at >= ? ORDER BY last_seen_at DESC`, since)
 }
 
 func (s *SQLiteStore) ListNodes(ctx context.Context) ([]Node, error) {
-	return s.queryNodes(ctx,
-		`SELECT id, owner_type, owner_user_id, region, urls, turn_secret, version, relayed_bytes, stored_bytes, created_at, last_seen_at
-		   FROM nodes ORDER BY last_seen_at DESC`)
+	return s.queryNodes(ctx, `SELECT `+nodeCols+` FROM nodes ORDER BY last_seen_at DESC`)
 }
 
 func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]Node, error) {
@@ -1091,15 +1148,52 @@ func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]
 		var n Node
 		var ownerUser sql.NullString
 		var urls string
+		var storageURL, storageSecret sql.NullString
+		var storageEnabled int
 		if err := rows.Scan(&n.ID, &n.OwnerType, &ownerUser, &n.Region, &urls, &n.TURNSecret,
-			&n.Version, &n.RelayedBytes, &n.StoredBytes, &n.CreatedAt, &n.LastSeenAt); err != nil {
+			&n.Version, &n.RelayedBytes, &n.StoredBytes, &n.CreatedAt, &n.LastSeenAt,
+			&storageURL, &storageSecret, &storageEnabled, &n.StorageTotal, &n.StorageFree); err != nil {
 			return nil, err
 		}
 		n.OwnerUserID = ownerUser.String
+		n.StorageURL = storageURL.String
+		n.StorageSecret = storageSecret.String
+		n.StorageEnabled = storageEnabled != 0
 		if err := json.Unmarshal([]byte(urls), &n.URLs); err != nil {
 			return nil, err
 		}
 		out = append(out, n)
 	}
 	return out, rows.Err()
+}
+
+// EnqueueNodeDelete records an orphaned blob-on-node delete for GC to retry.
+// DO NOTHING on conflict: the pair may already be queued from a prior sweep.
+func (s *SQLiteStore) EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO pending_node_deletes (blob_key, node_id, enqueued_at) VALUES (?,?,?)
+		 ON CONFLICT(blob_key, node_id) DO NOTHING`, blobKey, nodeID, at)
+	return err
+}
+
+func (s *SQLiteStore) ListPendingNodeDeletes(ctx context.Context) ([]PendingNodeDelete, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT blob_key, node_id, enqueued_at FROM pending_node_deletes`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PendingNodeDelete
+	for rows.Next() {
+		var p PendingNodeDelete
+		if err := rows.Scan(&p.BlobKey, &p.NodeID, &p.EnqueuedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) DeletePendingNodeDelete(ctx context.Context, blobKey, nodeID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM pending_node_deletes WHERE blob_key=? AND node_id=?`, blobKey, nodeID)
+	return err
 }

@@ -89,8 +89,9 @@ type StoredFile struct {
 	BurnAfterRead bool
 	CreatedAt     int64
 	ExpiresAt     int64
-	DownloadedAt  int64 // 0 = not yet downloaded
-	DownloadCount int64 // lifetime successful downloads of this file (non-burn)
+	DownloadedAt  int64  // 0 = not yet downloaded
+	DownloadCount int64  // lifetime successful downloads of this file (non-burn)
+	NodeID        string // "" = central-local blob; else the relay node holding the ciphertext
 }
 
 // UsageKind selects which per-month meter a RecordMeter call increments.
@@ -126,17 +127,31 @@ type UploadEvent struct {
 // mint ephemeral credentials it will validate). relayed_bytes/stored_bytes are the
 // node's own cumulative, keep-max counters fed from heartbeats.
 type Node struct {
-	ID           string
-	OwnerType    string // "fleet" (SP3 adds "user")
-	OwnerUserID  string // "" for fleet
-	Region       string
-	URLs         []string
-	TURNSecret   string
-	Version      string
-	RelayedBytes int64
-	StoredBytes  int64
-	CreatedAt    int64
-	LastSeenAt   int64
+	ID             string
+	OwnerType      string // "fleet" (SP3 adds "user")
+	OwnerUserID    string // "" for fleet
+	Region         string
+	URLs           []string
+	TURNSecret     string
+	Version        string
+	RelayedBytes   int64
+	StoredBytes    int64
+	CreatedAt      int64
+	LastSeenAt     int64
+	StorageURL     string
+	StorageSecret  string
+	StorageEnabled bool
+	StorageTotal   int64
+	StorageFree    int64
+}
+
+// PendingNodeDelete is a blob whose owning node was unreachable when its file
+// expired/was deleted; GC retries the node DELETE each sweep until it succeeds,
+// reclaiming the orphan under the no-replication model.
+type PendingNodeDelete struct {
+	BlobKey    string
+	NodeID     string
+	EnqueuedAt int64
 }
 
 // Setting is one admin-editable integer config value (bytes or seconds).
@@ -269,7 +284,13 @@ type Store interface {
 	ListSettings(ctx context.Context) ([]Setting, error)
 	// relay nodes (self-reporting fleet telemetry)
 	UpsertNode(ctx context.Context, n Node) (Node, error)
-	TouchNode(ctx context.Context, id string, relayedBytes, storedBytes, at int64) error
+	TouchNode(ctx context.Context, id string, relayedBytes, storedBytes, storageTotal, storageFree, at int64) error
+	GetNode(ctx context.Context, id string) (Node, bool, error)
+	StorageNodes(ctx context.Context, since, minFree int64) ([]Node, error)
 	OnlineNodes(ctx context.Context, since int64) ([]Node, error)
 	ListNodes(ctx context.Context) ([]Node, error)
+	// pending_node_deletes (orphan-retry queue for GC when a node's DELETE fails)
+	EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error
+	ListPendingNodeDeletes(ctx context.Context) ([]PendingNodeDelete, error)
+	DeletePendingNodeDelete(ctx context.Context, blobKey, nodeID string) error
 }

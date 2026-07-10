@@ -129,7 +129,11 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := s.now().Unix()
-	if err := s.store.TouchNode(r.Context(), req.NodeID, req.RelayedTotal, req.StoredBytes, now); err != nil {
+	// storageTotal/storageFree are 0 here: the SP1 heartbeat payload doesn't
+	// carry them yet (Task 3 adds the SP2 storage self-report to this handler).
+	// Zeroing them is harmless for SP1's relay-only fleet, which never sets
+	// storage_enabled.
+	if err := s.store.TouchNode(r.Context(), req.NodeID, req.RelayedTotal, req.StoredBytes, 0, 0, now); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
