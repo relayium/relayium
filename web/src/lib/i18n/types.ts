@@ -348,6 +348,10 @@ export interface Messages {
   legal: { privacy: string; terms: string; security: string };
   // Footer link label for the generated static Guides hub page.
   learn: { hub: string };
+  // Client-local "recent transfers" panel (localStorage-backed, this device only).
+  historyTitle: string;
+  historyEmpty: string;
+  historyClear: string;
 }
 
 export function legalUrl(slug: "privacy" | "terms" | "security", l: Lang): string {

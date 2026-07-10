@@ -408,6 +408,9 @@ const ko: Messages = {
   },
   legal: { privacy: "개인정보 처리방침", terms: "이용약관", security: "보안" },
   learn: { hub: "가이드" },
+  historyTitle: "최근 전송",
+  historyEmpty: "아직 전송 기록이 없습니다",
+  historyClear: "지우기",
 };
 
 

@@ -408,6 +408,9 @@ const en: Messages = {
   },
   legal: { privacy: "Privacy Policy", terms: "Terms of Service", security: "Security" },
   learn: { hub: "Guides" },
+  historyTitle: "Recent transfers",
+  historyEmpty: "No transfers yet",
+  historyClear: "Clear",
 };
 
 

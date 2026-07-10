@@ -408,6 +408,9 @@ const ja: Messages = {
   },
   legal: { privacy: "プライバシーポリシー", terms: "利用規約", security: "セキュリティ" },
   learn: { hub: "ガイド" },
+  historyTitle: "最近の転送",
+  historyEmpty: "まだ転送履歴はありません",
+  historyClear: "クリア",
 };
 
 

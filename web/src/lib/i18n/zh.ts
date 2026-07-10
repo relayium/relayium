@@ -408,6 +408,9 @@ const zh: Messages = {
   },
   legal: { privacy: "隐私政策", terms: "服务条款", security: "安全说明" },
   learn: { hub: "使用指南" },
+  historyTitle: "最近传输",
+  historyEmpty: "暂无记录",
+  historyClear: "清空",
 };
 
 

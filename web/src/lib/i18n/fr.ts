@@ -409,6 +409,9 @@ const fr: Messages = {
   },
   legal: { privacy: "Politique de confidentialité", terms: "Conditions d'utilisation", security: "Sécurité" },
   learn: { hub: "Guides" },
+  historyTitle: "Transferts récents",
+  historyEmpty: "Aucun transfert pour l'instant",
+  historyClear: "Effacer",
 };
 
 
