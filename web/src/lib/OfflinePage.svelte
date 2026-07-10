@@ -8,6 +8,7 @@
   import FeatureStrip from "./FeatureStrip.svelte";
   import UseCases from "./UseCases.svelte";
   import Faq from "./Faq.svelte";
+  import WhyAccount from "./WhyAccount.svelte";
   import { session } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import PageFooter from "./PageFooter.svelte";
@@ -41,6 +42,10 @@
       {/if}
     </section>
   </div>
+
+  {#if !session().user}
+    <WhyAccount />
+  {/if}
 
   <CrossSell target="realtime" />
   <HowItWorks variant="offline" />

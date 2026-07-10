@@ -7,6 +7,8 @@
   import UseCases from "./UseCases.svelte";
   import Faq from "./Faq.svelte";
   import CrossSell from "./CrossSell.svelte";
+  import WhyAccount from "./WhyAccount.svelte";
+  import { session } from "./auth.svelte";
   import { enterRoom } from "./room.svelte";
   import { clearOutbox } from "./outbox.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
@@ -76,6 +78,10 @@
       </section>
     {/if}
   </div>
+
+  {#if !inRoom && !session().user}
+    <WhyAccount />
+  {/if}
 
   {#if !inRoom}
     <CrossSell target="offline" />

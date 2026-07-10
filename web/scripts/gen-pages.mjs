@@ -44,6 +44,7 @@ import howtoMacToWindows from "./pages/content/articles/howto-mac-to-windows.mjs
 import howtoSameWifi from "./pages/content/articles/howto-same-wifi.mjs";
 import guidesWhatIsP2pFileTransfer from "./pages/content/articles/guides-what-is-p2p-file-transfer.mjs";
 import guidesIsItSafe from "./pages/content/articles/guides-is-it-safe.mjs";
+import guidesOwnNode from "./pages/content/articles/guides-own-node.mjs";
 import {
   buildLegalPages,
   buildLandingPages,
@@ -93,6 +94,7 @@ const articles = [
   howtoSameWifi,
   guidesWhatIsP2pFileTransfer,
   guidesIsItSafe,
+  guidesOwnNode,
 ];
 
 async function main() {

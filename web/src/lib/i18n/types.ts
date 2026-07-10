@@ -162,6 +162,9 @@ export interface Messages {
     addNodeSubmit: string; // confirm button inside the add-node mini-form
     addNodeCancel: string; // cancel button inside the add-node mini-form
     tokenNote: string; // instruction shown above the one-time paste-in command
+    tokenPortsNote: string; // note above the firewall/ports block
+    tokenPortsTitle: string; // title of the ufw ports CommandBlock
+    tokenGuideLink: string; // link text to the full "bring your own node" guide
     tokenDone: string; // "Done" button that clears the one-time token from memory
     nodeOnline: string; // online-status label
     nodeOffline: string; // offline-status label
@@ -171,6 +174,18 @@ export interface Messages {
     nodeStorageFree: (free: string, total: string) => string; // "X free of Y" disk line
     delNode: string; // remove-node button
     confirmDelNode: string; // confirm() before removing a node
+  };
+  // Shared "why an account?" explainer shown on the two login-gated feature pages
+  // (/cross-network, /offline-transfer) and, compact, on the /me login gate.
+  why: {
+    heading: string; // small eyebrow above the three points (compact variant hides it)
+    costTitle: string; // point 1 — why login is required
+    costBody: string; // these features cost us; free allowance then paid
+    selfhostTitle: string; // point 2 — run your own node for free
+    selfhostBody: string; // traffic goes through your node, not us, so we don't charge
+    selfhostCta: string; // link text to the bring-your-own-node guide
+    privacyTitle: string; // point 3 — our promise
+    privacyBody: string; // your data and config are only ever usable by you
   };
   // /verify-email — landing page for the emailed verification link (?token=).
   verifyEmail: {

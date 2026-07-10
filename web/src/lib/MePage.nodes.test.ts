@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { nodeRunCommand } from "./nodes";
+import { nodeRunCommand, nodePortsCommand } from "./nodes";
 
 describe("nodeRunCommand", () => {
   it("embeds the token and central URL", () => {
@@ -16,13 +16,19 @@ describe("nodeRunCommand", () => {
   it("installs via the hosted installer rather than assuming the binary exists", () => {
     const cmd = nodeRunCommand("abc", "https://relayium.com");
     expect(cmd).toContain("curl -fsSL https://relayium.com/install-node.sh");
-    expect(cmd).toMatch(/\|\s*RELAYIUM_/); // pipes env into the installer
-    expect(cmd).toContain("| ");
+    expect(cmd).toContain("| sudo RELAYIUM_"); // elevates + pipes env into the installer
   });
 
   it("enables blob storage so the node relays and stores", () => {
     const cmd = nodeRunCommand("abc", "https://relayium.com");
     expect(cmd).toContain("RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs");
+  });
+
+  it("lists the inbound ports a node must open, matching the binary", () => {
+    const ports = nodePortsCommand();
+    expect(ports).toContain("3478/udp"); // TURN
+    expect(ports).toContain("8081/tcp"); // storage
+    expect(ports).toContain("49152:65535/udp"); // relay range
   });
 
   it("differs per token so a stale copy can't be reused silently", () => {

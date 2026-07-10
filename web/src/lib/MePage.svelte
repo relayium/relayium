@@ -7,7 +7,8 @@
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate } from "./router.svelte";
   import { formatSize, formatRemaining } from "./format";
-  import { nodeRunCommand } from "./nodes";
+  import { nodeRunCommand, nodePortsCommand } from "./nodes";
+  import WhyAccount from "./WhyAccount.svelte";
   import CommandBlock from "./CommandBlock.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
@@ -158,6 +159,7 @@
     <div class="gate">
       <p>{t.me.loginRequired}</p>
       <button class="btn btn-primary" onclick={() => (loginOpen = true)}>{t.me.signIn}</button>
+      <WhyAccount compact />
     </div>
   {:else}
     <div class="stats">
@@ -224,6 +226,11 @@
         <div class="token-reveal">
           <p class="hint">{t.me.tokenNote}</p>
           <CommandBlock code={nodeRunCommand(newToken, location.origin)} title="relayium-node" />
+          <p class="hint ports-note">{t.me.tokenPortsNote}</p>
+          <CommandBlock code={nodePortsCommand()} title={t.me.tokenPortsTitle} />
+          <p class="hint">
+            <a href={lang() === "en" ? "/guides/bring-your-own-node" : `/${lang()}/guides/bring-your-own-node`} target="_blank" rel="noopener">{t.me.tokenGuideLink} →</a>
+          </p>
           <button class="btn btn-primary" onclick={() => (newToken = null)}>{t.me.tokenDone}</button>
         </div>
       {:else if addingNode}
@@ -328,6 +335,7 @@
 
   .token-reveal { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-3); }
   .token-reveal .hint { margin: 0; font-size: var(--fs-xs); color: var(--text); }
+  .token-reveal .ports-note { padding-top: var(--space-2); border-top: 1px solid var(--border); }
 
   .nodelist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
   .nodelist li {
