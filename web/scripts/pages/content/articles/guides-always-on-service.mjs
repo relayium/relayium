@@ -4,10 +4,47 @@
 // English is the master; zh/ja/ko/de/fr follow the same structure and facts.
 // Command blocks (code) stay English in every language.
 
+// Shared code for the macOS/launchd section — identical across every language,
+// referenced as code: [LAUNCHD_PLIST, LAUNCHD_CMDS] so it's written once. YOU is
+// a placeholder the reader replaces with their macOS username.
+const LAUNCHD_PLIST = `<!-- /Library/LaunchDaemons/com.relayium.serve.plist  (replace YOU with your macOS username) -->
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>              <string>com.relayium.serve</string>
+  <key>UserName</key>           <string>YOU</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/relayium</string>
+    <string>serve</string>
+    <string>--dir</string>         <string>/Users/YOU/inbox</string>
+    <string>--port</string>        <string>9031</string>
+    <string>--config-dir</string>  <string>/Users/YOU/.config/relayium</string>
+    <string>--allow-delete</string>
+  </array>
+  <key>RunAtLoad</key>   <true/>
+  <key>KeepAlive</key>   <true/>
+  <key>StandardOutPath</key>    <string>/Users/YOU/relayium-serve.log</string>
+  <key>StandardErrorPath</key>  <string>/Users/YOU/relayium-serve.log</string>
+</dict>
+</plist>`;
+const LAUNCHD_CMDS = `# 1) authorize each pusher first — launchd gives serve no terminal to prompt on:
+relayium authorize <fingerprint>     # get the fingerprint from the pusher's  relayium id
+
+# 2) save the plist above to that path, then load it (root-owned, starts at boot):
+sudo chown root:wheel /Library/LaunchDaemons/com.relayium.serve.plist
+sudo launchctl bootstrap system /Library/LaunchDaemons/com.relayium.serve.plist
+
+# check it's running / follow logs / stop it:
+sudo launchctl print system/com.relayium.serve | grep state
+tail -f ~/relayium-serve.log
+sudo launchctl bootout system/com.relayium.serve`;
+
 const en = {
   title: "Run Relayium as an always-on receive service",
   description:
-    "Keep relayium serve running so any peer can push to you at any time — daemon-direct over pinned TLS. Covers first-push approval, pre-authorizing fingerprints for systemd, --allow-delete, and a sample unit file.",
+    "Keep relayium serve running so any peer can push to you at any time — daemon-direct over pinned TLS. Covers first-push approval, pre-authorizing fingerprints, running it at boot under systemd (Linux) or launchd (macOS), and --allow-delete.",
   updatedLabel: "Last updated",
   lead: [
     "relayium serve --once handles a single incoming transfer and exits — fine for a one-off pull. But if you want a machine to be a standing drop point — a home server that backups land on overnight, a build box that CI pushes artifacts to, a NAS your phone can send photos to whenever — you want serve running all the time, not started by hand for each transfer.",
@@ -89,6 +126,19 @@ WantedBy=multi-user.target`,
       ],
     },
     {
+      heading: "Run it at boot on macOS (launchd)",
+      body: [
+        "macOS has no systemd — its service manager is launchd. To keep serve running on a Mac (a Mac mini left on as a drop point, say), install it as a LaunchDaemon so it starts at boot, before anyone logs in. Set UserName so it runs as you rather than root, and give --dir and --config-dir absolute paths so its identity and trust files stay in your own ~/.config/relayium:",
+      ],
+      code: [LAUNCHD_PLIST, LAUNCHD_CMDS],
+      bullets: [
+        "launchd gives serve no terminal, so it can't prompt — run relayium authorize <fingerprint> for each pusher first, the same as with systemd. The fingerprint comes from that machine's relayium id.",
+        "KeepAlive restarts serve if it crashes; RunAtLoad plus a LaunchDaemon in /Library/LaunchDaemons starts it at boot without a login — the right fit for a headless Mac mini.",
+        "Want a login-scoped service instead? Put the same plist (drop the UserName key) in ~/Library/LaunchAgents/ and load it with launchctl bootstrap gui/$(id -u) <path> — it starts when you log in rather than at boot.",
+        "If the macOS application firewall is on, allow incoming connections for relayium (System Settings → Network → Firewall), or pushes to your port are blocked.",
+      ],
+    },
+    {
       heading: "Let a sync --delete sender mirror deletions",
       body: [
         "By default serve only ever adds or updates files — a sender running sync --delete against it still copies new and changed files, but any deletions it asks for are skipped, with a warning logged on the receiver. Start serve with --allow-delete to opt in to true mirroring, where files removed on the sender's side are removed here too:",
@@ -123,6 +173,10 @@ WantedBy=multi-user.target`,
         q: "Where does serve keep its identity and peer list?",
         a: "In ~/.config/relayium by default (id.key/id.crt for this host's identity, authorized_fingerprints for the allow-list). Point --config-dir somewhere fixed, like /etc/relayium, for a systemd service.",
       },
+      {
+        q: "How do I run serve at boot on macOS?",
+        a: "macOS has no systemd — use launchd. Install serve as a LaunchDaemon in /Library/LaunchDaemons (starts at boot; set UserName to run as you), or as a LaunchAgent in ~/Library/LaunchAgents (starts at login). This guide has a ready-to-edit plist; there's no Homebrew service. Pre-authorize pushers with relayium authorize first, since launchd gives serve no terminal to prompt on.",
+      },
     ],
   },
   cta: {
@@ -136,7 +190,7 @@ WantedBy=multi-user.target`,
 const zh = {
   title: "把 Relayium 变成常驻接收服务",
   description:
-    "让 relayium serve 一直运行，这样任何对端都能随时向你推送——基于锁定 TLS 的守护进程直连。涵盖首次推送批准、为 systemd 预先授权指纹、--allow-delete，以及一份示例服务单元文件。",
+    "让 relayium serve 一直运行，这样任何对端都能随时向你推送——基于锁定 TLS 的守护进程直连。涵盖首次推送批准、预先授权指纹、在 systemd（Linux）或 launchd（macOS）下开机自启，以及 --allow-delete。",
   updatedLabel: "最近更新",
   lead: [
     "relayium serve --once 只处理一次传入的传输就退出——适合偶尔拉取一次的场景。但如果你想让某台机器成为一个常驻的落地点——一台每晚接收备份的家庭服务器、一台 CI 会推送构建产物的构建机、一台随时能接收手机照片的 NAS——你会想让 serve 一直运行，而不是每次传输都手动启动它。",
@@ -218,6 +272,19 @@ WantedBy=multi-user.target`,
       ],
     },
     {
+      heading: "在 macOS 上开机自启（launchd）",
+      body: [
+        "macOS 没有 systemd——它的服务管理器是 launchd。要让 serve 在 Mac 上常驻（比如一台常开、当落地点用的 Mac mini），把它装成 LaunchDaemon，这样开机即启动、无需任何人登录。设置 UserName 让它以你自己的身份（而非 root）运行，并给 --dir 和 --config-dir 绝对路径，这样它的身份和信任文件仍留在你自己的 ~/.config/relayium 里：",
+      ],
+      code: [LAUNCHD_PLIST, LAUNCHD_CMDS],
+      bullets: [
+        "launchd 不给 serve 终端，所以它无法弹出提示——请先为每个推送方运行 relayium authorize <fingerprint>，跟 systemd 一样。指纹来自那台机器的 relayium id。",
+        "KeepAlive 会在 serve 崩溃时把它重新拉起；RunAtLoad 加上放在 /Library/LaunchDaemons 的 LaunchDaemon，会在开机时（无需登录）启动它——正适合一台无人值守的 Mac mini。",
+        "想要登录级的服务？把同一份 plist（去掉 UserName 键）放到 ~/Library/LaunchAgents/，用 launchctl bootstrap gui/$(id -u) <path> 加载——它会在你登录时启动，而不是开机时。",
+        "如果开了 macOS 应用防火墙，请允许 relayium 的传入连接（系统设置 → 网络 → 防火墙），否则发往你端口的推送会被拦截。",
+      ],
+    },
+    {
       heading: "让 sync --delete 的发送方镜像删除操作",
       body: [
         "默认情况下，serve 只会新增或更新文件——即使发送方对它运行 sync --delete，新增和修改过的文件依然会被复制，但它请求的删除操作会被跳过，接收方会记录一条警告。用 --allow-delete 启动 serve 即可选择启用真正的镜像同步，让发送方那边删除的文件在这里也被删除：",
@@ -252,6 +319,10 @@ WantedBy=multi-user.target`,
         q: "serve 把身份和对端列表存在哪里？",
         a: "默认在 ~/.config/relayium 中（id.key/id.crt 是这台主机的身份，authorized_fingerprints 是允许列表）。对于 systemd 服务，可以把 --config-dir 指向一个固定位置，例如 /etc/relayium。",
       },
+      {
+        q: "在 macOS 上怎么让 serve 开机自启？",
+        a: "macOS 没有 systemd——用 launchd。把 serve 装成 /Library/LaunchDaemons 里的 LaunchDaemon（开机启动；设置 UserName 以你的身份运行），或 ~/Library/LaunchAgents 里的 LaunchAgent（登录时启动）。本指南给了一份可直接改的 plist；没有 Homebrew 服务。由于 launchd 不给 serve 终端弹提示，请先用 relayium authorize 预先授权推送方。",
+      },
     ],
   },
   cta: {
@@ -265,7 +336,7 @@ WantedBy=multi-user.target`,
 const ja = {
   title: "Relayium を常時稼働の受信サービスとして実行する",
   description:
-    "relayium serve を常時起動しておけば、どのピアからでもいつでもプッシュを受け取れます——固定された TLS 上のデーモン直結です。初回プッシュの承認、systemd 向けのフィンガープリント事前承認、--allow-delete、サンプルのユニットファイルまでを扱います。",
+    "relayium serve を起動したままにして、どのピアからでもいつでもプッシュを受け取れるようにします — ピン留めした TLS 上での daemon-direct 方式です。初回プッシュの承認、フィンガープリントの事前認可、systemd (Linux) または launchd (macOS) による起動時の自動実行、そして --allow-delete について解説します。",
   updatedLabel: "最終更新",
   lead: [
     "relayium serve --once は1回の受信を処理して終了します——たまに1回だけ pull する用途には十分です。しかし、あるマシンを常駐の受け皿にしたい場合——毎晩バックアップが届くホームサーバー、CI がビルド成果物をプッシュするビルドマシン、スマートフォンからいつでも写真を送れる NAS——には、毎回手動で起動するのではなく、serve をずっと動かし続けたいはずです。",
@@ -347,6 +418,19 @@ WantedBy=multi-user.target`,
       ],
     },
     {
+      heading: "macOS で起動時に実行する (launchd)",
+      body: [
+        "macOS に systemd はありません — サービスマネージャは launchd です。Mac 上で serve を起動し続けるには (例えば受け取り口として常時稼働させる Mac mini など)、LaunchDaemon としてインストールし、誰かがログインする前の起動時に開始させます。UserName を設定して root ではなく自分として実行し、--dir と --config-dir に絶対パスを指定して、identity と信頼ファイルが自分の ~/.config/relayium に保存されるようにします:",
+      ],
+      code: [LAUNCHD_PLIST, LAUNCHD_CMDS],
+      bullets: [
+        "launchd は serve にターミナルを与えないため、プロンプトを表示できません — systemd と同様に、各プッシュ元について先に relayium authorize <fingerprint> を実行してください。フィンガープリントはそのマシンの relayium id から取得できます。",
+        "KeepAlive は serve がクラッシュした場合に再起動します。RunAtLoad と /Library/LaunchDaemons 内の LaunchDaemon の組み合わせにより、ログインなしで起動時に開始します — ヘッドレスの Mac mini に最適です。",
+        "代わりにログインスコープのサービスが必要ですか? 同じ plist (UserName キーは削除) を ~/Library/LaunchAgents/ に置き、launchctl bootstrap gui/$(id -u) <path> で読み込みます — 起動時ではなくログイン時に開始します。",
+        "macOS のアプリケーションファイアウォールが有効な場合、relayium の受信接続を許可してください (システム設定 → ネットワーク → ファイアウォール)。さもないと、あなたのポートへのプッシュがブロックされます。",
+      ],
+    },
+    {
       heading: "sync --delete を使う送信側に削除をミラーさせる",
       body: [
         "デフォルトでは serve はファイルの追加・更新しか行いません——送信側が sync --delete を実行しても、新規・変更ファイルはコピーされますが、要求された削除はスキップされ、受信側に警告がログ出力されます。真のミラーリングを有効にするには --allow-delete を付けて serve を起動します。これにより送信側で削除されたファイルはこちらでも削除されます:",
@@ -381,6 +465,10 @@ WantedBy=multi-user.target`,
         q: "serve はアイデンティティとピアリストをどこに保存しますか?",
         a: "デフォルトでは ~/.config/relayium です(id.key/id.crt はこのホストのアイデンティティ、authorized_fingerprints は許可リスト)。systemd サービスの場合は --config-dir を /etc/relayium のような固定の場所に向けてください。",
       },
+      {
+        q: "macOS で起動時に serve を実行するには?",
+        a: "macOS に systemd はありません — launchd を使います。serve を /Library/LaunchDaemons に LaunchDaemon としてインストールする (起動時に開始。UserName を設定して自分として実行) か、~/Library/LaunchAgents に LaunchAgent としてインストールします (ログイン時に開始)。このガイドには編集してすぐ使える plist があります。Homebrew サービスはありません。launchd は serve にプロンプト用のターミナルを与えないため、先に relayium authorize でプッシュ元を事前認可してください。",
+      },
     ],
   },
   cta: {
@@ -394,7 +482,7 @@ WantedBy=multi-user.target`,
 const ko = {
   title: "Relayium을 상시 실행되는 수신 서비스로 운영하기",
   description:
-    "relayium serve를 계속 실행해 두면 어떤 피어든 언제든지 당신에게 푸시할 수 있습니다——고정된 TLS 위의 데몬 다이렉트입니다. 첫 푸시 승인, systemd를 위한 핑거프린트 사전 승인, --allow-delete, 그리고 예시 유닛 파일까지 다룹니다.",
+    "relayium serve 를 계속 실행해 두어 어떤 피어든 언제나 여러분에게 푸시할 수 있게 하세요 — 고정된 TLS 위에서 daemon-direct 방식으로 동작합니다. 최초 푸시 승인, 핑거프린트 사전 인증, systemd (Linux) 또는 launchd (macOS) 로 부팅 시 실행하기, 그리고 --allow-delete 를 다룹니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
     "relayium serve --once는 들어오는 전송 하나만 처리하고 종료합니다——가끔 한 번 pull하는 용도로는 충분합니다. 하지만 어떤 기기를 상시 대기하는 수신처로 만들고 싶다면——밤사이 백업이 도착하는 홈 서버, CI가 빌드 산출물을 푸시하는 빌드 머신, 언제든 휴대폰에서 사진을 보낼 수 있는 NAS——매번 손으로 켜는 대신 serve를 계속 켜 두고 싶을 것입니다.",
@@ -476,6 +564,19 @@ WantedBy=multi-user.target`,
       ],
     },
     {
+      heading: "macOS 에서 부팅 시 실행하기 (launchd)",
+      body: [
+        "macOS 에는 systemd 가 없습니다 — 서비스 관리자는 launchd 입니다. Mac 에서 serve 를 계속 실행하려면 (예를 들어 수신 지점으로 켜 둔 Mac mini), LaunchDaemon 으로 설치하여 누군가 로그인하기 전 부팅 시에 시작되도록 하세요. UserName 을 설정해 root 가 아닌 여러분 계정으로 실행하고, --dir 와 --config-dir 에 절대 경로를 지정하여 identity 및 신뢰 파일이 여러분 자신의 ~/.config/relayium 에 저장되도록 하세요:",
+      ],
+      code: [LAUNCHD_PLIST, LAUNCHD_CMDS],
+      bullets: [
+        "launchd 는 serve 에 터미널을 제공하지 않으므로 프롬프트를 띄울 수 없습니다 — systemd 와 마찬가지로, 각 푸시 발신자에 대해 먼저 relayium authorize <fingerprint> 를 실행하세요. 핑거프린트는 해당 머신의 relayium id 에서 얻습니다.",
+        "KeepAlive 는 serve 가 충돌하면 다시 시작합니다. RunAtLoad 와 /Library/LaunchDaemons 안의 LaunchDaemon 을 함께 쓰면 로그인 없이 부팅 시 시작됩니다 — 헤드리스 Mac mini 에 딱 맞습니다.",
+        "대신 로그인 범위의 서비스를 원하시나요? 동일한 plist (UserName 키는 제거) 를 ~/Library/LaunchAgents/ 에 두고 launchctl bootstrap gui/$(id -u) <path> 로 로드하세요 — 부팅 시가 아니라 로그인할 때 시작됩니다.",
+        "macOS 응용 프로그램 방화벽이 켜져 있다면 relayium 의 수신 연결을 허용하세요 (시스템 설정 → 네트워크 → 방화벽). 그렇지 않으면 여러분의 포트로 오는 푸시가 차단됩니다.",
+      ],
+    },
+    {
       heading: "sync --delete를 쓰는 보내는 쪽이 삭제를 미러링하도록 허용하기",
       body: [
         "기본적으로 serve는 파일을 추가하거나 갱신하기만 합니다——보내는 쪽이 sync --delete를 실행해도 새 파일과 변경된 파일은 복사되지만, 요청된 삭제는 건너뛰고 받는 쪽 로그에 경고가 남습니다. 진짜 미러링을 사용하려면 --allow-delete와 함께 serve를 시작하세요. 그러면 보내는 쪽에서 삭제된 파일이 여기서도 삭제됩니다:",
@@ -510,6 +611,10 @@ WantedBy=multi-user.target`,
         q: "serve는 신원과 피어 목록을 어디에 보관하나요?",
         a: "기본적으로 ~/.config/relayium에 있습니다(id.key/id.crt는 이 호스트의 신원, authorized_fingerprints는 허용 목록). systemd 서비스의 경우 --config-dir을 /etc/relayium 같은 고정된 위치로 지정하세요.",
       },
+      {
+        q: "macOS 에서 부팅 시 serve 를 실행하려면?",
+        a: "macOS 에는 systemd 가 없습니다 — launchd 를 사용하세요. serve 를 /Library/LaunchDaemons 에 LaunchDaemon 으로 설치하거나 (부팅 시 시작; UserName 을 설정해 여러분 계정으로 실행), ~/Library/LaunchAgents 에 LaunchAgent 로 설치하세요 (로그인 시 시작). 이 가이드에는 바로 편집해 쓸 수 있는 plist 가 있습니다. Homebrew 서비스는 없습니다. launchd 는 serve 에 프롬프트를 띄울 터미널을 제공하지 않으므로, 먼저 relayium authorize 로 푸시 발신자를 사전 인증하세요.",
+      },
     ],
   },
   cta: {
@@ -523,7 +628,7 @@ WantedBy=multi-user.target`,
 const de = {
   title: "Relayium als dauerhaft laufenden Empfangsdienst betreiben",
   description:
-    "Lass relayium serve durchgehend laufen, damit jeder Peer dir jederzeit etwas pushen kann — Daemon Direct über gepinntes TLS. Behandelt die Genehmigung beim ersten Push, das Vorab-Autorisieren von Fingerprints für systemd, --allow-delete und eine Beispiel-Unit-Datei.",
+    "Halten Sie relayium serve am Laufen, damit jeder Peer Ihnen jederzeit etwas pushen kann — daemon-direct über gepinntes TLS. Behandelt die Freigabe des ersten Push, das Vorab-Autorisieren von Fingerprints, den Start beim Booten unter systemd (Linux) oder launchd (macOS) sowie --allow-delete.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "relayium serve --once nimmt eine eingehende Übertragung entgegen und beendet sich dann — gut für ein gelegentliches Pull. Willst du aber eine Maschine zu einer dauerhaften Anlaufstelle machen — einen Heimserver, auf dem nachts Backups landen, eine Build-Maschine, zu der CI Artefakte pusht, ein NAS, an das dein Handy jederzeit Fotos schicken kann —, soll serve durchgehend laufen, statt für jede Übertragung von Hand gestartet zu werden.",
@@ -605,6 +710,19 @@ WantedBy=multi-user.target`,
       ],
     },
     {
+      heading: "Beim Booten unter macOS starten (launchd)",
+      body: [
+        "macOS hat kein systemd — sein Dienstmanager ist launchd. Um serve auf einem Mac dauerhaft laufen zu lassen (etwa auf einem Mac mini, der als Ablagepunkt eingeschaltet bleibt), installieren Sie es als LaunchDaemon, damit es beim Booten startet, noch bevor sich jemand anmeldet. Setzen Sie UserName, damit es als Sie und nicht als root läuft, und geben Sie --dir und --config-dir absolute Pfade an, damit Identität und Vertrauensdateien in Ihrem eigenen ~/.config/relayium bleiben:",
+      ],
+      code: [LAUNCHD_PLIST, LAUNCHD_CMDS],
+      bullets: [
+        "launchd gibt serve kein Terminal, es kann also nicht nachfragen — führen Sie für jeden Absender zuerst relayium authorize <fingerprint> aus, genau wie bei systemd. Der Fingerprint stammt aus dem relayium id jener Maschine.",
+        "KeepAlive startet serve neu, falls es abstürzt; RunAtLoad zusammen mit einem LaunchDaemon in /Library/LaunchDaemons startet es beim Booten ohne Anmeldung — genau das Richtige für einen kopflosen Mac mini.",
+        "Lieber einen anmeldungsbezogenen Dienst? Legen Sie dasselbe plist (ohne den UserName-Schlüssel) in ~/Library/LaunchAgents/ ab und laden Sie es mit launchctl bootstrap gui/$(id -u) <path> — es startet bei Ihrer Anmeldung statt beim Booten.",
+        "Wenn die Anwendungs-Firewall von macOS aktiv ist, erlauben Sie eingehende Verbindungen für relayium (Systemeinstellungen → Netzwerk → Firewall), sonst werden Pushes an Ihren Port blockiert.",
+      ],
+    },
+    {
       heading: "Einem sync --delete-Sender erlauben, Löschungen zu spiegeln",
       body: [
         "Standardmäßig fügt serve nur Dateien hinzu oder aktualisiert sie — führt ein Sender sync --delete dagegen aus, werden neue und geänderte Dateien trotzdem kopiert, aber angeforderte Löschungen werden übersprungen und auf dem Empfänger als Warnung protokolliert. Starte serve mit --allow-delete, um echtes Spiegeln zu aktivieren, bei dem auf der Senderseite gelöschte Dateien auch hier gelöscht werden:",
@@ -639,6 +757,10 @@ WantedBy=multi-user.target`,
         q: "Wo bewahrt serve Identität und Peer-Liste auf?",
         a: "Standardmäßig in ~/.config/relayium (id.key/id.crt für die Identität dieses Hosts, authorized_fingerprints für die Allow-Liste). Richte --config-dir für einen systemd-Dienst auf einen festen Ort wie /etc/relayium.",
       },
+      {
+        q: "Wie starte ich serve beim Booten unter macOS?",
+        a: "macOS hat kein systemd — verwenden Sie launchd. Installieren Sie serve als LaunchDaemon in /Library/LaunchDaemons (startet beim Booten; setzen Sie UserName, damit es als Sie läuft) oder als LaunchAgent in ~/Library/LaunchAgents (startet bei der Anmeldung). Dieser Leitfaden enthält ein fertiges, editierbares plist; einen Homebrew-Dienst gibt es nicht. Autorisieren Sie Absender vorab mit relayium authorize, da launchd serve kein Terminal für Rückfragen gibt.",
+      },
     ],
   },
   cta: {
@@ -652,7 +774,7 @@ WantedBy=multi-user.target`,
 const fr = {
   title: "Faire tourner Relayium en service de réception permanent",
   description:
-    "Laissez relayium serve tourner en continu pour que n'importe quel pair puisse vous envoyer des fichiers à tout moment — daemon direct via TLS épinglé. Couvre l'approbation au premier envoi, l'autorisation préalable des empreintes pour systemd, --allow-delete et un exemple de fichier unit.",
+    "Gardez relayium serve en fonctionnement pour que n'importe quel pair puisse vous pousser des fichiers à tout moment — en daemon-direct sur TLS épinglé. Couvre l'approbation du premier push, la pré-autorisation des empreintes, le lancement au démarrage sous systemd (Linux) ou launchd (macOS), ainsi que --allow-delete.",
   updatedLabel: "Dernière mise à jour",
   lead: [
     "relayium serve --once traite un seul transfert entrant puis s'arrête — parfait pour un pull occasionnel. Mais si vous voulez qu'une machine soit un point de dépôt permanent — un serveur domestique qui reçoit des sauvegardes chaque nuit, une machine de build vers laquelle la CI pousse des artefacts, un NAS auquel votre téléphone peut envoyer des photos à tout moment — vous voulez que serve tourne en continu, sans avoir à le démarrer à la main à chaque transfert.",
@@ -734,6 +856,19 @@ WantedBy=multi-user.target`,
       ],
     },
     {
+      heading: "Le lancer au démarrage sous macOS (launchd)",
+      body: [
+        "macOS n'a pas de systemd — son gestionnaire de services est launchd. Pour maintenir serve en fonctionnement sur un Mac (par exemple un Mac mini laissé allumé comme point de dépôt), installez-le en tant que LaunchDaemon afin qu'il démarre au boot, avant que quiconque ne se connecte. Définissez UserName pour qu'il s'exécute sous votre compte plutôt qu'en root, et donnez à --dir et --config-dir des chemins absolus pour que ses fichiers d'identité et de confiance restent dans votre propre ~/.config/relayium :",
+      ],
+      code: [LAUNCHD_PLIST, LAUNCHD_CMDS],
+      bullets: [
+        "launchd ne donne aucun terminal à serve, il ne peut donc pas demander de confirmation — exécutez d'abord relayium authorize <fingerprint> pour chaque expéditeur, comme avec systemd. L'empreinte provient du relayium id de cette machine.",
+        "KeepAlive redémarre serve s'il plante ; RunAtLoad avec un LaunchDaemon dans /Library/LaunchDaemons le lance au démarrage sans connexion — le choix idéal pour un Mac mini sans écran.",
+        "Vous préférez un service à portée de session ? Placez le même plist (sans la clé UserName) dans ~/Library/LaunchAgents/ et chargez-le avec launchctl bootstrap gui/$(id -u) <path> — il démarre à votre connexion plutôt qu'au boot.",
+        "Si le coupe-feu applicatif de macOS est activé, autorisez les connexions entrantes pour relayium (Réglages Système → Réseau → Coupe-feu), sinon les pushes vers votre port seront bloqués.",
+      ],
+    },
+    {
       heading: "Laisser un émetteur utilisant sync --delete répercuter les suppressions",
       body: [
         "Par défaut, serve ne fait qu'ajouter ou mettre à jour des fichiers — un émetteur qui exécute sync --delete contre lui voit quand même ses fichiers nouveaux et modifiés copiés, mais les suppressions demandées sont ignorées, avec un avertissement consigné côté récepteur. Démarrez serve avec --allow-delete pour activer un vrai miroir, où les fichiers supprimés côté émetteur le sont aussi ici :",
@@ -768,6 +903,10 @@ WantedBy=multi-user.target`,
         q: "Où serve conserve-t-il son identité et sa liste de pairs ?",
         a: "Par défaut dans ~/.config/relayium (id.key/id.crt pour l'identité de cet hôte, authorized_fingerprints pour la liste d'autorisation). Pour un service systemd, faites pointer --config-dir vers un emplacement fixe comme /etc/relayium.",
       },
+      {
+        q: "Comment lancer serve au démarrage sous macOS ?",
+        a: "macOS n'a pas de systemd — utilisez launchd. Installez serve en tant que LaunchDaemon dans /Library/LaunchDaemons (démarre au boot ; définissez UserName pour qu'il s'exécute sous votre compte), ou en tant que LaunchAgent dans ~/Library/LaunchAgents (démarre à la connexion). Ce guide fournit un plist prêt à éditer ; il n'y a pas de service Homebrew. Pré-autorisez les expéditeurs avec relayium authorize au préalable, car launchd ne donne à serve aucun terminal pour demander confirmation.",
+      },
     ],
   },
   cta: {
@@ -780,6 +919,6 @@ WantedBy=multi-user.target`,
 
 export default {
   slug: "guides/run-relayium-as-an-always-on-service",
-  updated: "2026-07-09",
+  updated: "2026-07-10",
   langs: { en, zh, ja, ko, de, fr },
 };
