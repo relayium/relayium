@@ -40,6 +40,7 @@
   import { lang, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
   import { outbox, setOutbox, takeOutbox, clearOutbox } from "./lib/outbox.svelte";
+  import { shouldConfirmBeforeSend } from "./lib/confirm-send";
   import { folderUploadSupported } from "./lib/platform";
   import CrossPage from "./lib/CrossPage.svelte";
   import OfflinePage from "./lib/OfflinePage.svelte";
@@ -260,11 +261,37 @@
   // Queued files (OS share sheet, or picked before pairing) auto-send the
   // moment there's exactly one reachable device and nothing else in flight;
   // with several devices the user picks one (the peer cards become targets).
+  let pendingPeer = $state<Peer | null>(null);
+  let dismissedPeerId = $state<string | null>(null);
+
   $effect(() => {
     if (outbox().length && surfaceShown && !busy && visiblePeers.length === 1) {
-      sendFiles(visiblePeers[0].id, takeOutbox());
+      const peer = visiblePeers[0];
+      if (!shouldConfirmBeforeSend(roomCode)) {
+        sendFiles(peer.id, takeOutbox()); // LAN: unchanged frictionless auto-send
+        return;
+      }
+      // Code room: surface a confirmation bar instead of auto-sending, so a
+      // code-guesser who joined never receives the files automatically.
+      if (!pendingPeer && peer.id !== dismissedPeerId) pendingPeer = peer;
+    } else {
+      pendingPeer = null; // peer left / conditions changed
     }
   });
+
+  function confirmSend() {
+    if (pendingPeer) {
+      const id = pendingPeer.id;
+      pendingPeer = null;
+      sendFiles(id, takeOutbox());
+    }
+  }
+  function cancelSend() {
+    if (pendingPeer) {
+      dismissedPeerId = pendingPeer.id; // don't re-prompt this joiner; keep files queued for a different peer
+      pendingPeer = null;
+    }
+  }
 
   // Poll the live ICE path a few times once a channel is up: the selected
   // candidate pair can settle shortly after the data channel opens.
@@ -1144,6 +1171,13 @@
     {#if outbox().length && visiblePeers.length !== 1}
       <p class="share-pending">{t.sharePending(outbox().length)}</p>
     {/if}
+    {#if pendingPeer}
+      <div class="confirm-send" role="alertdialog" aria-live="polite">
+        <span>{t.confirmRecv(nameOf(pendingPeer.id))}</span>
+        <button class="btn btn-primary" onclick={confirmSend}>{t.confirmRecvSend}</button>
+        <button class="btn" onclick={cancelSend}>{t.confirmRecvCancel}</button>
+      </div>
+    {/if}
     {#if visiblePeers.length === 0}
       <div class="empty">
         <p class="empty-lead">{t.emptyPeers}</p>
@@ -1460,6 +1494,14 @@
     border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
     color: var(--text); font-size: 14px;
   }
+  .confirm-send {
+    margin: 0 0 12px; padding: 10px 14px; border-radius: 10px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    color: var(--text); font-size: 14px;
+  }
+  .confirm-send span { flex: 1 1 auto; }
   .peers ul {
     list-style: none; padding: 0; margin: 0;
     display: grid; gap: 12px;

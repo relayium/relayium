@@ -69,6 +69,9 @@ export interface Messages {
   titleDefault: string;
   reconnecting: string; // signalling socket dropped, trying to reconnect
   confirmLeave: string; // confirm() before an action would interrupt an active transfer
+  confirmRecv: (name: string) => string; // "<name> wants to receive"
+  confirmRecvSend: string;
+  confirmRecvCancel: string;
   status: {
     connecting: string;
     waitingAccept: string;

@@ -49,6 +49,9 @@ const de: Messages = {
   titleDefault: "Relayium — Ende-zu-Ende-verschlüsselte Dateiübertragung",
   reconnecting: "Verbindung getrennt – neu verbinden…",
   confirmLeave: "Eine Übertragung läuft. Ein Wechsel bricht sie ab. Fortfahren?",
+  confirmRecv: (n) => `${n} möchte empfangen`,
+  confirmRecvSend: "Senden",
+  confirmRecvCancel: "Abbrechen",
   status: {
     connecting: "Verschlüsselte Verbindung wird hergestellt…",
     waitingAccept: "Warten auf die Annahme des Empfängers…",

@@ -49,6 +49,9 @@ const en: Messages = {
   titleDefault: "Relayium — end-to-end encrypted file transfer",
   reconnecting: "Connection lost — reconnecting…",
   confirmLeave: "A transfer is in progress. Switching will interrupt it. Continue?",
+  confirmRecv: (n) => `${n} wants to receive`,
+  confirmRecvSend: "Send",
+  confirmRecvCancel: "Cancel",
   status: {
     connecting: "Establishing an encrypted connection…",
     waitingAccept: "Waiting for the recipient to accept…",

@@ -49,6 +49,9 @@ const ja: Messages = {
   titleDefault: "Relayium — エンドツーエンド暗号化ファイル転送",
   reconnecting: "接続が切れました。再接続しています…",
   confirmLeave: "転送が進行中です。切り替えると中断されます。続けますか？",
+  confirmRecv: (n) => `${n} が受信を希望しています`,
+  confirmRecvSend: "送信",
+  confirmRecvCancel: "キャンセル",
   status: {
     connecting: "暗号化接続を確立中…",
     waitingAccept: "相手の受信確認を待っています…",

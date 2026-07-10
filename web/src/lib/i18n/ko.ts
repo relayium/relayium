@@ -49,6 +49,9 @@ const ko: Messages = {
   titleDefault: "Relayium — 종단간 암호화 파일 전송",
   reconnecting: "연결이 끊어졌습니다. 다시 연결하는 중…",
   confirmLeave: "전송이 진행 중입니다. 전환하면 중단됩니다. 계속할까요?",
+  confirmRecv: (n) => `${n} 님이 받기를 원합니다`,
+  confirmRecvSend: "보내기",
+  confirmRecvCancel: "취소",
   status: {
     connecting: "암호화 연결을 설정하는 중…",
     waitingAccept: "상대의 수락을 기다리는 중…",
