@@ -8,6 +8,7 @@ import terms from "./pages/content/legal/terms.mjs";
 import security from "./pages/content/legal/security.mjs";
 import landing from "./pages/content/landing.mjs";
 import crossNetwork from "./pages/content/cross-network.mjs";
+import offlineTransfer from "./pages/content/offline-transfer.mjs";
 import guidesIndex from "./pages/content/guides-index.mjs";
 import compareSnapdrop from "./pages/content/articles/compare-snapdrop.mjs";
 import compareAirdrop from "./pages/content/articles/compare-airdrop.mjs";
@@ -101,6 +102,7 @@ async function main() {
     ...buildArticlePages(articles),
     ...buildGuidesIndexPages(guidesIndex, articleGroupsByLang(articles)),
     ...buildModePages(crossNetwork, { slug: "cross-network" }),
+    ...buildModePages(offlineTransfer, { slug: "offline-transfer" }),
   ];
   for (const page of pages) {
     const abs = join(publicDir, page.path);
@@ -114,7 +116,10 @@ async function main() {
       landing,
       articles,
       guidesIndex,
-      modes: [{ def: crossNetwork, slug: "cross-network" }],
+      modes: [
+        { def: crossNetwork, slug: "cross-network" },
+        { def: offlineTransfer, slug: "offline-transfer" },
+      ],
     }),
     "utf8"
   );
