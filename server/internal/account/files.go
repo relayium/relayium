@@ -92,7 +92,8 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	st := s.resolveSettings(r.Context())
 	burn := r.URL.Query().Get("burnAfterRead") == "1"
 	reqTTL, _ := strconv.ParseInt(r.URL.Query().Get("ttl"), 10, 64)
-	ttl := clampTTL(reqTTL, st)
+	reqMaxDL, _ := strconv.ParseInt(r.URL.Query().Get("maxDownloads"), 10, 64)
+	ttl, maxDL := resolveRetention(burn, reqTTL, reqMaxDL, st)
 
 	br := bufio.NewReader(r.Body)
 	// Length-prefixed opaque encrypted manifest.
@@ -178,17 +179,15 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		}
 	}
 	id := newID()
-	// Burn normalizes to MaxDownloads=1 (1 = burn-equivalent), so the generalized
-	// ClaimDownloadSlot enforcement (files.go handleFileBlob) covers burn without a
-	// separate code path. BurnAfterRead itself is kept for back-compat/display only.
-	maxDownloads := int64(0)
-	if burn {
-		maxDownloads = 1
-	}
+	// resolveRetention above turns request params + admin default policy into
+	// (ttl, maxDL); maxDL==1 is the burn-equivalent slot count, so the
+	// generalized ClaimDownloadSlot enforcement (files.go handleFileBlob) covers
+	// burn without a separate code path. BurnAfterRead itself is kept for
+	// back-compat/display only.
 	sf := StoredFile{
 		ID: id, UserID: u.ID, BlobKey: blobKey, EncManifest: encManifest,
-		Size: size, BurnAfterRead: burn, CreatedAt: now, ExpiresAt: now + ttl, NodeID: nodeID,
-		MaxDownloads: maxDownloads,
+		Size: size, BurnAfterRead: maxDL == 1, CreatedAt: now, ExpiresAt: now + ttl, NodeID: nodeID,
+		MaxDownloads: maxDL,
 	}
 	if err := s.store.CreateStoredFile(r.Context(), sf); err != nil {
 		s.dropBlob(bs, blobKey, nodeID)
@@ -257,12 +256,19 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 
 	// Retention: unlimited files (max_downloads==0) stream freely. Limited files
 	// claim a slot BEFORE streaming so an offline node never spends a shot;
-	// concurrent GETs race on ClaimDownloadSlot and only winners stream.
+	// concurrent GETs race on ClaimDownloadSlot and only winners stream. slot is
+	// THIS request's own 1-based slot number (from the same atomic UPDATE that
+	// incremented download_count) — the post-delivery delete below gates on it
+	// directly rather than re-reading download_count, which would be racy: a
+	// concurrent in-flight (later-failing) claim could inflate the count and
+	// make an earlier, genuinely-final-slot-less download look like the last one.
 	limited := sf.MaxDownloads > 0
-	var claimAt int64
+	var claimAt, slot int64
 	if limited {
 		claimAt = s.now().Unix()
-		claimed, cerr := s.store.ClaimDownloadSlot(r.Context(), sf.ID, claimAt)
+		var claimed bool
+		var cerr error
+		slot, claimed, cerr = s.store.ClaimDownloadSlot(r.Context(), sf.ID, claimAt)
 		if cerr != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
@@ -293,9 +299,11 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	_ = s.store.AddDownloadStat(r.Context(), sf.UserID, sf.Size)
 	_ = s.store.RecordMeter(r.Context(), sf.UserID, MeterDownload, sf.Size, s.now().Unix())
 	if limited {
-		// Re-read to see the post-claim count (this request already incremented it).
-		if cur, gerr := s.store.GetStoredFile(r.Context(), sf.ID); gerr == nil &&
-			cur.MaxDownloads > 0 && cur.DownloadCount >= cur.MaxDownloads {
+		// Delete iff THIS request took the final slot (its own claimed slot
+		// number is >= MaxDownloads) — never by re-reading download_count, which
+		// a concurrent claim could have already bumped past MaxDownloads on a
+		// request that hasn't (and may never) finish delivering.
+		if slot >= sf.MaxDownloads {
 			if derr := bs.Delete(r.Context(), sf.BlobKey); derr != nil {
 				// Node unreachable: record the orphan so GC retries; still remove the row.
 				_ = s.store.EnqueueNodeDelete(r.Context(), sf.BlobKey, sf.NodeID, s.now().Unix())

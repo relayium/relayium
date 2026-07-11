@@ -56,6 +56,15 @@ type Config struct {
 	// RelayMonthlyFree is the interim per-user monthly TURN-relay allowance in
 	// bytes; superseded by a per-plan quota later.
 	RelayMonthlyFree int64
+	// DefaultRetention is the admin default retention policy (0=burn, 1=ttl,
+	// 2=count) applied when an upload request specifies none of
+	// burnAfterRead/ttl/maxDownloads. See Settings.DefaultRetention.
+	DefaultRetention int64
+	// DefaultMaxDownloads is the download-count cap used by the count retention
+	// policy, and the fallback for a non-positive explicit maxDownloads request.
+	DefaultMaxDownloads int64
+	// MaxMaxDownloads hard-bounds any resolved MaxDownloads; 0 = unbounded.
+	MaxMaxDownloads int64
 	// NodeToken is the fleet bootstrap bearer token relay nodes present to
 	// /api/nodes/*. Empty disables the node API (endpoints return 404).
 	NodeToken string

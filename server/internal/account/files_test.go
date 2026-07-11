@@ -31,6 +31,10 @@ func newFileServer(t *testing.T) (*httptest.Server, *Service, *SQLiteStore, *cap
 		// tests that specifically exercise quota exhaustion build their own
 		// tight-quota server via newFileServerWithQuota instead.
 		MaxFileSize: 1024, DailyQuota: 8 << 20, DefaultTTL: 3600, MaxTTL: 7200,
+		// DefaultRetention=ttl keeps a plain upload (no burn/ttl/maxDownloads
+		// params) unlimited-until-TTL, matching this suite's pre-existing
+		// assumption; tests that want burn/count behavior request it explicitly.
+		DefaultRetention: retentionTTL,
 	})
 	// Tests route blobs to loopback fakeNode servers; relax the SSRF dial guard.
 	svc.nodeHTTP.Transport.(*http.Transport).DialContext = guardedDialContext(true)

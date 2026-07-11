@@ -10,11 +10,14 @@ func newSettingsService(t *testing.T) (*Service, *SQLiteStore) {
 	t.Helper()
 	store := newTestStore(t)
 	svc := NewService(store, &capturingMailer{}, Config{
-		BaseURL:     "http://example.test",
-		MaxFileSize: 50 << 20,
-		DailyQuota:  200 << 20,
-		DefaultTTL:  86400,
-		MaxTTL:      604800,
+		BaseURL:             "http://example.test",
+		MaxFileSize:         50 << 20,
+		DailyQuota:          200 << 20,
+		DefaultTTL:          86400,
+		MaxTTL:              604800,
+		DefaultRetention:    retentionTTL, // keep this suite's uploads unlimited-until-TTL, not burn
+		DefaultMaxDownloads: 5,
+		MaxMaxDownloads:     100,
 	})
 	svc.now = func() time.Time { return time.Unix(1000, 0) }
 	return svc, store
@@ -83,8 +86,17 @@ func TestSeedSettingsInsertsDefaultsOnceAndKeepsExisting(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	all, _ := store.ListSettings(ctx)
-	if len(all) != 5 {
-		t.Fatalf("want 5 settings seeded, got %d (%+v)", len(all), all)
+	if len(all) != 8 {
+		t.Fatalf("want 8 settings seeded, got %d (%+v)", len(all), all)
+	}
+	if v, _, _ := store.GetSetting(ctx, SettingDefaultRetention); v != retentionTTL {
+		t.Fatalf("seed default_retention = %d, want %d", v, int64(retentionTTL))
+	}
+	if v, _, _ := store.GetSetting(ctx, SettingDefaultMaxDownloads); v != 5 {
+		t.Fatalf("seed default_max_downloads = %d, want 5", v)
+	}
+	if v, _, _ := store.GetSetting(ctx, SettingMaxMaxDownloads); v != 100 {
+		t.Fatalf("seed max_max_downloads = %d, want 100", v)
 	}
 	if v, _, _ := store.GetSetting(ctx, SettingDailyQuota); v != 777 {
 		t.Fatalf("seed overwrote existing daily_quota = %d, want 777", v)

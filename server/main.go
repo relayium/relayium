@@ -97,6 +97,12 @@ func main() {
 	fileTTLMax := flag.Int64("file-ttl-max", envInt64("RELAYIUM_FILE_TTL_MAX", 604800), "stored-transfer max link TTL in seconds (default 7 days)")
 	relayMonthlyFree := flag.Int64("relay-monthly-free", envInt64("RELAYIUM_RELAY_MONTHLY_FREE", 2<<30),
 		"interim per-user monthly TURN-relay allowance in bytes (default 2 GiB); superseded by per-plan quota later")
+	defaultRetention := flag.Int64("default-retention", envInt64("RELAYIUM_DEFAULT_RETENTION", 0),
+		"stored-transfer default retention policy when an upload requests none: 0=burn, 1=ttl, 2=count")
+	defaultMaxDownloads := flag.Int64("default-max-downloads", envInt64("RELAYIUM_DEFAULT_MAX_DOWNLOADS", 5),
+		"stored-transfer default download-count cap used by the count retention policy (default 5)")
+	maxMaxDownloads := flag.Int64("max-max-downloads", envInt64("RELAYIUM_MAX_MAX_DOWNLOADS", 100),
+		"stored-transfer hard ceiling on a requested download-count cap (default 100)")
 	trustedProxies := flag.String("trusted-proxies", envStr("RELAYIUM_TRUSTED_PROXIES", ""), "comma-separated CIDRs (or IPs) of reverse proxies whose X-Forwarded-For is trusted; empty (default) ignores XFF and uses the direct peer IP")
 	blobDiskMax := flag.Int64("blob-disk-max", envInt64("RELAYIUM_BLOB_DISK_MAX", 0),
 		"global blob-volume high-water mark in bytes; new uploads 503 once used >= this (0 disables the global soft cap)")
@@ -240,9 +246,12 @@ func main() {
 			DailyQuota:       *dailyQuota,
 			DefaultTTL:       *fileTTL,
 			MaxTTL:           *fileTTLMax,
-			RelayMonthlyFree: *relayMonthlyFree,
-			NodeToken:        *nodeToken,
-			EnableUserNodes:  *enableUserNodes,
+			RelayMonthlyFree:    *relayMonthlyFree,
+			DefaultRetention:    *defaultRetention,
+			DefaultMaxDownloads: *defaultMaxDownloads,
+			MaxMaxDownloads:     *maxMaxDownloads,
+			NodeToken:           *nodeToken,
+			EnableUserNodes:     *enableUserNodes,
 		})
 		// Wire /api/ice to validate anonymous pairing codes so it can hand out
 		// TURN credentials for them — otherwise code transfers are STUN-only

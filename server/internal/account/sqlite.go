@@ -1147,20 +1147,30 @@ func (s *SQLiteStore) IncDownloadCount(ctx context.Context, id string) error {
 // the WHERE clause (max_downloads = 0 OR download_count < max_downloads) means
 // only callers that still fit under the cap succeed, so concurrent GETs racing
 // on the same near-exhausted file each get an authoritative claimed/not-claimed
-// answer instead of over-counting.
-func (s *SQLiteStore) ClaimDownloadSlot(ctx context.Context, id string, at int64) (bool, error) {
-	res, err := s.db.ExecContext(ctx,
+// answer instead of over-counting. RETURNING hands back the post-increment
+// download_count in the SAME atomic statement as the UPDATE, so slot is this
+// request's own 1-based slot number — not a value a concurrent claim (which
+// may later fail and release) can inflate out from under a caller that reads
+// it back separately. Callers must gate any "was this the last slot" decision
+// (e.g. handleFileBlob's delete-when-exhausted) on this returned slot, never
+// on a fresh re-read of download_count.
+func (s *SQLiteStore) ClaimDownloadSlot(ctx context.Context, id string, at int64) (int64, bool, error) {
+	var slot int64
+	err := s.db.QueryRowContext(ctx,
 		`UPDATE stored_files
 		    SET download_count = download_count + 1,
 		        downloaded_at = ?
 		  WHERE id = ?
-		    AND (max_downloads = 0 OR download_count < max_downloads)`,
-		at, id)
+		    AND (max_downloads = 0 OR download_count < max_downloads)
+		  RETURNING download_count`,
+		at, id).Scan(&slot)
 	if err != nil {
-		return false, err
+		if err == sql.ErrNoRows {
+			return 0, false, nil
+		}
+		return 0, false, err
 	}
-	n, err := res.RowsAffected()
-	return n == 1, err
+	return slot, true, nil
 }
 
 // ReleaseDownloadSlot undoes a ClaimDownloadSlot after a failed delivery

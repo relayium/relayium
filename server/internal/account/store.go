@@ -315,8 +315,11 @@ type Store interface {
 	// ClaimDownloadSlot atomically takes one of a file's remaining download
 	// slots: increments download_count only while download_count < max_downloads
 	// (max_downloads = 0 means unlimited). Returns claimed=true exactly for the
-	// callers that fit under the cap across concurrent requests.
-	ClaimDownloadSlot(ctx context.Context, id string, at int64) (claimed bool, err error)
+	// callers that fit under the cap across concurrent requests, and slot = the
+	// post-increment download_count (1-based) THIS call took — the caller's own
+	// slot number, not a value a concurrent claim can later inflate out from
+	// under it. slot==0 when claimed==false.
+	ClaimDownloadSlot(ctx context.Context, id string, at int64) (slot int64, claimed bool, err error)
 	// ReleaseDownloadSlot undoes a ClaimDownloadSlot after a failed delivery
 	// (download_count-1, floored at 0).
 	ReleaseDownloadSlot(ctx context.Context, id string, at int64) error

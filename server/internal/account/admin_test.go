@@ -84,7 +84,8 @@ func TestAdminSettingsUpdateValid(t *testing.T) {
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	// 10 MiB file, 100 MiB quota, 12h default, 48h max, 5 MiB relay cap.
 	req, _ := http.NewRequest("POST", ts.URL+"/admin/settings", strings.NewReader(
-		"max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48&relay_monthly_free_mb=5"))
+		"max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48&relay_monthly_free_mb=5"+
+			"&default_retention=0&default_max_downloads=5&max_max_downloads=100"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(cookie)
 	resp, _ := client.Do(req)
@@ -112,13 +113,24 @@ func TestAdminSettingsRejectsInvalid(t *testing.T) {
 		resp, _ := client.Do(req)
 		return resp.StatusCode
 	}
+	const okRetention = "&default_retention=0&default_max_downloads=5&max_max_downloads=100"
 	// default_ttl (48h) > max_ttl (24h) → rejected.
-	if code := post("max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=48&max_ttl_hours=24&relay_monthly_free_mb=5"); code != http.StatusBadRequest {
+	if code := post("max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=48&max_ttl_hours=24&relay_monthly_free_mb=5" + okRetention); code != http.StatusBadRequest {
 		t.Fatalf("default>max: want 400, got %d", code)
 	}
 	// Negative value → rejected.
-	if code := post("max_file_size_mb=-1&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48&relay_monthly_free_mb=5"); code != http.StatusBadRequest {
+	if code := post("max_file_size_mb=-1&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48&relay_monthly_free_mb=5" + okRetention); code != http.StatusBadRequest {
 		t.Fatalf("negative: want 400, got %d", code)
+	}
+	// default_retention out of range (0..2) → rejected.
+	if code := post("max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48&relay_monthly_free_mb=5" +
+		"&default_retention=3&default_max_downloads=5&max_max_downloads=100"); code != http.StatusBadRequest {
+		t.Fatalf("default_retention=3: want 400, got %d", code)
+	}
+	// default_max_downloads > max_max_downloads → rejected.
+	if code := post("max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48&relay_monthly_free_mb=5" +
+		"&default_retention=2&default_max_downloads=999&max_max_downloads=100"); code != http.StatusBadRequest {
+		t.Fatalf("default_max_downloads>max: want 400, got %d", code)
 	}
 	// Nothing persisted by the rejected posts.
 	if _, ok, _ := store.GetSetting(context.Background(), SettingMaxFileSize); ok {
@@ -132,9 +144,10 @@ func TestAdminSettingsSavesRelayCap(t *testing.T) {
 	client := ts.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
-	// Post all five settings; relay cap = 3 MiB.
+	// Post all settings; relay cap = 3 MiB.
 	req, _ := http.NewRequest("POST", ts.URL+"/admin/settings", strings.NewReader(
-		"max_file_size_mb=50&daily_quota_mb=200&default_ttl_hours=24&max_ttl_hours=168&relay_monthly_free_mb=3"))
+		"max_file_size_mb=50&daily_quota_mb=200&default_ttl_hours=24&max_ttl_hours=168&relay_monthly_free_mb=3"+
+			"&default_retention=0&default_max_downloads=5&max_max_downloads=100"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(cookie)
 	resp, _ := client.Do(req)
