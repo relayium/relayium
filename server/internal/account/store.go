@@ -313,6 +313,14 @@ type Store interface {
 	// MarkPurgeReminderSent records when the pre-purge reminder email was sent,
 	// so GC sends it at most once per deletion request.
 	MarkPurgeReminderSent(ctx context.Context, userID string, at int64) error
+	// PurgeTransientUserData wipes a user's transient/live data immediately at
+	// deletion-confirmation time (sessions, cli_tokens, cli_device_auth,
+	// devices, magic_tokens, stored_files, node_tokens, and their own
+	// owner_type='user' nodes), keeping the account shell (users row +
+	// identities + usage_events/usage_monthly/user_stats) intact until the
+	// 30-day hard-purge. Returns the deleted stored_files so the caller can
+	// enqueue blob deletes. Runs in one transaction.
+	PurgeTransientUserData(ctx context.Context, userID string) (blobs []StoredFile, err error)
 	// sessions
 	CreateSession(ctx context.Context, s Session) error
 	GetSession(ctx context.Context, id string) (Session, bool, error)

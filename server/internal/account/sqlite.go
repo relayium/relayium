@@ -591,6 +591,51 @@ func (s *SQLiteStore) MarkPurgeReminderSent(ctx context.Context, userID string, 
 	return err
 }
 
+// PurgeTransientUserData wipes a user's transient/live data at
+// deletion-confirmation time, keeping the account shell (users row +
+// identities + usage_events/usage_monthly/user_stats) intact until the
+// 30-day hard-purge (GC). It returns the user's stored_files (selected
+// before the delete) so the caller can enqueue blob deletes.
+//
+// magic_tokens has no user_id column (it's keyed by the login email, not an
+// account row — see CreateMagicToken), so it's purged by matching the user's
+// current email instead. node_tokens carries its own user_id column (plus a
+// nullable, unbound-until-claimed node_id), so it's deleted directly by
+// user_id rather than via a nodes subquery, which would miss unbound tokens.
+func (s *SQLiteStore) PurgeTransientUserData(ctx context.Context, userID string) ([]StoredFile, error) {
+	files, err := s.ListStoredFilesByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	stmts := []struct {
+		q    string
+		args []any
+	}{
+		{`DELETE FROM sessions WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM cli_tokens WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM cli_device_auth WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM devices WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM magic_tokens WHERE email=(SELECT email FROM users WHERE id=?)`, []any{userID}},
+		{`DELETE FROM stored_files WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM node_tokens WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM nodes WHERE owner_type='user' AND owner_user_id=?`, []any{userID}},
+	}
+	for _, st := range stmts {
+		if _, err := tx.ExecContext(ctx, st.q, st.args...); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
 func (s *SQLiteStore) LinkIdentity(ctx context.Context, provider, subject, userID string) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT OR IGNORE INTO identities (provider, subject, user_id) VALUES (?, ?, ?)`,
