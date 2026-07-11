@@ -168,6 +168,26 @@ CREATE TABLE IF NOT EXISTS fleet_tokens (
   last_used_at INTEGER NOT NULL DEFAULT 0,
   revoked_at   INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS cli_device_auth (
+  user_code        TEXT PRIMARY KEY,
+  device_code_hash TEXT NOT NULL UNIQUE,
+  status           TEXT NOT NULL,
+  user_id          TEXT NOT NULL DEFAULT '',
+  token_hash       TEXT NOT NULL DEFAULT '',
+  pending_token    TEXT NOT NULL DEFAULT '', -- raw one-time token, held only between approve and the next poll
+  created_at       INTEGER NOT NULL,
+  expires_at       INTEGER NOT NULL,
+  consumed_at      INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS cli_tokens (
+  token_hash   TEXT PRIMARY KEY,
+  user_id      TEXT NOT NULL,
+  device_id    TEXT NOT NULL,
+  created_at   INTEGER NOT NULL,
+  last_seen_at INTEGER NOT NULL DEFAULT 0,
+  FOREIGN KEY(user_id) REFERENCES users(id),
+  FOREIGN KEY(device_id) REFERENCES devices(id)
+);
 `
 
 // connPragmas are applied to every connection via the DSN (not a one-shot
@@ -239,6 +259,9 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// monthly relay traffic and disk usage.
 		`ALTER TABLE nodes ADD COLUMN traffic_limit_bytes INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE nodes ADD COLUMN disk_limit_bytes INTEGER NOT NULL DEFAULT 0`,
+		// device-code CLI login flow: distinguishes a CLI-registered device
+		// ("cli") from the default browser device. Existing rows default to ''.
+		`ALTER TABLE devices ADD COLUMN kind TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -665,27 +688,29 @@ func (s *SQLiteStore) DeleteSpentEmailTokens(ctx context.Context, now int64) err
 	return err
 }
 
+const deviceCols = `id, user_id, name, created_at, last_seen_at, kind`
+
 func (s *SQLiteStore) UpsertDevice(ctx context.Context, d Device) (Device, error) {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO devices (id, user_id, name, created_at, last_seen_at)
-		 VALUES (?, ?, ?, ?, ?)
-		 ON CONFLICT(id) DO UPDATE SET name = excluded.name
+		`INSERT INTO devices (`+deviceCols+`)
+		 VALUES (?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET name = excluded.name, kind = excluded.kind
 		 WHERE devices.user_id = excluded.user_id`,
-		d.ID, d.UserID, d.Name, d.CreatedAt, d.LastSeenAt)
+		d.ID, d.UserID, d.Name, d.CreatedAt, d.LastSeenAt, d.Kind)
 	if err != nil {
 		return Device{}, err
 	}
 	var out Device
 	err = s.db.QueryRowContext(ctx,
-		`SELECT id, user_id, name, created_at, last_seen_at FROM devices WHERE id = ? AND user_id = ?`,
+		`SELECT `+deviceCols+` FROM devices WHERE id = ? AND user_id = ?`,
 		d.ID, d.UserID,
-	).Scan(&out.ID, &out.UserID, &out.Name, &out.CreatedAt, &out.LastSeenAt)
+	).Scan(&out.ID, &out.UserID, &out.Name, &out.CreatedAt, &out.LastSeenAt, &out.Kind)
 	return out, err
 }
 
 func (s *SQLiteStore) ListDevices(ctx context.Context, userID string) ([]Device, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, user_id, name, created_at, last_seen_at FROM devices WHERE user_id = ? ORDER BY created_at`, userID)
+		`SELECT `+deviceCols+` FROM devices WHERE user_id = ? ORDER BY created_at`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -693,7 +718,7 @@ func (s *SQLiteStore) ListDevices(ctx context.Context, userID string) ([]Device,
 	var out []Device
 	for rows.Next() {
 		var d Device
-		if err := rows.Scan(&d.ID, &d.UserID, &d.Name, &d.CreatedAt, &d.LastSeenAt); err != nil {
+		if err := rows.Scan(&d.ID, &d.UserID, &d.Name, &d.CreatedAt, &d.LastSeenAt, &d.Kind); err != nil {
 			return nil, err
 		}
 		out = append(out, d)
@@ -1731,4 +1756,134 @@ func (s *SQLiteStore) ListActiveFleetTokens(ctx context.Context) ([]FleetToken, 
 		out = append(out, t)
 	}
 	return out, rows.Err()
+}
+
+// deviceAuthCols is shared by CreateDeviceAuth's INSERT and the two lookup
+// SELECTs; pending_token is deliberately excluded from the public struct (it
+// is a DB-internal handoff field) but still needs its own default on INSERT.
+const deviceAuthCols = `user_code, device_code_hash, status, user_id, token_hash, created_at, expires_at, consumed_at`
+
+func (s *SQLiteStore) CreateDeviceAuth(ctx context.Context, r DeviceAuthRequest) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO cli_device_auth (`+deviceAuthCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.UserCode, r.DeviceCodeHash, r.Status, r.UserID, r.TokenHash, r.CreatedAt, r.ExpiresAt, r.ConsumedAt)
+	return err
+}
+
+func scanDeviceAuth(sc rowScanner) (DeviceAuthRequest, error) {
+	var r DeviceAuthRequest
+	err := sc.Scan(&r.UserCode, &r.DeviceCodeHash, &r.Status, &r.UserID, &r.TokenHash,
+		&r.CreatedAt, &r.ExpiresAt, &r.ConsumedAt)
+	return r, err
+}
+
+func (s *SQLiteStore) GetDeviceAuthByUserCode(ctx context.Context, userCode string) (DeviceAuthRequest, bool, error) {
+	r, err := scanDeviceAuth(s.db.QueryRowContext(ctx,
+		`SELECT `+deviceAuthCols+` FROM cli_device_auth WHERE user_code = ?`, userCode))
+	if err == sql.ErrNoRows {
+		return DeviceAuthRequest{}, false, nil
+	}
+	if err != nil {
+		return DeviceAuthRequest{}, false, err
+	}
+	return r, true, nil
+}
+
+func (s *SQLiteStore) GetDeviceAuthByCodeHash(ctx context.Context, hash string) (DeviceAuthRequest, bool, error) {
+	r, err := scanDeviceAuth(s.db.QueryRowContext(ctx,
+		`SELECT `+deviceAuthCols+` FROM cli_device_auth WHERE device_code_hash = ?`, hash))
+	if err == sql.ErrNoRows {
+		return DeviceAuthRequest{}, false, nil
+	}
+	if err != nil {
+		return DeviceAuthRequest{}, false, err
+	}
+	return r, true, nil
+}
+
+// ApproveDeviceAuth atomically transitions a request from pending to approved,
+// conditioned on both the request still being pending AND unexpired — the
+// WHERE clause means only the request whose user_code exactly matches a
+// pending, live row is touched, so RowsAffected()==1 is the sole signal of
+// success (stale/expired/already-approved/denied/unknown codes all report
+// ok=false, nothing written). The raw one-time token is stashed in
+// pending_token for ConsumeDeviceAuth to hand back on the CLI's next poll.
+func (s *SQLiteStore) ApproveDeviceAuth(ctx context.Context, userCode, userID, tokenHash, rawToken string, at int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE cli_device_auth SET status='approved', user_id=?, token_hash=?, pending_token=?
+		  WHERE user_code=? AND status='pending' AND expires_at > ?`,
+		userID, tokenHash, rawToken, userCode, at)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
+
+// ConsumeDeviceAuth marks an approved request consumed exactly once and returns
+// the raw one-time token, blanking pending_token so it never lingers at rest.
+// The SELECT and UPDATE run in one transaction so a second concurrent caller
+// racing the same codeHash either sees the row still approved/unconsumed (and
+// wins) or already consumed (sql.ErrNoRows, ok=false) — never a torn read of a
+// pending_token that's about to be blanked out from under it.
+func (s *SQLiteStore) ConsumeDeviceAuth(ctx context.Context, codeHash string, at int64) (string, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", false, err
+	}
+	defer tx.Rollback()
+	var raw string
+	err = tx.QueryRowContext(ctx,
+		`SELECT pending_token FROM cli_device_auth
+		  WHERE device_code_hash=? AND status='approved' AND consumed_at=0`, codeHash).Scan(&raw)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE cli_device_auth SET consumed_at=?, pending_token='' WHERE device_code_hash=?`,
+		at, codeHash); err != nil {
+		return "", false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", false, err
+	}
+	return raw, true, nil
+}
+
+// DeleteExpiredDeviceAuth reclaims device-auth rows past their expiry —
+// pending or approved-but-never-consumed alike; a consumed row is already
+// harmless (pending_token blanked) but gets swept too once past expiry.
+func (s *SQLiteStore) DeleteExpiredDeviceAuth(ctx context.Context, now int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM cli_device_auth WHERE expires_at < ?`, now)
+	return err
+}
+
+func (s *SQLiteStore) CreateCLIToken(ctx context.Context, t CLIToken) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO cli_tokens (token_hash, user_id, device_id, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?)`,
+		t.TokenHash, t.UserID, t.DeviceID, t.CreatedAt, t.LastSeenAt)
+	return err
+}
+
+func (s *SQLiteStore) GetCLITokenUser(ctx context.Context, tokenHash string) (string, string, bool, error) {
+	var userID, deviceID string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT user_id, device_id FROM cli_tokens WHERE token_hash = ?`, tokenHash).
+		Scan(&userID, &deviceID)
+	if err == sql.ErrNoRows {
+		return "", "", false, nil
+	}
+	if err != nil {
+		return "", "", false, err
+	}
+	return userID, deviceID, true, nil
+}
+
+func (s *SQLiteStore) TouchCLIToken(ctx context.Context, tokenHash string, at int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE cli_tokens SET last_seen_at = ? WHERE token_hash = ?`, at, tokenHash)
+	return err
 }

@@ -67,6 +67,36 @@ type Device struct {
 	Name       string
 	CreatedAt  int64
 	LastSeenAt int64
+	// Kind distinguishes the device's platform: "" / "browser" (default) or
+	// "cli" for a device registered via the device-code CLI login flow.
+	Kind string
+}
+
+// DeviceAuthRequest is one device-code CLI login flow request (RFC 8628-style).
+// Status transitions pending -> approved -> consumed exactly once each; denied
+// is a terminal dead end. TokenHash is the hash of the CLI bearer token minted
+// on approval; PendingToken (DB-only, not exposed on this struct) transiently
+// holds the raw token between approve and the CLI's next poll, then is blanked.
+type DeviceAuthRequest struct {
+	UserCode       string // short code shown to the user (e.g. "WDJB-MJHT")
+	DeviceCodeHash string // hash of the long-lived code the CLI polls with
+	Status         string // "pending" | "approved" | "denied"
+	UserID         string // set on approval
+	TokenHash      string // hash of the minted CLI token, set on approval
+	CreatedAt      int64
+	ExpiresAt      int64
+	ConsumedAt     int64 // 0 = not yet consumed
+}
+
+// CLIToken is a long-lived hashed bearer credential minted at the end of a
+// device-code CLI login flow. Only its hash is stored; the raw token is shown
+// to the CLI once (via ConsumeDeviceAuth's pending_token handoff).
+type CLIToken struct {
+	TokenHash  string
+	UserID     string
+	DeviceID   string
+	CreatedAt  int64
+	LastSeenAt int64
 }
 
 // UsageEvent is one coturn allocation's relay accounting. Recorded unattributed
@@ -389,4 +419,25 @@ type Store interface {
 	TouchFleetTokenUsed(ctx context.Context, id string, at int64) error
 	RevokeFleetToken(ctx context.Context, id string, at int64) error
 	ListActiveFleetTokens(ctx context.Context) ([]FleetToken, error)
+	// cli_device_auth (device-code CLI login flow)
+	CreateDeviceAuth(ctx context.Context, r DeviceAuthRequest) error
+	GetDeviceAuthByUserCode(ctx context.Context, userCode string) (DeviceAuthRequest, bool, error)
+	GetDeviceAuthByCodeHash(ctx context.Context, hash string) (DeviceAuthRequest, bool, error)
+	// ApproveDeviceAuth atomically transitions a request from pending to
+	// approved (WHERE status='pending' AND unexpired), stashing the raw
+	// one-time CLI token in pending_token for the next poll to collect.
+	// ok=false if the request wasn't pending/unexpired (already approved,
+	// denied, expired, or unknown code) — nothing is written.
+	ApproveDeviceAuth(ctx context.Context, userCode, userID, tokenHash, rawToken string, at int64) (ok bool, err error)
+	// ConsumeDeviceAuth atomically transitions an approved request to
+	// consumed exactly once, returning the raw one-time token stashed by
+	// ApproveDeviceAuth and blanking pending_token so it never lingers at
+	// rest. ok=false on any second call or if the request isn't approved.
+	ConsumeDeviceAuth(ctx context.Context, codeHash string, at int64) (rawToken string, ok bool, err error)
+	// DeleteExpiredDeviceAuth reclaims device-auth rows past their expiry.
+	DeleteExpiredDeviceAuth(ctx context.Context, now int64) error
+	// cli_tokens (long-lived hashed CLI bearer tokens; prefix "rlm_cli_")
+	CreateCLIToken(ctx context.Context, t CLIToken) error
+	GetCLITokenUser(ctx context.Context, tokenHash string) (userID, deviceID string, ok bool, err error)
+	TouchCLIToken(ctx context.Context, tokenHash string, at int64) error
 }
