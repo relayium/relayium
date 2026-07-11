@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"os"
 	"sync"
@@ -232,6 +233,12 @@ func (s *Service) UserFromRequest(r *http.Request) (User, bool) {
 
 func (s *Service) RequestMagicLink(ctx context.Context, email string) error {
 	email = normEmail(email)
+	// Reject malformed addresses (e.g. embedded CRLF) before they reach the
+	// mailer — defense in depth against SMTP header injection. Silent to keep the
+	// endpoint's anti-enumeration behaviour.
+	if _, err := mail.ParseAddress(email); err != nil {
+		return nil
+	}
 	raw := randToken()
 	now := s.now()
 	tok := MagicToken{

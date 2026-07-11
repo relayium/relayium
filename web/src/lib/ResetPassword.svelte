@@ -20,6 +20,9 @@
 
   onMount(() => {
     token = new URLSearchParams(location.search).get("token") ?? "";
+    // Strip the token from the URL so it doesn't linger in browser history or
+    // leak via the Referer header on a later navigation (it's kept in memory).
+    if (token) history.replaceState(null, "", location.pathname);
     if (!token) phase = "no-token";
   });
 

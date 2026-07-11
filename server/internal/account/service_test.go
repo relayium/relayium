@@ -57,6 +57,26 @@ func newMagicTestService(t *testing.T) (*Service, *capturingMailer) {
 	return svc, mail
 }
 
+// A malformed address (e.g. embedded CRLF for SMTP header injection) must be a
+// silent no-op: no mail sent, no error leaked.
+func TestRequestMagicLinkRejectsMalformedEmail(t *testing.T) {
+	svc, mail := newMagicTestService(t)
+	ctx := context.Background()
+	for _, bad := range []string{
+		"victim@example.com\r\nBcc: evil@x.com",
+		"a@b.com\nSubject: hijack",
+		"not-an-email",
+		"",
+	} {
+		if err := svc.RequestMagicLink(ctx, bad); err != nil {
+			t.Errorf("RequestMagicLink(%q) = %v, want silent nil", bad, err)
+		}
+	}
+	if mail.sends() != 0 {
+		t.Fatalf("mailer sent %d messages for malformed addresses; want 0", mail.sends())
+	}
+}
+
 func TestMagicLinkRoundTripIssuesSession(t *testing.T) {
 	svc, mail := newMagicTestService(t)
 	ctx := context.Background()

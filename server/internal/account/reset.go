@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"fmt"
+	"net/mail"
 	"net/url"
 
 	"golang.org/x/crypto/bcrypt"
@@ -13,6 +14,11 @@ import (
 // endpoint never reveals whether an account exists.
 func (s *Service) RequestPasswordReset(ctx context.Context, email string) error {
 	email = normEmail(email)
+	// Reject malformed addresses (e.g. embedded CRLF) before the mailer — defense
+	// in depth against SMTP header injection. Silent, per the no-op contract above.
+	if _, err := mail.ParseAddress(email); err != nil {
+		return nil
+	}
 	uid, _, ok, err := s.store.GetCredentials(ctx, email)
 	if err != nil {
 		return err

@@ -15,6 +15,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 )
 
@@ -30,7 +31,9 @@ func LoadOrCreateIdentity(dir string) (*Identity, error) {
 	info, err := os.Stat(keyPath)
 	switch {
 	case err == nil:
-		if perm := info.Mode().Perm(); perm != 0o600 {
+		// Unix permission bits are not meaningful on Windows (Stat reports ~0666
+		// regardless; access is governed by ACLs), so only enforce 0600 elsewhere.
+		if perm := info.Mode().Perm(); runtime.GOOS != "windows" && perm != 0o600 {
 			return nil, fmt.Errorf("secure: %s has insecure permissions %04o; run: chmod 600 %s", keyPath, perm, keyPath)
 		}
 		return loadIdentity(keyPath, crtPath)
