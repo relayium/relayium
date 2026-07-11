@@ -1,6 +1,7 @@
 package account
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"log"
@@ -27,9 +28,39 @@ type nodeRegisterReq struct {
 	StorageFree   int64    `json:"storageFree"`
 }
 
+// nodeLimits carries a node's admin-set hard caps plus its current-month relayed
+// total, so the node can enforce them locally in real time (workstream B) instead
+// of relying on central to withhold it at ICE time between heartbeats.
+type nodeLimits struct {
+	TrafficLimitBytes int64 `json:"trafficLimitBytes"` // 0 = unlimited
+	DiskLimitBytes    int64 `json:"diskLimitBytes"`    // 0 = unlimited
+	RelayedThisMonth  int64 `json:"relayedThisMonth"`  // central's authoritative month-to-date
+}
+
 type nodeRegisterResp struct {
 	NodeID            string `json:"nodeID"`
 	HeartbeatInterval int    `json:"heartbeatInterval"`
+	nodeLimits
+}
+
+type nodeHeartbeatResp struct {
+	OK                bool `json:"ok"`
+	HeartbeatInterval int  `json:"heartbeatInterval"`
+	nodeLimits
+}
+
+// nodeLimitsFor assembles a node's caps and month-to-date relayed total.
+func (s *Service) nodeLimitsFor(ctx context.Context, node Node) nodeLimits {
+	monthStart, _ := monthRange(periodOf(s.now().Unix()))
+	relayed := int64(0)
+	if m, err := s.store.NodeRelayedSince(ctx, monthStart); err == nil {
+		relayed = m[node.ID]
+	}
+	return nodeLimits{
+		TrafficLimitBytes: node.TrafficLimitBytes,
+		DiskLimitBytes:    node.DiskLimitBytes,
+		RelayedThisMonth:  relayed,
+	}
 }
 
 type nodeUsage struct {
@@ -157,7 +188,10 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 		// An admin-minted fleet token (not the shared env token) binds to its node.
 		_ = s.store.BindFleetToken(r.Context(), ft.ID, saved.ID)
 	}
-	writeJSON(w, http.StatusOK, nodeRegisterResp{NodeID: saved.ID, HeartbeatInterval: nodeHeartbeatInterval})
+	writeJSON(w, http.StatusOK, nodeRegisterResp{
+		NodeID: saved.ID, HeartbeatInterval: nodeHeartbeatInterval,
+		nodeLimits: s.nodeLimitsFor(r.Context(), saved),
+	})
 }
 
 // handleNodeHeartbeat trusts the reported usage[]: any holder of a valid node
@@ -233,5 +267,8 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 			log.Printf("node %s heartbeat: record alloc %s failed: %v", req.NodeID, u.AllocID, err)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "heartbeatInterval": nodeHeartbeatInterval})
+	writeJSON(w, http.StatusOK, nodeHeartbeatResp{
+		OK: true, HeartbeatInterval: nodeHeartbeatInterval,
+		nodeLimits: s.nodeLimitsFor(r.Context(), node),
+	})
 }

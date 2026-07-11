@@ -111,6 +111,44 @@ func TestUsagePeriodsBackfillPreservesTotals(t *testing.T) {
 	}
 }
 
+// The heartbeat response must carry the node's hard caps and its
+// central-authoritative month-to-date relayed total, so the node can enforce
+// them locally (workstream B).
+func TestHeartbeatResponseCarriesLimits(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	n, _ := st.UpsertNode(ctx, Node{
+		ID: "fn", OwnerType: "fleet", URLs: []string{"turn:x:3478"}, TURNSecret: "s",
+		TrafficLimitBytes: 5000, DiskLimitBytes: 9000, CreatedAt: 1, LastSeenAt: 1,
+	})
+	s := &Service{store: st, cfg: Config{NodeToken: "fleet-secret"}, now: func() time.Time { return time.Unix(50, 0) }}
+	mux := http.NewServeMux()
+	s.RegisterNodeRoutes(mux)
+
+	// A heartbeat that also reports 1234 relayed bytes for this node.
+	hb := nodeHeartbeatReq{NodeID: n.ID, Status: "ok", Usage: []nodeUsage{
+		{AllocID: "a1", Username: "9999:someuser.code", RelayedBytes: 1234},
+	}}
+	body, _ := json.Marshal(hb)
+	r := httptest.NewRequest("POST", "/api/nodes/heartbeat", bytes.NewReader(body))
+	r.Header.Set("Authorization", "Bearer fleet-secret")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("heartbeat: %d body=%s", w.Code, w.Body)
+	}
+	var resp nodeHeartbeatResp
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.TrafficLimitBytes != 5000 || resp.DiskLimitBytes != 9000 {
+		t.Fatalf("caps = traffic %d disk %d, want 5000/9000", resp.TrafficLimitBytes, resp.DiskLimitBytes)
+	}
+	if resp.RelayedThisMonth != 1234 {
+		t.Fatalf("relayedThisMonth = %d, want 1234 (includes this heartbeat)", resp.RelayedThisMonth)
+	}
+}
+
 // A fleet node forging attribution to a user who is not the pairing code's real
 // owner is dropped; a report matching the code's owner is recorded.
 func TestHeartbeatDropsForgedAttribution(t *testing.T) {

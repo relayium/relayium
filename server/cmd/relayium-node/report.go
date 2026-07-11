@@ -23,9 +23,25 @@ type registerBody struct {
 	StorageFree   int64    `json:"storageFree"`
 }
 
+// nodeLimits mirrors central's response (internal/account/nodes.go): the node's
+// hard caps plus central's authoritative month-to-date relayed total, which the
+// node enforces locally in real time.
+type nodeLimits struct {
+	TrafficLimitBytes int64 `json:"trafficLimitBytes"`
+	DiskLimitBytes    int64 `json:"diskLimitBytes"`
+	RelayedThisMonth  int64 `json:"relayedThisMonth"`
+}
+
 type registerResp struct {
 	NodeID            string `json:"nodeID"`
 	HeartbeatInterval int    `json:"heartbeatInterval"`
+	nodeLimits
+}
+
+type heartbeatResp struct {
+	OK                bool `json:"ok"`
+	HeartbeatInterval int  `json:"heartbeatInterval"`
+	nodeLimits
 }
 
 type usageItem struct {
@@ -80,14 +96,14 @@ func (rp *reporter) post(path string, in any, out any) error {
 	return nil
 }
 
-func (rp *reporter) register(body registerBody) (nodeID string, heartbeatInterval int, err error) {
+func (rp *reporter) register(body registerBody) (registerResp, error) {
 	var r registerResp
-	if err = rp.post("/api/nodes/register", body, &r); err != nil {
-		return "", 0, err
-	}
-	return r.NodeID, r.HeartbeatInterval, nil
+	err := rp.post("/api/nodes/register", body, &r)
+	return r, err
 }
 
-func (rp *reporter) heartbeat(body heartbeatBody) error {
-	return rp.post("/api/nodes/heartbeat", body, nil)
+func (rp *reporter) heartbeat(body heartbeatBody) (heartbeatResp, error) {
+	var r heartbeatResp
+	err := rp.post("/api/nodes/heartbeat", body, &r)
+	return r, err
 }

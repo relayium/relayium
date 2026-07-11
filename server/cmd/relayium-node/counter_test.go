@@ -25,7 +25,7 @@ func TestCountingConnTallies(t *testing.T) {
 }
 
 func TestRegistrySnapshotAttributes(t *testing.T) {
-	reg := newAllocRegistry()
+	reg := newAllocRegistry(nil)
 	src := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 5), Port: 12345}
 	relay := &net.UDPAddr{IP: net.IPv4(10, 0, 0, 1), Port: 50000}
 	c := reg.wrap(fakePC{}, relay)
@@ -48,7 +48,7 @@ func TestRegistrySnapshotAttributes(t *testing.T) {
 // C1: two allocations that reuse the same relay address (port reuse over time)
 // must get DISTINCT allocIDs so central keep-max never straddles two owners.
 func TestAllocIDUniquePerAllocation(t *testing.T) {
-	reg := newAllocRegistry()
+	reg := newAllocRegistry(nil)
 	relay := &net.UDPAddr{IP: net.IPv4(10, 0, 0, 1), Port: 50000}
 	srcA := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 5), Port: 1111}
 	srcB := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 6), Port: 2222}
@@ -80,7 +80,7 @@ func TestAllocIDUniquePerAllocation(t *testing.T) {
 // I1: a closed allocation is reported exactly once more (final flush) and then
 // evicted, so it stops refreshing central recorded_at and the map stays bounded.
 func TestClosedAllocEvictedAfterFinalSnapshot(t *testing.T) {
-	reg := newAllocRegistry()
+	reg := newAllocRegistry(nil)
 	src := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 5), Port: 3333}
 	relay := &net.UDPAddr{IP: net.IPv4(10, 0, 0, 2), Port: 51000}
 	c := reg.wrap(fakePC{}, relay)
@@ -97,7 +97,7 @@ func TestClosedAllocEvictedAfterFinalSnapshot(t *testing.T) {
 }
 
 func TestRegistryConcurrent(t *testing.T) {
-	reg := newAllocRegistry()
+	reg := newAllocRegistry(nil)
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
 		relay := &net.UDPAddr{IP: net.IPv4(10, 0, 0, byte(i)), Port: 40000 + i}

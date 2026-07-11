@@ -93,7 +93,8 @@ func run(c config, st nodeState) error {
 		return fmt.Errorf("listen udp %s: %w", udpAddr, err)
 	}
 
-	reg := newAllocRegistry()
+	lim := &limits{}
+	reg := newAllocRegistry(lim)
 	gen := &countingGenerator{
 		reg: reg,
 		inner: &turn.RelayAddressGeneratorPortRange{
@@ -108,6 +109,12 @@ func run(c config, st nodeState) error {
 		Realm: c.Realm,
 		AuthHandler: func(username, realm string, srcAddr net.Addr) ([]byte, bool) {
 			if credentialExpired(username, time.Now().Unix()) {
+				return nil, false
+			}
+			// Refuse new allocations once the node is over its monthly relay cap,
+			// so the cap holds locally between heartbeats instead of only when
+			// central next withholds this node at ICE time.
+			if lim.overTraffic() {
 				return nil, false
 			}
 			password := longTermPassword(st.TURNSecret, username)
@@ -142,7 +149,13 @@ func run(c config, st nodeState) error {
 			return fmt.Errorf("open storage dir %s: %w", c.StorageDir, derr)
 		}
 		storageSecret = st.StorageSecret
-		blobSrv := &http.Server{Addr: fmt.Sprintf(":%d", c.StoragePort), Handler: newBlobHandler(ds, storageSecret)}
+		diskUsed := func() int64 {
+			if t, f, err := storageReport(c.StorageDir); err == nil {
+				return t - f
+			}
+			return 0
+		}
+		blobSrv := &http.Server{Addr: fmt.Sprintf(":%d", c.StoragePort), Handler: newBlobHandler(ds, storageSecret, lim, diskUsed)}
 		go func() {
 			if err := blobSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				log.Printf("relayium-node: blob server exited: %v", err)
@@ -160,7 +173,7 @@ func run(c config, st nodeState) error {
 	if storageURL != "" {
 		capabilities = append(capabilities, "storage")
 	}
-	nodeID, interval, err := rp.register(registerBody{
+	rr, err := rp.register(registerBody{
 		NodeID: st.NodeID, TURNSecret: st.TURNSecret, URLs: urls,
 		Region: c.Region, Version: version, Capabilities: capabilities,
 		StorageURL: storageURL, StorageSecret: storageSecret,
@@ -169,6 +182,8 @@ func run(c config, st nodeState) error {
 	if err != nil {
 		return fmt.Errorf("register with central: %w", err)
 	}
+	nodeID, interval := rr.NodeID, rr.HeartbeatInterval
+	lim.sync(rr.RelayedThisMonth, rr.TrafficLimitBytes, rr.DiskLimitBytes)
 	if nodeID != st.NodeID {
 		st.NodeID = nodeID
 		if serr := saveState(c.StateDir, st); serr != nil {
@@ -190,12 +205,12 @@ func run(c config, st nodeState) error {
 			log.Printf("relayium-node: shutting down")
 			return nil
 		case <-ticker.C:
-			sendHeartbeat(rp, nodeID, reg, c.StorageDir)
+			sendHeartbeat(rp, nodeID, reg, c.StorageDir, lim)
 		}
 	}
 }
 
-func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir string) {
+func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir string, lim *limits) {
 	samples := reg.snapshot()
 	usage := make([]usageItem, 0, len(samples))
 	var total int64
@@ -217,8 +232,13 @@ func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir s
 		NodeID: nodeID, Status: "ok", Usage: usage, RelayedTotal: total,
 		StoredBytes: storedBytes, StorageTotal: storTotal, StorageFree: storFree,
 	}
-	if err := rp.heartbeat(body); err != nil {
+	hr, err := rp.heartbeat(body)
+	if err != nil {
 		log.Printf("relayium-node: heartbeat failed (will retry): %v", err)
+		return
+	}
+	if lim != nil {
+		lim.sync(hr.RelayedThisMonth, hr.TrafficLimitBytes, hr.DiskLimitBytes)
 	}
 }
 

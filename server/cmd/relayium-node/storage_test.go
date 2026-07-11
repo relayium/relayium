@@ -15,7 +15,7 @@ func TestBlobHandlerRoundTripAndAuth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("diskstore: %v", err)
 	}
-	h := newBlobHandler(ds, "nodesecret")
+	h := newBlobHandler(ds, "nodesecret", nil, nil)
 	srv := httptest.NewServer(h)
 	defer srv.Close()
 

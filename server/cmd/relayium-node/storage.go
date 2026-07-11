@@ -13,8 +13,10 @@ import (
 
 // newBlobHandler serves PUT/GET/DELETE /blob/{key} backed by a local DiskStore,
 // authenticated by a bearer secret (constant-time). The DiskStore's own key
-// validation (validKey regex) rejects path-traversal keys.
-func newBlobHandler(ds *storage.DiskStore, secret string) http.Handler {
+// validation (validKey regex) rejects path-traversal keys. When lim carries a
+// disk cap, PUTs are refused (507) once diskUsed reaches it, enforcing the cap
+// locally instead of relying on central's placement heuristic alone.
+func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed func() int64) http.Handler {
 	mux := http.NewServeMux()
 	authed := func(h func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
@@ -28,6 +30,12 @@ func newBlobHandler(ds *storage.DiskStore, secret string) http.Handler {
 		}
 	}
 	mux.HandleFunc("PUT /blob/{key}", authed(func(w http.ResponseWriter, r *http.Request, key string) {
+		if lim != nil && diskUsed != nil {
+			if cap := lim.diskCapBytes(); cap > 0 && diskUsed() >= cap {
+				http.Error(w, "storage full", http.StatusInsufficientStorage)
+				return
+			}
+		}
 		n, err := ds.Put(r.Context(), key, r.Body)
 		if errors.Is(err, storage.ErrInvalidKey) {
 			http.Error(w, "bad key", http.StatusBadRequest)

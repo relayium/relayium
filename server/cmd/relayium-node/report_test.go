@@ -25,20 +25,19 @@ func TestReporterRegisterAndHeartbeat(t *testing.T) {
 	defer srv.Close()
 
 	rp := newReporter(srv.URL, "fleet-secret")
-	id, interval, err := rp.register(registerBody{TURNSecret: "sek", URLs: []string{"turn:1.2.3.4:3478"}, Region: "asia", Version: "0.3.0", Capabilities: []string{"relay"}})
+	rr, err := rp.register(registerBody{TURNSecret: "sek", URLs: []string{"turn:1.2.3.4:3478"}, Region: "asia", Version: "0.3.0", Capabilities: []string{"relay"}})
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	if id != "srv-assigned" || interval != 30 {
-		t.Fatalf("got id=%q interval=%d", id, interval)
+	if rr.NodeID != "srv-assigned" || rr.HeartbeatInterval != 30 {
+		t.Fatalf("got id=%q interval=%d", rr.NodeID, rr.HeartbeatInterval)
 	}
 	if gotAuth != "Bearer fleet-secret" {
 		t.Fatalf("auth header=%q", gotAuth)
 	}
 
-	err = rp.heartbeat(heartbeatBody{NodeID: id, Status: "ok", RelayedTotal: 900,
-		Usage: []usageItem{{AllocID: "a1", Username: "6000:userX.1", RelayedBytes: 900}}})
-	if err != nil {
+	if _, err := rp.heartbeat(heartbeatBody{NodeID: rr.NodeID, Status: "ok", RelayedTotal: 900,
+		Usage: []usageItem{{AllocID: "a1", Username: "6000:userX.1", RelayedBytes: 900}}}); err != nil {
 		t.Fatalf("heartbeat: %v", err)
 	}
 	if gotHB.NodeID != "srv-assigned" || len(gotHB.Usage) != 1 || gotHB.Usage[0].RelayedBytes != 900 {
@@ -52,7 +51,7 @@ func TestReporterHeartbeatGoneError(t *testing.T) {
 	}))
 	defer srv.Close()
 	rp := newReporter(srv.URL, "t")
-	if err := rp.heartbeat(heartbeatBody{NodeID: "x"}); err == nil {
+	if _, err := rp.heartbeat(heartbeatBody{NodeID: "x"}); err == nil {
 		t.Fatal("expected error on 410")
 	}
 }
