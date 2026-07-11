@@ -27,6 +27,8 @@ usage:
   relayium login [--server URL]             log in to the cloud (device code flow)
   relayium logout                           clear local cloud credentials
   relayium whoami                           show the logged-in cloud account
+  relayium up <path...> [--burn] [--ttl D] [--max-downloads N]
+                                             encrypt client-side and upload to the cloud
   relayium version                          print the CLI version
 
 flags (after the subcommand):
@@ -72,6 +74,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runLogout(args[1:], stdout, stderr)
 	case "whoami":
 		return runWhoami(args[1:], stdout, stderr)
+	case "up":
+		return runUp(args[1:], stdout, stderr)
 	case "version", "--version", "-version":
 		return runVersion(stdout)
 	case "__recv":
