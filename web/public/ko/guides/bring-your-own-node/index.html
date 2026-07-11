@@ -94,6 +94,20 @@ sudo ufw allow 49152:65535/udp # relay</code></pre>
       <p>Bring-your-own-node는 평소의 relayium.com 계정과 앱을 그대로 유지하면서 트래픽을 운반할 여러분 소유의 노드를 추가하는 것뿐입니다. 셀프 호스팅은 서버 스택 전체(계정, 웹 앱, 시그널링)를 여러분 자신의 도메인에서 운영합니다. 이에 대해서는 &quot;Self-host Relayium&quot; 가이드를 참조하세요.</p>
       <h3>다른 사람이 제 노드를 사용하거나 제 데이터를 볼 수 있나요?</h3>
       <p>아니요. 노드는 토큰으로 여러분의 계정에 연결되어 여러분 계정의 트래픽만 운반합니다. 실시간 전송은 종단 간 암호화되고, 저장된 블롭은 여러분의 노드가 읽을 수 없는 암호문입니다. 여러분의 데이터와 노드 구성은 오직 여러분만 사용할 수 있습니다.</p>
+      <h3>이것을 제 서버에서 실행해도 안전한가요?</h3>
+      <p>설치 프로그램은 여러분의 업로드를 실행하지 않습니다 — 노드는 저장하는 모든 파일을 불투명한 암호화 바이트로 취급하여 절대 열거나, 압축을 풀거나, 실행하지 않으며, 디스크상의 이름은 무작위 토큰이므로 악성 업로드가 저장 폴더를 벗어나거나 실행될 수 없습니다. 게다가 설치되는 systemd 서비스는 의도적으로 강하게 제한됩니다: 전용 비루트 사용자로 실행되고, 그 하나의 저장 폴더를 제외한 전체 파일 시스템은 읽기 전용이며, 여러분의 홈 디렉터리와 SSH 키는 보이지 않고, 그 저장 폴더는 no-exec으로 마운트되며(그 안의 어떤 것도 실행할 수 없음), 프로세스는 결코 새 권한을 얻을 수 없습니다. 따라서 최악의 경우 — 노드 소프트웨어 자체가 침해되더라도 — 피해는 암호문 폴더에 한정되고 서버 본체에는 미치지 않습니다. 설정을 더 검토하거나 강화하려면 <a href="https://github.com/relayium/relayium/blob/main/docs/node-hardening.md">노드 강화 노트</a>를 참조하세요.</p>
+      <h3>노드를 어떻게 제거하나요?</h3>
+      <p>서비스를 중지하고 제거한 다음, 필요하면 데이터와 전용 사용자도 삭제합니다:</p>
+      <pre><code>sudo systemctl disable --now relayium-node   # 중지하고 부팅 시 자동 시작 해제
+sudo rm /etc/systemd/system/relayium-node.service
+sudo systemctl daemon-reload
+sudo rm -rf /etc/relayium-node                # 토큰 + 설정
+sudo rm -f /usr/local/bin/relayium-node       # 바이너리
+
+# 선택 사항 — 저장된 데이터와 전용 사용자도 삭제:
+sudo rm -rf /var/lib/relayium-node            # 상태 + 기본 저장 위치
+sudo userdel relayium-node</code></pre>
+      <p>사용자 지정 RELAYIUM_NODE_STORAGE_DIR을 설정했다면 그 폴더도 삭제하세요. 마지막으로 계정 페이지(/me → 내 노드)를 열어 거기서 노드를 제거하면 토큰을 더 이상 사용할 수 없습니다.</p>
       <div class="ctacard">
         <p>로그인하여 계정 페이지를 열고 1분도 안 되어 첫 노드를 추가하세요.</p>
         <a class="cta" href="/me">계정 페이지 열기</a>

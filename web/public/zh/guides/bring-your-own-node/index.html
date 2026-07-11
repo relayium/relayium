@@ -94,6 +94,20 @@ sudo ufw allow 49152:65535/udp # relay</code></pre>
       <p>自建节点保留你平常的 relayium.com 账号和客户端，只是多接一个你自己的节点来承载流量。自托管则是在你自己的域名上运行整套服务端（账号、Web 应用、信令）——那个见「自托管 Relayium」指南。</p>
       <h3>别人能用我的节点或看到我的数据吗？</h3>
       <p>不能。节点通过令牌绑定到你的账号，只承载你账号的流量。实时传输端到端加密，存储的数据块是你的节点也读不了的密文。你的数据和节点配置只为你自己所用。</p>
+      <h3>在我自己的服务器上跑这个安全吗？</h3>
+      <p>安装程序不会运行你上传的文件 —— 节点把每个存储的文件都当作不透明的加密字节：从不打开、解压或执行它们，磁盘上的文件名是随机令牌，所以恶意上传既跑不起来、也逃不出存储目录。此外，它安装的 systemd 服务被刻意收紧：以专用的非 root 用户运行，除了那一个存储目录外整个文件系统对它只读，你的主目录和 SSH 私钥对它完全不可见，那个存储目录以 no-exec 方式挂载（里面任何东西都无法执行），进程也永远无法提权。所以即便在最坏情况下 —— 节点软件本身被攻破 —— 损害也被限制在一个装密文的目录里，波及不到你的服务器。想进一步审阅或加固，见<a href="https://github.com/relayium/relayium/blob/main/docs/node-hardening.md">节点加固说明</a>。</p>
+      <h3>如何卸载节点？</h3>
+      <p>停止并移除服务，然后可选地删除它的数据和专用用户：</p>
+      <pre><code>sudo systemctl disable --now relayium-node   # 停止并取消开机自启
+sudo rm /etc/systemd/system/relayium-node.service
+sudo systemctl daemon-reload
+sudo rm -rf /etc/relayium-node                # 令牌 + 配置
+sudo rm -f /usr/local/bin/relayium-node       # 二进制文件
+
+# 可选 —— 一并删除存储的数据和专用用户：
+sudo rm -rf /var/lib/relayium-node            # 状态 + 默认存储目录
+sudo userdel relayium-node</code></pre>
+      <p>如果你设置了自定义的 RELAYIUM_NODE_STORAGE_DIR，也要删除那个目录。最后，打开账号页面（/me → 我的节点）在那里移除该节点，使它的令牌不再可用。</p>
       <div class="ctacard">
         <p>登录，打开账户页，一分钟内添加你的第一个节点。</p>
         <a class="cta" href="/me">打开账户页</a>

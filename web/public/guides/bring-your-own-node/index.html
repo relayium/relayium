@@ -96,6 +96,18 @@ sudo ufw allow 49152:65535/udp # relay</code></pre>
       <p>No. A node is bound to your account by its token and only carries your account&#39;s traffic. Realtime transfers are end-to-end encrypted and stored blobs are ciphertext your node can&#39;t read. Your data and node configuration are only ever usable by you.</p>
       <h3>Is it safe to run this on my own server?</h3>
       <p>The installer does not run your uploads — the node treats every stored file as opaque, encrypted bytes: it never opens, unpacks, or executes them, and the on-disk name is a random token, so a malicious upload can&#39;t escape the storage folder or run. On top of that the systemd service it installs is deliberately locked down: it runs as a dedicated non-root user, the whole filesystem is read-only to it except its one storage folder, your home directory and SSH keys are invisible to it, that storage folder is mounted no-exec (nothing in it can run), and the process can never gain new privileges. So even in the worst case — the node software itself being compromised — the damage is confined to a folder of ciphertext, not your server. If you want to review or tighten the setup further, see the <a href="https://github.com/relayium/relayium/blob/main/docs/node-hardening.md">node hardening notes</a>.</p>
+      <h3>How do I remove the node?</h3>
+      <p>Stop and remove the service, then optionally delete its data and dedicated user:</p>
+      <pre><code>sudo systemctl disable --now relayium-node   # stop and don&#39;t start on boot
+sudo rm /etc/systemd/system/relayium-node.service
+sudo systemctl daemon-reload
+sudo rm -rf /etc/relayium-node                # token + config
+sudo rm -f /usr/local/bin/relayium-node       # the binary
+
+# optional — also delete stored data and the dedicated user:
+sudo rm -rf /var/lib/relayium-node            # state + default blob storage
+sudo userdel relayium-node</code></pre>
+      <p>If you set a custom RELAYIUM_NODE_STORAGE_DIR, delete that folder too. Finally, open your account page (/me → My Nodes) and remove the node there so its token can no longer be used.</p>
       <div class="ctacard">
         <p>Sign in, open your account page, and add your first node in under a minute.</p>
         <a class="cta" href="/me">Open the account page</a>

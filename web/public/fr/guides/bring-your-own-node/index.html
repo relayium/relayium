@@ -94,6 +94,20 @@ sudo ufw allow 49152:65535/udp # relay</code></pre>
       <p>Bring-your-own-node conserve votre compte relayium.com et vos applications habituels et ajoute simplement un nœud qui vous appartient pour acheminer votre trafic. L&#39;auto-hébergement fait tourner toute la pile serveur (comptes, application web, signalisation) sur votre propre domaine — voyez le guide &quot;Self-host Relayium&quot; pour cela.</p>
       <h3>Quelqu&#39;un d&#39;autre peut-il utiliser mon nœud ou voir mes données ?</h3>
       <p>Non. Un nœud est rattaché à votre compte par son jeton et n&#39;achemine que le trafic de votre compte. Les transferts en temps réel sont chiffrés de bout en bout et les blobs stockés sont du texte chiffré que votre nœud ne peut pas lire. Vos données et la configuration de votre nœud ne sont utilisables que par vous.</p>
+      <h3>Est-il sûr d&#39;exécuter cela sur mon propre serveur ?</h3>
+      <p>L&#39;installateur n&#39;exécute pas vos fichiers envoyés — le nœud traite chaque fichier stocké comme des octets chiffrés opaques : il ne les ouvre, ne les décompresse ni ne les exécute jamais, et le nom sur le disque est un jeton aléatoire, de sorte qu&#39;un envoi malveillant ne peut ni sortir du dossier de stockage ni s&#39;exécuter. De plus, le service systemd installé est délibérément verrouillé : il s&#39;exécute sous un utilisateur dédié non-root, l&#39;ensemble du système de fichiers lui est en lecture seule sauf ce seul dossier de stockage, votre répertoire personnel et vos clés SSH lui sont invisibles, ce dossier de stockage est monté en no-exec (rien à l&#39;intérieur ne peut s&#39;exécuter), et le processus ne peut jamais obtenir de nouveaux privilèges. Ainsi, même dans le pire des cas — le logiciel du nœud lui-même étant compromis — les dégâts se limitent à un dossier de texte chiffré, sans atteindre votre serveur. Pour examiner ou renforcer davantage la configuration, voir les <a href="https://github.com/relayium/relayium/blob/main/docs/node-hardening.md">notes de durcissement du nœud</a>.</p>
+      <h3>Comment supprimer le nœud ?</h3>
+      <p>Arrêtez et supprimez le service, puis supprimez éventuellement ses données et l&#39;utilisateur dédié :</p>
+      <pre><code>sudo systemctl disable --now relayium-node   # arrêter et désactiver le démarrage au boot
+sudo rm /etc/systemd/system/relayium-node.service
+sudo systemctl daemon-reload
+sudo rm -rf /etc/relayium-node                # jeton + configuration
+sudo rm -f /usr/local/bin/relayium-node       # le binaire
+
+# facultatif — supprimer aussi les données stockées et l&#39;utilisateur dédié :
+sudo rm -rf /var/lib/relayium-node            # état + stockage par défaut
+sudo userdel relayium-node</code></pre>
+      <p>Si vous avez défini un RELAYIUM_NODE_STORAGE_DIR personnalisé, supprimez aussi ce dossier. Enfin, ouvrez votre page de compte (/me → Mes nœuds) et retirez-y le nœud pour que son jeton ne puisse plus être utilisé.</p>
       <div class="ctacard">
         <p>Connectez-vous, ouvrez la page de votre compte et ajoutez votre premier nœud en moins d&#39;une minute.</p>
         <a class="cta" href="/me">Ouvrir la page du compte</a>

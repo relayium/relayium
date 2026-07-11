@@ -94,6 +94,20 @@ sudo ufw allow 49152:65535/udp # relay</code></pre>
       <p>Bring-your-own-node behält Ihr normales relayium.com-Konto und Ihre Apps bei und fügt lediglich einen Node hinzu, der Ihnen gehört und Ihren Verkehr trägt. Selbst-Hosten betreibt den gesamten Server-Stack (Konten, Web-App, Signalisierung) auf Ihrer eigenen Domain — siehe dazu die Anleitung &quot;Self-host Relayium&quot;.</p>
       <h3>Kann jemand anderes meinen Node nutzen oder meine Daten sehen?</h3>
       <p>Nein. Ein Node ist über seinen Token an Ihr Konto gebunden und trägt nur den Verkehr Ihres Kontos. Echtzeit-Übertragungen sind Ende-zu-Ende-verschlüsselt und gespeicherte Blobs sind Chiffretext, den Ihr Node nicht lesen kann. Ihre Daten und Ihre Node-Konfiguration sind ausschließlich von Ihnen nutzbar.</p>
+      <h3>Ist es sicher, das auf meinem eigenen Server auszuführen?</h3>
+      <p>Der Installer führt Ihre Uploads nicht aus — der Node behandelt jede gespeicherte Datei als undurchsichtige, verschlüsselte Bytes: Er öffnet, entpackt oder führt sie niemals aus, und der Name auf der Festplatte ist ein zufälliger Token, sodass ein bösartiger Upload weder aus dem Speicherordner ausbrechen noch ausgeführt werden kann. Darüber hinaus ist der installierte systemd-Dienst bewusst stark eingeschränkt: Er läuft als dedizierter Nicht-Root-Benutzer, das gesamte Dateisystem ist für ihn schreibgeschützt außer diesem einen Speicherordner, Ihr Home-Verzeichnis und Ihre SSH-Schlüssel sind für ihn unsichtbar, dieser Speicherordner ist mit no-exec eingehängt (nichts darin kann ausgeführt werden), und der Prozess kann niemals neue Rechte erlangen. Selbst im schlimmsten Fall — wenn die Node-Software selbst kompromittiert wird — bleibt der Schaden auf einen Ordner mit Chiffretext beschränkt und erreicht nicht Ihren Server. Wenn Sie die Einrichtung weiter prüfen oder verschärfen möchten, siehe die <a href="https://github.com/relayium/relayium/blob/main/docs/node-hardening.md">Node-Härtungshinweise</a>.</p>
+      <h3>Wie entferne ich den Node?</h3>
+      <p>Stoppen und entfernen Sie den Dienst und löschen Sie optional seine Daten und den dedizierten Benutzer:</p>
+      <pre><code>sudo systemctl disable --now relayium-node   # stoppen und Autostart deaktivieren
+sudo rm /etc/systemd/system/relayium-node.service
+sudo systemctl daemon-reload
+sudo rm -rf /etc/relayium-node                # Token + Konfiguration
+sudo rm -f /usr/local/bin/relayium-node       # die Binärdatei
+
+# optional — auch gespeicherte Daten und den dedizierten Benutzer löschen:
+sudo rm -rf /var/lib/relayium-node            # Status + Standard-Speicher
+sudo userdel relayium-node</code></pre>
+      <p>Wenn Sie ein eigenes RELAYIUM_NODE_STORAGE_DIR gesetzt haben, löschen Sie auch diesen Ordner. Öffnen Sie schließlich Ihre Kontoseite (/me → Meine Nodes) und entfernen Sie den Node dort, damit sein Token nicht mehr verwendet werden kann.</p>
       <div class="ctacard">
         <p>Melden Sie sich an, öffnen Sie Ihre Kontoseite und fügen Sie in unter einer Minute Ihren ersten Node hinzu.</p>
         <a class="cta" href="/me">Kontoseite öffnen</a>
