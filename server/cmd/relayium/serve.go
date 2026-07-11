@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/term"
@@ -91,10 +92,16 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	return serveLoop(ln, h, f.once)
 }
 
+// maxConcurrentServe bounds how many pushes serve handles at once, so a flood of
+// slow/stalled peers can't spawn unbounded goroutines.
+const maxConcurrentServe = 64
+
 // serveHandler carries everything one serve invocation needs to authorize and
-// receive pushes. allow is mutated in place as new peers are approved.
+// receive pushes. allow is mutated in place as new peers are approved; mu guards
+// it (and serializes interactive approval) across concurrent connections.
 type serveHandler struct {
 	id          *secure.Identity
+	mu          sync.Mutex
 	allow       map[string]bool
 	dir         string
 	noResume    bool
@@ -107,24 +114,59 @@ type serveHandler struct {
 	stderr  io.Writer
 }
 
-// serveLoop accepts and handles connections serially. With once it returns after
-// the first handled connection (0 on success, 1 otherwise); otherwise it runs
+// serveLoop accepts and handles connections. With once it handles exactly one
+// serially and returns (0 on success, 1 otherwise) — used by the first-approval
+// flow. Otherwise it handles connections concurrently (bounded by
+// maxConcurrentServe) so one slow or stalled peer can't starve the rest, running
 // until Accept fails.
 func serveLoop(ln net.Listener, h *serveHandler, once bool) int {
+	if once {
+		conn, err := ln.Accept()
+		if err != nil {
+			fmt.Fprintln(h.stderr, err)
+			return 1
+		}
+		if h.serve(conn) {
+			return 0
+		}
+		return 1
+	}
+	sem := make(chan struct{}, maxConcurrentServe)
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			fmt.Fprintln(h.stderr, err)
 			return 1
 		}
-		ok := h.serve(conn)
-		if once {
-			if ok {
-				return 0
-			}
-			return 1
-		}
+		sem <- struct{}{}
+		go func() {
+			defer func() { <-sem }()
+			h.serve(conn)
+		}()
 	}
+}
+
+// authorize reports whether fp may push, consulting and updating the shared
+// allow-list under lock. The lock also serializes interactive approval so
+// concurrent connections don't race the map or double-prompt.
+func (h *serveHandler) authorize(fp, remote string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.allow[fp] {
+		return true
+	}
+	if h.approve == nil || !h.approve(remote, fp) {
+		fmt.Fprintf(h.stderr, "rejected unauthorized peer %s from %s\n", fp, remote)
+		return false
+	}
+	// Approved: remember the fingerprint so future pushes pass silently
+	// (this is what makes cron/script automation work after a one-time yes).
+	if err := trust.AddAuthorized(h.cfgDir, fp); err != nil {
+		fmt.Fprintf(h.stderr, "warning: could not persist fingerprint to %s: %v\n", trust.AuthorizedPath(h.cfgDir), err)
+	}
+	h.allow[fp] = true
+	fmt.Fprintf(h.stderr, "authorized %s (added to %s)\n", fp, trust.AuthorizedPath(h.cfgDir))
+	return true
 }
 
 // serve runs one pinned-TLS server handshake, authorizes the peer (allow-list
@@ -156,18 +198,8 @@ func (h *serveHandler) serve(conn net.Conn) (ok bool) {
 	_ = conn.SetDeadline(time.Time{})
 	defer tconn.Close()
 
-	if !h.allow[fp] {
-		if h.approve == nil || !h.approve(remote.String(), fp) {
-			fmt.Fprintf(h.stderr, "rejected unauthorized peer %s from %s\n", fp, remote)
-			return false
-		}
-		// Approved: remember the fingerprint so future pushes pass silently
-		// (this is what makes cron/script automation work after a one-time yes).
-		if err := trust.AddAuthorized(h.cfgDir, fp); err != nil {
-			fmt.Fprintf(h.stderr, "warning: could not persist fingerprint to %s: %v\n", trust.AuthorizedPath(h.cfgDir), err)
-		}
-		h.allow[fp] = true
-		fmt.Fprintf(h.stderr, "authorized %s (added to %s)\n", fp, trust.AuthorizedPath(h.cfgDir))
+	if !h.authorize(fp, remote.String()) {
+		return false
 	}
 
 	rep, err := xfer.Receive(tconn, h.dir, xfer.RecvOpts{NoResume: h.noResume, AllowDelete: h.allowDelete})

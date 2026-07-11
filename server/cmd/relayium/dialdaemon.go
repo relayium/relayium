@@ -70,6 +70,7 @@ func pushDaemon(target string, srcs []string, configDir string, noResume bool, s
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	xfer.WarnIfEmpty(m, stderr)
 	tconn, err := dialDaemon(target, configDir, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, err)

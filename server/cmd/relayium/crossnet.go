@@ -97,6 +97,7 @@ func runSendCross(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	xfer.WarnIfEmpty(m, stderr)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	conn, err := crossnetConn(ctx, code, "sender", f, stderr)

@@ -77,6 +77,58 @@ func writeSrc(t *testing.T, name, body string) string {
 
 func daemonTarget(port int) string { return "relayium://127.0.0.1:" + strconv.Itoa(port) }
 
+// In non-once mode a stalled peer (connected but never completing the
+// handshake) must not block a healthy push behind it — the concurrent accept
+// path handles them in parallel.
+func TestServeConcurrentPushDespiteStalledPeer(t *testing.T) {
+	// Uses the default handshakeTimeout (tens of seconds): a serial serve would
+	// hold that long on the stall, far longer than the push's 4s window below.
+	pusherDir, serverDir, recvDir := t.TempDir(), t.TempDir(), t.TempDir()
+	pusher, _ := secure.LoadOrCreateIdentity(pusherDir)
+	id, err := secure.LoadOrCreateIdentity(serverDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	port := ln.Addr().(*net.TCPAddr).Port
+	h := &serveHandler{
+		id: id, allow: map[string]bool{pusher.Fingerprint: true},
+		dir: recvDir, cfgDir: serverDir, stdout: io.Discard, stderr: io.Discard,
+	}
+	go serveLoop(ln, h, false /*concurrent*/)
+
+	// A peer that connects and never sends — under serial serve it would wedge
+	// the accept loop for the full handshakeTimeout.
+	stall, err := net.Dial("tcp", "127.0.0.1:"+strconv.Itoa(port))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stall.Close()
+
+	src := writeSrc(t, "hi.txt", "concurrent!")
+	done := make(chan int, 1)
+	go func() {
+		var o, e bytes.Buffer
+		done <- Run([]string{"push", "--config-dir", pusherDir, src, daemonTarget(port)}, &o, &e)
+	}()
+	select {
+	case rc := <-done:
+		if rc != 0 {
+			t.Fatalf("push exited %d", rc)
+		}
+	case <-time.After(4 * time.Second): // << handshakeTimeout: proves it wasn't serialized behind the stall
+		t.Fatal("healthy push blocked behind a stalled peer")
+	}
+	got, err := os.ReadFile(filepath.Join(recvDir, "hi.txt"))
+	if err != nil || string(got) != "concurrent!" {
+		t.Fatalf("received = %q err=%v", got, err)
+	}
+}
+
 func TestDaemonPushHappyPath(t *testing.T) {
 	pusherDir := t.TempDir()
 	serverDir := t.TempDir()

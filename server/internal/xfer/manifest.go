@@ -1,9 +1,20 @@
 package xfer
 
 import (
+	"fmt"
+	"io"
 	"io/fs"
 	"path/filepath"
 )
+
+// WarnIfEmpty notes to w when the manifest has no files. A push of a symlink
+// root (or an empty tree) yields zero files because symlinks and special files
+// are skipped, and would otherwise be reported as a silent success.
+func WarnIfEmpty(m Manifest, w io.Writer) {
+	if len(m.Files) == 0 {
+		fmt.Fprintln(w, "warning: no regular files to send (symlinks and special files are skipped)")
+	}
+}
 
 // BuildManifest walks the given source roots and returns a manifest plus a
 // parallel slice of absolute source paths (srcs[i] is the local file for

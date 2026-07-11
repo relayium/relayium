@@ -116,6 +116,7 @@ func runPush(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	xfer.WarnIfEmpty(m, stderr)
 	opts := sshx.Opts{IdentityFile: f.identity, Port: f.port}
 
 	has, err := sshx.RemoteHasRelayium(dest, opts)
@@ -238,6 +239,7 @@ func runSend(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	xfer.WarnIfEmpty(m, stderr)
 	rw := duplex{Reader: os.Stdin, Writer: os.Stdout}
 	if _, err := xfer.Send(rw, m, srcs, xfer.SendOpts{}); err != nil {
 		fmt.Fprintln(stderr, err)

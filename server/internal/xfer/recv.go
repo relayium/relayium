@@ -207,7 +207,7 @@ func writeFileBody(rw io.Reader, dest string, f FileEntry, offset int64) (string
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return "", err
 	}
-	flag := os.O_CREATE | os.O_WRONLY
+	flag := os.O_CREATE | os.O_WRONLY | oNoFollow
 	if offset == 0 {
 		flag |= os.O_TRUNC
 	}

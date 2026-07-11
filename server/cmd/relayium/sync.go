@@ -77,6 +77,7 @@ func syncOnce(dest string, srcs []string, f syncFlags, stdout, stderr io.Writer)
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	xfer.WarnIfEmpty(m, stderr)
 	if f.del && len(paths) == 0 {
 		fmt.Fprintln(stderr, "refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).")
 		return 1

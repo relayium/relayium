@@ -3,6 +3,7 @@ package xfer
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -35,5 +36,18 @@ func TestBuildManifestWalksDir(t *testing.T) {
 	}
 	if _, ok := byPath[base+"/sub/b.txt"]; !ok {
 		t.Fatalf("sub/b.txt missing; got %+v", m.Files)
+	}
+}
+
+func TestWarnIfEmpty(t *testing.T) {
+	var buf strings.Builder
+	WarnIfEmpty(Manifest{}, &buf)
+	if !strings.Contains(buf.String(), "no regular files") {
+		t.Fatalf("empty manifest should warn, got %q", buf.String())
+	}
+	buf.Reset()
+	WarnIfEmpty(Manifest{Files: []FileEntry{{Path: "a"}}}, &buf)
+	if buf.String() != "" {
+		t.Fatalf("non-empty manifest should not warn, got %q", buf.String())
 	}
 }
