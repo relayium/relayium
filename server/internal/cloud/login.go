@@ -140,6 +140,16 @@ func (c *Client) Login(ctx context.Context, notify func(DeviceStart)) (Creds, er
 		interval = 1
 	}
 
+	// Floor the expiry window the same way we floor interval: Client.Server
+	// is a user-supplied base URL (self-hosting is supported), so a buggy or
+	// hostile server that advertises expires_in <= 0 while forever returning
+	// authorization_pending must not be able to hang Login. 600s mirrors the
+	// first-party server's deviceCodeTTL and keeps the loop always bounded.
+	expiresIn := start.ExpiresIn
+	if expiresIn <= 0 {
+		expiresIn = 600
+	}
+
 	// elapsed tracks logical time (sum of the intervals we've slept for)
 	// rather than wall-clock time, so the loop's timeout is deterministic
 	// under a stubbed sleep (as in tests) instead of depending on real
@@ -173,7 +183,7 @@ func (c *Client) Login(ctx context.Context, notify func(DeviceStart)) (Creds, er
 			return Creds{}, fmt.Errorf("device poll: unexpected status %q", status)
 		}
 
-		if start.ExpiresIn > 0 && elapsed >= start.ExpiresIn {
+		if elapsed >= expiresIn {
 			return Creds{}, fmt.Errorf("device login timed out waiting for approval")
 		}
 	}

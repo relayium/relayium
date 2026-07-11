@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -132,5 +133,33 @@ func TestLoginTimeout(t *testing.T) {
 	_, err := c.Login(context.Background(), func(DeviceStart) {})
 	if err == nil {
 		t.Fatal("expected timeout error")
+	}
+	if !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("want a timeout error, got %v", err)
+	}
+}
+
+// TestLoginBoundedWhenNoExpiry proves Login always terminates even when a
+// (buggy or hostile, e.g. self-hosted) server advertises expires_in <= 0 and
+// never approves — the loop must fall back to the safe default TTL and time
+// out rather than spin forever.
+func TestLoginBoundedWhenNoExpiry(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/cli/device/start":
+			writeJSONTest(w, map[string]any{"user_code": "IIII-JJJJ", "device_code": "dc6", "verification_uri": "http://x/device", "interval": 0, "expires_in": 0})
+		case "/api/cli/device/poll":
+			writeJSONTest(w, map[string]any{"status": "authorization_pending"})
+		}
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.sleep = func(time.Duration) {}
+	_, err := c.Login(context.Background(), func(DeviceStart) {})
+	if err == nil {
+		t.Fatal("expected a bounded timeout error, but Login returned nil (would have hung in production)")
+	}
+	if !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("want a timeout error, got %v", err)
 	}
 }
