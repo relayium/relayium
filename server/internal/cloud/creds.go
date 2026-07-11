@@ -35,11 +35,21 @@ func Save(configDir string, c Creds) error {
 	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		return err
 	}
+	// MkdirAll/WriteFile only apply the mode when creating; enforce tight
+	// perms unconditionally so a pre-existing dir/file (backup restore,
+	// permissive umask, another tool) can't leave the token world-readable.
+	if err := os.Chmod(configDir, 0o700); err != nil {
+		return err
+	}
 	b, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(configDir, credsFile), b, 0o600)
+	path := filepath.Join(configDir, credsFile)
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o600)
 }
 
 func Clear(configDir string) error {
