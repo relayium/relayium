@@ -164,6 +164,20 @@ type NodeToken struct {
 	RevokedAt  int64
 }
 
+// FleetToken is an admin-minted, userless bearer credential an official (fleet)
+// node presents at register/heartbeat. Unlike NodeToken it has no owning user,
+// so it lives in its own table rather than node_tokens (whose user_id is NOT
+// NULL). Plaintext is shown once at mint; only its sha256 hash is stored.
+type FleetToken struct {
+	ID         string
+	TokenHash  string
+	Name       string
+	NodeID     string
+	CreatedAt  int64
+	LastUsedAt int64
+	RevokedAt  int64
+}
+
 // PendingNodeDelete is a blob whose owning node was unreachable when its file
 // expired/was deleted; GC retries the node DELETE each sweep until it succeeds,
 // reclaiming the orphan under the no-replication model.
@@ -337,4 +351,11 @@ type Store interface {
 	ListNodeTokensByUser(ctx context.Context, userID string) ([]NodeToken, error)
 	RevokeNodeToken(ctx context.Context, id, userID string, at int64) error
 	TouchNodeTokenUsed(ctx context.Context, id string, at int64) error
+	// fleet_tokens (admin-minted, userless official-node bearer credentials)
+	CreateFleetToken(ctx context.Context, t FleetToken) error
+	FleetTokenByHash(ctx context.Context, hash string) (FleetToken, bool, error)
+	BindFleetToken(ctx context.Context, id, nodeID string) error
+	TouchFleetTokenUsed(ctx context.Context, id string, at int64) error
+	RevokeFleetToken(ctx context.Context, id string, at int64) error
+	ListActiveFleetTokens(ctx context.Context) ([]FleetToken, error)
 }

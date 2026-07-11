@@ -143,6 +143,15 @@ CREATE TABLE IF NOT EXISTS node_tokens (
   revoked_at   INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_node_tokens_user ON node_tokens(user_id);
+CREATE TABLE IF NOT EXISTS fleet_tokens (
+  id           TEXT PRIMARY KEY,
+  token_hash   TEXT NOT NULL UNIQUE,
+  name         TEXT,
+  node_id      TEXT,
+  created_at   INTEGER NOT NULL,
+  last_used_at INTEGER NOT NULL DEFAULT 0,
+  revoked_at   INTEGER NOT NULL DEFAULT 0
+);
 `
 
 func OpenSQLite(dsn string) (*SQLiteStore, error) {
@@ -1335,4 +1344,68 @@ func (s *SQLiteStore) RevokeNodeToken(ctx context.Context, id, userID string, at
 func (s *SQLiteStore) TouchNodeTokenUsed(ctx context.Context, id string, at int64) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE node_tokens SET last_used_at = ? WHERE id = ?`, at, id)
 	return err
+}
+
+func (s *SQLiteStore) CreateFleetToken(ctx context.Context, t FleetToken) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO fleet_tokens (id, token_hash, name, node_id, created_at) VALUES (?,?,?,?,?)`,
+		t.ID, t.TokenHash, t.Name, nullStr(t.NodeID), t.CreatedAt)
+	return err
+}
+
+// FleetTokenByHash resolves an admin-minted fleet token by hash; ok=false for
+// both an absent and a revoked hash (no existence oracle), matching NodeTokenByHash.
+func (s *SQLiteStore) FleetTokenByHash(ctx context.Context, hash string) (FleetToken, bool, error) {
+	var t FleetToken
+	var nodeID sql.NullString
+	var name sql.NullString
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, token_hash, name, node_id, created_at, last_used_at, revoked_at
+		   FROM fleet_tokens WHERE token_hash = ? AND revoked_at = 0`, hash).
+		Scan(&t.ID, &t.TokenHash, &name, &nodeID, &t.CreatedAt, &t.LastUsedAt, &t.RevokedAt)
+	if err == sql.ErrNoRows {
+		return FleetToken{}, false, nil
+	}
+	if err != nil {
+		return FleetToken{}, false, err
+	}
+	t.Name, t.NodeID = name.String, nodeID.String
+	return t, true, nil
+}
+
+func (s *SQLiteStore) BindFleetToken(ctx context.Context, id, nodeID string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE fleet_tokens SET node_id = ? WHERE id = ?`, nodeID, id)
+	return err
+}
+
+func (s *SQLiteStore) TouchFleetTokenUsed(ctx context.Context, id string, at int64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE fleet_tokens SET last_used_at = ? WHERE id = ?`, at, id)
+	return err
+}
+
+func (s *SQLiteStore) RevokeFleetToken(ctx context.Context, id string, at int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE fleet_tokens SET revoked_at = ? WHERE id = ? AND revoked_at = 0`, at, id)
+	return err
+}
+
+func (s *SQLiteStore) ListActiveFleetTokens(ctx context.Context) ([]FleetToken, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, token_hash, name, node_id, created_at, last_used_at, revoked_at
+		   FROM fleet_tokens WHERE revoked_at = 0 ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []FleetToken
+	for rows.Next() {
+		var t FleetToken
+		var name, nodeID sql.NullString
+		if err := rows.Scan(&t.ID, &t.TokenHash, &name, &nodeID, &t.CreatedAt, &t.LastUsedAt, &t.RevokedAt); err != nil {
+			return nil, err
+		}
+		t.Name, t.NodeID = name.String, nodeID.String
+		out = append(out, t)
+	}
+	return out, rows.Err()
 }
