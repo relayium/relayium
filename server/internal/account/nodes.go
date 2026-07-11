@@ -214,6 +214,17 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 			log.Printf("node %s: dropping cross-user attribution to %s", req.NodeID, userID)
 			continue
 		}
+		// Attribution binding: the reported username embeds a pairing code whose
+		// true owner central assigned at ICE time. If that code still resolves to a
+		// DIFFERENT user, the node is forging attribution (e.g. billing a victim) —
+		// drop it. An expired/unknown code can't be contradicted, so it's accepted
+		// (magnitude is still bounded by RecordUsage's clamp).
+		if s.pairCodeOwner != nil && code != "" {
+			if realOwner, ok := s.pairCodeOwner(code); ok && realOwner != userID {
+				log.Printf("node %s: dropping forged attribution (code owner %s != reported %s)", req.NodeID, realOwner, userID)
+				continue
+			}
+		}
 		if err := s.store.RecordUsage(r.Context(), UsageEvent{
 			AllocID: u.AllocID, Token: code, UserID: userID, RelayedBytes: u.RelayedBytes,
 			RecordedAt: now, NodeID: req.NodeID, Billable: billable,

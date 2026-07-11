@@ -596,14 +596,40 @@ func (s *SQLiteStore) DeleteDevice(ctx context.Context, id, userID string) error
 	return err
 }
 
+// Relay-usage self-report bounds (workstream A). Nodes are the only party that
+// sees relayed bytes, so their reports can't be independently verified — but
+// they can be bounded to physically-plausible values. Conservative on purpose:
+// clamping under-counts a genuine ultra-fast transfer (user-favorable) while
+// denying a malicious node the ability to inflate a victim's usage.
+const (
+	// maxRelayBytesPerSec caps how fast one allocation may be reported to relay
+	// (per side). ~210 Mbps.
+	maxRelayBytesPerSec = 25 << 20
+	// relayReportSlack is added to the bandwidth×elapsed budget between heartbeats
+	// to absorb bursts and the first-report window.
+	relayReportSlack = 256 << 20
+	// maxAllocRelayBytes is the absolute ceiling on any single allocation's
+	// reported total (~one day at maxRelayBytesPerSec), so a forged huge value
+	// (e.g. 1<<50) can never blow a user's quota or the billing ledger.
+	maxAllocRelayBytes = int64(maxRelayBytesPerSec)*86400 + relayReportSlack
+)
+
+// RecordUsage records an allocation's relayed bytes, clamping the reported value
+// to physically-plausible bounds. The new total is MAX(existing, ...) so it
+// stays monotonic, capped by (a) an absolute per-allocation ceiling and (b) the
+// prior total plus maxRelayBytesPerSec × time-since-last-report + slack. An
+// out-of-order/backwards report can never lower or spuriously raise the total.
 func (s *SQLiteStore) RecordUsage(ctx context.Context, e UsageEvent) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO usage_events (alloc_id, token, user_id, relayed_bytes, recorded_at, node_id, billable)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)
+		 VALUES (?, ?, ?, MIN(?, ?), ?, ?, ?)
 		 ON CONFLICT(alloc_id) DO UPDATE SET
-		   relayed_bytes = MAX(relayed_bytes, excluded.relayed_bytes),
+		   relayed_bytes = MAX(relayed_bytes,
+		     MIN(excluded.relayed_bytes,
+		         relayed_bytes + ? * (excluded.recorded_at - recorded_at) + ?)),
 		   recorded_at = excluded.recorded_at`,
-		e.AllocID, e.Token, e.UserID, e.RelayedBytes, e.RecordedAt, nullStr(e.NodeID), b2i(e.Billable))
+		e.AllocID, e.Token, e.UserID, e.RelayedBytes, maxAllocRelayBytes, e.RecordedAt, nullStr(e.NodeID), b2i(e.Billable),
+		int64(maxRelayBytesPerSec), int64(relayReportSlack))
 	return err
 }
 
