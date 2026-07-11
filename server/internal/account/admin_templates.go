@@ -74,6 +74,7 @@ button:hover{filter:brightness(1.07)}
 var adminUsersTmpl = template.Must(template.New("users").Funcs(template.FuncMap{
 	"ts":    func(sec int64) string { return time.Unix(sec, 0).UTC().Format("2006-01-02 15:04") },
 	"bytes": humanBytes,
+	"gib":   func(b int64) int64 { return b / (1 << 30) },
 	"period": func(p string) string {
 		if t, err := time.Parse("200601", p); err == nil {
 			return t.Format("2006-01")
@@ -108,7 +109,15 @@ tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:var(--soft)}
 th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 .pager{display:flex;gap:16px;align-items:center;margin:18px 0}
 .pager a{color:var(--a);text-decoration:none}.pager a:hover{text-decoration:underline}
-.pager .off{color:var(--muted);opacity:.55}</style></head>
+.pager .off{color:var(--muted);opacity:.55}
+.mint{display:flex;gap:8px;margin:12px 0}
+.mint input{font:inherit;padding:7px 9px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg)}
+.minted{background:var(--soft);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin:12px 0}
+.minted pre{white-space:pre-wrap;word-break:break-all;background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:8px}
+.lim{display:flex;gap:6px;align-items:center}
+.lim input{width:70px;font:inherit;padding:5px 7px;border:1px solid var(--bd);border-radius:6px;background:var(--card);color:var(--fg)}
+.lim button,td .danger{padding:5px 10px;font-size:12px}
+.danger{background:#e5484d}</style></head>
 <body>
 <div class="top"><h1>后台概览</h1>
 <form method="post" action="/admin/logout"><button type="submit">退出</button></form></div>
@@ -123,21 +132,60 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 </section>
 
 <section class="nodes">
-<h2>中继节点（{{len .Nodes}}）</h2>
+<h2>官方节点（{{len .Nodes}}）</h2>
+
+{{if .MintedToken}}
+<div class="minted">
+<p>新节点 Token（仅显示一次，请立即复制）：</p>
+<pre>{{.MintedToken}}</pre>
+<p>在官方服务器上执行以下命令安装并启动节点：</p>
+<pre>{{.MintedInstallCmd}}</pre>
+</div>
+{{end}}
+
+<form method="post" action="/admin/nodes/token" class="mint">
+<input type="text" name="name" placeholder="节点备注名（如 cn-shanghai-1）">
+<button type="submit">生成节点 Token</button>
+</form>
+
 <table>
-<thead><tr><th>ID</th><th>区域</th><th>状态</th><th>中继字节</th><th>存储</th><th>剩余/总量</th><th>版本</th></tr></thead>
+<thead><tr><th>ID</th><th>区域</th><th>状态</th><th>本月中继 / 流量上限</th><th>存储 / 硬盘上限</th><th>盘 剩余/总量</th><th>版本</th><th>限额(GB)</th><th></th></tr></thead>
 <tbody>
-{{range .Nodes}}
+{{range .Nodes}}{{if eq .OwnerType "fleet"}}
 <tr>
 <td>{{.ID}}</td><td>{{.Region}}</td>
 <td>{{if .Online}}在线{{else}}离线{{end}}</td>
-<td>{{bytes .RelayedBytes}}</td>
-<td>{{if .StorageEnabled}}{{bytes .StoredBytes}}{{else}}—{{end}}</td>
+<td>{{bytes .MonthRelayedBytes}} / {{if .TrafficLimitBytes}}{{bytes .TrafficLimitBytes}}{{else}}∞{{end}}</td>
+<td>{{if .StorageEnabled}}{{bytes .StoredBytes}}{{else}}—{{end}} / {{if .DiskLimitBytes}}{{bytes .DiskLimitBytes}}{{else}}∞{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StorageFree}} / {{bytes .StorageTotal}}{{else}}—{{end}}</td>
 <td>{{.Version}}</td>
+<td>
+<form method="post" action="/admin/nodes/{{.ID}}/limits" class="lim">
+<input type="number" name="traffic_limit_gb" min="0" value="{{gib .TrafficLimitBytes}}" title="流量上限 GB/月，0=无限">
+<input type="number" name="disk_limit_gb" min="0" value="{{gib .DiskLimitBytes}}" title="硬盘上限 GB，0=无限">
+<button type="submit">保存</button>
+</form>
+</td>
+<td><form method="post" action="/admin/nodes/{{.ID}}/delete" onsubmit="return confirm('删除该官方节点？')"><button type="submit" class="danger">删除</button></form></td>
+</tr>
+{{end}}{{end}}
+</tbody></table>
+
+{{if .FleetTokens}}
+<h2>活跃节点 Token（{{len .FleetTokens}}）</h2>
+<table>
+<thead><tr><th>备注名</th><th>创建时间(UTC)</th><th>最后使用</th><th>绑定节点</th><th></th></tr></thead>
+<tbody>
+{{range .FleetTokens}}
+<tr>
+<td>{{.Name}}</td><td>{{ts .CreatedAt}}</td>
+<td>{{if .LastUsedAt}}{{ts .LastUsedAt}}{{else}}—{{end}}</td>
+<td>{{if .NodeID}}{{.NodeID}}{{else}}—{{end}}</td>
+<td><form method="post" action="/admin/nodes/token/{{.ID}}/revoke" onsubmit="return confirm('撤销该 Token？')"><button type="submit" class="danger">撤销</button></form></td>
 </tr>
 {{end}}
 </tbody></table>
+{{end}}
 </section>
 
 <section class="settings">
