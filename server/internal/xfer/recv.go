@@ -63,7 +63,7 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 		if err != nil {
 			return rep, err
 		}
-		sum, werr := writeFileBody(rw, dest, f, fs.Offset)
+		sum, werr := writeFileBody(rw, destDir, dest, f, fs.Offset)
 
 		var fh FileHash
 		if _, err := ReadJSON(rw, &fh); err != nil {
@@ -203,8 +203,16 @@ func syncStateFor(destDir string, m Manifest) ResumeState {
 
 // writeFileBody reads exactly f.Size-offset bytes from rw, writes them at the
 // given offset in dest, and returns the SHA-256 (hex) of the full file.
-func writeFileBody(rw io.Reader, dest string, f FileEntry, offset int64) (string, error) {
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+func writeFileBody(rw io.Reader, base, dest string, f FileEntry, offset int64) (string, error) {
+	dir := filepath.Dir(dest)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	// Defense in depth beyond safeJoin's lexical check and the leaf O_NOFOLLOW: a
+	// pre-planted symlinked *directory* under destDir could still redirect the
+	// write outside it. Confirm the parent's real (symlink-resolved) path stays
+	// within the real destDir root.
+	if err := ensureWithin(base, dir); err != nil {
 		return "", err
 	}
 	flag := os.O_CREATE | os.O_WRONLY | oNoFollow
@@ -255,4 +263,26 @@ func safeJoin(destDir, rel string) (string, error) {
 		return "", fmt.Errorf("unsafe path in manifest: %q", rel)
 	}
 	return joined, nil
+}
+
+// ensureWithin verifies that dir, after resolving any symlinks, is still inside
+// destDir (also symlink-resolved). Both must exist. This catches a symlinked
+// directory pre-planted under destDir that a purely lexical check would miss.
+func ensureWithin(destDir, dir string) error {
+	absBase, err := filepath.Abs(destDir)
+	if err != nil {
+		return err
+	}
+	realBase, err := filepath.EvalSymlinks(absBase)
+	if err != nil {
+		return err
+	}
+	realDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return err
+	}
+	if realDir != realBase && !strings.HasPrefix(realDir, realBase+string(filepath.Separator)) {
+		return fmt.Errorf("refusing write outside destDir via symlinked directory: %q", dir)
+	}
+	return nil
 }
