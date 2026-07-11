@@ -269,6 +269,44 @@ func TestDeleteFileOwnerGate(t *testing.T) {
 // the HTTP layer: many concurrent GETs of the same burn file yield exactly one
 // 200 with the full plaintext; every other request 404s. Before the fix, several
 // requests could each stream the complete ciphertext.
+// A burn claim released after a failed mid-stream delivery must let the owner
+// re-download, while a wrong-timestamp release must never clobber a live claim.
+func TestReleaseBurnDownloadAllowsRetry(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	u, err := store.UpsertUserByEmail(ctx, "burnrelease@example.com", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CreateStoredFile(ctx, StoredFile{
+		ID: "b1", UserID: u.ID, BlobKey: "bk", EncManifest: []byte("m"),
+		Size: 5, BurnAfterRead: true, CreatedAt: 1, ExpiresAt: 1 << 40,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if claimed, err := store.ClaimBurnDownload(ctx, "b1", 100); err != nil || !claimed {
+		t.Fatalf("first claim: claimed=%v err=%v", claimed, err)
+	}
+	if again, _ := store.ClaimBurnDownload(ctx, "b1", 200); again {
+		t.Fatal("second concurrent claim succeeded; want blocked")
+	}
+	// Wrong-timestamp release is a no-op: the claim stays held.
+	if err := store.ReleaseBurnDownload(ctx, "b1", 999); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := store.ClaimBurnDownload(ctx, "b1", 300); again {
+		t.Fatal("claim succeeded after wrong-timestamp release; want still held")
+	}
+	// Releasing our own claim restores availability.
+	if err := store.ReleaseBurnDownload(ctx, "b1", 100); err != nil {
+		t.Fatal(err)
+	}
+	if again, err := store.ClaimBurnDownload(ctx, "b1", 400); err != nil || !again {
+		t.Fatalf("re-claim after release: claimed=%v err=%v", again, err)
+	}
+}
+
 func TestBurnBlobConcurrentSingleDelivery(t *testing.T) {
 	ts, _, store, mail := newFileServer(t)
 	cookie := loginCookie(t, ts, mail, "burnrace@example.com")

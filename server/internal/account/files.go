@@ -2,6 +2,7 @@ package account
 
 import (
 	"bufio"
+	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/relayium/relayium/internal/storage"
 )
@@ -236,8 +238,10 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	// Burn-after-read: claim the single download only AFTER the blob opened, so an
 	// offline node never burns the shot. Concurrent GETs race on ClaimBurnDownload;
 	// only the winner streams, the rest 404.
+	var burnClaimAt int64
 	if sf.BurnAfterRead {
-		claimed, cerr := s.store.ClaimBurnDownload(r.Context(), sf.ID, s.now().Unix())
+		burnClaimAt = s.now().Unix()
+		claimed, cerr := s.store.ClaimBurnDownload(r.Context(), sf.ID, burnClaimAt)
 		if cerr != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
@@ -251,7 +255,17 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", strconv.FormatInt(sf.Size, 10))
 	n, err := io.Copy(w, rc)
 	if err != nil || n != sf.Size {
-		return // client hung up / incomplete: not a counted download (burn already spent)
+		// Incomplete delivery (client hung up / network hiccup). For a burn file,
+		// release the claim so the owner can retry rather than losing their only
+		// download to a transient failure. Use a fresh context: r.Context() is
+		// likely already cancelled, which is what aborted the copy. Only our own
+		// claim (matching burnClaimAt) is released, so a concurrent re-claim wins.
+		if sf.BurnAfterRead {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			_ = s.store.ReleaseBurnDownload(ctx, sf.ID, burnClaimAt)
+			cancel()
+		}
+		return
 	}
 	// Count the completed download against the file's OWNER only — never the
 	// downloader (no downloader identity is read or stored). Best-effort: a stats

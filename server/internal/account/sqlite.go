@@ -905,6 +905,16 @@ func (s *SQLiteStore) ClaimBurnDownload(ctx context.Context, id string, at int64
 	return n == 1, nil
 }
 
+// ReleaseBurnDownload undoes a claim whose download failed mid-stream. The
+// downloaded_at=? guard means it only clears the claim it made, so a concurrent
+// re-claim (different timestamp) is left intact.
+func (s *SQLiteStore) ReleaseBurnDownload(ctx context.Context, id string, claimedAt int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE stored_files SET downloaded_at = 0 WHERE id = ? AND burn_after_read = 1 AND downloaded_at = ?`,
+		id, claimedAt)
+	return err
+}
+
 func (s *SQLiteStore) DeleteStoredFile(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM stored_files WHERE id = ?`, id)
 	return err

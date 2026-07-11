@@ -301,6 +301,10 @@ type Store interface {
 	// download: it sets downloaded_at only if the file is burn and still unclaimed,
 	// returning claimed=true exactly once across concurrent callers.
 	ClaimBurnDownload(ctx context.Context, id string, at int64) (claimed bool, err error)
+	// ReleaseBurnDownload reverses a ClaimBurnDownload when the download failed
+	// mid-stream, restoring downloaded_at=0 only if it still matches the claim's
+	// timestamp (so a concurrent re-claim is never clobbered).
+	ReleaseBurnDownload(ctx context.Context, id string, claimedAt int64) error
 	DeleteStoredFile(ctx context.Context, id string) error
 	ListExpiredStoredFiles(ctx context.Context, now int64) ([]StoredFile, error)
 	IncDownloadCount(ctx context.Context, id string) error
