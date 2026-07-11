@@ -148,6 +148,11 @@ type Node struct {
 	StorageEnabled bool
 	StorageTotal   int64
 	StorageFree    int64
+	// Admin-set hard caps for official (fleet) nodes; 0 = unlimited. TrafficLimit
+	// is a monthly relay-bytes cap enforced in handleICE; DiskLimit caps stored
+	// bytes and is enforced in StorageNodes placement.
+	TrafficLimitBytes int64
+	DiskLimitBytes    int64
 }
 
 // NodeToken is a per-user credential a BYO node presents as its bearer. The
@@ -337,6 +342,10 @@ type Store interface {
 	// missing id are indistinguishable (both ErrNotFound). Also clears the
 	// node's pending_node_deletes entries.
 	DeleteNode(ctx context.Context, id, ownerUserID string) error
+	// SetNodeLimits sets a node's admin hard caps (bytes; 0 = unlimited).
+	SetNodeLimits(ctx context.Context, nodeID string, trafficLimit, diskLimit int64) error
+	// DeleteFleetNode removes an official (fleet) node, scoped to owner_type='fleet'.
+	DeleteFleetNode(ctx context.Context, id string) error
 	// pending_node_deletes (orphan-retry queue for GC when a node's DELETE fails)
 	EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error
 	ListPendingNodeDeletes(ctx context.Context) ([]PendingNodeDelete, error)

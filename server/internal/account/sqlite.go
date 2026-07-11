@@ -196,6 +196,10 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// SP3: only_own_nodes restricts a user's transfers to their own
 		// self-hosted nodes, excluding the shared fleet.
 		`ALTER TABLE users ADD COLUMN only_own_nodes INTEGER NOT NULL DEFAULT 0`,
+		// Admin-set per-node hard caps for official nodes (0 = unlimited):
+		// monthly relay traffic and disk usage.
+		`ALTER TABLE nodes ADD COLUMN traffic_limit_bytes INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE nodes ADD COLUMN disk_limit_bytes INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -1100,7 +1104,8 @@ func nullStr(s string) any {
 // column order stays in lockstep with queryNodes's scan.
 const nodeCols = `id, owner_type, owner_user_id, region, urls, turn_secret, version,
   relayed_bytes, stored_bytes, created_at, last_seen_at,
-  storage_url, storage_secret, storage_enabled, storage_total, storage_free`
+  storage_url, storage_secret, storage_enabled, storage_total, storage_free,
+  traffic_limit_bytes, disk_limit_bytes`
 
 func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	if n.ID == "" {
@@ -1112,7 +1117,7 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO nodes (`+nodeCols+`)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   owner_type=excluded.owner_type, owner_user_id=excluded.owner_user_id,
 		   region=excluded.region, urls=excluded.urls, turn_secret=excluded.turn_secret,
@@ -1122,7 +1127,8 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 		   storage_free=excluded.storage_free`,
 		n.ID, n.OwnerType, nullStr(n.OwnerUserID), n.Region, string(urls), n.TURNSecret,
 		n.Version, n.RelayedBytes, n.StoredBytes, n.CreatedAt, n.LastSeenAt,
-		nullStr(n.StorageURL), nullStr(n.StorageSecret), b2i(n.StorageEnabled), n.StorageTotal, n.StorageFree)
+		nullStr(n.StorageURL), nullStr(n.StorageSecret), b2i(n.StorageEnabled), n.StorageTotal, n.StorageFree,
+		n.TrafficLimitBytes, n.DiskLimitBytes)
 	if err != nil {
 		return Node{}, err
 	}
@@ -1210,6 +1216,35 @@ func (s *SQLiteStore) DeleteNode(ctx context.Context, id, ownerUserID string) er
 	return nil
 }
 
+// SetNodeLimits sets a node's admin hard caps (bytes; 0 = unlimited).
+func (s *SQLiteStore) SetNodeLimits(ctx context.Context, nodeID string, trafficLimit, diskLimit int64) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE nodes SET traffic_limit_bytes = ?, disk_limit_bytes = ? WHERE id = ?`,
+		trafficLimit, diskLimit, nodeID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteFleetNode removes an official (fleet) node, scoped to owner_type='fleet'
+// so a user node id cannot be deleted through the admin path. Also clears the
+// node's pending_node_deletes entries (mirrors DeleteNode).
+func (s *SQLiteStore) DeleteFleetNode(ctx context.Context, id string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM nodes WHERE id = ? AND owner_type = 'fleet'`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	_, _ = s.db.ExecContext(ctx, `DELETE FROM pending_node_deletes WHERE node_id = ?`, id)
+	return nil
+}
+
 func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]Node, error) {
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -1225,7 +1260,8 @@ func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]
 		var storageEnabled int
 		if err := rows.Scan(&n.ID, &n.OwnerType, &ownerUser, &n.Region, &urls, &n.TURNSecret,
 			&n.Version, &n.RelayedBytes, &n.StoredBytes, &n.CreatedAt, &n.LastSeenAt,
-			&storageURL, &storageSecret, &storageEnabled, &n.StorageTotal, &n.StorageFree); err != nil {
+			&storageURL, &storageSecret, &storageEnabled, &n.StorageTotal, &n.StorageFree,
+			&n.TrafficLimitBytes, &n.DiskLimitBytes); err != nil {
 			return nil, err
 		}
 		n.OwnerUserID = ownerUser.String
