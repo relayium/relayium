@@ -16,6 +16,20 @@ type Mailer interface {
 	SendMagicLink(ctx context.Context, email, link string) error
 	SendVerifyEmail(ctx context.Context, email, link string) error
 	SendPasswordReset(ctx context.Context, email, link string) error
+	// SendAccountDeletionConfirm emails the double-opt-in confirm link for a
+	// self-serve account-deletion request (Task 3). No account state changes
+	// until the link is used.
+	SendAccountDeletionConfirm(ctx context.Context, email, link string) error
+	// SendAccountDeletionScheduled emails confirmation that deletion is
+	// scheduled: the account is now suspended and will be hard-purged at
+	// purgeAt (unix seconds) unless reactivateLink is used first.
+	SendAccountDeletionScheduled(ctx context.Context, email string, purgeAt int64, reactivateLink string) error
+	// SendAccountDeletionReminder emails a one-time warning shortly before
+	// purgeAt that the grace window is about to end (Task 5).
+	SendAccountDeletionReminder(ctx context.Context, email string, purgeAt int64, reactivateLink string) error
+	// SendAccountDeleted emails final confirmation once GC has hard-purged the
+	// account (Task 5).
+	SendAccountDeleted(ctx context.Context, email string) error
 }
 
 // LogMailer prints the link instead of sending it. For local development only.
@@ -33,6 +47,28 @@ func (m *LogMailer) SendVerifyEmail(_ context.Context, email, link string) error
 
 func (m *LogMailer) SendPasswordReset(_ context.Context, email, link string) error {
 	m.Log.Printf("password reset for %s: %s", email, link)
+	return nil
+}
+
+func (m *LogMailer) SendAccountDeletionConfirm(_ context.Context, email, link string) error {
+	m.Log.Printf("account deletion confirm for %s: %s", email, link)
+	return nil
+}
+
+func (m *LogMailer) SendAccountDeletionScheduled(_ context.Context, email string, purgeAt int64, reactivateLink string) error {
+	m.Log.Printf("account deletion scheduled for %s, purge at %s: reactivate via %s",
+		email, time.Unix(purgeAt, 0).UTC().Format(time.RFC1123), reactivateLink)
+	return nil
+}
+
+func (m *LogMailer) SendAccountDeletionReminder(_ context.Context, email string, purgeAt int64, reactivateLink string) error {
+	m.Log.Printf("account deletion reminder for %s, purge at %s: reactivate via %s",
+		email, time.Unix(purgeAt, 0).UTC().Format(time.RFC1123), reactivateLink)
+	return nil
+}
+
+func (m *LogMailer) SendAccountDeleted(_ context.Context, email string) error {
+	m.Log.Printf("account deleted (purged) for %s", email)
 	return nil
 }
 
@@ -124,4 +160,34 @@ func (m *SMTPMailer) SendPasswordReset(_ context.Context, email, link string) er
 	return m.send(email, "Reset your Relayium password",
 		"Reset your Relayium password:\n"+link+"\n\nThis link is valid for 1 hour. If you didn't request it, ignore this email and your password stays unchanged.",
 		`<p>Reset your Relayium password:</p><p><a href="`+link+`">Reset password</a></p><p style="color:#666">This link is valid for 1 hour. If you didn't request it, ignore this email and your password stays unchanged.</p>`)
+}
+
+func (m *SMTPMailer) SendAccountDeletionConfirm(_ context.Context, email, link string) error {
+	return m.send(email, "Confirm Relayium account deletion",
+		"Confirm you want to delete your Relayium account:\n"+link+"\n\nThis link is valid for 1 hour and can be used once. If you didn't request this, ignore this email and no changes will be made.",
+		`<p>Confirm you want to delete your Relayium account:</p><p><a href="`+link+`">Confirm deletion</a></p><p style="color:#666">This link is valid for 1 hour and can be used once. If you didn't request this, ignore this email and no changes will be made.</p>`)
+}
+
+func (m *SMTPMailer) SendAccountDeletionScheduled(_ context.Context, email string, purgeAt int64, reactivateLink string) error {
+	when := time.Unix(purgeAt, 0).UTC().Format(time.RFC1123)
+	return m.send(email, "Your Relayium account deletion is scheduled",
+		"Your Relayium account is now scheduled for deletion. All data will be permanently purged on "+when+".\n\n"+
+			"Changed your mind? Reactivate before then:\n"+reactivateLink,
+		`<p>Your Relayium account is now scheduled for deletion. All data will be permanently purged on `+when+`.</p>`+
+			`<p>Changed your mind? <a href="`+reactivateLink+`">Reactivate your account</a> before then.</p>`)
+}
+
+func (m *SMTPMailer) SendAccountDeletionReminder(_ context.Context, email string, purgeAt int64, reactivateLink string) error {
+	when := time.Unix(purgeAt, 0).UTC().Format(time.RFC1123)
+	return m.send(email, "Reminder: your Relayium account will be permanently deleted soon",
+		"This is a reminder that your Relayium account and all its data will be permanently purged on "+when+".\n\n"+
+			"Changed your mind? Reactivate before then:\n"+reactivateLink,
+		`<p>This is a reminder that your Relayium account and all its data will be permanently purged on `+when+`.</p>`+
+			`<p>Changed your mind? <a href="`+reactivateLink+`">Reactivate your account</a> before then.</p>`)
+}
+
+func (m *SMTPMailer) SendAccountDeleted(_ context.Context, email string) error {
+	return m.send(email, "Your Relayium account has been deleted",
+		"Your Relayium account and all its data have been permanently deleted. If you didn't request this, please contact support immediately.",
+		`<p>Your Relayium account and all its data have been permanently deleted.</p><p style="color:#666">If you didn't request this, please contact support immediately.</p>`)
 }

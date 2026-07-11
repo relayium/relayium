@@ -35,6 +35,10 @@ func newFileServer(t *testing.T) (*httptest.Server, *Service, *SQLiteStore, *cap
 		// params) unlimited-until-TTL, matching this suite's pre-existing
 		// assumption; tests that want burn/count behavior request it explicitly.
 		DefaultRetention: retentionTTL,
+		// AccountGraceDays: self-deletion tests (deletion_test.go) need a
+		// nonzero grace window so purge_after lands strictly after deleted_at;
+		// harmless to every other test in this suite, which doesn't touch it.
+		AccountGraceDays: 30,
 	})
 	// Tests route blobs to loopback fakeNode servers; relax the SSRF dial guard.
 	svc.nodeHTTP.Transport.(*http.Transport).DialContext = guardedDialContext(true)

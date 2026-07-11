@@ -94,6 +94,7 @@ type Service struct {
 	magicRequests     *loginThrottle              // per email+IP magic-link request rate limiter
 	verifyRequests    *loginThrottle              // per email+IP resend-verification limiter
 	resetRequests     *loginThrottle              // per email+IP forgot-password limiter
+	deleteRequests    *loginThrottle              // per user+IP account-deletion-request limiter
 	blobs             storage.BlobStore           // nil until SetBlobStore; stored-transfer disabled when nil
 	pairCodeOwner     func(string) (string, bool) // resolves a live code to its owner userID; nil until wired
 	// clientIP resolves the request's rate-limit key IP. Defaults to the
@@ -135,7 +136,8 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 		adminSessions: map[string]int64{}, adminLogins: newLoginThrottle(),
 		pwLogins: newLoginThrottle(), magicRequests: newLoginThrottle(),
 		verifyRequests: newLoginThrottle(), resetRequests: newLoginThrottle(),
-		uploadSem: newUploadSem(maxConcurrentUploadsPerUser)}
+		deleteRequests: newLoginThrottle(),
+		uploadSem:      newUploadSem(maxConcurrentUploadsPerUser)}
 	svc.clientIP = clientIP
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
 	svc.allowPrivateNodeURLs = os.Getenv("RELAYIUM_ALLOW_PRIVATE_NODE_URLS") == "true"

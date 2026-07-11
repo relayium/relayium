@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -13,6 +14,16 @@ type capturingMailer struct {
 	mu       sync.Mutex
 	lastLink string
 	count    int
+
+	// Deletion-flow captures (Task 3): kept distinct from lastLink/count so a
+	// test can assert on the delete-confirm link, the post-confirm reactivate
+	// link, and the scheduled purge time without racing other mailer calls.
+	lastDeleteLink      string // confirm-deletion link from SendAccountDeletionConfirm
+	lastReactivateLink  string // reactivate link from SendAccountDeletionScheduled/Reminder
+	lastPurgeAt         int64
+	deletionScheduled   int
+	deletionReminders   int
+	accountDeletedSends int
 }
 
 func (m *capturingMailer) SendMagicLink(_ context.Context, _, link string) error {
@@ -43,6 +54,67 @@ func (m *capturingMailer) sends() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.count
+}
+
+func (m *capturingMailer) SendAccountDeletionConfirm(_ context.Context, _, link string) error {
+	m.mu.Lock()
+	m.lastDeleteLink = link
+	m.mu.Unlock()
+	return nil
+}
+
+func (m *capturingMailer) SendAccountDeletionScheduled(_ context.Context, _ string, purgeAt int64, reactivateLink string) error {
+	m.mu.Lock()
+	m.lastPurgeAt = purgeAt
+	m.lastReactivateLink = reactivateLink
+	m.deletionScheduled++
+	m.mu.Unlock()
+	return nil
+}
+
+func (m *capturingMailer) SendAccountDeletionReminder(_ context.Context, _ string, purgeAt int64, reactivateLink string) error {
+	m.mu.Lock()
+	m.lastPurgeAt = purgeAt
+	m.lastReactivateLink = reactivateLink
+	m.deletionReminders++
+	m.mu.Unlock()
+	return nil
+}
+
+func (m *capturingMailer) SendAccountDeleted(_ context.Context, _ string) error {
+	m.mu.Lock()
+	m.accountDeletedSends++
+	m.mu.Unlock()
+	return nil
+}
+
+// lastDeleteToken extracts the raw token from the last captured
+// account-deletion confirm link ("...?token=<raw>"), failing the test if none
+// was sent or the link has no token param.
+func (m *capturingMailer) lastDeleteToken(t *testing.T) string {
+	t.Helper()
+	m.mu.Lock()
+	link := m.lastDeleteLink
+	m.mu.Unlock()
+	i := strings.Index(link, "token=")
+	if i < 0 {
+		t.Fatalf("no delete-confirm token captured in link %q", link)
+	}
+	return link[i+len("token="):]
+}
+
+// lastReactivateToken extracts the raw token from the last captured
+// reactivate link, analogous to lastDeleteToken.
+func (m *capturingMailer) lastReactivateToken(t *testing.T) string {
+	t.Helper()
+	m.mu.Lock()
+	link := m.lastReactivateLink
+	m.mu.Unlock()
+	i := strings.Index(link, "token=")
+	if i < 0 {
+		t.Fatalf("no reactivate token captured in link %q", link)
+	}
+	return link[i+len("token="):]
 }
 
 func newMagicTestService(t *testing.T) (*Service, *capturingMailer) {

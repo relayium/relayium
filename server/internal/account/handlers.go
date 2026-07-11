@@ -12,6 +12,12 @@ import (
 
 const sessionCookie = "relayium_session"
 
+// deleteTokenTTL bounds how long a self-serve-deletion confirm link stays
+// valid — short, since it's re-requestable and email delivery is normally
+// near-instant (mirrors resetTTL's role, kept separate so tuning one never
+// silently retunes the other).
+const deleteTokenTTL = time.Hour
+
 // cookieSecure reports whether auth cookies should carry the Secure attribute.
 // Derived from the base URL scheme: production (https) gets Secure cookies,
 // while plain http://localhost development keeps real-browser login working.
@@ -71,6 +77,12 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/auth/email/resend", s.handleResendVerification)
 	mux.HandleFunc("POST /api/auth/password/forgot", s.handleForgotPassword)
 	mux.HandleFunc("POST /api/auth/password/reset", s.handleResetPassword)
+	// Self-serve account deletion (double opt-in): request is session-authed and
+	// only ever emails a confirm link (no destructive action); confirm carries
+	// no session (a prior confirm may already have revoked it) — the token
+	// itself is the authorization, mirroring the password-reset token pattern.
+	mux.HandleFunc("POST /api/account/delete/request", s.RequireSession(s.handleDeleteRequest))
+	mux.HandleFunc("POST /api/account/delete/confirm", s.handleDeleteConfirm)
 	mux.HandleFunc("GET /api/auth/methods", s.handleAuthMethods)
 	if s.cfg.EnableMagic {
 		mux.HandleFunc("POST /api/auth/magic/request", s.handleMagicRequest)

@@ -24,6 +24,16 @@ type noopMailer struct{}
 func (noopMailer) SendMagicLink(context.Context, string, string) error     { return nil }
 func (noopMailer) SendVerifyEmail(context.Context, string, string) error   { return nil }
 func (noopMailer) SendPasswordReset(context.Context, string, string) error { return nil }
+func (noopMailer) SendAccountDeletionConfirm(context.Context, string, string) error {
+	return nil
+}
+func (noopMailer) SendAccountDeletionScheduled(context.Context, string, int64, string) error {
+	return nil
+}
+func (noopMailer) SendAccountDeletionReminder(context.Context, string, int64, string) error {
+	return nil
+}
+func (noopMailer) SendAccountDeleted(context.Context, string) error { return nil }
 
 // newE2EService stands up a real account.Service over an in-memory SQLite
 // store and a real on-disk blob store, using only exported APIs (the account

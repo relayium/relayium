@@ -35,7 +35,10 @@ func TestLogMailerWritesLink(t *testing.T) {
 
 // captureMailer records the most recent link per kind for assertions.
 type captureMailer struct {
-	magic, verify, reset string
+	magic, verify, reset                 string
+	deleteConfirm, deletionScheduledLink string
+	deletionReminderLink                 string
+	accountDeletedCount                  int
 }
 
 func (m *captureMailer) SendMagicLink(_ context.Context, _, link string) error {
@@ -48,6 +51,22 @@ func (m *captureMailer) SendVerifyEmail(_ context.Context, _, link string) error
 }
 func (m *captureMailer) SendPasswordReset(_ context.Context, _, link string) error {
 	m.reset = link
+	return nil
+}
+func (m *captureMailer) SendAccountDeletionConfirm(_ context.Context, _, link string) error {
+	m.deleteConfirm = link
+	return nil
+}
+func (m *captureMailer) SendAccountDeletionScheduled(_ context.Context, _ string, _ int64, reactivateLink string) error {
+	m.deletionScheduledLink = reactivateLink
+	return nil
+}
+func (m *captureMailer) SendAccountDeletionReminder(_ context.Context, _ string, _ int64, reactivateLink string) error {
+	m.deletionReminderLink = reactivateLink
+	return nil
+}
+func (m *captureMailer) SendAccountDeleted(_ context.Context, _ string) error {
+	m.accountDeletedCount++
 	return nil
 }
 
