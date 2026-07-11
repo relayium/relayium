@@ -32,6 +32,8 @@ func newFileServer(t *testing.T) (*httptest.Server, *Service, *SQLiteStore, *cap
 		// tight-quota server via newFileServerWithQuota instead.
 		MaxFileSize: 1024, DailyQuota: 8 << 20, DefaultTTL: 3600, MaxTTL: 7200,
 	})
+	// Tests route blobs to loopback fakeNode servers; relax the SSRF dial guard.
+	svc.nodeHTTP.Transport.(*http.Transport).DialContext = guardedDialContext(true)
 	disk, err := storage.NewDiskStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("disk: %v", err)

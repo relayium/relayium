@@ -3,6 +3,7 @@ package account
 import (
 	"bytes"
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -23,6 +24,8 @@ func newFileServerWithQuota(t *testing.T, dailyQuota, maxFileSize int64) (*httpt
 		EnableMagic: true,
 		MaxFileSize: maxFileSize, DailyQuota: dailyQuota, DefaultTTL: 3600, MaxTTL: 7200,
 	})
+	// Tests route blobs to loopback fakeNode servers; relax the SSRF dial guard.
+	svc.nodeHTTP.Transport.(*http.Transport).DialContext = guardedDialContext(true)
 	disk, err := storage.NewDiskStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("disk: %v", err)

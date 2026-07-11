@@ -109,6 +109,14 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "turnSecret and urls required"})
 		return
 	}
+	// StorageURL is user-controlled and central makes outbound calls to it;
+	// reject non-public / malformed endpoints to prevent SSRF.
+	if req.StorageURL != "" {
+		if err := validateNodeStorageURL(req.StorageURL, s.allowPrivateNodeURLs); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+	}
 	// Prevent node-ID takeover: a re-register of an existing node id must come from
 	// the SAME owner. A fleet token may only re-register a fleet node; a user token
 	// may only re-register its own user node. Unknown ids fall through as new nodes.

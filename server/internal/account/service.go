@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"sync"
 	"time"
 
@@ -100,6 +101,10 @@ type Service struct {
 	// deliberately no total request timeout since blob bodies are large
 	// streams.
 	nodeHTTP *http.Client
+	// allowPrivateNodeURLs disables the SSRF guard on node-supplied StorageURLs
+	// (RELAYIUM_ALLOW_PRIVATE_NODE_URLS=true), for self-hosting the whole stack
+	// on a private LAN.
+	allowPrivateNodeURLs bool
 	// pickN returns a random index in [0,n); overridable in tests for
 	// deterministic node selection in placeUpload.
 	pickN func(int) int
@@ -117,8 +122,12 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 		uploadSem: newUploadSem(maxConcurrentUploadsPerUser)}
 	svc.clientIP = clientIP
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
+	svc.allowPrivateNodeURLs = os.Getenv("RELAYIUM_ALLOW_PRIVATE_NODE_URLS") == "true"
 	svc.nodeHTTP = &http.Client{Transport: &http.Transport{
 		ResponseHeaderTimeout: 15 * time.Second,
+		// Block outbound calls to non-public addresses (SSRF via user-supplied
+		// node StorageURL). Dial-time check also defeats DNS rebinding.
+		DialContext: guardedDialContext(svc.allowPrivateNodeURLs),
 		// no total timeout: blob bodies are large streams
 	}}
 	svc.pickN = func(n int) int {
