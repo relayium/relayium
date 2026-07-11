@@ -143,6 +143,15 @@ CREATE TABLE IF NOT EXISTS node_tokens (
   revoked_at   INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_node_tokens_user ON node_tokens(user_id);
+CREATE TABLE IF NOT EXISTS fleet_tokens (
+  id           TEXT PRIMARY KEY,
+  token_hash   TEXT NOT NULL UNIQUE,
+  name         TEXT,
+  node_id      TEXT,
+  created_at   INTEGER NOT NULL,
+  last_used_at INTEGER NOT NULL DEFAULT 0,
+  revoked_at   INTEGER NOT NULL DEFAULT 0
+);
 `
 
 func OpenSQLite(dsn string) (*SQLiteStore, error) {
@@ -187,6 +196,10 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// SP3: only_own_nodes restricts a user's transfers to their own
 		// self-hosted nodes, excluding the shared fleet.
 		`ALTER TABLE users ADD COLUMN only_own_nodes INTEGER NOT NULL DEFAULT 0`,
+		// Admin-set per-node hard caps for official nodes (0 = unlimited):
+		// monthly relay traffic and disk usage.
+		`ALTER TABLE nodes ADD COLUMN traffic_limit_bytes INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE nodes ADD COLUMN disk_limit_bytes INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -594,6 +607,29 @@ func (s *SQLiteStore) UserRelayedSince(ctx context.Context, userID string, since
 		`SELECT COALESCE(SUM(relayed_bytes),0) FROM usage_events WHERE user_id = ? AND recorded_at >= ? AND billable = 1`,
 		userID, since).Scan(&total)
 	return total, err
+}
+
+// NodeRelayedSince sums relayed bytes per node for usage recorded at or after
+// `since` (the current month for the per-node traffic cap). Keyed by node id;
+// nodes with no usage in the window are absent (treated as 0 by callers).
+func (s *SQLiteStore) NodeRelayedSince(ctx context.Context, since int64) (map[string]int64, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT node_id, COALESCE(SUM(relayed_bytes),0) FROM usage_events
+		   WHERE recorded_at >= ? AND node_id IS NOT NULL GROUP BY node_id`, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]int64)
+	for rows.Next() {
+		var id string
+		var total int64
+		if err := rows.Scan(&id, &total); err != nil {
+			return nil, err
+		}
+		out[id] = total
+	}
+	return out, rows.Err()
 }
 
 func (s *SQLiteStore) SetPassword(ctx context.Context, userID, passwordHash string) error {
@@ -1091,7 +1127,8 @@ func nullStr(s string) any {
 // column order stays in lockstep with queryNodes's scan.
 const nodeCols = `id, owner_type, owner_user_id, region, urls, turn_secret, version,
   relayed_bytes, stored_bytes, created_at, last_seen_at,
-  storage_url, storage_secret, storage_enabled, storage_total, storage_free`
+  storage_url, storage_secret, storage_enabled, storage_total, storage_free,
+  traffic_limit_bytes, disk_limit_bytes`
 
 func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	if n.ID == "" {
@@ -1103,7 +1140,7 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO nodes (`+nodeCols+`)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   owner_type=excluded.owner_type, owner_user_id=excluded.owner_user_id,
 		   region=excluded.region, urls=excluded.urls, turn_secret=excluded.turn_secret,
@@ -1113,7 +1150,8 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 		   storage_free=excluded.storage_free`,
 		n.ID, n.OwnerType, nullStr(n.OwnerUserID), n.Region, string(urls), n.TURNSecret,
 		n.Version, n.RelayedBytes, n.StoredBytes, n.CreatedAt, n.LastSeenAt,
-		nullStr(n.StorageURL), nullStr(n.StorageSecret), b2i(n.StorageEnabled), n.StorageTotal, n.StorageFree)
+		nullStr(n.StorageURL), nullStr(n.StorageSecret), b2i(n.StorageEnabled), n.StorageTotal, n.StorageFree,
+		n.TrafficLimitBytes, n.DiskLimitBytes)
 	if err != nil {
 		return Node{}, err
 	}
@@ -1152,7 +1190,8 @@ func (s *SQLiteStore) StorageNodes(ctx context.Context, since, minFree int64) ([
 	return s.queryNodes(ctx,
 		`SELECT `+nodeCols+` FROM nodes
 		   WHERE owner_type='fleet' AND storage_enabled=1 AND last_seen_at >= ? AND storage_free >= ?
-		   ORDER BY last_seen_at DESC`, since, minFree)
+		     AND (disk_limit_bytes = 0 OR disk_limit_bytes - stored_bytes >= ?)
+		   ORDER BY last_seen_at DESC`, since, minFree, minFree)
 }
 
 func (s *SQLiteStore) OnlineNodes(ctx context.Context, since int64) ([]Node, error) {
@@ -1201,6 +1240,35 @@ func (s *SQLiteStore) DeleteNode(ctx context.Context, id, ownerUserID string) er
 	return nil
 }
 
+// SetNodeLimits sets a node's admin hard caps (bytes; 0 = unlimited).
+func (s *SQLiteStore) SetNodeLimits(ctx context.Context, nodeID string, trafficLimit, diskLimit int64) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE nodes SET traffic_limit_bytes = ?, disk_limit_bytes = ? WHERE id = ? AND owner_type = 'fleet'`,
+		trafficLimit, diskLimit, nodeID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteFleetNode removes an official (fleet) node, scoped to owner_type='fleet'
+// so a user node id cannot be deleted through the admin path. Also clears the
+// node's pending_node_deletes entries (mirrors DeleteNode).
+func (s *SQLiteStore) DeleteFleetNode(ctx context.Context, id string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM nodes WHERE id = ? AND owner_type = 'fleet'`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	_, _ = s.db.ExecContext(ctx, `DELETE FROM pending_node_deletes WHERE node_id = ?`, id)
+	return nil
+}
+
 func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]Node, error) {
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -1216,7 +1284,8 @@ func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]
 		var storageEnabled int
 		if err := rows.Scan(&n.ID, &n.OwnerType, &ownerUser, &n.Region, &urls, &n.TURNSecret,
 			&n.Version, &n.RelayedBytes, &n.StoredBytes, &n.CreatedAt, &n.LastSeenAt,
-			&storageURL, &storageSecret, &storageEnabled, &n.StorageTotal, &n.StorageFree); err != nil {
+			&storageURL, &storageSecret, &storageEnabled, &n.StorageTotal, &n.StorageFree,
+			&n.TrafficLimitBytes, &n.DiskLimitBytes); err != nil {
 			return nil, err
 		}
 		n.OwnerUserID = ownerUser.String
@@ -1335,4 +1404,68 @@ func (s *SQLiteStore) RevokeNodeToken(ctx context.Context, id, userID string, at
 func (s *SQLiteStore) TouchNodeTokenUsed(ctx context.Context, id string, at int64) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE node_tokens SET last_used_at = ? WHERE id = ?`, at, id)
 	return err
+}
+
+func (s *SQLiteStore) CreateFleetToken(ctx context.Context, t FleetToken) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO fleet_tokens (id, token_hash, name, node_id, created_at) VALUES (?,?,?,?,?)`,
+		t.ID, t.TokenHash, t.Name, nullStr(t.NodeID), t.CreatedAt)
+	return err
+}
+
+// FleetTokenByHash resolves an admin-minted fleet token by hash; ok=false for
+// both an absent and a revoked hash (no existence oracle), matching NodeTokenByHash.
+func (s *SQLiteStore) FleetTokenByHash(ctx context.Context, hash string) (FleetToken, bool, error) {
+	var t FleetToken
+	var nodeID sql.NullString
+	var name sql.NullString
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, token_hash, name, node_id, created_at, last_used_at, revoked_at
+		   FROM fleet_tokens WHERE token_hash = ? AND revoked_at = 0`, hash).
+		Scan(&t.ID, &t.TokenHash, &name, &nodeID, &t.CreatedAt, &t.LastUsedAt, &t.RevokedAt)
+	if err == sql.ErrNoRows {
+		return FleetToken{}, false, nil
+	}
+	if err != nil {
+		return FleetToken{}, false, err
+	}
+	t.Name, t.NodeID = name.String, nodeID.String
+	return t, true, nil
+}
+
+func (s *SQLiteStore) BindFleetToken(ctx context.Context, id, nodeID string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE fleet_tokens SET node_id = ? WHERE id = ?`, nodeID, id)
+	return err
+}
+
+func (s *SQLiteStore) TouchFleetTokenUsed(ctx context.Context, id string, at int64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE fleet_tokens SET last_used_at = ? WHERE id = ?`, at, id)
+	return err
+}
+
+func (s *SQLiteStore) RevokeFleetToken(ctx context.Context, id string, at int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE fleet_tokens SET revoked_at = ? WHERE id = ? AND revoked_at = 0`, at, id)
+	return err
+}
+
+func (s *SQLiteStore) ListActiveFleetTokens(ctx context.Context) ([]FleetToken, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, token_hash, name, node_id, created_at, last_used_at, revoked_at
+		   FROM fleet_tokens WHERE revoked_at = 0 ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []FleetToken
+	for rows.Next() {
+		var t FleetToken
+		var name, nodeID sql.NullString
+		if err := rows.Scan(&t.ID, &t.TokenHash, &name, &nodeID, &t.CreatedAt, &t.LastUsedAt, &t.RevokedAt); err != nil {
+			return nil, err
+		}
+		t.Name, t.NodeID = name.String, nodeID.String
+		out = append(out, t)
+	}
+	return out, rows.Err()
 }

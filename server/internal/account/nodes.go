@@ -69,6 +69,12 @@ func (s *Service) nodeOwner(r *http.Request) (ownerType, ownerUserID string, ok 
 	if s.cfg.NodeToken != "" && subtle.ConstantTimeCompare([]byte(tok), []byte(s.cfg.NodeToken)) == 1 {
 		return "fleet", "", true
 	}
+	// Admin-minted fleet tokens (userless) — resolved like the env token but
+	// per-node and revocable from the admin panel.
+	if ft, found, err := s.store.FleetTokenByHash(r.Context(), hashToken(tok)); err == nil && found {
+		_ = s.store.TouchFleetTokenUsed(r.Context(), ft.ID, s.now().Unix())
+		return "fleet", "", true
+	}
 	if s.cfg.EnableUserNodes {
 		if nt, found, err := s.store.NodeTokenByHash(r.Context(), hashToken(tok)); err == nil && found {
 			_ = s.store.TouchNodeTokenUsed(r.Context(), nt.ID, s.now().Unix())
@@ -133,12 +139,15 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
-	// Bind a user token to its node for per-node revoke/delete.
+	// Bind the presented token to its node for per-node revoke/delete.
+	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if ownerType == "user" {
-		tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if nt, found, e := s.store.NodeTokenByHash(r.Context(), hashToken(tok)); e == nil && found {
 			_ = s.store.BindNodeToken(r.Context(), nt.ID, saved.ID)
 		}
+	} else if ft, found, e := s.store.FleetTokenByHash(r.Context(), hashToken(tok)); e == nil && found {
+		// An admin-minted fleet token (not the shared env token) binds to its node.
+		_ = s.store.BindFleetToken(r.Context(), ft.ID, saved.ID)
 	}
 	writeJSON(w, http.StatusOK, nodeRegisterResp{NodeID: saved.ID, HeartbeatInterval: nodeHeartbeatInterval})
 }

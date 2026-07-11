@@ -148,6 +148,11 @@ type Node struct {
 	StorageEnabled bool
 	StorageTotal   int64
 	StorageFree    int64
+	// Admin-set hard caps for official (fleet) nodes; 0 = unlimited. TrafficLimit
+	// is a monthly relay-bytes cap enforced in handleICE; DiskLimit caps stored
+	// bytes and is enforced in StorageNodes placement.
+	TrafficLimitBytes int64
+	DiskLimitBytes    int64
 }
 
 // NodeToken is a per-user credential a BYO node presents as its bearer. The
@@ -159,6 +164,20 @@ type NodeToken struct {
 	UserID     string
 	NodeID     string
 	Name       string
+	CreatedAt  int64
+	LastUsedAt int64
+	RevokedAt  int64
+}
+
+// FleetToken is an admin-minted, userless bearer credential an official (fleet)
+// node presents at register/heartbeat. Unlike NodeToken it has no owning user,
+// so it lives in its own table rather than node_tokens (whose user_id is NOT
+// NULL). Plaintext is shown once at mint; only its sha256 hash is stored.
+type FleetToken struct {
+	ID         string
+	TokenHash  string
+	Name       string
+	NodeID     string
 	CreatedAt  int64
 	LastUsedAt int64
 	RevokedAt  int64
@@ -267,6 +286,9 @@ type Store interface {
 	RecordUsage(ctx context.Context, e UsageEvent) error
 	UserUsageTotal(ctx context.Context, userID string) (int64, error)
 	UserRelayedSince(ctx context.Context, userID string, since int64) (int64, error)
+	// NodeRelayedSince sums relayed bytes per node for usage since `since`
+	// (per-node monthly traffic cap), keyed by node id.
+	NodeRelayedSince(ctx context.Context, since int64) (map[string]int64, error)
 	// admin (read-only)
 	AdminListUsers(ctx context.Context, q AdminUserQuery) (rows []AdminUserRow, total int64, err error)
 	AdminMetrics(ctx context.Context, period string, now int64) (AdminMetrics, error)
@@ -323,6 +345,10 @@ type Store interface {
 	// missing id are indistinguishable (both ErrNotFound). Also clears the
 	// node's pending_node_deletes entries.
 	DeleteNode(ctx context.Context, id, ownerUserID string) error
+	// SetNodeLimits sets a node's admin hard caps (bytes; 0 = unlimited).
+	SetNodeLimits(ctx context.Context, nodeID string, trafficLimit, diskLimit int64) error
+	// DeleteFleetNode removes an official (fleet) node, scoped to owner_type='fleet'.
+	DeleteFleetNode(ctx context.Context, id string) error
 	// pending_node_deletes (orphan-retry queue for GC when a node's DELETE fails)
 	EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error
 	ListPendingNodeDeletes(ctx context.Context) ([]PendingNodeDelete, error)
@@ -337,4 +363,11 @@ type Store interface {
 	ListNodeTokensByUser(ctx context.Context, userID string) ([]NodeToken, error)
 	RevokeNodeToken(ctx context.Context, id, userID string, at int64) error
 	TouchNodeTokenUsed(ctx context.Context, id string, at int64) error
+	// fleet_tokens (admin-minted, userless official-node bearer credentials)
+	CreateFleetToken(ctx context.Context, t FleetToken) error
+	FleetTokenByHash(ctx context.Context, hash string) (FleetToken, bool, error)
+	BindFleetToken(ctx context.Context, id, nodeID string) error
+	TouchFleetTokenUsed(ctx context.Context, id string, at int64) error
+	RevokeFleetToken(ctx context.Context, id string, at int64) error
+	ListActiveFleetTokens(ctx context.Context) ([]FleetToken, error)
 }

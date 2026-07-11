@@ -20,34 +20,50 @@ const (
 // adminNodeView is a Node prepared for the admin template (online flag derived
 // from last_seen against nodeOnlineWindow).
 type adminNodeView struct {
-	ID             string
-	Region         string
-	Version        string
-	Online         bool
-	RelayedBytes   int64
-	StoredBytes    int64
-	StorageEnabled bool
-	StorageTotal   int64
-	StorageFree    int64
-	LastSeenAt     int64
+	ID                string
+	OwnerType         string
+	Region            string
+	Version           string
+	Online            bool
+	RelayedBytes      int64
+	MonthRelayedBytes int64
+	StoredBytes       int64
+	StorageEnabled    bool
+	StorageTotal      int64
+	StorageFree       int64
+	TrafficLimitBytes int64
+	DiskLimitBytes    int64
+	LastSeenAt        int64
 }
 
-func nodeViews(nodes []Node, now time.Time) []adminNodeView {
+func nodeViews(nodes []Node, monthly map[string]int64, now time.Time) []adminNodeView {
 	cutoff := now.Add(-nodeOnlineWindow).Unix()
 	out := make([]adminNodeView, 0, len(nodes))
 	for _, n := range nodes {
 		out = append(out, adminNodeView{
-			ID: n.ID, Region: n.Region, Version: n.Version,
-			Online:         n.LastSeenAt >= cutoff,
-			RelayedBytes:   n.RelayedBytes,
-			StoredBytes:    n.StoredBytes,
-			StorageEnabled: n.StorageEnabled,
-			StorageTotal:   n.StorageTotal,
-			StorageFree:    n.StorageFree,
-			LastSeenAt:     n.LastSeenAt,
+			ID: n.ID, OwnerType: n.OwnerType, Region: n.Region, Version: n.Version,
+			Online:            n.LastSeenAt >= cutoff,
+			RelayedBytes:      n.RelayedBytes,
+			MonthRelayedBytes: monthly[n.ID],
+			StoredBytes:       n.StoredBytes,
+			StorageEnabled:    n.StorageEnabled,
+			StorageTotal:      n.StorageTotal,
+			StorageFree:       n.StorageFree,
+			TrafficLimitBytes: n.TrafficLimitBytes,
+			DiskLimitBytes:    n.DiskLimitBytes,
+			LastSeenAt:        n.LastSeenAt,
 		})
 	}
 	return out
+}
+
+// nodeRunCommandGo is the server-side twin of web/src/lib/nodes.ts
+// nodeRunCommand: the one-liner an operator runs on an official box to install
+// and start a fleet node bound to this admin-minted token. Kept in sync with
+// that TS helper.
+func nodeRunCommandGo(centralURL, token string) string {
+	return "curl -fsSL " + centralURL + "/install-node.sh | sudo RELAYIUM_CENTRAL_URL=" + centralURL +
+		" RELAYIUM_NODE_TOKEN=" + token + " RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh"
 }
 
 // adminListHref builds a /admin list link, keeping only non-default params, URL-encoded.
@@ -119,6 +135,10 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	mux.Handle("POST /admin/login", s.csrfGuard(http.HandlerFunc(s.handleAdminLogin)))
 	mux.Handle("POST /admin/logout", s.csrfGuard(http.HandlerFunc(s.handleAdminLogout)))
 	mux.Handle("POST /admin/settings", s.csrfGuard(http.HandlerFunc(s.handleAdminSettings)))
+	mux.Handle("POST /admin/nodes/token", s.csrfGuard(http.HandlerFunc(s.handleAdminMintToken)))
+	mux.Handle("POST /admin/nodes/token/{id}/revoke", s.csrfGuard(http.HandlerFunc(s.handleAdminRevokeToken)))
+	mux.Handle("POST /admin/nodes/{id}/limits", s.csrfGuard(http.HandlerFunc(s.handleAdminNodeLimits)))
+	mux.Handle("POST /admin/nodes/{id}/delete", s.csrfGuard(http.HandlerFunc(s.handleAdminDeleteNode)))
 }
 
 func (s *Service) newAdminSession() string {
@@ -202,11 +222,9 @@ func (s *Service) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 
-func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
-	if !s.isAdminReq(r) {
-		s.renderAdminLogin(w, http.StatusOK, "")
-		return
-	}
+// buildAdminHomeData assembles the dashboard view model (metrics, users, nodes,
+// settings, fleet tokens). Shared by handleAdminHome and handleAdminMintToken.
+func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 	q := r.URL.Query()
 	search := strings.TrimSpace(q.Get("q"))
 	sortBy := q.Get("sort")
@@ -228,40 +246,31 @@ func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	months := recentMonths(now, 12)
 	period := q.Get("period")
 	if !contains(months, period) {
-		period = months[0] // default = current month
+		period = months[0]
 	}
 	metrics, err := s.store.AdminMetrics(r.Context(), period, now)
 	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
+		return adminHomeData{}, err
 	}
-	rows, total, err := s.store.AdminListUsers(r.Context(), AdminUserQuery{
-		Search: search, SortBy: sortBy, SortDir: dir,
-		Period: period, Now: now,
-		Limit: adminUsersPerPage, Offset: (page - 1) * adminUsersPerPage,
-	})
+	query := AdminUserQuery{Search: search, SortBy: sortBy, SortDir: dir, Period: period, Now: now,
+		Limit: adminUsersPerPage, Offset: (page - 1) * adminUsersPerPage}
+	rows, total, err := s.store.AdminListUsers(r.Context(), query)
 	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
+		return adminHomeData{}, err
 	}
 	totalPages := int(math.Ceil(float64(total) / float64(adminUsersPerPage)))
 	if totalPages < 1 {
 		totalPages = 1
 	}
-	if page > totalPages { // clamp to the last page and re-fetch it
+	if page > totalPages {
 		page = totalPages
-		rows, total, err = s.store.AdminListUsers(r.Context(), AdminUserQuery{
-			Search: search, SortBy: sortBy, SortDir: dir,
-			Period: period, Now: now,
-			Limit: adminUsersPerPage, Offset: (page - 1) * adminUsersPerPage,
-		})
+		query.Offset = (page - 1) * adminUsersPerPage
+		rows, total, err = s.store.AdminListUsers(r.Context(), query)
 		if err != nil {
-			http.Error(w, "server error", http.StatusInternalServerError)
-			return
+			return adminHomeData{}, err
 		}
 	}
 
-	// Sort link for a column header: non-current column -> desc; current column -> toggle direction. Resets to page 1.
 	sortHref := map[string]string{}
 	for _, col := range []string{"created", "email", "relayed", "upload", "download", "storage"} {
 		nd := "desc"
@@ -278,19 +287,39 @@ func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		next = adminListHref(search, sortBy, dir, period, page+1)
 	}
 
+	// Per-node monthly relayed bytes (current month) for the fleet traffic column.
+	monthStart, _ := monthRange(periodOf(now))
+	monthly, mErr := s.store.NodeRelayedSince(r.Context(), monthStart)
+	if mErr != nil {
+		log.Printf("admin: NodeRelayedSince failed: %v", mErr)
+	}
 	var nodeVs []adminNodeView
 	if ns, nerr := s.store.ListNodes(r.Context()); nerr != nil {
 		log.Printf("admin: ListNodes failed: %v", nerr)
 	} else {
-		nodeVs = nodeViews(ns, s.now())
+		nodeVs = nodeViews(ns, monthly, s.now())
+	}
+	fleetNodeCount := 0
+	for _, nv := range nodeVs {
+		if nv.OwnerType == "fleet" {
+			fleetNodeCount++
+		}
+	}
+	var tokenVs []adminFleetTokenView
+	if fts, ferr := s.store.ListActiveFleetTokens(r.Context()); ferr != nil {
+		log.Printf("admin: ListActiveFleetTokens failed: %v", ferr)
+	} else {
+		for _, ft := range fts {
+			tokenVs = append(tokenVs, adminFleetTokenView{ID: ft.ID, Name: ft.Name, NodeID: ft.NodeID, CreatedAt: ft.CreatedAt, LastUsedAt: ft.LastUsedAt})
+		}
 	}
 
 	st := s.resolveSettings(r.Context())
-	data := adminHomeData{
+	return adminHomeData{
 		Metrics: metrics, Users: rows, Total: total, Page: page, TotalPages: totalPages,
 		Search: search, Sort: sortBy, Dir: dir, Period: period, Months: months,
 		PrevHref: prev, NextHref: next, SortHref: sortHref,
-		Nodes: nodeVs,
+		Nodes: nodeVs, FleetNodeCount: fleetNodeCount, FleetTokens: tokenVs,
 		Settings: adminSettingsView{
 			MaxFileSizeMB:      st.MaxFileSize / (1024 * 1024),
 			DailyQuotaMB:       st.DailyQuota / (1024 * 1024),
@@ -298,6 +327,18 @@ func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 			MaxTTLHrs:          st.MaxTTL / 3600,
 			RelayMonthlyFreeMB: st.RelayMonthlyFree / (1024 * 1024),
 		},
+	}, nil
+}
+
+func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		s.renderAdminLogin(w, http.StatusOK, "")
+		return
+	}
+	data, err := s.buildAdminHomeData(r)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
 	}
 	if err := adminUsersTmpl.Execute(w, data); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -338,6 +379,91 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
+	}
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// handleAdminMintToken mints an admin fleet-node token, stores its hash, and
+// re-renders the dashboard with the plaintext token + install command shown
+// once inline (never persisted, never shown again).
+func (s *Service) handleAdminMintToken(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	name := strings.TrimSpace(r.FormValue("name"))
+	if name == "" {
+		name = "official-node"
+	}
+	raw := randToken()
+	if err := s.store.CreateFleetToken(r.Context(), FleetToken{
+		ID: newID(), TokenHash: hashToken(raw), Name: name, CreatedAt: s.now().Unix(),
+	}); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	data, err := s.buildAdminHomeData(r)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	data.MintedToken = raw
+	data.MintedInstallCmd = nodeRunCommandGo(s.cfg.BaseURL, raw)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := adminUsersTmpl.Execute(w, data); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+	}
+}
+
+// handleAdminNodeLimits sets an official node's traffic/disk hard caps (GB in
+// the form, stored as bytes; 0 = unlimited).
+func (s *Service) handleAdminNodeLimits(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	id := r.PathValue("id")
+	gb := func(k string) (int64, bool) {
+		n, err := strconv.ParseInt(strings.TrimSpace(r.FormValue(k)), 10, 64)
+		// 0 allowed = unlimited; reject values whose GB->bytes shift would overflow int64.
+		return n, err == nil && n >= 0 && n <= math.MaxInt64>>30
+	}
+	tGB, ok1 := gb("traffic_limit_gb")
+	dGB, ok2 := gb("disk_limit_gb")
+	if !ok1 || !ok2 {
+		http.Error(w, "invalid limits (non-negative integers, GB)", http.StatusBadRequest)
+		return
+	}
+	if err := s.store.SetNodeLimits(r.Context(), id, tGB<<30, dGB<<30); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// handleAdminDeleteNode deletes an official (fleet) node.
+func (s *Service) handleAdminDeleteNode(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if err := s.store.DeleteFleetNode(r.Context(), r.PathValue("id")); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// handleAdminRevokeToken revokes an admin-minted fleet token so it can no longer
+// register/heartbeat a node.
+func (s *Service) handleAdminRevokeToken(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if err := s.store.RevokeFleetToken(r.Context(), r.PathValue("id"), s.now().Unix()); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
 	}
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
