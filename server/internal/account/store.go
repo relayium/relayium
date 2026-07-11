@@ -286,6 +286,9 @@ type Store interface {
 	RecordUsage(ctx context.Context, e UsageEvent) error
 	UserUsageTotal(ctx context.Context, userID string) (int64, error)
 	UserRelayedSince(ctx context.Context, userID string, since int64) (int64, error)
+	// NodeRelayedSince sums relayed bytes per node for usage since `since`
+	// (per-node monthly traffic cap), keyed by node id.
+	NodeRelayedSince(ctx context.Context, since int64) (map[string]int64, error)
 	// admin (read-only)
 	AdminListUsers(ctx context.Context, q AdminUserQuery) (rows []AdminUserRow, total int64, err error)
 	AdminMetrics(ctx context.Context, period string, now int64) (AdminMetrics, error)

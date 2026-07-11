@@ -609,6 +609,29 @@ func (s *SQLiteStore) UserRelayedSince(ctx context.Context, userID string, since
 	return total, err
 }
 
+// NodeRelayedSince sums relayed bytes per node for usage recorded at or after
+// `since` (the current month for the per-node traffic cap). Keyed by node id;
+// nodes with no usage in the window are absent (treated as 0 by callers).
+func (s *SQLiteStore) NodeRelayedSince(ctx context.Context, since int64) (map[string]int64, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT node_id, COALESCE(SUM(relayed_bytes),0) FROM usage_events
+		   WHERE recorded_at >= ? AND node_id IS NOT NULL GROUP BY node_id`, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]int64)
+	for rows.Next() {
+		var id string
+		var total int64
+		if err := rows.Scan(&id, &total); err != nil {
+			return nil, err
+		}
+		out[id] = total
+	}
+	return out, rows.Err()
+}
+
 func (s *SQLiteStore) SetPassword(ctx context.Context, userID, passwordHash string) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE users SET password_hash = ? WHERE id = ?`, passwordHash, userID)
