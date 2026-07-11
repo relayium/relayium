@@ -5,6 +5,7 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 )
 
 func newTestStore(t *testing.T) *SQLiteStore {
@@ -205,19 +206,23 @@ func TestUserRelayedSince(t *testing.T) {
 	ctx := context.Background()
 	u, _ := s.UpsertUserByEmail(ctx, "r@example.com", "R")
 
-	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a1", Token: "c1", UserID: u.ID, RelayedBytes: 100, RecordedAt: 1000, Billable: true})
-	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a2", Token: "c2", UserID: u.ID, RelayedBytes: 250, RecordedAt: 2000, Billable: true})
-	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a3", Token: "c3", UserID: "other", RelayedBytes: 999, RecordedAt: 2000, Billable: true})
+	jun := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC).Unix()
+	jul := time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC).Unix()
+	julStart := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC).Unix()
 
-	// since=1500 → only the 250 event counts; "other" user excluded.
-	got, err := s.UserRelayedSince(ctx, u.ID, 1500)
+	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a1", Token: "c1", UserID: u.ID, RelayedBytes: 100, RecordedAt: jun, Billable: true})
+	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a2", Token: "c2", UserID: u.ID, RelayedBytes: 250, RecordedAt: jul, Billable: true})
+	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a3", Token: "c3", UserID: "other", RelayedBytes: 999, RecordedAt: jul, Billable: true})
+
+	// since=July → only the 250 July event counts; June excluded, "other" excluded.
+	got, err := s.UserRelayedSince(ctx, u.ID, julStart)
 	if err != nil {
 		t.Fatalf("UserRelayedSince: %v", err)
 	}
 	if got != 250 {
 		t.Fatalf("got %d, want 250", got)
 	}
-	// since=0 → both of u's events.
+	// since=0 → both of u's events (June + July).
 	if got, _ := s.UserRelayedSince(ctx, u.ID, 0); got != 350 {
 		t.Fatalf("got %d, want 350", got)
 	}

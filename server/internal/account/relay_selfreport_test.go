@@ -49,6 +49,68 @@ func TestRecordUsageDeltaCapBoundsGrowth(t *testing.T) {
 	}
 }
 
+// A long-lived allocation spanning a month boundary must be billed to each
+// month by the bytes it actually relayed that month — not have its whole
+// cumulative reattributed to the latest heartbeat's month (the keep-max drift).
+func TestRecordUsageAttributesDeltaPerMonth(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u, _ := s.UpsertUserByEmail(ctx, "m@example.com", "M")
+	jun := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC).Unix()
+	jul := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC).Unix()
+	junStart := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC).Unix()
+	julStart := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC).Unix()
+
+	// Same alloc: 100 relayed in June, then cumulative 300 by July (200 more).
+	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "x", Token: "c", UserID: u.ID, RelayedBytes: 100, RecordedAt: jun, Billable: true})
+	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "x", Token: "c", UserID: u.ID, RelayedBytes: 300, RecordedAt: jul, Billable: true})
+
+	if got, _ := s.UserRelayedSince(ctx, u.ID, junStart); got != 300 {
+		t.Fatalf("June onward = %d, want 300 (100 June + 200 July)", got)
+	}
+	if got, _ := s.UserRelayedSince(ctx, u.ID, julStart); got != 200 {
+		t.Fatalf("July only = %d, want 200 (the July delta, not the whole 300)", got)
+	}
+}
+
+// The one-time backfill on first creation of usage_periods must preserve each
+// legacy allocation's total (attributed to its last-recorded month), so an
+// upgrade doesn't change anyone's current billing numbers.
+func TestUsagePeriodsBackfillPreservesTotals(t *testing.T) {
+	ctx := context.Background()
+	dsn := t.TempDir() + "/acct.db"
+
+	s, err := OpenSQLite(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a legacy DB: a usage_events row with no usage_periods counterpart.
+	jul := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC).Unix()
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO usage_events (alloc_id, token, user_id, relayed_bytes, recorded_at, node_id, billable)
+		 VALUES ('leg', 'c', 'u', 4242, ?, 'N', 1)`, jul); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(ctx, `DROP TABLE usage_periods`); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+
+	// Reopen: migration recreates usage_periods and backfills from usage_events.
+	s2, err := OpenSQLite(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s2.Close()
+	julStart := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC).Unix()
+	if got, _ := s2.UserRelayedSince(ctx, "u", julStart); got != 4242 {
+		t.Fatalf("backfilled July total = %d, want 4242", got)
+	}
+	if m, _ := s2.NodeRelayedSince(ctx, julStart); m["N"] != 4242 {
+		t.Fatalf("backfilled node total = %d, want 4242", m["N"])
+	}
+}
+
 // A fleet node forging attribution to a user who is not the pairing code's real
 // owner is dropped; a report matching the code's owner is recorded.
 func TestHeartbeatDropsForgedAttribution(t *testing.T) {

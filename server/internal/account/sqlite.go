@@ -213,15 +213,53 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 			return nil, err
 		}
 	}
-	// Composite indexes for the billing hot paths (UserRelayedSince /
-	// NodeRelayedSince). Created here, after the ALTERs above add billable/node_id
-	// — creating them in the top-level schema would fail with "no such column" on
-	// a legacy DB before those columns exist.
+	// The billing hot paths now read the usage_periods buckets (see below), not
+	// usage_events, so the recorded_at composite indexes an earlier version added
+	// here are dead weight — and they added write cost to every heartbeat's
+	// high-water update. Drop them.
 	for _, idx := range []string{
-		`CREATE INDEX IF NOT EXISTS idx_usage_user_recorded ON usage_events(user_id, billable, recorded_at)`,
-		`CREATE INDEX IF NOT EXISTS idx_usage_node_recorded ON usage_events(node_id, recorded_at)`,
+		`DROP INDEX IF EXISTS idx_usage_user_recorded`,
+		`DROP INDEX IF EXISTS idx_usage_node_recorded`,
 	} {
 		if _, err := db.ExecContext(context.Background(), idx); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
+	// usage_periods buckets relayed bytes by the month they occurred in, fixing the
+	// cross-month drift of usage_events (whose single per-alloc row's recorded_at
+	// gets bumped to the latest month, misattributing an allocation's whole
+	// cumulative total to whatever month it was last touched). usage_events stays
+	// as the per-alloc high-water anchor; usage_periods holds the per-period deltas
+	// the billing/cap queries read. Backfill ONCE on first creation, mapping each
+	// existing alloc's cumulative to periodOf(recorded_at) so current totals are
+	// preserved exactly (no billing jump on upgrade).
+	var periodsExisted int
+	if err := db.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='usage_periods'`).Scan(&periodsExisted); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if _, err := db.ExecContext(context.Background(), `
+		CREATE TABLE IF NOT EXISTS usage_periods (
+		  alloc_id TEXT NOT NULL,
+		  period   TEXT NOT NULL,   -- 'YYYYMM', matches periodOf()
+		  user_id  TEXT NOT NULL,
+		  node_id  TEXT,
+		  billable INTEGER NOT NULL DEFAULT 1,
+		  bytes    INTEGER NOT NULL DEFAULT 0,
+		  PRIMARY KEY (alloc_id, period)
+		);
+		CREATE INDEX IF NOT EXISTS idx_usage_periods_user ON usage_periods(user_id, period, billable);
+		CREATE INDEX IF NOT EXISTS idx_usage_periods_node ON usage_periods(node_id, period);`); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if periodsExisted == 0 {
+		if _, err := db.ExecContext(context.Background(), `
+			INSERT OR IGNORE INTO usage_periods (alloc_id, period, user_id, node_id, billable, bytes)
+			  SELECT alloc_id, strftime('%Y%m', recorded_at, 'unixepoch'), user_id, node_id, billable, relayed_bytes
+			  FROM usage_events`); err != nil {
 			db.Close()
 			return nil, err
 		}
@@ -614,23 +652,75 @@ const (
 	maxAllocRelayBytes = int64(maxRelayBytesPerSec)*86400 + relayReportSlack
 )
 
-// RecordUsage records an allocation's relayed bytes, clamping the reported value
-// to physically-plausible bounds. The new total is MAX(existing, ...) so it
-// stays monotonic, capped by (a) an absolute per-allocation ceiling and (b) the
-// prior total plus maxRelayBytesPerSec × time-since-last-report + slack. An
-// out-of-order/backwards report can never lower or spuriously raise the total.
+// RecordUsage records an allocation's relayed bytes. The reported cumulative is
+// clamped to physically-plausible bounds — monotonic, capped by (a) an absolute
+// per-allocation ceiling and (b) the prior total plus maxRelayBytesPerSec ×
+// time-since-last-report + slack (workstream A) — and the resulting increment is
+// attributed to the month it occurred in (workstream C), so a long-lived
+// allocation that spans a month boundary is billed to each month correctly
+// rather than having its whole cumulative reattributed to the latest month.
+// usage_events holds the per-alloc high-water mark; usage_periods holds the
+// per-month deltas the billing/cap queries read.
 func (s *SQLiteStore) RecordUsage(ctx context.Context, e UsageEvent) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO usage_events (alloc_id, token, user_id, relayed_bytes, recorded_at, node_id, billable)
-		 VALUES (?, ?, ?, MIN(?, ?), ?, ?, ?)
-		 ON CONFLICT(alloc_id) DO UPDATE SET
-		   relayed_bytes = MAX(relayed_bytes,
-		     MIN(excluded.relayed_bytes,
-		         relayed_bytes + ? * (excluded.recorded_at - recorded_at) + ?)),
-		   recorded_at = excluded.recorded_at`,
-		e.AllocID, e.Token, e.UserID, e.RelayedBytes, maxAllocRelayBytes, e.RecordedAt, nullStr(e.NodeID), b2i(e.Billable),
-		int64(maxRelayBytesPerSec), int64(relayReportSlack))
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var prev, prevRec int64
+	exists := true
+	switch err := tx.QueryRowContext(ctx,
+		`SELECT relayed_bytes, recorded_at FROM usage_events WHERE alloc_id = ?`, e.AllocID).
+		Scan(&prev, &prevRec); err {
+	case nil:
+	case sql.ErrNoRows:
+		exists = false
+	default:
+		return err
+	}
+
+	// Clamp the reported cumulative.
+	newCum := e.RelayedBytes
+	if newCum > maxAllocRelayBytes {
+		newCum = maxAllocRelayBytes
+	}
+	if exists {
+		if budget := prev + int64(maxRelayBytesPerSec)*(e.RecordedAt-prevRec) + int64(relayReportSlack); newCum > budget {
+			newCum = budget
+		}
+		if newCum < prev { // monotonic: never lower on a stale/backwards report
+			newCum = prev
+		}
+	}
+	delta := newCum - prev
+
+	if exists {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE usage_events SET relayed_bytes = ?, recorded_at = ? WHERE alloc_id = ?`,
+			newCum, e.RecordedAt, e.AllocID); err != nil {
+			return err
+		}
+	} else {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO usage_events (alloc_id, token, user_id, relayed_bytes, recorded_at, node_id, billable)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			e.AllocID, e.Token, e.UserID, newCum, e.RecordedAt, nullStr(e.NodeID), b2i(e.Billable)); err != nil {
+			return err
+		}
+	}
+
+	// Attribute the increment to the period it occurred in.
+	if delta > 0 {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO usage_periods (alloc_id, period, user_id, node_id, billable, bytes)
+			 VALUES (?, ?, ?, ?, ?, ?)
+			 ON CONFLICT(alloc_id, period) DO UPDATE SET bytes = bytes + excluded.bytes`,
+			e.AllocID, periodOf(e.RecordedAt), e.UserID, nullStr(e.NodeID), b2i(e.Billable), delta); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *SQLiteStore) UserUsageTotal(ctx context.Context, userID string) (int64, error) {
@@ -644,23 +734,25 @@ func (s *SQLiteStore) UserUsageTotal(ctx context.Context, userID string) (int64,
 	return total.Int64, nil // SUM over no rows is NULL → 0
 }
 
-// UserRelayedSince sums a user's relayed bytes recorded at or after `since`
-// (used for the interim monthly relay cap).
+// UserRelayedSince sums a user's billable relayed bytes in the month(s) at or
+// after `since` (a month-start unix; used for the monthly relay cap). Reads the
+// per-month usage_periods buckets so a cross-month allocation is counted only in
+// the months it actually relayed, not reattributed to its latest heartbeat.
 func (s *SQLiteStore) UserRelayedSince(ctx context.Context, userID string, since int64) (int64, error) {
 	var total int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT COALESCE(SUM(relayed_bytes),0) FROM usage_events WHERE user_id = ? AND recorded_at >= ? AND billable = 1`,
-		userID, since).Scan(&total)
+		`SELECT COALESCE(SUM(bytes),0) FROM usage_periods WHERE user_id = ? AND period >= ? AND billable = 1`,
+		userID, periodOf(since)).Scan(&total)
 	return total, err
 }
 
-// NodeRelayedSince sums relayed bytes per node for usage recorded at or after
-// `since` (the current month for the per-node traffic cap). Keyed by node id;
+// NodeRelayedSince sums relayed bytes per node for the month(s) at or after
+// `since` (a month-start unix, for the per-node traffic cap). Keyed by node id;
 // nodes with no usage in the window are absent (treated as 0 by callers).
 func (s *SQLiteStore) NodeRelayedSince(ctx context.Context, since int64) (map[string]int64, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT node_id, COALESCE(SUM(relayed_bytes),0) FROM usage_events
-		   WHERE recorded_at >= ? AND node_id IS NOT NULL GROUP BY node_id`, since)
+		`SELECT node_id, COALESCE(SUM(bytes),0) FROM usage_periods
+		   WHERE period >= ? AND node_id IS NOT NULL GROUP BY node_id`, periodOf(since))
 	if err != nil {
 		return nil, err
 	}
@@ -769,14 +861,13 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context, q AdminUserQuery) ([]A
 		dir = "ASC"
 	}
 
-	mStart, mEnd := monthRange(q.Period)
-	listArgs := append([]any{mStart, mEnd, q.Period, q.Period, q.Now}, whereArgs...)
+	listArgs := append([]any{q.Period, q.Period, q.Period, q.Now}, whereArgs...)
 	listArgs = append(listArgs, q.Limit, q.Offset)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT u.id, u.email, u.display_name, u.created_at,
 		       (SELECT COUNT(*) FROM devices d WHERE d.user_id = u.id),
-		       (SELECT COALESCE(SUM(e.relayed_bytes),0) FROM usage_events e
-		          WHERE e.user_id = u.id AND e.recorded_at >= ? AND e.recorded_at < ?) AS relayed_bytes,
+		       (SELECT COALESCE(SUM(up.bytes),0) FROM usage_periods up
+		          WHERE up.user_id = u.id AND up.period = ?) AS relayed_bytes,
 		       (SELECT COALESCE(SUM(um.upload_bytes),0) FROM usage_monthly um
 		          WHERE um.user_id = u.id AND um.period = ?) AS upload_bytes,
 		       (SELECT COALESCE(SUM(um.download_bytes),0) FROM usage_monthly um
@@ -850,7 +941,6 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context, q AdminUserQuery) ([]A
 }
 
 func (s *SQLiteStore) AdminMetrics(ctx context.Context, period string, now int64) (AdminMetrics, error) {
-	start, end := monthRange(period)
 	var m AdminMetrics
 	err := s.db.QueryRowContext(ctx, `
 		SELECT
@@ -859,8 +949,8 @@ func (s *SQLiteStore) AdminMetrics(ctx context.Context, period string, now int64
 		  (SELECT COALESCE(SUM(size),0) FROM stored_files WHERE expires_at > ?),
 		  (SELECT COALESCE(SUM(upload_bytes),0) FROM usage_monthly WHERE period = ?),
 		  (SELECT COALESCE(SUM(download_bytes),0) FROM usage_monthly WHERE period = ?),
-		  (SELECT COALESCE(SUM(relayed_bytes),0) FROM usage_events WHERE recorded_at >= ? AND recorded_at < ?)`,
-		now, now, period, period, start, end,
+		  (SELECT COALESCE(SUM(bytes),0) FROM usage_periods WHERE period = ?)`,
+		now, now, period, period, period,
 	).Scan(&m.TotalUsers, &m.ActiveStoredFiles, &m.ActiveStoredBytes,
 		&m.UploadBytes, &m.DownloadBytes, &m.RelayBytes)
 	if err != nil {
