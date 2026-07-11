@@ -66,7 +66,12 @@
   }
   .cmd-wrap {
     flex: 1 1 340px;
+    /* min-width:0 alone doesn't let the terminal shrink: the command block's
+       non-wrapping <pre> has a min-content wider than the column on narrow
+       screens, so cap the flex item at the container width and let the <pre>
+       scroll internally (fixes ~100px horizontal page overflow on mobile). */
     min-width: 0;
+    max-width: 100%;
   }
   @media (max-width: 560px) {
     .cli-callout {
