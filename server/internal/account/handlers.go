@@ -97,6 +97,12 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("GET /api/nodes/mine", s.RequireSession(s.handleMyNodes))
 	mux.HandleFunc("DELETE /api/nodes/{id}", s.RequireSession(s.handleDeleteMyNode))
 	mux.HandleFunc("PUT /api/me/strict-nodes", s.RequireSession(s.handleStrictNodes))
+	// Device-code CLI login flow (RFC 8628-style): start/poll are called by
+	// the unauthenticated CLI (it has no credential yet), approve is called
+	// by the logged-in web session that confirms the code.
+	mux.HandleFunc("POST /api/cli/device/start", s.handleDeviceStart)
+	mux.HandleFunc("POST /api/cli/device/poll", s.handleDevicePoll)
+	mux.HandleFunc("POST /api/cli/device/approve", s.RequireSession(s.handleDeviceApprove))
 	s.registerFileRoutes(mux)
 	return mux
 }
