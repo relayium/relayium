@@ -32,6 +32,7 @@ type adminHomeData struct {
 	Settings   adminSettingsView
 
 	FleetTokens      []adminFleetTokenView
+	FleetNodeCount   int    // count of Nodes with OwnerType == "fleet" (matches table body's guard)
 	MintedToken      string // set once, right after minting; shown inline then gone
 	MintedInstallCmd string // install one-liner for the freshly minted token
 }
@@ -132,7 +133,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 </section>
 
 <section class="nodes">
-<h2>官方节点（{{len .Nodes}}）</h2>
+<h2>官方节点（{{.FleetNodeCount}}）</h2>
 
 {{if .MintedToken}}
 <div class="minted">

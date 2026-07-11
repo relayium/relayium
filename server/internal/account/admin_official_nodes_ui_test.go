@@ -14,6 +14,8 @@ func TestAdminDashboardShowsOfficialNodesSection(t *testing.T) {
 	// A fleet node with limits set, plus an active token.
 	n, _ := store.UpsertNode(context.Background(), Node{OwnerType: "fleet", Region: "cn-sh", URLs: []string{"turn:1.1.1.1:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1, TrafficLimitBytes: 500 << 30, DiskLimitBytes: 100 << 30})
 	store.CreateFleetToken(context.Background(), FleetToken{ID: "ft1", TokenHash: hashToken("x"), Name: "cn-sh-1", CreatedAt: 1})
+	// A user-owned BYO node should not inflate the official-nodes heading count.
+	store.UpsertNode(context.Background(), Node{OwnerType: "user", OwnerUserID: "u1", URLs: []string{"turn:8.8.8.8:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1})
 
 	client := ts.Client()
 	req, _ := http.NewRequest("GET", ts.URL+"/admin", nil)
@@ -23,7 +25,7 @@ func TestAdminDashboardShowsOfficialNodesSection(t *testing.T) {
 	html := string(body)
 
 	for _, want := range []string{
-		"官方节点",                    // section heading
+		"官方节点（1）",                // section heading, counts only the fleet node (not the user node too)
 		"生成节点 Token",              // mint button
 		"/admin/nodes/" + n.ID + "/limits", // edit-limits form action
 		"/admin/nodes/" + n.ID + "/delete", // delete form action

@@ -299,6 +299,12 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 	} else {
 		nodeVs = nodeViews(ns, monthly, s.now())
 	}
+	fleetNodeCount := 0
+	for _, nv := range nodeVs {
+		if nv.OwnerType == "fleet" {
+			fleetNodeCount++
+		}
+	}
 	var tokenVs []adminFleetTokenView
 	if fts, ferr := s.store.ListActiveFleetTokens(r.Context()); ferr != nil {
 		log.Printf("admin: ListActiveFleetTokens failed: %v", ferr)
@@ -313,7 +319,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		Metrics: metrics, Users: rows, Total: total, Page: page, TotalPages: totalPages,
 		Search: search, Sort: sortBy, Dir: dir, Period: period, Months: months,
 		PrevHref: prev, NextHref: next, SortHref: sortHref,
-		Nodes: nodeVs, FleetTokens: tokenVs,
+		Nodes: nodeVs, FleetNodeCount: fleetNodeCount, FleetTokens: tokenVs,
 		Settings: adminSettingsView{
 			MaxFileSizeMB:      st.MaxFileSize / (1024 * 1024),
 			DailyQuotaMB:       st.DailyQuota / (1024 * 1024),
