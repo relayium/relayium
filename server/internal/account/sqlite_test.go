@@ -820,3 +820,26 @@ func TestFileStoreReadPoolAndWAL(t *testing.T) {
 		t.Fatalf("read pool metrics: users=%d, want 1", m.TotalUsers)
 	}
 }
+
+// foreign_keys must be enforced: PRAGMA reports on, a usage row for a
+// non-existent user is rejected, and a valid one is accepted.
+func TestForeignKeysEnforced(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	var fk int
+	if err := s.db.QueryRowContext(ctx, `PRAGMA foreign_keys`).Scan(&fk); err != nil {
+		t.Fatal(err)
+	}
+	if fk != 1 {
+		t.Fatalf("PRAGMA foreign_keys = %d, want 1", fk)
+	}
+	// Dangling user_id → rejected.
+	if err := s.RecordUsage(ctx, UsageEvent{AllocID: "x", Token: "c", UserID: "ghost", RelayedBytes: 10, RecordedAt: 1}); err == nil {
+		t.Fatal("RecordUsage for a non-existent user should violate the foreign key")
+	}
+	// Real user → accepted.
+	u, _ := s.UpsertUserByEmail(ctx, "fk@example.com", "F")
+	if err := s.RecordUsage(ctx, UsageEvent{AllocID: "y", Token: "c", UserID: u.ID, RelayedBytes: 10, RecordedAt: 1}); err != nil {
+		t.Fatalf("RecordUsage for a real user should succeed: %v", err)
+	}
+}

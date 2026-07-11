@@ -170,18 +170,35 @@ CREATE TABLE IF NOT EXISTS fleet_tokens (
 );
 `
 
+// connPragmas are applied to every connection via the DSN (not a one-shot
+// ExecContext, which would only reach whichever pooled connection ran it):
+//   - busy_timeout: wait rather than fail on a locked DB (a node process or a
+//     WAL checkpoint holding the file) instead of surfacing SQLITE_BUSY.
+//   - foreign_keys: enforce the REFERENCES users(id) constraints, which SQLite
+//     leaves off by default. It only checks new operations, so an upgrade can't
+//     fail on pre-existing rows; writers skip unattributable (ownerless) usage
+//     rows so no path violates it.
+var connPragmas = []string{"busy_timeout(5000)", "foreign_keys(1)"}
+
+// withPragmas appends _pragma query params to a modernc sqlite DSN.
+func withPragmas(dsn string, pragmas ...string) string {
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	q := make([]string, len(pragmas))
+	for i, p := range pragmas {
+		q[i] = "_pragma=" + p
+	}
+	return dsn + sep + strings.Join(q, "&")
+}
+
 func OpenSQLite(dsn string) (*SQLiteStore, error) {
-	db, err := sql.Open("sqlite", dsn)
+	db, err := sql.Open("sqlite", withPragmas(dsn, connPragmas...))
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1) // SQLite + :memory: safety; fine for our write volume
-	// Wait rather than fail immediately on a locked DB (e.g. a node process or a
-	// WAL checkpoint holding the file), instead of surfacing SQLITE_BUSY.
-	if _, err := db.ExecContext(context.Background(), `PRAGMA busy_timeout = 5000`); err != nil {
-		db.Close()
-		return nil, err
-	}
 	if _, err := db.ExecContext(context.Background(), schema); err != nil {
 		db.Close()
 		return nil, err
@@ -337,17 +354,12 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 			db.Close()
 			return nil, err
 		}
-		rdb, err := sql.Open("sqlite", dsn)
+		rdb, err := sql.Open("sqlite", withPragmas(dsn, connPragmas...))
 		if err != nil {
 			db.Close()
 			return nil, err
 		}
 		rdb.SetMaxOpenConns(4)
-		if _, err := rdb.ExecContext(context.Background(), `PRAGMA busy_timeout = 5000`); err != nil {
-			rdb.Close()
-			db.Close()
-			return nil, err
-		}
 		s.rdb = rdb
 	}
 	return s, nil

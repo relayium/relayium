@@ -18,7 +18,7 @@ func TestWorkerRecordsLastEvent(t *testing.T) {
 	sink := &fakeSink{}
 	w := &Worker{Sink: sink, Now: now, Log: log.New(bytes.NewBuffer(nil), "", 0)}
 
-	w.handle(context.Background(), UsageEvent{AllocID: "a1", Username: "1000:tok", RelayedBytes: 42})
+	w.handle(context.Background(), UsageEvent{AllocID: "a1", Username: "1000:u.tok", RelayedBytes: 42})
 
 	if got := w.LastEventUnix(); got != 500 {
 		t.Fatalf("LastEventUnix() = %d, want 500", got)
@@ -85,7 +85,7 @@ func TestWatchdogGoneQuietAfterEvents(t *testing.T) {
 	silence := 5 * time.Minute
 
 	// Fresh event: must NOT warn right after.
-	w.handle(context.Background(), UsageEvent{AllocID: "a1", Username: "1000:tok", RelayedBytes: 42})
+	w.handle(context.Background(), UsageEvent{AllocID: "a1", Username: "1000:u.tok", RelayedBytes: 42})
 	w.checkSilence(w.LastEventUnix(), w.LastEventUnix(), silence)
 	if buf.Len() != 0 {
 		t.Fatalf("expected no warning right after an event, got log: %q", buf.String())

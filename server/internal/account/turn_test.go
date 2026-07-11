@@ -89,6 +89,20 @@ func ownerResolver(owner, wantCode string) func(string) (string, bool) {
 	}
 }
 
+// verifiedOwner creates an email-verified user and returns its ID, for ICE tests
+// that record relay usage against a real (foreign-key-valid) owner.
+func verifiedOwner(t *testing.T, store *SQLiteStore, email string) string {
+	t.Helper()
+	u, err := store.UpsertUserByEmail(context.Background(), email, "O")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetEmailVerified(context.Background(), u.ID); err != nil {
+		t.Fatal(err)
+	}
+	return u.ID
+}
+
 func TestICEValidPairCodeIncludesTurn(t *testing.T) {
 	ts, svc, _ := newICEServer(t, "secret")
 	svc.SetPairCodeOwner(ownerResolver("owner-1", "424242"))
@@ -168,15 +182,16 @@ func TestICEEmbedsOwnerInTurnUsername(t *testing.T) {
 // itself is otherwise valid.
 func TestICEWithholdsTurnOverCap(t *testing.T) {
 	ts, svc, store := newICEServer(t, "secret")
-	svc.SetPairCodeOwner(ownerResolver("owner-1", "424242"))
-
 	ctx := context.Background()
+	owner := verifiedOwner(t, store, "owner1@example.com")
+	svc.SetPairCodeOwner(ownerResolver(owner, "424242"))
+
 	now := svc.now().Unix()
 	if err := store.SetSetting(ctx, SettingRelayMonthlyFree, 100, now); err != nil {
 		t.Fatalf("SetSetting: %v", err)
 	}
 	if err := store.RecordUsage(ctx, UsageEvent{
-		AllocID: "x", Token: "424242", UserID: "owner-1", RelayedBytes: 500, RecordedAt: now, Billable: true,
+		AllocID: "x", Token: "424242", UserID: owner, RelayedBytes: 500, RecordedAt: now, Billable: true,
 	}); err != nil {
 		t.Fatalf("RecordUsage: %v", err)
 	}
@@ -204,15 +219,16 @@ func TestICEWithholdsTurnOverCap(t *testing.T) {
 // and relayDenied is absent.
 func TestICEUnderCapIncludesTurn(t *testing.T) {
 	ts, svc, store := newICEServer(t, "secret")
-	svc.SetPairCodeOwner(ownerResolver("owner-1", "424242"))
-
 	ctx := context.Background()
+	owner := verifiedOwner(t, store, "owner1@example.com")
+	svc.SetPairCodeOwner(ownerResolver(owner, "424242"))
+
 	now := svc.now().Unix()
 	if err := store.SetSetting(ctx, SettingRelayMonthlyFree, 1000, now); err != nil {
 		t.Fatalf("SetSetting: %v", err)
 	}
 	if err := store.RecordUsage(ctx, UsageEvent{
-		AllocID: "y", Token: "424242", UserID: "owner-1", RelayedBytes: 500, RecordedAt: now, Billable: true,
+		AllocID: "y", Token: "424242", UserID: owner, RelayedBytes: 500, RecordedAt: now, Billable: true,
 	}); err != nil {
 		t.Fatalf("RecordUsage: %v", err)
 	}

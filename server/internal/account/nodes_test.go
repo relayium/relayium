@@ -77,9 +77,10 @@ func TestNodeHeartbeatRecordsUsage(t *testing.T) {
 	mux := http.NewServeMux()
 	s.RegisterNodeRoutes(mux)
 
+	user, _ := s.store.UpsertUserByEmail(context.Background(), "userx@example.com", "X")
 	hb := nodeHeartbeatReq{
 		NodeID: n.ID, Status: "ok", RelayedTotal: 900, StoredBytes: 0,
-		Usage: []nodeUsage{{AllocID: "a1", Username: "6000:userX.123456", RelayedBytes: 900}},
+		Usage: []nodeUsage{{AllocID: "a1", Username: "6000:" + user.ID + ".123456", RelayedBytes: 900}},
 	}
 	body, _ := json.Marshal(hb)
 	r := httptest.NewRequest("POST", "/api/nodes/heartbeat", bytes.NewReader(body))
@@ -89,8 +90,8 @@ func TestNodeHeartbeatRecordsUsage(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("heartbeat: got %d body=%s", w.Code, w.Body)
 	}
-	// RecordUsage attributed 900 bytes to userX.
-	got, err := s.store.UserRelayedSince(context.Background(), "userX", 0)
+	// RecordUsage attributed 900 bytes to the user.
+	got, err := s.store.UserRelayedSince(context.Background(), user.ID, 0)
 	if err != nil {
 		t.Fatalf("relayed: %v", err)
 	}

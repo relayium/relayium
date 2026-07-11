@@ -243,6 +243,11 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		userID, code := relayusage.SplitAttrib(token)
+		// An unattributable username (no owner) can't be billed to anyone and
+		// would violate foreign_keys=ON; skip it.
+		if userID == "" {
+			continue
+		}
 		// A user-owned node may only attribute usage to its own owner.
 		if node.OwnerType == "user" && userID != node.OwnerUserID {
 			log.Printf("node %s: dropping cross-user attribution to %s", req.NodeID, userID)

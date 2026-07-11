@@ -85,6 +85,11 @@ func TestUsagePeriodsBackfillPreservesTotals(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Simulate a legacy DB: a usage_events row with no usage_periods counterpart.
+	// The owner must exist for the foreign key.
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO users (id, email, created_at, canonical_email) VALUES ('u', 'u@example.com', 1, 'u@example.com')`); err != nil {
+		t.Fatal(err)
+	}
 	jul := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC).Unix()
 	if _, err := s.db.ExecContext(ctx,
 		`INSERT INTO usage_events (alloc_id, token, user_id, relayed_bytes, recorded_at, node_id, billable)
@@ -125,9 +130,10 @@ func TestHeartbeatResponseCarriesLimits(t *testing.T) {
 	mux := http.NewServeMux()
 	s.RegisterNodeRoutes(mux)
 
-	// A heartbeat that also reports 1234 relayed bytes for this node.
+	// A heartbeat that also reports 1234 relayed bytes attributed to a real user.
+	user, _ := st.UpsertUserByEmail(ctx, "hbu@example.com", "U")
 	hb := nodeHeartbeatReq{NodeID: n.ID, Status: "ok", Usage: []nodeUsage{
-		{AllocID: "a1", Username: "9999:someuser.code", RelayedBytes: 1234},
+		{AllocID: "a1", Username: "9999:" + user.ID + ".code", RelayedBytes: 1234},
 	}}
 	body, _ := json.Marshal(hb)
 	r := httptest.NewRequest("POST", "/api/nodes/heartbeat", bytes.NewReader(body))

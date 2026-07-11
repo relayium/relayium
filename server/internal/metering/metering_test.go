@@ -51,16 +51,17 @@ func runWith(t *testing.T, sink *fakeSink, events []UsageEvent) {
 	}
 }
 
-func TestWorkerRecordsAnonymously(t *testing.T) {
+// A username with no owner prefix (legacy no-owner format) can't be attributed
+// to any account, so it is skipped rather than written as an orphan row — which
+// also keeps user_id referentially valid under foreign_keys=ON. (In current
+// operation every credential /api/ice issues carries an owner, so this path is
+// effectively dead; the change only drops unattributable legacy/forged rows.)
+func TestWorkerSkipsUnattributedUsername(t *testing.T) {
 	sink := &fakeSink{}
 	w := &Worker{Sink: sink, Now: func() int64 { return 42 }, Log: log.New(io.Discard, "", 0)}
 	w.handle(context.Background(), UsageEvent{AllocID: "a1", Username: "99:424242", RelayedBytes: 7})
-	if len(sink.recorded) != 1 {
-		t.Fatalf("want 1 usage row, got %d", len(sink.recorded))
-	}
-	got := sink.recorded[0]
-	if got.Token != "424242" || got.UserID != "" || got.RelayedBytes != 7 || got.RecordedAt != 42 {
-		t.Fatalf("unexpected record: %+v", got)
+	if len(sink.recorded) != 0 {
+		t.Fatalf("unattributed username must not record, got %+v", sink.recorded)
 	}
 }
 
@@ -75,8 +76,8 @@ func TestWorkerSkipsMalformedUsername(t *testing.T) {
 func TestWorkerKeepsMaxPerAlloc(t *testing.T) {
 	sink := &fakeSink{}
 	runWith(t, sink, []UsageEvent{
-		{AllocID: "a1", Username: "1000:tok", RelayedBytes: 100},
-		{AllocID: "a1", Username: "1000:tok", RelayedBytes: 999},
+		{AllocID: "a1", Username: "1000:u.tok", RelayedBytes: 100},
+		{AllocID: "a1", Username: "1000:u.tok", RelayedBytes: 999},
 	})
 	if len(sink.recorded) != 1 || sink.recorded[0].RelayedBytes != 999 {
 		t.Fatalf("keep-max record wrong: %+v", sink.recorded)
@@ -90,8 +91,8 @@ func TestWorkerKeepsMaxPerAlloc(t *testing.T) {
 func TestWorkerOutOfOrderKeepsMax(t *testing.T) {
 	sink := &fakeSink{}
 	runWith(t, sink, []UsageEvent{
-		{AllocID: "a1", Username: "1000:tok", RelayedBytes: 999},
-		{AllocID: "a1", Username: "1000:tok", RelayedBytes: 100},
+		{AllocID: "a1", Username: "1000:u.tok", RelayedBytes: 999},
+		{AllocID: "a1", Username: "1000:u.tok", RelayedBytes: 100},
 	})
 	if len(sink.recorded) != 1 || sink.recorded[0].RelayedBytes != 999 {
 		t.Fatalf("out-of-order keep-max record wrong: %+v", sink.recorded)

@@ -85,6 +85,13 @@ func (w *Worker) handle(ctx context.Context, ev UsageEvent) {
 		return
 	}
 	userID, code := relayusage.SplitAttrib(token)
+	// A username with no owner prefix can't be attributed to any account, so the
+	// row would be an orphan no billing query reads. Skip it — this also keeps
+	// user_id referentially valid under foreign_keys=ON.
+	if userID == "" {
+		w.Log.Printf("metering: skip alloc %s, unattributed username %q", ev.AllocID, ev.Username)
+		return
+	}
 	rec := account.UsageEvent{
 		AllocID:      ev.AllocID,
 		Token:        code,
