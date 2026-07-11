@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { crc32, ZipWriter } from "./zip";
+import { crc32, ZipWriter, sanitizeRelPath, safeSegments } from "./zip";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const u32 = (b: Uint8Array, o: number) => new DataView(b.buffer, b.byteOffset).getUint32(o, true);
@@ -11,6 +11,39 @@ describe("crc32", () => {
   });
   it("is 0 for empty input", () => {
     expect(crc32(new Uint8Array(0))).toBe(0);
+  });
+});
+
+describe("sanitizeRelPath (Zip Slip defense)", () => {
+  it("keeps a normal nested path intact", () => {
+    expect(sanitizeRelPath("dir/sub/b.txt")).toBe("dir/sub/b.txt");
+  });
+  it("strips leading and embedded '..' segments", () => {
+    expect(sanitizeRelPath("../../etc/passwd")).toBe("etc/passwd");
+    expect(sanitizeRelPath("a/../../b")).toBe("a/b");
+  });
+  it("strips absolute-path leading slashes", () => {
+    expect(sanitizeRelPath("/etc/passwd")).toBe("etc/passwd");
+  });
+  it("normalizes backslashes and drops drive letters", () => {
+    expect(sanitizeRelPath("..\\..\\Windows\\x")).toBe("Windows/x");
+    expect(sanitizeRelPath("C:/Windows/x")).toBe("Windows/x");
+  });
+  it("falls back to 'file' when nothing survives", () => {
+    expect(sanitizeRelPath("../..")).toBe("file");
+    expect(safeSegments("../..")).toEqual([]);
+  });
+});
+
+describe("ZipWriter Zip Slip", () => {
+  it("writes the sanitized name, never the '..' path", async () => {
+    const z = new ZipWriter();
+    z.add("../../evil.sh", enc("x"));
+    const buf = new Uint8Array(await z.finish().arrayBuffer());
+    const nameLen = u16(buf, 26);
+    const name = new TextDecoder().decode(buf.slice(30, 30 + nameLen));
+    expect(name).toBe("evil.sh");
+    expect(name.includes("..")).toBe(false);
   });
 });
 

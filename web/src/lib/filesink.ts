@@ -1,4 +1,4 @@
-import { ZipWriter } from "./zip";
+import { ZipWriter, safeSegments } from "./zip";
 
 export interface FileSink {
   write(chunk: Uint8Array): Promise<void>;
@@ -119,7 +119,9 @@ export async function pickSaveTarget(files: FileMetaLite[]): Promise<SaveTarget>
     return {
       label: "已选择目标文件夹",
       file: async (name, _size, path) => {
-        const segs = (path || name).split("/").filter(Boolean);
+        // safeSegments drops any ".."/absolute components so a hostile peer
+        // path can't escape the chosen directory (matches the ZIP sink).
+        const segs = safeSegments(path || name);
         const base = segs.pop() ?? name;
         const dir = segs.length ? await dirFor(segs) : root;
         const prefix = segs.join("/");

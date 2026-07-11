@@ -32,6 +32,24 @@ export function crc32(data: Uint8Array): number {
 
 const utf8 = (s: string) => new TextEncoder().encode(s);
 
+/**
+ * Split a peer-supplied relative path into segments that cannot escape the
+ * extraction root (Zip Slip defense): normalize backslashes, then drop "",
+ * ".", ".." and bare drive letters ("C:"). The path comes from the sender's
+ * webkitRelativePath and is fully attacker-controlled in realtime mode.
+ */
+export function safeSegments(path: string): string[] {
+  return path
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter((s) => s !== "" && s !== "." && s !== ".." && !/^[a-zA-Z]:$/.test(s));
+}
+
+/** safeSegments joined back into a slash path, or "file" if nothing survives. */
+export function sanitizeRelPath(path: string): string {
+  return safeSegments(path).join("/") || "file";
+}
+
 export class ZipWriter {
   private parts: Uint8Array[] = []; // local headers + file data, in order
   private central: Uint8Array[] = []; // one central-directory record per entry
@@ -40,7 +58,7 @@ export class ZipWriter {
 
   /** Append one stored file. `path` may contain "/" separators to nest it. */
   add(path: string, data: Uint8Array): void {
-    const name = utf8(path);
+    const name = utf8(sanitizeRelPath(path));
     const crc = crc32(data);
 
     const local = new Uint8Array(30 + name.length);
