@@ -15,7 +15,7 @@ func TestStorageNodesRespectsDiskLimit(t *testing.T) {
 	// (disk_limit 5 GiB, stored 4.5 GiB -> 0.5 GiB cap headroom < 1 GiB)
 	st.UpsertNode(ctx, Node{OwnerType: "fleet", ID: "capfull", URLs: []string{"turn:1.1.1.1:3478"}, TURNSecret: "s",
 		CreatedAt: 1, LastSeenAt: now, StorageEnabled: true, StorageTotal: 100 << 30, StorageFree: 50 << 30,
-		StoredBytes: 45 << 29 /*4.5GiB*/, DiskLimitBytes: 5 << 30})
+		StoredBytes: 9 << 29 /*4.5GiB*/, DiskLimitBytes: 5 << 30})
 	// disk cap has room ( cap 100 GiB, stored 1 GiB -> 99 GiB headroom ) -> included.
 	st.UpsertNode(ctx, Node{OwnerType: "fleet", ID: "caproom", URLs: []string{"turn:2.2.2.2:3478"}, TURNSecret: "s",
 		CreatedAt: 1, LastSeenAt: now, StorageEnabled: true, StorageTotal: 200 << 30, StorageFree: 150 << 30,
