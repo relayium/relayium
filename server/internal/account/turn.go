@@ -138,10 +138,21 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if !strict {
+			// Per-node monthly traffic hard cap: skip any fleet node whose
+			// relayed bytes this month have reached its admin-set limit. Computed
+			// once per request; a read error fails open (no node withheld).
+			monthStart, _ := monthRange(periodOf(now.Unix()))
+			monthlyUsed, muErr := s.store.NodeRelayedSince(r.Context(), monthStart)
+			if muErr != nil {
+				log.Printf("ice: NodeRelayedSince read failed: %v (traffic caps not enforced this request)", muErr)
+			}
 			if nodes, err := s.store.OnlineNodes(r.Context(), since); err == nil {
 				for _, n := range nodes {
 					if n.ID == "" || n.TURNSecret == "" || len(n.URLs) == 0 || seen[n.ID] {
 						continue
+					}
+					if n.TrafficLimitBytes > 0 && monthlyUsed[n.ID] >= n.TrafficLimitBytes {
+						continue // over monthly traffic cap — withhold this node
 					}
 					relays = append(relays, relayEntry{ID: n.ID, Region: n.Region,
 						ICEServers: []ICEServer{turnCredentials(n.TURNSecret, token, expiry, n.URLs)}})
