@@ -231,5 +231,5 @@ func writeUploadBody(w io.Writer, encManifest []byte, files []uploadFile, key []
 // in the URL fragment, so it is never sent to the server on a normal page
 // load.
 func (c *Client) DownloadLink(origin, id, keyB64Url string) string {
-	return origin + "/d/" + id + "#" + keyB64Url
+	return origin + "/d/" + id + "#k=" + keyB64Url
 }

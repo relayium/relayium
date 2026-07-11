@@ -54,4 +54,9 @@ func TestUploadWireFormat(t *testing.T) {
 	if string(out) != "hello world" {
 		t.Fatalf("payload: %q", out)
 	}
+	// The claim link carries the key in a "#k=" fragment, matching web's
+	// buildDownloadLink / parseDownloadKey so it opens in a browser.
+	if got, want := c.DownloadLink("https://relayium.com", id, key), "https://relayium.com/d/abc123#k="+key; got != want {
+		t.Fatalf("download link: got %q want %q", got, want)
+	}
 }

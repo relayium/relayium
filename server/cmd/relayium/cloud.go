@@ -169,7 +169,7 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	link := client.DownloadLink(creds.Server, id, key)
+	link := client.DownloadLink(client.Server, id, key)
 	fmt.Fprintln(stdout, link)
 	fmt.Fprintln(stdout, "opens in a browser, or fetch it with `relayium down <link>`")
 	return 0

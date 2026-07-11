@@ -63,7 +63,7 @@ func TestRunUpHappyPath(t *testing.T) {
 	if !strings.Contains(gotQuery, "burnAfterRead=1") {
 		t.Fatalf("query: %q", gotQuery)
 	}
-	wantPrefix := srv.URL + "/d/up123#"
+	wantPrefix := srv.URL + "/d/up123#k="
 	if !strings.HasPrefix(out.String(), wantPrefix) {
 		t.Fatalf("want link prefix %q, got %q", wantPrefix, out.String())
 	}
