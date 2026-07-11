@@ -77,6 +77,50 @@ func storageReport(dir string) (total, free int64, err error) {
 	return int64(tot), int64(tot - used), nil
 }
 
+// newTURNServer builds the node's pion TURN server: a counting relay generator
+// wired to reg, plus an auth handler that rejects expired credentials and — the
+// local cost cap (workstream B) — refuses new allocations once lim is over the
+// monthly relay cap.
+func newTURNServer(udpConn net.PacketConn, publicIP string, minPort, maxPort int, realm, turnSecret string, reg *allocRegistry, lim *limits) (*turn.Server, error) {
+	gen := &countingGenerator{
+		reg: reg,
+		inner: &turn.RelayAddressGeneratorPortRange{
+			RelayAddress: net.ParseIP(publicIP),
+			Address:      "0.0.0.0",
+			MinPort:      uint16(minPort),
+			MaxPort:      uint16(maxPort),
+		},
+	}
+	return turn.NewServer(turn.ServerConfig{
+		Realm: realm,
+		AuthHandler: func(username, realm string, srcAddr net.Addr) ([]byte, bool) {
+			if credentialExpired(username, time.Now().Unix()) {
+				return nil, false
+			}
+			// Refuse new allocations once the node is over its monthly relay cap,
+			// so the cap holds locally between heartbeats instead of only when
+			// central next withholds this node at ICE time.
+			if lim.overTraffic() {
+				return nil, false
+			}
+			password := longTermPassword(turnSecret, username)
+			return turn.GenerateAuthKey(username, realm, password), true
+		},
+		EventHandler: turn.EventHandler{
+			OnAllocationCreated: func(srcAddr, dstAddr net.Addr, protocol, username, realm string, relayAddr net.Addr, requestedPort int) {
+				reg.created(srcAddr, relayAddr, username) // join counter (by relayAddr) to username; index by srcAddr
+			},
+			OnAllocationDeleted: func(srcAddr, dstAddr net.Addr, protocol, username, realm string) {
+				reg.closeAlloc(srcAddr) // stop re-reporting; evicted after one final flush
+			},
+		},
+		PacketConnConfigs: []turn.PacketConnConfig{{
+			PacketConn:            udpConn,
+			RelayAddressGenerator: gen,
+		}},
+	})
+}
+
 func run(c config, st nodeState) error {
 	publicIP := c.PublicIP
 	if publicIP == "" {
@@ -95,44 +139,7 @@ func run(c config, st nodeState) error {
 
 	lim := &limits{}
 	reg := newAllocRegistry(lim)
-	gen := &countingGenerator{
-		reg: reg,
-		inner: &turn.RelayAddressGeneratorPortRange{
-			RelayAddress: net.ParseIP(publicIP),
-			Address:      "0.0.0.0",
-			MinPort:      uint16(c.MinPort),
-			MaxPort:      uint16(c.MaxPort),
-		},
-	}
-
-	server, err := turn.NewServer(turn.ServerConfig{
-		Realm: c.Realm,
-		AuthHandler: func(username, realm string, srcAddr net.Addr) ([]byte, bool) {
-			if credentialExpired(username, time.Now().Unix()) {
-				return nil, false
-			}
-			// Refuse new allocations once the node is over its monthly relay cap,
-			// so the cap holds locally between heartbeats instead of only when
-			// central next withholds this node at ICE time.
-			if lim.overTraffic() {
-				return nil, false
-			}
-			password := longTermPassword(st.TURNSecret, username)
-			return turn.GenerateAuthKey(username, realm, password), true
-		},
-		EventHandler: turn.EventHandler{
-			OnAllocationCreated: func(srcAddr, dstAddr net.Addr, protocol, username, realm string, relayAddr net.Addr, requestedPort int) {
-				reg.created(srcAddr, relayAddr, username) // join counter (by relayAddr) to username; index by srcAddr
-			},
-			OnAllocationDeleted: func(srcAddr, dstAddr net.Addr, protocol, username, realm string) {
-				reg.closeAlloc(srcAddr) // stop re-reporting; evicted after one final flush
-			},
-		},
-		PacketConnConfigs: []turn.PacketConnConfig{{
-			PacketConn:            udpConn,
-			RelayAddressGenerator: gen,
-		}},
-	})
+	server, err := newTURNServer(udpConn, publicIP, c.MinPort, c.MaxPort, c.Realm, st.TURNSecret, reg, lim)
 	if err != nil {
 		return fmt.Errorf("start turn server: %w", err)
 	}
