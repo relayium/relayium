@@ -46,11 +46,12 @@ func (c *cappedReader) Read(p []byte) (int, error) {
 }
 
 // registerFileRoutes mounts the stored-transfer endpoints on the account mux.
-// Public routes (meta/blob) are unauthenticated; the rest require a session.
+// Public routes (meta/blob) are unauthenticated; the rest require auth — a
+// session cookie (browser) or a CLI bearer token (RequireAuth covers both).
 func (s *Service) registerFileRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /api/files", s.RequireSession(s.handleUploadFile))
-	mux.HandleFunc("GET /api/files", s.RequireSession(s.handleListFiles))
-	mux.HandleFunc("DELETE /api/files/{id}", s.RequireSession(s.handleDeleteFile))
+	mux.HandleFunc("POST /api/files", s.RequireAuth(s.handleUploadFile))
+	mux.HandleFunc("GET /api/files", s.RequireAuth(s.handleListFiles))
+	mux.HandleFunc("DELETE /api/files/{id}", s.RequireAuth(s.handleDeleteFile))
 	mux.HandleFunc("GET /api/files/{id}/meta", s.handleFileMeta)
 	mux.HandleFunc("GET /api/files/{id}/blob", s.handleFileBlob)
 }
