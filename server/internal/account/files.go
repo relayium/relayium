@@ -178,9 +178,17 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		}
 	}
 	id := newID()
+	// Burn normalizes to MaxDownloads=1 (1 = burn-equivalent), so the generalized
+	// ClaimDownloadSlot enforcement (files.go handleFileBlob) covers burn without a
+	// separate code path. BurnAfterRead itself is kept for back-compat/display only.
+	maxDownloads := int64(0)
+	if burn {
+		maxDownloads = 1
+	}
 	sf := StoredFile{
 		ID: id, UserID: u.ID, BlobKey: blobKey, EncManifest: encManifest,
 		Size: size, BurnAfterRead: burn, CreatedAt: now, ExpiresAt: now + ttl, NodeID: nodeID,
+		MaxDownloads: maxDownloads,
 	}
 	if err := s.store.CreateStoredFile(r.Context(), sf); err != nil {
 		s.dropBlob(bs, blobKey, nodeID)
@@ -247,13 +255,14 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rc.Close()
 
-	// Burn-after-read: claim the single download only AFTER the blob opened, so an
-	// offline node never burns the shot. Concurrent GETs race on ClaimBurnDownload;
-	// only the winner streams, the rest 404.
-	var burnClaimAt int64
-	if sf.BurnAfterRead {
-		burnClaimAt = s.now().Unix()
-		claimed, cerr := s.store.ClaimBurnDownload(r.Context(), sf.ID, burnClaimAt)
+	// Retention: unlimited files (max_downloads==0) stream freely. Limited files
+	// claim a slot BEFORE streaming so an offline node never spends a shot;
+	// concurrent GETs race on ClaimDownloadSlot and only winners stream.
+	limited := sf.MaxDownloads > 0
+	var claimAt int64
+	if limited {
+		claimAt = s.now().Unix()
+		claimed, cerr := s.store.ClaimDownloadSlot(r.Context(), sf.ID, claimAt)
 		if cerr != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
@@ -267,14 +276,13 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", strconv.FormatInt(sf.Size, 10))
 	n, err := io.Copy(w, rc)
 	if err != nil || n != sf.Size {
-		// Incomplete delivery (client hung up / network hiccup). For a burn file,
-		// release the claim so the owner can retry rather than losing their only
+		// Incomplete delivery (client hung up / network hiccup). For a limited
+		// file, release the claim so the owner can retry rather than losing a
 		// download to a transient failure. Use a fresh context: r.Context() is
-		// likely already cancelled, which is what aborted the copy. Only our own
-		// claim (matching burnClaimAt) is released, so a concurrent re-claim wins.
-		if sf.BurnAfterRead {
+		// likely already cancelled, which is what aborted the copy.
+		if limited {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			_ = s.store.ReleaseBurnDownload(ctx, sf.ID, burnClaimAt)
+			_ = s.store.ReleaseDownloadSlot(ctx, sf.ID, claimAt)
 			cancel()
 		}
 		return
@@ -284,14 +292,16 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	// failure must not turn a delivered file into an error.
 	_ = s.store.AddDownloadStat(r.Context(), sf.UserID, sf.Size)
 	_ = s.store.RecordMeter(r.Context(), sf.UserID, MeterDownload, sf.Size, s.now().Unix())
-	if sf.BurnAfterRead {
-		// Already claimed after the blob opened; this is cleanup of the now-spent
-		// ciphertext+row.
-		if derr := bs.Delete(r.Context(), sf.BlobKey); derr != nil {
-			// Node unreachable: record the orphan so GC retries; still remove the row.
-			_ = s.store.EnqueueNodeDelete(r.Context(), sf.BlobKey, sf.NodeID, s.now().Unix())
+	if limited {
+		// Re-read to see the post-claim count (this request already incremented it).
+		if cur, gerr := s.store.GetStoredFile(r.Context(), sf.ID); gerr == nil &&
+			cur.MaxDownloads > 0 && cur.DownloadCount >= cur.MaxDownloads {
+			if derr := bs.Delete(r.Context(), sf.BlobKey); derr != nil {
+				// Node unreachable: record the orphan so GC retries; still remove the row.
+				_ = s.store.EnqueueNodeDelete(r.Context(), sf.BlobKey, sf.NodeID, s.now().Unix())
+			}
+			_ = s.store.DeleteStoredFile(r.Context(), sf.ID)
 		}
-		_ = s.store.DeleteStoredFile(r.Context(), sf.ID)
 	} else {
 		_ = s.store.IncDownloadCount(r.Context(), sf.ID)
 	}
@@ -347,10 +357,10 @@ func (s *Service) liveFile(r *http.Request, id string) (StoredFile, bool) {
 	if err != nil || s.now().Unix() >= sf.ExpiresAt {
 		return StoredFile{}, false
 	}
-	// A burn-after-read file whose one download was already claimed is spent:
-	// treat it as gone even if the row lingers (e.g. an interrupted stream that
-	// claimed the download but never reached the cleanup delete).
-	if sf.BurnAfterRead && sf.DownloadedAt > 0 {
+	// A limited-download file whose slots are already spent is gone: treat it as
+	// gone even if the row lingers (e.g. an interrupted stream that claimed a
+	// slot but never reached the cleanup delete).
+	if sf.MaxDownloads > 0 && sf.DownloadCount >= sf.MaxDownloads {
 		return StoredFile{}, false
 	}
 	return sf, true

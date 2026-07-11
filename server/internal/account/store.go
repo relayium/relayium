@@ -97,6 +97,10 @@ type StoredFile struct {
 	DownloadedAt  int64  // 0 = not yet downloaded
 	DownloadCount int64  // lifetime successful downloads of this file (non-burn)
 	NodeID        string // "" = central-local blob; else the relay node holding the ciphertext
+	// MaxDownloads generalizes BurnAfterRead: 0 = unlimited until TTL; N = delete
+	// after the Nth successful download; 1 = burn-equivalent. BurnAfterRead is
+	// kept for back-compat, but runtime logic is driven off MaxDownloads.
+	MaxDownloads int64
 }
 
 // UsageKind selects which per-month meter a RecordMeter call increments.
@@ -308,6 +312,14 @@ type Store interface {
 	DeleteStoredFile(ctx context.Context, id string) error
 	ListExpiredStoredFiles(ctx context.Context, now int64) ([]StoredFile, error)
 	IncDownloadCount(ctx context.Context, id string) error
+	// ClaimDownloadSlot atomically takes one of a file's remaining download
+	// slots: increments download_count only while download_count < max_downloads
+	// (max_downloads = 0 means unlimited). Returns claimed=true exactly for the
+	// callers that fit under the cap across concurrent requests.
+	ClaimDownloadSlot(ctx context.Context, id string, at int64) (claimed bool, err error)
+	// ReleaseDownloadSlot undoes a ClaimDownloadSlot after a failed delivery
+	// (download_count-1, floored at 0).
+	ReleaseDownloadSlot(ctx context.Context, id string, at int64) error
 	// user_stats (lifetime aggregate counters; privacy-minimal, no per-event rows)
 	AddUploadStat(ctx context.Context, userID string, bytes int64) error
 	AddDownloadStat(ctx context.Context, userID string, bytes int64) error

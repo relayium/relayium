@@ -246,6 +246,22 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 			return nil, err
 		}
 	}
+	// max_downloads generalizes burn_after_read into a download-count limit:
+	// 0 = unlimited until TTL, N = delete after the Nth download, 1 = burn.
+	// Freshly added (err==nil) → backfill existing burn rows to max_downloads=1
+	// once so pre-existing burn-after-read files keep their exact semantics;
+	// duplicate column name → already migrated, skip the backfill.
+	if _, err := db.ExecContext(context.Background(),
+		`ALTER TABLE stored_files ADD COLUMN max_downloads INTEGER NOT NULL DEFAULT 0`); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column name") {
+			db.Close()
+			return nil, err
+		}
+	} else if _, err := db.ExecContext(context.Background(),
+		`UPDATE stored_files SET max_downloads = 1 WHERE burn_after_read = 1`); err != nil {
+		db.Close()
+		return nil, err
+	}
 	// The billing hot paths now read the usage_periods buckets (see below), not
 	// usage_events, so the recorded_at composite indexes an earlier version added
 	// here are dead weight — and they added write cost to every heartbeat's
@@ -1030,23 +1046,24 @@ func scanStoredFile(sc rowScanner) (StoredFile, error) {
 	var burn int
 	var nodeID sql.NullString
 	err := sc.Scan(&f.ID, &f.UserID, &f.BlobKey, &f.EncManifest, &f.Size,
-		&burn, &f.CreatedAt, &f.ExpiresAt, &f.DownloadedAt, &nodeID, &f.DownloadCount)
+		&burn, &f.CreatedAt, &f.ExpiresAt, &f.DownloadedAt, &nodeID, &f.MaxDownloads, &f.DownloadCount)
 	f.BurnAfterRead = burn != 0
 	f.NodeID = nodeID.String
 	return f, err
 }
 
 // storedFileCols is the INSERT column list (CreateStoredFile). storedFileSelectCols
-// adds download_count, which defaults to 0 on insert and is only ever read back.
-const storedFileCols = `id, user_id, blob_key, enc_manifest, size, burn_after_read, created_at, expires_at, downloaded_at, node_id`
+// adds download_count and max_downloads, which default on insert (0) and are only
+// ever read back / mutated in place by ClaimDownloadSlot etc.
+const storedFileCols = `id, user_id, blob_key, enc_manifest, size, burn_after_read, created_at, expires_at, downloaded_at, node_id, max_downloads`
 const storedFileSelectCols = storedFileCols + `, download_count`
 
 func (s *SQLiteStore) CreateStoredFile(ctx context.Context, f StoredFile) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO stored_files (`+storedFileCols+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		f.ID, f.UserID, f.BlobKey, f.EncManifest, f.Size,
-		b2i(f.BurnAfterRead), f.CreatedAt, f.ExpiresAt, f.DownloadedAt, nullStr(f.NodeID))
+		b2i(f.BurnAfterRead), f.CreatedAt, f.ExpiresAt, f.DownloadedAt, nullStr(f.NodeID), f.MaxDownloads)
 	return err
 }
 
@@ -1117,6 +1134,34 @@ func (s *SQLiteStore) DeleteStoredFile(ctx context.Context, id string) error {
 func (s *SQLiteStore) IncDownloadCount(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE stored_files SET download_count = download_count + 1 WHERE id = ?`, id)
+	return err
+}
+
+// ClaimDownloadSlot atomically takes one of a file's remaining download slots:
+// the WHERE clause (max_downloads = 0 OR download_count < max_downloads) means
+// only callers that still fit under the cap succeed, so concurrent GETs racing
+// on the same near-exhausted file each get an authoritative claimed/not-claimed
+// answer instead of over-counting.
+func (s *SQLiteStore) ClaimDownloadSlot(ctx context.Context, id string, at int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE stored_files
+		    SET download_count = download_count + 1,
+		        downloaded_at = ?
+		  WHERE id = ?
+		    AND (max_downloads = 0 OR download_count < max_downloads)`,
+		at, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
+
+// ReleaseDownloadSlot undoes a ClaimDownloadSlot after a failed delivery
+// (download_count-1, floored at 0).
+func (s *SQLiteStore) ReleaseDownloadSlot(ctx context.Context, id string, at int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE stored_files SET download_count = MAX(download_count - 1, 0) WHERE id = ?`, id)
 	return err
 }
 
