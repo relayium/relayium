@@ -24,6 +24,9 @@ usage:
                                              (in a terminal, approve each new peer on first push)
   relayium id                                print this host's fingerprint
   relayium authorize <fingerprint>          pre-authorize a pusher (for non-interactive serve)
+  relayium login [--server URL]             log in to the cloud (device code flow)
+  relayium logout                           clear local cloud credentials
+  relayium whoami                           show the logged-in cloud account
   relayium version                          print the CLI version
 
 flags (after the subcommand):
@@ -63,6 +66,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runID(args[1:], stdout, stderr)
 	case "authorize":
 		return runAuthorize(args[1:], stdout, stderr)
+	case "login":
+		return runLogin(args[1:], stdout, stderr)
+	case "logout":
+		return runLogout(args[1:], stdout, stderr)
+	case "whoami":
+		return runWhoami(args[1:], stdout, stderr)
 	case "version", "--version", "-version":
 		return runVersion(stdout)
 	case "__recv":
