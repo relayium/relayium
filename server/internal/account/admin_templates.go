@@ -30,6 +30,18 @@ type adminHomeData struct {
 	SortHref   map[string]string // column key ("created"/"email"/"relayed"/"upload"/"download"/"storage") -> sort link on click
 	Nodes      []adminNodeView
 	Settings   adminSettingsView
+
+	FleetTokens      []adminFleetTokenView
+	MintedToken      string // set once, right after minting; shown inline then gone
+	MintedInstallCmd string // install one-liner for the freshly minted token
+}
+
+type adminFleetTokenView struct {
+	ID         string
+	Name       string
+	NodeID     string
+	CreatedAt  int64
+	LastUsedAt int64
 }
 
 type adminLoginData struct {
