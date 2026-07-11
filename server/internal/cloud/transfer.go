@@ -317,10 +317,22 @@ func (w *manifestWriter) openNext() error {
 		if err != nil {
 			return err
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		dir := filepath.Dir(path)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
-		fh, err := os.Create(path)
+		// Defense in depth beyond safeJoin's lexical check and the leaf
+		// O_NOFOLLOW below: a pre-planted symlinked *directory* under destDir
+		// (which defaults to the user's cwd — never freshly created) could
+		// still redirect the write outside it. Confirm the parent's real
+		// (symlink-resolved) path stays within destDir. Mirrors the receive
+		// path's hardening (internal/xfer, commit a4bc65d).
+		if err := ensureWithin(w.destDir, dir); err != nil {
+			return err
+		}
+		// O_NOFOLLOW refuses a symlink at the leaf, so a pre-planted
+		// notes.txt -> /outside symlink can't be followed and overwritten.
+		fh, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC|oNoFollow, 0o644)
 		if err != nil {
 			return err
 		}
@@ -415,6 +427,29 @@ func safeJoin(destDir, name string) (string, error) {
 		return "", fmt.Errorf("cloud: unsafe path in manifest: %q", name)
 	}
 	return joined, nil
+}
+
+// ensureWithin verifies that dir, after resolving any symlinks, is still inside
+// destDir (also symlink-resolved). Both must exist. This catches a symlinked
+// directory pre-planted under destDir that a purely lexical check would miss.
+// Copied from internal/xfer/recv.go's identical defense (commit a4bc65d).
+func ensureWithin(destDir, dir string) error {
+	absBase, err := filepath.Abs(destDir)
+	if err != nil {
+		return err
+	}
+	realBase, err := filepath.EvalSymlinks(absBase)
+	if err != nil {
+		return err
+	}
+	realDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return err
+	}
+	if realDir != realBase && !strings.HasPrefix(realDir, realBase+string(filepath.Separator)) {
+		return fmt.Errorf("cloud: refusing write outside destDir via symlinked directory: %q", dir)
+	}
+	return nil
 }
 
 // Download fetches id's encrypted manifest and blob from server, decrypts

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -320,6 +321,98 @@ func TestDownloadZipSlip(t *testing.T) {
 	got, err := os.ReadFile(paths[0])
 	if err != nil || string(got) != "evil" {
 		t.Fatalf("clamped file: %q %v", got, err)
+	}
+}
+
+// TestDownloadLeafSymlinkNotFollowed verifies that a symlink pre-planted in
+// destDir at the exact name a manifest entry targets (notes.txt -> an outside
+// file) is refused via O_NOFOLLOW, so the outside file is never overwritten
+// with decrypted bytes. Mirrors the receive path's hardening (commit a4bc65d).
+func TestDownloadLeafSymlinkNotFollowed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("O_NOFOLLOW is a no-op on Windows")
+	}
+	raw, err := storecrypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	encManifest, blob := blobStreamFromFiles(t, raw, []struct {
+		name    string
+		content string
+	}{{"notes.txt", "hello world"}})
+
+	srv := fakeCloudServer(encManifest, blob)
+	defer srv.Close()
+
+	root := t.TempDir()
+	dest := filepath.Join(root, "dest")
+	if err := os.Mkdir(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(root, "outside.txt")
+	if err := os.WriteFile(outside, []byte("ORIGINAL"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Pre-plant a leaf symlink at the manifest's target name.
+	if err := os.Symlink(outside, filepath.Join(dest, "notes.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	c := NewClient(srv.URL)
+	_, err = c.Download(context.Background(), "abc", storecrypto.EncodeKey(raw), dest)
+	if err == nil {
+		t.Fatal("expected Download to refuse the pre-planted leaf symlink")
+	}
+	got, rerr := os.ReadFile(outside)
+	if rerr != nil {
+		t.Fatal(rerr)
+	}
+	if string(got) != "ORIGINAL" {
+		t.Fatalf("outside file was overwritten through the symlink: %q", got)
+	}
+}
+
+// TestDownloadParentSymlinkNotFollowed verifies that a symlinked *directory*
+// pre-planted under destDir (cfg -> an outside dir) is refused via
+// ensureWithin, so a manifest naming cfg/authorized_keys never writes into the
+// outside directory.
+func TestDownloadParentSymlinkNotFollowed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink-based test not applicable on Windows")
+	}
+	raw, err := storecrypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	encManifest, blob := blobStreamFromFiles(t, raw, []struct {
+		name    string
+		content string
+	}{{"cfg/authorized_keys", "ssh-rsa PWNED"}})
+
+	srv := fakeCloudServer(encManifest, blob)
+	defer srv.Close()
+
+	root := t.TempDir()
+	dest := filepath.Join(root, "dest")
+	if err := os.Mkdir(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outsideDir := filepath.Join(root, "outsideDir")
+	if err := os.Mkdir(outsideDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Pre-plant a symlinked directory under destDir.
+	if err := os.Symlink(outsideDir, filepath.Join(dest, "cfg")); err != nil {
+		t.Fatal(err)
+	}
+
+	c := NewClient(srv.URL)
+	_, err = c.Download(context.Background(), "abc", storecrypto.EncodeKey(raw), dest)
+	if err == nil {
+		t.Fatal("expected Download to refuse the symlinked parent directory")
+	}
+	if _, statErr := os.Stat(filepath.Join(outsideDir, "authorized_keys")); !os.IsNotExist(statErr) {
+		t.Fatalf("file was written into the outside dir through the symlinked parent: %v", statErr)
 	}
 }
 
