@@ -41,6 +41,30 @@ func daemonServe(t *testing.T, serverDir, recvDir string, allow map[string]bool,
 	return port, done
 }
 
+// A client that connects but never completes the TLS handshake must be timed
+// out, not left to wedge the serial accept loop indefinitely.
+func TestServeHandshakeTimeout(t *testing.T) {
+	old := handshakeTimeout
+	handshakeTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { handshakeTimeout = old })
+
+	port, done := daemonServe(t, t.TempDir(), t.TempDir(), map[string]bool{}, nil, false)
+	conn, err := net.Dial("tcp", "127.0.0.1:"+strconv.Itoa(port))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	// Send nothing. serveLoop (once mode) must give up and exit with failure.
+	select {
+	case code := <-done:
+		if code != 1 {
+			t.Fatalf("serveLoop exit = %d, want 1 (failed connection)", code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("serve did not time out a stalled handshake")
+	}
+}
+
 func writeSrc(t *testing.T, name, body string) string {
 	t.Helper()
 	dir := t.TempDir()

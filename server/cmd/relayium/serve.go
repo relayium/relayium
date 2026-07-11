@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	"golang.org/x/term"
 
@@ -14,6 +15,10 @@ import (
 	"github.com/relayium/relayium/internal/trust"
 	"github.com/relayium/relayium/internal/xfer"
 )
+
+// handshakeTimeout bounds the unauthenticated TLS handshake per connection.
+// A var so tests can shorten it.
+var handshakeTimeout = 30 * time.Second
 
 type serveFlags struct {
 	dir         string
@@ -138,11 +143,17 @@ func (h *serveHandler) serve(conn net.Conn) (ok bool) {
 		}
 	}()
 
+	// Bound the unauthenticated TLS handshake so a client that connects and then
+	// stalls can't wedge the (serial) accept loop indefinitely. Cleared once the
+	// peer is cryptographically identified: interactive approval and large file
+	// receives legitimately take longer.
+	_ = conn.SetDeadline(time.Now().Add(handshakeTimeout))
 	tconn, fp, err := secure.ServerAny(conn, h.id)
 	if err != nil {
 		fmt.Fprintf(h.stderr, "handshake failed from %s: %v\n", remote, err)
 		return false
 	}
+	_ = conn.SetDeadline(time.Time{})
 	defer tconn.Close()
 
 	if !h.allow[fp] {
