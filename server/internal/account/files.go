@@ -138,9 +138,9 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	capped := &cappedReader{r: br, max: st.MaxFileSize}
 	size, err := bs.Put(r.Context(), blobKey, capped)
 	if err != nil {
-		// Best-effort reclaim: a committed-but-response-lost blob would otherwise
-		// orphan on node disk (no row, no pending-delete entry).
-		_ = bs.Delete(r.Context(), blobKey)
+		// Reclaim a committed-but-response-lost blob; if the node is unreachable
+		// the pending-delete queue ensures GC retries instead of orphaning it.
+		s.dropBlob(bs, blobKey, nodeID)
 		if errors.Is(err, errTooLarge) {
 			http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
 			return
@@ -167,12 +167,12 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 			UploadEvent{ID: newID(), UserID: u.ID, Bytes: billed, UploadedAt: now},
 			now-dayWindow, st.DailyQuota)
 		if err != nil {
-			_ = bs.Delete(r.Context(), blobKey)
+			s.dropBlob(bs, blobKey, nodeID)
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
 		if !ok {
-			_ = bs.Delete(r.Context(), blobKey)
+			s.dropBlob(bs, blobKey, nodeID)
 			http.Error(w, "daily quota exceeded", http.StatusTooManyRequests)
 			return
 		}
@@ -183,7 +183,7 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		Size: size, BurnAfterRead: burn, CreatedAt: now, ExpiresAt: now + ttl, NodeID: nodeID,
 	}
 	if err := s.store.CreateStoredFile(r.Context(), sf); err != nil {
-		_ = bs.Delete(r.Context(), blobKey)
+		s.dropBlob(bs, blobKey, nodeID)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
@@ -192,6 +192,18 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	_ = s.store.AddUploadStat(r.Context(), u.ID, size)
 	_ = s.store.RecordMeter(r.Context(), u.ID, MeterUpload, size, now)
 	writeJSON(w, http.StatusOK, map[string]any{"id": id, "expiresAt": sf.ExpiresAt})
+}
+
+// dropBlob reclaims an orphaned upload blob. It deletes best-effort, and on a
+// node/transport failure records a pending delete so GC retries instead of
+// leaking the blob. Uses a fresh context so cleanup survives a cancelled
+// request (the client hangup that stranded the blob in the first place).
+func (s *Service) dropBlob(bs storage.BlobStore, blobKey, nodeID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := bs.Delete(ctx, blobKey); err != nil {
+		_ = s.store.EnqueueNodeDelete(ctx, blobKey, nodeID, s.now().Unix())
+	}
 }
 
 func (s *Service) handleFileMeta(w http.ResponseWriter, r *http.Request) {

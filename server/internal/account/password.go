@@ -25,6 +25,11 @@ var (
 	ErrInvalidEmail = errors.New("account: invalid email address")
 )
 
+// dummyBcryptHash is a valid bcrypt hash at DefaultCost. Login compares against
+// it when the account doesn't exist so the response time matches the
+// account-exists path and doesn't leak account existence. No password matches it.
+var dummyBcryptHash, _ = bcrypt.GenerateFromPassword([]byte("relayium-login-timing-equalizer"), bcrypt.DefaultCost)
+
 // Register 创建密码账号（初始未验证）并发送验证邮件。不发 session：用户须先验证。
 func (s *Service) Register(ctx context.Context, email, password, displayName string) (User, error) {
 	email = normEmail(email)
@@ -77,6 +82,9 @@ func (s *Service) Login(ctx context.Context, email, password string) (Session, e
 		return Session{}, err
 	}
 	if !ok {
+		// Equalize timing against the account-exists path: run a comparable bcrypt
+		// against a dummy hash so response time doesn't leak account existence.
+		_ = bcrypt.CompareHashAndPassword(dummyBcryptHash, []byte(password))
 		return Session{}, ErrBadCredentials
 	}
 	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {

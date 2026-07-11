@@ -160,6 +160,12 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1) // SQLite + :memory: safety; fine for our write volume
+	// Wait rather than fail immediately on a locked DB (e.g. a node process or a
+	// WAL checkpoint holding the file), instead of surfacing SQLITE_BUSY.
+	if _, err := db.ExecContext(context.Background(), `PRAGMA busy_timeout = 5000`); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if _, err := db.ExecContext(context.Background(), schema); err != nil {
 		db.Close()
 		return nil, err
@@ -203,6 +209,19 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
+			db.Close()
+			return nil, err
+		}
+	}
+	// Composite indexes for the billing hot paths (UserRelayedSince /
+	// NodeRelayedSince). Created here, after the ALTERs above add billable/node_id
+	// — creating them in the top-level schema would fail with "no such column" on
+	// a legacy DB before those columns exist.
+	for _, idx := range []string{
+		`CREATE INDEX IF NOT EXISTS idx_usage_user_recorded ON usage_events(user_id, billable, recorded_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_usage_node_recorded ON usage_events(node_id, recorded_at)`,
+	} {
+		if _, err := db.ExecContext(context.Background(), idx); err != nil {
 			db.Close()
 			return nil, err
 		}
