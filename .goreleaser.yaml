@@ -40,6 +40,22 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+# Keyless (Sigstore) signing of the checksum file: no private key to manage —
+# the signing identity is the GitHub Actions workflow (OIDC). Produces
+# checksums.txt.sig + checksums.txt.pem as release assets, which install.sh
+# verifies with cosign when present.
+signs:
+  - cmd: cosign
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--output-certificate=${certificate}"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    output: true
+
 release:
   github:
     owner: relayium

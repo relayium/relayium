@@ -57,6 +57,27 @@ echo "Downloading ${asset}..."
 dl "${BASE_URL}/${asset}" "${tmp}/${asset}" || err "download failed (has a release been published yet?)"
 dl "${BASE_URL}/checksums.txt" "${tmp}/checksums.txt" || err "checksum list download failed"
 
+# Verify the checksum file's Sigstore (keyless) signature when cosign is present,
+# so a tampered checksums.txt is rejected — not just a corrupted download. The
+# signing identity is this repo's release workflow (GitHub OIDC). Without cosign
+# we fall back to checksum-only integrity.
+if command -v cosign >/dev/null 2>&1; then
+  if dl "${BASE_URL}/checksums.txt.sig" "${tmp}/checksums.txt.sig" &&
+     dl "${BASE_URL}/checksums.txt.pem" "${tmp}/checksums.txt.pem"; then
+    cosign verify-blob \
+      --certificate "${tmp}/checksums.txt.pem" \
+      --signature "${tmp}/checksums.txt.sig" \
+      --certificate-identity-regexp "^https://github.com/${REPO}/\.github/workflows/release\.yml@" \
+      --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+      "${tmp}/checksums.txt" >/dev/null 2>&1 || err "signature verification failed — refusing to install"
+    echo "Verified release signature (cosign)."
+  else
+    echo "Note: signature files not found; falling back to checksum-only verification." >&2
+  fi
+else
+  echo "Note: cosign not found; verifying checksum only. Install cosign for signature verification." >&2
+fi
+
 want=$(grep " ${asset}$" "${tmp}/checksums.txt" | awk '{print $1}')
 [ -n "$want" ] || err "no checksum listed for ${asset}"
 got=$(sha "${tmp}/${asset}")

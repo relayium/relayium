@@ -44,6 +44,26 @@ echo "downloading ${asset} ..."
 curl -fsSL "${BASE_URL}/${asset}" -o "$tmp/a.tar.gz" || err "download failed"
 curl -fsSL "${BASE_URL}/checksums.txt" -o "$tmp/checksums.txt" || err "checksum list download failed"
 
+# Verify the checksum file's Sigstore (keyless) signature when cosign is present
+# (signing identity = this repo's release workflow, via GitHub OIDC), rejecting a
+# tampered checksums.txt. Without cosign, fall back to checksum-only integrity.
+if command -v cosign >/dev/null 2>&1; then
+  if curl -fsSL "${BASE_URL}/checksums.txt.sig" -o "$tmp/checksums.txt.sig" &&
+     curl -fsSL "${BASE_URL}/checksums.txt.pem" -o "$tmp/checksums.txt.pem"; then
+    cosign verify-blob \
+      --certificate "$tmp/checksums.txt.pem" \
+      --signature "$tmp/checksums.txt.sig" \
+      --certificate-identity-regexp "^https://github.com/${REPO}/\.github/workflows/release\.yml@" \
+      --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+      "$tmp/checksums.txt" >/dev/null 2>&1 || err "signature verification failed — refusing to install"
+    echo "Verified release signature (cosign)."
+  else
+    echo "Note: signature files not found; falling back to checksum-only verification." >&2
+  fi
+else
+  echo "Note: cosign not found; verifying checksum only. Install cosign for signature verification." >&2
+fi
+
 want=$(grep " ${asset}$" "$tmp/checksums.txt" | awk '{print $1}')
 [ -n "$want" ] || err "no checksum listed for ${asset}"
 got=$(sha "$tmp/a.tar.gz")

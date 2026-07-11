@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write # OIDC token for keyless cosign signing
 
 jobs:
   goreleaser:
@@ -17,6 +18,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: server/go.mod
+      - uses: sigstore/cosign-installer@v3
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: '~> v2'
