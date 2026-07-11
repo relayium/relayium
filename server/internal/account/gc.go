@@ -60,6 +60,9 @@ func (g *GC) sweep(ctx context.Context) {
 	if err := g.Store.DeleteSpentEmailTokens(ctx, now); err != nil {
 		g.Log.Printf("gc: delete spent email tokens: %v", err)
 	}
+	if err := g.Store.DeleteExpiredDeviceAuth(ctx, now); err != nil {
+		g.Log.Printf("gc: delete expired device-auth: %v", err)
+	}
 }
 
 func (g *GC) deleteBlob(ctx context.Context, nodeID, blobKey string) error {

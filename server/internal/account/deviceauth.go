@@ -45,6 +45,12 @@ func genUserCode() string {
 // short user_code is what the human types at verification_uri; the opaque
 // device_code is what the CLI polls with and is never shown to the human.
 func (s *Service) handleDeviceStart(w http.ResponseWriter, r *http.Request) {
+	// Unauthenticated by design (first call the CLI ever makes), so without a
+	// throttle an anonymous caller can mint cli_device_auth rows without bound.
+	if s.registerLimiter != nil && !s.registerLimiter.Allow(s.clientIP(r)) {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
+		return
+	}
 	now := s.now().Unix()
 	deviceCode := randToken()
 	userCode := genUserCode()

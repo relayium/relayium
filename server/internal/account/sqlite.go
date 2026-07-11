@@ -179,6 +179,7 @@ CREATE TABLE IF NOT EXISTS cli_device_auth (
   expires_at       INTEGER NOT NULL,
   consumed_at      INTEGER NOT NULL DEFAULT 0
 );
+CREATE INDEX IF NOT EXISTS idx_cli_device_auth_expires ON cli_device_auth(expires_at);
 CREATE TABLE IF NOT EXISTS cli_tokens (
   token_hash   TEXT PRIMARY KEY,
   user_id      TEXT NOT NULL,

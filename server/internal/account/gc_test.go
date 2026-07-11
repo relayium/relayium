@@ -107,3 +107,34 @@ func TestGCSweepReclaimsSessionsAndMagicTokens(t *testing.T) {
 		t.Fatalf("email tokens after sweep = %d, want 1", etCount)
 	}
 }
+
+func TestGCSweepReclaimsExpiredDeviceAuth(t *testing.T) {
+	store := newTestStore(t)
+	disk, _ := storage.NewDiskStore(t.TempDir())
+	ctx := context.Background()
+
+	// One expired device-auth request, one still live.
+	_ = store.CreateDeviceAuth(ctx, DeviceAuthRequest{
+		UserCode: "AAAA-BBBB", DeviceCodeHash: "expired-hash", Status: "pending",
+		CreatedAt: 1, ExpiresAt: 100,
+	})
+	_ = store.CreateDeviceAuth(ctx, DeviceAuthRequest{
+		UserCode: "CCCC-DDDD", DeviceCodeHash: "live-hash", Status: "pending",
+		CreatedAt: 1, ExpiresAt: 9000000,
+	})
+
+	g := &GC{Store: store, Blobs: disk, Now: func() int64 { return 1000000 }, Log: log.New(io.Discard, "", 0)}
+	g.sweep(ctx)
+
+	if _, ok, _ := store.GetDeviceAuthByCodeHash(ctx, "expired-hash"); ok {
+		t.Fatal("expired device-auth row wrongly retained")
+	}
+	if _, ok, _ := store.GetDeviceAuthByCodeHash(ctx, "live-hash"); !ok {
+		t.Fatal("live device-auth row wrongly reclaimed")
+	}
+	var daCount int
+	_ = store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM cli_device_auth`).Scan(&daCount)
+	if daCount != 1 {
+		t.Fatalf("cli_device_auth rows after sweep = %d, want 1", daCount)
+	}
+}
