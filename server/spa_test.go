@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -15,6 +16,34 @@ func writeFile(t *testing.T, path, body string) {
 	}
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func TestSecurityHeaders(t *testing.T) {
+	h := securityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	want := map[string]string{
+		"X-Content-Type-Options": "nosniff",
+		"X-Frame-Options":        "DENY",
+		"Referrer-Policy":        "strict-origin-when-cross-origin",
+	}
+	for k, v := range want {
+		if got := rr.Header().Get(k); got != v {
+			t.Errorf("%s = %q, want %q", k, got, v)
+		}
+	}
+	csp := rr.Header().Get("Content-Security-Policy")
+	for _, must := range []string{"frame-ancestors 'none'", "object-src 'none'", "connect-src 'self' https: wss:"} {
+		if !strings.Contains(csp, must) {
+			t.Errorf("CSP missing %q; got %q", must, csp)
+		}
+	}
+	if rr.Header().Get("Permissions-Policy") == "" {
+		t.Error("Permissions-Policy not set")
 	}
 }
 

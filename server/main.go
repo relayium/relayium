@@ -336,7 +336,7 @@ func main() {
 	// detects dead peers instead).
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           mux,
+		Handler:           securityHeaders(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
