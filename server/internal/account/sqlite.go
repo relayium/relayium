@@ -1190,7 +1190,8 @@ func (s *SQLiteStore) StorageNodes(ctx context.Context, since, minFree int64) ([
 	return s.queryNodes(ctx,
 		`SELECT `+nodeCols+` FROM nodes
 		   WHERE owner_type='fleet' AND storage_enabled=1 AND last_seen_at >= ? AND storage_free >= ?
-		   ORDER BY last_seen_at DESC`, since, minFree)
+		     AND (disk_limit_bytes = 0 OR disk_limit_bytes - stored_bytes >= ?)
+		   ORDER BY last_seen_at DESC`, since, minFree, minFree)
 }
 
 func (s *SQLiteStore) OnlineNodes(ctx context.Context, since int64) ([]Node, error) {
