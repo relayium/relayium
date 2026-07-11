@@ -36,7 +36,10 @@ func BuildArgs(e xfer.Endpoint, remoteCmd string, o Opts) []string {
 	if e.User != "" {
 		host = e.User + "@" + e.Host
 	}
-	args = append(args, host, remoteCmd)
+	// "--" ends ssh option parsing so a host that looks like a flag (e.g.
+	// "-oProxyCommand=...") can't be interpreted as an option. ParseEndpoint
+	// also rejects such hosts; this is defense in depth for direct callers.
+	args = append(args, "--", host, remoteCmd)
 	return args
 }
 

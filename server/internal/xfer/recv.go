@@ -52,6 +52,12 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 		if _, err := ReadJSON(rw, &fs); err != nil {
 			return rep, err
 		}
+		// fs.Index is peer-controlled; reject out-of-range values before indexing
+		// so a malicious/buggy sender can't panic the receiver (and, under serve,
+		// take down the whole daemon).
+		if fs.Index < 0 || fs.Index >= len(m.Files) {
+			return rep, fmt.Errorf("file index %d out of range [0,%d)", fs.Index, len(m.Files))
+		}
 		f := m.Files[fs.Index]
 		dest, err := safeJoin(destDir, f.Path)
 		if err != nil {
@@ -236,9 +242,16 @@ func writeFileBody(rw io.Reader, dest string, f FileEntry, offset int64) (string
 // safeJoin joins a relative manifest path onto destDir, rejecting any path that
 // escapes destDir (defends against a malicious/buggy manifest with "..").
 func safeJoin(destDir, rel string) (string, error) {
+	// Resolve destDir to an absolute, cleaned path first. Without this a destDir
+	// like "." or "out/" (serve's default --dir and receive's default destdir
+	// are both ".") never prefix-matches the joined result, rejecting every file.
+	base, err := filepath.Abs(destDir)
+	if err != nil {
+		return "", err
+	}
 	clean := filepath.Clean("/" + filepath.FromSlash(rel))
-	joined := filepath.Join(destDir, clean)
-	if joined != destDir && !strings.HasPrefix(joined, destDir+string(filepath.Separator)) {
+	joined := filepath.Join(base, clean)
+	if joined != base && !strings.HasPrefix(joined, base+string(filepath.Separator)) {
 		return "", fmt.Errorf("unsafe path in manifest: %q", rel)
 	}
 	return joined, nil

@@ -2,7 +2,10 @@
 // its wire protocol. It is pure client-side and never touches server code.
 package xfer
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // Endpoint is a parsed push/pull argument. A remote endpoint has a non-empty
 // Host; a local one has Host == "". Stdin is set only for the literal "-".
@@ -35,6 +38,15 @@ func ParseEndpoint(s string) (Endpoint, error) {
 			e.Host = hostpart[at+1:]
 		} else {
 			e.Host = hostpart
+		}
+		// A host or user starting with "-" would be passed to the ssh binary as
+		// an option (e.g. "-oProxyCommand=..."), turning the target into command
+		// execution. Reject it rather than hand it to ssh.
+		if strings.HasPrefix(e.Host, "-") || strings.HasPrefix(e.User, "-") {
+			return Endpoint{}, fmt.Errorf("invalid endpoint %q: host/user may not start with '-'", s)
+		}
+		if e.Host == "" {
+			return Endpoint{}, fmt.Errorf("invalid endpoint %q: empty host", s)
 		}
 		if e.Path == "" {
 			e.Path = "."

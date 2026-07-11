@@ -126,9 +126,17 @@ func serveLoop(ln net.Listener, h *serveHandler, once bool) int {
 // membership, or interactive approval that remembers the fingerprint), then
 // receives the pushed batch. No file data is read until the peer is authorized,
 // and one bad peer never takes down serve.
-func (h *serveHandler) serve(conn net.Conn) bool {
-	defer conn.Close()
+func (h *serveHandler) serve(conn net.Conn) (ok bool) {
 	remote := conn.RemoteAddr()
+	defer conn.Close()
+	// A panic while handling one connection must not take down the daemon: turn
+	// it into a failed connection so serveLoop keeps accepting.
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintf(h.stderr, "panic serving %s: %v\n", remote, r)
+			ok = false
+		}
+	}()
 
 	tconn, fp, err := secure.ServerAny(conn, h.id)
 	if err != nil {
