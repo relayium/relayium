@@ -2,6 +2,7 @@ package cloud
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/relayium/relayium/internal/storecrypto"
 )
@@ -232,4 +234,288 @@ func writeUploadBody(w io.Writer, encManifest []byte, files []uploadFile, key []
 // load.
 func (c *Client) DownloadLink(origin, id, keyB64Url string) string {
 	return origin + "/d/" + id + "#k=" + keyB64Url
+}
+
+// ParseClaim parses a download claim in either of the two forms `down`
+// accepts: a full shareable link, as built by DownloadLink
+// (scheme://host/d/<id>#k=<key>), or a bare compact code with no host
+// (<id>#k=<key>) — for the latter, server is returned empty and the caller
+// supplies a default (--server, or defaultCloudServer). Both forms carry the
+// key as a "k=" URL-fragment, matching web's buildDownloadLink/
+// parseDownloadKey so links interop between the CLI and the browser.
+func ParseClaim(s string) (server, id, keyB64Url string, err error) {
+	hashIdx := strings.LastIndex(s, "#")
+	if hashIdx < 0 {
+		return "", "", "", fmt.Errorf("cloud: claim %q: missing #k=<key> fragment", s)
+	}
+	head, frag := s[:hashIdx], s[hashIdx+1:]
+	key, ok := strings.CutPrefix(frag, "k=")
+	if !ok || key == "" {
+		return "", "", "", fmt.Errorf("cloud: claim %q: fragment must be k=<key>", s)
+	}
+
+	if u, uerr := url.Parse(head); uerr == nil && u.Scheme != "" && u.Host != "" {
+		id, ok := strings.CutPrefix(u.Path, "/d/")
+		if !ok || id == "" {
+			return "", "", "", fmt.Errorf("cloud: claim %q: not a /d/<id> link", s)
+		}
+		return u.Scheme + "://" + u.Host, id, key, nil
+	}
+
+	if head == "" {
+		return "", "", "", fmt.Errorf("cloud: claim %q: missing id", s)
+	}
+	return "", head, key, nil
+}
+
+// downloadStatusError maps a meta/blob fetch's HTTP status to an actionable
+// message, distinct from a bare "unexpected status N".
+func downloadStatusError(what string, status int) error {
+	switch status {
+	case http.StatusNotFound:
+		return fmt.Errorf("cloud: %s: not found (expired, burned, or wrong id)", what)
+	case http.StatusServiceUnavailable:
+		return fmt.Errorf("cloud: %s: storage temporarily unavailable, try again later", what)
+	default:
+		return fmt.Errorf("cloud: %s: unexpected status %d", what, status)
+	}
+}
+
+// writeError wraps a local filesystem error encountered while routing
+// decrypted bytes into files, so Download can tell it apart from a
+// storecrypto decrypt/integrity failure (see the errors.As check below) even
+// though both surface through the same Decryptor.Push emit callback.
+type writeError struct{ err error }
+
+func (e *writeError) Error() string { return e.err.Error() }
+func (e *writeError) Unwrap() error { return e.err }
+
+// manifestWriter routes a stream of decrypted plaintext (delivered in
+// arbitrary-sized chunks by Decryptor.Push) into the right output files, in
+// manifest order: the manifest is the sole source of truth for where one
+// file ends and the next begins, since the ciphertext stream carries no
+// per-file framing of its own (writeUploadBody emits zero chunks for a
+// zero-size file).
+type manifestWriter struct {
+	destDir string
+	files   []storecrypto.FileEntry
+
+	idx       int      // index into files of the next file to open
+	cur       *os.File // currently-open output file, or nil between files
+	remaining int64    // bytes left to write to cur
+	paths     []string // paths written so far, in manifest order
+}
+
+// openNext opens files starting at idx, creating (and immediately closing)
+// any zero-size entries along the way — since no ciphertext bytes exist for
+// them — until it finds one with bytes left to receive, or exhausts the
+// manifest (cur stays nil in that case).
+func (w *manifestWriter) openNext() error {
+	for w.cur == nil && w.idx < len(w.files) {
+		f := w.files[w.idx]
+		path, err := safeJoin(w.destDir, f.Name)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		fh, err := os.Create(path)
+		if err != nil {
+			return err
+		}
+		w.paths = append(w.paths, path)
+		w.idx++
+		if f.Size == 0 {
+			if err := fh.Close(); err != nil {
+				return err
+			}
+			continue
+		}
+		w.cur = fh
+		w.remaining = f.Size
+	}
+	return nil
+}
+
+// write is the Decryptor.Push emit callback: it fans a chunk of decrypted
+// plaintext out across one or more files per the manifest's declared sizes.
+// Any error here — a Zip-Slip-rejected name, a disk write failure — is
+// wrapped in *writeError so Download can distinguish it from a genuine
+// decrypt/integrity failure, even though both propagate through the same
+// Push return value.
+func (w *manifestWriter) write(pt []byte) error {
+	for len(pt) > 0 {
+		if w.cur == nil {
+			if err := w.openNext(); err != nil {
+				return &writeError{err}
+			}
+			if w.cur == nil {
+				return &writeError{errors.New("more decrypted data than the manifest declares")}
+			}
+		}
+		n := int64(len(pt))
+		if n > w.remaining {
+			n = w.remaining
+		}
+		if _, err := w.cur.Write(pt[:n]); err != nil {
+			return &writeError{err}
+		}
+		pt = pt[n:]
+		w.remaining -= n
+		if w.remaining == 0 {
+			if err := w.cur.Close(); err != nil {
+				return &writeError{err}
+			}
+			w.cur = nil
+		}
+	}
+	return nil
+}
+
+// finish opens (as empty files) any manifest entries left unopened once the
+// ciphertext stream is exhausted — trailing zero-size files never receive a
+// Push call at all, so they must be flushed out explicitly. Only called
+// after Decryptor.End has confirmed the total byte count matches the
+// manifest, which guarantees any entries left here are all zero-size.
+func (w *manifestWriter) finish() error {
+	if w.cur != nil {
+		if err := w.cur.Close(); err != nil {
+			return err
+		}
+		w.cur = nil
+	}
+	return w.openNext()
+}
+
+// closeAll is a best-effort cleanup for early-return error paths; it does
+// not report errors since Download already has one to return by the time it
+// runs.
+func (w *manifestWriter) closeAll() {
+	if w.cur != nil {
+		_ = w.cur.Close()
+		w.cur = nil
+	}
+}
+
+// safeJoin joins a manifest file name onto destDir, rejecting any path that
+// would let a malicious/buggy manifest escape destDir (Zip-Slip) — mirrors
+// xfer's safeJoin (internal/xfer/recv.go).
+func safeJoin(destDir, name string) (string, error) {
+	// Resolve destDir to an absolute, cleaned path first: without this a
+	// destDir like "." (down's default) never prefix-matches the joined
+	// result, rejecting every file.
+	base, err := filepath.Abs(destDir)
+	if err != nil {
+		return "", err
+	}
+	clean := filepath.Clean("/" + filepath.FromSlash(name))
+	joined := filepath.Join(base, clean)
+	if joined != base && !strings.HasPrefix(joined, base+string(filepath.Separator)) {
+		return "", fmt.Errorf("cloud: unsafe path in manifest: %q", name)
+	}
+	return joined, nil
+}
+
+// Download fetches id's encrypted manifest and blob from server, decrypts
+// them with the key encoded in keyB64Url, and writes the resulting files
+// under destDir (creating parent directories as needed). It streams the
+// blob response directly into a storecrypto.Decryptor rather than buffering
+// it, and verifies the total decrypted length against the manifest via
+// Decryptor.End before returning. Returns the written file paths, in
+// manifest order.
+func (c *Client) Download(ctx context.Context, id, keyB64Url, destDir string) ([]string, error) {
+	key, err := storecrypto.DecodeKey(keyB64Url)
+	if err != nil {
+		return nil, fmt.Errorf("cloud: %w", err)
+	}
+
+	httpc := c.HTTP
+	if httpc == nil {
+		httpc = http.DefaultClient
+	}
+
+	// id is untrusted (typically pasted from a claim link); escape it so it
+	// can't smuggle extra path segments into the request URL.
+	idPath := url.PathEscape(id)
+
+	metaReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.Server+"/api/files/"+idPath+"/meta", nil)
+	if err != nil {
+		return nil, err
+	}
+	metaResp, err := httpc.Do(metaReq)
+	if err != nil {
+		return nil, fmt.Errorf("cloud: fetch metadata: %w", err)
+	}
+	defer metaResp.Body.Close()
+	if metaResp.StatusCode < 200 || metaResp.StatusCode >= 300 {
+		return nil, downloadStatusError("fetch metadata", metaResp.StatusCode)
+	}
+	var meta struct {
+		EncManifest string `json:"encManifest"`
+	}
+	if err := json.NewDecoder(metaResp.Body).Decode(&meta); err != nil {
+		return nil, fmt.Errorf("cloud: fetch metadata: %w", err)
+	}
+
+	encManifest, err := base64.StdEncoding.DecodeString(meta.EncManifest)
+	if err != nil {
+		return nil, fmt.Errorf("cloud: fetch metadata: bad encManifest encoding: %w", err)
+	}
+	manifest, err := storecrypto.DecryptManifest(key, encManifest)
+	if err != nil {
+		return nil, fmt.Errorf("cloud: decrypt failed (wrong key, or corrupt/tampered manifest): %w", err)
+	}
+
+	var expectedTotal int64
+	for _, f := range manifest.Files {
+		expectedTotal += f.Size
+	}
+
+	blobReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.Server+"/api/files/"+idPath+"/blob", nil)
+	if err != nil {
+		return nil, err
+	}
+	blobResp, err := httpc.Do(blobReq)
+	if err != nil {
+		return nil, fmt.Errorf("cloud: fetch blob: %w", err)
+	}
+	defer blobResp.Body.Close()
+	if blobResp.StatusCode < 200 || blobResp.StatusCode >= 300 {
+		return nil, downloadStatusError("fetch blob", blobResp.StatusCode)
+	}
+
+	w := &manifestWriter{destDir: destDir, files: manifest.Files}
+	defer w.closeAll()
+
+	dec := storecrypto.NewDecryptor(key)
+	buf := make([]byte, storecrypto.ChunkSize)
+	for {
+		n, rerr := blobResp.Body.Read(buf)
+		if n > 0 {
+			if perr := dec.Push(buf[:n], w.write); perr != nil {
+				var we *writeError
+				if errors.As(perr, &we) {
+					return nil, fmt.Errorf("cloud: write file: %w", we.err)
+				}
+				return nil, fmt.Errorf("cloud: decrypt failed (wrong key, or corrupt/tampered data): %w", perr)
+			}
+		}
+		if rerr == io.EOF {
+			break
+		}
+		if rerr != nil {
+			return nil, fmt.Errorf("cloud: network error while downloading: %w", rerr)
+		}
+	}
+
+	if err := dec.End(expectedTotal); err != nil {
+		return nil, fmt.Errorf("cloud: decrypt failed (wrong key, or corrupt/tampered/truncated data): %w", err)
+	}
+
+	if err := w.finish(); err != nil {
+		return nil, fmt.Errorf("cloud: write file: %w", err)
+	}
+
+	return w.paths, nil
 }

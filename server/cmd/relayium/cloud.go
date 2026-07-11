@@ -174,3 +174,61 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintln(stdout, "opens in a browser, or fetch it with `relayium down <link>`")
 	return 0
 }
+
+// runDown fetches and decrypts a claim (a full `relayium up` link, or a bare
+// <id>#k=<key> code) into destDir. It needs no login: /meta and /blob are
+// public endpoints gated only by knowledge of id + key, matching the web
+// /d/<id> claim page.
+func runDown(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("down", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	var server string
+	fs.StringVar(&server, "server", "", "override the cloud server (defaults to the one embedded in the link, else "+defaultCloudServer+")")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	rest := fs.Args()
+	if len(rest) < 1 || len(rest) > 2 {
+		fmt.Fprintln(stderr, "down needs <link-or-code> [destDir]")
+		return 2
+	}
+	claim := rest[0]
+	destDir := "."
+	if len(rest) == 2 {
+		destDir = rest[1]
+	}
+
+	claimServer, id, key, err := cloud.ParseClaim(claim)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+
+	client := cloud.NewClient(resolveDownServer(claimServer, server))
+	paths, err := client.Download(context.Background(), id, key, destDir)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	for _, p := range paths {
+		fmt.Fprintln(stdout, p)
+	}
+	fmt.Fprintf(stderr, "downloaded %d file(s)\n", len(paths))
+	return 0
+}
+
+// resolveDownServer picks the cloud server `down` talks to. Precedence: an
+// explicit --server always wins (self-hosters pointing at their own
+// instance); otherwise prefer the server embedded in a full claim link, so a
+// link always resolves to the server it came from even if the user has a
+// different --server habit; a bare <id>#k=<key> code has no embedded server,
+// so fall back to the first-party default.
+func resolveDownServer(claimServer, flagServer string) string {
+	if flagServer != "" {
+		return flagServer
+	}
+	if claimServer != "" {
+		return claimServer
+	}
+	return defaultCloudServer
+}
