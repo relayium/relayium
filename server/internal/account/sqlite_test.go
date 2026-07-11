@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -777,5 +778,45 @@ func TestDeleteSpentMagicTokens(t *testing.T) {
 	_ = s.db.QueryRowContext(ctx, `SELECT token_hash FROM magic_tokens`).Scan(&hash)
 	if hash != "live" {
 		t.Fatalf("surviving token = %q, want live", hash)
+	}
+}
+
+// A file-backed store must open in WAL mode with a separate read pool, and admin
+// reads (routed through it) must see writes made on the writer connection.
+func TestFileStoreReadPoolAndWAL(t *testing.T) {
+	dsn := t.TempDir() + "/acct.db"
+	s, err := OpenSQLite(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if s.rdb == nil {
+		t.Fatal("file-backed store should have a separate read pool")
+	}
+	var mode string
+	if err := s.db.QueryRow(`PRAGMA journal_mode`).Scan(&mode); err != nil {
+		t.Fatal(err)
+	}
+	if strings.ToLower(mode) != "wal" {
+		t.Fatalf("journal_mode = %q, want wal", mode)
+	}
+
+	ctx := context.Background()
+	if _, err := s.UpsertUserByEmail(ctx, "rp@example.com", "RP"); err != nil {
+		t.Fatal(err)
+	}
+	rows, total, err := s.AdminListUsers(ctx, AdminUserQuery{Limit: 10, Period: periodOf(1)})
+	if err != nil {
+		t.Fatalf("AdminListUsers via read pool: %v", err)
+	}
+	if total != 1 || len(rows) != 1 {
+		t.Fatalf("read pool list: total=%d rows=%d, want 1/1", total, len(rows))
+	}
+	m, err := s.AdminMetrics(ctx, periodOf(1), 1)
+	if err != nil {
+		t.Fatalf("AdminMetrics via read pool: %v", err)
+	}
+	if m.TotalUsers != 1 {
+		t.Fatalf("read pool metrics: users=%d, want 1", m.TotalUsers)
 	}
 }

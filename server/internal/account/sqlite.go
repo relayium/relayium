@@ -14,7 +14,23 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-type SQLiteStore struct{ db *sql.DB }
+// SQLiteStore keeps a single writer connection (db) — write-path atomicity
+// relies on MaxOpenConns(1) serializing writers — plus, for a file-backed DB, a
+// separate read-only pool (rdb) so a slow admin query doesn't block the writer.
+// rdb is nil for :memory: (a second connection would see a separate empty DB).
+type SQLiteStore struct {
+	db  *sql.DB
+	rdb *sql.DB
+}
+
+// reader returns the read pool for heavy reads, falling back to the writer
+// connection when there is no separate pool (:memory:).
+func (s *SQLiteStore) reader() *sql.DB {
+	if s.rdb != nil {
+		return s.rdb
+	}
+	return s.db
+}
 
 const schema = `
 CREATE TABLE IF NOT EXISTS users (
@@ -310,7 +326,31 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
-	return &SQLiteStore{db: db}, nil
+
+	s := &SQLiteStore{db: db}
+	// For a file-backed DB, switch to WAL (readers don't block the single writer
+	// and vice versa) and open a separate read-only pool so a slow admin query
+	// runs off the writer connection instead of stalling uploads/heartbeats.
+	// :memory: keeps the single connection (a second one would be a distinct DB).
+	if !strings.Contains(dsn, ":memory:") {
+		if _, err := db.ExecContext(context.Background(), `PRAGMA journal_mode = WAL`); err != nil {
+			db.Close()
+			return nil, err
+		}
+		rdb, err := sql.Open("sqlite", dsn)
+		if err != nil {
+			db.Close()
+			return nil, err
+		}
+		rdb.SetMaxOpenConns(4)
+		if _, err := rdb.ExecContext(context.Background(), `PRAGMA busy_timeout = 5000`); err != nil {
+			rdb.Close()
+			db.Close()
+			return nil, err
+		}
+		s.rdb = rdb
+	}
+	return s, nil
 }
 
 // backfillCanonicalEmail populates canonical_email for pre-existing rows the
@@ -345,7 +385,12 @@ func backfillCanonicalEmail(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-func (s *SQLiteStore) Close() error { return s.db.Close() }
+func (s *SQLiteStore) Close() error {
+	if s.rdb != nil {
+		s.rdb.Close()
+	}
+	return s.db.Close()
+}
 
 func newID() string {
 	b := make([]byte, 16)
@@ -839,7 +884,7 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context, q AdminUserQuery) ([]A
 	}
 
 	var total int64
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users u`+where, whereArgs...).Scan(&total); err != nil {
+	if err := s.reader().QueryRowContext(ctx, `SELECT COUNT(*) FROM users u`+where, whereArgs...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
@@ -863,7 +908,7 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context, q AdminUserQuery) ([]A
 
 	listArgs := append([]any{q.Period, q.Period, q.Period, q.Now}, whereArgs...)
 	listArgs = append(listArgs, q.Limit, q.Offset)
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.reader().QueryContext(ctx, `
 		SELECT u.id, u.email, u.display_name, u.created_at,
 		       (SELECT COUNT(*) FROM devices d WHERE d.user_id = u.id),
 		       (SELECT COALESCE(SUM(up.bytes),0) FROM usage_periods up
@@ -942,7 +987,7 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context, q AdminUserQuery) ([]A
 
 func (s *SQLiteStore) AdminMetrics(ctx context.Context, period string, now int64) (AdminMetrics, error) {
 	var m AdminMetrics
-	err := s.db.QueryRowContext(ctx, `
+	err := s.reader().QueryRowContext(ctx, `
 		SELECT
 		  (SELECT COUNT(*) FROM users),
 		  (SELECT COUNT(*) FROM stored_files WHERE expires_at > ?),
