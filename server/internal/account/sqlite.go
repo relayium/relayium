@@ -248,17 +248,23 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 	}
 	// max_downloads generalizes burn_after_read into a download-count limit:
 	// 0 = unlimited until TTL, N = delete after the Nth download, 1 = burn.
-	// Freshly added (err==nil) → backfill existing burn rows to max_downloads=1
-	// once so pre-existing burn-after-read files keep their exact semantics;
-	// duplicate column name → already migrated, skip the backfill.
 	if _, err := db.ExecContext(context.Background(),
-		`ALTER TABLE stored_files ADD COLUMN max_downloads INTEGER NOT NULL DEFAULT 0`); err != nil {
-		if !strings.Contains(err.Error(), "duplicate column name") {
-			db.Close()
-			return nil, err
-		}
-	} else if _, err := db.ExecContext(context.Background(),
-		`UPDATE stored_files SET max_downloads = 1 WHERE burn_after_read = 1`); err != nil {
+		`ALTER TABLE stored_files ADD COLUMN max_downloads INTEGER NOT NULL DEFAULT 0`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column name") {
+		db.Close()
+		return nil, err
+	}
+	// Backfill pre-existing burn rows to max_downloads=1 UNCONDITIONALLY on every
+	// boot — NOT gated on the ALTER succeeding. If the process died between a
+	// successful ALTER and this UPDATE, gating it on the ALTER would make every
+	// later boot see "duplicate column name", skip the backfill forever, and leave
+	// pre-existing burn-after-read rows at max_downloads=0 (downloadable
+	// indefinitely — defeating burn-after-read). Running it every boot self-heals
+	// that crash window. It's idempotent and cheap: the AND max_downloads = 0 guard
+	// scopes it to only the rows that still need it (re-asserting 1 where already 1
+	// is a no-op; our model guarantees burn_after_read=1 ⟺ max_downloads=1).
+	if _, err := db.ExecContext(context.Background(),
+		`UPDATE stored_files SET max_downloads = 1 WHERE burn_after_read = 1 AND max_downloads = 0`); err != nil {
 		db.Close()
 		return nil, err
 	}
