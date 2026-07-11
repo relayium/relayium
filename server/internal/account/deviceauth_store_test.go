@@ -56,3 +56,37 @@ func TestCLITokenLookup(t *testing.T) {
 		t.Fatalf("touch: %v", err)
 	}
 }
+
+// Deleting a CLI device is the token-revocation path: DELETE /api/devices/{id}
+// does a bare DELETE FROM devices, which (with FKs on) would fail the
+// cli_tokens.device_id constraint unless it cascades. ON DELETE CASCADE makes
+// the delete succeed AND drop the token row, so a leaked rlm_cli_ token stops
+// authenticating.
+func TestDeleteCLIDeviceRevokesToken(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	u, err := st.UpsertUserByEmail(ctx, "revoke@example.com", "Revoke User")
+	if err != nil {
+		t.Fatalf("upsert user: %v", err)
+	}
+	d, err := st.UpsertDevice(ctx, Device{ID: "dev-cli", UserID: u.ID, Name: "cli-laptop", CreatedAt: 1, Kind: "cli"})
+	if err != nil {
+		t.Fatalf("upsert device: %v", err)
+	}
+	raw := "rlm_cli_secret"
+	if err := st.CreateCLIToken(ctx, CLIToken{TokenHash: hashToken(raw), UserID: u.ID, DeviceID: d.ID, CreatedAt: 1}); err != nil {
+		t.Fatalf("create cli token: %v", err)
+	}
+	// Sanity: token authenticates before deletion.
+	if _, _, ok, _ := st.GetCLITokenUser(ctx, hashToken(raw)); !ok {
+		t.Fatal("token should resolve before device deletion")
+	}
+	// The revocation path: deleting the device must not 500 on the FK...
+	if err := st.DeleteDevice(ctx, d.ID, u.ID); err != nil {
+		t.Fatalf("DeleteDevice failed (FK not cascading?): %v", err)
+	}
+	// ...and the token must no longer authenticate (cascade-deleted).
+	if _, _, ok, err := st.GetCLITokenUser(ctx, hashToken(raw)); err != nil || ok {
+		t.Fatalf("token must be revoked after device delete: ok=%v err=%v", ok, err)
+	}
+}

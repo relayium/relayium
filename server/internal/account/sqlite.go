@@ -186,7 +186,11 @@ CREATE TABLE IF NOT EXISTS cli_tokens (
   created_at   INTEGER NOT NULL,
   last_seen_at INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY(user_id) REFERENCES users(id),
-  FOREIGN KEY(device_id) REFERENCES devices(id)
+  -- ON DELETE CASCADE makes DELETE /api/devices/{id} (bare DELETE FROM devices)
+  -- the CLI-token revocation path: removing a CLI device cascade-deletes its
+  -- token row instead of failing the FK, so a leaked rlm_cli_ token can be
+  -- invalidated from the web devices page (per spec). user_id stays un-cascaded.
+  FOREIGN KEY(device_id) REFERENCES devices(id) ON DELETE CASCADE
 );
 `
 
