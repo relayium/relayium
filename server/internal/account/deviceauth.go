@@ -138,7 +138,25 @@ func (s *Service) handleDeviceApprove(w http.ResponseWriter, r *http.Request, u 
 	}
 	ctx := r.Context()
 	now := s.now().Unix()
+	// Validate-then-mint: settle the raw token + hash in memory only, then let
+	// ApproveDeviceAuth gate on user_code FIRST. An ordinary expired/mistyped/
+	// double-submitted code fails here having created no DB rows, so it can't
+	// leave a phantom "CLI" device in the user's list or an orphaned cli_token.
 	raw := "rlm_cli_" + randToken()
+	h := hashToken(raw)
+	ok, err := s.store.ApproveDeviceAuth(ctx, in.UserCode, u.ID, h, raw, now)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_code"})
+		return
+	}
+	// Only now that the code is validated do we persist the device + token. A
+	// poll could observe pending_token in the microsecond window before these
+	// commit; that's benign — the token row is created regardless, so a CLI
+	// retry (5s poll interval) self-heals. No rollback machinery needed.
 	dev, err := s.store.UpsertDevice(ctx, Device{
 		ID: newID(), UserID: u.ID, Name: "CLI", Kind: "cli", CreatedAt: now,
 	})
@@ -147,18 +165,9 @@ func (s *Service) handleDeviceApprove(w http.ResponseWriter, r *http.Request, u 
 		return
 	}
 	if err := s.store.CreateCLIToken(ctx, CLIToken{
-		TokenHash: hashToken(raw), UserID: u.ID, DeviceID: dev.ID, CreatedAt: now,
+		TokenHash: h, UserID: u.ID, DeviceID: dev.ID, CreatedAt: now,
 	}); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
-	ok, err := s.store.ApproveDeviceAuth(ctx, in.UserCode, u.ID, hashToken(raw), raw, now)
-	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
-	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_code"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "account_email": u.Email})

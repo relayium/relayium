@@ -1,6 +1,7 @@
 package account
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -86,6 +87,47 @@ func TestDeviceCodeFlow(t *testing.T) {
 	p3 := doJSONMap(t, client, ts.URL+"/api/cli/device/poll", nil, `{"device_code":"`+deviceCode+`"}`)
 	if p3["status"] == "ok" {
 		t.Fatal("token must be issued only once")
+	}
+}
+
+// TestDeviceApproveInvalidCodeCreatesNoRows is the regression test for the
+// validate-then-mint fix: an ordinary bad/never-started user_code must 400
+// without leaving a phantom "CLI" device or an orphaned cli_token behind.
+func TestDeviceApproveInvalidCodeCreatesNoRows(t *testing.T) {
+	ts, store, mail := newUserNodesServer(t)
+	cookie := loginCookie(t, ts, mail, "badapprove@example.com")
+
+	// Approve a code that was never started.
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/cli/device/approve",
+		strings.NewReader(`{"user_code":"ZZZZ-ZZZZ"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(cookie)
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatalf("do: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("want 400 for unknown user_code, got %d", resp.StatusCode)
+	}
+
+	// The user must have gained no device (CLI or otherwise) from the failed
+	// approve, which also means no CLI token row was minted for one.
+	ctx := context.Background()
+	// UpsertUserByEmail is idempotent: the account already exists from
+	// loginCookie, so this returns it (resolving its ID) without inserting.
+	u, err := store.UpsertUserByEmail(ctx, "badapprove@example.com", "")
+	if err != nil {
+		t.Fatalf("lookup user: %v", err)
+	}
+	devs, err := store.ListDevices(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("list devices: %v", err)
+	}
+	for _, d := range devs {
+		if d.Kind == "cli" {
+			t.Fatalf("failed approve left a phantom cli device: %+v", d)
+		}
 	}
 }
 
