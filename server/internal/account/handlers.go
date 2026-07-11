@@ -103,6 +103,11 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/cli/device/start", s.handleDeviceStart)
 	mux.HandleFunc("POST /api/cli/device/poll", s.handleDevicePoll)
 	mux.HandleFunc("POST /api/cli/device/approve", s.RequireSession(s.handleDeviceApprove))
+	// GET /device is the human-facing verification_uri the CLI shows
+	// (RFC 8628-style): server-rendered, session-gated for the authed view,
+	// public for the anon "please sign in" view. Session-authed POSTs to
+	// approve happen client-side via fetch, see devicepage.go.
+	mux.HandleFunc("GET /device", s.handleDevicePage)
 	s.registerFileRoutes(mux)
 	return mux
 }
