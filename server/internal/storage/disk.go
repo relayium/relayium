@@ -31,7 +31,7 @@ const tmpPrefix = ".tmp-"
 type DiskStore struct{ dir string }
 
 func NewDiskStore(dir string) (*DiskStore, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
 	return &DiskStore{dir: dir}, nil
@@ -51,7 +51,7 @@ func (d *DiskStore) Put(ctx context.Context, key string, r io.Reader) (int64, er
 		return 0, ErrInvalidKey
 	}
 	shardDir, full := d.paths(key)
-	if err := os.MkdirAll(shardDir, 0o755); err != nil {
+	if err := os.MkdirAll(shardDir, 0o700); err != nil {
 		return 0, err
 	}
 	// Write to a temp file in the same dir, then atomically rename, so a
