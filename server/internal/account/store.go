@@ -20,6 +20,12 @@ type User struct {
 	// OnlyOwnNodes restricts this user's transfers to their own self-hosted
 	// nodes (SP3 BYO nodes), excluding the shared fleet.
 	OnlyOwnNodes bool
+	// DeletedAt is when the user requested account deletion (unix seconds);
+	// 0 = active account, not scheduled for deletion.
+	DeletedAt int64
+	// PurgeAfter is when GC may hard-delete this account and its data (unix
+	// seconds); 0 = not scheduled. Set alongside DeletedAt with a grace period.
+	PurgeAfter int64
 }
 
 // Identity links an external auth subject (google sub, or the email itself) to a user.
@@ -297,6 +303,16 @@ type Store interface {
 	SetEmailVerified(ctx context.Context, userID string) error
 	// SetOnlyOwnNodes toggles the BYO-nodes-only restriction (SP3) for a user.
 	SetOnlyOwnNodes(ctx context.Context, userID string, on bool) error
+	// SetAccountDeletion schedules a user for deletion: sets deleted_at and
+	// purge_after (the GC hard-delete deadline), resetting purge_reminder_sent
+	// so a re-request re-arms the reminder.
+	SetAccountDeletion(ctx context.Context, userID string, deletedAt, purgeAfter int64) error
+	// ClearAccountDeletion cancels a pending deletion, zeroing all three
+	// lifecycle columns (deleted_at, purge_after, purge_reminder_sent).
+	ClearAccountDeletion(ctx context.Context, userID string) error
+	// MarkPurgeReminderSent records when the pre-purge reminder email was sent,
+	// so GC sends it at most once per deletion request.
+	MarkPurgeReminderSent(ctx context.Context, userID string, at int64) error
 	// sessions
 	CreateSession(ctx context.Context, s Session) error
 	GetSession(ctx context.Context, id string) (Session, bool, error)

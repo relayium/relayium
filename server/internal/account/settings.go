@@ -15,6 +15,11 @@ const (
 	SettingDefaultRetention    = "default_retention"
 	SettingDefaultMaxDownloads = "default_max_downloads"
 	SettingMaxMaxDownloads     = "max_max_downloads"
+	// SettingAccountGraceDays is the grace period (days) between a self-deletion
+	// request and GC's hard purge; SettingAccountReminderDays is how many days
+	// before purge the one-time reminder email is sent.
+	SettingAccountGraceDays    = "account_grace_days"
+	SettingAccountReminderDays = "account_purge_reminder_days"
 )
 
 // minTTL is the floor a requested TTL is clamped up to; well below default_ttl.
@@ -44,6 +49,12 @@ type Settings struct {
 	// MaxMaxDownloads bounds any resolved MaxDownloads (explicit or default);
 	// 0 = unbounded.
 	MaxMaxDownloads int64
+	// AccountGraceDays is the grace period between a self-deletion request and
+	// GC's hard purge of the account and its data.
+	AccountGraceDays int64
+	// AccountReminderDays is how many days before purge the one-time reminder
+	// email is sent.
+	AccountReminderDays int64
 }
 
 // settingOr returns the DB value for key, or def when unset/on error (fail to env).
@@ -67,6 +78,8 @@ func (s *Service) resolveSettings(ctx context.Context) Settings {
 		DefaultRetention:    s.settingOr(ctx, SettingDefaultRetention, s.cfg.DefaultRetention),
 		DefaultMaxDownloads: s.settingOr(ctx, SettingDefaultMaxDownloads, s.cfg.DefaultMaxDownloads),
 		MaxMaxDownloads:     s.settingOr(ctx, SettingMaxMaxDownloads, s.cfg.MaxMaxDownloads),
+		AccountGraceDays:    s.settingOr(ctx, SettingAccountGraceDays, s.cfg.AccountGraceDays),
+		AccountReminderDays: s.settingOr(ctx, SettingAccountReminderDays, s.cfg.AccountReminderDays),
 	}
 }
 
@@ -142,6 +155,8 @@ func (s *Service) SeedSettings(ctx context.Context) error {
 		{SettingDefaultRetention, s.cfg.DefaultRetention},
 		{SettingDefaultMaxDownloads, s.cfg.DefaultMaxDownloads},
 		{SettingMaxMaxDownloads, s.cfg.MaxMaxDownloads},
+		{SettingAccountGraceDays, s.cfg.AccountGraceDays},
+		{SettingAccountReminderDays, s.cfg.AccountReminderDays},
 	}
 	now := s.now().Unix()
 	for _, d := range defaults {

@@ -86,8 +86,8 @@ func TestSeedSettingsInsertsDefaultsOnceAndKeepsExisting(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	all, _ := store.ListSettings(ctx)
-	if len(all) != 8 {
-		t.Fatalf("want 8 settings seeded, got %d (%+v)", len(all), all)
+	if len(all) != 10 {
+		t.Fatalf("want 10 settings seeded, got %d (%+v)", len(all), all)
 	}
 	if v, _, _ := store.GetSetting(ctx, SettingDefaultRetention); v != retentionTTL {
 		t.Fatalf("seed default_retention = %d, want %d", v, int64(retentionTTL))

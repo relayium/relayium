@@ -193,6 +193,11 @@ CREATE TABLE IF NOT EXISTS cli_tokens (
   -- invalidated from the web devices page (per spec). user_id stays un-cascaded.
   FOREIGN KEY(device_id) REFERENCES devices(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS usage_archive (
+  period         TEXT PRIMARY KEY,
+  upload_bytes   INTEGER NOT NULL DEFAULT 0,
+  download_bytes INTEGER NOT NULL DEFAULT 0
+);
 `
 
 // connPragmas are applied to every connection via the DSN (not a one-shot
@@ -267,6 +272,13 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// device-code CLI login flow: distinguishes a CLI-registered device
 		// ("cli") from the default browser device. Existing rows default to ''.
 		`ALTER TABLE devices ADD COLUMN kind TEXT NOT NULL DEFAULT ''`,
+		// Account self-deletion lifecycle: deleted_at marks a pending-deletion
+		// request, purge_after is the GC hard-delete deadline, purge_reminder_sent
+		// tracks the one-time pre-purge reminder email. 0 = active/not scheduled
+		// for existing and new rows alike, so no backfill is needed.
+		`ALTER TABLE users ADD COLUMN deleted_at INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE users ADD COLUMN purge_after INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE users ADD COLUMN purge_reminder_sent INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -468,8 +480,8 @@ func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName 
 	email = normEmail(email)
 	var u User
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, email, display_name, created_at, email_verified FROM users WHERE email = ?`, email,
-	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified)
+		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after FROM users WHERE email = ?`, email,
+	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter)
 	if err == nil {
 		return u, nil
 	}
@@ -489,9 +501,9 @@ func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName 
 func (s *SQLiteStore) UserByCanonicalEmail(ctx context.Context, canonical string) (User, bool, error) {
 	var u User
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, email, display_name, created_at, email_verified
+		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after
 		   FROM users WHERE canonical_email = ? LIMIT 1`, canonical,
-	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified)
+	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter)
 	if err == sql.ErrNoRows {
 		return User{}, false, nil
 	}
@@ -542,8 +554,8 @@ func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (User, error) 
 	var u User
 	var strict int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes FROM users WHERE id = ?`, id,
-	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &strict)
+		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes, deleted_at, purge_after FROM users WHERE id = ?`, id,
+	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &strict, &u.DeletedAt, &u.PurgeAfter)
 	if err == sql.ErrNoRows {
 		return User{}, ErrNotFound
 	}
@@ -553,6 +565,29 @@ func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (User, error) 
 
 func (s *SQLiteStore) SetOnlyOwnNodes(ctx context.Context, userID string, on bool) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE users SET only_own_nodes = ? WHERE id = ?`, b2i(on), userID)
+	return err
+}
+
+// SetAccountDeletion schedules a user for deletion (deleted_at + purge_after),
+// resetting purge_reminder_sent so a cancel-then-re-request re-arms it.
+func (s *SQLiteStore) SetAccountDeletion(ctx context.Context, userID string, deletedAt, purgeAfter int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET deleted_at = ?, purge_after = ?, purge_reminder_sent = 0 WHERE id = ?`,
+		deletedAt, purgeAfter, userID)
+	return err
+}
+
+// ClearAccountDeletion cancels a pending deletion, zeroing all three
+// lifecycle columns.
+func (s *SQLiteStore) ClearAccountDeletion(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET deleted_at = 0, purge_after = 0, purge_reminder_sent = 0 WHERE id = ?`, userID)
+	return err
+}
+
+// MarkPurgeReminderSent records when the pre-purge reminder email was sent.
+func (s *SQLiteStore) MarkPurgeReminderSent(ctx context.Context, userID string, at int64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET purge_reminder_sent = ? WHERE id = ?`, at, userID)
 	return err
 }
 

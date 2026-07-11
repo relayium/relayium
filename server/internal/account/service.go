@@ -65,6 +65,12 @@ type Config struct {
 	DefaultMaxDownloads int64
 	// MaxMaxDownloads hard-bounds any resolved MaxDownloads; 0 = unbounded.
 	MaxMaxDownloads int64
+	// AccountGraceDays is the grace period (days) between a self-deletion
+	// request and GC's hard purge of the account and its data (default 30).
+	AccountGraceDays int64
+	// AccountReminderDays is how many days before purge the one-time reminder
+	// email is sent (default 3).
+	AccountReminderDays int64
 	// NodeToken is the fleet bootstrap bearer token relay nodes present to
 	// /api/nodes/*. Empty disables the node API (endpoints return 404).
 	NodeToken string

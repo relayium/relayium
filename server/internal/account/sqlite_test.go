@@ -843,3 +843,23 @@ func TestForeignKeysEnforced(t *testing.T) {
 		t.Fatalf("RecordUsage for a real user should succeed: %v", err)
 	}
 }
+
+func TestAccountDeletionColumns(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	u, _ := st.UpsertUserByEmail(ctx, "a@example.com", "")
+	if err := st.SetAccountDeletion(ctx, u.ID, 100, 100+30*86400); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := st.GetUserByID(ctx, u.ID)
+	if got.DeletedAt != 100 || got.PurgeAfter != 100+30*86400 {
+		t.Fatalf("deletion cols not persisted: %+v", got)
+	}
+	if err := st.ClearAccountDeletion(ctx, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	got2, _ := st.GetUserByID(ctx, u.ID)
+	if got2.DeletedAt != 0 || got2.PurgeAfter != 0 {
+		t.Fatalf("clear failed: %+v", got2)
+	}
+}

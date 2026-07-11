@@ -103,6 +103,10 @@ func main() {
 		"stored-transfer default download-count cap used by the count retention policy (default 5)")
 	maxMaxDownloads := flag.Int64("max-max-downloads", envInt64("RELAYIUM_MAX_MAX_DOWNLOADS", 100),
 		"stored-transfer hard ceiling on a requested download-count cap (default 100)")
+	accountGraceDays := flag.Int64("account-grace-days", envInt64("RELAYIUM_ACCOUNT_GRACE_DAYS", 30),
+		"grace period in days between a self-deletion request and GC's hard purge of the account (default 30)")
+	accountReminderDays := flag.Int64("account-purge-reminder-days", envInt64("RELAYIUM_ACCOUNT_PURGE_REMINDER_DAYS", 3),
+		"days before purge the one-time pre-purge reminder email is sent (default 3)")
 	trustedProxies := flag.String("trusted-proxies", envStr("RELAYIUM_TRUSTED_PROXIES", ""), "comma-separated CIDRs (or IPs) of reverse proxies whose X-Forwarded-For is trusted; empty (default) ignores XFF and uses the direct peer IP")
 	blobDiskMax := flag.Int64("blob-disk-max", envInt64("RELAYIUM_BLOB_DISK_MAX", 0),
 		"global blob-volume high-water mark in bytes; new uploads 503 once used >= this (0 disables the global soft cap)")
@@ -250,6 +254,8 @@ func main() {
 			DefaultRetention:    *defaultRetention,
 			DefaultMaxDownloads: *defaultMaxDownloads,
 			MaxMaxDownloads:     *maxMaxDownloads,
+			AccountGraceDays:    *accountGraceDays,
+			AccountReminderDays: *accountReminderDays,
 			NodeToken:           *nodeToken,
 			EnableUserNodes:     *enableUserNodes,
 		})
