@@ -419,7 +419,8 @@ func (s *Service) handleAdminNodeLimits(w http.ResponseWriter, r *http.Request) 
 	id := r.PathValue("id")
 	gb := func(k string) (int64, bool) {
 		n, err := strconv.ParseInt(strings.TrimSpace(r.FormValue(k)), 10, 64)
-		return n, err == nil && n >= 0 // 0 allowed = unlimited
+		// 0 allowed = unlimited; reject values whose GB->bytes shift would overflow int64.
+		return n, err == nil && n >= 0 && n <= math.MaxInt64>>30
 	}
 	tGB, ok1 := gb("traffic_limit_gb")
 	dGB, ok2 := gb("disk_limit_gb")

@@ -67,6 +67,51 @@ func TestAdminDeleteFleetNode(t *testing.T) {
 	}
 }
 
+func TestAdminRevokeFleetToken(t *testing.T) {
+	ts, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	if err := store.CreateFleetToken(context.Background(), FleetToken{
+		ID: "ft-rev", TokenHash: hashToken("x"), Name: "n", CreatedAt: 1,
+	}); err != nil {
+		t.Fatalf("CreateFleetToken: %v", err)
+	}
+
+	req, _ := http.NewRequest("POST", ts.URL+"/admin/nodes/token/ft-rev/revoke", nil)
+	req.AddCookie(cookie)
+	resp, _ := client.Do(req)
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("revoke token: want 302, got %d", resp.StatusCode)
+	}
+	toks, _ := store.ListActiveFleetTokens(context.Background())
+	if len(toks) != 0 {
+		t.Fatalf("token still active after revoke: %+v", toks)
+	}
+}
+
+func TestAdminSetNodeLimitsUserNodeNotFound(t *testing.T) {
+	ts, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	n, _ := store.UpsertNode(context.Background(), Node{
+		OwnerType: "user", OwnerUserID: "u1", URLs: []string{"turn:9.9.9.9:3478"},
+		TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1,
+	})
+
+	req, _ := http.NewRequest("POST", ts.URL+"/admin/nodes/"+n.ID+"/limits",
+		strings.NewReader("traffic_limit_gb=5&disk_limit_gb=5"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookie)
+	resp, _ := client.Do(req)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("set limits on user node: want 404, got %d", resp.StatusCode)
+	}
+}
+
 func TestAdminNodeRoutesRequireAdmin(t *testing.T) {
 	ts, _ := newAdminSettingsServer(t)
 	client := ts.Client()

@@ -1243,7 +1243,7 @@ func (s *SQLiteStore) DeleteNode(ctx context.Context, id, ownerUserID string) er
 // SetNodeLimits sets a node's admin hard caps (bytes; 0 = unlimited).
 func (s *SQLiteStore) SetNodeLimits(ctx context.Context, nodeID string, trafficLimit, diskLimit int64) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE nodes SET traffic_limit_bytes = ?, disk_limit_bytes = ? WHERE id = ?`,
+		`UPDATE nodes SET traffic_limit_bytes = ?, disk_limit_bytes = ? WHERE id = ? AND owner_type = 'fleet'`,
 		trafficLimit, diskLimit, nodeID)
 	if err != nil {
 		return err
