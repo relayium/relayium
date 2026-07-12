@@ -282,7 +282,7 @@ const fr: Messages = {
     cloudBody:
       "up chiffre les fichiers localement, téléverse le chiffré et affiche un lien de récupération. Ajoutez un drapeau de rétention pour contrôler sa durée de vie (sinon la valeur par défaut de votre compte s'applique) : --burn (un téléchargement), --ttl 7d (durée fixe) ou --max-downloads 5 (nombre fixe). Sur l'autre machine, passez le lien à down — aucune connexion requise.",
     cloudLoginNote:
-      "login est une connexion d'appareil approuvée dans le navigateur : la CLI affiche un code, vous ouvrez relayium.com/device et le confirmez. whoami montre le compte lié ; logout l'efface.",
+      "login est une connexion d'appareil approuvée dans le navigateur : la CLI affiche un code, vous ouvrez relayium.com/device et le confirmez. Le côté téléversement demande un compte gratuit, alors connectez-vous d'abord sur relayium.com — ou créez-en un. whoami montre le compte lié ; logout l'efface.",
     cloudInteropNote:
       "Le lien est le même que celui du site : un lien up s'ouvre dans un navigateur, et un lien de partage créé sur relayium.com peut être récupéré avec down.",
     cloudPrivacyNote:

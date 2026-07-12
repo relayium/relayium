@@ -24,13 +24,24 @@ const en = {
       ],
     },
     {
+      heading: "Before you start",
+      body: [
+        "Two one-time things before your first up — install the CLI, and have an account. Already have both? Skip ahead.",
+      ],
+      code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+      bullets: [
+        "Install the CLI so the relayium command exists. The line above drops a prebuilt binary on your PATH (macOS and Linux; on Windows, grab the .zip from the releases page); relayium --version confirms it, and relayium.com/cli lists every install option. Skip this and relayium login just prints 'command not found'.",
+        "Have a free Relayium account. The browser step approves the login against your account, so you need one before you can approve — sign in at relayium.com first, or create one there if you haven't. Only uploading needs the account; downloading never does.",
+      ],
+    },
+    {
       heading: "Bind this machine to your account (once)",
       body: [
         "up needs to know whose account to store under, so sign in once per machine. It's a browser-approved device login — nothing is typed into the terminal except the code you confirm:",
       ],
       code: ["relayium login"],
       bullets: [
-        "The CLI prints a short code and a URL (relayium.com/device). Open it in a browser where you're already signed in, enter the code, and approve — this machine is now bound.",
+        "The CLI prints a short code and a URL (relayium.com/device). Open it in the browser where you're signed in to relayium.com (sign in there first if you aren't), enter the code, and approve — this machine is now bound.",
         "The login is saved under ~/.config/relayium/, so you only do it once per machine. relayium whoami shows who you're bound to; relayium logout clears it.",
         "To revoke a machine later, delete its device from your account's devices page in the browser.",
       ],
@@ -135,13 +146,24 @@ const zh = {
       ],
     },
     {
+      heading: "开始之前",
+      body: [
+        "第一次 up 之前有两件一次性的事——装好 CLI，以及有个账号。两样都齐了就往下跳。",
+      ],
+      code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+      bullets: [
+        "先装 CLI，这样 relayium 命令才存在。上面这行会把预编译好的二进制放到你的 PATH 上（macOS 和 Linux；Windows 请从发布页下载 .zip）；relayium --version 可确认是否装好，relayium.com/cli 列出了所有安装方式。不装这一步，relayium login 只会报 “command not found”。",
+        "有一个免费的 Relayium 账号。浏览器那一步是拿你的账号来批准这次登录，所以你得先有账号才能批准——先在 relayium.com 登录，没有就在那里注册一个。只有上传才需要账号；下载从不需要。",
+      ],
+    },
+    {
       heading: "把这台机器绑定到你的账号（一次即可）",
       body: [
         "up 需要知道存到谁的账号下，所以每台机器登录一次。这是浏览器授权的设备登录——终端里除了你要确认的那个码，什么都不用输：",
       ],
       code: ["relayium login"],
       bullets: [
-        "CLI 会打印一个短码和一个网址（relayium.com/device）。在已登录的浏览器里打开它、输入短码并确认——这台机器就绑定好了。",
+        "CLI 会打印一个短码和一个网址（relayium.com/device）。在已登录 relayium.com 的浏览器里打开它（若尚未登录，先在那里登录），输入短码并确认——这台机器就绑定好了。",
         "登录信息存在 ~/.config/relayium/ 下，所以每台机器只需做一次。relayium whoami 显示当前绑定的账号；relayium logout 清除它。",
         "以后要撤销某台机器，在浏览器里从账号的“设备”页删掉对应设备即可。",
       ],
@@ -246,13 +268,24 @@ const ja = {
       ],
     },
     {
+      heading: "始める前に",
+      body: [
+        "最初の up の前に、一度だけ済ませることが二つあります——CLI のインストールと、アカウントの用意です。両方そろっていれば読み飛ばしてください。",
+      ],
+      code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+      bullets: [
+        "まず CLI をインストールして relayium コマンドが存在するようにします。上の一行でビルド済みバイナリが PATH に入ります（macOS と Linux。Windows は releases ページから .zip を取得）。relayium --version でインストールを確認でき、relayium.com/cli にすべてのインストール方法があります。これをしないと relayium login は「command not found」と出るだけです。",
+        "無料の Relayium アカウントを用意します。ブラウザでの手順はあなたのアカウントに対してログインを承認するので、承認する前にアカウントが必要です——まず relayium.com でサインインし、なければそこで作成してください。アカウントが要るのはアップロードだけで、ダウンロードには不要です。",
+      ],
+    },
+    {
       heading: "このマシンをアカウントにバインドする（一度だけ）",
       body: [
         "up は誰のアカウントに保存するかを知る必要があるため、マシンごとに一度サインインします。ブラウザで承認するデバイスログインで、ターミナルには確認するコード以外は何も入力しません：",
       ],
       code: ["relayium login"],
       bullets: [
-        "CLI が短いコードと URL（relayium.com/device）を表示します。サインイン済みのブラウザで開いてコードを入力し承認すると、このマシンがバインドされます。",
+        "CLI が短いコードと URL（relayium.com/device）を表示します。relayium.com にサインイン済みのブラウザで開き（未サインインならまずそこでサインイン）、コードを入力して承認すると、このマシンがバインドされます。",
         "ログイン情報は ~/.config/relayium/ に保存されるので、マシンごとに一度で済みます。relayium whoami でバインド先を表示し、relayium logout で解除します。",
         "後でマシンを取り消すには、ブラウザのアカウントの「デバイス」ページから該当デバイスを削除します。",
       ],
@@ -357,13 +390,24 @@ const ko = {
       ],
     },
     {
+      heading: "시작하기 전에",
+      body: [
+        "첫 up 전에 한 번만 해두면 되는 두 가지 — CLI 설치와 계정 준비입니다. 둘 다 있으면 건너뛰세요.",
+      ],
+      code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+      bullets: [
+        "먼저 CLI를 설치해 relayium 명령이 존재하게 합니다. 위 한 줄이 미리 빌드된 바이너리를 PATH에 올립니다(macOS와 Linux; Windows는 releases 페이지에서 .zip을 받으세요). relayium --version 으로 설치를 확인할 수 있고, relayium.com/cli 에 모든 설치 방법이 있습니다. 이 단계를 건너뛰면 relayium login 은 “command not found”만 출력합니다.",
+        "무료 Relayium 계정을 준비합니다. 브라우저 단계는 당신의 계정에 대해 로그인을 승인하므로, 승인하려면 먼저 계정이 있어야 합니다 — relayium.com 에서 로그인하거나 없으면 거기서 새로 만드세요. 계정이 필요한 것은 업로드뿐이고 다운로드에는 필요 없습니다.",
+      ],
+    },
+    {
       heading: "이 기기를 계정에 바인딩하기 (한 번만)",
       body: [
         "up 은 누구의 계정에 저장할지 알아야 하므로 기기마다 한 번 로그인합니다. 브라우저에서 승인하는 기기 로그인이며, 터미널에는 확인할 코드 외에는 아무것도 입력하지 않습니다:",
       ],
       code: ["relayium login"],
       bullets: [
-        "CLI 가 짧은 코드와 URL(relayium.com/device)을 표시합니다. 로그인된 브라우저에서 열어 코드를 입력하고 승인하면 이 기기가 바인딩됩니다.",
+        "CLI 가 짧은 코드와 URL(relayium.com/device)을 표시합니다. relayium.com 에 로그인된 브라우저에서 열어(로그인되어 있지 않으면 먼저 거기서 로그인) 코드를 입력하고 승인하면 이 기기가 바인딩됩니다.",
         "로그인 정보는 ~/.config/relayium/ 아래 저장되므로 기기마다 한 번이면 됩니다. relayium whoami 로 바인딩 대상을 보고, relayium logout 으로 지웁니다.",
         "나중에 기기를 취소하려면 브라우저의 계정 '기기' 페이지에서 해당 기기를 삭제하세요.",
       ],
@@ -468,13 +512,24 @@ const de = {
       ],
     },
     {
+      heading: "Bevor du loslegst",
+      body: [
+        "Zwei einmalige Dinge vor deinem ersten up — die CLI installieren und ein Konto haben. Hast du beides, überspring diesen Abschnitt.",
+      ],
+      code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+      bullets: [
+        "Installiere die CLI, damit es den Befehl relayium gibt. Die Zeile oben legt eine vorgefertigte Binärdatei in deinen PATH (macOS und Linux; unter Windows die .zip von der Releases-Seite holen); relayium --version bestätigt die Installation, und relayium.com/cli listet alle Installationswege. Ohne das gibt relayium login nur „command not found“ aus.",
+        "Halte ein kostenloses Relayium-Konto bereit. Der Browser-Schritt bestätigt die Anmeldung gegenüber deinem Konto, du brauchst also vorher eines — melde dich zuerst auf relayium.com an oder erstelle dort eines. Nur das Hochladen braucht das Konto; das Herunterladen nie.",
+      ],
+    },
+    {
       heading: "Diesen Rechner an dein Konto binden (einmalig)",
       body: [
         "up muss wissen, unter wessen Konto es speichern soll, also melde dich pro Rechner einmal an. Es ist eine im Browser bestätigte Geräteanmeldung — im Terminal tippst du nichts außer dem Code, den du bestätigst:",
       ],
       code: ["relayium login"],
       bullets: [
-        "Die CLI zeigt einen kurzen Code und eine URL (relayium.com/device). Öffne sie in einem Browser, in dem du angemeldet bist, gib den Code ein und bestätige — dieser Rechner ist jetzt gebunden.",
+        "Die CLI zeigt einen kurzen Code und eine URL (relayium.com/device). Öffne sie in dem Browser, in dem du bei relayium.com angemeldet bist (melde dich dort zuerst an, falls nicht), gib den Code ein und bestätige — dieser Rechner ist jetzt gebunden.",
         "Die Anmeldung wird unter ~/.config/relayium/ gespeichert, also machst du das pro Rechner nur einmal. relayium whoami zeigt, an wen du gebunden bist; relayium logout löscht es.",
         "Um einen Rechner später zu widerrufen, lösche sein Gerät auf der Geräteseite deines Kontos im Browser.",
       ],
@@ -579,13 +634,24 @@ const fr = {
       ],
     },
     {
+      heading: "Avant de commencer",
+      body: [
+        "Deux choses à faire une seule fois avant votre premier up — installer la CLI et avoir un compte. Si vous avez déjà les deux, passez à la suite.",
+      ],
+      code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+      bullets: [
+        "Installez la CLI pour que la commande relayium existe. La ligne ci-dessus place un binaire précompilé dans votre PATH (macOS et Linux ; sous Windows, récupérez le .zip depuis la page des releases) ; relayium --version confirme l'installation, et relayium.com/cli liste toutes les options d'installation. Sans cela, relayium login affiche seulement « command not found ».",
+        "Ayez un compte Relayium gratuit. L'étape dans le navigateur approuve la connexion pour votre compte, il vous en faut donc un avant de pouvoir approuver — connectez-vous d'abord sur relayium.com, ou créez-en un là-bas. Seul le téléversement demande le compte ; le téléchargement jamais.",
+      ],
+    },
+    {
       heading: "Lier cette machine à votre compte (une seule fois)",
       body: [
         "up doit savoir sous quel compte stocker, alors connectez-vous une fois par machine. C'est une connexion d'appareil approuvée dans le navigateur — vous ne tapez rien dans le terminal, hormis le code que vous confirmez :",
       ],
       code: ["relayium login"],
       bullets: [
-        "La CLI affiche un code court et une URL (relayium.com/device). Ouvrez-la dans un navigateur où vous êtes connecté, saisissez le code et approuvez — cette machine est désormais liée.",
+        "La CLI affiche un code court et une URL (relayium.com/device). Ouvrez-la dans le navigateur où vous êtes connecté à relayium.com (connectez-vous-y d'abord si ce n'est pas le cas), saisissez le code et approuvez — cette machine est désormais liée.",
         "La connexion est enregistrée sous ~/.config/relayium/, vous ne le faites donc qu'une fois par machine. relayium whoami montre à qui vous êtes lié ; relayium logout l'efface.",
         "Pour révoquer une machine plus tard, supprimez son appareil depuis la page « appareils » de votre compte dans le navigateur.",
       ],

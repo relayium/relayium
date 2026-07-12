@@ -66,10 +66,14 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>どんなときに使うか</h2>
       <p>相手側がオンラインかどうか、二台がどう到達し合うかでモードを選びます：</p>
       <ul><li>up / down（このガイド）——二台が同時にオンラインにならない。今アップロードし、後で自分（または別のマシン）がダウンロードする。アカウント経由。</li><li>send / receive——両端が今オンラインで、使い捨てコードで直接ピアツーピア転送したい。</li><li>push / pull——相手のマシンに既に ssh できる。</li><li>up 以外はアカウント不要。relayium login が要るのは up だけ。</li></ul>
+      <h2>始める前に</h2>
+      <p>最初の up の前に、一度だけ済ませることが二つあります——CLI のインストールと、アカウントの用意です。両方そろっていれば読み飛ばしてください。</p>
+      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>まず CLI をインストールして relayium コマンドが存在するようにします。上の一行でビルド済みバイナリが PATH に入ります（macOS と Linux。Windows は releases ページから .zip を取得）。relayium --version でインストールを確認でき、relayium.com/cli にすべてのインストール方法があります。これをしないと relayium login は「command not found」と出るだけです。</li><li>無料の Relayium アカウントを用意します。ブラウザでの手順はあなたのアカウントに対してログインを承認するので、承認する前にアカウントが必要です——まず relayium.com でサインインし、なければそこで作成してください。アカウントが要るのはアップロードだけで、ダウンロードには不要です。</li></ul>
       <h2>このマシンをアカウントにバインドする（一度だけ）</h2>
       <p>up は誰のアカウントに保存するかを知る必要があるため、マシンごとに一度サインインします。ブラウザで承認するデバイスログインで、ターミナルには確認するコード以外は何も入力しません：</p>
       <pre><code>relayium login</code></pre>
-      <ul><li>CLI が短いコードと URL（relayium.com/device）を表示します。サインイン済みのブラウザで開いてコードを入力し承認すると、このマシンがバインドされます。</li><li>ログイン情報は ~/.config/relayium/ に保存されるので、マシンごとに一度で済みます。relayium whoami でバインド先を表示し、relayium logout で解除します。</li><li>後でマシンを取り消すには、ブラウザのアカウントの「デバイス」ページから該当デバイスを削除します。</li></ul>
+      <ul><li>CLI が短いコードと URL（relayium.com/device）を表示します。relayium.com にサインイン済みのブラウザで開き（未サインインならまずそこでサインイン）、コードを入力して承認すると、このマシンがバインドされます。</li><li>ログイン情報は ~/.config/relayium/ に保存されるので、マシンごとに一度で済みます。relayium whoami でバインド先を表示し、relayium logout で解除します。</li><li>後でマシンを取り消すには、ブラウザのアカウントの「デバイス」ページから該当デバイスを削除します。</li></ul>
       <h2>一台目のコンピュータからアップロード</h2>
       <p>up は渡したファイルをたどり、ローカルで暗号化し、暗号文をアップロードして、取得用リンクを表示します：</p>
       <pre><code>relayium up ./report.pdf

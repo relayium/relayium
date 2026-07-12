@@ -281,7 +281,7 @@ const ja: Messages = {
     cloudBody:
       "up はファイルをローカルで暗号化し、暗号文をアップロードして取得用リンクを表示します。保持 flag で寿命を制御します（指定しなければアカウントの既定）：--burn（一度のダウンロード）、--ttl 7d（一定時間）、--max-downloads 5（一定回数）。別のマシンでは、リンクを down に渡すだけ——ログイン不要。",
     cloudLoginNote:
-      "login はブラウザで承認するデバイスサインインです：CLI がコードを表示し、relayium.com/device を開いて確認します。whoami でバインド先を表示、logout で解除。",
+      "login はブラウザで承認するデバイスサインインです：CLI がコードを表示し、relayium.com/device を開いて確認します。アップロード側には無料アカウントが必要なので、まず relayium.com でサインイン（なければ作成）してください。whoami でバインド先を表示、logout で解除。",
     cloudInteropNote:
       "リンクはウェブサイトが使うものと同じ：up のリンクはブラウザで開け、relayium.com で作った共有リンクは down で取得できます。",
     cloudPrivacyNote:

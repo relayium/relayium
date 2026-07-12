@@ -281,7 +281,7 @@ const ko: Messages = {
     cloudBody:
       "up 은 파일을 로컬에서 암호화하고 암호문을 업로드한 뒤 수령용 링크를 출력합니다. 보관 flag 로 수명을 정합니다(없으면 계정 기본값): --burn(한 번 다운로드), --ttl 7d(정해진 시간), --max-downloads 5(정해진 횟수). 다른 기기에서는 링크를 down 에 건네기만 하면 됩니다 — 로그인 불필요.",
     cloudLoginNote:
-      "login 은 브라우저에서 승인하는 기기 로그인입니다: CLI 가 코드를 보여주고, relayium.com/device 를 열어 확인합니다. whoami 는 바인딩된 계정을 보여주고 logout 은 지웁니다.",
+      "login 은 브라우저에서 승인하는 기기 로그인입니다: CLI 가 코드를 보여주고, relayium.com/device 를 열어 확인합니다. 업로드 쪽에는 무료 계정이 필요하니 먼저 relayium.com 에서 로그인(없으면 새로 만들기)하세요. whoami 는 바인딩된 계정을 보여주고 logout 은 지웁니다.",
     cloudInteropNote:
       "링크는 웹사이트가 쓰는 것과 같습니다: up 링크는 브라우저에서 열리고, relayium.com 에서 만든 공유 링크는 down 으로 받을 수 있습니다.",
     cloudPrivacyNote:

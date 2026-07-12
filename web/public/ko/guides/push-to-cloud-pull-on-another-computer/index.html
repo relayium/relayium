@@ -66,10 +66,14 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>언제 쓰나</h2>
       <p>상대편이 온라인인지, 두 기기가 서로 어떻게 닿는지에 따라 모드를 고릅니다:</p>
       <ul><li>up / down (이 가이드) — 두 기기가 동시에 온라인이 되지 않습니다. 지금 업로드하고, 나중에 자신(또는 다른 기기)이 다운로드합니다. 계정을 거칩니다.</li><li>send / receive — 양쪽이 지금 온라인이며 일회용 코드로 직접 피어 투 피어 전송을 원합니다.</li><li>push / pull — 상대 기기에 이미 ssh 할 수 있습니다.</li><li>up 을 제외하면 계정이 필요 없습니다. relayium login 이 필요한 것은 up 뿐입니다.</li></ul>
+      <h2>시작하기 전에</h2>
+      <p>첫 up 전에 한 번만 해두면 되는 두 가지 — CLI 설치와 계정 준비입니다. 둘 다 있으면 건너뛰세요.</p>
+      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>먼저 CLI를 설치해 relayium 명령이 존재하게 합니다. 위 한 줄이 미리 빌드된 바이너리를 PATH에 올립니다(macOS와 Linux; Windows는 releases 페이지에서 .zip을 받으세요). relayium --version 으로 설치를 확인할 수 있고, relayium.com/cli 에 모든 설치 방법이 있습니다. 이 단계를 건너뛰면 relayium login 은 “command not found”만 출력합니다.</li><li>무료 Relayium 계정을 준비합니다. 브라우저 단계는 당신의 계정에 대해 로그인을 승인하므로, 승인하려면 먼저 계정이 있어야 합니다 — relayium.com 에서 로그인하거나 없으면 거기서 새로 만드세요. 계정이 필요한 것은 업로드뿐이고 다운로드에는 필요 없습니다.</li></ul>
       <h2>이 기기를 계정에 바인딩하기 (한 번만)</h2>
       <p>up 은 누구의 계정에 저장할지 알아야 하므로 기기마다 한 번 로그인합니다. 브라우저에서 승인하는 기기 로그인이며, 터미널에는 확인할 코드 외에는 아무것도 입력하지 않습니다:</p>
       <pre><code>relayium login</code></pre>
-      <ul><li>CLI 가 짧은 코드와 URL(relayium.com/device)을 표시합니다. 로그인된 브라우저에서 열어 코드를 입력하고 승인하면 이 기기가 바인딩됩니다.</li><li>로그인 정보는 ~/.config/relayium/ 아래 저장되므로 기기마다 한 번이면 됩니다. relayium whoami 로 바인딩 대상을 보고, relayium logout 으로 지웁니다.</li><li>나중에 기기를 취소하려면 브라우저의 계정 &#39;기기&#39; 페이지에서 해당 기기를 삭제하세요.</li></ul>
+      <ul><li>CLI 가 짧은 코드와 URL(relayium.com/device)을 표시합니다. relayium.com 에 로그인된 브라우저에서 열어(로그인되어 있지 않으면 먼저 거기서 로그인) 코드를 입력하고 승인하면 이 기기가 바인딩됩니다.</li><li>로그인 정보는 ~/.config/relayium/ 아래 저장되므로 기기마다 한 번이면 됩니다. relayium whoami 로 바인딩 대상을 보고, relayium logout 으로 지웁니다.</li><li>나중에 기기를 취소하려면 브라우저의 계정 &#39;기기&#39; 페이지에서 해당 기기를 삭제하세요.</li></ul>
       <h2>첫 번째 컴퓨터에서 업로드</h2>
       <p>up 은 준 파일들을 훑어 로컬에서 암호화하고 암호문을 업로드한 뒤 수령용 링크를 출력합니다:</p>
       <pre><code>relayium up ./report.pdf

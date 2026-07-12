@@ -66,10 +66,14 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>When to reach for it</h2>
       <p>Pick the mode by whether the far end is online and how the two machines reach each other:</p>
       <ul><li>up / down (this guide) — the two machines are never online together. You upload now; you (or another machine) download later. Goes through your account.</li><li>send / receive — both ends are online right now and want a direct peer-to-peer transfer over a one-time code.</li><li>push / pull — you can already ssh into the far machine.</li><li>Everything except up needs no account; only up requires relayium login.</li></ul>
+      <h2>Before you start</h2>
+      <p>Two one-time things before your first up — install the CLI, and have an account. Already have both? Skip ahead.</p>
+      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>Install the CLI so the relayium command exists. The line above drops a prebuilt binary on your PATH (macOS and Linux; on Windows, grab the .zip from the releases page); relayium --version confirms it, and relayium.com/cli lists every install option. Skip this and relayium login just prints &#39;command not found&#39;.</li><li>Have a free Relayium account. The browser step approves the login against your account, so you need one before you can approve — sign in at relayium.com first, or create one there if you haven&#39;t. Only uploading needs the account; downloading never does.</li></ul>
       <h2>Bind this machine to your account (once)</h2>
       <p>up needs to know whose account to store under, so sign in once per machine. It&#39;s a browser-approved device login — nothing is typed into the terminal except the code you confirm:</p>
       <pre><code>relayium login</code></pre>
-      <ul><li>The CLI prints a short code and a URL (relayium.com/device). Open it in a browser where you&#39;re already signed in, enter the code, and approve — this machine is now bound.</li><li>The login is saved under ~/.config/relayium/, so you only do it once per machine. relayium whoami shows who you&#39;re bound to; relayium logout clears it.</li><li>To revoke a machine later, delete its device from your account&#39;s devices page in the browser.</li></ul>
+      <ul><li>The CLI prints a short code and a URL (relayium.com/device). Open it in the browser where you&#39;re signed in to relayium.com (sign in there first if you aren&#39;t), enter the code, and approve — this machine is now bound.</li><li>The login is saved under ~/.config/relayium/, so you only do it once per machine. relayium whoami shows who you&#39;re bound to; relayium logout clears it.</li><li>To revoke a machine later, delete its device from your account&#39;s devices page in the browser.</li></ul>
       <h2>Upload from the first computer</h2>
       <p>up walks the files you give it, encrypts them locally, uploads the ciphertext, and prints a claim link:</p>
       <pre><code>relayium up ./report.pdf

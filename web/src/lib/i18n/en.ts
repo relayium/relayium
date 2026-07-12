@@ -281,7 +281,7 @@ const en: Messages = {
     cloudBody:
       "up encrypts the files locally, uploads the ciphertext, and prints a claim link. Add a retention flag to control how long it lives (otherwise your account's default applies): --burn (one download), --ttl 7d (a fixed time), or --max-downloads 5 (a fixed count). On the other machine, hand the link to down — no login needed.",
     cloudLoginNote:
-      "login is a browser-approved device sign-in: the CLI shows a code, you open relayium.com/device and confirm it. whoami shows the bound account; logout clears it.",
+      "login is a browser-approved device sign-in: the CLI shows a code, you open relayium.com/device and confirm it. You need a free account for the upload side, so sign in — or create one — at relayium.com first. whoami shows the bound account; logout clears it.",
     cloudInteropNote:
       "The link is the same one the website uses: an up link opens in a browser, and a share link made on relayium.com can be pulled with down.",
     cloudPrivacyNote:

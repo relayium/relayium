@@ -66,10 +66,14 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>什么时候用它</h2>
       <p>按对端是否在线、以及两台机器如何互相触达来选模式：</p>
       <ul><li>up / down（本指南）——两台机器从不同时在线。你现在上传，之后你（或另一台机器）再下载。走你的账号。</li><li>send / receive——两端此刻都在线，想用一次性配对码做直接点对点传输。</li><li>push / pull——你已经能 ssh 进对端机器。</li><li>除 up 外都无需账号；只有 up 需要 relayium login。</li></ul>
+      <h2>开始之前</h2>
+      <p>第一次 up 之前有两件一次性的事——装好 CLI，以及有个账号。两样都齐了就往下跳。</p>
+      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>先装 CLI，这样 relayium 命令才存在。上面这行会把预编译好的二进制放到你的 PATH 上（macOS 和 Linux；Windows 请从发布页下载 .zip）；relayium --version 可确认是否装好，relayium.com/cli 列出了所有安装方式。不装这一步，relayium login 只会报 “command not found”。</li><li>有一个免费的 Relayium 账号。浏览器那一步是拿你的账号来批准这次登录，所以你得先有账号才能批准——先在 relayium.com 登录，没有就在那里注册一个。只有上传才需要账号；下载从不需要。</li></ul>
       <h2>把这台机器绑定到你的账号（一次即可）</h2>
       <p>up 需要知道存到谁的账号下，所以每台机器登录一次。这是浏览器授权的设备登录——终端里除了你要确认的那个码，什么都不用输：</p>
       <pre><code>relayium login</code></pre>
-      <ul><li>CLI 会打印一个短码和一个网址（relayium.com/device）。在已登录的浏览器里打开它、输入短码并确认——这台机器就绑定好了。</li><li>登录信息存在 ~/.config/relayium/ 下，所以每台机器只需做一次。relayium whoami 显示当前绑定的账号；relayium logout 清除它。</li><li>以后要撤销某台机器，在浏览器里从账号的“设备”页删掉对应设备即可。</li></ul>
+      <ul><li>CLI 会打印一个短码和一个网址（relayium.com/device）。在已登录 relayium.com 的浏览器里打开它（若尚未登录，先在那里登录），输入短码并确认——这台机器就绑定好了。</li><li>登录信息存在 ~/.config/relayium/ 下，所以每台机器只需做一次。relayium whoami 显示当前绑定的账号；relayium logout 清除它。</li><li>以后要撤销某台机器，在浏览器里从账号的“设备”页删掉对应设备即可。</li></ul>
       <h2>从第一台电脑上传</h2>
       <p>up 会遍历你给的文件，在本地加密，上传密文，并打印一个取件链接：</p>
       <pre><code>relayium up ./report.pdf

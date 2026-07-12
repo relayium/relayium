@@ -281,7 +281,7 @@ const zh: Messages = {
     cloudBody:
       "up 在本地加密文件、上传密文，并打印一个取件链接。用保留 flag 控制它存活多久（不给则用你账号的默认）：--burn（下载一次）、--ttl 7d（固定时间）、--max-downloads 5（固定次数）。在另一台机器上，把链接交给 down——无需登录。",
     cloudLoginNote:
-      "login 是浏览器授权的设备登录：CLI 显示一个码，你打开 relayium.com/device 确认它。whoami 显示绑定的账号；logout 清除它。",
+      "login 是浏览器授权的设备登录：CLI 显示一个码，你打开 relayium.com/device 确认它。上传侧需要一个免费账号，所以先在 relayium.com 登录，没有就注册一个。whoami 显示绑定的账号；logout 清除它。",
     cloudInteropNote:
       "链接和网页端用的是同一种：up 的链接能在浏览器打开，在 relayium.com 上创建的分享链接也能用 down 取回。",
     cloudPrivacyNote:

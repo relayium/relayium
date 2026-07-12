@@ -282,7 +282,7 @@ const de: Messages = {
     cloudBody:
       "up verschlüsselt die Dateien lokal, lädt den Chiffretext hoch und gibt einen Abhol-Link aus. Steuere mit einem Aufbewahrungs-Flag die Lebensdauer (sonst gilt die Vorgabe deines Kontos): --burn (ein Download), --ttl 7d (feste Zeit) oder --max-downloads 5 (feste Anzahl). Auf dem anderen Rechner gibst du den Link einfach an down — keine Anmeldung nötig.",
     cloudLoginNote:
-      "login ist eine im Browser bestätigte Geräteanmeldung: die CLI zeigt einen Code, du öffnest relayium.com/device und bestätigst ihn. whoami zeigt das gebundene Konto; logout löscht es.",
+      "login ist eine im Browser bestätigte Geräteanmeldung: die CLI zeigt einen Code, du öffnest relayium.com/device und bestätigst ihn. Für die Upload-Seite brauchst du ein kostenloses Konto, also melde dich zuerst auf relayium.com an — oder erstelle eines. whoami zeigt das gebundene Konto; logout löscht es.",
     cloudInteropNote:
       "Der Link ist derselbe, den die Website verwendet: ein up-Link öffnet sich im Browser, und ein auf relayium.com erstellter Freigabelink lässt sich mit down abholen.",
     cloudPrivacyNote:
