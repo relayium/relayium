@@ -21,6 +21,7 @@ import cliBackupSsh from "./pages/content/articles/cli-backup-server-ssh.mjs";
 import cliSendToSomeone from "./pages/content/articles/cli-send-to-someone.mjs";
 import cliServerToServer from "./pages/content/articles/cli-server-to-server.mjs";
 import cliSyncLargeFolder from "./pages/content/articles/cli-sync-large-folder.mjs";
+import cliCloudAsync from "./pages/content/articles/cli-cloud-async.mjs";
 import howtoShareFileExpiringLink from "./pages/content/articles/howto-share-file-expiring-link.mjs";
 import guidesSelfHost from "./pages/content/articles/guides-self-host.mjs";
 import howtoSendFilesBetweenComputers from "./pages/content/articles/howto-send-files-between-computers.mjs";
@@ -71,6 +72,7 @@ const articles = [
   cliSendToSomeone,
   cliServerToServer,
   cliSyncLargeFolder,
+  cliCloudAsync,
   howtoShareFileExpiringLink,
   guidesSelfHost,
   howtoSendFilesBetweenComputers,

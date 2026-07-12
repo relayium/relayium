@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>클라우드에 올리고 다른 컴퓨터에서 받기 · Relayium</title>
+    <meta name="description" content="Relayium 계정을 통한 비동기 파일 전송. relayium up 으로 한 기기에서 업로드하고, 편할 때 relayium down 으로 다른 기기에서 다운로드 — 종단 간 암호화이며 계정이 필요한 것은 업로드뿐입니다." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ko/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="클라우드에 올리고 다른 컴퓨터에서 받기" />
+    <meta property="og:description" content="Relayium 계정을 통한 비동기 파일 전송. relayium up 으로 한 기기에서 업로드하고, 편할 때 relayium down 으로 다른 기기에서 다운로드 — 종단 간 암호화이며 계정이 필요한 것은 업로드뿐입니다." />
+    <meta property="og:url" content="https://relayium.com/ko/guides/push-to-cloud-pull-on-another-computer" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="클라우드에 올리고 다른 컴퓨터에서 받기" />
+    <meta name="twitter:description" content="Relayium 계정을 통한 비동기 파일 전송. relayium up 으로 한 기기에서 업로드하고, 편할 때 relayium down 으로 다른 기기에서 다운로드 — 종단 간 암호화이며 계정이 필요한 것은 업로드뿐입니다." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"클라우드에 올리고 다른 컴퓨터에서 받기","description":"Relayium 계정을 통한 비동기 파일 전송. relayium up 으로 한 기기에서 업로드하고, 편할 때 relayium down 으로 다른 기기에서 다운로드 — 종단 간 암호화이며 계정이 필요한 것은 업로드뿐입니다.","inLanguage":"ko","dateModified":"2026-07-12","mainEntityOfPage":"https://relayium.com/ko/guides/push-to-cloud-pull-on-another-computer","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"업로드할 때만요. relayium up 은 relayium login 이 필요하지만, relayium down 은 계정이 필요 없고 다른 모든 CLI 명령(push/pull, send/receive, daemon 직결, sync)도 계정 없이 동작합니다."}},{"@type":"Question","name":"파일은 암호화되나요?","acceptedAnswer":{"@type":"Answer","text":"네, 종단 간으로요. 업로드 전에 당신의 기기에서 암호화되며, 키는 링크의 #k= 조각에만 있고 서버로 전송되지 않습니다. Relayium 은 읽을 수 없는 암호문을 파일 이름까지 포함해 저장합니다."}},{"@type":"Question","name":"링크를 잃어버리면요?","acceptedAnswer":{"@type":"Answer","text":"링크는 복호화 키의 유일한 사본을 담고 있어, 잃으면 파일은 복구할 수 없습니다 — 서버에 복원할 수 있는 것이 전혀 없습니다."}},{"@type":"Question","name":"누가 다운로드할지 제한할 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"링크를 가진 누구나 다운로드할 수 있으니 비공개로 공유하세요. --burn 으로 한 번만, --max-downloads \u003cn> 으로 횟수를 제한하고, --ttl \u003c기간> 으로 일정 시간 후 만료시킬 수 있습니다."}},{"@type":"Question","name":"웹사이트와 연동되나요?","acceptedAnswer":{"@type":"Answer","text":"네. relayium up 의 링크는 브라우저에서 열리고, relayium.com 에서 만든 공유 링크는 다른 기기에서 relayium down 으로 받을 수 있습니다."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ko">Relayium</a></header>
+      <h1>클라우드에 올리고 다른 컴퓨터에서 받기</h1>
+      <p class="updated">마지막 업데이트: 2026-07-12</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/push-to-cloud-pull-on-another-computer">English</a><a href="/zh/guides/push-to-cloud-pull-on-another-computer">中文</a><a href="/ja/guides/push-to-cloud-pull-on-another-computer">日本語</a><a href="/ko/guides/push-to-cloud-pull-on-another-computer" aria-current="true">한국어</a><a href="/de/guides/push-to-cloud-pull-on-another-computer">Deutsch</a><a href="/fr/guides/push-to-cloud-pull-on-another-computer">Français</a></nav>
+      <p class="lead">두 컴퓨터가 동시에 켜져 있는 일이 결코 없을 때가 있습니다. 오늘 밤 업무용 노트북에서 파일을 올려두고 내일 집 데스크톱에서 받고 싶은데, 실시간 연결을 기다리는 사람은 아무도 없습니다. relayium up 과 relayium down 이 바로 그 일을 합니다. up 은 로컬에서 암호화해 계정에 업로드하고, down 은 나중에 아무 기기에서나 가져와 복호화합니다. 피어 투 피어 핸드셰이크도, 둘 다 ssh 할 수 있는 서버도 필요 없습니다.</p>
+      <p class="lead">이것은 CLI 에서 Relayium 계정을 사용하는 유일한 부분이며, 그것도 업로드할 때뿐입니다. 바인딩은 선택 사항입니다. 나머지 전부 — push/pull, send/receive, daemon 직결, sync — 는 로그인 없이 계속 동작합니다. 다운로드에는 계정이 전혀 필요 없고 링크만 있으면 됩니다.</p>
+      <h2>언제 쓰나</h2>
+      <p>상대편이 온라인인지, 두 기기가 서로 어떻게 닿는지에 따라 모드를 고릅니다:</p>
+      <ul><li>up / down (이 가이드) — 두 기기가 동시에 온라인이 되지 않습니다. 지금 업로드하고, 나중에 자신(또는 다른 기기)이 다운로드합니다. 계정을 거칩니다.</li><li>send / receive — 양쪽이 지금 온라인이며 일회용 코드로 직접 피어 투 피어 전송을 원합니다.</li><li>push / pull — 상대 기기에 이미 ssh 할 수 있습니다.</li><li>up 을 제외하면 계정이 필요 없습니다. relayium login 이 필요한 것은 up 뿐입니다.</li></ul>
+      <h2>이 기기를 계정에 바인딩하기 (한 번만)</h2>
+      <p>up 은 누구의 계정에 저장할지 알아야 하므로 기기마다 한 번 로그인합니다. 브라우저에서 승인하는 기기 로그인이며, 터미널에는 확인할 코드 외에는 아무것도 입력하지 않습니다:</p>
+      <pre><code>relayium login</code></pre>
+      <ul><li>CLI 가 짧은 코드와 URL(relayium.com/device)을 표시합니다. 로그인된 브라우저에서 열어 코드를 입력하고 승인하면 이 기기가 바인딩됩니다.</li><li>로그인 정보는 ~/.config/relayium/ 아래 저장되므로 기기마다 한 번이면 됩니다. relayium whoami 로 바인딩 대상을 보고, relayium logout 으로 지웁니다.</li><li>나중에 기기를 취소하려면 브라우저의 계정 &#39;기기&#39; 페이지에서 해당 기기를 삭제하세요.</li></ul>
+      <h2>첫 번째 컴퓨터에서 업로드</h2>
+      <p>up 은 준 파일들을 훑어 로컬에서 암호화하고 암호문을 업로드한 뒤 수령용 링크를 출력합니다:</p>
+      <pre><code>relayium up ./report.pdf
+#   → https://relayium.com/d/7fK2p…#k=Xr8s…</code></pre>
+      <pre><code># 얼마나 살려둘지 고르기(없으면 계정 기본값 적용):
+relayium up ./report.pdf --burn              # 한 번 다운로드 후 삭제
+relayium up ./report.pdf --ttl 7d            # 7일간 보관
+relayium up ./report.pdf --max-downloads 5   # 5회까지 허용 후 삭제</code></pre>
+      <ul><li>링크가 전달의 전부입니다 — 다른 기기가 읽을 수 있는 곳에 복사하세요. 링크를 가진 누구나 파일을 다운로드할 수 있으니 비밀번호처럼 다루세요.</li><li>보관: --burn 은 한 번 다운로드하면 삭제, --ttl &lt;기간&gt; 은 정해진 시간(예: 7d, 24h) 보관, --max-downloads &lt;n&gt; 은 정해진 횟수 허용. 아무것도 주지 않으면 계정 기본값이 적용됩니다.</li><li>up 은 로그인이 필요합니다. 되어 있지 않으면 알려주고 아무 일도 하지 않습니다.</li></ul>
+      <h2>두 번째 컴퓨터에서 다운로드</h2>
+      <p>다른 기기에서 링크를 down 에 건넵니다. 로그인도 설정도 필요 없습니다 — 파일을 복호화하는 키가 링크 안에 있으므로 down 은 계정에서 아무것도 필요로 하지 않습니다:</p>
+      <pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads</code></pre>
+      <ul><li>링크는 따옴표로 감싸세요: #k=… 조각이 복호화 키를 담고 있는데 일부 셸은 # 을 주석 시작으로 취급합니다.</li><li>대상 디렉터리(여기서는 ./downloads)를 주거나 생략해 현재 디렉터리에 받습니다.</li><li>파일이 번(burn) 설정이거나 다운로드 한도에 도달했거나 만료되었으면 링크는 소진된 것이고, down 은 사라졌다고 알립니다.</li></ul>
+      <h2>웹사이트와도 연동</h2>
+      <p>이 링크는 웹사이트가 쓰는 것과 같으므로 CLI 와 브라우저가 자유롭게 연동됩니다:</p>
+      <ul><li>relayium up 의 링크는 브라우저에서 열립니다 — CLI 가 없는 사람에게 건네면 웹에서 다운로드합니다.</li><li>relayium.com 에서 만든 공유 링크는 다른 기기에서 relayium down 으로 받을 수 있습니다.</li></ul>
+      <h2>서버가 볼 수 있는 것과 없는 것</h2>
+      <p>클라우드 전송은 종단 간 암호화를 유지합니다:</p>
+      <ul><li>파일은 업로드 전에 당신의 기기에서 암호화됩니다. 복호화 키는 링크의 #k= 조각에만 있고 서버로 전송되지 않습니다 — Relayium 은 읽을 수 없는 암호문을 파일 이름까지 포함해 저장합니다.</li><li>그래서 링크가 파일로 돌아가는 유일한 길입니다: 잃으면 파일은 복구할 수 없습니다, 당신도 우리도.</li></ul>
+      <h2>자주 묻는 질문</h2>
+      <h3>계정이 필요한가요?</h3>
+      <p>업로드할 때만요. relayium up 은 relayium login 이 필요하지만, relayium down 은 계정이 필요 없고 다른 모든 CLI 명령(push/pull, send/receive, daemon 직결, sync)도 계정 없이 동작합니다.</p>
+      <h3>파일은 암호화되나요?</h3>
+      <p>네, 종단 간으로요. 업로드 전에 당신의 기기에서 암호화되며, 키는 링크의 #k= 조각에만 있고 서버로 전송되지 않습니다. Relayium 은 읽을 수 없는 암호문을 파일 이름까지 포함해 저장합니다.</p>
+      <h3>링크를 잃어버리면요?</h3>
+      <p>링크는 복호화 키의 유일한 사본을 담고 있어, 잃으면 파일은 복구할 수 없습니다 — 서버에 복원할 수 있는 것이 전혀 없습니다.</p>
+      <h3>누가 다운로드할지 제한할 수 있나요?</h3>
+      <p>링크를 가진 누구나 다운로드할 수 있으니 비공개로 공유하세요. --burn 으로 한 번만, --max-downloads &lt;n&gt; 으로 횟수를 제한하고, --ttl &lt;기간&gt; 으로 일정 시간 후 만료시킬 수 있습니다.</p>
+      <h3>웹사이트와 연동되나요?</h3>
+      <p>네. relayium up 의 링크는 브라우저에서 열리고, relayium.com 에서 만든 공유 링크는 다른 기기에서 relayium down 으로 받을 수 있습니다.</p>
+      <div class="ctacard">
+        <p>자신의 기기들 사이에서 파일을 옮길 준비가 되셨나요? CLI를 설치하고 relayium login 을 실행한 뒤 up 하세요.</p>
+        <a class="cta" href="/cli">CLI 받기</a>
+      </div>
+      <h2>계속 읽기</h2>
+      <ul class="related"><li><a href="/ko/compare/snapdrop">Relayium vs Snapdrop·PairDrop: 어떤 P2P 파일 전송이 더 안전할까?</a></li><li><a href="/ko/compare/airdrop">Relayium vs AirDrop: 크로스플랫폼 에어드롭 대안</a></li><li><a href="/ko/compare/wetransfer">Relayium vs WeTransfer: 서버 없이 대용량 파일 보내기</a></li><li><a href="/ko/how-to/transfer-files-android-to-iphone">안드로이드에서 아이폰으로 파일 전송하는 방법 (케이블 없이)</a></li><li><a href="/ko/how-to/send-files-pc-to-phone-wirelessly">PC에서 폰으로 무선 파일 전송: 케이블도 앱도 필요 없이</a></li><li><a href="/ko/how-to/send-large-files-without-cloud">클라우드 없이 대용량 파일 보내는 방법</a></li><li><a href="/ko/guides/transfer-files-from-terminal">Relayium CLI로 터미널에서 파일 전송하기</a></li><li><a href="/ko/guides/back-up-a-server-over-ssh">Relayium CLI로 SSH를 통해 자신의 서버에 파일 백업하기</a></li><li><a href="/ko/guides/send-a-file-to-someone">Relayium CLI로 네트워크를 넘어 상대에게 파일 보내기</a></li><li><a href="/ko/guides/server-to-server-transfers">Relayium CLI로 서버 간 전송(데몬 다이렉트)</a></li><li><a href="/ko/guides/sync-a-large-folder-between-servers">두 서버 사이에서 큰 폴더 동기화하기(재개 가능, 백그라운드)</a></li><li><a href="/ko/how-to/share-a-file-with-an-expiring-link">만료되는 안전한 다운로드 링크로 파일 공유하기</a></li><li><a href="/ko/guides/self-host-relayium">Relayium 셀프 호스팅: 나만의 파일 전송 서버 운영하기</a></li><li><a href="/ko/how-to/send-files-between-two-computers-over-the-internet">인터넷으로 컴퓨터 두 대 사이에 파일 보내는 방법</a></li><li><a href="/ko/compare/croc">Relayium vs croc: 터미널에서 암호화 파일 전송</a></li><li><a href="/ko/guides/how-relayium-encrypts-your-files">Relayium이 파일을 종단간 암호화하는 방식</a></li><li><a href="/ko/compare/google-drive">Relayium vs Google Drive: 파일을 더 직접적으로 보내기</a></li><li><a href="/ko/compare/rsync">Relayium vs rsync: SSH 설정 없이 폴더 동기화하기</a></li><li><a href="/ko/compare/firefox-send">2026년 최고의 Firefox Send 대안</a></li><li><a href="/ko/how-to/transfer-files-by-scanning-a-qr-code">QR 코드를 스캔해서 파일 전송하기</a></li><li><a href="/ko/guides/receive-files-from-the-command-line">명령줄에서 파일 받기</a></li><li><a href="/ko/how-to/send-a-folder">파일이 아니라 폴더째로 보내는 방법</a></li><li><a href="/ko/guides/run-relayium-as-an-always-on-service">Relayium을 상시 실행되는 수신 서비스로 운영하기</a></li><li><a href="/ko/how-to/automate-server-backups">cron 작업으로 암호화된 서버 백업 자동화하기</a></li><li><a href="/ko/compare/localsend">Relayium vs LocalSend: 로컬 파일 전송, 무엇을 쓸까</a></li><li><a href="/ko/compare/scp">Relayium vs scp: 더 간단한 SSH 파일 전송</a></li><li><a href="/ko/compare/magic-wormhole">Relayium vs magic-wormhole: CLI 파일 전송</a></li><li><a href="/ko/compare/nextcloud">Relayium vs Nextcloud: 파일 전송에는 무엇을 써야 할까</a></li><li><a href="/ko/compare/dropbox">Relayium vs Dropbox: 파일 하나를 더 직접적으로 보내기</a></li><li><a href="/ko/how-to/airdrop-for-windows-and-android">Windows·Linux·Android용 AirDrop 대안</a></li><li><a href="/ko/how-to/transfer-files-between-mac-and-windows">Mac와 Windows PC 사이에서 파일 전송하는 방법</a></li><li><a href="/ko/how-to/send-files-on-the-same-wifi">같은 Wi-Fi에 있는 기기끼리 파일 보내기</a></li><li><a href="/ko/guides/what-is-peer-to-peer-file-transfer">P2P(피어투피어) 파일 전송이란?</a></li><li><a href="/ko/guides/is-it-safe-to-send-files-over-the-internet">인터넷으로 파일을 보내도 안전할까요?</a></li><li><a href="/ko/guides/bring-your-own-node">Bring Your Own Node: Relayium 릴레이 및 스토리지를 무료로 사용하기</a></li><li><a href="/ko/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ko">← Relayium</a>
+        <a href="/ko/guides">가이드</a>
+        <a href="/ko/privacy">개인정보 처리방침</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>
