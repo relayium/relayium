@@ -192,7 +192,7 @@ const ja: Messages = {
     cta: "CLI を見る →",
   },
   cliPage: {
-    badges: ["無料・オープンソース", "エンドツーエンド暗号化", "セルフホスト可能"],
+    badges: ["無料の P2P", "エンドツーエンド暗号化", "セルフホスト可能"],
     freenote:
       "push/pull、send/receive、daemon 直結では、ファイルはマシン間を直接移動し、Relayium のサーバーを経由しません——通過するのは send/receive 時の小さなランデブーハンドシェイクだけです。唯一の例外はクラウド up/down で、ファイルをエンドツーエンド暗号化して保存し、別のマシンが後で取得できるようにします。",
     installH2: "インストール",

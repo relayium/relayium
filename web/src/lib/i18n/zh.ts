@@ -192,7 +192,7 @@ const zh: Messages = {
     cta: "了解 CLI →",
   },
   cliPage: {
-    badges: ["免费开源", "端到端加密", "可自托管"],
+    badges: ["免费 P2P", "端到端加密", "可自托管"],
     freenote:
       "在 push/pull、send/receive 和 daemon 直连中，文件直接在机器之间传输，绝不经过 Relayium 的服务器——只有一次很小的会合握手会经过，且仅用于 send/receive。唯一的例外是云端 up/down：它把你的文件端到端加密后存下，好让另一台机器之后取回。",
     installH2: "安装",

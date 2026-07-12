@@ -192,7 +192,7 @@ const en: Messages = {
     cta: "Explore the CLI →",
   },
   cliPage: {
-    badges: ["Free & open source", "End-to-end encrypted", "Self-hostable"],
+    badges: ["Free P2P", "End-to-end encrypted", "Self-hostable"],
     freenote:
       "In push/pull, send/receive and daemon-direct, files go straight between machines and never touch Relayium's servers — only a tiny rendezvous handshake does, and only for send/receive. The exception is cloud up/down, which stores your file end-to-end encrypted so another machine can fetch it later.",
     installH2: "Install",

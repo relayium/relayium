@@ -192,7 +192,7 @@ const de: Messages = {
     cta: "CLI entdecken →",
   },
   cliPage: {
-    badges: ["Kostenlos & Open Source", "Ende-zu-Ende-verschlüsselt", "Selbst hostbar"],
+    badges: ["Kostenloses P2P", "Ende-zu-Ende-verschlüsselt", "Selbst hostbar"],
     freenote:
       "Bei push/pull, send/receive und Daemon-Direkt gehen Dateien direkt zwischen den Rechnern und laufen nie über Relayiums Server — nur ein kleiner Rendezvous-Handshake tut das, und auch nur bei send/receive. Die Ausnahme ist Cloud up/down: Sie speichert deine Datei Ende-zu-Ende-verschlüsselt, damit ein anderer Rechner sie später abholen kann.",
     installH2: "Installation",

@@ -192,7 +192,7 @@ const fr: Messages = {
     cta: "Découvrir la CLI →",
   },
   cliPage: {
-    badges: ["Gratuit et open source", "Chiffré de bout en bout", "Auto-hébergeable"],
+    badges: ["P2P gratuit", "Chiffré de bout en bout", "Auto-hébergeable"],
     freenote:
       "Avec push/pull, send/receive et daemon-direct, les fichiers vont directement entre les machines et ne passent jamais par les serveurs de Relayium — seule une petite poignée de main de mise en relation y transite, et uniquement pour send/receive. L'exception est le cloud up/down, qui stocke votre fichier chiffré de bout en bout pour qu'une autre machine puisse le récupérer plus tard.",
     installH2: "Installation",
