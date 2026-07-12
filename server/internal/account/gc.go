@@ -27,6 +27,21 @@ type GC struct {
 	// BlobFor resolves the blob store for a file's node_id (central-local or a
 	// remote node). When nil, GC falls back to Blobs (SP1 behavior).
 	BlobFor func(ctx context.Context, nodeID string) (storage.BlobStore, error)
+
+	// Mailer sends the pre-purge reminder and final "account deleted" emails
+	// (Task 5). When nil, the reminder/purge passes are skipped entirely —
+	// existing tests that construct a GC without these deletion-lifecycle
+	// dependencies keep exercising only the file/session/token reclamation
+	// passes above.
+	Mailer Mailer
+	// ReminderWindow returns the live reminder window in seconds
+	// (Settings.AccountReminderDays*86400), read fresh each sweep so an admin
+	// setting change takes effect without a restart.
+	ReminderWindow func(ctx context.Context) int64
+	// ReactivateLink mints a fresh reactivate token for userID/email and
+	// returns its full URL, for the pre-purge reminder email. Shared with the
+	// Task 3/4 reactivate-token issuer (Service.IssueReactivateLink).
+	ReactivateLink func(ctx context.Context, userID, email string) (string, error)
 }
 
 func (g *GC) sweep(ctx context.Context) {
@@ -62,6 +77,54 @@ func (g *GC) sweep(ctx context.Context) {
 	}
 	if err := g.Store.DeleteExpiredDeviceAuth(ctx, now); err != nil {
 		g.Log.Printf("gc: delete expired device-auth: %v", err)
+	}
+	g.sweepAccountDeletions(ctx, now)
+}
+
+// sweepAccountDeletions runs the self-deletion lifecycle's two remaining
+// steps: a one-time pre-purge reminder email, then the hard purge of accounts
+// whose grace period has fully elapsed. Requires Mailer/ReminderWindow/
+// ReactivateLink to be wired (main.go); skipped entirely when they aren't, so
+// tests that construct a bare GC for the file/session/token passes above are
+// unaffected.
+func (g *GC) sweepAccountDeletions(ctx context.Context, now int64) {
+	if g.Mailer == nil || g.ReminderWindow == nil || g.ReactivateLink == nil {
+		return
+	}
+
+	toRemind, err := g.Store.ListUsersToRemind(ctx, now, g.ReminderWindow(ctx))
+	if err != nil {
+		g.Log.Printf("gc: list users to remind: %v", err)
+	}
+	for _, u := range toRemind {
+		link, err := g.ReactivateLink(ctx, u.ID, u.Email)
+		if err != nil {
+			g.Log.Printf("gc: mint reactivate link for %s: %v", u.ID, err)
+			continue
+		}
+		if err := g.Mailer.SendAccountDeletionReminder(ctx, u.Email, u.PurgeAfter, link); err != nil {
+			g.Log.Printf("gc: send purge reminder for %s: %v", u.ID, err)
+			continue // retry next sweep rather than mark it sent on a failed send
+		}
+		if err := g.Store.MarkPurgeReminderSent(ctx, u.ID, now); err != nil {
+			g.Log.Printf("gc: mark purge reminder sent for %s: %v", u.ID, err)
+		}
+	}
+
+	toPurge, err := g.Store.ListUsersToPurge(ctx, now)
+	if err != nil {
+		g.Log.Printf("gc: list users to purge: %v", err)
+		return
+	}
+	for _, u := range toPurge {
+		email := u.Email // capture before the row is gone
+		if err := g.Store.ArchiveAndPurgeUser(ctx, u.ID); err != nil {
+			g.Log.Printf("gc: purge user %s: %v", u.ID, err)
+			continue
+		}
+		if err := g.Mailer.SendAccountDeleted(ctx, email); err != nil {
+			g.Log.Printf("gc: send final deletion email for %s: %v", u.ID, err)
+		}
 	}
 }
 

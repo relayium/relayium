@@ -321,6 +321,22 @@ type Store interface {
 	// 30-day hard-purge. Returns the deleted stored_files so the caller can
 	// enqueue blob deletes. Runs in one transaction.
 	PurgeTransientUserData(ctx context.Context, userID string) (blobs []StoredFile, err error)
+	// ListUsersToPurge returns every user whose grace period has fully
+	// elapsed (purge_after>0 AND purge_after<=now): GC's hard-purge worklist.
+	ListUsersToPurge(ctx context.Context, now int64) ([]User, error)
+	// ListUsersToRemind returns every pending-deletion user who hasn't yet
+	// received the one-time pre-purge reminder and whose purge_after falls
+	// within the reminder window (now..now+remindWindow).
+	ListUsersToRemind(ctx context.Context, now, remindWindow int64) ([]User, error)
+	// ArchiveAndPurgeUser is the GC hard-purge: in one transaction it folds
+	// userID's usage_monthly rows into the anonymized usage_archive (summed by
+	// period, no user identity retained), then deletes every user-linked row
+	// (identities, sessions, magic_tokens, devices, cli_tokens,
+	// cli_device_auth, usage_events, stored_files, upload_events, user_stats,
+	// usage_monthly, email_tokens, node_tokens, the user's own nodes) before
+	// finally deleting the users row itself. FK-safe delete order (children
+	// before the users parent, PRAGMA foreign_keys=ON).
+	ArchiveAndPurgeUser(ctx context.Context, userID string) error
 	// sessions
 	CreateSession(ctx context.Context, s Session) error
 	GetSession(ctx context.Context, id string) (Session, bool, error)

@@ -83,6 +83,13 @@ func (s *Service) resolveSettings(ctx context.Context) Settings {
 	}
 }
 
+// ReminderWindowSeconds returns the live pre-purge reminder window
+// (Settings.AccountReminderDays*86400) for GC's reminder pass (Task 5), read
+// fresh so an admin setting change takes effect without a restart.
+func (s *Service) ReminderWindowSeconds(ctx context.Context) int64 {
+	return s.resolveSettings(ctx).AccountReminderDays * 86400
+}
+
 // clampMaxDownloads resolves a requested download-count cap: a non-positive
 // request falls back to the admin's DefaultMaxDownloads, is floored at 1, and
 // is clamped to MaxMaxDownloads (0 = unbounded).

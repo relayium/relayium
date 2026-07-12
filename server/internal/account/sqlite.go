@@ -636,6 +636,105 @@ func (s *SQLiteStore) PurgeTransientUserData(ctx context.Context, userID string)
 	return files, nil
 }
 
+// ListUsersToPurge returns every user due for GC's hard purge: a pending
+// deletion (purge_after>0) whose grace period has fully elapsed (<=now).
+func (s *SQLiteStore) ListUsersToPurge(ctx context.Context, now int64) ([]User, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after
+		   FROM users WHERE purge_after > 0 AND purge_after <= ?`, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// ListUsersToRemind returns every pending-deletion user who hasn't yet
+// received the one-time pre-purge reminder and whose purge_after falls
+// within [now, now+remindWindow].
+func (s *SQLiteStore) ListUsersToRemind(ctx context.Context, now, remindWindow int64) ([]User, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after
+		   FROM users
+		  WHERE purge_after > 0 AND purge_reminder_sent = 0 AND purge_after <= ?`, now+remindWindow)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// ArchiveAndPurgeUser is GC's hard-purge: folds userID's usage_monthly into
+// the anonymized usage_archive (period totals only — no user_id retained),
+// then deletes every user-linked row before the users row itself, all inside
+// one transaction. The delete set is a superset of PurgeTransientUserData's
+// (which already ran at confirm time): repeating those deletes here is a
+// harmless no-op and keeps this method correct standalone, independent of
+// what already ran. Order is children-before-parent so PRAGMA foreign_keys=ON
+// never rejects a delete.
+func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO usage_archive(period, upload_bytes, download_bytes)
+		SELECT period, upload_bytes, download_bytes FROM usage_monthly WHERE user_id=?
+		ON CONFLICT(period) DO UPDATE SET
+		  upload_bytes = upload_bytes + excluded.upload_bytes,
+		  download_bytes = download_bytes + excluded.download_bytes`, userID); err != nil {
+		return err
+	}
+
+	stmts := []struct {
+		q    string
+		args []any
+	}{
+		// FK tables (REFERENCES users(id)) — must precede DELETE FROM users.
+		{`DELETE FROM identities WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM sessions WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM devices WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM usage_events WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM stored_files WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM upload_events WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM user_stats WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM usage_monthly WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM email_tokens WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM node_tokens WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM cli_tokens WHERE user_id=?`, []any{userID}},
+		// Non-FK but user-owned.
+		{`DELETE FROM magic_tokens WHERE email=(SELECT email FROM users WHERE id=?)`, []any{userID}},
+		{`DELETE FROM cli_device_auth WHERE user_id=?`, []any{userID}},
+		{`DELETE FROM nodes WHERE owner_type='user' AND owner_user_id=?`, []any{userID}},
+		// Finally, the users row itself.
+		{`DELETE FROM users WHERE id=?`, []any{userID}},
+	}
+	for _, st := range stmts {
+		if _, err := tx.ExecContext(ctx, st.q, st.args...); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 func (s *SQLiteStore) LinkIdentity(ctx context.Context, provider, subject, userID string) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT OR IGNORE INTO identities (provider, subject, user_id) VALUES (?, ?, ?)`,

@@ -145,6 +145,18 @@ func (s *Service) reactivateLink(raw string) string {
 	return fmt.Sprintf("%s/account/reactivate?token=%s", s.cfg.BaseURL, url.QueryEscape(raw))
 }
 
+// IssueReactivateLink mints a fresh reactivate token for userID/email and
+// returns its full URL. Exported for GC's pre-purge reminder email (Task 5),
+// which needs an independently-expiring link each time it fires — mirrors
+// every frozen-login guard's (Task 4) use of the same issue+link pair.
+func (s *Service) IssueReactivateLink(ctx context.Context, userID, email string) (string, error) {
+	raw, err := s.issueReactivateToken(ctx, userID, email)
+	if err != nil {
+		return "", err
+	}
+	return s.reactivateLink(raw), nil
+}
+
 // handleReactivate consumes a "reactivate" email token. Unauthenticated by
 // design, mirroring handleDeleteConfirm: the token itself is the
 // authorization, since a frozen account has no live session to authenticate
