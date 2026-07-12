@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"testing"
+	"time"
 )
 
 // httptestPost issues a POST with an optional string body and cookie against
@@ -106,6 +108,59 @@ func TestDeleteConfirmInvalidToken(t *testing.T) {
 	}
 	if u2, _ := store.GetUserByID(ctx, u.ID); u2.DeletedAt != 0 {
 		t.Fatal("bogus token must not schedule deletion")
+	}
+}
+
+// scheduledMailFailMailer is a capturingMailer whose SendAccountDeletionScheduled
+// always fails, to prove confirm treats that send as best-effort.
+type scheduledMailFailMailer struct{ capturingMailer }
+
+func (m *scheduledMailFailMailer) SendAccountDeletionScheduled(_ context.Context, _ string, purgeAt int64, reactivateLink string) error {
+	// Still record what would have been sent (so the test can read the
+	// reactivate link) but report the send as failed.
+	m.mu.Lock()
+	m.lastPurgeAt = purgeAt
+	m.lastReactivateLink = reactivateLink
+	m.mu.Unlock()
+	return errors.New("smtp down")
+}
+
+// TestDeleteConfirmSurvivesScheduledEmailFailure: when the scheduled-deletion
+// email fails to send, confirm must still return 200, the account must still
+// be scheduled (deleted_at/purge_after set), and a reactivate token must exist
+// so reactivation stays possible despite the send failure.
+func TestDeleteConfirmSurvivesScheduledEmailFailure(t *testing.T) {
+	store := newTestStore(t)
+	mail := &scheduledMailFailMailer{}
+	svc := NewService(store, mail, Config{
+		BaseURL: "http://example.test", SessionTTL: time.Hour,
+		AccountGraceDays: 30,
+	})
+	ctx := context.Background()
+	u, _ := store.UpsertUserByEmail(ctx, "d@example.com", "")
+
+	if err := svc.RequestAccountDeletion(ctx, u.ID, u.Email); err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	rawToken := mail.lastDeleteToken(t)
+
+	// Confirm directly against the service (a failing SMTP send must be
+	// non-fatal — the handler would surface it as 500 only if the service
+	// returned an error, which it must not).
+	if err := svc.ConfirmAccountDeletion(ctx, rawToken); err != nil {
+		t.Fatalf("confirm must not error on scheduled-email failure: %v", err)
+	}
+	u2, _ := store.GetUserByID(ctx, u.ID)
+	if u2.DeletedAt == 0 || u2.PurgeAfter <= u2.DeletedAt {
+		t.Fatalf("deletion must still be scheduled: %+v", u2)
+	}
+	// A reactivate token must exist and be usable for this user.
+	rtok, ok, err := store.UseEmailToken(ctx, hashToken(mail.lastReactivateToken(t)), "reactivate", svc.now().Unix())
+	if err != nil {
+		t.Fatalf("use reactivate token: %v", err)
+	}
+	if !ok || rtok.UserID != u.ID {
+		t.Fatalf("expected a usable reactivate token for user %s, got ok=%v tok=%+v", u.ID, ok, rtok)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 )
@@ -66,6 +67,23 @@ func (s *Service) ConfirmAccountDeletion(ctx context.Context, rawToken string) e
 	st := s.resolveSettings(ctx)
 	purgeAfter := now.Unix() + st.AccountGraceDays*86400
 
+	// Issue the reactivate token BEFORE the account becomes pending, so the
+	// moment SetAccountDeletion commits there is guaranteed to be a usable
+	// reactivate token in email_tokens — even if the scheduled-deletion email
+	// send below fails. Minting it for a not-yet-pending account is harmless
+	// (reactivation is idempotent, and the token is bounded to the grace window).
+	raw := randToken()
+	if err := s.store.CreateEmailToken(ctx, EmailToken{
+		TokenHash: hashToken(raw),
+		UserID:    tok.UserID,
+		Email:     u.Email,
+		Purpose:   "reactivate",
+		CreatedAt: now.Unix(),
+		ExpiresAt: purgeAfter,
+	}); err != nil {
+		return err
+	}
+
 	files, err := s.store.PurgeTransientUserData(ctx, tok.UserID)
 	if err != nil {
 		return err
@@ -91,21 +109,17 @@ func (s *Service) ConfirmAccountDeletion(ctx context.Context, rawToken string) e
 		return err
 	}
 
-	// Issue a reactivate token good for the whole grace window, so the user can
-	// cancel the pending deletion any time before the hard purge (Task 4).
-	raw := randToken()
-	if err := s.store.CreateEmailToken(ctx, EmailToken{
-		TokenHash: hashToken(raw),
-		UserID:    tok.UserID,
-		Email:     u.Email,
-		Purpose:   "reactivate",
-		CreatedAt: now.Unix(),
-		ExpiresAt: purgeAfter,
-	}); err != nil {
-		return err
-	}
+	// The scheduled-deletion email is best-effort: the deletion is genuinely
+	// scheduled and a reactivate token already exists (issued above), plus the
+	// user can always mint a fresh one by logging in during the grace window
+	// (Task 4). A transient SMTP hiccup must not 500 nor leave the account in an
+	// inconsistent "purged but not scheduled" state — mirror the other handlers'
+	// treatment of mail sends as fire-and-forget.
 	reactivateLink := fmt.Sprintf("%s/account/reactivate?token=%s", s.cfg.BaseURL, url.QueryEscape(raw))
-	return s.mailer.SendAccountDeletionScheduled(ctx, u.Email, purgeAfter, reactivateLink)
+	if err := s.mailer.SendAccountDeletionScheduled(ctx, u.Email, purgeAfter, reactivateLink); err != nil {
+		log.Printf("account deletion: scheduled-email send failed for user %s (deletion still scheduled, purge_after=%d): %v", tok.UserID, purgeAfter, err)
+	}
+	return nil
 }
 
 // handleDeleteRequest issues a delete-confirm email for the logged-in user.
