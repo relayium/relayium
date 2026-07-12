@@ -106,7 +106,10 @@ async function main() {
     ...buildArticlePages(articles),
     ...buildGuidesIndexPages(guidesIndex, articleGroupsByLang(articles)),
     ...buildModePages(crossNetwork, { slug: "cross-network" }),
-    ...buildModePages(offlineTransfer, { slug: "offline-transfer" }),
+    ...buildModePages(offlineTransfer, {
+      slug: "offline-transfer",
+      learn: articleLinksByLang([cliCloudAsync]),
+    }),
   ];
   for (const page of pages) {
     const abs = join(publicDir, page.path);

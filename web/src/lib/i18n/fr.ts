@@ -300,6 +300,9 @@ const fr: Messages = {
     tagline: "Chiffré dans votre navigateur, puis stocké · le serveur ne détient que du chiffré",
     pitch: "Le destinataire n'est pas en ligne ? Chiffrez, envoyez, et transmettez un lien de téléchargement à durée limitée — il récupère quand il veut. Zéro connaissance de bout en bout : le serveur ne peut pas voir le contenu.",
     signIn: "Connectez-vous pour téléverser et créer des liens de téléchargement ; les destinataires n'ont jamais besoin de compte.",
+    cliNote:
+      "Vous préférez le terminal ? relayium up téléverse et affiche le même lien, et relayium down le récupère sur une autre machine — aucune connexion requise pour télécharger.",
+    cliLink: "Guide CLI : envoyer dans le cloud, récupérer ailleurs →",
   },
   crossSell: {
     realtime: { lead: "L'autre personne est en ligne maintenant ? Le direct en temps réel est plus rapide — pair-à-pair, les fichiers ne touchent jamais le serveur.", cta: "Vers le direct en temps réel →" },

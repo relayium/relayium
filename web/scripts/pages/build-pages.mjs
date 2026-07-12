@@ -74,11 +74,17 @@ export function buildGuidesIndexPages(guidesIndex, groupsByLang) {
   }));
 }
 
-export function buildModePages(modeDef, { slug }) {
+export function buildModePages(modeDef, { slug, learn = null }) {
   validateLangs(`mode:${slug}`, modeDef.langs, LANDING_LANGS);
   return LANDING_LANGS.map((lang) => ({
     path: pagePath(slug, lang),
-    html: renderModePage({ slug, lang, doc: modeDef.langs[lang], updated: modeDef.updated }),
+    html: renderModePage({
+      slug,
+      lang,
+      doc: modeDef.langs[lang],
+      updated: modeDef.updated,
+      articleLinks: learn?.[lang] ?? [],
+    }),
   }));
 }
 

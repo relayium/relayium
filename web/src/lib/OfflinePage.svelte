@@ -15,6 +15,8 @@
 
   const t = $derived<Messages>(messages[lang()]);
   let loginOpen = $state(false);
+  const cloudGuideSlug = "guides/push-to-cloud-pull-on-another-computer";
+  const cloudGuideHref = $derived(lang() === "en" ? `/${cloudGuideSlug}` : `/${lang()}/${cloudGuideSlug}`);
 </script>
 
 <section class="offlinepage">
@@ -42,6 +44,11 @@
       {/if}
     </section>
   </div>
+
+  <p class="cli-note">
+    {t.offline.cliNote}
+    <a href={cloudGuideHref}>{t.offline.cliLink}</a>
+  </p>
 
   {#if !session().user}
     <WhyAccount />
@@ -83,4 +90,11 @@
 
   .signin { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
   .signin .hint { margin: 0; font-size: var(--fs-xs); color: var(--text); text-align: center; }
+
+  .cli-note {
+    max-width: 520px; margin: var(--space-4) auto 0; text-align: center;
+    font-size: var(--fs-xs); color: var(--text); line-height: 1.55;
+  }
+  .cli-note a { color: var(--accent); text-decoration: none; white-space: nowrap; }
+  .cli-note a:hover { text-decoration: underline; }
 </style>

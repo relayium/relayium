@@ -300,6 +300,9 @@ const de: Messages = {
     tagline: "Im Browser verschlüsselt, dann zwischengespeichert · der Server hält nur Chiffretext",
     pitch: "Die Gegenseite ist gerade nicht online? Verschlüsseln, hochladen und einen Download-Link mit Ablaufdatum schicken — abgeholt wird, wann es passt. Durchgehend Zero-Knowledge: der Server kann den Inhalt nicht sehen.",
     signIn: "Melde dich an, um hochzuladen und Download-Links zu erzeugen; Empfänger brauchen nie ein Konto.",
+    cliNote:
+      "Lieber im Terminal? relayium up lädt hoch und gibt denselben Link aus, relayium down holt ihn auf einem anderen Rechner ab — zum Herunterladen ist keine Anmeldung nötig.",
+    cliLink: "CLI-Anleitung: in die Cloud laden, woanders abholen →",
   },
   crossSell: {
     realtime: { lead: "Ist die andere Person gerade online? Direkt in Echtzeit ist schneller – Peer-to-Peer, Dateien berühren nie den Server.", cta: "Zur Echtzeit-Direktübertragung →" },

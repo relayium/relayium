@@ -111,8 +111,13 @@ const zh = {
         title: "异步场景的补充",
         desc: "当对方暂时不在线时使用；若双方同时在线，可改用实时跨网络传输。",
       },
+      {
+        title: "也能用命令行",
+        desc: "在终端里，relayium up 会上传并打印同一个链接，relayium down 在另一台机器上取回——CLI 与网页端共用同一条链接。",
+      },
     ],
   },
+  learnHeading: "延伸阅读",
   compare: {
     heading: "与其他方式相比",
     items: [
@@ -193,8 +198,13 @@ const ja = {
         title: "非同期モードとしての補完",
         desc: "相手が今オンラインでないときに使います。双方がオンラインならリアルタイムのクロスネットワーク転送を使ってください。",
       },
+      {
+        title: "コマンドラインからも",
+        desc: "ターミナルでは relayium up が同じリンクを表示してアップロードし、relayium down が別のマシンで取得します——CLI とウェブは同じリンクを共有します。",
+      },
     ],
   },
+  learnHeading: "さらに詳しく",
   compare: {
     heading: "他の方法との比較",
     items: [
@@ -275,8 +285,13 @@ const ko = {
         title: "비동기 보완 수단",
         desc: "상대가 지금 온라인이 아닐 때 사용하세요. 양쪽이 모두 온라인이면 실시간 크로스 네트워크 전송을 사용하세요.",
       },
+      {
+        title: "명령줄에서도",
+        desc: "터미널에서 relayium up 이 같은 링크를 출력하며 업로드하고, relayium down 이 다른 기기에서 받습니다 — CLI 와 웹이 같은 링크를 공유합니다.",
+      },
     ],
   },
+  learnHeading: "더 알아보기",
   compare: {
     heading: "다른 방식과 비교",
     items: [
@@ -357,8 +372,13 @@ const de = {
         title: "Ergänzung für asynchrone Fälle",
         desc: "Nutze dies, wenn die andere Seite gerade nicht online ist; für Echtzeit-Transfers über Netzwerke hinweg, wenn beide Seiten da sind.",
       },
+      {
+        title: "Auch vom Terminal",
+        desc: "Im Terminal lädt relayium up hoch und gibt denselben Link aus, relayium down holt ihn auf einem anderen Rechner ab — CLI und Web teilen sich einen Link.",
+      },
     ],
   },
+  learnHeading: "Mehr erfahren",
   compare: {
     heading: "Im Vergleich",
     items: [
@@ -439,8 +459,13 @@ const fr = {
         title: "Complément asynchrone",
         desc: "Utilisez ceci quand l'autre personne n'est pas en ligne pour l'instant ; utilisez le transfert inter-réseaux en temps réel quand les deux sont présentes.",
       },
+      {
+        title: "Aussi depuis le terminal",
+        desc: "Dans le terminal, relayium up téléverse et affiche le même lien, relayium down le récupère sur une autre machine — la CLI et le web partagent un seul lien.",
+      },
     ],
   },
+  learnHeading: "Pour aller plus loin",
   compare: {
     heading: "En comparaison",
     items: [

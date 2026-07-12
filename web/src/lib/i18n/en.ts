@@ -299,6 +299,9 @@ const en: Messages = {
     tagline: "Encrypted in your browser, then stored · the server only ever holds ciphertext",
     pitch: "Recipient not online right now? Encrypt and upload, send them a download link with an expiry — they fetch it whenever they're free. Zero-knowledge throughout: the server cannot see the content.",
     signIn: "Sign in to upload and create download links; recipients never need an account.",
+    cliNote:
+      "Prefer the terminal? relayium up uploads and prints the same link, and relayium down fetches it on another machine — no login needed to download.",
+    cliLink: "CLI guide: push to the cloud, pull anywhere →",
   },
   crossSell: {
     realtime: { lead: "Is the other person online right now? Realtime direct is faster — peer-to-peer, files never touch the server.", cta: "Go to realtime direct →" },
