@@ -40,7 +40,7 @@
   import { fetchIceConfig, hasTurnServer, measureRelays, pickRelay, type RelayEntry } from "./lib/ice";
   import type { Peer } from "./lib/protocol";
   import { lang, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
-  import { pageMeta } from "./lib/page-meta";
+  import { pageMeta, altHreflangs } from "./lib/page-meta";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
   import { outbox, setOutbox, takeOutbox, clearOutbox } from "./lib/outbox.svelte";
   import { shouldConfirmBeforeSend } from "./lib/confirm-send";
@@ -233,6 +233,13 @@
     const canon = location.origin + meta.canonicalPath;
     document.querySelector('link[rel="canonical"]')?.setAttribute("href", canon);
     document.querySelector('meta[property="og:url"]')?.setAttribute("content", canon);
+    // Repoint the hreflang alternates at this route's own localized URLs; index.html
+    // hard-codes the homepage cluster, which is wrong for /cross-network & /offline-transfer.
+    for (const { hreflang, path } of altHreflangs(meta.canonicalPath)) {
+      document
+        .querySelector(`link[rel="alternate"][hreflang="${hreflang}"]`)
+        ?.setAttribute("href", location.origin + path);
+    }
   });
 
   // Notify when a transfer finishes and the user is on another tab/app, so a long

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pageMeta } from "./page-meta";
+import { pageMeta, altHreflangs } from "./page-meta";
 import { CROSS_PATH, OFFLINE_PATH } from "./router.svelte";
 // `messages` in i18n.svelte is populated lazily (code-split per language), so it's
 // empty at import time in a test — import the English table directly instead,
@@ -21,6 +21,29 @@ describe("pageMeta", () => {
     expect(pageMeta("cross", m).canonicalPath).toBe("/cross-network");
     expect(pageMeta("offline", m).canonicalPath).toBe("/offline-transfer");
     expect(pageMeta("lan", m).canonicalPath).toBe("/");
+  });
+});
+
+describe("altHreflangs", () => {
+  it("home cluster keeps the localized homepages (trailing slash)", () => {
+    const alt = altHreflangs("/");
+    expect(alt.find((a) => a.hreflang === "en")?.path).toBe("/");
+    expect(alt.find((a) => a.hreflang === "zh-Hans")?.path).toBe("/zh/");
+    expect(alt.find((a) => a.hreflang === "x-default")?.path).toBe("/");
+  });
+
+  it("mode routes point each language at its own localized page", () => {
+    const alt = altHreflangs("/cross-network");
+    expect(alt.find((a) => a.hreflang === "en")?.path).toBe("/cross-network");
+    expect(alt.find((a) => a.hreflang === "zh-Hans")?.path).toBe("/zh/cross-network");
+    expect(alt.find((a) => a.hreflang === "ja")?.path).toBe("/ja/cross-network");
+    expect(alt.find((a) => a.hreflang === "x-default")?.path).toBe("/cross-network");
+  });
+
+  it("covers all six languages plus x-default", () => {
+    expect(altHreflangs("/offline-transfer").map((a) => a.hreflang)).toEqual([
+      "en", "zh-Hans", "ja", "ko", "de", "fr", "x-default",
+    ]);
   });
 });
 

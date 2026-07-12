@@ -16,3 +16,27 @@ export function pageMeta(
   if (route === "offline") return { title: m.titleOffline, description: m.descOffline, canonicalPath: OFFLINE_PATH };
   return { title: m.titleDefault, description: m.descDefault ?? m.titleDefault, canonicalPath: "/" };
 }
+
+// hreflang → localized-URL prefix. English (and x-default) live at the root; each
+// other language has static pages under "/<prefix>". Order and codes mirror the
+// static <link rel=alternate> tags baked into index.html.
+const HREFLANG_PREFIX: [string, string][] = [
+  ["en", ""],
+  ["zh-Hans", "/zh"],
+  ["ja", "/ja"],
+  ["ko", "/ko"],
+  ["de", "/de"],
+  ["fr", "/fr"],
+  ["x-default", ""],
+];
+
+// altHreflangs maps a canonical path to its per-language alternate URLs. index.html
+// ships the homepage cluster (/, /zh/, …); the SPA calls this so /cross-network and
+// /offline-transfer point their hreflang at their own localized pages
+// (/zh/cross-network, …) — which exist as static pages — instead of the homepage.
+export function altHreflangs(canonicalPath: string): { hreflang: string; path: string }[] {
+  return HREFLANG_PREFIX.map(([hreflang, prefix]) => ({
+    hreflang,
+    path: canonicalPath === "/" ? prefix + "/" : prefix + canonicalPath,
+  }));
+}
