@@ -27,7 +27,7 @@
     <meta name="twitter:title" content="自托管 Relayium：运行属于你自己的文件传输服务器" />
     <meta name="twitter:description" content="用一条 Docker 命令自己运行完整的 Relayium 服务端——自己的域名、自己的数据，无需账号。涵盖环境变量、可选的 TURN 中继，以及如何让 CLI 指向它。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"自托管 Relayium：运行属于你自己的文件传输服务器","description":"用一条 Docker 命令自己运行完整的 Relayium 服务端——自己的域名、自己的数据，无需账号。涵盖环境变量、可选的 TURN 中继，以及如何让 CLI 指向它。","inLanguage":"zh-Hans","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/zh/guides/self-host-relayium","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"我需要搭建 TURN 吗？","acceptedAnswer":{"@type":"Answer","text":"只有当你希望跨网络的实时传输能穿透严格 NAT 时才需要。同网络传输、基于 SSH 的 push/pull，以及 daemon-direct 都不需要它——TURN 只用于跨网络配对码路径上的 NAT 穿透。"}},{"@type":"Question","name":"自托管之后 CLI 还免费吗？","acceptedAnswer":{"@type":"Answer","text":"是的。无论连接的是 relayium.com 还是你自己运行的服务器，CLI 完全免费，也都不需要账号——--server 只是让它指向你的实例。"}},{"@type":"Question","name":"我可以用自己的域名和 TLS 证书吗？","acceptedAnswer":{"@type":"Answer","text":"可以。Docker 镜像本身在 :8080 上以明文 HTTP 监听；在前面加一层 nginx 或 Caddy，配上你自己的域名和证书（例如通过 certbot/Let's Encrypt）。docs/DEPLOYMENT.md 里有一份完整的 nginx 配置可以直接照抄。"}},{"@type":"Question","name":"我自托管的服务器会存储哪些数据？","acceptedAnswer":{"@type":"Answer","text":"一个位于 RELAYIUM_DB 的 SQLite 数据库（账号、会话），以及——对于存储型/链接型传输——位于 RELAYIUM_BLOB_DIR 的加密数据块，服务器自己也无法解密它们。实时点对点传输完全不会被存储在任何地方——服务器只转发信令握手。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"自托管 Relayium：运行属于你自己的文件传输服务器","description":"用一条 Docker 命令自己运行完整的 Relayium 服务端——自己的域名、自己的数据，无需账号。涵盖环境变量、可选的 TURN 中继，以及如何让 CLI 指向它。","inLanguage":"zh-Hans","dateModified":"2026-07-12","mainEntityOfPage":"https://relayium.com/zh/guides/self-host-relayium","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"我需要搭建 TURN 吗？","acceptedAnswer":{"@type":"Answer","text":"只有当你希望跨网络的实时传输能穿透严格 NAT 时才需要。同网络传输、基于 SSH 的 push/pull，以及 daemon-direct 都不需要它——TURN 只用于跨网络配对码路径上的 NAT 穿透。"}},{"@type":"Question","name":"自托管之后 CLI 还免费吗？","acceptedAnswer":{"@type":"Answer","text":"是的。无论连接的是 relayium.com 还是你自己运行的服务器，CLI 完全免费，也都不需要账号——--server 只是让它指向你的实例。"}},{"@type":"Question","name":"我可以用自己的域名和 TLS 证书吗？","acceptedAnswer":{"@type":"Answer","text":"可以。Docker 镜像本身在 :8080 上以明文 HTTP 监听；在前面加一层 nginx 或 Caddy，配上你自己的域名和证书（例如通过 certbot/Let's Encrypt）。docs/DEPLOYMENT.md 里有一份完整的 nginx 配置可以直接照抄。"}},{"@type":"Question","name":"我自托管的服务器会存储哪些数据？","acceptedAnswer":{"@type":"Answer","text":"一个位于 RELAYIUM_DB 的 SQLite 数据库（账号、会话），以及——对于存储型/链接型传输——位于 RELAYIUM_BLOB_DIR 的加密数据块，服务器自己也无法解密它们。实时点对点传输完全不会被存储在任何地方——服务器只转发信令握手。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -59,7 +59,7 @@ footer a{color:var(--text-h);text-decoration:none}
     <div class="wrap">
       <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <h1>自托管 Relayium：运行属于你自己的文件传输服务器</h1>
-      <p class="updated">最近更新: 2026-07-09</p>
+      <p class="updated">最近更新: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/self-host-relayium">English</a><a href="/zh/guides/self-host-relayium" aria-current="true">中文</a><a href="/ja/guides/self-host-relayium">日本語</a><a href="/ko/guides/self-host-relayium">한국어</a><a href="/de/guides/self-host-relayium">Deutsch</a><a href="/fr/guides/self-host-relayium">Français</a></nav>
       <p class="lead">Relayium 采用 MIT 许可、开源，服务端是一个自包含的镜像——不需要外部数据库，不需要第三方存储桶，也没有什么需要注册。如果你更想自己运行整套系统而不是依赖 relayium.com，本指南会带你用 Docker 起一台服务器，并让 CLI 指向它。</p>
       <p class="lead">自托管让你完全掌控数据存放的位置、拥有自己的域名和 TLS 证书，也不依赖别人的运维决策。以下内容全部基于仓库中实际存在的文件——docker-compose.yml、server/.env.example 和 docs/DEPLOYMENT.md——因此这里不会出现任何实际不存在的参数或配置项。</p>
@@ -75,6 +75,10 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>docker-compose.yml 里有一个可选的 relay profile，会在启动主服务器的同时启动 coturn（TURN 服务器）和一个用于中继流量计量的小型 Redis 实例：</p>
       <pre><code>RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build</code></pre>
       <ul><li>coturn 需要主机真实的公网 IP，以及一段开放的 UDP 端口范围才能工作——完整搭建步骤（包括一个一条命令的安装脚本）见 docs/coturn.md，排查纯粹的 NAT 穿透失败见 docs/enable-turn.md。</li><li>如果不加 --profile relay 和 RELAYIUM_TURN_SECRET，服务器依然能正常运行——只是跨网络传输会退化为纯 STUN，这对较宽松的 NAT 类型没问题，但对最严格的类型不行。</li></ul>
+      <h2>在你自己的机器上装 CLI</h2>
+      <p>最后这一步是在你自己的电脑上运行 relayium CLI（不是服务器），所以没装的话先在本机装上。macOS 或 Linux：</p>
+      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>relayium.com/cli 列出了所有安装方式——Windows 二进制、发布页，或装了 Go 用 go build。</li><li>relayium --version 可确认。没装 CLI，下面的命令只会报 “command not found”。</li></ul>
       <h2>让 CLI 指向你的服务器</h2>
       <p>Relayium CLI 默认使用 relayium.com 的会合服务器来完成跨网络的 send/receive。传入 --server 即可改用你自己的服务器：</p>
       <pre><code>relayium send ./report.pdf --server https://your-domain</code></pre>

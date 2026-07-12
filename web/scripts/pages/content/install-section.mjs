@@ -73,22 +73,96 @@ export const installSection = {
   },
 };
 
-// withInstall returns a copy of a guide's `langs` map with the install section
+// selfHostInstall is a variant for the self-host guide, whose body is server /
+// Docker setup and whose one CLI step ("point the CLI at your server") runs on
+// the reader's own machine. The generic "everything below is the CLI" framing
+// doesn't fit there, so this one is scoped to that single step.
+export const selfHostInstall = {
+  en: {
+    heading: "Install the CLI on your machine",
+    body: [
+      "This last step runs the relayium CLI on your own computer (not the server), so install it there if you haven't. On macOS or Linux:",
+    ],
+    code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+    bullets: [
+      "relayium.com/cli lists every install option — a Windows binary, the releases page, or go build if you have Go.",
+      "relayium --version confirms it. Without the CLI, the command below prints 'command not found'.",
+    ],
+  },
+  zh: {
+    heading: "在你自己的机器上装 CLI",
+    body: [
+      "最后这一步是在你自己的电脑上运行 relayium CLI（不是服务器），所以没装的话先在本机装上。macOS 或 Linux：",
+    ],
+    code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+    bullets: [
+      "relayium.com/cli 列出了所有安装方式——Windows 二进制、发布页，或装了 Go 用 go build。",
+      "relayium --version 可确认。没装 CLI，下面的命令只会报 “command not found”。",
+    ],
+  },
+  ja: {
+    heading: "自分のマシンに CLI をインストール",
+    body: [
+      "この最後の手順はサーバーではなく自分のコンピュータで relayium CLI を実行します。未インストールならまず入れてください。macOS または Linux：",
+    ],
+    code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+    bullets: [
+      "relayium.com/cli にすべてのインストール方法があります——Windows バイナリ、リリースページ、または Go があれば go build。",
+      "relayium --version で確認できます。CLI がないと下のコマンドは「command not found」と出るだけです。",
+    ],
+  },
+  ko: {
+    heading: "내 컴퓨터에 CLI 설치",
+    body: [
+      "이 마지막 단계는 서버가 아니라 내 컴퓨터에서 relayium CLI를 실행합니다. 설치하지 않았다면 먼저 설치하세요. macOS나 Linux:",
+    ],
+    code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+    bullets: [
+      "relayium.com/cli 에 모든 설치 방법이 있습니다 — Windows 바이너리, 릴리스 페이지, 또는 Go가 있으면 go build.",
+      "relayium --version 으로 확인합니다. CLI가 없으면 아래 명령은 “command not found”만 출력합니다.",
+    ],
+  },
+  de: {
+    heading: "Installiere die CLI auf deinem Rechner",
+    body: [
+      "Dieser letzte Schritt führt die relayium-CLI auf deinem eigenen Rechner aus (nicht auf dem Server), installiere sie dort also, falls noch nicht geschehen. Unter macOS oder Linux:",
+    ],
+    code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+    bullets: [
+      "relayium.com/cli listet alle Installationswege — ein Windows-Binary, die Releases-Seite oder go build, wenn du Go hast.",
+      "relayium --version bestätigt es. Ohne die CLI gibt der Befehl unten nur „command not found“ aus.",
+    ],
+  },
+  fr: {
+    heading: "Installez la CLI sur votre machine",
+    body: [
+      "Cette dernière étape exécute la CLI relayium sur votre propre ordinateur (pas le serveur), alors installez-la là si ce n'est pas fait. Sous macOS ou Linux :",
+    ],
+    code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+    bullets: [
+      "relayium.com/cli liste toutes les options — un binaire Windows, la page des releases, ou go build si vous avez Go.",
+      "relayium --version le confirme. Sans la CLI, la commande ci-dessous affiche « command not found ».",
+    ],
+  },
+};
+
+// withInstall returns a copy of a guide's `langs` map with an install section
 // inserted just before the first section that shows a `relayium` command (in a
 // code block). Task guides that open with a command get it at the very top;
 // comparison articles keep their intro first and get it right before the first
-// command demo. Inputs are not mutated.
-export function withInstall(langs) {
+// command demo. Pass `snippet` to use a variant (e.g. selfHostInstall). Inputs
+// are not mutated.
+export function withInstall(langs, snippet = installSection) {
   const out = {};
   for (const [l, doc] of Object.entries(langs)) {
     const sections = doc.sections || [];
     const hasCmd = (s) => (s.code || []).some((block) => block.includes("relayium "));
     let i = sections.findIndex(hasCmd);
     if (i < 0) i = 0;
-    const snippet = installSection[l] || installSection.en;
+    const snip = snippet[l] || snippet.en;
     out[l] = {
       ...doc,
-      sections: [...sections.slice(0, i), snippet, ...sections.slice(i)],
+      sections: [...sections.slice(0, i), snip, ...sections.slice(i)],
     };
   }
   return out;

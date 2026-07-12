@@ -3,6 +3,8 @@
 // follow the same structure with identical facts. Command/env-key blocks
 // (code) stay English in every language.
 
+import { withInstall, selfHostInstall } from "../install-section.mjs";
+
 const en = {
   title: "Self-host Relayium: run your own file-transfer server",
   description:
@@ -527,6 +529,6 @@ const fr = {
 
 export default {
   slug: "guides/self-host-relayium",
-  updated: "2026-07-09",
-  langs: { en, zh, ja, ko, de, fr },
+  updated: "2026-07-12",
+  langs: withInstall({ en, zh, ja, ko, de, fr }, selfHostInstall),
 };
