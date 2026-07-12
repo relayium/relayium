@@ -27,7 +27,7 @@
     <meta name="twitter:title" content="Relayium 对比 croc：从终端加密传输文件" />
     <meta name="twitter:description" content="Relayium 和 croc 都是免费、开源、加密的命令行点对点传输工具。本文客观对比两者，看看各自更适合什么场景。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 croc：从终端加密传输文件","description":"Relayium 和 croc 都是免费、开源、加密的命令行点对点传输工具。本文客观对比两者，看看各自更适合什么场景。","inLanguage":"zh-Hans","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/zh/compare/croc","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Relayium 的 CLI 免费吗？","acceptedAnswer":{"@type":"Answer","text":"完全免费。没有付费档位，也没有什么可计量的——每种模式都是两端直接连接，CLI 采用 MIT 许可并开源。"}},{"@type":"Question","name":"需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。push/pull 用你自己的 SSH 权限，daemon-direct 用你机器之间锁定的 TLS 证书信任，send/receive 用你们线下约定的一段简短代码。三者都不涉及 Relayium 账号。"}},{"@type":"Question","name":"CLI 的配对码能和 Relayium 的浏览器版互通吗？","acceptedAnswer":{"@type":"Answer","text":"目前还不能实时配对传输——CLI 的 send/receive 用的是自己的直连握手协议，和浏览器基于 WebRTC 的配对流程不是一回事，两者暂不互通。如果只想用浏览器把文件交给对方，可以用 Relayium 的存储下载链接，或者浏览器版自己的配对码模式。"}},{"@type":"Question","name":"可以自托管吗？","acceptedAnswer":{"@type":"Answer","text":"可以。Relayium 的服务器以 Docker 镜像形式发布（docker compose up -d --build），你也可以用 --server https://your-domain 让 CLI 的 send/receive 指向你自己的实例——和自建 croc 中继是同样的思路。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 croc：从终端加密传输文件","description":"Relayium 和 croc 都是免费、开源、加密的命令行点对点传输工具。本文客观对比两者，看看各自更适合什么场景。","inLanguage":"zh-Hans","dateModified":"2026-07-12","mainEntityOfPage":"https://relayium.com/zh/compare/croc","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Relayium 的 CLI 免费吗？","acceptedAnswer":{"@type":"Answer","text":"完全免费。没有付费档位，也没有什么可计量的——每种模式都是两端直接连接，CLI 采用 MIT 许可并开源。"}},{"@type":"Question","name":"需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。push/pull 用你自己的 SSH 权限，daemon-direct 用你机器之间锁定的 TLS 证书信任，send/receive 用你们线下约定的一段简短代码。三者都不涉及 Relayium 账号。"}},{"@type":"Question","name":"CLI 的配对码能和 Relayium 的浏览器版互通吗？","acceptedAnswer":{"@type":"Answer","text":"目前还不能实时配对传输——CLI 的 send/receive 用的是自己的直连握手协议，和浏览器基于 WebRTC 的配对流程不是一回事，两者暂不互通。如果只想用浏览器把文件交给对方，可以用 Relayium 的存储下载链接，或者浏览器版自己的配对码模式。"}},{"@type":"Question","name":"可以自托管吗？","acceptedAnswer":{"@type":"Answer","text":"可以。Relayium 的服务器以 Docker 镜像形式发布（docker compose up -d --build），你也可以用 --server https://your-domain 让 CLI 的 send/receive 指向你自己的实例——和自建 croc 中继是同样的思路。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -59,13 +59,17 @@ footer a{color:var(--text-h);text-decoration:none}
     <div class="wrap">
       <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <h1>Relayium 对比 croc：从终端加密传输文件</h1>
-      <p class="updated">最近更新: 2026-07-09</p>
+      <p class="updated">最近更新: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/compare/croc">English</a><a href="/zh/compare/croc" aria-current="true">中文</a><a href="/ja/compare/croc">日本語</a><a href="/ko/compare/croc">한국어</a><a href="/de/compare/croc">Deutsch</a><a href="/fr/compare/croc">Français</a></nav>
       <p class="lead">croc 是最受欢迎的终端间传输文件工具之一：一个简短好记的暗号短语、一次 PAKE 密钥交换，就能直接用。Relayium CLI 想做的是同一件事，实现方式也相似——免费、开源、端到端加密，任何模式都不需要账号。</p>
       <p class="lead">这不是一篇贬低文。croc 的口碑是实至名归的。本文客观对比两者的共同点、Relayium CLI 因为能对接你已有的服务器而多出的能力，以及 croc 老实说更简单的场景。</p>
       <h2>Relayium 与 croc 的共同点</h2>
       <p>先说重合的部分，其实不少：两者都是安装一次就好的小型单一二进制文件，都完全免费、没有付费档位，都以宽松许可证开源，文件相关的每一行代码你都能读到。</p>
       <ul><li>传输无需账号——一个只有两端知道的简短暗号，就足以让彼此找到对方并协商出密钥。</li><li>全程端到端加密：中间的中继或会合节点从不会看到你文件的内容。</li><li>中断的传输可以接着传，而不必从头再来；两者也都会校验收到的内容确实和发出的一致。</li><li>跨平台：macOS、Linux 和 Windows。</li></ul>
+      <h2>开始之前</h2>
+      <p>下面用到的都是 relayium CLI，所以没装的话先装上。在 macOS 或 Linux 上，一条命令就能把预编译二进制放进你的 PATH：</p>
+      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul>
       <h2>SSH 与 daemon-direct：对接你已有的服务器</h2>
       <p>这是两者在实际使用上最大的差别。croc 围绕单一流程构建——输入暗号、输出暗号。Relayium CLI 又加了两种传输方式，用的是你本就已有的基础设施。</p>
       <p>relayium push / pull 复用你现有的 SSH 权限，因此没有新增的信任关系，也无需分享任何暗号。push 甚至能在远程完全没装 relayium 的服务器上工作，退化为通过 SSH 连接传输一段普通的 tar 流——但这个兜底只属于 push；pull 始终需要远程装有 relayium，因为在那里它要充当发送方。</p>

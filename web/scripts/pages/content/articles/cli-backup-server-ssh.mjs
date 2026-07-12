@@ -3,6 +3,8 @@
 // English is the master; zh/ja/ko/de/fr follow the same structure and facts.
 // Command blocks (code) stay English in every language.
 
+import { withInstall } from "../install-section.mjs";
+
 const en = {
   title: "Back up files to your own server over SSH with the Relayium CLI",
   description:
@@ -563,6 +565,6 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
 
 export default {
   slug: "guides/back-up-a-server-over-ssh",
-  updated: "2026-07-08",
-  langs: { en, zh, ja, ko, de, fr },
+  updated: "2026-07-12",
+  langs: withInstall({ en, zh, ja, ko, de, fr }),
 };

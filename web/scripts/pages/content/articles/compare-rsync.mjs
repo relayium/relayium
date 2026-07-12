@@ -3,6 +3,8 @@
 // English is the master; zh/ja/ko/de/fr follow the same structure with identical facts.
 // Command/code blocks stay English in every language.
 
+import { withInstall } from "../install-section.mjs";
+
 const en = {
   title: "Relayium vs rsync: sync folders without the SSH setup",
   description:
@@ -557,6 +559,6 @@ const fr = {
 
 export default {
   slug: "compare/rsync",
-  updated: "2026-07-09",
-  langs: { en, zh, ja, ko, de, fr },
+  updated: "2026-07-12",
+  langs: withInstall({ en, zh, ja, ko, de, fr }),
 };

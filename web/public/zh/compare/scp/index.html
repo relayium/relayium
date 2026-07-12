@@ -27,7 +27,7 @@
     <meta name="twitter:title" content="Relayium 对比 scp：更简单的 SSH 文件传输" />
     <meta name="twitter:description" content="scp 通用且预装在几乎所有系统上。Relayium 的 push/pull 走同一条 SSH，但增加了断点续传、SHA-256 校验、进度显示，以及针对裸机服务器的兜底方案。一次客观的对比。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 scp：更简单的 SSH 文件传输","description":"scp 通用且预装在几乎所有系统上。Relayium 的 push/pull 走同一条 SSH，但增加了断点续传、SHA-256 校验、进度显示，以及针对裸机服务器的兜底方案。一次客观的对比。","inLanguage":"zh-Hans","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/zh/compare/scp","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Relayium 的 CLI 需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。push/pull 使用你自己的 SSH 访问权限，方式和 scp 完全一样——CLI 的任何模式都不需要 Relayium 账号，也不需要登录。"}},{"@type":"Question","name":"如果远程服务器没装 Relayium，push 还能用吗？","acceptedAnswer":{"@type":"Answer","text":"可以。push 会先检测，如果 relayium 不在，就会退化为通过同一条 SSH 连接传输一段普通的 tar 流，因此在裸机服务器上依然可用。这个兜底只属于 push——pull 始终需要远程已经装好 relayium，因为在 pull 里远程要充当发送方。"}},{"@type":"Question","name":"用起来真的和 scp 一样简单吗？","acceptedAnswer":{"@type":"Answer","text":"命令形式很相近：relayium push src user@host:dest，对应 scp -r src user@host:dest。区别只会在出问题时体现出来——连接掉线时会续传而不是重来，且每个文件到达后都会做校验和验证。"}},{"@type":"Question","name":"什么时候该直接用 scp？","acceptedAnswer":{"@type":"Answer","text":"对于真正的一次性拷贝——不需要续传，不需要校验，也不想引入额外的二进制——scp 本来就在那里，是更简单的选择。它也是快速脚本里更稳妥的默认项，不想引入新依赖时尤其如此。"}},{"@type":"Question","name":"Relayium 的 CLI 免费吗？","acceptedAnswer":{"@type":"Answer","text":"完全免费——没有付费档位，MIT 许可并开源，每种模式都是两端直接连接。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 scp：更简单的 SSH 文件传输","description":"scp 通用且预装在几乎所有系统上。Relayium 的 push/pull 走同一条 SSH，但增加了断点续传、SHA-256 校验、进度显示，以及针对裸机服务器的兜底方案。一次客观的对比。","inLanguage":"zh-Hans","dateModified":"2026-07-12","mainEntityOfPage":"https://relayium.com/zh/compare/scp","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Relayium 的 CLI 需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。push/pull 使用你自己的 SSH 访问权限，方式和 scp 完全一样——CLI 的任何模式都不需要 Relayium 账号，也不需要登录。"}},{"@type":"Question","name":"如果远程服务器没装 Relayium，push 还能用吗？","acceptedAnswer":{"@type":"Answer","text":"可以。push 会先检测，如果 relayium 不在，就会退化为通过同一条 SSH 连接传输一段普通的 tar 流，因此在裸机服务器上依然可用。这个兜底只属于 push——pull 始终需要远程已经装好 relayium，因为在 pull 里远程要充当发送方。"}},{"@type":"Question","name":"用起来真的和 scp 一样简单吗？","acceptedAnswer":{"@type":"Answer","text":"命令形式很相近：relayium push src user@host:dest，对应 scp -r src user@host:dest。区别只会在出问题时体现出来——连接掉线时会续传而不是重来，且每个文件到达后都会做校验和验证。"}},{"@type":"Question","name":"什么时候该直接用 scp？","acceptedAnswer":{"@type":"Answer","text":"对于真正的一次性拷贝——不需要续传，不需要校验，也不想引入额外的二进制——scp 本来就在那里，是更简单的选择。它也是快速脚本里更稳妥的默认项，不想引入新依赖时尤其如此。"}},{"@type":"Question","name":"Relayium 的 CLI 免费吗？","acceptedAnswer":{"@type":"Answer","text":"完全免费——没有付费档位，MIT 许可并开源，每种模式都是两端直接连接。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -59,13 +59,17 @@ footer a{color:var(--text-h);text-decoration:none}
     <div class="wrap">
       <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <h1>Relayium 对比 scp：更简单的 SSH 文件传输</h1>
-      <p class="updated">最近更新: 2026-07-09</p>
+      <p class="updated">最近更新: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/compare/scp">English</a><a href="/zh/compare/scp" aria-current="true">中文</a><a href="/ja/compare/scp">日本語</a><a href="/ko/compare/scp">한국어</a><a href="/de/compare/scp">Deutsch</a><a href="/fr/compare/scp">Français</a></nav>
       <p class="lead">几十年来，scp 一直是通过 SSH 传文件的默认方式：几乎装在你会用到的每一台类 Unix 机器上，人人都熟悉它的用法，而且一直很好用。没必要假装不是这样——scp 的地位是实至名归的。</p>
       <p class="lead">Relayium 的 CLI 并不是要取代 SSH，而是搭在你已经拥有的同一条 SSH 访问权限之上。push 和 pull 使用你的 SSH 连接的方式和 scp 一样，但补上了几件 scp 从未打算做的事：接续中断的传输、用校验和验证每个文件、显示真实进度，以及在远程什么都没安装的情况下依然能用。</p>
       <h2>scp 确实更简单的场景</h2>
       <p>有必要坦白说：在很多任务里，scp 就是对的工具，加任何别的东西反而是负担。</p>
       <ul><li>它已经装好了——不用下载任何二进制，不用做任何配置，几乎你会 SSH 进去的每台服务器上都有。</li><li>它久经考验。几十年的使用积累、行为清晰可预期，每个系统管理员都已经熟悉它的参数。</li><li>对于真正的一次性任务——现在就复制这一个文件——直接敲 scp file.txt user@host:path，比安装任何东西都省事。</li><li>对于不想引入 OpenSSH 之外任何依赖的快速、一次性脚本，它是理想之选。</li></ul>
+      <h2>开始之前</h2>
+      <p>下面用到的都是 relayium CLI，所以没装的话先装上。在 macOS 或 Linux 上，一条命令就能把预编译二进制放进你的 PATH：</p>
+      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul>
       <h2>push / pull：同一条 SSH，加上断点续传、校验和进度</h2>
       <p>relayium push 和 relayium pull 走的是与 scp 完全相同的 SSH 访问——同一台主机、同一把密钥、同一个端口。区别在于连接建立之后发生了什么。</p>
       <p>每个文件到达后都会用 SHA-256 哈希做端到端校验，因此一个看起来完成了的传输，其内容确实和发出的一字不差。如果传输被打断——连接掉线、笔记本合上盖子——重新运行同一条命令会从中断处接着传，而不是全部重传，全程还能看到逐文件的真实进度，而不是悄无声息地拷贝。</p>

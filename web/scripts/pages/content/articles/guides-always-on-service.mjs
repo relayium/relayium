@@ -41,6 +41,8 @@ sudo launchctl print system/com.relayium.serve | grep state
 tail -f ~/relayium-serve.log
 sudo launchctl bootout system/com.relayium.serve`;
 
+import { withInstall } from "../install-section.mjs";
+
 const en = {
   title: "Run Relayium as an always-on receive service",
   description:
@@ -919,6 +921,6 @@ WantedBy=multi-user.target`,
 
 export default {
   slug: "guides/run-relayium-as-an-always-on-service",
-  updated: "2026-07-10",
-  langs: { en, zh, ja, ko, de, fr },
+  updated: "2026-07-12",
+  langs: withInstall({ en, zh, ja, ko, de, fr }),
 };

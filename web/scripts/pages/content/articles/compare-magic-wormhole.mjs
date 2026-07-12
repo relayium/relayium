@@ -3,6 +3,8 @@
 // master; zh/ja/ko/de/fr follow the same structure with identical facts.
 // Command/code snippets stay English in every language.
 
+import { withInstall } from "../install-section.mjs";
+
 const en = {
   title: "Relayium vs magic-wormhole: CLI file transfer",
   description:
@@ -581,6 +583,6 @@ const fr = {
 
 export default {
   slug: "compare/magic-wormhole",
-  updated: "2026-07-09",
-  langs: { en, zh, ja, ko, de, fr },
+  updated: "2026-07-12",
+  langs: withInstall({ en, zh, ja, ko, de, fr }),
 };

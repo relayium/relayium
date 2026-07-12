@@ -3,6 +3,8 @@
 // English is the master; zh/ja/ko/de/fr follow the same structure and facts.
 // Command blocks (code) stay English in every language.
 
+import { withInstall } from "../install-section.mjs";
+
 const en = {
   title: "Automate encrypted server backups with a cron job",
   description:
@@ -611,6 +613,6 @@ relayium push ./data relayium://backup-server:9031`,
 
 export default {
   slug: "how-to/automate-server-backups",
-  updated: "2026-07-09",
-  langs: { en, zh, ja, ko, de, fr },
+  updated: "2026-07-12",
+  langs: withInstall({ en, zh, ja, ko, de, fr }),
 };

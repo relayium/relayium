@@ -3,6 +3,8 @@
 // English is the master; zh/ja/ko/de/fr follow the same structure and facts.
 // Command blocks (code) stay English in every language.
 
+import { withInstall } from "../install-section.mjs";
+
 const en = {
   title: "Server-to-server transfers with the Relayium CLI (daemon direct)",
   description:
@@ -785,6 +787,6 @@ WantedBy=multi-user.target`,
 
 export default {
   slug: "guides/server-to-server-transfers",
-  updated: "2026-07-08",
-  langs: { en, zh, ja, ko, de, fr },
+  updated: "2026-07-12",
+  langs: withInstall({ en, zh, ja, ko, de, fr }),
 };
