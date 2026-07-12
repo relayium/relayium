@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/mail"
@@ -16,6 +17,26 @@ import (
 
 	"github.com/relayium/relayium/internal/storage"
 )
+
+// ErrPendingDeletion signals that a login attempt (password, magic link, or
+// OAuth) resolved to an account with a pending self-deletion (DeletedAt>0).
+// No session may be issued for such an account — every session-issuing auth
+// path must check this before calling IssueSession, since a frozen account
+// getting a live session is a security bug, not just a UX one.
+var ErrPendingDeletion = errors.New("account pending deletion")
+
+// PendingDeletionError carries the reactivation details a frozen-login
+// handler needs (purge deadline + a fresh single-use reactivate token)
+// without a second user lookup. It wraps ErrPendingDeletion so
+// errors.Is(err, ErrPendingDeletion) still matches at any call site;
+// handlers that need the extra fields use errors.As.
+type PendingDeletionError struct {
+	PurgeAfter      int64
+	ReactivateToken string
+}
+
+func (e *PendingDeletionError) Error() string { return ErrPendingDeletion.Error() }
+func (e *PendingDeletionError) Unwrap() error { return ErrPendingDeletion }
 
 // RelayConfig is one TURN relay in the pool (RELAYIUM_TURN_RELAYS JSON). The
 // client measures its RTT to each and both peers agree on the fastest common one.
@@ -282,6 +303,17 @@ func (s *Service) VerifyMagicLink(ctx context.Context, rawToken string) (Session
 	u, err := s.store.UpsertUserByEmail(ctx, tok.Email, "")
 	if err != nil {
 		return Session{}, err
+	}
+	// Frozen-login guard (Task 4): a pending-deletion account must not get a
+	// live session via magic link. Mint a fresh reactivate token right here,
+	// while we still have u — handleMagicVerify has no other way to recover
+	// the account's email from just the (now-consumed) magic token.
+	if u.DeletedAt > 0 {
+		raw, terr := s.issueReactivateToken(ctx, u.ID, u.Email)
+		if terr != nil {
+			return Session{}, terr
+		}
+		return Session{}, &PendingDeletionError{PurgeAfter: u.PurgeAfter, ReactivateToken: raw}
 	}
 	if err := s.store.LinkIdentity(ctx, "email", tok.Email, u.ID); err != nil {
 		return Session{}, err

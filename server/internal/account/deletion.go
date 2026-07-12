@@ -72,15 +72,8 @@ func (s *Service) ConfirmAccountDeletion(ctx context.Context, rawToken string) e
 	// reactivate token in email_tokens — even if the scheduled-deletion email
 	// send below fails. Minting it for a not-yet-pending account is harmless
 	// (reactivation is idempotent, and the token is bounded to the grace window).
-	raw := randToken()
-	if err := s.store.CreateEmailToken(ctx, EmailToken{
-		TokenHash: hashToken(raw),
-		UserID:    tok.UserID,
-		Email:     u.Email,
-		Purpose:   "reactivate",
-		CreatedAt: now.Unix(),
-		ExpiresAt: purgeAfter,
-	}); err != nil {
+	raw, err := s.issueReactivateToken(ctx, tok.UserID, u.Email)
+	if err != nil {
 		return err
 	}
 
@@ -115,11 +108,85 @@ func (s *Service) ConfirmAccountDeletion(ctx context.Context, rawToken string) e
 	// (Task 4). A transient SMTP hiccup must not 500 nor leave the account in an
 	// inconsistent "purged but not scheduled" state — mirror the other handlers'
 	// treatment of mail sends as fire-and-forget.
-	reactivateLink := fmt.Sprintf("%s/account/reactivate?token=%s", s.cfg.BaseURL, url.QueryEscape(raw))
-	if err := s.mailer.SendAccountDeletionScheduled(ctx, u.Email, purgeAfter, reactivateLink); err != nil {
+	link := s.reactivateLink(raw)
+	if err := s.mailer.SendAccountDeletionScheduled(ctx, u.Email, purgeAfter, link); err != nil {
 		log.Printf("account deletion: scheduled-email send failed for user %s (deletion still scheduled, purge_after=%d): %v", tok.UserID, purgeAfter, err)
 	}
 	return nil
+}
+
+// issueReactivateToken mints a fresh "reactivate" email_tokens row for userID,
+// valid for a full grace window (Settings.AccountGraceDays, in days) from
+// now, and returns the raw token. Shared by ConfirmAccountDeletion's
+// scheduled-deletion email and every frozen-login guard (Task 4:
+// password/magic/OAuth) — each pending-deletion login attempt hands back its
+// own independently-expiring token rather than depending on the original
+// confirm email having survived or still being at hand.
+func (s *Service) issueReactivateToken(ctx context.Context, userID, email string) (string, error) {
+	raw := randToken()
+	now := s.now()
+	st := s.resolveSettings(ctx)
+	tok := EmailToken{
+		TokenHash: hashToken(raw),
+		UserID:    userID,
+		Email:     email,
+		Purpose:   "reactivate",
+		CreatedAt: now.Unix(),
+		ExpiresAt: now.Unix() + st.AccountGraceDays*86400,
+	}
+	if err := s.store.CreateEmailToken(ctx, tok); err != nil {
+		return "", err
+	}
+	return raw, nil
+}
+
+// reactivateLink builds the reactivation URL for a raw reactivate token.
+func (s *Service) reactivateLink(raw string) string {
+	return fmt.Sprintf("%s/account/reactivate?token=%s", s.cfg.BaseURL, url.QueryEscape(raw))
+}
+
+// handleReactivate consumes a "reactivate" email token. Unauthenticated by
+// design, mirroring handleDeleteConfirm: the token itself is the
+// authorization, since a frozen account has no live session to authenticate
+// with in the first place (every login path refuses to issue one). On
+// success it clears the pending-deletion state and immediately logs the user
+// in — "click the link, you're back in" — so the response carries a fresh
+// session cookie plus the user JSON, mirroring handleResetPassword. Calling
+// it again for an already-active account is a 400 (the single-use token is
+// already spent), not a crash or a second purge-clearing no-op.
+func (s *Service) handleReactivate(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Token == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	tok, ok, err := s.store.UseEmailToken(r.Context(), hashToken(in.Token), "reactivate", s.now().Unix())
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_token"})
+		return
+	}
+	if err := s.store.ClearAccountDeletion(r.Context(), tok.UserID); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	u, err := s.store.GetUserByID(r.Context(), tok.UserID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	sess, err := s.IssueSession(r.Context(), u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	s.setSessionCookie(w, sess)
+	s.writeUser(r.Context(), w, http.StatusOK, u)
 }
 
 // handleDeleteRequest issues a delete-confirm email for the logged-in user.

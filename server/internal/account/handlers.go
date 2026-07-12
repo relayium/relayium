@@ -83,6 +83,10 @@ func (s *Service) routeMux() *http.ServeMux {
 	// itself is the authorization, mirroring the password-reset token pattern.
 	mux.HandleFunc("POST /api/account/delete/request", s.RequireSession(s.handleDeleteRequest))
 	mux.HandleFunc("POST /api/account/delete/confirm", s.handleDeleteConfirm)
+	// Reactivation (Task 4): also unauthed — a frozen account has no live
+	// session, so the reactivate token itself is the authorization, exactly
+	// like delete/confirm above.
+	mux.HandleFunc("POST /api/account/reactivate", s.handleReactivate)
 	mux.HandleFunc("GET /api/auth/methods", s.handleAuthMethods)
 	if s.cfg.EnableMagic {
 		mux.HandleFunc("POST /api/auth/magic/request", s.handleMagicRequest)
@@ -260,6 +264,13 @@ func (s *Service) handleMagicRequest(w http.ResponseWriter, r *http.Request) {
 func (s *Service) handleMagicVerify(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	sess, err := s.VerifyMagicLink(r.Context(), token)
+	var pd *PendingDeletionError
+	if errors.As(err, &pd) {
+		// Frozen login (Task 4): no session cookie, redirect carrying a fresh
+		// reactivate token instead of the usual post-login "/".
+		http.Redirect(w, r, "/?account=pending_deletion&token="+url.QueryEscape(pd.ReactivateToken), http.StatusFound)
+		return
+	}
 	if err != nil {
 		http.Redirect(w, r, "/?login=expired", http.StatusFound)
 		return
@@ -387,6 +398,15 @@ func (s *Service) handleRegister(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, ErrWeakPassword):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})
+	case errors.Is(err, ErrPendingDeletion):
+		// Task 4: this email (or its canonical sibling) belongs to an account
+		// mid-grace-period. Refuse the new registration rather than silently
+		// creating a second account on the same address the original owner
+		// might still reactivate into.
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "account_pending_deletion",
+			"hint":  "an account for this address is scheduled for deletion; use the reactivation link emailed at delete time, or try again after the grace period ends",
+		})
 	case errors.Is(err, ErrEmailTaken):
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "email already registered"})
 	case errors.Is(err, ErrInvalidEmail):
@@ -423,6 +443,18 @@ func (s *Service) handlePasswordLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if errors.Is(err, ErrEmailUnverified) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "email_unverified", "email": normEmail(in.Email)})
+		return
+	}
+	var pd *PendingDeletionError
+	if errors.As(err, &pd) {
+		// Frozen login (Task 4): correct credentials, but the account is
+		// pending deletion — no session, HTTP 200 (this is not a credentials
+		// failure) carrying the reactivation state instead.
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":          "pending_deletion",
+			"purgeAfter":      pd.PurgeAfter,
+			"reactivateToken": pd.ReactivateToken,
+		})
 		return
 	}
 	if err != nil {

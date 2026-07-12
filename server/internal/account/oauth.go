@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -74,9 +75,23 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u, err := s.store.UpsertUserByEmail(r.Context(), email, name)
-	if err == nil {
-		err = s.store.LinkIdentity(r.Context(), "google", sub, u.ID)
+	if err != nil {
+		http.Redirect(w, r, "/?login=error", http.StatusFound)
+		return
 	}
+	// Frozen-login guard (Task 4): a pending-deletion account must not get a
+	// live session via OAuth either — checked right after u is resolved,
+	// before any of LinkIdentity/SetEmailVerified/IssueSession run.
+	if u.DeletedAt > 0 {
+		raw, terr := s.issueReactivateToken(r.Context(), u.ID, u.Email)
+		if terr != nil {
+			http.Redirect(w, r, "/?login=error", http.StatusFound)
+			return
+		}
+		http.Redirect(w, r, "/?account=pending_deletion&token="+url.QueryEscape(raw), http.StatusFound)
+		return
+	}
+	err = s.store.LinkIdentity(r.Context(), "google", sub, u.ID)
 	if err == nil {
 		// Google only reaches this path with verified == true (checked above).
 		err = s.store.SetEmailVerified(r.Context(), u.ID)

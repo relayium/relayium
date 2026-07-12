@@ -39,6 +39,20 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 	if len(password) < minPasswordLen {
 		return User{}, ErrWeakPassword
 	}
+	// Task 4: a pending-deletion account (DeletedAt>0) keeps its email/canonical
+	// slot reserved through the grace window — re-registering it would let a
+	// second live account exist under the same address the original owner might
+	// still reactivate into. Checked first (against the canonical form, so this
+	// also catches a "a+1@gmail" registration attempt against a pending-deletion
+	// "a@gmail" account) and ahead of the exact-match GetCredentials check right
+	// below, since a pending-deletion password account still has a credentials
+	// row and would otherwise be misreported as a plain ErrEmailTaken.
+	canon := canonicalEmail(email)
+	if existing, ok, err := s.store.UserByCanonicalEmail(ctx, canon); err != nil {
+		return User{}, err
+	} else if ok && existing.DeletedAt > 0 {
+		return User{}, ErrPendingDeletion
+	}
 	if _, _, ok, err := s.store.GetCredentials(ctx, email); err != nil {
 		return User{}, err
 	} else if ok {
@@ -51,7 +65,7 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 	// leave a TOCTOU race letting N concurrent registrations for the same canonical
 	// form all pass. Same ErrEmailTaken → identical 409 response as an
 	// exact-duplicate, so existence is not leaked any differently.
-	u, taken, err := s.store.InsertUserDedupedByCanonical(ctx, email, displayName, canonicalEmail(email))
+	u, taken, err := s.store.InsertUserDedupedByCanonical(ctx, email, displayName, canon)
 	if err != nil {
 		return User{}, err
 	}
@@ -94,6 +108,21 @@ func (s *Service) Login(ctx context.Context, email, password string) (Session, e
 		return Session{}, err
 	} else if !verified {
 		return Session{}, ErrEmailUnverified
+	}
+	// Frozen-login guard (Task 4): load the full user row so DeletedAt is
+	// visible, and refuse to issue a session for a pending-deletion account —
+	// checked after credentials/verification pass but strictly before
+	// IssueSession, so a frozen account can never end up with a live session.
+	u, err := s.store.GetUserByID(ctx, uid)
+	if err != nil {
+		return Session{}, err
+	}
+	if u.DeletedAt > 0 {
+		raw, terr := s.issueReactivateToken(ctx, u.ID, u.Email)
+		if terr != nil {
+			return Session{}, terr
+		}
+		return Session{}, &PendingDeletionError{PurgeAfter: u.PurgeAfter, ReactivateToken: raw}
 	}
 	return s.IssueSession(ctx, uid)
 }

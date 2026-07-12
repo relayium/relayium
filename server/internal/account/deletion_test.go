@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -206,5 +208,255 @@ func TestDeleteConfirmIdempotent(t *testing.T) {
 	}
 	if mail.deletionScheduled != sentAfterFirst {
 		t.Fatalf("idempotent confirm must not re-send the scheduled email: want %d sends, got %d", sentAfterFirst, mail.deletionScheduled)
+	}
+}
+
+// --- Task 4: frozen login (all auth methods) + reactivation + registration guard ---
+
+// httpJSONResp is the trio of things the Task 4 test helpers below care about
+// from a JSON auth-endpoint response: status code, decoded body, and whether
+// a session cookie was set.
+type httpJSONResp struct {
+	status    int
+	json      map[string]any
+	setCookie string
+}
+
+// mustPasswordUser creates a login-ready (verified) password account,
+// reusing the Register + SetEmailVerified path the existing password-login
+// tests already establish (see TestPasswordRegisterLoginAndMethods).
+func mustPasswordUser(t *testing.T, svc *Service, store *SQLiteStore, email, password string) User {
+	t.Helper()
+	ctx := context.Background()
+	u, err := svc.Register(ctx, email, password, "")
+	if err != nil {
+		t.Fatalf("register %s: %v", email, err)
+	}
+	if err := store.SetEmailVerified(ctx, u.ID); err != nil {
+		t.Fatalf("verify %s: %v", email, err)
+	}
+	return u
+}
+
+// loginPassword posts to /api/auth/password/login and reports status, decoded
+// JSON body, and any session cookie value set (empty string = none set).
+func loginPassword(t *testing.T, baseURL, email, password string) httpJSONResp {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"email": email, "password": password})
+	resp, err := http.Post(baseURL+"/api/auth/password/login", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("login post: %v", err)
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	cookie := ""
+	for _, c := range resp.Cookies() {
+		if c.Name == sessionCookie {
+			cookie = c.Value
+		}
+	}
+	return httpJSONResp{status: resp.StatusCode, json: out, setCookie: cookie}
+}
+
+// register posts to /api/auth/register.
+func register(t *testing.T, baseURL, email, password string) httpJSONResp {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"email": email, "password": password})
+	resp, err := http.Post(baseURL+"/api/auth/register", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("register post: %v", err)
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	return httpJSONResp{status: resp.StatusCode, json: out}
+}
+
+// TestPasswordLoginFrozenWhenPendingDeletion: correct credentials against a
+// pending-deletion account must not issue a session — the JSON body carries
+// the pending_deletion state (purgeAfter + a fresh reactivate token) instead,
+// still HTTP 200 since the credentials themselves were fine.
+func TestPasswordLoginFrozenWhenPendingDeletion(t *testing.T) {
+	ts, svc, store, _ := newFileServer(t)
+	ctx := context.Background()
+	u := mustPasswordUser(t, svc, store, "a@example.com", "correct-horse")
+	if err := store.SetAccountDeletion(ctx, u.ID, 100, 100+30*86400); err != nil {
+		t.Fatalf("set deletion: %v", err)
+	}
+	resp := loginPassword(t, ts.URL, "a@example.com", "correct-horse")
+	if resp.status != 200 {
+		t.Fatalf("want 200 pending, got %d", resp.status)
+	}
+	if resp.json["status"] != "pending_deletion" || resp.json["reactivateToken"] == "" {
+		t.Fatalf("want pending_deletion+token, got %+v", resp.json)
+	}
+	if resp.setCookie != "" {
+		t.Fatal("no session cookie must be set for a frozen account")
+	}
+}
+
+// TestMagicLoginFrozenWhenPendingDeletion mirrors the password-login guard
+// for the magic-link path: verify redirects to the pending_deletion query
+// params carrying a fresh reactivate token instead of "/", and sets no
+// session cookie.
+func TestMagicLoginFrozenWhenPendingDeletion(t *testing.T) {
+	ts, _, store, mail := newFileServer(t)
+	ctx := context.Background()
+	u, err := store.UpsertUserByEmail(ctx, "m@example.com", "")
+	if err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	if err := store.SetAccountDeletion(ctx, u.ID, 100, 100+30*86400); err != nil {
+		t.Fatalf("set deletion: %v", err)
+	}
+
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	if _, err := client.PostForm(ts.URL+"/api/auth/magic/request", map[string][]string{"email": {"m@example.com"}}); err != nil {
+		t.Fatalf("magic request: %v", err)
+	}
+	i := strings.Index(mail.lastLink, "token=")
+	if i < 0 {
+		t.Fatalf("no magic token captured: %q", mail.lastLink)
+	}
+	resp, err := client.Get(ts.URL + "/api/auth/magic/verify?token=" + mail.lastLink[i+len("token="):])
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("want redirect, got %d", resp.StatusCode)
+	}
+	loc := resp.Header.Get("Location")
+	if !strings.Contains(loc, "account=pending_deletion") || !strings.Contains(loc, "token=") {
+		t.Fatalf("want pending_deletion redirect with token, got %q", loc)
+	}
+	if hasSessionCookie(resp.Cookies()) {
+		t.Fatal("no session cookie must be set for a frozen account via magic link")
+	}
+}
+
+// TestOAuthCallbackFrozenWhenPendingDeletion mirrors the guard for the OAuth
+// path: the callback redirects to the pending_deletion query params instead
+// of "/", with no session cookie, even though Google returned a fully
+// verified identity for the (pending-deletion) account's email.
+func TestOAuthCallbackFrozenWhenPendingDeletion(t *testing.T) {
+	store := newTestStore(t)
+	svc := NewService(store, &capturingMailer{}, Config{
+		BaseURL: "http://example.test", SessionTTL: time.Hour, EnableGoogle: true,
+		AccountGraceDays: 30,
+	})
+	ctx := context.Background()
+	u, err := store.UpsertUserByEmail(ctx, "gfrozen@example.com", "Frozen")
+	if err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	if err := store.SetAccountDeletion(ctx, u.ID, 100, 100+30*86400); err != nil {
+		t.Fatalf("set deletion: %v", err)
+	}
+	svc.fetchGoogleUser = func(context.Context, string) (string, string, string, bool, error) {
+		return "google-sub-frozen", "gfrozen@example.com", "Frozen", true, nil
+	}
+	ts := httptest.NewServer(svc.Routes())
+	defer ts.Close()
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	req, _ := http.NewRequest("GET", ts.URL+"/api/auth/google/callback?code=abc&state=s1", nil)
+	req.AddCookie(&http.Cookie{Name: "relayium_oauth_state", Value: "s1"})
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("callback: %v", err)
+	}
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("want redirect, got %d", resp.StatusCode)
+	}
+	loc := resp.Header.Get("Location")
+	if !strings.Contains(loc, "account=pending_deletion") || !strings.Contains(loc, "token=") {
+		t.Fatalf("want pending_deletion redirect with token, got %q", loc)
+	}
+	if hasSessionCookie(resp.Cookies()) {
+		t.Fatal("no session cookie must be set for a frozen account via OAuth")
+	}
+}
+
+// TestReactivateRestoresLogin drives the full frozen-login round trip: a
+// pending-deletion account's login hands back a reactivate token; posting
+// that token to /api/account/reactivate clears the deletion columns; and a
+// subsequent login now issues a normal session.
+func TestReactivateRestoresLogin(t *testing.T) {
+	ts, svc, store, _ := newFileServer(t)
+	ctx := context.Background()
+	u := mustPasswordUser(t, svc, store, "a@example.com", "correct-horse")
+	if err := store.SetAccountDeletion(ctx, u.ID, 100, 100+30*86400); err != nil {
+		t.Fatalf("set deletion: %v", err)
+	}
+	pending := loginPassword(t, ts.URL, "a@example.com", "correct-horse")
+	tok, _ := pending.json["reactivateToken"].(string)
+	if tok == "" {
+		t.Fatalf("no reactivate token in pending response: %+v", pending.json)
+	}
+	r := httptestPostJSON(t, ts.URL+"/api/account/reactivate", map[string]string{"token": tok})
+	if r.StatusCode != 200 {
+		t.Fatalf("reactivate: %d", r.StatusCode)
+	}
+	if u2, _ := store.GetUserByID(ctx, u.ID); u2.DeletedAt != 0 || u2.PurgeAfter != 0 {
+		t.Fatalf("reactivate should clear deletion: %+v", u2)
+	}
+	// A subsequent login now issues a real session.
+	ok := loginPassword(t, ts.URL, "a@example.com", "correct-horse")
+	if ok.setCookie == "" || ok.json["status"] == "pending_deletion" {
+		t.Fatal("login after reactivation should issue a session")
+	}
+}
+
+// TestReactivateInvalidTokenRejected: a bogus/expired/already-used token is
+// refused with 400 and never touches account state.
+func TestReactivateInvalidTokenRejected(t *testing.T) {
+	ts, _, _, _ := newFileServer(t)
+	resp := httptestPostJSON(t, ts.URL+"/api/account/reactivate", map[string]string{"token": "not-a-real-token"})
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", resp.StatusCode)
+	}
+}
+
+// TestRegisterRefusesPendingDeletionEmail: registering an email address that
+// belongs to a pending-deletion account must be refused, not silently create
+// a second live account on that address.
+func TestRegisterRefusesPendingDeletionEmail(t *testing.T) {
+	ts, svc, store, _ := newFileServer(t)
+	ctx := context.Background()
+	u := mustPasswordUser(t, svc, store, "a@example.com", "pw12345678")
+	if err := store.SetAccountDeletion(ctx, u.ID, 100, 100+30*86400); err != nil {
+		t.Fatalf("set deletion: %v", err)
+	}
+	resp := register(t, ts.URL, "a@example.com", "another12345")
+	if resp.status == 200 {
+		t.Fatal("registering a pending-delete email must be refused")
+	}
+	if resp.json["error"] != "account_pending_deletion" {
+		t.Fatalf("want account_pending_deletion error, got %+v", resp.json)
+	}
+}
+
+// TestRegisterRefusesPendingDeletionCanonicalSibling proves the register
+// guard is checked against the canonical form, not just the exact address —
+// a gmail dot-fold/+tag variant of a pending-deletion account must also be
+// refused (mirrors the existing canonical-dedupe Sybil-mint tests).
+func TestRegisterRefusesPendingDeletionCanonicalSibling(t *testing.T) {
+	ts, svc, store, _ := newFileServer(t)
+	ctx := context.Background()
+	u := mustPasswordUser(t, svc, store, "a.b@gmail.com", "pw12345678")
+	if err := store.SetAccountDeletion(ctx, u.ID, 100, 100+30*86400); err != nil {
+		t.Fatalf("set deletion: %v", err)
+	}
+	// "ab@gmail.com" dot-folds to the same canonical form as "a.b@gmail.com"
+	// (see TestRegisterCanonicalDedupeGmail).
+	resp := register(t, ts.URL, "ab@gmail.com", "another12345")
+	if resp.status == 200 {
+		t.Fatal("registering a canonical sibling of a pending-delete email must be refused")
+	}
+	if resp.json["error"] != "account_pending_deletion" {
+		t.Fatalf("want account_pending_deletion error, got %+v", resp.json)
 	}
 }
