@@ -3,7 +3,7 @@ import type { Messages } from "./types";
 const de: Messages = {
   langLabel: "Sprache",
   theme: { label: "Design", system: "System", light: "Hell", dark: "Dunkel" },
-  tagline: "Ende-zu-Ende-verschlüsselte Peer-to-Peer-Dateiübertragung · Dateien erreichen nie den Server",
+  tagline: "Ende-zu-Ende-verschlüsselte Peer-to-Peer-Dateiübertragung · der Server sieht deine Dateien nie",
   connected: (n) => `Verbunden · dieses Gerät ${n}`,
   ipLabel: "öffentliche IP",
   connecting: "Verbindung zum Signalisierungsserver…",
@@ -292,7 +292,7 @@ const de: Messages = {
   },
   crossnet: {
     realtimeTitle: "Echtzeit-Direktübertragung",
-    realtimeSub: "Beide jetzt online · Peer-to-Peer · Dateien berühren nie den Server",
+    realtimeSub: "Beide jetzt online · Peer-to-Peer · der Server sieht deine Dateien nie",
     realtimeFoot: "Empfänger braucht kein Konto · Ende-zu-Ende-verschlüsselt",
     signInToSend: "Zum netzwerkübergreifenden Senden anmelden. Die empfangende Person braucht nie ein Konto.",
     relayQuotaWarn: "Das Relay-Kontingent dieses Monats ist aufgebraucht. Eine direkte Peer-to-Peer-Verbindung funktioniert weiterhin — nur der Relay-Rückfall steht nicht zur Verfügung. Es wird zu Beginn des nächsten Monats zurückgesetzt; nutze in der Zwischenzeit einen Download-Link, um jetzt zu senden.",
@@ -307,7 +307,7 @@ const de: Messages = {
     cliLink: "CLI-Anleitung: in die Cloud laden, woanders abholen →",
   },
   crossSell: {
-    realtime: { lead: "Ist die andere Person gerade online? Direkt in Echtzeit ist schneller – Peer-to-Peer, Dateien berühren nie den Server.", cta: "Zur Echtzeit-Direktübertragung →" },
+    realtime: { lead: "Ist die andere Person gerade online? Direkt in Echtzeit ist schneller – Peer-to-Peer, und der Server sieht deine Dateien nie.", cta: "Zur Echtzeit-Direktübertragung →" },
     offline: { lead: "Gegenseite offline? Nutze die asynchrone Übertragung — verschlüsselt hochladen und einen Download-Link hinterlassen, tagelang abholbar.", cta: "Zur asynchronen Übertragung →" },
   },
   methods: {
@@ -378,7 +378,7 @@ const de: Messages = {
     secureLink: "So wird verschlüsselt und vor MITM geschützt →",
     items: [
       { title: "Ende-zu-Ende-verschlüsselt", desc: "X25519 + AES-256-GCM; die Schlüssel werden ausschließlich zwischen den beiden Geräten ausgehandelt, der Server kann nicht entschlüsseln." },
-      { title: "Dateien erreichen nie den Server", desc: "Im Echtzeitmodus fließen die Bytes per WebRTC direkt von Gerät zu Gerät und erreichen nie den Server; der optionale Download-Link-Modus speichert nur Zero-Knowledge-Chiffretext." },
+      { title: "Der Server sieht deine Dateien nie", desc: "Im Echtzeitmodus fließen die Bytes per WebRTC — im selben Netz direkt von Gerät zu Gerät und nie über den Server, netzübergreifend über einen verschlüsselten Relay, der nur Chiffretext sieht; der optionale Download-Link-Modus speichert nur Zero-Knowledge-Chiffretext." },
       { title: "Prüfung auf Man-in-the-Middle", desc: "Beide Bildschirme zeigen denselben Code (SAS); vergleiche ihn, um einen mithörenden MITM auszuschließen." },
       { title: "Plattformübergreifend", desc: "Windows, macOS, Linux, Android, iOS — jeder moderne Browser, nichts zu installieren." },
       { title: "Open Source & prüfbar", desc: "Das Protokoll und der gesamte Code liegen offen auf GitHub — jeder kann sie prüfen, selbst hosten oder mitwirken." },
@@ -392,7 +392,7 @@ const de: Messages = {
       ways: [
         { icon: "📄", name: "Dateien wählen, Code erhalten", how: "Auf „Dateien senden“ tippen und auswählen — ein 6-stelliger Kopplungscode wird automatisch erzeugt, samt Beitrittslink und QR.", tag: "Zum Senden anmelden" },
         { icon: "🔢", name: "Code an die Gegenseite geben", how: "Vorlesen, den Link schicken oder den QR zeigen — die andere Person tippt ihn ein oder öffnet ihn in einem beliebigen modernen Browser.", tag: "Codes gelten 15 Minuten" },
-        { icon: "⚡", name: "Übertragung startet beim Beitritt", how: "Sobald die Gegenseite beitritt, startet die Übertragung automatisch — Peer-to-Peer und Ende-zu-Ende-verschlüsselt; scheitert das Hole-Punching, springt ein verschlüsseltes TURN-Relay ein, das nichts entschlüsseln kann.", tag: "Dateien erreichen nie den Server" },
+        { icon: "⚡", name: "Übertragung startet beim Beitritt", how: "Sobald die Gegenseite beitritt, startet die Übertragung automatisch — Peer-to-Peer und Ende-zu-Ende-verschlüsselt; scheitert das Hole-Punching, springt ein verschlüsseltes TURN-Relay ein, das nichts entschlüsseln kann.", tag: "Der Server sieht deine Dateien nie" },
       ],
     },
     offline: {
@@ -436,7 +436,7 @@ const de: Messages = {
       { q: "Muss ich eine App installieren?", a: "Nein. Jeder moderne Browser überträgt direkt von der Webseite aus — Chrome wird empfohlen (streamt große Dateien speicherschonend auf die Festplatte, optional in einen Zielordner)." },
       { q: "Was, wenn keine Verbindung zustande kommt?", a: "Echtzeitübertragungen versuchen zuerst eine direkte Peer-to-Peer-Verbindung (STUN-Hole-Punching) und weichen bei Fehlschlag automatisch auf ein verschlüsseltes TURN-Relay aus (das Relay leitet nur Chiffretext weiter und kann nicht entschlüsseln). Immer noch nichts? Ein Download-Link ist am zuverlässigsten — er ist asynchron, sodass nicht beide Seiten gleichzeitig online sein müssen." },
       { q: "Wie groß dürfen Dateien sein?", a: "Die Echtzeit-Direktübertragung streamt die Daten, in der Praxis gibt es also keine harte Größengrenze; Download-Links sind durch ein Größenlimit pro Datei und ein Tageskontingent begrenzt, über die dich die Seite informiert." },
-      { q: "Kann der Server meine Dateien sehen?", a: "Nein. Echtzeitübertragungen erreichen nie den Server; Download-Links werden in deinem Browser verschlüsselt, und der Server behält nur Chiffretext, den er nicht entschlüsseln kann — der Schlüssel liegt allein bei der teilenden und der empfangenden Person." },
+      { q: "Kann der Server meine Dateien sehen?", a: "Nein. Im selben Netz erreichen Echtzeitübertragungen nie den Server; netzübergreifend laufen sie über einen verschlüsselten Relay, der nur Chiffretext weiterleitet und nichts entschlüsseln kann. Download-Links werden in deinem Browser verschlüsselt, und der Server behält nur Chiffretext, den er nicht entschlüsseln kann — der Schlüssel liegt allein bei der teilenden und der empfangenden Person." },
       { q: "Muss ich ein Konto anlegen?", a: "LAN-Übertragungen im selben Netzwerk brauchen keine Anmeldung. Netzwerkübergreifendes Senden per Kopplungscode oder Link erfordert die Anmeldung des Absenders — der Empfänger braucht nie ein Konto. Auch Download-Links erfordern die Anmeldung des Absenders, damit der verschlüsselte Chiffretext gespeichert werden kann." },
       { q: "Ist es Open Source?", a: "Ja. Das Protokolldesign sowie der gesamte Frontend- und Backend-Code liegen offen auf GitHub — frei zum Prüfen, Selbst-Hosten oder Mitwirken." },
     ],
@@ -444,7 +444,7 @@ const de: Messages = {
   crossPitch: "Im selben Netzwerk ist „LAN-Übertragung“ am einfachsten; getrennt und beide online? Dann direkt hier in Echtzeit übertragen — Gegenseite offline? Unten geht's zur asynchronen Übertragung.",
   homeCross: {
     title: "Nicht im selben Netzwerk?",
-    desc: "Ist die Gegenseite online, nutze Echtzeit-Direkt (Dateien berühren nie den Server); wenn nicht, die asynchrone Übertragung (verschlüsselt zwischengespeichert, Abruf per Link).",
+    desc: "Ist die Gegenseite online, nutze Echtzeit-Direkt (der Server sieht deine Dateien nie); wenn nicht, die asynchrone Übertragung (verschlüsselt zwischengespeichert, Abruf per Link).",
     realtimeCta: "Echtzeit-Direkt →",
     offlineCta: "Asynchron senden →",
   },

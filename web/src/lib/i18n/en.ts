@@ -3,7 +3,7 @@ import type { Messages } from "./types";
 const en: Messages = {
   langLabel: "Language",
   theme: { label: "Theme", system: "System", light: "Light", dark: "Dark" },
-  tagline: "End-to-end encrypted peer-to-peer file transfer · files never touch the server",
+  tagline: "End-to-end encrypted peer-to-peer file transfer · the server never sees your files",
   connected: (n) => `Connected · this device ${n}`,
   ipLabel: "public IP",
   connecting: "Connecting to the signaling server…",
@@ -291,7 +291,7 @@ const en: Messages = {
   },
   crossnet: {
     realtimeTitle: "Realtime direct",
-    realtimeSub: "Both online now · peer-to-peer · files never touch the server",
+    realtimeSub: "Both online now · peer-to-peer · the server never sees your files",
     realtimeFoot: "Recipient needs no account · end-to-end encrypted",
     signInToSend: "Sign in to send across networks. The person receiving never needs an account.",
     relayQuotaWarn: "You've used up this month's relay traffic. A direct peer-to-peer connection still works — only the relay fallback is unavailable. It resets at the start of next month; to send now, try a stored download link instead.",
@@ -306,7 +306,7 @@ const en: Messages = {
     cliLink: "CLI guide: push to the cloud, pull anywhere →",
   },
   crossSell: {
-    realtime: { lead: "Is the other person online right now? Realtime direct is faster — peer-to-peer, files never touch the server.", cta: "Go to realtime direct →" },
+    realtime: { lead: "Is the other person online right now? Realtime direct is faster — peer-to-peer, and the server never sees your files.", cta: "Go to realtime direct →" },
     offline: { lead: "Recipient not online? Use async transfer — encrypt, upload, and leave a download link they can fetch for days.", cta: "Go to async transfer →" },
   },
   methods: {
@@ -377,7 +377,7 @@ const en: Messages = {
     secureLink: "See how it's encrypted and MITM-protected →",
     items: [
       { title: "End-to-end encrypted", desc: "X25519 + AES-256-GCM; keys are negotiated only between the two devices and the server can't decrypt." },
-      { title: "Files never touch the server", desc: "In realtime mode, bytes flow device-to-device over WebRTC and never touch the server; the optional download-link mode stores only zero-knowledge ciphertext." },
+      { title: "The server never sees your files", desc: "In realtime mode, bytes flow over WebRTC — directly device-to-device on your network, or through an encrypted relay that only ever sees ciphertext across networks; the optional download-link mode stores only zero-knowledge ciphertext." },
       { title: "Man-in-the-middle check", desc: "Both screens show the same code (SAS); match it to rule out an eavesdropping MITM." },
       { title: "Cross-platform", desc: "Windows, macOS, Linux, Android, iOS — any modern browser, nothing to install." },
       { title: "Open source & auditable", desc: "The protocol and all the code are public on GitHub — anyone can review it, self-host, or contribute." },
@@ -391,7 +391,7 @@ const en: Messages = {
       ways: [
         { icon: "📄", name: "Pick files, get a code", how: "Tap “Send files” and choose what to send — a 6-digit pairing code is minted automatically, along with a join link and QR.", tag: "Sign in to send" },
         { icon: "🔢", name: "Give the code to the other side", how: "Read it out, send the link, or show the QR — any of the three; they type it in or open it in any modern browser.", tag: "Codes live 15 minutes" },
-        { icon: "⚡", name: "Transfer starts on join", how: "The moment they join, the transfer starts automatically — peer-to-peer and end-to-end encrypted; if hole-punching fails it falls back to an encrypted TURN relay that still can't decrypt anything.", tag: "Files never touch the server" },
+        { icon: "⚡", name: "Transfer starts on join", how: "The moment they join, the transfer starts automatically — peer-to-peer and end-to-end encrypted; if hole-punching fails it falls back to an encrypted TURN relay that still can't decrypt anything.", tag: "The server never sees your files" },
       ],
     },
     offline: {
@@ -435,7 +435,7 @@ const en: Messages = {
       { q: "Do I need to install an app?", a: "No. Any modern browser can transfer straight from the web page — Chrome is recommended (streams large files to disk with an optional target folder, without using memory)." },
       { q: "What if it won't connect?", a: "Realtime transfers first try a direct peer-to-peer path (STUN hole-punching) and automatically fall back to an encrypted TURN relay when that fails (the relay only ever forwards ciphertext and cannot decrypt). Still stuck? A download link is the most reliable option — it's asynchronous, so both sides don't need to be online at once." },
       { q: "How big can files be?", a: "Realtime direct transfer streams data, so there's no hard size cap in practice; download links are bounded by a per-file size limit and a daily quota, which the page will tell you about." },
-      { q: "Can the server see my files?", a: "No. Realtime transfers never touch the server; download links are encrypted in your browser and the server keeps only ciphertext it can't decrypt — the key lives solely with the link's sharer and recipient." },
+      { q: "Can the server see my files?", a: "No. On the same network, realtime transfers never touch the server; across networks they may pass through an encrypted relay, but it only ever forwards ciphertext and can't decrypt it. Download links are encrypted in your browser and the server keeps only ciphertext it can't decrypt — the key lives solely with the link's sharer and recipient." },
       { q: "Do I have to create an account?", a: "LAN transfers on the same network need no sign-in. Sending across networks by pairing code or link requires the sender to sign in — the recipient never needs an account. Download links also require the sender to sign in, so the encrypted ciphertext can be stored." },
       { q: "Is it open source?", a: "Yes. The protocol design and all front-end and back-end code are public on GitHub — free to review, self-host, or contribute to." },
     ],
@@ -443,7 +443,7 @@ const en: Messages = {
   crossPitch: "On the same network, “LAN transfer” is simplest; apart but both online, transfer right here in realtime — recipient offline? Switch to async transfer below.",
   homeCross: {
     title: "Not on the same network?",
-    desc: "If they're online, use realtime direct (peer-to-peer, files never touch the server); if not, use async transfer (encrypted storage, fetch by link anytime).",
+    desc: "If they're online, use realtime direct (peer-to-peer; the server never sees your files); if not, use async transfer (encrypted storage, fetch by link anytime).",
     realtimeCta: "Realtime direct →",
     offlineCta: "Async transfer →",
   },
