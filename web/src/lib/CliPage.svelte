@@ -54,8 +54,22 @@ relayium authorize 74318e3b…`;
     { flag: "--delete", who: "sync" },
     { flag: "--watch", who: "sync" },
     { flag: "--allow-delete", who: "serve" },
+    { flag: "--burn", who: "up" },
+    { flag: "--ttl <dur>", who: "up" },
+    { flag: "--max-downloads <n>", who: "up" },
+    { flag: "--server <url>", who: "login / up / down" },
   ];
   const syncCmd = "relayium sync ./site relayium://receiver.example.com --delete --watch";
+  const loginCmd = "relayium login   # opens relayium.com/device — enter the code to bind this machine";
+  const upCmd = `relayium up ./report.pdf
+#   → https://relayium.com/d/7fK2p…#k=Xr8s…
+
+# retention (otherwise your account's default applies)
+relayium up ./report.pdf --burn              # one download, then gone
+relayium up ./report.pdf --ttl 7d            # kept for 7 days
+relayium up ./report.pdf --max-downloads 5   # allow 5 downloads`;
+  const downCmd = `# on another machine — no login needed
+relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
   const fileNames = ["id.key / id.crt", "known_hosts", "authorized_fingerprints"];
   const guideSlugs = [
     "guides/transfer-files-from-terminal",
@@ -63,8 +77,9 @@ relayium authorize 74318e3b…`;
     "guides/send-a-file-to-someone",
     "guides/server-to-server-transfers",
     "guides/sync-a-large-folder-between-servers",
+    "guides/push-to-cloud-pull-on-another-computer",
   ];
-  const guideIcons = ["🚀", "🔑", "🔗", "🖧", "🔁"];
+  const guideIcons = ["🚀", "🔑", "🔗", "🖧", "🔁", "☁️"];
   const guideUrl = (slug: string) => (lang() === "en" ? `/${slug}` : `/${lang()}/${slug}`);
 </script>
 
@@ -158,6 +173,23 @@ relayium authorize 74318e3b…`;
     <h2>{t.cliPage.syncH2}</h2>
     <p>{t.cliPage.syncNote}</p>
     <CommandBlock code={syncCmd} title="sync a folder" />
+  </div>
+
+  <!-- Cloud (async, account) -->
+  <div class="mode">
+    <div class="mode-head">
+      <span class="g" aria-hidden="true">☁️</span>
+      <h2>{t.cliPage.cloudH2}</h2>
+      <span class="tag">{t.cliPage.cloudTag}</span>
+    </div>
+    <p>{t.cliPage.cloudIntro}</p>
+    <CommandBlock code={loginCmd} title="login" />
+    <p>{t.cliPage.cloudLoginNote}</p>
+    <p>{t.cliPage.cloudBody}</p>
+    <CommandBlock code={upCmd} title="up · from the first machine" />
+    <CommandBlock code={downCmd} title="down · on the second machine" />
+    <p>{t.cliPage.cloudInteropNote}</p>
+    <p>{t.cliPage.cloudPrivacyNote}</p>
   </div>
 
   <!-- Guides -->

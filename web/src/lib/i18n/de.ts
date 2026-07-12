@@ -245,6 +245,10 @@ const de: Messages = {
       "Löschungen von der Quelle zum Empfänger spiegeln",
       "Weiterlaufen und bei jeder Änderung neu synchronisieren",
       "Erlaubt, dass --delete eines sync-Senders tatsächlich Dateien löscht",
+      "Den Cloud-Upload nach einem einzigen Download löschen",
+      "Wie lange ein Cloud-Upload lebt, z. B. 7d oder 24h",
+      "Eine feste Zahl an Cloud-Downloads erlauben, dann löschen",
+      "login / up / down auf einen selbst gehosteten Server richten",
     ],
     trustH3: "Vertrauens- und Identitätsdateien",
     trustIntro:
@@ -267,9 +271,22 @@ const de: Messages = {
       "Eine Datei an jemanden senden",
       "Server-zu-Server-Übertragungen",
       "Einen großen Ordner zwischen Servern synchronisieren",
+      "In die Cloud laden, auf einem anderen Computer abholen",
     ],
     syncH2: "Einen Ordner synchron halten",
     syncNote: "Einen Ordner per inkrementeller Synchronisierung einseitig spiegeln — nur geänderte Dateien werden übertragen. Mit --delete werden auch Löschungen gespiegelt, mit --watch wird in Echtzeit neu synchronisiert. Funktioniert über SSH und daemon direct.",
+    cloudH2: "Cloud — jetzt hochladen, später herunterladen",
+    cloudTag: "Konto · asynchron",
+    cloudIntro:
+      "Von einem Rechner hochladen und auf einem anderen herunterladen, wann immer du willst — die beiden müssen nie gleichzeitig online sein. Das ist der einzige Modus, der dein Konto nutzt, und nur zum Hochladen: einmal relayium login, dann up. Das Herunterladen braucht kein Konto. Alles andere in der CLI bleibt ohne Anmeldung.",
+    cloudBody:
+      "up verschlüsselt die Dateien lokal, lädt den Chiffretext hoch und gibt einen Abhol-Link aus. Steuere mit einem Aufbewahrungs-Flag die Lebensdauer (sonst gilt die Vorgabe deines Kontos): --burn (ein Download), --ttl 7d (feste Zeit) oder --max-downloads 5 (feste Anzahl). Auf dem anderen Rechner gibst du den Link einfach an down — keine Anmeldung nötig.",
+    cloudLoginNote:
+      "login ist eine im Browser bestätigte Geräteanmeldung: die CLI zeigt einen Code, du öffnest relayium.com/device und bestätigst ihn. whoami zeigt das gebundene Konto; logout löscht es.",
+    cloudInteropNote:
+      "Der Link ist derselbe, den die Website verwendet: ein up-Link öffnet sich im Browser, und ein auf relayium.com erstellter Freigabelink lässt sich mit down abholen.",
+    cloudPrivacyNote:
+      "Ende-zu-Ende-verschlüsselt: der Schlüssel steckt nur im #k=-Fragment des Links und erreicht den Server nie, der Chiffretext (samt Dateinamen) speichert. Verlierst du den Link, ist die Datei unwiederbringlich.",
   },
   crossnet: {
     realtimeTitle: "Echtzeit-Direktübertragung",

@@ -245,6 +245,10 @@ const fr: Messages = {
       "Refléter les suppressions de la source vers le récepteur",
       "Continuer de s'exécuter et resynchroniser à chaque changement",
       "Autoriser le --delete d'un expéditeur sync à réellement supprimer des fichiers",
+      "Supprimer le téléversement cloud après un seul téléchargement",
+      "Durée de vie d'un téléversement cloud, p. ex. 7d ou 24h",
+      "Autoriser un nombre fixe de téléchargements cloud, puis supprimer",
+      "Diriger login / up / down vers un serveur auto-hébergé",
     ],
     trustH3: "Fichiers de confiance et d'identité",
     trustIntro:
@@ -267,9 +271,22 @@ const fr: Messages = {
       "Envoyer un fichier à quelqu'un",
       "Transferts de serveur à serveur",
       "Synchroniser un grand dossier entre serveurs",
+      "Envoyer dans le cloud, récupérer sur un autre ordinateur",
     ],
     syncH2: "Garder un dossier synchronisé",
     syncNote: "Miroir unidirectionnel d'un dossier par synchronisation incrémentielle — seuls les fichiers modifiés sont transférés. Ajoutez --delete pour refléter les suppressions, --watch pour resynchroniser en temps réel. Fonctionne via SSH et daemon direct.",
+    cloudH2: "Cloud — téléverser maintenant, télécharger plus tard",
+    cloudTag: "compte · asynchrone",
+    cloudIntro:
+      "Téléversez depuis une machine et téléchargez sur une autre quand vous voulez — les deux n'ont jamais besoin d'être en ligne en même temps. C'est le seul mode qui utilise votre compte, et seulement pour téléverser : lancez relayium login une fois, puis up. Le téléchargement ne demande aucun compte. Tout le reste de la CLI reste sans connexion.",
+    cloudBody:
+      "up chiffre les fichiers localement, téléverse le chiffré et affiche un lien de récupération. Ajoutez un drapeau de rétention pour contrôler sa durée de vie (sinon la valeur par défaut de votre compte s'applique) : --burn (un téléchargement), --ttl 7d (durée fixe) ou --max-downloads 5 (nombre fixe). Sur l'autre machine, passez le lien à down — aucune connexion requise.",
+    cloudLoginNote:
+      "login est une connexion d'appareil approuvée dans le navigateur : la CLI affiche un code, vous ouvrez relayium.com/device et le confirmez. whoami montre le compte lié ; logout l'efface.",
+    cloudInteropNote:
+      "Le lien est le même que celui du site : un lien up s'ouvre dans un navigateur, et un lien de partage créé sur relayium.com peut être récupéré avec down.",
+    cloudPrivacyNote:
+      "Chiffré de bout en bout : la clé ne voyage que dans le fragment #k= du lien et n'atteint jamais le serveur, qui stocke le chiffré (noms de fichiers compris). Perdez le lien et le fichier est irrécupérable.",
   },
   crossnet: {
     realtimeTitle: "Transfert direct en temps réel",

@@ -259,6 +259,13 @@ export interface Messages {
     guides: string[];
     syncH2: string;
     syncNote: string;
+    cloudH2: string;
+    cloudTag: string;
+    cloudIntro: string;
+    cloudBody: string;
+    cloudLoginNote: string;
+    cloudInteropNote: string;
+    cloudPrivacyNote: string;
   };
   crossnet: {
     realtimeTitle: string;

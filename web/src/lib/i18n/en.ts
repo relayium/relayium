@@ -244,6 +244,10 @@ const en: Messages = {
       "Mirror deletions from source to the receiver",
       "Keep running and re-sync on any change",
       "Permit a sync sender's --delete to actually remove files",
+      "Delete the cloud upload after a single download",
+      "How long a cloud upload lives, e.g. 7d or 24h",
+      "Allow a fixed number of cloud downloads, then delete",
+      "Point login / up / down at a self-hosted server",
     ],
     trustH3: "Trust & identity files",
     trustIntro:
@@ -266,9 +270,22 @@ const en: Messages = {
       "Send a file to someone",
       "Server-to-server transfers",
       "Sync a large folder between servers",
+      "Push to the cloud, pull on another computer",
     ],
     syncH2: "Keep a folder in sync",
     syncNote: "Mirror a folder one-way with incremental sync — only changed files transfer. Add --delete to mirror removals, --watch to re-sync in real time. Works over SSH and daemon direct.",
+    cloudH2: "Cloud — upload now, download later",
+    cloudTag: "account · async",
+    cloudIntro:
+      "Upload from one machine and download on another whenever you like — the two never need to be online at the same time. This is the only mode that uses your account, and only for uploading: run relayium login once, then up. Downloading needs no account. Everything else in the CLI stays no-login.",
+    cloudBody:
+      "up encrypts the files locally, uploads the ciphertext, and prints a claim link. Add a retention flag to control how long it lives (otherwise your account's default applies): --burn (one download), --ttl 7d (a fixed time), or --max-downloads 5 (a fixed count). On the other machine, hand the link to down — no login needed.",
+    cloudLoginNote:
+      "login is a browser-approved device sign-in: the CLI shows a code, you open relayium.com/device and confirm it. whoami shows the bound account; logout clears it.",
+    cloudInteropNote:
+      "The link is the same one the website uses: an up link opens in a browser, and a share link made on relayium.com can be pulled with down.",
+    cloudPrivacyNote:
+      "End-to-end encrypted: the key rides only in the link's #k= fragment and never reaches the server, which stores ciphertext (file names included). Lose the link and the file is unrecoverable.",
   },
   crossnet: {
     realtimeTitle: "Realtime direct",

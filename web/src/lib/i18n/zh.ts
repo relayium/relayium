@@ -244,6 +244,10 @@ const zh: Messages = {
       "将源端的删除同步镜像到接收端",
       "保持运行，有改动就自动重新同步",
       "允许 sync 发送端的 --delete 真正删除文件",
+      "下载一次后即删除该云端上传",
+      "云端上传的存活时长，如 7d 或 24h",
+      "允许固定次数的云端下载，之后删除",
+      "让 login / up / down 指向自建服务器",
     ],
     trustH3: "信任与身份文件",
     trustIntro:
@@ -266,9 +270,22 @@ const zh: Messages = {
       "把文件发给别人",
       "服务器到服务器传输",
       "在服务器之间同步大文件夹",
+      "推送到云端，在另一台电脑取回",
     ],
     syncH2: "保持文件夹同步",
     syncNote: "用增量同步单向镜像一个文件夹——只传改动过的文件。加 --delete 连删除一起镜像,加 --watch 实时重新同步。SSH 和 daemon direct 都支持。",
+    cloudH2: "云端——现在上传，稍后下载",
+    cloudTag: "账号 · 异步",
+    cloudIntro:
+      "从一台机器上传，之后随时在另一台下载——两者无需同时在线。这是唯一用到账号的模式，而且只在上传时用：先 relayium login 一次，再 up。下载无需账号。CLI 其余功能都免登录。",
+    cloudBody:
+      "up 在本地加密文件、上传密文，并打印一个取件链接。用保留 flag 控制它存活多久（不给则用你账号的默认）：--burn（下载一次）、--ttl 7d（固定时间）、--max-downloads 5（固定次数）。在另一台机器上，把链接交给 down——无需登录。",
+    cloudLoginNote:
+      "login 是浏览器授权的设备登录：CLI 显示一个码，你打开 relayium.com/device 确认它。whoami 显示绑定的账号；logout 清除它。",
+    cloudInteropNote:
+      "链接和网页端用的是同一种：up 的链接能在浏览器打开，在 relayium.com 上创建的分享链接也能用 down 取回。",
+    cloudPrivacyNote:
+      "端到端加密：密钥只在链接的 #k= 片段里，从不到达服务器，服务器只存密文（含文件名）。链接一丢，文件就无法找回。",
   },
   crossnet: {
     realtimeTitle: "实时直传",
