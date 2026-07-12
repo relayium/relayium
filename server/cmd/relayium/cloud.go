@@ -36,7 +36,7 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 	}
 
 	notify := func(start cloud.DeviceStart) {
-		fmt.Fprintf(stderr, "打开 %s 输入码: %s\n", start.VerificationURI, start.UserCode)
+		fmt.Fprintf(stderr, "Open %s and enter code: %s\n", start.VerificationURI, start.UserCode)
 	}
 
 	creds, err := cloud.NewClient(server).Login(context.Background(), notify)
