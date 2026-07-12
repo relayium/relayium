@@ -41,6 +41,8 @@ relayium authorize 74318e3b…`;
     { g: "🔑", title: "push / pull", cmd: "relayium push … user@host:path" },
     { g: "🔗", title: "send / receive", cmd: "relayium send … <code>" },
     { g: "🖧", title: "daemon direct", cmd: "relayium push … relayium://host" },
+    { g: "🔁", title: "sync", cmd: "relayium sync … relayium://host" },
+    { g: "☁️", title: "up / down", cmd: "relayium up … / down <link>" },
   ];
   const flagRows = [
     { flag: "--dir <d>", who: "serve" },
@@ -333,12 +335,16 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
 
   /* Which-mode picker */
   .pick {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: var(--space-3);
     margin-top: var(--space-4);
   }
   .pick-card {
+    flex: 1 1 220px;
+    min-width: 200px;
+    max-width: 300px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: var(--space-4);
@@ -518,9 +524,4 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     color: var(--text);
   }
 
-  @media (max-width: 620px) {
-    .pick {
-      grid-template-columns: 1fr;
-    }
-  }
 </style>

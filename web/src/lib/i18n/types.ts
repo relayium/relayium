@@ -214,7 +214,7 @@ export interface Messages {
   cliCallout: { heading: string; blurb: string; cta: string };
   // /cli docs page body. Command blocks stay literal English (code); only prose
   // and labels are localised. Arrays keep a fixed length matching CliPage.svelte:
-  // badges 3, pickWhen 3, flagMeanings 8, fileDescs 3.
+  // badges 3, pickWhen 5, flagMeanings 8, fileDescs 3.
   cliPage: {
     badges: string[];
     freenote: string;
