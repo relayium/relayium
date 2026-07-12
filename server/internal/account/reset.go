@@ -57,6 +57,23 @@ func (s *Service) ResetPassword(ctx context.Context, rawToken, newPassword strin
 	if !ok {
 		return Session{}, ErrInvalidToken
 	}
+	// Frozen-account guard (blocker fix, mirrors Task 4's login-path guards): a
+	// pending-deletion account must not get a live session via password reset
+	// either, and its password must not be silently changed while frozen — GC
+	// still hard-purges it on schedule regardless, and reactivation is the only
+	// path meant to bring it back. Checked immediately after the token is
+	// consumed, before any state mutation below.
+	u, err := s.store.GetUserByID(ctx, tok.UserID)
+	if err != nil {
+		return Session{}, err
+	}
+	if u.DeletedAt > 0 {
+		raw, terr := s.issueReactivateToken(ctx, u.ID, u.Email)
+		if terr != nil {
+			return Session{}, terr
+		}
+		return Session{}, &PendingDeletionError{PurgeAfter: u.PurgeAfter, ReactivateToken: raw}
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return Session{}, err

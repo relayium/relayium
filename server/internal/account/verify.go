@@ -34,6 +34,23 @@ func (s *Service) VerifyEmail(ctx context.Context, rawToken string) (Session, er
 	if !ok {
 		return Session{}, ErrInvalidToken
 	}
+	// Frozen-account guard (blocker fix, mirrors Task 4's login-path guards):
+	// effectively unreachable today (a pending-delete account is already
+	// email-verified, and resend only targets unverified accounts), but this
+	// closes the same one-line gap as ResetPassword/Login/VerifyMagicLink for
+	// defense-in-depth, in case a future path lets an unverified account reach
+	// pending-deletion.
+	u, err := s.store.GetUserByID(ctx, tok.UserID)
+	if err != nil {
+		return Session{}, err
+	}
+	if u.DeletedAt > 0 {
+		raw, terr := s.issueReactivateToken(ctx, u.ID, u.Email)
+		if terr != nil {
+			return Session{}, terr
+		}
+		return Session{}, &PendingDeletionError{PurgeAfter: u.PurgeAfter, ReactivateToken: raw}
+	}
 	if err := s.store.SetEmailVerified(ctx, tok.UserID); err != nil {
 		return Session{}, err
 	}

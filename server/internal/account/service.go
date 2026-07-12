@@ -251,6 +251,20 @@ func (s *Service) ValidateSession(ctx context.Context, sessionID string) (User, 
 	if err != nil {
 		return User{}, false, err
 	}
+	// Central frozen-account guard (blocker fix): a session that somehow got
+	// minted for a pending-deletion account (DeletedAt>0) — whether through a
+	// gap in one of the per-endpoint guards below, or a session that predates
+	// the deletion request outliving PurgeTransientUserData's revoke — must
+	// stop being usable the moment the account is frozen. This is the last
+	// line of defense: it covers every RequireSession/UserFromRequest-gated
+	// endpoint regardless of how the session was issued, not just the three
+	// login paths. Treated identically to an expired session so callers don't
+	// need a new branch. Reactivation (POST /api/account/reactivate) does not
+	// go through ValidateSession — it's token-authorized — so this can't block
+	// the only path that clears DeletedAt.
+	if u.DeletedAt > 0 {
+		return User{}, false, nil
+	}
 	return u, true, nil
 }
 

@@ -480,6 +480,18 @@ func (s *Service) handleEmailVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess, err := s.VerifyEmail(r.Context(), in.Token)
+	var pd *PendingDeletionError
+	if errors.As(err, &pd) {
+		// Frozen account (blocker fix, mirrors handlePasswordLogin's Task 4
+		// guard): no session, HTTP 200 (the token itself was valid) carrying
+		// the reactivation state instead.
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":          "pending_deletion",
+			"purgeAfter":      pd.PurgeAfter,
+			"reactivateToken": pd.ReactivateToken,
+		})
+		return
+	}
 	if errors.Is(err, ErrInvalidToken) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_token"})
 		return
@@ -547,6 +559,19 @@ func (s *Service) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess, err := s.ResetPassword(r.Context(), in.Token, in.NewPassword)
+	var pd *PendingDeletionError
+	if errors.As(err, &pd) {
+		// Frozen account (blocker fix, mirrors handlePasswordLogin's Task 4
+		// guard): no session, HTTP 200 (the token itself was valid) carrying
+		// the reactivation state instead — the password is left unchanged
+		// (ResetPassword checks DeletedAt before mutating anything).
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":          "pending_deletion",
+			"purgeAfter":      pd.PurgeAfter,
+			"reactivateToken": pd.ReactivateToken,
+		})
+		return
+	}
 	switch {
 	case errors.Is(err, ErrWeakPassword):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})

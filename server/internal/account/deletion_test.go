@@ -460,3 +460,113 @@ func TestRegisterRefusesPendingDeletionCanonicalSibling(t *testing.T) {
 		t.Fatalf("want account_pending_deletion error, got %+v", resp.json)
 	}
 }
+
+// --- Blocker fix: session-issuing paths other than the 3 login flows must
+// also honor the frozen-account guard, and the guard must also stop any
+// session that slips through by other means. ---
+
+// TestResetPasswordOnFrozenAccountIssuesNoSession: a pending-deletion account
+// that drives forgot→reset with valid credentials/token must not come out
+// the other end with a usable session — no session cookie is set, the
+// response instead carries the same pending_deletion state the 3 login paths
+// return, and any (bogus) cookie value can't be used against a
+// RequireSession-gated endpoint either.
+func TestResetPasswordOnFrozenAccountIssuesNoSession(t *testing.T) {
+	// Built directly (not via newFileServer) so ResetTTL is actually set —
+	// newFileServer's Config omits ResetTTL/VerifyTTL (it targets file-upload
+	// tests), which would make the reset token expire the instant it's minted.
+	store := newTestStore(t)
+	mail := &capturingMailer{}
+	svc := NewService(store, mail, Config{
+		BaseURL: "http://example.test", SessionTTL: time.Hour, ResetTTL: time.Hour,
+		AccountGraceDays: 30,
+	})
+	ts := httptest.NewServer(svc.Routes())
+	defer ts.Close()
+	ctx := context.Background()
+	u := mustPasswordUser(t, svc, store, "frozen-reset@example.com", "correct-horse")
+	if err := store.SetAccountDeletion(ctx, u.ID, 100, 100+30*86400); err != nil {
+		t.Fatalf("set deletion: %v", err)
+	}
+
+	if err := svc.RequestPasswordReset(ctx, "frozen-reset@example.com"); err != nil {
+		t.Fatalf("request reset: %v", err)
+	}
+	if mail.lastLink == "" {
+		t.Fatal("reset email not sent")
+	}
+
+	body, _ := json.Marshal(map[string]string{
+		"token": tokenFromLink(t, mail.lastLink), "newPassword": "brandnewpass",
+	})
+	resp, err := http.Post(ts.URL+"/api/auth/password/reset", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("reset post: %v", err)
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("want 200 pending, got %d body=%+v", resp.StatusCode, out)
+	}
+	if out["status"] != "pending_deletion" || out["reactivateToken"] == "" {
+		t.Fatalf("want pending_deletion+token, got %+v", out)
+	}
+	if hasSessionCookie(resp.Cookies()) {
+		t.Fatal("no session cookie must be set for a frozen account via password reset")
+	}
+
+	// Belt and suspenders: even if a cookie had been set, a RequireSession
+	// endpoint must reject it (proves the central ValidateSession guard also
+	// covers this path independent of the handler's own check).
+	req, _ := http.NewRequest("GET", ts.URL+"/api/me", nil)
+	for _, c := range resp.Cookies() {
+		req.AddCookie(c)
+	}
+	meResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("/api/me: %v", err)
+	}
+	defer meResp.Body.Close()
+	if meResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("/api/me after frozen reset must 401, got %d", meResp.StatusCode)
+	}
+}
+
+// TestValidateSessionRejectsFrozenUser proves the central guard in
+// ValidateSession catches a session minted before an account became
+// pending-deletion (e.g. by some future/other issuing path, not just the
+// three guarded login flows) — not just sessions issued afterward.
+func TestValidateSessionRejectsFrozenUser(t *testing.T) {
+	ts, svc, store, _ := newFileServer(t)
+	ctx := context.Background()
+	u := mustPasswordUser(t, svc, store, "residual@example.com", "correct-horse")
+	sess, err := svc.IssueSession(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("issue session: %v", err)
+	}
+	// Sanity: the session works before the account is frozen.
+	if _, ok, err := svc.ValidateSession(ctx, sess.ID); err != nil || !ok {
+		t.Fatalf("session should validate before freeze: ok=%v err=%v", ok, err)
+	}
+
+	if err := store.SetAccountDeletion(ctx, u.ID, 100, 100+30*86400); err != nil {
+		t.Fatalf("set deletion: %v", err)
+	}
+
+	if _, ok, err := svc.ValidateSession(ctx, sess.ID); err != nil || ok {
+		t.Fatalf("ValidateSession must reject a session for a now-frozen account: ok=%v err=%v", ok, err)
+	}
+
+	req, _ := http.NewRequest("GET", ts.URL+"/api/me", nil)
+	req.AddCookie(withCookie(sess.ID))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("/api/me: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("/api/me with a residual session for a frozen account must 401, got %d", resp.StatusCode)
+	}
+}
