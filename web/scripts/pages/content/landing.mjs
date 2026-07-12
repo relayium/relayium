@@ -5,11 +5,11 @@
 const zh = {
   title: "Relayium — 端到端加密的点对点文件传输",
   description:
-    "Relayium 是开源、端到端加密的点对点文件传输工具。在浏览器里两台设备直连，文件不经过服务器，无需安装即可实时传输；同一网络下无需账号，跨网络配对时仅发送方需登录。",
+    "Relayium 是开源、端到端加密的文件传输工具。在浏览器里实时直传：同一网络下两台设备直连、文件不经过服务器，跨网络则经加密中继转发（中继只见密文）。无需安装，同一网络下无需账号，跨网络配对时仅发送方需登录。",
   hero: {
     h1: "端到端加密的点对点文件传输",
     pitch:
-      "在浏览器里让两台设备直接相连，文件端到端加密、逐块传输，实时模式下根本不经过服务器。无需安装、无需注册，打开网页即可开始。",
+      "在浏览器里让两台设备直接相连，文件端到端加密、逐块传输；同一网络下根本不经过服务器，跨网络则经加密中继转发（中继只见密文）。无需安装、无需注册，打开网页即可开始。",
     cta: "开始传输",
   },
   how: {
@@ -30,7 +30,7 @@ const zh = {
       },
       {
         title: "真正点对点",
-        desc: "实时模式下文件通过加密的 WebRTC 通道在设备之间直接流动，根本不经过我们的服务器。",
+        desc: "同一网络下文件通过加密的 WebRTC 通道在设备之间直接流动、根本不经过我们的服务器；跨网络时经加密中继转发，中继也只能看到密文。",
       },
       {
         title: "SAS 防中间人",
@@ -72,7 +72,7 @@ const zh = {
       },
       {
         q: "文件会上传到服务器吗？",
-        a: "实时直传的文件根本不经过服务器；仅当你改用可选的下载链接时，浏览器会先加密再上传，服务器只保存无法解密的密文，密钥只存在于链接里。",
+        a: "同一网络下实时直传的文件根本不经过服务器；跨网络时经加密中继转发，中继也只能看到密文。仅当你改用可选的下载链接时，浏览器会先加密再上传，服务器只保存无法解密的密文，密钥只存在于链接里。",
       },
       {
         q: "是端到端加密的吗？",
@@ -99,11 +99,11 @@ const zh = {
 const ja = {
   title: "Relayium — エンドツーエンド暗号化のP2Pファイル転送",
   description:
-    "Relayiumはオープンソースでエンドツーエンド暗号化のP2Pファイル転送ツールです。ブラウザで2台の端末を直結し、ファイルはサーバーを経由しません。インストール不要でリアルタイムに転送でき、同じネットワークならアカウントも不要です（ネットワークをまたぐペアリングは送信側のサインインのみ必要）。",
+    "Relayiumはオープンソースでエンドツーエンド暗号化のファイル転送ツールです。ブラウザでのリアルタイム転送では、同じネットワークなら2台の端末が直結しファイルはサーバーを経由せず、ネットワークをまたぐ場合は暗号化されたリレー経由になります（リレーは暗号文しか扱いません）。インストール不要、同じネットワークならアカウントも不要です（ネットワークをまたぐペアリングは送信側のサインインのみ必要）。",
   hero: {
     h1: "エンドツーエンド暗号化のP2Pファイル転送",
     pitch:
-      "ブラウザで2台の端末を直接つなぎ、ファイルはエンドツーエンド暗号化されチャンクごとに転送されます。リアルタイムモードではサーバーを一切経由しません。インストールも登録も不要、ウェブページを開くだけで始められます。",
+      "ブラウザで2台の端末を直接つなぎ、ファイルはエンドツーエンド暗号化されチャンクごとに転送されます。同じネットワークではサーバーを一切経由せず、ネットワークをまたぐ場合は暗号化されたリレー経由になります（リレーは暗号文のみ）。インストールも登録も不要、ウェブページを開くだけで始められます。",
     cta: "転送を始める",
   },
   how: {
@@ -124,7 +124,7 @@ const ja = {
       },
       {
         title: "真のP2P",
-        desc: "リアルタイムモードではファイルは暗号化されたWebRTCチャネルを通じて端末間を直接流れ、当社のサーバーを一切経由しません。",
+        desc: "同じネットワークではファイルは暗号化されたWebRTCチャネルを通じて端末間を直接流れ、当社のサーバーを一切経由しません。ネットワークをまたぐ場合は暗号化されたリレーを経由しますが、リレーも暗号文しか見えません。",
       },
       {
         title: "SASで中間者攻撃を防止",
@@ -166,7 +166,7 @@ const ja = {
       },
       {
         q: "ファイルはサーバーにアップロードされますか？",
-        a: "リアルタイム直接転送のファイルはサーバーを一切経由しません。任意のダウンロードリンクを使う場合のみ、ブラウザで暗号化してからアップロードし、サーバーは復号できない暗号文だけを保持します。鍵はリンクの中にしかありません。",
+        a: "同じネットワークでのリアルタイム直接転送では、ファイルはサーバーを一切経由しません。ネットワークをまたぐ場合は暗号化されたリレーを経由しますが、リレーも暗号文しか見えません。任意のダウンロードリンクを使う場合のみ、ブラウザで暗号化してからアップロードし、サーバーは復号できない暗号文だけを保持します。鍵はリンクの中にしかありません。",
       },
       {
         q: "エンドツーエンド暗号化ですか？",
@@ -193,11 +193,11 @@ const ja = {
 const ko = {
   title: "Relayium — 종단간 암호화 P2P 파일 전송",
   description:
-    "Relayium은 오픈소스이자 종단간 암호화된 P2P 파일 전송 도구입니다. 브라우저에서 두 기기를 직접 연결하며 파일은 서버를 거치지 않습니다. 설치 없이 실시간으로 전송할 수 있고, 같은 네트워크에서는 계정도 필요 없습니다(네트워크를 넘는 페어링은 보내는 쪽 로그인만 필요).",
+    "Relayium은 오픈소스이자 종단간 암호화된 파일 전송 도구입니다. 브라우저 실시간 전송에서는 같은 네트워크일 때 두 기기가 직접 연결되어 파일이 서버를 거치지 않고, 네트워크를 넘을 때는 암호화된 릴레이를 거칩니다(릴레이는 암호문만 봅니다). 설치가 필요 없고, 같은 네트워크에서는 계정도 필요 없습니다(네트워크를 넘는 페어링은 보내는 쪽 로그인만 필요).",
   hero: {
     h1: "종단간 암호화 P2P 파일 전송",
     pitch:
-      "브라우저에서 두 기기를 직접 연결하고, 파일은 종단간 암호화되어 청크 단위로 전송됩니다. 실시간 모드에서는 서버를 전혀 거치지 않습니다. 설치도 가입도 필요 없이 웹 페이지만 열면 시작할 수 있습니다.",
+      "브라우저에서 두 기기를 직접 연결하고, 파일은 종단간 암호화되어 청크 단위로 전송됩니다. 같은 네트워크에서는 서버를 전혀 거치지 않고, 네트워크를 넘을 때는 암호화된 릴레이를 거칩니다(릴레이는 암호문만 봅니다). 설치도 가입도 필요 없이 웹 페이지만 열면 시작할 수 있습니다.",
     cta: "전송 시작",
   },
   how: {
@@ -218,7 +218,7 @@ const ko = {
       },
       {
         title: "진정한 P2P",
-        desc: "실시간 모드에서 파일은 암호화된 WebRTC 채널을 통해 기기 간에 직접 전달되며 당사 서버를 전혀 거치지 않습니다.",
+        desc: "같은 네트워크에서 파일은 암호화된 WebRTC 채널을 통해 기기 간에 직접 전달되며 당사 서버를 전혀 거치지 않습니다. 네트워크를 넘을 때는 암호화된 릴레이를 거치지만 릴레이도 암호문만 볼 수 있습니다.",
       },
       {
         title: "SAS로 중간자 공격 차단",
@@ -260,7 +260,7 @@ const ko = {
       },
       {
         q: "파일이 서버에 업로드되나요?",
-        a: "실시간 직접 전송의 파일은 서버를 전혀 거치지 않습니다. 선택적인 다운로드 링크를 쓸 때만 브라우저에서 암호화한 뒤 업로드하며, 서버는 복호화할 수 없는 암호문만 보관하고 키는 링크 안에만 있습니다.",
+        a: "같은 네트워크에서의 실시간 직접 전송에서는 파일이 서버를 전혀 거치지 않습니다. 네트워크를 넘을 때는 암호화된 릴레이를 거치지만 릴레이도 암호문만 볼 수 있습니다. 선택적인 다운로드 링크를 쓸 때만 브라우저에서 암호화한 뒤 업로드하며, 서버는 복호화할 수 없는 암호문만 보관하고 키는 링크 안에만 있습니다.",
       },
       {
         q: "종단간 암호화인가요?",
@@ -287,11 +287,11 @@ const ko = {
 const de = {
   title: "Relayium — Ende-zu-Ende-verschlüsselte P2P-Dateiübertragung",
   description:
-    "Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug für Peer-to-Peer-Dateiübertragung. Zwei Geräte verbinden sich direkt im Browser, Dateien erreichen nie den Server — ohne Installation, in Echtzeit. Im selben Netz ist kein Konto nötig; für Pairing über Netzwerke hinweg meldet sich nur der Absender an.",
+    "Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug zur Dateiübertragung. Bei der Echtzeitübertragung im Browser verbinden sich im selben Netz zwei Geräte direkt und Dateien erreichen nie den Server; netzübergreifend läuft es über einen verschlüsselten Relay, der nur Chiffretext sieht. Ohne Installation; im selben Netz ist kein Konto nötig, für Pairing über Netzwerke hinweg meldet sich nur der Absender an.",
   hero: {
     h1: "Ende-zu-Ende-verschlüsselte P2P-Dateiübertragung",
     pitch:
-      "Verbinde zwei Geräte direkt im Browser; Dateien werden Ende-zu-Ende verschlüsselt und Chunk für Chunk übertragen. Im Echtzeitmodus erreichen sie nie den Server. Keine Installation, keine Registrierung — einfach die Webseite öffnen und loslegen.",
+      "Verbinde zwei Geräte direkt im Browser; Dateien werden Ende-zu-Ende verschlüsselt und Chunk für Chunk übertragen. Im selben Netz erreichen sie nie den Server, netzübergreifend laufen sie über einen verschlüsselten Relay, der nur Chiffretext sieht. Keine Installation, keine Registrierung — einfach die Webseite öffnen und loslegen.",
     cta: "Übertragung starten",
   },
   how: {
@@ -312,7 +312,7 @@ const de = {
       },
       {
         title: "Echtes Peer-to-Peer",
-        desc: "Im Echtzeitmodus fließen Dateien über einen verschlüsselten WebRTC-Kanal direkt von Gerät zu Gerät und erreichen unsere Server nie.",
+        desc: "Im selben Netz fließen Dateien über einen verschlüsselten WebRTC-Kanal direkt von Gerät zu Gerät und erreichen unsere Server nie; netzübergreifend läuft es über einen verschlüsselten Relay, der ebenfalls nur Chiffretext sieht.",
       },
       {
         title: "SAS gegen Man-in-the-Middle",
@@ -354,7 +354,7 @@ const de = {
       },
       {
         q: "Werden meine Dateien auf einen Server hochgeladen?",
-        a: "Dateien der Echtzeit-Direktübertragung erreichen den Server nie. Nur wenn du den optionalen Download-Link nutzt, verschlüsselt der Browser sie vor dem Hochladen, und der Server behält lediglich Chiffretext, den er nicht entschlüsseln kann — der Schlüssel steckt nur im Link.",
+        a: "Im selben Netz erreichen Dateien der Echtzeit-Direktübertragung den Server nie; netzübergreifend laufen sie über einen verschlüsselten Relay, der ebenfalls nur Chiffretext sieht. Nur wenn du den optionalen Download-Link nutzt, verschlüsselt der Browser sie vor dem Hochladen, und der Server behält lediglich Chiffretext, den er nicht entschlüsseln kann — der Schlüssel steckt nur im Link.",
       },
       {
         q: "Ist es Ende-zu-Ende-verschlüsselt?",
@@ -381,11 +381,11 @@ const de = {
 const fr = {
   title: "Relayium — Transfert de fichiers P2P chiffré de bout en bout",
   description:
-    "Relayium est un outil open source de transfert de fichiers pair-à-pair chiffré de bout en bout. Deux appareils se connectent directement dans le navigateur, les fichiers ne passent jamais par le serveur — sans installation, en temps réel. Sur le même réseau, aucun compte n'est nécessaire ; pour s'appairer entre réseaux différents, seul l'expéditeur se connecte.",
+    "Relayium est un outil open source de transfert de fichiers chiffré de bout en bout. Lors d'un transfert en temps réel dans le navigateur, sur le même réseau deux appareils se connectent directement et les fichiers ne passent jamais par le serveur ; entre réseaux différents, cela passe par un relais chiffré qui ne voit que du chiffré. Sans installation ; sur le même réseau aucun compte n'est nécessaire, et pour s'appairer entre réseaux différents, seul l'expéditeur se connecte.",
   hero: {
     h1: "Transfert de fichiers P2P chiffré de bout en bout",
     pitch:
-      "Reliez deux appareils directement dans le navigateur ; les fichiers sont chiffrés de bout en bout et transférés bloc par bloc. En mode temps réel, ils ne passent jamais par le serveur. Aucune installation, aucune inscription — ouvrez la page web et commencez.",
+      "Reliez deux appareils directement dans le navigateur ; les fichiers sont chiffrés de bout en bout et transférés bloc par bloc. Sur le même réseau, ils ne passent jamais par le serveur ; entre réseaux différents, ils transitent par un relais chiffré qui ne voit que du chiffré. Aucune installation, aucune inscription — ouvrez la page web et commencez.",
     cta: "Démarrer le transfert",
   },
   how: {
@@ -406,7 +406,7 @@ const fr = {
       },
       {
         title: "Véritable pair-à-pair",
-        desc: "En mode temps réel, les fichiers circulent directement d'appareil à appareil via un canal WebRTC chiffré et ne passent jamais par nos serveurs.",
+        desc: "Sur le même réseau, les fichiers circulent directement d'appareil à appareil via un canal WebRTC chiffré et ne passent jamais par nos serveurs ; entre réseaux différents, ils transitent par un relais chiffré qui, lui aussi, ne voit que du chiffré.",
       },
       {
         title: "SAS contre l'homme du milieu",
@@ -448,7 +448,7 @@ const fr = {
       },
       {
         q: "Mes fichiers sont-ils téléversés sur un serveur ?",
-        a: "Les fichiers du transfert direct en temps réel ne passent jamais par le serveur. Uniquement si vous utilisez le lien de téléchargement optionnel, le navigateur les chiffre avant l'envoi et le serveur ne conserve que du chiffré qu'il ne peut pas déchiffrer — la clé reste dans le lien.",
+        a: "Sur le même réseau, les fichiers du transfert direct en temps réel ne passent jamais par le serveur ; entre réseaux différents, ils transitent par un relais chiffré qui, lui aussi, ne voit que du chiffré. Uniquement si vous utilisez le lien de téléchargement optionnel, le navigateur les chiffre avant l'envoi et le serveur ne conserve que du chiffré qu'il ne peut pas déchiffrer — la clé reste dans le lien.",
       },
       {
         q: "Est-ce chiffré de bout en bout ?",

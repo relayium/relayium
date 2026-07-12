@@ -51,7 +51,7 @@ const de: Messages = {
   tooMany: (m, n) => `Maximal ${m} Dateien auf einmal; ${n} überzählige ignoriert`,
   titleDefault: "Relayium — Ende-zu-Ende-verschlüsselte Dateiübertragung",
   descDefault:
-    "Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug für Peer-to-Peer-Dateiübertragung. Zwei Geräte verbinden sich direkt im Browser, Dateien erreichen nie den Server — ohne Installation, in Echtzeit. Im selben Netz ist kein Konto nötig; für Pairing über Netzwerke hinweg meldet sich nur der Absender an.",
+    "Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug zur Dateiübertragung. Bei der Echtzeitübertragung im Browser verbinden sich im selben Netz zwei Geräte direkt und Dateien erreichen nie den Server; netzübergreifend läuft es über einen verschlüsselten Relay, der nur Chiffretext sieht. Ohne Installation; im selben Netz ist kein Konto nötig, für Pairing über Netzwerke hinweg meldet sich nur der Absender an.",
   titleCross: "Netzwerkübergreifende Dateiübertragung — Echtzeit, Ende-zu-Ende-verschlüsselt | Relayium",
   titleOffline: "Verschlüsselter Datei-Link — jetzt hochladen, später herunterladen | Relayium",
   descCross: "Dateien mit einem 6-stelligen Code netzwerkübergreifend senden — Echtzeitübertragung, Ende-zu-Ende-verschlüsselt; der Relay-Server sieht nur Chiffretext, nie die Dateiinhalte.",

@@ -51,7 +51,7 @@ const en: Messages = {
   tooMany: (m, n) => `Up to ${m} files at a time; ignored the extra ${n}`,
   titleDefault: "Relayium — end-to-end encrypted file transfer",
   descDefault:
-    "Open-source, end-to-end encrypted peer-to-peer file transfer in your browser. In realtime mode, files stream device-to-device over WebRTC and never touch the server; the optional stored download-link mode keeps them as zero-knowledge ciphertext only you can decrypt.",
+    "Open-source, end-to-end encrypted file transfer in your browser. In realtime mode, files stream directly device-to-device over WebRTC on your local network, or across networks through an encrypted relay that only ever sees ciphertext; the optional stored download-link mode keeps them as zero-knowledge ciphertext only you can decrypt.",
   titleCross: "Cross-network file transfer — realtime, end-to-end encrypted | Relayium",
   titleOffline: "Encrypted file link — upload now, download later | Relayium",
   descCross: "Send files across networks with a 6-digit code — realtime transfer, end-to-end encrypted; the relay only ever sees ciphertext, never your files.",

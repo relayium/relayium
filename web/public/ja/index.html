@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Relayium — エンドツーエンド暗号化のP2Pファイル転送</title>
-    <meta name="description" content="Relayiumはオープンソースでエンドツーエンド暗号化のP2Pファイル転送ツールです。ブラウザで2台の端末を直結し、ファイルはサーバーを経由しません。インストール不要でリアルタイムに転送でき、同じネットワークならアカウントも不要です（ネットワークをまたぐペアリングは送信側のサインインのみ必要）。" />
+    <meta name="description" content="Relayiumはオープンソースでエンドツーエンド暗号化のファイル転送ツールです。ブラウザでのリアルタイム転送では、同じネットワークなら2台の端末が直結しファイルはサーバーを経由せず、ネットワークをまたぐ場合は暗号化されたリレー経由になります（リレーは暗号文しか扱いません）。インストール不要、同じネットワークならアカウントも不要です（ネットワークをまたぐペアリングは送信側のサインインのみ必要）。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/" />
@@ -19,15 +19,15 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Relayium — エンドツーエンド暗号化のP2Pファイル転送" />
-    <meta property="og:description" content="Relayiumはオープンソースでエンドツーエンド暗号化のP2Pファイル転送ツールです。ブラウザで2台の端末を直結し、ファイルはサーバーを経由しません。インストール不要でリアルタイムに転送でき、同じネットワークならアカウントも不要です（ネットワークをまたぐペアリングは送信側のサインインのみ必要）。" />
+    <meta property="og:description" content="Relayiumはオープンソースでエンドツーエンド暗号化のファイル転送ツールです。ブラウザでのリアルタイム転送では、同じネットワークなら2台の端末が直結しファイルはサーバーを経由せず、ネットワークをまたぐ場合は暗号化されたリレー経由になります（リレーは暗号文しか扱いません）。インストール不要、同じネットワークならアカウントも不要です（ネットワークをまたぐペアリングは送信側のサインインのみ必要）。" />
     <meta property="og:url" content="https://relayium.com/ja/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:locale" content="ja_JP" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Relayium — エンドツーエンド暗号化のP2Pファイル転送" />
-    <meta name="twitter:description" content="Relayiumはオープンソースでエンドツーエンド暗号化のP2Pファイル転送ツールです。ブラウザで2台の端末を直結し、ファイルはサーバーを経由しません。インストール不要でリアルタイムに転送でき、同じネットワークならアカウントも不要です（ネットワークをまたぐペアリングは送信側のサインインのみ必要）。" />
+    <meta name="twitter:description" content="Relayiumはオープンソースでエンドツーエンド暗号化のファイル転送ツールです。ブラウザでのリアルタイム転送では、同じネットワークなら2台の端末が直結しファイルはサーバーを経由せず、ネットワークをまたぐ場合は暗号化されたリレー経由になります（リレーは暗号文しか扱いません）。インストール不要、同じネットワークならアカウントも不要です（ネットワークをまたぐペアリングは送信側のサインインのみ必要）。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":["WebApplication","SoftwareApplication"],"name":"Relayium","url":"https://relayium.com/ja/","description":"Relayiumはオープンソースでエンドツーエンド暗号化のP2Pファイル転送ツールです。ブラウザで2台の端末を直結し、ファイルはサーバーを経由しません。インストール不要でリアルタイムに転送でき、同じネットワークならアカウントも不要です（ネットワークをまたぐペアリングは送信側のサインインのみ必要）。","applicationCategory":"UtilitiesApplication","operatingSystem":"Web","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"inLanguage":"ja"},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"無料ですか？","acceptedAnswer":{"@type":"Answer","text":"無料です。RelayiumはMITライセンスのオープンソースで、料金は一切かかりません。同じネットワークならリアルタイム転送はログイン不要で、ネットワークをまたぐペアリングコードでの転送は送信側のみサインインが必要です。受信側はどちらの場合もアカウント不要です。"}},{"@type":"Question","name":"ファイルはサーバーにアップロードされますか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイム直接転送のファイルはサーバーを一切経由しません。任意のダウンロードリンクを使う場合のみ、ブラウザで暗号化してからアップロードし、サーバーは復号できない暗号文だけを保持します。鍵はリンクの中にしかありません。"}},{"@type":"Question","name":"エンドツーエンド暗号化ですか？","acceptedAnswer":{"@type":"Answer","text":"はい。X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、鍵は2台の端末間だけでネゴシエートされるため、サーバーは何も復号できません。"}},{"@type":"Question","name":"異なるOS間でも転送できますか？","acceptedAnswer":{"@type":"Answer","text":"できます。モダンブラウザさえあれば、Windows・macOS・Linux・Android・iOSの間で相互に転送でき、アプリのインストールは不要です。"}},{"@type":"Question","name":"ファイルサイズの制限はありますか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイム直接転送はストリーミングのため、実用上のサイズ上限はありません（Chrome・Edgeはディスクへ直接ストリーミング、Firefox・Safariはメモリにバッファするため1ファイル約200MBまでを推奨）。1回につき最大1,000ファイルです。"}},{"@type":"Question","name":"Snapdropとの違いは？","acceptedAnswer":{"@type":"Answer","text":"Relayiumはアプリケーション層のエンドツーエンド暗号化とSAS検証コードを追加しており、シグナリングサーバーが侵害されても盗聴やなりすましができません。さらにネットワークをまたぐ転送や任意のゼロ知識ダウンロードリンクにも対応します。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":["WebApplication","SoftwareApplication"],"name":"Relayium","url":"https://relayium.com/ja/","description":"Relayiumはオープンソースでエンドツーエンド暗号化のファイル転送ツールです。ブラウザでのリアルタイム転送では、同じネットワークなら2台の端末が直結しファイルはサーバーを経由せず、ネットワークをまたぐ場合は暗号化されたリレー経由になります（リレーは暗号文しか扱いません）。インストール不要、同じネットワークならアカウントも不要です（ネットワークをまたぐペアリングは送信側のサインインのみ必要）。","applicationCategory":"UtilitiesApplication","operatingSystem":"Web","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"inLanguage":"ja"},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"無料ですか？","acceptedAnswer":{"@type":"Answer","text":"無料です。RelayiumはMITライセンスのオープンソースで、料金は一切かかりません。同じネットワークならリアルタイム転送はログイン不要で、ネットワークをまたぐペアリングコードでの転送は送信側のみサインインが必要です。受信側はどちらの場合もアカウント不要です。"}},{"@type":"Question","name":"ファイルはサーバーにアップロードされますか？","acceptedAnswer":{"@type":"Answer","text":"同じネットワークでのリアルタイム直接転送では、ファイルはサーバーを一切経由しません。ネットワークをまたぐ場合は暗号化されたリレーを経由しますが、リレーも暗号文しか見えません。任意のダウンロードリンクを使う場合のみ、ブラウザで暗号化してからアップロードし、サーバーは復号できない暗号文だけを保持します。鍵はリンクの中にしかありません。"}},{"@type":"Question","name":"エンドツーエンド暗号化ですか？","acceptedAnswer":{"@type":"Answer","text":"はい。X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、鍵は2台の端末間だけでネゴシエートされるため、サーバーは何も復号できません。"}},{"@type":"Question","name":"異なるOS間でも転送できますか？","acceptedAnswer":{"@type":"Answer","text":"できます。モダンブラウザさえあれば、Windows・macOS・Linux・Android・iOSの間で相互に転送でき、アプリのインストールは不要です。"}},{"@type":"Question","name":"ファイルサイズの制限はありますか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイム直接転送はストリーミングのため、実用上のサイズ上限はありません（Chrome・Edgeはディスクへ直接ストリーミング、Firefox・Safariはメモリにバッファするため1ファイル約200MBまでを推奨）。1回につき最大1,000ファイルです。"}},{"@type":"Question","name":"Snapdropとの違いは？","acceptedAnswer":{"@type":"Answer","text":"Relayiumはアプリケーション層のエンドツーエンド暗号化とSAS検証コードを追加しており、シグナリングサーバーが侵害されても盗聴やなりすましができません。さらにネットワークをまたぐ転送や任意のゼロ知識ダウンロードリンクにも対応します。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -57,7 +57,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
       <nav class="langbar" aria-label="Language"><a href="/">English</a><a href="/zh/">中文</a><a href="/ja/" aria-current="true">日本語</a><a href="/ko/">한국어</a><a href="/de/">Deutsch</a><a href="/fr/">Français</a></nav>
       <h1>エンドツーエンド暗号化のP2Pファイル転送</h1>
-      <p class="pitch">ブラウザで2台の端末を直接つなぎ、ファイルはエンドツーエンド暗号化されチャンクごとに転送されます。リアルタイムモードではサーバーを一切経由しません。インストールも登録も不要、ウェブページを開くだけで始められます。</p>
+      <p class="pitch">ブラウザで2台の端末を直接つなぎ、ファイルはエンドツーエンド暗号化されチャンクごとに転送されます。同じネットワークではサーバーを一切経由せず、ネットワークをまたぐ場合は暗号化されたリレー経由になります（リレーは暗号文のみ）。インストールも登録も不要、ウェブページを開くだけで始められます。</p>
       <a class="cta" href="/?lang=ja">転送を始める</a>
 
       <h2>4ステップで転送</h2>
@@ -71,7 +71,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>Relayiumが選ばれる理由</h2>
       <ul class="why">
         <li><b>エンドツーエンド暗号化</b> — X25519鍵交換とチャンクごとのAES-256-GCM。鍵は2台の端末間だけでネゴシエートされ、サーバーは復号できません。</li>
-        <li><b>真のP2P</b> — リアルタイムモードではファイルは暗号化されたWebRTCチャネルを通じて端末間を直接流れ、当社のサーバーを一切経由しません。</li>
+        <li><b>真のP2P</b> — 同じネットワークではファイルは暗号化されたWebRTCチャネルを通じて端末間を直接流れ、当社のサーバーを一切経由しません。ネットワークをまたぐ場合は暗号化されたリレーを経由しますが、リレーも暗号文しか見えません。</li>
         <li><b>SASで中間者攻撃を防止</b> — 両方の画面に同じ6桁の検証コードが表示されます。一致を確認すれば盗聴を狙う中間者を排除でき、シグナリングサーバーが侵害されてもなりすませません。</li>
         <li><b>クロスプラットフォーム</b> — Windows・macOS・Linux・Android・iOS——モダンブラウザさえあればインストール不要で使えます。</li>
         <li><b>無料でオープンソース</b> — MITライセンス。プロトコルとすべてのコードはGitHubで公開。同じネットワークならリアルタイム転送はログイン不要、ネットワークをまたぐペアリングコードでの転送は送信側のみサインインが必要です。</li>
@@ -91,7 +91,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>無料ですか？</h3>
       <p>無料です。RelayiumはMITライセンスのオープンソースで、料金は一切かかりません。同じネットワークならリアルタイム転送はログイン不要で、ネットワークをまたぐペアリングコードでの転送は送信側のみサインインが必要です。受信側はどちらの場合もアカウント不要です。</p>
       <h3>ファイルはサーバーにアップロードされますか？</h3>
-      <p>リアルタイム直接転送のファイルはサーバーを一切経由しません。任意のダウンロードリンクを使う場合のみ、ブラウザで暗号化してからアップロードし、サーバーは復号できない暗号文だけを保持します。鍵はリンクの中にしかありません。</p>
+      <p>同じネットワークでのリアルタイム直接転送では、ファイルはサーバーを一切経由しません。ネットワークをまたぐ場合は暗号化されたリレーを経由しますが、リレーも暗号文しか見えません。任意のダウンロードリンクを使う場合のみ、ブラウザで暗号化してからアップロードし、サーバーは復号できない暗号文だけを保持します。鍵はリンクの中にしかありません。</p>
       <h3>エンドツーエンド暗号化ですか？</h3>
       <p>はい。X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、鍵は2台の端末間だけでネゴシエートされるため、サーバーは何も復号できません。</p>
       <h3>異なるOS間でも転送できますか？</h3>

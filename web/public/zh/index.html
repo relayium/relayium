@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Relayium — 端到端加密的点对点文件传输</title>
-    <meta name="description" content="Relayium 是开源、端到端加密的点对点文件传输工具。在浏览器里两台设备直连，文件不经过服务器，无需安装即可实时传输；同一网络下无需账号，跨网络配对时仅发送方需登录。" />
+    <meta name="description" content="Relayium 是开源、端到端加密的文件传输工具。在浏览器里实时直传：同一网络下两台设备直连、文件不经过服务器，跨网络则经加密中继转发（中继只见密文）。无需安装，同一网络下无需账号，跨网络配对时仅发送方需登录。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/zh/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/" />
@@ -19,15 +19,15 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Relayium — 端到端加密的点对点文件传输" />
-    <meta property="og:description" content="Relayium 是开源、端到端加密的点对点文件传输工具。在浏览器里两台设备直连，文件不经过服务器，无需安装即可实时传输；同一网络下无需账号，跨网络配对时仅发送方需登录。" />
+    <meta property="og:description" content="Relayium 是开源、端到端加密的文件传输工具。在浏览器里实时直传：同一网络下两台设备直连、文件不经过服务器，跨网络则经加密中继转发（中继只见密文）。无需安装，同一网络下无需账号，跨网络配对时仅发送方需登录。" />
     <meta property="og:url" content="https://relayium.com/zh/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Relayium — 端到端加密的点对点文件传输" />
-    <meta name="twitter:description" content="Relayium 是开源、端到端加密的点对点文件传输工具。在浏览器里两台设备直连，文件不经过服务器，无需安装即可实时传输；同一网络下无需账号，跨网络配对时仅发送方需登录。" />
+    <meta name="twitter:description" content="Relayium 是开源、端到端加密的文件传输工具。在浏览器里实时直传：同一网络下两台设备直连、文件不经过服务器，跨网络则经加密中继转发（中继只见密文）。无需安装，同一网络下无需账号，跨网络配对时仅发送方需登录。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":["WebApplication","SoftwareApplication"],"name":"Relayium","url":"https://relayium.com/zh/","description":"Relayium 是开源、端到端加密的点对点文件传输工具。在浏览器里两台设备直连，文件不经过服务器，无需安装即可实时传输；同一网络下无需账号，跨网络配对时仅发送方需登录。","applicationCategory":"UtilitiesApplication","operatingSystem":"Web","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"inLanguage":"zh-Hans"},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"免费吗？","acceptedAnswer":{"@type":"Answer","text":"免费。Relayium 采用 MIT 许可开源，完全无任何费用；同一网络下实时传输无需登录，跨网络配对码传输仅发送方需登录，接收方始终无需账号。"}},{"@type":"Question","name":"文件会上传到服务器吗？","acceptedAnswer":{"@type":"Answer","text":"实时直传的文件根本不经过服务器；仅当你改用可选的下载链接时，浏览器会先加密再上传，服务器只保存无法解密的密文，密钥只存在于链接里。"}},{"@type":"Question","name":"是端到端加密的吗？","acceptedAnswer":{"@type":"Answer","text":"是。采用 X25519 密钥交换加每块 AES-256-GCM 加密，密钥只在两台设备之间协商，服务器无法解密任何内容。"}},{"@type":"Question","name":"能跨系统传吗？","acceptedAnswer":{"@type":"Answer","text":"能。只要有现代浏览器，Windows、macOS、Linux、Android、iOS 之间都能互传，无需安装 App。"}},{"@type":"Question","name":"文件有大小限制吗？","acceptedAnswer":{"@type":"Answer","text":"实时直传采用流式传输，理论上没有硬性大小上限（Chrome、Edge 直接流式落盘；Firefox、Safari 在内存中缓冲，建议单文件不超过约 200 MB）。每批最多 1,000 个文件。"}},{"@type":"Question","name":"和 Snapdrop 有什么区别？","acceptedAnswer":{"@type":"Answer","text":"Relayium 在同类思路上增加了应用层端到端加密与 SAS 校验码，即使信令服务器被入侵也无法窃听或冒充，并支持跨网络传输与可选的零知识下载链接。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":["WebApplication","SoftwareApplication"],"name":"Relayium","url":"https://relayium.com/zh/","description":"Relayium 是开源、端到端加密的文件传输工具。在浏览器里实时直传：同一网络下两台设备直连、文件不经过服务器，跨网络则经加密中继转发（中继只见密文）。无需安装，同一网络下无需账号，跨网络配对时仅发送方需登录。","applicationCategory":"UtilitiesApplication","operatingSystem":"Web","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"inLanguage":"zh-Hans"},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"免费吗？","acceptedAnswer":{"@type":"Answer","text":"免费。Relayium 采用 MIT 许可开源，完全无任何费用；同一网络下实时传输无需登录，跨网络配对码传输仅发送方需登录，接收方始终无需账号。"}},{"@type":"Question","name":"文件会上传到服务器吗？","acceptedAnswer":{"@type":"Answer","text":"同一网络下实时直传的文件根本不经过服务器；跨网络时经加密中继转发，中继也只能看到密文。仅当你改用可选的下载链接时，浏览器会先加密再上传，服务器只保存无法解密的密文，密钥只存在于链接里。"}},{"@type":"Question","name":"是端到端加密的吗？","acceptedAnswer":{"@type":"Answer","text":"是。采用 X25519 密钥交换加每块 AES-256-GCM 加密，密钥只在两台设备之间协商，服务器无法解密任何内容。"}},{"@type":"Question","name":"能跨系统传吗？","acceptedAnswer":{"@type":"Answer","text":"能。只要有现代浏览器，Windows、macOS、Linux、Android、iOS 之间都能互传，无需安装 App。"}},{"@type":"Question","name":"文件有大小限制吗？","acceptedAnswer":{"@type":"Answer","text":"实时直传采用流式传输，理论上没有硬性大小上限（Chrome、Edge 直接流式落盘；Firefox、Safari 在内存中缓冲，建议单文件不超过约 200 MB）。每批最多 1,000 个文件。"}},{"@type":"Question","name":"和 Snapdrop 有什么区别？","acceptedAnswer":{"@type":"Answer","text":"Relayium 在同类思路上增加了应用层端到端加密与 SAS 校验码，即使信令服务器被入侵也无法窃听或冒充，并支持跨网络传输与可选的零知识下载链接。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -57,7 +57,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <nav class="langbar" aria-label="Language"><a href="/">English</a><a href="/zh/" aria-current="true">中文</a><a href="/ja/">日本語</a><a href="/ko/">한국어</a><a href="/de/">Deutsch</a><a href="/fr/">Français</a></nav>
       <h1>端到端加密的点对点文件传输</h1>
-      <p class="pitch">在浏览器里让两台设备直接相连，文件端到端加密、逐块传输，实时模式下根本不经过服务器。无需安装、无需注册，打开网页即可开始。</p>
+      <p class="pitch">在浏览器里让两台设备直接相连，文件端到端加密、逐块传输；同一网络下根本不经过服务器，跨网络则经加密中继转发（中继只见密文）。无需安装、无需注册，打开网页即可开始。</p>
       <a class="cta" href="/?lang=zh">开始传输</a>
 
       <h2>四步完成一次传输</h2>
@@ -71,7 +71,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>为什么选择 Relayium</h2>
       <ul class="why">
         <li><b>端到端加密</b> — X25519 密钥交换 + 每块 AES-256-GCM 加密，密钥只在两台设备间协商，服务器无从解密。</li>
-        <li><b>真正点对点</b> — 实时模式下文件通过加密的 WebRTC 通道在设备之间直接流动，根本不经过我们的服务器。</li>
+        <li><b>真正点对点</b> — 同一网络下文件通过加密的 WebRTC 通道在设备之间直接流动、根本不经过我们的服务器；跨网络时经加密中继转发，中继也只能看到密文。</li>
         <li><b>SAS 防中间人</b> — 两边屏幕显示同一段 6 位校验码，核对一致即可排除中间人窃听，即便信令服务器被入侵也无法冒充。</li>
         <li><b>跨平台</b> — Windows、macOS、Linux、Android、iOS——只要有现代浏览器就能用，无需安装任何 App。</li>
         <li><b>免费开源</b> — MIT 许可，协议与全部前后端代码都在 GitHub 公开；同一网络下实时传输免登录，跨网络配对码传输仅发送方需登录。</li>
@@ -91,7 +91,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>免费吗？</h3>
       <p>免费。Relayium 采用 MIT 许可开源，完全无任何费用；同一网络下实时传输无需登录，跨网络配对码传输仅发送方需登录，接收方始终无需账号。</p>
       <h3>文件会上传到服务器吗？</h3>
-      <p>实时直传的文件根本不经过服务器；仅当你改用可选的下载链接时，浏览器会先加密再上传，服务器只保存无法解密的密文，密钥只存在于链接里。</p>
+      <p>同一网络下实时直传的文件根本不经过服务器；跨网络时经加密中继转发，中继也只能看到密文。仅当你改用可选的下载链接时，浏览器会先加密再上传，服务器只保存无法解密的密文，密钥只存在于链接里。</p>
       <h3>是端到端加密的吗？</h3>
       <p>是。采用 X25519 密钥交换加每块 AES-256-GCM 加密，密钥只在两台设备之间协商，服务器无法解密任何内容。</p>
       <h3>能跨系统传吗？</h3>
