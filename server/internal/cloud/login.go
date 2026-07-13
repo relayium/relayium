@@ -25,9 +25,22 @@ type Client struct {
 
 // NewClient builds a Client against the given server base URL.
 func NewClient(server string) *Client {
+	// Deliberately no blanket http.Client.Timeout: it bounds the WHOLE
+	// request including reading the response body, so it would cap the
+	// streaming upload (writeUploadBody) and download (blob body) at a fixed
+	// wall clock. Any transfer slower than that cap — a large blob, a
+	// cold-storage round-trip, a slow link — then dies mid-stream with
+	// "context deadline exceeded (Client.Timeout or context cancellation
+	// while reading body)". Instead bound only the phases that should be
+	// fast (connect, TLS handshake, time-to-first-response-byte) via the
+	// transport, and let the body stream for as long as it needs — an
+	// interactive `relayium up/down` can always be Ctrl-C'd. Per-request
+	// deadlines still ride on the ctx each method threads through.
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.ResponseHeaderTimeout = 30 * time.Second
 	return &Client{
 		Server: server,
-		HTTP:   &http.Client{Timeout: 30 * time.Second},
+		HTTP:   &http.Client{Transport: tr},
 		sleep:  time.Sleep,
 	}
 }

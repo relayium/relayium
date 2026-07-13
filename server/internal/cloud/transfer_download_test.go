@@ -68,6 +68,30 @@ func fakeCloudServer(encManifest, blob []byte) *httptest.Server {
 	}))
 }
 
+// TestNewClientNoBlanketTimeout guards the download-timeout fix: a blanket
+// http.Client.Timeout caps the WHOLE request, including the streaming
+// upload/download body, so any transfer slower than the cap (a large blob, a
+// cold-storage round-trip, a slow link) dies mid-stream with "context
+// deadline exceeded (Client.Timeout or context cancellation while reading
+// body)". The client must instead bound only the fast phases (connect,
+// time-to-first-byte) and let the body stream unbounded.
+func TestNewClientNoBlanketTimeout(t *testing.T) {
+	c := NewClient("https://example.com")
+	if c.HTTP.Timeout != 0 {
+		t.Fatalf("NewClient set a blanket Client.Timeout=%v; it caps streaming transfers and must be 0", c.HTTP.Timeout)
+	}
+	tr, ok := c.HTTP.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected *http.Transport, got %T", c.HTTP.Transport)
+	}
+	if tr.ResponseHeaderTimeout == 0 {
+		t.Fatal("expected a ResponseHeaderTimeout to bound time-to-first-byte in place of the blanket timeout")
+	}
+	if tr.TLSHandshakeTimeout == 0 {
+		t.Fatal("expected a TLSHandshakeTimeout (Clone of DefaultTransport) to bound the handshake")
+	}
+}
+
 func TestDownloadRoundTrip(t *testing.T) {
 	raw, err := storecrypto.GenerateKey()
 	if err != nil {
