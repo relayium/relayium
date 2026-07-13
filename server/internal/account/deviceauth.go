@@ -60,6 +60,11 @@ func (s *Service) handleDeviceStart(w http.ResponseWriter, r *http.Request) {
 		Status:         "pending",
 		CreatedAt:      now,
 		ExpiresAt:      now + int64(deviceCodeTTL.Seconds()),
+		// Record the requesting CLI's origin so the browser approval page can show
+		// the human what they're authorizing — a phished victim seeing an
+		// unfamiliar IP/agent (or a stale request) is a chance to catch it.
+		ClientIP:  s.clientIP(r),
+		UserAgent: truncateUA(r.UserAgent()),
 	}
 	if err := s.store.CreateDeviceAuth(r.Context(), req); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -71,6 +76,45 @@ func (s *Service) handleDeviceStart(w http.ResponseWriter, r *http.Request) {
 		"verification_uri": s.cfg.BaseURL + "/device",
 		"interval":         devicePollInterval,
 		"expires_in":       int(deviceCodeTTL.Seconds()),
+	})
+}
+
+// truncateUA bounds a stored User-Agent so a hostile client can't bloat the row
+// (and keeps the approval page tidy).
+func truncateUA(ua string) string {
+	const max = 200
+	if len(ua) > max {
+		return ua[:max]
+	}
+	return ua
+}
+
+// handleDevicePending (GET /api/cli/device/pending?user_code=…) lets the
+// signed-in approval page show what a device-code login is authorizing before
+// the human clicks Approve: the origin (IP + agent) the CLI started from and how
+// long ago. Session-authed so it isn't an open lookup; only a still-pending,
+// unexpired request is surfaced (an approved/consumed/expired one returns
+// found=false), and no secret (device_code/token) is ever exposed.
+func (s *Service) handleDevicePending(w http.ResponseWriter, r *http.Request, _ User) {
+	code := r.URL.Query().Get("user_code")
+	if code == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	req, ok, err := s.store.GetDeviceAuthByUserCode(r.Context(), code)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !ok || req.Status != "pending" || s.now().Unix() >= req.ExpiresAt {
+		writeJSON(w, http.StatusOK, map[string]any{"found": false})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"found":      true,
+		"started_at": req.CreatedAt,
+		"client_ip":  req.ClientIP,
+		"user_agent": req.UserAgent,
 	})
 }
 

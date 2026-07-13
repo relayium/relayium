@@ -119,6 +119,7 @@ func (s *Service) routeMux() *http.ServeMux {
 	// by the logged-in web session that confirms the code.
 	mux.HandleFunc("POST /api/cli/device/start", s.handleDeviceStart)
 	mux.HandleFunc("POST /api/cli/device/poll", s.handleDevicePoll)
+	mux.HandleFunc("GET /api/cli/device/pending", s.RequireSession(s.handleDevicePending))
 	mux.HandleFunc("POST /api/cli/device/approve", s.RequireSession(s.handleDeviceApprove))
 	// GET /device is the human-facing verification_uri the CLI shows
 	// (RFC 8628-style): server-rendered, session-gated for the authed view,

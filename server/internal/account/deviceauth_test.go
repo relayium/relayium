@@ -138,3 +138,57 @@ func TestDevicePollUnknownCode(t *testing.T) {
 		t.Fatalf("unknown device_code should read as expired, got %+v", p)
 	}
 }
+
+// TestDevicePendingShowsOrigin: device/start records the CLI's IP + User-Agent,
+// and the session-authed /pending lookup surfaces them (so the approval page can
+// show what's being authorized). The lookup rejects anonymous callers.
+func TestDevicePendingShowsOrigin(t *testing.T) {
+	ts, mail := newTestServer(t)
+	client := ts.Client()
+
+	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/cli/device/start", strings.NewReader(""))
+	startReq.Header.Set("User-Agent", "relayium-cli/9.9.9")
+	sresp, err := client.Do(startReq)
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	var start map[string]any
+	_ = json.NewDecoder(sresp.Body).Decode(&start)
+	sresp.Body.Close()
+	userCode, _ := start["user_code"].(string)
+	if userCode == "" {
+		t.Fatalf("start missing user_code: %+v", start)
+	}
+
+	// Anonymous lookup is refused.
+	anon, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/cli/device/pending?user_code="+userCode, nil)
+	ar, err := client.Do(anon)
+	if err != nil {
+		t.Fatalf("anon pending: %v", err)
+	}
+	ar.Body.Close()
+	if ar.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("pending without session should 401, got %d", ar.StatusCode)
+	}
+
+	// A signed-in session sees the captured origin.
+	cookie := loginCookie(t, ts, mail, "pend@example.com")
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/cli/device/pending?user_code="+userCode, nil)
+	req.AddCookie(cookie)
+	r, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("pending: %v", err)
+	}
+	var d map[string]any
+	_ = json.NewDecoder(r.Body).Decode(&d)
+	r.Body.Close()
+	if d["found"] != true {
+		t.Fatalf("pending should be found: %+v", d)
+	}
+	if d["user_agent"] != "relayium-cli/9.9.9" {
+		t.Fatalf("user_agent = %v, want relayium-cli/9.9.9", d["user_agent"])
+	}
+	if ip, _ := d["client_ip"].(string); ip == "" {
+		t.Fatalf("client_ip should be recorded: %+v", d)
+	}
+}

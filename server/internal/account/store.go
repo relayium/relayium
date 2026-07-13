@@ -91,7 +91,9 @@ type DeviceAuthRequest struct {
 	TokenHash      string // hash of the minted CLI token, set on approval
 	CreatedAt      int64
 	ExpiresAt      int64
-	ConsumedAt     int64 // 0 = not yet consumed
+	ConsumedAt     int64  // 0 = not yet consumed
+	ClientIP       string // origin of the CLI that started the flow (for the approval page)
+	UserAgent      string // CLI's User-Agent, truncated
 }
 
 // CLIToken is a long-lived hashed bearer credential minted at the end of a
@@ -394,8 +396,10 @@ type Store interface {
 	// under it. slot==0 when claimed==false.
 	ClaimDownloadSlot(ctx context.Context, id string, at int64) (slot int64, claimed bool, err error)
 	// ReleaseDownloadSlot undoes a ClaimDownloadSlot after a failed delivery
-	// (download_count-1, floored at 0).
-	ReleaseDownloadSlot(ctx context.Context, id string, at int64) error
+	// (download_count-1, floored at 0). Slots are fungible — any failed claim
+	// returns one — so this takes no claim timestamp: a downloaded_at guard would
+	// wrongly leak slots when several downloads of a multi-download file race.
+	ReleaseDownloadSlot(ctx context.Context, id string) error
 	// user_stats (lifetime aggregate counters; privacy-minimal, no per-event rows)
 	AddUploadStat(ctx context.Context, userID string, bytes int64) error
 	AddDownloadStat(ctx context.Context, userID string, bytes int64) error

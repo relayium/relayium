@@ -316,7 +316,7 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		// likely already cancelled, which is what aborted the copy.
 		if limited {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			_ = s.store.ReleaseDownloadSlot(ctx, sf.ID, claimAt)
+			_ = s.store.ReleaseDownloadSlot(ctx, sf.ID)
 			cancel()
 		}
 		return

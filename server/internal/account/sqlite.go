@@ -177,7 +177,9 @@ CREATE TABLE IF NOT EXISTS cli_device_auth (
   pending_token    TEXT NOT NULL DEFAULT '', -- raw one-time token, held only between approve and the next poll
   created_at       INTEGER NOT NULL,
   expires_at       INTEGER NOT NULL,
-  consumed_at      INTEGER NOT NULL DEFAULT 0
+  consumed_at      INTEGER NOT NULL DEFAULT 0,
+  client_ip        TEXT NOT NULL DEFAULT '', -- origin of the CLI that started the flow, shown on /device to help spot phishing
+  user_agent       TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_cli_device_auth_expires ON cli_device_auth(expires_at);
 CREATE TABLE IF NOT EXISTS cli_tokens (
@@ -279,6 +281,10 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`ALTER TABLE users ADD COLUMN deleted_at INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE users ADD COLUMN purge_after INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE users ADD COLUMN purge_reminder_sent INTEGER NOT NULL DEFAULT 0`,
+		// device-code CLI login: record the requesting CLI's origin so the
+		// browser approval page can show what it's authorizing (anti-phishing).
+		`ALTER TABLE cli_device_auth ADD COLUMN client_ip TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE cli_device_auth ADD COLUMN user_agent TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -1404,8 +1410,10 @@ func (s *SQLiteStore) ClaimDownloadSlot(ctx context.Context, id string, at int64
 }
 
 // ReleaseDownloadSlot undoes a ClaimDownloadSlot after a failed delivery
-// (download_count-1, floored at 0).
-func (s *SQLiteStore) ReleaseDownloadSlot(ctx context.Context, id string, at int64) error {
+// (download_count-1, floored at 0). Slots are fungible, so it does not guard on
+// the claim's timestamp: doing so would leave a slot leaked whenever several
+// concurrent downloads of a multi-download file each set downloaded_at in turn.
+func (s *SQLiteStore) ReleaseDownloadSlot(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE stored_files SET download_count = MAX(download_count - 1, 0) WHERE id = ?`, id)
 	return err
@@ -1973,19 +1981,19 @@ func (s *SQLiteStore) ListActiveFleetTokens(ctx context.Context) ([]FleetToken, 
 // deviceAuthCols is shared by CreateDeviceAuth's INSERT and the two lookup
 // SELECTs; pending_token is deliberately excluded from the public struct (it
 // is a DB-internal handoff field) but still needs its own default on INSERT.
-const deviceAuthCols = `user_code, device_code_hash, status, user_id, token_hash, created_at, expires_at, consumed_at`
+const deviceAuthCols = `user_code, device_code_hash, status, user_id, token_hash, created_at, expires_at, consumed_at, client_ip, user_agent`
 
 func (s *SQLiteStore) CreateDeviceAuth(ctx context.Context, r DeviceAuthRequest) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO cli_device_auth (`+deviceAuthCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		r.UserCode, r.DeviceCodeHash, r.Status, r.UserID, r.TokenHash, r.CreatedAt, r.ExpiresAt, r.ConsumedAt)
+		`INSERT INTO cli_device_auth (`+deviceAuthCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.UserCode, r.DeviceCodeHash, r.Status, r.UserID, r.TokenHash, r.CreatedAt, r.ExpiresAt, r.ConsumedAt, r.ClientIP, r.UserAgent)
 	return err
 }
 
 func scanDeviceAuth(sc rowScanner) (DeviceAuthRequest, error) {
 	var r DeviceAuthRequest
 	err := sc.Scan(&r.UserCode, &r.DeviceCodeHash, &r.Status, &r.UserID, &r.TokenHash,
-		&r.CreatedAt, &r.ExpiresAt, &r.ConsumedAt)
+		&r.CreatedAt, &r.ExpiresAt, &r.ConsumedAt, &r.ClientIP, &r.UserAgent)
 	return r, err
 }
 
