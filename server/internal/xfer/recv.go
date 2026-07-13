@@ -205,13 +205,14 @@ func syncStateFor(destDir string, m Manifest) ResumeState {
 // given offset in dest, and returns the SHA-256 (hex) of the full file.
 func writeFileBody(rw io.Reader, base, dest string, f FileEntry, offset int64) (string, error) {
 	dir := filepath.Dir(dest)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
 	// Defense in depth beyond safeJoin's lexical check and the leaf O_NOFOLLOW: a
 	// pre-planted symlinked *directory* under destDir could still redirect the
-	// write outside it. Confirm the parent's real (symlink-resolved) path stays
-	// within the real destDir root.
+	// write outside it. mkdirAllWithin verifies the deepest existing ancestor
+	// stays within destDir BEFORE MkdirAll can follow it (a symlink must already
+	// exist to be followed); the post-create ensureWithin is the backstop.
+	if err := mkdirAllWithin(base, dir); err != nil {
+		return "", err
+	}
 	if err := ensureWithin(base, dir); err != nil {
 		return "", err
 	}
@@ -263,6 +264,30 @@ func safeJoin(destDir, rel string) (string, error) {
 		return "", fmt.Errorf("unsafe path in manifest: %q", rel)
 	}
 	return joined, nil
+}
+
+// mkdirAllWithin creates dir like os.MkdirAll, but first verifies the deepest
+// already-existing ancestor of dir resolves (symlinks and all) within destDir,
+// so MkdirAll can't follow a pre-planted symlinked parent to create directories
+// outside destDir. A symlink must already exist to be followed, and
+// EvalSymlinks resolves the whole chain; components created below the ancestor
+// are fresh real dirs.
+func mkdirAllWithin(destDir, dir string) error {
+	anc := dir
+	for {
+		if _, err := os.Lstat(anc); err == nil {
+			break // deepest existing ancestor
+		}
+		parent := filepath.Dir(anc)
+		if parent == anc {
+			break // reached the filesystem root
+		}
+		anc = parent
+	}
+	if err := ensureWithin(destDir, anc); err != nil {
+		return err
+	}
+	return os.MkdirAll(dir, 0o755)
 }
 
 // ensureWithin verifies that dir, after resolving any symlinks, is still inside

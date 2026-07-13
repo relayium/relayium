@@ -27,7 +27,19 @@ type Client struct {
 	// sleep is used between poll attempts; overridable in tests so the
 	// device-code poll loop doesn't actually block on wall-clock time.
 	sleep func(time.Duration)
+
+	// idleTimeout bounds how long a single blob-body Read may stall with no
+	// bytes arriving before the download treats the stream as dead and resumes
+	// (reconnect + Range). Dropping the blanket http.Client.Timeout removed the
+	// only bound on a wedged body; without this a server that accepts the request
+	// then dribbles or freezes the body would hang `down`/`up` forever, and the
+	// resume loop — which only reacts to read errors/EOF — never engages. 0 uses
+	// defaultIdleTimeout; overridable in tests.
+	idleTimeout time.Duration
 }
+
+// defaultIdleTimeout is the default per-Read stall bound for streaming bodies.
+const defaultIdleTimeout = 60 * time.Second
 
 // NewClient builds a Client against the given server base URL.
 func NewClient(server string) *Client {

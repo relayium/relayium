@@ -332,15 +332,17 @@ func (w *manifestWriter) openNext() error {
 			return err
 		}
 		dir := filepath.Dir(path)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
-		}
 		// Defense in depth beyond safeJoin's lexical check and the leaf
 		// O_NOFOLLOW below: a pre-planted symlinked *directory* under destDir
 		// (which defaults to the user's cwd — never freshly created) could
-		// still redirect the write outside it. Confirm the parent's real
-		// (symlink-resolved) path stays within destDir. Mirrors the receive
-		// path's hardening (internal/xfer, commit a4bc65d).
+		// still redirect the write outside it. mkdirAllWithin verifies the
+		// deepest existing ancestor stays within destDir BEFORE MkdirAll can
+		// follow it (a symlink must already exist to be followed), and the
+		// post-create ensureWithin is the backstop. Mirrors the receive path's
+		// hardening (internal/xfer, commit a4bc65d).
+		if err := mkdirAllWithin(w.destDir, dir); err != nil {
+			return err
+		}
 		if err := ensureWithin(w.destDir, dir); err != nil {
 			return err
 		}
@@ -443,6 +445,31 @@ func safeJoin(destDir, name string) (string, error) {
 	return joined, nil
 }
 
+// mkdirAllWithin creates dir like os.MkdirAll, but first verifies the deepest
+// already-existing ancestor of dir resolves (symlinks and all) within destDir.
+// os.MkdirAll follows an existing symlinked component, so a pre-planted
+// destDir/evil -> /outside would let it create /outside/sub before the leaf
+// guards fire; checking the deepest existing ancestor closes that, since a
+// symlink must already exist to be followed and EvalSymlinks resolves the whole
+// chain. Components MkdirAll creates below the ancestor are fresh real dirs.
+func mkdirAllWithin(destDir, dir string) error {
+	anc := dir
+	for {
+		if _, err := os.Lstat(anc); err == nil {
+			break // deepest existing ancestor
+		}
+		parent := filepath.Dir(anc)
+		if parent == anc {
+			break // reached the filesystem root
+		}
+		anc = parent
+	}
+	if err := ensureWithin(destDir, anc); err != nil {
+		return err
+	}
+	return os.MkdirAll(dir, 0o755)
+}
+
 // ensureWithin verifies that dir, after resolving any symlinks, is still inside
 // destDir (also symlink-resolved). Both must exist. This catches a symlinked
 // directory pre-planted under destDir that a purely lexical check would miss.
@@ -532,10 +559,18 @@ func (c *Client) Download(ctx context.Context, id, keyB64Url, destDir string) ([
 	var written int64
 	defer func() { w.closeAll() }()
 
+	// priorPaths accumulates output paths from writers discarded by reset(), so a
+	// download that ultimately fails cleans up files opened before a reset too —
+	// not just the current writer's. Without this, a reset followed by attempts
+	// that fail before re-opening the files would leave the pre-reset output on
+	// disk, the very truncated-file-left-behind case removePartials guards.
+	var priorPaths []string
+
 	// reset restarts from scratch (fresh writer/decryptor, re-truncating output),
 	// used when the server ignores Range and answers a resume with a full 200
 	// (an old server, or a limited/burn file).
 	reset := func() {
+		priorPaths = append(priorPaths, w.paths...)
 		w.closeAll()
 		w = &manifestWriter{destDir: destDir, files: manifest.Files}
 		dec = storecrypto.NewDecryptor(key)
@@ -560,12 +595,12 @@ func (c *Client) Download(ctx context.Context, id, keyB64Url, destDir string) ([
 		}
 		var fe *fatalError
 		if errors.As(serr, &fe) {
-			removePartials(w) // corrupt/tampered data or a disk error — don't leave junk
+			removePartials(w, priorPaths) // corrupt/tampered data or a disk error — don't leave junk
 			return nil, fe.err
 		}
 		attempt++
 		if attempt >= maxAttempts {
-			removePartials(w)
+			removePartials(w, priorPaths)
 			return nil, fmt.Errorf("cloud: download failed after %d attempts: %w", attempt, serr)
 		}
 		if errors.Is(serr, errIgnoredRange) {
@@ -579,11 +614,11 @@ func (c *Client) Download(ctx context.Context, id, keyB64Url, destDir string) ([
 	}
 
 	if err := dec.End(expectedTotal); err != nil {
-		removePartials(w)
+		removePartials(w, priorPaths)
 		return nil, fmt.Errorf("cloud: decrypt failed (wrong key, or corrupt/tampered/truncated data): %w", err)
 	}
 	if err := w.finish(); err != nil {
-		removePartials(w)
+		removePartials(w, priorPaths)
 		return nil, fmt.Errorf("cloud: write file: %w", err)
 	}
 	return w.paths, nil
@@ -614,10 +649,22 @@ func resumeBackoff(attempt int) time.Duration {
 
 // removePartials deletes the output files written so far, so a download that
 // ultimately fails never leaves a truncated file masquerading as complete.
-func removePartials(w *manifestWriter) {
+// prior holds paths from writers discarded by reset() (see Download), removed
+// alongside the current writer's so a pre-reset attempt's output isn't orphaned.
+func removePartials(w *manifestWriter, prior []string) {
 	w.closeAll()
+	seen := make(map[string]bool, len(w.paths)+len(prior))
+	for _, p := range prior {
+		if !seen[p] {
+			seen[p] = true
+			_ = os.Remove(p)
+		}
+	}
 	for _, p := range w.paths {
-		_ = os.Remove(p)
+		if !seen[p] {
+			seen[p] = true
+			_ = os.Remove(p)
+		}
 	}
 }
 
@@ -654,10 +701,24 @@ func (c *Client) streamBlob(ctx context.Context, httpc *http.Client, idPath stri
 		*written += int64(len(pt))
 		return nil
 	}
+
+	// Bound each Read against a stalled body: if no bytes arrive within
+	// idleTimeout, close the body so the blocked Read unblocks with an error the
+	// resume loop retries (reconnect + Range from dec.ConsumedCipher). Reset on
+	// every read that makes progress. A closed-body Read error is retryable, not
+	// fatal, so a genuine stall recovers rather than hanging forever.
+	idle := c.idleTimeout
+	if idle <= 0 {
+		idle = defaultIdleTimeout
+	}
+	stall := time.AfterFunc(idle, func() { resp.Body.Close() })
+	defer stall.Stop()
+
 	buf := make([]byte, storecrypto.ChunkSize)
 	for {
 		n, rerr := resp.Body.Read(buf)
 		if n > 0 {
+			stall.Reset(idle)
 			if perr := dec.Push(buf[:n], emit); perr != nil {
 				var we *writeError
 				if errors.As(perr, &we) {

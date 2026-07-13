@@ -118,3 +118,65 @@ func TestDownloadResumesAcrossFrameBoundary(t *testing.T) {
 		t.Fatalf("content = %q", got)
 	}
 }
+
+// TestDownloadRecoversFromStalledBody: the first blob response starts streaming
+// then freezes mid-body (no bytes, connection held open). The idle-timeout must
+// detect the stall, drop the dead body, and let the resume loop reconnect and
+// finish — rather than hanging forever, which is what removing the blanket
+// Client.Timeout would otherwise allow.
+func TestDownloadRecoversFromStalledBody(t *testing.T) {
+	raw, err := storecrypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c1 := strings.Repeat("A", 100)
+	c2 := strings.Repeat("B", 100)
+	encManifest, blob := blobStreamFromFiles(t, raw, []struct {
+		name    string
+		content string
+	}{{"a.txt", c1}, {"b.txt", c2}})
+
+	firstBlob := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/meta"):
+			writeJSONTest(w, map[string]any{
+				"encManifest": base64.StdEncoding.EncodeToString(encManifest),
+				"size":        len(blob),
+			})
+		case strings.HasSuffix(r.URL.Path, "/blob"):
+			if firstBlob {
+				firstBlob = false
+				w.Header().Set("Content-Length", strconv.Itoa(len(blob)))
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(blob[:20])
+				if f, ok := w.(http.Flusher); ok {
+					f.Flush()
+				}
+				<-r.Context().Done() // freeze until the client abandons this body
+				return
+			}
+			http.ServeContent(w, r, "blob", time.Time{}, bytes.NewReader(blob))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	dest := t.TempDir()
+	c := NewClient(srv.URL)
+	c.sleep = func(time.Duration) {}
+	c.idleTimeout = 100 * time.Millisecond // trip the stall guard quickly
+	paths, err := c.Download(context.Background(), "abc", storecrypto.EncodeKey(raw), dest)
+	if err != nil {
+		t.Fatalf("stalled download should recover via resume: %v", err)
+	}
+	if len(paths) != 2 {
+		t.Fatalf("paths = %v", paths)
+	}
+	got1, _ := os.ReadFile(filepath.Join(dest, "a.txt"))
+	got2, _ := os.ReadFile(filepath.Join(dest, "b.txt"))
+	if string(got1) != c1 || string(got2) != c2 {
+		t.Fatalf("recovered content mismatch: a=%q b=%q", got1, got2)
+	}
+}

@@ -46,10 +46,28 @@ func Save(configDir string, c Creds) error {
 		return err
 	}
 	path := filepath.Join(configDir, credsFile)
-	if err := os.WriteFile(path, b, 0o600); err != nil {
+	// Write to a fresh temp file (os.CreateTemp makes it 0600 and, being new, it
+	// can't pre-exist with looser perms) then atomically rename into place.
+	// WriteFile straight to `path` would, if credentials already existed
+	// world-readable, hold the token bytes in that mode until the trailing Chmod.
+	tmp, err := os.CreateTemp(configDir, credsFile+".tmp-*")
+	if err != nil {
 		return err
 	}
-	return os.Chmod(path, 0o600)
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath) // harmless no-op once the rename succeeds
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }
 
 func Clear(configDir string) error {
