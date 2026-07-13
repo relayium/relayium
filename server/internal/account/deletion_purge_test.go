@@ -27,7 +27,7 @@ func TestGCPurgesDueAccountsAndArchives(t *testing.T) {
 	if len(users) != 1 || users[0].ID != due.ID {
 		t.Fatalf("only the due user should be listed: %+v", users)
 	}
-	if err := st.ArchiveAndPurgeUser(ctx, due.ID); err != nil {
+	if err := st.ArchiveAndPurgeUser(ctx, due.ID, 200); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := st.GetUserByID(ctx, due.ID); err == nil {
@@ -149,7 +149,10 @@ func TestArchiveAndPurgeUserClearsEveryLinkedTable(t *testing.T) {
 		t.Fatal("fixture bug: magic_tokens has no row for user before purge")
 	}
 
-	if err := st.ArchiveAndPurgeUser(ctx, u.ID); err != nil {
+	if err := st.SetAccountDeletion(ctx, u.ID, 1, 100); err != nil {
+		t.Fatalf("schedule deletion: %v", err)
+	}
+	if err := st.ArchiveAndPurgeUser(ctx, u.ID, 200); err != nil {
 		t.Fatalf("archive and purge: %v", err)
 	}
 
@@ -182,17 +185,56 @@ func TestArchiveAndPurgeUserSumsAcrossMultipleUsersSamePeriod(t *testing.T) {
 
 	_ = st.RecordMeter(ctx, a.ID, MeterUpload, 1000, 100)
 	_ = st.RecordMeter(ctx, b.ID, MeterUpload, 2000, 100) // same period as a
+	_ = st.SetAccountDeletion(ctx, a.ID, 1, 100)
+	_ = st.SetAccountDeletion(ctx, b.ID, 1, 100)
 
-	if err := st.ArchiveAndPurgeUser(ctx, a.ID); err != nil {
+	if err := st.ArchiveAndPurgeUser(ctx, a.ID, 200); err != nil {
 		t.Fatalf("purge a: %v", err)
 	}
-	if err := st.ArchiveAndPurgeUser(ctx, b.ID); err != nil {
+	if err := st.ArchiveAndPurgeUser(ctx, b.ID, 200); err != nil {
 		t.Fatalf("purge b: %v", err)
 	}
 
 	period := periodOf(100)
 	if up := archivedUploadBytes(t, st, period); up != 3000 {
 		t.Fatalf("archive should sum both users' totals for the shared period, got %d want 3000", up)
+	}
+}
+
+// TestArchiveAndPurgeUserSkipsReactivatedAccount is the reactivation-race
+// regression: GC snapshots a due account via ListUsersToPurge, then the user
+// reactivates (ClearAccountDeletion zeroes purge_after) before GC reaches
+// ArchiveAndPurgeUser. The guarded final delete must match nothing and roll the
+// whole purge back, leaving the live account — and its data — fully intact.
+func TestArchiveAndPurgeUserSkipsReactivatedAccount(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	u, _ := st.UpsertUserByEmail(ctx, "revived@example.com", "Revived")
+	_ = st.RecordMeter(ctx, u.ID, MeterUpload, 777, 100)
+	_ = st.CreateStoredFile(ctx, StoredFile{ID: newID(), UserID: u.ID, BlobKey: "bk", EncManifest: []byte("x"), Size: 1, ExpiresAt: 1 << 40, CreatedAt: 1})
+	_ = st.SetAccountDeletion(ctx, u.ID, 1, 100) // due at purge_after=100
+
+	// User reactivates just before GC's purge fires.
+	if err := st.ClearAccountDeletion(ctx, u.ID); err != nil {
+		t.Fatalf("clear deletion: %v", err)
+	}
+
+	if err := st.ArchiveAndPurgeUser(ctx, u.ID, 200); err != nil {
+		t.Fatalf("purge (should be a no-op): %v", err)
+	}
+
+	if _, err := st.GetUserByID(ctx, u.ID); err != nil {
+		t.Fatal("reactivated account must survive the raced purge")
+	}
+	if n := countRows(t, st, `SELECT COUNT(*) FROM stored_files WHERE user_id=?`, u.ID); n != 1 {
+		t.Fatalf("stored_files should be untouched by the aborted purge, got %d", n)
+	}
+	// The archive INSERT is inside the same transaction, so a rollback must also
+	// undo it — no anonymized total should leak for a user who never purged.
+	var archived int64
+	_ = st.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM usage_archive WHERE period=?`, periodOf(100)).Scan(&archived)
+	if archived != 0 {
+		t.Fatalf("aborted purge must not archive usage, got %d archive rows", archived)
 	}
 }
 

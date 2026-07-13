@@ -175,3 +175,86 @@ func TestResumableUploadOwnershipAndCap(t *testing.T) {
 		t.Fatalf("after reap: %d, want 404", r2.StatusCode)
 	}
 }
+
+// initUploadStatus starts an upload and returns the raw HTTP status, for
+// asserting the per-account session cap (which initUpload's helper can't, since
+// it fatals on non-200).
+func initUploadStatus(t *testing.T, ts *httptest.Server, cookie *http.Cookie, encManifest []byte) int {
+	t.Helper()
+	var body bytes.Buffer
+	_ = binary.Write(&body, binary.BigEndian, uint32(len(encManifest)))
+	body.Write(encManifest)
+	req, _ := http.NewRequest("POST", ts.URL+"/api/uploads?size=100", &body)
+	req.AddCookie(cookie)
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	return resp.StatusCode
+}
+
+// TestResumableUploadPerUserSessionCap: an account can hold at most
+// maxSessionsPerUser open (unfinalized) sessions; the next init is refused with
+// 429 so it can't pin unbounded unbilled partial blobs. Finalizing or reaping
+// one frees a slot.
+func TestResumableUploadPerUserSessionCap(t *testing.T) {
+	ts, svc, _, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "cap@example.com")
+
+	for i := 0; i < maxSessionsPerUser; i++ {
+		if code := initUploadStatus(t, ts, cookie, []byte("M")); code != 200 {
+			t.Fatalf("session %d: init = %d, want 200", i, code)
+		}
+	}
+	if code := initUploadStatus(t, ts, cookie, []byte("M")); code != http.StatusTooManyRequests {
+		t.Fatalf("over-cap init = %d, want 429", code)
+	}
+	// Reaping the open sessions frees the slots so init works again.
+	svc.ReapPendingUploads(svc.now().Unix() + pendingUploadTTL + 1)
+	if code := initUploadStatus(t, ts, cookie, []byte("M")); code != 200 {
+		t.Fatalf("post-reap init = %d, want 200", code)
+	}
+}
+
+// TestResumableUploadConcurrentFinalize: racing finalizes of one upload must
+// commit exactly once — no double-bill, no second file row sharing the blob.
+func TestResumableUploadConcurrentFinalize(t *testing.T) {
+	ts, _, _, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "race@example.com")
+
+	blob := bytes.Repeat([]byte("R"), 900)
+	uploadID := initUpload(t, ts, cookie, []byte("M"), len(blob), 0)
+	if code, _ := patchChunk(t, ts, cookie, uploadID, blob, 0, 900, len(blob)); code != 200 {
+		t.Fatalf("chunk: %d", code)
+	}
+
+	const racers = 6
+	codes := make(chan int, racers)
+	start := make(chan struct{})
+	for i := 0; i < racers; i++ {
+		go func() {
+			<-start
+			req, _ := http.NewRequest("POST", ts.URL+"/api/uploads/"+uploadID+"/finalize", nil)
+			req.AddCookie(cookie)
+			resp, err := ts.Client().Do(req)
+			if err != nil {
+				codes <- -1
+				return
+			}
+			resp.Body.Close()
+			codes <- resp.StatusCode
+		}()
+	}
+	close(start)
+
+	ok := 0
+	for i := 0; i < racers; i++ {
+		if <-codes == 200 {
+			ok++
+		}
+	}
+	if ok != 1 {
+		t.Fatalf("exactly one finalize should succeed, got %d", ok)
+	}
+}

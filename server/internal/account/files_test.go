@@ -254,6 +254,48 @@ func TestBlobRangeResumeUnlimited(t *testing.T) {
 	}
 }
 
+// TestBlobRangeMetersServedBytes: a Range continuation (start>0) must still meter
+// the bytes it egresses and count the completed delivery — otherwise a client
+// could pull a whole unlimited file via `Range: bytes=N-` with zero metering and
+// zero download_count, an unmetered egress amplifier. The meter is the SERVED
+// count (6 of 10 here), not the full size.
+func TestBlobRangeMetersServedBytes(t *testing.T) {
+	ts, _, _, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "rm@example.com")
+	resp := postUpload(t, ts, cookie, "?ttl=0", uploadBody([]byte("m"), []byte("0123456789")))
+	var up struct {
+		ID string `json:"id"`
+	}
+	decodeJSON(t, resp, &up)
+
+	req, _ := http.NewRequest("GET", ts.URL+"/api/files/"+up.ID+"/blob", nil)
+	req.Header.Set("Range", "bytes=4-")
+	br, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(br.Body)
+	br.Body.Close()
+	if br.StatusCode != http.StatusPartialContent || string(body) != "456789" {
+		t.Fatalf("range download: status=%d body=%q", br.StatusCode, body)
+	}
+
+	var st statsResp
+	if r := getJSON(t, ts, cookie, "/api/stats", &st); r.StatusCode != http.StatusOK {
+		t.Fatalf("stats: %d", r.StatusCode)
+	}
+	if st.Downloads != 1 || st.DownloadBytes != 6 {
+		t.Fatalf("range download must be metered: downloads=%d bytes=%d, want 1/6", st.Downloads, st.DownloadBytes)
+	}
+	var list struct {
+		Files []map[string]any `json:"files"`
+	}
+	getJSON(t, ts, cookie, "/api/files", &list)
+	if dc, _ := list.Files[0]["downloadCount"].(float64); dc != 1 {
+		t.Fatalf("downloadCount = %v, want 1", list.Files[0]["downloadCount"])
+	}
+}
+
 // TestBlobRangeIgnoredForLimited: a max-downloads file ignores Range (serves the
 // whole blob, 200) and still consumes its single slot — so resume can't be used
 // to bypass the download cap.

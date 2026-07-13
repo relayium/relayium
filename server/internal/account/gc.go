@@ -125,7 +125,7 @@ func (g *GC) sweepAccountDeletions(ctx context.Context, now int64) {
 	}
 	for _, u := range toPurge {
 		email := u.Email // capture before the row is gone
-		if err := g.Store.ArchiveAndPurgeUser(ctx, u.ID); err != nil {
+		if err := g.Store.ArchiveAndPurgeUser(ctx, u.ID, now); err != nil {
 			g.Log.Printf("gc: purge user %s: %v", u.ID, err)
 			continue
 		}

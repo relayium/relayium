@@ -688,7 +688,16 @@ func (s *SQLiteStore) ListUsersToRemind(ctx context.Context, now, remindWindow i
 // harmless no-op and keeps this method correct standalone, independent of
 // what already ran. Order is children-before-parent so PRAGMA foreign_keys=ON
 // never rejects a delete.
-func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string) error {
+//
+// The final users delete is guarded on the account still being due
+// (purge_after>0 AND purge_after<=now), re-read inside this write transaction
+// rather than trusted from GC's earlier ListUsersToPurge snapshot. If a
+// concurrent reactivation cleared the schedule between the snapshot and here,
+// the guard matches zero rows and the whole purge (archive + child deletes)
+// rolls back, so a user who reactivated during the grace window is never
+// destroyed. SQLite serializes writers, so the guarded delete and
+// ClearAccountDeletion cannot interleave: whichever commits first wins.
+func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string, now int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -724,13 +733,25 @@ func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string) er
 		{`DELETE FROM magic_tokens WHERE email=(SELECT email FROM users WHERE id=?)`, []any{userID}},
 		{`DELETE FROM cli_device_auth WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM nodes WHERE owner_type='user' AND owner_user_id=?`, []any{userID}},
-		// Finally, the users row itself.
-		{`DELETE FROM users WHERE id=?`, []any{userID}},
 	}
 	for _, st := range stmts {
 		if _, err := tx.ExecContext(ctx, st.q, st.args...); err != nil {
 			return err
 		}
+	}
+	// Finally, the users row itself — but only if the account is still due for
+	// purge. A reactivation that committed after GC's snapshot zeroes
+	// purge_after; the guard then matches nothing and the deferred Rollback
+	// undoes the archive + child deletes, sparing the revived account.
+	res, err := tx.ExecContext(ctx,
+		`DELETE FROM users WHERE id=? AND purge_after>0 AND purge_after<=?`, userID, now)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return nil // no longer due (reactivated / already purged): abort, rollback
 	}
 	return tx.Commit()
 }

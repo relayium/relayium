@@ -321,14 +321,15 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	// A Range continuation (start>0) is the same logical download resuming, not a
-	// fresh one — don't double-count stats/meter or advance retention.
-	if start > 0 {
-		return
-	}
-	// Count the completed download against the file's OWNER only — never the
-	// downloader (no downloader identity is read or stored). Best-effort: a stats
-	// failure must not turn a delivered file into an error.
+	// Meter/stat the OWNER for the bytes THIS request actually egressed — never
+	// the downloader (no downloader identity is read or stored). A Range
+	// continuation (start>0) is metered too: it delivered real bytes off the
+	// blob volume, so exempting it (as an earlier version did) let a client pull
+	// a whole unlimited file via `Range: bytes=1-` — or resume past a failed
+	// start==0 attempt — with zero metering and zero download_count, an unmetered
+	// egress amplifier. Metering the served count (n), not sf.Size, avoids
+	// over-charging a resume for bytes a prior (already-uncounted) attempt sent.
+	// Best-effort: a stats failure must not turn a delivered file into an error.
 	//
 	// These writes MUST NOT ride r.Context(): a client typically drops the
 	// connection the instant it receives the last byte, which cancels r.Context()
@@ -337,8 +338,8 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	// A fresh, short-lived context detaches the accounting from the client.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = s.store.AddDownloadStat(ctx, sf.UserID, sf.Size)
-	_ = s.store.RecordMeter(ctx, sf.UserID, MeterDownload, sf.Size, s.now().Unix())
+	_ = s.store.AddDownloadStat(ctx, sf.UserID, n)
+	_ = s.store.RecordMeter(ctx, sf.UserID, MeterDownload, n, s.now().Unix())
 	if limited {
 		// Delete iff THIS request took the final slot (its own claimed slot
 		// number is >= MaxDownloads) — never by re-reading download_count, which

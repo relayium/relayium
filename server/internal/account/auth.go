@@ -25,7 +25,10 @@ func (s *Service) RequireAuth(next func(http.ResponseWriter, *http.Request, User
 			uid, _, ok, err := s.store.GetCLITokenUser(r.Context(), hash)
 			if err == nil && ok {
 				u, gerr := s.store.GetUserByID(r.Context(), uid)
-				if gerr == nil {
+				// Mirror the cookie path's central frozen-account guard
+				// (ValidateSession rejects DeletedAt>0): a pending-delete/frozen
+				// account must not keep CLI/API access via a bearer token either.
+				if gerr == nil && u.DeletedAt == 0 {
 					_ = s.store.TouchCLIToken(r.Context(), hash, s.now().Unix())
 					next(w, r, u)
 					return

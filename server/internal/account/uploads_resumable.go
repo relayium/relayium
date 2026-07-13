@@ -39,23 +39,45 @@ type uploadSession struct {
 	maxSize     int64 // MaxFileSize snapshot at init
 	received    int64 // bytes committed to the blob so far
 	createdAt   int64
+	// done is set (under mu) by the first terminal action — finalize, or the
+	// reaper's drop — so a racing second finalize can't double-bill/double-create
+	// and a chunk can't append to (or the reaper drop) a blob another goroutine
+	// has already committed or reclaimed.
+	done bool
 }
 
+// maxSessionsPerUser caps concurrent open chunked-upload sessions per account.
+// Without it, handleUploadInit — which reserves no quota until finalize — lets a
+// single account pin maxSessionsPerUser×MaxFileSize of partial blobs on disk (and
+// their manifests in RAM) indefinitely, unbilled. Shares the single-shot path's
+// per-account concurrency budget (M1).
+const maxSessionsPerUser = maxConcurrentUploadsPerUser
+
 // resumableUploads is the in-memory registry of upload sessions, keyed by a
-// random uploadId.
+// random uploadId. perUser tracks each account's open-session count so a single
+// account can't open unbounded sessions; entries are pruned at zero.
 type resumableUploads struct {
-	mu sync.Mutex
-	m  map[string]*uploadSession
+	mu      sync.Mutex
+	m       map[string]*uploadSession
+	perUser map[string]int
+	maxUser int
 }
 
 func newResumableUploads() *resumableUploads {
-	return &resumableUploads{m: map[string]*uploadSession{}}
+	return &resumableUploads{m: map[string]*uploadSession{}, perUser: map[string]int{}, maxUser: maxSessionsPerUser}
 }
 
-func (ru *resumableUploads) put(id string, s *uploadSession) {
+// tryPut registers a session, returning false if userID is already at its
+// open-session cap (caller should 429). The count is released by del/expired.
+func (ru *resumableUploads) tryPut(id string, s *uploadSession) bool {
 	ru.mu.Lock()
+	defer ru.mu.Unlock()
+	if ru.perUser[s.userID] >= ru.maxUser {
+		return false
+	}
 	ru.m[id] = s
-	ru.mu.Unlock()
+	ru.perUser[s.userID]++
+	return true
 }
 
 // get returns the session for id only if it belongs to userID (ownership gate).
@@ -69,10 +91,23 @@ func (ru *resumableUploads) get(id, userID string) (*uploadSession, bool) {
 	return s, true
 }
 
+// release drops userID's open-session count by one, pruning the entry at zero.
+// Caller holds ru.mu.
+func (ru *resumableUploads) release(userID string) {
+	if ru.perUser[userID] <= 1 {
+		delete(ru.perUser, userID)
+		return
+	}
+	ru.perUser[userID]--
+}
+
 func (ru *resumableUploads) del(id string) {
 	ru.mu.Lock()
-	delete(ru.m, id)
-	ru.mu.Unlock()
+	defer ru.mu.Unlock()
+	if s, ok := ru.m[id]; ok {
+		ru.release(s.userID)
+		delete(ru.m, id)
+	}
 }
 
 // expired removes and returns every session older than ttl, for the reaper.
@@ -83,6 +118,7 @@ func (ru *resumableUploads) expired(now, ttl int64) []*uploadSession {
 	for id, s := range ru.m {
 		if now-s.createdAt >= ttl {
 			out = append(out, s)
+			ru.release(s.userID)
 			delete(ru.m, id)
 		}
 	}
@@ -90,10 +126,20 @@ func (ru *resumableUploads) expired(now, ttl int64) []*uploadSession {
 }
 
 // ReapPendingUploads drops abandoned upload sessions and their partial blobs.
-// Wired into the GC tick (see main.go). now is unix seconds.
+// Wired into the GC tick (see main.go). now is unix seconds. It takes each
+// session's mutex and honours the done flag so it never drops a blob a
+// concurrent finalize has already committed, nor races an in-flight chunk append.
 func (s *Service) ReapPendingUploads(now int64) {
 	for _, sess := range s.resumable.expired(now, pendingUploadTTL) {
-		s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
+		sess.mu.Lock()
+		if sess.done {
+			sess.mu.Unlock()
+			continue // already finalized (blob kept) or dropped
+		}
+		sess.done = true
+		bs, key, node := sess.bs, sess.blobKey, sess.nodeID
+		sess.mu.Unlock()
+		s.dropBlob(bs, key, node)
 	}
 }
 
@@ -160,7 +206,11 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 		createdAt: s.now().Unix(),
 	}
 	uploadID := newID()
-	s.resumable.put(uploadID, sess)
+	if !s.resumable.tryPut(uploadID, sess) {
+		w.Header().Set("Retry-After", "1")
+		http.Error(w, "too many concurrent uploads", http.StatusTooManyRequests)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"uploadId": uploadID, "chunkSize": uploadChunkSize})
 }
 
@@ -182,6 +232,13 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 	sess.mu.Lock()
 	defer sess.mu.Unlock()
 
+	if sess.done {
+		// Finalized or reaped while this chunk was in flight; the blob is no longer
+		// ours to append to.
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
 	if start < sess.received {
 		// Client re-sent bytes we already have (a resume overshoot) — ack the
 		// current offset so it advances without corrupting the blob.
@@ -191,6 +248,18 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 	if start > sess.received {
 		writeJSON(w, http.StatusConflict, map[string]any{"received": sess.received})
 		return
+	}
+
+	// M3b: the global blob-volume soft cap is only checked at init; a chunked
+	// upload grows the blob incrementally, so re-check here so a session opened
+	// while there was room can't keep appending past the high-water mark. Applies
+	// only to central-local placement; a usage-read error fails open, matching the
+	// single-shot path.
+	if sess.nodeID == "" && s.diskUsage != nil && s.blobDiskMax > 0 {
+		if used, _, err := s.diskUsage(); err == nil && used >= uint64(s.blobDiskMax) {
+			http.Error(w, "storage temporarily full", http.StatusServiceUnavailable)
+			return
+		}
 	}
 
 	capped := &cappedReader{r: r.Body, max: sess.maxSize - sess.received}
@@ -225,6 +294,14 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	}
 	sess.mu.Lock()
 	defer sess.mu.Unlock()
+
+	if sess.done {
+		// A concurrent finalize already committed (or the reaper dropped) this
+		// session; don't bill or create a second file row for the same blob.
+		http.Error(w, "already finalized", http.StatusConflict)
+		return
+	}
+	sess.done = true // claim the session so a racing finalize/reaper backs off
 
 	size := sess.received
 	now := s.now().Unix()

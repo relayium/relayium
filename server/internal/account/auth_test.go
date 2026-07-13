@@ -54,4 +54,17 @@ func TestRequireAuthBearer(t *testing.T) {
 	if rec3.Code != 401 {
 		t.Fatalf("no credentials should 401, got %d", rec3.Code)
 	}
+
+	// A frozen/pending-delete account must not keep bearer access, mirroring the
+	// cookie path's central guard — even while its cli_tokens row still exists.
+	if err := s.store.SetAccountDeletion(ctx, u.ID, s.now().Unix(), s.now().Unix()+100); err != nil {
+		t.Fatalf("schedule deletion: %v", err)
+	}
+	req4 := httptest.NewRequest("GET", "/x", nil)
+	req4.Header.Set("Authorization", "Bearer "+raw)
+	rec4 := httptest.NewRecorder()
+	h(rec4, req4)
+	if rec4.Code != 401 {
+		t.Fatalf("frozen account bearer should 401, got %d", rec4.Code)
+	}
 }

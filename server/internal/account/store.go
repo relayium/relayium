@@ -335,8 +335,11 @@ type Store interface {
 	// cli_device_auth, usage_events, stored_files, upload_events, user_stats,
 	// usage_monthly, email_tokens, node_tokens, the user's own nodes) before
 	// finally deleting the users row itself. FK-safe delete order (children
-	// before the users parent, PRAGMA foreign_keys=ON).
-	ArchiveAndPurgeUser(ctx context.Context, userID string) error
+	// before the users parent, PRAGMA foreign_keys=ON). The final users delete
+	// is guarded on purge_after>0 AND purge_after<=now; if a concurrent
+	// reactivation cleared the schedule, the guard matches nothing and the whole
+	// purge rolls back, so a revived account is never destroyed.
+	ArchiveAndPurgeUser(ctx context.Context, userID string, now int64) error
 	// sessions
 	CreateSession(ctx context.Context, s Session) error
 	GetSession(ctx context.Context, id string) (Session, bool, error)
