@@ -75,6 +75,21 @@ func TestDecryptorRejectsTruncation(t *testing.T) {
 	}
 }
 
+// interopVector is the shared shape of the cross-language test vectors. The
+// chunk frames concatenate one frame per file at a GLOBAL seq starting at 1
+// (manifest is seq 0), so a multi-file vector exercises seq continuity ACROSS a
+// file boundary — the property most likely to diverge between the two impls.
+type interopVector struct {
+	KeyB64Url         string `json:"keyB64Url"`
+	ManifestCtB64Std  string `json:"manifestCtB64Std"`
+	ChunkFramesB64Std string `json:"chunkFramesB64Std"`
+	Plaintext         string `json:"plaintext"`
+	Files             []struct {
+		Name string `json:"name"`
+		Size int64  `json:"size"`
+	} `json:"files"`
+}
+
 func TestGenerateInteropVector(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -84,14 +99,20 @@ func TestGenerateInteropVector(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := Manifest{Files: []FileEntry{{Name: "hello.txt", Size: 11}}}
+	// Two files so the frame stream crosses a file boundary (seq 1 → seq 2) and
+	// the vector tests cross-file global-seq continuity, not just one frame.
+	f1, f2 := []byte("hello world"), []byte("second-file-payload")
+	m := Manifest{Files: []FileEntry{{Name: "hello.txt", Size: int64(len(f1))}, {Name: "sub/data.bin", Size: int64(len(f2))}}}
 	mct, _ := EncryptManifest(key, m)
-	fr, _ := FrameChunk(key, 1, []byte("hello world"))
+	fr1, _ := FrameChunk(key, 1, f1)
+	fr2, _ := FrameChunk(key, 2, f2)
+	frames := append(append([]byte{}, fr1...), fr2...)
 	vec := map[string]any{
 		"keyB64Url":         EncodeKey(key),
 		"manifestCtB64Std":  base64.StdEncoding.EncodeToString(mct),
-		"chunkFramesB64Std": base64.StdEncoding.EncodeToString(fr),
-		"plaintext":         "hello world",
+		"chunkFramesB64Std": base64.StdEncoding.EncodeToString(frames),
+		"plaintext":         string(f1) + string(f2),
+		"files":             m.Files,
 	}
 	b, _ := json.MarshalIndent(vec, "", "  ")
 	if err := os.WriteFile("testdata/vector.json", b, 0o644); err != nil {
@@ -99,17 +120,33 @@ func TestGenerateInteropVector(t *testing.T) {
 	}
 }
 
+// TestInteropVectorRoundTrip decrypts the Go-produced vector (also consumed by
+// the web side) — the forward direction.
 func TestInteropVectorRoundTrip(t *testing.T) {
-	raw, err := os.ReadFile("testdata/vector.json")
+	decodeAndCheckVector(t, "testdata/vector.json")
+}
+
+// TestWebInteropVectorRoundTrip decrypts a vector produced by the WEB impl
+// (web/src/lib/store-crypto.interop.test.ts writes it), proving the REVERSE
+// direction: web-encrypted manifest + frames decrypt on the Go side, and a
+// tampered frame is rejected. Skips cleanly if the web suite hasn't generated it.
+func TestWebInteropVectorRoundTrip(t *testing.T) {
+	if _, err := os.Stat("testdata/web-vector.json"); os.IsNotExist(err) {
+		t.Skip("web-vector.json not generated (run the web interop test suite)")
+	}
+	decodeAndCheckVector(t, "testdata/web-vector.json")
+}
+
+// decodeAndCheckVector loads a cross-language vector, verifies the manifest and
+// the full (possibly multi-file) plaintext decrypt, and asserts a single-byte
+// tamper of the chunk frames is rejected by the AEAD.
+func decodeAndCheckVector(t *testing.T, path string) {
+	t.Helper()
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var vec struct {
-		KeyB64Url         string `json:"keyB64Url"`
-		ManifestCtB64Std  string `json:"manifestCtB64Std"`
-		ChunkFramesB64Std string `json:"chunkFramesB64Std"`
-		Plaintext         string `json:"plaintext"`
-	}
+	var vec interopVector
 	if err := json.Unmarshal(raw, &vec); err != nil {
 		t.Fatal(err)
 	}
@@ -119,9 +156,20 @@ func TestInteropVectorRoundTrip(t *testing.T) {
 	}
 	mct, _ := base64.StdEncoding.DecodeString(vec.ManifestCtB64Std)
 	m, err := DecryptManifest(key, mct)
-	if err != nil || len(m.Files) != 1 || m.Files[0].Name != "hello.txt" {
-		t.Fatalf("manifest decrypt: %v %+v", err, m)
+	if err != nil {
+		t.Fatalf("manifest decrypt: %v", err)
 	}
+	if len(vec.Files) > 0 {
+		if len(m.Files) != len(vec.Files) {
+			t.Fatalf("manifest files = %d, want %d", len(m.Files), len(vec.Files))
+		}
+		for i, f := range vec.Files {
+			if m.Files[i].Name != f.Name || m.Files[i].Size != f.Size {
+				t.Fatalf("file %d = %+v, want %+v", i, m.Files[i], f)
+			}
+		}
+	}
+
 	frames, _ := base64.StdEncoding.DecodeString(vec.ChunkFramesB64Std)
 	dec := NewDecryptor(key)
 	var out []byte
@@ -133,5 +181,19 @@ func TestInteropVectorRoundTrip(t *testing.T) {
 	}
 	if string(out) != vec.Plaintext {
 		t.Fatalf("got %q want %q", out, vec.Plaintext)
+	}
+
+	// Tamper: flip a byte in the last frame's ciphertext; the GCM tag must reject
+	// it (cross-language integrity, not just same-language).
+	if len(frames) == 0 {
+		t.Fatal("vector has no frames")
+	}
+	bad := append([]byte{}, frames...)
+	bad[len(bad)-1] ^= 0x01
+	tdec := NewDecryptor(key)
+	perr := tdec.Push(bad, func([]byte) error { return nil })
+	eerr := tdec.End(int64(len(vec.Plaintext)))
+	if perr == nil && eerr == nil {
+		t.Fatal("tampered frame was accepted; AEAD must reject it")
 	}
 }

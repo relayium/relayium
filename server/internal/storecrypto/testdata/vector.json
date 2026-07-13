@@ -1,6 +1,16 @@
 {
-  "chunkFramesB64Std": "AAAAG0GkSE6bVhCz22w5tEGzk0L6/i8t7xGaTXvU6g==",
+  "chunkFramesB64Std": "AAAAG0GkSE6bVhCz22w5tEGzk0L6/i8t7xGaTXvU6gAAACPNSVVcl5+YLAjk9/v3NsAPcLQPI9mCOK/2ctgR40qqC5GLeQ==",
+  "files": [
+    {
+      "name": "hello.txt",
+      "size": 11
+    },
+    {
+      "name": "sub/data.bin",
+      "size": 19
+    }
+  ],
   "keyB64Url": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-  "manifestCtB64Std": "tYUmVCEFGEw9Fb7x1JLwfVBaIaJSykYb/9aN+lcqF/20MNQKd3vQBhyVdh1J/OflIeqVCv91WJ8Bzw==",
-  "plaintext": "hello world"
+  "manifestCtB64Std": "tYUmVCEFGEw9Fb7x1JLwfVBaIaJSykYb/9aN+lcqF/20MNQKd3vQBm2Te0omYVPVfWO4lOOUG1EVHTOBwmIYM/K35glEihcGWejxneayDTX8UMDhvQ07Hq83mfI=",
+  "plaintext": "hello worldsecond-file-payload"
 }

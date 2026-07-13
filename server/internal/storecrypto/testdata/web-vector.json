@@ -1,0 +1,16 @@
+{
+  "keyB64Url": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "manifestCtB64Std": "tYUmVCEFGEw9Fb7x1JLwfVBaIaJSykYb/9aN+lcqF/20MNQKd3OcVzrKN0UqaRTNZS+kleTIUEIEHXmOziJXe/LorQBI0kgVWqeZnRzs+YXOWsV+we5L8aFqOgFHVA==",
+  "chunkFramesB64Std": "AAAAGV6kRgKAGUe7xtBP8iOid2nEovMxEwQvCqQAAAAp3F5ZRIqex2cE5vGk/ifNBnv1G1mWmVYIgOdPBuQYa6zZnvfkReImP7U=",
+  "plaintext": "web to gobrowser-encrypted payload",
+  "files": [
+    {
+      "name": "hello.txt",
+      "size": 9
+    },
+    {
+      "name": "notes/readme.md",
+      "size": 25
+    }
+  ]
+}
