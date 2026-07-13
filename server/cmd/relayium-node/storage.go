@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -69,6 +70,36 @@ func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed 
 			return
 		}
 		_, _ = io.Copy(w, rc)
+	}))
+	mux.HandleFunc("PATCH /blob/{key}", authed(func(w http.ResponseWriter, r *http.Request, key string) {
+		offset, oerr := strconv.ParseInt(r.Header.Get("X-Blob-Offset"), 10, 64)
+		if oerr != nil || offset < 0 {
+			http.Error(w, "bad offset", http.StatusBadRequest)
+			return
+		}
+		if lim != nil && diskUsed != nil {
+			if cap := lim.diskCapBytes(); cap > 0 && diskUsed() >= cap {
+				http.Error(w, "storage full", http.StatusInsufficientStorage)
+				return
+			}
+		}
+		size, err := ds.Append(r.Context(), key, offset, r.Body)
+		if errors.Is(err, storage.ErrOffsetMismatch) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]int64{"size": size})
+			return
+		}
+		if errors.Is(err, storage.ErrInvalidKey) {
+			http.Error(w, "bad key", http.StatusBadRequest)
+			return
+		}
+		if err != nil {
+			http.Error(w, "append failed", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]int64{"size": size})
 	}))
 	mux.HandleFunc("DELETE /blob/{key}", authed(func(w http.ResponseWriter, r *http.Request, key string) {
 		if err := ds.Delete(r.Context(), key); err != nil && !errors.Is(err, storage.ErrInvalidKey) {

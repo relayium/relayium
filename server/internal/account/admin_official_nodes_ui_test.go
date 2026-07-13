@@ -25,11 +25,11 @@ func TestAdminDashboardShowsOfficialNodesSection(t *testing.T) {
 	html := string(body)
 
 	for _, want := range []string{
-		"官方节点（1）",                // section heading, counts only the fleet node (not the user node too)
-		"生成节点 Token",              // mint button
+		"官方节点（1）",                          // section heading, counts only the fleet node (not the user node too)
+		"生成节点 Token",                       // mint button
 		"/admin/nodes/" + n.ID + "/limits", // edit-limits form action
 		"/admin/nodes/" + n.ID + "/delete", // delete form action
-		"cn-sh-1",                    // token name in the tokens list
+		"cn-sh-1",                          // token name in the tokens list
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("dashboard missing %q", want)

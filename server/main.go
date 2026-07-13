@@ -308,6 +308,7 @@ func main() {
 				Mailer:         mailer,
 				ReminderWindow: acct.ReminderWindowSeconds,
 				ReactivateLink: acct.IssueReactivateLink,
+				ReapSessions:   acct.ReapPendingUploads,
 			}
 			go gc.Run(context.Background(), 10*time.Minute)
 			log.Printf("stored transfers enabled: blobs in %s", *blobDir)

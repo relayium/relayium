@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/relayium/relayium/internal/storage"
@@ -74,6 +75,74 @@ func TestBlobHandlerRoundTripAndAuth(t *testing.T) {
 	if gr.StatusCode != 404 {
 		t.Fatalf("get after delete: %d", gr.StatusCode)
 	}
+}
+
+// TestBlobHandlerAppend verifies the node's PATCH /blob append (X-Blob-Offset)
+// used by resumable uploads, including the offset-mismatch 409.
+func TestBlobHandlerAppend(t *testing.T) {
+	ds, err := storage.NewDiskStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(newBlobHandler(ds, "s", nil, nil))
+	defer srv.Close()
+
+	patch := func(offset int64, data string) (int, string) {
+		req, _ := http.NewRequest("PATCH", srv.URL+"/blob/uploadkey", bytes.NewReader([]byte(data)))
+		req.Header.Set("Authorization", "Bearer s")
+		req.Header.Set("X-Blob-Offset", itoa64(offset))
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return resp.StatusCode, string(b)
+	}
+
+	if code, body := patch(0, "chunk1"); code != 200 || !strings.Contains(body, `"size":6`) {
+		t.Fatalf("append#1: %d %s", code, body)
+	}
+	if code, body := patch(6, "chunk2"); code != 200 || !strings.Contains(body, `"size":12`) {
+		t.Fatalf("append#2: %d %s", code, body)
+	}
+	// Stale offset → 409 with the real size.
+	if code, body := patch(6, "dup"); code != http.StatusConflict || !strings.Contains(body, `"size":12`) {
+		t.Fatalf("stale offset: %d %s", code, body)
+	}
+
+	// The assembled blob reads back whole.
+	req, _ := http.NewRequest("GET", srv.URL+"/blob/uploadkey", nil)
+	req.Header.Set("Authorization", "Bearer s")
+	resp, _ := http.DefaultClient.Do(req)
+	got, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if string(got) != "chunk1chunk2" {
+		t.Fatalf("assembled = %q", got)
+	}
+}
+
+func itoa64(n int64) string {
+	return itoa(int(n))
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	var b []byte
+	for n > 0 {
+		b = append([]byte{byte('0' + n%10)}, b...)
+		n /= 10
+	}
+	if neg {
+		b = append([]byte{'-'}, b...)
+	}
+	return string(b)
 }
 
 // TestBlobHandlerRange verifies the node serves HTTP Range (206) so central can

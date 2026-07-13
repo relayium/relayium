@@ -42,6 +42,10 @@ type GC struct {
 	// returns its full URL, for the pre-purge reminder email. Shared with the
 	// Task 3/4 reactivate-token issuer (Service.IssueReactivateLink).
 	ReactivateLink func(ctx context.Context, userID, email string) (string, error)
+
+	// ReapSessions, when set, drops abandoned in-memory chunked-upload sessions
+	// (and their partial blobs) each sweep. Wired to Service.ReapPendingUploads.
+	ReapSessions func(now int64)
 }
 
 func (g *GC) sweep(ctx context.Context) {
@@ -60,6 +64,9 @@ func (g *GC) sweep(ctx context.Context) {
 		}
 	}
 	g.drainPending(ctx)
+	if g.ReapSessions != nil {
+		g.ReapSessions(now)
+	}
 	if err := g.Store.PruneUploadEvents(ctx, now-pruneMargin); err != nil {
 		g.Log.Printf("gc: prune upload events: %v", err)
 	}

@@ -106,6 +106,42 @@ func (d *DiskStore) GetRange(ctx context.Context, key string, start int64) (io.R
 	return rc, nil
 }
 
+func (d *DiskStore) Append(ctx context.Context, key string, offset int64, r io.Reader) (int64, error) {
+	if !validKey.MatchString(key) {
+		return 0, ErrInvalidKey
+	}
+	if offset < 0 {
+		return 0, ErrOffsetMismatch
+	}
+	shardDir, full := d.paths(key)
+	if err := os.MkdirAll(shardDir, 0o700); err != nil {
+		return 0, err
+	}
+	f, err := os.OpenFile(full, os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return 0, err
+	}
+	// Strict sequential append: the offset must be exactly the current end, so a
+	// duplicate/stale chunk can't overwrite and a gap can't leave a hole. The
+	// caller re-syncs from the returned size on a mismatch.
+	if info.Size() != offset {
+		return info.Size(), ErrOffsetMismatch
+	}
+	if _, err := f.Seek(offset, io.SeekStart); err != nil {
+		return 0, err
+	}
+	n, err := io.Copy(f, r)
+	if err != nil {
+		return offset + n, err
+	}
+	return offset + n, nil
+}
+
 func (d *DiskStore) Delete(ctx context.Context, key string) error {
 	if !validKey.MatchString(key) {
 		return ErrInvalidKey

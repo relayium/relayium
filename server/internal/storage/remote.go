@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -136,6 +137,41 @@ func (r *RemoteBlobStore) GetRange(ctx context.Context, key string, start int64)
 		resp.Body.Close()
 		return nil, fmt.Errorf("remote blob get %s: status %d", key, resp.StatusCode)
 	}
+}
+
+// Append PATCHes a chunk to the node at `offset` (sent via X-Blob-Offset), for
+// resumable uploads. The node replies {"size":N} on success, or 409 with the
+// node's current size on an offset mismatch (surfaced as ErrOffsetMismatch).
+func (r *RemoteBlobStore) Append(ctx context.Context, key string, offset int64, body io.Reader) (int64, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, r.url(key), body)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Authorization", "Bearer "+r.secret)
+	req.Header.Set("X-Blob-Offset", strconv.FormatInt(offset, 10))
+	resp, err := r.hc.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusConflict {
+		var out struct {
+			Size int64 `json:"size"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		return out.Size, ErrOffsetMismatch
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		return 0, fmt.Errorf("remote blob append %s: status %d: %s", key, resp.StatusCode, string(b))
+	}
+	var out struct {
+		Size int64 `json:"size"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return 0, err
+	}
+	return out.Size, nil
 }
 
 func (r *RemoteBlobStore) Delete(ctx context.Context, key string) error {

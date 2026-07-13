@@ -52,6 +52,14 @@ func (c *cappedReader) Read(p []byte) (int, error) {
 // session cookie (browser) or a CLI bearer token (RequireAuth covers both).
 func (s *Service) registerFileRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/files", s.RequireAuth(s.handleUploadFile))
+	// Resumable chunked upload (browser): init → append chunks → finalize, with a
+	// status probe for resume. Kept under /api/uploads (not /api/files/uploads) so
+	// it can't collide with the /api/files/{id}/... wildcard routes. The
+	// single-shot POST /api/files above stays for the CLI.
+	mux.HandleFunc("POST /api/uploads", s.RequireAuth(s.handleUploadInit))
+	mux.HandleFunc("PATCH /api/uploads/{uploadId}", s.RequireAuth(s.handleUploadChunk))
+	mux.HandleFunc("POST /api/uploads/{uploadId}/finalize", s.RequireAuth(s.handleUploadFinalize))
+	mux.HandleFunc("GET /api/uploads/{uploadId}", s.RequireAuth(s.handleUploadStatus))
 	mux.HandleFunc("GET /api/files", s.RequireAuth(s.handleListFiles))
 	mux.HandleFunc("DELETE /api/files/{id}", s.RequireAuth(s.handleDeleteFile))
 	mux.HandleFunc("GET /api/files/{id}/meta", s.handleFileMeta)
