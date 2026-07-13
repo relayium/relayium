@@ -90,11 +90,31 @@ export async function uploadFile(
   return { id, expiresAt, key: encodeKey(sk.raw) };
 }
 
-/** Encrypt in-browser, then upload the ciphertext in resumable chunks: init →
- *  PATCH each chunk (with per-chunk retry that re-syncs to the server's
- *  committed offset) → finalize. A transient reset loses only the current chunk,
- *  not the whole 50 MB upload. Same signature/return as uploadFile. */
+/** Resumable upload with a safety net: try the chunked flow, but fall back to
+ *  the single-shot uploadFile if the chunked endpoints aren't usable — an older
+ *  server without /api/uploads, a storage node without PATCH-append support, or
+ *  retries exhausted. A real user/quota error (413/429/401) or an abort is NOT
+ *  masked: it propagates. This keeps the rollout from ever regressing an upload
+ *  that the single POST would have completed. */
 export async function uploadFileResumable(
+  files: File[],
+  opts: { burnAfterRead: boolean; ttl: number },
+  onProgress?: (p: UploadProgress) => void,
+  signal?: AbortSignal,
+): Promise<UploadResult> {
+  try {
+    return await chunkedUpload(files, opts, onProgress, signal);
+  } catch (e) {
+    if (signal?.aborted) throw e;
+    if (e instanceof UploadError && (e.status === 413 || e.status === 429 || e.status === 401)) throw e;
+    return uploadFile(files, opts, onProgress, signal);
+  }
+}
+
+/** The chunked flow: init → PATCH each chunk (per-chunk retry re-syncing to the
+ *  server's committed offset) → finalize. A transient reset loses only the
+ *  current chunk, not the whole upload. */
+async function chunkedUpload(
   files: File[],
   opts: { burnAfterRead: boolean; ttl: number },
   onProgress?: (p: UploadProgress) => void,

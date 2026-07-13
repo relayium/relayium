@@ -182,6 +182,17 @@ describe("uploadFileResumable", () => {
     expect(state.finalized).toBe(true);
   });
 
+  it("falls back to the single POST when /api/uploads is unavailable", async () => {
+    // An old server 404s the init endpoint...
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 404, json: async () => ({}) })));
+    // ...so the flow falls back to the single-shot XHR POST /api/files.
+    const captured = installFakeXHR({ status: 200, response: JSON.stringify({ id: "fid", expiresAt: 9 }), network: false });
+    const file = new File([new Uint8Array(40)], "f.bin");
+    const out = await uploadFileResumable([file], { burnAfterRead: false, ttl: 0 });
+    expect(out.id).toBe("fid");
+    expect(captured.url).toContain("/api/files");
+  });
+
   it("throws UploadError on a fatal chunk status (e.g. 413)", async () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
