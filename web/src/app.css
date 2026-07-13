@@ -5,6 +5,10 @@
   --border: #e5e4e7;
   --code-bg: #f4f3ec;
   --accent: #aa3bff;
+  --accent-deep: #6d28d9;
+  /* The one brand gradient — buttons, marks, progress fills all draw from it so
+     every page reads as the same product. */
+  --grad-accent: linear-gradient(135deg, var(--accent), var(--accent-deep));
   --accent-bg: rgba(170, 59, 255, 0.1);
   --accent-border: rgba(170, 59, 255, 0.5);
   --social-bg: rgba(244, 243, 236, 0.5);
@@ -65,6 +69,7 @@
     --border: #2e303a;
     --code-bg: #1f2028;
     --accent: #c084fc;
+    --accent-deep: #818cf8;
     --accent-bg: rgba(192, 132, 252, 0.15);
     --accent-border: rgba(192, 132, 252, 0.5);
     --social-bg: rgba(47, 48, 58, 0.5);
@@ -83,6 +88,7 @@
   --border: #2e303a;
   --code-bg: #1f2028;
   --accent: #c084fc;
+  --accent-deep: #818cf8;
   --accent-bg: rgba(192, 132, 252, 0.15);
   --accent-border: rgba(192, 132, 252, 0.5);
   --social-bg: rgba(47, 48, 58, 0.5);
@@ -99,12 +105,20 @@
 
 body {
   margin: 0;
+  /* Ambient brand glow at the top of every page — two soft accent-tinted radial
+     washes over the flat background. Very low chroma so text contrast is
+     untouched; works in both themes because it keys off the theme's accent. */
+  background:
+    radial-gradient(1000px 520px at 12% -12%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 62%),
+    radial-gradient(900px 460px at 88% -10%, color-mix(in srgb, var(--accent-deep) 7%, transparent), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
 }
 
 h1,
 h2 {
   font-family: var(--heading);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-h);
 }
 
@@ -180,8 +194,11 @@ code {
 .btn:hover { border-color: var(--accent-border); box-shadow: var(--shadow); }
 .btn:active { transform: translateY(1px); }
 .btn:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; transform: none; }
-.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn-primary:hover { filter: brightness(1.07); box-shadow: var(--shadow); }
+.btn-primary { background: var(--grad-accent); border-color: transparent; color: #fff; }
+.btn-primary:hover {
+  filter: brightness(1.07);
+  box-shadow: 0 8px 22px -8px color-mix(in srgb, var(--accent) 60%, transparent);
+}
 .btn-ghost { background: var(--social-bg); }
 .btn-link {
   border: none; background: none; box-shadow: none;

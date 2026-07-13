@@ -265,9 +265,9 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     font-size: 30px;
     font-family: var(--mono);
     color: #fff;
-    border-radius: 18px;
-    background: linear-gradient(135deg, var(--accent), #6d28d9);
-    box-shadow: var(--shadow);
+    border-radius: 14px;
+    background: var(--grad-accent);
+    box-shadow: 0 12px 36px -10px color-mix(in srgb, var(--accent) 55%, transparent);
   }
   .hero h1 {
     font-size: var(--fs-display);

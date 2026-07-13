@@ -218,7 +218,7 @@
   .pick .drophint { width: 100%; font-size: var(--fs-xs); color: var(--text); }
   .max-hint { display: block; margin-top: var(--space-2); font-size: var(--fs-xs); color: var(--text); }
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; margin-top: var(--space-3); }
-  .fill { height: 100%; background: linear-gradient(90deg, var(--accent), #6d28d9); transition: width .2s; }
+  .fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-deep)); transition: width .2s; }
   .phase { margin: var(--space-2) 0 0; font-size: var(--fs-xs); color: var(--text); }
   .cancel { align-self: flex-start; margin-top: var(--space-3); }
   .ready { color: var(--text-h); font-size: var(--fs-sm); margin: var(--space-3) 0 var(--space-2); }

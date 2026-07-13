@@ -108,7 +108,8 @@
   .cards { display: grid; grid-template-columns: 1fr; gap: var(--space-4); max-width: 720px; margin: 0 auto; align-items: stretch; }
   .card {
     border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-5);
-    background: var(--social-bg); display: flex; flex-direction: column; gap: var(--space-3);
+    background: var(--surface); display: flex; flex-direction: column; gap: var(--space-3);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 12px 32px -18px color-mix(in srgb, var(--accent) 22%, transparent);
   }
   .card h2 { font-size: var(--fs-h3); margin: 0; }
   .cardsub { margin: 0; font-size: var(--fs-xs); color: var(--text); line-height: 1.5; }

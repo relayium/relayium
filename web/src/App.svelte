@@ -1569,7 +1569,7 @@
   }
 
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; }
-  .fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), #6d28d9); transition: width .2s ease; }
+  .fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--accent-deep)); transition: width .2s ease; }
   .meta { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 12.5px; color: var(--text); }
   .meta-right { display: inline-flex; align-items: center; gap: 12px; }
   /* Connection-path badge: a coloured dot + label. Green LAN, blue P2P, orange relay. */
@@ -1615,7 +1615,7 @@
   .pavatar {
     flex: none; width: 40px; height: 40px; line-height: 40px; text-align: center;
     border-radius: 50%; color: #fff; font-weight: 600;
-    background: linear-gradient(135deg, var(--accent), #6d28d9);
+    background: var(--grad-accent);
   }
   .pavatar.big { width: 48px; height: 48px; line-height: 48px; font-size: 20px; }
   .ptext { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

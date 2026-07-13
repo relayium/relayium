@@ -2,6 +2,7 @@
   import { currentRoute, navigate, CROSS_PATH, OFFLINE_PATH, CLI_PATH, type Route } from "./router.svelte";
   import { lang, setLang, LANGS, messages, type Lang, type Messages } from "./i18n.svelte";
   import ThemeSelect from "./ThemeSelect.svelte";
+  import Logo from "./Logo.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
   const tabs: { id: Route; label: () => string }[] = [
@@ -14,7 +15,7 @@
 
 <nav class="topnav">
   <a class="brand" href="/" onclick={(e) => { e.preventDefault(); navigate("lan"); }}>
-    <span class="mark">⇌</span><span class="word">Relayium</span>
+    <Logo size={26} /><span class="word">Relayium</span>
   </a>
 
   <!-- These switch pages, not tab panels, so they're navigation links with
@@ -52,11 +53,6 @@
     padding: var(--space-4) 0 var(--space-3); margin-bottom: var(--space-1);
   }
   .brand { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text-h); font-weight: 600; }
-  .brand .mark {
-    width: 28px; height: 28px; line-height: 28px; text-align: center;
-    border-radius: 9px; color: #fff; font-size: 16px;
-    background: linear-gradient(135deg, var(--accent), #6d28d9);
-  }
   .brand .word { font-size: 16px; letter-spacing: -0.4px; }
 
   .tabs { display: flex; gap: 6px; margin: 0 auto 0 8px; }
@@ -68,7 +64,7 @@
     transition: border-color .13s, color .13s, background .13s;
   }
   .tab:hover { border-color: var(--accent-border); }
-  .tab.active { color: #fff; background: var(--accent); border-color: var(--accent); }
+  .tab.active { color: #fff; background: var(--grad-accent); border-color: transparent; }
 
   .lang {
     font: inherit; font-size: var(--fs-xs); padding: 5px 28px 5px 10px;

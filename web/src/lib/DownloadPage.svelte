@@ -187,7 +187,7 @@
   .brand .mark {
     width: 28px; height: 28px; line-height: 28px; text-align: center;
     border-radius: var(--radius-sm); color: #fff; font-size: var(--fs-body);
-    background: linear-gradient(135deg, var(--accent), #6d28d9);
+    background: var(--grad-accent);
   }
   .brand .word { font-size: var(--fs-body); letter-spacing: -0.4px; }
   .lang {
@@ -220,7 +220,7 @@
   }
 
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; }
-  .fill { height: 100%; background: linear-gradient(90deg, var(--accent), #6d28d9); transition: width .2s; }
+  .fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-deep)); transition: width .2s; }
   .error { color: var(--danger); } .ok { color: #2ecc71; }
 
   .sendcta {

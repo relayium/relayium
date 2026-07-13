@@ -1,5 +1,6 @@
 <script lang="ts">
   import { lang, messages, type Messages } from "./i18n.svelte";
+  import Logo from "./Logo.svelte";
   let { connState, unsupported, selfName, selfIP, onRename }:
     { connState: "connecting" | "ready" | "reconnecting"; unsupported: boolean; selfName: string; selfIP: string; onRename: (name: string) => void } = $props();
   const t = $derived<Messages>(messages[lang()]);
@@ -30,7 +31,7 @@
 </script>
 
 <header class="hero">
-  <div class="logo">⇌</div>
+  <div class="logo"><Logo size={64} /></div>
   <h1>Relayium</h1>
   <p class="tagline">{t.tagline}</p>
   <div class="statusbar">
@@ -65,12 +66,11 @@
 <style>
   .hero { text-align: center; padding-top: var(--space-9); }
   .logo {
-    width: 60px; height: 60px; line-height: 60px;
+    display: inline-flex;
     margin: 0 auto var(--space-3);
-    font-size: 32px; color: #fff;
-    border-radius: 18px;
-    background: linear-gradient(135deg, var(--accent), #6d28d9);
-    box-shadow: var(--shadow);
+    border-radius: 15px;
+    /* Brand-tinted glow instead of a plain drop shadow — the mark floats. */
+    box-shadow: 0 12px 36px -10px color-mix(in srgb, var(--accent) 55%, transparent);
   }
   h1 { font-size: var(--fs-display); margin: 0 0 var(--space-2); letter-spacing: -1.6px; }
   .tagline { color: var(--text); font-size: var(--fs-body); max-width: 44ch; margin: 0 auto; }
