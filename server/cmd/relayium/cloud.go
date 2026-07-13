@@ -158,12 +158,15 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	if server != "" {
 		client.Server = server
 	}
+	bar := newProgressBar(stderr, "⇡", "Uploading")
+	client.Progress = bar.update
 
 	id, key, err := client.Upload(context.Background(), paths, cloud.UploadOpts{
 		Burn:         burn,
 		TTLSeconds:   ttlSeconds,
 		MaxDownloads: maxDownloads,
 	})
+	bar.finish()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -205,7 +208,10 @@ func runDown(args []string, stdout, stderr io.Writer) int {
 	}
 
 	client := cloud.NewClient(resolveDownServer(claimServer, server))
+	bar := newProgressBar(stderr, "⇣", "Downloading")
+	client.Progress = bar.update
 	paths, err := client.Download(context.Background(), id, key, destDir)
+	bar.finish()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -213,7 +219,7 @@ func runDown(args []string, stdout, stderr io.Writer) int {
 	for _, p := range paths {
 		fmt.Fprintln(stdout, p)
 	}
-	fmt.Fprintf(stderr, "downloaded %d file(s)\n", len(paths))
+	fmt.Fprintf(stderr, "✓ downloaded %d file(s) to %s\n", len(paths), destDir)
 	return 0
 }
 

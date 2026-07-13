@@ -126,12 +126,14 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 	}
 
 	manifest := storecrypto.Manifest{Files: make([]storecrypto.FileEntry, len(files))}
+	var total int64
 	for i, f := range files {
 		info, err := os.Stat(f.path)
 		if err != nil {
 			return "", "", err
 		}
 		manifest.Files[i] = storecrypto.FileEntry{Name: f.name, Size: info.Size()}
+		total += info.Size()
 	}
 
 	encManifest, err := storecrypto.EncryptManifest(key, manifest)
@@ -139,9 +141,15 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 		return "", "", err
 	}
 
+	var onProgress func(sent int64)
+	if c.Progress != nil {
+		c.Progress(0, total) // starting line before any bytes stream
+		onProgress = func(sent int64) { c.Progress(sent, total) }
+	}
+
 	pr, pw := io.Pipe()
 	go func() {
-		pw.CloseWithError(writeUploadBody(pw, encManifest, files, key))
+		pw.CloseWithError(writeUploadBody(pw, encManifest, files, key, onProgress))
 	}()
 
 	q := uploadQuery(opt)
@@ -183,7 +191,7 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 // writeUploadBody writes the framed request body (manifest header + each
 // file's encrypted chunks) into w, using one global seq counter starting at
 // 1 across all files (seq 0 is the manifest, per EncryptManifest/nonce(0)).
-func writeUploadBody(w io.Writer, encManifest []byte, files []uploadFile, key []byte) error {
+func writeUploadBody(w io.Writer, encManifest []byte, files []uploadFile, key []byte, progress func(sent int64)) error {
 	var hdr [4]byte
 	binary.BigEndian.PutUint32(hdr[:], uint32(len(encManifest)))
 	if _, err := w.Write(hdr[:]); err != nil {
@@ -194,6 +202,7 @@ func writeUploadBody(w io.Writer, encManifest []byte, files []uploadFile, key []
 	}
 
 	seq := uint64(1)
+	var sent int64
 	buf := make([]byte, storecrypto.ChunkSize)
 	for _, f := range files {
 		fh, err := os.Open(f.path)
@@ -212,6 +221,10 @@ func writeUploadBody(w io.Writer, encManifest []byte, files []uploadFile, key []
 					seq++
 					if _, werr := w.Write(frame); werr != nil {
 						return werr
+					}
+					sent += int64(n)
+					if progress != nil {
+						progress(sent)
 					}
 				}
 				if rerr == io.EOF || rerr == io.ErrUnexpectedEOF {
@@ -523,17 +536,36 @@ func (c *Client) Download(ctx context.Context, id, keyB64Url, destDir string) ([
 	w := &manifestWriter{destDir: destDir, files: manifest.Files}
 	defer w.closeAll()
 
+	// emit routes decrypted plaintext into the output files and tallies the
+	// bytes written so Progress reflects file-recovery progress (plaintext,
+	// against the manifest's known total) rather than depending on the blob
+	// response advertising a Content-Length.
+	var written int64
+	emit := func(pt []byte) error {
+		if err := w.write(pt); err != nil {
+			return err
+		}
+		written += int64(len(pt))
+		return nil
+	}
+
+	if c.Progress != nil {
+		c.Progress(0, expectedTotal) // show a starting line even for tiny blobs
+	}
 	dec := storecrypto.NewDecryptor(key)
 	buf := make([]byte, storecrypto.ChunkSize)
 	for {
 		n, rerr := blobResp.Body.Read(buf)
 		if n > 0 {
-			if perr := dec.Push(buf[:n], w.write); perr != nil {
+			if perr := dec.Push(buf[:n], emit); perr != nil {
 				var we *writeError
 				if errors.As(perr, &we) {
 					return nil, fmt.Errorf("cloud: write file: %w", we.err)
 				}
 				return nil, fmt.Errorf("cloud: decrypt failed (wrong key, or corrupt/tampered data): %w", perr)
+			}
+			if c.Progress != nil {
+				c.Progress(written, expectedTotal)
 			}
 		}
 		if rerr == io.EOF {

@@ -18,6 +18,12 @@ type Client struct {
 	HTTP   *http.Client
 	Token  string
 
+	// Progress, if set, is called during Upload and Download with the number of
+	// plaintext bytes transferred so far and the total (from the manifest / the
+	// summed source file sizes). total may be 0 for an empty transfer. It lets a
+	// caller render a progress bar; nil (the default) disables reporting.
+	Progress func(done, total int64)
+
 	// sleep is used between poll attempts; overridable in tests so the
 	// device-code poll loop doesn't actually block on wall-clock time.
 	sleep func(time.Duration)
