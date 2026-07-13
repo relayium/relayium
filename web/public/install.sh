@@ -93,8 +93,12 @@ else
   dir="${HOME}/.local/bin"
 fi
 mkdir -p "$dir" || err "cannot create ${dir}"
-cp "${tmp}/relayium" "${dir}/relayium" || err "cannot write ${dir}/relayium"
-chmod 0755 "${dir}/relayium"
+# Stage in the target dir, then rename into place: cp over a running binary
+# fails with ETXTBSY, while rename() atomically replaces it even mid-execution.
+staged="${dir}/.relayium.new.$$"
+cp "${tmp}/relayium" "$staged" || err "cannot write ${dir}/relayium"
+chmod 0755 "$staged"
+mv -f "$staged" "${dir}/relayium" || { rm -f "$staged"; err "cannot write ${dir}/relayium"; }
 
 echo "Installed relayium to ${dir}/relayium"
 case ":${PATH}:" in
