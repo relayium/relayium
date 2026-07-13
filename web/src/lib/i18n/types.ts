@@ -382,7 +382,10 @@ export interface Messages {
   faq: {
     title: string;
     sub: string;
-    items: { q: string; a: string }[];
+    items: { q: string; a: string }[]; // shared questions shown on every FAQ
+    home: { q: string; a: string }[]; // LAN / same-network realtime page extras
+    cross: { q: string; a: string }[]; // cross-network realtime page extras
+    offline: { q: string; a: string }[]; // async download-link / stored page extras
   };
   crossPitch: string; // one-line pitch under the realtime page header
   homeCross: { title: string; desc: string; realtimeCta: string; offlineCta: string }; // homepage → the two cross-network pages

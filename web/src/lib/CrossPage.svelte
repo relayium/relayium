@@ -89,7 +89,7 @@
     <ModeCompare />
     <FeatureStrip />
     <UseCases />
-    <Faq />
+    <Faq variant="cross" />
   {/if}
 
   <PageFooter fineprint={t.footer} />

@@ -59,7 +59,7 @@
   <ModeCompare />
   <FeatureStrip />
   <UseCases />
-  <Faq />
+  <Faq variant="offline" />
 
   <PageFooter fineprint={t.offlineFooter} />
 </section>

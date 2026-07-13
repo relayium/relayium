@@ -1419,7 +1419,7 @@
     <FeatureStrip />
     <CliCallout />
     <UseCases />
-    <Faq />
+    <Faq variant="home" />
 
     <footer>
       <nav class="legal" aria-label="Legal">

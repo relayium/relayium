@@ -1,6 +1,12 @@
 <script lang="ts">
   import { lang, messages, type Messages } from "./i18n.svelte";
+
+  // Each page shows the shared questions plus its own page-specific set, so the
+  // FAQ is tailored to what a visitor on that page is likely asking.
+  let { variant = "home" }: { variant?: "home" | "cross" | "offline" } = $props();
+
   const t = $derived<Messages>(messages[lang()]);
+  const items = $derived([...t.faq.items, ...t.faq[variant]]);
 </script>
 
 <section class="faq" aria-label={t.faq.title}>
@@ -9,7 +15,7 @@
     <p class="sub">{t.faq.sub}</p>
   </div>
   <div class="list">
-    {#each t.faq.items as item (item.q)}
+    {#each items as item (item.q)}
       <details class="qa">
         <summary>
           <span class="q">{item.q}</span>
@@ -27,7 +33,10 @@
   .head h2 { font-size: var(--fs-h2); margin: 0 0 var(--space-2); }
   .head .sub { color: var(--text); font-size: var(--fs-sm); max-width: 60ch; }
 
-  .list { display: flex; flex-direction: column; gap: var(--space-3); }
+  /* Two columns on wider viewports; collapses to one on narrow screens. Grid
+     places items in row order and lets each row size to its tallest open item. */
+  .list { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); align-items: start; }
+  @media (max-width: 720px) { .list { grid-template-columns: 1fr; } }
   .qa {
     border: 1px solid var(--border); border-radius: var(--radius);
     background: var(--surface-2); overflow: hidden;
