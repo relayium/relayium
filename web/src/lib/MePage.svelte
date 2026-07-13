@@ -8,6 +8,8 @@
   import { navigate } from "./router.svelte";
   import { formatSize, formatRemaining } from "./format";
   import { nodeRunCommand, nodePortsCommand } from "./nodes";
+  import { buildDownloadLink } from "./stored-file";
+  import { uploadKey, forgetUploadKey, pruneUploadKeys } from "./upload-keys";
   import WhyAccount from "./WhyAccount.svelte";
   import CommandBlock from "./CommandBlock.svelte";
 
@@ -30,6 +32,10 @@
 
   let stats = $state<Stats | null>(null);
   let files = $state<FileRow[]>([]);
+  // Local id→key map for files this browser uploaded, so their share link (whose
+  // key the server never holds) can be rebuilt and re-copied from here.
+  let fileKeys = $state<Record<string, string>>({});
+  let copiedId = $state(""); // file id whose "copy link" just fired, for the ✓ state
   let loading = $state(true);
   let nowSec = $state(Math.floor(Date.now() / 1000));
   let loadedFor = ""; // user id we last loaded data for; guards against refetch loops
@@ -41,12 +47,30 @@
   let newNodeName = $state("");
   let newToken = $state<string | null>(null); // shown exactly once, right after provisioning
 
+  // Per-node live connectivity probe: distinct from the passive online dot, this
+  // asks central to actually reach the node right now.
+  interface CheckResult { reachable: boolean; online: boolean; latencyMs: number; error?: string }
+  let checking = $state<Record<string, boolean>>({});
+  let checkResult = $state<Record<string, CheckResult>>({});
+
   async function loadNodes() {
     try {
       const res = await fetch("/api/nodes/mine", { credentials: "include" });
       nodes = res.ok ? ((await res.json()).nodes ?? []) : [];
     } catch {
       nodes = [];
+    }
+  }
+
+  async function checkNode(id: string) {
+    checking = { ...checking, [id]: true };
+    try {
+      const res = await fetch(`/api/nodes/${id}/check`, { method: "POST", credentials: "include" });
+      checkResult = { ...checkResult, [id]: res.ok ? await res.json() : { reachable: false, online: false, latencyMs: 0, error: "error" } };
+    } catch {
+      checkResult = { ...checkResult, [id]: { reachable: false, online: false, latencyMs: 0, error: "error" } };
+    } finally {
+      checking = { ...checking, [id]: false };
     }
   }
 
@@ -61,14 +85,38 @@
       stats = sr.ok ? await sr.json() : null;
       files = fr.ok ? ((await fr.json()).files ?? []) : [];
       strict = mr.ok ? Boolean((await mr.json()).user?.onlyOwnNodes) : false;
+      // Recover locally-held keys for the current files, and drop keys for files
+      // the server no longer lists (expired/deleted) so the store can't grow forever.
+      const ids = files.map((f) => f.id);
+      pruneUploadKeys(ids);
+      const km: Record<string, string> = {};
+      for (const id of ids) {
+        const k = uploadKey(id);
+        if (k) km[id] = k;
+      }
+      fileKeys = km;
     } catch {
       stats = null;
       files = [];
       strict = false;
+      fileKeys = {};
     } finally {
       loading = false;
     }
     await loadNodes();
+  }
+
+  async function copyLink(id: string) {
+    const key = fileKeys[id];
+    if (!key) return;
+    const link = buildDownloadLink(location.origin, id, key);
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      return; // clipboard blocked
+    }
+    copiedId = id;
+    setTimeout(() => { if (copiedId === id) copiedId = ""; }, 2000);
   }
 
   async function addNode() {
@@ -111,6 +159,9 @@
     const res = await fetch(`/api/files/${id}`, { method: "DELETE", credentials: "include" });
     if (res.ok) {
       files = files.filter((f) => f.id !== id);
+      forgetUploadKey(id);
+      const { [id]: _drop, ...rest } = fileKeys;
+      fileKeys = rest;
       // A deleted link can no longer be downloaded, but its past downloads still
       // count toward lifetime stats — so refresh the numbers, not just the list.
       try {
@@ -188,6 +239,7 @@
         <h2>{t.me.filesTitle}</h2>
         <span class="note">{t.me.noName}</span>
       </div>
+      <p class="link-hint">{t.me.linkHint}</p>
 
       {#if loading}
         <p class="muted">…</p>
@@ -205,6 +257,11 @@
               <span class="exp" class:soon={secLeft < 3600}>
                 ⏳ {t.me.expiresIn(formatRemaining(secLeft, t.download.durUnits))}
               </span>
+              {#if fileKeys[f.id]}
+                <button class="linkbtn" onclick={() => copyLink(f.id)}>
+                  {copiedId === f.id ? "✓" : "🔗 " + t.me.copyLink}
+                </button>
+              {/if}
               <button class="del" onclick={() => del(f.id)} aria-label={t.me.del}>{t.me.del}</button>
             </li>
           {/each}
@@ -221,6 +278,7 @@
         </label>
       </div>
       <p class="hint">{t.me.strictHint}</p>
+      <p class="hint">{t.me.nodesTrafficHint}</p>
 
       {#if newToken}
         <div class="token-reveal">
@@ -250,12 +308,20 @@
       {:else}
         <ul class="nodelist">
           {#each nodes as n (n.id)}
+            {@const cr = checkResult[n.id]}
             <li>
               <span class="dot" class:on={n.online} aria-label={n.online ? t.me.nodeOnline : t.me.nodeOffline}></span>
               <span class="nid">{n.region || "—"} · #{n.id.slice(0, 8)}</span>
               <span class="nstat">{t.me.nodeRelayed(formatSize(n.relayedBytes))} ({t.me.nodeFreeTag})</span>
-              <span class="nstat">{t.me.nodeStored(formatSize(n.storedBytes))} ({t.me.nodeFreeTag})</span>
               <span class="nstat">{t.me.nodeStorageFree(formatSize(n.storageFree), formatSize(n.storageTotal))}</span>
+              {#if cr}
+                <span class="probe" class:ok={cr.reachable} class:bad={!cr.reachable}>
+                  {cr.reachable ? t.me.nodeReachable(String(cr.latencyMs)) : t.me.nodeUnreachable}
+                </span>
+              {/if}
+              <button class="chk" disabled={checking[n.id]} onclick={() => checkNode(n.id)}>
+                {checking[n.id] ? "…" : t.me.checkNode}
+              </button>
               <button class="del" onclick={() => deleteNode(n.id)} aria-label={t.me.delNode}>{t.me.delNode}</button>
             </li>
           {/each}
@@ -266,7 +332,7 @@
 </section>
 
 <style>
-  .me { position: relative; max-width: 720px; margin: 0 auto; }
+  .me { position: relative; max-width: 1120px; margin: 0 auto; }
   .acct { display: flex; justify-content: flex-end; min-height: 32px; }
 
   .me-head { text-align: center; padding: var(--space-2) 0 var(--space-5); position: relative; }
@@ -314,6 +380,13 @@
   .exp { color: var(--text); margin-left: auto; }
   .exp.soon { color: var(--danger); }
   .tag.burn { color: var(--accent); }
+  .link-hint { margin: 0 0 var(--space-3); font-size: var(--fs-xs); color: var(--text); }
+  .linkbtn {
+    font: inherit; font-size: var(--fs-xs); background: none; cursor: pointer;
+    border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--accent);
+    padding: 2px 10px; transition: border-color .13s;
+  }
+  .linkbtn:hover { border-color: var(--accent-border); }
   .del {
     font: inherit; font-size: var(--fs-xs); background: none; cursor: pointer;
     border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text);
@@ -347,6 +420,16 @@
   .dot.on { background: var(--accent); opacity: 1; }
   .nid { font-family: ui-monospace, monospace; color: var(--text-h); }
   .nstat { color: var(--text); }
+  .probe { font-size: var(--fs-xs); }
+  .probe.ok { color: var(--accent); }
+  .probe.bad { color: var(--danger); }
+  .chk {
+    font: inherit; font-size: var(--fs-xs); background: none; cursor: pointer; margin-left: auto;
+    border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text);
+    padding: 2px 10px; transition: border-color .13s, color .13s;
+  }
+  .chk:hover:not(:disabled) { border-color: var(--accent-border); color: var(--text-h); }
+  .chk:disabled { opacity: .6; cursor: default; }
 
   @media (max-width: 520px) {
     .exp { margin-left: 0; }

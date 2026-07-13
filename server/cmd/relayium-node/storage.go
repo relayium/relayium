@@ -17,9 +17,29 @@ import (
 // authenticated by a bearer secret (constant-time). The DiskStore's own key
 // validation (validKey regex) rejects path-traversal keys. When lim carries a
 // disk cap, PUTs are refused (507) once diskUsed reaches it, enforcing the cap
-// locally instead of relying on central's placement heuristic alone.
-func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed func() int64) http.Handler {
+// locally instead of relying on central's placement heuristic alone. diskFull is
+// a built-in safety reserve (independent of the admin cap): it returns true once
+// the volume is past ~80% used, so relayium can never fill the disk and wedge the
+// host. It also serves an unauthenticated GET /healthz for central's reachability
+// probe.
+func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed func() int64, diskFull func() bool) http.Handler {
+	// full reports whether a write must be refused: over the admin disk cap, or
+	// past the built-in 80%-full safety reserve.
+	full := func() bool {
+		if lim != nil && diskUsed != nil {
+			if cap := lim.diskCapBytes(); cap > 0 && diskUsed() >= cap {
+				return true
+			}
+		}
+		return diskFull != nil && diskFull()
+	}
 	mux := http.NewServeMux()
+	// Liveness probe for central's connectivity check — no secret, reveals nothing
+	// beyond "this node is up and serving HTTP".
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
 	authed := func(h func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -32,11 +52,9 @@ func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed 
 		}
 	}
 	mux.HandleFunc("PUT /blob/{key}", authed(func(w http.ResponseWriter, r *http.Request, key string) {
-		if lim != nil && diskUsed != nil {
-			if cap := lim.diskCapBytes(); cap > 0 && diskUsed() >= cap {
-				http.Error(w, "storage full", http.StatusInsufficientStorage)
-				return
-			}
+		if full() {
+			http.Error(w, "storage full", http.StatusInsufficientStorage)
+			return
 		}
 		n, err := ds.Put(r.Context(), key, r.Body)
 		if errors.Is(err, storage.ErrInvalidKey) {
@@ -77,11 +95,9 @@ func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed 
 			http.Error(w, "bad offset", http.StatusBadRequest)
 			return
 		}
-		if lim != nil && diskUsed != nil {
-			if cap := lim.diskCapBytes(); cap > 0 && diskUsed() >= cap {
-				http.Error(w, "storage full", http.StatusInsufficientStorage)
-				return
-			}
+		if full() {
+			http.Error(w, "storage full", http.StatusInsufficientStorage)
+			return
 		}
 		size, err := ds.Append(r.Context(), key, offset, r.Body)
 		if errors.Is(err, storage.ErrOffsetMismatch) {

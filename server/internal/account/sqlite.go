@@ -1659,10 +1659,14 @@ func (s *SQLiteStore) GetNode(ctx context.Context, id string) (Node, bool, error
 // have at least minFree bytes free — candidates for placing a new node-backed
 // blob.
 func (s *SQLiteStore) StorageNodes(ctx context.Context, since, minFree int64) ([]Node, error) {
+	// storage_free*5 >= storage_total keeps the volume at most 80% full: never
+	// place a new blob on a node whose disk is already past that reserve, so a
+	// node can't be filled to the point of wedging its host.
 	return s.queryNodes(ctx,
 		`SELECT `+nodeCols+` FROM nodes
 		   WHERE owner_type='fleet' AND storage_enabled=1 AND last_seen_at >= ? AND storage_free >= ?
 		     AND (disk_limit_bytes = 0 OR disk_limit_bytes - stored_bytes >= ?)
+		     AND (storage_total = 0 OR storage_free * 5 >= storage_total)
 		   ORDER BY last_seen_at DESC`, since, minFree, minFree)
 }
 
@@ -1693,8 +1697,11 @@ func (s *SQLiteStore) UserNodesAll(ctx context.Context, userID string) ([]Node, 
 // UserStorageNodes is UserNodes filtered to storage-enabled nodes with at
 // least minFree bytes free.
 func (s *SQLiteStore) UserStorageNodes(ctx context.Context, userID string, since, minFree int64) ([]Node, error) {
+	// Same 80%-full reserve as StorageNodes: even the user's own node is skipped
+	// once its volume is past 80% used, so a full disk never bricks their host.
 	return s.queryNodes(ctx,
-		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? AND last_seen_at >= ? AND storage_enabled=1 AND storage_free >= ? ORDER BY last_seen_at DESC`,
+		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? AND last_seen_at >= ? AND storage_enabled=1 AND storage_free >= ?
+		   AND (storage_total = 0 OR storage_free * 5 >= storage_total) ORDER BY last_seen_at DESC`,
 		userID, since, minFree)
 }
 

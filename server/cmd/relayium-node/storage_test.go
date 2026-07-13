@@ -16,7 +16,7 @@ func TestBlobHandlerRoundTripAndAuth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("diskstore: %v", err)
 	}
-	h := newBlobHandler(ds, "nodesecret", nil, nil)
+	h := newBlobHandler(ds, "nodesecret", nil, nil, nil)
 	srv := httptest.NewServer(h)
 	defer srv.Close()
 
@@ -84,7 +84,7 @@ func TestBlobHandlerAppend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(newBlobHandler(ds, "s", nil, nil))
+	srv := httptest.NewServer(newBlobHandler(ds, "s", nil, nil, nil))
 	defer srv.Close()
 
 	patch := func(offset int64, data string) (int, string) {
@@ -152,7 +152,7 @@ func TestBlobHandlerRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := newBlobHandler(ds, "s", nil, nil)
+	h := newBlobHandler(ds, "s", nil, nil, nil)
 	srv := httptest.NewServer(h)
 	defer srv.Close()
 

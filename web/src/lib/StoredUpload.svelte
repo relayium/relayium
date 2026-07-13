@@ -4,6 +4,8 @@
   import { canShare, share } from "./share";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { maxSizeHint } from "./max-size";
+  import { hasFiles, filesFromDataTransfer } from "./drag";
+  import { rememberUploadKey } from "./upload-keys";
 
   const t = $derived<Messages>(messages[lang()]);
 
@@ -55,10 +57,35 @@
     return () => { cancelled = true; };
   });
 
+  let dragOver = $state(false); // window/card drag hover, for the drop-zone highlight
+
   async function onPick(e: Event) {
     const input = e.currentTarget as HTMLInputElement;
     const files = input.files ? Array.from(input.files) : [];
     input.value = "";
+    await startUpload(files);
+  }
+
+  async function onDrop(e: DragEvent) {
+    e.preventDefault();
+    dragOver = false;
+    if (busy || !e.dataTransfer) return;
+    // Recurse into dropped folders (Chromium/Firefox); otherwise a flat file list.
+    const picked = await filesFromDataTransfer(e.dataTransfer);
+    await startUpload(picked.map((p) => p.file));
+  }
+
+  function onDragOver(e: DragEvent) {
+    if (busy || !hasFiles(e.dataTransfer?.types)) return;
+    e.preventDefault(); // required so the drop event fires
+    dragOver = true;
+  }
+
+  function onDragLeave() {
+    dragOver = false;
+  }
+
+  async function startUpload(files: File[]) {
     if (files.length === 0) return;
     err = "";
     link = "";
@@ -76,6 +103,9 @@
       }, controller.signal);
       link = buildDownloadLink(location.origin, out.id, out.key);
       expiresAt = out.expiresAt;
+      // Persist the zero-knowledge key locally so it can be recovered from
+      // "My Files" later — the server never sees it, so this is the only copy.
+      rememberUploadKey(out.id, out.key);
     } catch (e2) {
       // User-initiated cancel: return to idle silently, not as an error.
       if (controller?.signal.aborted) { /* cancelled */ }
@@ -126,9 +156,17 @@
     </label>
   </div>
 
-  <label class="pick" class:disabled={busy}>
+  <label
+    class="pick"
+    class:disabled={busy}
+    class:dragover={dragOver}
+    ondragover={onDragOver}
+    ondragleave={onDragLeave}
+    ondrop={onDrop}
+  >
     <input type="file" multiple disabled={busy} onchange={onPick} />
     <span>{busy ? t.stored.uploading : t.stored.pick}</span>
+    <span class="drophint">{t.stored.dropHint}</span>
   </label>
   {#if hint}<span class="max-hint">{t.maxSize(hint)}</span>{/if}
 
@@ -172,10 +210,12 @@
   .stored { display: flex; flex-direction: column; }
   .opts { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); margin-bottom: var(--space-3); font-size: var(--fs-xs); }
   .opt { display: flex; align-items: center; gap: var(--space-2); }
-  .pick { display: inline-flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1.5px dashed var(--border); border-radius: var(--radius-sm); cursor: pointer; transition: border-color .13s; }
+  .pick { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-4); border: 1.5px dashed var(--border); border-radius: var(--radius-sm); cursor: pointer; transition: border-color .13s, background .13s; }
   .pick:hover { border-color: var(--accent-border); }
+  .pick.dragover { border-color: var(--accent); background: var(--code-bg); }
   .pick.disabled { opacity: .6; cursor: not-allowed; }
   .pick input[type="file"] { display: none; }
+  .pick .drophint { width: 100%; font-size: var(--fs-xs); color: var(--text); }
   .max-hint { display: block; margin-top: var(--space-2); font-size: var(--fs-xs); color: var(--text); }
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; margin-top: var(--space-3); }
   .fill { height: 100%; background: linear-gradient(90deg, var(--accent), #6d28d9); transition: width .2s; }

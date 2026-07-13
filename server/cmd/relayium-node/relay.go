@@ -162,7 +162,14 @@ func run(c config, st nodeState) error {
 			}
 			return 0
 		}
-		blobSrv := &http.Server{Addr: fmt.Sprintf(":%d", c.StoragePort), Handler: newBlobHandler(ds, storageSecret, lim, diskUsed)}
+		// Built-in safety reserve: refuse writes once the volume is past 80% used
+		// (free < 20%), independent of any admin cap, so relayium can never fill
+		// the disk and wedge the host. Fails open on a stat error (don't block).
+		diskFull := func() bool {
+			t, f, err := storageReport(c.StorageDir)
+			return err == nil && t > 0 && f*5 < t
+		}
+		blobSrv := &http.Server{Addr: fmt.Sprintf(":%d", c.StoragePort), Handler: newBlobHandler(ds, storageSecret, lim, diskUsed, diskFull)}
 		go func() {
 			if err := blobSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				log.Printf("relayium-node: blob server exited: %v", err)

@@ -75,7 +75,7 @@ func TestBlobHandlerEnforcesDiskCap(t *testing.T) {
 	lim := &limits{}
 	lim.sync(0, 0, 1000) // disk cap 1000
 	var used int64
-	h := newBlobHandler(ds, "s", lim, func() int64 { return atomic.LoadInt64(&used) })
+	h := newBlobHandler(ds, "s", lim, func() int64 { return atomic.LoadInt64(&used) }, nil)
 
 	put := func() int {
 		r := httptest.NewRequest("PUT", "/blob/abc123", bytes.NewReader([]byte("data")))

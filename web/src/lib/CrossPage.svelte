@@ -105,7 +105,7 @@
   .cn-head .tagline { color: var(--text); font-size: var(--fs-body); max-width: 44ch; margin: 0 auto; }
   .cn-head .pitch { color: var(--text); font-size: var(--fs-xs); max-width: 52ch; margin: var(--space-3) auto 0; line-height: 1.55; }
 
-  .cards { display: grid; grid-template-columns: 1fr; gap: var(--space-4); max-width: 520px; margin: 0 auto; align-items: stretch; }
+  .cards { display: grid; grid-template-columns: 1fr; gap: var(--space-4); max-width: 720px; margin: 0 auto; align-items: stretch; }
   .card {
     border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-5);
     background: var(--social-bg); display: flex; flex-direction: column; gap: var(--space-3);

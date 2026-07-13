@@ -172,8 +172,14 @@ export interface Messages {
     nodeStored: (bytes: string) => string; // bytes stored on this node
     nodeFreeTag: string; // "(free)" tag next to relayed/stored figures — own-node traffic isn't billed
     nodeStorageFree: (free: string, total: string) => string; // "X free of Y" disk line
+    nodesTrafficHint: string; // explains relay-vs-storage: stored files don't count as "relayed"
+    checkNode: string; // "test connectivity" button per node
+    nodeReachable: (ms: string) => string; // probe succeeded, with round-trip latency
+    nodeUnreachable: string; // probe failed — node not reachable from central
     delNode: string; // remove-node button
     confirmDelNode: string; // confirm() before removing a node
+    copyLink: string; // copy the rebuilt share link for a stored file (key held locally)
+    linkHint: string; // note: links are recoverable only on the browser that uploaded
   };
   // Shared "why an account?" explainer shown on the two login-gated feature pages
   // (/cross-network, /offline-transfer) and, compact, on the /me login gate.
@@ -312,6 +318,7 @@ export interface Messages {
   };
   stored: {
     pick: string;
+    dropHint: string; // secondary line in the picker: drag files/folders here too
     uploading: string;
     encrypting: string; // phase 1: encrypting in the browser (progress bar tracks this)
     uploadingNow: string; // phase 2: ciphertext is being POSTed (bar sits full)

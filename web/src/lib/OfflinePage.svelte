@@ -74,7 +74,7 @@
   .cn-head .tagline { color: var(--text); font-size: var(--fs-body); max-width: 44ch; margin: 0 auto; }
   .cn-head .pitch { color: var(--text); font-size: var(--fs-xs); max-width: 52ch; margin: var(--space-3) auto 0; line-height: 1.55; }
 
-  .cards { max-width: 520px; margin: 0 auto; }
+  .cards { max-width: 720px; margin: 0 auto; }
   .card {
     border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-5);
     background: var(--social-bg); display: flex; flex-direction: column; gap: var(--space-3);
@@ -92,7 +92,7 @@
   .signin .hint { margin: 0; font-size: var(--fs-xs); color: var(--text); text-align: center; }
 
   .cli-note {
-    max-width: 520px; margin: var(--space-4) auto 0; text-align: center;
+    max-width: 720px; margin: var(--space-4) auto 0; text-align: center;
     font-size: var(--fs-xs); color: var(--text); line-height: 1.55;
   }
   .cli-note a { color: var(--accent); text-decoration: none; white-space: nowrap; }

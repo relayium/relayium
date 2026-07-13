@@ -329,22 +329,30 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	// Count the completed download against the file's OWNER only — never the
 	// downloader (no downloader identity is read or stored). Best-effort: a stats
 	// failure must not turn a delivered file into an error.
-	_ = s.store.AddDownloadStat(r.Context(), sf.UserID, sf.Size)
-	_ = s.store.RecordMeter(r.Context(), sf.UserID, MeterDownload, sf.Size, s.now().Unix())
+	//
+	// These writes MUST NOT ride r.Context(): a client typically drops the
+	// connection the instant it receives the last byte, which cancels r.Context()
+	// and silently loses every best-effort write below — the very reason an
+	// unlimited file's download_count kept reading 0 after a successful download.
+	// A fresh, short-lived context detaches the accounting from the client.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.store.AddDownloadStat(ctx, sf.UserID, sf.Size)
+	_ = s.store.RecordMeter(ctx, sf.UserID, MeterDownload, sf.Size, s.now().Unix())
 	if limited {
 		// Delete iff THIS request took the final slot (its own claimed slot
 		// number is >= MaxDownloads) — never by re-reading download_count, which
 		// a concurrent claim could have already bumped past MaxDownloads on a
 		// request that hasn't (and may never) finish delivering.
 		if slot >= sf.MaxDownloads {
-			if derr := bs.Delete(r.Context(), sf.BlobKey); derr != nil {
+			if derr := bs.Delete(ctx, sf.BlobKey); derr != nil {
 				// Node unreachable: record the orphan so GC retries; still remove the row.
-				_ = s.store.EnqueueNodeDelete(r.Context(), sf.BlobKey, sf.NodeID, s.now().Unix())
+				_ = s.store.EnqueueNodeDelete(ctx, sf.BlobKey, sf.NodeID, s.now().Unix())
 			}
-			_ = s.store.DeleteStoredFile(r.Context(), sf.ID)
+			_ = s.store.DeleteStoredFile(ctx, sf.ID)
 		}
 	} else {
-		_ = s.store.IncDownloadCount(r.Context(), sf.ID)
+		_ = s.store.IncDownloadCount(ctx, sf.ID)
 	}
 }
 

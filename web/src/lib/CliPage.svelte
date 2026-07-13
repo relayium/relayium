@@ -247,7 +247,7 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
 
 <style>
   .cli {
-    max-width: 820px;
+    max-width: 1120px;
     margin: 0 auto;
     padding: var(--space-4) 0 var(--space-9);
   }
