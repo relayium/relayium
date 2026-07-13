@@ -54,6 +54,16 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.builder{margin:16px 0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
+.builder .bf{display:block;margin:0 0 12px}
+.builder .bf span{display:block;font-size:14px;color:var(--text);margin:0 0 5px}
+.builder .bf input{width:100%;font:15px ui-monospace,SFMono-Regular,Menlo,monospace;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h)}
+.builder .bcmd{margin:14px 0 0}
+.builder .bcmd pre{margin:0}
+.builder .bcopy{margin:10px 0 0;padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h);font:inherit;font-size:14px;cursor:pointer}
+.builder .bcopy:hover{border-color:var(--accent)}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -86,6 +96,7 @@ relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除</cod
       <h2>二台目のコンピュータでダウンロード</h2>
       <p>別のマシンでは、リンクを down に渡します。ログインも設定も不要——ファイルを復号する鍵はリンクの中にあるので、down はアカウントから何も必要としません：</p>
       <pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads</code></pre>
+      <div class="builder" data-download-builder><label class="bf"><span>共有リンク</span><input data-link type="text" placeholder="https://relayium.com/d/…#k=…" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" data-token="あなたのリンク" /></label><label class="bf"><span>保存先（pwd の出力を貼り付け）</span><input data-dest type="text" placeholder="/home/you/downloads" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" /></label><div class="bcmd"><pre><code data-cmd>relayium down &#39;&lt;あなたのリンク&gt;&#39; &lt;保存先ディレクトリ&gt;</code></pre><button type="button" class="bcopy" data-copy data-copied="コピーしました" hidden>コマンドをコピー</button></div></div>
       <ul><li>リンクは引用符で囲みます：#k=… 断片が復号鍵を運び、シェルによっては # をコメントの開始として扱うためです。</li><li>宛先ディレクトリ（ここでは ./downloads）を指定するか、省略して現在のディレクトリに落とします。</li><li>ファイルがバーン設定、ダウンロード上限到達、または期限切れの場合、リンクは使い切られており、down はもう存在しないと報告します。</li></ul>
       <h2>ウェブサイトとも連携</h2>
       <p>このリンクはウェブサイトが使うものと同じなので、CLI とブラウザは自由に連携します：</p>
@@ -117,5 +128,31 @@ relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除</cod
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>
+    <script>
+(function(){
+  function q(s){return /^[\w@%+=:,.\/-]+$/.test(s)?s:"'"+s.replace(/'/g,"'\\''")+"'";}
+  document.querySelectorAll('[data-download-builder]').forEach(function(b){
+    var link=b.querySelector('[data-link]'),dest=b.querySelector('[data-dest]'),
+        out=b.querySelector('[data-cmd]'),copy=b.querySelector('[data-copy]');
+    function render(){
+      var l=link.value.trim()||('<'+(link.getAttribute('data-token')||'link')+'>');
+      var d=dest.value.trim();
+      out.textContent="relayium down '"+l+"' "+(d?q(d):".");
+    }
+    link.addEventListener('input',render);
+    dest.addEventListener('input',render);
+    if(copy){
+      copy.hidden=false;
+      copy.addEventListener('click',function(){
+        navigator.clipboard.writeText(out.textContent).then(function(){
+          var o=copy.textContent;copy.textContent=copy.getAttribute('data-copied')||o;
+          setTimeout(function(){copy.textContent=o;},1500);
+        }).catch(function(){});
+      });
+    }
+    render();
+  });
+})();
+</script>
   </body>
 </html>

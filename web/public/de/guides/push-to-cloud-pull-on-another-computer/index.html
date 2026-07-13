@@ -54,6 +54,16 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.builder{margin:16px 0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
+.builder .bf{display:block;margin:0 0 12px}
+.builder .bf span{display:block;font-size:14px;color:var(--text);margin:0 0 5px}
+.builder .bf input{width:100%;font:15px ui-monospace,SFMono-Regular,Menlo,monospace;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h)}
+.builder .bcmd{margin:14px 0 0}
+.builder .bcmd pre{margin:0}
+.builder .bcopy{margin:10px 0 0;padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h);font:inherit;font-size:14px;cursor:pointer}
+.builder .bcopy:hover{border-color:var(--accent)}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -86,6 +96,7 @@ relayium up ./report.pdf --max-downloads 5   # 5 Downloads erlaubt, dann weg</co
       <h2>Auf dem zweiten Computer herunterladen</h2>
       <p>Gib auf dem anderen Rechner den Link an down. Keine Anmeldung, keine Einrichtung — der Schlüssel, der die Datei entschlüsselt, steckt im Link, also braucht down nichts von deinem Konto:</p>
       <pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads</code></pre>
+      <div class="builder" data-download-builder><label class="bf"><span>Dein Freigabelink</span><input data-link type="text" placeholder="https://relayium.com/d/…#k=…" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" data-token="dein Link" /></label><label class="bf"><span>Speichern unter (füg deine pwd-Ausgabe ein)</span><input data-dest type="text" placeholder="/home/du/downloads" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" /></label><div class="bcmd"><pre><code data-cmd>relayium down &#39;&lt;dein Link&gt;&#39; &lt;Zielverzeichnis&gt;</code></pre><button type="button" class="bcopy" data-copy data-copied="Kopiert" hidden>Befehl kopieren</button></div></div>
       <ul><li>Setz den Link in Anführungszeichen: das Fragment #k=… trägt den Entschlüsselungsschlüssel, und manche Shells behandeln # als Kommentaranfang.</li><li>Gib ein Zielverzeichnis an (hier ./downloads) oder lass es weg, um im aktuellen Verzeichnis zu landen.</li><li>Wurde die Datei auf Burn gesetzt, ihr Download-Limit erreicht oder ist sie abgelaufen, ist der Link verbraucht und down meldet, dass sie weg ist.</li></ul>
       <h2>Funktioniert auch mit der Website</h2>
       <p>Der Link ist derselbe, den die Website verwendet, also arbeiten CLI und Browser frei zusammen:</p>
@@ -117,5 +128,31 @@ relayium up ./report.pdf --max-downloads 5   # 5 Downloads erlaubt, dann weg</co
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>
+    <script>
+(function(){
+  function q(s){return /^[\w@%+=:,.\/-]+$/.test(s)?s:"'"+s.replace(/'/g,"'\\''")+"'";}
+  document.querySelectorAll('[data-download-builder]').forEach(function(b){
+    var link=b.querySelector('[data-link]'),dest=b.querySelector('[data-dest]'),
+        out=b.querySelector('[data-cmd]'),copy=b.querySelector('[data-copy]');
+    function render(){
+      var l=link.value.trim()||('<'+(link.getAttribute('data-token')||'link')+'>');
+      var d=dest.value.trim();
+      out.textContent="relayium down '"+l+"' "+(d?q(d):".");
+    }
+    link.addEventListener('input',render);
+    dest.addEventListener('input',render);
+    if(copy){
+      copy.hidden=false;
+      copy.addEventListener('click',function(){
+        navigator.clipboard.writeText(out.textContent).then(function(){
+          var o=copy.textContent;copy.textContent=copy.getAttribute('data-copied')||o;
+          setTimeout(function(){copy.textContent=o;},1500);
+        }).catch(function(){});
+      });
+    }
+    render();
+  });
+})();
+</script>
   </body>
 </html>

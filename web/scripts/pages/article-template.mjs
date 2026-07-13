@@ -52,12 +52,83 @@ function alternates(slug) {
   return links.join("\n    ");
 }
 
+// widgetHtml renders an interactive command builder that degrades gracefully:
+// with JS off it's a plain <pre> showing the command template (real,
+// crawlable content) plus two labelled inputs; the inline BUILDER_SCRIPT
+// (injected only when a page uses a widget) upgrades it to live-build the
+// `relayium down '<link>' <dir>` command and reveal a Copy button. Only the
+// "downloadBuilder" kind exists today.
+function widgetHtml(w) {
+  const fallback = `relayium down '<${w.linkToken}>' <${w.destToken}>`;
+  return (
+    `\n      <div class="builder" data-download-builder>` +
+    `<label class="bf"><span>${esc(w.linkLabel)}</span>` +
+    `<input data-link type="text" placeholder="${esc(w.linkPlaceholder)}" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" data-token="${esc(w.linkToken)}" /></label>` +
+    `<label class="bf"><span>${esc(w.destLabel)}</span>` +
+    `<input data-dest type="text" placeholder="${esc(w.destPlaceholder)}" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" /></label>` +
+    `<div class="bcmd"><pre><code data-cmd>${esc(fallback)}</code></pre>` +
+    `<button type="button" class="bcopy" data-copy data-copied="${esc(w.copied)}" hidden>${esc(w.copy)}</button></div>` +
+    `</div>`
+  );
+}
+
 function sectionHtml(s) {
   let out = `<h2>${esc(s.heading)}</h2>`;
   for (const p of s.body || []) out += `\n      <p>${esc(p)}</p>`;
   for (const block of s.code || []) out += `\n      <pre><code>${esc(block)}</code></pre>`;
+  if (s.widget) out += widgetHtml(s.widget);
   if (s.bullets?.length) out += `\n      <ul>${s.bullets.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>`;
   return out;
+}
+
+// Styles for widgetHtml, emitted only on pages that use a builder so every
+// other article stays byte-for-byte free of it (mirrors BUILDER_SCRIPT gating).
+const BUILDER_STYLE = `<style>
+.builder{margin:16px 0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
+.builder .bf{display:block;margin:0 0 12px}
+.builder .bf span{display:block;font-size:14px;color:var(--text);margin:0 0 5px}
+.builder .bf input{width:100%;font:15px ui-monospace,SFMono-Regular,Menlo,monospace;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h)}
+.builder .bcmd{margin:14px 0 0}
+.builder .bcmd pre{margin:0}
+.builder .bcopy{margin:10px 0 0;padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h);font:inherit;font-size:14px;cursor:pointer}
+.builder .bcopy:hover{border-color:var(--accent)}
+</style>`;
+
+// Progressive enhancement for widgetHtml. Kept dependency-free and tiny; only
+// emitted on pages that actually contain a [data-download-builder]. An empty
+// link falls back to its <…> token so the command still reads as a template;
+// an empty destination becomes "." (down's own default — current directory).
+const BUILDER_SCRIPT = `<script>
+(function(){
+  function q(s){return /^[\\w@%+=:,.\\/-]+$/.test(s)?s:"'"+s.replace(/'/g,"'\\\\''")+"'";}
+  document.querySelectorAll('[data-download-builder]').forEach(function(b){
+    var link=b.querySelector('[data-link]'),dest=b.querySelector('[data-dest]'),
+        out=b.querySelector('[data-cmd]'),copy=b.querySelector('[data-copy]');
+    function render(){
+      var l=link.value.trim()||('<'+(link.getAttribute('data-token')||'link')+'>');
+      var d=dest.value.trim();
+      out.textContent="relayium down '"+l+"' "+(d?q(d):".");
+    }
+    link.addEventListener('input',render);
+    dest.addEventListener('input',render);
+    if(copy){
+      copy.hidden=false;
+      copy.addEventListener('click',function(){
+        navigator.clipboard.writeText(out.textContent).then(function(){
+          var o=copy.textContent;copy.textContent=copy.getAttribute('data-copied')||o;
+          setTimeout(function(){copy.textContent=o;},1500);
+        }).catch(function(){});
+      });
+    }
+    render();
+  });
+})();
+</script>`;
+
+// hasWidget reports whether any section carries a builder widget, so the page
+// only ships BUILDER_SCRIPT when it's needed (every other article stays JS-free).
+function hasWidget(doc) {
+  return (doc.sections || []).some((s) => s.widget);
 }
 
 export function renderArticlePage({ slug, lang, doc, updated, related = [] }) {
@@ -129,7 +200,7 @@ export function renderArticlePage({ slug, lang, doc, updated, related = [] }) {
     <meta name="twitter:description" content="${esc(doc.description)}" />
     <meta name="twitter:image" content="${ogImage}" />
     <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
-    <style>${STYLE}</style>
+    <style>${STYLE}</style>${hasWidget(doc) ? "\n    " + BUILDER_STYLE : ""}
   </head>
   <body>
     <div class="wrap">
@@ -151,7 +222,7 @@ export function renderArticlePage({ slug, lang, doc, updated, related = [] }) {
         <a href="${urlPath("privacy", lang)}">${esc(PRIVACY_LABELS[lang])}</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
-    </div>
+    </div>${hasWidget(doc) ? "\n    " + BUILDER_SCRIPT : ""}
   </body>
 </html>
 `;

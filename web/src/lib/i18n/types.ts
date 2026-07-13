@@ -325,6 +325,11 @@ export interface Messages {
     expiresOn: (when: string) => string; // echoes the link's expiry back to the sender
     copy: string;
     copied: string;
+    cliHeading: string; // "Fetch it from the terminal" — CLI command builder heading
+    cliIntro: string; // one-line lead-in above the builder
+    cliDestLabel: string; // label for the destination-directory input
+    cliDestHint: string; // hint: paste your pwd, or leave . for the current dir
+    cliCopy: string; // copy button for the full `relayium down …` command
     errTooLarge: string;
     errQuota: string;
     errUpload: string;

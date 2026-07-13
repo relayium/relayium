@@ -28,7 +28,20 @@
   let expiresAt = $state(0); // unix seconds of the generated link, 0 until ready
   let err = $state("");
   let copied = $state(false);
+  let cmdCopied = $state(false);
+  let dest = $state("."); // download destination for the `relayium down` command builder
   let qrDataUrl = $state("");
+
+  // A shell-safe download command the recipient can paste on another machine.
+  // The link is single-quoted so the `#k=…` fragment isn't swallowed as a
+  // comment; the destination is only quoted when it contains characters a
+  // shell would otherwise split or interpret (a pasted pwd with spaces, say).
+  function shellQuote(s: string): string {
+    if (s === "") return ".";
+    if (/^[\w@%+=:,./-]+$/.test(s)) return s;
+    return "'" + s.replace(/'/g, "'\\''") + "'";
+  }
+  const downCmd = $derived(`relayium down '${link}' ${shellQuote(dest.trim())}`);
   let controller: AbortController | null = null; // in-flight upload, so it can be cancelled
 
   $effect(() => {
@@ -88,6 +101,16 @@
     copied = true;
     setTimeout(() => (copied = false), 2000);
   }
+
+  async function copyCmd() {
+    try {
+      await navigator.clipboard.writeText(downCmd);
+    } catch {
+      return; // clipboard blocked — the command is visible and selectable
+    }
+    cmdCopied = true;
+    setTimeout(() => (cmdCopied = false), 2000);
+  }
 </script>
 
 <section class="stored">
@@ -128,6 +151,20 @@
       <p class="expiry">{t.stored.expiresOn(new Date(expiresAt * 1000).toLocaleString(lang()))}</p>
     {/if}
     {#if qrDataUrl}<img class="qr" src={qrDataUrl} alt="QR" width="192" height="192" />{/if}
+
+    <div class="cli">
+      <p class="cli-h">{t.stored.cliHeading}</p>
+      <p class="cli-intro">{t.stored.cliIntro}</p>
+      <label class="cli-dest">
+        <span>{t.stored.cliDestLabel}</span>
+        <input bind:value={dest} placeholder="." spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" />
+      </label>
+      <p class="cli-hint">{t.stored.cliDestHint}</p>
+      <div class="cli-cmd">
+        <code>{downCmd}</code>
+        <button class="btn btn-ghost" onclick={copyCmd}>{cmdCopied ? t.stored.copied : t.stored.cliCopy}</button>
+      </div>
+    </div>
   {/if}
 </section>
 
@@ -154,4 +191,25 @@
   .row .btn { padding: var(--space-2) var(--space-4); white-space: nowrap; }
   .qr { margin-top: var(--space-3); }
   .error { color: var(--danger); font-size: var(--fs-xs); margin-top: var(--space-3); }
+
+  .cli { margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border); }
+  .cli-h { margin: 0; font-size: var(--fs-sm); color: var(--text-h); font-weight: 600; }
+  .cli-intro { margin: var(--space-2) 0 0; font-size: var(--fs-xs); color: var(--text); line-height: 1.5; }
+  .cli-dest { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-3); font-size: var(--fs-xs); color: var(--text); }
+  .cli-dest span { flex: none; }
+  .cli-dest input {
+    flex: 1; min-width: 0; font: inherit; font-size: var(--fs-xs); padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text-h);
+  }
+  .cli-hint { margin: var(--space-2) 0 0; font-size: var(--fs-xs); color: var(--text); line-height: 1.5; }
+  .cli-cmd {
+    display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-3);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--code-bg);
+  }
+  .cli-cmd code {
+    flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--fs-xs); color: var(--text-h);
+  }
+  .cli-cmd .btn { flex: none; padding: var(--space-2) var(--space-3); white-space: nowrap; }
 </style>

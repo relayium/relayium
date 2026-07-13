@@ -54,6 +54,16 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.builder{margin:16px 0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
+.builder .bf{display:block;margin:0 0 12px}
+.builder .bf span{display:block;font-size:14px;color:var(--text);margin:0 0 5px}
+.builder .bf input{width:100%;font:15px ui-monospace,SFMono-Regular,Menlo,monospace;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h)}
+.builder .bcmd{margin:14px 0 0}
+.builder .bcmd pre{margin:0}
+.builder .bcopy{margin:10px 0 0;padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h);font:inherit;font-size:14px;cursor:pointer}
+.builder .bcopy:hover{border-color:var(--accent)}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -86,6 +96,7 @@ relayium up ./report.pdf --max-downloads 5   # 允许下载 5 次，之后删除
       <h2>在第二台电脑下载</h2>
       <p>在另一台机器上，把链接交给 down。无需登录、无需配置——解密文件的密钥就在链接里，所以 down 完全不需要你的账号：</p>
       <pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads</code></pre>
+      <div class="builder" data-download-builder><label class="bf"><span>你的分享链接</span><input data-link type="text" placeholder="https://relayium.com/d/…#k=…" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" data-token="你的链接" /></label><label class="bf"><span>保存到（粘贴你的 pwd 输出）</span><input data-dest type="text" placeholder="/home/you/downloads" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" /></label><div class="bcmd"><pre><code data-cmd>relayium down &#39;&lt;你的链接&gt;&#39; &lt;目标目录&gt;</code></pre><button type="button" class="bcopy" data-copy data-copied="已复制" hidden>复制命令</button></div></div>
       <ul><li>给链接加引号：#k=… 片段携带解密密钥，而有些 shell 会把 # 当作注释起点。</li><li>给一个目标目录（这里是 ./downloads），或省略以落到当前目录。</li><li>如果该文件设了阅后即焚、已达下载次数上限或已过期，链接就失效了，down 会告知它已不存在。</li></ul>
       <h2>也能和网页端互通</h2>
       <p>这个链接和网页端用的是同一种，所以 CLI 与浏览器可以自由互通：</p>
@@ -117,5 +128,31 @@ relayium up ./report.pdf --max-downloads 5   # 允许下载 5 次，之后删除
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>
+    <script>
+(function(){
+  function q(s){return /^[\w@%+=:,.\/-]+$/.test(s)?s:"'"+s.replace(/'/g,"'\\''")+"'";}
+  document.querySelectorAll('[data-download-builder]').forEach(function(b){
+    var link=b.querySelector('[data-link]'),dest=b.querySelector('[data-dest]'),
+        out=b.querySelector('[data-cmd]'),copy=b.querySelector('[data-copy]');
+    function render(){
+      var l=link.value.trim()||('<'+(link.getAttribute('data-token')||'link')+'>');
+      var d=dest.value.trim();
+      out.textContent="relayium down '"+l+"' "+(d?q(d):".");
+    }
+    link.addEventListener('input',render);
+    dest.addEventListener('input',render);
+    if(copy){
+      copy.hidden=false;
+      copy.addEventListener('click',function(){
+        navigator.clipboard.writeText(out.textContent).then(function(){
+          var o=copy.textContent;copy.textContent=copy.getAttribute('data-copied')||o;
+          setTimeout(function(){copy.textContent=o;},1500);
+        }).catch(function(){});
+      });
+    }
+    render();
+  });
+})();
+</script>
   </body>
 </html>
