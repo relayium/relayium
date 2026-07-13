@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/relayium/relayium/internal/storage"
 )
@@ -60,6 +61,13 @@ func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed 
 		}
 		defer rc.Close()
 		w.Header().Set("Content-Type", "application/octet-stream")
+		// ServeContent gives us Range/206/Accept-Ranges for free, so central can
+		// resume an interrupted download. DiskStore.Get returns an *os.File
+		// (io.ReadSeeker); fall back to a plain copy for any non-seekable store.
+		if rs, ok := rc.(io.ReadSeeker); ok {
+			http.ServeContent(w, r, key, time.Time{}, rs)
+			return
+		}
 		_, _ = io.Copy(w, rc)
 	}))
 	mux.HandleFunc("DELETE /blob/{key}", authed(func(w http.ResponseWriter, r *http.Request, key string) {

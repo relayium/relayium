@@ -17,5 +17,9 @@ type BlobStore interface {
 	// Put streams r into object `key`, returning the number of bytes written.
 	Put(ctx context.Context, key string, r io.Reader) (int64, error)
 	Get(ctx context.Context, key string) (io.ReadCloser, error)
+	// GetRange returns the object's bytes from `start` to the end; start==0 is
+	// equivalent to Get. It backs resumable downloads (HTTP Range). The returned
+	// reader always begins exactly at `start`.
+	GetRange(ctx context.Context, key string, start int64) (io.ReadCloser, error)
 	Delete(ctx context.Context, key string) error
 }

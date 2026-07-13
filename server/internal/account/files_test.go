@@ -221,6 +221,67 @@ func TestBlobStreamsAndBurnDeletes(t *testing.T) {
 	}
 }
 
+// TestBlobRangeResumeUnlimited: an unlimited file honours a Range request with
+// 206 + the correct tail + Content-Range + Accept-Ranges, backing resume.
+func TestBlobRangeResumeUnlimited(t *testing.T) {
+	ts, _, _, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "r@example.com")
+	resp := postUpload(t, ts, cookie, "?ttl=0", uploadBody([]byte("m"), []byte("0123456789")))
+	var up struct {
+		ID string `json:"id"`
+	}
+	decodeJSON(t, resp, &up)
+
+	req, _ := http.NewRequest("GET", ts.URL+"/api/files/"+up.ID+"/blob", nil)
+	req.Header.Set("Range", "bytes=4-")
+	br, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(br.Body)
+	br.Body.Close()
+	if br.StatusCode != http.StatusPartialContent {
+		t.Fatalf("status = %d, want 206", br.StatusCode)
+	}
+	if string(body) != "456789" {
+		t.Fatalf("range body = %q, want %q", body, "456789")
+	}
+	if cr := br.Header.Get("Content-Range"); cr != "bytes 4-9/10" {
+		t.Fatalf("Content-Range = %q", cr)
+	}
+	if ar := br.Header.Get("Accept-Ranges"); ar != "bytes" {
+		t.Fatalf("Accept-Ranges = %q", ar)
+	}
+}
+
+// TestBlobRangeIgnoredForLimited: a max-downloads file ignores Range (serves the
+// whole blob, 200) and still consumes its single slot — so resume can't be used
+// to bypass the download cap.
+func TestBlobRangeIgnoredForLimited(t *testing.T) {
+	ts, _, store, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "l@example.com")
+	resp := postUpload(t, ts, cookie, "?ttl=0&maxDownloads=1", uploadBody([]byte("m"), []byte("0123456789")))
+	var up struct {
+		ID string `json:"id"`
+	}
+	decodeJSON(t, resp, &up)
+
+	req, _ := http.NewRequest("GET", ts.URL+"/api/files/"+up.ID+"/blob", nil)
+	req.Header.Set("Range", "bytes=4-")
+	br, _ := ts.Client().Do(req)
+	body, _ := io.ReadAll(br.Body)
+	br.Body.Close()
+	if br.StatusCode != http.StatusOK {
+		t.Fatalf("limited status = %d, want 200 (Range ignored)", br.StatusCode)
+	}
+	if string(body) != "0123456789" {
+		t.Fatalf("limited body = %q, want the whole object", body)
+	}
+	if _, err := store.GetStoredFile(context.Background(), up.ID); err != ErrNotFound {
+		t.Fatalf("maxDownloads=1 should be spent by the full delivery, got %v", err)
+	}
+}
+
 func TestListOwnFilesNoPlaintextNames(t *testing.T) {
 	ts, _, _, mail := newFileServer(t)
 	cookie := loginCookie(t, ts, mail, "l@example.com")

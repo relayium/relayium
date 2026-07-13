@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/relayium/relayium/internal/storecrypto"
 )
@@ -520,69 +521,159 @@ func (c *Client) Download(ctx context.Context, id, keyB64Url, destDir string) ([
 		expectedTotal += f.Size
 	}
 
-	blobReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.Server+"/api/files/"+idPath+"/blob", nil)
-	if err != nil {
-		return nil, err
-	}
-	blobResp, err := httpc.Do(blobReq)
-	if err != nil {
-		return nil, fmt.Errorf("cloud: fetch blob: %w", err)
-	}
-	defer blobResp.Body.Close()
-	if blobResp.StatusCode < 200 || blobResp.StatusCode >= 300 {
-		return nil, downloadStatusError("fetch blob", blobResp.StatusCode)
-	}
-
+	// Stream the blob into the writer, resuming across transient interruptions.
+	// A single stalled/reset connection (common through proxies on large
+	// transfers) shouldn't fail the whole download: on a mid-stream network
+	// error we reconnect with `Range: bytes=<consumed>-` and continue from the
+	// last whole frame the Decryptor accepted. The writer and Decryptor persist
+	// across reconnects so the output files keep filling in place.
 	w := &manifestWriter{destDir: destDir, files: manifest.Files}
-	defer w.closeAll()
-
-	// emit routes decrypted plaintext into the output files and tallies the
-	// bytes written so Progress reflects file-recovery progress (plaintext,
-	// against the manifest's known total) rather than depending on the blob
-	// response advertising a Content-Length.
+	dec := storecrypto.NewDecryptor(key)
 	var written int64
-	emit := func(pt []byte) error {
-		if err := w.write(pt); err != nil {
-			return err
-		}
-		written += int64(len(pt))
-		return nil
+	defer func() { w.closeAll() }()
+
+	// reset restarts from scratch (fresh writer/decryptor, re-truncating output),
+	// used when the server ignores Range and answers a resume with a full 200
+	// (an old server, or a limited/burn file).
+	reset := func() {
+		w.closeAll()
+		w = &manifestWriter{destDir: destDir, files: manifest.Files}
+		dec = storecrypto.NewDecryptor(key)
+		written = 0
 	}
 
 	if c.Progress != nil {
 		c.Progress(0, expectedTotal) // show a starting line even for tiny blobs
 	}
-	dec := storecrypto.NewDecryptor(key)
+
+	sleep := c.sleep
+	if sleep == nil {
+		sleep = time.Sleep
+	}
+
+	const maxAttempts = 5
+	attempt := 0
+	for {
+		serr := c.streamBlob(ctx, httpc, idPath, dec, w, expectedTotal, &written)
+		if serr == nil {
+			break // whole blob consumed
+		}
+		var fe *fatalError
+		if errors.As(serr, &fe) {
+			removePartials(w) // corrupt/tampered data or a disk error — don't leave junk
+			return nil, fe.err
+		}
+		attempt++
+		if attempt >= maxAttempts {
+			removePartials(w)
+			return nil, fmt.Errorf("cloud: download failed after %d attempts: %w", attempt, serr)
+		}
+		if errors.Is(serr, errIgnoredRange) {
+			reset() // server won't resume — start over
+			continue
+		}
+		// Transient network/stream error: back off, then resume from the last
+		// fully-decoded frame (ResetBuffer drops the interrupted partial frame).
+		dec.ResetBuffer()
+		sleep(resumeBackoff(attempt))
+	}
+
+	if err := dec.End(expectedTotal); err != nil {
+		removePartials(w)
+		return nil, fmt.Errorf("cloud: decrypt failed (wrong key, or corrupt/tampered/truncated data): %w", err)
+	}
+	if err := w.finish(); err != nil {
+		removePartials(w)
+		return nil, fmt.Errorf("cloud: write file: %w", err)
+	}
+	return w.paths, nil
+}
+
+// errIgnoredRange signals the server answered a resume (Range) request with a
+// full 200 body rather than a 206 tail — it won't resume this file, so the
+// caller must restart from scratch instead of treating the body as a tail.
+var errIgnoredRange = errors.New("cloud: server ignored Range")
+
+// fatalError wraps a non-retryable download failure (bad key, corrupt/tampered
+// data, or a local write error) so the resume loop returns it immediately
+// instead of reconnecting.
+type fatalError struct{ err error }
+
+func (e *fatalError) Error() string { return e.err.Error() }
+func (e *fatalError) Unwrap() error { return e.err }
+
+// resumeBackoff is the delay before the Nth (1-based) resume attempt: 300ms
+// doubling up to a 5s cap.
+func resumeBackoff(attempt int) time.Duration {
+	d := 300 * time.Millisecond << (attempt - 1)
+	if d > 5*time.Second {
+		d = 5 * time.Second
+	}
+	return d
+}
+
+// removePartials deletes the output files written so far, so a download that
+// ultimately fails never leaves a truncated file masquerading as complete.
+func removePartials(w *manifestWriter) {
+	w.closeAll()
+	for _, p := range w.paths {
+		_ = os.Remove(p)
+	}
+}
+
+// streamBlob performs one blob GET — resuming from dec.ConsumedCipher via a
+// Range header when nonzero — and feeds the body through the Decryptor into the
+// writer. Returns: nil on a clean EOF; a *fatalError for non-retryable failures;
+// errIgnoredRange when a resume got a 200; or the raw transport/read error
+// (to be retried) on a mid-stream failure.
+func (c *Client) streamBlob(ctx context.Context, httpc *http.Client, idPath string, dec *storecrypto.Decryptor, w *manifestWriter, expectedTotal int64, written *int64) error {
+	start := dec.ConsumedCipher()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.Server+"/api/files/"+idPath+"/blob", nil)
+	if err != nil {
+		return &fatalError{err}
+	}
+	if start > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", start))
+	}
+	resp, err := httpc.Do(req)
+	if err != nil {
+		return err // transport error — retryable
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return &fatalError{downloadStatusError("fetch blob", resp.StatusCode)}
+	}
+	if start > 0 && resp.StatusCode == http.StatusOK {
+		return errIgnoredRange // asked to resume, got the whole object
+	}
+
+	emit := func(pt []byte) error {
+		if err := w.write(pt); err != nil {
+			return err
+		}
+		*written += int64(len(pt))
+		return nil
+	}
 	buf := make([]byte, storecrypto.ChunkSize)
 	for {
-		n, rerr := blobResp.Body.Read(buf)
+		n, rerr := resp.Body.Read(buf)
 		if n > 0 {
 			if perr := dec.Push(buf[:n], emit); perr != nil {
 				var we *writeError
 				if errors.As(perr, &we) {
-					return nil, fmt.Errorf("cloud: write file: %w", we.err)
+					return &fatalError{fmt.Errorf("cloud: write file: %w", we.err)}
 				}
-				return nil, fmt.Errorf("cloud: decrypt failed (wrong key, or corrupt/tampered data): %w", perr)
+				return &fatalError{fmt.Errorf("cloud: decrypt failed (wrong key, or corrupt/tampered data): %w", perr)}
 			}
 			if c.Progress != nil {
-				c.Progress(written, expectedTotal)
+				c.Progress(*written, expectedTotal)
 			}
 		}
 		if rerr == io.EOF {
-			break
+			return nil
 		}
 		if rerr != nil {
-			return nil, fmt.Errorf("cloud: network error while downloading: %w", rerr)
+			return rerr // mid-stream read error — retryable
 		}
 	}
-
-	if err := dec.End(expectedTotal); err != nil {
-		return nil, fmt.Errorf("cloud: decrypt failed (wrong key, or corrupt/tampered/truncated data): %w", err)
-	}
-
-	if err := w.finish(); err != nil {
-		return nil, fmt.Errorf("cloud: write file: %w", err)
-	}
-
-	return w.paths, nil
 }

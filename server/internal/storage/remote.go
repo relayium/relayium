@@ -100,6 +100,44 @@ func (r *RemoteBlobStore) Get(ctx context.Context, key string) (io.ReadCloser, e
 	return resp.Body, nil // caller closes
 }
 
+// GetRange fetches the object from `start` to the end via an HTTP Range
+// request. It returns a reader positioned exactly at `start`: normally the node
+// answers 206 and the body already starts there; defensively, if the node
+// ignored Range and returned 200 (whole object), the leading `start` bytes are
+// skipped so callers get identical behaviour either way.
+func (r *RemoteBlobStore) GetRange(ctx context.Context, key string, start int64) (io.ReadCloser, error) {
+	if start <= 0 {
+		return r.Get(ctx, key)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.url(key), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+r.secret)
+	req.Header.Set("Range", fmt.Sprintf("bytes=%d-", start))
+	resp, err := r.hc.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		resp.Body.Close()
+		return nil, ErrNotFound
+	}
+	switch resp.StatusCode {
+	case http.StatusPartialContent:
+		return resp.Body, nil
+	case http.StatusOK:
+		if _, err := io.CopyN(io.Discard, resp.Body, start); err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		return resp.Body, nil
+	default:
+		resp.Body.Close()
+		return nil, fmt.Errorf("remote blob get %s: status %d", key, resp.StatusCode)
+	}
+}
+
 func (r *RemoteBlobStore) Delete(ctx context.Context, key string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, r.url(key), nil)
 	if err != nil {

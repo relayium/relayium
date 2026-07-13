@@ -110,10 +110,11 @@ func FrameChunk(key []byte, seq uint64, plaintext []byte) ([]byte, error) {
 // Decryptor reassembles length-prefixed frames across arbitrary chunk
 // boundaries and emits decrypted plaintext in order. seq starts at 1.
 type Decryptor struct {
-	aead cipher.AEAD
-	seq  uint64
-	buf  []byte
-	n    int64
+	aead      cipher.AEAD
+	seq       uint64
+	buf       []byte
+	n         int64
+	cipherOff int64 // ciphertext bytes of fully-decoded frames (frame-aligned)
 }
 
 func NewDecryptor(key []byte) *Decryptor {
@@ -122,6 +123,18 @@ func NewDecryptor(key []byte) *Decryptor {
 }
 
 func (d *Decryptor) DecryptedBytes() int64 { return d.n }
+
+// ConsumedCipher returns the number of ciphertext bytes belonging to frames
+// that have been fully decoded so far. It is always frame-aligned, so a resumed
+// download can request `Range: bytes=<ConsumedCipher()>-` and this Decryptor
+// will continue at the correct next frame/seq — provided ResetBuffer is called
+// first to drop any partial frame left from the interrupted stream.
+func (d *Decryptor) ConsumedCipher() int64 { return d.cipherOff }
+
+// ResetBuffer discards the partial-frame buffer. Call it before feeding a
+// Range-resumed body that begins exactly at ConsumedCipher (a frame boundary);
+// the leftover partial bytes will be re-delivered by the new response.
+func (d *Decryptor) ResetBuffer() { d.buf = nil }
 
 func (d *Decryptor) Push(data []byte, emit func([]byte) error) error {
 	d.buf = append(d.buf, data...)
@@ -141,6 +154,7 @@ func (d *Decryptor) Push(data []byte, emit func([]byte) error) error {
 		}
 		d.seq++
 		off += 4 + int(l)
+		d.cipherOff += int64(4 + int(l))
 		d.n += int64(len(pt))
 		if err := emit(pt); err != nil {
 			return err

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/relayium/relayium/internal/storecrypto"
 )
@@ -282,15 +283,22 @@ func TestDownloadNetworkErrorDistinctFromDecrypt(t *testing.T) {
 
 	dest := t.TempDir()
 	c := NewClient(srv.URL)
+	c.sleep = func(time.Duration) {} // skip resume backoff in tests
 	_, err = c.Download(context.Background(), "abc", storecrypto.EncodeKey(raw), dest)
 	if err == nil {
 		t.Fatal("expected a network error")
 	}
-	if !strings.Contains(err.Error(), "network error") {
-		t.Fatalf("expected a network-error message, got: %v", err)
+	// A persistently truncated stream now retries and, after exhausting the
+	// resume attempts, reports a transfer failure — never a decrypt failure.
+	if !strings.Contains(err.Error(), "download failed after") {
+		t.Fatalf("expected a retry-exhausted transfer error, got: %v", err)
 	}
 	if strings.Contains(err.Error(), "decrypt failed") {
 		t.Fatalf("network failure must not be reported as a decrypt failure: %v", err)
+	}
+	// The failed download must not leave a truncated file behind.
+	if entries, _ := os.ReadDir(dest); len(entries) != 0 {
+		t.Fatalf("failed download left files behind: %v", entries)
 	}
 }
 

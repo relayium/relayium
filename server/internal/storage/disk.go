@@ -91,6 +91,21 @@ func (d *DiskStore) Get(ctx context.Context, key string) (io.ReadCloser, error) 
 	return f, nil
 }
 
+func (d *DiskStore) GetRange(ctx context.Context, key string, start int64) (io.ReadCloser, error) {
+	rc, err := d.Get(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	if start > 0 {
+		// Get returns an *os.File, which is an io.Seeker.
+		if _, err := rc.(io.Seeker).Seek(start, io.SeekStart); err != nil {
+			rc.Close()
+			return nil, err
+		}
+	}
+	return rc, nil
+}
+
 func (d *DiskStore) Delete(ctx context.Context, key string) error {
 	if !validKey.MatchString(key) {
 		return ErrInvalidKey

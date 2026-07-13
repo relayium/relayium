@@ -6,10 +6,12 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/relayium/relayium/internal/storage"
@@ -243,7 +245,24 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "storage node unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	rc, err := bs.Get(r.Context(), sf.BlobKey)
+	// Retention & resume gating: unlimited files (max_downloads==0) stream
+	// freely and support HTTP Range, so an interrupted download can resume.
+	// Limited files claim a slot BEFORE streaming so an offline node never
+	// spends a shot, and deliberately do NOT support Range — a resumed download
+	// is several stateless GETs that can't be reconciled with max-downloads/burn
+	// accounting, so they always serve the whole blob. slot is THIS request's
+	// own 1-based slot number (from the same atomic UPDATE that incremented
+	// download_count) — the post-delivery delete gates on it directly rather
+	// than re-reading download_count, which would be racy: a concurrent
+	// in-flight (later-failing) claim could inflate the count and make an
+	// earlier, genuinely-final-slot-less download look like the last one.
+	limited := sf.MaxDownloads > 0
+	var start int64
+	if !limited {
+		start = parseRangeStart(r.Header.Get("Range"), sf.Size)
+	}
+
+	rc, err := bs.GetRange(r.Context(), sf.BlobKey, start)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			http.Error(w, "not found", http.StatusNotFound)
@@ -255,15 +274,6 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rc.Close()
 
-	// Retention: unlimited files (max_downloads==0) stream freely. Limited files
-	// claim a slot BEFORE streaming so an offline node never spends a shot;
-	// concurrent GETs race on ClaimDownloadSlot and only winners stream. slot is
-	// THIS request's own 1-based slot number (from the same atomic UPDATE that
-	// incremented download_count) — the post-delivery delete below gates on it
-	// directly rather than re-reading download_count, which would be racy: a
-	// concurrent in-flight (later-failing) claim could inflate the count and
-	// make an earlier, genuinely-final-slot-less download look like the last one.
-	limited := sf.MaxDownloads > 0
 	var claimAt, slot int64
 	if limited {
 		claimAt = s.now().Unix()
@@ -280,9 +290,18 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Length", strconv.FormatInt(sf.Size, 10))
+	if !limited {
+		w.Header().Set("Accept-Ranges", "bytes")
+	}
+	if start > 0 {
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, sf.Size-1, sf.Size))
+		w.Header().Set("Content-Length", strconv.FormatInt(sf.Size-start, 10))
+		w.WriteHeader(http.StatusPartialContent)
+	} else {
+		w.Header().Set("Content-Length", strconv.FormatInt(sf.Size, 10))
+	}
 	n, err := io.Copy(w, rc)
-	if err != nil || n != sf.Size {
+	if err != nil || n != sf.Size-start {
 		// Incomplete delivery (client hung up / network hiccup). For a limited
 		// file, release the claim so the owner can retry rather than losing a
 		// download to a transient failure. Use a fresh context: r.Context() is
@@ -292,6 +311,11 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 			_ = s.store.ReleaseDownloadSlot(ctx, sf.ID, claimAt)
 			cancel()
 		}
+		return
+	}
+	// A Range continuation (start>0) is the same logical download resuming, not a
+	// fresh one — don't double-count stats/meter or advance retention.
+	if start > 0 {
 		return
 	}
 	// Count the completed download against the file's OWNER only — never the
@@ -314,6 +338,22 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	} else {
 		_ = s.store.IncDownloadCount(r.Context(), sf.ID)
 	}
+}
+
+// parseRangeStart extracts N from a "bytes=N-" Range header — the only form the
+// resumable client sends. Anything absent, malformed, a suffix ("-N"), an
+// explicit-end ("N-M"), a multi-range, or an out-of-bounds start yields 0 (serve
+// the whole object). The returned start is guaranteed to be in (0, size).
+func parseRangeStart(h string, size int64) int64 {
+	spec, ok := strings.CutPrefix(h, "bytes=")
+	if !ok || !strings.HasSuffix(spec, "-") || strings.Contains(spec, ",") {
+		return 0
+	}
+	n, err := strconv.ParseInt(strings.TrimSuffix(spec, "-"), 10, 64)
+	if err != nil || n <= 0 || n >= size {
+		return 0
+	}
+	return n
 }
 
 func (s *Service) handleListFiles(w http.ResponseWriter, r *http.Request, u User) {

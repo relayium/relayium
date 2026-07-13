@@ -75,3 +75,39 @@ func TestBlobHandlerRoundTripAndAuth(t *testing.T) {
 		t.Fatalf("get after delete: %d", gr.StatusCode)
 	}
 }
+
+// TestBlobHandlerRange verifies the node serves HTTP Range (206) so central can
+// resume an interrupted download.
+func TestBlobHandlerRange(t *testing.T) {
+	ds, err := storage.NewDiskStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := newBlobHandler(ds, "s", nil, nil)
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+
+	putReq, _ := http.NewRequest("PUT", srv.URL+"/blob/blobkey", bytes.NewReader([]byte("0123456789")))
+	putReq.Header.Set("Authorization", "Bearer s")
+	pr, _ := http.DefaultClient.Do(putReq)
+	pr.Body.Close()
+
+	req, _ := http.NewRequest("GET", srv.URL+"/blob/blobkey", nil)
+	req.Header.Set("Authorization", "Bearer s")
+	req.Header.Set("Range", "bytes=4-")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusPartialContent {
+		t.Fatalf("range status = %d, want 206", resp.StatusCode)
+	}
+	if string(body) != "456789" {
+		t.Fatalf("range body = %q, want %q", body, "456789")
+	}
+	if ar := resp.Header.Get("Accept-Ranges"); ar != "bytes" {
+		t.Fatalf("Accept-Ranges = %q, want bytes", ar)
+	}
+}
