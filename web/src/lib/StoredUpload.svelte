@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { uploadFile, buildDownloadLink, UploadError } from "./stored-file";
+  import { uploadFileResumable, buildDownloadLink, UploadError } from "./stored-file";
   import { canShare, share } from "./share";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { maxSizeHint } from "./max-size";
@@ -68,7 +68,7 @@
     phase = "encrypting";
     controller = new AbortController();
     try {
-      const out = await uploadFile(files, { burnAfterRead: burn, ttl }, (p) => {
+      const out = await uploadFileResumable(files, { burnAfterRead: burn, ttl }, (p) => {
         // The bar tracks whichever phase is live; it fills 0→100 for encryption,
         // then resets and fills again for the real upload (the label says which).
         phase = p.phase;

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   uploadFile,
+  uploadFileResumable,
   fetchMeta,
   buildDownloadLink,
   parseDownloadKey,
@@ -117,6 +118,83 @@ describe("uploadFile", () => {
       if (phases[phases.length - 1] !== p.phase) phases.push(p.phase);
     });
     expect(phases).toEqual(["encrypting", "uploading"]);
+  });
+});
+
+// A fetch double for the resumable upload endpoints. init hands back a small
+// chunkSize (forcing multiple chunks), PATCH appends by offset (409 on a gap),
+// GET reports the offset, finalize returns id/expiresAt. failPatches makes the
+// first N PATCH fetches reject (network error) before letting them through.
+function installFakeUploadFetch(opts?: { chunkSize?: number; failPatches?: number }) {
+  const state = { received: 0, patches: 0, finalized: false };
+  const chunkSize = opts?.chunkSize ?? 8;
+  let failsLeft = opts?.failPatches ?? 0;
+  const json = (body: unknown, status = 200) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  });
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    const method = init?.method ?? "GET";
+    if (method === "POST" && url.startsWith("/api/uploads?")) return json({ uploadId: "u1", chunkSize });
+    if (method === "POST" && url.endsWith("/finalize")) {
+      state.finalized = true;
+      return json({ id: "id1", expiresAt: 123 });
+    }
+    if (method === "GET" && url === "/api/uploads/u1") return json({ received: state.received });
+    if (method === "PATCH" && url === "/api/uploads/u1") {
+      if (failsLeft > 0) {
+        failsLeft--;
+        throw new TypeError("network");
+      }
+      state.patches++;
+      const cr = (init!.headers as Record<string, string>)["Content-Range"];
+      const start = Number(/bytes (\d+)-/.exec(cr)![1]);
+      if (start > state.received) return json({ received: state.received }, 409);
+      const buf = new Uint8Array(await (init!.body as Blob).arrayBuffer());
+      if (start === state.received) state.received += buf.length;
+      return json({ received: state.received });
+    }
+    throw new Error(`unexpected ${method} ${url}`);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return state;
+}
+
+describe("uploadFileResumable", () => {
+  it("uploads in chunks (init → PATCH×N → finalize) and returns id/key", async () => {
+    const state = installFakeUploadFetch({ chunkSize: 8 });
+    const file = new File([new Uint8Array(40).fill(7)], "f.bin");
+    const out = await uploadFileResumable([file], { burnAfterRead: false, ttl: 0 });
+    expect(out.id).toBe("id1");
+    expect(out.expiresAt).toBe(123);
+    expect(out.key).toBeTruthy();
+    expect(state.finalized).toBe(true);
+    expect(state.patches).toBeGreaterThan(1); // ciphertext split across several chunks
+    expect(state.received).toBeGreaterThan(0);
+  });
+
+  it("resumes after a mid-upload network error", async () => {
+    const state = installFakeUploadFetch({ chunkSize: 8, failPatches: 1 });
+    const file = new File([new Uint8Array(40).fill(3)], "f.bin");
+    const out = await uploadFileResumable([file], { burnAfterRead: false, ttl: 0 });
+    expect(out.id).toBe("id1");
+    expect(state.finalized).toBe(true);
+  });
+
+  it("throws UploadError on a fatal chunk status (e.g. 413)", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "POST" && url.startsWith("/api/uploads?"))
+        return { ok: true, status: 200, json: async () => ({ uploadId: "u1", chunkSize: 8 }) };
+      if (method === "PATCH") return { ok: false, status: 413, json: async () => ({}) };
+      throw new Error("unexpected");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const file = new File([new Uint8Array(40)], "f.bin");
+    await expect(uploadFileResumable([file], { burnAfterRead: false, ttl: 0 })).rejects.toBeInstanceOf(
+      UploadError,
+    );
   });
 });
 

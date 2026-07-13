@@ -90,6 +90,151 @@ export async function uploadFile(
   return { id, expiresAt, key: encodeKey(sk.raw) };
 }
 
+/** Encrypt in-browser, then upload the ciphertext in resumable chunks: init →
+ *  PATCH each chunk (with per-chunk retry that re-syncs to the server's
+ *  committed offset) → finalize. A transient reset loses only the current chunk,
+ *  not the whole 50 MB upload. Same signature/return as uploadFile. */
+export async function uploadFileResumable(
+  files: File[],
+  opts: { burnAfterRead: boolean; ttl: number },
+  onProgress?: (p: UploadProgress) => void,
+  signal?: AbortSignal,
+): Promise<UploadResult> {
+  const sk = await generateStoreKey();
+  const manifest: StoredManifest = { files: files.map((f) => ({ name: f.name, size: f.size })) };
+  const encManifest = await encryptManifest(sk.key, manifest);
+
+  const total = files.reduce((n, f) => n + f.size, 0);
+  const frames: Uint8Array[] = [];
+  let enc = 0;
+  for await (const fr of encryptFiles(files, sk.key)) {
+    if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+    frames.push(fr);
+    enc += fr.length - 4 - 16; // frame = 4-byte len + (plaintext + 16-byte tag)
+    onProgress?.({ phase: "encrypting", sent: Math.min(enc, total), total });
+  }
+  const cipherBlob = new Blob(frames as BlobPart[]);
+  const cipherSize = cipherBlob.size;
+
+  // init: hand over the manifest header and the declared ciphertext size.
+  const header = new Uint8Array(4);
+  new DataView(header.buffer).setUint32(0, encManifest.length);
+  const q = `?burnAfterRead=${opts.burnAfterRead ? 1 : 0}&ttl=${opts.ttl}&size=${cipherSize}`;
+  const init = await uploadJSON("POST", "/api/uploads" + q, new Blob([header, encManifest]), signal);
+  const uploadId: string = init.uploadId;
+  const chunkSize: number = init.chunkSize > 0 ? init.chunkSize : 8 << 20;
+
+  // Append chunks, resuming from the server's committed offset on failure.
+  let offset = 0;
+  onProgress?.({ phase: "uploading", sent: 0, total: cipherSize });
+  while (offset < cipherSize) {
+    if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+    const end = Math.min(offset + chunkSize, cipherSize);
+    offset = await uploadChunk(uploadId, cipherBlob, offset, end, cipherSize, signal);
+    onProgress?.({ phase: "uploading", sent: offset, total: cipherSize });
+  }
+
+  // finalize (small; retried so a flaky moment doesn't waste the whole upload).
+  const fin = await uploadJSON("POST", `/api/uploads/${uploadId}/finalize`, undefined, signal, true);
+  return { id: fin.id, expiresAt: fin.expiresAt, key: encodeKey(sk.raw) };
+}
+
+/** PATCH cipherBlob[start:end], returning the server's new committed offset. On
+ *  a network error it re-syncs to the server's real offset (some of the chunk
+ *  may have committed before the reset) and retries; a 409 means the server was
+ *  already ahead — take its offset. Non-2xx (413/429/401) is fatal. */
+async function uploadChunk(
+  uploadId: string,
+  blob: Blob,
+  start: number,
+  end: number,
+  total: number,
+  signal?: AbortSignal,
+): Promise<number> {
+  const maxAttempts = 5;
+  let from = start;
+  for (let attempt = 1; ; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(`/api/uploads/${uploadId}`, {
+        method: "PATCH",
+        credentials: "include",
+        signal,
+        headers: { "Content-Range": `bytes ${from}-${end - 1}/${total}` },
+        body: blob.slice(from, end),
+      });
+    } catch (e) {
+      if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+      if (attempt >= maxAttempts) throw new UploadError(0);
+      from = await uploadOffset(uploadId, signal).catch(() => from);
+      if (from >= end) return from;
+      await uploadSleep(uploadBackoff(attempt), signal);
+      continue;
+    }
+    if (res.status === 409) return (await res.json()).received; // server ahead
+    if (!res.ok) throw new UploadError(res.status);
+    return (await res.json()).received;
+  }
+}
+
+/** GET the server's committed offset for a resuming upload. */
+async function uploadOffset(uploadId: string, signal?: AbortSignal): Promise<number> {
+  const res = await fetch(`/api/uploads/${uploadId}`, { credentials: "include", signal });
+  if (!res.ok) throw new UploadError(res.status);
+  return (await res.json()).received;
+}
+
+/** Credentialed JSON request; maps a non-2xx to UploadError(status). When
+ *  retry is set, a network failure is retried a few times with backoff. */
+async function uploadJSON(
+  method: string,
+  url: string,
+  body: BodyInit | undefined,
+  signal?: AbortSignal,
+  retry = false,
+): Promise<any> {
+  const maxAttempts = retry ? 4 : 1;
+  for (let attempt = 1; ; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(url, { method, credentials: "include", body, signal });
+    } catch (e) {
+      if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+      if (attempt >= maxAttempts) throw new UploadError(0);
+      await uploadSleep(uploadBackoff(attempt), signal);
+      continue;
+    }
+    if (!res.ok) throw new UploadError(res.status);
+    return res.json();
+  }
+}
+
+function uploadBackoff(attempt: number): number {
+  return Math.min(300 * 2 ** (attempt - 1), 5000);
+}
+
+function uploadSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("aborted", "AbortError"));
+      return;
+    }
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException("aborted", "AbortError"));
+    };
+    const cleanup = () => {
+      clearTimeout(t);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const t = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 /** POST a Blob with real upload-progress reporting and AbortSignal support.
  *  Rejects with UploadError(status) on a non-2xx response (status 0 on a network
  *  error) and with an AbortError DOMException when the signal aborts. */
