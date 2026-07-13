@@ -51,7 +51,10 @@ else
 fi
 
 tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT INT TERM
+# Also remove the staged binary (set later, in the install dir — not under $tmp)
+# so an interrupt between cp/chmod and the atomic mv doesn't leave a stray
+# .relayium.new.<pid> behind in /usr/local/bin or ~/.local/bin.
+trap 'rm -rf "$tmp"; [ -n "${staged:-}" ] && rm -f "$staged"' EXIT INT TERM
 
 echo "Downloading ${asset}..."
 dl "${BASE_URL}/${asset}" "${tmp}/${asset}" || err "download failed (has a release been published yet?)"

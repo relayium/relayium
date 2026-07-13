@@ -86,6 +86,11 @@
   }
 
   async function startUpload(files: File[]) {
+    // Re-entrancy guard: onDrop checks `busy` before awaiting the folder-walk, so
+    // a second drop landing during that async gap would otherwise reach here too
+    // and start a concurrent upload — overwriting `controller` and orphaning the
+    // first upload (cancel would only abort the last one). Bail if one is live.
+    if (busy) return;
     if (files.length === 0) return;
     err = "";
     link = "";
