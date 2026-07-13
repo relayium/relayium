@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -239,5 +241,80 @@ func TestCloudPlainUpDownE2E(t *testing.T) {
 		if string(got) != content {
 			t.Fatalf("plain download %d content = %q, want %q", i, got, content)
 		}
+	}
+}
+
+// TestCloudDownResumeE2E proves the full resume path against the REAL central
+// handler: a proxy truncates the first /blob response mid-stream (as a reset
+// proxy would), and the client reconnects with a Range request that the server
+// answers 206 — reassembling the multi-frame file correctly.
+func TestCloudDownResumeE2E(t *testing.T) {
+	ts, svc, store := newE2EService(t)
+	ctx := context.Background()
+
+	u, err := store.UpsertUserByEmail(ctx, "resume@example.com", "")
+	if err != nil {
+		t.Fatalf("upsert user: %v", err)
+	}
+	c := cloud.NewClient(ts.URL)
+	c.Token = cliToken(t, ts, svc, u.ID)
+
+	// ~600 KB spans several 192 KB frames, so the truncation lands mid-stream
+	// after at least one whole frame — forcing a nonzero-offset Range resume.
+	src := filepath.Join(t.TempDir(), "big.bin")
+	content := bytes.Repeat([]byte("relayium-resume!"), 40000) // 640 KB
+	if err := os.WriteFile(src, content, 0o644); err != nil {
+		t.Fatalf("write src: %v", err)
+	}
+	id, key, err := c.Upload(ctx, []string{src}, cloud.UploadOpts{}) // unlimited (ttl retention)
+	if err != nil {
+		t.Fatalf("upload: %v", err)
+	}
+
+	// Proxy forwarding to the real service; the FIRST /blob response is cut to a
+	// third of the body then the handler returns, so the declared Content-Length
+	// is unmet and the client sees a short read (a mid-stream reset).
+	firstBlob := true
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req, _ := http.NewRequest(r.Method, ts.URL+r.URL.Path, nil)
+		req.Header = r.Header.Clone() // forward Range + auth
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close()
+		for k, v := range resp.Header {
+			w.Header()[k] = v
+		}
+		w.WriteHeader(resp.StatusCode)
+		if strings.HasSuffix(r.URL.Path, "/blob") && firstBlob {
+			firstBlob = false
+			_, _ = io.CopyN(w, resp.Body, int64(len(content)/3)) // truncate + return → short body
+			return
+		}
+		_, _ = io.Copy(w, resp.Body)
+	}))
+	defer proxy.Close()
+
+	c2 := cloud.NewClient(proxy.URL)
+	c2.Token = c.Token
+	dest := t.TempDir()
+	paths, err := c2.Download(ctx, id, key, dest)
+	if err != nil {
+		t.Fatalf("resume download through a dropping proxy: %v", err)
+	}
+	if firstBlob {
+		t.Fatal("expected the first blob response to have been truncated")
+	}
+	if len(paths) != 1 {
+		t.Fatalf("paths = %v", paths)
+	}
+	got, err := os.ReadFile(filepath.Join(dest, "big.bin"))
+	if err != nil {
+		t.Fatalf("read resumed file: %v", err)
+	}
+	if !bytes.Equal(got, content) {
+		t.Fatalf("resumed content mismatch: got %d bytes, want %d", len(got), len(content))
 	}
 }
