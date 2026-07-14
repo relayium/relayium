@@ -467,13 +467,22 @@ func (s *Service) handleAdminUpsertPlan(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "invalid plan (non-negative integers; id/name required)", http.StatusBadRequest)
 		return
 	}
-	// Never leave zero active plans.
+	// Never leave zero active plans. Fail closed: any store error here
+	// blocks the deactivation rather than silently allowing it.
 	if !active {
-		if n, err := s.store.CountActivePlans(r.Context()); err == nil {
-			if cur, ok, _ := s.store.GetPlan(r.Context(), id); ok && cur.Active && n <= 1 {
-				http.Error(w, "at least one plan must stay active", http.StatusBadRequest)
-				return
-			}
+		n, err := s.store.CountActivePlans(r.Context())
+		if err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		cur, ok, err := s.store.GetPlan(r.Context(), id)
+		if err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if ok && cur.Active && n <= 1 {
+			http.Error(w, "at least one plan must stay active", http.StatusBadRequest)
+			return
 		}
 	}
 	p := Plan{
