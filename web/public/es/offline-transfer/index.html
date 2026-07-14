@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Enlace de archivo cifrado — sube ahora, descarga después, de conocimiento cero (Relayium)</title>
+    <meta name="description" content="Sube un archivo cifrado en tu navegador y comparte un enlace de descarga. El servidor solo almacena texto cifrado que no puede descifrar — la clave está en el enlace. Autodestrucción tras la lectura y caducidad opcionales." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/es/offline-transfer" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/offline-transfer" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/offline-transfer" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/offline-transfer" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/offline-transfer" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/offline-transfer" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/offline-transfer" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/offline-transfer" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/offline-transfer" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/offline-transfer" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/offline-transfer" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Enlace de archivo cifrado — sube ahora, descarga después, de conocimiento cero (Relayium)" />
+    <meta property="og:description" content="Sube un archivo cifrado en tu navegador y comparte un enlace de descarga. El servidor solo almacena texto cifrado que no puede descifrar — la clave está en el enlace. Autodestrucción tras la lectura y caducidad opcionales." />
+    <meta property="og:url" content="https://relayium.com/es/offline-transfer" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="es_ES" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Enlace de archivo cifrado — sube ahora, descarga después, de conocimiento cero (Relayium)" />
+    <meta name="twitter:description" content="Sube un archivo cifrado en tu navegador y comparte un enlace de descarga. El servidor solo almacena texto cifrado que no puede descifrar — la clave está en el enlace. Autodestrucción tras la lectura y caducidad opcionales." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"Enlace de archivo cifrado — sube ahora, descarga después, de conocimiento cero (Relayium)","description":"Sube un archivo cifrado en tu navegador y comparte un enlace de descarga. El servidor solo almacena texto cifrado que no puede descifrar — la clave está en el enlace. Autodestrucción tras la lectura y caducidad opcionales.","url":"https://relayium.com/es/offline-transfer","inLanguage":"es","dateModified":"2026-07-10","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿Puede el servidor leer mi archivo?","acceptedAnswer":{"@type":"Answer","text":"No — se cifra en tu navegador; el servidor solo almacena texto cifrado, y la clave nunca llega a él."}},{"@type":"Question","name":"¿Dónde está la clave?","acceptedAnswer":{"@type":"Answer","text":"En el fragmento del enlace (después del #). Los navegadores no envían los fragmentos a los servidores, así que solo quien tenga el enlace completo puede descifrar."}},{"@type":"Question","name":"¿Necesito una cuenta?","acceptedAnswer":{"@type":"Answer","text":"Para subir, sí (usa almacenamiento). Para descargar, no — basta con el enlace."}},{"@type":"Question","name":"¿Puedo hacerlo de un solo uso?","acceptedAnswer":{"@type":"Answer","text":"Sí — activa la autodestrucción tras la lectura y fija una caducidad."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:820px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:38px;letter-spacing:-.5px;margin:40px 0 12px}
+h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.pitch{font-size:20px;margin:0 0 24px;max-width:42em}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:8px 0}
+ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
+.cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.why li b,.compare h3{color:var(--text-h)}
+.learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
+footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=es">Relayium</a></header>
+      
+      <h1>Enviar un archivo como enlace cifrado</h1>
+      <p class="pitch">Cuando la otra persona no está en línea, sube ahora y comparte un enlace. Tu navegador cifra antes de subir; el servidor conserva únicamente texto cifrado que no puede leer — la clave nunca sale del enlace.</p>
+      <a class="cta" href="/offline-transfer?lang=es">Subir un archivo</a>
+
+      <h2>Transferir en cuatro pasos</h2>
+      <ol class="steps">
+        <li>Inicia sesión y elige un archivo — tu navegador lo cifra localmente antes de que nada salga del dispositivo.</li>
+        <li>El servidor solo almacena el texto cifrado; la clave de descifrado permanece en el fragmento del enlace y nunca se envía al servidor.</li>
+        <li>Comparte el enlace de descarga (opcionalmente con autodestrucción tras la lectura y una caducidad que tú eliges).</li>
+        <li>El destinatario abre el enlace; su navegador obtiene el texto cifrado y lo descifra con la clave del enlace.</li>
+      </ol>
+
+      <h2>Por qué Relayium</h2>
+      <ul class="why">
+        <li><b>De conocimiento cero</b> — El archivo se cifra en el navegador; el servidor solo llega a tener texto cifrado que no puede descifrar.</li>
+        <li><b>La clave está en el enlace</b> — La clave de descifrado se encuentra en el fragmento de la URL (después del #), que los navegadores nunca envían al servidor.</li>
+        <li><b>Autodestrucción tras la lectura + caducidad</b> — Elimina el archivo, si quieres, en la primera descarga, y fija un tiempo de vida tras el cual desaparece.</li>
+        <li><b>Sin cuenta para el destinatario</b> — Cualquiera con el enlace puede descargar; solo quien sube necesita iniciar sesión.</li>
+        <li><b>Complemento asíncrono</b> — Úsalo cuando la otra persona no está en línea ahora mismo; usa la transferencia entre redes en tiempo real cuando ambas están presentes.</li>
+        <li><b>También desde la terminal</b> — En la terminal, relayium up sube y muestra el mismo enlace, y relayium down lo recupera en otra máquina — la CLI y la web comparten un mismo enlace.</li>
+      </ul>
+
+      <h2>En comparación</h2>
+      <div class="compare">
+      <h3>Frente a los enlaces de WeTransfer/Dropbox</h3>
+      <p>Esos pueden leer tus archivos en el servidor; el servidor de Relayium solo conserva texto cifrado que no puede descifrar — la clave se queda en el enlace.</p>
+      <h3>Frente al modo en tiempo real</h3>
+      <p>El tiempo real es de igual a igual y exige que ambas partes estén en línea; este modo almacena el archivo cifrado para que el destinatario pueda recuperarlo después.</p>
+      </div>
+
+      <h2>Preguntas frecuentes</h2>
+      <h3>¿Puede el servidor leer mi archivo?</h3>
+      <p>No — se cifra en tu navegador; el servidor solo almacena texto cifrado, y la clave nunca llega a él.</p>
+      <h3>¿Dónde está la clave?</h3>
+      <p>En el fragmento del enlace (después del #). Los navegadores no envían los fragmentos a los servidores, así que solo quien tenga el enlace completo puede descifrar.</p>
+      <h3>¿Necesito una cuenta?</h3>
+      <p>Para subir, sí (usa almacenamiento). Para descargar, no — basta con el enlace.</p>
+      <h3>¿Puedo hacerlo de un solo uso?</h3>
+      <p>Sí — activa la autodestrucción tras la lectura y fija una caducidad.</p>
+
+      <h2>Más información</h2>
+      <ul class="learn"><li><a href="/es/guides/push-to-cloud-pull-on-another-computer">Sube archivos a la nube y recógelos en otro ordenador</a></li></ul>
+      <footer>
+        <a href="/?lang=es">← Relayium</a>
+        <a href="/es/privacy">Privacidad</a>
+        <a href="/es/terms">Términos del servicio</a>
+        <a href="/es/security">Seguridad</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -741,4 +741,216 @@ const ar = {
   ],
 };
 
-export default { slug: "security", langs: { en, zh, ja, ko, de, fr, ar } };
+const es = {
+  title: "Seguridad y modelo de amenazas",
+  description:
+    "Cómo Relayium protege tus archivos: claves X25519 por transferencia y AES-256-GCM, un código de verificación SAS con un protocolo de compromiso y luego revelación para frustrar a un servidor malicioso, enlaces de descarga de conocimiento cero, y una exposición honesta de lo que sí y lo que no defendemos.",
+  updatedLabel: "Última actualización",
+  updated: "2026-07-01",
+  otherDocLabel: "Política de privacidad",
+  lead: [
+    "Relayium está diseñado para que las personas que transfieren archivos —no el servidor— tengan las claves. Esta página describe exactamente qué está protegido, cómo funciona y los límites de esa protección.",
+    "En resumen: en el modo en tiempo real tus archivos nunca pasan por nuestros servidores; las claves de cifrado se generan de nuevo en cada dispositivo y nunca lo abandonan; y un código de verificación corto permite a dos personas detectar un servidor malicioso. A continuación, los detalles.",
+  ],
+  sections: [
+    {
+      heading: "Cifrado de extremo a extremo (X25519 + AES-256-GCM)",
+      body: [
+        "Cada transferencia genera un par de claves X25519 efímero y nuevo en cada dispositivo. Los dos dispositivos realizan un intercambio de claves para derivar una clave compartida AES-256-GCM que solo existe dentro de los dos navegadores. Cada fragmento se cifra con esa clave y un nonce único, de modo que el servidor de señalización —y cualquier retransmisor— solo ve texto cifrado.",
+      ],
+      bullets: [
+        "Las claves son efímeras y por transferencia: nada se reutiliza entre sesiones.",
+        "La clave compartida se deriva en los dos dispositivos; nunca se envía a ningún servidor ni se almacena en él.",
+        "El cifrado se aplica en la capa de aplicación, por encima de la propia seguridad de transporte de WebRTC, de modo que se mantiene incluso si la capa de transporte se ve comprometida.",
+      ],
+    },
+    {
+      heading: "El código de verificación (SAS): detectar un servidor malicioso",
+      body: [
+        "El cifrado integrado de WebRTC (DTLS) intercambia huellas de claves a través del servidor de señalización, por lo que un servidor deshonesto podría interponerse en el medio e intercambiar las claves. Para detectarlo, Relayium deriva una cadena de autenticación corta (SAS) de 6 dígitos a partir de las claves públicas de ambas partes y la muestra en las dos pantallas. Si los dos códigos coinciden, no hay nadie en el medio.",
+        "Un simple código de 6 dígitos (unos 20 bits) podría, en principio, forzarse por fuerza bruta si un retransmisor compite por producir un código coincidente. Relayium cierra esa brecha con un protocolo de compromiso y luego revelación: cada parte se compromete primero con su clave enviando un hash, y solo revela la clave tras recibir el compromiso de la otra parte. Por lo tanto, un servidor no puede elegir a posteriori una clave que colisione, de modo que el código corto sigue siendo digno de confianza.",
+      ],
+      bullets: [
+        "Para la garantía más sólida, compara el código fuera de banda: en persona o por una llamada de voz.",
+        "Si los dos códigos difieren, detén la transferencia: alguien podría estar interceptando la conexión.",
+      ],
+    },
+    {
+      heading: "Lo que el servidor nunca ve",
+      body: [
+        "El servicio está diseñado para que lo siguiente nunca llegue a nuestros servidores, en ningún modo:",
+        "En el modo en tiempo real, los bytes del archivo no pasan en absoluto por el servidor: fluyen directamente entre los dos dispositivos. El servidor de señalización solo retransmite mensajes de establecimiento de la conexión y ve la pertenencia a la sala (tu IP pública), un apodo de dispositivo que tú eliges y la presencia.",
+      ],
+      bullets: [
+        "El contenido de tus archivos.",
+        "Los nombres de tus archivos.",
+        "Tus claves de cifrado.",
+      ],
+    },
+    {
+      heading: "Cuando tus archivos se retransmiten (TURN)",
+      body: [
+        "Cuando dos dispositivos no pueden abrir una conexión directa entre redes (NAT o cortafuegos restrictivos), el flujo cifrado se retransmite a través de un servidor TURN para que la transferencia aún pueda completarse. Siempre se intenta primero la conexión directa de igual a igual; el retransmisor es un recurso alternativo, y solo las sesiones con código de emparejamiento (incluidos sus enlaces de unión) reciben credenciales de retransmisión.",
+      ],
+      bullets: [
+        "El retransmisor reenvía únicamente texto cifrado: no puede leer tus archivos, que permanecen cifrados de extremo a extremo.",
+        "Registramos el número de bytes retransmitidos por cuenta, para aplicar una asignación mensual de retransmisión y evitar el abuso; nunca inspeccionamos lo que se retransmite, solo el recuento de bytes.",
+        "Nunca inspeccionamos el contenido retransmitido.",
+      ],
+    },
+    {
+      heading: "Enlaces de descarga almacenados: la clave nunca abandona tu navegador",
+      body: [
+        "El modo opcional de enlace de descarga es para cuando el destinatario no está en línea. Tu navegador cifra los archivos con AES-256-GCM antes de subir nada, y la clave de descifrado se coloca únicamente en el fragmento de la URL —la parte después del #—, que los navegadores nunca envían al servidor.",
+      ],
+      bullets: [
+        "El servidor almacena solo texto cifrado, además del tamaño del texto cifrado y marcas de tiempo para la cuota y la limpieza; nunca texto plano, nombres de archivos ni claves.",
+        "Cualquiera que tenga el enlace completo puede descifrar, así que trata el enlace como el archivo mismo y compártelo por un canal de confianza.",
+        "Los enlaces pueden configurarse para que caduquen (1 hora, 1, 3 o 7 días) o para que se destruyan tras la primera descarga completa.",
+      ],
+    },
+    {
+      heading: "Integridad de los archivos (SHA-256)",
+      body: [
+        "Más allá de la confidencialidad, se verifica la integridad de cada archivo. Cada fragmento lleva una etiqueta de autenticación AES-GCM, y en el lado receptor se comprueba de extremo a extremo un hash SHA-256 por archivo, de modo que un archivo dañado o manipulado se detecta en lugar de aceptarse en silencio.",
+      ],
+    },
+    {
+      heading: "Contra qué no protege Relayium",
+      body: [
+        "El cifrado de extremo a extremo protege los datos en tránsito entre dos extremos honestos. Por diseño, no puede proteger contra:",
+      ],
+      bullets: [
+        "Un dispositivo o navegador comprometido en cualquiera de los extremos: malware, una extensión de navegador hostil o alguien que lee la pantalla.",
+        "Los metadatos que el servidor necesariamente maneja: que ocurrió una transferencia, su tamaño y momento, y —en el caso de un enlace de descarga almacenado o una transferencia con código de emparejamiento entre redes— la cuenta que lo creó o lo envió.",
+        "Un destinatario que decide conservar o reenviar los archivos después de haberlos recibido.",
+        "Compartir un enlace de descarga por un canal no fiable, ya que la clave de descifrado viaja dentro del enlace.",
+      ],
+    },
+    {
+      heading: "Compatibilidad con navegadores y sus límites",
+      body: [
+        "Relayium funciona en cualquier navegador moderno con WebRTC a través de HTTPS. Algunas capacidades difieren según el navegador:",
+      ],
+      bullets: [
+        "Chrome y Edge transmiten los archivos grandes directamente al disco, sin un techo de memoria práctico.",
+        "Firefox y Safari almacenan los archivos en memoria, por lo que los archivos muy grandes (por encima de unos 200 MB) pueden fallar; prefiere Chrome/Edge, o usa el modo de enlace de descarga para esos.",
+        "WebRTC requiere un contexto seguro (HTTPS); la aplicación no se conectará por HTTP simple.",
+      ],
+    },
+    {
+      heading: "Código abierto e informe de problemas",
+      body: [
+        "El diseño del protocolo y todo el código de cliente y servidor son públicos en GitHub, de modo que cualquiera puede auditar la criptografía, ejecutar su propio servidor o contribuir. Si encuentras un problema de seguridad, infórmalo de forma privada a través del informe de vulnerabilidades de GitHub en el repositorio, en lugar de abrir una incidencia pública.",
+      ],
+    },
+  ],
+};
+
+const pt = {
+  title: "Segurança e modelo de ameaças",
+  description:
+    "Como a Relayium protege seus arquivos: chaves X25519 por transferência e AES-256-GCM, um código de verificação SAS com um handshake de comprometer e depois revelar para frustrar um servidor malicioso, links de download de conhecimento zero, e uma exposição honesta do que defendemos e do que não defendemos.",
+  updatedLabel: "Última atualização",
+  updated: "2026-07-01",
+  otherDocLabel: "Política de Privacidade",
+  lead: [
+    "A Relayium foi criada para que as pessoas que transferem arquivos — e não o servidor — tenham as chaves. Esta página descreve exatamente o que é protegido, como funciona e os limites dessa proteção.",
+    "Em resumo: no modo em tempo real, seus arquivos nunca passam pelos nossos servidores; as chaves de criptografia são geradas do zero em cada dispositivo e nunca o deixam; e um código de verificação curto permite que duas pessoas detectem um servidor malicioso. A seguir, os detalhes.",
+  ],
+  sections: [
+    {
+      heading: "Criptografia de ponta a ponta (X25519 + AES-256-GCM)",
+      body: [
+        "Cada transferência gera um par de chaves X25519 efêmero e novo em cada dispositivo. Os dois dispositivos realizam uma troca de chaves para derivar uma chave AES-256-GCM compartilhada que existe apenas dentro dos dois navegadores. Cada bloco é criptografado com essa chave e um nonce único, de modo que o servidor de sinalização — e qualquer retransmissor — só vê texto cifrado.",
+      ],
+      bullets: [
+        "As chaves são efêmeras e específicas de cada transferência — nada é reutilizado entre sessões.",
+        "A chave compartilhada é derivada nos dois dispositivos; ela nunca é enviada a nenhum servidor nem armazenada nele.",
+        "A criptografia é aplicada na camada de aplicação, acima da própria segurança de transporte do WebRTC, de modo que se mantém mesmo se a camada de transporte for comprometida.",
+      ],
+    },
+    {
+      heading: "O código de verificação (SAS) — detectar um servidor malicioso",
+      body: [
+        "A criptografia embutida do WebRTC (DTLS) troca impressões digitais de chaves por meio do servidor de sinalização, então um servidor desonesto poderia se colocar no meio e trocar as chaves. Para detectar isso, a Relayium deriva uma Short Authentication String (SAS) de 6 dígitos a partir das chaves públicas dos dois lados e a exibe nas duas telas. Se os dois códigos coincidirem, não há ninguém no meio.",
+        "Um simples código de 6 dígitos (cerca de 20 bits) poderia, em princípio, ser quebrado por força bruta por um retransmissor correndo para forçar um código coincidente. A Relayium fecha essa brecha com um handshake de comprometer e depois revelar: cada lado primeiro se compromete com sua chave enviando um hash, e só revela a chave depois de receber o comprometimento do outro lado. Um servidor, portanto, não pode escolher depois uma chave que colida, de modo que o código curto continua confiável.",
+      ],
+      bullets: [
+        "Para a garantia mais forte, compare o código fora de banda — pessoalmente ou por uma chamada de voz.",
+        "Se os dois códigos forem diferentes, interrompa a transferência: alguém pode estar interceptando a conexão.",
+      ],
+    },
+    {
+      heading: "O que o servidor nunca vê",
+      body: [
+        "O serviço foi projetado para que o seguinte nunca chegue aos nossos servidores, em nenhum modo:",
+        "No modo em tempo real, os bytes do arquivo não passam de forma alguma pelo servidor — eles fluem diretamente entre os dois dispositivos. O servidor de sinalização apenas retransmite mensagens de configuração da conexão e vê a participação na sala (seu IP público), um apelido de dispositivo que você escolhe e a presença.",
+      ],
+      bullets: [
+        "O conteúdo dos seus arquivos.",
+        "Os nomes dos seus arquivos.",
+        "Suas chaves de criptografia.",
+      ],
+    },
+    {
+      heading: "Quando seus arquivos são retransmitidos (TURN)",
+      body: [
+        "Quando dois dispositivos não conseguem abrir uma conexão direta entre redes (NATs ou firewalls restritivos), o fluxo criptografado é retransmitido por um servidor TURN para que a transferência ainda possa ser concluída. A conexão direta ponto a ponto é sempre tentada primeiro; o retransmissor é um recurso alternativo, e apenas as sessões com código de emparelhamento (incluindo seus links de entrada) recebem credenciais de retransmissão.",
+      ],
+      bullets: [
+        "O retransmissor encaminha apenas texto cifrado — ele não consegue ler seus arquivos, que permanecem criptografados de ponta a ponta.",
+        "Registramos o número de bytes retransmitidos por conta, para aplicar uma cota mensal de retransmissão e evitar abusos — nunca inspecionamos o que é retransmitido, apenas a contagem de bytes.",
+        "Nunca inspecionamos o conteúdo retransmitido.",
+      ],
+    },
+    {
+      heading: "Links de download armazenados — a chave nunca deixa seu navegador",
+      body: [
+        "O modo opcional de link de download é para quando o destinatário não está on-line. Seu navegador criptografa os arquivos com AES-256-GCM antes de qualquer coisa ser enviada, e a chave de descriptografia é colocada apenas no fragmento da URL — a parte depois do # —, que os navegadores nunca enviam ao servidor.",
+      ],
+      bullets: [
+        "O servidor armazena apenas texto cifrado, além do tamanho do texto cifrado e marcas de tempo para cota e limpeza — nunca texto simples, nomes de arquivos ou chaves.",
+        "Qualquer pessoa com o link completo pode descriptografar, então trate o link como o próprio arquivo e compartilhe-o por um canal confiável.",
+        "Os links podem ser configurados para expirar (1 hora, 1, 3 ou 7 dias) ou para se destruir após o primeiro download completo.",
+      ],
+    },
+    {
+      heading: "Integridade dos arquivos (SHA-256)",
+      body: [
+        "Além da confidencialidade, a integridade de cada arquivo é verificada. Cada bloco carrega uma tag de autenticação AES-GCM, e um hash SHA-256 por arquivo é verificado de ponta a ponta no lado receptor, de modo que um arquivo corrompido ou adulterado é detectado em vez de aceito silenciosamente.",
+      ],
+    },
+    {
+      heading: "Contra o que a Relayium não protege",
+      body: [
+        "A criptografia de ponta a ponta protege os dados em trânsito entre dois pontos de extremidade honestos. Por design, ela não pode proteger contra:",
+      ],
+      bullets: [
+        "Um dispositivo ou navegador comprometido em qualquer uma das pontas — malware, uma extensão de navegador hostil ou alguém lendo a tela.",
+        "Os metadados que o servidor necessariamente processa: que uma transferência aconteceu, seu tamanho e horário e — no caso de um link de download armazenado ou de uma transferência entre redes por código de emparelhamento — a conta que o criou ou enviou.",
+        "Um destinatário que opta por guardar ou encaminhar os arquivos depois de recebê-los.",
+        "Compartilhar um link de download por um canal não confiável, já que a chave de descriptografia viaja dentro do link.",
+      ],
+    },
+    {
+      heading: "Suporte a navegadores e seus limites",
+      body: [
+        "A Relayium funciona em qualquer navegador moderno com WebRTC sobre HTTPS. Alguns recursos diferem conforme o navegador:",
+      ],
+      bullets: [
+        "Chrome e Edge transmitem arquivos grandes diretamente para o disco, sem um teto de memória prático.",
+        "Firefox e Safari armazenam os arquivos em memória, então arquivos muito grandes (acima de cerca de 200 MB) podem falhar — prefira Chrome/Edge, ou use o modo de link de download para esses.",
+        "O WebRTC exige um contexto seguro (HTTPS); o aplicativo não se conecta por HTTP simples.",
+      ],
+    },
+    {
+      heading: "Código aberto e relato de problemas",
+      body: [
+        "O design do protocolo e todo o código de cliente e servidor são públicos no GitHub, de modo que qualquer pessoa pode auditar a criptografia, executar o próprio servidor ou contribuir. Se você encontrar um problema de segurança, relate-o de forma privada por meio do relato de vulnerabilidades do GitHub no repositório, em vez de abrir uma issue pública.",
+      ],
+    },
+  ],
+};
+
+export default { slug: "security", langs: { en, zh, ja, ko, de, fr, ar, es, pt } };

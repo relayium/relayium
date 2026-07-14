@@ -677,8 +677,200 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Relayium vs magic-wormhole: transferencia de archivos por CLI",
+  description:
+    "Tanto magic-wormhole como la CLI de Relayium mueven archivos entre terminales con un código corto y cifrado de extremo a extremo. Una comparación justa, incluida la única concesión honesta que conviene conocer.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "magic-wormhole se ha ganado en silencio una base de seguidores fieles: lo ejecutas, obtienes un código corto y legible como 7-crossover-clockwork, se lo lees a la otra persona y el archivo llega — cifrado todo el trayecto, sin cuenta y sin ningún servidor en el que tengas que pensar. La CLI de Relayium se construye en torno a una idea similar: un código corto que empareja dos ordenadores directamente y cifra todo lo que pasa entre ellos.",
+    "Se solapan mucho, y donde no lo hacen, vale la pena ser preciso al respecto — incluido el único punto en el que magic-wormhole es hoy genuinamente más resistente que la CLI de Relayium.",
+  ],
+  sections: [
+    {
+      heading: "Lo que tienen en común",
+      body: [
+        "Ambas herramientas resuelven el mismo problema central de la misma forma honesta: sin cuenta, sin ningún archivo depositado en un servidor que no controlas, y un código corto como lo único en lo que los dos extremos necesitan ponerse de acuerdo por otro canal.",
+      ],
+      bullets: [
+        "Cifrado de extremo a extremo: magic-wormhole deriva una clave de sesión del propio código wormhole usando un PAKE (SPAKE2), de modo que ni siquiera su propio servidor de encuentro llega a conocer la clave; el send/receive de Relayium hace un intercambio de claves X25519 directamente entre los dos extremos y muestra un código de verificación corto (SAS) que puedes comparar antes de que se mueva ningún byte.",
+        "Sin cuenta para una transferencia, en ambas herramientas.",
+        "Gratis y de código abierto — lee el código que toca tus archivos.",
+        "Multiplataforma: macOS, Linux y Windows.",
+      ],
+    },
+    {
+      heading: "El único punto en que magic-wormhole es más resistente: tiene un retransmisor",
+      body: [
+        "Esta es la concesión honesta, y vale la pena decirla claramente en lugar de pasarla por alto. magic-wormhole incluye un Transit Relay al que puede recurrir cuando los dos extremos no pueden abrir una conexión directa entre sí — por ejemplo, ambos lados detrás de un NAT estricto o simétrico sin forma de atravesarlo. El retransmisor solo ve texto cifrado, pero como está ahí, la transferencia igualmente se completa.",
+        "El send/receive de Relayium es solo directo: busca una conexión directa durante unos segundos justo después del apretón de manos, y si no encuentra ninguna, la transferencia falla sin más en lugar de recurrir a ningún retransmisor — los servidores de Relayium nunca tocan los bytes de archivos de una transferencia CLI entre redes, por diseño. En la práctica eso es poco frecuente (la mayoría de las redes domésticas y de oficina permiten un camino directo), pero si estás moviendo archivos entre dos máquinas que están ambas detrás de NAT inusualmente estrictos, es más probable que magic-wormhole simplemente funcione. Si no se puede encontrar un camino directo y la fiabilidad importa más que evitar un retransmisor, ese es el caso para recurrir a magic-wormhole — o para usar el push/pull o el daemon-direct de Relayium contra un servidor al que realmente puedas llegar, que no dependen en absoluto de ese salto P2P directo.",
+      ],
+    },
+    {
+      heading: "SSH y daemon-direct: hablar con un servidor que ya operas",
+      body: [
+        "Donde la CLI de Relayium añade superficie real es fuera del caso puntual del código de emparejamiento: dos formas más de mover archivos que se apoyan en infraestructura que ya tienes, algo que magic-wormhole no intenta cubrir.",
+        "relayium push / pull reutiliza tu acceso SSH existente, así que no hay nada nuevo en lo que confiar ni ningún código que compartir. push incluso funciona contra un servidor sin relayium instalado en absoluto, recurriendo a un simple flujo tar sobre la conexión SSH — ese respaldo es solo para push; pull siempre necesita relayium en el remoto, ya que actúa allí como remitente.",
+        "relayium serve convierte cualquier máquina que poseas en un destino daemon-direct, accesible por TLS 1.3 fijado sin SSH ni frase de código — la confianza se establece en la primera conexión (aprobada de forma interactiva, o preautorizada para uso desatendido) y queda fijada a partir de entonces, la misma idea que una clave de host SSH.",
+      ],
+      code: [
+        "relayium push ./photos user@your-server:backups/",
+        "relayium serve --dir ~/incoming",
+        "relayium push ./build relayium://your-server",
+      ],
+    },
+    {
+      heading: "Sincronización de carpetas y un servidor autoalojable",
+      body: [
+        "magic-wormhole envía un lote de archivos (o una carpeta, comprimida) y termina — envíalo de nuevo para actualizar el otro lado, sin ninguna noción de qué debería eliminarse. La CLI de Relayium añade relayium sync, un espejo incremental de un solo sentido sobre cualquiera de los dos transportes anteriores: solo mueve lo que cambió, --delete elimina en el destino los archivos que desaparecieron del origen (un daemon solo lo respeta si se inició con --allow-delete, así que el receptor tiene que optar por ello), y --watch sigue resincronizando en tiempo real a medida que los archivos cambian, sin necesidad de ninguna tarea cron.",
+        "El servidor de Relayium también es autoalojable como un único contenedor Docker si quieres ejecutar todo tú mismo en lugar de depender de relayium.com; apunta la CLI hacia él con --server.",
+      ],
+      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
+    },
+    {
+      heading: "Comparativa de funciones de un vistazo",
+      body: ["Las diferencias que más importan, una al lado de la otra:"],
+      bullets: [
+        "Sin camino directo disponible: el Transit Relay de magic-wormhole transporta el flujo cifrado, así que la transferencia igualmente se completa; el send/receive de Relayium es solo directo y falla en ese caso.",
+        "Hablar con un servidor: Relayium reutiliza tu acceso SSH (push/pull) o un daemon con TLS fijado; magic-wormhole no tiene integración con SSH — instálalo en ambos extremos y comparte un código.",
+        "Sincronización de carpetas: relayium sync hace un espejo incremental con --delete y --watch; magic-wormhole envía un lote (o una carpeta comprimida) y termina, sin semántica de espejo ni de eliminación.",
+        "Verificación: ambos están cifrados de extremo a extremo; el send/receive de Relayium muestra además un código SAS corto que ambos lados comparan antes de que empiece la transferencia.",
+        "Autoalojamiento: el servidor de Relayium es una única imagen Docker que puedes ejecutar tú mismo, sirviendo tanto la CLI como la aplicación web; el send/receive de la CLI puede apuntar hacia él con --server.",
+        "Licencia y coste: ambos gratis y de código abierto, ninguno requiere cuenta.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Es gratis la CLI de Relayium?",
+        a: "Sí, completamente. No hay un nivel de pago ni nada que medir — cada modo conecta los dos extremos directamente, y la CLI es de código abierto.",
+      },
+      {
+        q: "¿Necesita una cuenta?",
+        a: "No. push/pull usa tu propio acceso SSH, daemon-direct usa la confianza de certificado TLS fijado entre tus máquinas, y send/receive usa un código corto que acordáis por otro canal. Nada de esto toca una cuenta de Relayium.",
+      },
+      {
+        q: "¿Qué pasa si estoy detrás de un NAT estricto y no hay camino directo?",
+        a: "El send/receive de Relayium es solo directo y fallará en ese caso — no recurre a un retransmisor. El Transit Relay de magic-wormhole todavía puede transportar el flujo cifrado y completar la transferencia. Si necesitas que funcione sin importar cómo sea la red, magic-wormhole cubre ese caso hoy; el push/pull o el daemon-direct de Relayium contra un servidor al que puedas llegar también funcionan, ya que no dependen de un salto P2P directo.",
+      },
+      {
+        q: "¿Puedo usar el código de emparejamiento de la CLI con la aplicación web de Relayium?",
+        a: "Todavía no para una transferencia emparejada en vivo — el send/receive de la CLI usa su propio apretón de manos directo, separado del flujo de emparejamiento del navegador basado en WebRTC, así que los dos no interoperan hoy. Para entregar un archivo a alguien que solo usa un navegador, usa el enlace de descarga almacenado de Relayium o el propio modo de código de emparejamiento de la aplicación web.",
+      },
+      {
+        q: "¿Puedo autoalojarlo?",
+        a: "Sí. El servidor de Relayium se distribuye como imagen Docker (docker compose up -d --build), y puedes apuntar el send/receive de la CLI hacia tu propia instancia con --server https://your-domain.",
+      },
+    ],
+  },
+  cta: {
+    text: "Instala la CLI gratuita de Relayium y prueba push, sync o send — sin cuenta, y una transferencia basada en código tan rápida de empezar como magic-wormhole.",
+    button: "Obtener la CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Seguir leyendo",
+};
+
+const pt = {
+  title: "Relayium vs magic-wormhole: transferência de arquivos por CLI",
+  description:
+    "Tanto o magic-wormhole quanto a CLI do Relayium movem arquivos entre terminais com um código curto e criptografia de ponta a ponta. Uma comparação justa, incluindo a única concessão honesta que vale a pena conhecer.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "O magic-wormhole conquistou silenciosamente um público fiel: você o executa, recebe um código curto e legível como 7-crossover-clockwork, lê para a outra pessoa e o arquivo chega — criptografado o caminho todo, sem conta e sem nenhum servidor com que precise se preocupar. A CLI do Relayium foi construída em torno de uma ideia parecida: um código curto que emparelha dois computadores diretamente e criptografa tudo o que passa entre eles.",
+    "Eles se sobrepõem bastante, e onde não se sobrepõem vale a pena ser preciso — incluindo o único ponto em que o magic-wormhole hoje é genuinamente mais resiliente que a CLI do Relayium.",
+  ],
+  sections: [
+    {
+      heading: "O que eles têm em comum",
+      body: [
+        "Ambas as ferramentas resolvem o mesmo problema central da mesma forma honesta: sem conta, sem nenhum arquivo depositado em um servidor que você não controla, e um código curto como a única coisa que as duas pontas precisam combinar por outro canal.",
+      ],
+      bullets: [
+        "Criptografado de ponta a ponta: o magic-wormhole deriva uma chave de sessão do próprio código wormhole usando um PAKE (SPAKE2), de modo que nem seu próprio servidor de encontro chega a conhecer a chave; o send/receive do Relayium faz uma troca de chaves X25519 diretamente entre as duas pontas e mostra um código de verificação curto (SAS) que você pode comparar antes de qualquer byte se mover.",
+        "Sem conta para uma transferência, em ambas as ferramentas.",
+        "Gratuito e de código aberto — leia o código que toca seus arquivos.",
+        "Multiplataforma: macOS, Linux e Windows.",
+      ],
+    },
+    {
+      heading: "O único ponto em que o magic-wormhole é mais resiliente: ele tem um retransmissor",
+      body: [
+        "Essa é a concessão honesta, e vale a pena dizê-la com clareza em vez de contorná-la. O magic-wormhole vem com um Transit Relay ao qual pode recorrer quando as duas pontas não conseguem abrir uma conexão direta entre si — por exemplo, ambos os lados atrás de um NAT rígido ou simétrico sem como atravessá-lo. O retransmissor só vê texto cifrado, mas, por existir, a transferência ainda assim se completa.",
+        "O send/receive do Relayium é somente direto: ele tenta uma conexão direta por alguns segundos logo após o handshake e, se não encontra nenhuma, a transferência simplesmente falha em vez de recorrer a qualquer retransmissor — os servidores do Relayium nunca tocam os bytes de arquivos de uma transferência CLI entre redes, por design. Na prática isso é raro (a maioria das redes domésticas e de escritório permite um caminho direto), mas se você estiver movendo arquivos entre duas máquinas ambas atrás de NAT excepcionalmente rígidos, é mais provável que o magic-wormhole simplesmente funcione. Se não for possível encontrar um caminho direto e a confiabilidade importar mais do que evitar um retransmissor, esse é o caso para recorrer ao magic-wormhole — ou para usar o push/pull ou o daemon-direct do Relayium contra um servidor que você realmente consiga alcançar, que não dependem em nada desse salto P2P direto.",
+      ],
+    },
+    {
+      heading: "SSH e daemon-direct: falar com um servidor que você já opera",
+      body: [
+        "Onde a CLI do Relayium acrescenta superfície de verdade é fora do caso pontual do código de emparelhamento: mais duas formas de mover arquivos que se apoiam em infraestrutura que você já tem, algo que o magic-wormhole não tenta cobrir.",
+        "O relayium push / pull reutiliza seu acesso SSH existente, então não há nada novo em que confiar nem nenhum código a compartilhar. O push até funciona contra um servidor sem nenhum relayium instalado, recorrendo a um simples fluxo tar sobre a conexão SSH — esse recurso de reserva é só do push; o pull sempre precisa do relayium no remoto, já que ali ele atua como remetente.",
+        "O relayium serve transforma qualquer máquina que você possua em um destino daemon-direct, acessível por TLS 1.3 fixado, sem SSH e sem frase de código — a confiança se estabelece na primeira conexão (aprovada de forma interativa, ou pré-autorizada para uso não supervisionado) e fica fixada a partir daí, a mesma ideia de uma chave de host SSH.",
+      ],
+      code: [
+        "relayium push ./photos user@your-server:backups/",
+        "relayium serve --dir ~/incoming",
+        "relayium push ./build relayium://your-server",
+      ],
+    },
+    {
+      heading: "Sincronização de pastas e um servidor auto-hospedável",
+      body: [
+        "O magic-wormhole envia um lote de arquivos (ou uma pasta, compactada) e encerra — envie de novo para atualizar o outro lado, sem nenhuma noção do que deveria ser removido. A CLI do Relayium acrescenta o relayium sync, um espelho incremental de sentido único sobre qualquer um dos dois transportes acima: ele só move o que mudou, o --delete remove no destino os arquivos que desapareceram da origem (um daemon só respeita isso se tiver sido iniciado com --allow-delete, então o receptor precisa optar por isso) e o --watch continua ressincronizando em tempo real conforme os arquivos mudam, sem necessidade de nenhuma tarefa cron.",
+        "O servidor do Relayium também é auto-hospedável como um único contêiner Docker, caso você queira rodar tudo por conta própria em vez de depender do relayium.com; aponte a CLI para ele com --server.",
+      ],
+      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
+    },
+    {
+      heading: "Comparação de recursos num relance",
+      body: ["As diferenças que mais importam, lado a lado:"],
+      bullets: [
+        "Sem caminho direto disponível: o Transit Relay do magic-wormhole carrega o fluxo criptografado, então a transferência ainda assim se completa; o send/receive do Relayium é somente direto e falha nesse caso.",
+        "Falar com um servidor: o Relayium reutiliza seu acesso SSH (push/pull) ou um daemon com TLS fixado; o magic-wormhole não tem integração com SSH — instale-o nas duas pontas e compartilhe um código.",
+        "Sincronização de pastas: o relayium sync faz um espelho incremental com --delete e --watch; o magic-wormhole envia um lote (ou uma pasta compactada) e encerra, sem semântica de espelho nem de exclusão.",
+        "Verificação: ambos são criptografados de ponta a ponta; o send/receive do Relayium mostra ainda um código SAS curto que os dois lados comparam antes de a transferência começar.",
+        "Auto-hospedagem: o servidor do Relayium é uma única imagem Docker que você pode rodar por conta própria, servindo tanto a CLI quanto o aplicativo web; o send/receive da CLI pode apontar para ele com --server.",
+        "Licença e custo: ambos gratuitos e de código aberto, nenhum exige conta.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "A CLI do Relayium é gratuita?",
+        a: "Sim, completamente. Não há nível pago nem nada a medir — cada modo conecta as duas pontas diretamente, e a CLI é de código aberto.",
+      },
+      {
+        q: "Ela precisa de conta?",
+        a: "Não. O push/pull usa seu próprio acesso SSH, o daemon-direct usa a confiança de certificado TLS fixado entre suas máquinas, e o send/receive usa um código curto que vocês combinam por outro canal. Nada disso toca uma conta do Relayium.",
+      },
+      {
+        q: "E se eu estiver atrás de um NAT rígido e não houver caminho direto?",
+        a: "O send/receive do Relayium é somente direto e falhará nesse caso — ele não recorre a um retransmissor. O Transit Relay do magic-wormhole ainda pode carregar o fluxo criptografado e completar a transferência. Se você precisa que funcione não importa como seja a rede, o magic-wormhole cobre esse caso hoje; o push/pull ou o daemon-direct do Relayium contra um servidor que você consiga alcançar também funcionam, já que não dependem de um salto P2P direto.",
+      },
+      {
+        q: "Posso usar o código de emparelhamento da CLI com o aplicativo web do Relayium?",
+        a: "Ainda não para uma transferência emparelhada ao vivo — o send/receive da CLI usa seu próprio handshake direto, separado do fluxo de emparelhamento do navegador baseado em WebRTC, então os dois não interoperam hoje. Para entregar um arquivo a alguém que usa apenas um navegador, use o link de download armazenado do Relayium ou o próprio modo de código de emparelhamento do aplicativo web.",
+      },
+      {
+        q: "Posso auto-hospedá-lo?",
+        a: "Sim. O servidor do Relayium é distribuído como imagem Docker (docker compose up -d --build), e você pode apontar o send/receive da CLI para a sua própria instância com --server https://your-domain.",
+      },
+    ],
+  },
+  cta: {
+    text: "Instale a CLI gratuita do Relayium e experimente push, sync ou send — sem conta, e uma transferência baseada em código tão rápida de começar quanto o magic-wormhole.",
+    button: "Obter a CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "compare/magic-wormhole",
   updated: "2026-07-12",
-  langs: withInstall({ en, zh, ja, ko, de, fr, ar }),
+  langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

@@ -598,8 +598,178 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Cómo transferir archivos de Android a iPhone (sin cable)",
+  description:
+    "Una guía paso a paso para enviar fotos, vídeos y documentos de Android a iPhone en un navegador — sin AirDrop, sin cable, sin subir a la nube. Solo abre Relayium en ambos dispositivos.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "Android y iPhone no comparten un AirDrop, así que mover unas fotos o un vídeo entre ellos suele implicar un cable USB, una app de chat que comprime tus imágenes, o un viaje de ida y vuelta por algún disco en la nube. Los tres son más lentos y engorrosos de lo que deberían.",
+    "Relayium se salta todo eso. Ambos teléfonos abren la misma página web, se encuentran y los archivos viajan directamente entre ellos — cifrados de extremo a extremo, sin app que instalar. En la misma red no hace falta cuenta; enviar entre redes con un código de emparejamiento solo le pide al remitente que inicie sesión. Esta guía lo explica paso a paso.",
+  ],
+  sections: [
+    {
+      heading: "Lo que necesitas antes de empezar",
+      body: [
+        "Nada que instalar. En la misma red tampoco hay nada que registrar — las transferencias en tiempo real funcionan directamente desde el navegador en ambos dispositivos.",
+      ],
+      bullets: [
+        "Un teléfono Android con Chrome (o cualquier navegador moderno) y un iPhone con Safari — ambos actualizados.",
+        "Para la vía más rápida, pon ambos dispositivos en la misma red Wi-Fi. Si no puedes, no pasa nada — un código de emparejamiento también funciona entre redes distintas.",
+        "Los archivos que quieres enviar, hasta 1.000 por lote.",
+      ],
+    },
+    {
+      heading: "Paso a paso: ambos dispositivos en la misma Wi-Fi",
+      body: [
+        "Esta es la vía más sencilla. En la misma red, los dos teléfonos se descubren automáticamente, así que casi no hay nada que escribir.",
+      ],
+      bullets: [
+        "Tanto en el teléfono Android como en el iPhone, abre relayium.com en el navegador.",
+        "Cada dispositivo aparece como un dispositivo cercano en el otro. En el teléfono que envía, toca el que recibe.",
+        "Elige los archivos a enviar — hasta 1.000 por lote — o simplemente arrástralos.",
+        "Ambas pantallas muestran el mismo código de 6 dígitos. Comprueba que coinciden; este es el código de verificación que prueba que ningún servidor se ha colado entre vosotros.",
+        "Acepta en el iPhone que recibe y los archivos se transfieren directamente, luego guárdalos en tu dispositivo.",
+      ],
+    },
+    {
+      heading: "¿En redes distintas? Usa un código de emparejamiento",
+      body: [
+        "No tenéis que estar en la misma Wi-Fi. Si los teléfonos están en redes distintas — uno con datos móviles, el otro con la Wi-Fi de casa — Relayium aún puede conectarlos con un código de emparejamiento.",
+        "El dispositivo que envía muestra un código de emparejamiento corto; introdúcelo en el otro teléfono (o abre el enlace para compartir que genera). La transferencia sigue yendo directamente de igual a igual siempre que sea posible, y cuando no hay un camino directo disponible recurre a un retransmisor TURN cifrado que solo ve texto cifrado — así que la transferencia sigue cifrada de extremo a extremo de cualquier forma. Si la conexión se cae a mitad de la transferencia, puede reanudarse en lugar de empezar de nuevo. Enviar así necesita que el remitente inicie sesión — la persona que recibe nunca necesita una cuenta.",
+      ],
+    },
+    {
+      heading: "Otras formas de mover archivos entre Android y iPhone",
+      body: [
+        "Relayium no es la única opción, y vale la pena conocer los sacrificios honestos de las alternativas:",
+      ],
+      bullets: [
+        "Quick Share de Google y apps de terceros como SHAREit mueven archivos rápido, pero necesitan instalación en ambos teléfonos y Quick Share no llega a los iPhone.",
+        "Un disco en la nube (Google Drive, iCloud, Dropbox) funciona cuando la otra persona está desconectada, pero subes y luego descargas el mismo archivo dos veces, cuenta contra tu cuota y el proveedor guarda una copia.",
+        "Las apps de chat y el correo están en todas partes, pero suelen recomprimir las fotos, limitar el tamaño de los adjuntos y no están cifradas de extremo a extremo para compartir archivos.",
+        "Un cable USB es fiable pero necesita el adaptador adecuado entre USB-C y Lightning, además de un ordenador en medio para muchos tipos de archivo.",
+      ],
+    },
+    {
+      heading: "¿Mis fotos perderán calidad?",
+      body: [
+        "No. A diferencia de una app de mensajería, Relayium envía el archivo original byte a byte — sin recompresión, sin redimensionar. Lo que aterriza en el iPhone es una copia exacta de lo que salió del teléfono Android.",
+        "Para demostrarlo, cada archivo se verifica de extremo a extremo con un hash SHA-256, así que una foto o un vídeo que llega tiene garantizado ser idéntico al que enviaste. Los archivos grandes también se gestionan bien: en Chrome y Edge la descarga se transmite directamente al disco sin límite de tamaño, mientras que Firefox y Safari almacenan en memoria, así que en esos mantén una sola transferencia por debajo de unos 200 MB.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Necesito instalar una app en alguno de los teléfonos?",
+        a: "No. Relayium se ejecuta por completo en el navegador tanto en Android como en iPhone. Abre relayium.com en cada dispositivo y ya está — sin descarga de ningún tipo. En la misma red una transferencia en tiempo real no necesita cuenta; emparejar entre redes solo le pide al remitente que inicie sesión. Puedes, opcionalmente, añadirlo a tu pantalla de inicio como PWA, pero eso es solo un acceso directo.",
+      },
+      {
+        q: "¿Los dos teléfonos tienen que estar en la misma Wi-Fi?",
+        a: "No. La misma red es la vía más rápida porque los dispositivos se descubren automáticamente, pero un código de emparejamiento conecta dos teléfonos entre redes distintas — incluso uno con datos móviles y otro con Wi-Fi. La transferencia sigue cifrada de extremo a extremo en ambos casos, aunque emparejar entre redes requiere que el remitente inicie sesión — el destinatario nunca necesita una cuenta.",
+      },
+      {
+        q: "¿Se comprimen o alteran las fotos de alguna forma?",
+        a: "No. El archivo original se transfiere byte a byte sin compresión, y cada archivo se comprueba de extremo a extremo con un hash SHA-256, así que lo que llega al iPhone es idéntico bit a bit a lo que enviaste desde Android.",
+      },
+    ],
+  },
+  cta: {
+    text: "Abre Relayium en ambos teléfonos y envía tus primeros archivos — sin instalación, y sin cuenta necesaria en la misma red.",
+    button: "Prueba Relayium ahora",
+  },
+  relatedHeading: "Seguir leyendo",
+};
+
+const pt = {
+  title: "Como transferir arquivos do Android para o iPhone (sem cabo)",
+  description:
+    "Um guia passo a passo para enviar fotos, vídeos e documentos do Android para o iPhone no navegador — sem AirDrop, sem cabo, sem upload para a nuvem. Basta abrir o Relayium nos dois dispositivos.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "Android e iPhone não compartilham um AirDrop, então mover algumas fotos ou um vídeo entre eles geralmente significa um cabo USB, um app de conversa que comprime suas imagens, ou uma ida e volta por algum drive na nuvem. Os três são mais lentos e mais trabalhosos do que deveriam ser.",
+    "O Relayium pula tudo isso. Os dois celulares abrem a mesma página web, se encontram e os arquivos viajam diretamente entre eles — criptografados de ponta a ponta, sem app para instalar. Na mesma rede não é preciso conta; enviar entre redes com um código de emparelhamento apenas pede que o remetente entre. Este guia mostra passo a passo.",
+  ],
+  sections: [
+    {
+      heading: "O que você precisa antes de começar",
+      body: [
+        "Nada para instalar. Na mesma rede também não há nada para cadastrar — as transferências em tempo real funcionam direto do navegador nos dois dispositivos.",
+      ],
+      bullets: [
+        "Um celular Android com Chrome (ou qualquer navegador moderno) e um iPhone com Safari — ambos atualizados.",
+        "Para o caminho mais rápido, coloque os dois dispositivos na mesma rede Wi-Fi. Se não der, tudo bem — um código de emparelhamento funciona entre redes diferentes também.",
+        "Os arquivos que você quer enviar, até 1.000 por lote.",
+      ],
+    },
+    {
+      heading: "Passo a passo: os dois dispositivos na mesma Wi-Fi",
+      body: [
+        "Este é o caminho mais simples. Na mesma rede, os dois celulares se descobrem automaticamente, então quase não há nada para digitar.",
+      ],
+      bullets: [
+        "Tanto no celular Android quanto no iPhone, abra relayium.com no navegador.",
+        "Cada dispositivo aparece como um dispositivo próximo no outro. No celular que envia, toque no que recebe.",
+        "Escolha os arquivos a enviar — até 1.000 por lote — ou simplesmente arraste-os.",
+        "As duas telas mostram o mesmo código de 6 dígitos. Confira se eles coincidem; este é o código de verificação que prova que nenhum servidor se meteu entre vocês.",
+        "Aceite no iPhone que recebe e os arquivos são transferidos diretamente, depois salve-os no seu dispositivo.",
+      ],
+    },
+    {
+      heading: "Em redes diferentes? Use um código de emparelhamento",
+      body: [
+        "Vocês não precisam estar na mesma Wi-Fi. Se os celulares estão em redes diferentes — um em dados móveis, o outro na Wi-Fi de casa — o Relayium ainda consegue conectá-los com um código de emparelhamento.",
+        "O dispositivo que envia mostra um código de emparelhamento curto; digite-o no outro celular (ou abra o link de compartilhamento que ele gera). A transferência continua indo diretamente ponto a ponto sempre que possível, e quando um caminho direto não está disponível ela recorre a um retransmissor TURN criptografado que só vê texto cifrado — então a transferência permanece criptografada de ponta a ponta de qualquer forma. Se a conexão cair no meio da transferência, ela pode ser retomada em vez de recomeçar. Enviar assim exige que o remetente entre — a pessoa que recebe nunca precisa de conta.",
+      ],
+    },
+    {
+      heading: "Outras formas de mover arquivos entre Android e iPhone",
+      body: [
+        "O Relayium não é a única opção, e vale conhecer os trade-offs honestos das alternativas:",
+      ],
+      bullets: [
+        "O Quick Share do Google e apps de terceiros como o SHAREit movem arquivos rápido, mas precisam de instalação nos dois celulares e o Quick Share não alcança iPhones.",
+        "Um drive na nuvem (Google Drive, iCloud, Dropbox) funciona quando a outra pessoa está offline, mas você envia e depois baixa o mesmo arquivo duas vezes, ele conta na sua cota e o provedor guarda uma cópia.",
+        "Apps de conversa e e-mail estão em toda parte, mas costumam recomprimir fotos, limitar o tamanho dos anexos e não são criptografados de ponta a ponta para compartilhamento de arquivos.",
+        "Um cabo USB é confiável, mas precisa do adaptador certo entre USB-C e Lightning, além de um computador no meio para muitos tipos de arquivo.",
+      ],
+    },
+    {
+      heading: "Minhas fotos vão perder qualidade?",
+      body: [
+        "Não. Diferentemente de um app de mensagens, o Relayium envia o arquivo original byte a byte — sem recompressão, sem redimensionamento. O que chega ao iPhone é uma cópia exata do que saiu do celular Android.",
+        "Para comprovar, cada arquivo é verificado de ponta a ponta com um hash SHA-256, então uma foto ou vídeo que chega é garantidamente idêntico ao que você enviou. Arquivos grandes também são bem tratados: no Chrome e no Edge o download é gravado direto no disco sem limite de tamanho, enquanto Firefox e Safari armazenam na memória, então nesses mantenha uma única transferência abaixo de cerca de 200 MB.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "Preciso instalar um app em algum dos celulares?",
+        a: "Não. O Relayium roda inteiramente no navegador tanto no Android quanto no iPhone. Abra relayium.com em cada dispositivo e você está pronto — sem download de qualquer forma. Na mesma rede uma transferência em tempo real não precisa de conta; emparelhar entre redes apenas pede que o remetente entre. Você pode, opcionalmente, adicioná-lo à tela inicial como um PWA, mas isso é só um atalho.",
+      },
+      {
+        q: "Os dois celulares precisam estar na mesma Wi-Fi?",
+        a: "Não. A mesma rede é o caminho mais rápido porque os dispositivos se descobrem automaticamente, mas um código de emparelhamento conecta dois celulares entre redes diferentes — mesmo um em dados móveis e outro em Wi-Fi. A transferência permanece criptografada de ponta a ponta nos dois casos, embora emparelhar entre redes exija que o remetente entre — o destinatário nunca precisa de conta.",
+      },
+      {
+        q: "As fotos são comprimidas ou alteradas de alguma forma?",
+        a: "Não. O arquivo original é transferido byte a byte sem compressão, e cada arquivo é verificado de ponta a ponta com um hash SHA-256, então o que chega ao iPhone é idêntico bit a bit ao que você enviou do Android.",
+      },
+    ],
+  },
+  cta: {
+    text: "Abra o Relayium nos dois celulares e envie seus primeiros arquivos — sem instalação, e sem conta necessária na mesma rede.",
+    button: "Experimente o Relayium agora",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "how-to/transfer-files-android-to-iphone",
   updated: "2026-07-03",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

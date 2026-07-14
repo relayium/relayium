@@ -674,8 +674,202 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Relayium vs scp: transferencia de archivos más sencilla por SSH",
+  description:
+    "scp es universal y viene preinstalado. Las órdenes push/pull de Relayium usan el mismo SSH pero añaden reanudación, verificación SHA-256, progreso y un plan de reserva para servidores desnudos. Una comparativa justa.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "scp ha sido durante décadas la forma predeterminada de mover un archivo por SSH: ya está en casi todas las máquinas de tipo Unix, todo el mundo conoce su sintaxis y simplemente funciona. No hay motivo para fingir lo contrario: scp se ha ganado su lugar.",
+    "La CLI de Relayium no reemplaza a SSH; se apoya exactamente en el mismo acceso SSH que ya tienes. push y pull usan tu conexión SSH igual que scp, pero añaden algunas cosas para las que scp nunca se construyó: reanudar una transferencia interrumpida, verificar cada archivo con una suma de comprobación, mostrar progreso real y funcionar incluso cuando en el extremo remoto no hay nada instalado.",
+  ],
+  sections: [
+    {
+      heading: "Donde scp es realmente más sencillo",
+      body: [
+        "Conviene decirlo con claridad: para muchas tareas, scp es la herramienta adecuada y añadir cualquier otra cosa es una carga innecesaria.",
+      ],
+      bullets: [
+        "Ya está instalado: no hay ningún binario que descargar ni nada que configurar, en prácticamente todos los servidores a los que jamás entrarás por SSH.",
+        "Está probado en la práctica. Décadas de uso, un comportamiento bien entendido y todos los administradores de sistemas ya conocen sus opciones.",
+        "Para un caso puntual de verdad —copiar este único archivo, ahora mismo— escribir scp file.txt user@host:path es menos teclear que instalar nada.",
+        "Es ideal para scripts rápidos y desechables en los que no quieres ninguna dependencia más allá de OpenSSH.",
+      ],
+    },
+    {
+      heading: "push / pull: el mismo SSH, con reanudación, sumas de comprobación y progreso",
+      body: [
+        "relayium push y relayium pull se conectan a través del acceso SSH idéntico que usa scp: el mismo host, la misma clave, el mismo puerto. La diferencia está en lo que ocurre una vez abierta la conexión.",
+        "Cada archivo se verifica de extremo a extremo con un hash SHA-256 tras su llegada, de modo que una transferencia que parece terminada coincide realmente, byte a byte, con lo que se envió. Si una transferencia se interrumpe —una conexión caída, la tapa de un portátil cerrada— volver a ejecutar la misma orden retoma justo donde se quedó en lugar de reenviarlo todo, y ves progreso real por archivo durante todo el proceso, no una copia silenciosa.",
+        "La mayor diferencia práctica es lo que ocurre cuando el remoto no tiene relayium instalado. push lo comprueba automáticamente y, si no está, recurre a transmitir un simple archivo tar por la misma conexión SSH hacia un tar -x en el otro extremo, de modo que push sigue funcionando contra un servidor totalmente desnudo, sin nada que instalar antes. Ese plan de reserva es exclusivo de push: pull siempre necesita relayium ya instalado en el remoto, porque en un pull la máquina remota es la que actúa como remitente.",
+      ],
+      code: [
+        "relayium push ./photos user@your-server:backups/",
+        "relayium pull user@your-server:backups/ ./restore",
+      ],
+    },
+    {
+      heading: "Más allá de SSH: daemon-direct y emparejamiento entre redes",
+      body: [
+        "scp solo funciona donde tienes acceso SSH. La CLI de Relayium añade dos formas más de mover archivos para las que scp no tiene equivalente.",
+        "relayium serve convierte una máquina de tu propiedad en un destino daemon-direct accesible por TLS 1.3 fijado (pinned): sin SSH, sin puerto 22, la confianza se establece en la primera conexión (aprobada de forma interactiva, o preautorizada con relayium authorize para un uso desatendido) y queda fijada a partir de ahí. Haz push directamente hacia ella con una dirección relayium://.",
+        "Para enviar por internet a alguien sobre quien no tienes ningún acceso SSH, relayium send / receive empareja en su lugar dos ordenadores con un código corto: de igual a igual directo, con un código de verificación corto (SAS) que ambas partes comparan antes de que se mueva un solo byte. scp no tiene respuesta para ese caso; primero necesitarías acceso SSH.",
+      ],
+      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf ABCD-1234"],
+    },
+    {
+      heading: "Réplica de carpetas: sync frente a reejecutar scp -r",
+      body: [
+        "Copiar una carpeta entera una y otra vez con scp -r significa reenviarlo todo cada vez, sin ninguna noción de qué cambió o qué debería eliminarse. relayium sync construye una réplica incremental unidireccional sobre push/pull o daemon-direct: solo se mueven los archivos modificados, --delete elimina en el destino los archivos que desaparecieron del origen, y --watch sigue resincronizando en tiempo real cada vez que un archivo cambia localmente, sin necesidad de una tarea cron.",
+      ],
+      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
+    },
+    {
+      heading: "Comparativa de funciones de un vistazo",
+      body: ["Las diferencias que más importan, una al lado de la otra:"],
+      bullets: [
+        "Disponibilidad: scp viene preinstalado en prácticamente todos los servidores; la CLI de Relayium es un único binario que instalas una vez con una sola orden.",
+        "Reanudación: scp reinicia desde cero una transferencia interrumpida; push/pull reanudan desde donde se detuvieron.",
+        "Integridad: scp no verifica el contenido a posteriori; cada transferencia de Relayium se comprueba con un hash SHA-256 por archivo.",
+        "Servidores desnudos: scp no necesita nada extra, y push funciona igual mediante su reserva con tar cuando relayium no está instalado en el remoto (pull necesita relayium en el remoto, sin reserva).",
+        "Más allá de SSH: scp solo funciona por SSH; Relayium ofrece además daemon-direct (TLS fijado, sin SSH) y transferencias por código de emparejamiento entre redes (send/receive) que no requieren ningún acceso SSH.",
+        "Réplica de carpetas: scp -r reenvía todo cada vez; relayium sync replica de forma incremental con --delete y --watch.",
+        "Coste y licencia: ambos gratis; scp viene con OpenSSH, la CLI de Relayium está bajo licencia MIT y es de código abierto.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿La CLI de Relayium necesita una cuenta?",
+        a: "No. push/pull usa tu propio acceso SSH exactamente igual que scp: sin cuenta de Relayium, sin iniciar sesión, para cualquier modo de la CLI.",
+      },
+      {
+        q: "¿Funciona push si el servidor remoto no tiene Relayium instalado?",
+        a: "Sí. push lo comprueba primero y, si relayium no está, recurre a un simple flujo tar por la misma conexión SSH, de modo que sigue funcionando contra un servidor desnudo. Ese plan de reserva es exclusivo de push: pull siempre necesita relayium ya instalado en el remoto, ya que el remoto actúa como remitente en un pull.",
+      },
+      {
+        q: "¿Es realmente tan sencillo de usar como scp?",
+        a: "Las órdenes se parecen: relayium push src user@host:dest en lugar de scp -r src user@host:dest. La diferencia solo aparece cuando algo va mal: una conexión caída se reanuda en vez de reiniciar, y cada archivo se verifica con suma de comprobación al llegar.",
+      },
+      {
+        q: "¿Cuándo debería usar simplemente scp?",
+        a: "Para una copia puntual de verdad en la que nada necesita reanudarse, nada necesita verificarse y no quieres ningún binario extra, scp ya está ahí y es la opción más sencilla. También es la opción predeterminada más segura dentro de scripts rápidos en los que no quieres una nueva dependencia.",
+      },
+      {
+        q: "¿La CLI de Relayium es gratis?",
+        a: "Sí, por completo: sin nivel de pago, con licencia MIT y de código abierto, y cada modo conecta ambos extremos directamente.",
+      },
+    ],
+  },
+  cta: {
+    text: "Instala la CLI gratuita de Relayium y prueba push o pull con el acceso SSH que ya tienes.",
+    button: "Obtener la CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Relayium vs scp: transferência de arquivos mais simples por SSH",
+  description:
+    "O scp é universal e vem pré-instalado. Os comandos push/pull do Relayium usam o mesmo SSH, mas acrescentam retomada, verificação SHA-256, progresso e um plano de reserva para servidores vazios. Um comparativo justo.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "Há décadas o scp é a forma padrão de mover um arquivo por SSH: já está em quase toda máquina do tipo Unix, todo mundo conhece a sintaxe e ele simplesmente funciona. Não há motivo para fingir o contrário — o scp conquistou seu lugar.",
+    "A CLI do Relayium não substitui o SSH; ela se apoia exatamente no mesmo acesso SSH que você já tem. push e pull usam sua conexão SSH do mesmo jeito que o scp, mas acrescentam algumas coisas para as quais o scp nunca foi feito: retomar uma transferência interrompida, verificar cada arquivo com uma soma de verificação, mostrar progresso real e funcionar mesmo quando não há nada instalado do lado remoto.",
+  ],
+  sections: [
+    {
+      heading: "Onde o scp é realmente mais simples",
+      body: [
+        "Vale dizer com clareza: para muitas tarefas, o scp é a ferramenta certa e acrescentar qualquer outra coisa é peso extra.",
+      ],
+      bullets: [
+        "Ele já está instalado — nenhum binário para baixar, nada para configurar, em praticamente todo servidor no qual você um dia entrará por SSH.",
+        "É testado no campo. Décadas de uso, comportamento bem compreendido e todo administrador de sistemas já conhece as opções.",
+        "Para um caso pontual de verdade — copiar este único arquivo, agora mesmo — digitar scp file.txt user@host:path dá menos trabalho do que instalar qualquer coisa.",
+        "É ideal para scripts rápidos e descartáveis nos quais você não quer nenhuma dependência além do OpenSSH.",
+      ],
+    },
+    {
+      heading: "push / pull: o mesmo SSH, com retomada, somas de verificação e progresso",
+      body: [
+        "relayium push e relayium pull se conectam pelo acesso SSH idêntico ao que o scp usa — mesmo host, mesma chave, mesma porta. A diferença está no que acontece depois que a conexão é aberta.",
+        "Cada arquivo é verificado de ponta a ponta com um hash SHA-256 após chegar, de modo que uma transferência que parece concluída realmente corresponde, byte a byte, ao que foi enviado. Se uma transferência é interrompida — uma conexão caída, a tampa de um notebook fechada — reexecutar o mesmo comando retoma de onde parou em vez de reenviar tudo, e você vê progresso real por arquivo o tempo todo, não uma cópia silenciosa.",
+        "A maior diferença prática é o que acontece quando o remoto não tem o relayium instalado. push verifica isso automaticamente e, se não estiver, recorre a transmitir um simples arquivo tar pela mesma conexão SSH para um tar -x do outro lado — assim, push continua funcionando contra um servidor totalmente vazio, sem nada para instalar antes. Esse plano de reserva é exclusivo do push: pull sempre precisa do relayium já instalado no remoto, porque num pull a máquina remota é a que atua como remetente.",
+      ],
+      code: [
+        "relayium push ./photos user@your-server:backups/",
+        "relayium pull user@your-server:backups/ ./restore",
+      ],
+    },
+    {
+      heading: "Além do SSH: daemon-direct e emparelhamento entre redes",
+      body: [
+        "O scp só funciona onde você tem acesso SSH. A CLI do Relayium acrescenta mais duas formas de mover arquivos para as quais o scp não tem equivalente.",
+        "relayium serve transforma uma máquina sua num destino daemon-direct acessível por TLS 1.3 fixado (pinned) — sem SSH, sem porta 22, a confiança se estabelece na primeira conexão (aprovada de forma interativa, ou pré-autorizada com relayium authorize para uso sem supervisão) e fica fixada dali em diante. Faça push direto para ela com um endereço relayium://.",
+        "Para enviar pela internet a alguém sobre quem você não tem nenhum acesso SSH, relayium send / receive emparelha, em vez disso, dois computadores com um código curto — ponto a ponto direto, com um código de verificação curto (SAS) que os dois lados comparam antes de qualquer byte se mover. O scp não tem resposta para esse caso; você precisaria antes de acesso SSH.",
+      ],
+      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf ABCD-1234"],
+    },
+    {
+      heading: "Espelhamento de pastas: sync versus reexecutar scp -r",
+      body: [
+        "Copiar uma pasta inteira repetidamente com scp -r significa reenviar tudo toda vez, sem nenhuma noção do que mudou ou do que deveria ser removido. relayium sync constrói um espelho incremental unidirecional sobre push/pull ou daemon-direct: só os arquivos alterados se movem, --delete remove no destino os arquivos que sumiram da origem, e --watch continua ressincronizando em tempo real sempre que um arquivo muda localmente — sem precisar de tarefa cron.",
+      ],
+      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
+    },
+    {
+      heading: "Comparativo de recursos num relance",
+      body: ["As diferenças que mais importam, lado a lado:"],
+      bullets: [
+        "Disponibilidade: o scp vem pré-instalado em praticamente todo servidor; a CLI do Relayium é um único binário que você instala uma vez com um comando.",
+        "Retomada: o scp reinicia do zero uma transferência interrompida; push/pull retomam de onde pararam.",
+        "Integridade: o scp não verifica o conteúdo depois; cada transferência do Relayium é checada com um hash SHA-256 por arquivo.",
+        "Servidores vazios: o scp não precisa de nada extra, e push funciona do mesmo jeito via sua reserva com tar quando o relayium não está instalado no remoto (pull precisa do relayium no remoto, sem reserva).",
+        "Além do SSH: o scp só funciona por SSH; o Relayium também oferece daemon-direct (TLS fixado, sem SSH) e transferências por código de emparelhamento entre redes (send/receive) que não precisam de nenhum acesso SSH.",
+        "Espelhamento de pastas: scp -r reenvia tudo toda vez; relayium sync espelha de forma incremental com --delete e --watch.",
+        "Custo e licença: ambos gratuitos; o scp vem com o OpenSSH, a CLI do Relayium é licenciada sob MIT e de código aberto.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "A CLI do Relayium precisa de conta?",
+        a: "Não. push/pull usa seu próprio acesso SSH exatamente como o scp — sem conta Relayium, sem fazer login, para qualquer modo da CLI.",
+      },
+      {
+        q: "push funciona se o servidor remoto não tiver o Relayium instalado?",
+        a: "Sim. push verifica primeiro e, se o relayium não estiver lá, recorre a um simples fluxo tar pela mesma conexão SSH, de modo que continua funcionando contra um servidor vazio. Esse plano de reserva é exclusivo do push — pull sempre precisa do relayium já instalado no remoto, já que o remoto atua como remetente num pull.",
+      },
+      {
+        q: "É mesmo tão simples de usar quanto o scp?",
+        a: "Os comandos se parecem: relayium push src user@host:dest em vez de scp -r src user@host:dest. A diferença só aparece quando algo dá errado — uma conexão caída é retomada em vez de reiniciar, e cada arquivo é verificado por soma de verificação na chegada.",
+      },
+      {
+        q: "Quando devo simplesmente usar o scp?",
+        a: "Para uma cópia pontual de verdade em que nada precisa ser retomado, nada precisa ser verificado e você não quer nenhum binário extra, o scp já está ali e é a escolha mais simples. Também é a opção padrão mais segura dentro de scripts rápidos em que você não quer uma nova dependência.",
+      },
+      {
+        q: "A CLI do Relayium é gratuita?",
+        a: "Sim, totalmente — sem nível pago, licenciada sob MIT e de código aberto, e cada modo conecta as duas pontas diretamente.",
+      },
+    ],
+  },
+  cta: {
+    text: "Instale a CLI gratuita do Relayium e experimente push ou pull com o acesso SSH que você já tem.",
+    button: "Obter a CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "compare/scp",
   updated: "2026-07-12",
-  langs: withInstall({ en, zh, ja, ko, de, fr, ar }),
+  langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

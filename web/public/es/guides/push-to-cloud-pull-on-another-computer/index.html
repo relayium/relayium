@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sube archivos a la nube y recógelos en otro ordenador · Relayium</title>
+    <meta name="description" content="Transferencia de archivos asíncrona a través de tu cuenta de Relayium: sube desde una máquina con relayium up y descarga en otra con relayium down cuando te venga bien — cifrado de extremo a extremo, y solo subir necesita una cuenta." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/es/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Sube archivos a la nube y recógelos en otro ordenador" />
+    <meta property="og:description" content="Transferencia de archivos asíncrona a través de tu cuenta de Relayium: sube desde una máquina con relayium up y descarga en otra con relayium down cuando te venga bien — cifrado de extremo a extremo, y solo subir necesita una cuenta." />
+    <meta property="og:url" content="https://relayium.com/es/guides/push-to-cloud-pull-on-another-computer" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="es_ES" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Sube archivos a la nube y recógelos en otro ordenador" />
+    <meta name="twitter:description" content="Transferencia de archivos asíncrona a través de tu cuenta de Relayium: sube desde una máquina con relayium up y descarga en otra con relayium down cuando te venga bien — cifrado de extremo a extremo, y solo subir necesita una cuenta." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Sube archivos a la nube y recógelos en otro ordenador","description":"Transferencia de archivos asíncrona a través de tu cuenta de Relayium: sube desde una máquina con relayium up y descarga en otra con relayium down cuando te venga bien — cifrado de extremo a extremo, y solo subir necesita una cuenta.","inLanguage":"es","dateModified":"2026-07-12","mainEntityOfPage":"https://relayium.com/es/guides/push-to-cloud-pull-on-another-computer","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿Necesito una cuenta?","acceptedAnswer":{"@type":"Answer","text":"Solo para subir. relayium up requiere relayium login; relayium down no necesita cuenta, y cualquier otro comando de la CLI (push/pull, send/receive, daemon-direct, sync) funciona sin una."}},{"@type":"Question","name":"¿Está cifrado mi archivo?","acceptedAnswer":{"@type":"Answer","text":"Sí, de extremo a extremo. Se cifra en tu máquina antes de subirse; la clave vive solo en el fragmento #k= del enlace y nunca se envía al servidor. Relayium almacena texto cifrado que no puede leer, incluidos los nombres de los archivos."}},{"@type":"Question","name":"¿Y si pierdo el enlace?","acceptedAnswer":{"@type":"Answer","text":"El enlace lleva la única copia de la clave de descifrado, así que un enlace perdido significa un archivo irrecuperable — no hay nada en el servidor que pueda recuperarlo."}},{"@type":"Question","name":"¿Puedo limitar quién lo descarga?","acceptedAnswer":{"@type":"Answer","text":"Cualquiera con el enlace puede descargar, así que compártelo en privado. Usa --burn para permitir una sola descarga, o --max-downloads \u003cn> para limitar el número, y --ttl \u003cduración> para que caduque tras un tiempo fijo."}},{"@type":"Question","name":"¿Funciona con el sitio web?","acceptedAnswer":{"@type":"Answer","text":"Sí. Un enlace de relayium up se abre en un navegador, y un enlace para compartir creado en relayium.com puede recogerse con relayium down en otra máquina."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+    <style>
+.builder{margin:16px 0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
+.builder .bf{display:block;margin:0 0 12px}
+.builder .bf span{display:block;font-size:14px;color:var(--text);margin:0 0 5px}
+.builder .bf input{width:100%;font:15px ui-monospace,SFMono-Regular,Menlo,monospace;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h)}
+.builder .bcmd{margin:14px 0 0}
+.builder .bcmd pre{margin:0}
+.builder .bcopy{margin:10px 0 0;padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h);font:inherit;font-size:14px;cursor:pointer}
+.builder .bcopy:hover{border-color:var(--accent)}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=es">Relayium</a></header>
+      <h1>Sube archivos a la nube y recógelos en otro ordenador</h1>
+      <p class="updated">Última actualización: 2026-07-12</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/push-to-cloud-pull-on-another-computer">English</a><a href="/zh/guides/push-to-cloud-pull-on-another-computer">中文</a><a href="/ja/guides/push-to-cloud-pull-on-another-computer">日本語</a><a href="/ko/guides/push-to-cloud-pull-on-another-computer">한국어</a><a href="/de/guides/push-to-cloud-pull-on-another-computer">Deutsch</a><a href="/fr/guides/push-to-cloud-pull-on-another-computer">Français</a><a href="/ar/guides/push-to-cloud-pull-on-another-computer">العربية</a><a href="/es/guides/push-to-cloud-pull-on-another-computer" aria-current="true">Español</a><a href="/pt/guides/push-to-cloud-pull-on-another-computer">Português</a></nav>
+      <p class="lead">A veces los dos ordenadores nunca están despiertos a la vez. Quieres soltar un archivo desde el portátil del trabajo esta noche y cogerlo desde el sobremesa de casa mañana, sin que nadie espere una conexión en directo. relayium up y relayium down hacen exactamente eso: up cifra y sube a tu cuenta, y down lo recupera y lo descifra después en cualquier máquina — sin apretón de manos de igual a igual, sin un servidor al que ambos entréis por ssh.</p>
+      <p class="lead">Esta es la única parte de la CLI que usa tu cuenta de Relayium, y solo para las subidas. La vinculación es opcional: todo lo demás — push/pull, send/receive, daemon-direct, sync — sigue funcionando sin iniciar sesión. Descargar no necesita ninguna cuenta, solo el enlace.</p>
+      <h2>Cuándo recurrir a ello</h2>
+      <p>Elige el modo según si el otro extremo está en línea y cómo se alcanzan las dos máquinas entre sí:</p>
+      <ul><li>up / down (esta guía) — las dos máquinas nunca están en línea a la vez. Subes ahora; tú (u otra máquina) descargas después. Pasa por tu cuenta.</li><li>send / receive — ambos extremos están en línea ahora mismo y quieren una transferencia directa de igual a igual con un código de un solo uso.</li><li>push / pull — ya puedes entrar por ssh a la máquina remota.</li><li>Todo excepto up se hace sin cuenta; solo up requiere relayium login.</li></ul>
+      <h2>Antes de empezar</h2>
+      <p>Dos cosas de una sola vez antes de tu primer up — instalar la CLI y tener una cuenta. ¿Ya tienes ambas? Sáltate esto.</p>
+      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>Instala la CLI para que exista el comando relayium. La línea de arriba deja un binario precompilado en tu PATH (macOS y Linux; en Windows, coge el .zip de la página de releases); relayium --version lo confirma, y relayium.com/cli lista todas las opciones de instalación. Sáltate esto y relayium login solo imprimirá &#39;command not found&#39;.</li><li>Ten una cuenta gratuita de Relayium. El paso del navegador aprueba el inicio de sesión contra tu cuenta, así que necesitas una antes de poder aprobar — inicia sesión primero en relayium.com, o crea una allí si no la tienes. Solo subir necesita la cuenta; descargar nunca.</li></ul>
+      <h2>Vincula esta máquina a tu cuenta (una vez)</h2>
+      <p>up necesita saber bajo qué cuenta almacenar, así que inicia sesión una vez por máquina. Es un inicio de sesión de dispositivo aprobado en el navegador — no se escribe nada en la terminal salvo el código que confirmas:</p>
+      <pre><code>relayium login</code></pre>
+      <ul><li>La CLI imprime un código corto y una URL (relayium.com/device). Ábrela en el navegador donde has iniciado sesión en relayium.com (inicia sesión allí primero si no lo has hecho), introduce el código y aprueba — esta máquina queda ahora vinculada.</li><li>El inicio de sesión se guarda en ~/.config/relayium/, así que solo lo haces una vez por máquina. relayium whoami muestra a quién estás vinculado; relayium logout lo borra.</li><li>Para revocar una máquina más adelante, elimina su dispositivo desde la página de dispositivos de tu cuenta en el navegador.</li></ul>
+      <h2>Sube desde el primer ordenador</h2>
+      <p>up recorre los archivos que le das, los cifra localmente, sube el texto cifrado e imprime un enlace de recogida:</p>
+      <pre><code>relayium up ./report.pdf
+#   → https://relayium.com/d/7fK2p…#k=Xr8s…</code></pre>
+      <pre><code># choose how long it lives (otherwise your account&#39;s default applies):
+relayium up ./report.pdf --burn              # deleted after one download
+relayium up ./report.pdf --ttl 7d            # kept for 7 days
+relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone</code></pre>
+      <ul><li>El enlace es toda la entrega — cópialo a donde la otra máquina pueda leerlo. Cualquiera con el enlace puede descargar el archivo, así que trátalo como una contraseña.</li><li>Retención: --burn elimina el archivo tras una sola descarga; --ttl &lt;duración&gt; lo conserva un tiempo fijo (p. ej. 7d, 24h); --max-downloads &lt;n&gt; permite un número fijo de descargas. Si no das ninguno, se aplica el valor por defecto de tu cuenta.</li><li>up necesita que hayas iniciado sesión; si no lo has hecho, te lo dice y no hace nada.</li></ul>
+      <h2>Descarga en el segundo ordenador</h2>
+      <p>En la otra máquina, pasa el enlace a down. Sin iniciar sesión, sin configuración — la clave que descifra el archivo está dentro del enlace, así que down no necesita nada de tu cuenta:</p>
+      <pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads</code></pre>
+      <div class="builder" data-download-builder><label class="bf"><span>Tu enlace para compartir</span><input data-link type="text" placeholder="https://relayium.com/d/…#k=…" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" data-token="tu enlace" /></label><label class="bf"><span>Guardar en (pega la salida de tu pwd)</span><input data-dest type="text" placeholder="/home/you/downloads" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" /></label><div class="bcmd"><pre><code data-cmd>relayium down &#39;&lt;tu enlace&gt;&#39; &lt;directorio de destino&gt;</code></pre><button type="button" class="bcopy" data-copy data-copied="Copiado" hidden>Copiar comando</button></div></div>
+      <ul><li>Pon el enlace entre comillas: el fragmento #k=… lleva la clave de descifrado, y algunas shells tratan # como el inicio de un comentario.</li><li>Da un directorio de destino (aquí ./downloads) u omítelo para caer en el directorio actual.</li><li>Si el archivo estaba en modo de un solo uso, ha alcanzado su límite de descargas o ha caducado, el enlace está agotado y down informa de que ya no existe.</li></ul>
+      <h2>Funciona también con el sitio web</h2>
+      <p>El enlace es el mismo que usa el sitio web, así que la CLI y el navegador interoperan libremente:</p>
+      <ul><li>Un enlace de relayium up se abre en un navegador — dáselo a alguien que no tenga la CLI y descargará desde la web.</li><li>Un enlace para compartir creado en relayium.com puede recogerse con relayium down en otra máquina.</li></ul>
+      <h2>Qué puede ver el servidor y qué no</h2>
+      <p>Las transferencias en la nube siguen cifradas de extremo a extremo:</p>
+      <ul><li>Tu archivo se cifra en tu máquina antes de subirse. La clave de descifrado vive solo en el fragmento #k= del enlace y nunca se envía al servidor — Relayium almacena texto cifrado que no puede leer, incluidos los nombres de los archivos.</li><li>Eso también significa que el enlace es la única vía de vuelta al archivo: si lo pierdes, el archivo es irrecuperable, ni por ti ni por nosotros.</li></ul>
+      <h2>Preguntas frecuentes</h2>
+      <h3>¿Necesito una cuenta?</h3>
+      <p>Solo para subir. relayium up requiere relayium login; relayium down no necesita cuenta, y cualquier otro comando de la CLI (push/pull, send/receive, daemon-direct, sync) funciona sin una.</p>
+      <h3>¿Está cifrado mi archivo?</h3>
+      <p>Sí, de extremo a extremo. Se cifra en tu máquina antes de subirse; la clave vive solo en el fragmento #k= del enlace y nunca se envía al servidor. Relayium almacena texto cifrado que no puede leer, incluidos los nombres de los archivos.</p>
+      <h3>¿Y si pierdo el enlace?</h3>
+      <p>El enlace lleva la única copia de la clave de descifrado, así que un enlace perdido significa un archivo irrecuperable — no hay nada en el servidor que pueda recuperarlo.</p>
+      <h3>¿Puedo limitar quién lo descarga?</h3>
+      <p>Cualquiera con el enlace puede descargar, así que compártelo en privado. Usa --burn para permitir una sola descarga, o --max-downloads &lt;n&gt; para limitar el número, y --ttl &lt;duración&gt; para que caduque tras un tiempo fijo.</p>
+      <h3>¿Funciona con el sitio web?</h3>
+      <p>Sí. Un enlace de relayium up se abre en un navegador, y un enlace para compartir creado en relayium.com puede recogerse con relayium down en otra máquina.</p>
+      <div class="ctacard">
+        <p>¿Listo para mover un archivo entre tus propias máquinas? Instala la CLI, ejecuta relayium login y súbelo con up.</p>
+        <a class="cta" href="/cli">Obtener la CLI</a>
+      </div>
+      <h2>Sigue leyendo</h2>
+      <ul class="related"><li><a href="/es/compare/snapdrop">Relayium vs Snapdrop y PairDrop: ¿qué transferencia P2P segura?</a></li><li><a href="/es/compare/airdrop">Relayium vs AirDrop: una alternativa a AirDrop multiplataforma</a></li><li><a href="/es/compare/wetransfer">Relayium vs WeTransfer: envía archivos grandes sin el servidor</a></li><li><a href="/es/how-to/transfer-files-android-to-iphone">Cómo transferir archivos de Android a iPhone (sin cable)</a></li><li><a href="/es/how-to/send-files-pc-to-phone-wirelessly">Enviar archivos del PC al teléfono sin cables, sin cable ni app</a></li><li><a href="/es/how-to/send-large-files-without-cloud">Cómo enviar archivos grandes sin la nube</a></li><li><a href="/es/guides/transfer-files-from-terminal">Transfiere archivos desde la terminal con la CLI de Relayium</a></li><li><a href="/es/guides/back-up-a-server-over-ssh">Haz copias de seguridad de archivos en tu propio servidor por SSH con la CLI de Relayium</a></li><li><a href="/es/guides/send-a-file-to-someone">Enviar un archivo a alguien entre redes con la CLI de Relayium</a></li><li><a href="/es/guides/server-to-server-transfers">Transferencias de servidor a servidor con la CLI de Relayium (daemon direct)</a></li><li><a href="/es/guides/sync-a-large-folder-between-servers">Sincronizar una carpeta grande entre dos servidores (reanudable, en segundo plano)</a></li><li><a href="/es/how-to/share-a-file-with-an-expiring-link">Compartir un archivo con un enlace de descarga seguro y con caducidad</a></li><li><a href="/es/guides/self-host-relayium">Aloja Relayium por tu cuenta: ejecuta tu propio servidor de transferencia de archivos</a></li><li><a href="/es/how-to/send-files-between-two-computers-over-the-internet">Enviar archivos entre dos computadoras por Internet</a></li><li><a href="/es/compare/croc">Relayium vs croc: transferencia de archivos cifrada desde la terminal</a></li><li><a href="/es/guides/how-relayium-encrypts-your-files">Cómo Relayium cifra tus archivos de extremo a extremo</a></li><li><a href="/es/compare/google-drive">Relayium frente a Google Drive para enviar archivos</a></li><li><a href="/es/compare/rsync">Relayium vs rsync: sincroniza carpetas sin la configuración de SSH</a></li><li><a href="/es/compare/firefox-send">La mejor alternativa a Firefox Send en 2026</a></li><li><a href="/es/how-to/transfer-files-by-scanning-a-qr-code">Transferir archivos escaneando un código QR</a></li><li><a href="/es/guides/receive-files-from-the-command-line">Recibir archivos desde la línea de comandos</a></li><li><a href="/es/how-to/send-a-folder">Cómo enviar una carpeta entera, no solo archivos</a></li><li><a href="/es/guides/run-relayium-as-an-always-on-service">Ejecuta Relayium como un servicio de recepción siempre activo</a></li><li><a href="/es/how-to/automate-server-backups">Automatiza copias de seguridad cifradas del servidor con una tarea cron</a></li><li><a href="/es/compare/localsend">Relayium frente a LocalSend: qué transferencia local usar</a></li><li><a href="/es/compare/scp">Relayium vs scp: transferencia de archivos más sencilla por SSH</a></li><li><a href="/es/compare/magic-wormhole">Relayium vs magic-wormhole: transferencia de archivos por CLI</a></li><li><a href="/es/compare/nextcloud">Relayium vs Nextcloud para enviar archivos</a></li><li><a href="/es/compare/dropbox">Relayium vs Dropbox para enviar un archivo</a></li><li><a href="/es/how-to/airdrop-for-windows-and-android">AirDrop para Windows, Linux y Android</a></li><li><a href="/es/how-to/transfer-files-between-mac-and-windows">Transferir archivos entre un Mac y un PC con Windows</a></li><li><a href="/es/how-to/send-files-on-the-same-wifi">Enviar archivos entre dispositivos en la misma Wi-Fi</a></li><li><a href="/es/guides/what-is-peer-to-peer-file-transfer">¿Qué es la transferencia de archivos de igual a igual?</a></li><li><a href="/es/guides/is-it-safe-to-send-files-over-the-internet">¿Es seguro enviar archivos por internet?</a></li><li><a href="/es/guides/bring-your-own-node">Usa tu propio nodo: aprovecha el retransmisor y el almacenamiento de Relayium gratis</a></li><li><a href="/es/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=es">← Relayium</a>
+        <a href="/es/guides">Guías</a>
+        <a href="/es/privacy">undefined</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+    <script>
+(function(){
+  function q(s){return /^[\w@%+=:,.\/-]+$/.test(s)?s:"'"+s.replace(/'/g,"'\\''")+"'";}
+  document.querySelectorAll('[data-download-builder]').forEach(function(b){
+    var link=b.querySelector('[data-link]'),dest=b.querySelector('[data-dest]'),
+        out=b.querySelector('[data-cmd]'),copy=b.querySelector('[data-copy]');
+    function render(){
+      var l=link.value.trim()||('<'+(link.getAttribute('data-token')||'link')+'>');
+      var d=dest.value.trim();
+      out.textContent="relayium down '"+l+"' "+(d?q(d):".");
+    }
+    link.addEventListener('input',render);
+    dest.addEventListener('input',render);
+    if(copy){
+      copy.hidden=false;
+      copy.addEventListener('click',function(){
+        navigator.clipboard.writeText(out.textContent).then(function(){
+          var o=copy.textContent;copy.textContent=copy.getAttribute('data-copied')||o;
+          setTimeout(function(){copy.textContent=o;},1500);
+        }).catch(function(){});
+      });
+    }
+    render();
+  });
+})();
+</script>
+  </body>
+</html>

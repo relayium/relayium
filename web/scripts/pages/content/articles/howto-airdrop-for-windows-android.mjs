@@ -538,8 +538,160 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "AirDrop para Windows, Linux y Android",
+  description:
+    "No existe un AirDrop oficial para Windows, Linux ni Android — esto es lo más parecido: compartir al instante en la misma Wi-Fi desde el navegador, sin cuenta, sin instalación, además de una forma de llegar a través de internet que AirDrop no puede.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "AirDrop solo existe dentro del mundo de Apple, lo que deja a todos los demás — Windows, Linux, Android y cualquier hogar con una mezcla de dispositivos — sin un equivalente integrado. Esta guía muestra lo más parecido a AirDrop para dispositivos que no son de Apple: abre una página web en ambos extremos y el archivo simplemente se mueve.",
+    "Funciona igual sea cual sea la plataforma, así que también cubre el caso que AirDrop nunca gestiona bien: un portátil con Windows, un ordenador de escritorio con Linux y un teléfono Android todos en la misma habitación, o los tres más un iPhone añadido.",
+  ],
+  sections: [
+    {
+      heading: "El flujo tipo AirDrop: misma Wi-Fi, en el navegador",
+      body: [
+        "Este es el caso cotidiano para el que se creó AirDrop, y Relayium lo iguala sin necesidad de una app de ninguna tienda.",
+      ],
+      bullets: [
+        "En cada dispositivo, abre relayium.com en cualquier navegador moderno — Chrome o Edge en Windows, Firefox o Chrome en Linux, Chrome en Android.",
+        "En la misma Wi-Fi, los dispositivos se encuentran automáticamente — sin código, sin cuenta, sin paso de emparejamiento, igual que AirDrop descubre los dispositivos cercanos.",
+        "Arrastra archivos a la página (o una carpeta entera — hasta 1.000 archivos por lote), elige el otro dispositivo y confirma el código de 6 dígitos coincidente que se muestra en ambas pantallas.",
+        "La transferencia se ejecuta directamente, de igual a igual, por tu propia red — nada se sube a un servidor en medio.",
+      ],
+    },
+    {
+      heading: "A través de internet: algo que AirDrop no puede hacer",
+      body: [
+        "AirDrop es solo de cercanía — sal del alcance de Bluetooth/Wi-Fi y deja de funcionar. El segundo modo de Relayium cubre exactamente ese hueco: dos dispositivos en redes completamente distintas, en cualquier parte del mundo.",
+        "El remitente inicia sesión y obtiene un código de emparejamiento corto (con un enlace para unirse y un código QR); el destinatario lo introduce, escanea el QR o abre el enlace — y nunca necesita una cuenta. Los dos dispositivos se conectan entonces directamente siempre que las redes lo permitan; cuando no es posible un camino directo, el flujo cifrado recurre a un retransmisor TURN que solo ve texto cifrado, así que sigue cifrado de extremo a extremo todo el trayecto. Una conexión caída puede reanudarse en lugar de empezar de cero.",
+      ],
+    },
+    {
+      heading: "Qué protege realmente el archivo",
+      body: [
+        "Ambos modos anteriores son transferencias en tiempo real, y ambos usan el mismo cifrado: un intercambio de claves X25519 deriva una clave que se usa para AES-256-GCM por fragmento, negociada solo entre los dos dispositivos. Ambos lados muestran el mismo código de verificación de 6 dígitos (una Short Authentication String) para que puedas confirmar que nadie está en medio, y cada archivo se comprueba de extremo a extremo con un hash SHA-256.",
+        "En este modo no se almacena nada en un servidor — existe solo durante la transferencia. Relayium es de código abierto bajo la licencia MIT en github.com/relayium/relayium, así que su mecánica es auditable en lugar de una caja negra.",
+      ],
+    },
+    {
+      heading: "Los límites prácticos, con honestidad",
+      body: [
+        "Como el archivo nunca aterriza en un servidor, no hay cuota de subida — el límite real es qué navegador está recibiendo. En Windows, Linux o Android con Chrome o Edge, los datos entrantes se transmiten directamente al disco, así que los archivos de varios gigabytes no dan problema. En un receptor con Firefox o Safari de iOS dentro de un conjunto mixto, el archivo se almacena en memoria en su lugar, así que mantén esas transferencias por debajo de unos 200 MB.",
+        "Las carpetas también funcionan: elige una carpeta en el escritorio (no en iOS) y se conservan las rutas relativas. Si el navegador receptor puede escribir directamente en un directorio elegido (Chrome, Edge) los archivos se colocan en su sitio; si no (Firefox, Safari) toda la carpeta llega como un único .zip que se descomprime con la misma estructura.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Hay una app oficial de AirDrop para Windows o Android?",
+        a: "No — AirDrop es exclusivo de los dispositivos de Apple y Apple nunca ha lanzado un cliente para Windows ni Android. Relayium es un equivalente basado en navegador: abre relayium.com en ambos dispositivos y funciona igual sea cual sea la plataforma, incluidas las parejas mixtas de Apple y no Apple.",
+      },
+      {
+        q: "¿Necesito una cuenta?",
+        a: "No para el flujo en la misma Wi-Fi — abre la página en ambos dispositivos y se descubren, sin ningún inicio de sesión. Enviar entre redes distintas con un código de emparejamiento requiere que el remitente inicie sesión; la persona que recibe nunca necesita una cuenta, en ninguno de los dos modos de red.",
+      },
+      {
+        q: "¿Necesito instalar algo?",
+        a: "No. Es una página web en todas las plataformas — Windows, Linux, macOS, Android e iOS — así que no hay nada que descargar de una tienda ni nada que mantener actualizado.",
+      },
+      {
+        q: "¿En qué se diferencia esto de la comparativa Relayium frente a AirDrop?",
+        a: "Ese artículo es un análisis frente a frente de dónde AirDrop es genuinamente mejor (hogares puramente de Apple) y dónde se queda corto. Esta guía es el tutorial para conseguir de verdad la experiencia tipo AirDrop cuando al menos un dispositivo no es de Apple.",
+      },
+      {
+        q: "¿Puede enviar a un grupo, como hace AirDrop?",
+        a: "En la misma red, sí — la sala local no se limita a dos dispositivos, así que más de un dispositivo cercano puede recibir a la vez. El modo con código de emparejamiento para enviar a través de internet es una conexión directa entre dos dispositivos.",
+      },
+    ],
+  },
+  cta: {
+    text: "Abre Relayium en tu dispositivo Windows, Linux o Android y en aquel al que envías — sin cuenta necesaria en la misma red.",
+    button: "Prueba Relayium ahora",
+  },
+  relatedHeading: "Seguir leyendo",
+};
+
+const pt = {
+  title: "AirDrop para Windows, Linux e Android",
+  description:
+    "Não existe um AirDrop oficial para Windows, Linux ou Android — aqui está o mais próximo: compartilhamento instantâneo na mesma Wi-Fi pelo navegador, sem conta, sem instalação, além de um jeito de alcançar pela internet que o AirDrop não consegue.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "O AirDrop só existe dentro do mundo da Apple, o que deixa todos os demais — Windows, Linux, Android e qualquer casa com uma mistura de dispositivos — sem um equivalente embutido. Este guia mostra o mais próximo do AirDrop para dispositivos que não são da Apple: abra uma página web nas duas pontas e o arquivo simplesmente se move.",
+    "Funciona da mesma forma independentemente da plataforma, então também cobre o caso que o AirDrop nunca lida bem: um notebook com Windows, um desktop com Linux e um celular Android todos na mesma sala, ou os três mais um iPhone incluído.",
+  ],
+  sections: [
+    {
+      heading: "O fluxo estilo AirDrop: mesma Wi-Fi, no navegador",
+      body: [
+        "Este é o caso do dia a dia para o qual o AirDrop foi feito, e o Relayium o iguala sem precisar de um app de nenhuma loja.",
+      ],
+      bullets: [
+        "Em cada dispositivo, abra relayium.com em qualquer navegador moderno — Chrome ou Edge no Windows, Firefox ou Chrome no Linux, Chrome no Android.",
+        "Na mesma Wi-Fi, os dispositivos se encontram automaticamente — sem código, sem conta, sem etapa de emparelhamento, assim como o AirDrop descobre dispositivos próximos.",
+        "Arraste arquivos para a página (ou uma pasta inteira — até 1.000 arquivos por lote), escolha o outro dispositivo e confirme o código de 6 dígitos correspondente exibido nas duas telas.",
+        "A transferência ocorre diretamente, ponto a ponto, pela sua própria rede — nada é enviado para um servidor no meio.",
+      ],
+    },
+    {
+      heading: "Pela internet: algo que o AirDrop não consegue fazer",
+      body: [
+        "O AirDrop é só de proximidade — saia do alcance de Bluetooth/Wi-Fi e ele para de funcionar. O segundo modo do Relayium cobre exatamente essa lacuna: dois dispositivos em redes completamente diferentes, em qualquer lugar do mundo.",
+        "O remetente entra e recebe um código de emparelhamento curto (com um link de entrada e um código QR); o destinatário o digita, escaneia o QR ou abre o link — e nunca precisa de conta. Os dois dispositivos então se conectam diretamente sempre que as redes permitirem; quando um caminho direto não é possível, o fluxo criptografado recorre a um retransmissor TURN que só vê texto cifrado, então permanece criptografado de ponta a ponta o caminho todo. Uma conexão caída pode ser retomada em vez de recomeçar do zero.",
+      ],
+    },
+    {
+      heading: "O que realmente protege o arquivo",
+      body: [
+        "Ambos os modos acima são transferências em tempo real, e ambos usam a mesma criptografia: uma troca de chaves X25519 deriva uma chave usada para AES-256-GCM por bloco, negociada apenas entre os dois dispositivos. Os dois lados exibem o mesmo código de verificação de 6 dígitos (uma Short Authentication String) para que você possa confirmar que ninguém está no meio, e cada arquivo é verificado de ponta a ponta com um hash SHA-256.",
+        "Nesse modo, nada é armazenado em um servidor — existe apenas durante a transferência. O Relayium é de código aberto sob a licença MIT em github.com/relayium/relayium, então a mecânica é auditável em vez de uma caixa-preta.",
+      ],
+    },
+    {
+      heading: "Os limites práticos, com honestidade",
+      body: [
+        "Como o arquivo nunca aterrissa em um servidor, não há cota de upload — o limite real é qual navegador está recebendo. No Windows, Linux ou Android com Chrome ou Edge, os dados que chegam são gravados direto no disco, então arquivos de vários gigabytes não são problema. Em um receptor com Firefox ou Safari do iOS em um conjunto misto, o arquivo é armazenado na memória, então mantenha essas transferências abaixo de cerca de 200 MB.",
+        "Pastas também funcionam: escolha uma pasta no desktop (não no iOS) e os caminhos relativos são preservados. Se o navegador receptor puder gravar direto em um diretório escolhido (Chrome, Edge), os arquivos ficam em seus lugares; caso contrário (Firefox, Safari), a pasta inteira chega como um único .zip que se descompacta com a mesma estrutura.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "Existe um app oficial do AirDrop para Windows ou Android?",
+        a: "Não — o AirDrop é exclusivo dos dispositivos da Apple e a Apple nunca lançou um cliente para Windows ou Android. O Relayium é um equivalente baseado em navegador: abra relayium.com nos dois dispositivos e ele funciona da mesma forma independentemente da plataforma, inclusive em pares mistos de Apple e não Apple.",
+      },
+      {
+        q: "Preciso de uma conta?",
+        a: "Não para o fluxo na mesma Wi-Fi — abra a página nos dois dispositivos e eles se descobrem, sem nenhum login. Enviar entre redes diferentes com um código de emparelhamento exige que o remetente entre; a pessoa que recebe nunca precisa de conta, em nenhum dos dois modos de rede.",
+      },
+      {
+        q: "Preciso instalar alguma coisa?",
+        a: "Não. É uma página web em toda plataforma — Windows, Linux, macOS, Android e iOS — então não há nada para baixar de uma loja nem nada para manter atualizado.",
+      },
+      {
+        q: "Qual a diferença entre isto e a comparação Relayium versus AirDrop?",
+        a: "Aquele artigo é uma análise frente a frente de onde o AirDrop é genuinamente melhor (casas puramente Apple) e onde ele fica aquém. Este guia é o tutorial para de fato obter a experiência estilo AirDrop quando pelo menos um dispositivo não é da Apple.",
+      },
+      {
+        q: "Dá para enviar para um grupo, como o AirDrop faz?",
+        a: "Na mesma rede, sim — a sala local não se limita a dois dispositivos, então mais de um dispositivo próximo pode receber ao mesmo tempo. O modo por código de emparelhamento para envio pela internet é uma conexão direta entre dois dispositivos.",
+      },
+    ],
+  },
+  cta: {
+    text: "Abra o Relayium no seu dispositivo Windows, Linux ou Android e naquele para o qual está enviando — sem conta necessária na mesma rede.",
+    button: "Experimente o Relayium agora",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "how-to/airdrop-for-windows-and-android",
   updated: "2026-07-09",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

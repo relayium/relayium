@@ -655,8 +655,194 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "¿Qué es la transferencia de archivos de igual a igual?",
+  description:
+    "Una explicación en lenguaje sencillo de la transferencia de archivos P2P: en qué se diferencia de subir a un servidor, cómo se encuentra una conexión WebRTC directa y por qué es privada y rápida.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "«De igual a igual» se usa de forma imprecisa, así que esto es lo que realmente significa para una transferencia de archivos: tu archivo va directamente de un dispositivo al otro, no sube al servidor de una empresa y vuelve a bajar. No hay parada intermedia donde pueda quedarse una copia.",
+    "Suena sencillo, pero internet no está hecho para que dos dispositivos cualesquiera simplemente se encuentren y hablen directamente: la mayoría de las conexiones se esconden detrás de routers y cortafuegos que nunca se diseñaron para ser alcanzados desde fuera. Esta página explica, en términos claros, cómo se establece realmente una conexión directa, cuándo no puede establecerse y qué significa eso para tu privacidad y tu velocidad. Se usa Relayium como ejemplo concreto a lo largo de todo el texto, ya que es una implementación funcional de exactamente esto.",
+  ],
+  sections: [
+    {
+      heading: "P2P frente a la forma habitual: eliminar la parada intermedia",
+      body: [
+        "La mayoría de las herramientas para «enviar un archivo» funcionan por subida: tu archivo va desde tu dispositivo hasta el servidor de la empresa, se almacena allí y la otra persona lo descarga de vuelta. Son dos saltos y, durante un tiempo, una copia completa de tu archivo reside en el almacenamiento de otra persona, aunque se elimine después.",
+        "La transferencia de igual a igual se salta esa parada. Una vez que hay una conexión abierta entre tu dispositivo y el de la otra persona, los bytes del archivo fluyen directamente por ese único salto y por ningún otro sitio. No hay copia del lado del servidor que almacenar, proteger ni acabar eliminando, porque nunca se subió en primer lugar.",
+      ],
+      bullets: [
+        "Transferencia basada en subida: de tu dispositivo a un servidor y luego a su dispositivo — dos saltos, una copia almacenada en medio.",
+        "Transferencia de igual a igual: de tu dispositivo directamente a su dispositivo — un salto, nada almacenado.",
+        "En Relayium, esto es el modo en tiempo real: abre el sitio en ambos dispositivos, conéctalos y el archivo se transmite directamente, de navegador a navegador.",
+      ],
+    },
+    {
+      heading: "Cómo se encuentran realmente dos dispositivos: STUN",
+      body: [
+        "Aquí está la parte que no es obvia: tu dispositivo casi con toda seguridad no conoce su propia dirección tal como se ve desde la internet pública — está detrás de un router doméstico o de la traducción de direcciones de red (NAT) de un operador móvil, que lo oculta tras una IP pública compartida y reasigna los puertos sobre la marcha. El otro dispositivo está en la misma situación. Ninguno de los dos puede simplemente «marcarle» al otro directamente sin averiguar antes qué dirección lo alcanzaría de verdad.",
+        "Para eso sirve STUN (Session Traversal Utilities for NAT). Cada dispositivo le hace brevemente una pregunta a un pequeño y ligero servidor STUN: «¿desde qué dirección y puerto me ves llegar?». La respuesta le dice su propia dirección visible desde el exterior — ni el archivo, ni ningún contenido, solo la información de red suficiente para describir un camino de vuelta hacia él. Ambos dispositivos intercambian esta información (mediante un paso de señalización que solo transporta detalles de establecimiento de la conexión, nunca bytes del archivo) y luego intentan abrir un camino directo hacia la dirección del otro. En una gran parte de los casos reales — especialmente dos dispositivos en la misma Wi-Fi, o NAT que se comportan de forma predecible — esto funciona y se abre una conexión totalmente directa.",
+      ],
+      bullets: [
+        "STUN solo llega a conocer y compartir direcciones de red — nunca el contenido de los archivos, sus nombres ni las claves de cifrado.",
+        "Relayium usa WebRTC para esto, la misma tecnología de conexión directa integrada en todos los navegadores modernos para las videollamadas — reutilizada aquí para mover bytes de archivos en lugar de fotogramas de vídeo.",
+        "Dos dispositivos en la misma red (sin necesidad de código) suelen conectarse de la forma más directa de todas, ya que a menudo no hay ningún NAT de por medio.",
+      ],
+    },
+    {
+      heading: "Cuando no se encuentra un camino directo: el retransmisor TURN",
+      body: [
+        "A veces STUN no basta. Algunos NAT — especialmente en redes corporativas más estrictas o en ciertos operadores móviles — son lo bastante impredecibles como para que no pueda descubrirse ningún camino directo solo con la información externa. Si ambos dispositivos están detrás de ese tipo de NAT, una conexión genuinamente directa simplemente no es posible; algo tiene que retransmitir el tráfico en medio.",
+        "Para eso está TURN (Traversal Using Relays around NAT): un servidor de retransmisión de reserva al que ambos dispositivos se conectan cuando falla un camino directo. No es tanto un truco o un compromiso con la privacidad como una necesidad derivada de cómo están construidas algunas redes — pero conviene ser precisos sobre qué ve y qué no. En Relayium, el archivo ya está cifrado de extremo a extremo antes de llegar al retransmisor, así que el retransmisor solo reenvía texto cifrado — datos sellados que no tiene ninguna clave para abrir. Mueve bytes; no puede leerlos.",
+      ],
+      bullets: [
+        "TURN solo se usa cuando realmente no puede encontrarse un camino directo — es un recurso de reserva, no la opción por defecto.",
+        "El retransmisor solo reenvía texto cifrado; nunca tiene la clave de descifrado y no puede leer el contenido de los archivos, sus nombres ni ninguna otra cosa sobre lo que hay dentro.",
+        "Si una transferencia concreta fue directa o pasó por un retransmisor puede verse en los diagnósticos de conexión de Relayium, para quien tenga la curiosidad de comprobarlo.",
+      ],
+    },
+    {
+      heading: "Por qué esto importa: privacidad y velocidad",
+      body: [
+        "El argumento de la privacidad es sencillo: cuando los bytes del archivo solo cruzan un único salto, directamente entre dos dispositivos, no hay ningún paso de almacenamiento del lado del servidor donde una copia pudiera quedarse, registrarse o ser accedida por otra persona — porque nunca se colocó ahí. Esa es una garantía estructuralmente distinta de un «prometemos borrarlo en algún momento».",
+        "El argumento de la velocidad sigue la misma lógica. Una transferencia de subida y luego descarga tiene que cruzar la red dos veces — una de subida, otra de bajada — y a menudo espera a que el lado emisor termine por completo antes de que el lado receptor pueda empezar. Una conexión directa cruza la red una sola vez, y los datos pueden fluir de forma continua entre los dos dispositivos tan rápido como lo permita la conexión más lenta, sin un servidor en medio que limite el rendimiento o añada su propia latencia.",
+      ],
+    },
+    {
+      heading: "Cómo lo junta todo Relayium",
+      body: [
+        "Abre relayium.com en dos dispositivos de la misma red y normalmente se encuentran automáticamente — sin cuenta, sin código, nada que instalar; ese es el caso de la red local, donde a menudo ni siquiera hace falta STUN. Para enviar a través de internet a alguien en una red distinta se usa un código de emparejamiento: el remitente inicia sesión, genera un código (o comparte un enlace, con un código QR opcional para escanear) y, en cuanto la otra persona se une, se ejecuta el mismo proceso — STUN y luego TURN si hace falta — para abrir una conexión directa o retransmitida; el destinatario nunca necesita cuenta, sea cual sea el camino.",
+        "Sea como sea, una vez abierta la conexión, hasta 1.000 archivos por lote se transmiten directamente por ella, cada uno verificado de forma independiente con un hash SHA-256 para que sepas que lo que llega coincide exactamente con lo que se envió. Si el tiempo real no es posible — por ejemplo, si la otra persona está desconectada —, eso es un modo genuinamente distinto (un enlace almacenado de conocimiento cero), no de igual a igual, y vale la pena entenderlo por separado.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Es lo mismo de igual a igual que cifrado de extremo a extremo?",
+        a: "Están relacionados, pero no son idénticos. P2P describe el camino de red — bytes que van directamente entre dos dispositivos. El cifrado describe si esos bytes son ilegibles para cualquiera que esté en medio. Las transferencias en tiempo real de Relayium son ambas cosas: un camino directo (o retransmitido pero cifrado), con el archivo sellado de extremo a extremo sea cual sea el camino que tome.",
+      },
+      {
+        q: "¿Una transferencia P2P llega a tocar algún servidor?",
+        a: "Un pequeño servidor de señalización ayuda a los dos dispositivos a encontrar la dirección del otro — pero solo ve información de establecimiento de la conexión, nunca bytes del archivo. Si no puede encontrarse un camino directo, un retransmisor TURN reenvía los datos cifrados del archivo, pero incluso entonces solo maneja texto cifrado que no puede descifrar.",
+      },
+      {
+        q: "¿Por qué fallaría una conexión directa en primer lugar?",
+        a: "Algunas redes — a menudo cortafuegos corporativos estrictos o ciertos NAT de operadores móviles — están construidas de forma que hacen imposible descubrir una dirección alcanzable solo con la información externa. Es más raro de lo que parece, pero cuando ocurre, un retransmisor es lo que mantiene la transferencia funcionando en lugar de fallar por completo.",
+      },
+      {
+        q: "¿Es más lenta la transferencia P2P cuando recurre a un retransmisor?",
+        a: "Puede añadir algo de latencia, ya que el retransmisor es un salto extra por el que pasan los datos y es un servidor compartido en lugar de uno dedicado. Pero suele seguir siendo más rápido que un flujo de subida y luego descarga, porque no hay que esperar a que el archivo aterrice por completo en un servidor antes de que el lado de la descarga pueda empezar.",
+      },
+      {
+        q: "¿Ambas personas necesitan una cuenta para una transferencia P2P?",
+        a: "Dos dispositivos en la misma red no necesitan cuenta alguna. Enviar entre redes distintas mediante un código de emparejamiento requiere que el remitente inicie sesión, pero la persona que recibe nunca necesita cuenta, sea cual sea el camino.",
+      },
+    ],
+  },
+  cta: {
+    text: "¿Con curiosidad por ver cómo se siente? Abre Relayium en dos dispositivos y observa cómo se forma una conexión directa en tiempo real.",
+    button: "Prueba Relayium ahora",
+  },
+  relatedHeading: "Seguir leyendo",
+};
+
+const pt = {
+  title: "O que é transferência de arquivos ponto a ponto?",
+  description:
+    "Uma explicação em linguagem simples da transferência de arquivos P2P: como ela difere de enviar para um servidor, como uma conexão WebRTC direta é encontrada e por que é privada e rápida.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "\"Ponto a ponto\" é usado de forma imprecisa, então aqui está o que realmente significa para uma transferência de arquivos: seu arquivo vai direto de um dispositivo para o outro, e não sobe para o servidor de uma empresa e desce de volta. Não há parada no meio onde uma cópia poderia ficar.",
+    "Parece simples, mas a internet não foi feita para que dois dispositivos quaisquer simplesmente se encontrem e conversem diretamente — a maioria das conexões se esconde atrás de roteadores e firewalls que nunca foram projetados para serem alcançados de fora. Esta página explica, em termos claros, como uma conexão direta é realmente estabelecida, quando ela não pode ser estabelecida e o que isso significa para sua privacidade e velocidade. O Relayium é usado como exemplo concreto ao longo de todo o texto, já que é uma implementação funcional exatamente disso.",
+  ],
+  sections: [
+    {
+      heading: "P2P versus a forma habitual: eliminar a parada intermediária",
+      body: [
+        "A maioria das ferramentas de \"enviar arquivo\" funciona por upload: seu arquivo vai do seu dispositivo para o servidor da empresa, fica armazenado lá e a outra pessoa baixa de volta. São dois saltos e, por um tempo, uma cópia completa do seu arquivo fica no armazenamento de outra pessoa — mesmo que seja excluída depois.",
+        "A transferência ponto a ponto pula essa parada. Assim que há uma conexão aberta entre o seu dispositivo e o da outra pessoa, os bytes do arquivo fluem diretamente por esse único salto e por nenhum outro lugar. Não há cópia do lado do servidor para armazenar, proteger ou acabar excluindo, porque ela nunca foi enviada em primeiro lugar.",
+      ],
+      bullets: [
+        "Transferência baseada em upload: do seu dispositivo para um servidor e depois para o dispositivo dela — dois saltos, uma cópia armazenada no meio.",
+        "Transferência ponto a ponto: do seu dispositivo direto para o dispositivo dela — um salto, nada armazenado.",
+        "No Relayium, isso é o modo em tempo real: abra o site nos dois dispositivos, conecte-os e o arquivo é transmitido diretamente, de navegador para navegador.",
+      ],
+    },
+    {
+      heading: "Como dois dispositivos realmente se encontram: STUN",
+      body: [
+        "Aqui está a parte que não é óbvia: seu dispositivo quase com certeza não conhece o próprio endereço tal como visto da internet externa — ele fica atrás de um roteador doméstico ou da tradução de endereços de rede (NAT) de uma operadora móvel, que o esconde atrás de um IP público compartilhado e reatribui as portas dinamicamente. O outro dispositivo está na mesma situação. Nenhum dos dois pode simplesmente \"discar\" para o outro diretamente sem antes descobrir qual endereço realmente o alcançaria.",
+        "É para isso que serve o STUN (Session Traversal Utilities for NAT). Cada dispositivo faz brevemente uma pergunta a um pequeno e leve servidor STUN: \"de qual endereço e porta você me vê chegando?\". A resposta lhe informa o próprio endereço visível de fora — nem o arquivo, nem qualquer conteúdo, apenas informação de rede suficiente para descrever um caminho de volta até ele. Ambos os dispositivos trocam essa informação (por meio de uma etapa de sinalização que só transporta detalhes de estabelecimento da conexão, nunca bytes do arquivo) e então tentam abrir um caminho direto até o endereço um do outro. Em grande parte dos casos reais — especialmente dois dispositivos na mesma Wi-Fi, ou NATs que se comportam de forma previsível — isso funciona e uma conexão totalmente direta se abre.",
+      ],
+      bullets: [
+        "O STUN só chega a conhecer e compartilhar endereços de rede — nunca o conteúdo dos arquivos, seus nomes ou as chaves de criptografia.",
+        "O Relayium usa WebRTC para isso, a mesma tecnologia de conexão direta embutida em todos os navegadores modernos para chamadas de vídeo — reaproveitada aqui para mover bytes de arquivos em vez de quadros de vídeo.",
+        "Dois dispositivos na mesma rede (sem necessidade de código) costumam se conectar da forma mais direta de todas, já que muitas vezes não há nenhum NAT no caminho.",
+      ],
+    },
+    {
+      heading: "Quando um caminho direto não pode ser encontrado: o retransmissor TURN",
+      body: [
+        "Às vezes o STUN não basta. Alguns NATs — especialmente em redes corporativas mais rígidas ou em certas operadoras móveis — são imprevisíveis o suficiente para que nenhum caminho direto possa ser descoberto apenas com a informação externa. Se ambos os dispositivos estiverem atrás desse tipo de NAT, uma conexão genuinamente direta simplesmente não é possível; algo tem que retransmitir o tráfego no meio.",
+        "É para isso que existe o TURN (Traversal Using Relays around NAT): um servidor de retransmissão de reserva ao qual ambos os dispositivos se conectam quando um caminho direto falha. Não é tanto um truque ou uma concessão de privacidade quanto uma necessidade decorrente de como algumas redes são construídas — mas vale ser preciso sobre o que ele vê e o que não vê. No Relayium, o arquivo já está criptografado de ponta a ponta antes de chegar ao retransmissor, então o retransmissor só encaminha texto cifrado — dados selados dos quais ele não tem chave para abrir. Ele move bytes; não pode lê-los.",
+      ],
+      bullets: [
+        "O TURN só é usado quando um caminho direto realmente não pode ser encontrado — é um recurso de reserva, não o padrão.",
+        "O retransmissor só encaminha texto cifrado; ele nunca tem a chave de descriptografia e não pode ler o conteúdo dos arquivos, seus nomes nem qualquer outra coisa sobre o que há dentro.",
+        "Se uma transferência específica foi direta ou passou por um retransmissor pode ser visto nos diagnósticos de conexão do Relayium, para quem tiver curiosidade de conferir.",
+      ],
+    },
+    {
+      heading: "Por que isso importa: privacidade e velocidade",
+      body: [
+        "O argumento da privacidade é simples: quando os bytes do arquivo só cruzam um único salto, diretamente entre dois dispositivos, não há nenhuma etapa de armazenamento do lado do servidor onde uma cópia pudesse ficar, ser registrada ou ser acessada por outra pessoa — porque ela nunca foi colocada ali. Essa é uma garantia estruturalmente diferente de um \"prometemos excluir em algum momento\".",
+        "O argumento da velocidade segue a mesma lógica. Uma transferência de upload e depois download precisa cruzar a rede duas vezes — uma de subida, uma de descida — e muitas vezes espera o lado remetente terminar por completo antes de o lado receptor poder começar. Uma conexão direta cruza a rede apenas uma vez, e os dados podem fluir continuamente entre os dois dispositivos tão rápido quanto a conexão mais lenta permitir, sem um servidor no meio limitando a taxa de transferência ou acrescentando sua própria latência.",
+      ],
+    },
+    {
+      heading: "Como o Relayium junta tudo isso",
+      body: [
+        "Abra relayium.com em dois dispositivos na mesma rede e normalmente eles se encontram automaticamente — sem conta, sem código, nada para instalar; esse é o caso da rede local, em que muitas vezes o STUN nem é necessário. Para enviar pela internet a alguém em outra rede, usa-se um código de emparelhamento: o remetente entra, gera um código (ou compartilha um link, com um código QR opcional para escanear) e, assim que a outra pessoa entra, o mesmo processo — STUN e depois TURN se necessário — roda para abrir uma conexão direta ou retransmitida; o destinatário nunca precisa de conta, seja qual for o caminho.",
+        "De todo modo, uma vez aberta a conexão, até 1.000 arquivos por lote são transmitidos diretamente por ela, cada um verificado de forma independente com um hash SHA-256 para que você saiba que o que chega corresponde exatamente ao que foi enviado. Se o tempo real não for possível — digamos, a outra pessoa está offline —, isso é um modo genuinamente diferente (um link armazenado de conhecimento zero), não ponto a ponto, e vale entender à parte.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "Ponto a ponto é a mesma coisa que criptografia de ponta a ponta?",
+        a: "Estão relacionados, mas não são idênticos. P2P descreve o caminho de rede — bytes indo diretamente entre dois dispositivos. A criptografia descreve se esses bytes são ilegíveis para qualquer um no meio. As transferências em tempo real do Relayium são as duas coisas: um caminho direto (ou retransmitido, mas criptografado), com o arquivo selado de ponta a ponta independentemente do caminho que ele tome.",
+      },
+      {
+        q: "Uma transferência P2P chega a tocar em algum servidor?",
+        a: "Um pequeno servidor de sinalização ajuda os dois dispositivos a encontrar o endereço um do outro — mas ele só vê informação de estabelecimento da conexão, nunca bytes do arquivo. Se um caminho direto não puder ser encontrado, um retransmissor TURN encaminha os dados criptografados do arquivo, mas mesmo assim só lida com texto cifrado que não consegue descriptografar.",
+      },
+      {
+        q: "Por que uma conexão direta falharia em primeiro lugar?",
+        a: "Algumas redes — muitas vezes firewalls corporativos rígidos ou certos NATs de operadoras móveis — são construídas de forma a tornar impossível descobrir um endereço alcançável apenas com a informação externa. Isso é mais raro do que parece, mas quando acontece, um retransmissor é o que mantém a transferência funcionando em vez de falhar por completo.",
+      },
+      {
+        q: "A transferência P2P fica mais lenta quando recorre a um retransmissor?",
+        a: "Pode acrescentar alguma latência, já que o retransmissor é um salto extra pelo qual os dados passam e é um servidor compartilhado em vez de dedicado. Mas ainda costuma ser mais rápido que um fluxo de upload e depois download, porque não é preciso esperar o arquivo aterrissar por completo em um servidor antes de o lado do download poder começar.",
+      },
+      {
+        q: "As duas pessoas precisam de conta para uma transferência P2P?",
+        a: "Dois dispositivos na mesma rede não precisam de conta alguma. Enviar entre redes diferentes por código de emparelhamento exige que o remetente entre, mas a pessoa que recebe nunca precisa de conta, seja qual for o caminho.",
+      },
+    ],
+  },
+  cta: {
+    text: "Curioso para ver como é? Abra o Relayium em dois dispositivos e veja uma conexão direta se formar em tempo real.",
+    button: "Experimente o Relayium agora",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "guides/what-is-peer-to-peer-file-transfer",
   updated: "2026-07-09",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

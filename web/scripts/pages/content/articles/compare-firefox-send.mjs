@@ -473,8 +473,142 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "La mejor alternativa a Firefox Send en 2026",
+  description:
+    "Firefox Send cerró en 2020. Relayium recupera el uso compartido de enlaces cifrados, privados y con caducidad: una clave aleatoria generada en tu navegador, almacenamiento de conocimiento cero y sin necesidad de cuenta para descargar.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "Firefox Send era la propuesta de Mozilla para compartir archivos de forma privada: sueltas un archivo, obtienes un enlace cifrado y lo configuras para que caduque o se autodestruya tras una sola descarga. A la gente le encantaba y lo sigue buscando años después. No va a volver —Mozilla descontinuó el servicio en 2020—, pero la necesidad que cubría sigue siendo real.",
+    "El modo asíncrono (enlace almacenado) de Relayium retoma esa misma idea: cifrar en el navegador, compartir un enlace, verlo caducar o consumirse. Este artículo es una comparativa honesta: qué hacía Firefox Send, cuánto se le acerca Relayium y dónde Relayium va más allá con la transferencia en tiempo real de igual a igual, una CLI y el autoalojamiento.",
+  ],
+  sections: [
+    {
+      heading: "Qué era Firefox Send y por qué la gente aún lo echa de menos",
+      body: [
+        "Firefox Send se lanzó desde Mozilla en 2019 como una forma sencilla y respetuosa con la privacidad de compartir archivos: subes un archivo, el navegador lo cifraba y obtenías un enlace que podías enviar a cualquier parte. El destinatario no necesitaba cuenta para descargar. Podías configurar el enlace para que caducara tras cierto número de descargas o pasado un tiempo determinado, y Mozilla lo promocionaba como cifrado de extremo a extremo.",
+        "Mozilla cerró Firefox Send en septiembre de 2020, alegando el abuso del servicio para distribuir malware y la decisión de centrar la ingeniería en otra parte. No ha habido ningún sucesor por parte de Mozilla ni planes anunciados para revivirlo: si esperas que vuelva con su antiguo nombre, no lo hará. Eso ha dejado un vacío real: mucha gente todavía quiere una forma gratuita, privada y basada en enlaces de enviar un archivo que caduque y que el proveedor que lo aloja no pueda leer.",
+      ],
+    },
+    {
+      heading: "Cómo los enlaces almacenados de Relayium encajan con esa idea",
+      body: [
+        "El modo asíncrono de Relayium se construye en torno a la misma forma de experiencia. Eliges tus archivos, tu navegador genera localmente una clave AES-256-GCM aleatoria, cifra los archivos con ella y sube el texto cifrado. El servidor nunca ve la clave y no puede descifrar lo que almacena: es genuinamente de conocimiento cero, no solo \"cifrado en reposo\".",
+        "La clave de descifrado viaja únicamente dentro del propio enlace, en el fragmento de la URL tras el #, que los navegadores nunca transmiten a ningún servidor. Quien recibe el enlace no necesita cuenta para descargar: simplemente lo abre, y su navegador obtiene el texto cifrado y lo descifra localmente con la clave del fragmento. Esa es la promesa central de Firefox Send, intacta: un enlace que lleva su propia clave y que el servidor que lo aloja no puede leer.",
+      ],
+    },
+    {
+      heading: "Caducidad, autodestrucción tras la lectura y los límites honestos",
+      body: [
+        "Como en Firefox Send, cada enlace de Relayium tiene una vida útil que tú eliges: 1 hora, 1 día, 3 días o 7 días, o puedes configurarlo para que se consuma tras la primera descarga completa, de modo que desaparece en cuanto tu destinatario tiene el archivo. Una vez que un enlace caduca o se consume, el texto cifrado almacenado se elimina y el enlace deja de funcionar.",
+        "Para ser precisos sobre qué se almacena y dónde: este es un modo de enlace almacenado, así que los bytes del archivo cifrado sí que residen en el servidor de Relayium entre la subida y la descarga; es texto cifrado de conocimiento cero que el servidor no puede descifrar, pero no es un montaje en el que \"el archivo nunca toca un servidor\". Crear un enlace exige que el remitente inicie sesión (está vinculado a la cuota de almacenamiento de tu cuenta); el destinatario nunca necesita cuenta para abrirlo o descargarlo.",
+      ],
+    },
+    {
+      heading: "Más allá de compartir enlaces: transferencia en tiempo real, una CLI y autoalojamiento",
+      body: [
+        "Firefox Send solo hizo una cosa —compartir enlaces cifrados de forma asíncrona— y el modo almacenado de Relayium cubre ese terreno. Pero Relayium también tiene un modo que Firefox Send nunca ofreció: la transferencia en tiempo real de igual a igual, en la que los archivos fluyen directamente entre dos navegadores abiertos a través de un canal WebRTC cifrado de extremo a extremo y no se almacena nada en ningún servidor. En la misma red no necesita cuenta ninguna de las partes; enviar entre redes con un código de emparejamiento requiere que el remitente inicie sesión, y el receptor sigue sin necesitarla nunca.",
+        "Para quienes quieren más control, Relayium también incluye una CLI gratuita y de código abierto (push/pull por SSH, envío/recepción entre redes, sincronización de carpetas) y un servidor autoalojable que puedes ejecutar tú mismo, nada de lo cual tuvo nunca Firefox Send. Todo el proyecto está bajo licencia MIT y es de código abierto en GitHub.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Va a volver Firefox Send?",
+        a: "No. Mozilla descontinuó Firefox Send en septiembre de 2020 y no lo ha revivido ni ha anunciado un sucesor. El modo de enlace almacenado de Relayium es un proyecto independiente y construido por separado, diseñado para llenar el mismo vacío.",
+      },
+      {
+        q: "¿Es Relayium tan privado como lo era Firefox Send?",
+        a: "Sí, y el diseño es más fuerte en un aspecto: tu navegador genera localmente una clave AES-256-GCM aleatoria, y la clave vive únicamente en el fragmento de la URL del enlace, que nunca se envía al servidor. El servidor solo almacena texto cifrado que no puede descifrar: un montaje de conocimiento cero de verdad.",
+      },
+      {
+        q: "¿Caducan los enlaces?",
+        a: "Sí. Elige 1 hora, 1 día, 3 días o 7 días, o configura el enlace para que se consuma tras la primera descarga completa. Después de eso, el texto cifrado almacenado se elimina y el enlace ya no funciona.",
+      },
+      {
+        q: "¿Es Relayium gratis?",
+        a: "Sí. Relayium es gratis y de código abierto bajo la licencia MIT. Crear un enlace de descarga almacenado requiere que el remitente inicie sesión (los enlaces cuentan para la cuota de almacenamiento de tu cuenta), pero el destinatario nunca necesita cuenta para descargar.",
+      },
+    ],
+  },
+  cta: {
+    text: "Envía un enlace privado y con caducidad como solía hacerlo Firefox Send: cifrado en tu navegador, ilegible para el servidor.",
+    button: "Prueba Relayium ahora",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "A melhor alternativa ao Firefox Send em 2026",
+  description:
+    "O Firefox Send encerrou em 2020. O Relayium traz de volta o compartilhamento de links criptografados, privados e com expiração: uma chave aleatória gerada no seu navegador, armazenamento de conhecimento zero e sem necessidade de conta para baixar.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "O Firefox Send era a proposta da Mozilla para o compartilhamento privado de arquivos: você solta um arquivo, recebe um link criptografado e o configura para expirar ou se autodestruir após um único download. As pessoas adoravam e ainda o procuram anos depois. Ele não vai voltar — a Mozilla descontinuou o serviço em 2020 —, mas a necessidade que ele atendia continua real.",
+    "O modo assíncrono (link armazenado) do Relayium retoma a mesma ideia: criptografar no navegador, compartilhar um link, vê-lo expirar ou se consumir. Este artigo é uma comparação honesta: o que o Firefox Send fazia, o quanto o Relayium chega perto disso e onde o Relayium vai além com a transferência em tempo real ponto a ponto, uma CLI e a auto-hospedagem.",
+  ],
+  sections: [
+    {
+      heading: "O que era o Firefox Send e por que as pessoas ainda sentem falta dele",
+      body: [
+        "O Firefox Send foi lançado pela Mozilla em 2019 como uma forma simples e voltada à privacidade de compartilhar arquivos: você envia um arquivo, o navegador o criptografava e você recebia um link que podia mandar para qualquer lugar. O destinatário não precisava de conta para baixar. Você podia configurar o link para expirar após um certo número de downloads ou depois de um tempo determinado, e a Mozilla o divulgava como criptografado de ponta a ponta.",
+        "A Mozilla encerrou o Firefox Send em setembro de 2020, citando o abuso do serviço para distribuir malware e a decisão de concentrar a engenharia em outro lugar. Não houve nenhum sucessor da Mozilla nem planos anunciados para revivê-lo: se você espera que ele volte com o nome antigo, isso não acontecerá. Isso deixou uma lacuna real: muita gente ainda quer uma forma gratuita, privada e baseada em links de enviar um arquivo que expire e que o provedor de hospedagem não consiga ler.",
+      ],
+    },
+    {
+      heading: "Como os links armazenados do Relayium correspondem a essa ideia",
+      body: [
+        "O modo assíncrono do Relayium é construído em torno do mesmo formato de experiência. Você escolhe seus arquivos, seu navegador gera localmente uma chave AES-256-GCM aleatória, criptografa os arquivos com ela e envia o texto cifrado. O servidor nunca vê a chave e não consegue descriptografar o que armazena — é genuinamente de conhecimento zero, não apenas \"criptografado em repouso\".",
+        "A chave de descriptografia viaja apenas dentro do próprio link, no fragmento da URL após o #, que os navegadores nunca transmitem a nenhum servidor. Quem recebe o link não precisa de conta para baixar — basta abri-lo, e o navegador busca o texto cifrado e o descriptografa localmente com a chave do fragmento. Essa é a promessa central do Firefox Send, intacta: um link que carrega a própria chave e que o servidor que o hospeda não consegue ler.",
+      ],
+    },
+    {
+      heading: "Expiração, autodestruição após a leitura e os limites honestos",
+      body: [
+        "Assim como no Firefox Send, cada link do Relayium tem um tempo de vida que você escolhe: 1 hora, 1 dia, 3 dias ou 7 dias, ou você pode configurá-lo para se consumir após o primeiríssimo download completo, de modo que desaparece no momento em que seu destinatário tem o arquivo. Depois que um link expira ou se consome, o texto cifrado armazenado é excluído e o link para de funcionar.",
+        "Para ser preciso sobre o que é armazenado e onde: este é um modo de link armazenado, então os bytes do arquivo criptografado realmente ficam no servidor do Relayium entre o envio e o download — é texto cifrado de conhecimento zero que o servidor não consegue descriptografar, mas não é uma configuração em que \"o arquivo nunca toca um servidor\". Criar um link exige que o remetente faça login (está ligado à cota de armazenamento da sua conta); o destinatário nunca precisa de conta para abri-lo ou baixá-lo.",
+      ],
+    },
+    {
+      heading: "Além do compartilhamento de links: transferência em tempo real, uma CLI e auto-hospedagem",
+      body: [
+        "O Firefox Send só fez uma coisa — compartilhamento de links criptografados de forma assíncrona — e o modo armazenado do Relayium cobre esse terreno. Mas o Relayium também tem um modo que o Firefox Send nunca ofereceu: a transferência em tempo real ponto a ponto, em que os arquivos fluem diretamente entre dois navegadores abertos por um canal WebRTC criptografado de ponta a ponta e nada é armazenado em nenhum servidor. Na mesma rede, nenhum dos lados precisa de conta; enviar entre redes com um código de emparelhamento exige que o remetente faça login, e o receptor continua nunca precisando.",
+        "Para quem quer mais controle, o Relayium também traz uma CLI gratuita e de código aberto (push/pull por SSH, envio/recebimento entre redes, sincronização de pastas) e um servidor auto-hospedável que você mesmo pode rodar — nada disso o Firefox Send jamais teve. Todo o projeto é licenciado sob MIT e de código aberto no GitHub.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "O Firefox Send vai voltar?",
+        a: "Não. A Mozilla descontinuou o Firefox Send em setembro de 2020 e não o reviveu nem anunciou um sucessor. O modo de link armazenado do Relayium é um projeto separado, construído de forma independente, feito para preencher a mesma lacuna.",
+      },
+      {
+        q: "O Relayium é tão privado quanto o Firefox Send era?",
+        a: "Sim, e o design é mais forte em um aspecto: seu navegador gera localmente uma chave AES-256-GCM aleatória, e a chave vive apenas no fragmento da URL do link, que nunca é enviado ao servidor. O servidor armazena somente texto cifrado que não consegue descriptografar — uma configuração de conhecimento zero de verdade.",
+      },
+      {
+        q: "Os links expiram?",
+        a: "Sim. Escolha 1 hora, 1 dia, 3 dias ou 7 dias, ou configure o link para se consumir após o primeiro download completo. Depois disso, o texto cifrado armazenado é excluído e o link não funciona mais.",
+      },
+      {
+        q: "O Relayium é gratuito?",
+        a: "Sim. O Relayium é gratuito e de código aberto sob a licença MIT. Criar um link de download armazenado exige que o remetente faça login (os links contam para a cota de armazenamento da sua conta), mas o destinatário nunca precisa de conta para baixar.",
+      },
+    ],
+  },
+  cta: {
+    text: "Envie um link privado e com expiração como o Firefox Send fazia — criptografado no seu navegador, ilegível para o servidor.",
+    button: "Experimente o Relayium agora",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "compare/firefox-send",
   updated: "2026-07-09",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

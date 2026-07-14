@@ -10,8 +10,8 @@ const docs = [privacy, terms];
 describe("buildLegalPages", () => {
   const pages = buildLegalPages(docs);
 
-  it("produces 14 pages (2 docs × 7 langs)", () => {
-    expect(pages.length).toBe(14);
+  it("produces 18 pages (2 docs × 9 langs)", () => {
+    expect(pages.length).toBe(18);
   });
 
   it("uses pretty paths with en unprefixed and others lang-prefixed", () => {
@@ -31,11 +31,11 @@ describe("buildLegalPages", () => {
 describe("buildSitemap", () => {
   const xml = buildSitemap(docs, { home: true });
 
-  it("includes the homepage and all 14 legal URLs", () => {
+  it("includes the homepage and all 18 legal URLs", () => {
     expect(xml).toContain("<loc>https://relayium.com/</loc>");
     expect(xml).toContain("<loc>https://relayium.com/privacy</loc>");
     expect(xml).toContain("<loc>https://relayium.com/zh/terms</loc>");
-    expect((xml.match(/<loc>/g) || []).length).toBe(15);
+    expect((xml.match(/<loc>/g) || []).length).toBe(19);
   });
 });
 
@@ -54,7 +54,7 @@ describe("landing helpers", () => {
   });
   it("validateLangs throws listing missing languages", () => {
     expect(() => validateLangs("x", { en: {}, zh: {} })).toThrow(/missing translations: ja, ko, de, fr/);
-    expect(() => validateLangs("x", { zh: {}, ja: {}, ko: {}, de: {}, fr: {}, ar: {} }, LANDING_LANGS)).not.toThrow();
+    expect(() => validateLangs("x", { zh: {}, ja: {}, ko: {}, de: {}, fr: {}, ar: {}, es: {}, pt: {} }, LANDING_LANGS)).not.toThrow();
   });
 });
 
@@ -68,18 +68,18 @@ describe("buildSitemap lastmod", () => {
 
 const fakeArticles = [
   { slug: "compare/snapdrop", updated: "2026-07-01", langs: Object.fromEntries(
-      ["en","zh","ja","ko","de","fr","ar"].map((l) => [l, { title: `snap-${l}` }])) },
+      ["en","zh","ja","ko","de","fr","ar","es","pt"].map((l) => [l, { title: `snap-${l}` }])) },
   { slug: "how-to/x", updated: "2026-07-02", langs: Object.fromEntries(
-      ["en","zh","ja","ko","de","fr","ar"].map((l) => [l, { title: `howto-${l}` }])) },
+      ["en","zh","ja","ko","de","fr","ar","es","pt"].map((l) => [l, { title: `howto-${l}` }])) },
   { slug: "guides/y", updated: "2026-07-03", langs: Object.fromEntries(
-      ["en","zh","ja","ko","de","fr","ar"].map((l) => [l, { title: `guide-${l}` }])) },
+      ["en","zh","ja","ko","de","fr","ar","es","pt"].map((l) => [l, { title: `guide-${l}` }])) },
 ];
 
 describe("articleGroupsByLang", () => {
   const groups = articleGroupsByLang(fakeArticles);
 
-  it("has all seven languages", () => {
-    expect(Object.keys(groups).sort()).toEqual(["ar","de","en","fr","ja","ko","zh"]);
+  it("has all nine languages", () => {
+    expect(Object.keys(groups).sort()).toEqual(["ar","de","en","es","fr","ja","ko","pt","zh"]);
   });
 
   it("buckets each article by slug prefix into guides/howTo/compare", () => {
@@ -97,7 +97,7 @@ describe("buildGuidesIndexPages", () => {
   const pages = buildGuidesIndexPages(guidesIndex, articleGroupsByLang(fakeArticles));
 
   it("produces one page per language at the guides path", () => {
-    expect(pages.length).toBe(7);
+    expect(pages.length).toBe(9);
     expect(pages.map((p) => p.path)).toContain("guides/index.html");
     expect(pages.map((p) => p.path)).toContain("zh/guides/index.html");
   });

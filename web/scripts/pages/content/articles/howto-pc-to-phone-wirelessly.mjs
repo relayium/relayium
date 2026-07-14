@@ -570,8 +570,170 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Enviar archivos del PC al teléfono sin cables, sin cable ni app",
+  description:
+    "Una guía paso a paso para mover archivos entre un ordenador y un teléfono por Wi-Fi — arrastrar y soltar, sin cable USB, sin cuenta en la nube y con cifrado de extremo a extremo de principio a fin.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "Pasar un archivo del portátil al teléfono no debería obligarte a buscar el cable adecuado, enviarte un correo a ti mismo o subirlo a un disco en la nube para volver a descargarlo. Relayium mueve los bytes directamente de tu ordenador a tu teléfono a través de tu propia Wi-Fi, en el navegador, sin nada que instalar en ninguno de los dos lados.",
+    "Esta guía recorre paso a paso la vía inalámbrica — en la misma red o entre redes — y luego la compara con honestidad con las alternativas habituales (USB, Bluetooth, apps de mensajería y correo) para que elijas la herramienta adecuada para cada caso.",
+  ],
+  sections: [
+    {
+      heading: "Enviar del PC al teléfono en la misma Wi-Fi",
+      body: [
+        "Esta es la vía más rápida: ambos dispositivos están en la misma red, así que se conectan directamente y la transferencia solo está limitada por tu Wi-Fi. No necesitas nada más que un navegador en cada dispositivo.",
+      ],
+      bullets: [
+        "En el ordenador, abre relayium.com en cualquier navegador moderno (Chrome, Edge, Firefox o Safari).",
+        "En el teléfono, abre relayium.com también. En la misma red, los dos dispositivos se descubren automáticamente.",
+        "En el ordenador, arrastra los archivos directamente a la página, o haz clic para elegirlos — hasta 1.000 archivos por lote. Puedes soltar una carpeta entera y Relayium conserva su estructura.",
+        "Elige el teléfono como destino y empieza. Ambos dispositivos muestran el mismo código de verificación de 6 dígitos (SAS); échales un vistazo, confirma que coinciden, y los archivos vuelan al otro lado.",
+        "En el teléfono, guarda los archivos recibidos. No hace falta cuenta para una transferencia en tiempo real como esta.",
+      ],
+    },
+    {
+      heading: "¿No están en la misma red? Usa un código de emparejamiento",
+      body: [
+        "¿Tu teléfono va con datos móviles y tu PC con la Wi-Fi de casa? No pasa nada — Relayium está hecho para llegar entre redes, no solo dentro de la misma.",
+        "En lugar del descubrimiento automático, el remitente obtiene un código de emparejamiento corto (o el enlace de unión que genera) e inicia sesión para generarlo — la persona que recibe nunca necesita una cuenta. Introduce el código en el otro dispositivo y los dos se conectan directamente, de igual a igual, siempre que las redes lo permitan. Cuando una ruta directa es imposible, el flujo cifrado recurre a un retransmisor TURN — el retransmisor solo ve texto cifrado, así que la transferencia sigue cifrada de extremo a extremo. Si la conexión se corta a medias, la transferencia puede reanudarse en lugar de empezar de nuevo.",
+      ],
+    },
+    {
+      heading: "Instálalo como una app (PWA opcional)",
+      body: [
+        "Relayium es un sitio web, así que de verdad no hay nada que instalar. Pero si envías archivos a menudo, puedes añadirlo a tu pantalla de inicio o escritorio como aplicación web progresiva (PWA): entonces se abre en su propia ventana y se lanza como una app nativa, aunque por debajo sigue siendo solo la página web.",
+        "En el teléfono, usa la opción «Añadir a la pantalla de inicio» de tu navegador; en el ordenador, el icono de instalar en la barra de direcciones. De cualquier modo sigue siendo gratis — Relayium es de código abierto bajo la licencia MIT en github.com/relayium/relayium, y funciona en Windows, macOS, Linux, Android e iOS.",
+      ],
+    },
+    {
+      heading: "Archivos grandes: lo que tu navegador puede manejar",
+      body: [
+        "Como una transferencia en tiempo real nunca deja tus archivos en un servidor, no hay cuota de subida que te preocupe. El límite práctico es qué navegador recibe.",
+        "En Chrome o Edge, los datos entrantes se transmiten directamente al disco, así que en la práctica no hay tope de tamaño — vídeos de varios gigabytes no son problema. Firefox y Safari, en cambio, almacenan el archivo en memoria, así que en esos mantén un archivo individual por debajo de unos 200 MB. Si necesitas enviar algo grande a un iPhone basado en Safari, recibir en un dispositivo basado en Chrome evita el límite por completo.",
+      ],
+    },
+    {
+      heading: "Otras formas de mover archivos del PC al teléfono (y sus límites)",
+      body: [
+        "El inalámbrico en el navegador no es la única opción, y la respuesta honesta es que cada alternativa tiene su lugar. Así se comparan las más habituales:",
+      ],
+      bullets: [
+        "Cable USB: fiable y rápido, pero necesitas el cable adecuado, y acceder a los archivos del teléfono desde el PC puede ser engorroso (sobre todo iPhone a Windows). Es con cable, no inalámbrico.",
+        "Bluetooth: de verdad sin cables, pero lento — enviar unas pocas fotos grandes puede llevar minutos, y es poco práctico para vídeos o lotes grandes.",
+        "Apps de mensajería o enviarte un correo a ti mismo (WhatsApp, Telegram, correo): cómodo si ya lo tienes abierto, pero la mayoría impone límites de tamaño, puede recomprimir las fotos y hace pasar tus archivos por un servidor de terceros en lugar de mantenerlos privados.",
+        "Relayium: inalámbrico, sin instalación, sin cuenta en la misma red (solo el remitente inicia sesión para emparejar entre redes), sin recompresión (byte a byte con una comprobación de integridad SHA-256 por archivo), y cifrado de extremo a extremo con un código de verificación que puedes comprobar tú mismo.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Funciona con Mac y Android, no solo con Windows y iPhone?",
+        a: "Sí. Relayium funciona en el navegador en Windows, macOS, Linux, Android e iOS, así que cualquier combinación sirve — de Windows a Android, de Mac a iPhone, de Linux a un teléfono, y a la inversa. No hay nada que instalar en ninguno de los dispositivos.",
+      },
+      {
+        q: "¿Qué velocidad tiene la transferencia?",
+        a: "En la misma Wi-Fi los dos dispositivos se conectan directamente, así que la velocidad la limita tu red local y no un servidor — normalmente tan rápido como lo permita tu Wi-Fi. Entre redes distintas depende de ambas conexiones a internet, y Relayium recurre a un retransmisor cifrado solo cuando no es posible un enlace directo.",
+      },
+      {
+        q: "¿Es seguro enviar archivos así?",
+        a: "Sí. Además del cifrado de transporte del navegador, Relayium añade su propia capa: un intercambio de claves X25519 deriva una clave usada para AES-256-GCM por bloque, y esa clave nunca toca un servidor. Ambos dispositivos muestran el mismo código de 6 dígitos (SAS) para que confirmes que nadie está en medio, y cada archivo se verifica de extremo a extremo con un hash SHA-256.",
+      },
+    ],
+  },
+  cta: {
+    text: "Abre Relayium en tu ordenador y tu teléfono y envía tu primer archivo sin cables — sin cable, sin instalación, sin cuenta en la misma red.",
+    button: "Prueba Relayium ahora",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Enviar arquivos do PC para o celular sem fio, sem cabo nem app",
+  description:
+    "Um guia passo a passo para mover arquivos entre um computador e um celular por Wi-Fi — arrastar e soltar, sem cabo USB, sem conta na nuvem e com criptografia de ponta a ponta o tempo todo.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "Levar um arquivo do notebook para o celular não deveria significar caçar o cabo certo, mandar um e-mail para si mesmo ou subir para um disco na nuvem e baixar de novo. O Relayium move os bytes direto do seu computador para o seu celular pela sua própria Wi-Fi, no navegador, sem nada para instalar em nenhum dos lados.",
+    "Este guia mostra o jeito sem fio passo a passo — na mesma rede ou entre redes — e depois compara com honestidade com as alternativas de sempre (USB, Bluetooth, apps de mensagem e e-mail) para você escolher a ferramenta certa para cada situação.",
+  ],
+  sections: [
+    {
+      heading: "Enviar do PC para o celular na mesma Wi-Fi",
+      body: [
+        "Este é o caminho mais rápido: os dois dispositivos estão na mesma rede, então se conectam diretamente e a transferência é limitada apenas pela sua Wi-Fi. Você não precisa de nada além de um navegador em cada dispositivo.",
+      ],
+      bullets: [
+        "No computador, abra relayium.com em qualquer navegador moderno (Chrome, Edge, Firefox ou Safari).",
+        "No celular, abra relayium.com também. Na mesma rede, os dois dispositivos se descobrem automaticamente.",
+        "No computador, arraste os arquivos direto para a página, ou clique para escolhê-los — até 1.000 arquivos por lote. Você pode soltar uma pasta inteira e o Relayium mantém a estrutura dela.",
+        "Escolha o celular como destino e comece. Ambos os dispositivos mostram o mesmo código de verificação de 6 dígitos (SAS); dê uma olhada, confirme que coincidem, e os arquivos voam para o outro lado.",
+        "No celular, salve os arquivos recebidos. Nenhuma conta é necessária para uma transferência em tempo real como esta.",
+      ],
+    },
+    {
+      heading: "Não estão na mesma rede? Use um código de emparelhamento",
+      body: [
+        "Seu celular está no dados móveis e seu PC na Wi-Fi de casa? Tudo bem — o Relayium foi feito para alcançar entre redes, não só dentro da mesma.",
+        "Em vez da descoberta automática, o remetente recebe um código de emparelhamento curto (ou o link de entrada que ele gera) e faz login para gerá-lo — quem recebe nunca precisa de conta. Digite o código no outro dispositivo e os dois se conectam diretamente, ponto a ponto, sempre que as redes permitirem. Quando um caminho direto é impossível, o fluxo criptografado recorre a um retransmissor TURN — o retransmissor só vê texto cifrado, então a transferência continua criptografada de ponta a ponta. Se a conexão cair no meio, a transferência pode ser retomada em vez de recomeçar.",
+      ],
+    },
+    {
+      heading: "Instale como um app (PWA opcional)",
+      body: [
+        "O Relayium é um site, então realmente não há nada para instalar. Mas se você envia arquivos com frequência, pode adicioná-lo à tela inicial ou à área de trabalho como um aplicativo web progressivo (PWA): ele então abre na própria janela e é iniciado como um app nativo, embora por baixo continue sendo apenas a página web.",
+        "No celular, use a opção «Adicionar à tela inicial» do seu navegador; no computador, o ícone de instalar na barra de endereços. De qualquer forma continua gratuito — o Relayium é de código aberto sob a licença MIT em github.com/relayium/relayium, e funciona em Windows, macOS, Linux, Android e iOS.",
+      ],
+    },
+    {
+      heading: "Arquivos grandes: o que seu navegador consegue lidar",
+      body: [
+        "Como uma transferência em tempo real nunca deixa seus arquivos em um servidor, não há cota de upload com que se preocupar. O limite prático é qual navegador está recebendo.",
+        "No Chrome ou no Edge, os dados que chegam são gravados direto no disco, então praticamente não há limite de tamanho — vídeos de vários gigabytes são tranquilos. Firefox e Safari, em vez disso, guardam o arquivo na memória, então neles mantenha um único arquivo abaixo de cerca de 200 MB. Se você precisar enviar algo grande para um iPhone baseado em Safari, receber em um dispositivo baseado em Chrome evita o limite por completo.",
+      ],
+    },
+    {
+      heading: "Outras formas de mover arquivos do PC para o celular (e seus limites)",
+      body: [
+        "O sem fio no navegador não é a única opção, e a resposta honesta é que cada alternativa tem o seu lugar. Veja como as mais comuns se comparam:",
+      ],
+      bullets: [
+        "Cabo USB: confiável e rápido, mas você precisa do cabo certo, e acessar os arquivos do celular pelo PC pode ser complicado (especialmente iPhone para Windows). É com fio, não sem fio.",
+        "Bluetooth: realmente sem cabo, mas lento — enviar algumas fotos grandes pode levar minutos, e é impraticável para vídeos ou lotes grandes.",
+        "Apps de mensagem ou mandar e-mail para si mesmo (WhatsApp, Telegram, e-mail): conveniente se você já tem aberto, mas a maioria impõe limites de tamanho, pode recomprimir as fotos e faz seus arquivos passarem por um servidor de terceiros em vez de mantê-los privados.",
+        "Relayium: sem fio, sem instalação, sem conta na mesma rede (só o remetente faz login para emparelhar entre redes), sem recompressão (byte a byte com uma verificação de integridade SHA-256 por arquivo), e criptografado de ponta a ponta com um código de verificação que você mesmo pode conferir.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "Isso funciona com Mac e Android, não só com Windows e iPhone?",
+        a: "Sim. O Relayium roda no navegador em Windows, macOS, Linux, Android e iOS, então qualquer combinação funciona — Windows para Android, Mac para iPhone, Linux para um celular, e vice-versa. Não há nada para instalar em nenhum dos dispositivos.",
+      },
+      {
+        q: "Qual é a velocidade da transferência?",
+        a: "Na mesma Wi-Fi os dois dispositivos se conectam diretamente, então a velocidade é limitada pela sua rede local e não por um servidor — normalmente tão rápido quanto sua Wi-Fi permitir. Entre redes diferentes depende das duas conexões de internet, e o Relayium recorre a um retransmissor criptografado apenas quando um link direto não é possível.",
+      },
+      {
+        q: "É seguro enviar arquivos assim?",
+        a: "Sim. Além da criptografia de transporte do navegador, o Relayium adiciona a sua própria camada: uma troca de chaves X25519 deriva uma chave usada para AES-256-GCM por bloco, e essa chave nunca toca um servidor. Ambos os dispositivos mostram o mesmo código de 6 dígitos (SAS) para você confirmar que ninguém está no meio, e cada arquivo é verificado de ponta a ponta com um hash SHA-256.",
+      },
+    ],
+  },
+  cta: {
+    text: "Abra o Relayium no seu computador e no seu celular e envie seu primeiro arquivo sem fio — sem cabo, sem instalação, sem conta na mesma rede.",
+    button: "Experimente o Relayium agora",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "how-to/send-files-pc-to-phone-wirelessly",
   updated: "2026-07-03",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

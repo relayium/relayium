@@ -915,8 +915,268 @@ WantedBy=multi-user.target`,
   relatedHeading: "تابِع القراءة",
 };
 
+const es = {
+  title: "Transferencias de servidor a servidor con la CLI de Relayium (daemon direct)",
+  description:
+    "Mueve archivos directamente entre dos servidores que controlas con relayium serve y push relayium:// — sobre TLS fijado, sin retransmisor, sin SSH, sin código. Aprueba un nuevo emisor una vez en su primer push, y luego automatízalo o ejecútalo bajo systemd.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "Cuando ambas máquinas son tuyas y cada una conoce la dirección de la otra, SSH es una fricción de más y un encuentro es pura sobrecarga. daemon direct está hecho exactamente para esto: un servidor escucha, el otro le hace push directamente sobre una conexión TLS 1.3 fijada. Sin retransmisor, sin SSH, sin código de emparejamiento: la confianza se basa en clave pública y se configura una sola vez.",
+    "Esta guía cubre iniciar el escucha, hacerle push, aprobar un nuevo emisor en el primer contacto, automatizarlo y ejecutar el escucha como servicio de systemd.",
+  ],
+  sections: [
+    {
+      heading: "Iniciar el escucha (en el receptor)",
+      body: [
+        "En el servidor receptor, serve escucha los push y los escribe en un directorio. Se ejecuta de forma continua por defecto; añade --once para aceptar una sola transferencia y salir. No compartes nada de antemano: no hay huellas que copiar por adelantado:",
+      ],
+      code: [
+        `# on the RECEIVER
+relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031`,
+      ],
+      bullets: [
+        "El escucha procesa las conexiones de una en una y deposita los archivos bajo --dir.",
+        "El puerto por defecto es 9031; cámbialo con --port y ábrelo en tu cortafuegos.",
+      ],
+    },
+    {
+      heading: "Hacerle push (en el emisor)",
+      body: [
+        "Desde el servidor emisor, haz push a la dirección relayium:// del receptor. La primera conexión fija la huella del receptor; cada conexión posterior la verifica, y una huella cambiada se rechaza en lugar de aceptarse en silencio, de modo que una clave sustituida o un ataque de intermediario se detecta, no se confía en él. En el primer push, el emisor espera un momento mientras el receptor lo aprueba (siguiente paso).",
+      ],
+      code: [
+        `# on the SENDER
+relayium push ./build.tar.zst relayium://receiver.example.com
+
+# non-default port
+relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
+      ],
+      bullets: [
+        "Sin retransmisor y sin respaldo: si no se puede alcanzar el escucha, el push falla; los bytes del archivo nunca se enrutan a través de nadie más.",
+        "El mismo motor de transferencia que los otros modos: reanudable, con una comprobación SHA-256 por archivo.",
+      ],
+    },
+    {
+      heading: "Aprobar al emisor en el primer push (en el receptor)",
+      body: [
+        "La primera vez que una máquina nueva hace push a tu escucha, serve (en una terminal) te muestra de dónde viene y su huella y te pide que la apruebes, como el aviso de primera conexión de SSH, pero en el lado receptor:",
+      ],
+      code: [
+        `# on the RECEIVER, when a new sender pushes:
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+      ],
+      bullets: [
+        "Responde y y esa huella se recuerda en authorized_fingerprints; cada push posterior desde la misma máquina pasa entonces en silencio.",
+        "La huella es la identidad estable de una máquina (sobrevive a reinicios y cambios de IP), así que aprobar es un paso único por emisor.",
+        "El emisor, a su vez, aprende la clave del escucha en la primera conexión (confianza en el primer uso) y la fija en known_hosts.",
+      ],
+    },
+    {
+      heading: "Automatizarlo (o ejecutarlo sin terminal)",
+      body: [
+        "Como una huella aprobada se recuerda, los push posteriores no necesitan aviso, así que relayium push encaja directamente en cron, un script de despliegue o CI para una sincronización de servidor a servidor cifrada, con integridad comprobada y reanudable. Cuando serve se ejecuta sin terminal (un servicio de systemd, una tubería) no puede preguntar, así que rechaza a los emisores desconocidos; autorízalos de antemano en su lugar. Obtén la huella con relayium id en el emisor, o cópiala de la línea \"rejected unauthorized peer …\" del registro de serve, y luego:",
+      ],
+      code: [
+        `# on the RECEIVER: pre-authorize a sender without a prompt
+relayium authorize 74318e3b...`,
+      ],
+      bullets: [
+        "Los archivos de identidad y confianza viven en ~/.config/relayium/ (se anulan con --config-dir, p. ej. /etc/relayium para un servicio).",
+        "authorize es idempotente: ejecutarlo de nuevo para la misma huella no hace nada.",
+      ],
+    },
+    {
+      heading: "Ejecutar el escucha bajo systemd",
+      body: [
+        "Para una bandeja de entrada siempre activa, ejecuta serve como servicio de systemd. Apunta --config-dir a una ubicación fija como /etc/relayium para que la identidad sea estable entre reinicios, y deja que systemd la mantenga viva:",
+      ],
+      code: [
+        `# /etc/systemd/system/relayium-serve.service
+[Unit]
+Description=Relayium daemon-direct listener
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/relayium serve --dir /srv/inbox --config-dir /etc/relayium
+Restart=always
+User=relayium
+
+[Install]
+WantedBy=multi-user.target`,
+      ],
+      bullets: [
+        "systemctl enable --now relayium-serve para iniciarlo y levantarlo al arrancar.",
+        "Mantén /etc/relayium/id.key legible solo para el usuario del servicio: relayium se niega a cargar una clave con permisos laxos.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿En qué se diferencia daemon direct de push por SSH?",
+        a: "push por SSH tuneliza la transferencia a través de tu conexión SSH y necesita una cuenta SSH en el remoto. daemon direct no necesita SSH ni cuenta: los dos servidores se autentican mutuamente por huella de certificado sobre TLS fijado, lo cual es más ligero cuando ambas máquinas son tuyas.",
+      },
+      {
+        q: "¿Tengo que copiar huellas a mano de un lado a otro?",
+        a: "No. En una terminal, serve te pide aprobar a cada nuevo emisor en su primer push —mostrando su dirección y su huella— y lo recuerda, así que los push posteriores son silenciosos. Solo recurres a relayium id o relayium authorize en configuraciones no interactivas como un servicio de systemd, donde no hay nadie para responder al aviso.",
+      },
+      {
+        q: "¿Dónde están los archivos de identidad y confianza?",
+        a: "En ~/.config/relayium/ por defecto (se anula con --config-dir). id.key / id.crt son la identidad persistente de este host, known_hosts guarda las huellas de los escuchas a los que has hecho push, y authorized_fingerprints es la lista de permitidos de emisores del escucha.",
+      },
+      {
+        q: "¿Qué pasa si una huella cambia?",
+        a: "El push se rechaza y avisa. La clave del escucha se fija en known_hosts en el primer uso, así que un cambio posterior —un host con clave regenerada o un ataque de intermediario— se rechaza en lugar de aceptarse en silencio. Elimina la línea de known_hosts solo si rotaste la clave a propósito.",
+      },
+      {
+        q: "¿Hay algún respaldo por retransmisor?",
+        a: "No. daemon direct asume una dirección de escucha alcanzable; si no se puede establecer la conexión, falla. Nada se enruta nunca a través de Relayium como proxy: ese es el sentido de este modo.",
+      },
+    ],
+  },
+  cta: {
+    text: "Conecta dos de tus propios servidores para transferencias directas: sin retransmisor, sin SSH, sin código de emparejamiento.",
+    button: "Obtener la CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Seguir leyendo",
+};
+
+const pt = {
+  title: "Transferências de servidor para servidor com a CLI do Relayium (daemon direct)",
+  description:
+    "Mova arquivos diretamente entre dois servidores que você controla com relayium serve e push relayium:// — sobre TLS fixado, sem retransmissor, sem SSH, sem código. Aprove um novo emissor uma vez no seu primeiro push e depois automatize-o ou execute-o sob systemd.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "Quando as duas máquinas são suas e cada uma conhece o endereço da outra, o SSH é um atrito a mais e um encontro é puro overhead. O daemon direct foi feito exatamente para isso: um servidor escuta, o outro faz push direto para ele sobre uma conexão TLS 1.3 fixada. Sem retransmissor, sem SSH, sem código de emparelhamento: a confiança é por chave pública e é configurada uma única vez.",
+    "Este guia cobre iniciar o listener, fazer push para ele, aprovar um novo emissor no primeiro contato, automatizá-lo e executar o listener como um serviço do systemd.",
+  ],
+  sections: [
+    {
+      heading: "Iniciar o listener (no receptor)",
+      body: [
+        "No servidor receptor, serve escuta os pushes e os escreve em um diretório. Ele roda continuamente por padrão; adicione --once para aceitar uma única transferência e sair. Você não compartilha nada com antecedência: não há impressões digitais para copiar antes:",
+      ],
+      code: [
+        `# on the RECEIVER
+relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031`,
+      ],
+      bullets: [
+        "O listener processa as conexões uma de cada vez e deposita os arquivos em --dir.",
+        "A porta padrão é 9031; altere-a com --port e abra-a no seu firewall.",
+      ],
+    },
+    {
+      heading: "Fazer push para ele (no emissor)",
+      body: [
+        "Do servidor emissor, faça push para o endereço relayium:// do receptor. A primeira conexão fixa a impressão digital do receptor; toda conexão posterior a verifica, e uma impressão digital alterada é recusada em vez de aceita silenciosamente — assim, uma chave trocada ou um ataque de intermediário é detectado, não confiado. No primeiro push, o emissor espera um momento enquanto o receptor o aprova (próximo passo).",
+      ],
+      code: [
+        `# on the SENDER
+relayium push ./build.tar.zst relayium://receiver.example.com
+
+# non-default port
+relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
+      ],
+      bullets: [
+        "Sem retransmissor e sem retorno: se o listener não for alcançável, o push falha — os bytes do arquivo nunca são roteados por mais ninguém.",
+        "O mesmo motor de transferência dos outros modos: retomável, com uma verificação SHA-256 por arquivo.",
+      ],
+    },
+    {
+      heading: "Aprovar o emissor no primeiro push (no receptor)",
+      body: [
+        "Na primeira vez que uma máquina nova faz push para o seu listener, serve (em um terminal) mostra de onde ela vem e sua impressão digital e pede que você a aprove — como o prompt de primeira conexão do SSH, mas no lado receptor:",
+      ],
+      code: [
+        `# on the RECEIVER, when a new sender pushes:
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+      ],
+      bullets: [
+        "Responda y e essa impressão digital é lembrada em authorized_fingerprints; cada push posterior da mesma máquina passa então em silêncio.",
+        "A impressão digital é a identidade estável de uma máquina (sobrevive a reinicializações e mudanças de IP), então aprovar é um passo único por emissor.",
+        "O emissor, por sua vez, aprende a chave do listener na primeira conexão (confiança no primeiro uso) e a fixa em known_hosts.",
+      ],
+    },
+    {
+      heading: "Automatizá-lo (ou executá-lo sem terminal)",
+      body: [
+        "Como uma impressão digital aprovada é lembrada, os pushes posteriores não precisam de prompt, então relayium push se encaixa direto em cron, um script de deploy ou CI para uma sincronização de servidor para servidor criptografada, com integridade verificada e retomável. Quando serve roda sem terminal (um serviço do systemd, um pipe) ele não pode perguntar, então rejeita emissores desconhecidos; pré-autorize-os em vez disso. Obtenha a impressão digital com relayium id no emissor, ou copie-a da linha \"rejected unauthorized peer …\" no log do serve, e então:",
+      ],
+      code: [
+        `# on the RECEIVER: pre-authorize a sender without a prompt
+relayium authorize 74318e3b...`,
+      ],
+      bullets: [
+        "Os arquivos de identidade e confiança ficam em ~/.config/relayium/ (substitua com --config-dir, por exemplo /etc/relayium para um serviço).",
+        "authorize é idempotente — executá-lo novamente para a mesma impressão digital não faz nada.",
+      ],
+    },
+    {
+      heading: "Executar o listener sob systemd",
+      body: [
+        "Para uma caixa de entrada sempre ativa, execute serve como um serviço do systemd. Aponte --config-dir para um local fixo como /etc/relayium para que a identidade seja estável entre reinicializações, e deixe o systemd mantê-la viva:",
+      ],
+      code: [
+        `# /etc/systemd/system/relayium-serve.service
+[Unit]
+Description=Relayium daemon-direct listener
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/relayium serve --dir /srv/inbox --config-dir /etc/relayium
+Restart=always
+User=relayium
+
+[Install]
+WantedBy=multi-user.target`,
+      ],
+      bullets: [
+        "systemctl enable --now relayium-serve para iniciá-lo e subi-lo no boot.",
+        "Mantenha /etc/relayium/id.key legível apenas pelo usuário do serviço — relayium se recusa a carregar uma chave com permissões frouxas.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "Em que o daemon direct difere de push por SSH?",
+        a: "push por SSH tunela a transferência pela sua conexão SSH e precisa de uma conta SSH no remoto. O daemon direct não precisa de SSH nem de conta — os dois servidores se autenticam mutuamente pela impressão digital do certificado sobre TLS fixado, o que é mais leve quando as duas máquinas são suas.",
+      },
+      {
+        q: "Preciso copiar impressões digitais à mão de um lado para o outro?",
+        a: "Não. Em um terminal, serve pede que você aprove cada novo emissor no seu primeiro push — mostrando seu endereço e sua impressão digital — e o lembra, então os pushes posteriores são silenciosos. Você só recorre a relayium id ou relayium authorize em configurações não interativas como um serviço do systemd, onde não há ninguém para responder ao prompt.",
+      },
+      {
+        q: "Onde estão os arquivos de identidade e confiança?",
+        a: "Em ~/.config/relayium/ por padrão (substitua com --config-dir). id.key / id.crt são a identidade persistente deste host, known_hosts guarda as impressões digitais dos listeners para os quais você fez push, e authorized_fingerprints é a lista de permissão de emissores do listener.",
+      },
+      {
+        q: "O que acontece se uma impressão digital mudar?",
+        a: "O push é recusado e avisa. A chave do listener é fixada em known_hosts no primeiro uso, então uma mudança posterior — um host com chave regenerada ou um ataque de intermediário — é rejeitada em vez de aceita silenciosamente. Remova a linha do known_hosts apenas se você rotacionou a chave intencionalmente.",
+      },
+      {
+        q: "Existe algum retorno por retransmissor?",
+        a: "Não. O daemon direct pressupõe um endereço de listener alcançável; se a conexão não puder ser feita, ela falha. Nada é jamais roteado via proxy pelo Relayium — esse é o propósito deste modo.",
+      },
+    ],
+  },
+  cta: {
+    text: "Conecte dois dos seus próprios servidores para transferências diretas — sem retransmissor, sem SSH, sem código de emparelhamento.",
+    button: "Obter a CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "guides/server-to-server-transfers",
   updated: "2026-07-12",
-  langs: withInstall({ en, zh, ja, ko, de, fr, ar }),
+  langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

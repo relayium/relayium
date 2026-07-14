@@ -14,6 +14,8 @@
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/sync-a-large-folder-between-servers" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/sync-a-large-folder-between-servers" />
     <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/sync-a-large-folder-between-servers" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/sync-a-large-folder-between-servers" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -61,7 +63,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
       <h1>2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド)</h1>
       <p class="updated">最終更新: 2026-07-08</p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers">English</a><a href="/zh/guides/sync-a-large-folder-between-servers">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers" aria-current="true">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers">Français</a><a href="/ar/guides/sync-a-large-folder-between-servers">العربية</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers">English</a><a href="/zh/guides/sync-a-large-folder-between-servers">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers" aria-current="true">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers">Français</a><a href="/ar/guides/sync-a-large-folder-between-servers">العربية</a><a href="/es/guides/sync-a-large-folder-between-servers">Español</a><a href="/pt/guides/sync-a-large-folder-between-servers">Português</a></nav>
       <p class="lead">一方のサーバーに大きなフォルダー——数十 GB——があり、それをもう一方に完全な複製として欲しいとします。何時間もターミナルを見張ることはできませんし、途中で落ちた転送が最初からやり直しになるのも困ります。relayium sync はまさにこのために作られています。一方向の増分ミラーで、すでにあるものはスキップし、途中まで送ったファイルは止まったところから再開し、各ファイルを端から端まで検証します。</p>
       <p class="lead">本ガイドでは、無人で自己修復する転送を構築します。送信側を一度だけ承認し、リスナーをバックグラウンドで動かし、tmux 内のリトライループで relayium sync を回して、接続が切れても続行させ、フォルダー全体が届くまで走らせます。</p>
       <h2>なぜ relayium sync がこの用途に向くのか</h2>

@@ -614,4 +614,182 @@ const ar = {
   ],
 };
 
-export default { slug: "privacy", langs: { en, zh, ja, ko, de, fr, ar } };
+const es = {
+  title: "Política de privacidad",
+  description:
+    "Cómo Relayium gestiona tus datos: las transferencias directas en tiempo real se realizan de igual a igual y nunca pasan por nuestros servidores; el modo de enlace de descarga almacenado mantiene los archivos cifrados con conocimiento cero. Las cuentas son opcionales y solo almacenan un correo electrónico y un nombre para mostrar.",
+  updatedLabel: "Última actualización",
+  updated: "2026-07-01",
+  otherDocLabel: "Términos del servicio",
+  lead: [
+    "Relayium está diseñado para que tus archivos sigan siendo tuyos. Las transferencias directas en tiempo real se realizan de igual a igual, cifradas de extremo a extremo, y nunca pasan por nuestros servidores; el modo opcional de enlace de descarga almacenado utiliza cifrado de conocimiento cero: el servidor solo conserva texto cifrado que no puede leer.",
+    "Esta página explica los pocos datos que el servicio sí gestiona, y los datos que deliberadamente nunca ve.",
+  ],
+  sections: [
+    {
+      heading: "Las transferencias en red local no recopilan nada",
+      body: [
+        "Cuando transfieres archivos entre dispositivos de la misma red, no se necesita ninguna cuenta y el servicio no almacena nada sobre ti. El servidor de señalización solo ayuda a que los dos dispositivos se encuentren entre sí; los bytes del archivo fluyen de dispositivo a dispositivo a través de un canal WebRTC cifrado.",
+      ],
+    },
+    {
+      heading: "Qué almacena una cuenta (solo si inicias sesión)",
+      body: [
+        "Las transferencias en la misma red (red local) no necesitan cuenta. Enviar entre redes con un código de emparejamiento requiere que el remitente inicie sesión: la persona que recibe nunca necesita una cuenta. Crear un enlace de descarga almacenado también requiere iniciar sesión. Si inicias sesión, almacenamos lo mínimo necesario para gestionar una cuenta:",
+      ],
+      bullets: [
+        "Tu dirección de correo electrónico y un nombre para mostrar.",
+        "Qué método de inicio de sesión usaste (Google, un enlace mágico por correo electrónico, o correo electrónico + contraseña). Los tokens de enlace mágico se almacenan solo como un hash, nunca en texto claro; si estableces una contraseña, almacenamos solo su hash bcrypt, nunca la contraseña en sí.",
+        "Una sesión de inicio de sesión, guardada en una cookie segura httpOnly.",
+        "Los dispositivos que registras, como un id de dispositivo aleatorio y un nombre de dispositivo (p. ej., el nombre de tu plataforma).",
+      ],
+    },
+    {
+      heading: "Transferencia almacenada (enlaces de descarga)",
+      body: [
+        "Cuando usas el modo opcional de enlace de descarga almacenado, tu navegador cifra tus archivos con AES-256-GCM antes de que salgan de tu dispositivo. La clave de descifrado existe únicamente en el fragmento de la URL: nunca se envía al servidor. Esto significa:",
+      ],
+      bullets: [
+        "El servidor solo almacena texto cifrado. No puede leer el contenido de tus archivos, sus nombres ni las claves.",
+        "Registramos el tamaño del texto cifrado y marcas de tiempo (hora de subida, caducidad) para la gestión de cuotas y la limpieza.",
+        "El texto cifrado se elimina automáticamente al caducar o en la primera descarga completa (destrucción tras la lectura), lo que ocurra primero.",
+      ],
+    },
+    {
+      heading: "Qué nunca recopilamos",
+      body: ["El servicio está diseñado para que lo siguiente nunca llegue a nuestros servidores:"],
+      bullets: [
+        "El contenido de tus archivos.",
+        "Los nombres de tus archivos.",
+        "Tus claves de cifrado.",
+      ],
+    },
+    {
+      heading: "Retransmisión entre redes (TURN)",
+      body: [
+        "Cuando dos dispositivos no pueden conectarse directamente entre redes, el flujo cifrado se retransmite a través de un servidor TURN. El retransmisor sigue sin poder leer tus archivos: permanecen cifrados de extremo a extremo. Registramos el número de bytes retransmitidos por cuenta, para aplicar una asignación mensual de retransmisión y evitar el abuso; nunca inspeccionamos lo que se retransmite, solo el recuento de bytes.",
+      ],
+    },
+    {
+      heading: "Cookies y almacenamiento local",
+      body: [
+        "Usamos una cookie de sesión para mantener tu sesión iniciada. En el almacenamiento local de tu navegador guardamos un id de dispositivo aleatorio para que un dispositivo que hayas registrado pueda ser reconocido. No usamos cookies de publicidad ni de seguimiento.",
+      ],
+    },
+    {
+      heading: "Servicios de terceros",
+      body: ["Solo intervienen un par de terceros cuando eliges usarlos:"],
+      bullets: [
+        "Google, si inicias sesión con Google: recibimos tu correo electrónico y tu perfil básico para crear la cuenta.",
+        "Un proveedor de envío de correo electrónico, para enviar los correos de inicio de sesión con enlace mágico.",
+      ],
+    },
+    {
+      heading: "Conservación y eliminación de datos",
+      body: [
+        "Los datos de la cuenta se conservan mientras exista tu cuenta. Puedes pedirnos que eliminemos tu cuenta y sus datos en cualquier momento contactándonos en support@relayium.com.",
+      ],
+    },
+    {
+      heading: "Cambios en esta política",
+      body: [
+        "Podemos actualizar esta política a medida que el servicio evolucione. Cuando lo hagamos, cambiaremos la fecha de «Última actualización» anterior.",
+      ],
+    },
+    {
+      heading: "Contacto",
+      body: ["¿Preguntas sobre privacidad? Escribe a support@relayium.com."],
+    },
+  ],
+};
+
+const pt = {
+  title: "Política de Privacidade",
+  description:
+    "Como a Relayium lida com seus dados: as transferências diretas em tempo real são feitas ponto a ponto e nunca passam pelos nossos servidores; o modo de link de download armazenado mantém os arquivos criptografados com conhecimento zero. As contas são opcionais e armazenam apenas um e-mail e um nome de exibição.",
+  updatedLabel: "Última atualização",
+  updated: "2026-07-01",
+  otherDocLabel: "Termos de Serviço",
+  lead: [
+    "A Relayium foi criada para que seus arquivos continuem sendo seus. As transferências diretas em tempo real são feitas ponto a ponto, com criptografia de ponta a ponta, e nunca passam pelos nossos servidores; o modo opcional de link de download armazenado usa criptografia de conhecimento zero — o servidor guarda apenas texto cifrado que não consegue ler.",
+    "Esta página explica os poucos dados que o serviço de fato processa e os dados que ele deliberadamente nunca vê.",
+  ],
+  sections: [
+    {
+      heading: "As transferências na rede local não coletam nada",
+      body: [
+        "Quando você transfere arquivos entre dispositivos na mesma rede, nenhuma conta é necessária e o serviço não armazena nada sobre você. O servidor de sinalização apenas ajuda os dois dispositivos a se encontrarem; os bytes do arquivo fluem de dispositivo para dispositivo por um canal WebRTC criptografado.",
+      ],
+    },
+    {
+      heading: "O que uma conta armazena (somente se você fizer login)",
+      body: [
+        "As transferências na mesma rede (rede local) não precisam de conta. Enviar entre redes com um código de emparelhamento exige que o remetente faça login — quem recebe nunca precisa de uma conta. Criar um link de download armazenado também exige fazer login. Se você fizer login, armazenamos o mínimo necessário para operar uma conta:",
+      ],
+      bullets: [
+        "Seu endereço de e-mail e um nome de exibição.",
+        "Qual método de login você usou (Google, um link mágico por e-mail ou e-mail + senha). Os tokens de link mágico são armazenados apenas como um hash, nunca em texto claro; se você definir uma senha, armazenamos apenas o hash bcrypt dela, nunca a senha em si.",
+        "Uma sessão de login, mantida em um cookie seguro httpOnly.",
+        "Os dispositivos que você registra, como um id de dispositivo aleatório e um nome de dispositivo (por exemplo, o nome da sua plataforma).",
+      ],
+    },
+    {
+      heading: "Transferência armazenada (links de download)",
+      body: [
+        "Quando você usa o modo opcional de link de download armazenado, seu navegador criptografa seus arquivos com AES-256-GCM antes de eles saírem do seu dispositivo. A chave de descriptografia existe apenas no fragmento da URL — ela nunca é enviada ao servidor. Isso significa:",
+      ],
+      bullets: [
+        "O servidor armazena apenas texto cifrado. Ele não consegue ler o conteúdo dos seus arquivos, os nomes deles nem as chaves.",
+        "Registramos o tamanho do texto cifrado e marcas de tempo (hora do envio, expiração) para gerenciamento de cota e limpeza.",
+        "O texto cifrado é excluído automaticamente na expiração ou no primeiro download completo (destruição após leitura), o que ocorrer primeiro.",
+      ],
+    },
+    {
+      heading: "O que nunca coletamos",
+      body: ["O serviço foi projetado para que o seguinte nunca chegue aos nossos servidores:"],
+      bullets: [
+        "O conteúdo dos seus arquivos.",
+        "Os nomes dos seus arquivos.",
+        "Suas chaves de criptografia.",
+      ],
+    },
+    {
+      heading: "Retransmissão entre redes (TURN)",
+      body: [
+        "Quando dois dispositivos não conseguem se conectar diretamente entre redes, o fluxo criptografado é retransmitido por um servidor TURN. O retransmissor ainda não consegue ler seus arquivos — eles permanecem com criptografia de ponta a ponta. Registramos o número de bytes retransmitidos por conta, para aplicar uma cota mensal de retransmissão e evitar abusos — nunca inspecionamos o que é retransmitido, apenas a contagem de bytes.",
+      ],
+    },
+    {
+      heading: "Cookies e armazenamento local",
+      body: [
+        "Usamos um cookie de sessão para manter você conectado. No armazenamento local do seu navegador, guardamos um id de dispositivo aleatório para que um dispositivo que você registrou possa ser reconhecido. Não usamos cookies de publicidade ou de rastreamento.",
+      ],
+    },
+    {
+      heading: "Serviços de terceiros",
+      body: ["Alguns poucos terceiros só entram em cena quando você opta por usá-los:"],
+      bullets: [
+        "O Google, se você fizer login com o Google — recebemos seu e-mail e seu perfil básico para criar a conta.",
+        "Um provedor de envio de e-mail, para enviar os e-mails de login com link mágico.",
+      ],
+    },
+    {
+      heading: "Retenção e exclusão de dados",
+      body: [
+        "Os dados da conta são mantidos enquanto sua conta existir. Você pode nos pedir para excluir sua conta e seus dados a qualquer momento entrando em contato pelo support@relayium.com.",
+      ],
+    },
+    {
+      heading: "Alterações nesta política",
+      body: [
+        "Podemos atualizar esta política à medida que o serviço evolui. Quando o fizermos, alteraremos a data de \"Última atualização\" acima.",
+      ],
+    },
+    {
+      heading: "Contato",
+      body: ["Dúvidas sobre privacidade? Envie um e-mail para support@relayium.com."],
+    },
+  ],
+};
+
+export default { slug: "privacy", langs: { en, zh, ja, ko, de, fr, ar, es, pt } };

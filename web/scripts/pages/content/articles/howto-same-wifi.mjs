@@ -586,8 +586,174 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Enviar archivos entre dispositivos en la misma Wi-Fi",
+  description:
+    "Cómo enviar archivos entre cualquier dispositivo en la misma Wi-Fi o red local — sin cuenta, sin código de emparejamiento, solo abre relayium.com en ambos y transfiere directamente, cifrado de extremo a extremo.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "Si dos o más dispositivos están en la misma Wi-Fi o red local, enviar un archivo entre ellos no debería requerir una cuenta, un código ni un rodeo por la nube. Relayium detecta cuándo los dispositivos comparten una red y les permite conectarse directamente, en el navegador, sin nada que registrar.",
+    "Esta guía cubre el caso genérico de la misma red — cualquier dispositivo, cualquier sistema operativo, incluso más de dos a la vez. Si tienes en mente una pareja de dispositivos concreta, consulta las guías dedicadas para PC a teléfono, Mac a Windows, o un flujo estilo AirDrop para Windows/Linux/Android, enlazadas al final.",
+  ],
+  sections: [
+    {
+      heading: "Cómo funciona la detección en la misma red",
+      body: [
+        "Relayium no te pide teclear nada para encontrar dispositivos cercanos. Cuando tu navegador abre relayium.com sin un código de emparejamiento, el servidor te coloca en una sala según la red desde la que te conectas — en la práctica, los dispositivos que comparten la misma dirección IP pública (la misma Wi-Fi de casa, la oficina o el campus, o el mismo punto de acceso móvil) van a parar automáticamente a la misma sala.",
+        "Esa sala no está limitada a dos participantes: acoge tantos dispositivos como abran el sitio desde esa red, así que toda una mesa de portátiles o un aula de teléfonos pueden verse todos a la vez, no solo una única pareja.",
+      ],
+    },
+    {
+      heading: "Paso a paso",
+      body: [
+        "Todo el proceso ocurre en el navegador — ninguna app que instalar en ningún dispositivo.",
+      ],
+      bullets: [
+        "Conecta cada dispositivo que quieras usar a la misma Wi-Fi o red local.",
+        "En cada dispositivo, abre relayium.com en un navegador moderno (Chrome, Edge, Firefox o Safari).",
+        "Los dispositivos de esa red aparecen entre sí automáticamente — sin código, sin inicio de sesión, sin cuenta en ninguno de los lados.",
+        "Elige un archivo o una carpeta entera (hasta 1.000 archivos por lote) y selecciona qué dispositivo de la lista debe recibirlo.",
+        "Ambos dispositivos muestran el mismo código de verificación corto (SAS). Échale un vistazo en cada pantalla, confirma que coincide, y la transferencia empieza.",
+        "Los archivos pasan directamente de un dispositivo al otro; guárdalos cuando lleguen.",
+      ],
+    },
+    {
+      heading: "Por qué es rápido: sin servidor en medio",
+      body: [
+        "Como ambos dispositivos ya están en la misma red, Relayium los conecta directamente de igual a igual — los bytes viajan de un dispositivo al otro por tu Wi-Fi local y nunca hacen un viaje de ida y vuelta a un servidor de Relayium. No hay nada que subir ni nada que esperar al descargar; la velocidad solo está limitada por tu red local, que suele ser mucho más rápida que una conexión a internet en cualquier sentido.",
+        "Esta es también la razón por la que no interviene cuenta alguna en ningún lado: con todos ya en la misma red de confianza, Relayium no necesita inicio de sesión para saber quién debería poder conectarse con quién.",
+      ],
+    },
+    {
+      heading: "Sigue siendo cifrado de extremo a extremo",
+      body: [
+        "Estar en la misma red no significa que la transferencia se envíe en claro. Relayium negocia un intercambio de claves X25519 entre los dos dispositivos y cifra cada bloque con AES-256-GCM; esa clave nunca la ve ningún servidor, incluido el propio servidor de señalización de Relayium, que solo ayuda a los dispositivos a encontrarse. El código de verificación corto (SAS) que ambas pantallas muestran te permite confirmar visualmente que la conexión es realmente entre tus dos dispositivos, y cada archivo se comprueba de extremo a extremo con un hash SHA-256 para que sepas que llegó intacto byte a byte.",
+      ],
+    },
+    {
+      heading: "Si un dispositivo está en una red distinta",
+      body: [
+        "El modo de la misma red solo funciona cuando los dispositivos comparten realmente una red — un teléfono con datos móviles, un portátil en otra Wi-Fi o un dispositivo detrás de otro router no aparecerán automáticamente. Para ese caso, Relayium también admite conectar entre redes con un código de emparejamiento corto: el remitente inicia sesión para generar el código (o un código QR / enlace), quien recibe nunca necesita una cuenta, y la transferencia sigue conectando directamente, de igual a igual, siempre que las redes lo permitan — recurriendo a un retransmisor cifrado solo cuando no es posible una ruta directa.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Necesito una cuenta para enviar archivos en la misma Wi-Fi?",
+        a: "No. Las transferencias en la misma red no necesitan cuenta ni código de emparejamiento en ninguno de los lados — solo abre relayium.com en cada dispositivo.",
+      },
+      {
+        q: "¿Cómo sabe Relayium qué dispositivos están en mi red?",
+        a: "Los dispositivos que se conectan desde la misma red suelen compartir la misma dirección IP pública, y Relayium agrupa automáticamente en la misma sala los dispositivos con una IP pública coincidente, sin necesidad de código.",
+      },
+      {
+        q: "¿Pueden verse más de dos dispositivos a la vez?",
+        a: "Sí. Las salas de la misma red no se limitan a una pareja — cada dispositivo que abra relayium.com desde esa red puede aparecer y recibir archivos, útil para compartir con varias personas en la misma sala u oficina.",
+      },
+      {
+        q: "¿Sigue cifrada la transferencia aunque nunca salga de mi red?",
+        a: "Sí. Cada transferencia en la misma red usa el mismo intercambio de claves X25519 y el mismo cifrado AES-256-GCM que una entre redes, con un código de verificación que puedes comprobar tú mismo y una comprobación de integridad SHA-256 por archivo.",
+      },
+      {
+        q: "¿Y si un dispositivo está en Wi-Fi y el otro en datos móviles?",
+        a: "No están en la misma red, así que el descubrimiento automático no los conectará. Usa en su lugar un código de emparejamiento — el remitente inicia sesión para crearlo, quien recibe no necesita cuenta, y los dos dispositivos aún se conectan directamente.",
+      },
+    ],
+  },
+  cta: {
+    text: "Abre Relayium en dos (o más) dispositivos cualesquiera en la misma Wi-Fi y envía tu primer archivo — sin cuenta, sin código.",
+    button: "Prueba Relayium ahora",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Enviar arquivos entre dispositivos na mesma Wi-Fi",
+  description:
+    "Como enviar arquivos entre quaisquer dispositivos na mesma Wi-Fi ou rede local — sem conta, sem código de emparelhamento, é só abrir relayium.com nos dois e transferir diretamente, criptografado de ponta a ponta.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "Se dois ou mais dispositivos estão na mesma Wi-Fi ou rede local, enviar um arquivo entre eles não deveria exigir uma conta, um código nem um desvio pela nuvem. O Relayium detecta quando os dispositivos compartilham uma rede e permite que se conectem diretamente, no navegador, sem nada para cadastrar.",
+    "Este guia cobre o caso genérico da mesma rede — quaisquer dispositivos, quaisquer sistemas operacionais, até mais de dois ao mesmo tempo. Se você tem em mente um par de dispositivos específico, veja os guias dedicados para PC para celular, Mac para Windows, ou um fluxo no estilo AirDrop para Windows/Linux/Android, com links no fim.",
+  ],
+  sections: [
+    {
+      heading: "Como funciona a detecção na mesma rede",
+      body: [
+        "O Relayium não pede que você digite nada para encontrar dispositivos próximos. Quando seu navegador abre relayium.com sem um código de emparelhamento, o servidor coloca você em uma sala com base na rede pela qual você está se conectando — na prática, dispositivos que compartilham o mesmo endereço IP público (a mesma Wi-Fi de casa, do escritório ou do campus, ou o mesmo ponto de acesso móvel) vão parar automaticamente na mesma sala.",
+        "Essa sala não é limitada a dois participantes: ela comporta quantos dispositivos abrirem o site a partir daquela rede, então uma mesa inteira de notebooks ou uma sala de aula de celulares podem se ver todos ao mesmo tempo, não apenas um único par.",
+      ],
+    },
+    {
+      heading: "Passo a passo",
+      body: [
+        "Todo o fluxo acontece no navegador — nenhum app para instalar em qualquer dispositivo.",
+      ],
+      bullets: [
+        "Conecte cada dispositivo que você quer usar à mesma Wi-Fi ou rede local.",
+        "Em cada dispositivo, abra relayium.com em um navegador moderno (Chrome, Edge, Firefox ou Safari).",
+        "Os dispositivos daquela rede aparecem uns para os outros automaticamente — sem código, sem login, sem conta em nenhum dos lados.",
+        "Escolha um arquivo ou uma pasta inteira (até 1.000 arquivos por lote) e escolha qual dispositivo da lista deve recebê-lo.",
+        "Ambos os dispositivos mostram o mesmo código de verificação curto (SAS). Dê uma olhada em cada tela, confirme que coincide, e a transferência começa.",
+        "Os arquivos passam direto de um dispositivo para o outro; salve-os quando chegarem.",
+      ],
+    },
+    {
+      heading: "Por que é rápido: nenhum servidor no meio",
+      body: [
+        "Como os dois dispositivos já estão na mesma rede, o Relayium os conecta diretamente ponto a ponto — os bytes viajam de um dispositivo para o outro pela sua Wi-Fi local e nunca fazem uma ida e volta a um servidor do Relayium. Não há nada para enviar e nada para esperar baixando; a velocidade é limitada apenas pela sua rede local, que normalmente é muito mais rápida do que uma conexão de internet em qualquer sentido.",
+        "É também por isso que nenhuma conta está envolvida em nenhum dos lados: com todos já na mesma rede confiável, o Relayium não precisa de login para saber quem deve poder se conectar a quem.",
+      ],
+    },
+    {
+      heading: "Ainda criptografado de ponta a ponta",
+      body: [
+        "Estar na mesma rede não significa que a transferência é enviada às claras. O Relayium negocia uma troca de chaves X25519 entre os dois dispositivos e criptografa cada bloco com AES-256-GCM; essa chave nunca é vista por nenhum servidor, incluindo o próprio servidor de sinalização do Relayium, que apenas ajuda os dispositivos a se encontrarem. O código de verificação curto (SAS) que ambas as telas exibem permite confirmar visualmente que a conexão é realmente entre os seus dois dispositivos, e cada arquivo é verificado de ponta a ponta com um hash SHA-256 para você saber que chegou intacto, byte a byte.",
+      ],
+    },
+    {
+      heading: "Se um dispositivo estiver em uma rede diferente",
+      body: [
+        "O modo da mesma rede só funciona quando os dispositivos realmente compartilham uma rede — um celular no dados móveis, um notebook em outra Wi-Fi ou um dispositivo atrás de outro roteador não aparecerá automaticamente. Para esse caso, o Relayium também oferece conexão entre redes com um código de emparelhamento curto: o remetente faz login para gerar o código (ou um código QR / link), quem recebe nunca precisa de conta, e a transferência ainda se conecta diretamente, ponto a ponto, sempre que as redes permitirem — recorrendo a um retransmissor criptografado apenas quando um caminho direto não é possível.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "Preciso de uma conta para enviar arquivos na mesma Wi-Fi?",
+        a: "Não. Transferências na mesma rede não precisam de conta nem de código de emparelhamento em nenhum dos lados — é só abrir relayium.com em cada dispositivo.",
+      },
+      {
+        q: "Como o Relayium sabe quais dispositivos estão na minha rede?",
+        a: "Dispositivos que se conectam a partir da mesma rede normalmente compartilham o mesmo endereço IP público, e o Relayium agrupa automaticamente na mesma sala os dispositivos com IP público correspondente, sem exigir código.",
+      },
+      {
+        q: "Mais de dois dispositivos podem se ver ao mesmo tempo?",
+        a: "Sim. As salas da mesma rede não são limitadas a um par — todo dispositivo que abrir relayium.com a partir daquela rede pode aparecer e receber arquivos, útil para compartilhar com várias pessoas na mesma sala ou escritório.",
+      },
+      {
+        q: "A transferência continua criptografada mesmo que nunca saia da minha rede?",
+        a: "Sim. Toda transferência na mesma rede usa a mesma troca de chaves X25519 e a mesma criptografia AES-256-GCM de uma entre redes, com um código de verificação que você mesmo pode conferir e uma verificação de integridade SHA-256 por arquivo.",
+      },
+      {
+        q: "E se um dispositivo estiver na Wi-Fi e o outro no dados móveis?",
+        a: "Então eles não estão na mesma rede, e a descoberta automática não vai conectá-los. Use um código de emparelhamento em vez disso — o remetente faz login para criá-lo, quem recebe não precisa de conta, e os dois dispositivos ainda se conectam diretamente.",
+      },
+    ],
+  },
+  cta: {
+    text: "Abra o Relayium em dois (ou mais) dispositivos quaisquer na mesma Wi-Fi e envie seu primeiro arquivo — sem conta, sem código.",
+    button: "Experimente o Relayium agora",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "how-to/send-files-on-the-same-wifi",
   updated: "2026-07-09",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

@@ -14,6 +14,8 @@
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/security" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/security" />
     <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/security" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/security" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/security" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/security" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -43,7 +45,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
       <h1>الأمان ونموذج التهديد</h1>
       <p class="updated">آخر تحديث: 2026-07-01</p>
-      <nav class="langbar" aria-label="Language"><a href="/security">English</a><a href="/zh/security">中文</a><a href="/ja/security">日本語</a><a href="/ko/security">한국어</a><a href="/de/security">Deutsch</a><a href="/fr/security">Français</a><a href="/ar/security" aria-current="true">العربية</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/security">English</a><a href="/zh/security">中文</a><a href="/ja/security">日本語</a><a href="/ko/security">한국어</a><a href="/de/security">Deutsch</a><a href="/fr/security">Français</a><a href="/ar/security" aria-current="true">العربية</a><a href="/es/security">Español</a><a href="/pt/security">Português</a></nav>
       <p>صُمِّمت Relayium بحيث يكون مَن ينقلون الملفات — لا الخادم — هم مَن يملكون المفاتيح. تصف هذه الصفحة بدقة ما هو محميّ، وكيف يعمل، وحدود تلك الحماية.</p>
       <p>باختصار: في الوضع الفوري لا تمسّ ملفاتك خوادمنا مطلقًا؛ وتُولَّد مفاتيح التشفير من جديد على كل جهاز ولا تغادره أبدًا؛ ويتيح رمز تحقق قصير لشخصين اكتشاف خادم خبيث. وفيما يلي التفاصيل.</p>
       <h2>التشفير من الطرف إلى الطرف (X25519 + AES-256-GCM)</h2><p>تُولِّد كل عملية نقل زوج مفاتيح X25519 جديدًا ومؤقتًا على كل جهاز. ويُجري الجهازان تبادلًا للمفاتيح لاشتقاق مفتاح AES-256-GCM مشترك لا يوجد إلا داخل المتصفحين. وتُشفَّر كل كتلة بذلك المفتاح مع قيمة عشوائية فريدة (nonce)، بحيث لا يرى خادم الإشارة — وأي مُرحِّل — سوى النص المُشفَّر على الدوام.</p><ul><li>المفاتيح مؤقتة وخاصة بكل عملية نقل — ولا يُعاد استخدام أي شيء عبر الجلسات.</li><li>يُشتَقّ المفتاح المشترك على الجهازين؛ ولا يُرسَل أبدًا إلى أي خادم ولا يُخزَّن عليه.</li><li>يُطبَّق التشفير في طبقة التطبيق، فوق أمان النقل الخاص بـ WebRTC، فيظل صامدًا حتى لو تعرّضت طبقة النقل للاختراق.</li></ul>

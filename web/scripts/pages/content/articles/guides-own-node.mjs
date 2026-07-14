@@ -671,8 +671,196 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Usa tu propio nodo: aprovecha el retransmisor y el almacenamiento de Relayium gratis",
+  description:
+    "Vincula tu propio nodo de retransmisión/almacenamiento a tu cuenta de Relayium con un solo comando. Tus transferencias pasan entonces por tu nodo — no por nuestros servidores medidos —, así que son gratis, y los datos permanecen en hardware que tú controlas.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "Las transferencias entre redes y los enlaces almacenados usan ancho de banda de retransmisión y disco que nos cuestan dinero, así que funcionan con una franquicia gratuita y se pagan a partir de ahí. Hay una forma de evitarlo: ejecuta tu propio nodo de retransmisión/almacenamiento, vincúlalo a tu cuenta, y tus transferencias fluyen por tu nodo en lugar del nuestro — nada medido, nada facturado.",
+    "Esto es distinto de alojar por tu cuenta todo el servidor de Relayium. Sigues usando tu cuenta habitual de relayium.com y las mismas aplicaciones; solo estás añadiendo un nodo que es tuyo para que lleve tu tráfico. Esta guía te lleva de una máquina Linux recién instalada a un nodo en línea en unos cinco minutos.",
+  ],
+  sections: [
+    {
+      heading: "Por qué ejecutar tu propio nodo",
+      body: [
+        "Dos razones. Primero, el costo: un nodo que es tuyo lleva tu tráfico de retransmisión y almacenamiento directamente, así que nunca toca nuestra infraestructura medida y no hay nada que facturar — tu uso es gratis por grande que sea.",
+        "Segundo, el control: los bytes retransmitidos y los blobs almacenados residen en hardware que tú operas, bajo tu propio control operativo. Las transferencias en tiempo real siguen cifradas de extremo a extremo durante todo el trayecto, así que incluso tu propio nodo solo ve texto cifrado.",
+      ],
+    },
+    {
+      heading: "Qué necesitas",
+      body: [
+        "Un servidor Linux accesible desde internet — sirve tanto un VPS barato como una máquina siempre encendida en casa. Necesitarás root (o sudo) y la capacidad de abrir unos cuantos puertos entrantes. Se admiten tanto amd64 como arm64.",
+      ],
+    },
+    {
+      heading: "Paso 1 — obtén tu comando de instalación",
+      body: [
+        "Inicia sesión en relayium.com, abre la página de cuenta (/me), desplázate hasta My Nodes y haz clic en Add node. Obtendrás un comando de instalación de un solo uso con un token incrustado — el token se muestra una única vez, así que cópialo de inmediato. Tiene este aspecto:",
+      ],
+      code: [INSTALL_CMD],
+      bullets: [
+        "La parte <your-token> se rellena por ti en la página de cuenta — no pegues literalmente el marcador de posición de arriba.",
+        "RELAYIUM_NODE_STORAGE_DIR activa el almacenamiento de blobs además de la retransmisión. Déjalo desactivado (omite la variable) si solo quieres que el nodo retransmita y no almacene.",
+      ],
+    },
+    {
+      heading: "Paso 2 — ejecútalo en tu servidor, como root",
+      body: [
+        "Pega el comando en tu servidor. Canaliza nuestro instalador a sh: el instalador descarga y verifica por suma de comprobación el binario relayium-node, lo instala en /usr/local/bin, escribe un servicio systemd y lo arranca. El sudo inicial es lo que le permite instalar el servicio; si ya eres root, es un no-op inofensivo.",
+        "Como es un servicio systemd, el nodo se habilita al arrancar y se reinicia por sí solo si alguna vez se cae — se mantiene en línea a través de los reinicios sin nada más que hacer. Si ves `relayium-node: command not found`, ejecutaste el binario directamente en lugar del instalador de arriba — es el comando de una línea el que pone el binario en su sitio.",
+      ],
+      bullets: [
+        "Comprueba que arrancó: `systemctl status relayium-node` (debería indicar active/running).",
+        "Confirma la persistencia al arranque: `systemctl is-enabled relayium-node` (debería indicar enabled).",
+        "Observa los registros en vivo: `journalctl -u relayium-node -f`.",
+      ],
+    },
+    {
+      heading: "Paso 3 — abre los puertos entrantes",
+      body: [
+        "Estar en línea (un latido hacia relayium.com) solo necesita acceso saliente, que ya tienes. Pero para que otros pares realmente retransmitan a través de tu nodo y almacenen en él, sus puertos entrantes deben ser accesibles. Si el host ejecuta un cortafuegos, ábrelos — con ufw es así:",
+      ],
+      code: PORTS_CODE,
+      bullets: [
+        "3478/udp es el puerto TURN que los pares usan para retransmitir; 8081/tcp es el puerto HTTP del almacenamiento de blobs; 49152–65535/udp es el rango de medios de la retransmisión.",
+        "En un VPS en la nube, permítelos también en el grupo de seguridad / cortafuegos de red del proveedor, no solo en ufw.",
+      ],
+    },
+    {
+      heading: "Paso 4 — confirma y enruta el tráfico a través de él",
+      body: [
+        "De vuelta en la página de cuenta, tu nodo aparece bajo My Nodes y cambia a Online en unos 30 segundos. A partir de entonces, las transferencias de tu cuenta prefieren tu propio nodo automáticamente.",
+        "Para forzarlo — que nunca recurra a nuestra infraestructura compartida — activa \"Only use my own nodes for relay/storage\" en la misma página. Con eso activado, si ninguno de tus nodos está en línea, una transferencia falla en lugar de usar discretamente los nuestros.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "Recibí \"relayium-node: command not found\" — ¿qué salió mal?",
+        a: "Ejecutaste el binario relayium-node antes de instalarlo. Usa el comando de instalación de una línea de la página de cuenta (la forma curl … | sudo … sh): descarga el binario, lo coloca en tu PATH y lo arranca como servicio. Nunca instalas relayium-node por separado.",
+      },
+      {
+        q: "¿El nodo sigue en línea tras un reinicio?",
+        a: "Sí. El instalador registra un servicio systemd que se habilita al arrancar y está configurado con Restart=always, así que vuelve tras un reinicio y se reinicia por sí solo si se cae. Nada más que ejecutar.",
+      },
+      {
+        q: "¿En qué se diferencia esto de alojar Relayium por tu cuenta?",
+        a: "Usar tu propio nodo conserva tu cuenta y aplicaciones habituales de relayium.com y solo añade un nodo que es tuyo para llevar tu tráfico. El autoalojamiento ejecuta toda la pila del servidor (cuentas, aplicación web, señalización) en tu propio dominio — consulta la guía \"Aloja Relayium por tu cuenta\" para eso.",
+      },
+      {
+        q: "¿Puede alguien más usar mi nodo o ver mis datos?",
+        a: "No. Un nodo está vinculado a tu cuenta por su token y solo lleva el tráfico de tu cuenta. Las transferencias en tiempo real están cifradas de extremo a extremo y los blobs almacenados son texto cifrado que tu nodo no puede leer. Tus datos y la configuración de tu nodo solo los puedes usar tú.",
+      },
+    ],
+  },
+  cta: {
+    text: "Inicia sesión, abre tu página de cuenta y añade tu primer nodo en menos de un minuto.",
+    button: "Abrir la página de cuenta",
+    href: "/me",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Use seu próprio nó: aproveite o retransmissor e o armazenamento do Relayium de graça",
+  description:
+    "Vincule seu próprio nó de retransmissão/armazenamento à sua conta do Relayium com um único comando. Suas transferências passam então pelo seu nó — não pelos nossos servidores medidos —, então são gratuitas, e os dados ficam em hardware que você controla.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "Transferências entre redes e links armazenados usam largura de banda de retransmissão e disco que nos custam dinheiro, então funcionam dentro de uma cota gratuita e são pagas além dela. Há um jeito de contornar isso: rode seu próprio nó de retransmissão/armazenamento, vincule-o à sua conta, e suas transferências fluem pelo seu nó em vez do nosso — nada medido, nada faturado.",
+    "Isso é diferente de hospedar por conta própria o servidor Relayium inteiro. Você continua usando sua conta habitual do relayium.com e os mesmos aplicativos; só está adicionando um nó que é seu para carregar seu tráfego. Este guia leva você de uma máquina Linux recém-instalada a um nó on-line em cerca de cinco minutos.",
+  ],
+  sections: [
+    {
+      heading: "Por que rodar seu próprio nó",
+      body: [
+        "Dois motivos. Primeiro, o custo: um nó que é seu carrega seu tráfego de retransmissão e armazenamento diretamente, então nunca toca nossa infraestrutura medida e não há nada a faturar — seu uso é gratuito por maior que seja.",
+        "Segundo, o controle: os bytes retransmitidos e os blobs armazenados residem em hardware que você opera, sob seu próprio controle operacional. As transferências em tempo real permanecem com criptografia de ponta a ponta durante todo o trajeto, então até seu próprio nó só vê texto cifrado.",
+      ],
+    },
+    {
+      heading: "O que você precisa",
+      body: [
+        "Um servidor Linux acessível pela internet — serve tanto um VPS barato quanto uma máquina sempre ligada em casa. Você vai precisar de root (ou sudo) e da capacidade de abrir alguns poucos portos de entrada. Tanto amd64 quanto arm64 são suportados.",
+      ],
+    },
+    {
+      heading: "Passo 1 — obtenha seu comando de instalação",
+      body: [
+        "Faça login em relayium.com, abra a página da conta (/me), role até My Nodes e clique em Add node. Você receberá um comando de instalação de uso único com um token embutido — o token é exibido apenas uma vez, então copie-o imediatamente. Ele tem esta aparência:",
+      ],
+      code: [INSTALL_CMD],
+      bullets: [
+        "A parte <your-token> é preenchida para você na página da conta — não cole literalmente o espaço reservado acima.",
+        "RELAYIUM_NODE_STORAGE_DIR ativa o armazenamento de blobs além da retransmissão. Deixe-o desativado (omita a variável) se quiser que o nó apenas retransmita, sem armazenar.",
+      ],
+    },
+    {
+      heading: "Passo 2 — execute-o no seu servidor, como root",
+      body: [
+        "Cole o comando no seu servidor. Ele canaliza nosso instalador para o sh: o instalador baixa e verifica por soma de verificação o binário relayium-node, instala-o em /usr/local/bin, escreve um serviço systemd e o inicia. O sudo inicial é o que permite instalar o serviço; se você já for root, é um no-op inofensivo.",
+        "Como é um serviço systemd, o nó é habilitado na inicialização e reinicia-se sozinho caso venha a travar — ele permanece on-line através dos reinícios sem nada mais a fazer. Se você vir `relayium-node: command not found`, executou o binário diretamente em vez do instalador acima — é o comando de uma linha que coloca o binário no lugar.",
+      ],
+      bullets: [
+        "Verifique que iniciou: `systemctl status relayium-node` (deve indicar active/running).",
+        "Confirme a persistência na inicialização: `systemctl is-enabled relayium-node` (deve indicar enabled).",
+        "Acompanhe os logs ao vivo: `journalctl -u relayium-node -f`.",
+      ],
+    },
+    {
+      heading: "Passo 3 — abra os portos de entrada",
+      body: [
+        "Estar on-line (um heartbeat para relayium.com) só precisa de acesso de saída, que você já tem. Mas para que os pares realmente retransmitam através do seu nó e armazenem nele, seus portos de entrada precisam estar acessíveis. Se o host executa um firewall, abra-os — com ufw é assim:",
+      ],
+      code: PORTS_CODE,
+      bullets: [
+        "3478/udp é o porto TURN que os pares usam para retransmitir; 8081/tcp é o porto HTTP do armazenamento de blobs; 49152–65535/udp é a faixa de mídia da retransmissão.",
+        "Em um VPS na nuvem, permita-os também no grupo de segurança / firewall de rede do provedor, não só no ufw.",
+      ],
+    },
+    {
+      heading: "Passo 4 — confirme e roteie o tráfego por ele",
+      body: [
+        "De volta à página da conta, seu nó aparece em My Nodes e muda para Online em cerca de 30 segundos. A partir daí, as transferências da sua conta preferem seu próprio nó automaticamente.",
+        "Para forçá-lo — que nunca recorra à nossa infraestrutura compartilhada — ative \"Only use my own nodes for relay/storage\" na mesma página. Com isso ativado, se nenhum dos seus nós estiver on-line, uma transferência falha em vez de usar discretamente os nossos.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "Recebi \"relayium-node: command not found\" — o que deu errado?",
+        a: "Você executou o binário relayium-node antes de instalá-lo. Use o comando de instalação de uma linha da página da conta (a forma curl … | sudo … sh): ele baixa o binário, coloca-o no seu PATH e o inicia como serviço. Você nunca instala relayium-node separadamente.",
+      },
+      {
+        q: "O nó continua on-line depois de um reinício?",
+        a: "Sim. O instalador registra um serviço systemd que é habilitado na inicialização e configurado com Restart=always, então ele volta após um reinício e reinicia-se sozinho se travar. Nada mais a executar.",
+      },
+      {
+        q: "Em que isso difere de hospedar o Relayium por conta própria?",
+        a: "Usar seu próprio nó mantém sua conta e aplicativos habituais do relayium.com e apenas adiciona um nó que é seu para carregar seu tráfego. A auto-hospedagem executa toda a pilha do servidor (contas, aplicativo web, sinalização) no seu próprio domínio — veja o guia \"Hospede o Relayium por conta própria\" para isso.",
+      },
+      {
+        q: "Alguém mais pode usar meu nó ou ver meus dados?",
+        a: "Não. Um nó é vinculado à sua conta pelo seu token e só carrega o tráfego da sua conta. As transferências em tempo real têm criptografia de ponta a ponta e os blobs armazenados são texto cifrado que seu nó não consegue ler. Seus dados e a configuração do seu nó só podem ser usados por você.",
+      },
+    ],
+  },
+  cta: {
+    text: "Faça login, abra sua página da conta e adicione seu primeiro nó em menos de um minuto.",
+    button: "Abrir a página da conta",
+    href: "/me",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "guides/bring-your-own-node",
   updated: "2026-07-10",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

@@ -14,6 +14,8 @@
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/run-relayium-as-an-always-on-service" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/run-relayium-as-an-always-on-service" />
     <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/run-relayium-as-an-always-on-service" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/run-relayium-as-an-always-on-service" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -61,7 +63,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <h1>把 Relayium 变成常驻接收服务</h1>
       <p class="updated">最近更新: 2026-07-12</p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service" aria-current="true">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service">Français</a><a href="/ar/guides/run-relayium-as-an-always-on-service">العربية</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service" aria-current="true">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service">Français</a><a href="/ar/guides/run-relayium-as-an-always-on-service">العربية</a><a href="/es/guides/run-relayium-as-an-always-on-service">Español</a><a href="/pt/guides/run-relayium-as-an-always-on-service">Português</a></nav>
       <p class="lead">relayium serve --once 只处理一次传入的传输就退出——适合偶尔拉取一次的场景。但如果你想让某台机器成为一个常驻的落地点——一台每晚接收备份的家庭服务器、一台 CI 会推送构建产物的构建机、一台随时能接收手机照片的 NAS——你会想让 serve 一直运行，而不是每次传输都手动启动它。</p>
       <p class="lead">本指南涵盖启动一个长期运行的监听端、批准谁可以向它推送、为没有人守在终端前的场景预先授权对端、在 systemd 下运行它，以及让使用 sync --delete 的发送方镜像删除操作。</p>
       <h2>开始之前</h2>

@@ -542,8 +542,162 @@ const ar = {
   relatedHeading: "تابِع القراءة",
 };
 
+const es = {
+  title: "Relayium vs AirDrop: una alternativa a AirDrop multiplataforma",
+  description:
+    "Una mirada honesta a AirDrop y Relayium. AirDrop es excelente dentro del ecosistema de Apple; Relayium funciona en cualquier navegador, así que un dispositivo Windows, Android o Linux puede enviar a un iPhone o un Mac, y a la inversa.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "AirDrop es una de las mejores experiencias de compartir archivos jamás lanzadas. Entre un iPhone, un iPad y un Mac es rápido, privado y está integrado en el sistema sin esfuerzo — Relayium no pretende superarlo en el terreno propio de Apple.",
+    "El inconveniente es la frontera: AirDrop solo se comunica con otros dispositivos Apple. Este artículo compara ambos con justicia, explica dónde AirDrop es realmente mejor y muestra dónde ayuda Relayium — al enviar entre un iPhone y un PC con Windows, un teléfono Android y un Mac, o un portátil Linux y un iPad, directamente desde el navegador.",
+  ],
+  sections: [
+    {
+      heading: "Lo que AirDrop hace bien",
+      body: [
+        "AirDrop usa Apple Wireless Direct Link para levantar una conexión Wi-Fi de igual a igual entre dos dispositivos cercanos, mientras Bluetooth se encarga del descubrimiento. El resultado es rápido, directo y funciona incluso cuando ninguno de los dispositivos está en una red — sin router, sin internet, sin cuenta.",
+        "También está profundamente integrado: la hoja de compartir está a un toque en cada aplicación, las transferencias van cifradas y los archivos recibidos aterrizan automáticamente en el lugar correcto. Para mover fotos o documentos dentro de un hogar totalmente Apple, es difícil de superar.",
+      ],
+    },
+    {
+      heading: "El inconveniente: AirDrop se queda dentro del mundo de Apple",
+      body: [
+        "AirDrop sencillamente no existe para Windows, Android ni Linux. No hay cliente oficial ni interoperabilidad, así que en el momento en que un lado de la transferencia no es un dispositivo Apple, AirDrop deja de ser una opción por completo.",
+        "Ese es justo el hueco con el que topa la mayoría: una foto del iPhone que necesita llegar a un PC con Windows, un vídeo de Android que va hacia un Mac, o archivos que se mueven entre una estación de trabajo Linux y un iPad. Los apaños habituales — un cable, un correo a ti mismo, o subir a la nube y volver a descargar — son más lentos y hacen pasar tus archivos por el servidor de otra persona.",
+      ],
+    },
+    {
+      heading: "Cómo Relayium tiende el puente",
+      body: [
+        "Relayium funciona por completo en un navegador web moderno sin nada que instalar, así que dos dispositivos cualesquiera que puedan abrir una página web pueden transferirse entre sí sin importar la plataforma: Windows, macOS, Linux, Android e iOS interoperan todos. En la misma Wi-Fi, ambos dispositivos abren relayium.com y se descubren automáticamente; en redes distintas te conectas con un breve código de emparejamiento en su lugar.",
+        "La transferencia en sí va directamente de igual a igual sobre WebRTC siempre que es posible, con una segunda capa de cifrado independiente por encima: un intercambio de claves X25519 deriva una clave que se usa para AES-256-GCM por fragmento, y esa clave nunca llega a ningún servidor. Ambos dispositivos muestran el mismo código de verificación de 6 dígitos (una Short Authentication String) para que confirmes que nadie se interpone en medio, y cada archivo se verifica de extremo a extremo con un hash SHA-256. Puedes enviar hasta 1.000 archivos por lote; en la misma red no hace falta cuenta, y enviar entre redes con un código de emparejamiento requiere que el remitente inicie sesión — el destinatario nunca necesita cuenta. Si la conexión se cae, la transferencia puede reanudarse en lugar de empezar de nuevo.",
+      ],
+    },
+    {
+      heading: "Límites honestos en iPhone y iPad",
+      body: [
+        "Esta es la parte que conviene decir con franqueza: recibir archivos grandes en un navegador móvil no es tan fluido como el AirDrop nativo. Safari y Firefox almacenan en memoria el archivo entrante, así que en un iPhone o iPad es mejor mantener las transferencias por debajo de unos 200 MB para quedarte cómodamente dentro de lo que el navegador puede retener.",
+        "En el escritorio la historia es mejor: Chrome y Edge pueden transmitir directamente al disco, lo que elimina por completo el límite de tamaño, así que los archivos grandes fluyen sin llenar la memoria. Cuando una conexión directa es imposible, el flujo cifrado recurre a un retransmisor TURN que solo ve texto cifrado, de modo que sigue cifrado de extremo a extremo. También existe un modo opcional de enlace de descarga almacenado — tu navegador cifra los archivos con AES-256-GCM y la clave vive solo en el fragmento de la URL, así que el servidor guarda texto cifrado de conocimiento cero que no puede leer; crear un enlace así requiere que el remitente inicie sesión, mientras que las transferencias en tiempo real no.",
+      ],
+    },
+    {
+      heading: "AirDrop vs Relayium de un vistazo",
+      body: [
+        "Las diferencias que más importan, una al lado de la otra:",
+      ],
+      bullets: [
+        "Plataformas: AirDrop es solo para Apple; Relayium funciona en Windows, macOS, Linux, Android e iOS desde el navegador.",
+        "Instalación: AirDrop está integrado en el sistema de Apple; Relayium no necesita ninguna app ni instalación, solo una página web.",
+        "Entre redes: AirDrop es solo de proximidad; Relayium conecta en la misma Wi-Fi o entre redes con un código de emparejamiento.",
+        "Cifrado: ambos van cifrados; Relayium añade X25519 + AES-256-GCM con un código de 6 dígitos que verificas y comprobaciones SHA-256 por archivo.",
+        "Archivos grandes en móvil: AirDrop es más fluido; Relayium sugiere mantener las transferencias del navegador por debajo de unos 200 MB en iOS, mientras que Chrome/Edge en el escritorio no tienen límite de tamaño.",
+        "Cuenta: AirDrop nunca necesita una; Relayium no necesita cuenta en la misma red, pero el remitente debe iniciar sesión para emparejar entre redes o para crear un enlace de descarga almacenado — el destinatario nunca necesita cuenta.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Existe un AirDrop para Windows?",
+        a: "No — AirDrop es exclusivo de los dispositivos Apple y no tiene cliente para Windows. Relayium es la alternativa multiplataforma: funciona en cualquier navegador, así que un PC con Windows puede enviar a un iPhone o un Mac y recibir de ellos con la misma facilidad que entre dos dispositivos Apple.",
+      },
+      {
+        q: "¿Cómo envío un archivo de un iPhone a un PC con Windows?",
+        a: "Abre relayium.com en un navegador en ambos dispositivos. En la misma Wi-Fi se descubren automáticamente; si no, introduce en el otro el código de emparejamiento que muestra un dispositivo, lo que requiere que el remitente inicie sesión. Elige hasta 1.000 archivos, confirma que el código de verificación de 6 dígitos coincide en ambas pantallas, y la transferencia se realiza directamente entre ellos.",
+      },
+      {
+        q: "¿Necesito instalar una app?",
+        a: "No. Relayium es una página web — no hay nada que instalar en ninguno de los dispositivos, en cualquier sistema operativo. Es gratis y de código abierto bajo la licencia MIT en github.com/relayium/relayium, así que puedes auditarlo o ejecutar tu propia instancia.",
+      },
+    ],
+  },
+  cta: {
+    text: "Envía entre Apple y todo lo demás — sin instalación, y sin cuenta en la misma red.",
+    button: "Prueba Relayium ahora",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Relayium vs AirDrop: uma alternativa ao AirDrop multiplataforma",
+  description:
+    "Um olhar honesto sobre o AirDrop e o Relayium. O AirDrop é excelente dentro do ecossistema da Apple; o Relayium roda em qualquer navegador, então um dispositivo Windows, Android ou Linux pode enviar para um iPhone ou Mac, e vice-versa.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "O AirDrop é uma das melhores experiências de compartilhamento de arquivos já lançadas. Entre um iPhone, um iPad e um Mac ele é rápido, privado e integrado ao sistema sem esforço — o Relayium não finge vencê-lo no território da própria Apple.",
+    "O problema é a fronteira: o AirDrop só conversa com outros dispositivos Apple. Este artigo compara os dois de forma justa, explica onde o AirDrop é realmente melhor e mostra onde o Relayium ajuda — ao enviar entre um iPhone e um PC com Windows, um telefone Android e um Mac, ou um notebook Linux e um iPad, direto do navegador.",
+  ],
+  sections: [
+    {
+      heading: "O que o AirDrop faz bem",
+      body: [
+        "O AirDrop usa o Apple Wireless Direct Link para levantar uma conexão Wi-Fi ponto a ponto entre dois dispositivos próximos, com o Bluetooth cuidando da descoberta. O resultado é rápido, direto e funciona mesmo quando nenhum dos dispositivos está em uma rede — sem roteador, sem internet, sem conta.",
+        "Ele também é profundamente integrado: a folha de compartilhamento está a um toque em todo aplicativo, as transferências são criptografadas e os arquivos recebidos vão automaticamente para o lugar certo. Para mover fotos ou documentos dentro de uma casa toda Apple, é difícil de superar.",
+      ],
+    },
+    {
+      heading: "O problema: o AirDrop permanece dentro do mundo da Apple",
+      body: [
+        "O AirDrop simplesmente não existe para Windows, Android ou Linux. Não há cliente oficial nem interoperabilidade, então no momento em que um lado da transferência não é um dispositivo Apple, o AirDrop deixa de ser uma opção por completo.",
+        "É exatamente essa a lacuna com que a maioria das pessoas esbarra: uma foto do iPhone que precisa chegar a um PC com Windows, um vídeo do Android indo para um Mac, ou arquivos indo e voltando entre uma estação de trabalho Linux e um iPad. As soluções de contorno habituais — um cabo, um e-mail para si mesmo, ou um upload para a nuvem e novo download — são mais lentas e fazem seus arquivos passarem pelo servidor de outra pessoa.",
+      ],
+    },
+    {
+      heading: "Como o Relayium preenche a lacuna",
+      body: [
+        "O Relayium roda inteiramente em um navegador web moderno, sem nada para instalar, então dois dispositivos quaisquer que consigam abrir uma página web podem transferir entre si independentemente da plataforma: Windows, macOS, Linux, Android e iOS todos interoperam. Na mesma Wi-Fi, os dois dispositivos abrem relayium.com e se descobrem automaticamente; em redes diferentes, você se conecta com um curto código de emparelhamento.",
+        "A transferência em si vai diretamente ponto a ponto por WebRTC sempre que possível, com uma segunda camada de criptografia independente por cima: uma troca de chaves X25519 deriva uma chave usada para AES-256-GCM por bloco, e essa chave nunca chega a nenhum servidor. Os dois dispositivos mostram o mesmo código de verificação de 6 dígitos (uma Short Authentication String) para você confirmar que ninguém está no meio, e cada arquivo é verificado de ponta a ponta com um hash SHA-256. Você pode enviar até 1.000 arquivos por lote; na mesma rede não é preciso conta, e enviar entre redes com um código de emparelhamento exige que o remetente faça login — o destinatário nunca precisa de conta. Se a conexão cair, a transferência pode ser retomada em vez de recomeçar.",
+      ],
+    },
+    {
+      heading: "Limites honestos no iPhone e no iPad",
+      body: [
+        "Esta é a parte a ser sincero: receber arquivos grandes em um navegador móvel não é tão suave quanto o AirDrop nativo. O Safari e o Firefox armazenam na memória o arquivo que chega, então em um iPhone ou iPad é melhor manter as transferências abaixo de cerca de 200 MB para ficar confortavelmente dentro do que o navegador consegue segurar.",
+        "No desktop a história é melhor: Chrome e Edge conseguem transmitir direto para o disco, o que remove o limite de tamanho por completo, então arquivos grandes fluem sem encher a memória. Quando uma conexão direta é impossível, o fluxo criptografado recorre a um retransmissor TURN que só vê texto cifrado, então continua criptografado de ponta a ponta. Há também um modo opcional de link de download armazenado — seu navegador criptografa os arquivos com AES-256-GCM e a chave vive apenas no fragmento da URL, então o servidor guarda texto cifrado de conhecimento zero que não consegue ler; criar um link assim exige que o remetente faça login, enquanto as transferências em tempo real não.",
+      ],
+    },
+    {
+      heading: "AirDrop vs Relayium num relance",
+      body: [
+        "As diferenças que mais importam, lado a lado:",
+      ],
+      bullets: [
+        "Plataformas: o AirDrop é só para Apple; o Relayium funciona em Windows, macOS, Linux, Android e iOS no navegador.",
+        "Instalação: o AirDrop é integrado ao sistema da Apple; o Relayium não precisa de app nem instalação, apenas uma página web.",
+        "Entre redes: o AirDrop é só de proximidade; o Relayium conecta na mesma Wi-Fi ou entre redes com um código de emparelhamento.",
+        "Criptografia: ambos são criptografados; o Relayium acrescenta X25519 + AES-256-GCM com um código de 6 dígitos que você verifica e checagens SHA-256 por arquivo.",
+        "Arquivos grandes no celular: o AirDrop é mais suave; o Relayium sugere manter as transferências pelo navegador abaixo de cerca de 200 MB no iOS, enquanto Chrome/Edge no desktop não têm limite de tamanho.",
+        "Conta: o AirDrop nunca precisa de uma; o Relayium não precisa de conta na mesma rede, mas o remetente deve fazer login para emparelhar entre redes ou para criar um link de download armazenado — o destinatário nunca precisa de conta.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "Existe um AirDrop para Windows?",
+        a: "Não — o AirDrop é exclusivo dos dispositivos Apple e não tem cliente para Windows. O Relayium é a alternativa multiplataforma: roda em qualquer navegador, então um PC com Windows pode enviar para um iPhone ou Mac e receber deles com a mesma facilidade que entre dois dispositivos Apple.",
+      },
+      {
+        q: "Como envio um arquivo de um iPhone para um PC com Windows?",
+        a: "Abra relayium.com em um navegador nos dois dispositivos. Na mesma Wi-Fi eles se descobrem automaticamente; caso contrário, digite no outro o código de emparelhamento mostrado em um dispositivo, o que exige que o remetente faça login. Escolha até 1.000 arquivos, confirme que o código de verificação de 6 dígitos coincide nas duas telas, e a transferência ocorre diretamente entre eles.",
+      },
+      {
+        q: "Preciso instalar um aplicativo?",
+        a: "Não. O Relayium é uma página web — não há nada para instalar em nenhum dos dispositivos, em qualquer sistema operacional. É gratuito e de código aberto sob a licença MIT em github.com/relayium/relayium, então você pode auditá-lo ou rodar sua própria instância.",
+      },
+    ],
+  },
+  cta: {
+    text: "Envie entre a Apple e todo o resto — sem instalação, e sem conta na mesma rede.",
+    button: "Experimente o Relayium agora",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "compare/airdrop",
   updated: "2026-07-03",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

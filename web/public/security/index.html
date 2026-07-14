@@ -14,6 +14,8 @@
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/security" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/security" />
     <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/security" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/security" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/security" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/security" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -43,7 +45,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
       <h1>Security &amp; Threat Model</h1>
       <p class="updated">Last updated: 2026-07-01</p>
-      <nav class="langbar" aria-label="Language"><a href="/security" aria-current="true">English</a><a href="/zh/security">中文</a><a href="/ja/security">日本語</a><a href="/ko/security">한국어</a><a href="/de/security">Deutsch</a><a href="/fr/security">Français</a><a href="/ar/security">العربية</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/security" aria-current="true">English</a><a href="/zh/security">中文</a><a href="/ja/security">日本語</a><a href="/ko/security">한국어</a><a href="/de/security">Deutsch</a><a href="/fr/security">Français</a><a href="/ar/security">العربية</a><a href="/es/security">Español</a><a href="/pt/security">Português</a></nav>
       <p>Relayium is built so that the people transferring files — not the server — hold the keys. This page describes exactly what is protected, how it works, and the limits of that protection.</p>
       <p>The short version: in realtime mode your files never touch our servers; the encryption keys are generated fresh on each device and never leave it; and a short verification code lets two people detect a malicious server. The detail follows.</p>
       <h2>End-to-end encryption (X25519 + AES-256-GCM)</h2><p>Each transfer generates a fresh, ephemeral X25519 key pair on each device. The two devices perform a key exchange to derive a shared AES-256-GCM key that exists only inside the two browsers. Every chunk is encrypted under that key with a unique nonce, so the signaling server — and any relay — only ever sees ciphertext.</p><ul><li>Keys are ephemeral and per-transfer — nothing is reused across sessions.</li><li>The shared key is derived on the two devices; it is never sent to, or stored on, any server.</li><li>Encryption is applied at the application layer, on top of WebRTC&#39;s own transport security, so it holds even if the transport layer is compromised.</li></ul>

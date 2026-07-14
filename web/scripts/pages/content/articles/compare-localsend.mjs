@@ -619,8 +619,184 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Relayium frente a LocalSend: qué transferencia local usar",
+  description:
+    "Una comparación honesta de Relayium y LocalSend. LocalSend es una gran aplicación de código abierto instalada en cada dispositivo; Relayium hace la misma transferencia por red local en el navegador —sin instalación—, más entre redes y con una CLI.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "LocalSend es una aplicación genuinamente buena y muy querida: gratis, de código abierto, multiplataforma y creada para mover archivos entre dispositivos de la misma red local sin servidor y sin cuenta, nunca. Mucha gente confía en ella como herramienta tipo AirDrop para Windows, Linux y Android.",
+    "Este artículo la compara con justicia con Relayium, que aborda el mismo problema de la misma red de otra manera —sin ninguna aplicación que instalar, funcionando directamente en tu navegador— y luego va más allá, llegando entre redes y ofreciendo una herramienta de línea de comandos que LocalSend no tiene.",
+  ],
+  sections: [
+    {
+      heading: "Lo que LocalSend hace bien",
+      body: [
+        "LocalSend es una aplicación gratuita y de código abierto para Windows, macOS, Linux, Android e iOS. Instálala una vez en cada dispositivo y descubre automáticamente otras instancias de LocalSend en el mismo Wi-Fi o red local usando un transporte local cifrado: ningún servidor en ninguna parte, ninguna conexión a internet necesaria, ninguna cuenta.",
+        "Admite arrastrar y soltar, el envío de carpetas enteras y un PIN opcional para enviar en redes en las que no confías del todo.",
+      ],
+      bullets: [
+        "Aplicaciones nativas multiplataforma para Windows, macOS, Linux, Android e iOS: instálala una vez y funciona sin más.",
+        "Completamente sin conexión por diseño: sin servidor, sin conexión a internet y sin cuenta, nunca; solo necesita dispositivos en la misma red local.",
+        "Protección con PIN opcional para enviar en redes no confiables, además de arrastrar y soltar y transferencias de carpetas enteras.",
+        "Un icono de aplicación propio e integración con el menú de compartir del sistema operativo, algo que una pestaña del navegador no puede ofrecer.",
+      ],
+    },
+    {
+      heading: "En qué se diferencia Relayium: nada que instalar, directo en el navegador",
+      body: [
+        "Relayium adopta el enfoque opuesto ante el mismo problema de la misma red: en lugar de instalar una aplicación en cada dispositivo, abres relayium.com en un navegador que ya tienes. Dos dispositivos en la misma red caen automáticamente en la misma sala: el servidor deriva la sala de la red compartida, sin código de emparejamiento y sin necesidad de cuenta por ninguna de las partes.",
+        "Esa sala de red local admite cualquier número de pares a la vez, no solo una pareja, y arrastrar y soltar o seleccionar carpetas funciona igual que en una aplicación nativa, solo que sin el paso de instalación.",
+      ],
+    },
+    {
+      heading: "Más allá de la red local: transferencia entre redes y una CLI",
+      body: [
+        "LocalSend es solo para red local por diseño: no tiene forma de alcanzar un dispositivo en una red distinta o a través de internet. Relayium añade eso: crea un código de emparejamiento (o comparte el enlace de acceso que genera) y el otro lado se conecta desde cualquier parte, directo de igual a igual siempre que sea posible.",
+        "Crear un código de emparejamiento entre redes requiere que el remitente inicie sesión; la persona que recibe nunca necesita cuenta. Cada transferencia en tiempo real —en red local o entre redes— está cifrada de extremo a extremo en la capa de aplicación: un intercambio de claves X25519 deriva una clave usada para AES-256-GCM, un código SAS de 6 dígitos permite a ambos lados confirmar que no hay ningún servidor en medio, y cada archivo se verifica con un hash SHA-256. Cuando no es posible una conexión directa, un retransmisor TURN cifrado transporta texto cifrado que no puede leer.",
+        "Para quien quiera automatizar transferencias hacia un servidor, también hay una CLI —push/pull por SSH o directo al daemon, sincronización incremental de carpetas y envío/recepción por código de emparejamiento—, algo que una aplicación solo de red local no ofrece.",
+      ],
+    },
+    {
+      heading: "Cuándo LocalSend es la mejor opción",
+      body: [
+        "Si nunca quieres abrir un navegador —por ejemplo, moviendo archivos en una red realmente sin acceso a internet, o simplemente quieres un icono de aplicación permanente e integración con el menú de compartir del sistema—, la aplicación propia de LocalSend encaja mejor. Es madura, funciona totalmente sin conexión en el sentido más estricto, y su modo PIN es una buena capa extra en redes en las que no confías del todo.",
+      ],
+    },
+    {
+      heading: "Comparación de funciones de un vistazo",
+      body: ["Las diferencias que más importan, una al lado de la otra:"],
+      bullets: [
+        "Instalación: LocalSend necesita una aplicación en cada dispositivo; el modo de misma red de Relayium no necesita nada más que un navegador.",
+        "Alcance de red: LocalSend es solo de red local; Relayium también conecta entre redes distintas con un código de emparejamiento.",
+        "Cifrado: LocalSend asegura su transporte local; Relayium añade un canal independiente en la capa de aplicación con X25519 + AES-256-GCM y un código de verificación SAS, incluso en la red local.",
+        "Cuentas: LocalSend nunca necesita ninguna; el modo de red local de Relayium tampoco; solo el remitente inicia sesión para las transferencias entre redes.",
+        "Automatización: Relayium incluye una CLI para push/pull por SSH, sincronización incremental y un servicio de recepción siempre activo; LocalSend es solo aplicación.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Necesito instalar algo para usar Relayium en la misma red?",
+        a: "No. Abre relayium.com en un navegador en ambos dispositivos mientras están en la misma red y se ven automáticamente: sin aplicación, sin cuenta, sin código de emparejamiento.",
+      },
+      {
+        q: "¿LocalSend necesita conexión a internet?",
+        a: "No, y esa es una de sus fortalezas. LocalSend funciona por completo sobre la red local sin ningún servidor involucrado, así que sigue funcionando incluso sin nada de internet.",
+      },
+      {
+        q: "¿Puede Relayium enviar archivos a alguien en una red distinta?",
+        a: "Sí. Crea un código de emparejamiento (o comparte el enlace de acceso que genera) y el otro dispositivo se conecta desde cualquier parte, aún de igual a igual siempre que sea posible. El remitente tiene que iniciar sesión para esto; el destinatario nunca.",
+      },
+      {
+        q: "¿Es Relayium de código abierto?",
+        a: "Sí, bajo licencia MIT, con el protocolo y el código completos públicos en github.com/relayium/relayium: el mismo tipo de apertura que hace confiable a LocalSend.",
+      },
+      {
+        q: "¿Cuál es más privado?",
+        a: "Ambos mantienen las transferencias de la misma red fuera de un servidor público. LocalSend asegura su transporte local; Relayium añade un canal de cifrado independiente en la capa de aplicación con un código SAS que ambos lados pueden verificar, en la red local o entre redes.",
+      },
+    ],
+  },
+  cta: {
+    text: "Comprueba cómo se siente una transferencia en la misma red sin nada que instalar: solo abre la página en ambos dispositivos.",
+    button: "Prueba Relayium ahora",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Relayium vs LocalSend: qual transferência local usar",
+  description:
+    "Uma comparação honesta entre Relayium e LocalSend. O LocalSend é um ótimo aplicativo de código aberto instalado em cada dispositivo; o Relayium faz a mesma transferência por rede local no navegador — sem instalação —, além de entre redes e com uma CLI.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "O LocalSend é um aplicativo genuinamente bom e muito querido: gratuito, de código aberto, multiplataforma e feito para mover arquivos entre dispositivos na mesma rede local sem servidor e sem conta, nunca. Muita gente conta com ele como uma ferramenta tipo AirDrop para Windows, Linux e Android.",
+    "Este artigo o compara de forma justa com o Relayium, que resolve o mesmo problema da mesma rede de outra maneira — nenhum aplicativo para instalar, rodando direto no seu navegador — e depois vai além, alcançando outras redes e oferecendo uma ferramenta de linha de comando que o LocalSend não tem.",
+  ],
+  sections: [
+    {
+      heading: "O que o LocalSend faz bem",
+      body: [
+        "O LocalSend é um aplicativo gratuito e de código aberto para Windows, macOS, Linux, Android e iOS. Instale-o uma vez em cada dispositivo e ele descobre automaticamente outras instâncias do LocalSend no mesmo Wi-Fi ou rede local usando um transporte local criptografado — nenhum servidor em lugar nenhum, nenhuma conexão com a internet necessária, nenhuma conta.",
+        "Ele oferece arrastar e soltar, o envio de pastas inteiras e um PIN opcional para enviar em redes em que você não confia totalmente.",
+      ],
+      bullets: [
+        "Aplicativos nativos multiplataforma para Windows, macOS, Linux, Android e iOS — instale uma vez e ele simplesmente funciona.",
+        "Totalmente off-line por design: sem servidor, sem conexão com a internet e sem conta, nunca — ele só precisa de dispositivos na mesma rede local.",
+        "Proteção por PIN opcional para enviar em redes não confiáveis, além de arrastar e soltar e transferências de pastas inteiras.",
+        "Um ícone de aplicativo dedicado e integração com a folha de compartilhamento do sistema operacional, algo que uma aba do navegador não pode oferecer.",
+      ],
+    },
+    {
+      heading: "Onde o Relayium difere: nada para instalar, direto no navegador",
+      body: [
+        "O Relayium adota a abordagem oposta para o mesmo problema da mesma rede: em vez de instalar um aplicativo em cada dispositivo, você abre o relayium.com em um navegador que já tem. Dois dispositivos na mesma rede caem automaticamente na mesma sala — o servidor deriva a sala da rede compartilhada, sem código de emparelhamento e sem necessidade de conta de nenhum dos lados.",
+        "Essa sala de rede local comporta qualquer número de pares ao mesmo tempo, não apenas uma dupla, e arrastar e soltar ou selecionar pastas funciona do mesmo jeito que em um aplicativo nativo — só que sem a etapa de instalação.",
+      ],
+    },
+    {
+      heading: "Além da rede local: transferência entre redes e uma CLI",
+      body: [
+        "O LocalSend é só para rede local por design — não tem como alcançar um dispositivo em uma rede diferente ou pela internet. O Relayium acrescenta isso: crie um código de emparelhamento (ou compartilhe o link de acesso que ele gera), e o outro lado se conecta de qualquer lugar, direto ponto a ponto sempre que possível.",
+        "Criar um código de emparelhamento entre redes exige que o remetente faça login; a pessoa que recebe nunca precisa de conta. Toda transferência em tempo real — na rede local ou entre redes — é criptografada de ponta a ponta na camada de aplicação: uma troca de chaves X25519 deriva uma chave usada para AES-256-GCM, um código SAS de 6 dígitos permite que os dois lados confirmem que não há servidor no meio, e cada arquivo é verificado com um hash SHA-256. Quando uma conexão direta não é possível, um retransmissor TURN criptografado carrega texto cifrado que ele não consegue ler.",
+        "Para quem quiser automatizar transferências para um servidor, também há uma CLI — push/pull por SSH ou direto ao daemon, sincronização incremental de pastas e envio/recebimento por código de emparelhamento —, algo que um aplicativo só de rede local não oferece.",
+      ],
+    },
+    {
+      heading: "Quando o LocalSend é a melhor escolha",
+      body: [
+        "Se você nunca quer abrir um navegador — digamos, movendo arquivos em uma rede realmente sem acesso à internet, ou você só quer um ícone de aplicativo permanente e integração com a folha de compartilhamento do sistema —, o aplicativo dedicado do LocalSend encaixa melhor. Ele é maduro, funciona totalmente off-line no sentido mais estrito, e o modo PIN é uma boa camada extra em redes em que você não confia totalmente.",
+      ],
+    },
+    {
+      heading: "Comparação de recursos num relance",
+      body: ["As diferenças que mais importam, lado a lado:"],
+      bullets: [
+        "Instalação: o LocalSend precisa de um aplicativo em cada dispositivo; o modo de mesma rede do Relayium não precisa de nada além de um navegador.",
+        "Alcance de rede: o LocalSend é só de rede local; o Relayium também conecta entre redes diferentes com um código de emparelhamento.",
+        "Criptografia: o LocalSend protege seu transporte local; o Relayium acrescenta um canal independente na camada de aplicação com X25519 + AES-256-GCM e um código de verificação SAS, mesmo na rede local.",
+        "Contas: o LocalSend nunca precisa de nenhuma; o modo de rede local do Relayium também não — só o remetente faz login para as transferências entre redes.",
+        "Automação: o Relayium traz uma CLI para push/pull por SSH, sincronização incremental e um serviço de recebimento sempre ativo; o LocalSend é apenas aplicativo.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "Preciso instalar algo para usar o Relayium na mesma rede?",
+        a: "Não. Abra o relayium.com em um navegador nos dois dispositivos enquanto eles estão na mesma rede e eles se veem automaticamente — sem aplicativo, sem conta, sem código de emparelhamento.",
+      },
+      {
+        q: "O LocalSend precisa de conexão com a internet?",
+        a: "Não — essa é uma de suas forças. O LocalSend funciona inteiramente pela rede local sem nenhum servidor envolvido, então continua funcionando mesmo sem nada de internet.",
+      },
+      {
+        q: "O Relayium pode enviar arquivos para alguém em uma rede diferente?",
+        a: "Sim. Crie um código de emparelhamento (ou compartilhe o link de acesso que ele gera) e o outro dispositivo se conecta de qualquer lugar, ainda ponto a ponto direto sempre que possível. O remetente precisa fazer login para isso; o destinatário nunca.",
+      },
+      {
+        q: "O Relayium é de código aberto?",
+        a: "Sim, licenciado sob MIT, com o protocolo e o código completos públicos em github.com/relayium/relayium — o mesmo tipo de abertura que torna o LocalSend confiável.",
+      },
+      {
+        q: "Qual é mais privado?",
+        a: "Ambos mantêm as transferências da mesma rede fora de um servidor público. O LocalSend protege seu transporte local. O Relayium acrescenta, na rede local ou entre redes, um canal de criptografia independente na camada de aplicação com um código SAS que os dois lados podem verificar.",
+      },
+    ],
+  },
+  cta: {
+    text: "Veja como é uma transferência na mesma rede sem nada para instalar — basta abrir a página nos dois dispositivos.",
+    button: "Experimente o Relayium agora",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "compare/localsend",
   updated: "2026-07-09",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

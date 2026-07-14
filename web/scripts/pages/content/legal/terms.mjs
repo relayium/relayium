@@ -512,4 +512,152 @@ const ar = {
   ],
 };
 
-export default { slug: "terms", langs: { en, zh, ja, ko, de, fr, ar } };
+const es = {
+  title: "Términos del servicio",
+  description:
+    "Los términos para usar Relayium: un servicio de transferencia de archivos de igual a igual, gratuito, de código abierto y cifrado de extremo a extremo, proporcionado tal cual.",
+  updatedLabel: "Última actualización",
+  updated: "2026-07-01",
+  otherDocLabel: "Política de privacidad",
+  lead: [
+    "Al usar Relayium aceptas estos términos. Relayium es un servicio gratuito y de código abierto que te permite enviar archivos directamente entre dispositivos, cifrados de extremo a extremo.",
+  ],
+  sections: [
+    {
+      heading: "El servicio",
+      body: [
+        "Relayium transfiere archivos de igual a igual entre dispositivos. Se proporciona de forma gratuita y su código fuente es de código abierto bajo la licencia MIT.",
+      ],
+    },
+    {
+      heading: "Uso aceptable",
+      body: ["Aceptas no usar Relayium para:"],
+      bullets: [
+        "Infringir la ley o vulnerar los derechos de otros, incluido el envío de contenido que no tienes derecho a compartir.",
+        "Distribuir malware, o intentar interrumpir, sobrecargar o abusar del servicio o de su infraestructura.",
+        "Eludir las medidas de seguridad o intentar acceder a datos que no son tuyos.",
+      ],
+    },
+    {
+      heading: "Cuentas",
+      body: [
+        "Las transferencias en la misma red (red local) no necesitan cuenta. Enviar entre redes con un código de emparejamiento requiere que el remitente inicie sesión: la persona que recibe nunca necesita una cuenta. Crear un enlace de descarga almacenado también requiere una cuenta. Eres responsable de mantener seguro el acceso a tu correo electrónico y a tu cuenta. Puedes solicitar la eliminación de tu cuenta y sus datos en cualquier momento contactando con support@relayium.com.",
+      ],
+    },
+    {
+      heading: "Contenido almacenado",
+      body: [
+        "Cuando usas el modo opcional de enlace de descarga almacenado, tu navegador cifra los archivos antes de subirlos y el servidor solo almacena texto cifrado. Como no podemos descifrar el contenido almacenado (conocimiento cero), no podemos examinarlo previamente. Aceptas usar las transferencias almacenadas únicamente para contenido que tienes derecho a compartir y que no infringe la ley aplicable.",
+      ],
+      bullets: [
+        "Puedes solicitar la retirada de un enlace de descarga específico informando del id del archivo a support@relayium.com.",
+        "El texto cifrado almacenado se elimina automáticamente al caducar o en la primera descarga completa (destrucción tras la lectura), lo que ocurra primero.",
+        "Nos reservamos el derecho de suspender o retirar el contenido almacenado que se denuncie de forma creíble como ilegal.",
+      ],
+    },
+    {
+      heading: "Sin garantía",
+      body: [
+        "El servicio se proporciona «tal cual» y «según disponibilidad», sin garantías de ningún tipo, expresas o implícitas. No garantizamos que las transferencias siempre se completen con éxito ni que el servicio sea ininterrumpido o esté libre de errores.",
+      ],
+    },
+    {
+      heading: "Limitación de responsabilidad",
+      body: [
+        "En la máxima medida permitida por la ley, Relayium y sus colaboradores no son responsables de ningún daño indirecto, incidental o consecuente, ni de ninguna pérdida de datos, derivados de tu uso del servicio.",
+      ],
+    },
+    {
+      heading: "Código abierto y licencias",
+      body: [
+        "El código fuente de Relayium está disponible bajo la licencia MIT. Tu uso del código fuente se rige por esa licencia.",
+      ],
+    },
+    {
+      heading: "Cambios en estos términos",
+      body: [
+        "Podemos actualizar estos términos a medida que el servicio evolucione. Cuando lo hagamos, cambiaremos la fecha de «Última actualización» anterior. El uso continuado tras un cambio significa que aceptas los términos actualizados.",
+      ],
+    },
+    {
+      heading: "Contacto",
+      body: ["¿Preguntas sobre estos términos? Escribe a support@relayium.com."],
+    },
+  ],
+};
+
+const pt = {
+  title: "Termos de Serviço",
+  description:
+    "Os termos para usar a Relayium — um serviço de transferência de arquivos ponto a ponto, gratuito, de código aberto e com criptografia de ponta a ponta, fornecido no estado em que se encontra.",
+  updatedLabel: "Última atualização",
+  updated: "2026-07-01",
+  otherDocLabel: "Política de Privacidade",
+  lead: [
+    "Ao usar a Relayium, você concorda com estes termos. A Relayium é um serviço gratuito e de código aberto que permite enviar arquivos diretamente entre dispositivos, com criptografia de ponta a ponta.",
+  ],
+  sections: [
+    {
+      heading: "O serviço",
+      body: [
+        "A Relayium transfere arquivos ponto a ponto entre dispositivos. É fornecida gratuitamente e seu código-fonte é de código aberto sob a licença MIT.",
+      ],
+    },
+    {
+      heading: "Uso aceitável",
+      body: ["Você concorda em não usar a Relayium para:"],
+      bullets: [
+        "Infringir a lei ou violar os direitos de terceiros, incluindo o envio de conteúdo que você não tem o direito de compartilhar.",
+        "Distribuir malware ou tentar interromper, sobrecarregar ou abusar do serviço ou de sua infraestrutura.",
+        "Contornar medidas de segurança ou tentar acessar dados que não são seus.",
+      ],
+    },
+    {
+      heading: "Contas",
+      body: [
+        "As transferências na mesma rede (rede local) não precisam de conta. Enviar entre redes com um código de emparelhamento exige que o remetente faça login — quem recebe nunca precisa de uma conta. Criar um link de download armazenado também exige uma conta. Você é responsável por manter seguro o acesso ao seu e-mail e à sua conta. Você pode solicitar a exclusão da sua conta e dos seus dados a qualquer momento entrando em contato pelo support@relayium.com.",
+      ],
+    },
+    {
+      heading: "Conteúdo armazenado",
+      body: [
+        "Quando você usa o modo opcional de link de download armazenado, seu navegador criptografa os arquivos antes do envio e o servidor armazena apenas texto cifrado. Como não podemos descriptografar o conteúdo armazenado (conhecimento zero), não podemos examiná-lo previamente. Você concorda em usar as transferências armazenadas apenas para conteúdo que tem o direito de compartilhar e que não viola a lei aplicável.",
+      ],
+      bullets: [
+        "Você pode solicitar a remoção de um link de download específico informando o id do arquivo ao support@relayium.com.",
+        "O texto cifrado armazenado é excluído automaticamente na expiração ou no primeiro download completo (destruição após leitura), o que ocorrer primeiro.",
+        "Reservamo-nos o direito de suspender ou remover conteúdo armazenado que seja denunciado de forma credível como ilegal.",
+      ],
+    },
+    {
+      heading: "Sem garantia",
+      body: [
+        "O serviço é fornecido \"no estado em que se encontra\" e \"conforme disponível\", sem garantias de qualquer tipo, expressas ou implícitas. Não garantimos que as transferências sempre serão bem-sucedidas nem que o serviço será ininterrupto ou livre de erros.",
+      ],
+    },
+    {
+      heading: "Limitação de responsabilidade",
+      body: [
+        "Na máxima extensão permitida por lei, a Relayium e seus colaboradores não se responsabilizam por quaisquer danos indiretos, incidentais ou consequentes, nem por qualquer perda de dados, decorrentes do seu uso do serviço.",
+      ],
+    },
+    {
+      heading: "Código aberto e licenças",
+      body: [
+        "O código-fonte da Relayium está disponível sob a licença MIT. Seu uso do código-fonte é regido por essa licença.",
+      ],
+    },
+    {
+      heading: "Alterações nestes termos",
+      body: [
+        "Podemos atualizar estes termos à medida que o serviço evolui. Quando o fizermos, alteraremos a data de \"Última atualização\" acima. O uso continuado após uma alteração significa que você aceita os termos atualizados.",
+      ],
+    },
+    {
+      heading: "Contato",
+      body: ["Dúvidas sobre estes termos? Envie um e-mail para support@relayium.com."],
+    },
+  ],
+};
+
+export default { slug: "terms", langs: { en, zh, ja, ko, de, fr, ar, es, pt } };

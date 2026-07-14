@@ -14,6 +14,8 @@
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/server-to-server-transfers" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/server-to-server-transfers" />
     <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/server-to-server-transfers" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/server-to-server-transfers" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/server-to-server-transfers" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/server-to-server-transfers" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -61,7 +63,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
       <h1>Server-to-server transfers with the Relayium CLI (daemon direct)</h1>
       <p class="updated">Last updated: 2026-07-12</p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers" aria-current="true">English</a><a href="/zh/guides/server-to-server-transfers">中文</a><a href="/ja/guides/server-to-server-transfers">日本語</a><a href="/ko/guides/server-to-server-transfers">한국어</a><a href="/de/guides/server-to-server-transfers">Deutsch</a><a href="/fr/guides/server-to-server-transfers">Français</a><a href="/ar/guides/server-to-server-transfers">العربية</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers" aria-current="true">English</a><a href="/zh/guides/server-to-server-transfers">中文</a><a href="/ja/guides/server-to-server-transfers">日本語</a><a href="/ko/guides/server-to-server-transfers">한국어</a><a href="/de/guides/server-to-server-transfers">Deutsch</a><a href="/fr/guides/server-to-server-transfers">Français</a><a href="/ar/guides/server-to-server-transfers">العربية</a><a href="/es/guides/server-to-server-transfers">Español</a><a href="/pt/guides/server-to-server-transfers">Português</a></nav>
       <p class="lead">When both machines are yours and each knows the other&#39;s address, SSH is extra friction and a rendezvous is pure overhead. Daemon direct is built for exactly this: one server listens, the other pushes straight to it over a pinned TLS 1.3 connection. No relay, no SSH, no pairing code — trust is public-key and set up once.</p>
       <p class="lead">This guide covers starting the listener, pushing to it, approving a new pusher on first contact, automating it, and running the listener as a systemd service.</p>
       <h2>Before you start</h2>

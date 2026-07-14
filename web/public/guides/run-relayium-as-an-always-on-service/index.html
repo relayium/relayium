@@ -14,6 +14,8 @@
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/run-relayium-as-an-always-on-service" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/run-relayium-as-an-always-on-service" />
     <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/run-relayium-as-an-always-on-service" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/run-relayium-as-an-always-on-service" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -61,7 +63,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
       <h1>Run Relayium as an always-on receive service</h1>
       <p class="updated">Last updated: 2026-07-12</p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service" aria-current="true">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service">Français</a><a href="/ar/guides/run-relayium-as-an-always-on-service">العربية</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service" aria-current="true">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service">Français</a><a href="/ar/guides/run-relayium-as-an-always-on-service">العربية</a><a href="/es/guides/run-relayium-as-an-always-on-service">Español</a><a href="/pt/guides/run-relayium-as-an-always-on-service">Português</a></nav>
       <p class="lead">relayium serve --once handles a single incoming transfer and exits — fine for a one-off pull. But if you want a machine to be a standing drop point — a home server that backups land on overnight, a build box that CI pushes artifacts to, a NAS your phone can send photos to whenever — you want serve running all the time, not started by hand for each transfer.</p>
       <p class="lead">This guide covers starting a long-running listener, approving who&#39;s allowed to push to it, pre-authorizing peers for the cases where no one&#39;s at the terminal, running it under systemd, and letting a sync --delete sender mirror deletions.</p>
       <h2>Before you start</h2>

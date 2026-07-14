@@ -656,8 +656,194 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Haz copias de seguridad de archivos en tu propio servidor por SSH con la CLI de Relayium",
+  description:
+    "Usa relayium push y pull para copiar o sincronizar directorios a un servidor al que ya accedes por ssh — reanudable, con comprobación de integridad y gratis. Los bytes viajan por tu propia conexión SSH y nunca tocan los servidores de Relayium.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "Si ya tienes acceso SSH a una máquina — un VPS, un servidor doméstico, un NAS, una estación de trabajo —, puedes hacer copias de seguridad de tus archivos en ella con la CLI de Relayium sin montar un servicio de sincronización ni una cuenta. La transferencia se ejecuta sobre tu conexión SSH existente, así que los bytes van directos a tu servidor y nunca pasan por Relayium.",
+    "Esta guía cubre cómo hacer push y pull de directorios, qué te aportan la reanudación y la comprobación de integridad, y cómo ejecutarlo de forma programada con cron.",
+  ],
+  sections: [
+    {
+      heading: "Envía (push) un directorio a tu servidor",
+      body: [
+        "push toma una o más fuentes y un destino al estilo scp. Relayium se conecta por SSH usando tus claves y tu configuración habituales, y luego transmite los archivos al directorio de destino:",
+      ],
+      code: [
+        `# copy a local folder to the server
+relayium push ./photos user@your-server:backups/
+
+# choose an SSH key and a non-default port
+relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
+      ],
+      bullets: [
+        "Reutiliza tu ~/.ssh/config, así que los alias de host, las claves y los puertos que ya configuraste funcionan sin más.",
+        "Si relayium está instalado en el servidor, usa el protocolo nativo: reanudación por archivo y una comprobación SHA-256 en cada archivo.",
+        "Si no lo está, recurre a canalizar un flujo tar hacia la máquina remota, de modo que hasta un servidor pelado sin relayium funciona.",
+      ],
+    },
+    {
+      heading: "Recupera (pull) los archivos",
+      body: [
+        "Restaurar es el mismo comando a la inversa: indica una fuente remota y un directorio de destino local. Así recuperas una copia de seguridad, o sincronizas la salida de un servidor hacia tu portátil:",
+      ],
+      code: ["relayium pull user@your-server:backups/ ./restore"],
+      bullets: [
+        "A diferencia de push, pull siempre necesita relayium ya instalado en el remoto — no tiene alternativa con tar, así que instálalo allí primero si falta.",
+      ],
+    },
+    {
+      heading: "Reanudación e integridad vienen de serie",
+      body: [
+        "Las copias de seguridad tienden a ser grandes y las redes tienden a cortarse. Cuando relayium está en ambos extremos, una transferencia interrumpida se reanuda en la siguiente ejecución desde donde se detuvo en lugar de reenviarlo todo, y cada archivo se verifica de extremo a extremo con un hash SHA-256 — lo que llega al servidor es byte por byte lo que enviaste.",
+        "Si en algún momento prefieres un reenvío completo y limpio en vez de reanudar un archivo parcial, pasa --no-resume.",
+      ],
+      bullets: [
+        "La reanudación necesita relayium en el remoto (el protocolo nativo); la alternativa con tar siempre envía por completo.",
+        "La comprobación SHA-256 se ejecuta automáticamente; una discrepancia se informa y ese archivo se marca como fallido.",
+      ],
+    },
+    {
+      heading: "Ejecútalo de forma programada con cron",
+      body: [
+        "Como push es un único comando no interactivo que usa tus claves SSH, encaja directamente en cron para una copia de seguridad recurrente. Apúntalo a una clave sin frase de contraseña (o a un agente), y registra la salida para poder ver los fallos:",
+      ],
+      code: [
+        `# back up every night at 2am — add to your crontab (crontab -e)
+0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@your-server:backups/ >> ~/relayium-backup.log 2>&1`,
+      ],
+      bullets: [
+        "Combinado con la reanudación, un trabajo nocturno que se interrumpe simplemente continúa la noche siguiente.",
+        "El comando termina con un código distinto de cero si algún archivo falla su comprobación de integridad, así que el correo de fallo de cron detecta los problemas.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Los archivos pasan por los servidores de Relayium?",
+        a: "No. push y pull se ejecutan enteramente sobre tu propia conexión SSH. Los servidores de Relayium nunca intervienen y no necesitas ninguna cuenta.",
+      },
+      {
+        q: "¿El servidor necesita tener relayium instalado?",
+        a: "Depende de la dirección. Para push es opcional: con relayium en el remoto obtienes el protocolo nativo — transferencias reanudables y comprobaciones SHA-256 por archivo — y sin él, push recurre a un simple flujo tar sobre SSH, que sigue funcionando pero envía siempre cada archivo por completo. Para pull es obligatorio: pull siempre necesita relayium en el remoto (no tiene alternativa con tar), así que instálalo allí primero.",
+      },
+      {
+        q: "¿Cómo elige qué clave SSH y qué puerto usar?",
+        a: "Lee tu ~/.ssh/config igual que hace ssh, así que los alias de host, las claves y los puertos se recogen automáticamente. También puedes sobrescribirlos por comando con -i para el archivo de identidad y -p para el puerto.",
+      },
+      {
+        q: "¿Es más rápido que rsync?",
+        a: "Para enviar a tu propio servidor está en el mismo orden de magnitud que rsync sobre SSH; el objetivo no es superar a rsync, sino darte una sola herramienta que además hace transferencias entre redes y de servidor a servidor con las mismas garantías de reanudación e integridad.",
+      },
+    ],
+  },
+  cta: {
+    text: "Haz la copia de seguridad de tu próximo directorio de la forma directa — por tu propio SSH, reanudable, con comprobación de integridad y gratis.",
+    button: "Obtener la CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Faça backup de arquivos no seu próprio servidor via SSH com a CLI do Relayium",
+  description:
+    "Use relayium push e pull para copiar ou sincronizar diretórios para um servidor que você já acessa por ssh — retomável, com verificação de integridade e gratuito. Os bytes trafegam pela sua própria conexão SSH e nunca tocam os servidores do Relayium.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "Se você já tem acesso SSH a uma máquina — um VPS, um servidor doméstico, um NAS, uma estação de trabalho —, pode fazer backup dos seus arquivos nela com a CLI do Relayium sem montar um serviço de sincronização nem uma conta. A transferência roda sobre a sua conexão SSH existente, então os bytes vão direto para o seu servidor e nunca passam pelo Relayium.",
+    "Este guia aborda como fazer push e pull de diretórios, o que a retomada e a verificação de integridade oferecem, e como executá-lo de forma agendada com o cron.",
+  ],
+  sections: [
+    {
+      heading: "Envie (push) um diretório para o seu servidor",
+      body: [
+        "O push recebe uma ou mais origens e um destino no estilo scp. O Relayium se conecta por SSH usando suas chaves e sua configuração de sempre e, em seguida, transmite os arquivos para o diretório de destino:",
+      ],
+      code: [
+        `# copy a local folder to the server
+relayium push ./photos user@your-server:backups/
+
+# choose an SSH key and a non-default port
+relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
+      ],
+      bullets: [
+        "Ele reaproveita seu ~/.ssh/config, então os apelidos de host, as chaves e as portas que você já configurou simplesmente funcionam.",
+        "Se o relayium estiver instalado no servidor, ele usa o protocolo nativo: retomada por arquivo e uma verificação SHA-256 em cada arquivo.",
+        "Se não estiver, ele recorre a canalizar um fluxo tar para a máquina remota, de modo que até um servidor pelado sem relayium funciona.",
+      ],
+    },
+    {
+      heading: "Traga os arquivos de volta (pull)",
+      body: [
+        "Restaurar é o mesmo comando ao contrário: informe uma origem remota e um diretório de destino local. É assim que você recupera um backup ou sincroniza a saída de um servidor para o seu notebook:",
+      ],
+      code: ["relayium pull user@your-server:backups/ ./restore"],
+      bullets: [
+        "Ao contrário do push, o pull sempre precisa do relayium já instalado no remoto — ele não tem alternativa com tar, então instale-o lá primeiro se estiver faltando.",
+      ],
+    },
+    {
+      heading: "Retomada e integridade já vêm embutidas",
+      body: [
+        "Backups tendem a ser grandes e redes tendem a cair. Quando o relayium está nas duas pontas, uma transferência interrompida é retomada na próxima execução de onde parou em vez de reenviar tudo, e cada arquivo é verificado de ponta a ponta com um hash SHA-256 — o que chega ao servidor é byte por byte o que você enviou.",
+        "Se em algum momento você quiser um reenvio completo e limpo em vez de retomar um arquivo parcial, passe --no-resume.",
+      ],
+      bullets: [
+        "A retomada precisa do relayium no remoto (o protocolo nativo); a alternativa com tar sempre envia por completo.",
+        "A verificação SHA-256 roda automaticamente; uma divergência é relatada e esse arquivo é marcado como falho.",
+      ],
+    },
+    {
+      heading: "Execute-o de forma agendada com o cron",
+      body: [
+        "Como o push é um único comando não interativo que usa suas chaves SSH, ele entra direto no cron para um backup recorrente. Aponte-o para uma chave sem frase-senha (ou para um agente) e registre a saída para conseguir ver as falhas:",
+      ],
+      code: [
+        `# back up every night at 2am — add to your crontab (crontab -e)
+0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@your-server:backups/ >> ~/relayium-backup.log 2>&1`,
+      ],
+      bullets: [
+        "Combinado com a retomada, um trabalho noturno que é interrompido simplesmente continua na noite seguinte.",
+        "O comando encerra com código diferente de zero se algum arquivo falhar na verificação de integridade, então o e-mail de falha do cron detecta os problemas.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "Os arquivos passam pelos servidores do Relayium?",
+        a: "Não. O push e o pull rodam inteiramente sobre a sua própria conexão SSH. Os servidores do Relayium nunca são envolvidos e você não precisa de conta alguma.",
+      },
+      {
+        q: "O servidor precisa ter o relayium instalado?",
+        a: "Depende da direção. Para o push é opcional: com o relayium no remoto você obtém o protocolo nativo — transferências retomáveis e verificações SHA-256 por arquivo — e sem ele, o push recorre a um simples fluxo tar sobre SSH, que ainda funciona, mas envia sempre cada arquivo por completo. Para o pull é obrigatório: o pull sempre precisa do relayium no remoto (ele não tem alternativa com tar), então instale-o lá primeiro.",
+      },
+      {
+        q: "Como ele escolhe qual chave SSH e qual porta usar?",
+        a: "Ele lê o seu ~/.ssh/config como o ssh faz, então os apelidos de host, as chaves e as portas são identificados automaticamente. Você também pode sobrescrevê-los por comando com -i para o arquivo de identidade e -p para a porta.",
+      },
+      {
+        q: "Isso é mais rápido que o rsync?",
+        a: "Para enviar ao seu próprio servidor, fica na mesma ordem de grandeza que o rsync sobre SSH; o objetivo não é vencer o rsync, mas dar a você uma única ferramenta que também faz transferências entre redes e de servidor para servidor com as mesmas garantias de retomada e integridade.",
+      },
+    ],
+  },
+  cta: {
+    text: "Faça o backup do seu próximo diretório da forma direta — pelo seu próprio SSH, retomável, com verificação de integridade e gratuito.",
+    button: "Obter a CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "guides/back-up-a-server-over-ssh",
   updated: "2026-07-12",
-  langs: withInstall({ en, zh, ja, ko, de, fr, ar }),
+  langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

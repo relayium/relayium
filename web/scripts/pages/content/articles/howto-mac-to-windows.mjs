@@ -723,8 +723,216 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Transferir archivos entre un Mac y un PC con Windows",
+  description:
+    "Cómo enviar archivos entre macOS y Windows sin una memoria USB, una carpeta de red compartida ni una subida a la nube. En la misma red y por internet — nada que instalar en ninguna de las dos máquinas.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "Los Mac y los PC no hablan el mismo idioma de compartición de archivos de fábrica. AirDrop es solo de Apple, la compartición de red de Windows quiere que ambas máquinas estén en un grupo de trabajo o dominio coincidente, y ninguna de las dos es precisamente fácil de configurar en cinco minutos cuando solo quieres mover una carpeta de archivos de proyecto de un MacBook a un equipo de escritorio con Windows.",
+    "Relayium esquiva toda la cuestión de la compatibilidad. Abre la misma página en un navegador en el Mac y en el PC con Windows, y los archivos viajan directamente entre ellos — cifrados de extremo a extremo, nada que instalar en ninguno de los dos sistemas operativos. En la misma red no hace falta cuenta alguna; enviar por internet con un código de emparejamiento solo pide al remitente iniciar sesión. Aquí tienes exactamente cómo funciona en ambas direcciones.",
+  ],
+  sections: [
+    {
+      heading: "Qué necesitas antes de empezar",
+      body: [
+        "Nada que instalar en el Mac ni en el PC. En la misma red tampoco hay nada que registrar — el navegador se encarga de todo.",
+      ],
+      bullets: [
+        "Un Mac con Safari o Chrome, y un PC con Windows con Edge o Chrome — cualquier navegador moderno en cualquiera de los dos lados.",
+        "Para la vía más sencilla, conecta ambas máquinas a la misma red Wi-Fi o Ethernet. Si están en lugares distintos, un código de emparejamiento salva la distancia en su lugar.",
+        "Los archivos o carpetas a enviar — hasta 1.000 archivos por lote.",
+      ],
+    },
+    {
+      heading: "Mac y PC en la misma red",
+      body: [
+        "Si ambos ordenadores están en la misma red de oficina o de casa, esta es la forma más rápida de mover archivos — ninguna unidad compartida que montar, ningún permiso contra el que pelear.",
+      ],
+      bullets: [
+        "En el Mac, abre relayium.com en el navegador. En el PC con Windows, abre la misma dirección.",
+        "Cada máquina aparece como un dispositivo cercano para la otra — sin configurar un grupo de trabajo de Windows, sin habilitar la compartición de archivos de macOS.",
+        "En el ordenador que envía, toca el otro y luego elige los archivos (o una carpeta entera) a enviar.",
+        "Ambas pantallas muestran el mismo código de verificación corto. Comprueba que coincide en las dos — eso confirma que la conexión es directa entre tus dos máquinas, sin pasar por nada en medio.",
+        "Acepta en el lado que recibe y la transferencia empieza de inmediato, transmitiendo directamente al disco.",
+      ],
+    },
+    {
+      heading: "Mac y PC en redes distintas",
+      body: [
+        "¿Trabajas desde casa mientras la otra máquina está en la oficina, o simplemente en una red Wi-Fi distinta? Un código de emparejamiento conecta un Mac y un PC con Windows a través de internet, no solo de un lado a otro de la habitación.",
+        "El ordenador que envía genera un código de emparejamiento corto (o un enlace para compartir); introdúcelo en la otra máquina para conectar. La transferencia sigue yendo directamente de igual a igual siempre que haya una vía directa posible, y recurre a un retransmisor TURN cifrado — que solo ve texto cifrado — cuando no la hay. Si la conexión se cae a mitad de una carpeta grande, se reanuda en lugar de empezar de nuevo. Este modo necesita que el remitente inicie sesión; quien recibe nunca necesita una cuenta.",
+      ],
+    },
+    {
+      heading: "Enviar una carpeta entera, no solo archivos sueltos",
+      body: [
+        "Mover una carpeta de proyecto de Mac a Windows (o al revés) suele implicar comprimirla primero. Relayium puede enviar una carpeta directamente, manteniendo su estructura intacta.",
+      ],
+      bullets: [
+        "En el Mac, arrastra una carpeta, o elígela desde el diálogo de archivos — hasta 1.000 archivos en el lote.",
+        "En un PC con Windows usando Edge o Chrome, la carpeta entrante se escribe directamente en un directorio que elijas, con la estructura preservada.",
+        "Si el navegador que recibe no admite escribir carpetas directamente, la carpeta llega como un único .zip que se descomprime con la misma disposición.",
+      ],
+    },
+    {
+      heading: "Otras formas de mover archivos entre Mac y Windows",
+      body: [
+        "Relayium no es la única opción — aquí están los compromisos honestos de las alternativas habituales:",
+      ],
+      bullets: [
+        "Una memoria USB funciona sin conexión, pero macOS y Windows no siempre se ponen de acuerdo en un sistema de archivos sin reformatear, y es un objeto físico más del que estar pendiente.",
+        "La compartición de red de Windows (SMB) puede llegar a un Mac, pero configurar grupos de trabajo, permisos y reglas de cortafuegos para una transferencia puntual es más trabajo del que vale la transferencia.",
+        "Una unidad en la nube (OneDrive, iCloud, Google Drive) funciona cuando la otra persona está desconectada, pero el archivo se sube y luego se descarga, cuenta contra tu cuota de almacenamiento y el proveedor guarda una copia.",
+        "El correo y las apps de chat son cómodos, pero suelen limitar el tamaño del adjunto y no están cifrados de extremo a extremo para compartir archivos.",
+      ],
+    },
+    {
+      heading: "¿Cambiará algo en los archivos?",
+      body: [
+        "No. Relayium transfiere los bytes originales exactamente como están — sin recompresión, sin reformateo, sin cambios de fin de línea ni de nombre de archivo entre los dos sistemas operativos.",
+        "Cada archivo se comprueba de extremo a extremo con un hash SHA-256, así que lo que aterriza en el PC con Windows (o en el Mac) queda verificado como idéntico a lo que salió de la otra máquina. Los archivos grandes también se manejan bien: Chrome y Edge transmiten la descarga directamente al disco sin límite de tamaño, mientras que Firefox y Safari almacenan en memoria, así que en esos mantén una sola transferencia por debajo de unos 200 MB.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Necesito instalar algo en el Mac o en el PC con Windows?",
+        a: "No. Relayium funciona por completo en el navegador tanto en macOS como en Windows. Abre relayium.com en cada máquina y estás listo — nada que descargar en ningún caso. En la misma red una transferencia no necesita cuenta alguna; emparejar por internet solo pide al remitente iniciar sesión.",
+      },
+      {
+        q: "¿Tienen que estar ambos ordenadores en la misma red?",
+        a: "No. Estar en la misma red es la vía más rápida porque las dos máquinas se encuentran automáticamente, pero un código de emparejamiento conecta un Mac y un PC con Windows por internet igual de bien — incluso desde ciudades distintas. En cualquier caso la transferencia sigue cifrada de extremo a extremo; la ruta entre redes solo pide que el remitente inicie sesión primero, y quien recibe nunca necesita una cuenta.",
+      },
+      {
+        q: "¿Puedo enviar una carpeta entera, no solo archivos sueltos?",
+        a: "Sí. Arrastra una carpeta y Relayium envía hasta 1.000 archivos en el lote, preservando la estructura de la carpeta. Chrome y Edge en Windows la escriben directamente en un directorio elegido; si el navegador que recibe no puede escribir carpetas directamente, llega como un único .zip con la misma disposición.",
+      },
+      {
+        q: "¿Se estropearán los permisos de archivo, los fines de línea o los nombres al pasar de Mac a Windows?",
+        a: "No. Relayium mueve los bytes exactos de cada archivo y los verifica con un hash SHA-256 de extremo a extremo — no toca los fines de línea, la codificación ni los nombres de archivo. Todo lo que una conversión a nivel de aplicación tendría que manejar (como CRLF frente a LF en un archivo de texto) queda sin cambios porque el propio archivo queda sin cambios.",
+      },
+      {
+        q: "¿Hay algún límite de tamaño?",
+        a: "Hasta 1.000 archivos por lote. No hay límite de tamaño del lado del servidor para una transferencia directa — Chrome y Edge transmiten directamente al disco — pero Firefox y Safari almacenan en memoria, así que mantén las transferencias individuales en esos por debajo de unos 200 MB.",
+      },
+    ],
+  },
+  cta: {
+    text: "Abre Relayium en tu Mac y en tu PC con Windows y mueve tus primeros archivos — sin instalación, y sin necesidad de cuenta en la misma red.",
+    button: "Prueba Relayium ahora",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Transferir arquivos entre um Mac e um PC com Windows",
+  description:
+    "Como enviar arquivos entre macOS e Windows sem pen drive, sem pasta de rede compartilhada e sem upload para a nuvem. Na mesma rede e pela internet — nada para instalar em nenhuma das máquinas.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "Macs e PCs não falam a mesma língua de compartilhamento de arquivos de fábrica. O AirDrop é só da Apple, o compartilhamento de rede do Windows exige que as duas máquinas estejam em um grupo de trabalho ou domínio compatível, e nenhum dos dois é exatamente fácil de configurar em cinco minutos quando você só quer mover uma pasta de arquivos de projeto de um MacBook para um desktop com Windows.",
+    "O Relayium contorna toda a questão da compatibilidade. Abra a mesma página em um navegador no Mac e no PC com Windows, e os arquivos viajam diretamente entre eles — criptografados de ponta a ponta, nada para instalar em nenhum dos dois sistemas operacionais. Na mesma rede não é preciso conta alguma; enviar pela internet com um código de emparelhamento só pede que o remetente faça login. Veja exatamente como funciona nos dois sentidos.",
+  ],
+  sections: [
+    {
+      heading: "O que você precisa antes de começar",
+      body: [
+        "Nada para instalar no Mac ou no PC. Na mesma rede também não há nada para se cadastrar — o navegador cuida de tudo.",
+      ],
+      bullets: [
+        "Um Mac com Safari ou Chrome e um PC com Windows com Edge ou Chrome — qualquer navegador moderno em qualquer um dos lados.",
+        "Para o caminho mais simples, conecte as duas máquinas à mesma rede Wi-Fi ou Ethernet. Se estiverem em lugares diferentes, um código de emparelhamento faz a ponte no lugar disso.",
+        "Os arquivos ou pastas a enviar — até 1.000 arquivos por lote.",
+      ],
+    },
+    {
+      heading: "Mac e PC na mesma rede",
+      body: [
+        "Se os dois computadores estiverem na mesma rede do escritório ou de casa, esta é a forma mais rápida de mover arquivos — nenhuma unidade compartilhada para montar, nenhuma permissão para brigar.",
+      ],
+      bullets: [
+        "No Mac, abra o relayium.com no navegador. No PC com Windows, abra o mesmo endereço.",
+        "Cada máquina aparece para a outra como um dispositivo próximo — nenhum grupo de trabalho do Windows para configurar, nenhum compartilhamento de arquivos do macOS para ativar.",
+        "No computador que envia, toque no outro e depois escolha os arquivos (ou uma pasta inteira) para enviar.",
+        "As duas telas mostram o mesmo código de verificação curto. Confira se ele coincide dos dois lados — isso confirma que a conexão é direta entre suas duas máquinas, sem passar por nada no meio.",
+        "Aceite no lado que recebe e a transferência começa imediatamente, transmitindo direto para o disco.",
+      ],
+    },
+    {
+      heading: "Mac e PC em redes diferentes",
+      body: [
+        "Trabalhando de casa enquanto a outra máquina está no escritório, ou apenas em uma rede Wi-Fi diferente? Um código de emparelhamento conecta um Mac e um PC com Windows pela internet, não só de um lado a outro da sala.",
+        "O computador que envia gera um código de emparelhamento curto (ou um link de compartilhamento); digite-o na outra máquina para conectar. A transferência continua indo direto ponto a ponto sempre que um caminho direto for possível, e recorre a um retransmissor TURN criptografado — que só vê texto cifrado — quando não for. Se a conexão cair no meio de uma pasta grande, ela retoma em vez de recomeçar. Esse modo precisa que o remetente faça login; quem recebe nunca precisa de conta.",
+      ],
+    },
+    {
+      heading: "Enviar uma pasta inteira, não só arquivos avulsos",
+      body: [
+        "Mover uma pasta de projeto do Mac para o Windows (ou de volta) geralmente significa compactá-la antes. O Relayium consegue enviar uma pasta diretamente, mantendo sua estrutura intacta.",
+      ],
+      bullets: [
+        "No Mac, arraste uma pasta para dentro, ou escolha uma na caixa de diálogo de arquivos — até 1.000 arquivos no lote.",
+        "Em um PC com Windows usando Edge ou Chrome, a pasta que chega é gravada direto em um diretório que você escolhe, com a estrutura preservada.",
+        "Se o navegador que recebe não suportar gravar pastas diretamente, a pasta chega como um único .zip que se descompacta com a mesma organização.",
+      ],
+    },
+    {
+      heading: "Outras formas de mover arquivos entre Mac e Windows",
+      body: [
+        "O Relayium não é a única opção — aqui estão os compromissos honestos das alternativas de sempre:",
+      ],
+      bullets: [
+        "Um pen drive funciona off-line, mas macOS e Windows nem sempre concordam sobre um sistema de arquivos sem reformatar, e é mais um objeto físico para não perder de vista.",
+        "O compartilhamento de rede do Windows (SMB) consegue alcançar um Mac, mas configurar grupos de trabalho, permissões e regras de firewall para uma transferência única dá mais trabalho do que a transferência vale.",
+        "Uma unidade na nuvem (OneDrive, iCloud, Google Drive) funciona quando a outra pessoa está off-line, mas o arquivo é enviado e depois baixado, conta contra sua cota de armazenamento e o provedor guarda uma cópia.",
+        "E-mail e apps de mensagens são convenientes, mas costumam limitar o tamanho do anexo e não são criptografados de ponta a ponta para compartilhar arquivos.",
+      ],
+    },
+    {
+      heading: "Alguma coisa vai mudar nos arquivos?",
+      body: [
+        "Não. O Relayium transfere os bytes originais exatamente como são — sem recompressão, sem reformatação, sem mudanças de fim de linha ou de nome de arquivo entre os dois sistemas operacionais.",
+        "Cada arquivo é conferido de ponta a ponta com um hash SHA-256, então o que pousa no PC com Windows (ou no Mac) é verificado como idêntico ao que saiu da outra máquina. Arquivos grandes também são bem tratados: Chrome e Edge transmitem o download direto para o disco sem limite de tamanho, enquanto Firefox e Safari armazenam na memória, então nesses mantenha uma única transferência abaixo de cerca de 200 MB.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "Preciso instalar alguma coisa no Mac ou no PC com Windows?",
+        a: "Não. O Relayium roda inteiramente no navegador tanto no macOS quanto no Windows. Abra o relayium.com em cada máquina e está pronto — nada para baixar de qualquer forma. Na mesma rede uma transferência não precisa de conta alguma; emparelhar pela internet só pede que o remetente faça login.",
+      },
+      {
+        q: "Os dois computadores precisam estar na mesma rede?",
+        a: "Não. Estar na mesma rede é o caminho mais rápido porque as duas máquinas se encontram automaticamente, mas um código de emparelhamento conecta um Mac e um PC com Windows pela internet igualmente bem — mesmo de cidades diferentes. De qualquer forma, a transferência permanece criptografada de ponta a ponta; a rota entre redes só pede que o remetente faça login primeiro, e quem recebe nunca precisa de conta.",
+      },
+      {
+        q: "Posso enviar uma pasta inteira, não só arquivos individuais?",
+        a: "Sim. Arraste uma pasta e o Relayium envia até 1.000 arquivos no lote, preservando a estrutura da pasta. Chrome e Edge no Windows gravam direto em um diretório escolhido; se o navegador que recebe não conseguir gravar pastas diretamente, ela chega como um único .zip com a mesma organização.",
+      },
+      {
+        q: "As permissões de arquivo, os fins de linha ou os nomes de arquivo vão se embaralhar ao passar do Mac para o Windows?",
+        a: "Não. O Relayium move os bytes exatos de cada arquivo e os verifica com um hash SHA-256 de ponta a ponta — ele não toca nos fins de linha, na codificação ou nos nomes de arquivo. Tudo o que uma conversão em nível de aplicação precisaria tratar (como CRLF versus LF em um arquivo de texto) fica inalterado, porque o próprio arquivo fica inalterado.",
+      },
+      {
+        q: "Existe algum limite de tamanho?",
+        a: "Até 1.000 arquivos por lote. Não há limite de tamanho do lado do servidor para uma transferência direta — Chrome e Edge transmitem direto para o disco — mas Firefox e Safari armazenam na memória, então mantenha as transferências individuais nesses abaixo de cerca de 200 MB.",
+      },
+    ],
+  },
+  cta: {
+    text: "Abra o Relayium no seu Mac e no seu PC com Windows e mova seus primeiros arquivos — sem instalação e sem precisar de conta na mesma rede.",
+    button: "Experimente o Relayium agora",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "how-to/transfer-files-between-mac-and-windows",
   updated: "2026-07-09",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

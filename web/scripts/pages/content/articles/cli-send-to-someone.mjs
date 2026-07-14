@@ -544,8 +544,162 @@ relayium receive 428571`,
   relatedHeading: "تابِع القراءة",
 };
 
+const es = {
+  title: "Enviar un archivo a alguien entre redes con la CLI de Relayium",
+  description:
+    "Usa relayium send y receive para mover un archivo directamente entre dos personas en redes distintas, con un breve código de emparejamiento. Cifrado de extremo a extremo, verificado con un código SAS y gratis: el archivo va directo entre ustedes, nunca a través de nuestros servidores.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "A veces la otra máquina no es tuya y no puedes entrar por SSH: un archivo para un colega en otra oficina, una compilación para un cliente, un archivo comprimido para un amigo al otro lado del país. relayium send y receive lo mueven directamente entre ustedes dos, entre redes, usando solo un código corto que acuerden.",
+    "La conexión es de igual a igual y cifrada de extremo a extremo. Solo un pequeñísimo apretón de manos de encuentro pasa por Relayium para presentar los dos extremos; los bytes del archivo nunca lo hacen.",
+  ],
+  sections: [
+    {
+      heading: "Acuerden un código, luego send y receive",
+      body: [
+        "Elige cualquier código corto y compártelo fuera de banda: dilo en una llamada, escríbelo en un chat. Un lado envía, el otro recibe con el mismo código:",
+      ],
+      code: [
+        `# sender
+relayium send ./release.zip 428571
+
+# receiver (in the folder where files should land)
+relayium receive 428571`,
+      ],
+      bullets: [
+        "El código es solo un secreto compartido para encontrarse; no se envía a nadie más que al punto de encuentro, y solo sirve para presentar los dos extremos.",
+        "El receptor puede indicar un directorio de destino: relayium receive 428571 ./downloads",
+      ],
+    },
+    {
+      heading: "Verificar con el código SAS",
+      body: [
+        "Cuando los dos extremos se conectan, ambas terminales muestran el mismo SAS (short authentication string) de 6 dígitos derivado de las claves de sesión. Compáralos —léelo en voz alta durante la llamada— para asegurarte de que están conectados entre sí y no con alguien en el medio.",
+        "Para una garantía firme, añade --verify: la transferencia esperará a que confirmes que los códigos coinciden antes de que se mueva un solo byte.",
+      ],
+      code: ["relayium send --verify ./release.zip 428571"],
+    },
+    {
+      heading: "Solo directo: gratis, o falla",
+      body: [
+        "La transferencia compite por establecer una conexión directa entre los dos extremos. Cuando se puede establecer —lo habitual cuando al menos un lado tiene una dirección alcanzable— el archivo fluye directo, cifrado, a máxima velocidad y sin coste.",
+        "Si ambos extremos están detrás de un NAT estricto y no se encuentra ninguna ruta directa, la transferencia falla limpiamente en lugar de enrutar tu archivo a través de un retransmisor. Eso mantiene la CLI completamente gratis y mantiene los bytes de tu archivo fuera de nuestros servidores. Si te ocurre esto, la respuesta fiable es daemon direct entre dos servidores alcanzables, o push por SSH.",
+      ],
+      bullets: [
+        "La conexión directa tiene éxito → gratis, a máxima velocidad, cifrada de extremo a extremo.",
+        "Sin ruta directa → la transferencia falla; la CLI nunca hace de proxy del archivo por ti.",
+        "Ambos extremos pueden estar en cualquier lugar geográficamente; solo necesitan ejecutar cada uno el comando con el mismo código.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿De dónde sale el código de emparejamiento?",
+        a: "Lo inventas tú. Es cualquier cadena corta que ambos lados escriben; acuérdenlo en una llamada o un chat. Solo tiene que coincidir en ambos extremos.",
+      },
+      {
+        q: "¿Se sube el archivo a algún sitio?",
+        a: "No. El archivo fluye directamente entre ustedes dos, cifrado de extremo a extremo. Solo un pequeño apretón de manos de encuentro pasa por Relayium para presentar los extremos; el archivo nunca.",
+      },
+      {
+        q: "¿Y si no podemos conectarnos?",
+        a: "Si ambos extremos están detrás de un NAT estricto sin dirección alcanzable, no se puede establecer la conexión directa y la transferencia falla: la CLI no tiene respaldo por retransmisor, por diseño. Usa daemon direct entre dos servidores alcanzables, o push por SSH, cuando no haya una ruta directa disponible.",
+      },
+      {
+        q: "¿Cómo sé que de verdad es la persona correcta al otro lado?",
+        a: "Ambas terminales muestran un código SAS idéntico de 6 dígitos a partir de las claves de sesión. Compáralos fuera de banda; si coinciden, no hay nadie en el medio. Añade --verify para exigir esa confirmación antes de que se muevan bytes.",
+      },
+    ],
+  },
+  cta: {
+    text: "Envía tu próximo archivo directamente a alguien en otra red: cifrado de extremo a extremo y gratis.",
+    button: "Obtener la CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Seguir leyendo",
+};
+
+const pt = {
+  title: "Enviar um arquivo para alguém entre redes com a CLI do Relayium",
+  description:
+    "Use relayium send e receive para mover um arquivo diretamente entre duas pessoas em redes diferentes, com um código de emparelhamento curto. Com criptografia de ponta a ponta, verificado com um código SAS e gratuito: o arquivo vai direto entre vocês, nunca através dos nossos servidores.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "Às vezes a outra máquina não é sua e você não consegue entrar por SSH: um arquivo para um colega em outro escritório, um build para um cliente, um arquivo compactado para um amigo do outro lado do país. relayium send e receive o movem diretamente entre vocês dois, entre redes, usando apenas um código curto que vocês combinam.",
+    "A conexão é ponto a ponto e com criptografia de ponta a ponta. Apenas um pequeníssimo handshake de encontro passa pelo Relayium para apresentar as duas pontas; os bytes do arquivo nunca passam.",
+  ],
+  sections: [
+    {
+      heading: "Combinem um código, depois send e receive",
+      body: [
+        "Escolha qualquer código curto e compartilhe fora de banda: diga em uma chamada, coloque em um chat. Um lado envia, o outro recebe com o mesmo código:",
+      ],
+      code: [
+        `# sender
+relayium send ./release.zip 428571
+
+# receiver (in the folder where files should land)
+relayium receive 428571`,
+      ],
+      bullets: [
+        "O código é apenas um segredo compartilhado para se encontrar; não é enviado a ninguém além do ponto de encontro, e serve apenas para apresentar as duas pontas.",
+        "O receptor pode indicar um diretório de destino: relayium receive 428571 ./downloads",
+      ],
+    },
+    {
+      heading: "Verificar com o código SAS",
+      body: [
+        "Quando as duas pontas se conectam, os dois terminais exibem o mesmo SAS (short authentication string) de 6 dígitos derivado das chaves de sessão. Compare-os — leia em voz alta durante a chamada — para ter certeza de que vocês estão conectados um ao outro e não a alguém no meio.",
+        "Para uma garantia firme, adicione --verify: a transferência então espera que você confirme que os códigos coincidem antes que um único byte se mova.",
+      ],
+      code: ["relayium send --verify ./release.zip 428571"],
+    },
+    {
+      heading: "Somente direto: gratuito, ou falha",
+      body: [
+        "A transferência disputa o estabelecimento de uma conexão direta entre as duas pontas. Quando ela pode ser estabelecida — o caso comum quando pelo menos um lado tem um endereço alcançável — o arquivo flui direto, criptografado, na velocidade máxima e sem custo.",
+        "Se ambas as pontas estiverem atrás de um NAT estrito e nenhum caminho direto puder ser encontrado, a transferência falha de forma limpa em vez de rotear seu arquivo por um retransmissor. Isso mantém a CLI completamente gratuita e mantém os bytes do seu arquivo fora dos nossos servidores. Se você se deparar com isso, a resposta confiável é daemon direct entre dois servidores alcançáveis, ou push por SSH.",
+      ],
+      bullets: [
+        "A conexão direta é bem-sucedida → gratuita, na velocidade máxima, com criptografia de ponta a ponta.",
+        "Sem caminho direto → a transferência falha; a CLI nunca faz proxy do arquivo por você.",
+        "Ambas as pontas podem estar em qualquer lugar geograficamente — cada uma só precisa executar o comando com o mesmo código.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "De onde vem o código de emparelhamento?",
+        a: "Você mesmo inventa. É qualquer string curta que os dois lados digitam — combinem em uma chamada ou um chat. Só precisa coincidir nas duas pontas.",
+      },
+      {
+        q: "O arquivo é enviado para algum lugar?",
+        a: "Não. O arquivo flui diretamente entre vocês dois, com criptografia de ponta a ponta. Apenas um pequeno handshake de encontro passa pelo Relayium para apresentar as pontas — nunca o arquivo.",
+      },
+      {
+        q: "E se não conseguirmos conectar?",
+        a: "Se ambas as pontas estiverem atrás de um NAT estrito sem endereço alcançável, a conexão direta não pode ser feita e a transferência falha — a CLI não tem retorno por retransmissor, por design. Use daemon direct entre dois servidores alcançáveis, ou push por SSH, quando não houver um caminho direto disponível.",
+      },
+      {
+        q: "Como sei que é mesmo a pessoa certa do outro lado?",
+        a: "Os dois terminais exibem um código SAS idêntico de 6 dígitos a partir das chaves de sessão. Compare-os fora de banda; se coincidirem, não há ninguém no meio. Adicione --verify para exigir essa confirmação antes que qualquer byte se mova.",
+      },
+    ],
+  },
+  cta: {
+    text: "Envie seu próximo arquivo diretamente para alguém em outra rede — com criptografia de ponta a ponta e gratuito.",
+    button: "Obter a CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "guides/send-a-file-to-someone",
   updated: "2026-07-12",
-  langs: withInstall({ en, zh, ja, ko, de, fr, ar }),
+  langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

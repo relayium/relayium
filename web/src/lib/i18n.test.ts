@@ -10,8 +10,10 @@ import ko from "./i18n/ko";
 import de from "./i18n/de";
 import fr from "./i18n/fr";
 import ar from "./i18n/ar";
+import es from "./i18n/es";
+import pt from "./i18n/pt";
 
-const messages: Record<Lang, Messages> = { zh, en, ja, ko, de, fr, ar };
+const messages: Record<Lang, Messages> = { zh, en, ja, ko, de, fr, ar, es, pt };
 
 describe("i18n completeness", () => {
   it("every language has nav tab labels and the cross-network method names", () => {

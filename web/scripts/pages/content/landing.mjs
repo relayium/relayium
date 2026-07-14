@@ -566,7 +566,195 @@ const ar = {
   footer: { privacy: "الخصوصية", terms: "شروط الخدمة", security: "الأمان" },
 };
 
+const es = {
+  title: "Relayium — Transferencia de archivos P2P cifrada de extremo a extremo",
+  description:
+    "Relayium es una herramienta de código abierto para transferir archivos con cifrado de extremo a extremo. En una transferencia en tiempo real dentro del navegador, en la misma red dos dispositivos se conectan directamente y los archivos nunca pasan por el servidor; entre redes distintas, todo va por un retransmisor cifrado que solo ve texto cifrado. Sin instalación; en la misma red no hace falta ninguna cuenta, y para emparejar entre redes distintas solo el remitente inicia sesión.",
+  hero: {
+    h1: "Transferencia de archivos P2P cifrada de extremo a extremo",
+    pitch:
+      "Conecta dos dispositivos directamente en el navegador; los archivos se cifran de extremo a extremo y se transfieren bloque a bloque. En la misma red nunca pasan por el servidor; entre redes distintas van por un retransmisor cifrado que solo ve texto cifrado. Sin instalación, sin registro — abre la página web y empieza.",
+    cta: "Iniciar transferencia",
+  },
+  how: {
+    heading: "Transferir en cuatro pasos",
+    steps: [
+      "Abre relayium.com en ambos dispositivos con un navegador moderno.",
+      "Un lado selecciona o arrastra los archivos a enviar (hasta 1.000 por lote).",
+      "Comparad en las dos pantallas el mismo código de verificación de 6 dígitos (SAS) y confirmad la coincidencia para descartar cualquier intermediario.",
+      "Se establece una conexión directa de igual a igual; los archivos se transfieren bloque a bloque, cifrados con AES-256-GCM, y se verifica la integridad de cada archivo mediante SHA-256.",
+    ],
+  },
+  why: {
+    heading: "Por qué Relayium",
+    items: [
+      {
+        title: "Cifrado de extremo a extremo",
+        desc: "Intercambio de claves X25519 y AES-256-GCM por bloque; las claves se negocian únicamente entre los dos dispositivos y el servidor no puede descifrar.",
+      },
+      {
+        title: "Verdadero de igual a igual",
+        desc: "En la misma red, los archivos circulan directamente de dispositivo a dispositivo por un canal WebRTC cifrado y nunca llegan a nuestros servidores; entre redes distintas van por un retransmisor cifrado que, también él, solo ve texto cifrado.",
+      },
+      {
+        title: "SAS contra el ataque de intermediario",
+        desc: "Las dos pantallas muestran el mismo código de verificación de 6 dígitos; si coincide, se descarta cualquier interceptor — ni siquiera un servidor de señalización comprometido puede hacerse pasar por ti.",
+      },
+      {
+        title: "Multiplataforma",
+        desc: "Windows, macOS, Linux, Android, iOS — basta un navegador moderno, sin necesidad de instalar nada.",
+      },
+      {
+        title: "Gratis y de código abierto",
+        desc: "Licencia MIT; el protocolo y todo el código son públicos en GitHub. En la misma red, las transferencias en tiempo real no requieren cuenta; para emparejar entre redes distintas solo el remitente inicia sesión.",
+      },
+    ],
+  },
+  compare: {
+    heading: "En comparación",
+    items: [
+      {
+        title: "Frente a AirDrop",
+        body: "AirDrop es nativo y fluido, pero se limita a los dispositivos Apple. Relayium es multiplataforma — conecta igual de directamente Windows o Android con un iPhone o un Mac, con un simple navegador.",
+      },
+      {
+        title: "Frente a Snapdrop / PairDrop",
+        body: "Snapdrop y PairDrop son pioneros del mismo tipo. Relayium les añade cifrado de extremo a extremo a nivel de aplicación y un código de verificación SAS: incluso un servidor de señalización malicioso no puede montar un ataque de intermediario.",
+      },
+      {
+        title: "Frente a WeTransfer / almacenamiento en la nube",
+        body: "WeTransfer y el almacenamiento en la nube son asíncronos y cómodos, pero el plan gratuito suele toparse en 2 GB y los archivos se suben a sus servidores. El modo en tiempo real de Relayium no tiene límite de tamaño y no almacena nada en el servidor.",
+      },
+    ],
+  },
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Es gratis?",
+        a: "Sí. Relayium es de código abierto bajo licencia MIT y se usa sin coste alguno. En la misma red, las transferencias en tiempo real no requieren iniciar sesión; para emparejar entre redes distintas solo el remitente debe iniciar sesión — el destinatario nunca necesita cuenta.",
+      },
+      {
+        q: "¿Se suben mis archivos a un servidor?",
+        a: "En la misma red, los archivos de la transferencia directa en tiempo real nunca pasan por el servidor; entre redes distintas van por un retransmisor cifrado que, también él, solo ve texto cifrado. Solo si usas el enlace de descarga opcional, el navegador los cifra antes de subirlos y el servidor conserva únicamente texto cifrado que no puede descifrar — la clave queda en el enlace.",
+      },
+      {
+        q: "¿Es cifrado de extremo a extremo?",
+        a: "Sí. Usa intercambio de claves X25519 y cifrado AES-256-GCM por bloque; las claves se negocian únicamente entre los dos dispositivos, de modo que el servidor no puede descifrar nada.",
+      },
+      {
+        q: "¿Se puede transferir entre sistemas distintos?",
+        a: "Sí. Con un navegador moderno puedes transferir entre Windows, macOS, Linux, Android e iOS, sin instalar ninguna aplicación.",
+      },
+      {
+        q: "¿Hay un límite de tamaño?",
+        a: "La transferencia directa en tiempo real envía los datos en flujo, así que en la práctica no hay un límite estricto de tamaño (Chrome y Edge escriben directamente en el disco; Firefox y Safari almacenan en memoria, por lo que se recomiendan unos 200 MB por archivo). Hasta 1.000 archivos por lote.",
+      },
+      {
+        q: "¿En qué se diferencia de Snapdrop?",
+        a: "Relayium añade cifrado de extremo a extremo a nivel de aplicación y un código de verificación SAS, de modo que un servidor de señalización comprometido no puede escuchar ni suplantar. Además admite transferencias entre redes y enlaces de descarga opcionales de conocimiento cero.",
+      },
+    ],
+  },
+  learnHeading: "Más información",
+  footer: { privacy: "Privacidad", terms: "Términos del servicio", security: "Seguridad" },
+};
+
+const pt = {
+  title: "Relayium — Transferência de arquivos P2P com criptografia de ponta a ponta",
+  description:
+    "O Relayium é uma ferramenta de código aberto para transferir arquivos com criptografia de ponta a ponta. Em uma transferência em tempo real no navegador, na mesma rede dois dispositivos se conectam diretamente e os arquivos nunca passam pelo servidor; entre redes diferentes, tudo passa por um retransmissor criptografado que só vê texto cifrado. Sem instalação; na mesma rede não é preciso nenhuma conta, e para emparelhar entre redes diferentes só o remetente faz login.",
+  hero: {
+    h1: "Transferência de arquivos P2P com criptografia de ponta a ponta",
+    pitch:
+      "Conecte dois dispositivos diretamente no navegador; os arquivos são criptografados de ponta a ponta e transferidos bloco a bloco. Na mesma rede nunca passam pelo servidor; entre redes diferentes passam por um retransmissor criptografado que só vê texto cifrado. Sem instalação, sem cadastro — abra a página web e comece.",
+    cta: "Iniciar transferência",
+  },
+  how: {
+    heading: "Transferir em quatro passos",
+    steps: [
+      "Abra relayium.com nos dois dispositivos em um navegador moderno.",
+      "Um lado seleciona ou arrasta os arquivos a enviar (até 1.000 por lote).",
+      "Comparem nas duas telas o mesmo código de verificação de 6 dígitos (SAS) e confirmem a correspondência para descartar qualquer intermediário.",
+      "Uma conexão direta ponto a ponto é estabelecida; os arquivos são transferidos bloco a bloco, criptografados com AES-256-GCM, e a integridade de cada arquivo é verificada por SHA-256.",
+    ],
+  },
+  why: {
+    heading: "Por que o Relayium",
+    items: [
+      {
+        title: "Criptografia de ponta a ponta",
+        desc: "Troca de chaves X25519 e AES-256-GCM por bloco; as chaves são negociadas apenas entre os dois dispositivos e o servidor não consegue descriptografar.",
+      },
+      {
+        title: "Verdadeiramente ponto a ponto",
+        desc: "Na mesma rede, os arquivos circulam diretamente de dispositivo a dispositivo por um canal WebRTC criptografado e nunca chegam aos nossos servidores; entre redes diferentes passam por um retransmissor criptografado que, também ele, só vê texto cifrado.",
+      },
+      {
+        title: "SAS contra o ataque de intermediário",
+        desc: "As duas telas mostram o mesmo código de verificação de 6 dígitos; se coincidir, qualquer interceptador é descartado — nem mesmo um servidor de sinalização comprometido consegue se passar por você.",
+      },
+      {
+        title: "Multiplataforma",
+        desc: "Windows, macOS, Linux, Android, iOS — basta um navegador moderno, sem precisar instalar nada.",
+      },
+      {
+        title: "Gratuito e de código aberto",
+        desc: "Licença MIT; o protocolo e todo o código são públicos no GitHub. Na mesma rede, as transferências em tempo real não exigem conta; para emparelhar entre redes diferentes só o remetente faz login.",
+      },
+    ],
+  },
+  compare: {
+    heading: "Em comparação",
+    items: [
+      {
+        title: "Comparado ao AirDrop",
+        body: "O AirDrop é nativo e fluido, mas restrito aos dispositivos Apple. O Relayium é multiplataforma — conecta igualmente direto Windows ou Android a um iPhone ou um Mac, com um simples navegador.",
+      },
+      {
+        title: "Comparado ao Snapdrop / PairDrop",
+        body: "Snapdrop e PairDrop são pioneiros do mesmo tipo. O Relayium acrescenta a eles criptografia de ponta a ponta na camada de aplicação e um código de verificação SAS: mesmo um servidor de sinalização malicioso não consegue montar um ataque de intermediário.",
+      },
+      {
+        title: "Comparado ao WeTransfer / armazenamento na nuvem",
+        body: "WeTransfer e o armazenamento na nuvem são assíncronos e práticos, mas o plano gratuito costuma parar em 2 GB e os arquivos são enviados aos servidores deles. O modo em tempo real do Relayium não tem limite de tamanho e não armazena nada no servidor.",
+      },
+    ],
+  },
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "É gratuito?",
+        a: "Sim. O Relayium é de código aberto sob licença MIT e é usado sem custo algum. Na mesma rede, as transferências em tempo real não exigem login; para emparelhar entre redes diferentes só o remetente precisa fazer login — o destinatário nunca precisa de conta.",
+      },
+      {
+        q: "Meus arquivos são enviados para um servidor?",
+        a: "Na mesma rede, os arquivos da transferência direta em tempo real nunca passam pelo servidor; entre redes diferentes passam por um retransmissor criptografado que, também ele, só vê texto cifrado. Apenas se você usar o link de download opcional, o navegador os criptografa antes de enviar e o servidor guarda somente texto cifrado que não consegue descriptografar — a chave fica no link.",
+      },
+      {
+        q: "É criptografia de ponta a ponta?",
+        a: "Sim. Usa troca de chaves X25519 e criptografia AES-256-GCM por bloco; as chaves são negociadas apenas entre os dois dispositivos, de modo que o servidor não consegue descriptografar nada.",
+      },
+      {
+        q: "Dá para transferir entre sistemas diferentes?",
+        a: "Sim. Com um navegador moderno você pode transferir entre Windows, macOS, Linux, Android e iOS, sem instalar nenhum aplicativo.",
+      },
+      {
+        q: "Há um limite de tamanho?",
+        a: "A transferência direta em tempo real envia os dados em fluxo, então na prática não há um limite rígido de tamanho (Chrome e Edge gravam direto no disco; Firefox e Safari armazenam em memória, por isso recomendam-se cerca de 200 MB por arquivo). Até 1.000 arquivos por lote.",
+      },
+      {
+        q: "Qual a diferença em relação ao Snapdrop?",
+        a: "O Relayium acrescenta criptografia de ponta a ponta na camada de aplicação e um código de verificação SAS, de modo que um servidor de sinalização comprometido não consegue espionar nem se passar por outro. Além disso, oferece transferências entre redes e links de download opcionais de conhecimento zero.",
+      },
+    ],
+  },
+  learnHeading: "Saiba mais",
+  footer: { privacy: "Privacidade", terms: "Termos de Serviço", security: "Segurança" },
+};
+
 export default {
   updated: "2026-07-03",
-  langs: { zh, ja, ko, de, fr, ar },
+  langs: { zh, ja, ko, de, fr, ar, es, pt },
 };

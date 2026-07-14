@@ -486,8 +486,146 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Cómo enviar una carpeta entera, no solo archivos",
+  description:
+    "Elige una carpeta entera en el navegador y envíala en un solo lote — se conservan las rutas relativas, hasta 1.000 archivos, cada uno verificado con SHA-256. Sin necesidad de comprimir antes.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "Enviar un proyecto no es lo mismo que enviar un archivo — tienes una carpeta llena de subcarpetas, y copiar y pegar cada pieza por separado pierde la estructura que la hace útil. Comprimirla primero funciona, pero implica un rodeo por una herramienta de compresión antes siquiera de poder empezar.",
+    "Relayium te deja elegir una carpeta directamente y enviarla tal cual. El navegador recorre todo el árbol, mantiene intacta cada ruta relativa y la transmite al otro lado — tanto si acaba siendo de igual a igual sin nada almacenado, como un enlace que puedes dejar para más tarde.",
+  ],
+  sections: [
+    {
+      heading: "Elige una carpeta, no un montón de archivos",
+      body: [
+        "En lugar de seleccionar los archivos uno por uno, elige la carpeta en sí. Relayium recorre el árbol de directorios en el navegador y conserva la ruta relativa de cada archivo — subcarpetas, subcarpetas anidadas, todo — para que lo que llega al otro extremo tenga la misma disposición con la que empezaste.",
+        "Esto funciona hoy en Chrome, Edge y Firefox de escritorio. No funciona en iOS: el selector de archivos de Safari en iPhone y iPad no tiene forma de seleccionar una carpeta, solo archivos individuales, así que el envío de carpetas es de momento una función de escritorio.",
+      ],
+      bullets: [
+        "Hasta 1.000 archivos en un solo lote.",
+        "Cada archivo se verifica de extremo a extremo con su propio hash SHA-256, para que lo que llega coincida exactamente con lo que enviaste.",
+        "Funciona por arrastrar y soltar o con un botón de selección de carpeta — sin necesidad de comprimir nada antes.",
+      ],
+    },
+    {
+      heading: "Qué recibe la otra persona",
+      body: [
+        "Cómo llega la carpeta depende del navegador que recibe. Chrome y Edge pueden escribir los archivos directamente en un directorio que elija el destinatario, así que la carpeta aparece en el disco exactamente como salió — sin paso extra.",
+        "Firefox y Safari no tienen esa capacidad, así que en su lugar reciben un único archivo .zip sin comprimir (modo almacenamiento) que se descomprime en la misma estructura de carpetas exacta. Se mantiene por debajo de 4 GiB (sin soporte de ZIP64), lo que cubre la inmensa mayoría de carpetas de proyecto y conjuntos de fotos o documentos — para algo más grande, divídelo en dos envíos.",
+      ],
+    },
+    {
+      heading: "En tiempo real, o un enlace para más tarde",
+      body: [
+        "Si ambos podéis estar en línea a la vez, envía la carpeta directamente — va de igual a igual y nada se almacena en ningún servidor por el camino. Esta es la vía más rápida y no necesita cuenta si estáis en la misma red; enviar entre redes con un código de emparejamiento solo requiere que el remitente inicie sesión, y quien recibe nunca necesita cuenta en absoluto.",
+        "Si la otra persona no está disponible ahora mismo, crea en su lugar un enlace almacenado. Tu navegador cifra los archivos de la carpeta antes de subirlos con una clave AES-256-GCM aleatoria que solo vive en el propio enlace, de modo que el servidor guarda texto cifrado que no puede leer. Crear un enlace requiere que el remitente inicie sesión; configúralo para que caduque en 1 hora, 1 día, 3 días o 7 días, o haz que se destruya tras la primera descarga.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Puedo enviar una carpeta desde un iPhone o iPad?",
+        a: "No como remitente — el Safari de iOS no tiene selector de carpetas, solo archivos individuales, así que el envío de carpetas funciona actualmente desde Chrome, Edge o Firefox de escritorio. Un iPhone o iPad sí puede recibir una carpeta sin problema, como un .zip.",
+      },
+      {
+        q: "¿Se conservan las subcarpetas y la estructura de archivos?",
+        a: "Sí. Relayium conserva la ruta relativa de cada archivo, incluidas las subcarpetas anidadas, así que la carpeta que llega tiene la misma disposición que la que elegiste.",
+      },
+      {
+        q: "¿Cuántos archivos puede contener un envío de carpeta?",
+        a: "Hasta 1.000 archivos en un solo lote, cada uno verificado individualmente con un hash SHA-256 a su llegada.",
+      },
+      {
+        q: "¿El destinatario recibe una carpeta de verdad o un .zip?",
+        a: "Depende de su navegador. Chrome y Edge escriben los archivos directamente en un directorio que ellos eligen. Firefox y Safari reciben un único .zip sin comprimir (menos de 4 GiB) que se descomprime en la misma estructura de carpetas.",
+      },
+      {
+        q: "¿Necesito una cuenta para enviar una carpeta?",
+        a: "No en la misma red. Enviar entre redes con un código de emparejamiento requiere que el remitente inicie sesión, pero quien recibe nunca necesita cuenta en ningún caso.",
+      },
+    ],
+  },
+  cta: {
+    text: "Elige una carpeta y envíala exactamente como está — estructura intacta, cada archivo verificado.",
+    button: "Prueba Relayium ahora",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Como enviar uma pasta inteira, não só arquivos",
+  description:
+    "Escolha uma pasta inteira no navegador e envie de uma vez — caminhos relativos preservados, até 1.000 arquivos, cada um verificado com SHA-256. Sem precisar compactar antes.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "Enviar um projeto não é a mesma coisa que enviar um arquivo — você tem uma pasta cheia de subpastas, e copiar e colar cada pedaço separadamente perde a estrutura que a torna útil. Compactar antes funciona, mas significa um desvio por uma ferramenta de compressão antes mesmo de conseguir começar.",
+    "O Relayium deixa você escolher uma pasta diretamente e enviá-la como está. O navegador percorre toda a árvore, mantém cada caminho relativo intacto e a transmite para o outro lado — seja acabando em ponto a ponto sem nada armazenado, seja como um link que você deixa para depois.",
+  ],
+  sections: [
+    {
+      heading: "Escolha uma pasta, não uma pilha de arquivos",
+      body: [
+        "Em vez de selecionar os arquivos um a um, escolha a própria pasta. O Relayium percorre a árvore de diretórios no navegador e mantém o caminho relativo de cada arquivo — subpastas, subpastas aninhadas, tudo — para que o que chega do outro lado tenha o mesmo layout com que você começou.",
+        "Isso funciona hoje no Chrome, Edge e Firefox de desktop. Não funciona no iOS: o seletor de arquivos do Safari no iPhone e no iPad não tem como selecionar uma pasta, apenas arquivos individuais, então o envio de pastas é, por enquanto, um recurso de desktop.",
+      ],
+      bullets: [
+        "Até 1.000 arquivos em um único lote.",
+        "Cada arquivo é verificado de ponta a ponta com o seu próprio hash SHA-256, para que o que chega corresponda exatamente ao que você enviou.",
+        "Funciona por arrastar e soltar ou por um botão de seleção de pasta — sem precisar compactar nada antes.",
+      ],
+    },
+    {
+      heading: "O que a outra pessoa recebe",
+      body: [
+        "Como a pasta chega depende do navegador que recebe. Chrome e Edge podem gravar os arquivos direto em um diretório que o destinatário escolhe, então a pasta aparece no disco exatamente como saiu — sem passo extra.",
+        "Firefox e Safari não têm essa capacidade, então recebem em vez disso um único arquivo .zip sem compressão (modo armazenamento) que, ao ser descompactado, resulta na mesma estrutura de pasta exata. Ele fica abaixo de 4 GiB (sem suporte a ZIP64), o que cobre a grande maioria das pastas de projeto e conjuntos de fotos ou documentos — para algo maior, divida em dois envios.",
+      ],
+    },
+    {
+      heading: "Em tempo real, ou um link para depois",
+      body: [
+        "Se vocês dois puderem estar on-line ao mesmo tempo, envie a pasta diretamente — ela vai ponto a ponto e nada é armazenado em nenhum servidor no meio. Este é o caminho mais rápido e não precisa de conta se vocês estão na mesma rede; enviar entre redes com um código de emparelhamento só exige que o remetente faça login, e quem recebe nunca precisa de conta alguma.",
+        "Se a outra pessoa não estiver por perto agora, crie um link armazenado em vez disso. Seu navegador criptografa os arquivos da pasta antes do upload com uma chave AES-256-GCM aleatória que só existe no próprio link, de modo que o servidor guarda texto cifrado que não consegue ler. Criar um link exige que o remetente faça login; defina para expirar em 1 hora, 1 dia, 3 dias ou 7 dias, ou faça-o se autodestruir após o primeiro download.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "Posso enviar uma pasta de um iPhone ou iPad?",
+        a: "Não como remetente — o Safari do iOS não tem seletor de pastas, apenas arquivos individuais, então o envio de pastas funciona atualmente a partir do Chrome, Edge ou Firefox de desktop. Um iPhone ou iPad ainda pode receber uma pasta numa boa, como um .zip.",
+      },
+      {
+        q: "As subpastas e a estrutura de arquivos são preservadas?",
+        a: "Sim. O Relayium mantém o caminho relativo de cada arquivo, incluindo subpastas aninhadas, então a pasta que chega tem o mesmo layout da que você escolheu.",
+      },
+      {
+        q: "Quantos arquivos um envio de pasta pode conter?",
+        a: "Até 1.000 arquivos em um único lote, cada um verificado individualmente com um hash SHA-256 na chegada.",
+      },
+      {
+        q: "O destinatário recebe uma pasta de verdade ou um .zip?",
+        a: "Depende do navegador dele. Chrome e Edge gravam os arquivos direto em um diretório que ele escolhe. Firefox e Safari recebem um único .zip sem compressão (abaixo de 4 GiB) que, ao ser descompactado, resulta na mesma estrutura de pasta.",
+      },
+      {
+        q: "Preciso de uma conta para enviar uma pasta?",
+        a: "Não na mesma rede. Enviar entre redes com um código de emparelhamento exige que o remetente faça login, mas quem recebe nunca precisa de conta em nenhum dos casos.",
+      },
+    ],
+  },
+  cta: {
+    text: "Escolha uma pasta e envie exatamente como ela está — estrutura intacta, cada arquivo verificado.",
+    button: "Experimente o Relayium agora",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "how-to/send-a-folder",
   updated: "2026-07-09",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

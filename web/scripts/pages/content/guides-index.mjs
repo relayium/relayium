@@ -60,5 +60,23 @@ const ar = {
     "كل ما يخص نقل الملفات باستخدام Relayium — شروحات الطرفية، والنقل بين الهواتف، ومقارنات صادقة مع الأدوات الأخرى.",
   categories: { guides: "الأدلة", howTo: "كيفية", compare: "المقارنات" },
 };
+const es = {
+  title: "Guías · Relayium",
+  description:
+    "Guías paso a paso y comparativas para transferir archivos con Relayium — desde la terminal, entre teléfonos, de servidor a servidor y frente a otras herramientas.",
+  heading: "Guías",
+  intro:
+    "Todo sobre transferir archivos con Relayium — tutoriales en la terminal, transferencias entre teléfonos y comparativas honestas con otras herramientas.",
+  categories: { guides: "Guías", howTo: "Cómo", compare: "Comparativas" },
+};
+const pt = {
+  title: "Guias · Relayium",
+  description:
+    "Guias passo a passo e comparativos para transferir arquivos com o Relayium — do terminal, entre celulares, de servidor a servidor e frente a outras ferramentas.",
+  heading: "Guias",
+  intro:
+    "Tudo sobre transferir arquivos com o Relayium — tutoriais no terminal, transferências entre celulares e comparativos honestos com outras ferramentas.",
+  categories: { guides: "Guias", howTo: "Como", compare: "Comparativos" },
+};
 
-export default { slug: "guides", updated: "2026-07-09", langs: { en, zh, ja, ko, de, fr, ar } };
+export default { slug: "guides", updated: "2026-07-09", langs: { en, zh, ja, ko, de, fr, ar, es, pt } };

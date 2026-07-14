@@ -3,7 +3,7 @@ import { buildModePages } from "./build-pages.mjs";
 
 const fixture = {
   updated: "2026-07-10",
-  langs: Object.fromEntries(["zh", "ja", "ko", "de", "fr", "ar"].map((l) => [l, {
+  langs: Object.fromEntries(["zh", "ja", "ko", "de", "fr", "ar", "es", "pt"].map((l) => [l, {
     title: `T-${l}`, description: `D-${l}`,
     hero: { h1: `H-${l}`, pitch: `P-${l}`, cta: `C-${l}` },
     how: { heading: `how-${l}`, steps: [`s1-${l}`] },
@@ -18,12 +18,14 @@ const fixture = {
 describe("buildModePages", () => {
   const pages = buildModePages(fixture, { slug: "cross-network" });
 
-  it("emits 6 localized pages, NO english static page", () => {
+  it("emits 8 localized pages, NO english static page", () => {
     const paths = pages.map((p) => p.path).sort();
     expect(paths).toEqual([
       "ar/cross-network/index.html",
-      "de/cross-network/index.html", "fr/cross-network/index.html",
+      "de/cross-network/index.html", "es/cross-network/index.html",
+      "fr/cross-network/index.html",
       "ja/cross-network/index.html", "ko/cross-network/index.html",
+      "pt/cross-network/index.html",
       "zh/cross-network/index.html",
     ]);
     expect(paths).not.toContain("cross-network/index.html"); // english is the SPA route

@@ -1,18 +1,18 @@
 // web/scripts/pages/shared.mjs — constants + pure path/url/escape helpers.
-export const LANGS = ["en", "zh", "ja", "ko", "de", "fr", "ar"];
+export const LANGS = ["en", "zh", "ja", "ko", "de", "fr", "ar", "es", "pt"];
 export const DEFAULT_LANG = "en";
 
 export const LANG_LABELS = {
-  en: "English", zh: "中文", ja: "日本語", ko: "한국어", de: "Deutsch", fr: "Français", ar: "العربية",
+  en: "English", zh: "中文", ja: "日本語", ko: "한국어", de: "Deutsch", fr: "Français", ar: "العربية", es: "Español", pt: "Português",
 };
 
 // Footer link label for the Guides hub, per language.
 export const GUIDES_LABELS = {
-  en: "Guides", zh: "使用指南", ja: "ガイド", ko: "가이드", de: "Anleitungen", fr: "Guides", ar: "الأدلة",
+  en: "Guides", zh: "使用指南", ja: "ガイド", ko: "가이드", de: "Anleitungen", fr: "Guides", ar: "الأدلة", es: "Guías", pt: "Guias",
 };
-export const BCP47 = { en: "en", zh: "zh-Hans", ja: "ja", ko: "ko", de: "de", fr: "fr", ar: "ar" };
+export const BCP47 = { en: "en", zh: "zh-Hans", ja: "ja", ko: "ko", de: "de", fr: "fr", ar: "ar", es: "es", pt: "pt" };
 // Open Graph wants language_TERRITORY with an underscore, not BCP47.
-export const OG_LOCALE = { en: "en_US", zh: "zh_CN", ja: "ja_JP", ko: "ko_KR", de: "de_DE", fr: "fr_FR", ar: "ar_AR" };
+export const OG_LOCALE = { en: "en_US", zh: "zh_CN", ja: "ja_JP", ko: "ko_KR", de: "de_DE", fr: "fr_FR", ar: "ar_AR", es: "es_ES", pt: "pt_BR" };
 
 // Right-to-left languages. Only these emit a dir="rtl" attribute on <html>; every
 // other language inherits the document default (ltr), so their markup is unchanged.
@@ -42,7 +42,7 @@ export function esc(s) {
 // ── Landing-page helpers ──
 // The English homepage is the SPA at "/"; static landing pages exist only for
 // the other languages, at "/<lang>/".
-export const LANDING_LANGS = ["zh", "ja", "ko", "de", "fr", "ar"];
+export const LANDING_LANGS = ["zh", "ja", "ko", "de", "fr", "ar", "es", "pt"];
 
 export function landingUrl(lang) {
   return lang === DEFAULT_LANG ? "/" : `/${lang}/`;

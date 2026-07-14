@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Automatiza copias de seguridad cifradas del servidor con una tarea cron · Relayium</title>
+    <meta name="description" content="Programa relayium push o sync desde cron para copiar automáticamente un directorio a otro servidor: cifrado, reanudable, verificado con SHA-256 y gratis para ejecutarlo con la frecuencia que quieras." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/es/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/automate-server-backups" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Automatiza copias de seguridad cifradas del servidor con una tarea cron" />
+    <meta property="og:description" content="Programa relayium push o sync desde cron para copiar automáticamente un directorio a otro servidor: cifrado, reanudable, verificado con SHA-256 y gratis para ejecutarlo con la frecuencia que quieras." />
+    <meta property="og:url" content="https://relayium.com/es/how-to/automate-server-backups" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="es_ES" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Automatiza copias de seguridad cifradas del servidor con una tarea cron" />
+    <meta name="twitter:description" content="Programa relayium push o sync desde cron para copiar automáticamente un directorio a otro servidor: cifrado, reanudable, verificado con SHA-256 y gratis para ejecutarlo con la frecuencia que quieras." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Automatiza copias de seguridad cifradas del servidor con una tarea cron","description":"Programa relayium push o sync desde cron para copiar automáticamente un directorio a otro servidor: cifrado, reanudable, verificado con SHA-256 y gratis para ejecutarlo con la frecuencia que quieras.","inLanguage":"es","dateModified":"2026-07-12","mainEntityOfPage":"https://relayium.com/es/how-to/automate-server-backups","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿El servidor de copias de seguridad necesita relayium instalado?","acceptedAnswer":{"@type":"Answer","text":"Depende del comando. push funciona de cualquier forma: con relayium instalado usa el protocolo nativo (reanudación + SHA-256 por archivo); sin él, push recurre a un simple flujo tar por SSH, así que un servidor pelado sigue funcionando. sync siempre necesita el protocolo nativo de relayium en el extremo remoto: no hay respaldo con tar para sync, así que instálalo allí primero."}},{"@type":"Question","name":"¿La copia de seguridad va cifrada y verificada?","acceptedAnswer":{"@type":"Answer","text":"Sí. Cada archivo se comprueba con un hash SHA-256 de extremo a extremo, y al enviar por SSH o daemon-direct los bytes ya están protegidos por el cifrado de esa conexión: nada más que configurar."}},{"@type":"Question","name":"¿Qué pasa si la tarea cron se interrumpe a mitad de camino?","acceptedAnswer":{"@type":"Answer","text":"Con relayium en ambos extremos, la siguiente ejecución programada reanuda los archivos parciales en lugar de reenviarlo todo. Pasa --no-resume si alguna vez quieres un reenvío completo y limpio en su lugar."}},{"@type":"Question","name":"¿Puede --delete vaciar mi destino por accidente?","acceptedAnswer":{"@type":"Answer","text":"sync se niega a ejecutarse con --delete si el directorio de origen no contiene ningún archivo, y el receptor tiene que iniciarse con serve --allow-delete para que los borrados surtan efecto siquiera; de lo contrario se omiten y se te informa de ello."}},{"@type":"Question","name":"¿Necesito una cuenta o esto cuesta algo?","acceptedAnswer":{"@type":"Answer","text":"No. La CLI es gratis y no necesita cuenta para push, pull ni sync: la transferencia va por tu propia conexión SSH o una conexión de daemon directa, no a través de los servidores de Relayium."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=es">Relayium</a></header>
+      <h1>Automatiza copias de seguridad cifradas del servidor con una tarea cron</h1>
+      <p class="updated">Última actualización: 2026-07-12</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/automate-server-backups">English</a><a href="/zh/how-to/automate-server-backups">中文</a><a href="/ja/how-to/automate-server-backups">日本語</a><a href="/ko/how-to/automate-server-backups">한국어</a><a href="/de/how-to/automate-server-backups">Deutsch</a><a href="/fr/how-to/automate-server-backups">Français</a><a href="/ar/how-to/automate-server-backups">العربية</a><a href="/es/how-to/automate-server-backups" aria-current="true">Español</a><a href="/pt/how-to/automate-server-backups">Português</a></nav>
+      <p class="lead">Las copias de seguridad que tienes que acordarte de ejecutar no ocurren. cron sí se acuerda, y la CLI de Relayium está hecha para eso: un único comando no interactivo que copia (o replica) un directorio a otra máquina, verifica cada archivo y retoma donde lo dejó si se cae la red.</p>
+      <p class="lead">Esta guía cubre cómo programar relayium push y el relayium sync incremental desde cron, los dos transportes a los que puedes apuntar cualquiera de ellos, y las líneas de crontab para copiar.</p>
+      <h2>push frente a sync: copia completa o réplica incremental</h2>
+      <p>Tanto push como sync mueven un directorio a otra máquina y ambos son seguros de ejecutar repetidamente, pero resuelven problemas de copia de seguridad ligeramente distintos.</p>
+      <p>push envía una copia por SSH o daemon-direct cada vez que lo ejecutas: sencillo, e incluso funciona contra un servidor pelado sin relayium instalado gracias a un respaldo con tar. sync, en cambio, mantiene el destino como una réplica incremental unidireccional del origen: solo se reenvían los archivos cambiados, así que un sync nocturno de un directorio grande es rápido después de la primera ejecución. sync siempre necesita el protocolo nativo de relayium en ambos extremos: no tiene respaldo con tar.</p>
+      <ul><li>Usa push para una copia programada sencilla, sobre todo hacia un servidor que quizá no tenga relayium instalado.</li><li>Usa sync para un directorio grande o que cambia con frecuencia, donde reenviar todo cada noche sería un desperdicio.</li><li>Ambos se verifican por archivo con SHA-256 y son reanudables si se interrumpen.</li></ul>
+      <h2>Before you start</h2>
+      <p>Everything below is the relayium CLI, so install it first if you haven&#39;t. On macOS or Linux, one command drops a prebuilt binary on your PATH:</p>
+      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>Prefer to pick the file yourself, or on Windows? Grab a binary from the releases page — relayium.com/cli lists every install option (or go build -o relayium ./cmd/relayium if you have Go).</li><li>relayium --version confirms it&#39;s installed. Skip this and the commands below just print &#39;command not found&#39;.</li></ul>
+      <h2>Dos transportes: SSH o daemon-direct</h2>
+      <p>Apunta cualquiera de los comandos a un destino SSH (al estilo scp, usando tu ~/.ssh/config) o, si la otra máquina ejecuta relayium serve, directamente a ella por el protocolo daemon-direct, sin necesidad de SSH.</p>
+      <pre><code># SSH destination — uses your existing SSH keys and config
+relayium push ./data user@backup-server:/srv/backups/
+
+# daemon-direct — the destination runs &quot;relayium serve&quot;, no SSH required
+relayium push ./data relayium://backup-server:9031</code></pre>
+      <ul><li>Las conexiones daemon-direct usan TLS 1.3 fijado con confianza en el primer uso, y luego se comprueban contra esa misma huella en cada ejecución posterior.</li><li>sync acepta las mismas dos formas de destino que push.</li></ul>
+      <h2>Prográmalo con cron</h2>
+      <p>Tanto push como sync son comandos únicos y no interactivos, así que se integran directamente en un crontab. Apúntalos a una clave SSH sin frase de contraseña (o a un agente) y registra la salida para que los fallos sean visibles:</p>
+      <pre><code># full copy every night at 2am — add to your crontab (crontab -e)
+0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1
+
+# incremental mirror every 15 minutes instead
+*/15 * * * * relayium sync -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ &gt;&gt; ~/relayium-sync.log 2&gt;&amp;1</code></pre>
+      <ul><li>El comando termina con un código distinto de cero si algún archivo falla su comprobación de integridad, así que el aviso por correo de cron ante fallos detecta los problemas.</li><li>Una ejecución interrumpida simplemente se reanuda o se pone al día en la siguiente ejecución programada.</li></ul>
+      <h2>Replicar borrados y sincronización en tiempo real</h2>
+      <p>De forma predeterminada, sync solo añade o actualiza archivos en el destino. Añade --delete para convertirlo en una réplica de verdad que también elimina los archivos que el origen ya no tiene: el lado receptor debe estar escuchando explícitamente con serve --allow-delete, o los borrados se omiten en silencio y se informan de vuelta como denegados. sync además rechaza --delete de plano si el directorio de origen no se resuelve en ningún archivo, de modo que un error de tecleo en la ruta de origen no puede vaciar el destino.</p>
+      <p>Si prefieres no esperar al siguiente tic de cron, --watch mantiene relayium sync en ejecución y vuelve a sincronizar automáticamente un instante después de que cambie cualquier archivo bajo el origen: una alternativa ligera al sondeo programado.</p>
+      <ul><li>relayium sync ./data user@backup-server:/srv/backups/ --delete replica los borrados (el receptor necesita serve --allow-delete).</li><li>relayium sync ./data user@backup-server:/srv/backups/ --watch se mantiene en ejecución y vuelve a sincronizar al cambiar algo, en lugar de ejecutarse una sola vez desde cron.</li></ul>
+      <h2>Preguntas frecuentes</h2>
+      <h3>¿El servidor de copias de seguridad necesita relayium instalado?</h3>
+      <p>Depende del comando. push funciona de cualquier forma: con relayium instalado usa el protocolo nativo (reanudación + SHA-256 por archivo); sin él, push recurre a un simple flujo tar por SSH, así que un servidor pelado sigue funcionando. sync siempre necesita el protocolo nativo de relayium en el extremo remoto: no hay respaldo con tar para sync, así que instálalo allí primero.</p>
+      <h3>¿La copia de seguridad va cifrada y verificada?</h3>
+      <p>Sí. Cada archivo se comprueba con un hash SHA-256 de extremo a extremo, y al enviar por SSH o daemon-direct los bytes ya están protegidos por el cifrado de esa conexión: nada más que configurar.</p>
+      <h3>¿Qué pasa si la tarea cron se interrumpe a mitad de camino?</h3>
+      <p>Con relayium en ambos extremos, la siguiente ejecución programada reanuda los archivos parciales en lugar de reenviarlo todo. Pasa --no-resume si alguna vez quieres un reenvío completo y limpio en su lugar.</p>
+      <h3>¿Puede --delete vaciar mi destino por accidente?</h3>
+      <p>sync se niega a ejecutarse con --delete si el directorio de origen no contiene ningún archivo, y el receptor tiene que iniciarse con serve --allow-delete para que los borrados surtan efecto siquiera; de lo contrario se omiten y se te informa de ello.</p>
+      <h3>¿Necesito una cuenta o esto cuesta algo?</h3>
+      <p>No. La CLI es gratis y no necesita cuenta para push, pull ni sync: la transferencia va por tu propia conexión SSH o una conexión de daemon directa, no a través de los servidores de Relayium.</p>
+      <div class="ctacard">
+        <p>Pon tus copias de seguridad en un calendario que no tienes que recordar: cifradas, reanudables y gratis.</p>
+        <a class="cta" href="/cli">Obtener la CLI</a>
+      </div>
+      <h2>Sigue leyendo</h2>
+      <ul class="related"><li><a href="/es/compare/snapdrop">Relayium vs Snapdrop y PairDrop: ¿qué transferencia P2P segura?</a></li><li><a href="/es/compare/airdrop">Relayium vs AirDrop: una alternativa a AirDrop multiplataforma</a></li><li><a href="/es/compare/wetransfer">Relayium vs WeTransfer: envía archivos grandes sin el servidor</a></li><li><a href="/es/how-to/transfer-files-android-to-iphone">Cómo transferir archivos de Android a iPhone (sin cable)</a></li><li><a href="/es/how-to/send-files-pc-to-phone-wirelessly">Enviar archivos del PC al teléfono sin cables, sin cable ni app</a></li><li><a href="/es/how-to/send-large-files-without-cloud">Cómo enviar archivos grandes sin la nube</a></li><li><a href="/es/guides/transfer-files-from-terminal">Transfiere archivos desde la terminal con la CLI de Relayium</a></li><li><a href="/es/guides/back-up-a-server-over-ssh">Haz copias de seguridad de archivos en tu propio servidor por SSH con la CLI de Relayium</a></li><li><a href="/es/guides/send-a-file-to-someone">Enviar un archivo a alguien entre redes con la CLI de Relayium</a></li><li><a href="/es/guides/server-to-server-transfers">Transferencias de servidor a servidor con la CLI de Relayium (daemon direct)</a></li><li><a href="/es/guides/sync-a-large-folder-between-servers">Sincronizar una carpeta grande entre dos servidores (reanudable, en segundo plano)</a></li><li><a href="/es/guides/push-to-cloud-pull-on-another-computer">Sube archivos a la nube y recógelos en otro ordenador</a></li><li><a href="/es/how-to/share-a-file-with-an-expiring-link">Compartir un archivo con un enlace de descarga seguro y con caducidad</a></li><li><a href="/es/guides/self-host-relayium">Aloja Relayium por tu cuenta: ejecuta tu propio servidor de transferencia de archivos</a></li><li><a href="/es/how-to/send-files-between-two-computers-over-the-internet">Enviar archivos entre dos computadoras por Internet</a></li><li><a href="/es/compare/croc">Relayium vs croc: transferencia de archivos cifrada desde la terminal</a></li><li><a href="/es/guides/how-relayium-encrypts-your-files">Cómo Relayium cifra tus archivos de extremo a extremo</a></li><li><a href="/es/compare/google-drive">Relayium frente a Google Drive para enviar archivos</a></li><li><a href="/es/compare/rsync">Relayium vs rsync: sincroniza carpetas sin la configuración de SSH</a></li><li><a href="/es/compare/firefox-send">La mejor alternativa a Firefox Send en 2026</a></li><li><a href="/es/how-to/transfer-files-by-scanning-a-qr-code">Transferir archivos escaneando un código QR</a></li><li><a href="/es/guides/receive-files-from-the-command-line">Recibir archivos desde la línea de comandos</a></li><li><a href="/es/how-to/send-a-folder">Cómo enviar una carpeta entera, no solo archivos</a></li><li><a href="/es/guides/run-relayium-as-an-always-on-service">Ejecuta Relayium como un servicio de recepción siempre activo</a></li><li><a href="/es/compare/localsend">Relayium frente a LocalSend: qué transferencia local usar</a></li><li><a href="/es/compare/scp">Relayium vs scp: transferencia de archivos más sencilla por SSH</a></li><li><a href="/es/compare/magic-wormhole">Relayium vs magic-wormhole: transferencia de archivos por CLI</a></li><li><a href="/es/compare/nextcloud">Relayium vs Nextcloud para enviar archivos</a></li><li><a href="/es/compare/dropbox">Relayium vs Dropbox para enviar un archivo</a></li><li><a href="/es/how-to/airdrop-for-windows-and-android">AirDrop para Windows, Linux y Android</a></li><li><a href="/es/how-to/transfer-files-between-mac-and-windows">Transferir archivos entre un Mac y un PC con Windows</a></li><li><a href="/es/how-to/send-files-on-the-same-wifi">Enviar archivos entre dispositivos en la misma Wi-Fi</a></li><li><a href="/es/guides/what-is-peer-to-peer-file-transfer">¿Qué es la transferencia de archivos de igual a igual?</a></li><li><a href="/es/guides/is-it-safe-to-send-files-over-the-internet">¿Es seguro enviar archivos por internet?</a></li><li><a href="/es/guides/bring-your-own-node">Usa tu propio nodo: aprovecha el retransmisor y el almacenamiento de Relayium gratis</a></li><li><a href="/es/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=es">← Relayium</a>
+        <a href="/es/guides">Guías</a>
+        <a href="/es/privacy">undefined</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

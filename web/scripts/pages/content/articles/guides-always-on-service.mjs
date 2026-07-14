@@ -1065,8 +1065,300 @@ WantedBy=multi-user.target`,
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Ejecuta Relayium como un servicio de recepción siempre activo",
+  description:
+    "Mantén relayium serve en ejecución para que cualquier par pueda enviarte archivos en cualquier momento — daemon-direct sobre TLS fijado. Cubre la aprobación del primer envío, la autorización previa de huellas, ejecutarlo al arranque con systemd (Linux) o launchd (macOS), y --allow-delete.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "relayium serve --once atiende una única transferencia entrante y luego se cierra — perfecto para un pull ocasional. Pero si quieres que una máquina sea un punto de recepción permanente — un servidor doméstico en el que las copias de seguridad aterrizan cada noche, una máquina de compilación a la que CI envía artefactos, un NAS al que tu teléfono puede mandar fotos en cualquier momento — querrás que serve esté en ejecución todo el tiempo, en lugar de iniciarlo a mano para cada transferencia.",
+    "Esta guía cubre cómo iniciar un proceso de escucha de larga duración, aprobar quién puede enviar, autorizar pares de antemano para los casos en que no hay nadie ante la terminal, ejecutarlo con systemd, y permitir que un remitente que usa sync --delete refleje las eliminaciones.",
+  ],
+  sections: [
+    {
+      heading: "Iniciar el proceso de escucha",
+      body: [
+        "serve escucha envíos daemon-direct (relayium://host:port) a través de una conexión TLS 1.3 fijada y escribe lo que recibe en un directorio. No hace falta compartir nada de antemano para iniciarlo — ninguna huella que copiar, ningún servidor que registrar:",
+      ],
+      code: [
+        `relayium serve --dir ~/inbox
+relayium serve --dir /srv/drop --port 9040   # non-default port
+relayium serve --dir ~/inbox --allow-delete  # let a sync --delete sender mirror deletions`,
+      ],
+      bullets: [
+        "--dir establece dónde aterrizan los archivos (por defecto, el directorio actual).",
+        "--port establece el puerto de escucha (por defecto, 9031); ábrelo en tu cortafuegos si el remitente está en otro lugar.",
+        "Sin --once, serve sigue en ejecución y aceptando envíos hasta que lo detengas o un gestor de procesos lo reinicie — eso es lo que lo convierte en un servicio siempre activo.",
+      ],
+    },
+    {
+      heading: "Aprobar quién puede enviar",
+      body: [
+        "La primera vez que un par nuevo envía algo, serve — si se está ejecutando en una terminal — te muestra de dónde vino el envío y su huella, y te pide que lo apruebes, igual que SSH pregunta por un host desconocido en la primera conexión:",
+      ],
+      code: [
+        `Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+      ],
+      bullets: [
+        "Responde y una vez y esa huella se escribe en authorized_fingerprints; cada envío posterior desde la misma máquina pasa sin ninguna solicitud.",
+        "Una huella identifica a una máquina, no a una dirección de red, así que sigue siendo válida aunque cambie la IP del remitente.",
+        "Este paso es interactivo por diseño — necesita a alguien ante el teclado, algo que dejará de cumplirse en cuanto serve pase a systemd (siguiente).",
+      ],
+    },
+    {
+      heading: "Autorizar pares de antemano para configuraciones no interactivas",
+      body: [
+        "Cuando serve no tiene una terminal en la que preguntar — un servicio systemd, un proceso en segundo plano, una tubería — no puede preguntar, así que rechaza cualquier huella que aún no reconozca. En su lugar, autoriza los pares con antelación. En la máquina que va a enviar, ejecuta relayium id para imprimir su huella; en el receptor, añádela antes de que llegue el primer envío:",
+      ],
+      code: [
+        `# on the machine that will PUSH: print its fingerprint
+relayium id
+
+# on this always-on RECEIVER: authorize it in advance
+relayium authorize 74318e3b...`,
+      ],
+      bullets: [
+        "authorize es idempotente — ejecutarlo de nuevo para una huella en la que ya confías no hace nada.",
+        "Los archivos de identidad y de confianza viven bajo --config-dir, cuyo valor por defecto es ~/.config/relayium (id.key/id.crt es la identidad de este host, authorized_fingerprints es la lista de permitidos de pares).",
+      ],
+    },
+    {
+      heading: "Ejecutarlo con systemd",
+      body: [
+        "Para un servicio que sobreviva a reinicios y caídas, entrega serve a systemd. Apunta --config-dir a una ruta fija para que la identidad del host y su lista de pares permitidos permanezcan intactas entre reinicios:",
+      ],
+      code: [
+        `# /etc/systemd/system/relayium-serve.service
+[Unit]
+Description=Relayium always-on receiver
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/relayium serve --dir /srv/drop --port 9031 --config-dir /etc/relayium --allow-delete
+Restart=always
+User=relayium
+
+[Install]
+WantedBy=multi-user.target`,
+      ],
+      bullets: [
+        "Antes de habilitar el servicio, ejecuta relayium authorize <fingerprint> para cada par que deba poder enviar — el servicio en sí no puede preguntar.",
+        "systemctl enable --now relayium-serve lo inicia y hace que vuelva a levantarse en cada arranque.",
+        "Mantén /etc/relayium/id.key legible solo por el usuario del servicio; relayium se niega a cargar una clave con permisos más laxos.",
+      ],
+    },
+    {
+      heading: "Ejecutarlo al arranque en macOS (launchd)",
+      body: [
+        "macOS no tiene systemd — su gestor de servicios es launchd. Para mantener serve en ejecución en un Mac (por ejemplo, un Mac mini que dejas encendido como punto de recepción), instálalo como LaunchDaemon para que se inicie en el arranque, antes de que nadie inicie sesión. Define UserName para que se ejecute como tú y no como root, y da a --dir y --config-dir rutas absolutas para que sus archivos de identidad y de confianza permanezcan en tu propio ~/.config/relayium:",
+      ],
+      code: [LAUNCHD_PLIST, LAUNCHD_CMDS],
+      bullets: [
+        "launchd no da ninguna terminal a serve, así que no puede preguntar — ejecuta primero relayium authorize <fingerprint> para cada emisor, igual que con systemd. La huella proviene del relayium id de esa máquina.",
+        "KeepAlive reinicia serve si se cae; RunAtLoad junto con un LaunchDaemon en /Library/LaunchDaemons lo inicia en el arranque sin necesidad de iniciar sesión — la opción idónea para un Mac mini sin monitor.",
+        "¿Prefieres un servicio a nivel de sesión? Coloca el mismo plist (quitando la clave UserName) en ~/Library/LaunchAgents/ y cárgalo con launchctl bootstrap gui/$(id -u) <path> — se inicia al iniciar sesión en lugar de en el arranque.",
+        "Si el cortafuegos de aplicaciones de macOS está activado, permite las conexiones entrantes para relayium (Ajustes del Sistema → Red → Cortafuegos), o los envíos a tu puerto quedarán bloqueados.",
+      ],
+    },
+    {
+      heading: "Permitir que un remitente con sync --delete refleje las eliminaciones",
+      body: [
+        "Por defecto, serve solo añade o actualiza archivos — un remitente que ejecuta sync --delete contra él sigue copiando los archivos nuevos y modificados, pero cualquier eliminación que solicite se omite, y se registra una advertencia en el receptor. Inicia serve con --allow-delete para optar por un reflejo real, en el que los archivos eliminados en el lado del remitente también se eliminan aquí:",
+      ],
+      code: [`relayium serve --dir /srv/mirror --allow-delete`],
+      bullets: [
+        "--allow-delete es una opción del lado del receptor; el remitente todavía tiene que solicitarla con sync --delete.",
+        "Sin ella, nunca se elimina nada en esta máquina, sin importar lo que solicite un remitente.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿En qué puerto escucha serve por defecto?",
+        a: "9031. Cámbialo con --port tanto en el proceso de escucha (serve --port N) como en el destino del emisor (relayium://host:N).",
+      },
+      {
+        q: "¿Tengo que aprobar cada envío a mano?",
+        a: "Solo el primer envío de una huella dada, y únicamente cuando serve se ejecuta con una terminal conectada. Después se recuerda. Ejecutar serve de forma no interactiva (systemd, una tubería) omite por completo la solicitud y rechaza los pares desconocidos — autorízalos de antemano con relayium authorize en su lugar.",
+      },
+      {
+        q: "¿Puede un remitente eliminar archivos en mi receptor siempre activo?",
+        a: "Solo si iniciaste serve con --allow-delete y el remitente está ejecutando sync --delete. Sin --allow-delete, las eliminaciones se omiten en silencio y todo lo demás se transfiere igualmente.",
+      },
+      {
+        q: "¿Es gratis ejecutar un receptor siempre activo?",
+        a: "Sí. relayium serve forma parte de la CLI gratuita y autoalojable — sin cuenta, sin nivel de pago, en ninguno de los dos lados de la conexión.",
+      },
+      {
+        q: "¿Dónde guarda serve su identidad y su lista de pares?",
+        a: "En ~/.config/relayium por defecto (id.key/id.crt para la identidad de este host, authorized_fingerprints para la lista de permitidos). Apunta --config-dir a un lugar fijo, como /etc/relayium, para un servicio systemd.",
+      },
+      {
+        q: "¿Cómo ejecuto serve al arranque en macOS?",
+        a: "macOS no tiene systemd — usa launchd. Instala serve como LaunchDaemon en /Library/LaunchDaemons (se inicia en el arranque; define UserName para ejecutarlo como tú), o como LaunchAgent en ~/Library/LaunchAgents (se inicia al iniciar sesión). Esta guía incluye un plist listo para editar; no hay servicio de Homebrew. Autoriza de antemano a los emisores con relayium authorize, ya que launchd no da a serve ninguna terminal en la que preguntar.",
+      },
+    ],
+  },
+  cta: {
+    text: "Convierte cualquier máquina que poseas en un receptor gratuito y siempre activo — envíos directos sobre TLS fijado, sin ningún retransmisor de por medio.",
+    button: "Obtener la CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Execute o Relayium como um serviço de recepção sempre ativo",
+  description:
+    "Mantenha o relayium serve em execução para que qualquer par possa enviar arquivos para você a qualquer momento — daemon-direct sobre TLS fixado. Aborda a aprovação do primeiro envio, a pré-autorização de impressões digitais, executá-lo na inicialização com systemd (Linux) ou launchd (macOS), e --allow-delete.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "O relayium serve --once trata de uma única transferência recebida e então encerra — ótimo para um pull ocasional. Mas se você quer que uma máquina seja um ponto de recepção permanente — um servidor doméstico onde os backups chegam durante a noite, uma máquina de build para a qual o CI envia artefatos, um NAS para o qual seu celular pode mandar fotos a qualquer momento — você quer o serve em execução o tempo todo, em vez de iniciá-lo manualmente a cada transferência.",
+    "Este guia aborda como iniciar um processo de escuta de longa duração, aprovar quem tem permissão para enviar, pré-autorizar pares para os casos em que ninguém está diante do terminal, executá-lo com systemd, e permitir que um remetente usando sync --delete espelhe as exclusões.",
+  ],
+  sections: [
+    {
+      heading: "Iniciar o processo de escuta",
+      body: [
+        "O serve escuta envios daemon-direct (relayium://host:port) por uma conexão TLS 1.3 fixada e grava o que recebe em um diretório. Nada precisa ser compartilhado de antemão para iniciá-lo — nenhuma impressão digital para copiar, nenhum servidor para registrar:",
+      ],
+      code: [
+        `relayium serve --dir ~/inbox
+relayium serve --dir /srv/drop --port 9040   # non-default port
+relayium serve --dir ~/inbox --allow-delete  # let a sync --delete sender mirror deletions`,
+      ],
+      bullets: [
+        "--dir define onde os arquivos chegam (por padrão, o diretório atual).",
+        "--port define a porta de escuta (por padrão, 9031); abra-a no seu firewall se o remetente estiver em outro lugar.",
+        "Sem --once, o serve continua em execução e aceitando envios até você pará-lo ou um gerenciador de processos reiniciá-lo — é isso que o torna um serviço sempre ativo.",
+      ],
+    },
+    {
+      heading: "Aprovar quem tem permissão para enviar",
+      body: [
+        "Na primeira vez que um novo par envia algo, o serve — se estiver rodando em um terminal — mostra de onde veio o envio e sua impressão digital, e pede que você o aprove, do mesmo jeito que o SSH pergunta sobre um host desconhecido na primeira conexão:",
+      ],
+      code: [
+        `Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+      ],
+      bullets: [
+        "Responda y uma vez e essa impressão digital é gravada em authorized_fingerprints; todo envio posterior da mesma máquina passa sem nenhuma solicitação.",
+        "Uma impressão digital identifica uma máquina, não um endereço de rede, então continua válida mesmo que o IP do remetente mude.",
+        "Esta etapa é interativa por natureza — precisa de alguém diante do teclado, o que deixará de valer assim que o serve passar para o systemd (a seguir).",
+      ],
+    },
+    {
+      heading: "Pré-autorizar pares para configurações não interativas",
+      body: [
+        "Quando o serve não tem um terminal onde perguntar — um serviço systemd, um processo em segundo plano, um pipe — ele não pode perguntar, então rejeita qualquer impressão digital que ainda não reconheça. Em vez disso, autorize os pares com antecedência. Na máquina que vai enviar, execute relayium id para imprimir a impressão digital dela; no receptor, adicione-a antes que o primeiro envio chegue:",
+      ],
+      code: [
+        `# on the machine that will PUSH: print its fingerprint
+relayium id
+
+# on this always-on RECEIVER: authorize it in advance
+relayium authorize 74318e3b...`,
+      ],
+      bullets: [
+        "authorize é idempotente — executá-lo de novo para uma impressão digital em que você já confia não faz nada.",
+        "Os arquivos de identidade e de confiança ficam em --config-dir, cujo padrão é ~/.config/relayium (id.key/id.crt é a identidade deste host, authorized_fingerprints é a lista de permissões de pares).",
+      ],
+    },
+    {
+      heading: "Executá-lo com systemd",
+      body: [
+        "Para um serviço que sobrevive a reinicializações e falhas, entregue o serve ao systemd. Aponte --config-dir para um caminho fixo para que a identidade do host e sua lista de pares autorizados permaneçam no lugar entre reinicializações:",
+      ],
+      code: [
+        `# /etc/systemd/system/relayium-serve.service
+[Unit]
+Description=Relayium always-on receiver
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/relayium serve --dir /srv/drop --port 9031 --config-dir /etc/relayium --allow-delete
+Restart=always
+User=relayium
+
+[Install]
+WantedBy=multi-user.target`,
+      ],
+      bullets: [
+        "Antes de habilitar o serviço, execute relayium authorize <fingerprint> para cada par que deva poder enviar — o próprio serviço não pode perguntar.",
+        "systemctl enable --now relayium-serve o inicia e o traz de volta a cada inicialização.",
+        "Mantenha /etc/relayium/id.key legível apenas pelo usuário do serviço; o relayium se recusa a carregar uma chave com permissões mais frouxas.",
+      ],
+    },
+    {
+      heading: "Executá-lo na inicialização no macOS (launchd)",
+      body: [
+        "O macOS não tem systemd — seu gerenciador de serviços é o launchd. Para manter o serve em execução em um Mac (por exemplo, um Mac mini deixado ligado como ponto de recepção), instale-o como LaunchDaemon para que ele inicie na inicialização, antes de qualquer login. Defina UserName para que ele rode como você e não como root, e dê a --dir e --config-dir caminhos absolutos para que seus arquivos de identidade e de confiança permaneçam no seu próprio ~/.config/relayium:",
+      ],
+      code: [LAUNCHD_PLIST, LAUNCHD_CMDS],
+      bullets: [
+        "O launchd não dá nenhum terminal ao serve, então ele não pode perguntar — execute primeiro relayium authorize <fingerprint> para cada remetente, igual ao systemd. A impressão digital vem do relayium id daquela máquina.",
+        "O KeepAlive reinicia o serve se ele travar; o RunAtLoad junto com um LaunchDaemon em /Library/LaunchDaemons o inicia na inicialização sem login — a opção certa para um Mac mini sem monitor.",
+        "Prefere um serviço no escopo de login? Coloque o mesmo plist (removendo a chave UserName) em ~/Library/LaunchAgents/ e carregue-o com launchctl bootstrap gui/$(id -u) <path> — ele inicia no seu login em vez de na inicialização.",
+        "Se o firewall de aplicativos do macOS estiver ativado, permita conexões de entrada para o relayium (Ajustes do Sistema → Rede → Firewall), ou os envios para a sua porta serão bloqueados.",
+      ],
+    },
+    {
+      heading: "Permitir que um remetente com sync --delete espelhe as exclusões",
+      body: [
+        "Por padrão, o serve apenas adiciona ou atualiza arquivos — um remetente que executa sync --delete contra ele ainda copia os arquivos novos e alterados, mas qualquer exclusão que ele solicite é ignorada, com um aviso registrado no receptor. Inicie o serve com --allow-delete para optar por um espelhamento verdadeiro, em que os arquivos removidos no lado do remetente também são removidos aqui:",
+      ],
+      code: [`relayium serve --dir /srv/mirror --allow-delete`],
+      bullets: [
+        "--allow-delete é uma opção do lado do receptor; o remetente ainda precisa solicitá-la com sync --delete.",
+        "Sem ela, nada é jamais excluído nesta máquina, não importa o que um remetente solicite.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "Em que porta o serve escuta por padrão?",
+        a: "9031. Mude-a com --port tanto no processo de escuta (serve --port N) quanto no destino do remetente (relayium://host:N).",
+      },
+      {
+        q: "Preciso aprovar cada envio manualmente?",
+        a: "Apenas o primeiro envio de uma dada impressão digital, e somente quando o serve está rodando com um terminal conectado. Depois disso, fica memorizado. Rodar o serve de forma não interativa (systemd, um pipe) ignora completamente a solicitação e rejeita pares desconhecidos — pré-autorize-os com relayium authorize em vez disso.",
+      },
+      {
+        q: "Um remetente pode excluir arquivos no meu receptor sempre ativo?",
+        a: "Só se você iniciou o serve com --allow-delete e o remetente está executando sync --delete. Sem --allow-delete, as exclusões são ignoradas silenciosamente e todo o resto é transferido normalmente.",
+      },
+      {
+        q: "Executar um receptor sempre ativo é gratuito?",
+        a: "Sim. O relayium serve faz parte da CLI gratuita e auto-hospedável — sem conta, sem nível pago, em nenhum dos lados da conexão.",
+      },
+      {
+        q: "Onde o serve guarda sua identidade e sua lista de pares?",
+        a: "Em ~/.config/relayium por padrão (id.key/id.crt para a identidade deste host, authorized_fingerprints para a lista de permissões). Aponte --config-dir para um lugar fixo, como /etc/relayium, para um serviço systemd.",
+      },
+      {
+        q: "Como executo o serve na inicialização no macOS?",
+        a: "O macOS não tem systemd — use o launchd. Instale o serve como LaunchDaemon em /Library/LaunchDaemons (inicia na inicialização; defina UserName para rodar como você), ou como LaunchAgent em ~/Library/LaunchAgents (inicia no login). Este guia tem um plist pronto para editar; não há serviço do Homebrew. Pré-autorize os remetentes com relayium authorize primeiro, já que o launchd não dá ao serve nenhum terminal para perguntar.",
+      },
+    ],
+  },
+  cta: {
+    text: "Transforme qualquer máquina que você tenha em um receptor gratuito e sempre ativo — envios diretos sobre TLS fixado, sem nenhum retransmissor envolvido.",
+    button: "Obter a CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "guides/run-relayium-as-an-always-on-service",
   updated: "2026-07-12",
-  langs: withInstall({ en, zh, ja, ko, de, fr, ar }),
+  langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

@@ -14,6 +14,8 @@
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/sync-a-large-folder-between-servers" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/sync-a-large-folder-between-servers" />
     <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/sync-a-large-folder-between-servers" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/sync-a-large-folder-between-servers" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -61,7 +63,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
       <h1>Sync a large folder between two servers (resumable, in the background)</h1>
       <p class="updated">Last updated: 2026-07-08</p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers" aria-current="true">English</a><a href="/zh/guides/sync-a-large-folder-between-servers">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers">Français</a><a href="/ar/guides/sync-a-large-folder-between-servers">العربية</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers" aria-current="true">English</a><a href="/zh/guides/sync-a-large-folder-between-servers">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers">Français</a><a href="/ar/guides/sync-a-large-folder-between-servers">العربية</a><a href="/es/guides/sync-a-large-folder-between-servers">Español</a><a href="/pt/guides/sync-a-large-folder-between-servers">Português</a></nav>
       <p class="lead">You have a large folder — tens of gigabytes — on one server and you want an exact copy on another. You can&#39;t watch a terminal for hours, and a transfer that dies halfway shouldn&#39;t start over from zero. relayium sync is built for this: a one-way incremental mirror that skips what&#39;s already there, resumes a half-sent file from where it stopped, and verifies every file end to end.</p>
       <p class="lead">This guide sets up an unattended, self-healing transfer: authorize the sender once, run the listener in the background, and drive relayium sync from a retry loop inside tmux so it keeps going across dropped connections until the whole folder has landed.</p>
       <h2>Why relayium sync fits this job</h2>

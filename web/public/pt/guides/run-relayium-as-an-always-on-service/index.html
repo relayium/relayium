@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="pt">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Execute o Relayium como um serviço de recepção sempre ativo · Relayium</title>
+    <meta name="description" content="Mantenha o relayium serve em execução para que qualquer par possa enviar arquivos para você a qualquer momento — daemon-direct sobre TLS fixado. Aborda a aprovação do primeiro envio, a pré-autorização de impressões digitais, executá-lo na inicialização com systemd (Linux) ou launchd (macOS), e --allow-delete." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/pt/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/run-relayium-as-an-always-on-service" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Execute o Relayium como um serviço de recepção sempre ativo" />
+    <meta property="og:description" content="Mantenha o relayium serve em execução para que qualquer par possa enviar arquivos para você a qualquer momento — daemon-direct sobre TLS fixado. Aborda a aprovação do primeiro envio, a pré-autorização de impressões digitais, executá-lo na inicialização com systemd (Linux) ou launchd (macOS), e --allow-delete." />
+    <meta property="og:url" content="https://relayium.com/pt/guides/run-relayium-as-an-always-on-service" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Execute o Relayium como um serviço de recepção sempre ativo" />
+    <meta name="twitter:description" content="Mantenha o relayium serve em execução para que qualquer par possa enviar arquivos para você a qualquer momento — daemon-direct sobre TLS fixado. Aborda a aprovação do primeiro envio, a pré-autorização de impressões digitais, executá-lo na inicialização com systemd (Linux) ou launchd (macOS), e --allow-delete." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Execute o Relayium como um serviço de recepção sempre ativo","description":"Mantenha o relayium serve em execução para que qualquer par possa enviar arquivos para você a qualquer momento — daemon-direct sobre TLS fixado. Aborda a aprovação do primeiro envio, a pré-autorização de impressões digitais, executá-lo na inicialização com systemd (Linux) ou launchd (macOS), e --allow-delete.","inLanguage":"pt","dateModified":"2026-07-12","mainEntityOfPage":"https://relayium.com/pt/guides/run-relayium-as-an-always-on-service","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"Em que porta o serve escuta por padrão?","acceptedAnswer":{"@type":"Answer","text":"9031. Mude-a com --port tanto no processo de escuta (serve --port N) quanto no destino do remetente (relayium://host:N)."}},{"@type":"Question","name":"Preciso aprovar cada envio manualmente?","acceptedAnswer":{"@type":"Answer","text":"Apenas o primeiro envio de uma dada impressão digital, e somente quando o serve está rodando com um terminal conectado. Depois disso, fica memorizado. Rodar o serve de forma não interativa (systemd, um pipe) ignora completamente a solicitação e rejeita pares desconhecidos — pré-autorize-os com relayium authorize em vez disso."}},{"@type":"Question","name":"Um remetente pode excluir arquivos no meu receptor sempre ativo?","acceptedAnswer":{"@type":"Answer","text":"Só se você iniciou o serve com --allow-delete e o remetente está executando sync --delete. Sem --allow-delete, as exclusões são ignoradas silenciosamente e todo o resto é transferido normalmente."}},{"@type":"Question","name":"Executar um receptor sempre ativo é gratuito?","acceptedAnswer":{"@type":"Answer","text":"Sim. O relayium serve faz parte da CLI gratuita e auto-hospedável — sem conta, sem nível pago, em nenhum dos lados da conexão."}},{"@type":"Question","name":"Onde o serve guarda sua identidade e sua lista de pares?","acceptedAnswer":{"@type":"Answer","text":"Em ~/.config/relayium por padrão (id.key/id.crt para a identidade deste host, authorized_fingerprints para a lista de permissões). Aponte --config-dir para um lugar fixo, como /etc/relayium, para um serviço systemd."}},{"@type":"Question","name":"Como executo o serve na inicialização no macOS?","acceptedAnswer":{"@type":"Answer","text":"O macOS não tem systemd — use o launchd. Instale o serve como LaunchDaemon em /Library/LaunchDaemons (inicia na inicialização; defina UserName para rodar como você), ou como LaunchAgent em ~/Library/LaunchAgents (inicia no login). Este guia tem um plist pronto para editar; não há serviço do Homebrew. Pré-autorize os remetentes com relayium authorize primeiro, já que o launchd não dá ao serve nenhum terminal para perguntar."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=pt">Relayium</a></header>
+      <h1>Execute o Relayium como um serviço de recepção sempre ativo</h1>
+      <p class="updated">Última atualização: 2026-07-12</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service">Français</a><a href="/ar/guides/run-relayium-as-an-always-on-service">العربية</a><a href="/es/guides/run-relayium-as-an-always-on-service">Español</a><a href="/pt/guides/run-relayium-as-an-always-on-service" aria-current="true">Português</a></nav>
+      <p class="lead">O relayium serve --once trata de uma única transferência recebida e então encerra — ótimo para um pull ocasional. Mas se você quer que uma máquina seja um ponto de recepção permanente — um servidor doméstico onde os backups chegam durante a noite, uma máquina de build para a qual o CI envia artefatos, um NAS para o qual seu celular pode mandar fotos a qualquer momento — você quer o serve em execução o tempo todo, em vez de iniciá-lo manualmente a cada transferência.</p>
+      <p class="lead">Este guia aborda como iniciar um processo de escuta de longa duração, aprovar quem tem permissão para enviar, pré-autorizar pares para os casos em que ninguém está diante do terminal, executá-lo com systemd, e permitir que um remetente usando sync --delete espelhe as exclusões.</p>
+      <h2>Before you start</h2>
+      <p>Everything below is the relayium CLI, so install it first if you haven&#39;t. On macOS or Linux, one command drops a prebuilt binary on your PATH:</p>
+      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>Prefer to pick the file yourself, or on Windows? Grab a binary from the releases page — relayium.com/cli lists every install option (or go build -o relayium ./cmd/relayium if you have Go).</li><li>relayium --version confirms it&#39;s installed. Skip this and the commands below just print &#39;command not found&#39;.</li></ul>
+      <h2>Iniciar o processo de escuta</h2>
+      <p>O serve escuta envios daemon-direct (relayium://host:port) por uma conexão TLS 1.3 fixada e grava o que recebe em um diretório. Nada precisa ser compartilhado de antemão para iniciá-lo — nenhuma impressão digital para copiar, nenhum servidor para registrar:</p>
+      <pre><code>relayium serve --dir ~/inbox
+relayium serve --dir /srv/drop --port 9040   # non-default port
+relayium serve --dir ~/inbox --allow-delete  # let a sync --delete sender mirror deletions</code></pre>
+      <ul><li>--dir define onde os arquivos chegam (por padrão, o diretório atual).</li><li>--port define a porta de escuta (por padrão, 9031); abra-a no seu firewall se o remetente estiver em outro lugar.</li><li>Sem --once, o serve continua em execução e aceitando envios até você pará-lo ou um gerenciador de processos reiniciá-lo — é isso que o torna um serviço sempre ativo.</li></ul>
+      <h2>Aprovar quem tem permissão para enviar</h2>
+      <p>Na primeira vez que um novo par envia algo, o serve — se estiver rodando em um terminal — mostra de onde veio o envio e sua impressão digital, e pede que você o aprove, do mesmo jeito que o SSH pergunta sobre um host desconhecido na primeira conexão:</p>
+      <pre><code>Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y</code></pre>
+      <ul><li>Responda y uma vez e essa impressão digital é gravada em authorized_fingerprints; todo envio posterior da mesma máquina passa sem nenhuma solicitação.</li><li>Uma impressão digital identifica uma máquina, não um endereço de rede, então continua válida mesmo que o IP do remetente mude.</li><li>Esta etapa é interativa por natureza — precisa de alguém diante do teclado, o que deixará de valer assim que o serve passar para o systemd (a seguir).</li></ul>
+      <h2>Pré-autorizar pares para configurações não interativas</h2>
+      <p>Quando o serve não tem um terminal onde perguntar — um serviço systemd, um processo em segundo plano, um pipe — ele não pode perguntar, então rejeita qualquer impressão digital que ainda não reconheça. Em vez disso, autorize os pares com antecedência. Na máquina que vai enviar, execute relayium id para imprimir a impressão digital dela; no receptor, adicione-a antes que o primeiro envio chegue:</p>
+      <pre><code># on the machine that will PUSH: print its fingerprint
+relayium id
+
+# on this always-on RECEIVER: authorize it in advance
+relayium authorize 74318e3b...</code></pre>
+      <ul><li>authorize é idempotente — executá-lo de novo para uma impressão digital em que você já confia não faz nada.</li><li>Os arquivos de identidade e de confiança ficam em --config-dir, cujo padrão é ~/.config/relayium (id.key/id.crt é a identidade deste host, authorized_fingerprints é a lista de permissões de pares).</li></ul>
+      <h2>Executá-lo com systemd</h2>
+      <p>Para um serviço que sobrevive a reinicializações e falhas, entregue o serve ao systemd. Aponte --config-dir para um caminho fixo para que a identidade do host e sua lista de pares autorizados permaneçam no lugar entre reinicializações:</p>
+      <pre><code># /etc/systemd/system/relayium-serve.service
+[Unit]
+Description=Relayium always-on receiver
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/relayium serve --dir /srv/drop --port 9031 --config-dir /etc/relayium --allow-delete
+Restart=always
+User=relayium
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+      <ul><li>Antes de habilitar o serviço, execute relayium authorize &lt;fingerprint&gt; para cada par que deva poder enviar — o próprio serviço não pode perguntar.</li><li>systemctl enable --now relayium-serve o inicia e o traz de volta a cada inicialização.</li><li>Mantenha /etc/relayium/id.key legível apenas pelo usuário do serviço; o relayium se recusa a carregar uma chave com permissões mais frouxas.</li></ul>
+      <h2>Executá-lo na inicialização no macOS (launchd)</h2>
+      <p>O macOS não tem systemd — seu gerenciador de serviços é o launchd. Para manter o serve em execução em um Mac (por exemplo, um Mac mini deixado ligado como ponto de recepção), instale-o como LaunchDaemon para que ele inicie na inicialização, antes de qualquer login. Defina UserName para que ele rode como você e não como root, e dê a --dir e --config-dir caminhos absolutos para que seus arquivos de identidade e de confiança permaneçam no seu próprio ~/.config/relayium:</p>
+      <pre><code>&lt;!-- /Library/LaunchDaemons/com.relayium.serve.plist  (replace YOU with your macOS username) --&gt;
+&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;!DOCTYPE plist PUBLIC &quot;-//Apple//DTD PLIST 1.0//EN&quot; &quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd&quot;&gt;
+&lt;plist version=&quot;1.0&quot;&gt;
+&lt;dict&gt;
+  &lt;key&gt;Label&lt;/key&gt;              &lt;string&gt;com.relayium.serve&lt;/string&gt;
+  &lt;key&gt;UserName&lt;/key&gt;           &lt;string&gt;YOU&lt;/string&gt;
+  &lt;key&gt;ProgramArguments&lt;/key&gt;
+  &lt;array&gt;
+    &lt;string&gt;/usr/local/bin/relayium&lt;/string&gt;
+    &lt;string&gt;serve&lt;/string&gt;
+    &lt;string&gt;--dir&lt;/string&gt;         &lt;string&gt;/Users/YOU/inbox&lt;/string&gt;
+    &lt;string&gt;--port&lt;/string&gt;        &lt;string&gt;9031&lt;/string&gt;
+    &lt;string&gt;--config-dir&lt;/string&gt;  &lt;string&gt;/Users/YOU/.config/relayium&lt;/string&gt;
+    &lt;string&gt;--allow-delete&lt;/string&gt;
+  &lt;/array&gt;
+  &lt;key&gt;RunAtLoad&lt;/key&gt;   &lt;true/&gt;
+  &lt;key&gt;KeepAlive&lt;/key&gt;   &lt;true/&gt;
+  &lt;key&gt;StandardOutPath&lt;/key&gt;    &lt;string&gt;/Users/YOU/relayium-serve.log&lt;/string&gt;
+  &lt;key&gt;StandardErrorPath&lt;/key&gt;  &lt;string&gt;/Users/YOU/relayium-serve.log&lt;/string&gt;
+&lt;/dict&gt;
+&lt;/plist&gt;</code></pre>
+      <pre><code># 1) authorize each pusher first — launchd gives serve no terminal to prompt on:
+relayium authorize &lt;fingerprint&gt;     # get the fingerprint from the pusher&#39;s  relayium id
+
+# 2) save the plist above to that path, then load it (root-owned, starts at boot):
+sudo chown root:wheel /Library/LaunchDaemons/com.relayium.serve.plist
+sudo launchctl bootstrap system /Library/LaunchDaemons/com.relayium.serve.plist
+
+# check it&#39;s running / follow logs / stop it:
+sudo launchctl print system/com.relayium.serve | grep state
+tail -f ~/relayium-serve.log
+sudo launchctl bootout system/com.relayium.serve</code></pre>
+      <ul><li>O launchd não dá nenhum terminal ao serve, então ele não pode perguntar — execute primeiro relayium authorize &lt;fingerprint&gt; para cada remetente, igual ao systemd. A impressão digital vem do relayium id daquela máquina.</li><li>O KeepAlive reinicia o serve se ele travar; o RunAtLoad junto com um LaunchDaemon em /Library/LaunchDaemons o inicia na inicialização sem login — a opção certa para um Mac mini sem monitor.</li><li>Prefere um serviço no escopo de login? Coloque o mesmo plist (removendo a chave UserName) em ~/Library/LaunchAgents/ e carregue-o com launchctl bootstrap gui/$(id -u) &lt;path&gt; — ele inicia no seu login em vez de na inicialização.</li><li>Se o firewall de aplicativos do macOS estiver ativado, permita conexões de entrada para o relayium (Ajustes do Sistema → Rede → Firewall), ou os envios para a sua porta serão bloqueados.</li></ul>
+      <h2>Permitir que um remetente com sync --delete espelhe as exclusões</h2>
+      <p>Por padrão, o serve apenas adiciona ou atualiza arquivos — um remetente que executa sync --delete contra ele ainda copia os arquivos novos e alterados, mas qualquer exclusão que ele solicite é ignorada, com um aviso registrado no receptor. Inicie o serve com --allow-delete para optar por um espelhamento verdadeiro, em que os arquivos removidos no lado do remetente também são removidos aqui:</p>
+      <pre><code>relayium serve --dir /srv/mirror --allow-delete</code></pre>
+      <ul><li>--allow-delete é uma opção do lado do receptor; o remetente ainda precisa solicitá-la com sync --delete.</li><li>Sem ela, nada é jamais excluído nesta máquina, não importa o que um remetente solicite.</li></ul>
+      <h2>Perguntas frequentes</h2>
+      <h3>Em que porta o serve escuta por padrão?</h3>
+      <p>9031. Mude-a com --port tanto no processo de escuta (serve --port N) quanto no destino do remetente (relayium://host:N).</p>
+      <h3>Preciso aprovar cada envio manualmente?</h3>
+      <p>Apenas o primeiro envio de uma dada impressão digital, e somente quando o serve está rodando com um terminal conectado. Depois disso, fica memorizado. Rodar o serve de forma não interativa (systemd, um pipe) ignora completamente a solicitação e rejeita pares desconhecidos — pré-autorize-os com relayium authorize em vez disso.</p>
+      <h3>Um remetente pode excluir arquivos no meu receptor sempre ativo?</h3>
+      <p>Só se você iniciou o serve com --allow-delete e o remetente está executando sync --delete. Sem --allow-delete, as exclusões são ignoradas silenciosamente e todo o resto é transferido normalmente.</p>
+      <h3>Executar um receptor sempre ativo é gratuito?</h3>
+      <p>Sim. O relayium serve faz parte da CLI gratuita e auto-hospedável — sem conta, sem nível pago, em nenhum dos lados da conexão.</p>
+      <h3>Onde o serve guarda sua identidade e sua lista de pares?</h3>
+      <p>Em ~/.config/relayium por padrão (id.key/id.crt para a identidade deste host, authorized_fingerprints para a lista de permissões). Aponte --config-dir para um lugar fixo, como /etc/relayium, para um serviço systemd.</p>
+      <h3>Como executo o serve na inicialização no macOS?</h3>
+      <p>O macOS não tem systemd — use o launchd. Instale o serve como LaunchDaemon em /Library/LaunchDaemons (inicia na inicialização; defina UserName para rodar como você), ou como LaunchAgent em ~/Library/LaunchAgents (inicia no login). Este guia tem um plist pronto para editar; não há serviço do Homebrew. Pré-autorize os remetentes com relayium authorize primeiro, já que o launchd não dá ao serve nenhum terminal para perguntar.</p>
+      <div class="ctacard">
+        <p>Transforme qualquer máquina que você tenha em um receptor gratuito e sempre ativo — envios diretos sobre TLS fixado, sem nenhum retransmissor envolvido.</p>
+        <a class="cta" href="/cli">Obter a CLI</a>
+      </div>
+      <h2>Continue lendo</h2>
+      <ul class="related"><li><a href="/pt/compare/snapdrop">Relayium vs Snapdrop e PairDrop: qual transferência P2P segura?</a></li><li><a href="/pt/compare/airdrop">Relayium vs AirDrop: uma alternativa ao AirDrop multiplataforma</a></li><li><a href="/pt/compare/wetransfer">Relayium vs WeTransfer: envie arquivos grandes sem o servidor</a></li><li><a href="/pt/how-to/transfer-files-android-to-iphone">Como transferir arquivos do Android para o iPhone (sem cabo)</a></li><li><a href="/pt/how-to/send-files-pc-to-phone-wirelessly">Enviar arquivos do PC para o celular sem fio, sem cabo nem app</a></li><li><a href="/pt/how-to/send-large-files-without-cloud">Como enviar arquivos grandes sem a nuvem</a></li><li><a href="/pt/guides/transfer-files-from-terminal">Transfira arquivos pelo terminal com a CLI do Relayium</a></li><li><a href="/pt/guides/back-up-a-server-over-ssh">Faça backup de arquivos no seu próprio servidor via SSH com a CLI do Relayium</a></li><li><a href="/pt/guides/send-a-file-to-someone">Enviar um arquivo para alguém entre redes com a CLI do Relayium</a></li><li><a href="/pt/guides/server-to-server-transfers">Transferências de servidor para servidor com a CLI do Relayium (daemon direct)</a></li><li><a href="/pt/guides/sync-a-large-folder-between-servers">Sincronizar uma pasta grande entre dois servidores (retomável, em segundo plano)</a></li><li><a href="/pt/guides/push-to-cloud-pull-on-another-computer">Suba arquivos para a nuvem e os pegue em outro computador</a></li><li><a href="/pt/how-to/share-a-file-with-an-expiring-link">Compartilhar um arquivo com um link de download seguro e com validade</a></li><li><a href="/pt/guides/self-host-relayium">Hospede o Relayium por conta própria: rode seu próprio servidor de transferência de arquivos</a></li><li><a href="/pt/how-to/send-files-between-two-computers-over-the-internet">Enviar arquivos entre dois computadores pela Internet</a></li><li><a href="/pt/compare/croc">Relayium vs croc: transferência de arquivos criptografada do terminal</a></li><li><a href="/pt/guides/how-relayium-encrypts-your-files">Como o Relayium criptografa seus arquivos de ponta a ponta</a></li><li><a href="/pt/compare/google-drive">Relayium vs Google Drive para enviar arquivos</a></li><li><a href="/pt/compare/rsync">Relayium vs rsync: sincronize pastas sem a configuração de SSH</a></li><li><a href="/pt/compare/firefox-send">A melhor alternativa ao Firefox Send em 2026</a></li><li><a href="/pt/how-to/transfer-files-by-scanning-a-qr-code">Transferir arquivos escaneando um código QR</a></li><li><a href="/pt/guides/receive-files-from-the-command-line">Receber arquivos pela linha de comando</a></li><li><a href="/pt/how-to/send-a-folder">Como enviar uma pasta inteira, não só arquivos</a></li><li><a href="/pt/how-to/automate-server-backups">Automatize backups criptografados do servidor com uma tarefa cron</a></li><li><a href="/pt/compare/localsend">Relayium vs LocalSend: qual transferência local usar</a></li><li><a href="/pt/compare/scp">Relayium vs scp: transferência de arquivos mais simples por SSH</a></li><li><a href="/pt/compare/magic-wormhole">Relayium vs magic-wormhole: transferência de arquivos por CLI</a></li><li><a href="/pt/compare/nextcloud">Relayium vs Nextcloud para enviar arquivos</a></li><li><a href="/pt/compare/dropbox">Relayium vs Dropbox para enviar um arquivo</a></li><li><a href="/pt/how-to/airdrop-for-windows-and-android">AirDrop para Windows, Linux e Android</a></li><li><a href="/pt/how-to/transfer-files-between-mac-and-windows">Transferir arquivos entre um Mac e um PC com Windows</a></li><li><a href="/pt/how-to/send-files-on-the-same-wifi">Enviar arquivos entre dispositivos na mesma Wi-Fi</a></li><li><a href="/pt/guides/what-is-peer-to-peer-file-transfer">O que é transferência de arquivos ponto a ponto?</a></li><li><a href="/pt/guides/is-it-safe-to-send-files-over-the-internet">É seguro enviar arquivos pela internet?</a></li><li><a href="/pt/guides/bring-your-own-node">Use seu próprio nó: aproveite o retransmissor e o armazenamento do Relayium de graça</a></li><li><a href="/pt/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=pt">← Relayium</a>
+        <a href="/pt/guides">Guias</a>
+        <a href="/pt/privacy">undefined</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

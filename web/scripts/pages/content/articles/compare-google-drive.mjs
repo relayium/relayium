@@ -556,8 +556,166 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Relayium frente a Google Drive para enviar archivos",
+  description:
+    "Una comparación justa para la entrega puntual de un archivo: Google Drive es un excelente almacenamiento duradero, pero enviar significa subir y gestionar permisos. Relayium envía de igual a igual o mediante un enlace de conocimiento cero que caduca solo.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "Google Drive es un producto genuinamente bueno: tus archivos viven en un solo lugar, se sincronizan entre dispositivos, quedan respaldados y son fáciles de coeditar en equipo. Si lo que necesitas es un hogar duradero para archivos a los que volverás, Drive es una opción por defecto razonable, y este artículo no intenta disuadirte de ello.",
+    "Pero mucho de aquello para lo que la gente usa Drive es en realidad una entrega puntual —enviar un vídeo a un amigo, un contrato a un cliente, un conjunto de datos a un colega—, no almacenamiento duradero. Para esa tarea concreta, subir una copia a los servidores de Google y luego configurar quién puede verla es más maquinaria de la que la tarea necesita. Relayium está hecho exactamente para esa entrega: envía el archivo directamente entre los dos dispositivos, o mediante un enlace que solo tu destinatario puede descifrar.",
+  ],
+  sections: [
+    {
+      heading: "Lo que Google Drive hace bien",
+      body: [
+        "La fortaleza de Drive es la permanencia y la colaboración. Un archivo que subes permanece ahí —sincronizado entre tu teléfono, tu portátil y la web— hasta que lo eliminas, que es justo lo que quieres para una carpeta de trabajo, una unidad de equipo compartida o documentos que editáis juntos en tiempo real.",
+        "También es generoso y sin fricciones para el almacenamiento: un buen plan gratuito, copia de seguridad automática, historial de versiones y búsqueda en todo lo que hayas guardado. Nada de eso es algo que Relayium intente reemplazar.",
+      ],
+    },
+    {
+      heading: "En qué se diferencian: enviar no es la misma tarea que almacenar",
+      body: [
+        "Para enviar un archivo por Drive, subes una copia a la infraestructura de Google y luego decides quién puede abrirlo: la cuenta de Google de una persona concreta, o \"cualquier persona con el enlace\". Si te equivocas con el ajuste de uso compartido, el archivo queda o inaccesible o más abierto de lo que pretendías. En cualquier caso, ahora vive una copia indefinidamente en los servidores de Google, hasta que vuelvas y la elimines.",
+        "Relayium se salta el paso del almacenamiento en el caso común. Su modo en tiempo real mueve los bytes directamente entre los dispositivos del remitente y del destinatario a través de una conexión de igual a igual cifrada de extremo a extremo: el archivo en sí nunca se almacena en un servidor. Cuando el destinatario está desconectado y sí quieres un enlace, el modo de enlace almacenado conserva la propiedad de conocimiento cero que Drive no tiene: tu navegador cifra el archivo con una clave AES-256-GCM aleatoria antes de subirlo, y esa clave vive únicamente en el fragmento de la URL (la parte tras el #, que los navegadores nunca envían a un servidor). Los servidores de Google guardan tus archivos de Drive y técnicamente pueden leerlos; el servidor de Relayium, para un enlace almacenado, solo guarda texto cifrado que no puede descifrar.",
+      ],
+    },
+    {
+      heading: "Tiempo real: nada almacenado en un servidor",
+      body: [
+        "Para el caso clásico —ambas personas están conectadas ahora mismo— la transferencia directa en tiempo real envía hasta 1.000 archivos en un solo lote directamente entre dispositivos, sin paso de subida y sin nada almacenado en ningún punto intermedio. Ambos lados ven un código de verificación de 6 dígitos coincidente (SAS) para descartar un ataque de intermediario, y cada archivo se comprueba de extremo a extremo con un hash SHA-256; si la conexión se cae, la transferencia se reanuda en lugar de reiniciarse.",
+        "No hay límite de tamaño en el servidor, así que el límite práctico viene del navegador que recibe: Chrome y Edge transmiten los datos entrantes directamente al disco, manejando con holgura decenas de gigabytes, mientras que Firefox y Safari almacenan en memoria, así que mantén esas transferencias por debajo de unos 200 MB. En la misma red no hace falta ninguna cuenta. Enviar entre redes usa un código de emparejamiento y requiere que el remitente inicie sesión; el destinatario nunca necesita cuenta, en ninguna de las dos configuraciones de red. Si no es posible una conexión directa, recurre a un retransmisor TURN cifrado que solo ve texto cifrado.",
+      ],
+    },
+    {
+      heading: "¿Aun así quieres un enlace? Enlaces almacenados de conocimiento cero",
+      body: [
+        "A veces un enlace es realmente lo que necesitas: el destinatario no está conectado, o quieres una única URL que puedas pegar en cualquier parte. El modo de enlace almacenado de Relayium cubre ese caso sin renunciar a la privacidad del modo en tiempo real.",
+        "Eliges una caducidad —1 hora, 1 día, 3 días o 7 días— o configuras el enlace para que se consuma tras la primera descarga completada. Crear un enlace requiere que el remitente inicie sesión (cuenta para una cuota de almacenamiento de tu cuenta), pero el destinatario solo abre el enlace y descarga, sin necesidad de cuenta. Como la clave de descifrado nunca sale del fragmento de la URL, el modelo de Google y el modelo de enlace almacenado de Relayium difieren en un punto central: Google puede técnicamente descifrar los archivos alojados en Drive; el servidor de Relayium, para los enlaces almacenados, estructuralmente no puede.",
+      ],
+    },
+    {
+      heading: "Comparación de funciones de un vistazo",
+      body: ["Las diferencias que más importan, una al lado de la otra:"],
+      bullets: [
+        "Propósito: Google Drive es almacenamiento duradero, siempre disponible, con colaboración integrada; Relayium está hecho para un envío puntual: P2P en tiempo real o un enlace que caduca solo.",
+        "Dónde viven los archivos: Drive conserva una copia indefinida en los servidores de Google hasta que la eliminas; el tiempo real de Relayium no almacena el archivo en absoluto, y los enlaces almacenados caducan automáticamente (1h/1d/3d/7d) o se consumen tras la primera descarga.",
+        "Quién puede leerlo: la infraestructura de Google puede técnicamente descifrar los archivos de Drive; los enlaces almacenados de Relayium son de conocimiento cero: la clave vive únicamente en el fragmento de la URL, así que el servidor guarda texto cifrado que no puede leer.",
+        "Cuentas: Drive requiere una cuenta de Google para el remitente, y a menudo para el destinatario según los ajustes de uso compartido; Relayium no necesita cuenta en la misma red, y solo el remitente inicia sesión para el envío entre redes o de enlace almacenado; el destinatario nunca la necesita.",
+        "Límites de tamaño: Drive está limitado por tu cuota de almacenamiento; el tiempo real de Relayium no tiene límite en el servidor (Chrome/Edge transmiten al disco para decenas de GB; mantén Firefox/Safari por debajo de ~200 MB).",
+        "Coste y apertura: Relayium es gratis y está bajo licencia MIT en github.com/relayium/relayium, funcionando en el navegador en Windows, macOS, Linux, Android e iOS sin nada que instalar.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Relayium almacena mis archivos como lo hace Google Drive?",
+        a: "En el modo en tiempo real no: el archivo va directamente entre dispositivos y nunca se almacena en un servidor. Si creas un enlace de descarga, el servidor sí almacena algo, pero solo texto cifrado de conocimiento cero que no puede descifrar; caduca (1h/1d/3d/7d) o se consume tras la primera descarga.",
+      },
+      {
+        q: "¿Necesito una cuenta?",
+        a: "En la misma red no hace falta ninguna cuenta. Enviar entre redes con un código de emparejamiento, o crear un enlace de descarga almacenado, requiere que el remitente inicie sesión. El destinatario nunca necesita cuenta, en ninguno de los dos casos.",
+      },
+      {
+        q: "¿Hay un límite de tamaño?",
+        a: "Las transferencias en tiempo real llevan hasta 1.000 archivos por lote sin límite de tamaño en el servidor: Chrome y Edge transmiten directamente al disco para decenas de gigabytes, mientras que Firefox y Safari almacenan en memoria, así que mantén esas por debajo de unos 200 MB. Los enlaces almacenados cuentan para una cuota vinculada a tu cuenta.",
+      },
+      {
+        q: "¿Es Relayium gratis?",
+        a: "Sí. Relayium es gratis y de código abierto bajo la licencia MIT, con el protocolo y el código completos en github.com/relayium/relayium; no hay un plan de pago para desbloquear transferencias más grandes o más rápidas.",
+      },
+    ],
+  },
+  cta: {
+    text: "Envía un archivo directamente, sin subirlo a la nube de nadie: sin límite de tamaño, sin instalación y sin cuenta en la misma red.",
+    button: "Prueba Relayium ahora",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Relayium vs Google Drive para enviar arquivos",
+  description:
+    "Uma comparação justa para a entrega pontual de um arquivo: o Google Drive é um ótimo armazenamento duradouro, mas enviar significa fazer upload e gerenciar permissões. O Relayium envia ponto a ponto ou por um link de conhecimento zero que expira sozinho.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "O Google Drive é um produto genuinamente bom: seus arquivos ficam em um só lugar, sincronizam entre dispositivos, permanecem com backup e são fáceis de coeditar em equipe. Se o que você precisa é uma casa duradoura para arquivos aos quais você vai voltar, o Drive é uma escolha padrão razoável, e este artigo não tenta convencê-lo do contrário.",
+    "Mas boa parte daquilo para que as pessoas usam o Drive é na verdade uma entrega pontual — enviar um vídeo para um amigo, um contrato para um cliente, um conjunto de dados para um colega —, não armazenamento duradouro. Para essa tarefa específica, fazer upload de uma cópia para os servidores do Google e depois configurar quem pode vê-la é mais maquinaria do que a tarefa precisa. O Relayium foi feito exatamente para essa entrega: envia o arquivo diretamente entre os dois dispositivos, ou por um link que só o seu destinatário consegue descriptografar.",
+  ],
+  sections: [
+    {
+      heading: "O que o Google Drive faz bem",
+      body: [
+        "A força do Drive é a permanência e a colaboração. Um arquivo que você envia permanece ali — sincronizado entre seu celular, seu notebook e a web — até você excluí-lo, que é exatamente o que você quer para uma pasta de trabalho, um drive de equipe compartilhado ou documentos que vocês coeditam em tempo real.",
+        "Ele também é generoso e sem atrito para o armazenamento: um plano gratuito sólido, backup automático, histórico de versões e busca em tudo o que você já salvou. Nada disso é algo que o Relayium tente substituir.",
+      ],
+    },
+    {
+      heading: "Onde eles diferem: enviar não é a mesma tarefa que armazenar",
+      body: [
+        "Para enviar um arquivo pelo Drive, você faz upload de uma cópia para a infraestrutura do Google e depois decide quem pode abri-lo: a conta Google de uma pessoa específica, ou \"qualquer pessoa com o link\". Se você errar a configuração de compartilhamento, o arquivo fica ou inacessível ou mais aberto do que você pretendia. De todo modo, uma cópia agora vive indefinidamente nos servidores do Google, até você voltar e removê-la.",
+        "O Relayium pula a etapa de armazenamento no caso comum. Seu modo em tempo real move os bytes diretamente entre os dispositivos do remetente e do destinatário por uma conexão ponto a ponto criptografada de ponta a ponta — o arquivo em si nunca é armazenado em um servidor. Quando o destinatário está off-line e você realmente quer um link, o modo de link armazenado mantém a propriedade de conhecimento zero que o Drive não tem: seu navegador criptografa o arquivo com uma chave AES-256-GCM aleatória antes do upload, e essa chave vive apenas no fragmento da URL (a parte após o #, que os navegadores nunca enviam a um servidor). Os servidores do Google guardam seus arquivos do Drive e podem tecnicamente lê-los; o servidor do Relayium, para um link armazenado, guarda apenas texto cifrado que não consegue descriptografar.",
+      ],
+    },
+    {
+      heading: "Tempo real: nada armazenado em um servidor",
+      body: [
+        "Para o caso clássico — as duas pessoas estão on-line agora mesmo — a transferência direta em tempo real envia até 1.000 arquivos em um único lote diretamente entre dispositivos, sem etapa de upload e sem nada armazenado em qualquer ponto intermediário. Os dois lados veem um código de verificação de 6 dígitos correspondente (SAS) para descartar um ataque de intermediário, e cada arquivo é conferido de ponta a ponta com um hash SHA-256; se a conexão cair, a transferência é retomada em vez de recomeçar.",
+        "Não há limite de tamanho no servidor, então o limite prático vem do navegador que recebe: Chrome e Edge transmitem os dados que chegam direto para o disco, lidando com folga com dezenas de gigabytes, enquanto Firefox e Safari armazenam em memória, então mantenha essas transferências abaixo de cerca de 200 MB. Na mesma rede, nenhuma conta é necessária. Enviar entre redes usa um código de emparelhamento e exige que o remetente faça login — o destinatário nunca precisa de conta, em nenhuma das duas configurações de rede. Se uma conexão direta não for possível, recorre a um retransmissor TURN criptografado que só vê texto cifrado.",
+      ],
+    },
+    {
+      heading: "Ainda quer um link? Links armazenados de conhecimento zero",
+      body: [
+        "Às vezes um link é realmente o que você precisa — o destinatário não está on-line, ou você quer uma única URL que possa colar em qualquer lugar. O modo de link armazenado do Relayium cobre esse caso sem abrir mão da privacidade do modo em tempo real.",
+        "Você escolhe uma expiração — 1 hora, 1 dia, 3 dias ou 7 dias — ou configura o link para se consumir após o primeiro download concluído. Criar um link exige que o remetente faça login (conta para uma cota de armazenamento da sua conta), mas o destinatário apenas abre o link e baixa, sem precisar de conta. Como a chave de descriptografia nunca sai do fragmento da URL, o modelo do Google e o modelo de link armazenado do Relayium diferem em um ponto central: o Google pode tecnicamente descriptografar os arquivos hospedados no Drive; o servidor do Relayium, para os links armazenados, estruturalmente não pode.",
+      ],
+    },
+    {
+      heading: "Comparação de recursos num relance",
+      body: ["As diferenças que mais importam, lado a lado:"],
+      bullets: [
+        "Propósito: o Google Drive é armazenamento duradouro, sempre disponível, com colaboração integrada; o Relayium foi feito para um envio pontual — P2P em tempo real ou um link que expira sozinho.",
+        "Onde os arquivos ficam: o Drive mantém uma cópia indefinida nos servidores do Google até você excluí-la; o tempo real do Relayium não armazena o arquivo de forma alguma, e os links armazenados expiram automaticamente (1h/1d/3d/7d) ou se consomem após o primeiro download.",
+        "Quem pode lê-lo: a infraestrutura do Google pode tecnicamente descriptografar os arquivos do Drive; os links armazenados do Relayium são de conhecimento zero — a chave vive apenas no fragmento da URL, então o servidor guarda texto cifrado que não consegue ler.",
+        "Contas: o Drive exige uma conta Google para o remetente e, muitas vezes, para o destinatário, conforme as configurações de compartilhamento; o Relayium não precisa de conta na mesma rede, e só o remetente faz login para o envio entre redes ou de link armazenado — o destinatário nunca precisa.",
+        "Limites de tamanho: o Drive é limitado pela sua cota de armazenamento; o tempo real do Relayium não tem limite no servidor (Chrome/Edge transmitem para o disco para dezenas de GB; mantenha Firefox/Safari abaixo de ~200 MB).",
+        "Custo e abertura: o Relayium é gratuito e licenciado sob MIT em github.com/relayium/relayium, rodando no navegador em Windows, macOS, Linux, Android e iOS sem nada para instalar.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "O Relayium armazena meus arquivos como o Google Drive faz?",
+        a: "No modo em tempo real, não — o arquivo vai diretamente entre dispositivos e nunca é armazenado em um servidor. Se você criar um link de download, o servidor até armazena algo, mas apenas texto cifrado de conhecimento zero que ele não consegue descriptografar; ele expira (1h/1d/3d/7d) ou se consome após o primeiro download.",
+      },
+      {
+        q: "Preciso de uma conta?",
+        a: "Na mesma rede, nenhuma conta é necessária. Enviar entre redes com um código de emparelhamento, ou criar um link de download armazenado, exige que o remetente faça login. O destinatário nunca precisa de conta, em nenhum dos casos.",
+      },
+      {
+        q: "Há um limite de tamanho?",
+        a: "As transferências em tempo real levam até 1.000 arquivos por lote sem limite de tamanho no servidor — Chrome e Edge transmitem direto para o disco para dezenas de gigabytes, enquanto Firefox e Safari armazenam em memória, então mantenha essas abaixo de cerca de 200 MB. Os links armazenados contam para uma cota ligada à sua conta.",
+      },
+      {
+        q: "O Relayium é gratuito?",
+        a: "Sim. O Relayium é gratuito e de código aberto sob a licença MIT, com o protocolo e o código completos em github.com/relayium/relayium — sem plano pago para desbloquear transferências maiores ou mais rápidas.",
+      },
+    ],
+  },
+  cta: {
+    text: "Envie um arquivo diretamente, sem enviá-lo para a nuvem de ninguém — sem limite de tamanho, sem instalação e sem precisar de conta na mesma rede.",
+    button: "Experimente o Relayium agora",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "compare/google-drive",
   updated: "2026-07-09",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

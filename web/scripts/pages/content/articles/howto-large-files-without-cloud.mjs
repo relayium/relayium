@@ -479,8 +479,144 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Cómo enviar archivos grandes sin la nube",
+  description:
+    "Envía vídeos de varios gigabytes y archivos de proyecto directamente, de navegador a navegador: sin subida a la nube, sin límite de tamaño en modo en tiempo real, con transferencias reanudables y comprobaciones de integridad por archivo.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "Una exportación de vídeo de 20 GB o un pesado archivo de proyecto es justo donde el almacenamiento en la nube se siente más lento: subes el archivo entero una vez, esperas y luego la otra persona lo descarga de nuevo — dos transferencias completas más lo que permita tu cuota de almacenamiento. Para una entrega única, es mucho copiar y esperar por bytes que solo tenían que ir de A a B.",
+    "Relayium toma la ruta directa. El archivo fluye directamente desde tu navegador al de quien lo recibe por un canal de igual a igual cifrado, así que nunca aterriza en un servidor de por medio. Esta guía muestra cómo mover archivos grandes de esa forma, y es honesta sobre los dos límites reales: qué navegadores pueden manejar tamaños ilimitados y el hecho de que ambas personas suelen tener que estar en línea al mismo tiempo.",
+  ],
+  sections: [
+    {
+      heading: "Por qué la transferencia directa gana con archivos grandes",
+      body: [
+        "Con el almacenamiento en la nube, un archivo grande cruza la red dos veces — sube al servidor y luego baja al destinatario — y de por medio ocupa una cuota de almacenamiento. Una transferencia directa de igual a igual cruza la red una sola vez, del remitente al destinatario, sin nada almacenado en medio.",
+        "Relayium funciona por completo en el navegador, así que no hay nada que instalar en ninguno de los dos extremos. Funciona en Windows, macOS, Linux, Android e iOS. En la misma red las transferencias en tiempo real no necesitan cuenta; enviar entre redes con un código de emparejamiento solo pide al remitente iniciar sesión — basta con abrir relayium.com en ambos dispositivos y conectar.",
+      ],
+    },
+    {
+      heading: "Sin límite de tamaño en modo en tiempo real",
+      body: [
+        "Las transferencias en tiempo real no tienen límite de tamaño del lado del servidor, porque no hay ningún servidor guardando el archivo. El tope práctico lo fija el navegador que recibe, no nosotros.",
+        "En Chrome y Edge el archivo entrante se transmite directamente al disco a medida que llega, así que nunca tiene que caber en memoria — esta es la combinación que conviene usar para archivos muy grandes, cómodamente hasta decenas de gigabytes. Un lote puede contener hasta 1.000 archivos, y cada uno se verifica de extremo a extremo con un hash SHA-256, así que lo que aterriza en el disco es byte por byte lo que enviaste.",
+      ],
+      bullets: [
+        "Chrome o Edge del lado que recibe: los archivos se transmiten al disco, así que prácticamente no hay límite de tamaño.",
+        "Firefox y Safari, en cambio, almacenan el archivo en memoria, así que ahí mantén los archivos individuales por debajo de unos 200 MB.",
+        "Hasta 1.000 archivos por lote, cada uno verificado con su propio hash SHA-256 al llegar.",
+      ],
+    },
+    {
+      heading: "Reanudar en lugar de empezar de nuevo",
+      body: [
+        "Las transferencias grandes llevan tiempo, y el tiempo es cuando se cae el Wi-Fi, los portátiles se suspenden y los teléfonos cambian de red. Relayium está hecho para eso: si la conexión se rompe a mitad de camino, la transferencia se reanuda desde donde quedó en lugar de empezar el archivo entero de nuevo.",
+        "La conectividad se maneja de la misma forma. La transferencia va directamente de igual a igual siempre que es posible; cuando dos redes no pueden alcanzarse directamente, el flujo cifrado recurre a un retransmisor TURN. El retransmisor solo ve texto cifrado, así que incluso la vía alternativa sigue cifrada de extremo a extremo.",
+      ],
+    },
+    {
+      heading: "Envía ahora, o deja un enlace para después",
+      body: [
+        "La transferencia directa en tiempo real necesita a ambas personas en línea al mismo tiempo, lo cual es ideal cuando puedes coordinarte — una llamada, un momento compartido, un colega en su escritorio. Si la otra persona no está disponible ahora mismo, puedes crear en su lugar un enlace de descarga almacenado.",
+        "Un enlace almacenado es de conocimiento cero: tu navegador cifra los archivos con AES-256-GCM antes de subirlos y la clave de descifrado vive solo en el fragmento de la URL, así que el servidor guarda texto cifrado que no puede leer. Ten presentes los compromisos — crear un enlace requiere que el remitente inicie sesión, los enlaces cuentan contra una cuota de almacenamiento y caducan (o pueden autodestruirse tras la primera descarga). Para los archivos más grandes, cuando ambos podéis estar en línea, la vía en tiempo real sigue siendo la opción más limpia.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Cuál es el archivo más grande que puedo enviar?",
+        a: "En modo en tiempo real no hay límite del lado del servidor — el tope viene del navegador que recibe. En Chrome o Edge el archivo se transmite al disco, así que puedes enviar decenas de gigabytes sin quedarte sin memoria. En Firefox o Safari el archivo se almacena en memoria, así que mantén los archivos individuales por debajo de unos 200 MB en esos navegadores.",
+      },
+      {
+        q: "¿Qué pasa si la transferencia se interrumpe?",
+        a: "Se reanuda automáticamente. Si la conexión se cae a mitad de la transferencia — una señal Wi-Fi perdida, un portátil suspendido, un cambio de red — Relayium retoma desde donde se detuvo en vez de reiniciar el archivo entero, así que una transferencia larga no se pierde por un breve tropiezo.",
+      },
+      {
+        q: "¿Cómo se protege mi privacidad con archivos grandes?",
+        a: "Las transferencias en tiempo real están cifradas de extremo a extremo con un intercambio de claves X25519 y AES-256-GCM por bloque, y esa clave nunca llega a ningún servidor. Ambos dispositivos muestran un código de verificación de 6 dígitos para confirmar que no hay nadie en medio, y cada archivo se comprueba con un hash SHA-256. Incluso cuando hace falta un retransmisor TURN, este solo ve texto cifrado.",
+      },
+    ],
+  },
+  cta: {
+    text: "Mueve tu próximo archivo de varios gigabytes por la vía directa — sin instalación, y sin necesidad de cuenta en la misma red.",
+    button: "Prueba Relayium ahora",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Como enviar arquivos grandes sem a nuvem",
+  description:
+    "Envie vídeos de vários gigabytes e arquivos de projeto diretamente, de navegador a navegador — sem upload para a nuvem, sem limite de tamanho no modo em tempo real, com transferências retomáveis e verificações de integridade por arquivo.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "Uma exportação de vídeo de 20 GB ou um arquivo de projeto pesado é exatamente onde o armazenamento em nuvem parece mais lento: você faz upload do arquivo inteiro uma vez, espera e a outra pessoa faz o download de novo — duas transferências completas mais o que sua cota de armazenamento permitir. Para uma entrega única, é muita cópia e espera por bytes que só precisavam ir de A para B.",
+    "O Relayium segue o caminho direto. O arquivo flui direto do seu navegador para o de quem recebe por um canal ponto a ponto criptografado, então nunca pousa em um servidor no meio. Este guia mostra como mover arquivos grandes desse jeito e é honesto sobre os dois limites reais: quais navegadores conseguem lidar com tamanhos ilimitados e o fato de que as duas pessoas normalmente precisam estar on-line ao mesmo tempo.",
+  ],
+  sections: [
+    {
+      heading: "Por que a transferência direta vence para arquivos grandes",
+      body: [
+        "Com o armazenamento em nuvem, um arquivo grande cruza a rede duas vezes — sobe até o servidor e depois desce de volta até quem recebe — e, no meio, ocupa uma cota de armazenamento. Uma transferência direta ponto a ponto cruza a rede uma única vez, do remetente ao destinatário, sem nada armazenado no meio.",
+        "O Relayium roda inteiramente no navegador, então não há nada para instalar em nenhuma das pontas. Funciona no Windows, macOS, Linux, Android e iOS. Na mesma rede, as transferências em tempo real não precisam de conta; enviar entre redes com um código de emparelhamento só pede que o remetente faça login — basta abrir o relayium.com nos dois dispositivos e conectar.",
+      ],
+    },
+    {
+      heading: "Sem limite de tamanho no modo em tempo real",
+      body: [
+        "As transferências em tempo real não têm limite de tamanho do lado do servidor, porque não há servidor guardando o arquivo. O teto prático é definido pelo navegador que recebe, não por nós.",
+        "No Chrome e no Edge, o arquivo que chega é transmitido direto para o disco à medida que chega, então nunca precisa caber na memória — essa é a combinação a usar para arquivos muito grandes, tranquilamente na casa das dezenas de gigabytes. Um lote pode conter até 1.000 arquivos, e cada um é verificado de ponta a ponta com um hash SHA-256, então o que pousa no disco é byte a byte o que você enviou.",
+      ],
+      bullets: [
+        "Chrome ou Edge no lado que recebe: os arquivos são transmitidos para o disco, então praticamente não há limite de tamanho.",
+        "Firefox e Safari, em vez disso, armazenam o arquivo na memória, então nesses mantenha os arquivos individuais abaixo de cerca de 200 MB.",
+        "Até 1.000 arquivos por lote, cada um conferido com seu próprio hash SHA-256 na chegada.",
+      ],
+    },
+    {
+      heading: "Retomar em vez de recomeçar",
+      body: [
+        "Transferências grandes levam tempo, e o tempo é quando o Wi-Fi cai, os notebooks entram em suspensão e os celulares trocam de rede. O Relayium foi feito para isso: se a conexão se romper no meio do caminho, a transferência retoma de onde parou em vez de recomeçar o arquivo inteiro.",
+        "A conectividade é tratada da mesma forma. A transferência vai direto ponto a ponto sempre que possível; quando duas redes não conseguem se alcançar diretamente, o fluxo criptografado recorre a um retransmissor TURN. O retransmissor só vê texto cifrado, então até o caminho alternativo permanece criptografado de ponta a ponta.",
+      ],
+    },
+    {
+      heading: "Envie agora ou deixe um link para depois",
+      body: [
+        "A transferência direta em tempo real precisa das duas pessoas on-line ao mesmo tempo, o que é ideal quando dá para coordenar — uma chamada, um momento compartilhado, um colega na mesa dele. Se a outra pessoa não estiver disponível agora, você pode criar um link de download armazenado no lugar.",
+        "Um link armazenado é de conhecimento zero: seu navegador criptografa os arquivos com AES-256-GCM antes do upload e a chave de descriptografia vive apenas no fragmento da URL, então o servidor guarda texto cifrado que não consegue ler. Tenha em mente os compromissos — criar um link exige que o remetente faça login, os links contam contra uma cota de armazenamento e expiram (ou podem se autodestruir após o primeiro download). Para os maiores arquivos, quando os dois conseguem ficar on-line, o caminho em tempo real continua sendo a opção mais limpa.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "Qual é o maior arquivo que posso enviar?",
+        a: "No modo em tempo real não há limite do lado do servidor — o teto vem do navegador que recebe. No Chrome ou no Edge o arquivo é transmitido para o disco, então você pode enviar dezenas de gigabytes sem ficar sem memória. No Firefox ou no Safari o arquivo é armazenado na memória, então mantenha os arquivos individuais abaixo de cerca de 200 MB nesses navegadores.",
+      },
+      {
+        q: "O que acontece se a transferência for interrompida?",
+        a: "Ela retoma automaticamente. Se a conexão cair no meio da transferência — um sinal de Wi-Fi perdido, um notebook em suspensão, uma troca de rede — o Relayium retoma de onde parou em vez de reiniciar o arquivo inteiro, então uma transferência longa não se perde por causa de um tropeço rápido.",
+      },
+      {
+        q: "Como minha privacidade é protegida em arquivos grandes?",
+        a: "As transferências em tempo real são criptografadas de ponta a ponta com uma troca de chaves X25519 e AES-256-GCM por bloco, e essa chave nunca chega a nenhum servidor. Os dois dispositivos mostram um código de verificação de 6 dígitos para confirmar que não há ninguém no meio, e cada arquivo é conferido com um hash SHA-256. Mesmo quando um retransmissor TURN é necessário, ele só vê texto cifrado.",
+      },
+    ],
+  },
+  cta: {
+    text: "Mova seu próximo arquivo de vários gigabytes pelo caminho direto — sem instalação e sem precisar de conta na mesma rede.",
+    button: "Experimente o Relayium agora",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "how-to/send-large-files-without-cloud",
   updated: "2026-07-03",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

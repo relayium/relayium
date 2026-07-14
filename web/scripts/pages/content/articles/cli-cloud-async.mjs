@@ -934,8 +934,274 @@ relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Sube archivos a la nube y recógelos en otro ordenador",
+  description:
+    "Transferencia de archivos asíncrona a través de tu cuenta de Relayium: sube desde una máquina con relayium up y descarga en otra con relayium down cuando te venga bien — cifrado de extremo a extremo, y solo subir necesita una cuenta.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "A veces los dos ordenadores nunca están despiertos a la vez. Quieres soltar un archivo desde el portátil del trabajo esta noche y cogerlo desde el sobremesa de casa mañana, sin que nadie espere una conexión en directo. relayium up y relayium down hacen exactamente eso: up cifra y sube a tu cuenta, y down lo recupera y lo descifra después en cualquier máquina — sin apretón de manos de igual a igual, sin un servidor al que ambos entréis por ssh.",
+    "Esta es la única parte de la CLI que usa tu cuenta de Relayium, y solo para las subidas. La vinculación es opcional: todo lo demás — push/pull, send/receive, daemon-direct, sync — sigue funcionando sin iniciar sesión. Descargar no necesita ninguna cuenta, solo el enlace.",
+  ],
+  sections: [
+    {
+      heading: "Cuándo recurrir a ello",
+      body: ["Elige el modo según si el otro extremo está en línea y cómo se alcanzan las dos máquinas entre sí:"],
+      bullets: [
+        "up / down (esta guía) — las dos máquinas nunca están en línea a la vez. Subes ahora; tú (u otra máquina) descargas después. Pasa por tu cuenta.",
+        "send / receive — ambos extremos están en línea ahora mismo y quieren una transferencia directa de igual a igual con un código de un solo uso.",
+        "push / pull — ya puedes entrar por ssh a la máquina remota.",
+        "Todo excepto up se hace sin cuenta; solo up requiere relayium login.",
+      ],
+    },
+    {
+      heading: "Antes de empezar",
+      body: [
+        "Dos cosas de una sola vez antes de tu primer up — instalar la CLI y tener una cuenta. ¿Ya tienes ambas? Sáltate esto.",
+      ],
+      code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+      bullets: [
+        "Instala la CLI para que exista el comando relayium. La línea de arriba deja un binario precompilado en tu PATH (macOS y Linux; en Windows, coge el .zip de la página de releases); relayium --version lo confirma, y relayium.com/cli lista todas las opciones de instalación. Sáltate esto y relayium login solo imprimirá 'command not found'.",
+        "Ten una cuenta gratuita de Relayium. El paso del navegador aprueba el inicio de sesión contra tu cuenta, así que necesitas una antes de poder aprobar — inicia sesión primero en relayium.com, o crea una allí si no la tienes. Solo subir necesita la cuenta; descargar nunca.",
+      ],
+    },
+    {
+      heading: "Vincula esta máquina a tu cuenta (una vez)",
+      body: [
+        "up necesita saber bajo qué cuenta almacenar, así que inicia sesión una vez por máquina. Es un inicio de sesión de dispositivo aprobado en el navegador — no se escribe nada en la terminal salvo el código que confirmas:",
+      ],
+      code: ["relayium login"],
+      bullets: [
+        "La CLI imprime un código corto y una URL (relayium.com/device). Ábrela en el navegador donde has iniciado sesión en relayium.com (inicia sesión allí primero si no lo has hecho), introduce el código y aprueba — esta máquina queda ahora vinculada.",
+        "El inicio de sesión se guarda en ~/.config/relayium/, así que solo lo haces una vez por máquina. relayium whoami muestra a quién estás vinculado; relayium logout lo borra.",
+        "Para revocar una máquina más adelante, elimina su dispositivo desde la página de dispositivos de tu cuenta en el navegador.",
+      ],
+    },
+    {
+      heading: "Sube desde el primer ordenador",
+      body: ["up recorre los archivos que le das, los cifra localmente, sube el texto cifrado e imprime un enlace de recogida:"],
+      code: [
+        `relayium up ./report.pdf
+#   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
+        `# choose how long it lives (otherwise your account's default applies):
+relayium up ./report.pdf --burn              # deleted after one download
+relayium up ./report.pdf --ttl 7d            # kept for 7 days
+relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
+      ],
+      bullets: [
+        "El enlace es toda la entrega — cópialo a donde la otra máquina pueda leerlo. Cualquiera con el enlace puede descargar el archivo, así que trátalo como una contraseña.",
+        "Retención: --burn elimina el archivo tras una sola descarga; --ttl <duración> lo conserva un tiempo fijo (p. ej. 7d, 24h); --max-downloads <n> permite un número fijo de descargas. Si no das ninguno, se aplica el valor por defecto de tu cuenta.",
+        "up necesita que hayas iniciado sesión; si no lo has hecho, te lo dice y no hace nada.",
+      ],
+    },
+    {
+      heading: "Descarga en el segundo ordenador",
+      body: [
+        "En la otra máquina, pasa el enlace a down. Sin iniciar sesión, sin configuración — la clave que descifra el archivo está dentro del enlace, así que down no necesita nada de tu cuenta:",
+      ],
+      code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+      widget: {
+        kind: "downloadBuilder",
+        linkLabel: "Tu enlace para compartir",
+        linkToken: "tu enlace",
+        linkPlaceholder: "https://relayium.com/d/…#k=…",
+        destLabel: "Guardar en (pega la salida de tu pwd)",
+        destToken: "directorio de destino",
+        destPlaceholder: "/home/you/downloads",
+        copy: "Copiar comando",
+        copied: "Copiado",
+      },
+      bullets: [
+        "Pon el enlace entre comillas: el fragmento #k=… lleva la clave de descifrado, y algunas shells tratan # como el inicio de un comentario.",
+        "Da un directorio de destino (aquí ./downloads) u omítelo para caer en el directorio actual.",
+        "Si el archivo estaba en modo de un solo uso, ha alcanzado su límite de descargas o ha caducado, el enlace está agotado y down informa de que ya no existe.",
+      ],
+    },
+    {
+      heading: "Funciona también con el sitio web",
+      body: ["El enlace es el mismo que usa el sitio web, así que la CLI y el navegador interoperan libremente:"],
+      bullets: [
+        "Un enlace de relayium up se abre en un navegador — dáselo a alguien que no tenga la CLI y descargará desde la web.",
+        "Un enlace para compartir creado en relayium.com puede recogerse con relayium down en otra máquina.",
+      ],
+    },
+    {
+      heading: "Qué puede ver el servidor y qué no",
+      body: ["Las transferencias en la nube siguen cifradas de extremo a extremo:"],
+      bullets: [
+        "Tu archivo se cifra en tu máquina antes de subirse. La clave de descifrado vive solo en el fragmento #k= del enlace y nunca se envía al servidor — Relayium almacena texto cifrado que no puede leer, incluidos los nombres de los archivos.",
+        "Eso también significa que el enlace es la única vía de vuelta al archivo: si lo pierdes, el archivo es irrecuperable, ni por ti ni por nosotros.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Necesito una cuenta?",
+        a: "Solo para subir. relayium up requiere relayium login; relayium down no necesita cuenta, y cualquier otro comando de la CLI (push/pull, send/receive, daemon-direct, sync) funciona sin una.",
+      },
+      {
+        q: "¿Está cifrado mi archivo?",
+        a: "Sí, de extremo a extremo. Se cifra en tu máquina antes de subirse; la clave vive solo en el fragmento #k= del enlace y nunca se envía al servidor. Relayium almacena texto cifrado que no puede leer, incluidos los nombres de los archivos.",
+      },
+      {
+        q: "¿Y si pierdo el enlace?",
+        a: "El enlace lleva la única copia de la clave de descifrado, así que un enlace perdido significa un archivo irrecuperable — no hay nada en el servidor que pueda recuperarlo.",
+      },
+      {
+        q: "¿Puedo limitar quién lo descarga?",
+        a: "Cualquiera con el enlace puede descargar, así que compártelo en privado. Usa --burn para permitir una sola descarga, o --max-downloads <n> para limitar el número, y --ttl <duración> para que caduque tras un tiempo fijo.",
+      },
+      {
+        q: "¿Funciona con el sitio web?",
+        a: "Sí. Un enlace de relayium up se abre en un navegador, y un enlace para compartir creado en relayium.com puede recogerse con relayium down en otra máquina.",
+      },
+    ],
+  },
+  cta: {
+    text: "¿Listo para mover un archivo entre tus propias máquinas? Instala la CLI, ejecuta relayium login y súbelo con up.",
+    button: "Obtener la CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Suba arquivos para a nuvem e os pegue em outro computador",
+  description:
+    "Transferência de arquivos assíncrona pela sua conta do Relayium: envie de uma máquina com relayium up e baixe em outra com relayium down quando for conveniente — com criptografia de ponta a ponta, e só o envio precisa de conta.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "Às vezes os dois computadores nunca estão ligados ao mesmo tempo. Você quer soltar um arquivo do notebook do trabalho hoje à noite e pegá-lo no desktop de casa amanhã, sem ninguém esperando uma conexão ao vivo. relayium up e relayium down fazem exatamente isso: o up criptografa e envia para a sua conta, e o down o busca e o descriptografa depois em qualquer máquina — sem aperto de mãos ponto a ponto, sem um servidor no qual os dois entrem por ssh.",
+    "Esta é a única parte da CLI que usa a sua conta do Relayium, e só para os envios. A vinculação é opcional: todo o resto — push/pull, send/receive, daemon-direct, sync — continua funcionando sem login. Baixar não precisa de conta alguma, apenas do link.",
+  ],
+  sections: [
+    {
+      heading: "Quando recorrer a isso",
+      body: ["Escolha o modo conforme a outra ponta esteja on-line e como as duas máquinas se alcançam:"],
+      bullets: [
+        "up / down (este guia) — as duas máquinas nunca estão on-line juntas. Você envia agora; você (ou outra máquina) baixa depois. Passa pela sua conta.",
+        "send / receive — as duas pontas estão on-line agora e querem uma transferência ponto a ponto direta com um código de uso único.",
+        "push / pull — você já consegue entrar por ssh na máquina remota.",
+        "Tudo exceto o up dispensa conta; só o up exige relayium login.",
+      ],
+    },
+    {
+      heading: "Antes de começar",
+      body: [
+        "Duas coisas de uma vez só antes do seu primeiro up — instalar a CLI e ter uma conta. Já tem as duas? Pule adiante.",
+      ],
+      code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+      bullets: [
+        "Instale a CLI para que o comando relayium exista. A linha acima coloca um binário pré-compilado no seu PATH (macOS e Linux; no Windows, pegue o .zip na página de releases); relayium --version confirma, e relayium.com/cli lista todas as opções de instalação. Pule isso e o relayium login só imprimirá 'command not found'.",
+        "Tenha uma conta gratuita do Relayium. O passo do navegador aprova o login contra a sua conta, então você precisa de uma antes de poder aprovar — faça login em relayium.com primeiro, ou crie uma lá se ainda não tiver. Só o envio precisa da conta; baixar nunca.",
+      ],
+    },
+    {
+      heading: "Vincule esta máquina à sua conta (uma vez)",
+      body: [
+        "O up precisa saber sob qual conta armazenar, então faça login uma vez por máquina. É um login de dispositivo aprovado no navegador — nada é digitado no terminal além do código que você confirma:",
+      ],
+      code: ["relayium login"],
+      bullets: [
+        "A CLI imprime um código curto e uma URL (relayium.com/device). Abra-a no navegador em que você está logado no relayium.com (faça login lá primeiro se não estiver), digite o código e aprove — esta máquina está agora vinculada.",
+        "O login é salvo em ~/.config/relayium/, então você só faz isso uma vez por máquina. relayium whoami mostra a quem você está vinculado; relayium logout o apaga.",
+        "Para revogar uma máquina mais tarde, exclua o dispositivo dela na página de dispositivos da sua conta no navegador.",
+      ],
+    },
+    {
+      heading: "Envie a partir do primeiro computador",
+      body: ["O up percorre os arquivos que você passa, criptografa-os localmente, envia o texto cifrado e imprime um link de retirada:"],
+      code: [
+        `relayium up ./report.pdf
+#   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
+        `# choose how long it lives (otherwise your account's default applies):
+relayium up ./report.pdf --burn              # deleted after one download
+relayium up ./report.pdf --ttl 7d            # kept for 7 days
+relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
+      ],
+      bullets: [
+        "O link é toda a entrega — copie-o para onde a outra máquina possa lê-lo. Qualquer pessoa com o link pode baixar o arquivo, então trate-o como uma senha.",
+        "Retenção: --burn remove o arquivo após um único download; --ttl <duração> o mantém por um tempo fixo (por exemplo, 7d, 24h); --max-downloads <n> permite um número fixo de downloads. Não informe nenhum e o padrão da sua conta se aplica.",
+        "O up precisa que você esteja logado; se não estiver, ele avisa e não faz nada.",
+      ],
+    },
+    {
+      heading: "Baixe no segundo computador",
+      body: [
+        "Na outra máquina, passe o link para o down. Sem login, sem configuração — a chave que descriptografa o arquivo está dentro do link, então o down não precisa de nada da sua conta:",
+      ],
+      code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+      widget: {
+        kind: "downloadBuilder",
+        linkLabel: "Seu link de compartilhamento",
+        linkToken: "seu link",
+        linkPlaceholder: "https://relayium.com/d/…#k=…",
+        destLabel: "Salvar em (cole a saída do seu pwd)",
+        destToken: "diretório de destino",
+        destPlaceholder: "/home/you/downloads",
+        copy: "Copiar comando",
+        copied: "Copiado",
+      },
+      bullets: [
+        "Coloque o link entre aspas: o fragmento #k=… carrega a chave de descriptografia, e alguns shells tratam # como o início de um comentário.",
+        "Informe um diretório de destino (aqui ./downloads) ou omita-o para cair no diretório atual.",
+        "Se o arquivo foi definido para queima, atingiu seu limite de downloads ou expirou, o link está esgotado e o down informa que ele não existe mais.",
+      ],
+    },
+    {
+      heading: "Funciona com o site também",
+      body: ["O link é o mesmo que o site usa, então a CLI e o navegador interoperam livremente:"],
+      bullets: [
+        "Um link do relayium up abre em um navegador — passe-o para alguém que não tem a CLI e a pessoa baixa pela web.",
+        "Um link de compartilhamento criado no relayium.com pode ser buscado com relayium down em outra máquina.",
+      ],
+    },
+    {
+      heading: "O que o servidor pode e não pode ver",
+      body: ["As transferências na nuvem permanecem criptografadas de ponta a ponta:"],
+      bullets: [
+        "Seu arquivo é criptografado na sua máquina antes de ser enviado. A chave de descriptografia vive apenas no fragmento #k= do link e nunca é enviada ao servidor — o Relayium armazena texto cifrado que não consegue ler, incluindo os nomes dos arquivos.",
+        "Isso também significa que o link é o único caminho de volta ao arquivo: perca-o e o arquivo fica irrecuperável, por você ou por nós.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "Preciso de uma conta?",
+        a: "Só para enviar. O relayium up exige relayium login; o relayium down não precisa de conta, e todos os outros comandos da CLI (push/pull, send/receive, daemon-direct, sync) funcionam sem uma.",
+      },
+      {
+        q: "Meu arquivo é criptografado?",
+        a: "Sim, de ponta a ponta. Ele é criptografado na sua máquina antes do envio; a chave vive apenas no fragmento #k= do link e nunca é enviada ao servidor. O Relayium armazena texto cifrado que não consegue ler, incluindo os nomes dos arquivos.",
+      },
+      {
+        q: "E se eu perder o link?",
+        a: "O link carrega a única cópia da chave de descriptografia, então um link perdido significa um arquivo irrecuperável — não há nada no servidor que possa recuperá-lo.",
+      },
+      {
+        q: "Posso limitar quem baixa?",
+        a: "Qualquer pessoa com o link pode baixar, então compartilhe-o de forma privada. Use --burn para permitir um único download, ou --max-downloads <n> para limitar o número, e --ttl <duração> para expirá-lo após um tempo definido.",
+      },
+      {
+        q: "Funciona com o site?",
+        a: "Sim. Um link do relayium up abre em um navegador, e um link de compartilhamento criado no relayium.com pode ser buscado com relayium down em outra máquina.",
+      },
+    ],
+  },
+  cta: {
+    text: "Pronto para mover um arquivo entre as suas próprias máquinas? Instale a CLI, execute relayium login e envie-o com up.",
+    button: "Obter a CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "guides/push-to-cloud-pull-on-another-computer",
   updated: "2026-07-12",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

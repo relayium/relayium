@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium — Transferencia de archivos P2P cifrada de extremo a extremo</title>
+    <meta name="description" content="Relayium es una herramienta de código abierto para transferir archivos con cifrado de extremo a extremo. En una transferencia en tiempo real dentro del navegador, en la misma red dos dispositivos se conectan directamente y los archivos nunca pasan por el servidor; entre redes distintas, todo va por un retransmisor cifrado que solo ve texto cifrado. Sin instalación; en la misma red no hace falta ninguna cuenta, y para emparejar entre redes distintas solo el remitente inicia sesión." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/es/" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Relayium — Transferencia de archivos P2P cifrada de extremo a extremo" />
+    <meta property="og:description" content="Relayium es una herramienta de código abierto para transferir archivos con cifrado de extremo a extremo. En una transferencia en tiempo real dentro del navegador, en la misma red dos dispositivos se conectan directamente y los archivos nunca pasan por el servidor; entre redes distintas, todo va por un retransmisor cifrado que solo ve texto cifrado. Sin instalación; en la misma red no hace falta ninguna cuenta, y para emparejar entre redes distintas solo el remitente inicia sesión." />
+    <meta property="og:url" content="https://relayium.com/es/" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="es_ES" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium — Transferencia de archivos P2P cifrada de extremo a extremo" />
+    <meta name="twitter:description" content="Relayium es una herramienta de código abierto para transferir archivos con cifrado de extremo a extremo. En una transferencia en tiempo real dentro del navegador, en la misma red dos dispositivos se conectan directamente y los archivos nunca pasan por el servidor; entre redes distintas, todo va por un retransmisor cifrado que solo ve texto cifrado. Sin instalación; en la misma red no hace falta ninguna cuenta, y para emparejar entre redes distintas solo el remitente inicia sesión." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":["WebApplication","SoftwareApplication"],"name":"Relayium","url":"https://relayium.com/es/","description":"Relayium es una herramienta de código abierto para transferir archivos con cifrado de extremo a extremo. En una transferencia en tiempo real dentro del navegador, en la misma red dos dispositivos se conectan directamente y los archivos nunca pasan por el servidor; entre redes distintas, todo va por un retransmisor cifrado que solo ve texto cifrado. Sin instalación; en la misma red no hace falta ninguna cuenta, y para emparejar entre redes distintas solo el remitente inicia sesión.","applicationCategory":"UtilitiesApplication","operatingSystem":"Web","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"inLanguage":"es"},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿Es gratis?","acceptedAnswer":{"@type":"Answer","text":"Sí. Relayium es de código abierto bajo licencia MIT y se usa sin coste alguno. En la misma red, las transferencias en tiempo real no requieren iniciar sesión; para emparejar entre redes distintas solo el remitente debe iniciar sesión — el destinatario nunca necesita cuenta."}},{"@type":"Question","name":"¿Se suben mis archivos a un servidor?","acceptedAnswer":{"@type":"Answer","text":"En la misma red, los archivos de la transferencia directa en tiempo real nunca pasan por el servidor; entre redes distintas van por un retransmisor cifrado que, también él, solo ve texto cifrado. Solo si usas el enlace de descarga opcional, el navegador los cifra antes de subirlos y el servidor conserva únicamente texto cifrado que no puede descifrar — la clave queda en el enlace."}},{"@type":"Question","name":"¿Es cifrado de extremo a extremo?","acceptedAnswer":{"@type":"Answer","text":"Sí. Usa intercambio de claves X25519 y cifrado AES-256-GCM por bloque; las claves se negocian únicamente entre los dos dispositivos, de modo que el servidor no puede descifrar nada."}},{"@type":"Question","name":"¿Se puede transferir entre sistemas distintos?","acceptedAnswer":{"@type":"Answer","text":"Sí. Con un navegador moderno puedes transferir entre Windows, macOS, Linux, Android e iOS, sin instalar ninguna aplicación."}},{"@type":"Question","name":"¿Hay un límite de tamaño?","acceptedAnswer":{"@type":"Answer","text":"La transferencia directa en tiempo real envía los datos en flujo, así que en la práctica no hay un límite estricto de tamaño (Chrome y Edge escriben directamente en el disco; Firefox y Safari almacenan en memoria, por lo que se recomiendan unos 200 MB por archivo). Hasta 1.000 archivos por lote."}},{"@type":"Question","name":"¿En qué se diferencia de Snapdrop?","acceptedAnswer":{"@type":"Answer","text":"Relayium añade cifrado de extremo a extremo a nivel de aplicación y un código de verificación SAS, de modo que un servidor de señalización comprometido no puede escuchar ni suplantar. Además admite transferencias entre redes y enlaces de descarga opcionales de conocimiento cero."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:820px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:38px;letter-spacing:-.5px;margin:40px 0 12px}
+h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.pitch{font-size:20px;margin:0 0 24px;max-width:42em}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:8px 0}
+ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
+.cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.why li b,.compare h3{color:var(--text-h)}
+.learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
+footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=es">Relayium</a></header>
+      <nav class="langbar" aria-label="Language"><a href="/">English</a><a href="/zh/">中文</a><a href="/ja/">日本語</a><a href="/ko/">한국어</a><a href="/de/">Deutsch</a><a href="/fr/">Français</a><a href="/ar/">العربية</a><a href="/es/" aria-current="true">Español</a><a href="/pt/">Português</a></nav>
+      <h1>Transferencia de archivos P2P cifrada de extremo a extremo</h1>
+      <p class="pitch">Conecta dos dispositivos directamente en el navegador; los archivos se cifran de extremo a extremo y se transfieren bloque a bloque. En la misma red nunca pasan por el servidor; entre redes distintas van por un retransmisor cifrado que solo ve texto cifrado. Sin instalación, sin registro — abre la página web y empieza.</p>
+      <a class="cta" href="/?lang=es">Iniciar transferencia</a>
+
+      <h2>Transferir en cuatro pasos</h2>
+      <ol class="steps">
+        <li>Abre relayium.com en ambos dispositivos con un navegador moderno.</li>
+        <li>Un lado selecciona o arrastra los archivos a enviar (hasta 1.000 por lote).</li>
+        <li>Comparad en las dos pantallas el mismo código de verificación de 6 dígitos (SAS) y confirmad la coincidencia para descartar cualquier intermediario.</li>
+        <li>Se establece una conexión directa de igual a igual; los archivos se transfieren bloque a bloque, cifrados con AES-256-GCM, y se verifica la integridad de cada archivo mediante SHA-256.</li>
+      </ol>
+
+      <h2>Por qué Relayium</h2>
+      <ul class="why">
+        <li><b>Cifrado de extremo a extremo</b> — Intercambio de claves X25519 y AES-256-GCM por bloque; las claves se negocian únicamente entre los dos dispositivos y el servidor no puede descifrar.</li>
+        <li><b>Verdadero de igual a igual</b> — En la misma red, los archivos circulan directamente de dispositivo a dispositivo por un canal WebRTC cifrado y nunca llegan a nuestros servidores; entre redes distintas van por un retransmisor cifrado que, también él, solo ve texto cifrado.</li>
+        <li><b>SAS contra el ataque de intermediario</b> — Las dos pantallas muestran el mismo código de verificación de 6 dígitos; si coincide, se descarta cualquier interceptor — ni siquiera un servidor de señalización comprometido puede hacerse pasar por ti.</li>
+        <li><b>Multiplataforma</b> — Windows, macOS, Linux, Android, iOS — basta un navegador moderno, sin necesidad de instalar nada.</li>
+        <li><b>Gratis y de código abierto</b> — Licencia MIT; el protocolo y todo el código son públicos en GitHub. En la misma red, las transferencias en tiempo real no requieren cuenta; para emparejar entre redes distintas solo el remitente inicia sesión.</li>
+      </ul>
+
+      <h2>En comparación</h2>
+      <div class="compare">
+      <h3>Frente a AirDrop</h3>
+      <p>AirDrop es nativo y fluido, pero se limita a los dispositivos Apple. Relayium es multiplataforma — conecta igual de directamente Windows o Android con un iPhone o un Mac, con un simple navegador.</p>
+      <h3>Frente a Snapdrop / PairDrop</h3>
+      <p>Snapdrop y PairDrop son pioneros del mismo tipo. Relayium les añade cifrado de extremo a extremo a nivel de aplicación y un código de verificación SAS: incluso un servidor de señalización malicioso no puede montar un ataque de intermediario.</p>
+      <h3>Frente a WeTransfer / almacenamiento en la nube</h3>
+      <p>WeTransfer y el almacenamiento en la nube son asíncronos y cómodos, pero el plan gratuito suele toparse en 2 GB y los archivos se suben a sus servidores. El modo en tiempo real de Relayium no tiene límite de tamaño y no almacena nada en el servidor.</p>
+      </div>
+
+      <h2>Preguntas frecuentes</h2>
+      <h3>¿Es gratis?</h3>
+      <p>Sí. Relayium es de código abierto bajo licencia MIT y se usa sin coste alguno. En la misma red, las transferencias en tiempo real no requieren iniciar sesión; para emparejar entre redes distintas solo el remitente debe iniciar sesión — el destinatario nunca necesita cuenta.</p>
+      <h3>¿Se suben mis archivos a un servidor?</h3>
+      <p>En la misma red, los archivos de la transferencia directa en tiempo real nunca pasan por el servidor; entre redes distintas van por un retransmisor cifrado que, también él, solo ve texto cifrado. Solo si usas el enlace de descarga opcional, el navegador los cifra antes de subirlos y el servidor conserva únicamente texto cifrado que no puede descifrar — la clave queda en el enlace.</p>
+      <h3>¿Es cifrado de extremo a extremo?</h3>
+      <p>Sí. Usa intercambio de claves X25519 y cifrado AES-256-GCM por bloque; las claves se negocian únicamente entre los dos dispositivos, de modo que el servidor no puede descifrar nada.</p>
+      <h3>¿Se puede transferir entre sistemas distintos?</h3>
+      <p>Sí. Con un navegador moderno puedes transferir entre Windows, macOS, Linux, Android e iOS, sin instalar ninguna aplicación.</p>
+      <h3>¿Hay un límite de tamaño?</h3>
+      <p>La transferencia directa en tiempo real envía los datos en flujo, así que en la práctica no hay un límite estricto de tamaño (Chrome y Edge escriben directamente en el disco; Firefox y Safari almacenan en memoria, por lo que se recomiendan unos 200 MB por archivo). Hasta 1.000 archivos por lote.</p>
+      <h3>¿En qué se diferencia de Snapdrop?</h3>
+      <p>Relayium añade cifrado de extremo a extremo a nivel de aplicación y un código de verificación SAS, de modo que un servidor de señalización comprometido no puede escuchar ni suplantar. Además admite transferencias entre redes y enlaces de descarga opcionales de conocimiento cero.</p>
+
+      <h2>Más información</h2>
+      <ul class="learn"><li><a href="/es/compare/snapdrop">Relayium vs Snapdrop y PairDrop: ¿qué transferencia P2P segura?</a></li><li><a href="/es/compare/airdrop">Relayium vs AirDrop: una alternativa a AirDrop multiplataforma</a></li><li><a href="/es/compare/wetransfer">Relayium vs WeTransfer: envía archivos grandes sin el servidor</a></li><li><a href="/es/how-to/transfer-files-android-to-iphone">Cómo transferir archivos de Android a iPhone (sin cable)</a></li><li><a href="/es/how-to/send-files-pc-to-phone-wirelessly">Enviar archivos del PC al teléfono sin cables, sin cable ni app</a></li><li><a href="/es/how-to/send-large-files-without-cloud">Cómo enviar archivos grandes sin la nube</a></li><li><a href="/es/guides/transfer-files-from-terminal">Transfiere archivos desde la terminal con la CLI de Relayium</a></li><li><a href="/es/guides/back-up-a-server-over-ssh">Haz copias de seguridad de archivos en tu propio servidor por SSH con la CLI de Relayium</a></li><li><a href="/es/guides/send-a-file-to-someone">Enviar un archivo a alguien entre redes con la CLI de Relayium</a></li><li><a href="/es/guides/server-to-server-transfers">Transferencias de servidor a servidor con la CLI de Relayium (daemon direct)</a></li><li><a href="/es/guides/sync-a-large-folder-between-servers">Sincronizar una carpeta grande entre dos servidores (reanudable, en segundo plano)</a></li><li><a href="/es/guides/push-to-cloud-pull-on-another-computer">Sube archivos a la nube y recógelos en otro ordenador</a></li><li><a href="/es/how-to/share-a-file-with-an-expiring-link">Compartir un archivo con un enlace de descarga seguro y con caducidad</a></li><li><a href="/es/guides/self-host-relayium">Aloja Relayium por tu cuenta: ejecuta tu propio servidor de transferencia de archivos</a></li><li><a href="/es/how-to/send-files-between-two-computers-over-the-internet">Enviar archivos entre dos computadoras por Internet</a></li><li><a href="/es/compare/croc">Relayium vs croc: transferencia de archivos cifrada desde la terminal</a></li><li><a href="/es/guides/how-relayium-encrypts-your-files">Cómo Relayium cifra tus archivos de extremo a extremo</a></li><li><a href="/es/compare/google-drive">Relayium frente a Google Drive para enviar archivos</a></li><li><a href="/es/compare/rsync">Relayium vs rsync: sincroniza carpetas sin la configuración de SSH</a></li><li><a href="/es/compare/firefox-send">La mejor alternativa a Firefox Send en 2026</a></li><li><a href="/es/how-to/transfer-files-by-scanning-a-qr-code">Transferir archivos escaneando un código QR</a></li><li><a href="/es/guides/receive-files-from-the-command-line">Recibir archivos desde la línea de comandos</a></li><li><a href="/es/how-to/send-a-folder">Cómo enviar una carpeta entera, no solo archivos</a></li><li><a href="/es/guides/run-relayium-as-an-always-on-service">Ejecuta Relayium como un servicio de recepción siempre activo</a></li><li><a href="/es/how-to/automate-server-backups">Automatiza copias de seguridad cifradas del servidor con una tarea cron</a></li><li><a href="/es/compare/localsend">Relayium frente a LocalSend: qué transferencia local usar</a></li><li><a href="/es/compare/scp">Relayium vs scp: transferencia de archivos más sencilla por SSH</a></li><li><a href="/es/compare/magic-wormhole">Relayium vs magic-wormhole: transferencia de archivos por CLI</a></li><li><a href="/es/compare/nextcloud">Relayium vs Nextcloud para enviar archivos</a></li><li><a href="/es/compare/dropbox">Relayium vs Dropbox para enviar un archivo</a></li><li><a href="/es/how-to/airdrop-for-windows-and-android">AirDrop para Windows, Linux y Android</a></li><li><a href="/es/how-to/transfer-files-between-mac-and-windows">Transferir archivos entre un Mac y un PC con Windows</a></li><li><a href="/es/how-to/send-files-on-the-same-wifi">Enviar archivos entre dispositivos en la misma Wi-Fi</a></li><li><a href="/es/guides/what-is-peer-to-peer-file-transfer">¿Qué es la transferencia de archivos de igual a igual?</a></li><li><a href="/es/guides/is-it-safe-to-send-files-over-the-internet">¿Es seguro enviar archivos por internet?</a></li><li><a href="/es/guides/bring-your-own-node">Usa tu propio nodo: aprovecha el retransmisor y el almacenamiento de Relayium gratis</a></li></ul>
+      <footer>
+        <a href="/?lang=es">← Relayium</a>
+        <a href="/es/guides">Guías</a>
+        <a href="/es/privacy">Privacidad</a>
+        <a href="/es/terms">Términos del servicio</a>
+        <a href="/es/security">Seguridad</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

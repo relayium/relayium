@@ -14,6 +14,8 @@
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/security" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/security" />
     <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/security" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/security" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/security" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/security" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -43,7 +45,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
       <h1>安全与威胁模型</h1>
       <p class="updated">最后更新: 2026-07-01</p>
-      <nav class="langbar" aria-label="Language"><a href="/security">English</a><a href="/zh/security" aria-current="true">中文</a><a href="/ja/security">日本語</a><a href="/ko/security">한국어</a><a href="/de/security">Deutsch</a><a href="/fr/security">Français</a><a href="/ar/security">العربية</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/security">English</a><a href="/zh/security" aria-current="true">中文</a><a href="/ja/security">日本語</a><a href="/ko/security">한국어</a><a href="/de/security">Deutsch</a><a href="/fr/security">Français</a><a href="/ar/security">العربية</a><a href="/es/security">Español</a><a href="/pt/security">Português</a></nav>
       <p>Relayium 的设计宗旨是：掌握密钥的是传输文件的双方，而不是服务器。本页说明究竟保护了什么、如何保护，以及这份保护的边界。</p>
       <p>一句话概括：实时模式下你的文件绝不经过我们的服务器；加密密钥在每台设备上重新生成、绝不离开设备；一段简短的校验码让双方能识破恶意服务器。以下是细节。</p>
       <h2>端到端加密（X25519 + AES-256-GCM）</h2><p>每次传输都会在各自设备上重新生成一对临时的 X25519 密钥。两台设备通过密钥交换协商出一个共享的 AES-256-GCM 密钥，它只存在于两端浏览器中。每个数据块都用该密钥配合唯一的随机数加密，因此信令服务器——以及任何中继——只能看到密文。</p><ul><li>密钥是临时的、每次传输独立——不会跨会话复用。</li><li>共享密钥在两台设备上协商得出，绝不发送到或存储于任何服务器。</li><li>加密施加在应用层，位于 WebRTC 自身传输层安全之上，因此即便传输层被攻破也依然有效。</li></ul>

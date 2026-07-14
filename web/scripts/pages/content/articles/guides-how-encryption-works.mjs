@@ -641,8 +641,190 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Cómo Relayium cifra tus archivos de extremo a extremo",
+  description:
+    "Cómo Relayium protege tus archivos: X25519 y AES-256-GCM para transferencias en vivo, un código de seis dígitos que detecta a un servidor deshonesto, y enlaces almacenados de conocimiento cero.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "«¿Es seguro Relayium?» es una pregunta justa — toda herramienta de transferencia de archivos afirma ser privada. Esta página recorre exactamente cómo Relayium mantiene privados los archivos, en lenguaje sencillo, para que puedas juzgar la afirmación en lugar de aceptarla por fe.",
+    "Hay dos esquemas de cifrado distintos en juego, porque hay dos situaciones distintas: enviar un archivo en vivo a alguien que está en línea ahora mismo, y dejar un enlace de descarga para que alguien lo recoja más tarde. Ambos dejan al servidor fuera de tu archivo, pero llegan ahí por caminos diferentes — y vale la pena saber cuál se aplica en cada caso.",
+  ],
+  sections: [
+    {
+      heading: "Transferencias en vivo: dos dispositivos acuerdan un secreto que el servidor nunca ve",
+      body: [
+        "Cuando envías un archivo en tiempo real —ambas personas en línea, de navegador a navegador— Relayium empieza haciendo que cada dispositivo genere un nuevo par de claves con X25519, el mismo intercambio de claves de curva elíptica que se usa en la mensajería segura moderna (técnicamente, crypto_kx de libsodium). Cada dispositivo se guarda su clave privada para sí y envía solo su clave pública al otro lado.",
+        "A partir de esas dos claves públicas, cada dispositivo calcula de forma independiente el mismo secreto compartido — un proceso que funciona precisamente por cómo está construido el intercambio de claves de curva elíptica, no porque el secreto se haya enviado a ningún sitio. Ese secreto compartido se convierte en una clave AES-256-GCM que existe solo dentro de los dos navegadores. Cada fragmento del archivo se sella con esa clave y un nonce único antes siquiera de salir del dispositivo del remitente, así que todo lo que cruza la red —incluido el servidor de señalización que ayudó a los dos navegadores a encontrarse— solo ve texto cifrado.",
+      ],
+      bullets: [
+        "Se genera un nuevo par de claves para cada transferencia — nada se reutiliza entre sesiones.",
+        "La clave AES-256-GCM compartida se deriva de forma independiente en cada dispositivo; nunca se transmite a ningún sitio, incluidos los propios servidores de Relayium.",
+        "El cifrado ocurre en la capa de aplicación, por encima de la propia seguridad de transporte de WebRTC, así que se mantiene incluso si esa capa de transporte llegara a verse comprometida.",
+      ],
+    },
+    {
+      heading: "El código de 6 dígitos que detecta a un servidor deshonesto",
+      body: [
+        "Hay una sutileza que conviene reconocer con honestidad. El cifrado propio de WebRTC (DTLS) intercambia las huellas de las claves a través del servidor de señalización que presenta los dos dispositivos entre sí. Si ese servidor fuera deshonesto, podría en teoría situarse en medio y sustituir sus propias claves — un clásico ataque de intermediario — sin que ninguno de los dos navegadores lo notara de inmediato.",
+        "Relayium cierra esa brecha con un breve código de verificación. Ambos dispositivos derivan el mismo Short Authentication String (SAS) de 6 dígitos a partir de sus dos claves públicas y lo muestran en pantalla. Si los códigos coinciden, las claves no se sustituyeron y nadie está en medio. Pero un código simple de 6 dígitos son solo unos 20 bits, que en principio un atacante bien situado podría intentar forzar por fuerza bruta hasta hacerlo coincidir tras ver ambas claves reales. Para evitarlo, Relayium usa un intercambio de comprometer-y-luego-revelar: cada lado envía primero un hash que lo compromete con su clave, y solo revela la clave real después de recibir el compromiso del otro lado. Ese orden significa que un servidor malicioso tiene que comprometerse a ciegas con una clave falsa, antes de haber visto la real — no puede elegir después una clave que colisione, así que el código corto sigue siendo fiable.",
+      ],
+      bullets: [
+        "Para la garantía más fuerte, lee el código en voz alta en una llamada o compáralo en persona, no solo a ojo en dos pantallas una al lado de la otra.",
+        "Si los dos códigos no coinciden, detente — trátalo como una señal de que alguien podría estar interceptando la conexión.",
+      ],
+    },
+    {
+      heading: "Asegurarse de que lo que llega es exactamente lo que se envió",
+      body: [
+        "El cifrado protege el secreto, pero no prueba automáticamente que nada se haya corrompido o manipulado por el camino. Relayium lo comprueba por separado: cada fragmento lleva su propia etiqueta de autenticación AES-GCM, así que un fragmento modificado no logra descifrarse en absoluto. Además, a medida que se envía cada archivo, ambos lados calculan un hash SHA-256 continuo sobre su contenido en claro; cuando el archivo termina, el hash del remitente se compara con el del destinatario. Si coinciden, lo que aterrizó en el disco es byte por byte lo que se envió — si no, el archivo se marca en lugar de aceptarse en silencio.",
+      ],
+    },
+    {
+      heading: "Enlaces almacenados: una clave diferente, generada una sola vez, guardada solo en el enlace",
+      body: [
+        "La transferencia en tiempo real necesita a ambas personas en línea al mismo tiempo. Cuando eso no es posible, Relayium ofrece en su lugar un enlace de descarga almacenado — y este usa un mecanismo genuinamente distinto, que conviene no confundir con el de tiempo real anterior.",
+        "Aquí no hay intercambio de claves, porque todavía no hay un segundo dispositivo con el que intercambiar. En su lugar, tu navegador genera una única clave AES-256-GCM aleatoria y la usa para cifrar los archivos antes de que se suba nada. Esa clave no se envía en absoluto al servidor — se añade al enlace de descarga tras un carácter #, en lo que se llama el fragmento de la URL, una parte de la dirección que los navegadores deliberadamente nunca transmiten a un servidor. El servidor acaba almacenando solo texto cifrado que no tiene forma de descifrar, además de datos administrativos como el tamaño del texto cifrado y una marca de tiempo de caducidad. Cualquiera que abra el enlace completo —fragmento incluido— puede descifrar el archivo localmente en su navegador; cualquiera sin él solo ve un bloque opaco en el servidor. Esa es la parte de conocimiento cero: el servidor guarda el archivo cifrado sin llegar nunca a tener los medios para leerlo.",
+      ],
+      bullets: [
+        "Crear un enlace almacenado requiere que el remitente inicie sesión; abrir uno para descargar no lo requiere nunca.",
+        "Los enlaces pueden configurarse para caducar tras 1 hora, 1 día, 3 días o 7 días, o para destruirse tras la primera descarga completada.",
+        "Trata el enlace completo como el propio archivo — cualquiera que lo tenga puede descifrarlo, así que compártelo como compartirías el archivo.",
+      ],
+    },
+    {
+      heading: "Lo que el servidor puede ver — y lo que no",
+      body: [
+        "Vale la pena precisar exactamente dónde se sitúa el servidor en todo esto, porque «cifrado de extremo a extremo» es una afirmación fácil de hacer y más difícil de precisar. En modo tiempo real, el archivo en sí nunca toca los servidores de Relayium — se transmite directamente entre los dos navegadores. El trabajo del servidor de señalización se limita a retransmitir los mensajes de establecimiento de conexión (la información técnica SDP/ICE que WebRTC necesita para establecer un enlace directo) para que los dos dispositivos puedan encontrarse; nunca ve el contenido de los archivos, los nombres de archivo ni las claves.",
+        "Cuando una conexión directa no es posible —ambos lados tras NAT o cortafuegos restrictivos— el flujo cifrado recurre a un servidor retransmisor TURN en lugar de fallar por completo. El retransmisor solo reenvía texto cifrado; no tiene ninguna clave y no puede descifrar lo que pasa a través de él. Lo que sí hace es contabilizar los bytes que retransmite contra la asignación mensual de retransmisión de la cuenta que envía, puramente para medición y prevención de abusos — sin inspeccionar nunca lo que hay dentro.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Puede Relayium leer mis archivos?",
+        a: "No. En modo tiempo real, la clave de cifrado se deriva de forma independiente en ambos dispositivos y nunca los abandona — los servidores de Relayium nunca la ven, ni tampoco el contenido de los archivos. Para los enlaces almacenados, la clave vive solo en el fragmento de la URL, que los navegadores nunca envían a ningún servidor, así que el servidor solo llega a guardar texto cifrado que no puede descifrar.",
+      },
+      {
+        q: "¿Qué ve realmente el servidor?",
+        a: "En modo tiempo real, solo la información de establecimiento de conexión necesaria para presentar dos dispositivos entre sí — nunca los bytes del archivo. Para los enlaces almacenados, ve texto cifrado más datos administrativos como el tamaño y la hora de caducidad — nunca el texto en claro, los nombres de archivo ni la clave de descifrado.",
+      },
+      {
+        q: "¿Es el retransmisor TURN un punto débil?",
+        a: "Es un recurso de reserva que se usa solo cuando una conexión directa no es posible, y siempre maneja únicamente texto cifrado — no tiene ninguna clave, así que no puede leer lo que retransmite. Relayium contabiliza los bytes que retransmite contra la asignación mensual de tu cuenta, pero nunca inspecciona su contenido.",
+      },
+      {
+        q: "¿Es Relayium de código abierto?",
+        a: "Sí. El diseño del protocolo y todo el código de cliente y servidor son públicos en GitHub bajo la licencia MIT, así que la criptografía descrita aquí puede auditarse de forma independiente en lugar de aceptarse por fe.",
+      },
+      {
+        q: "¿Qué pasa si los dos códigos de verificación en pantalla no coinciden?",
+        a: "Detén la transferencia. Una discrepancia significa que la comprobación de comprometer-y-luego-revelar falló, lo que apunta a un posible intermediario más que a un fallo inofensivo — no continúes hasta entender por qué.",
+      },
+    ],
+  },
+  cta: {
+    text: "¿Con curiosidad por ver cómo se ve en la práctica? Inicia una transferencia y observa aparecer el código de verificación por ti mismo.",
+    button: "Prueba Relayium ahora",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Como o Relayium criptografa seus arquivos de ponta a ponta",
+  description:
+    "Como o Relayium protege seus arquivos: X25519 e AES-256-GCM para transferências ao vivo, um código de seis dígitos que flagra um servidor desonesto, e links armazenados de conhecimento zero.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "«O Relayium é seguro?» é uma pergunta justa — toda ferramenta de transferência de arquivos afirma ser privada. Esta página percorre exatamente como o Relayium mantém os arquivos privados, em linguagem simples, para que você possa julgar a afirmação em vez de aceitá-la por fé.",
+    "Há dois esquemas de criptografia diferentes em jogo, porque há duas situações diferentes: enviar um arquivo ao vivo para alguém que está on-line agora mesmo, e deixar um link de download para alguém pegar mais tarde. Ambos mantêm o servidor fora do seu arquivo, mas chegam lá por caminhos diferentes — e vale a pena saber qual se aplica em cada caso.",
+  ],
+  sections: [
+    {
+      heading: "Transferências ao vivo: dois dispositivos combinam um segredo que o servidor nunca vê",
+      body: [
+        "Quando você envia um arquivo em tempo real — ambas as pessoas on-line, de navegador para navegador — o Relayium começa fazendo cada dispositivo gerar um novo par de chaves com X25519, a mesma troca de chaves de curva elíptica usada nas mensagerias seguras modernas (tecnicamente, o crypto_kx do libsodium). Cada dispositivo guarda sua chave privada para si e envia apenas sua chave pública para o outro lado.",
+        "A partir dessas duas chaves públicas, cada dispositivo calcula independentemente o mesmo segredo compartilhado — um processo que funciona precisamente por causa de como a troca de chaves de curva elíptica é construída, e não porque o segredo tenha sido enviado a algum lugar. Esse segredo compartilhado se torna uma chave AES-256-GCM que existe apenas dentro dos dois navegadores. Cada bloco do arquivo é selado com essa chave e um nonce único antes mesmo de sair do dispositivo do remetente, então tudo o que atravessa a rede — incluindo o servidor de sinalização que ajudou os dois navegadores a se encontrarem — só vê texto cifrado.",
+      ],
+      bullets: [
+        "Um novo par de chaves é gerado para cada transferência — nada é reutilizado entre sessões.",
+        "A chave AES-256-GCM compartilhada é derivada independentemente em cada dispositivo; ela nunca é transmitida a lugar nenhum, incluindo os próprios servidores do Relayium.",
+        "A criptografia acontece na camada de aplicação, acima da própria segurança de transporte do WebRTC, então ela se mantém mesmo que essa camada de transporte venha a ser comprometida.",
+      ],
+    },
+    {
+      heading: "O código de 6 dígitos que flagra um servidor desonesto",
+      body: [
+        "Há uma sutileza que vale a pena reconhecer com honestidade. A criptografia embutida do WebRTC (DTLS) troca as impressões digitais das chaves através do servidor de sinalização que apresenta os dois dispositivos um ao outro. Se esse servidor fosse desonesto, ele poderia em teoria se colocar no meio e substituir suas próprias chaves — um clássico ataque de intermediário — sem que nenhum dos dois navegadores percebesse de imediato.",
+        "O Relayium fecha essa brecha com um curto código de verificação. Ambos os dispositivos derivam o mesmo Short Authentication String (SAS) de 6 dígitos a partir de suas duas chaves públicas e o exibem na tela. Se os códigos coincidem, as chaves não foram substituídas e ninguém está no meio. Mas um código simples de 6 dígitos tem apenas cerca de 20 bits, o que em princípio um atacante bem posicionado poderia tentar quebrar por força bruta até fazer coincidir depois de ver as duas chaves reais. Para evitar isso, o Relayium usa um handshake de comprometer-e-depois-revelar: cada lado primeiro envia um hash que o compromete com sua chave, e só revela a chave real depois de receber o compromisso do outro lado. Essa ordem significa que um servidor malicioso tem de se comprometer com uma chave falsa às cegas, antes de ter visto a real — ele não pode escolher depois uma chave que colida, então o código curto continua confiável.",
+      ],
+      bullets: [
+        "Para a garantia mais forte, leia o código em voz alta em uma chamada ou compare-o pessoalmente, não apenas a olho em duas telas lado a lado.",
+        "Se os dois códigos não coincidirem, pare — trate isso como um sinal de que alguém pode estar interceptando a conexão.",
+      ],
+    },
+    {
+      heading: "Garantir que o que chega é exatamente o que foi enviado",
+      body: [
+        "A criptografia protege o sigilo, mas não prova automaticamente que nada foi corrompido ou adulterado pelo caminho. O Relayium verifica isso separadamente: cada bloco carrega sua própria etiqueta de autenticação AES-GCM, de modo que um bloco modificado simplesmente falha ao ser descriptografado. Além disso, à medida que cada arquivo é enviado, ambos os lados calculam um hash SHA-256 contínuo sobre seu conteúdo em texto claro; quando o arquivo termina, o hash do remetente é comparado com o do destinatário. Se coincidem, o que chegou ao disco é byte por byte o que foi enviado — se não, o arquivo é sinalizado em vez de ser aceito silenciosamente.",
+      ],
+    },
+    {
+      heading: "Links armazenados: uma chave diferente, gerada uma única vez, guardada apenas no link",
+      body: [
+        "A transferência em tempo real precisa das duas pessoas on-line ao mesmo tempo. Quando isso não é possível, o Relayium oferece em vez disso um link de download armazenado — e este usa um mecanismo genuinamente diferente, que convém não confundir com o de tempo real acima.",
+        "Aqui não há troca de chaves, porque ainda não existe um segundo dispositivo com quem trocar. Em vez disso, seu navegador gera uma única chave AES-256-GCM aleatória e a usa para criptografar os arquivos antes que qualquer coisa seja enviada. Essa chave nunca é enviada ao servidor — ela é anexada ao link de download depois de um caractere #, no que se chama fragmento da URL, uma parte do endereço que os navegadores deliberadamente nunca transmitem a um servidor. O servidor acaba armazenando apenas texto cifrado que não tem como descriptografar, mais dados administrativos como o tamanho do texto cifrado e um carimbo de data/hora de expiração. Qualquer pessoa que abra o link completo — incluindo o fragmento — pode descriptografar o arquivo localmente em seu navegador; quem não o tem vê apenas um bloco opaco no servidor. Essa é a parte de conhecimento zero: o servidor guarda o arquivo criptografado sem jamais ter os meios de lê-lo.",
+      ],
+      bullets: [
+        "Criar um link armazenado exige que o remetente faça login; abrir um para baixar nunca exige.",
+        "Os links podem ser configurados para expirar após 1 hora, 1 dia, 3 dias ou 7 dias, ou para se autodestruir após o primeiro download concluído.",
+        "Trate o link completo como o próprio arquivo — qualquer pessoa que o tenha pode descriptografá-lo, então compartilhe-o do jeito que compartilharia o arquivo.",
+      ],
+    },
+    {
+      heading: "O que o servidor pode ver — e o que ele não pode",
+      body: [
+        "Vale a pena explicitar exatamente onde o servidor se situa em tudo isso, porque «criptografado de ponta a ponta» é uma afirmação fácil de fazer e mais difícil de fazer com precisão. No modo tempo real, o próprio arquivo nunca toca os servidores do Relayium — ele é transmitido diretamente entre os dois navegadores. O trabalho do servidor de sinalização se limita a retransmitir as mensagens de estabelecimento de conexão (as informações técnicas SDP/ICE de que o WebRTC precisa para estabelecer um link direto) para que os dois dispositivos possam se encontrar; ele nunca vê o conteúdo dos arquivos, os nomes dos arquivos ou as chaves.",
+        "Quando uma conexão direta não é possível — ambos os lados atrás de NATs ou firewalls restritivos — o fluxo criptografado recorre a um servidor retransmissor TURN em vez de falhar de vez. O retransmissor só encaminha texto cifrado; ele não tem chave e não pode descriptografar o que passa por ele. O que ele faz é contar os bytes que retransmite em relação à cota mensal de retransmissão da conta que envia, puramente para medição e prevenção de abuso — sem nunca inspecionar o que há dentro.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "O Relayium pode ler meus arquivos?",
+        a: "Não. No modo tempo real, a chave de criptografia é derivada independentemente em ambos os dispositivos e nunca os deixa — os servidores do Relayium nunca a veem, nem o conteúdo dos arquivos. Para os links armazenados, a chave vive apenas no fragmento da URL, que os navegadores nunca enviam a nenhum servidor, então o servidor só chega a guardar texto cifrado que não pode descriptografar.",
+      },
+      {
+        q: "O que o servidor realmente vê?",
+        a: "No modo tempo real, apenas as informações de estabelecimento de conexão necessárias para apresentar dois dispositivos um ao outro — nunca os bytes do arquivo. Para os links armazenados, ele vê texto cifrado mais dados administrativos como tamanho e hora de expiração — nunca o texto claro, os nomes dos arquivos ou a chave de descriptografia.",
+      },
+      {
+        q: "O retransmissor TURN é um ponto fraco?",
+        a: "É um recurso alternativo usado apenas quando uma conexão direta não é possível, e ele sempre lida somente com texto cifrado — não tem chave, então não pode ler o que retransmite. O Relayium conta os bytes que retransmite em relação à cota mensal da sua conta, mas nunca inspeciona o conteúdo deles.",
+      },
+      {
+        q: "O Relayium é de código aberto?",
+        a: "Sim. O design do protocolo e todo o código de cliente e servidor são públicos no GitHub sob a licença MIT, então a criptografia descrita aqui pode ser auditada de forma independente em vez de aceita por fé.",
+      },
+      {
+        q: "E se os dois códigos de verificação na tela não coincidirem?",
+        a: "Pare a transferência. Uma divergência significa que a verificação de comprometer-e-depois-revelar falhou, o que aponta para um possível intermediário e não para uma falha inofensiva — não prossiga até entender o motivo.",
+      },
+    ],
+  },
+  cta: {
+    text: "Curioso para ver como isso fica na prática? Inicie uma transferência e veja o código de verificação aparecer você mesmo.",
+    button: "Experimente o Relayium agora",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "guides/how-relayium-encrypts-your-files",
   updated: "2026-07-09",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

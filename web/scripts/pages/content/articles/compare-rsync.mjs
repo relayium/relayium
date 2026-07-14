@@ -649,8 +649,192 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Relayium vs rsync: sincroniza carpetas sin la configuración de SSH",
+  description:
+    "Una comparación justa: rsync es el estándar maduro y potente para reflejar carpetas; Relayium sync cede parte de esa potencia a cambio de menos configuración y funciona entre redes sin un servidor SSH.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "rsync refleja carpetas desde 1996 por una razón: sincronización bidireccional, un algoritmo de delta con suma de comprobación rodante que transfiere solo los bytes que realmente cambiaron dentro de un archivo, y décadas de opciones para cada caso límite. Si ya tienes acceso SSH y conoces rsync, es muy difícil de superar.",
+    "El comando sync de Relayium cubre un trabajo más estrecho — un espejo incremental de un solo sentido — pero elimina un paso que rsync da por hecho que ya has realizado: configurar SSH. Se ejecuta sobre SSH si ya lo tienes, o conecta dos máquinas directamente sin ningún servidor SSH. Este artículo compara ambos con honestidad; sync no es un reemplazo completo de rsync, y las preguntas frecuentes lo dicen claramente.",
+  ],
+  sections: [
+    {
+      heading: "Lo que rsync hace bien",
+      body: [
+        "rsync es bidireccional — cualquiera de los dos lados puede ser el origen — y su algoritmo de transferencia delta compara bloques de un archivo con una suma de comprobación rodante, de modo que una pequeña edición en un archivo enorme solo envía los bloques cambiados, no el archivo entero otra vez. Eso, más décadas de opciones (--exclude, --link-dest para instantáneas con enlaces duros, compresión, límites de ancho de banda y más), lo convierten en la herramienta adecuada para muchos trabajos.",
+        "También está en todas partes: la mayoría de los sistemas Linux y macOS lo incluyen, y funciona sobre una conexión SSH que probablemente ya configuraste. Nada de eso es algo que Relayium sync intente reemplazar.",
+      ],
+    },
+    {
+      heading: "Lo que hace Relayium sync en su lugar",
+      body: [
+        "relayium sync <src...> <dest> [--delete] [--watch] es un espejo incremental de un solo sentido: compara el tamaño y la hora de modificación de cada archivo, omite lo que ya coincide y envía el resto.",
+        "Funciona sobre dos transportes. Apúntalo a user@host:/dest y se ejecuta sobre SSH — pero relayium ya debe estar instalado en el remoto; a diferencia de push, no hay respaldo tar para sync. Apúntalo en cambio a relayium://host[:port] y se salta SSH por completo: una conexión TLS 1.3 fijada directamente a un proceso a la escucha relayium serve en la otra máquina, autenticada por la huella de esa máquina (aprobada una vez, recordada después). Esa segunda vía es la verdadera comodidad: ningún sshd que configurar, ninguna clave SSH que gestionar — solo dos máquinas con relayium instalado y un puerto abierto entre ellas.",
+      ],
+      code: [
+        `relayium sync ./photos user@host:/backup/photos       # over SSH`,
+        `relayium sync ./photos relayium://203.0.113.9:9031    # daemon direct, no SSH`,
+      ],
+    },
+    {
+      heading: "Eliminaciones y sincronización continua",
+      body: [
+        "Por defecto sync solo añade y actualiza — nunca elimina nada por su cuenta. Pasa --delete para reflejar también las eliminaciones, pero el receptor tiene que optar por ello: debe estar ejecutando relayium serve --allow-delete. Si no lo está, la solicitud de eliminación se rechaza y se informa de vuelta al remitente en lugar de ignorarse en silencio.",
+        "Para una carpeta que cambia continuamente, --watch mantiene sync en marcha tras la primera pasada y vuelve a reflejar cada vez que un archivo cambia bajo el origen — rsync no tiene nada incorporado para esto; normalmente recurrirías a una tarea cron o a un envoltorio como lsyncd.",
+      ],
+      code: [
+        `relayium serve --dir /backup --port 9031 --allow-delete`,
+        `relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch`,
+      ],
+    },
+    {
+      heading: "Integridad, reanudación y los límites honestos",
+      body: [
+        "Cada archivo se verifica de extremo a extremo con un hash SHA-256, y una transferencia que se corta a mitad de un archivo se reanuda desde el desplazamiento de byte que ya está en disco en lugar de reiniciarse — útil por las mismas razones que en rsync.",
+        "Deja claro qué no es la reanudación: no es el algoritmo delta de rsync. Si un archivo ya está completamente presente pero tiene un tamaño o una marca de tiempo diferente, sync lo retransmite entero en vez de comparar los bloques cambiados dentro de él. Para un único archivo enorme que cambia ligeramente y a menudo, la transferencia delta de rsync moverá menos datos. sync además solo maneja archivos normales — los enlaces simbólicos y los archivos especiales se omiten, así que cualquier cosa que dependa de ellos necesita tratarse por separado.",
+      ],
+    },
+    {
+      heading: "Cuándo rsync sigue siendo la mejor herramienta",
+      body: [
+        "Elige rsync cuando necesites que la sincronización vaya en ambos sentidos, cuando ya tengas SSH configurado y no quieras otro daemon, cuando necesites control preciso (exclusiones, filtros, instantáneas con enlaces duros, límites de ancho de banda, compresión), o cuando un archivo cambie ligeramente y a menudo y la transferencia delta ahorre ancho de banda de verdad. Relayium sync no intenta cubrir nada de eso.",
+      ],
+      bullets: [
+        "Solo un sentido: sync refleja origen → destino; rsync puede ir en cualquier dirección.",
+        "Sin transferencia delta: sync reenvía entero un archivo cambiado; la suma de comprobación rodante de rsync envía solo los bloques cambiados.",
+        "Menos opciones: rsync tiene décadas de opciones para filtrar, comprimir y hacer instantáneas; sync tiene --delete y --watch.",
+        "Dónde gana Relayium sync: no requiere servidor SSH (daemon directo), TLS fijado con autenticación por huella, resincronización en tiempo real con --watch, y es gratis y sin cuenta para cualquier modo de transferencia.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Es Relayium sync un reemplazo completo de rsync?",
+        a: "No. Solo hace espejo de un solo sentido y no tiene un algoritmo delta a nivel de bloque como rsync — un archivo con un tamaño o una marca de tiempo diferente se retransmite entero, y tiene muchas menos opciones que rsync. Si necesitas sincronización bidireccional, control preciso de filtros, o quieres apoyarte en el ecosistema maduro de rsync, rsync sigue siendo la mejor herramienta.",
+      },
+      {
+        q: "¿sync necesita un servidor SSH?",
+        a: "No. El daemon directo (relayium://host:port) se salta SSH por completo: una conexión TLS fijada, autenticada por la huella del receptor, aprobada una vez y recordada después. También puedes ir sobre SSH (user@host:path), pero relayium debe estar instalado en el remoto para eso — y a diferencia de push, no hay respaldo tar para sync.",
+      },
+      {
+        q: "¿sync elimina los archivos que quité del origen?",
+        a: "Solo si pasas --delete y el serve del receptor se está ejecutando con --allow-delete. De lo contrario, la solicitud de eliminación se rechaza y se informa de vuelta al remitente, no se ignora en silencio.",
+      },
+      {
+        q: "¿Puede sincronizar continuamente en tiempo real?",
+        a: "Sí, con --watch. Tras el espejo inicial, sync sigue en marcha y vuelve a reflejar (con antirrebote) cada vez que un archivo cambia bajo el origen.",
+      },
+      {
+        q: "¿Es gratis?",
+        a: "Sí. La CLI de Relayium es completamente gratis, y ningún modo — sync incluido — necesita cuenta.",
+      },
+    ],
+  },
+  cta: {
+    text: "Refleja una carpeta entre dos de tus propias máquinas — sin necesidad de un servidor SSH.",
+    button: "Obtener la CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Seguir leyendo",
+};
+
+const pt = {
+  title: "Relayium vs rsync: sincronize pastas sem a configuração de SSH",
+  description:
+    "Uma comparação justa: o rsync é o padrão maduro e poderoso para espelhar pastas; o Relayium sync abre mão de parte dessa força em troca de menos configuração e funciona entre redes sem um servidor SSH.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "O rsync espelha pastas desde 1996 por um motivo: sincronização bidirecional, um algoritmo de delta com soma de verificação rolante que transfere apenas os bytes que de fato mudaram dentro de um arquivo, e décadas de flags para cada caso extremo. Se você já tem acesso SSH e conhece o rsync, é muito difícil superá-lo.",
+    "O comando sync do Relayium cobre um trabalho mais estreito — um espelho incremental de sentido único — mas remove uma etapa que o rsync presume que você já fez: configurar o SSH. Ele roda sobre SSH se você já tiver, ou conecta duas máquinas diretamente sem nenhum servidor SSH. Este artigo compara os dois com honestidade; o sync não é um substituto completo do rsync, e as perguntas frequentes dizem isso claramente.",
+  ],
+  sections: [
+    {
+      heading: "O que o rsync acerta",
+      body: [
+        "O rsync é bidirecional — qualquer um dos lados pode ser a origem — e seu algoritmo de transferência delta compara blocos de um arquivo com uma soma de verificação rolante, de modo que uma pequena edição em um arquivo enorme só envia os blocos alterados, não o arquivo inteiro de novo. Isso, mais décadas de flags (--exclude, --link-dest para snapshots com hard links, compressão, limites de banda e mais), fazem dele a ferramenta certa para muitos trabalhos.",
+        "Ele também está em toda parte: a maioria dos sistemas Linux e macOS já vem com ele, e funciona sobre uma conexão SSH que você provavelmente já configurou. Nada disso é algo que o Relayium sync tente substituir.",
+      ],
+    },
+    {
+      heading: "O que o Relayium sync faz em vez disso",
+      body: [
+        "relayium sync <src...> <dest> [--delete] [--watch] é um espelho incremental de sentido único: ele compara o tamanho e a hora de modificação de cada arquivo, pula o que já corresponde e envia o resto.",
+        "Ele funciona sobre dois transportes. Aponte-o para user@host:/dest e ele roda sobre SSH — mas o relayium já precisa estar instalado no remoto; diferente do push, não há recurso de reserva tar para o sync. Aponte-o em vez disso para relayium://host[:port] e ele pula o SSH inteiramente: uma conexão TLS 1.3 fixada diretamente a um processo relayium serve à escuta na outra máquina, autenticada pela impressão digital dessa máquina (aprovada uma vez, lembrada depois). Essa segunda via é a real conveniência: nenhum sshd para configurar, nenhuma chave SSH para gerenciar — apenas duas máquinas com o relayium instalado e uma porta aberta entre elas.",
+      ],
+      code: [
+        `relayium sync ./photos user@host:/backup/photos       # over SSH`,
+        `relayium sync ./photos relayium://203.0.113.9:9031    # daemon direct, no SSH`,
+      ],
+    },
+    {
+      heading: "Exclusões e sincronização contínua",
+      body: [
+        "Por padrão o sync só adiciona e atualiza — ele nunca exclui nada por conta própria. Passe --delete para espelhar também as exclusões, mas o receptor precisa optar por isso: ele deve estar rodando relayium serve --allow-delete. Se não estiver, a solicitação de exclusão é recusada e reportada de volta ao remetente, em vez de ser ignorada em silêncio.",
+        "Para uma pasta que muda continuamente, o --watch mantém o sync rodando após a primeira passada e espelha de novo sempre que um arquivo muda sob a origem — o rsync não tem nada embutido para isso; normalmente você recorreria a uma tarefa cron ou a um invólucro como o lsyncd.",
+      ],
+      code: [
+        `relayium serve --dir /backup --port 9031 --allow-delete`,
+        `relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch`,
+      ],
+    },
+    {
+      heading: "Integridade, retomada e os limites honestos",
+      body: [
+        "Cada arquivo é verificado de ponta a ponta com um hash SHA-256, e uma transferência que é interrompida no meio de um arquivo retoma a partir do deslocamento de byte que já está em disco, em vez de recomeçar — útil pelas mesmas razões que no rsync.",
+        "Deixe claro o que a retomada não é: ela não é o algoritmo delta do rsync. Se um arquivo já está totalmente presente mas tem um tamanho ou um carimbo de data/hora diferente, o sync o retransmite inteiro em vez de comparar os blocos alterados dentro dele. Para um único arquivo enorme que muda ligeiramente e com frequência, a transferência delta do rsync move menos dados. O sync também só lida com arquivos comuns — links simbólicos e arquivos especiais são pulados, então qualquer coisa que dependa deles precisa ser tratada à parte.",
+      ],
+    },
+    {
+      heading: "Quando o rsync ainda é a melhor ferramenta",
+      body: [
+        "Escolha o rsync quando você precisar que a sincronização vá nos dois sentidos, quando já tiver o SSH configurado e não quiser outro daemon, quando precisar de controle refinado (exclusões, filtros, snapshots com hard links, limites de banda, compressão), ou quando um arquivo mudar ligeiramente e com frequência e a transferência delta economizar banda de verdade. O Relayium sync não tenta cobrir nada disso.",
+      ],
+      bullets: [
+        "Apenas sentido único: o sync espelha origem → destino; o rsync pode ir em qualquer direção.",
+        "Sem transferência delta: o sync reenvia inteiro um arquivo alterado; a soma de verificação rolante do rsync envia apenas os blocos alterados.",
+        "Menos opções: o rsync tem décadas de flags para filtragem, compressão e snapshots; o sync tem --delete e --watch.",
+        "Onde o Relayium sync vence: não exige servidor SSH (daemon direto), TLS fixado com autenticação por impressão digital, ressincronização em tempo real com --watch, e é gratuito e sem conta para qualquer modo de transferência.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "O Relayium sync é um substituto completo do rsync?",
+        a: "Não. Ele só faz espelhamento de sentido único e não tem um algoritmo delta em nível de bloco como o rsync — um arquivo com tamanho ou carimbo de data/hora diferente é retransmitido inteiro, e ele tem bem menos flags que o rsync. Se você precisa de sincronização bidirecional, de controle refinado de filtros, ou quer se apoiar no ecossistema maduro do rsync, o rsync ainda é a melhor ferramenta.",
+      },
+      {
+        q: "O sync precisa de um servidor SSH?",
+        a: "Não. O daemon direto (relayium://host:port) pula o SSH inteiramente: uma conexão TLS fixada, autenticada pela impressão digital do receptor, aprovada uma vez e lembrada depois. Você também pode ir por SSH (user@host:path), mas o relayium precisa estar instalado no remoto para isso — e diferente do push, não há recurso de reserva tar para o sync.",
+      },
+      {
+        q: "O sync exclui os arquivos que removi da origem?",
+        a: "Só se você passar --delete e o serve do receptor estiver rodando com --allow-delete. Caso contrário, a solicitação de exclusão é recusada e reportada de volta ao remetente, não ignorada em silêncio.",
+      },
+      {
+        q: "Ele pode sincronizar continuamente em tempo real?",
+        a: "Sim, com --watch. Após o espelhamento inicial, o sync continua rodando e espelha de novo (com antirrebote) sempre que um arquivo muda sob a origem.",
+      },
+      {
+        q: "É gratuito?",
+        a: "Sim. A CLI do Relayium é completamente gratuita, e nenhum modo — incluindo o sync — precisa de conta.",
+      },
+    ],
+  },
+  cta: {
+    text: "Espelhe uma pasta entre duas máquinas suas — sem necessidade de um servidor SSH.",
+    button: "Obter a CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "compare/rsync",
   updated: "2026-07-12",
-  langs: withInstall({ en, zh, ja, ko, de, fr, ar }),
+  langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

@@ -14,6 +14,8 @@
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/automate-server-backups" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/automate-server-backups" />
     <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/automate-server-backups" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/automate-server-backups" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -61,7 +63,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
       <h1>cron で暗号化されたサーバーバックアップを自動化する</h1>
       <p class="updated">最終更新: 2026-07-12</p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/automate-server-backups">English</a><a href="/zh/how-to/automate-server-backups">中文</a><a href="/ja/how-to/automate-server-backups" aria-current="true">日本語</a><a href="/ko/how-to/automate-server-backups">한국어</a><a href="/de/how-to/automate-server-backups">Deutsch</a><a href="/fr/how-to/automate-server-backups">Français</a><a href="/ar/how-to/automate-server-backups">العربية</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/automate-server-backups">English</a><a href="/zh/how-to/automate-server-backups">中文</a><a href="/ja/how-to/automate-server-backups" aria-current="true">日本語</a><a href="/ko/how-to/automate-server-backups">한국어</a><a href="/de/how-to/automate-server-backups">Deutsch</a><a href="/fr/how-to/automate-server-backups">Français</a><a href="/ar/how-to/automate-server-backups">العربية</a><a href="/es/how-to/automate-server-backups">Español</a><a href="/pt/how-to/automate-server-backups">Português</a></nav>
       <p class="lead">自分で覚えて実行しなければならないバックアップは、たいてい実行されません。cron は覚えていてくれますし、Relayium CLI はまさにそのために作られています。ディレクトリを別のマシンへコピー(またはミラー)し、すべてのファイルを検証し、ネットワークが切れても中断した所から再開する、単一の非対話型コマンドです。</p>
       <p class="lead">本ガイドでは、cron から relayium push と増分同期の relayium sync をスケジュール実行する方法、どちらでも使える2つの転送方式、そしてそのままコピーできる crontab の行を扱います。</p>
       <h2>push と sync:全体コピーか増分ミラーか</h2>

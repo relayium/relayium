@@ -49,6 +49,18 @@
     <priority>0.5</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/guides</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/guides</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/zh/</loc>
     <lastmod>2026-07-03</lastmod>
     <changefreq>weekly</changefreq>
@@ -80,6 +92,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/</loc>
+    <lastmod>2026-07-03</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/</loc>
+    <lastmod>2026-07-03</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/</loc>
     <lastmod>2026-07-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
@@ -127,6 +151,18 @@
     <priority>0.3</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/privacy</loc>
+    <lastmod>2026-07-01</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/privacy</loc>
+    <lastmod>2026-07-01</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/terms</loc>
     <lastmod>2026-07-01</lastmod>
     <changefreq>yearly</changefreq>
@@ -164,6 +200,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/terms</loc>
+    <lastmod>2026-07-01</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/terms</loc>
+    <lastmod>2026-07-01</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/terms</loc>
     <lastmod>2026-07-01</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
@@ -211,6 +259,18 @@
     <priority>0.3</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/security</loc>
+    <lastmod>2026-07-01</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/security</loc>
+    <lastmod>2026-07-01</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/compare/snapdrop</loc>
     <lastmod>2026-07-03</lastmod>
     <changefreq>monthly</changefreq>
@@ -248,6 +308,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/compare/snapdrop</loc>
+    <lastmod>2026-07-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/compare/snapdrop</loc>
+    <lastmod>2026-07-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/compare/snapdrop</loc>
     <lastmod>2026-07-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -295,6 +367,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/compare/airdrop</loc>
+    <lastmod>2026-07-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/compare/airdrop</loc>
+    <lastmod>2026-07-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/compare/wetransfer</loc>
     <lastmod>2026-07-03</lastmod>
     <changefreq>monthly</changefreq>
@@ -332,6 +416,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/compare/wetransfer</loc>
+    <lastmod>2026-07-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/compare/wetransfer</loc>
+    <lastmod>2026-07-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/compare/wetransfer</loc>
     <lastmod>2026-07-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -379,6 +475,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/how-to/transfer-files-android-to-iphone</loc>
+    <lastmod>2026-07-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/how-to/transfer-files-android-to-iphone</loc>
+    <lastmod>2026-07-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/how-to/send-files-pc-to-phone-wirelessly</loc>
     <lastmod>2026-07-03</lastmod>
     <changefreq>monthly</changefreq>
@@ -416,6 +524,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/how-to/send-files-pc-to-phone-wirelessly</loc>
+    <lastmod>2026-07-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/how-to/send-files-pc-to-phone-wirelessly</loc>
+    <lastmod>2026-07-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/how-to/send-files-pc-to-phone-wirelessly</loc>
     <lastmod>2026-07-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -463,6 +583,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/how-to/send-large-files-without-cloud</loc>
+    <lastmod>2026-07-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/how-to/send-large-files-without-cloud</loc>
+    <lastmod>2026-07-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/guides/transfer-files-from-terminal</loc>
     <lastmod>2026-07-08</lastmod>
     <changefreq>monthly</changefreq>
@@ -500,6 +632,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/guides/transfer-files-from-terminal</loc>
+    <lastmod>2026-07-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/guides/transfer-files-from-terminal</loc>
+    <lastmod>2026-07-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/guides/transfer-files-from-terminal</loc>
     <lastmod>2026-07-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -547,6 +691,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/guides/back-up-a-server-over-ssh</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/guides/back-up-a-server-over-ssh</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/guides/send-a-file-to-someone</loc>
     <lastmod>2026-07-12</lastmod>
     <changefreq>monthly</changefreq>
@@ -584,6 +740,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/guides/send-a-file-to-someone</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/guides/send-a-file-to-someone</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/guides/send-a-file-to-someone</loc>
     <lastmod>2026-07-12</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -631,6 +799,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/guides/server-to-server-transfers</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/guides/server-to-server-transfers</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/guides/sync-a-large-folder-between-servers</loc>
     <lastmod>2026-07-08</lastmod>
     <changefreq>monthly</changefreq>
@@ -668,6 +848,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/guides/sync-a-large-folder-between-servers</loc>
+    <lastmod>2026-07-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/guides/sync-a-large-folder-between-servers</loc>
+    <lastmod>2026-07-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/guides/sync-a-large-folder-between-servers</loc>
     <lastmod>2026-07-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -715,6 +907,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/guides/push-to-cloud-pull-on-another-computer</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/guides/push-to-cloud-pull-on-another-computer</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/how-to/share-a-file-with-an-expiring-link</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
@@ -752,6 +956,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/how-to/share-a-file-with-an-expiring-link</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/how-to/share-a-file-with-an-expiring-link</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/how-to/share-a-file-with-an-expiring-link</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -799,6 +1015,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/guides/self-host-relayium</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/guides/self-host-relayium</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/how-to/send-files-between-two-computers-over-the-internet</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
@@ -836,6 +1064,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/how-to/send-files-between-two-computers-over-the-internet</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/how-to/send-files-between-two-computers-over-the-internet</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/how-to/send-files-between-two-computers-over-the-internet</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -883,6 +1123,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/compare/croc</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/compare/croc</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/guides/how-relayium-encrypts-your-files</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
@@ -920,6 +1172,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/guides/how-relayium-encrypts-your-files</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/guides/how-relayium-encrypts-your-files</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/guides/how-relayium-encrypts-your-files</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -967,6 +1231,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/compare/google-drive</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/compare/google-drive</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/compare/rsync</loc>
     <lastmod>2026-07-12</lastmod>
     <changefreq>monthly</changefreq>
@@ -1004,6 +1280,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/compare/rsync</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/compare/rsync</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/compare/rsync</loc>
     <lastmod>2026-07-12</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -1051,6 +1339,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/compare/firefox-send</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/compare/firefox-send</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/how-to/transfer-files-by-scanning-a-qr-code</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
@@ -1088,6 +1388,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/how-to/transfer-files-by-scanning-a-qr-code</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/how-to/transfer-files-by-scanning-a-qr-code</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/how-to/transfer-files-by-scanning-a-qr-code</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -1135,6 +1447,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/guides/receive-files-from-the-command-line</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/guides/receive-files-from-the-command-line</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/how-to/send-a-folder</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
@@ -1172,6 +1496,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/how-to/send-a-folder</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/how-to/send-a-folder</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/how-to/send-a-folder</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -1219,6 +1555,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/guides/run-relayium-as-an-always-on-service</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/guides/run-relayium-as-an-always-on-service</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/how-to/automate-server-backups</loc>
     <lastmod>2026-07-12</lastmod>
     <changefreq>monthly</changefreq>
@@ -1256,6 +1604,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/how-to/automate-server-backups</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/how-to/automate-server-backups</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/how-to/automate-server-backups</loc>
     <lastmod>2026-07-12</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -1303,6 +1663,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/compare/localsend</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/compare/localsend</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/compare/scp</loc>
     <lastmod>2026-07-12</lastmod>
     <changefreq>monthly</changefreq>
@@ -1340,6 +1712,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/compare/scp</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/compare/scp</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/compare/scp</loc>
     <lastmod>2026-07-12</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -1387,6 +1771,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/compare/magic-wormhole</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/compare/magic-wormhole</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/compare/nextcloud</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
@@ -1424,6 +1820,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/compare/nextcloud</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/compare/nextcloud</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/compare/nextcloud</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -1471,6 +1879,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/compare/dropbox</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/compare/dropbox</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/how-to/airdrop-for-windows-and-android</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
@@ -1508,6 +1928,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/how-to/airdrop-for-windows-and-android</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/how-to/airdrop-for-windows-and-android</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/how-to/airdrop-for-windows-and-android</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -1555,6 +1987,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/how-to/transfer-files-between-mac-and-windows</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/how-to/transfer-files-between-mac-and-windows</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/how-to/send-files-on-the-same-wifi</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
@@ -1592,6 +2036,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/how-to/send-files-on-the-same-wifi</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/how-to/send-files-on-the-same-wifi</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/how-to/send-files-on-the-same-wifi</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -1639,6 +2095,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/guides/what-is-peer-to-peer-file-transfer</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/guides/what-is-peer-to-peer-file-transfer</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/guides/is-it-safe-to-send-files-over-the-internet</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
@@ -1676,6 +2144,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/guides/is-it-safe-to-send-files-over-the-internet</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/guides/is-it-safe-to-send-files-over-the-internet</loc>
+    <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/guides/is-it-safe-to-send-files-over-the-internet</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -1723,6 +2203,18 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/guides/bring-your-own-node</loc>
+    <lastmod>2026-07-10</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/guides/bring-your-own-node</loc>
+    <lastmod>2026-07-10</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/cross-network</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>weekly</changefreq>
@@ -1765,6 +2257,18 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://relayium.com/es/cross-network</loc>
+    <lastmod>2026-07-10</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/cross-network</loc>
+    <lastmod>2026-07-10</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://relayium.com/offline-transfer</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>weekly</changefreq>
@@ -1802,6 +2306,18 @@
   </url>
   <url>
     <loc>https://relayium.com/ar/offline-transfer</loc>
+    <lastmod>2026-07-10</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/es/offline-transfer</loc>
+    <lastmod>2026-07-10</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://relayium.com/pt/offline-transfer</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>

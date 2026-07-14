@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AirDrop para Windows, Linux e Android · Relayium</title>
+    <meta name="description" content="Não existe um AirDrop oficial para Windows, Linux ou Android — aqui está o mais próximo: compartilhamento instantâneo na mesma Wi-Fi pelo navegador, sem conta, sem instalação, além de um jeito de alcançar pela internet que o AirDrop não consegue." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/pt/how-to/airdrop-for-windows-and-android" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/airdrop-for-windows-and-android" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/airdrop-for-windows-and-android" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/airdrop-for-windows-and-android" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/airdrop-for-windows-and-android" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/airdrop-for-windows-and-android" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/airdrop-for-windows-and-android" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/airdrop-for-windows-and-android" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/airdrop-for-windows-and-android" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/airdrop-for-windows-and-android" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/airdrop-for-windows-and-android" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="AirDrop para Windows, Linux e Android" />
+    <meta property="og:description" content="Não existe um AirDrop oficial para Windows, Linux ou Android — aqui está o mais próximo: compartilhamento instantâneo na mesma Wi-Fi pelo navegador, sem conta, sem instalação, além de um jeito de alcançar pela internet que o AirDrop não consegue." />
+    <meta property="og:url" content="https://relayium.com/pt/how-to/airdrop-for-windows-and-android" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="AirDrop para Windows, Linux e Android" />
+    <meta name="twitter:description" content="Não existe um AirDrop oficial para Windows, Linux ou Android — aqui está o mais próximo: compartilhamento instantâneo na mesma Wi-Fi pelo navegador, sem conta, sem instalação, além de um jeito de alcançar pela internet que o AirDrop não consegue." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"AirDrop para Windows, Linux e Android","description":"Não existe um AirDrop oficial para Windows, Linux ou Android — aqui está o mais próximo: compartilhamento instantâneo na mesma Wi-Fi pelo navegador, sem conta, sem instalação, além de um jeito de alcançar pela internet que o AirDrop não consegue.","inLanguage":"pt","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/pt/how-to/airdrop-for-windows-and-android","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"Existe um app oficial do AirDrop para Windows ou Android?","acceptedAnswer":{"@type":"Answer","text":"Não — o AirDrop é exclusivo dos dispositivos da Apple e a Apple nunca lançou um cliente para Windows ou Android. O Relayium é um equivalente baseado em navegador: abra relayium.com nos dois dispositivos e ele funciona da mesma forma independentemente da plataforma, inclusive em pares mistos de Apple e não Apple."}},{"@type":"Question","name":"Preciso de uma conta?","acceptedAnswer":{"@type":"Answer","text":"Não para o fluxo na mesma Wi-Fi — abra a página nos dois dispositivos e eles se descobrem, sem nenhum login. Enviar entre redes diferentes com um código de emparelhamento exige que o remetente entre; a pessoa que recebe nunca precisa de conta, em nenhum dos dois modos de rede."}},{"@type":"Question","name":"Preciso instalar alguma coisa?","acceptedAnswer":{"@type":"Answer","text":"Não. É uma página web em toda plataforma — Windows, Linux, macOS, Android e iOS — então não há nada para baixar de uma loja nem nada para manter atualizado."}},{"@type":"Question","name":"Qual a diferença entre isto e a comparação Relayium versus AirDrop?","acceptedAnswer":{"@type":"Answer","text":"Aquele artigo é uma análise frente a frente de onde o AirDrop é genuinamente melhor (casas puramente Apple) e onde ele fica aquém. Este guia é o tutorial para de fato obter a experiência estilo AirDrop quando pelo menos um dispositivo não é da Apple."}},{"@type":"Question","name":"Dá para enviar para um grupo, como o AirDrop faz?","acceptedAnswer":{"@type":"Answer","text":"Na mesma rede, sim — a sala local não se limita a dois dispositivos, então mais de um dispositivo próximo pode receber ao mesmo tempo. O modo por código de emparelhamento para envio pela internet é uma conexão direta entre dois dispositivos."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=pt">Relayium</a></header>
+      <h1>AirDrop para Windows, Linux e Android</h1>
+      <p class="updated">Última atualização: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/airdrop-for-windows-and-android">English</a><a href="/zh/how-to/airdrop-for-windows-and-android">中文</a><a href="/ja/how-to/airdrop-for-windows-and-android">日本語</a><a href="/ko/how-to/airdrop-for-windows-and-android">한국어</a><a href="/de/how-to/airdrop-for-windows-and-android">Deutsch</a><a href="/fr/how-to/airdrop-for-windows-and-android">Français</a><a href="/ar/how-to/airdrop-for-windows-and-android">العربية</a><a href="/es/how-to/airdrop-for-windows-and-android">Español</a><a href="/pt/how-to/airdrop-for-windows-and-android" aria-current="true">Português</a></nav>
+      <p class="lead">O AirDrop só existe dentro do mundo da Apple, o que deixa todos os demais — Windows, Linux, Android e qualquer casa com uma mistura de dispositivos — sem um equivalente embutido. Este guia mostra o mais próximo do AirDrop para dispositivos que não são da Apple: abra uma página web nas duas pontas e o arquivo simplesmente se move.</p>
+      <p class="lead">Funciona da mesma forma independentemente da plataforma, então também cobre o caso que o AirDrop nunca lida bem: um notebook com Windows, um desktop com Linux e um celular Android todos na mesma sala, ou os três mais um iPhone incluído.</p>
+      <h2>O fluxo estilo AirDrop: mesma Wi-Fi, no navegador</h2>
+      <p>Este é o caso do dia a dia para o qual o AirDrop foi feito, e o Relayium o iguala sem precisar de um app de nenhuma loja.</p>
+      <ul><li>Em cada dispositivo, abra relayium.com em qualquer navegador moderno — Chrome ou Edge no Windows, Firefox ou Chrome no Linux, Chrome no Android.</li><li>Na mesma Wi-Fi, os dispositivos se encontram automaticamente — sem código, sem conta, sem etapa de emparelhamento, assim como o AirDrop descobre dispositivos próximos.</li><li>Arraste arquivos para a página (ou uma pasta inteira — até 1.000 arquivos por lote), escolha o outro dispositivo e confirme o código de 6 dígitos correspondente exibido nas duas telas.</li><li>A transferência ocorre diretamente, ponto a ponto, pela sua própria rede — nada é enviado para um servidor no meio.</li></ul>
+      <h2>Pela internet: algo que o AirDrop não consegue fazer</h2>
+      <p>O AirDrop é só de proximidade — saia do alcance de Bluetooth/Wi-Fi e ele para de funcionar. O segundo modo do Relayium cobre exatamente essa lacuna: dois dispositivos em redes completamente diferentes, em qualquer lugar do mundo.</p>
+      <p>O remetente entra e recebe um código de emparelhamento curto (com um link de entrada e um código QR); o destinatário o digita, escaneia o QR ou abre o link — e nunca precisa de conta. Os dois dispositivos então se conectam diretamente sempre que as redes permitirem; quando um caminho direto não é possível, o fluxo criptografado recorre a um retransmissor TURN que só vê texto cifrado, então permanece criptografado de ponta a ponta o caminho todo. Uma conexão caída pode ser retomada em vez de recomeçar do zero.</p>
+      <h2>O que realmente protege o arquivo</h2>
+      <p>Ambos os modos acima são transferências em tempo real, e ambos usam a mesma criptografia: uma troca de chaves X25519 deriva uma chave usada para AES-256-GCM por bloco, negociada apenas entre os dois dispositivos. Os dois lados exibem o mesmo código de verificação de 6 dígitos (uma Short Authentication String) para que você possa confirmar que ninguém está no meio, e cada arquivo é verificado de ponta a ponta com um hash SHA-256.</p>
+      <p>Nesse modo, nada é armazenado em um servidor — existe apenas durante a transferência. O Relayium é de código aberto sob a licença MIT em github.com/relayium/relayium, então a mecânica é auditável em vez de uma caixa-preta.</p>
+      <h2>Os limites práticos, com honestidade</h2>
+      <p>Como o arquivo nunca aterrissa em um servidor, não há cota de upload — o limite real é qual navegador está recebendo. No Windows, Linux ou Android com Chrome ou Edge, os dados que chegam são gravados direto no disco, então arquivos de vários gigabytes não são problema. Em um receptor com Firefox ou Safari do iOS em um conjunto misto, o arquivo é armazenado na memória, então mantenha essas transferências abaixo de cerca de 200 MB.</p>
+      <p>Pastas também funcionam: escolha uma pasta no desktop (não no iOS) e os caminhos relativos são preservados. Se o navegador receptor puder gravar direto em um diretório escolhido (Chrome, Edge), os arquivos ficam em seus lugares; caso contrário (Firefox, Safari), a pasta inteira chega como um único .zip que se descompacta com a mesma estrutura.</p>
+      <h2>Perguntas frequentes</h2>
+      <h3>Existe um app oficial do AirDrop para Windows ou Android?</h3>
+      <p>Não — o AirDrop é exclusivo dos dispositivos da Apple e a Apple nunca lançou um cliente para Windows ou Android. O Relayium é um equivalente baseado em navegador: abra relayium.com nos dois dispositivos e ele funciona da mesma forma independentemente da plataforma, inclusive em pares mistos de Apple e não Apple.</p>
+      <h3>Preciso de uma conta?</h3>
+      <p>Não para o fluxo na mesma Wi-Fi — abra a página nos dois dispositivos e eles se descobrem, sem nenhum login. Enviar entre redes diferentes com um código de emparelhamento exige que o remetente entre; a pessoa que recebe nunca precisa de conta, em nenhum dos dois modos de rede.</p>
+      <h3>Preciso instalar alguma coisa?</h3>
+      <p>Não. É uma página web em toda plataforma — Windows, Linux, macOS, Android e iOS — então não há nada para baixar de uma loja nem nada para manter atualizado.</p>
+      <h3>Qual a diferença entre isto e a comparação Relayium versus AirDrop?</h3>
+      <p>Aquele artigo é uma análise frente a frente de onde o AirDrop é genuinamente melhor (casas puramente Apple) e onde ele fica aquém. Este guia é o tutorial para de fato obter a experiência estilo AirDrop quando pelo menos um dispositivo não é da Apple.</p>
+      <h3>Dá para enviar para um grupo, como o AirDrop faz?</h3>
+      <p>Na mesma rede, sim — a sala local não se limita a dois dispositivos, então mais de um dispositivo próximo pode receber ao mesmo tempo. O modo por código de emparelhamento para envio pela internet é uma conexão direta entre dois dispositivos.</p>
+      <div class="ctacard">
+        <p>Abra o Relayium no seu dispositivo Windows, Linux ou Android e naquele para o qual está enviando — sem conta necessária na mesma rede.</p>
+        <a class="cta" href="/?lang=pt">Experimente o Relayium agora</a>
+      </div>
+      <h2>Continue lendo</h2>
+      <ul class="related"><li><a href="/pt/compare/snapdrop">Relayium vs Snapdrop e PairDrop: qual transferência P2P segura?</a></li><li><a href="/pt/compare/airdrop">Relayium vs AirDrop: uma alternativa ao AirDrop multiplataforma</a></li><li><a href="/pt/compare/wetransfer">Relayium vs WeTransfer: envie arquivos grandes sem o servidor</a></li><li><a href="/pt/how-to/transfer-files-android-to-iphone">Como transferir arquivos do Android para o iPhone (sem cabo)</a></li><li><a href="/pt/how-to/send-files-pc-to-phone-wirelessly">Enviar arquivos do PC para o celular sem fio, sem cabo nem app</a></li><li><a href="/pt/how-to/send-large-files-without-cloud">Como enviar arquivos grandes sem a nuvem</a></li><li><a href="/pt/guides/transfer-files-from-terminal">Transfira arquivos pelo terminal com a CLI do Relayium</a></li><li><a href="/pt/guides/back-up-a-server-over-ssh">Faça backup de arquivos no seu próprio servidor via SSH com a CLI do Relayium</a></li><li><a href="/pt/guides/send-a-file-to-someone">Enviar um arquivo para alguém entre redes com a CLI do Relayium</a></li><li><a href="/pt/guides/server-to-server-transfers">Transferências de servidor para servidor com a CLI do Relayium (daemon direct)</a></li><li><a href="/pt/guides/sync-a-large-folder-between-servers">Sincronizar uma pasta grande entre dois servidores (retomável, em segundo plano)</a></li><li><a href="/pt/guides/push-to-cloud-pull-on-another-computer">Suba arquivos para a nuvem e os pegue em outro computador</a></li><li><a href="/pt/how-to/share-a-file-with-an-expiring-link">Compartilhar um arquivo com um link de download seguro e com validade</a></li><li><a href="/pt/guides/self-host-relayium">Hospede o Relayium por conta própria: rode seu próprio servidor de transferência de arquivos</a></li><li><a href="/pt/how-to/send-files-between-two-computers-over-the-internet">Enviar arquivos entre dois computadores pela Internet</a></li><li><a href="/pt/compare/croc">Relayium vs croc: transferência de arquivos criptografada do terminal</a></li><li><a href="/pt/guides/how-relayium-encrypts-your-files">Como o Relayium criptografa seus arquivos de ponta a ponta</a></li><li><a href="/pt/compare/google-drive">Relayium vs Google Drive para enviar arquivos</a></li><li><a href="/pt/compare/rsync">Relayium vs rsync: sincronize pastas sem a configuração de SSH</a></li><li><a href="/pt/compare/firefox-send">A melhor alternativa ao Firefox Send em 2026</a></li><li><a href="/pt/how-to/transfer-files-by-scanning-a-qr-code">Transferir arquivos escaneando um código QR</a></li><li><a href="/pt/guides/receive-files-from-the-command-line">Receber arquivos pela linha de comando</a></li><li><a href="/pt/how-to/send-a-folder">Como enviar uma pasta inteira, não só arquivos</a></li><li><a href="/pt/guides/run-relayium-as-an-always-on-service">Execute o Relayium como um serviço de recepção sempre ativo</a></li><li><a href="/pt/how-to/automate-server-backups">Automatize backups criptografados do servidor com uma tarefa cron</a></li><li><a href="/pt/compare/localsend">Relayium vs LocalSend: qual transferência local usar</a></li><li><a href="/pt/compare/scp">Relayium vs scp: transferência de arquivos mais simples por SSH</a></li><li><a href="/pt/compare/magic-wormhole">Relayium vs magic-wormhole: transferência de arquivos por CLI</a></li><li><a href="/pt/compare/nextcloud">Relayium vs Nextcloud para enviar arquivos</a></li><li><a href="/pt/compare/dropbox">Relayium vs Dropbox para enviar um arquivo</a></li><li><a href="/pt/how-to/transfer-files-between-mac-and-windows">Transferir arquivos entre um Mac e um PC com Windows</a></li><li><a href="/pt/how-to/send-files-on-the-same-wifi">Enviar arquivos entre dispositivos na mesma Wi-Fi</a></li><li><a href="/pt/guides/what-is-peer-to-peer-file-transfer">O que é transferência de arquivos ponto a ponto?</a></li><li><a href="/pt/guides/is-it-safe-to-send-files-over-the-internet">É seguro enviar arquivos pela internet?</a></li><li><a href="/pt/guides/bring-your-own-node">Use seu próprio nó: aproveite o retransmissor e o armazenamento do Relayium de graça</a></li><li><a href="/pt/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=pt">← Relayium</a>
+        <a href="/pt/guides">Guias</a>
+        <a href="/pt/privacy">undefined</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

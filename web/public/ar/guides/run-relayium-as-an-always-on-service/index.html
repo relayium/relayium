@@ -14,6 +14,8 @@
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/run-relayium-as-an-always-on-service" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/run-relayium-as-an-always-on-service" />
     <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/run-relayium-as-an-always-on-service" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/run-relayium-as-an-always-on-service" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/run-relayium-as-an-always-on-service" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -61,7 +63,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=ar">Relayium</a></header>
       <h1>شغّل Relayium كخدمة استقبال دائمة التشغيل</h1>
       <p class="updated">آخر تحديث: 2026-07-12</p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service">Français</a><a href="/ar/guides/run-relayium-as-an-always-on-service" aria-current="true">العربية</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service">Français</a><a href="/ar/guides/run-relayium-as-an-always-on-service" aria-current="true">العربية</a><a href="/es/guides/run-relayium-as-an-always-on-service">Español</a><a href="/pt/guides/run-relayium-as-an-always-on-service">Português</a></nav>
       <p class="lead">يتعامل relayium serve --once مع عملية نقل واردة واحدة ثم يخرج — وهذا مناسب لعملية سحب لمرة واحدة. لكن إذا أردت أن تكون آلة ما نقطة إنزال دائمة — خادم منزلي تصل إليه النسخ الاحتياطية ليلاً، أو آلة بناء يدفع إليها CI منتجاتها، أو NAS يستطيع هاتفك إرسال الصور إليه في أي وقت — فأنت تريد أن يظل serve قيد التشغيل طوال الوقت، لا أن يُشغَّل يدوياً لكل عملية نقل.</p>
       <p class="lead">يغطّي هذا الدليل بدء مُستمِع طويل التشغيل، والموافقة على من يُسمَح له بالدفع إليه، والتفويض المسبق للنظراء في الحالات التي لا يكون فيها أحد أمام الطرفية، وتشغيله تحت systemd، والسماح لمُرسِل يستخدم sync --delete بأن يعكس عمليات الحذف.</p>
       <h2>Before you start</h2>

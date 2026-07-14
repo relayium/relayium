@@ -747,8 +747,220 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "¿Es seguro enviar archivos por internet?",
+  description:
+    "Qué sale mal en realidad con el correo electrónico, los enlaces en la nube y las memorias USB — qué significan de verdad «cifrado de extremo a extremo» y «conocimiento cero», y qué comprobar antes de confiar en una herramienta de transferencia.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "«¿Es seguro enviar este archivo?» es una pregunta razonable para detenerse a plantear, ya sea una declaración de la renta, un contrato o simplemente fotos que preferirías mantener privadas. Esta guía no pretende asustarte para que dejes las herramientas habituales — se trata de recorrer, con claridad, qué le ocurre en realidad a un archivo cuando lo envías por correo, lo dejas en una carpeta en la nube o lo llevas en una memoria USB, qué prometen de verdad las expresiones «cifrado de extremo a extremo» y «conocimiento cero», y qué comprobar antes de confiar algo que te importa a cualquier herramienta.",
+    "Nada de esto requiere formación técnica. Al terminar, sabrás qué preguntas hacer — sobre cualquier método de transferencia, incluido este.",
+  ],
+  sections: [
+    {
+      heading: "Dónde salen mal los archivos en realidad: los riesgos cotidianos",
+      body: [
+        "Los archivos adjuntos de correo pasan por los servidores de tu proveedor de correo y los del destinatario, y ambos suelen escanear, indexar y hacer copias de seguridad de los mensajes para el filtrado de spam y la recuperación ante desastres — mucho después de que hayas olvidado que lo enviaste. Reenvía el correo una vez, y el archivo queda delante de alguien a quien nunca lo destinaste, sin forma de saber que todas las copias han desaparecido.",
+        "Los enlaces de almacenamiento en la nube son cómodos, pero un enlace normalmente sigue funcionando hasta que te acuerdas de revocarlo, y «cualquiera con el enlace» es solo tan privado como una URL imposible de adivinar — algo que un servicio de acortamiento de enlaces o un reenvío descuidado pueden echar por tierra. El archivo hereda además la seguridad de toda la cuenta en la que reside, no solo la del propio recurso compartido.",
+        "Una memoria USB parece segura porque está sin conexión, pero ahí está justo la brecha: la mayoría de las unidades no están cifradas por defecto, así que una memoria olvidada en la funda de un portátil o en un coche de alquiler entrega el texto en claro a quien la encuentre, sin necesidad de contraseña.",
+        "Los sitios de subida públicos y gratuitos resuelven el problema inmediato —llevar un archivo de A a B— pero rara vez dicen qué pasa después: cuánto tiempo se conserva, si se escanea, quién podría tropezarse con él, o cómo paga sus facturas el sitio (los alojamientos de archivos financiados con publicidad tienen un historial de incluir rastreadores o cosas peores).",
+      ],
+      bullets: [
+        "Correo: retenido y escaneado por los servidores de correo, fácil de reenviar más allá de tu control",
+        "Enlaces en la nube: siguen funcionando hasta que se revocan, y heredan la seguridad de toda la cuenta",
+        "Memorias USB: sin cifrar por defecto, fáciles de perder u olvidar",
+        "Sitios de subida gratuitos: las prácticas de retención y escaneo suelen ser poco claras",
+      ],
+    },
+    {
+      heading: "Qué significan de verdad «cifrado de extremo a extremo» y «conocimiento cero»",
+      body: [
+        "Muchos servicios dicen «cifrado» y solo quieren decir que la conexión a su servidor está cifrada — el HTTPS/TLS estándar, el mismo icono del candado que usa tu banco. Eso es protección real frente a alguien que espíe la red, pero se detiene en el servidor: en cuanto llega tu archivo, el propio servicio puede leerlo, porque tiene la clave. Muchas herramientas cotidianas se detienen exactamente ahí.",
+        "El cifrado de extremo a extremo significa algo más fuerte: el archivo se cifra antes de salir de tu dispositivo, con una clave que solo tienen el remitente y el destinatario previsto. El servicio que lo transporta —el servidor, el retransmisor, cualquier cosa intermedia— nunca tiene la clave, así que nunca tiene el texto en claro, por más que se lo pidan.",
+        "«Conocimiento cero» es una idea relacionada que suele aplicarse a algo almacenado en lugar de enviado en vivo: incluso los datos que reposan en un servidor se cifraron con una clave que el propio servidor nunca recibió, así que el operador no tiene forma de leerlos, jamás, por mucho tiempo que permanezcan allí.",
+      ],
+      bullets: [
+        "«Cifrado» a secas a menudo solo significa TLS hasta el servidor — el proveedor todavía puede leer el archivo.",
+        "«Cifrado de extremo a extremo» significa que solo el remitente y el destinatario tienen la clave.",
+        "«Conocimiento cero» significa que el servidor guarda datos que, por su estructura, no puede descifrar, ni siquiera en reposo.",
+      ],
+    },
+    {
+      heading: "Qué comprobar de verdad antes de confiar en una herramienta de transferencia",
+      body: [
+        "El lenguaje de marketing de un sitio web vale menos que unas pocas preguntas concretas:",
+      ],
+      bullets: [
+        "¿Dice «cifrado» (podría ser solo TLS) o específicamente «cifrado de extremo a extremo» (solo el remitente y el destinatario tienen la clave)?",
+        "¿Hay una forma de verificar que la conexión no fue manipulada — un código que comparas, no solo un icono de candado en el que tienes que confiar?",
+        "¿Se comprueba la integridad del archivo, para que un archivo corrupto o alterado no llegue silenciosamente mal?",
+        "¿Es el código abierto y auditable, o las afirmaciones son solo marketing que tienes que aceptar por fe?",
+        "¿Enviar o recibir exige entregar más identidad de la que la transferencia realmente necesita?",
+        "Si se almacena algo, ¿tiene una vida útil clara y finita —una caducidad o un borrado tras la descarga— en lugar de quedarse ahí indefinidamente?",
+      ],
+    },
+    {
+      heading: "Cómo responde Relayium a cada una de estas",
+      body: [
+        "Para una transferencia en vivo, con ambas personas en línea a la vez, Relayium genera un nuevo par de claves X25519 en cada dispositivo y deriva una clave AES-256-GCM compartida que existe solo dentro de los dos navegadores — nunca se envía a los propios servidores de Relayium. Un breve código de verificación en pantalla (un SAS) permite a ambos lados confirmar que las claves no fueron sustituidas por un servidor deshonesto en medio, y el hash SHA-256 de cada archivo se comprueba de extremo a extremo para que una transferencia corrupta no llegue con buen aspecto. Los detalles exactos de cómo funciona eso se tratan con más profundidad en «Cómo Relayium cifra tus archivos de extremo a extremo», si quieres ir más allá de esta página.",
+        "Cuando el destinatario aún no está en línea, un enlace de descarga almacenado usa un diseño genuinamente distinto, de conocimiento cero: tu navegador genera una clave AES-256-GCM aleatoria y cifra los archivos con ella antes de que se suba nada. Esa clave nunca se envía al servidor — vive solo en el fragmento de la URL del enlace, la parte tras el #, que los navegadores nunca transmiten. El servidor acaba guardando texto cifrado que no tiene forma de descifrar, más una caducidad que tú eliges: 1 hora, 1 día, 3 días, 7 días, o destrucción tras la primera descarga completada.",
+        "Cuando no es posible una conexión directa entre dos dispositivos, el flujo cifrado recurre a un retransmisor TURN en lugar de fallar — y ese retransmisor también ve siempre solo texto cifrado, nunca un archivo legible.",
+        "Nada de esto te pide confiar en una afirmación por fe: el código de cliente y servidor de Relayium es de código abierto bajo la licencia MIT, así que puede leerse y auditarse en lugar de aceptarse por fe.",
+      ],
+      bullets: [
+        "Las transferencias en la misma red no necesitan ninguna cuenta.",
+        "Enviar entre redes mediante un código de emparejamiento, o crear un enlace almacenado, requiere que el remitente inicie sesión — el destinatario nunca necesita una cuenta.",
+      ],
+    },
+    {
+      heading: "El cifrado no es toda la historia — unos pocos hábitos siguen importando",
+      body: [
+        "Un cifrado fuerte protege un archivo en tránsito y en reposo, pero no puede impedir que envíes un enlace a la dirección equivocada — trata un enlace para compartir como el propio archivo, y no lo publiques en ningún lugar público.",
+        "Para cualquier cosa genuinamente sensible, tómate los pocos segundos de más para comparar un código de verificación en voz alta en una llamada, o en persona, en lugar de fiarte de que dos pantallas coincidentes una al lado de la otra no hayan sido engañadas ambas.",
+        "Y ninguna herramienta de transferencia, por bien cifrada que esté, protege un archivo que ya está expuesto en un dispositivo comprometido — un buen cifrado da por supuesto que los dos extremos son de fiar. Nada de esto es motivo para volverse paranoico con el envío de archivos; solo vale la pena saber qué cubre el cifrado y qué no.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Es seguro enviar un archivo sensible por correo electrónico?",
+        a: "El correo electrónico no está diseñado para la transferencia confidencial de archivos — los servidores de correo de ambos extremos suelen retener, escanear y respaldar los adjuntos, y un mensaje reenviado puede poner el archivo delante de personas a las que nunca lo destinaste. Está bien para archivos de poca importancia; para cualquier cosa sensible, una herramienta con cifrado de extremo a extremo elimina esa exposición.",
+      },
+      {
+        q: "¿Qué significa de verdad «conocimiento cero»?",
+        a: "Que a la parte que almacena tus datos nunca se le dio la clave para leerlos. El cifrado ocurre en tu dispositivo antes de que se suba nada, y la clave vive solo en algún sitio que el servidor nunca ve —como un fragmento de URL— así que lo que reside en el servidor es texto cifrado que, por su estructura, no puede descifrar, no solo datos que promete no mirar.",
+      },
+      {
+        q: "¿Basta con un archivo zip protegido con contraseña?",
+        a: "Es mejor que nada, pero la contraseña a menudo viaja por el mismo camino que el archivo —en el mismo hilo de correo, por ejemplo— lo que anula la protección, y las implementaciones del cifrado zip varían mucho en solidez. Una herramienta construida en torno al cifrado de extremo a extremo elimina ese eslabón débil al no necesitar nunca una contraseña compartida.",
+      },
+      {
+        q: "¿Guarda Relayium una copia de mis archivos?",
+        a: "En modo tiempo real, no — el archivo se transmite directamente entre los dos navegadores y no se almacena nada. Para un enlace almacenado, el servidor guarda solo texto cifrado que no puede leer, hasta que el enlace caduca o se descarga una vez si elegiste la destrucción tras la lectura.",
+      },
+      {
+        q: "¿Necesito una cuenta para enviar o recibir un archivo?",
+        a: "En la misma red, ninguno de los dos lados necesita cuenta. Enviar entre redes mediante un código de emparejamiento, o crear un enlace almacenado, requiere que el remitente inicie sesión — pero quien recibe nunca necesita una cuenta, sea cual sea el modo que se use.",
+      },
+    ],
+  },
+  cta: {
+    text: "¿Con curiosidad por saber si una herramienta protege de verdad lo que afirma? Inicia una transferencia y comprueba por ti mismo el código de verificación y el enlace de conocimiento cero.",
+    button: "Prueba Relayium ahora",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "É seguro enviar arquivos pela internet?",
+  description:
+    "O que de fato dá errado com e-mail, links na nuvem e pendrives — o que «criptografia de ponta a ponta» e «conhecimento zero» realmente significam, e o que verificar antes de confiar em uma ferramenta de transferência.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "«É seguro enviar este arquivo?» é uma pergunta razoável para parar e fazer, seja uma declaração de imposto de renda, um contrato ou apenas fotos que você preferiria manter privadas. Este guia não pretende afastar você das ferramentas comuns — trata-se de percorrer, com clareza, o que de fato acontece com um arquivo quando você o envia por e-mail, o deixa em uma pasta na nuvem ou o carrega em um pendrive, o que as expressões «criptografia de ponta a ponta» e «conhecimento zero» realmente prometem, e o que verificar antes de confiar algo importante a qualquer ferramenta.",
+    "Nada disso exige formação técnica. Ao final, você saberá que perguntas fazer — sobre qualquer método de transferência, incluindo este.",
+  ],
+  sections: [
+    {
+      heading: "Onde os arquivos de fato dão errado: os riscos do dia a dia",
+      body: [
+        "Os anexos de e-mail passam pelos servidores do seu provedor de e-mail e pelos do destinatário, e ambos costumam escanear, indexar e fazer backup das mensagens para filtragem de spam e recuperação de desastres — muito depois de você ter esquecido que o enviou. Encaminhe o e-mail uma vez, e o arquivo fica diante de alguém a quem você nunca o destinou, sem como saber se todas as cópias desapareceram.",
+        "Os links de armazenamento na nuvem são convenientes, mas um link geralmente continua funcionando até você lembrar de revogá-lo, e «qualquer pessoa com o link» só é tão privado quanto uma URL impossível de adivinhar — algo que um encurtador de links ou um encaminhamento descuidado pode desfazer. O arquivo também herda a segurança de toda a conta em que está, não apenas do compartilhamento em si.",
+        "Um pendrive parece seguro porque está off-line, mas é exatamente aí que está a brecha: a maioria das unidades não é criptografada por padrão, então um pendrive esquecido na bolsa do notebook ou em um carro alugado entrega o texto claro a quem o encontrar, sem exigir nenhuma senha.",
+        "Os sites de upload públicos e gratuitos resolvem o problema imediato — levar um arquivo de A a B — mas raramente dizem o que acontece depois: por quanto tempo é mantido, se é escaneado, quem pode topar com ele, ou como o site paga suas contas (hospedagens de arquivos financiadas por anúncios têm um histórico de embutir rastreadores ou coisas piores).",
+      ],
+      bullets: [
+        "E-mail: retido e escaneado pelos servidores de e-mail, fácil de encaminhar para além do seu controle",
+        "Links na nuvem: continuam funcionando até serem revogados, e herdam a segurança de toda a conta",
+        "Pendrives: não criptografados por padrão, fáceis de perder ou esquecer",
+        "Sites de upload gratuitos: as práticas de retenção e escaneamento costumam ser pouco claras",
+      ],
+    },
+    {
+      heading: "O que «criptografia de ponta a ponta» e «conhecimento zero» realmente significam",
+      body: [
+        "Muitos serviços dizem «criptografado» e querem dizer apenas que a conexão com o servidor deles é criptografada — o HTTPS/TLS padrão, o mesmo ícone de cadeado que o seu banco usa. Isso é proteção real contra alguém que espione a rede, mas para no servidor: assim que seu arquivo chega, o próprio serviço pode lê-lo, porque tem a chave. Muitas ferramentas do dia a dia param exatamente aí.",
+        "A criptografia de ponta a ponta significa algo mais forte: o arquivo é criptografado antes de sair do seu dispositivo, com uma chave que só o remetente e o destinatário pretendido têm. O serviço que o transporta — o servidor, o retransmissor, qualquer coisa no meio — nunca tem a chave, então nunca tem o texto claro, por mais que seja solicitado.",
+        "«Conhecimento zero» é uma ideia relacionada geralmente aplicada a algo armazenado em vez de enviado ao vivo: até dados parados em um servidor foram criptografados com uma chave que o próprio servidor nunca recebeu, então o operador não tem como lê-los, jamais, por mais tempo que fiquem lá.",
+      ],
+      bullets: [
+        "«Criptografado» sozinho muitas vezes significa apenas TLS até o servidor — o provedor ainda pode ler o arquivo.",
+        "«Criptografia de ponta a ponta» significa que só o remetente e o destinatário têm a chave.",
+        "«Conhecimento zero» significa que o servidor guarda dados que, por sua estrutura, não consegue descriptografar, mesmo em repouso.",
+      ],
+    },
+    {
+      heading: "O que de fato verificar antes de confiar em uma ferramenta de transferência",
+      body: [
+        "A linguagem de marketing de um site vale menos do que algumas perguntas concretas:",
+      ],
+      bullets: [
+        "Diz «criptografado» (pode significar apenas TLS) ou especificamente «criptografia de ponta a ponta» (só o remetente e o destinatário têm a chave)?",
+        "Existe uma forma de verificar que a conexão não foi adulterada — um código que você compara, e não apenas um ícone de cadeado no qual você tem de confiar?",
+        "A integridade do arquivo é verificada, para que um arquivo corrompido ou alterado não chegue silenciosamente errado?",
+        "O código é aberto e auditável, ou as afirmações são apenas marketing que você tem de aceitar por fé?",
+        "Enviar ou receber exige entregar mais identidade do que a transferência realmente precisa?",
+        "Se algo é armazenado, ele tem um tempo de vida claro e finito — uma expiração ou exclusão após o download — em vez de ficar ali indefinidamente?",
+      ],
+    },
+    {
+      heading: "Como o Relayium responde a cada um desses pontos",
+      body: [
+        "Para uma transferência ao vivo, com as duas pessoas on-line ao mesmo tempo, o Relayium gera um novo par de chaves X25519 em cada dispositivo e deriva uma chave AES-256-GCM compartilhada que existe apenas dentro dos dois navegadores — ela nunca é enviada aos próprios servidores do Relayium. Um curto código de verificação na tela (um SAS) permite que ambos os lados confirmem que as chaves não foram substituídas por um servidor desonesto no meio, e o hash SHA-256 de cada arquivo é verificado de ponta a ponta para que uma transferência corrompida não chegue parecendo intacta. Os detalhes exatos de como isso funciona são abordados com mais profundidade em «Como o Relayium criptografa seus arquivos de ponta a ponta», se você quiser ir além desta página.",
+        "Quando o destinatário ainda não está on-line, um link de download armazenado usa um design genuinamente diferente, de conhecimento zero: seu navegador gera uma chave AES-256-GCM aleatória e criptografa os arquivos com ela antes que qualquer coisa seja enviada. Essa chave nunca é enviada ao servidor — ela vive apenas no fragmento da URL do link, a parte depois do #, que os navegadores nunca transmitem. O servidor acaba guardando texto cifrado que não tem como descriptografar, mais uma expiração que você escolhe: 1 hora, 1 dia, 3 dias, 7 dias, ou autodestruição após o primeiro download concluído.",
+        "Quando uma conexão direta entre dois dispositivos não é possível, o fluxo criptografado recorre a um retransmissor TURN em vez de falhar — e esse retransmissor também vê sempre apenas texto cifrado, nunca um arquivo legível.",
+        "Nada disso pede que você confie em uma afirmação por fé: o código de cliente e servidor do Relayium é de código aberto sob a licença MIT, então pode ser lido e auditado em vez de aceito por fé.",
+      ],
+      bullets: [
+        "As transferências na mesma rede não precisam de conta alguma.",
+        "Enviar entre redes por código de emparelhamento, ou criar um link armazenado, exige que o remetente faça login — o destinatário nunca precisa de conta.",
+      ],
+    },
+    {
+      heading: "A criptografia não é toda a história — alguns hábitos ainda importam",
+      body: [
+        "Uma criptografia forte protege um arquivo em trânsito e em repouso, mas não pode impedir que você envie um link para o endereço errado — trate um link de compartilhamento como o próprio arquivo, e não o publique em nenhum lugar público.",
+        "Para qualquer coisa genuinamente sensível, dedique os poucos segundos a mais para comparar um código de verificação em voz alta em uma chamada, ou pessoalmente, em vez de confiar que duas telas coincidentes lado a lado não tenham sido ambas enganadas.",
+        "E nenhuma ferramenta de transferência, por melhor criptografada que seja, protege um arquivo que já está exposto em um dispositivo comprometido — uma boa criptografia pressupõe que as duas pontas em si são confiáveis. Nada disso é motivo para ficar paranoico em relação a enviar arquivos; só vale a pena saber o que a criptografia cobre e o que não cobre.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "É seguro enviar um arquivo sensível por e-mail?",
+        a: "O e-mail não foi projetado para transferência confidencial de arquivos — os anexos costumam ser retidos, escaneados e copiados por servidores de e-mail nas duas pontas, e uma mensagem encaminhada pode colocar o arquivo diante de pessoas a quem você nunca o destinou. Tudo bem para arquivos de baixo risco; para qualquer coisa sensível, uma ferramenta com criptografia de ponta a ponta elimina essa exposição.",
+      },
+      {
+        q: "O que «conhecimento zero» realmente significa?",
+        a: "Que a parte que armazena seus dados nunca recebeu a chave para lê-los. A criptografia acontece no seu dispositivo antes que qualquer coisa seja enviada, e a chave vive apenas em algum lugar que o servidor nunca vê — como um fragmento de URL — então o que fica no servidor é texto cifrado que, por sua estrutura, ele não consegue descriptografar, e não apenas dados que ele promete não olhar.",
+      },
+      {
+        q: "Um arquivo zip protegido por senha é suficiente?",
+        a: "É melhor que nada, mas a senha muitas vezes viaja pelo mesmo caminho que o arquivo — no mesmo fio de e-mail, por exemplo — o que desfaz a proteção, e as implementações de criptografia zip variam muito em robustez. Uma ferramenta construída em torno da criptografia de ponta a ponta elimina esse elo fraco por nunca precisar de uma senha compartilhada.",
+      },
+      {
+        q: "O Relayium mantém uma cópia dos meus arquivos?",
+        a: "No modo tempo real, não — o arquivo é transmitido diretamente entre os dois navegadores e nada é armazenado. Para um link armazenado, o servidor guarda apenas texto cifrado que não consegue ler, até o link expirar ou ser baixado uma vez, se você escolheu a autodestruição após a leitura.",
+      },
+      {
+        q: "Preciso de uma conta para enviar ou receber um arquivo?",
+        a: "Na mesma rede, nenhum dos lados precisa de conta. Enviar entre redes por código de emparelhamento, ou criar um link armazenado, exige que o remetente faça login — mas a pessoa que recebe nunca precisa de conta, seja qual for o modo usado.",
+      },
+    ],
+  },
+  cta: {
+    text: "Curioso para saber se uma ferramenta realmente protege o que afirma? Inicie uma transferência e veja você mesmo o código de verificação e o link de conhecimento zero.",
+    button: "Experimente o Relayium agora",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "guides/is-it-safe-to-send-files-over-the-internet",
   updated: "2026-07-09",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

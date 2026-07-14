@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium vs croc: transferencia de archivos cifrada desde la terminal · Relayium</title>
+    <meta name="description" content="Relayium y croc son herramientas CLI gratuitas, de código abierto y cifradas para la transferencia de archivos de igual a igual. Una comparación justa y honesta de dónde encaja mejor cada una." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/es/compare/croc" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/croc" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/croc" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/croc" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/croc" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/croc" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/croc" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/compare/croc" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/compare/croc" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/compare/croc" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/croc" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Relayium vs croc: transferencia de archivos cifrada desde la terminal" />
+    <meta property="og:description" content="Relayium y croc son herramientas CLI gratuitas, de código abierto y cifradas para la transferencia de archivos de igual a igual. Una comparación justa y honesta de dónde encaja mejor cada una." />
+    <meta property="og:url" content="https://relayium.com/es/compare/croc" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="es_ES" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium vs croc: transferencia de archivos cifrada desde la terminal" />
+    <meta name="twitter:description" content="Relayium y croc son herramientas CLI gratuitas, de código abierto y cifradas para la transferencia de archivos de igual a igual. Una comparación justa y honesta de dónde encaja mejor cada una." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs croc: transferencia de archivos cifrada desde la terminal","description":"Relayium y croc son herramientas CLI gratuitas, de código abierto y cifradas para la transferencia de archivos de igual a igual. Una comparación justa y honesta de dónde encaja mejor cada una.","inLanguage":"es","dateModified":"2026-07-12","mainEntityOfPage":"https://relayium.com/es/compare/croc","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿La CLI de Relayium es gratis?","acceptedAnswer":{"@type":"Answer","text":"Sí, por completo. No hay ningún nivel de pago ni nada que medir — cada modo conecta los dos extremos directamente, y la CLI tiene licencia MIT y es de código abierto."}},{"@type":"Question","name":"¿Necesita cuenta?","acceptedAnswer":{"@type":"Answer","text":"No. push/pull usa tu propio acceso SSH, daemon-direct usa la confianza por certificado TLS fijado entre tus máquinas, y send/receive usa un código corto que acordáis por otro canal. Nada de ello toca una cuenta de Relayium."}},{"@type":"Question","name":"¿Puedo usar el código de emparejamiento de la CLI con la aplicación de navegador de Relayium?","acceptedAnswer":{"@type":"Answer","text":"Todavía no para una transferencia emparejada en vivo — el send/receive de la CLI usa su propio apretón de manos directo, aparte del flujo de emparejamiento del navegador basado en WebRTC, así que hoy los dos no interoperan. Para entregar un archivo a alguien usando solo un navegador, usa el enlace de descarga almacenado de Relayium o el modo de código de emparejamiento propio de la aplicación de navegador."}},{"@type":"Question","name":"¿Puedo autoalojarlo?","acceptedAnswer":{"@type":"Answer","text":"Sí. El servidor de Relayium se distribuye como imagen Docker (docker compose up -d --build), y puedes apuntar el send/receive de la CLI a tu propia instancia con --server https://your-domain — el mismo espíritu que ejecutar tu propio retransmisor de croc."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=es">Relayium</a></header>
+      <h1>Relayium vs croc: transferencia de archivos cifrada desde la terminal</h1>
+      <p class="updated">Última actualización: 2026-07-12</p>
+      <nav class="langbar" aria-label="Language"><a href="/compare/croc">English</a><a href="/zh/compare/croc">中文</a><a href="/ja/compare/croc">日本語</a><a href="/ko/compare/croc">한국어</a><a href="/de/compare/croc">Deutsch</a><a href="/fr/compare/croc">Français</a><a href="/ar/compare/croc">العربية</a><a href="/es/compare/croc" aria-current="true">Español</a><a href="/pt/compare/croc">Português</a></nav>
+      <p class="lead">croc es una de las herramientas más queridas para enviar un archivo de una terminal a otra: una frase-código corta y fácil de recordar, un intercambio de claves PAKE, y simplemente funciona. La CLI de Relayium se propone hacer el mismo trabajo y está construida de la misma manera — gratis, de código abierto y cifrada de extremo a extremo, sin cuenta requerida para nada de ello.</p>
+      <p class="lead">Esto no es un ataque; croc se ganó su reputación. Es una comparación directa de lo que ambas comparten, de dónde la CLI de Relayium hace más porque también habla con servidores que ya tienes en marcha, y del caso en que croc es, con honestidad, la opción más sencilla.</p>
+      <h2>Lo que Relayium y croc tienen en común</h2>
+      <p>Empecemos por lo que se solapa, porque es considerable: ambas son un único binario pequeño que instalas una vez, ambas son completamente gratis sin ningún nivel de pago, y ambas son de código abierto bajo una licencia permisiva, así que puedes leer cada línea que toca tus archivos.</p>
+      <ul><li>Sin cuenta para una transferencia — un código corto que solo conocen los dos extremos basta para que se encuentren y acuerden una clave.</li><li>Cifrado de extremo a extremo en tránsito: el retransmisor o punto de encuentro en medio nunca ve el contenido de tu archivo.</li><li>Las transferencias interrumpidas pueden retomarse en lugar de empezar de nuevo, y ambas verifican que lo que llegó coincide realmente con lo que se envió.</li><li>Multiplataforma: macOS, Linux y Windows.</li></ul>
+      <h2>Before you start</h2>
+      <p>Everything below is the relayium CLI, so install it first if you haven&#39;t. On macOS or Linux, one command drops a prebuilt binary on your PATH:</p>
+      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>Prefer to pick the file yourself, or on Windows? Grab a binary from the releases page — relayium.com/cli lists every install option (or go build -o relayium ./cmd/relayium if you have Go).</li><li>relayium --version confirms it&#39;s installed. Skip this and the commands below just print &#39;command not found&#39;.</li></ul>
+      <h2>SSH y daemon-direct: hablar con un servidor que ya tienes en marcha</h2>
+      <p>Esta es la mayor diferencia práctica. croc está construido en torno a un único flujo — introduces la frase-código, entregas la frase-código. La CLI de Relayium añade dos formas más de mover archivos que se apoyan en infraestructura que ya tienes.</p>
+      <p>relayium push / pull reutiliza tu acceso SSH existente, así que no hay nada nuevo en lo que confiar ni código que compartir. push funciona incluso contra un servidor sin relayium instalado en absoluto, recurriendo a un simple flujo tar sobre la conexión SSH — ese respaldo es solo para push; pull siempre necesita relayium en el remoto, ya que allí actúa como el remitente.</p>
+      <p>relayium serve convierte cualquier máquina que poseas en un objetivo daemon-direct, accesible sobre TLS 1.3 fijado sin SSH ni frase-código — la confianza se establece en la primera conexión (aprobada de forma interactiva, o preautorizada para uso desatendido) y queda fijada a partir de entonces, la misma idea que una clave de host SSH.</p>
+      <pre><code>relayium push ./photos user@your-server:backups/</code></pre>
+      <pre><code>relayium serve --dir ~/incoming</code></pre>
+      <pre><code>relayium push ./build relayium://your-server</code></pre>
+      <h2>Sincronización de carpetas y un código de verificación que compruebas dos veces</h2>
+      <p>croc envía un lote de archivos y termina — envíalo otra vez para actualizar el otro lado, sin ninguna noción de qué debería eliminarse. La CLI de Relayium añade relayium sync, un espejo incremental de un solo sentido sobre cualquiera de los dos transportes anteriores: solo mueve lo que cambió, --delete elimina en el destino los archivos que desaparecieron del origen (un daemon solo lo respeta si se inició con --allow-delete, así que un receptor tiene que optar por ello), y --watch mantiene la resincronización en tiempo real a medida que los archivos cambian, sin necesidad de una tarea cron.</p>
+      <p>Para una transferencia puntual entre redes, relayium send / receive cumple el mismo papel que la frase-código de croc, emparejando dos ordenadores con un código corto. Es de igual a igual directo, e imprime un código de verificación corto (una Short Authentication String) en ambos extremos para que confirmes visualmente que nadie se interpuso antes de que se mueva ningún byte — vale la pena señalarlo con honestidad: este modo es solo directo, así que si los dos extremos no encuentran un camino directo, falla en lugar de recurrir a un retransmisor.</p>
+      <pre><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
+      <h2>Cuándo croc es la opción más sencilla</h2>
+      <p>Hay casos reales en los que croc es la mejor herramienta para el trabajo, y vale la pena decirlo claramente.</p>
+      <ul><li>Solo quieres entregar un archivo a un amigo ahora mismo con las menos piezas móviles posibles — ningún servidor al que llegar, nada que configurar en ninguno de los dos extremos.</li><li>Estás detrás de un NAT estricto sin forma de abrir un camino directo: el retransmisor de croc lleva el flujo cifrado de todos modos, así que la transferencia se completa igualmente. El send / receive de Relayium es solo directo y puede fallar en esa situación (push/pull o daemon-direct hacia un servidor accesible siguen funcionando, ya que no dependen de un salto P2P directo).</li><li>No necesitas replicación de carpetas, integración con SSH ni un escuchador de larga duración — croc es un único comando ad hoc por cada extremo y nada más en lo que pensar.</li><li>Ya confías en la comunidad grande y consolidada de croc y en sus años de uso en el mundo real.</li></ul>
+      <h2>Comparación de funciones de un vistazo</h2>
+      <p>Las diferencias que más importan, una al lado de la otra:</p>
+      <ul><li>Hablar con un servidor: Relayium reutiliza tu acceso SSH (push/pull) o un daemon con TLS fijado; croc no tiene integración con SSH — instala croc en ambos extremos y comparte una frase-código.</li><li>Sincronización de carpetas: relayium sync replica de forma incremental con --delete y --watch; croc envía un lote y termina, sin semántica de espejo ni de borrado.</li><li>Sin camino directo disponible: el retransmisor de croc lleva el flujo cifrado, así que la transferencia se completa igualmente; el send/receive de Relayium es solo directo.</li><li>Verificación: ambas van cifradas de extremo a extremo; el send/receive de Relayium además imprime un código corto que ambos lados comparan antes de que empiece la transferencia.</li><li>Autoalojamiento: ambas son autoalojables — el retransmisor de croc es un pequeño binario independiente; el servidor de Relayium también ejecuta la aplicación web, y el send/receive de la CLI puede apuntar al tuyo propio con --server.</li><li>Licencia y coste: ambas con licencia MIT, ambas completamente gratis, ninguna requiere cuenta.</li></ul>
+      <h2>Preguntas frecuentes</h2>
+      <h3>¿La CLI de Relayium es gratis?</h3>
+      <p>Sí, por completo. No hay ningún nivel de pago ni nada que medir — cada modo conecta los dos extremos directamente, y la CLI tiene licencia MIT y es de código abierto.</p>
+      <h3>¿Necesita cuenta?</h3>
+      <p>No. push/pull usa tu propio acceso SSH, daemon-direct usa la confianza por certificado TLS fijado entre tus máquinas, y send/receive usa un código corto que acordáis por otro canal. Nada de ello toca una cuenta de Relayium.</p>
+      <h3>¿Puedo usar el código de emparejamiento de la CLI con la aplicación de navegador de Relayium?</h3>
+      <p>Todavía no para una transferencia emparejada en vivo — el send/receive de la CLI usa su propio apretón de manos directo, aparte del flujo de emparejamiento del navegador basado en WebRTC, así que hoy los dos no interoperan. Para entregar un archivo a alguien usando solo un navegador, usa el enlace de descarga almacenado de Relayium o el modo de código de emparejamiento propio de la aplicación de navegador.</p>
+      <h3>¿Puedo autoalojarlo?</h3>
+      <p>Sí. El servidor de Relayium se distribuye como imagen Docker (docker compose up -d --build), y puedes apuntar el send/receive de la CLI a tu propia instancia con --server https://your-domain — el mismo espíritu que ejecutar tu propio retransmisor de croc.</p>
+      <div class="ctacard">
+        <p>Instala la CLI gratuita de Relayium y prueba push, sync o send — sin cuenta, y tan rápida de empezar como croc.</p>
+        <a class="cta" href="/cli">Consigue la CLI</a>
+      </div>
+      <h2>Sigue leyendo</h2>
+      <ul class="related"><li><a href="/es/compare/snapdrop">Relayium vs Snapdrop y PairDrop: ¿qué transferencia P2P segura?</a></li><li><a href="/es/compare/airdrop">Relayium vs AirDrop: una alternativa a AirDrop multiplataforma</a></li><li><a href="/es/compare/wetransfer">Relayium vs WeTransfer: envía archivos grandes sin el servidor</a></li><li><a href="/es/how-to/transfer-files-android-to-iphone">Cómo transferir archivos de Android a iPhone (sin cable)</a></li><li><a href="/es/how-to/send-files-pc-to-phone-wirelessly">Enviar archivos del PC al teléfono sin cables, sin cable ni app</a></li><li><a href="/es/how-to/send-large-files-without-cloud">Cómo enviar archivos grandes sin la nube</a></li><li><a href="/es/guides/transfer-files-from-terminal">Transfiere archivos desde la terminal con la CLI de Relayium</a></li><li><a href="/es/guides/back-up-a-server-over-ssh">Haz copias de seguridad de archivos en tu propio servidor por SSH con la CLI de Relayium</a></li><li><a href="/es/guides/send-a-file-to-someone">Enviar un archivo a alguien entre redes con la CLI de Relayium</a></li><li><a href="/es/guides/server-to-server-transfers">Transferencias de servidor a servidor con la CLI de Relayium (daemon direct)</a></li><li><a href="/es/guides/sync-a-large-folder-between-servers">Sincronizar una carpeta grande entre dos servidores (reanudable, en segundo plano)</a></li><li><a href="/es/guides/push-to-cloud-pull-on-another-computer">Sube archivos a la nube y recógelos en otro ordenador</a></li><li><a href="/es/how-to/share-a-file-with-an-expiring-link">Compartir un archivo con un enlace de descarga seguro y con caducidad</a></li><li><a href="/es/guides/self-host-relayium">Aloja Relayium por tu cuenta: ejecuta tu propio servidor de transferencia de archivos</a></li><li><a href="/es/how-to/send-files-between-two-computers-over-the-internet">Enviar archivos entre dos computadoras por Internet</a></li><li><a href="/es/guides/how-relayium-encrypts-your-files">Cómo Relayium cifra tus archivos de extremo a extremo</a></li><li><a href="/es/compare/google-drive">Relayium frente a Google Drive para enviar archivos</a></li><li><a href="/es/compare/rsync">Relayium vs rsync: sincroniza carpetas sin la configuración de SSH</a></li><li><a href="/es/compare/firefox-send">La mejor alternativa a Firefox Send en 2026</a></li><li><a href="/es/how-to/transfer-files-by-scanning-a-qr-code">Transferir archivos escaneando un código QR</a></li><li><a href="/es/guides/receive-files-from-the-command-line">Recibir archivos desde la línea de comandos</a></li><li><a href="/es/how-to/send-a-folder">Cómo enviar una carpeta entera, no solo archivos</a></li><li><a href="/es/guides/run-relayium-as-an-always-on-service">Ejecuta Relayium como un servicio de recepción siempre activo</a></li><li><a href="/es/how-to/automate-server-backups">Automatiza copias de seguridad cifradas del servidor con una tarea cron</a></li><li><a href="/es/compare/localsend">Relayium frente a LocalSend: qué transferencia local usar</a></li><li><a href="/es/compare/scp">Relayium vs scp: transferencia de archivos más sencilla por SSH</a></li><li><a href="/es/compare/magic-wormhole">Relayium vs magic-wormhole: transferencia de archivos por CLI</a></li><li><a href="/es/compare/nextcloud">Relayium vs Nextcloud para enviar archivos</a></li><li><a href="/es/compare/dropbox">Relayium vs Dropbox para enviar un archivo</a></li><li><a href="/es/how-to/airdrop-for-windows-and-android">AirDrop para Windows, Linux y Android</a></li><li><a href="/es/how-to/transfer-files-between-mac-and-windows">Transferir archivos entre un Mac y un PC con Windows</a></li><li><a href="/es/how-to/send-files-on-the-same-wifi">Enviar archivos entre dispositivos en la misma Wi-Fi</a></li><li><a href="/es/guides/what-is-peer-to-peer-file-transfer">¿Qué es la transferencia de archivos de igual a igual?</a></li><li><a href="/es/guides/is-it-safe-to-send-files-over-the-internet">¿Es seguro enviar archivos por internet?</a></li><li><a href="/es/guides/bring-your-own-node">Usa tu propio nodo: aprovecha el retransmisor y el almacenamiento de Relayium gratis</a></li><li><a href="/es/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=es">← Relayium</a>
+        <a href="/es/guides">Guías</a>
+        <a href="/es/privacy">undefined</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

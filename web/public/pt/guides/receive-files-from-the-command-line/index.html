@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="pt">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Receber arquivos pela linha de comando · Relayium</title>
+    <meta name="description" content="Três formas de receber um arquivo com a CLI do Relayium: receber um envio entre redes por código de emparelhamento, atuar como caixa de entrada à escuta para envios daemon-direct, ou fazer um pull de um servidor ao qual você já consegue se conectar por ssh. Gratuito, sem conta." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/pt/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/receive-files-from-the-command-line" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Receber arquivos pela linha de comando" />
+    <meta property="og:description" content="Três formas de receber um arquivo com a CLI do Relayium: receber um envio entre redes por código de emparelhamento, atuar como caixa de entrada à escuta para envios daemon-direct, ou fazer um pull de um servidor ao qual você já consegue se conectar por ssh. Gratuito, sem conta." />
+    <meta property="og:url" content="https://relayium.com/pt/guides/receive-files-from-the-command-line" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Receber arquivos pela linha de comando" />
+    <meta name="twitter:description" content="Três formas de receber um arquivo com a CLI do Relayium: receber um envio entre redes por código de emparelhamento, atuar como caixa de entrada à escuta para envios daemon-direct, ou fazer um pull de um servidor ao qual você já consegue se conectar por ssh. Gratuito, sem conta." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Receber arquivos pela linha de comando","description":"Três formas de receber um arquivo com a CLI do Relayium: receber um envio entre redes por código de emparelhamento, atuar como caixa de entrada à escuta para envios daemon-direct, ou fazer um pull de um servidor ao qual você já consegue se conectar por ssh. Gratuito, sem conta.","inLanguage":"pt","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/pt/guides/receive-files-from-the-command-line","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"Preciso de uma conta para receber arquivos?","acceptedAnswer":{"@type":"Answer","text":"Não. As três formas — receive, serve e pull — são completamente gratuitas e não precisam de conta do Relayium, em nenhuma das pontas."}},{"@type":"Question","name":"O relayium receive interopera com o código de emparelhamento do navegador?","acceptedAnswer":{"@type":"Answer","text":"Não. O protocolo de código de emparelhamento da CLI é separado do fluxo de link de entrada e QR do navegador em relayium.com — eles usam handshakes diferentes e hoje não se comunicam entre si. Isso está no roteiro, não é algo com que você possa contar ainda."}},{"@type":"Question","name":"O que acontece se uma máquina desconhecida enviar para o meu ouvinte serve?","acceptedAnswer":{"@type":"Answer","text":"Em um terminal, você é solicitado a aprová-la por endereço e impressão digital no primeiro envio dela, e a aprovação é lembrada. Sem terminal — um serviço systemd, uma tarefa cron — não há a quem perguntar, então um emissor não reconhecido é rejeitado; autorize-o primeiro com relayium authorize \u003cfingerprint>."}},{"@type":"Question","name":"Posso fazer pull de um servidor que não tem o relayium instalado?","acceptedAnswer":{"@type":"Answer","text":"Não. O pull sempre precisa do relayium na ponta remota; não há alternativa com tar como há para o push. Instale o relayium lá primeiro."}},{"@type":"Question","name":"Onde o relayium guarda minha identidade e os pares confiáveis?","acceptedAnswer":{"@type":"Answer","text":"Em ~/.config/relayium por padrão — substitua o local com --config-dir em qualquer comando que toque a identidade ou a confiança."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=pt">Relayium</a></header>
+      <h1>Receber arquivos pela linha de comando</h1>
+      <p class="updated">Última atualização: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/receive-files-from-the-command-line">English</a><a href="/zh/guides/receive-files-from-the-command-line">中文</a><a href="/ja/guides/receive-files-from-the-command-line">日本語</a><a href="/ko/guides/receive-files-from-the-command-line">한국어</a><a href="/de/guides/receive-files-from-the-command-line">Deutsch</a><a href="/fr/guides/receive-files-from-the-command-line">Français</a><a href="/ar/guides/receive-files-from-the-command-line">العربية</a><a href="/es/guides/receive-files-from-the-command-line">Español</a><a href="/pt/guides/receive-files-from-the-command-line" aria-current="true">Português</a></nav>
+      <p class="lead">Enviar é só metade da história — mais cedo ou mais tarde você está na ponta receptora: um colega quer te entregar um arquivo pela internet, uma das suas próprias máquinas quer repassá-lo a outra, ou você quer buscar algo em um servidor que administra. A CLI do Relayium cobre os três casos com um comando diferente para cada um, e nenhum precisa de conta.</p>
+      <p class="lead">Escolha receive quando outra pessoa está te enviando por código de emparelhamento, serve quando você quer uma caixa de entrada permanente para a qual máquinas confiáveis possam enviar a qualquer momento, e pull quando é você quem vai buscar em um servidor ao qual você já consegue se conectar por ssh.</p>
+      <h2>Três formas de receber, e quando cada uma se aplica</h2>
+      <p>Qual comando você executa depende de quem inicia a transferência e de como as duas máquinas se conhecem:</p>
+      <ul><li>relayium receive &lt;code&gt; [destdir] — alguém envia para você entre redes usando um código de emparelhamento combinado fora de banda. Direto ponto a ponto, verificado com um código SAS.</li><li>relayium serve [--dir D] [--port N] [--once] [--allow-delete] — esta máquina fica à escuta de envios daemon-direct por relayium://, na porta 9031 por padrão.</li><li>relayium pull [user@]host:src &lt;dest&gt; — você vai buscar por SSH em um servidor ao qual já consegue se conectar e recupera arquivos.</li></ul>
+      <h2>receive: alguém envia um arquivo para você entre redes</h2>
+      <p>Esta é a metade receptora do relayium send. A outra pessoa escolhe um código curto e te diz qual é por qualquer canal em que vocês dois confiem — uma ligação, uma mensagem de chat — e então executa relayium send &lt;path&gt; &lt;code&gt; do lado dela. Você executa receive com o mesmo código:</p>
+      <pre><code>relayium receive 428571
+
+# or into a specific directory
+relayium receive 428571 ./downloads</code></pre>
+      <ul><li>A conexão é direta, ponto a ponto e criptografada de ponta a ponta; ambos os terminais imprimem o mesmo SAS (cadeia de autenticação curta) assim que conectados — compare-o com o remetente para ter certeza de que ninguém está no meio.</li><li>Sem destino indicado: os arquivos caem no diretório atual.</li><li>A mesma regra de somente direto que o send: se nenhum caminho direto puder ser encontrado entre as duas redes, a transferência falha em vez de ser roteada por um retransmissor.</li><li>Este é o protocolo de código de emparelhamento próprio da CLI — hoje ele não interopera com o código de emparelhamento do navegador nem com o fluxo de QR em relayium.com; isso é uma possível adição futura, não algo com que você possa contar ainda.</li><li>O receptor nunca precisa de conta, em nenhuma rede.</li></ul>
+      <h2>serve: transforme esta máquina em uma caixa de entrada à escuta</h2>
+      <p>serve funciona ao contrário: em vez de você ir buscar, outras máquinas enviam diretamente para você por relayium:// — feito para máquinas em que você já confia, como seu próprio notebook enviando para um NAS, ou um servidor de compilação despejando artefatos em uma máquina que é sua — por uma conexão TLS 1.3 fixada, sem SSH, sem ponto de encontro.</p>
+      <pre><code>relayium serve
+
+# a specific directory, port, and allowing delete requests
+relayium serve --dir ~/incoming --port 9031 --allow-delete</code></pre>
+      <ul><li>Na primeira vez que uma máquina nova envia para você, o serve (rodando em um terminal) mostra o endereço e a impressão digital dela e pede que você a aprove uma vez; depois disso, os envios da mesma impressão digital passam silenciosamente.</li><li>Sem terminal — um serviço systemd, um script sem TTY — não há a quem perguntar, então um emissor não reconhecido é rejeitado de imediato. Em vez disso, autorize-o com antecedência usando a impressão digital que o emissor imprime com relayium id:</li></ul>
+      <h2>Autorizar com antecedência para um serve desassistido</h2>
+      <p>Para um serve que roda desassistido (systemd, um script em segundo plano), faça o emissor executar relayium id para imprimir sua impressão digital, e então aprove-a de antemão do lado receptor:</p>
+      <pre><code>relayium authorize &lt;fingerprint&gt;</code></pre>
+      <ul><li>--dir define onde os arquivos caem (padrão o diretório atual); --once aceita uma única transferência e sai; --allow-delete permite que uma requisição --delete (espelho) recebida realmente remova arquivos aqui, e está desligado por padrão.</li><li>--config-dir (padrão ~/.config/relayium) é onde ficam a identidade deste host e sua lista de impressões digitais autorizadas — substitua-o se você executa serve como um serviço dedicado.</li></ul>
+      <h2>pull: vá buscar e recupere de um servidor ao qual você consegue se conectar por ssh</h2>
+      <p>pull é o espelho do push: em vez de esperar que alguém envie algo para você, você vai buscar pelo seu acesso SSH existente e recupera arquivos.</p>
+      <pre><code>relayium pull user@host:/path/to/files ./local-dest</code></pre>
+      <ul><li>Ao contrário do push, o pull sempre precisa do relayium já instalado no remoto — não há alternativa com tar para fazer pull de um servidor pelado. Se o remoto ainda não o tem, instale-o lá primeiro com curl -fsSL https://relayium.com/install.sh | sh.</li><li>Os arquivos são verificados com uma checagem SHA-256 por arquivo e retomam automaticamente se interrompidos (adicione --no-resume para desativar).</li><li>-i e -p se comportam como os próprios -i/-p do ssh, para um arquivo de identidade ou porta específicos.</li></ul>
+      <h2>Perguntas frequentes</h2>
+      <h3>Preciso de uma conta para receber arquivos?</h3>
+      <p>Não. As três formas — receive, serve e pull — são completamente gratuitas e não precisam de conta do Relayium, em nenhuma das pontas.</p>
+      <h3>O relayium receive interopera com o código de emparelhamento do navegador?</h3>
+      <p>Não. O protocolo de código de emparelhamento da CLI é separado do fluxo de link de entrada e QR do navegador em relayium.com — eles usam handshakes diferentes e hoje não se comunicam entre si. Isso está no roteiro, não é algo com que você possa contar ainda.</p>
+      <h3>O que acontece se uma máquina desconhecida enviar para o meu ouvinte serve?</h3>
+      <p>Em um terminal, você é solicitado a aprová-la por endereço e impressão digital no primeiro envio dela, e a aprovação é lembrada. Sem terminal — um serviço systemd, uma tarefa cron — não há a quem perguntar, então um emissor não reconhecido é rejeitado; autorize-o primeiro com relayium authorize &lt;fingerprint&gt;.</p>
+      <h3>Posso fazer pull de um servidor que não tem o relayium instalado?</h3>
+      <p>Não. O pull sempre precisa do relayium na ponta remota; não há alternativa com tar como há para o push. Instale o relayium lá primeiro.</p>
+      <h3>Onde o relayium guarda minha identidade e os pares confiáveis?</h3>
+      <p>Em ~/.config/relayium por padrão — substitua o local com --config-dir em qualquer comando que toque a identidade ou a confiança.</p>
+      <div class="ctacard">
+        <p>Pronto para receber sua primeira transferência? Instale a CLI e escolha receive, serve ou pull.</p>
+        <a class="cta" href="/cli">Obter a CLI</a>
+      </div>
+      <h2>Continue lendo</h2>
+      <ul class="related"><li><a href="/pt/compare/snapdrop">Relayium vs Snapdrop e PairDrop: qual transferência P2P segura?</a></li><li><a href="/pt/compare/airdrop">Relayium vs AirDrop: uma alternativa ao AirDrop multiplataforma</a></li><li><a href="/pt/compare/wetransfer">Relayium vs WeTransfer: envie arquivos grandes sem o servidor</a></li><li><a href="/pt/how-to/transfer-files-android-to-iphone">Como transferir arquivos do Android para o iPhone (sem cabo)</a></li><li><a href="/pt/how-to/send-files-pc-to-phone-wirelessly">Enviar arquivos do PC para o celular sem fio, sem cabo nem app</a></li><li><a href="/pt/how-to/send-large-files-without-cloud">Como enviar arquivos grandes sem a nuvem</a></li><li><a href="/pt/guides/transfer-files-from-terminal">Transfira arquivos pelo terminal com a CLI do Relayium</a></li><li><a href="/pt/guides/back-up-a-server-over-ssh">Faça backup de arquivos no seu próprio servidor via SSH com a CLI do Relayium</a></li><li><a href="/pt/guides/send-a-file-to-someone">Enviar um arquivo para alguém entre redes com a CLI do Relayium</a></li><li><a href="/pt/guides/server-to-server-transfers">Transferências de servidor para servidor com a CLI do Relayium (daemon direct)</a></li><li><a href="/pt/guides/sync-a-large-folder-between-servers">Sincronizar uma pasta grande entre dois servidores (retomável, em segundo plano)</a></li><li><a href="/pt/guides/push-to-cloud-pull-on-another-computer">Suba arquivos para a nuvem e os pegue em outro computador</a></li><li><a href="/pt/how-to/share-a-file-with-an-expiring-link">Compartilhar um arquivo com um link de download seguro e com validade</a></li><li><a href="/pt/guides/self-host-relayium">Hospede o Relayium por conta própria: rode seu próprio servidor de transferência de arquivos</a></li><li><a href="/pt/how-to/send-files-between-two-computers-over-the-internet">Enviar arquivos entre dois computadores pela Internet</a></li><li><a href="/pt/compare/croc">Relayium vs croc: transferência de arquivos criptografada do terminal</a></li><li><a href="/pt/guides/how-relayium-encrypts-your-files">Como o Relayium criptografa seus arquivos de ponta a ponta</a></li><li><a href="/pt/compare/google-drive">Relayium vs Google Drive para enviar arquivos</a></li><li><a href="/pt/compare/rsync">Relayium vs rsync: sincronize pastas sem a configuração de SSH</a></li><li><a href="/pt/compare/firefox-send">A melhor alternativa ao Firefox Send em 2026</a></li><li><a href="/pt/how-to/transfer-files-by-scanning-a-qr-code">Transferir arquivos escaneando um código QR</a></li><li><a href="/pt/how-to/send-a-folder">Como enviar uma pasta inteira, não só arquivos</a></li><li><a href="/pt/guides/run-relayium-as-an-always-on-service">Execute o Relayium como um serviço de recepção sempre ativo</a></li><li><a href="/pt/how-to/automate-server-backups">Automatize backups criptografados do servidor com uma tarefa cron</a></li><li><a href="/pt/compare/localsend">Relayium vs LocalSend: qual transferência local usar</a></li><li><a href="/pt/compare/scp">Relayium vs scp: transferência de arquivos mais simples por SSH</a></li><li><a href="/pt/compare/magic-wormhole">Relayium vs magic-wormhole: transferência de arquivos por CLI</a></li><li><a href="/pt/compare/nextcloud">Relayium vs Nextcloud para enviar arquivos</a></li><li><a href="/pt/compare/dropbox">Relayium vs Dropbox para enviar um arquivo</a></li><li><a href="/pt/how-to/airdrop-for-windows-and-android">AirDrop para Windows, Linux e Android</a></li><li><a href="/pt/how-to/transfer-files-between-mac-and-windows">Transferir arquivos entre um Mac e um PC com Windows</a></li><li><a href="/pt/how-to/send-files-on-the-same-wifi">Enviar arquivos entre dispositivos na mesma Wi-Fi</a></li><li><a href="/pt/guides/what-is-peer-to-peer-file-transfer">O que é transferência de arquivos ponto a ponto?</a></li><li><a href="/pt/guides/is-it-safe-to-send-files-over-the-internet">É seguro enviar arquivos pela internet?</a></li><li><a href="/pt/guides/bring-your-own-node">Use seu próprio nó: aproveite o retransmissor e o armazenamento do Relayium de graça</a></li><li><a href="/pt/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=pt">← Relayium</a>
+        <a href="/pt/guides">Guias</a>
+        <a href="/pt/privacy">undefined</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -591,7 +591,181 @@ const ar = {
   footer: { privacy: "الخصوصية", terms: "شروط الخدمة", security: "الأمان" },
 };
 
+const es = {
+  title: "Enlace de archivo cifrado — sube ahora, descarga después, de conocimiento cero (Relayium)",
+  description:
+    "Sube un archivo cifrado en tu navegador y comparte un enlace de descarga. El servidor solo almacena texto cifrado que no puede descifrar — la clave está en el enlace. Autodestrucción tras la lectura y caducidad opcionales.",
+  hero: {
+    h1: "Enviar un archivo como enlace cifrado",
+    pitch:
+      "Cuando la otra persona no está en línea, sube ahora y comparte un enlace. Tu navegador cifra antes de subir; el servidor conserva únicamente texto cifrado que no puede leer — la clave nunca sale del enlace.",
+    cta: "Subir un archivo",
+  },
+  how: {
+    heading: "Transferir en cuatro pasos",
+    steps: [
+      "Inicia sesión y elige un archivo — tu navegador lo cifra localmente antes de que nada salga del dispositivo.",
+      "El servidor solo almacena el texto cifrado; la clave de descifrado permanece en el fragmento del enlace y nunca se envía al servidor.",
+      "Comparte el enlace de descarga (opcionalmente con autodestrucción tras la lectura y una caducidad que tú eliges).",
+      "El destinatario abre el enlace; su navegador obtiene el texto cifrado y lo descifra con la clave del enlace.",
+    ],
+  },
+  why: {
+    heading: "Por qué Relayium",
+    items: [
+      {
+        title: "De conocimiento cero",
+        desc: "El archivo se cifra en el navegador; el servidor solo llega a tener texto cifrado que no puede descifrar.",
+      },
+      {
+        title: "La clave está en el enlace",
+        desc: "La clave de descifrado se encuentra en el fragmento de la URL (después del #), que los navegadores nunca envían al servidor.",
+      },
+      {
+        title: "Autodestrucción tras la lectura + caducidad",
+        desc: "Elimina el archivo, si quieres, en la primera descarga, y fija un tiempo de vida tras el cual desaparece.",
+      },
+      {
+        title: "Sin cuenta para el destinatario",
+        desc: "Cualquiera con el enlace puede descargar; solo quien sube necesita iniciar sesión.",
+      },
+      {
+        title: "Complemento asíncrono",
+        desc: "Úsalo cuando la otra persona no está en línea ahora mismo; usa la transferencia entre redes en tiempo real cuando ambas están presentes.",
+      },
+      {
+        title: "También desde la terminal",
+        desc: "En la terminal, relayium up sube y muestra el mismo enlace, y relayium down lo recupera en otra máquina — la CLI y la web comparten un mismo enlace.",
+      },
+    ],
+  },
+  learnHeading: "Para profundizar",
+  compare: {
+    heading: "En comparación",
+    items: [
+      {
+        title: "Frente a los enlaces de WeTransfer/Dropbox",
+        body: "Esos pueden leer tus archivos en el servidor; el servidor de Relayium solo conserva texto cifrado que no puede descifrar — la clave se queda en el enlace.",
+      },
+      {
+        title: "Frente al modo en tiempo real",
+        body: "El tiempo real es de igual a igual y exige que ambas partes estén en línea; este modo almacena el archivo cifrado para que el destinatario pueda recuperarlo después.",
+      },
+    ],
+  },
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Puede el servidor leer mi archivo?",
+        a: "No — se cifra en tu navegador; el servidor solo almacena texto cifrado, y la clave nunca llega a él.",
+      },
+      {
+        q: "¿Dónde está la clave?",
+        a: "En el fragmento del enlace (después del #). Los navegadores no envían los fragmentos a los servidores, así que solo quien tenga el enlace completo puede descifrar.",
+      },
+      {
+        q: "¿Necesito una cuenta?",
+        a: "Para subir, sí (usa almacenamiento). Para descargar, no — basta con el enlace.",
+      },
+      {
+        q: "¿Puedo hacerlo de un solo uso?",
+        a: "Sí — activa la autodestrucción tras la lectura y fija una caducidad.",
+      },
+    ],
+  },
+  learnHeading: "Más información",
+  footer: { privacy: "Privacidad", terms: "Términos del servicio", security: "Seguridad" },
+};
+
+const pt = {
+  title: "Link de arquivo criptografado — envie agora, baixe depois, conhecimento zero (Relayium)",
+  description:
+    "Envie um arquivo criptografado no seu navegador e compartilhe um link de download. O servidor só armazena texto cifrado que não consegue descriptografar — a chave fica no link. Autodestruição após a leitura e validade opcionais.",
+  hero: {
+    h1: "Enviar um arquivo como link criptografado",
+    pitch:
+      "Quando a outra pessoa não está on-line, envie agora e compartilhe um link. Seu navegador criptografa antes de enviar; o servidor guarda somente texto cifrado que não consegue ler — a chave nunca sai do link.",
+    cta: "Enviar um arquivo",
+  },
+  how: {
+    heading: "Transferir em quatro passos",
+    steps: [
+      "Faça login e escolha um arquivo — seu navegador o criptografa localmente antes que qualquer coisa saia do dispositivo.",
+      "O servidor só armazena o texto cifrado; a chave de descriptografia permanece no fragmento do link e nunca é enviada ao servidor.",
+      "Compartilhe o link de download (opcionalmente com autodestruição após a leitura e uma validade que você escolhe).",
+      "O destinatário abre o link; seu navegador busca o texto cifrado e o descriptografa com a chave do link.",
+    ],
+  },
+  why: {
+    heading: "Por que o Relayium",
+    items: [
+      {
+        title: "Conhecimento zero",
+        desc: "O arquivo é criptografado no navegador; o servidor só chega a ter texto cifrado que não consegue descriptografar.",
+      },
+      {
+        title: "A chave está no link",
+        desc: "A chave de descriptografia fica no fragmento da URL (após o #), que os navegadores nunca enviam ao servidor.",
+      },
+      {
+        title: "Autodestruição após a leitura + validade",
+        desc: "Apague o arquivo, se quiser, no primeiro download, e defina um tempo de vida após o qual ele desaparece.",
+      },
+      {
+        title: "Sem conta para o destinatário",
+        desc: "Qualquer pessoa com o link pode baixar; só quem envia precisa fazer login.",
+      },
+      {
+        title: "Complemento assíncrono",
+        desc: "Use isto quando a outra pessoa não está on-line agora; use a transferência entre redes em tempo real quando ambas estão presentes.",
+      },
+      {
+        title: "Também pelo terminal",
+        desc: "No terminal, relayium up envia e exibe o mesmo link, e relayium down o recupera em outra máquina — a CLI e a web compartilham um único link.",
+      },
+    ],
+  },
+  learnHeading: "Para se aprofundar",
+  compare: {
+    heading: "Em comparação",
+    items: [
+      {
+        title: "Comparado aos links do WeTransfer/Dropbox",
+        body: "Esses podem ler seus arquivos no servidor; o servidor do Relayium só guarda texto cifrado que não consegue descriptografar — a chave permanece no link.",
+      },
+      {
+        title: "Comparado ao modo em tempo real",
+        body: "O tempo real é ponto a ponto e exige que as duas partes estejam on-line; este modo armazena o arquivo criptografado para que o destinatário possa recuperá-lo depois.",
+      },
+    ],
+  },
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "O servidor pode ler meu arquivo?",
+        a: "Não — ele é criptografado no seu navegador; o servidor só armazena texto cifrado, e a chave nunca chega a ele.",
+      },
+      {
+        q: "Onde está a chave?",
+        a: "No fragmento do link (após o #). Os navegadores não enviam os fragmentos aos servidores, então só quem tem o link completo consegue descriptografar.",
+      },
+      {
+        q: "Preciso de uma conta?",
+        a: "Para enviar, sim (usa armazenamento). Para baixar, não — basta o link.",
+      },
+      {
+        q: "Posso torná-lo de uso único?",
+        a: "Sim — ative a autodestruição após a leitura e defina uma validade.",
+      },
+    ],
+  },
+  learnHeading: "Saiba mais",
+  footer: { privacy: "Privacidade", terms: "Termos de Serviço", security: "Segurança" },
+};
+
 export default {
   updated: "2026-07-10",
-  langs: { zh, ja, ko, de, fr, ar },
+  langs: { zh, ja, ko, de, fr, ar, es, pt },
 };

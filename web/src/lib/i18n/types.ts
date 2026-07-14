@@ -2,7 +2,7 @@
 // runtime state live here, so language tables and the reactive facade can both
 // import it without a cycle.
 
-export type Lang = "zh" | "en" | "ja" | "ko" | "de" | "fr" | "ar";
+export type Lang = "zh" | "en" | "ja" | "ko" | "de" | "fr" | "ar" | "es" | "pt";
 
 export const LANGS: { code: Lang; label: string }[] = [
   { code: "zh", label: "中文" },
@@ -12,6 +12,8 @@ export const LANGS: { code: Lang; label: string }[] = [
   { code: "de", label: "Deutsch" },
   { code: "fr", label: "Français" },
   { code: "ar", label: "العربية" },
+  { code: "es", label: "Español" },
+  { code: "pt", label: "Português" },
 ];
 
 /** One page's "how it works" walkthrough: three sequential step cards. */

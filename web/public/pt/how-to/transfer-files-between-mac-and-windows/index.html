@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="pt">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Transferir arquivos entre um Mac e um PC com Windows · Relayium</title>
+    <meta name="description" content="Como enviar arquivos entre macOS e Windows sem pen drive, sem pasta de rede compartilhada e sem upload para a nuvem. Na mesma rede e pela internet — nada para instalar em nenhuma das máquinas." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/pt/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/transfer-files-between-mac-and-windows" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Transferir arquivos entre um Mac e um PC com Windows" />
+    <meta property="og:description" content="Como enviar arquivos entre macOS e Windows sem pen drive, sem pasta de rede compartilhada e sem upload para a nuvem. Na mesma rede e pela internet — nada para instalar em nenhuma das máquinas." />
+    <meta property="og:url" content="https://relayium.com/pt/how-to/transfer-files-between-mac-and-windows" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Transferir arquivos entre um Mac e um PC com Windows" />
+    <meta name="twitter:description" content="Como enviar arquivos entre macOS e Windows sem pen drive, sem pasta de rede compartilhada e sem upload para a nuvem. Na mesma rede e pela internet — nada para instalar em nenhuma das máquinas." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Transferir arquivos entre um Mac e um PC com Windows","description":"Como enviar arquivos entre macOS e Windows sem pen drive, sem pasta de rede compartilhada e sem upload para a nuvem. Na mesma rede e pela internet — nada para instalar em nenhuma das máquinas.","inLanguage":"pt","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/pt/how-to/transfer-files-between-mac-and-windows","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"Preciso instalar alguma coisa no Mac ou no PC com Windows?","acceptedAnswer":{"@type":"Answer","text":"Não. O Relayium roda inteiramente no navegador tanto no macOS quanto no Windows. Abra o relayium.com em cada máquina e está pronto — nada para baixar de qualquer forma. Na mesma rede uma transferência não precisa de conta alguma; emparelhar pela internet só pede que o remetente faça login."}},{"@type":"Question","name":"Os dois computadores precisam estar na mesma rede?","acceptedAnswer":{"@type":"Answer","text":"Não. Estar na mesma rede é o caminho mais rápido porque as duas máquinas se encontram automaticamente, mas um código de emparelhamento conecta um Mac e um PC com Windows pela internet igualmente bem — mesmo de cidades diferentes. De qualquer forma, a transferência permanece criptografada de ponta a ponta; a rota entre redes só pede que o remetente faça login primeiro, e quem recebe nunca precisa de conta."}},{"@type":"Question","name":"Posso enviar uma pasta inteira, não só arquivos individuais?","acceptedAnswer":{"@type":"Answer","text":"Sim. Arraste uma pasta e o Relayium envia até 1.000 arquivos no lote, preservando a estrutura da pasta. Chrome e Edge no Windows gravam direto em um diretório escolhido; se o navegador que recebe não conseguir gravar pastas diretamente, ela chega como um único .zip com a mesma organização."}},{"@type":"Question","name":"As permissões de arquivo, os fins de linha ou os nomes de arquivo vão se embaralhar ao passar do Mac para o Windows?","acceptedAnswer":{"@type":"Answer","text":"Não. O Relayium move os bytes exatos de cada arquivo e os verifica com um hash SHA-256 de ponta a ponta — ele não toca nos fins de linha, na codificação ou nos nomes de arquivo. Tudo o que uma conversão em nível de aplicação precisaria tratar (como CRLF versus LF em um arquivo de texto) fica inalterado, porque o próprio arquivo fica inalterado."}},{"@type":"Question","name":"Existe algum limite de tamanho?","acceptedAnswer":{"@type":"Answer","text":"Até 1.000 arquivos por lote. Não há limite de tamanho do lado do servidor para uma transferência direta — Chrome e Edge transmitem direto para o disco — mas Firefox e Safari armazenam na memória, então mantenha as transferências individuais nesses abaixo de cerca de 200 MB."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=pt">Relayium</a></header>
+      <h1>Transferir arquivos entre um Mac e um PC com Windows</h1>
+      <p class="updated">Última atualização: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-between-mac-and-windows">English</a><a href="/zh/how-to/transfer-files-between-mac-and-windows">中文</a><a href="/ja/how-to/transfer-files-between-mac-and-windows">日本語</a><a href="/ko/how-to/transfer-files-between-mac-and-windows">한국어</a><a href="/de/how-to/transfer-files-between-mac-and-windows">Deutsch</a><a href="/fr/how-to/transfer-files-between-mac-and-windows">Français</a><a href="/ar/how-to/transfer-files-between-mac-and-windows">العربية</a><a href="/es/how-to/transfer-files-between-mac-and-windows">Español</a><a href="/pt/how-to/transfer-files-between-mac-and-windows" aria-current="true">Português</a></nav>
+      <p class="lead">Macs e PCs não falam a mesma língua de compartilhamento de arquivos de fábrica. O AirDrop é só da Apple, o compartilhamento de rede do Windows exige que as duas máquinas estejam em um grupo de trabalho ou domínio compatível, e nenhum dos dois é exatamente fácil de configurar em cinco minutos quando você só quer mover uma pasta de arquivos de projeto de um MacBook para um desktop com Windows.</p>
+      <p class="lead">O Relayium contorna toda a questão da compatibilidade. Abra a mesma página em um navegador no Mac e no PC com Windows, e os arquivos viajam diretamente entre eles — criptografados de ponta a ponta, nada para instalar em nenhum dos dois sistemas operacionais. Na mesma rede não é preciso conta alguma; enviar pela internet com um código de emparelhamento só pede que o remetente faça login. Veja exatamente como funciona nos dois sentidos.</p>
+      <h2>O que você precisa antes de começar</h2>
+      <p>Nada para instalar no Mac ou no PC. Na mesma rede também não há nada para se cadastrar — o navegador cuida de tudo.</p>
+      <ul><li>Um Mac com Safari ou Chrome e um PC com Windows com Edge ou Chrome — qualquer navegador moderno em qualquer um dos lados.</li><li>Para o caminho mais simples, conecte as duas máquinas à mesma rede Wi-Fi ou Ethernet. Se estiverem em lugares diferentes, um código de emparelhamento faz a ponte no lugar disso.</li><li>Os arquivos ou pastas a enviar — até 1.000 arquivos por lote.</li></ul>
+      <h2>Mac e PC na mesma rede</h2>
+      <p>Se os dois computadores estiverem na mesma rede do escritório ou de casa, esta é a forma mais rápida de mover arquivos — nenhuma unidade compartilhada para montar, nenhuma permissão para brigar.</p>
+      <ul><li>No Mac, abra o relayium.com no navegador. No PC com Windows, abra o mesmo endereço.</li><li>Cada máquina aparece para a outra como um dispositivo próximo — nenhum grupo de trabalho do Windows para configurar, nenhum compartilhamento de arquivos do macOS para ativar.</li><li>No computador que envia, toque no outro e depois escolha os arquivos (ou uma pasta inteira) para enviar.</li><li>As duas telas mostram o mesmo código de verificação curto. Confira se ele coincide dos dois lados — isso confirma que a conexão é direta entre suas duas máquinas, sem passar por nada no meio.</li><li>Aceite no lado que recebe e a transferência começa imediatamente, transmitindo direto para o disco.</li></ul>
+      <h2>Mac e PC em redes diferentes</h2>
+      <p>Trabalhando de casa enquanto a outra máquina está no escritório, ou apenas em uma rede Wi-Fi diferente? Um código de emparelhamento conecta um Mac e um PC com Windows pela internet, não só de um lado a outro da sala.</p>
+      <p>O computador que envia gera um código de emparelhamento curto (ou um link de compartilhamento); digite-o na outra máquina para conectar. A transferência continua indo direto ponto a ponto sempre que um caminho direto for possível, e recorre a um retransmissor TURN criptografado — que só vê texto cifrado — quando não for. Se a conexão cair no meio de uma pasta grande, ela retoma em vez de recomeçar. Esse modo precisa que o remetente faça login; quem recebe nunca precisa de conta.</p>
+      <h2>Enviar uma pasta inteira, não só arquivos avulsos</h2>
+      <p>Mover uma pasta de projeto do Mac para o Windows (ou de volta) geralmente significa compactá-la antes. O Relayium consegue enviar uma pasta diretamente, mantendo sua estrutura intacta.</p>
+      <ul><li>No Mac, arraste uma pasta para dentro, ou escolha uma na caixa de diálogo de arquivos — até 1.000 arquivos no lote.</li><li>Em um PC com Windows usando Edge ou Chrome, a pasta que chega é gravada direto em um diretório que você escolhe, com a estrutura preservada.</li><li>Se o navegador que recebe não suportar gravar pastas diretamente, a pasta chega como um único .zip que se descompacta com a mesma organização.</li></ul>
+      <h2>Outras formas de mover arquivos entre Mac e Windows</h2>
+      <p>O Relayium não é a única opção — aqui estão os compromissos honestos das alternativas de sempre:</p>
+      <ul><li>Um pen drive funciona off-line, mas macOS e Windows nem sempre concordam sobre um sistema de arquivos sem reformatar, e é mais um objeto físico para não perder de vista.</li><li>O compartilhamento de rede do Windows (SMB) consegue alcançar um Mac, mas configurar grupos de trabalho, permissões e regras de firewall para uma transferência única dá mais trabalho do que a transferência vale.</li><li>Uma unidade na nuvem (OneDrive, iCloud, Google Drive) funciona quando a outra pessoa está off-line, mas o arquivo é enviado e depois baixado, conta contra sua cota de armazenamento e o provedor guarda uma cópia.</li><li>E-mail e apps de mensagens são convenientes, mas costumam limitar o tamanho do anexo e não são criptografados de ponta a ponta para compartilhar arquivos.</li></ul>
+      <h2>Alguma coisa vai mudar nos arquivos?</h2>
+      <p>Não. O Relayium transfere os bytes originais exatamente como são — sem recompressão, sem reformatação, sem mudanças de fim de linha ou de nome de arquivo entre os dois sistemas operacionais.</p>
+      <p>Cada arquivo é conferido de ponta a ponta com um hash SHA-256, então o que pousa no PC com Windows (ou no Mac) é verificado como idêntico ao que saiu da outra máquina. Arquivos grandes também são bem tratados: Chrome e Edge transmitem o download direto para o disco sem limite de tamanho, enquanto Firefox e Safari armazenam na memória, então nesses mantenha uma única transferência abaixo de cerca de 200 MB.</p>
+      <h2>Perguntas frequentes</h2>
+      <h3>Preciso instalar alguma coisa no Mac ou no PC com Windows?</h3>
+      <p>Não. O Relayium roda inteiramente no navegador tanto no macOS quanto no Windows. Abra o relayium.com em cada máquina e está pronto — nada para baixar de qualquer forma. Na mesma rede uma transferência não precisa de conta alguma; emparelhar pela internet só pede que o remetente faça login.</p>
+      <h3>Os dois computadores precisam estar na mesma rede?</h3>
+      <p>Não. Estar na mesma rede é o caminho mais rápido porque as duas máquinas se encontram automaticamente, mas um código de emparelhamento conecta um Mac e um PC com Windows pela internet igualmente bem — mesmo de cidades diferentes. De qualquer forma, a transferência permanece criptografada de ponta a ponta; a rota entre redes só pede que o remetente faça login primeiro, e quem recebe nunca precisa de conta.</p>
+      <h3>Posso enviar uma pasta inteira, não só arquivos individuais?</h3>
+      <p>Sim. Arraste uma pasta e o Relayium envia até 1.000 arquivos no lote, preservando a estrutura da pasta. Chrome e Edge no Windows gravam direto em um diretório escolhido; se o navegador que recebe não conseguir gravar pastas diretamente, ela chega como um único .zip com a mesma organização.</p>
+      <h3>As permissões de arquivo, os fins de linha ou os nomes de arquivo vão se embaralhar ao passar do Mac para o Windows?</h3>
+      <p>Não. O Relayium move os bytes exatos de cada arquivo e os verifica com um hash SHA-256 de ponta a ponta — ele não toca nos fins de linha, na codificação ou nos nomes de arquivo. Tudo o que uma conversão em nível de aplicação precisaria tratar (como CRLF versus LF em um arquivo de texto) fica inalterado, porque o próprio arquivo fica inalterado.</p>
+      <h3>Existe algum limite de tamanho?</h3>
+      <p>Até 1.000 arquivos por lote. Não há limite de tamanho do lado do servidor para uma transferência direta — Chrome e Edge transmitem direto para o disco — mas Firefox e Safari armazenam na memória, então mantenha as transferências individuais nesses abaixo de cerca de 200 MB.</p>
+      <div class="ctacard">
+        <p>Abra o Relayium no seu Mac e no seu PC com Windows e mova seus primeiros arquivos — sem instalação e sem precisar de conta na mesma rede.</p>
+        <a class="cta" href="/?lang=pt">Experimente o Relayium agora</a>
+      </div>
+      <h2>Continue lendo</h2>
+      <ul class="related"><li><a href="/pt/compare/snapdrop">Relayium vs Snapdrop e PairDrop: qual transferência P2P segura?</a></li><li><a href="/pt/compare/airdrop">Relayium vs AirDrop: uma alternativa ao AirDrop multiplataforma</a></li><li><a href="/pt/compare/wetransfer">Relayium vs WeTransfer: envie arquivos grandes sem o servidor</a></li><li><a href="/pt/how-to/transfer-files-android-to-iphone">Como transferir arquivos do Android para o iPhone (sem cabo)</a></li><li><a href="/pt/how-to/send-files-pc-to-phone-wirelessly">Enviar arquivos do PC para o celular sem fio, sem cabo nem app</a></li><li><a href="/pt/how-to/send-large-files-without-cloud">Como enviar arquivos grandes sem a nuvem</a></li><li><a href="/pt/guides/transfer-files-from-terminal">Transfira arquivos pelo terminal com a CLI do Relayium</a></li><li><a href="/pt/guides/back-up-a-server-over-ssh">Faça backup de arquivos no seu próprio servidor via SSH com a CLI do Relayium</a></li><li><a href="/pt/guides/send-a-file-to-someone">Enviar um arquivo para alguém entre redes com a CLI do Relayium</a></li><li><a href="/pt/guides/server-to-server-transfers">Transferências de servidor para servidor com a CLI do Relayium (daemon direct)</a></li><li><a href="/pt/guides/sync-a-large-folder-between-servers">Sincronizar uma pasta grande entre dois servidores (retomável, em segundo plano)</a></li><li><a href="/pt/guides/push-to-cloud-pull-on-another-computer">Suba arquivos para a nuvem e os pegue em outro computador</a></li><li><a href="/pt/how-to/share-a-file-with-an-expiring-link">Compartilhar um arquivo com um link de download seguro e com validade</a></li><li><a href="/pt/guides/self-host-relayium">Hospede o Relayium por conta própria: rode seu próprio servidor de transferência de arquivos</a></li><li><a href="/pt/how-to/send-files-between-two-computers-over-the-internet">Enviar arquivos entre dois computadores pela Internet</a></li><li><a href="/pt/compare/croc">Relayium vs croc: transferência de arquivos criptografada do terminal</a></li><li><a href="/pt/guides/how-relayium-encrypts-your-files">Como o Relayium criptografa seus arquivos de ponta a ponta</a></li><li><a href="/pt/compare/google-drive">Relayium vs Google Drive para enviar arquivos</a></li><li><a href="/pt/compare/rsync">Relayium vs rsync: sincronize pastas sem a configuração de SSH</a></li><li><a href="/pt/compare/firefox-send">A melhor alternativa ao Firefox Send em 2026</a></li><li><a href="/pt/how-to/transfer-files-by-scanning-a-qr-code">Transferir arquivos escaneando um código QR</a></li><li><a href="/pt/guides/receive-files-from-the-command-line">Receber arquivos pela linha de comando</a></li><li><a href="/pt/how-to/send-a-folder">Como enviar uma pasta inteira, não só arquivos</a></li><li><a href="/pt/guides/run-relayium-as-an-always-on-service">Execute o Relayium como um serviço de recepção sempre ativo</a></li><li><a href="/pt/how-to/automate-server-backups">Automatize backups criptografados do servidor com uma tarefa cron</a></li><li><a href="/pt/compare/localsend">Relayium vs LocalSend: qual transferência local usar</a></li><li><a href="/pt/compare/scp">Relayium vs scp: transferência de arquivos mais simples por SSH</a></li><li><a href="/pt/compare/magic-wormhole">Relayium vs magic-wormhole: transferência de arquivos por CLI</a></li><li><a href="/pt/compare/nextcloud">Relayium vs Nextcloud para enviar arquivos</a></li><li><a href="/pt/compare/dropbox">Relayium vs Dropbox para enviar um arquivo</a></li><li><a href="/pt/how-to/airdrop-for-windows-and-android">AirDrop para Windows, Linux e Android</a></li><li><a href="/pt/how-to/send-files-on-the-same-wifi">Enviar arquivos entre dispositivos na mesma Wi-Fi</a></li><li><a href="/pt/guides/what-is-peer-to-peer-file-transfer">O que é transferência de arquivos ponto a ponto?</a></li><li><a href="/pt/guides/is-it-safe-to-send-files-over-the-internet">É seguro enviar arquivos pela internet?</a></li><li><a href="/pt/guides/bring-your-own-node">Use seu próprio nó: aproveite o retransmissor e o armazenamento do Relayium de graça</a></li><li><a href="/pt/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=pt">← Relayium</a>
+        <a href="/pt/guides">Guias</a>
+        <a href="/pt/privacy">undefined</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

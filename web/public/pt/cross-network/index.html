@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pt">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Transferência de arquivos entre redes — em tempo real, criptografia de ponta a ponta | Relayium</title>
+    <meta name="description" content="Envie arquivos de um dispositivo a outro entre redes diferentes com um código de emparelhamento de 6 dígitos. Criptografia de ponta a ponta — o fluxo passa pelo retransmissor rápido do Relayium, que só transporta conteúdo cifrado que não consegue ler, verificado com um código SAS para que nem mesmo um retransmissor comprometido consiga espionar." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/pt/cross-network" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/cross-network" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/cross-network" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/cross-network" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/cross-network" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/cross-network" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/cross-network" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/cross-network" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/cross-network" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/cross-network" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/cross-network" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Transferência de arquivos entre redes — em tempo real, criptografia de ponta a ponta | Relayium" />
+    <meta property="og:description" content="Envie arquivos de um dispositivo a outro entre redes diferentes com um código de emparelhamento de 6 dígitos. Criptografia de ponta a ponta — o fluxo passa pelo retransmissor rápido do Relayium, que só transporta conteúdo cifrado que não consegue ler, verificado com um código SAS para que nem mesmo um retransmissor comprometido consiga espionar." />
+    <meta property="og:url" content="https://relayium.com/pt/cross-network" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Transferência de arquivos entre redes — em tempo real, criptografia de ponta a ponta | Relayium" />
+    <meta name="twitter:description" content="Envie arquivos de um dispositivo a outro entre redes diferentes com um código de emparelhamento de 6 dígitos. Criptografia de ponta a ponta — o fluxo passa pelo retransmissor rápido do Relayium, que só transporta conteúdo cifrado que não consegue ler, verificado com um código SAS para que nem mesmo um retransmissor comprometido consiga espionar." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"Transferência de arquivos entre redes — em tempo real, criptografia de ponta a ponta | Relayium","description":"Envie arquivos de um dispositivo a outro entre redes diferentes com um código de emparelhamento de 6 dígitos. Criptografia de ponta a ponta — o fluxo passa pelo retransmissor rápido do Relayium, que só transporta conteúdo cifrado que não consegue ler, verificado com um código SAS para que nem mesmo um retransmissor comprometido consiga espionar.","url":"https://relayium.com/pt/cross-network","inLanguage":"pt","dateModified":"2026-07-10","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"Meus arquivos passam pelo servidor de vocês?","acceptedAnswer":{"@type":"Answer","text":"O fluxo criptografado passa pelo retransmissor do Relayium para garantir uma conexão confiável entre redes — mas tudo é criptografado de ponta a ponta, então o retransmissor só vê conteúdo cifrado que não consegue ler."}},{"@type":"Question","name":"Um código é obrigatório?","acceptedAnswer":{"@type":"Answer","text":"Sim: um código de 6 dígitos (ou seu link de acesso/QR), válido por 15 minutos, empareja os dois dispositivos entre redes diferentes."}},{"@type":"Question","name":"Preciso de uma conta?","acceptedAnswer":{"@type":"Answer","text":"O remetente faz login para gerar um código; o destinatário entra de forma anônima."}},{"@type":"Question","name":"É criptografia de ponta a ponta?","acceptedAnswer":{"@type":"Answer","text":"Sim — X25519 e AES-256-GCM por bloco, verificado com o código SAS; nem o retransmissor nem o servidor conseguem descriptografar."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:820px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:38px;letter-spacing:-.5px;margin:40px 0 12px}
+h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.pitch{font-size:20px;margin:0 0 24px;max-width:42em}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:8px 0}
+ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
+.cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.why li b,.compare h3{color:var(--text-h)}
+.learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
+footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=pt">Relayium</a></header>
+      
+      <h1>Transferência de arquivos entre redes, criptografia de ponta a ponta</h1>
+      <p class="pitch">Dois dispositivos em redes diferentes se emparelham com um código de 6 dígitos (ou seu link/QR). Os arquivos circulam por um canal criptografado através do retransmissor rápido do Relayium — o retransmissor só vê conteúdo cifrado, e as chaves nunca saem dos dois dispositivos.</p>
+      <a class="cta" href="/cross-network?lang=pt">Iniciar transferência</a>
+
+      <h2>Transferir em quatro passos</h2>
+      <ol class="steps">
+        <li>O remetente faz login e gera um código de emparelhamento de 6 dígitos (ou compartilha seu link de acesso/QR).</li>
+        <li>O destinatário abre o link ou digita o código — não é preciso conta para receber.</li>
+        <li>As duas partes verificam na tela o mesmo código SAS de 6 dígitos para descartar qualquer intermediário.</li>
+        <li>Os arquivos são transferidos com criptografia de ponta a ponta (AES-256-GCM por bloco) através do retransmissor rápido do Relayium, que só transporta conteúdo cifrado que não consegue ler.</li>
+      </ol>
+
+      <h2>Por que o Relayium</h2>
+      <ul class="why">
+        <li><b>Criptografia de ponta a ponta</b> — Troca de chaves X25519 e AES-256-GCM por bloco; as chaves são negociadas apenas entre os dois dispositivos, de modo que nem o retransmissor nem o servidor conseguem descriptografar.</li>
+        <li><b>SAS contra o ataque de intermediário</b> — As duas telas mostram o mesmo código de 6 dígitos; fazê-lo coincidir frustra até mesmo um retransmissor ou um servidor de sinalização comprometido.</li>
+        <li><b>O retransmissor só vê texto cifrado</b> — As transferências entre redes passam por um retransmissor rápido para garantir uma conexão confiável através de qualquer NAT — ele só transporta conteúdo cifrado, nunca suas chaves nem texto em claro.</li>
+        <li><b>Multiplataforma</b> — Windows, macOS, Linux, Android, iOS — basta um navegador moderno, nada a instalar.</li>
+        <li><b>Gratuito</b> — Gratuito dentro de uma cota mensal de tráfego de retransmissor; gerar um código exige que o remetente esteja com login feito, o destinatário entra de forma anônima.</li>
+      </ul>
+
+      <h2>Em comparação</h2>
+      <div class="compare">
+      <h3>Comparado ao AirDrop</h3>
+      <p>O AirDrop se restringe aos dispositivos Apple e à proximidade imediata; o Relayium emparelha Windows, Android, iPhone e Mac entre redes diferentes, com criptografia de ponta a ponta, usando apenas um navegador.</p>
+      <h3>Comparado ao Snapdrop / PairDrop</h3>
+      <p>Esses só funcionam na mesma rede; o Relayium acrescenta o emparelhamento entre redes, além de uma criptografia de ponta a ponta na camada de aplicação e um código SAS, de modo que um retransmissor ou um servidor de sinalização comprometido não consegue espionar.</p>
+      </div>
+
+      <h2>Perguntas frequentes</h2>
+      <h3>Meus arquivos passam pelo servidor de vocês?</h3>
+      <p>O fluxo criptografado passa pelo retransmissor do Relayium para garantir uma conexão confiável entre redes — mas tudo é criptografado de ponta a ponta, então o retransmissor só vê conteúdo cifrado que não consegue ler.</p>
+      <h3>Um código é obrigatório?</h3>
+      <p>Sim: um código de 6 dígitos (ou seu link de acesso/QR), válido por 15 minutos, empareja os dois dispositivos entre redes diferentes.</p>
+      <h3>Preciso de uma conta?</h3>
+      <p>O remetente faz login para gerar um código; o destinatário entra de forma anônima.</p>
+      <h3>É criptografia de ponta a ponta?</h3>
+      <p>Sim — X25519 e AES-256-GCM por bloco, verificado com o código SAS; nem o retransmissor nem o servidor conseguem descriptografar.</p>
+
+      
+      <footer>
+        <a href="/?lang=pt">← Relayium</a>
+        <a href="/pt/privacy">Privacidade</a>
+        <a href="/pt/terms">Termos de Serviço</a>
+        <a href="/pt/security">Segurança</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -614,8 +614,182 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Aloja Relayium por tu cuenta: ejecuta tu propio servidor de transferencia de archivos",
+  description:
+    "Ejecuta toda la pila de Relayium por tu cuenta con un solo comando de Docker — tu propio dominio, tus propios datos, sin cuenta requerida. Cubre las claves de entorno, el retransmisor TURN opcional y cómo apuntar la CLI hacia él.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "Relayium tiene licencia MIT y es de código abierto, y el servidor es una única imagen autocontenida — sin base de datos externa, sin bucket de almacenamiento de terceros, nada para lo que registrarse. Si prefieres ejecutarlo todo por tu cuenta en vez de depender de relayium.com, esta guía levanta un servidor con Docker y apunta la CLI hacia él.",
+    "Alojar por tu cuenta te da control total sobre dónde viven tus datos, tu propio dominio y certificado TLS, y ninguna dependencia de la infraestructura de nadie más. Todo lo que sigue se basa en los archivos que se distribuyen en el repositorio — `docker-compose.yml`, `server/.env.example` y `docs/DEPLOYMENT.md` — así que nada de lo que hay aquí es un indicador o ajuste que no exista de verdad.",
+  ],
+  sections: [
+    {
+      heading: "Por qué alojar por tu cuenta",
+      body: [
+        "Las transferencias en tiempo real de Relayium ya son de igual a igual y cifradas de extremo a extremo, así que el servidor nunca ve los bytes de tu archivo ahí. Pero sí guarda tu cuenta y — para las transferencias almacenadas/basadas en enlace — blobs de texto cifrado y una pequeña base de datos SQLite. Alojar por tu cuenta significa que esos datos viven en infraestructura que tú controlas, bajo tu propio dominio, sin las decisiones operativas de nadie más de por medio.",
+        "Como el proyecto tiene licencia MIT y es de código abierto (github.com/relayium/relayium), puedes leer exactamente qué hace el servidor antes de confiarle nada, y bifurcarlo o modificarlo libremente.",
+      ],
+    },
+    {
+      heading: "Inicio rápido con Docker",
+      body: [
+        "La raíz del repositorio incluye un `Dockerfile` y un `docker-compose.yml` que construyen una única imagen autocontenida — un binario Go estático que sirve la aplicación web precompilada, así que no hace falta un Node, una cadena de herramientas Go ni nginx aparte solo para ejecutarlo:",
+      ],
+      code: ["docker compose up -d --build"],
+      bullets: [
+        "Ese es el servidor entero, escuchando en :8080. Pon nginx o Caddy delante para el TLS en producción — consulta docs/DEPLOYMENT.md para una configuración nginx completa.",
+        "La configuración de la aplicación viene de un archivo server/.env opcional más el bloque environment: en docker-compose.yml. Cada ajuste tiene una clave RELAYIUM_* — copia server/.env.example como punto de partida.",
+        "Las cuatro claves que importan para un despliegue básico: RELAYIUM_ADDR (dirección de escucha), RELAYIUM_STATIC (ruta a la aplicación web compilada), RELAYIUM_DB (ruta del archivo SQLite) y RELAYIUM_BLOB_DIR (dónde se escribe el texto cifrado de los enlaces almacenados). docker-compose.yml ya fija valores por defecto sensatos para las cuatro y las persiste en un volumen con nombre.",
+      ],
+    },
+    {
+      heading: "Añade un retransmisor TURN para las transferencias entre redes",
+      body: [
+        "Las transferencias en la misma red (red local) y el push/pull basado en SSH funcionan sin nada extra. Las transferencias en tiempo real entre redes (dos dispositivos tras NAT distintos) a veces necesitan un retransmisor TURN para establecer una ruta — el retransmisor solo ve texto cifrado, nunca el contenido de tus archivos.",
+        "docker-compose.yml tiene un perfil relay opcional que arranca coturn (el servidor TURN) y una pequeña instancia de Redis para la medición de bytes retransmitidos, junto al servidor principal:",
+      ],
+      code: [
+        "RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build",
+      ],
+      bullets: [
+        "coturn necesita la IP pública real del host y un rango de puertos UDP abierto para funcionar — consulta docs/coturn.md para la configuración completa (incluido un script de instalación de un comando) y docs/enable-turn.md para diagnosticar un fallo limitado al recorrido de NAT.",
+        "Sin --profile relay ni RELAYIUM_TURN_SECRET, el servidor igual funciona bien — las transferencias entre redes simplemente recurren a solo STUN, que funciona para los tipos de NAT más fáciles pero no para los más estrictos.",
+      ],
+    },
+    {
+      heading: "Apunta la CLI hacia tu servidor",
+      body: [
+        "La CLI de Relayium usa por defecto el servidor de encuentro de relayium.com para el send/receive entre redes. Pasa --server para usar el tuyo en su lugar:",
+      ],
+      code: [
+        "relayium send ./report.pdf --server https://your-domain",
+        "relayium receive --server https://your-domain",
+      ],
+      bullets: [
+        "La CLI es gratis y no necesita cuenta en ningún caso — --server solo cambia con qué servidor de encuentro habla para el handshake del código de emparejamiento.",
+        "push/pull (por tu propio SSH) y serve + el push daemon-direct relayium://host no tocan relayium.com en absoluto, con o sin alojamiento propio — se conectan directamente al remoto que indiques.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Necesito configurar TURN?",
+        a: "Solo si quieres que las transferencias en tiempo real entre redes funcionen a través de NAT estrictos. Las transferencias en la misma red, el push/pull basado en SSH y el daemon-direct funcionan todos sin él — TURN sirve puramente para el recorrido de NAT en la ruta del código de emparejamiento entre redes.",
+      },
+      {
+        q: "¿La CLI sigue siendo gratis si alojo por mi cuenta?",
+        a: "Sí. Tanto si habla con relayium.com como con un servidor que ejecutas tú mismo, la CLI es completamente gratis y no necesita cuenta — --server solo la apunta hacia tu instancia.",
+      },
+      {
+        q: "¿Puedo usar mi propio dominio y certificado TLS?",
+        a: "Sí. La imagen de Docker escucha en HTTP simple en :8080; pon nginx o Caddy delante con tu propio dominio y certificado (por ejemplo, vía certbot/Let's Encrypt). docs/DEPLOYMENT.md tiene una configuración nginx completa para copiar.",
+      },
+      {
+        q: "¿Qué datos almacena mi servidor alojado por mi cuenta?",
+        a: "Una base de datos SQLite (cuentas, sesiones) en RELAYIUM_DB y, para las transferencias almacenadas/basadas en enlace, blobs cifrados en RELAYIUM_BLOB_DIR que el propio servidor no puede descifrar. Las transferencias de igual a igual en tiempo real no se almacenan en ningún sitio — el servidor solo retransmite el handshake de señalización.",
+      },
+    ],
+  },
+  cta: {
+    text: "Instala la CLI gratuita de Relayium y apúntala hacia tu propio servidor con --server.",
+    button: "Obtener la CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Hospede o Relayium por conta própria: rode seu próprio servidor de transferência de arquivos",
+  description:
+    "Rode toda a pilha do Relayium por conta própria com um único comando Docker — seu próprio domínio, seus próprios dados, sem conta necessária. Cobre as chaves de ambiente, o retransmissor TURN opcional e como apontar a CLI para ele.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "O Relayium tem licença MIT e é de código aberto, e o servidor é uma única imagem autocontida — sem banco de dados externo, sem bucket de armazenamento de terceiros, nada para se cadastrar. Se você prefere rodar tudo por conta própria em vez de depender do relayium.com, este guia coloca um servidor no ar com Docker e aponta a CLI para ele.",
+    "Hospedar por conta própria dá a você controle total sobre onde seus dados ficam, seu próprio domínio e certificado TLS, e nenhuma dependência da infraestrutura de mais ninguém. Tudo a seguir se baseia nos arquivos que acompanham o repositório — `docker-compose.yml`, `server/.env.example` e `docs/DEPLOYMENT.md` — então nada aqui é uma flag ou configuração que não exista de verdade.",
+  ],
+  sections: [
+    {
+      heading: "Por que hospedar por conta própria",
+      body: [
+        "As transferências em tempo real do Relayium já são ponto a ponto e com criptografia de ponta a ponta, então o servidor nunca vê os bytes do seu arquivo ali. Mas ele guarda sua conta e — para transferências armazenadas/baseadas em link — blobs de texto cifrado e um pequeno banco de dados SQLite. Hospedar por conta própria significa que esses dados ficam em infraestrutura que você controla, sob seu próprio domínio, sem as decisões operacionais de mais ninguém envolvidas.",
+        "Como o projeto tem licença MIT e é de código aberto (github.com/relayium/relayium), você pode ler exatamente o que o servidor faz antes de confiar qualquer coisa a ele, e fazer fork ou modificá-lo livremente.",
+      ],
+    },
+    {
+      heading: "Início rápido com Docker",
+      body: [
+        "A raiz do repositório traz um `Dockerfile` e um `docker-compose.yml` que constroem uma única imagem autocontida — um binário Go estático que serve o aplicativo web pré-compilado, então não é preciso um Node, uma cadeia de ferramentas Go ou nginx separados só para executá-lo:",
+      ],
+      code: ["docker compose up -d --build"],
+      bullets: [
+        "Esse é o servidor inteiro, escutando em :8080. Coloque nginx ou Caddy na frente para o TLS em produção — veja docs/DEPLOYMENT.md para uma configuração nginx completa.",
+        "A configuração do aplicativo vem de um arquivo server/.env opcional mais o bloco environment: no docker-compose.yml. Cada configuração tem uma chave RELAYIUM_* — copie server/.env.example como ponto de partida.",
+        "As quatro chaves que importam para uma implantação básica: RELAYIUM_ADDR (endereço de escuta), RELAYIUM_STATIC (caminho para o aplicativo web compilado), RELAYIUM_DB (caminho do arquivo SQLite) e RELAYIUM_BLOB_DIR (onde o texto cifrado dos links armazenados é escrito). O docker-compose.yml já define valores padrão sensatos para as quatro e as persiste em um volume nomeado.",
+      ],
+    },
+    {
+      heading: "Adicione um retransmissor TURN para transferências entre redes",
+      body: [
+        "Transferências na mesma rede (rede local) e o push/pull baseado em SSH funcionam sem nada a mais. Transferências em tempo real entre redes (dois dispositivos atrás de NATs diferentes) às vezes precisam de um retransmissor TURN para estabelecer um caminho — o retransmissor só vê texto cifrado, nunca o conteúdo dos seus arquivos.",
+        "O docker-compose.yml tem um perfil relay opcional que inicia o coturn (o servidor TURN) e uma pequena instância Redis para a medição de bytes retransmitidos, ao lado do servidor principal:",
+      ],
+      code: [
+        "RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build",
+      ],
+      bullets: [
+        "O coturn precisa do IP público real do host e de uma faixa de portas UDP aberta para funcionar — veja docs/coturn.md para a configuração completa (incluindo um script de instalação de um comando) e docs/enable-turn.md para solucionar uma falha limitada à travessia de NAT.",
+        "Sem --profile relay e RELAYIUM_TURN_SECRET, o servidor ainda funciona bem — as transferências entre redes apenas recorrem a só STUN, que funciona para os tipos de NAT mais fáceis, mas não para os mais rígidos.",
+      ],
+    },
+    {
+      heading: "Aponte a CLI para o seu servidor",
+      body: [
+        "A CLI do Relayium usa por padrão o servidor de encontro do relayium.com para o send/receive entre redes. Passe --server para usar o seu em vez dele:",
+      ],
+      code: [
+        "relayium send ./report.pdf --server https://your-domain",
+        "relayium receive --server https://your-domain",
+      ],
+      bullets: [
+        "A CLI é gratuita e não precisa de conta em nenhum dos casos — --server apenas muda com qual servidor de encontro ela fala para o handshake do código de emparelhamento.",
+        "push/pull (pelo seu próprio SSH) e serve + o push daemon-direct relayium://host não tocam o relayium.com em nada, com ou sem auto-hospedagem — eles se conectam diretamente ao remoto que você especificar.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "Preciso configurar o TURN?",
+        a: "Só se você quiser que as transferências em tempo real entre redes funcionem através de NATs rígidos. Transferências na mesma rede, o push/pull baseado em SSH e o daemon-direct funcionam todos sem ele — o TURN serve puramente para a travessia de NAT no caminho do código de emparelhamento entre redes.",
+      },
+      {
+        q: "A CLI continua gratuita se eu hospedar por conta própria?",
+        a: "Sim. Quer ela fale com o relayium.com ou com um servidor que você mesmo opera, a CLI é completamente gratuita e não precisa de conta — --server apenas a aponta para a sua instância.",
+      },
+      {
+        q: "Posso usar meu próprio domínio e certificado TLS?",
+        a: "Sim. A imagem Docker escuta em HTTP simples na :8080; coloque nginx ou Caddy na frente com seu próprio domínio e certificado (por exemplo, via certbot/Let's Encrypt). docs/DEPLOYMENT.md tem uma configuração nginx completa para copiar.",
+      },
+      {
+        q: "Quais dados o meu servidor auto-hospedado armazena?",
+        a: "Um banco de dados SQLite (contas, sessões) em RELAYIUM_DB e, para transferências armazenadas/baseadas em link, blobs criptografados em RELAYIUM_BLOB_DIR que o próprio servidor não consegue descriptografar. Transferências ponto a ponto em tempo real não são armazenadas em lugar nenhum — o servidor apenas retransmite o handshake de sinalização.",
+      },
+    ],
+  },
+  cta: {
+    text: "Instale a CLI gratuita do Relayium e aponte-a para o seu próprio servidor com --server.",
+    button: "Obter a CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "guides/self-host-relayium",
   updated: "2026-07-12",
-  langs: withInstall({ en, zh, ja, ko, de, fr, ar }, selfHostInstall),
+  langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }, selfHostInstall),
 };

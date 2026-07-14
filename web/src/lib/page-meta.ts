@@ -28,6 +28,8 @@ const HREFLANG_PREFIX: [string, string][] = [
   ["de", "/de"],
   ["fr", "/fr"],
   ["ar", "/ar"],
+  ["es", "/es"],
+  ["pt", "/pt"],
   ["x-default", ""],
 ];
 

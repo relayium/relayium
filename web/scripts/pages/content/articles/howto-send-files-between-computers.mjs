@@ -565,8 +565,168 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Enviar archivos entre dos computadoras por Internet",
+  description:
+    "Una guía paso a paso para enviar archivos directamente entre dos computadoras por Internet — de igual a igual, sin subir a la nube, sin instalar nada y cifrado de extremo a extremo de principio a fin.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "Enviar un archivo a otra computadora suele significar subirlo primero a algún sitio — un disco en la nube, un adjunto de correo, una aplicación de chat — y esperar que el destinatario pueda recuperarlo. Relayium se salta ese paso: conecta tu navegador directamente con el suyo, esté donde esté en el mundo, y transmite el archivo directamente de un lado a otro.",
+    "Esta guía cubre ambos casos — dos computadoras en la misma red, y dos computadoras en redes completamente distintas (distintas casas, oficinas, países) — y muestra exactamente qué debe hacer cada lado.",
+  ],
+  sections: [
+    {
+      heading: "El enfoque directo: sin nube en el medio",
+      body: [
+        "Relayium funciona por completo en el navegador, en relayium.com. No hay nada que instalar en ninguna de las dos computadoras, y ningún almacenamiento de terceros se interpone entre tú y el destinatario: cuando es posible una conexión directa, el archivo va de un navegador al otro y nunca se escribe en un servidor.",
+        "Eso importa por dos razones: velocidad (no te frena la cuota de subida/descarga de otra persona) y privacidad (no queda ninguna copia de tu archivo en los servidores de una empresa esperando a ser solicitada, filtrada u olvidada).",
+      ],
+    },
+    {
+      heading: "Misma red vs. a través de Internet",
+      body: [
+        "Si ambas computadoras están en la misma Wi-Fi o red local, Relayium las encuentra automáticamente — abre relayium.com en las dos, y no hace falta cuenta en ninguno de los lados.",
+        "Si las dos computadoras están en redes distintas — tu equipo de escritorio en casa y la laptop de un colega al otro lado del país, por ejemplo — el descubrimiento automático no puede cruzar Internet, así que Relayium usa en su lugar un código de emparejamiento corto. La persona que envía inicia sesión para generar ese código; la persona que recibe nunca necesita una cuenta, ya sea que escriba el código o simplemente abra el enlace que este genera.",
+      ],
+    },
+    {
+      heading: "Paso a paso: enviar un archivo a través de Internet",
+      body: [
+        "Este es el flujo completo para dos computadoras en redes distintas:",
+      ],
+      bullets: [
+        "En la computadora que envía, abre relayium.com e inicia sesión.",
+        "Elige los archivos o la carpeta a enviar — hasta 1.000 archivos por lote. Relayium genera un código de emparejamiento de 6 dígitos (y un enlace/QR de unión que le corresponde).",
+        "Comparte ese código o enlace con la otra persona como te resulte más cómodo — léelo en voz alta, mándalo por mensaje, pégalo en el chat.",
+        "En la computadora que recibe, abre el enlace, o abre relayium.com y escribe el código de 6 dígitos. En este lado no hace falta iniciar sesión.",
+        "Ahora ambas pantallas muestran el mismo código de verificación corto (SAS). Comprueba que coincidan — esto confirma que la conexión es genuinamente entre ustedes dos, sin nadie en el medio — y entonces la transferencia comienza automáticamente.",
+      ],
+    },
+    {
+      heading: "¿Detrás de un cortafuegos o un NAT estricto? El retransmisor de reserva",
+      body: [
+        "La mayoría de las redes domésticas y de oficina permiten que dos navegadores se conecten directamente una vez que se conocen entre sí. Algunos cortafuegos corporativos o NAT estrictos lo bloquean, sin embargo — en cuyo caso Relayium recurre a un retransmisor TURN para transportar el flujo cifrado en lugar de fallar por completo.",
+        "El retransmisor solo ve texto cifrado: el archivo se cifra de extremo a extremo (intercambio de claves X25519 más AES-256-GCM) antes de salir siquiera del navegador que envía, así que el retransmisor no puede leerlo más de lo que podría cualquier computadora al azar en Internet. Si la conexión se corta a mitad de camino, la transferencia se reanuda en lugar de empezar de nuevo.",
+      ],
+    },
+    {
+      heading: "Cuántos archivos, y de qué tamaño",
+      body: [
+        "Puedes enviar hasta 1.000 archivos en un solo lote, incluida la estructura de carpetas. No hay límite de tamaño del lado del servidor — el tope práctico lo fija el navegador que recibe.",
+        "Chrome y Edge transmiten los datos entrantes directamente al disco, así que los archivos de varios gigabytes no son problema. Firefox y Safari, en cambio, almacenan el archivo en memoria, así que en esos conviene mantener un solo archivo en unos 200 MB o menos. Cada archivo también se verifica de extremo a extremo con un hash SHA-256, para que sepas que lo que llega es byte por byte lo que se envió.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Es realmente de igual a igual, o el archivo pasa por un servidor?",
+        a: "Cuando es posible una conexión directa, el archivo se transmite directamente de un navegador al otro y nunca se almacena en un servidor. Solo cuando no se puede establecer una ruta directa (un cortafuegos o NAT estricto en un lado) recurre a un retransmisor — e incluso entonces el retransmisor solo ve texto cifrado, nunca el archivo en sí.",
+      },
+      {
+        q: "¿Ambas personas necesitan una cuenta?",
+        a: "No. En la misma red, ninguno de los lados necesita cuenta. Entre redes distintas, la persona que envía inicia sesión para crear el código de emparejamiento — eso es lo que permite a Relayium generar y gestionar el código — pero la persona que recibe nunca necesita cuenta, ya sea que escriba el código o simplemente abra el enlace.",
+      },
+      {
+        q: "¿Funciona entre redes y países distintos?",
+        a: "Sí. El código de emparejamiento existe precisamente para este caso: dos computadoras que no están en la misma red local se conectan directamente, de igual a igual, esté donde esté cada una en el mundo, y recurren a un retransmisor cifrado solo cuando no es posible una ruta directa.",
+      },
+      {
+        q: "¿Hay un límite de tamaño de archivo o de cuántos archivos puedo enviar?",
+        a: "Puedes enviar hasta 1.000 archivos en un solo lote. No hay límite de tamaño impuesto por el servidor — el límite es lo que el navegador que recibe pueda manejar: prácticamente ilimitado en Chrome o Edge (transmitido al disco), y alrededor de 200 MB por archivo en Firefox o Safari (almacenado en memoria).",
+      },
+    ],
+  },
+  cta: {
+    text: "Abre Relayium en ambas computadoras y envía tu primer archivo a través de Internet — sin subir a la nube, sin instalar nada, y el destinatario nunca necesita una cuenta.",
+    button: "Prueba Relayium ahora",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Enviar arquivos entre dois computadores pela Internet",
+  description:
+    "Um guia passo a passo para enviar arquivos diretamente entre dois computadores pela Internet — ponto a ponto, sem upload para a nuvem, sem instalação e com criptografia de ponta a ponta o tempo todo.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "Enviar um arquivo para outro computador normalmente significa enviá-lo primeiro para algum lugar — um drive na nuvem, um anexo de e-mail, um aplicativo de chat — e torcer para que o destinatário consiga recuperá-lo. O Relayium pula essa etapa: ele conecta o seu navegador diretamente ao dele, onde quer que ele esteja no mundo, e transmite o arquivo direto de um lado ao outro.",
+    "Este guia cobre os dois casos — dois computadores na mesma rede, e dois computadores em redes completamente diferentes (casas, escritórios, países diferentes) — e mostra exatamente o que cada lado precisa fazer.",
+  ],
+  sections: [
+    {
+      heading: "A abordagem direta: sem nuvem no meio",
+      body: [
+        "O Relayium roda inteiramente no navegador, em relayium.com. Não há nada para instalar em nenhum dos dois computadores, e nenhum armazenamento de terceiros fica entre você e o destinatário: quando uma conexão direta é possível, o arquivo vai de um navegador para o outro e nunca é gravado em um servidor.",
+        "Isso importa por dois motivos: velocidade (você não fica limitado pela cota de upload/download de outra pessoa) e privacidade (nenhuma cópia do seu arquivo fica nos servidores de uma empresa esperando para ser solicitada, vazada ou esquecida).",
+      ],
+    },
+    {
+      heading: "Mesma rede vs. pela Internet",
+      body: [
+        "Se os dois computadores estiverem no mesmo Wi-Fi ou rede local, o Relayium os encontra automaticamente — abra relayium.com nos dois, e não é preciso conta em nenhum dos lados.",
+        "Se os dois computadores estiverem em redes diferentes — o seu desktop em casa e o notebook de um colega do outro lado do país, por exemplo — a descoberta automática não consegue atravessar a Internet, então o Relayium usa em vez disso um código de emparelhamento curto. Quem envia faz login para gerar esse código; quem recebe nunca precisa de conta, seja digitando o código ou apenas abrindo o link que ele gera.",
+      ],
+    },
+    {
+      heading: "Passo a passo: enviar um arquivo pela Internet",
+      body: [
+        "Este é o fluxo completo para dois computadores em redes diferentes:",
+      ],
+      bullets: [
+        "No computador que envia, abra relayium.com e faça login.",
+        "Escolha os arquivos ou a pasta a enviar — até 1.000 arquivos por lote. O Relayium gera um código de emparelhamento de 6 dígitos (e um link/QR de entrada correspondente).",
+        "Compartilhe esse código ou link com a outra pessoa da forma que for mais conveniente — leia em voz alta, mande por mensagem, cole no chat.",
+        "No computador que recebe, abra o link, ou abra relayium.com e digite o código de 6 dígitos. Deste lado não é preciso fazer login.",
+        "Agora as duas telas mostram o mesmo código de verificação curto (SAS). Confira se eles coincidem — isso confirma que a conexão é genuinamente entre vocês dois, sem ninguém no meio — e então a transferência começa automaticamente.",
+      ],
+    },
+    {
+      heading: "Atrás de um firewall ou NAT restrito? O retransmissor de reserva",
+      body: [
+        "A maioria das redes domésticas e de escritório permite que dois navegadores se conectem diretamente assim que sabem um do outro. Alguns firewalls corporativos ou NATs restritos bloqueiam isso, porém — nesse caso o Relayium recorre a um retransmissor TURN para carregar o fluxo criptografado em vez de simplesmente falhar.",
+        "O retransmissor só vê texto cifrado: o arquivo é criptografado de ponta a ponta (troca de chaves X25519 mais AES-256-GCM) antes mesmo de sair do navegador que envia, então o retransmissor não consegue lê-lo, assim como qualquer computador aleatório na Internet também não conseguiria. Se a conexão cair no meio do caminho, a transferência é retomada em vez de recomeçar.",
+      ],
+    },
+    {
+      heading: "Quantos arquivos, e de que tamanho",
+      body: [
+        "Você pode enviar até 1.000 arquivos em um único lote, incluindo a estrutura de pastas. Não há limite de tamanho do lado do servidor — o teto prático é definido pelo navegador que recebe.",
+        "O Chrome e o Edge transmitem os dados recebidos direto para o disco, então arquivos de vários gigabytes não são problema. Já o Firefox e o Safari armazenam o arquivo na memória, então neles mantenha um único arquivo em cerca de 200 MB ou menos. Cada arquivo também é verificado de ponta a ponta com um hash SHA-256, para você saber que o que chega é, byte a byte, o que foi enviado.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "É realmente ponto a ponto, ou o arquivo passa por um servidor?",
+        a: "Quando uma conexão direta é possível, o arquivo é transmitido direto de um navegador para o outro e nunca é armazenado em um servidor. Só quando não é possível estabelecer um caminho direto (um firewall ou NAT restrito de um lado) é que ele recorre a um retransmissor — e mesmo assim o retransmissor só vê texto cifrado, nunca o arquivo em si.",
+      },
+      {
+        q: "As duas pessoas precisam de conta?",
+        a: "Não. Na mesma rede, nenhum dos lados precisa de conta. Entre redes diferentes, quem envia faz login para criar o código de emparelhamento — é o que permite ao Relayium gerar e gerenciar o código — mas quem recebe nunca precisa de conta, seja digitando o código ou apenas abrindo o link.",
+      },
+      {
+        q: "Funciona entre redes e países diferentes?",
+        a: "Sim. O código de emparelhamento existe justamente para este caso: dois computadores que não estão na mesma rede local se conectam diretamente, ponto a ponto, onde quer que cada um esteja no mundo, recorrendo a um retransmissor criptografado apenas quando um caminho direto não é possível.",
+      },
+      {
+        q: "Há um limite de tamanho de arquivo ou de quantos arquivos posso enviar?",
+        a: "Você pode enviar até 1.000 arquivos em um único lote. Não há limite de tamanho imposto pelo servidor — o limite é o que o navegador que recebe consegue lidar: praticamente ilimitado no Chrome ou Edge (transmitido para o disco), e cerca de 200 MB por arquivo no Firefox ou Safari (armazenado na memória).",
+      },
+    ],
+  },
+  cta: {
+    text: "Abra o Relayium nos dois computadores e envie seu primeiro arquivo pela Internet — sem upload para a nuvem, sem instalação, e o destinatário nunca precisa de conta.",
+    button: "Experimente o Relayium agora",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "how-to/send-files-between-two-computers-over-the-internet",
   updated: "2026-07-09",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

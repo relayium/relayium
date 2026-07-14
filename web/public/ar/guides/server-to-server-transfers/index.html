@@ -14,6 +14,8 @@
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/server-to-server-transfers" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/server-to-server-transfers" />
     <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/server-to-server-transfers" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/server-to-server-transfers" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/server-to-server-transfers" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/server-to-server-transfers" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -61,7 +63,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=ar">Relayium</a></header>
       <h1>النقل من خادم إلى خادم باستخدام واجهة Relayium الطرفية (daemon direct)</h1>
       <p class="updated">آخر تحديث: 2026-07-12</p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers">English</a><a href="/zh/guides/server-to-server-transfers">中文</a><a href="/ja/guides/server-to-server-transfers">日本語</a><a href="/ko/guides/server-to-server-transfers">한국어</a><a href="/de/guides/server-to-server-transfers">Deutsch</a><a href="/fr/guides/server-to-server-transfers">Français</a><a href="/ar/guides/server-to-server-transfers" aria-current="true">العربية</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers">English</a><a href="/zh/guides/server-to-server-transfers">中文</a><a href="/ja/guides/server-to-server-transfers">日本語</a><a href="/ko/guides/server-to-server-transfers">한국어</a><a href="/de/guides/server-to-server-transfers">Deutsch</a><a href="/fr/guides/server-to-server-transfers">Français</a><a href="/ar/guides/server-to-server-transfers" aria-current="true">العربية</a><a href="/es/guides/server-to-server-transfers">Español</a><a href="/pt/guides/server-to-server-transfers">Português</a></nav>
       <p class="lead">حين يكون الجهازان كلاهما لك ويعرف كلٌّ منهما عنوان الآخر، يصبح SSH احتكاكاً زائداً واللقاء عبئاً محضاً. صُمِّم daemon direct لهذا تماماً: خادم يُنصِت، والآخر يدفع إليه مباشرةً عبر اتصال TLS 1.3 مُثبَّت. لا مُرحِّل، لا SSH، لا رمز اقتران — الثقة تقوم على المفتاح العام وتُهيَّأ مرةً واحدة.</p>
       <p class="lead">يغطي هذا الدليل تشغيل المُنصِت، والدفع إليه، واعتماد مُرسِل جديد عند أول اتصال، وأتمتة ذلك، وتشغيل المُنصِت كخدمة systemd.</p>
       <h2>Before you start</h2>

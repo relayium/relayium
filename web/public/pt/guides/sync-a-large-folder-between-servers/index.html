@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="pt">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sincronizar uma pasta grande entre dois servidores (retomável, em segundo plano) · Relayium</title>
+    <meta name="description" content="Espelhe um diretório grande de um servidor para outro com relayium sync — incremental, retomável após uma queda de conexão e seguro para executar sem supervisão. Um laço de repetição sob tmux move gigabytes sem precisar vigiar um terminal." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/pt/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/sync-a-large-folder-between-servers" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Sincronizar uma pasta grande entre dois servidores (retomável, em segundo plano)" />
+    <meta property="og:description" content="Espelhe um diretório grande de um servidor para outro com relayium sync — incremental, retomável após uma queda de conexão e seguro para executar sem supervisão. Um laço de repetição sob tmux move gigabytes sem precisar vigiar um terminal." />
+    <meta property="og:url" content="https://relayium.com/pt/guides/sync-a-large-folder-between-servers" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Sincronizar uma pasta grande entre dois servidores (retomável, em segundo plano)" />
+    <meta name="twitter:description" content="Espelhe um diretório grande de um servidor para outro com relayium sync — incremental, retomável após uma queda de conexão e seguro para executar sem supervisão. Um laço de repetição sob tmux move gigabytes sem precisar vigiar um terminal." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Sincronizar uma pasta grande entre dois servidores (retomável, em segundo plano)","description":"Espelhe um diretório grande de um servidor para outro com relayium sync — incremental, retomável após uma queda de conexão e seguro para executar sem supervisão. Um laço de repetição sob tmux move gigabytes sem precisar vigiar um terminal.","inLanguage":"pt","dateModified":"2026-07-08","mainEntityOfPage":"https://relayium.com/pt/guides/sync-a-large-folder-between-servers","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"O que acontece se a transferência for interrompida no meio do caminho?","acceptedAnswer":{"@type":"Answer","text":"Nada se perde. Reexecute relayium sync — ele pula os arquivos que já estão no receptor e retoma um arquivo enviado pela metade a partir do deslocamento de bytes já em disco. O laço until deste guia faz isso automaticamente até que a pasta inteira seja espelhada."}},{"@type":"Question","name":"Em que isso difere do rsync?","acceptedAnswer":{"@type":"Answer","text":"Ambos fazem espelhamento incremental unidirecional, mas relayium sync roda sobre uma conexão TLS fixada sem exigir conta SSH (daemon direct), autentica as duas máquinas pela impressão digital do certificado e verifica cada arquivo com SHA-256. É o mesmo motor de transferência dos outros modos do relayium."}},{"@type":"Question","name":"O sync apaga no receptor os arquivos que removi da origem?","acceptedAnswer":{"@type":"Answer","text":"Só se você pedir. Por padrão sync apenas adiciona e atualiza. Passe --delete para espelhar as exclusões, e o receptor precisa executar serve com --allow-delete para que sejam respeitadas — caso contrário a exclusão é ignorada e reportada de volta."}},{"@type":"Question","name":"Posso manter duas pastas sincronizadas continuamente?","acceptedAnswer":{"@type":"Answer","text":"Sim. Adicione --watch e sync continua rodando, reespelhando a qualquer mudança sob a origem. Para uma movimentação única de uma pasta grande você não precisa dele — o laço de repetição mais um sync simples bastam."}},{"@type":"Question","name":"Preciso abrir uma porta?","acceptedAnswer":{"@type":"Answer","text":"Para daemon direct, sim — a porta do listener (9031 por padrão) precisa ser alcançável a partir do emissor. Se você preferir não abrir uma porta e já tiver SSH entre os servidores, sync também funciona sobre SSH: relayium sync /path user@host:/path (relayium precisa estar instalado no remoto)."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=pt">Relayium</a></header>
+      <h1>Sincronizar uma pasta grande entre dois servidores (retomável, em segundo plano)</h1>
+      <p class="updated">Última atualização: 2026-07-08</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers">English</a><a href="/zh/guides/sync-a-large-folder-between-servers">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers">Français</a><a href="/ar/guides/sync-a-large-folder-between-servers">العربية</a><a href="/es/guides/sync-a-large-folder-between-servers">Español</a><a href="/pt/guides/sync-a-large-folder-between-servers" aria-current="true">Português</a></nav>
+      <p class="lead">Você tem uma pasta grande — dezenas de gigabytes — em um servidor e quer uma cópia exata em outro. Você não pode vigiar um terminal por horas, e uma transferência que morre no meio do caminho não deveria recomeçar do zero. relayium sync foi feito para isso: um espelho incremental unidirecional que pula o que já está lá, retoma um arquivo enviado pela metade de onde parou e verifica cada arquivo de ponta a ponta.</p>
+      <p class="lead">Este guia configura uma transferência sem supervisão e com autorrecuperação: autorize o emissor uma vez, execute o listener em segundo plano e conduza relayium sync a partir de um laço de repetição dentro do tmux para que ele continue através das quedas de conexão até que a pasta inteira chegue.</p>
+      <h2>Por que relayium sync se encaixa nesta tarefa</h2>
+      <p>sync é um espelho incremental unidirecional sobre o protocolo nativo (instale relayium nas duas pontas). Três propriedades o tornam seguro para executar e reexecutar sem supervisão:</p>
+      <ul><li>Pula os arquivos que já estão lá: um arquivo cuja cópia no receptor coincide em tamanho e hora de modificação não é enviado de novo.</li><li>Retoma arquivos parciais: se um arquivo foi transferido pela metade quando a conexão caiu, a próxima execução continua a partir do deslocamento de bytes já em disco em vez de reiniciá-lo.</li><li>Verifica cada arquivo: cada arquivo é verificado com SHA-256 de ponta a ponta, então se sabe que um espelho concluído está intacto.</li><li>Por causa disso, o comando é idempotente — executá-lo novamente só faz o trabalho que resta, que é exatamente o que permite a um laço de repetição concluir uma transferência enorme.</li></ul>
+      <h2>Pré-requisitos</h2>
+      <p>Instale relayium nos dois servidores (sync fala o protocolo nativo, então ele precisa estar presente em cada ponta):</p>
+      <pre><code># on BOTH servers
+curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>Este guia usa daemon direct (relayium://), então os dois servidores não precisam de acesso SSH entre si.</li><li>Abra a porta do listener (9031 por padrão) para o emissor no firewall ou grupo de segurança do receptor.</li></ul>
+      <h2>Autorizar o emissor uma vez (no receptor)</h2>
+      <p>O receptor aprova a máquina emissora uma vez; a aprovação é escrita em disco e permanece válida entre reinicializações, então você nunca a repete. Inicie o listener em um terminal e aponte --dir para o diretório pai — relayium sync /root/workspace reproduz workspace/... no receptor, então --dir /root deposita os arquivos em /root/workspace/.</p>
+      <p>Na primeira conexão do emissor (próxima seção), serve mostra seu endereço e sua impressão digital e pede que você o aprove; responda y e ele é lembrado para sempre:</p>
+      <pre><code># on the RECEIVER (foreground, to approve interactively)
+relayium serve --dir /root --port 9031</code></pre>
+      <pre><code># on the RECEIVER, at the first connection:
+Incoming push from 203.0.113.9:52140
+  fingerprint: 9f2c41ab…
+Accept and remember this peer? [y/N] y</code></pre>
+      <ul><li>Para uma configuração totalmente sem supervisão, pule o prompt: execute relayium id no emissor para imprimir sua impressão digital, e então relayium authorize &lt;impressão digital&gt; no receptor.</li><li>--dir é o pai da pasta que você está sincronizando, não a pasta em si — caso contrário os arquivos caem um nível fundo demais (por exemplo /root/workspace/workspace).</li></ul>
+      <h2>Executar o listener em segundo plano (no receptor)</h2>
+      <p>Uma vez autorizada a impressão digital, pare o serve em primeiro plano (Ctrl-C) e relance-o desacoplado para que sobreviva ao seu logout. Ele carrega a impressão digital salva e aceita o emissor em silêncio — sem prompt desta vez:</p>
+      <pre><code># on the RECEIVER
+nohup relayium serve --dir /root --port 9031 &gt; ~/relayium-serve.log 2&gt;&amp;1 &amp;</code></pre>
+      <ul><li>serve trata as conexões uma de cada vez e continua rodando, então está pronto para cada reconexão do laço de repetição abaixo.</li><li>Para uma caixa de entrada sempre ativa, execute-o sob systemd em vez disso (Restart=always, --config-dir /etc/relayium).</li></ul>
+      <h2>Executar o sync em um laço de repetição sob tmux (no emissor)</h2>
+      <p>Transferências longas são interrompidas: uma sessão caída, uma rede instável, uma reinicialização. A solução não é uma ferramenta sofisticada; é um laço que reexecuta sync até ter sucesso, mais um multiplexador de terminal para que sobreviva ao seu logout. Aqui o tmux é mais limpo que o nohup: não há redirecionamento de saída para errar, e você pode reconectar para acompanhar o progresso.</p>
+      <p>Inicie uma sessão do tmux, depois execute o espelho em um laço until — ele tenta de novo a cada 10 segundos até que sync retorne sucesso, e então sai sozinho:</p>
+      <pre><code># on the SENDER
+tmux new -s xfer      # apt install -y tmux if it&#39;s missing</code></pre>
+      <pre><code>until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre>
+      <ul><li>Desanexe com Ctrl-b e depois d; o laço continua rodando depois que você fecha o terminal. Reanexe com tmux attach -t xfer.</li><li>Cada tentativa faz menos: os arquivos já transferidos são pulados, um arquivo enviado pela metade é retomado — então o laço converge e termina.</li><li>O progresso imprime uma linha por arquivo concluído, então um arquivo grande é transferido em silêncio até terminar. O silêncio não é um travamento (veja solução de problemas).</li></ul>
+      <h2>Verificar e finalizar</h2>
+      <p>A transferência está completa quando o laço until termina e você volta a um prompt de shell normal. Confirme que os dois lados coincidem, depois pare o listener:</p>
+      <pre><code># compare totals on BOTH servers
+du -sh /root/workspace</code></pre>
+      <pre><code># on the RECEIVER, once verified
+pkill -f &#39;relayium serve&#39;</code></pre>
+      <ul><li>Cada arquivo foi verificado com SHA-256 na chegada, então tamanhos coincidentes mais uma saída limpa significam uma cópia intacta.</li></ul>
+      <h2>Solução de problemas</h2>
+      <p>Algumas coisas que parecem problemas mas normalmente não são — e a que normalmente é (uma porta bloqueada).</p>
+      <ul><li>A ausência de saída não é um travamento. O progresso só é impresso quando cada arquivo termina, então um arquivo grande é transferido em silêncio. Verifique o estado real no emissor com ss -tnp | grep 9031 — ESTAB significa que está conectado e transferindo; SYN-SENT significa que não consegue alcançar o listener.</li><li>SYN-SENT significa que a porta está bloqueada. Abra 9031/TCP para o emissor no receptor (grupo de segurança na nuvem, ou ufw allow 9031/tcp). Esta é a causa mais comum de uma transferência que nunca começa.</li><li>Prefira tmux mais um laço de uma única linha em vez de um nohup de várias linhas. Colar em uma shell um comando de várias linhas com aspas e um redirecionamento &gt; frequentemente quebra no redirecionamento ou deixa você em um prompt de continuação &gt;.</li><li>Ao limpar processos, faça uma correspondência precisa (pkill -f &#39;relayium sync&#39;), não pkill relayium — uma correspondência ampla pode matar um processo relayium não relacionado rodando na mesma máquina.</li><li>venv e outros diretórios regeneráveis valem a pena excluir. Um virtualenv de Python pode conter gigabytes de bibliotecas que o pip recria do outro lado; pulá-los economiza muita transferência.</li><li>Links simbólicos e arquivos especiais são pulados — sync transfere apenas arquivos regulares. Trate separadamente quaisquer links simbólicos importantes.</li></ul>
+      <h2>Perguntas frequentes</h2>
+      <h3>O que acontece se a transferência for interrompida no meio do caminho?</h3>
+      <p>Nada se perde. Reexecute relayium sync — ele pula os arquivos que já estão no receptor e retoma um arquivo enviado pela metade a partir do deslocamento de bytes já em disco. O laço until deste guia faz isso automaticamente até que a pasta inteira seja espelhada.</p>
+      <h3>Em que isso difere do rsync?</h3>
+      <p>Ambos fazem espelhamento incremental unidirecional, mas relayium sync roda sobre uma conexão TLS fixada sem exigir conta SSH (daemon direct), autentica as duas máquinas pela impressão digital do certificado e verifica cada arquivo com SHA-256. É o mesmo motor de transferência dos outros modos do relayium.</p>
+      <h3>O sync apaga no receptor os arquivos que removi da origem?</h3>
+      <p>Só se você pedir. Por padrão sync apenas adiciona e atualiza. Passe --delete para espelhar as exclusões, e o receptor precisa executar serve com --allow-delete para que sejam respeitadas — caso contrário a exclusão é ignorada e reportada de volta.</p>
+      <h3>Posso manter duas pastas sincronizadas continuamente?</h3>
+      <p>Sim. Adicione --watch e sync continua rodando, reespelhando a qualquer mudança sob a origem. Para uma movimentação única de uma pasta grande você não precisa dele — o laço de repetição mais um sync simples bastam.</p>
+      <h3>Preciso abrir uma porta?</h3>
+      <p>Para daemon direct, sim — a porta do listener (9031 por padrão) precisa ser alcançável a partir do emissor. Se você preferir não abrir uma porta e já tiver SSH entre os servidores, sync também funciona sobre SSH: relayium sync /path user@host:/path (relayium precisa estar instalado no remoto).</p>
+      <div class="ctacard">
+        <p>Espelhe uma pasta entre dois dos seus próprios servidores — incremental, retomável, sem precisar vigiar.</p>
+        <a class="cta" href="/cli">Obter a CLI</a>
+      </div>
+      <h2>Continue lendo</h2>
+      <ul class="related"><li><a href="/pt/compare/snapdrop">Relayium vs Snapdrop e PairDrop: qual transferência P2P segura?</a></li><li><a href="/pt/compare/airdrop">Relayium vs AirDrop: uma alternativa ao AirDrop multiplataforma</a></li><li><a href="/pt/compare/wetransfer">Relayium vs WeTransfer: envie arquivos grandes sem o servidor</a></li><li><a href="/pt/how-to/transfer-files-android-to-iphone">Como transferir arquivos do Android para o iPhone (sem cabo)</a></li><li><a href="/pt/how-to/send-files-pc-to-phone-wirelessly">Enviar arquivos do PC para o celular sem fio, sem cabo nem app</a></li><li><a href="/pt/how-to/send-large-files-without-cloud">Como enviar arquivos grandes sem a nuvem</a></li><li><a href="/pt/guides/transfer-files-from-terminal">Transfira arquivos pelo terminal com a CLI do Relayium</a></li><li><a href="/pt/guides/back-up-a-server-over-ssh">Faça backup de arquivos no seu próprio servidor via SSH com a CLI do Relayium</a></li><li><a href="/pt/guides/send-a-file-to-someone">Enviar um arquivo para alguém entre redes com a CLI do Relayium</a></li><li><a href="/pt/guides/server-to-server-transfers">Transferências de servidor para servidor com a CLI do Relayium (daemon direct)</a></li><li><a href="/pt/guides/push-to-cloud-pull-on-another-computer">Suba arquivos para a nuvem e os pegue em outro computador</a></li><li><a href="/pt/how-to/share-a-file-with-an-expiring-link">Compartilhar um arquivo com um link de download seguro e com validade</a></li><li><a href="/pt/guides/self-host-relayium">Hospede o Relayium por conta própria: rode seu próprio servidor de transferência de arquivos</a></li><li><a href="/pt/how-to/send-files-between-two-computers-over-the-internet">Enviar arquivos entre dois computadores pela Internet</a></li><li><a href="/pt/compare/croc">Relayium vs croc: transferência de arquivos criptografada do terminal</a></li><li><a href="/pt/guides/how-relayium-encrypts-your-files">Como o Relayium criptografa seus arquivos de ponta a ponta</a></li><li><a href="/pt/compare/google-drive">Relayium vs Google Drive para enviar arquivos</a></li><li><a href="/pt/compare/rsync">Relayium vs rsync: sincronize pastas sem a configuração de SSH</a></li><li><a href="/pt/compare/firefox-send">A melhor alternativa ao Firefox Send em 2026</a></li><li><a href="/pt/how-to/transfer-files-by-scanning-a-qr-code">Transferir arquivos escaneando um código QR</a></li><li><a href="/pt/guides/receive-files-from-the-command-line">Receber arquivos pela linha de comando</a></li><li><a href="/pt/how-to/send-a-folder">Como enviar uma pasta inteira, não só arquivos</a></li><li><a href="/pt/guides/run-relayium-as-an-always-on-service">Execute o Relayium como um serviço de recepção sempre ativo</a></li><li><a href="/pt/how-to/automate-server-backups">Automatize backups criptografados do servidor com uma tarefa cron</a></li><li><a href="/pt/compare/localsend">Relayium vs LocalSend: qual transferência local usar</a></li><li><a href="/pt/compare/scp">Relayium vs scp: transferência de arquivos mais simples por SSH</a></li><li><a href="/pt/compare/magic-wormhole">Relayium vs magic-wormhole: transferência de arquivos por CLI</a></li><li><a href="/pt/compare/nextcloud">Relayium vs Nextcloud para enviar arquivos</a></li><li><a href="/pt/compare/dropbox">Relayium vs Dropbox para enviar um arquivo</a></li><li><a href="/pt/how-to/airdrop-for-windows-and-android">AirDrop para Windows, Linux e Android</a></li><li><a href="/pt/how-to/transfer-files-between-mac-and-windows">Transferir arquivos entre um Mac e um PC com Windows</a></li><li><a href="/pt/how-to/send-files-on-the-same-wifi">Enviar arquivos entre dispositivos na mesma Wi-Fi</a></li><li><a href="/pt/guides/what-is-peer-to-peer-file-transfer">O que é transferência de arquivos ponto a ponto?</a></li><li><a href="/pt/guides/is-it-safe-to-send-files-over-the-internet">É seguro enviar arquivos pela internet?</a></li><li><a href="/pt/guides/bring-your-own-node">Use seu próprio nó: aproveite o retransmissor e o armazenamento do Relayium de graça</a></li><li><a href="/pt/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=pt">← Relayium</a>
+        <a href="/pt/guides">Guias</a>
+        <a href="/pt/privacy">undefined</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

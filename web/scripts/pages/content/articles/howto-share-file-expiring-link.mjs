@@ -539,8 +539,166 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Compartir un archivo con un enlace de descarga seguro y con caducidad",
+  description:
+    "Cifra un archivo en tu navegador y obtén un enlace que el servidor no puede descifrar. Elige 1 hora, 1 día, 3 días o 7 días, o que se borre tras la primera descarga, y luego envíalo cuando estés listo.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "No en toda transferencia hay alguien esperando del otro lado. Quizás el destinatario está dormido, en un vuelo, o simplemente quieres dejar un enlace en un mensaje y seguir con tu día. Para eso Relayium tiene un segundo modo: en lugar de transmitir un archivo en vivo a otro navegador abierto, cifra el archivo donde estás, sube solo el texto cifrado y te entrega un enlace que puedes enviar cuando quieras — la descarga ocurre según el horario del propio destinatario.",
+    "Esta guía recorre la creación de uno de estos enlaces, las opciones de caducidad y de borrado tras la lectura, y qué significa exactamente en la práctica el diseño de conocimiento cero — incluidos los límites honestos: crear un enlace requiere que el remitente inicie sesión, y los enlaces cuentan contra una cuota de almacenamiento.",
+  ],
+  sections: [
+    {
+      heading: "Enlaces almacenados vs. tiempo real: cuándo usar cada uno",
+      body: [
+        "El modo en tiempo real de Relayium transmite un archivo directamente entre dos pestañas de navegador abiertas — rápido, y sin que nada quede almacenado en ninguna parte, pero ambas personas deben estar en línea a la vez. Un enlace almacenado y con caducidad invierte ese compromiso: tu navegador se encarga del cifrado y sube el resultado una sola vez, y el destinatario puede abrir el enlace minutos, horas o días después, a su propio ritmo.",
+        "Usa un enlace almacenado cuando no sabes exactamente cuándo estará libre la otra persona, cuando envías el mismo archivo a más de una persona, o cuando simplemente quieres algo que puedas pegar en un correo o chat y olvidarte del asunto.",
+      ],
+    },
+    {
+      heading: "Cómo crear un enlace",
+      body: ["Crear un enlace lleva unos pocos pasos, todos en el navegador:"],
+      bullets: [
+        "Abre relayium.com y cambia al modo enlace/sin conexión.",
+        "Inicia sesión — solo el remitente necesita una cuenta; el destinatario nunca.",
+        "Elige uno o más archivos.",
+        "Opcionalmente fija una ventana de caducidad, o activa el borrado tras la lectura.",
+        "Espera mientras el navegador cifra y luego sube los archivos — una barra de progreso muestra ambas fases.",
+        "Copia el enlace (o escanea el código QR) y envíalo como prefieras.",
+      ],
+    },
+    {
+      heading: "Caducidad y borrado tras la lectura",
+      body: [
+        "Todo enlace necesita una vida útil — dejar uno activo para siempre no es el sentido de una transferencia puntual. Al crear un enlace eliges cuánto tiempo debe seguir siendo válido, o puedes configurarlo para que desaparezca en cuanto se use una vez.",
+        "El borrado tras la lectura significa que el enlace deja de funcionar en el momento en que el destinatario termina de descargar — útil cuando el archivo es sensible y quieres exactamente una persona, una vez, sin que quede nada colgando después. En cualquier caso, el destinatario ve una cuenta atrás en vivo en la página de descarga, así que sabe cuánto tiempo (o cuántas descargas) le quedan.",
+      ],
+      bullets: [
+        "1 hora",
+        "1 día (el valor por defecto)",
+        "3 días",
+        "7 días",
+        "O: borrado tras la primera descarga completa, en lugar de un tiempo fijo",
+      ],
+    },
+    {
+      heading: "La garantía de conocimiento cero, y sus límites",
+      body: [
+        "Esto es lo que realmente ocurre cuando creas un enlace. Tu navegador genera una clave AES-256-GCM aleatoria — un mecanismo distinto del modo en tiempo real de Relayium, que negocia una clave entre dos dispositivos con X25519; la clave de un enlace almacenado se genera localmente, sin nada que negociar. Esa clave cifra tus archivos y la lista de nombres de archivo antes de que nada salga de tu dispositivo, y se añade al enlace de descarga después de un `#` — una parte de la URL que los navegadores nunca envían a ningún servidor. El servidor almacena el texto cifrado que se le da, y solo el texto cifrado; no tiene forma de descifrarlo, porque nunca recibe la clave.",
+        "Ese diseño tiene compromisos reales que conviene conocer. El enlace en sí es la única copia de la clave, así que si lo pierdes, no hay restablecimiento de contraseña — los datos en el servidor quedan permanentemente ilegibles. Crear un enlace requiere que el remitente haya iniciado sesión, y cada enlace cuenta contra la cuota de almacenamiento de tu cuenta hasta que se borra o caduca. Y vale la pena ser precisos sobre lo que significa aquí \"conocimiento cero\": el texto cifrado sí se almacena en el servidor de Relayium entre la creación y la descarga — solo que es ilegible sin la clave que nunca salió de tu navegador.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿La persona a la que envío el enlace necesita una cuenta?",
+        a: "No. Cualquiera que tenga el enlace completo — incluida la parte después del `#` — puede abrirlo y descargar los archivos. Solo el remitente necesita iniciar sesión para crear el enlace en primer lugar.",
+      },
+      {
+        q: "¿Puede Relayium leer mi archivo?",
+        a: "No. Tu navegador cifra los archivos con una clave AES-256-GCM aleatoria antes de subir nada, y esa clave vive solo en el fragmento de la URL, que nunca llega al servidor. El servidor almacena texto cifrado que no tiene forma de descifrar — un diseño de conocimiento cero.",
+      },
+      {
+        q: "¿Cuánto duran los enlaces?",
+        a: "Lo eliges al crear el enlace: 1 hora, 1 día, 3 días o 7 días, o puedes configurarlo para que se borre tras la primera descarga completa en lugar de una caducidad fija. Pasado ese punto, el enlace deja de funcionar.",
+      },
+      {
+        q: "¿El archivo realmente desaparece tras el borrado por lectura?",
+        a: "El borrado tras la lectura está diseñado para exactamente una descarga: una vez que el destinatario termina de descargar el archivo, el enlace deja de funcionar para cualquiera que lo abra después, de modo que no se puede consultar en silencio una segunda vez.",
+      },
+    ],
+  },
+  cta: {
+    text: "¿Tienes un archivo listo pero nadie esperando del otro lado? Crea un enlace con caducidad en tu navegador y envíalo cuando estés listo.",
+    button: "Prueba Relayium ahora",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Compartilhar um arquivo com um link de download seguro e com validade",
+  description:
+    "Criptografe um arquivo no seu navegador e obtenha um link que o servidor não consegue descriptografar. Escolha 1 hora, 1 dia, 3 dias ou 7 dias, ou que se apague após o primeiro download, e envie quando estiver pronto.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "Nem toda transferência tem alguém esperando do outro lado. Talvez o destinatário esteja dormindo, em um voo, ou você só queira deixar um link em uma mensagem e seguir com o seu dia. Para isso o Relayium tem um segundo modo: em vez de transmitir um arquivo ao vivo para outro navegador aberto, ele criptografa o arquivo onde você está, envia apenas o texto cifrado e lhe entrega um link que você pode enviar quando quiser — o download acontece de acordo com a agenda do próprio destinatário.",
+    "Este guia percorre a criação de um desses links, as opções de validade e de apagar após a leitura, e o que exatamente o design de conhecimento zero significa na prática — incluindo os limites honestos: criar um link exige que o remetente faça login, e os links contam contra uma cota de armazenamento.",
+  ],
+  sections: [
+    {
+      heading: "Links armazenados vs. tempo real: quando usar cada um",
+      body: [
+        "O modo em tempo real do Relayium transmite um arquivo diretamente entre duas abas de navegador abertas — rápido, e nada fica armazenado em lugar nenhum, mas as duas pessoas precisam estar online ao mesmo tempo. Um link armazenado e com validade inverte esse compromisso: o seu navegador faz a criptografia e envia o resultado uma única vez, e o destinatário pode abrir o link minutos, horas ou dias depois, no próprio tempo.",
+        "Use um link armazenado quando não souber exatamente quando a outra pessoa estará livre, quando estiver enviando o mesmo arquivo para mais de uma pessoa, ou quando simplesmente quiser algo que você possa colar em um e-mail ou chat e pronto.",
+      ],
+    },
+    {
+      heading: "Como criar um link",
+      body: ["Criar um link leva alguns passos, todos no navegador:"],
+      bullets: [
+        "Abra relayium.com e mude para o modo link/offline.",
+        "Faça login — só o remetente precisa de uma conta; o destinatário nunca.",
+        "Escolha um ou mais arquivos.",
+        "Opcionalmente defina uma janela de validade, ou ative o apagar após a leitura.",
+        "Aguarde enquanto o navegador criptografa e depois envia os arquivos — uma barra de progresso mostra as duas fases.",
+        "Copie o link (ou escaneie o código QR) e envie da forma que preferir.",
+      ],
+    },
+    {
+      heading: "Validade e apagar após a leitura",
+      body: [
+        "Todo link precisa de um tempo de vida — deixar um ativo para sempre não é o objetivo de uma transferência pontual. Ao criar um link você escolhe por quanto tempo ele deve permanecer válido, ou pode configurá-lo para desaparecer assim que for usado uma vez.",
+        "Apagar após a leitura significa que o link para de funcionar no momento em que o destinatário termina de baixar — útil quando o arquivo é sensível e você quer exatamente uma pessoa, uma vez, sem deixar nada solto depois. De qualquer forma, o destinatário vê uma contagem regressiva ao vivo na página de download, então sabe quanto tempo (ou quantos downloads) resta.",
+      ],
+      bullets: [
+        "1 hora",
+        "1 dia (o padrão)",
+        "3 dias",
+        "7 dias",
+        "Ou: apagar após o primeiro download completo, em vez de um tempo fixo",
+      ],
+    },
+    {
+      heading: "A garantia de conhecimento zero, e seus limites",
+      body: [
+        "Veja o que realmente acontece quando você cria um link. O seu navegador gera uma chave AES-256-GCM aleatória — um mecanismo diferente do modo em tempo real do Relayium, que negocia uma chave entre dois dispositivos com X25519; a chave de um link armazenado é gerada localmente, sem nada a negociar. Essa chave criptografa seus arquivos e a lista de nomes de arquivo antes de qualquer coisa sair do seu dispositivo, e é anexada ao link de download depois de um `#` — uma parte da URL que os navegadores nunca enviam a nenhum servidor. O servidor armazena o texto cifrado que recebe, e apenas o texto cifrado; ele não tem como descriptografá-lo, porque nunca recebe a chave.",
+        "Esse design tem compromissos reais que vale a pena conhecer. O link em si é a única cópia da chave, então se você o perder, não há redefinição de senha — os dados no servidor ficam permanentemente ilegíveis. Criar um link exige que o remetente esteja com login feito, e cada link conta contra a cota de armazenamento da sua conta até ser apagado ou expirar. E vale ser preciso sobre o que \"conhecimento zero\" significa aqui: o texto cifrado é de fato armazenado no servidor do Relayium entre a criação e o download — só que é ilegível sem a chave que nunca saiu do seu navegador.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "A pessoa para quem envio o link precisa de uma conta?",
+        a: "Não. Qualquer pessoa com o link completo — incluindo a parte depois do `#` — pode abri-lo e baixar os arquivos. Só o remetente precisa fazer login para criar o link em primeiro lugar.",
+      },
+      {
+        q: "O Relayium consegue ler meu arquivo?",
+        a: "Não. O seu navegador criptografa os arquivos com uma chave AES-256-GCM aleatória antes de qualquer coisa ser enviada, e essa chave existe apenas no fragmento da URL, que nunca chega ao servidor. O servidor armazena texto cifrado que não tem como descriptografar — um design de conhecimento zero.",
+      },
+      {
+        q: "Quanto tempo os links duram?",
+        a: "Você escolhe ao criar o link: 1 hora, 1 dia, 3 dias ou 7 dias, ou pode configurá-lo para apagar após o primeiro download completo em vez de uma validade fixa. Depois desse ponto, o link para de funcionar.",
+      },
+      {
+        q: "O arquivo realmente some depois de apagar após a leitura?",
+        a: "Apagar após a leitura é projetado para exatamente um download: assim que o destinatário termina de baixar o arquivo, o link para de funcionar para qualquer um que o abra depois, então ele não pode ser visto discretamente uma segunda vez.",
+      },
+    ],
+  },
+  cta: {
+    text: "Tem um arquivo pronto mas ninguém esperando do outro lado? Crie um link com validade no seu navegador e envie quando estiver pronto.",
+    button: "Experimente o Relayium agora",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "how-to/share-a-file-with-an-expiring-link",
   updated: "2026-07-09",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

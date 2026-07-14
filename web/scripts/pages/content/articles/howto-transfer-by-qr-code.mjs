@@ -501,8 +501,150 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Transferir archivos escaneando un código QR",
+  description:
+    "Envía archivos escaneando un código QR de una sesión de emparejamiento — la transferencia conecta directamente, cifrada de extremo a extremo. Sin app ni cuenta para quien escanea.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "Escribir un código de seis dígitos es rápido, pero escanear lo es aún más — apunta la cámara del teléfono a la pantalla y la transferencia queda lista antes de que hubieras terminado de escribir. El flujo de emparejamiento de Relayium muestra un código QR junto a cada código de emparejamiento precisamente por esto.",
+    "Este es el flujo entre redes: funciona tanto si ambos dispositivos están en la misma Wi-Fi como si están en lados opuestos del planeta. El QR es solo un atajo hacia ese flujo — el código y el enlace que hay debajo funcionan exactamente igual si escanear no es cómodo.",
+  ],
+  sections: [
+    {
+      heading: "Crea un código, obtén un QR",
+      body: [
+        "En el dispositivo que envía, abre relayium.com e inicia sesión — crear un código de emparejamiento es el único punto en el que Relayium pide una cuenta, porque el código tiene que pertenecer a alguien. Elige un archivo, una carpeta, o simplemente conéctate sin archivos en cola todavía.",
+        "Relayium genera un código numérico corto y, justo al lado, representa un código QR. El QR no codifica nada nuevo — es el mismo enlace de unión que te da el botón \"copiar enlace\", solo que representado como un cuadrado escaneable en lugar de texto. Quien abra ese enlace llega directamente a tu sala de emparejamiento.",
+      ],
+    },
+    {
+      heading: "Escanéalo — sin app, sin cuenta",
+      body: [
+        "En el otro dispositivo, abre la app de la cámara (o cualquier escáner de QR) y apúntala a la pantalla. Tocar la notificación que aparece abre el enlace en un navegador, que se une a la sala automáticamente — sin escribir nada, sin cuenta de relayium.com para quien escanea, y sin nada que instalar.",
+        "Si no tienes una cámara a mano, el mismo enlace funciona pegado en cualquier navegador, y el código de seis dígitos funciona escrito en el cuadro de \"introducir código\" de relayium.com. El QR es una comodidad añadida sobre ambos, no un mecanismo aparte — elige lo que sea más fácil en el momento.",
+      ],
+    },
+    {
+      heading: "Qué ocurre tras el escaneo",
+      body: [
+        "Escanear solo mete a los dos dispositivos en la misma sala; la transferencia en sí no cambia respecto a cualquier otra sesión con código de emparejamiento. Los dispositivos negocian una conexión directa de igual a igual y derivan una clave compartida con un intercambio de claves X25519, y luego cifran cada fragmento con AES-256-GCM.",
+        "Ambas pantallas muestran el mismo código de verificación corto (SAS) — echa un vistazo a los dos y confirma que coinciden antes de confiar en la conexión; así es como detectas un retransmisor malicioso en el medio. Cuando no es posible una ruta directa entre las dos redes, el flujo cifrado recurre a un retransmisor TURN, que solo ve texto cifrado, nunca tus archivos. Cada archivo se verifica de extremo a extremo con un hash SHA-256, y una conexión caída puede reanudarse en lugar de reiniciarse.",
+      ],
+    },
+    {
+      heading: "Si el escaneo no funciona",
+      body: [
+        "Las cámaras fallan, la iluminación es mala, o un dispositivo simplemente no tiene una cámara a mano — nada de eso debería bloquear la transferencia. La tarjeta de emparejamiento en el dispositivo que envía también muestra botones para copiar el código en bruto y el enlace (y un botón de compartir en los dispositivos que lo admiten), además de una cuenta atrás hasta que el código caduca.",
+        "Vuelve a escribir el código, pega el enlace, o usa el menú de compartir para enviarlo de otra forma (chat, AirDrop, lo que sea más rápido) — cada vía llega a la misma sala y obtiene la misma conexión directa y cifrada. El QR es uno de varios puntos de entrada, nunca un requisito.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿La persona que escanea el QR necesita una cuenta de Relayium?",
+        a: "No. Solo el remitente inicia sesión para crear el código de emparejamiento y su QR. Quien lo escanea simplemente se une a la sala que ya se creó — sin cuenta, sin registro, nada que instalar.",
+      },
+      {
+        q: "¿Qué contiene en realidad el código QR?",
+        a: "El mismo enlace de unión que copia el botón \"copiar enlace\" — una URL de relayium.com con el código de emparejamiento incorporado. Escanearlo simplemente abre ese enlace en el navegador, que se une a la sala automáticamente.",
+      },
+      {
+        q: "¿Escanear el QR es tan seguro como escribir el código?",
+        a: "Sí, es la misma conexión en ambos casos. Los dos dispositivos siguen negociando un intercambio de claves X25519, cifran con AES-256-GCM y muestran un código de verificación SAS coincidente que deberías comprobar antes de confiar en la transferencia. El QR solo cambia cómo entras en la sala, no cómo se protege la transferencia.",
+      },
+      {
+        q: "¿Y si el QR no se escanea?",
+        a: "No se pierde nada — la misma tarjeta de emparejamiento muestra el código en bruto y un enlace que se puede copiar, y un botón de compartir en los dispositivos compatibles. Cualquiera de ellos abre la misma sala que el QR.",
+      },
+      {
+        q: "¿Funciona entre redes distintas, como datos del teléfono y la Wi-Fi de casa?",
+        a: "Sí. Este es el flujo de emparejamiento entre redes, así que funciona tanto si los dos dispositivos comparten red como si no. Relayium los conecta directamente cuando puede, y solo recurre a un retransmisor cifrado cuando no es posible una ruta directa.",
+      },
+    ],
+  },
+  cta: {
+    text: "Abre Relayium, crea un código y prueba a escanear el QR con otro dispositivo — sin app ni cuenta para quien escanea.",
+    button: "Prueba Relayium ahora",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Transferir arquivos escaneando um código QR",
+  description:
+    "Envie arquivos escaneando um código QR de uma sessão de emparelhamento — a transferência conecta diretamente, com criptografia de ponta a ponta. Sem app nem conta para quem escaneia.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "Digitar um código de seis dígitos é rápido, mas escanear é ainda mais rápido — aponte a câmera do celular para a tela e a transferência fica pronta antes de você terminar de digitar. O fluxo de emparelhamento do Relayium mostra um código QR ao lado de cada código de emparelhamento exatamente por isso.",
+    "Este é o fluxo entre redes: funciona tanto se os dois dispositivos estiverem no mesmo Wi-Fi como em lados opostos do planeta. O QR é só um atalho para esse fluxo — o código e o link abaixo dele funcionam exatamente da mesma forma se escanear não for conveniente.",
+  ],
+  sections: [
+    {
+      heading: "Crie um código, obtenha um QR",
+      body: [
+        "No dispositivo que envia, abra relayium.com e faça login — criar um código de emparelhamento é o único ponto em que o Relayium pede uma conta, porque o código precisa pertencer a alguém. Escolha um arquivo, uma pasta, ou apenas conecte sem arquivos na fila ainda.",
+        "O Relayium gera um código numérico curto e, logo ao lado, renderiza um código QR. O QR não codifica nada de novo — é o mesmo link de entrada que o botão \"copiar link\" oferece, apenas renderizado como um quadrado escaneável em vez de texto. Quem abrir esse link chega direto à sua sala de emparelhamento.",
+      ],
+    },
+    {
+      heading: "Escaneie — sem app, sem conta",
+      body: [
+        "No outro dispositivo, abra o app da câmera (ou qualquer leitor de QR) e aponte para a tela. Tocar na notificação que aparece abre o link em um navegador, que entra na sala automaticamente — sem digitar nada, sem conta relayium.com para quem escaneia, e nada para instalar.",
+        "Se não houver uma câmera à mão, o mesmo link funciona colado em qualquer navegador, e o código de seis dígitos funciona digitado na caixa \"inserir código\" de relayium.com. O QR é uma comodidade sobreposta aos dois, não um mecanismo separado — escolha o que for mais fácil no momento.",
+      ],
+    },
+    {
+      heading: "O que acontece depois do escaneamento",
+      body: [
+        "Escanear apenas coloca os dois dispositivos na mesma sala; a transferência em si não muda em relação a qualquer outra sessão com código de emparelhamento. Os dispositivos negociam uma conexão direta ponto a ponto e derivam uma chave compartilhada com uma troca de chaves X25519, e então criptografam cada bloco com AES-256-GCM.",
+        "As duas telas mostram o mesmo código de verificação curto (SAS) — olhe os dois e confirme que coincidem antes de confiar na conexão; é assim que você pega um retransmissor malicioso no meio. Quando não é possível um caminho direto entre as duas redes, o fluxo criptografado recorre a um retransmissor TURN, que só vê texto cifrado, nunca seus arquivos. Cada arquivo é verificado de ponta a ponta com um hash SHA-256, e uma conexão interrompida pode ser retomada em vez de recomeçar.",
+      ],
+    },
+    {
+      heading: "Se o escaneamento não funcionar",
+      body: [
+        "As câmeras falham, a iluminação está ruim, ou um dispositivo simplesmente não tem uma câmera à mão — nada disso deveria bloquear a transferência. O cartão de emparelhamento no dispositivo que envia também mostra botões para copiar o código bruto e o link (e um botão de compartilhamento nos dispositivos que o suportam), além de uma contagem regressiva até o código expirar.",
+        "Digite o código de novo, cole o link, ou use o menu de compartilhamento para enviá-lo de outra forma (chat, AirDrop, o que for mais rápido) — cada caminho chega à mesma sala e obtém a mesma conexão direta e criptografada. O QR é um entre vários pontos de entrada, nunca uma exigência.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "Quem escaneia o QR precisa de uma conta Relayium?",
+        a: "Não. Só o remetente faz login para criar o código de emparelhamento e o seu QR. Quem escaneia apenas entra na sala que já foi criada — sem conta, sem cadastro, nada para instalar.",
+      },
+      {
+        q: "O que o código QR contém de fato?",
+        a: "O mesmo link de entrada que o botão \"copiar link\" copia — uma URL relayium.com com o código de emparelhamento embutido. Escaneá-lo apenas abre esse link no navegador, que entra na sala automaticamente.",
+      },
+      {
+        q: "Escanear o QR é tão seguro quanto digitar o código?",
+        a: "Sim, é a conexão idêntica de qualquer jeito. Os dois dispositivos ainda negociam uma troca de chaves X25519, criptografam com AES-256-GCM e mostram um código de verificação SAS coincidente que você deve conferir antes de confiar na transferência. O QR só muda como você entra na sala, não como a transferência é protegida.",
+      },
+      {
+        q: "E se o QR não escanear?",
+        a: "Nada se perde — o mesmo cartão de emparelhamento mostra o código bruto e um link copiável, e um botão de compartilhamento nos dispositivos compatíveis. Qualquer um deles abre a mesma sala que o QR.",
+      },
+      {
+        q: "Isso funciona entre redes diferentes, como dados do celular e o Wi-Fi de casa?",
+        a: "Sim. Este é o fluxo de emparelhamento entre redes, então funciona tanto se os dois dispositivos compartilharem uma rede como se não. O Relayium os conecta diretamente quando pode, e só recorre a um retransmissor criptografado quando um caminho direto não é possível.",
+      },
+    ],
+  },
+  cta: {
+    text: "Abra o Relayium, crie um código e tente escanear o QR com outro dispositivo — sem app nem conta para quem escaneia.",
+    button: "Experimente o Relayium agora",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "how-to/transfer-files-by-scanning-a-qr-code",
   updated: "2026-07-09",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

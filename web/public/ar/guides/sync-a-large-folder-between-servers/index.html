@@ -14,6 +14,8 @@
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/sync-a-large-folder-between-servers" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/sync-a-large-folder-between-servers" />
     <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/sync-a-large-folder-between-servers" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/sync-a-large-folder-between-servers" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -61,7 +63,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=ar">Relayium</a></header>
       <h1>مزامنة مجلد كبير بين خادمين (قابلة للاستئناف، في الخلفية)</h1>
       <p class="updated">آخر تحديث: 2026-07-08</p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers">English</a><a href="/zh/guides/sync-a-large-folder-between-servers">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers">Français</a><a href="/ar/guides/sync-a-large-folder-between-servers" aria-current="true">العربية</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers">English</a><a href="/zh/guides/sync-a-large-folder-between-servers">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers">Français</a><a href="/ar/guides/sync-a-large-folder-between-servers" aria-current="true">العربية</a><a href="/es/guides/sync-a-large-folder-between-servers">Español</a><a href="/pt/guides/sync-a-large-folder-between-servers">Português</a></nav>
       <p class="lead">لديك مجلد كبير — عشرات الغيغابايتات — على خادم وتريد نسخة مطابقة على آخر. لا يمكنك مراقبة طرفية لساعات، ولا ينبغي لنقلٍ يموت في منتصف الطريق أن يبدأ من الصفر. صُمِّم relayium sync لهذا: مرآة تزايدية أحادية الاتجاه تتخطى ما هو موجود سلفاً، وتستأنف ملفاً أُرسِل نصفه من حيث توقف، وتتحقق من كل ملف من الطرف إلى الطرف.</p>
       <p class="lead">يُعِدّ هذا الدليل نقلاً دون إشراف يُصلِح نفسه: فوِّض المُرسِل مرةً واحدة، وشغّل المُنصِت في الخلفية، وقُد relayium sync من حلقة إعادة محاولة داخل tmux كي يستمر عبر الانقطاعات حتى يصل المجلد كاملاً.</p>
       <h2>لماذا يناسب relayium sync هذه المهمة</h2>

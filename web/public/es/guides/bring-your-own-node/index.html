@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Usa tu propio nodo: aprovecha el retransmisor y el almacenamiento de Relayium gratis · Relayium</title>
+    <meta name="description" content="Vincula tu propio nodo de retransmisión/almacenamiento a tu cuenta de Relayium con un solo comando. Tus transferencias pasan entonces por tu nodo — no por nuestros servidores medidos —, así que son gratis, y los datos permanecen en hardware que tú controlas." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/es/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/bring-your-own-node" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/bring-your-own-node" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Usa tu propio nodo: aprovecha el retransmisor y el almacenamiento de Relayium gratis" />
+    <meta property="og:description" content="Vincula tu propio nodo de retransmisión/almacenamiento a tu cuenta de Relayium con un solo comando. Tus transferencias pasan entonces por tu nodo — no por nuestros servidores medidos —, así que son gratis, y los datos permanecen en hardware que tú controlas." />
+    <meta property="og:url" content="https://relayium.com/es/guides/bring-your-own-node" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="es_ES" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Usa tu propio nodo: aprovecha el retransmisor y el almacenamiento de Relayium gratis" />
+    <meta name="twitter:description" content="Vincula tu propio nodo de retransmisión/almacenamiento a tu cuenta de Relayium con un solo comando. Tus transferencias pasan entonces por tu nodo — no por nuestros servidores medidos —, así que son gratis, y los datos permanecen en hardware que tú controlas." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Usa tu propio nodo: aprovecha el retransmisor y el almacenamiento de Relayium gratis","description":"Vincula tu propio nodo de retransmisión/almacenamiento a tu cuenta de Relayium con un solo comando. Tus transferencias pasan entonces por tu nodo — no por nuestros servidores medidos —, así que son gratis, y los datos permanecen en hardware que tú controlas.","inLanguage":"es","dateModified":"2026-07-10","mainEntityOfPage":"https://relayium.com/es/guides/bring-your-own-node","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"Recibí \"relayium-node: command not found\" — ¿qué salió mal?","acceptedAnswer":{"@type":"Answer","text":"Ejecutaste el binario relayium-node antes de instalarlo. Usa el comando de instalación de una línea de la página de cuenta (la forma curl … | sudo … sh): descarga el binario, lo coloca en tu PATH y lo arranca como servicio. Nunca instalas relayium-node por separado."}},{"@type":"Question","name":"¿El nodo sigue en línea tras un reinicio?","acceptedAnswer":{"@type":"Answer","text":"Sí. El instalador registra un servicio systemd que se habilita al arrancar y está configurado con Restart=always, así que vuelve tras un reinicio y se reinicia por sí solo si se cae. Nada más que ejecutar."}},{"@type":"Question","name":"¿En qué se diferencia esto de alojar Relayium por tu cuenta?","acceptedAnswer":{"@type":"Answer","text":"Usar tu propio nodo conserva tu cuenta y aplicaciones habituales de relayium.com y solo añade un nodo que es tuyo para llevar tu tráfico. El autoalojamiento ejecuta toda la pila del servidor (cuentas, aplicación web, señalización) en tu propio dominio — consulta la guía \"Aloja Relayium por tu cuenta\" para eso."}},{"@type":"Question","name":"¿Puede alguien más usar mi nodo o ver mis datos?","acceptedAnswer":{"@type":"Answer","text":"No. Un nodo está vinculado a tu cuenta por su token y solo lleva el tráfico de tu cuenta. Las transferencias en tiempo real están cifradas de extremo a extremo y los blobs almacenados son texto cifrado que tu nodo no puede leer. Tus datos y la configuración de tu nodo solo los puedes usar tú."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=es">Relayium</a></header>
+      <h1>Usa tu propio nodo: aprovecha el retransmisor y el almacenamiento de Relayium gratis</h1>
+      <p class="updated">Última actualización: 2026-07-10</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/bring-your-own-node">English</a><a href="/zh/guides/bring-your-own-node">中文</a><a href="/ja/guides/bring-your-own-node">日本語</a><a href="/ko/guides/bring-your-own-node">한국어</a><a href="/de/guides/bring-your-own-node">Deutsch</a><a href="/fr/guides/bring-your-own-node">Français</a><a href="/ar/guides/bring-your-own-node">العربية</a><a href="/es/guides/bring-your-own-node" aria-current="true">Español</a><a href="/pt/guides/bring-your-own-node">Português</a></nav>
+      <p class="lead">Las transferencias entre redes y los enlaces almacenados usan ancho de banda de retransmisión y disco que nos cuestan dinero, así que funcionan con una franquicia gratuita y se pagan a partir de ahí. Hay una forma de evitarlo: ejecuta tu propio nodo de retransmisión/almacenamiento, vincúlalo a tu cuenta, y tus transferencias fluyen por tu nodo en lugar del nuestro — nada medido, nada facturado.</p>
+      <p class="lead">Esto es distinto de alojar por tu cuenta todo el servidor de Relayium. Sigues usando tu cuenta habitual de relayium.com y las mismas aplicaciones; solo estás añadiendo un nodo que es tuyo para que lleve tu tráfico. Esta guía te lleva de una máquina Linux recién instalada a un nodo en línea en unos cinco minutos.</p>
+      <h2>Por qué ejecutar tu propio nodo</h2>
+      <p>Dos razones. Primero, el costo: un nodo que es tuyo lleva tu tráfico de retransmisión y almacenamiento directamente, así que nunca toca nuestra infraestructura medida y no hay nada que facturar — tu uso es gratis por grande que sea.</p>
+      <p>Segundo, el control: los bytes retransmitidos y los blobs almacenados residen en hardware que tú operas, bajo tu propio control operativo. Las transferencias en tiempo real siguen cifradas de extremo a extremo durante todo el trayecto, así que incluso tu propio nodo solo ve texto cifrado.</p>
+      <h2>Qué necesitas</h2>
+      <p>Un servidor Linux accesible desde internet — sirve tanto un VPS barato como una máquina siempre encendida en casa. Necesitarás root (o sudo) y la capacidad de abrir unos cuantos puertos entrantes. Se admiten tanto amd64 como arm64.</p>
+      <h2>Paso 1 — obtén tu comando de instalación</h2>
+      <p>Inicia sesión en relayium.com, abre la página de cuenta (/me), desplázate hasta My Nodes y haz clic en Add node. Obtendrás un comando de instalación de un solo uso con un token incrustado — el token se muestra una única vez, así que cópialo de inmediato. Tiene este aspecto:</p>
+      <pre><code>curl -fsSL https://relayium.com/install-node.sh | sudo RELAYIUM_CENTRAL_URL=https://relayium.com RELAYIUM_NODE_TOKEN=&lt;your-token&gt; RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh</code></pre>
+      <ul><li>La parte &lt;your-token&gt; se rellena por ti en la página de cuenta — no pegues literalmente el marcador de posición de arriba.</li><li>RELAYIUM_NODE_STORAGE_DIR activa el almacenamiento de blobs además de la retransmisión. Déjalo desactivado (omite la variable) si solo quieres que el nodo retransmita y no almacene.</li></ul>
+      <h2>Paso 2 — ejecútalo en tu servidor, como root</h2>
+      <p>Pega el comando en tu servidor. Canaliza nuestro instalador a sh: el instalador descarga y verifica por suma de comprobación el binario relayium-node, lo instala en /usr/local/bin, escribe un servicio systemd y lo arranca. El sudo inicial es lo que le permite instalar el servicio; si ya eres root, es un no-op inofensivo.</p>
+      <p>Como es un servicio systemd, el nodo se habilita al arrancar y se reinicia por sí solo si alguna vez se cae — se mantiene en línea a través de los reinicios sin nada más que hacer. Si ves `relayium-node: command not found`, ejecutaste el binario directamente en lugar del instalador de arriba — es el comando de una línea el que pone el binario en su sitio.</p>
+      <ul><li>Comprueba que arrancó: `systemctl status relayium-node` (debería indicar active/running).</li><li>Confirma la persistencia al arranque: `systemctl is-enabled relayium-node` (debería indicar enabled).</li><li>Observa los registros en vivo: `journalctl -u relayium-node -f`.</li></ul>
+      <h2>Paso 3 — abre los puertos entrantes</h2>
+      <p>Estar en línea (un latido hacia relayium.com) solo necesita acceso saliente, que ya tienes. Pero para que otros pares realmente retransmitan a través de tu nodo y almacenen en él, sus puertos entrantes deben ser accesibles. Si el host ejecuta un cortafuegos, ábrelos — con ufw es así:</p>
+      <pre><code>sudo ufw allow 3478/udp        # TURN
+sudo ufw allow 8081/tcp        # storage
+sudo ufw allow 49152:65535/udp # relay</code></pre>
+      <ul><li>3478/udp es el puerto TURN que los pares usan para retransmitir; 8081/tcp es el puerto HTTP del almacenamiento de blobs; 49152–65535/udp es el rango de medios de la retransmisión.</li><li>En un VPS en la nube, permítelos también en el grupo de seguridad / cortafuegos de red del proveedor, no solo en ufw.</li></ul>
+      <h2>Paso 4 — confirma y enruta el tráfico a través de él</h2>
+      <p>De vuelta en la página de cuenta, tu nodo aparece bajo My Nodes y cambia a Online en unos 30 segundos. A partir de entonces, las transferencias de tu cuenta prefieren tu propio nodo automáticamente.</p>
+      <p>Para forzarlo — que nunca recurra a nuestra infraestructura compartida — activa &quot;Only use my own nodes for relay/storage&quot; en la misma página. Con eso activado, si ninguno de tus nodos está en línea, una transferencia falla en lugar de usar discretamente los nuestros.</p>
+      <h2>Preguntas frecuentes</h2>
+      <h3>Recibí &quot;relayium-node: command not found&quot; — ¿qué salió mal?</h3>
+      <p>Ejecutaste el binario relayium-node antes de instalarlo. Usa el comando de instalación de una línea de la página de cuenta (la forma curl … | sudo … sh): descarga el binario, lo coloca en tu PATH y lo arranca como servicio. Nunca instalas relayium-node por separado.</p>
+      <h3>¿El nodo sigue en línea tras un reinicio?</h3>
+      <p>Sí. El instalador registra un servicio systemd que se habilita al arrancar y está configurado con Restart=always, así que vuelve tras un reinicio y se reinicia por sí solo si se cae. Nada más que ejecutar.</p>
+      <h3>¿En qué se diferencia esto de alojar Relayium por tu cuenta?</h3>
+      <p>Usar tu propio nodo conserva tu cuenta y aplicaciones habituales de relayium.com y solo añade un nodo que es tuyo para llevar tu tráfico. El autoalojamiento ejecuta toda la pila del servidor (cuentas, aplicación web, señalización) en tu propio dominio — consulta la guía &quot;Aloja Relayium por tu cuenta&quot; para eso.</p>
+      <h3>¿Puede alguien más usar mi nodo o ver mis datos?</h3>
+      <p>No. Un nodo está vinculado a tu cuenta por su token y solo lleva el tráfico de tu cuenta. Las transferencias en tiempo real están cifradas de extremo a extremo y los blobs almacenados son texto cifrado que tu nodo no puede leer. Tus datos y la configuración de tu nodo solo los puedes usar tú.</p>
+      <div class="ctacard">
+        <p>Inicia sesión, abre tu página de cuenta y añade tu primer nodo en menos de un minuto.</p>
+        <a class="cta" href="/me">Abrir la página de cuenta</a>
+      </div>
+      <h2>Sigue leyendo</h2>
+      <ul class="related"><li><a href="/es/compare/snapdrop">Relayium vs Snapdrop y PairDrop: ¿qué transferencia P2P segura?</a></li><li><a href="/es/compare/airdrop">Relayium vs AirDrop: una alternativa a AirDrop multiplataforma</a></li><li><a href="/es/compare/wetransfer">Relayium vs WeTransfer: envía archivos grandes sin el servidor</a></li><li><a href="/es/how-to/transfer-files-android-to-iphone">Cómo transferir archivos de Android a iPhone (sin cable)</a></li><li><a href="/es/how-to/send-files-pc-to-phone-wirelessly">Enviar archivos del PC al teléfono sin cables, sin cable ni app</a></li><li><a href="/es/how-to/send-large-files-without-cloud">Cómo enviar archivos grandes sin la nube</a></li><li><a href="/es/guides/transfer-files-from-terminal">Transfiere archivos desde la terminal con la CLI de Relayium</a></li><li><a href="/es/guides/back-up-a-server-over-ssh">Haz copias de seguridad de archivos en tu propio servidor por SSH con la CLI de Relayium</a></li><li><a href="/es/guides/send-a-file-to-someone">Enviar un archivo a alguien entre redes con la CLI de Relayium</a></li><li><a href="/es/guides/server-to-server-transfers">Transferencias de servidor a servidor con la CLI de Relayium (daemon direct)</a></li><li><a href="/es/guides/sync-a-large-folder-between-servers">Sincronizar una carpeta grande entre dos servidores (reanudable, en segundo plano)</a></li><li><a href="/es/guides/push-to-cloud-pull-on-another-computer">Sube archivos a la nube y recógelos en otro ordenador</a></li><li><a href="/es/how-to/share-a-file-with-an-expiring-link">Compartir un archivo con un enlace de descarga seguro y con caducidad</a></li><li><a href="/es/guides/self-host-relayium">Aloja Relayium por tu cuenta: ejecuta tu propio servidor de transferencia de archivos</a></li><li><a href="/es/how-to/send-files-between-two-computers-over-the-internet">Enviar archivos entre dos computadoras por Internet</a></li><li><a href="/es/compare/croc">Relayium vs croc: transferencia de archivos cifrada desde la terminal</a></li><li><a href="/es/guides/how-relayium-encrypts-your-files">Cómo Relayium cifra tus archivos de extremo a extremo</a></li><li><a href="/es/compare/google-drive">Relayium frente a Google Drive para enviar archivos</a></li><li><a href="/es/compare/rsync">Relayium vs rsync: sincroniza carpetas sin la configuración de SSH</a></li><li><a href="/es/compare/firefox-send">La mejor alternativa a Firefox Send en 2026</a></li><li><a href="/es/how-to/transfer-files-by-scanning-a-qr-code">Transferir archivos escaneando un código QR</a></li><li><a href="/es/guides/receive-files-from-the-command-line">Recibir archivos desde la línea de comandos</a></li><li><a href="/es/how-to/send-a-folder">Cómo enviar una carpeta entera, no solo archivos</a></li><li><a href="/es/guides/run-relayium-as-an-always-on-service">Ejecuta Relayium como un servicio de recepción siempre activo</a></li><li><a href="/es/how-to/automate-server-backups">Automatiza copias de seguridad cifradas del servidor con una tarea cron</a></li><li><a href="/es/compare/localsend">Relayium frente a LocalSend: qué transferencia local usar</a></li><li><a href="/es/compare/scp">Relayium vs scp: transferencia de archivos más sencilla por SSH</a></li><li><a href="/es/compare/magic-wormhole">Relayium vs magic-wormhole: transferencia de archivos por CLI</a></li><li><a href="/es/compare/nextcloud">Relayium vs Nextcloud para enviar archivos</a></li><li><a href="/es/compare/dropbox">Relayium vs Dropbox para enviar un archivo</a></li><li><a href="/es/how-to/airdrop-for-windows-and-android">AirDrop para Windows, Linux y Android</a></li><li><a href="/es/how-to/transfer-files-between-mac-and-windows">Transferir archivos entre un Mac y un PC con Windows</a></li><li><a href="/es/how-to/send-files-on-the-same-wifi">Enviar archivos entre dispositivos en la misma Wi-Fi</a></li><li><a href="/es/guides/what-is-peer-to-peer-file-transfer">¿Qué es la transferencia de archivos de igual a igual?</a></li><li><a href="/es/guides/is-it-safe-to-send-files-over-the-internet">¿Es seguro enviar archivos por internet?</a></li><li><a href="/es/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=es">← Relayium</a>
+        <a href="/es/guides">Guías</a>
+        <a href="/es/privacy">undefined</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

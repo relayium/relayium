@@ -577,8 +577,172 @@ const ar = {
   relatedHeading: "تابع القراءة",
 };
 
+const es = {
+  title: "Transfiere archivos desde la terminal con la CLI de Relayium",
+  description:
+    "Instala la CLI de Relayium, gratis y cifrada de extremo a extremo, y mueve archivos de tres maneras desde tu terminal — por tu propio SSH, con un código de emparejamiento entre redes, o directamente entre dos servidores. Sin cuenta, y los bytes de los archivos nunca pasan por nuestros servidores.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "La CLI de Relayium es un único binario pequeño que mueve archivos desde tu terminal — cifrado de extremo a extremo, autoalojable y completamente gratis. Existe para el caso que un navegador maneja mal: copiar archivos a un servidor que ya administras, enviar una compilación entre dos máquinas, o mandar un archivo comprimido a un colega entre redes sin subirlo a la nube de nadie.",
+    "Sea cual sea la forma en que la uses, los bytes de los archivos viajan directamente entre los dos extremos y nunca pasan por los servidores de Relayium. Esta guía te deja instalado y con tu primera transferencia hecha, y luego te dirige a los tutoriales más detallados de cada modo.",
+  ],
+  sections: [
+    {
+      heading: "Instala con un solo comando",
+      body: [
+        "En macOS o Linux, un comando descarga un binario precompilado para tu sistema operativo y lo coloca en tu PATH:",
+      ],
+      code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+      bullets: [
+        "¿Prefieres elegir el archivo tú mismo? Descarga un binario desde la página de releases.",
+        "¿Tienes Go instalado? Clona el repositorio y ejecuta: go build -o relayium ./cmd/relayium (desde el directorio server).",
+        "Luego ejecuta relayium --help para ver todos los comandos, y relayium version para comprobar la compilación.",
+      ],
+    },
+    {
+      heading: "Las tres formas en que mueve archivos",
+      body: [
+        "Relayium mueve archivos de tres maneras. Eliges según dónde esté el otro extremo, no aprendiendo tres herramientas distintas — todas comparten un mismo motor de transferencia con reanudación por archivo y verificación SHA-256.",
+      ],
+      bullets: [
+        "push / pull — a un servidor al que ya puedes entrar por SSH. Los bytes viajan por tu conexión SSH; sin cuenta de Relayium.",
+        "send / receive — a otra persona entre redes, usando un código de emparejamiento corto. De igual a igual directo; si no se encuentra una ruta directa, la transferencia falla en lugar de enrutarse a través de nosotros.",
+        "serve + push relayium:// (daemon direct) — directamente entre dos servidores que posees, sobre TLS fijado. Sin retransmisor, sin SSH, sin código.",
+      ],
+    },
+    {
+      heading: "Tu primera transferencia",
+      body: [
+        "Lo más rápido para probar es copiar una carpeta a un servidor al que puedas entrar por SSH. Relayium usa tu acceso SSH existente, así que no hay nada que configurar en el remoto ni cuenta que crear:",
+      ],
+      code: ["relayium push ./photos user@your-server:backups/"],
+      bullets: [
+        "Si relayium también está instalado en el remoto, push usa el protocolo nativo (reanudable, SHA-256 por archivo).",
+        "push recurre a un simple flujo tar cuando relayium no está en el remoto, así que funciona incluso contra un servidor pelado — esa alternativa es solo para push.",
+        "Recupera los mismos archivos con: relayium pull user@your-server:backups/ ./restore — pull siempre necesita relayium en el remoto (no tiene alternativa con tar), así que instálalo allí primero.",
+      ],
+    },
+    {
+      heading: "Gratis, y privado por diseño",
+      body: [
+        "No hay nada que pagar ni cuenta que mantener. La CLI conecta los dos extremos directamente, así que tus archivos nunca se suben a un servidor intermedio — lo único que toca a Relayium en algún momento es un diminuto apretón de manos de encuentro en el modo send / receive, usado para presentar a los dos extremos, nunca el archivo en sí.",
+        "Cada transferencia está cifrada de extremo a extremo, cada archivo se verifica con un hash SHA-256 al llegar, y una transferencia interrumpida se reanuda desde donde se detuvo en lugar de empezar de nuevo. Funciona en macOS, Linux y Windows, y todo el proyecto es de código abierto y autoalojable.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿La CLI cuesta algo?",
+        a: "No. La CLI es completamente gratis. Conecta tus máquinas directamente y nunca hace de intermediario para los bytes de tus archivos a través de Relayium, así que no hay nada que medir ni nada que pagar.",
+      },
+      {
+        q: "¿Necesito una cuenta de Relayium?",
+        a: "No. push / pull usa tu propio SSH, daemon direct usa confianza por clave pública entre tus servidores, y send / receive usa un código que acordáis por otro canal. Ninguno de ellos requiere cuenta.",
+      },
+      {
+        q: "¿Qué sistemas operativos son compatibles?",
+        a: "Se publican binarios precompilados para macOS, Linux y Windows, tanto en x86-64 como en arm64. El script de instalación cubre macOS y Linux; en Windows, descarga el .zip desde la página de releases.",
+      },
+      {
+        q: "¿Mis archivos pasan por los servidores de Relayium?",
+        a: "No. En todos los modos, los bytes de los archivos viajan directamente entre los dos extremos. Solo send / receive contacta con nuestros servidores, y únicamente para un pequeño apretón de manos de encuentro — nunca el contenido del archivo.",
+      },
+    ],
+  },
+  cta: {
+    text: "Instala la CLI de Relayium y haz tu primera transferencia — completamente gratis, y sin cuenta.",
+    button: "Obtener la CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Sigue leyendo",
+};
+
+const pt = {
+  title: "Transfira arquivos pelo terminal com a CLI do Relayium",
+  description:
+    "Instale a CLI do Relayium, gratuita e com criptografia de ponta a ponta, e mova arquivos de três formas pelo seu terminal — pelo seu próprio SSH, por um código de emparelhamento entre redes, ou direto entre dois servidores. Sem conta, e os bytes dos arquivos nunca passam pelos nossos servidores.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "A CLI do Relayium é um único binário pequeno que move arquivos pelo seu terminal — com criptografia de ponta a ponta, auto-hospedável e totalmente gratuito. Ela existe para o caso que um navegador lida mal: copiar arquivos para um servidor que você já administra, enviar um build entre duas máquinas, ou mandar um arquivo compactado para um colega entre redes sem subi-lo para a nuvem de ninguém.",
+    "Seja qual for a forma que você usar, os bytes dos arquivos trafegam diretamente entre as duas pontas e nunca passam pelos servidores do Relayium. Este guia deixa você instalado e com a sua primeira transferência feita, e depois aponta para os tutoriais mais aprofundados de cada modo.",
+  ],
+  sections: [
+    {
+      heading: "Instale com um único comando",
+      body: [
+        "No macOS ou no Linux, um comando baixa um binário pré-compilado para o seu sistema operacional e o coloca no seu PATH:",
+      ],
+      code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+      bullets: [
+        "Prefere escolher o arquivo você mesmo? Baixe um binário na página de releases.",
+        "Tem o Go instalado? Clone o repositório e execute: go build -o relayium ./cmd/relayium (a partir do diretório server).",
+        "Depois execute relayium --help para ver todos os comandos, e relayium version para conferir o build.",
+      ],
+    },
+    {
+      heading: "As três formas de mover arquivos",
+      body: [
+        "O Relayium move arquivos de três formas. Você escolhe pela localização da outra ponta, não aprendendo três ferramentas diferentes — todas compartilham um único motor de transferência com retomada por arquivo e verificação SHA-256.",
+      ],
+      bullets: [
+        "push / pull — para um servidor no qual você já consegue entrar por SSH. Os bytes trafegam pela sua conexão SSH; sem conta do Relayium.",
+        "send / receive — para outra pessoa entre redes, usando um código de emparelhamento curto. Ponto a ponto direto; se nenhum caminho direto for encontrado, a transferência falha em vez de ser roteada por nós.",
+        "serve + push relayium:// (daemon direct) — direto entre dois servidores que você possui, sobre TLS fixado. Sem retransmissor, sem SSH, sem código.",
+      ],
+    },
+    {
+      heading: "Sua primeira transferência",
+      body: [
+        "O mais rápido para experimentar é copiar uma pasta para um servidor no qual você consiga entrar por SSH. O Relayium usa o seu acesso SSH existente, então não há nada a configurar no remoto e nenhuma conta a criar:",
+      ],
+      code: ["relayium push ./photos user@your-server:backups/"],
+      bullets: [
+        "Se o relayium também estiver instalado no remoto, o push usa o protocolo nativo (retomável, SHA-256 por arquivo).",
+        "O push recorre a um simples fluxo tar quando o relayium não está no remoto, então funciona até contra um servidor pelado — essa alternativa é só do push.",
+        "Traga os mesmos arquivos de volta com: relayium pull user@your-server:backups/ ./restore — o pull sempre precisa do relayium no remoto (ele não tem alternativa com tar), então instale-o lá primeiro.",
+      ],
+    },
+    {
+      heading: "Gratuito, e privado por design",
+      body: [
+        "Não há nada a pagar nem conta a manter. A CLI conecta as duas pontas diretamente, então seus arquivos nunca são enviados para um servidor no meio — a única coisa que toca o Relayium em algum momento é um minúsculo aperto de mãos de encontro no modo send / receive, usado para apresentar as duas pontas uma à outra, nunca o arquivo em si.",
+        "Cada transferência é criptografada de ponta a ponta, cada arquivo é verificado com um hash SHA-256 na chegada, e uma transferência interrompida é retomada de onde parou em vez de começar do zero. Ela roda no macOS, no Linux e no Windows, e o projeto inteiro é de código aberto e auto-hospedável.",
+      ],
+    },
+  ],
+  faq: {
+    heading: "Perguntas frequentes",
+    items: [
+      {
+        q: "A CLI custa alguma coisa?",
+        a: "Não. A CLI é totalmente gratuita. Ela conecta suas máquinas diretamente e nunca faz proxy dos bytes dos seus arquivos pelo Relayium, então não há nada a medir nem nada a pagar.",
+      },
+      {
+        q: "Preciso de uma conta do Relayium?",
+        a: "Não. O push / pull usa o seu próprio SSH, o daemon direct usa confiança por chave pública entre os seus servidores, e o send / receive usa um código que vocês combinam por outro canal. Nenhum deles exige conta.",
+      },
+      {
+        q: "Quais sistemas operacionais são compatíveis?",
+        a: "Binários pré-compilados são publicados para macOS, Linux e Windows, tanto em x86-64 quanto em arm64. O script de instalação cobre macOS e Linux; no Windows, baixe o .zip na página de releases.",
+      },
+      {
+        q: "Meus arquivos passam pelos servidores do Relayium?",
+        a: "Não. Em todos os modos, os bytes dos arquivos trafegam diretamente entre as duas pontas. Só o send / receive contata os nossos servidores, e apenas para um pequeno aperto de mãos de encontro — nunca o conteúdo do arquivo.",
+      },
+    ],
+  },
+  cta: {
+    text: "Instale a CLI do Relayium e faça a sua primeira transferência — totalmente gratuita, e sem conta.",
+    button: "Obter a CLI",
+    href: "/cli",
+  },
+  relatedHeading: "Continue lendo",
+};
+
 export default {
   slug: "guides/transfer-files-from-terminal",
   updated: "2026-07-08",
-  langs: { en, zh, ja, ko, de, fr, ar },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

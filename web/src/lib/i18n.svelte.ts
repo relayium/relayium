@@ -22,6 +22,8 @@ const loaders: Record<Lang, () => Promise<{ default: Messages }>> = {
   de: () => import("./i18n/de"),
   fr: () => import("./i18n/fr"),
   ar: () => import("./i18n/ar"),
+  es: () => import("./i18n/es"),
+  pt: () => import("./i18n/pt"),
 };
 
 // Reactive table of the languages loaded so far. Typed as a full Record — not
@@ -67,7 +69,7 @@ export function detect(search?: string): Lang {
     if (saved && CODES.has(saved)) return saved as Lang;
   } catch { /* storage may be unavailable */ }
   const nav = (typeof navigator !== "undefined" ? navigator.language : "en").toLowerCase();
-  for (const code of ["zh", "ja", "ko", "de", "fr", "ar"] as Lang[]) {
+  for (const code of ["zh", "ja", "ko", "de", "fr", "ar", "es", "pt"] as Lang[]) {
     if (nav.startsWith(code)) return code;
   }
   return "en";
