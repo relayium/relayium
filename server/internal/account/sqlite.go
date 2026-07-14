@@ -297,6 +297,9 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// browser approval page can show what it's authorizing (anti-phishing).
 		`ALTER TABLE cli_device_auth ADD COLUMN client_ip TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE cli_device_auth ADD COLUMN user_agent TEXT NOT NULL DEFAULT ''`,
+		// Billing plans phase-1: every user is assigned a plan tier, defaulting
+		// to the free plan for existing and new rows alike.
+		`ALTER TABLE users ADD COLUMN plan_id TEXT NOT NULL DEFAULT 'free'`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -498,8 +501,8 @@ func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName 
 	email = normEmail(email)
 	var u User
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after FROM users WHERE email = ?`, email,
-	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter)
+		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after, plan_id FROM users WHERE email = ?`, email,
+	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter, &u.PlanID)
 	if err == nil {
 		return u, nil
 	}
@@ -519,9 +522,9 @@ func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName 
 func (s *SQLiteStore) UserByCanonicalEmail(ctx context.Context, canonical string) (User, bool, error) {
 	var u User
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after
+		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after, plan_id
 		   FROM users WHERE canonical_email = ? LIMIT 1`, canonical,
-	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter)
+	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter, &u.PlanID)
 	if err == sql.ErrNoRows {
 		return User{}, false, nil
 	}
@@ -572,8 +575,8 @@ func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (User, error) 
 	var u User
 	var strict int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes, deleted_at, purge_after FROM users WHERE id = ?`, id,
-	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &strict, &u.DeletedAt, &u.PurgeAfter)
+		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes, deleted_at, purge_after, plan_id FROM users WHERE id = ?`, id,
+	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &strict, &u.DeletedAt, &u.PurgeAfter, &u.PlanID)
 	if err == sql.ErrNoRows {
 		return User{}, ErrNotFound
 	}
@@ -583,6 +586,12 @@ func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (User, error) 
 
 func (s *SQLiteStore) SetOnlyOwnNodes(ctx context.Context, userID string, on bool) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE users SET only_own_nodes = ? WHERE id = ?`, b2i(on), userID)
+	return err
+}
+
+// SetUserPlan assigns a user's billing tier (plans.id).
+func (s *SQLiteStore) SetUserPlan(ctx context.Context, userID, planID string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET plan_id = ? WHERE id = ?`, planID, userID)
 	return err
 }
 

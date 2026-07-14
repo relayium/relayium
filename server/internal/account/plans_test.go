@@ -39,3 +39,25 @@ func TestSeedPlansCreatesFourDefaultsIdempotently(t *testing.T) {
 		t.Fatalf("re-seed overwrote an admin edit: %+v", got)
 	}
 }
+
+func TestUserPlanDefaultsFreeAndCanBeSet(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	u, _ := st.UpsertUserByEmail(ctx, "plan@example.com", "")
+
+	got, err := st.GetUserByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PlanID != "free" {
+		t.Fatalf("new user plan = %q, want free", got.PlanID)
+	}
+
+	if err := st.SetUserPlan(ctx, u.ID, "pro"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = st.GetUserByID(ctx, u.ID)
+	if got.PlanID != "pro" {
+		t.Fatalf("after set, plan = %q, want pro", got.PlanID)
+	}
+}

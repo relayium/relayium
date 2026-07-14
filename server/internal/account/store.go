@@ -26,6 +26,8 @@ type User struct {
 	// PurgeAfter is when GC may hard-delete this account and its data (unix
 	// seconds); 0 = not scheduled. Set alongside DeletedAt with a grace period.
 	PurgeAfter int64
+	// PlanID is the user's billing tier (plans.id); defaults to "free".
+	PlanID string
 }
 
 // Plan is an admin-configurable billing tier: per-account storage + monthly
@@ -320,6 +322,8 @@ type Store interface {
 	SetEmailVerified(ctx context.Context, userID string) error
 	// SetOnlyOwnNodes toggles the BYO-nodes-only restriction (SP3) for a user.
 	SetOnlyOwnNodes(ctx context.Context, userID string, on bool) error
+	// SetUserPlan assigns a user's billing tier (plans.id).
+	SetUserPlan(ctx context.Context, userID, planID string) error
 	// SetAccountDeletion schedules a user for deletion: sets deleted_at and
 	// purge_after (the GC hard-delete deadline), resetting purge_reminder_sent
 	// so a re-request re-arms the reminder.
