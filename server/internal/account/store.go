@@ -288,6 +288,11 @@ type AdminUserRow struct {
 	DownloadBytes int64  // 选定月下载（usage_monthly）
 	StorageBytes  int64  // 当前存储占用（未过期文件 size 之和，与月份无关）
 	PlanID        string // 当前套餐（plans.id）
+	// SubscriptionStatus mirrors users.subscription_status ('' when there is
+	// no active Stripe subscription). PlanSource mirrors users.plan_source
+	// ('' default/free, 'admin' manual comp, 'stripe' webhook-assigned).
+	SubscriptionStatus string
+	PlanSource         string
 }
 
 // AdminUserQuery 参数化后台用户列表查询。

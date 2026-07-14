@@ -89,6 +89,10 @@ type planView struct {
 	PriceYearlyCents  int64
 	SortOrder         int64
 	Active            bool
+	// StripePriceMonthlyID/StripePriceYearlyID are the Stripe Price ids
+	// mapped to this tier's monthly/yearly billing cycle; '' = unmapped.
+	StripePriceMonthlyID string
+	StripePriceYearlyID  string
 }
 
 func planViews(plans []Plan) []planView {
@@ -96,13 +100,15 @@ func planViews(plans []Plan) []planView {
 	for _, p := range plans {
 		out = append(out, planView{
 			ID: p.ID, Name: p.Name,
-			StorageMB:         p.StorageBytes >> 20,
-			TrafficGB:         p.TrafficBytes >> 30,
-			RetentionDays:     p.RetentionSecs / 86400,
-			PriceMonthlyCents: p.PriceMonthly,
-			PriceYearlyCents:  p.PriceYearly,
-			SortOrder:         p.SortOrder,
-			Active:            p.Active,
+			StorageMB:            p.StorageBytes >> 20,
+			TrafficGB:            p.TrafficBytes >> 30,
+			RetentionDays:        p.RetentionSecs / 86400,
+			PriceMonthlyCents:    p.PriceMonthly,
+			PriceYearlyCents:     p.PriceYearly,
+			SortOrder:            p.SortOrder,
+			Active:               p.Active,
+			StripePriceMonthlyID: p.StripePriceMonthlyID,
+			StripePriceYearlyID:  p.StripePriceYearlyID,
 		})
 	}
 	return out
@@ -498,6 +504,11 @@ func (s *Service) handleAdminUpsertPlan(w http.ResponseWriter, r *http.Request) 
 	py, ok5 := nn("price_yearly_cents")
 	sort, ok6 := nn("sort_order")
 	active := r.FormValue("active") == "1"
+	// Stripe price ids are free-form strings (e.g. "price_1AbCDe...") assigned
+	// by the operator after creating Prices in the Stripe dashboard — no
+	// numeric validation, just trim.
+	stripePriceMonthlyID := strings.TrimSpace(r.FormValue("stripe_price_monthly_id"))
+	stripePriceYearlyID := strings.TrimSpace(r.FormValue("stripe_price_yearly_id"))
 	if id == "" || name == "" || !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6) {
 		http.Error(w, "invalid plan (non-negative integers; id/name required; "+
 			"storage_mb/traffic_gb <= 1073741824; retention_days <= 36500)", http.StatusBadRequest)
@@ -526,6 +537,8 @@ func (s *Service) handleAdminUpsertPlan(w http.ResponseWriter, r *http.Request) 
 		StorageBytes: storageMB << 20, TrafficBytes: trafficGB << 30,
 		RetentionSecs: retDays * 86400, PriceMonthly: pm, PriceYearly: py,
 		SortOrder: sort, Active: active, UpdatedAt: s.now().Unix(),
+		StripePriceMonthlyID: stripePriceMonthlyID,
+		StripePriceYearlyID:  stripePriceYearlyID,
 	}
 	if err := s.store.UpsertPlan(r.Context(), p); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -536,7 +549,9 @@ func (s *Service) handleAdminUpsertPlan(w http.ResponseWriter, r *http.Request) 
 
 // handleAdminSetUserPlan assigns a user to a billing plan. Only ACTIVE plans
 // may be assigned (a deactivated plan is retired for new/changed
-// assignments, though existing holders keep it until moved).
+// assignments, though existing holders keep it until moved). Uses
+// SetUserPlanAdmin so the assignment is recorded as plan_source='admin' and
+// a later Stripe webhook for this user won't override it.
 func (s *Service) handleAdminSetUserPlan(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -561,7 +576,7 @@ func (s *Service) handleAdminSetUserPlan(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "unknown or inactive plan", http.StatusBadRequest)
 		return
 	}
-	if err := s.store.SetUserPlan(r.Context(), userID, planID); err != nil {
+	if err := s.store.SetUserPlanAdmin(r.Context(), userID, planID); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}

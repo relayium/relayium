@@ -204,10 +204,10 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <section class="plans">
 <h2>套餐（{{len .Plans}}）</h2>
 <table>
-<thead><tr><th>ID</th><th>名称</th><th>存储(MB)</th><th>流量(GB/月)</th><th>暂存天数</th><th>月付(分)</th><th>年付(分)</th><th>排序</th><th>启用</th><th></th></tr></thead>
+<thead><tr><th>ID</th><th>名称</th><th>存储(MB)</th><th>流量(GB/月)</th><th>暂存天数</th><th>月付(分)</th><th>年付(分)</th><th>排序</th><th>启用</th><th>Stripe 月付价格ID</th><th>Stripe 年付价格ID</th><th></th></tr></thead>
 <tbody>
 {{range .Plans}}
-<tr><td colspan="10">
+<tr><td colspan="12">
 <form method="post" action="/admin/plans" class="plan-row">
 <input type="hidden" name="id" value="{{.ID}}">
 <span>{{.ID}}</span>
@@ -219,6 +219,8 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <input type="number" name="price_yearly_cents" min="0" value="{{.PriceYearlyCents}}" title="年付(分)">
 <input type="number" name="sort_order" min="0" value="{{.SortOrder}}" title="排序">
 <label><input type="checkbox" name="active" value="1"{{if .Active}} checked{{end}}> 启用</label>
+<input type="text" name="stripe_price_monthly_id" value="{{.StripePriceMonthlyID}}" title="Stripe 月付价格ID" placeholder="price_...">
+<input type="text" name="stripe_price_yearly_id" value="{{.StripePriceYearlyID}}" title="Stripe 年付价格ID" placeholder="price_...">
 <button type="submit">保存</button>
 </form>
 </td></tr>
@@ -271,6 +273,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <th><a href="{{index .SortHref "relayed"}}">中继</a></th>
 <th><a href="{{index .SortHref "storage"}}">当前存储占用</a></th>
 <th>套餐</th>
+<th>订阅来源</th>
 </tr></thead><tbody>
 {{$plans := .ActivePlans}}
 {{range .Users}}<tr>
@@ -288,6 +291,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <button type="submit">分配</button>
 </form>
 </td>
+<td>{{if eq .PlanSource "admin"}}{{.PlanID}} · admin{{else if eq .PlanSource "stripe"}}{{.PlanID}} · stripe/{{.SubscriptionStatus}}{{else}}—{{end}}</td>
 </tr>{{end}}
 </tbody></table>
 

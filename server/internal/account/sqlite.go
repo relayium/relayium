@@ -635,7 +635,7 @@ func (s *SQLiteStore) SetUserStripeCustomer(ctx context.Context, userID, custome
 
 // GetUserByStripeCustomer looks up a user by Stripe customer id (webhook
 // dispatch). An empty customerID intentionally returns not-found: every
-// pre-Stripe row defaults stripe_customer_id to '', so matching "" would
+// pre-Stripe row defaults stripe_customer_id to ”, so matching "" would
 // return an arbitrary user instead of "unknown".
 func (s *SQLiteStore) GetUserByStripeCustomer(ctx context.Context, customerID string) (User, bool, error) {
 	if customerID == "" {
@@ -673,7 +673,7 @@ func (s *SQLiteStore) SetUserSubscription(ctx context.Context, userID, planID, s
 // PlanByStripePrice resolves a webhook's Stripe Price id to the plan tier
 // mapped to it (either the monthly or the yearly price). An empty priceID
 // intentionally returns not-found: every plan defaults both price columns to
-// '', so matching "" would return an arbitrary plan instead of "unmapped".
+// ”, so matching "" would return an arbitrary plan instead of "unmapped".
 func (s *SQLiteStore) PlanByStripePrice(ctx context.Context, priceID string) (Plan, bool, error) {
 	if priceID == "" {
 		return Plan{}, false, nil
@@ -1305,7 +1305,7 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context, q AdminUserQuery) ([]A
 		          WHERE um.user_id = u.id AND um.period = ?) AS download_bytes,
 		       (SELECT COALESCE(SUM(sf.size),0) FROM stored_files sf
 		          WHERE sf.user_id = u.id AND sf.expires_at > ?) AS storage_bytes,
-		       u.plan_id
+		       u.plan_id, u.subscription_status, u.plan_source
 		FROM users u`+where+`
 		ORDER BY `+orderCol+` `+dir+`, u.id ASC
 		LIMIT ? OFFSET ?`, listArgs...)
@@ -1320,7 +1320,8 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context, q AdminUserQuery) ([]A
 		var row AdminUserRow
 		if err := rows.Scan(&row.ID, &row.Email, &row.DisplayName, &row.CreatedAt,
 			&row.DeviceCount, &row.RelayedBytes,
-			&row.UploadBytes, &row.DownloadBytes, &row.StorageBytes, &row.PlanID); err != nil {
+			&row.UploadBytes, &row.DownloadBytes, &row.StorageBytes, &row.PlanID,
+			&row.SubscriptionStatus, &row.PlanSource); err != nil {
 			return nil, 0, err
 		}
 		index[row.ID] = len(out)
