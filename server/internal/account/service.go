@@ -97,6 +97,13 @@ type Config struct {
 	// EnableUserNodes serves the per-user node token path (BYO nodes) even when
 	// the shared fleet NodeToken is empty.
 	EnableUserNodes bool
+	// StripeSecretKey/StripeWebhookSecret/StripePortalConfig configure Stripe
+	// billing (phase-2). StripeSecretKey empty disables billing entirely:
+	// Service.biller stays nil, /api/billing/* return 404, and the webhook
+	// endpoint returns 400.
+	StripeSecretKey     string
+	StripeWebhookSecret string
+	StripePortalConfig  string
 }
 
 type Service struct {
@@ -146,6 +153,9 @@ type Service struct {
 	// pickN returns a random index in [0,n); overridable in tests for
 	// deterministic node selection in placeUpload.
 	pickN func(int) int
+	// biller is the Stripe integration (phase-2 billing); nil when
+	// cfg.StripeSecretKey is empty, in which case billing endpoints 404.
+	biller Biller
 }
 
 // rateLimiter is the minimal per-key limiter account needs; *signal.RateLimiter
@@ -177,6 +187,9 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 		b := make([]byte, 8)
 		_, _ = rand.Read(b)
 		return int(binary.BigEndian.Uint64(b) % uint64(n))
+	}
+	if cfg.StripeSecretKey != "" {
+		svc.biller = NewStripeClient(cfg.StripeSecretKey, cfg.StripeWebhookSecret, cfg.StripePortalConfig)
 	}
 	return svc
 }
