@@ -325,7 +325,6 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 			DailyQuotaMB:        st.DailyQuota / (1024 * 1024),
 			DefaultTTLHrs:       st.DefaultTTL / 3600,
 			MaxTTLHrs:           st.MaxTTL / 3600,
-			RelayMonthlyFreeMB:  st.RelayMonthlyFree / (1024 * 1024),
 			DefaultRetention:    st.DefaultRetention,
 			DefaultMaxDownloads: st.DefaultMaxDownloads,
 			MaxMaxDownloads:     st.MaxMaxDownloads,
@@ -367,11 +366,10 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 	quota, ok2 := atoi("daily_quota_mb")
 	defH, ok3 := atoi("default_ttl_hours")
 	maxH, ok4 := atoi("max_ttl_hours")
-	relayMB, ok5 := atoi("relay_monthly_free_mb")
-	defRetention, ok6 := enumi("default_retention")
-	defMaxDL, ok7 := atoi("default_max_downloads")
-	maxMaxDL, ok8 := atoi("max_max_downloads")
-	if !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8) ||
+	defRetention, ok5 := enumi("default_retention")
+	defMaxDL, ok6 := atoi("default_max_downloads")
+	maxMaxDL, ok7 := atoi("max_max_downloads")
+	if !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7) ||
 		defH > maxH || defRetention > retentionCount || defMaxDL > maxMaxDL {
 		http.Error(w, "invalid settings (positive integers; default_ttl <= max_ttl; "+
 			"default_retention in 0..2; default_max_downloads <= max_max_downloads)", http.StatusBadRequest)
@@ -386,7 +384,6 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		{SettingDailyQuota, quota * 1024 * 1024},
 		{SettingDefaultTTL, defH * 3600},
 		{SettingMaxTTL, maxH * 3600},
-		{SettingRelayMonthlyFree, relayMB * 1024 * 1024},
 		{SettingDefaultRetention, defRetention},
 		{SettingDefaultMaxDownloads, defMaxDL},
 		{SettingMaxMaxDownloads, maxMaxDL},

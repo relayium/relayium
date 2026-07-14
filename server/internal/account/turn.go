@@ -74,16 +74,13 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Interim relay cap: withhold TURN when the code's owner is over the monthly
-	// free relay allowance. On a read error, fail open (issue TURN) rather than
-	// blocking a legit transfer. Per-plan quota (billing phase-1) supersedes this.
+	// Per-plan traffic gate: withhold TURN when the code's owner is already over
+	// their plan's monthly traffic (relay + staged upload/download combined).
+	// P2P direct still works; only relay is withheld. Fail-open on a read error.
 	if validCode {
-		st := s.resolveSettings(r.Context())
-		since, _ := monthRange(periodOf(now.Unix()))
-		used, err := s.store.UserRelayedSince(r.Context(), owner, since)
-		if err != nil {
-			log.Printf("relay metering read failed for owner %s: %v (fail-open, issuing relay)", owner, err)
-		} else if used >= st.RelayMonthlyFree {
+		if over, err := s.overTraffic(r.Context(), owner, 0); err != nil {
+			log.Printf("relay quota read failed for owner %s: %v (fail-open, issuing relay)", owner, err)
+		} else if over {
 			validCode = false
 			relayDenied = "quota"
 		}

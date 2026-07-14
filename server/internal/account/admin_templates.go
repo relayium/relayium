@@ -7,11 +7,10 @@ import (
 )
 
 type adminSettingsView struct {
-	MaxFileSizeMB      int64
-	DailyQuotaMB       int64
-	DefaultTTLHrs      int64
-	MaxTTLHrs          int64
-	RelayMonthlyFreeMB int64
+	MaxFileSizeMB int64
+	DailyQuotaMB  int64
+	DefaultTTLHrs int64
+	MaxTTLHrs     int64
 	// DefaultRetention: 0=burn, 1=ttl, 2=count (see retentionBurn/TTL/Count).
 	DefaultRetention    int64
 	DefaultMaxDownloads int64
@@ -200,7 +199,6 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <label>每账号每日额度 (MiB)<input type="number" name="daily_quota_mb" min="1" value="{{.Settings.DailyQuotaMB}}"></label>
 <label>默认有效期 (小时)<input type="number" name="default_ttl_hours" min="1" value="{{.Settings.DefaultTTLHrs}}"></label>
 <label>最长有效期 (小时)<input type="number" name="max_ttl_hours" min="1" value="{{.Settings.MaxTTLHrs}}"></label>
-<label>中继月度免费额度 (MiB)<input type="number" name="relay_monthly_free_mb" min="1" value="{{.Settings.RelayMonthlyFreeMB}}"></label>
 <label>默认保留策略<select name="default_retention">
 <option value="0"{{if eq .Settings.DefaultRetention 0}} selected{{end}}>阅后即焚</option>
 <option value="1"{{if eq .Settings.DefaultRetention 1}} selected{{end}}>保存N天</option>

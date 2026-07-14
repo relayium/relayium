@@ -27,7 +27,7 @@ func TestICEWithholdsFleetNodeOverTrafficLimit(t *testing.T) {
 	st.RecordUsage(ctx, UsageEvent{AllocID: "x", Token: "c", UserID: owner.ID, RelayedBytes: 2 << 30, RecordedAt: now.Unix(), NodeID: "capped", Billable: true})
 
 	s := &Service{store: st, now: func() time.Time { return now },
-		cfg: Config{TURNCredTTL: time.Hour, RelayMonthlyFree: 1 << 40}}
+		cfg: Config{TURNCredTTL: time.Hour}}
 	s.pairCodeOwner = func(string) (string, bool) { return owner.ID, true }
 
 	r := httptest.NewRequest("GET", "/api/ice?code=123456", nil)

@@ -18,7 +18,7 @@ func TestICEUserNodeRoutingAndStrict(t *testing.T) {
 	st.UpsertNode(ctx, Node{ID: "fleet", OwnerType: "fleet", URLs: []string{"turn:fleet:3478"}, TURNSecret: "sf", CreatedAt: 1, LastSeenAt: now.Unix()})
 
 	s := &Service{store: st, now: func() time.Time { return now },
-		cfg: Config{TURNCredTTL: time.Hour, STUNURLs: []string{"stun:l:3478"}, RelayMonthlyFree: 1 << 30,
+		cfg: Config{TURNCredTTL: time.Hour, STUNURLs: []string{"stun:l:3478"},
 			TURNSecret: "ourturnsecret", TURNURLs: []string{"turn:ours:3478"}}}
 	s.pairCodeOwner = func(code string) (string, bool) { return owner.ID, true }
 

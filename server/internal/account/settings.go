@@ -4,11 +4,10 @@ import "context"
 
 // Setting keys for the admin-editable stored-transfer limits.
 const (
-	SettingMaxFileSize      = "max_file_size"
-	SettingDailyQuota       = "daily_quota"
-	SettingDefaultTTL       = "default_ttl"
-	SettingMaxTTL           = "max_ttl"
-	SettingRelayMonthlyFree = "relay_monthly_free_bytes"
+	SettingMaxFileSize = "max_file_size"
+	SettingDailyQuota  = "daily_quota"
+	SettingDefaultTTL  = "default_ttl"
+	SettingMaxTTL      = "max_ttl"
 	// SettingDefaultRetention picks the admin's default retention policy applied
 	// when an upload request specifies none of burnAfterRead/ttl/maxDownloads:
 	// 0=burn (retentionBurn), 1=ttl (retentionTTL), 2=count (retentionCount).
@@ -38,11 +37,10 @@ const (
 
 // Settings is the resolved live view of the limits for one request.
 type Settings struct {
-	MaxFileSize      int64
-	DailyQuota       int64
-	DefaultTTL       int64
-	MaxTTL           int64
-	RelayMonthlyFree int64
+	MaxFileSize int64
+	DailyQuota  int64
+	DefaultTTL  int64
+	MaxTTL      int64
 	// DefaultRetention is the admin's default policy (retentionBurn/TTL/Count)
 	// applied when an upload requests none of burn/ttl/maxDownloads explicitly.
 	DefaultRetention int64
@@ -80,7 +78,6 @@ func (s *Service) resolveSettings(ctx context.Context) Settings {
 		DailyQuota:          s.settingOr(ctx, SettingDailyQuota, s.cfg.DailyQuota),
 		DefaultTTL:          s.settingOr(ctx, SettingDefaultTTL, s.cfg.DefaultTTL),
 		MaxTTL:              s.settingOr(ctx, SettingMaxTTL, s.cfg.MaxTTL),
-		RelayMonthlyFree:    s.settingOr(ctx, SettingRelayMonthlyFree, s.cfg.RelayMonthlyFree),
 		DefaultRetention:    s.settingOr(ctx, SettingDefaultRetention, s.cfg.DefaultRetention),
 		DefaultMaxDownloads: s.settingOr(ctx, SettingDefaultMaxDownloads, s.cfg.DefaultMaxDownloads),
 		MaxMaxDownloads:     s.settingOr(ctx, SettingMaxMaxDownloads, s.cfg.MaxMaxDownloads),
@@ -165,7 +162,6 @@ func (s *Service) SeedSettings(ctx context.Context) error {
 		{SettingDailyQuota, s.cfg.DailyQuota},
 		{SettingDefaultTTL, s.cfg.DefaultTTL},
 		{SettingMaxTTL, s.cfg.MaxTTL},
-		{SettingRelayMonthlyFree, s.cfg.RelayMonthlyFree},
 		{SettingDefaultRetention, s.cfg.DefaultRetention},
 		{SettingDefaultMaxDownloads, s.cfg.DefaultMaxDownloads},
 		{SettingMaxMaxDownloads, s.cfg.MaxMaxDownloads},

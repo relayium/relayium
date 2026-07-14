@@ -74,9 +74,6 @@ type Config struct {
 	DailyQuota  int64 // bytes per rolling 24h
 	DefaultTTL  int64 // seconds
 	MaxTTL      int64 // seconds
-	// RelayMonthlyFree is the interim per-user monthly TURN-relay allowance in
-	// bytes; superseded by a per-plan quota later.
-	RelayMonthlyFree int64
 	// DefaultRetention is the admin default retention policy (0=burn, 1=ttl,
 	// 2=count) applied when an upload request specifies none of
 	// burnAfterRead/ttl/maxDownloads. See Settings.DefaultRetention.

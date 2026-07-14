@@ -29,11 +29,11 @@ func TestICEIncludesOnlineNodes(t *testing.T) {
 	st.UpsertNode(ctx, Node{OwnerType: "fleet", ID: "n-online", URLs: []string{"turn:1.1.1.1:3478"}, TURNSecret: "s1", CreatedAt: 1, LastSeenAt: now.Unix()})
 	st.UpsertNode(ctx, Node{OwnerType: "fleet", ID: "n-stale", URLs: []string{"turn:2.2.2.2:3478"}, TURNSecret: "s2", CreatedAt: 1, LastSeenAt: now.Unix() - 1000})
 
-	// RelayMonthlyFree must be > 0 or the quota gate denies (used 0 >= 0). It is
-	// read via resolveSettings, which falls back to cfg when the settings table is
-	// empty.
+	// The per-plan traffic gate falls back to the Free plan's 2GB cap when no
+	// plan row/table is seeded, so a freshly-verified owner with 0 usage always
+	// passes it here.
 	s := &Service{store: st, now: func() time.Time { return now },
-		cfg: Config{TURNCredTTL: time.Hour, STUNURLs: []string{"stun:stun.l:3478"}, RelayMonthlyFree: 1 << 30}}
+		cfg: Config{TURNCredTTL: time.Hour, STUNURLs: []string{"stun:stun.l:3478"}}}
 	s.pairCodeOwner = func(code string) (string, bool) { return owner.ID, true }
 
 	r := httptest.NewRequest("GET", "/api/ice?code=123456", nil)

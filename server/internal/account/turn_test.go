@@ -21,11 +21,10 @@ func newICEServer(t *testing.T, secret string) (*httptest.Server, *Service, *SQL
 	t.Helper()
 	store := newTestStore(t)
 	svc := NewService(store, &capturingMailer{}, Config{
-		TURNCredTTL:      time.Hour,
-		STUNURLs:         []string{"stun:stun.example.com:3478"},
-		TURNURLs:         []string{"turn:turn.example.com:3478"},
-		TURNSecret:       secret,
-		RelayMonthlyFree: 2 << 30, // 2GB default cap so plain TURN tests aren't gated
+		TURNCredTTL: time.Hour,
+		STUNURLs:    []string{"stun:stun.example.com:3478"},
+		TURNURLs:    []string{"turn:turn.example.com:3478"},
+		TURNSecret:  secret,
 	})
 	ts := httptest.NewServer(svc.Routes())
 	t.Cleanup(ts.Close)
@@ -176,19 +175,25 @@ func TestICEEmbedsOwnerInTurnUsername(t *testing.T) {
 	}
 }
 
-// TestICEWithholdsTurnOverCap: once the pairing code's owner has relayed at
-// least RelayMonthlyFree bytes this month, /api/ice must withhold TURN
-// (STUN-only) and flag resp["relayDenied"] = "quota", even though the code
-// itself is otherwise valid.
-func TestICEWithholdsTurnOverCap(t *testing.T) {
+// TestICEWithholdsTURNWhenOwnerOverPlanTraffic: once the pairing code's owner
+// is already over their plan's combined monthly traffic (upload+download+relay),
+// /api/ice must withhold TURN (STUN-only) and flag resp["relayDenied"] =
+// "quota", even though the code itself is otherwise valid. P2P (STUN) still
+// works.
+func TestICEWithholdsTURNWhenOwnerOverPlanTraffic(t *testing.T) {
 	ts, svc, store := newICEServer(t, "secret")
 	ctx := context.Background()
 	owner := verifiedOwner(t, store, "owner1@example.com")
 	svc.SetPairCodeOwner(ownerResolver(owner, "424242"))
 
 	now := svc.now().Unix()
-	if err := store.SetSetting(ctx, SettingRelayMonthlyFree, 100, now); err != nil {
-		t.Fatalf("SetSetting: %v", err)
+	// owner's plan_id defaults to "free"; shrink that plan's traffic cap to 1
+	// byte so already-recorded usage puts the owner over it.
+	if err := store.UpsertPlan(ctx, Plan{
+		ID: "free", Name: "Free", StorageBytes: 1 << 30, TrafficBytes: 1,
+		RetentionSecs: 86400, Active: true, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("UpsertPlan: %v", err)
 	}
 	if err := store.RecordUsage(ctx, UsageEvent{
 		AllocID: "x", Token: "424242", UserID: owner, RelayedBytes: 500, RecordedAt: now, Billable: true,
@@ -208,24 +213,32 @@ func TestICEWithholdsTurnOverCap(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	if hasTURN(out.ICEServers) {
-		t.Fatalf("expected STUN-only when over cap, got %+v", out.ICEServers)
+		t.Fatalf("expected STUN-only when over plan traffic, got %+v", out.ICEServers)
+	}
+	if len(out.ICEServers) == 0 {
+		t.Fatalf("STUN must still be offered when relay is withheld")
 	}
 	if out.RelayDenied != "quota" {
 		t.Fatalf("relayDenied = %q, want %q", out.RelayDenied, "quota")
 	}
 }
 
-// TestICEUnderCapIncludesTurn: below the monthly cap, TURN is issued as usual
-// and relayDenied is absent.
-func TestICEUnderCapIncludesTurn(t *testing.T) {
+// TestICEUnderPlanCapIncludesTurn: below the plan's monthly traffic cap, TURN
+// is issued as usual and relayDenied is absent.
+func TestICEUnderPlanCapIncludesTurn(t *testing.T) {
 	ts, svc, store := newICEServer(t, "secret")
 	ctx := context.Background()
 	owner := verifiedOwner(t, store, "owner1@example.com")
 	svc.SetPairCodeOwner(ownerResolver(owner, "424242"))
 
 	now := svc.now().Unix()
-	if err := store.SetSetting(ctx, SettingRelayMonthlyFree, 1000, now); err != nil {
-		t.Fatalf("SetSetting: %v", err)
+	// owner's plan_id defaults to "free"; a 1000-byte cap comfortably covers
+	// the 500 bytes recorded below.
+	if err := store.UpsertPlan(ctx, Plan{
+		ID: "free", Name: "Free", StorageBytes: 1 << 30, TrafficBytes: 1000,
+		RetentionSecs: 86400, Active: true, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("UpsertPlan: %v", err)
 	}
 	if err := store.RecordUsage(ctx, UsageEvent{
 		AllocID: "y", Token: "424242", UserID: owner, RelayedBytes: 500, RecordedAt: now, Billable: true,
@@ -309,11 +322,10 @@ func TestICEMeteringReadErrorFailsOpenWithAlert(t *testing.T) {
 	defer log.SetOutput(os.Stderr)
 
 	svc := NewService(relayErrStore{base}, &capturingMailer{}, Config{
-		TURNCredTTL:      time.Hour,
-		STUNURLs:         []string{"stun:stun.example.com:3478"},
-		TURNURLs:         []string{"turn:turn.example.com:3478"},
-		TURNSecret:       "secret",
-		RelayMonthlyFree: 2 << 30,
+		TURNCredTTL: time.Hour,
+		STUNURLs:    []string{"stun:stun.example.com:3478"},
+		TURNURLs:    []string{"turn:turn.example.com:3478"},
+		TURNSecret:  "secret",
 	})
 	svc.SetPairCodeOwner(ownerResolver(u.ID, "424242"))
 	ts := httptest.NewServer(svc.Routes())
@@ -324,7 +336,7 @@ func TestICEMeteringReadErrorFailsOpenWithAlert(t *testing.T) {
 	if !hasTURN(servers) {
 		t.Fatalf("metering read error must fail-open to relay, got %+v", servers)
 	}
-	if !strings.Contains(logbuf.String(), "metering read failed") {
+	if !strings.Contains(logbuf.String(), "quota read failed") {
 		t.Fatalf("expected a metering-blind alert log, got %q", logbuf.String())
 	}
 }
@@ -343,10 +355,9 @@ func relaysFromBody(t *testing.T, resp *http.Response) []relayEntry {
 func newPoolICEServer(t *testing.T, relays []RelayConfig) (*httptest.Server, *Service) {
 	t.Helper()
 	svc := NewService(newTestStore(t), &capturingMailer{}, Config{
-		TURNCredTTL:      time.Hour,
-		STUNURLs:         []string{"stun:stun.example.com:3478"},
-		TURNRelays:       relays,
-		RelayMonthlyFree: 2 << 30, // 2GB default cap so plain TURN tests aren't gated
+		TURNCredTTL: time.Hour,
+		STUNURLs:    []string{"stun:stun.example.com:3478"},
+		TURNRelays:  relays,
 	})
 	svc.SetPairCodeOwner(ownerResolver("owner-1", "424242"))
 	ts := httptest.NewServer(svc.Routes())
