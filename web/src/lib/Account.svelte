@@ -12,18 +12,6 @@
 
   const t = $derived<Messages>(messages[lang()]);
 
-  // Billing (phase-2) — English strings only for now — Task 10 replaces these
-  // with the i18n `t.billing.*` keys added there. One const object so that
-  // swap is a mechanical find/replace of `BL.foo` -> `t.billing.foo`
-  // (mirrors Pricing.svelte's `L`).
-  const BL = {
-    currentPlan: "Plan",
-    upgrade: "Upgrade",
-    manageBilling: "Manage billing",
-    portalError: "Couldn't open the billing portal. Please try again.",
-    checkoutSuccess: "Subscription active — thanks!",
-    checkoutCanceled: "Checkout canceled.",
-  };
   let { open = $bindable(false) }: { open?: boolean } = $props();
   let email = $state("");
   let password = $state("");
@@ -157,17 +145,17 @@
     try {
       const res = await fetch("/api/billing/portal", { method: "POST", credentials: "include" });
       if (!res.ok) {
-        portalError = BL.portalError;
+        portalError = t.billing.portalError;
         return;
       }
       const data = (await res.json()) as { url?: string };
       if (data.url) {
         location.href = data.url;
       } else {
-        portalError = BL.portalError;
+        portalError = t.billing.portalError;
       }
     } catch {
-      portalError = BL.portalError;
+      portalError = t.billing.portalError;
     } finally {
       portalBusy = false;
     }
@@ -270,7 +258,7 @@
 <div class="account">
   {#if billingBanner}
     <div class="billing-toast" class:cancel={billingBanner === "cancel"}>
-      <span>{billingBanner === "success" ? BL.checkoutSuccess : BL.checkoutCanceled}</span>
+      <span>{billingBanner === "success" ? t.billing.checkoutSuccess : t.billing.checkoutCanceled}</span>
       <button type="button" class="toast-close" aria-label={t.close} onclick={() => (billingBanner = "")}>✕</button>
     </div>
   {/if}
@@ -292,14 +280,14 @@
 
           <div class="billing-section">
             <p class="hint plan-line">
-              {BL.currentPlan}: {planLabel(session().user!.planId)}
+              {t.billing.currentPlan}: {planLabel(session().user!.planId)}
               {#if session().user!.subscriptionStatus}<span class="sub-status"> · {session().user!.subscriptionStatus}</span>{/if}
             </p>
             {#if session().user!.hasBilling}
-              <button class="btn btn-ghost" disabled={portalBusy} onclick={onManageBilling}>{BL.manageBilling}</button>
+              <button class="btn btn-ghost" disabled={portalBusy} onclick={onManageBilling}>{t.billing.manageBilling}</button>
               {#if portalError}<p class="err">{portalError}</p>{/if}
             {:else}
-              <button class="btn btn-ghost" onclick={() => (showPricing = !showPricing)}>{BL.upgrade}</button>
+              <button class="btn btn-ghost" onclick={() => (showPricing = !showPricing)}>{t.billing.upgrade}</button>
               {#if showPricing}
                 <div class="pricing-inline"><Pricing /></div>
               {/if}

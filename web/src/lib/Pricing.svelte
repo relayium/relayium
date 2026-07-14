@@ -1,27 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { formatSize } from "./format";
+  import { lang, messages, type Messages } from "./i18n.svelte";
 
-  // English strings only for now — Task 10 replaces these with the i18n
-  // `t.billing.*` keys added there. Kept as one const object so that swap is
-  // a mechanical find/replace of `L.foo` -> `t.billing.foo`.
-  const L = {
-    monthly: "Monthly",
-    yearly: "Yearly",
-    perMonth: "/mo",
-    perYear: "/yr",
-    free: "Free",
-    currentFree: "Free plan",
-    upgrade: "Upgrade",
-    notAvailable: "Not available yet — contact us",
-    signInRequired: "Sign in to upgrade",
-    checkoutError: "Couldn't start checkout. Please try again.",
-    loadError: "Couldn't load plans.",
-    storage: "Storage",
-    traffic: "Traffic",
-    retention: "Retention",
-    days: (n: number) => `${n} day${n === 1 ? "" : "s"}`,
-  };
+  const t = $derived<Messages>(messages[lang()]);
 
   interface Tier {
     id: string;
@@ -47,7 +29,7 @@
       if (!res.ok) throw new Error("bad status");
       tiers = await res.json();
     } catch {
-      loadError = L.loadError;
+      loadError = t.billing.loadError;
     }
   });
 
@@ -68,7 +50,7 @@
   }
 
   function formatRetention(secs: number): string {
-    return L.days(Math.round(secs / 86400));
+    return t.billing.days(Math.round(secs / 86400));
   }
 
   async function checkout(planId: string) {
@@ -83,21 +65,21 @@
         body: JSON.stringify({ planId, cycle }),
       });
       if (res.status === 401) {
-        checkoutError = L.signInRequired;
+        checkoutError = t.billing.signInRequired;
         return;
       }
       if (!res.ok) {
-        checkoutError = L.checkoutError;
+        checkoutError = t.billing.checkoutError;
         return;
       }
       const data = await res.json();
       if (data.url) {
         location.href = data.url;
       } else {
-        checkoutError = L.checkoutError;
+        checkoutError = t.billing.checkoutError;
       }
     } catch {
-      checkoutError = L.checkoutError;
+      checkoutError = t.billing.checkoutError;
     } finally {
       busyPlanId = null;
     }
@@ -112,7 +94,7 @@
       class:active={cycle === "monthly"}
       onclick={() => (cycle = "monthly")}
     >
-      {L.monthly}
+      {t.billing.monthly}
     </button>
     <button
       type="button"
@@ -120,7 +102,7 @@
       class:active={cycle === "yearly"}
       onclick={() => (cycle = "yearly")}
     >
-      {L.yearly}
+      {t.billing.yearly}
     </button>
   </div>
 
@@ -136,20 +118,20 @@
       <div class="tier">
         <h3 class="tier-name">{tier.name}</h3>
         {#if isFree(tier)}
-          <div class="tier-price">{L.free}</div>
+          <div class="tier-price">{t.billing.free}</div>
         {:else}
           <div class="tier-price">
             {formatPrice(priceCents(tier))}
-            <span class="tier-suffix">{cycle === "monthly" ? L.perMonth : L.perYear}</span>
+            <span class="tier-suffix">{cycle === "monthly" ? t.billing.perMonth : t.billing.perYear}</span>
           </div>
         {/if}
         <ul class="tier-caps">
-          <li>{L.storage}: {formatSize(tier.storageBytes)}</li>
-          <li>{L.traffic}: {formatSize(tier.trafficBytes)}</li>
-          <li>{L.retention}: {formatRetention(tier.retentionSecs)}</li>
+          <li>{t.billing.storage}: {formatSize(tier.storageBytes)}</li>
+          <li>{t.billing.traffic}: {formatSize(tier.trafficBytes)}</li>
+          <li>{t.billing.retention}: {formatRetention(tier.retentionSecs)}</li>
         </ul>
         {#if isFree(tier)}
-          <div class="tier-note">{L.currentFree}</div>
+          <div class="tier-note">{t.billing.currentFree}</div>
         {:else}
           <button
             type="button"
@@ -157,10 +139,10 @@
             disabled={!purchasable(tier) || busyPlanId === tier.id}
             onclick={() => checkout(tier.id)}
           >
-            {L.upgrade}
+            {t.billing.upgrade}
           </button>
           {#if !purchasable(tier)}
-            <div class="tier-note">{L.notAvailable}</div>
+            <div class="tier-note">{t.billing.notAvailable}</div>
           {/if}
         {/if}
       </div>

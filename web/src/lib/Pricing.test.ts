@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mount, unmount, flushSync } from "svelte";
 import Pricing from "./Pricing.svelte";
+import { loadLang } from "./i18n.svelte";
 
 const TIERS = [
   {
@@ -42,6 +43,10 @@ let target: HTMLDivElement;
 let app: unknown;
 
 async function mountPricing() {
+  // messages[lang()] must be populated before mount — Pricing.svelte reads it
+  // synchronously in a $derived — mirroring main.ts's real bootstrap order
+  // (mirrors Account.billing.test.ts's mountAccount helper).
+  await loadLang("en");
   target = document.createElement("div");
   document.body.appendChild(target);
   app = mount(Pricing, { target });

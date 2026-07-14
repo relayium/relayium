@@ -134,6 +134,29 @@ export interface Messages {
     resetPasswordSent: string; // neutral post-submit message (never reveals account existence)
     checkSpamHint: string; // muted follow-up under any "we emailed you" state: check spam + allowlist noreply@relayium.com. Also reused (via t.account.*) on VerifyEmail.svelte's invalid-token panel.
   };
+  // Pricing tiers (Pricing.svelte) + account billing section (Account.svelte).
+  billing: {
+    monthly: string; // billing-cycle toggle: monthly option
+    yearly: string; // billing-cycle toggle: yearly option
+    perMonth: string; // price suffix, e.g. "$9.00/mo"
+    perYear: string; // price suffix, e.g. "$90.00/yr"
+    free: string; // price shown for the free tier
+    currentFree: string; // note under the free tier: you're already on it
+    upgrade: string; // CTA on a purchasable tier / account panel
+    notAvailable: string; // tier not yet purchasable
+    signInRequired: string; // checkout attempted while signed out (401)
+    checkoutError: string; // generic checkout-start failure
+    loadError: string; // GET /api/plans failed
+    storage: string; // tier capability line label
+    traffic: string; // tier capability line label
+    retention: string; // tier capability line label
+    days: (n: number) => string; // "N day(s)" retention value
+    currentPlan: string; // "Plan" label in the account billing section
+    manageBilling: string; // CTA that opens the Stripe billing portal
+    portalError: string; // billing-portal open failure
+    checkoutSuccess: string; // banner after Stripe Checkout success redirect
+    checkoutCanceled: string; // banner after Stripe Checkout cancel redirect
+  };
   me: {
     title: string;
     back: string; // link back to the home page
