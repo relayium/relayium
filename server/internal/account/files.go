@@ -105,6 +105,9 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	reqTTL, _ := strconv.ParseInt(r.URL.Query().Get("ttl"), 10, 64)
 	reqMaxDL, _ := strconv.ParseInt(r.URL.Query().Get("maxDownloads"), 10, 64)
 	ttl, maxDL := resolveRetention(burn, reqTTL, reqMaxDL, st)
+	if capSecs := s.planRetentionCap(r.Context(), u.ID); capSecs > 0 && ttl > capSecs {
+		ttl = capSecs
+	}
 
 	br := bufio.NewReader(r.Body)
 	// Length-prefixed opaque encrypted manifest.
@@ -143,6 +146,28 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 				http.Error(w, "daily quota exceeded", http.StatusTooManyRequests)
 				return
 			}
+		}
+	}
+
+	// Per-plan gates (billable central-stored uploads only; own-node uploads use
+	// the user's own disk and are never metered against a plan).
+	if billable {
+		declared := r.ContentLength - 4 - int64(mlen) // ciphertext bytes (minus framing)
+		if declared < 0 {
+			declared = 0
+		}
+		// Global logical storage ceiling (oversubscription backstop) first.
+		if over, err := s.overGlobalStorage(r.Context(), declared); err == nil && over {
+			http.Error(w, "server storage is full", http.StatusInsufficientStorage)
+			return
+		}
+		if over, err := s.overStorage(r.Context(), u.ID, declared); err == nil && over {
+			http.Error(w, "storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
+			return
+		}
+		if over, err := s.overTraffic(r.Context(), u.ID, declared); err == nil && over {
+			http.Error(w, "monthly traffic limit reached — upgrade to continue", http.StatusTooManyRequests)
+			return
 		}
 	}
 
