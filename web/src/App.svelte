@@ -45,19 +45,32 @@
   import { outbox, setOutbox, takeOutbox, clearOutbox } from "./lib/outbox.svelte";
   import { shouldConfirmBeforeSend } from "./lib/confirm-send";
   import { folderUploadSupported } from "./lib/platform";
-  import CrossPage from "./lib/CrossPage.svelte";
-  import OfflinePage from "./lib/OfflinePage.svelte";
-  import MePage from "./lib/MePage.svelte";
-  import CliPage from "./lib/CliPage.svelte";
-  import VerifyEmail from "./lib/VerifyEmail.svelte";
-  import ResetPassword from "./lib/ResetPassword.svelte";
   import Nav from "./lib/Nav.svelte";
   import { currentRoute, syncRouteFromLocation, downloadId, navigate, setNavGuard } from "./lib/router.svelte";
   import Hero from "./lib/Hero.svelte";
-  import DownloadPage from "./lib/DownloadPage.svelte";
   import FeatureStrip from "./lib/FeatureStrip.svelte";
   import CliCallout from "./lib/CliCallout.svelte";
   import HowToSteps from "./lib/HowToSteps.svelte";
+
+  // Route pages are code-split and loaded on first navigation, so they stay out of
+  // the initial bundle (the LAN transfer home path is what loads first). The import
+  // promise per route is memoized so a component's reactive prop changes (e.g.
+  // CrossPage during a transfer) don't re-trigger the import or flash the await.
+  const routeLoaders = {
+    download: () => import("./lib/DownloadPage.svelte"),
+    cross: () => import("./lib/CrossPage.svelte"),
+    offline: () => import("./lib/OfflinePage.svelte"),
+    me: () => import("./lib/MePage.svelte"),
+    cli: () => import("./lib/CliPage.svelte"),
+    "verify-email": () => import("./lib/VerifyEmail.svelte"),
+    "reset-password": () => import("./lib/ResetPassword.svelte"),
+  } as const;
+  const routeCache = new Map<string, ReturnType<(typeof routeLoaders)[keyof typeof routeLoaders]>>();
+  function routePage<K extends keyof typeof routeLoaders>(key: K): ReturnType<(typeof routeLoaders)[K]> {
+    let p = routeCache.get(key);
+    if (!p) { p = routeLoaders[key](); routeCache.set(key, p); }
+    return p as ReturnType<(typeof routeLoaders)[K]>;
+  }
   import UseCases from "./lib/UseCases.svelte";
   import Faq from "./lib/Faq.svelte";
 
@@ -1357,22 +1370,36 @@
   {/if}
 
   {#if currentRoute() === "download"}
-    <DownloadPage id={downloadId(location.pathname)} />
+    {#await routePage("download") then { default: DownloadPage }}
+      <DownloadPage id={downloadId(location.pathname)} />
+    {/await}
   {:else}
   <Nav />
 
   {#if currentRoute() === "cross"}
-    <CrossPage {roomCode} {linkDead} {showTransfer} {relayDenied} {transferSurface} dismissLan={() => (lanDismissed = true)} />
+    {#await routePage("cross") then { default: CrossPage }}
+      <CrossPage {roomCode} {linkDead} {showTransfer} {relayDenied} {transferSurface} dismissLan={() => (lanDismissed = true)} />
+    {/await}
   {:else if currentRoute() === "offline"}
-    <OfflinePage />
+    {#await routePage("offline") then { default: OfflinePage }}
+      <OfflinePage />
+    {/await}
   {:else if currentRoute() === "me"}
-    <MePage />
+    {#await routePage("me") then { default: MePage }}
+      <MePage />
+    {/await}
   {:else if currentRoute() === "cli"}
-    <CliPage />
+    {#await routePage("cli") then { default: CliPage }}
+      <CliPage />
+    {/await}
   {:else if currentRoute() === "verify-email"}
-    <VerifyEmail />
+    {#await routePage("verify-email") then { default: VerifyEmail }}
+      <VerifyEmail />
+    {/await}
   {:else if currentRoute() === "reset-password"}
-    <ResetPassword />
+    {#await routePage("reset-password") then { default: ResetPassword }}
+      <ResetPassword />
+    {/await}
   {:else}
     <Hero {connState} {unsupported} {selfName} {selfIP} onRename={commitName} />
 
