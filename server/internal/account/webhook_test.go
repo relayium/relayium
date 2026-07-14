@@ -290,6 +290,63 @@ func TestWebhookAdminSourceNotOverridden(t *testing.T) {
 	}
 }
 
+// TestWebhookAdminSourceNotOverriddenViaMetadata closes the seam the
+// metadata-fallback fix (TestWebhookSubscriptionBeforeCheckoutUsesMetadata)
+// left untested: an admin-comped user whose Stripe customer id is NOT yet
+// bound, receiving a subscription event that carries metadata.user_id. The
+// admin-source guard in billing.go's customer.subscription.updated branch
+// must still win — plan_id must stay the admin-assigned plan — even when the
+// user is resolved via the metadata fallback rather than the direct
+// GetUserByStripeCustomer lookup.
+func TestWebhookAdminSourceNotOverriddenViaMetadata(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	secret := "whsec_admin_meta"
+	svc.biller = NewStripeClient("sk_test", secret, "")
+	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
+	mustPlan(t, store, Plan{ID: "plus", Name: "Plus", Active: true, StripePriceMonthlyID: "price_plus_m"})
+	cookie := loginCookie(t, ts, mail, "webhook-admin-meta@example.com")
+	_ = cookie
+	uid := mustUserID(t, store, "webhook-admin-meta@example.com")
+	// Admin comps this user onto "pro" but the customer id is deliberately
+	// left unbound (no checkout.session.completed / SetUserStripeCustomer
+	// call), forcing the subscription event below to resolve the user via
+	// the metadata.user_id fallback instead of the direct customer lookup.
+	if err := store.SetUserPlanAdmin(context.Background(), uid, "pro"); err != nil {
+		t.Fatal(err)
+	}
+
+	// "cus_admin_meta" is unbound; the price maps to "plus", a DIFFERENT plan
+	// than the admin-comped "pro" — if the admin-source guard were skipped on
+	// the metadata-fallback path, plan_id would incorrectly flip to "plus".
+	body := webhookEnvWithMetadata("customer.subscription.updated", "cus_admin_meta", "sub_1", "", "active", "price_plus_m", 1700007000, uid)
+	resp := postWebhook(t, ts, secret, body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+
+	u, err := store.GetUserByID(context.Background(), uid)
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	if u.PlanID != "pro" {
+		t.Fatalf("admin-comped plan must not be overridden via metadata fallback, got %q", u.PlanID)
+	}
+	if u.PlanSource != "admin" {
+		t.Fatalf("plan source must stay admin, got %q", u.PlanSource)
+	}
+	if u.SubscriptionStatus != "active" {
+		t.Fatalf("status should still record, got %q", u.SubscriptionStatus)
+	}
+	// handleStripeWebhook's metadata-fallback branch calls
+	// SetUserStripeCustomer to bind the customer BEFORE the
+	// u.PlanSource == "admin" check runs (see billing.go), so the customer id
+	// does get bound even though the plan assignment itself is guarded.
+	if u.StripeCustomerID != "cus_admin_meta" {
+		t.Fatalf("want stripe_customer_id bound to cus_admin_meta via metadata fallback even for an admin-comped user, got %q", u.StripeCustomerID)
+	}
+}
+
 func TestWebhookUnknownCustomerIgnored200(t *testing.T) {
 	ts, svc, store, _ := newBillingServer(t)
 	secret := "whsec_unknown"
