@@ -124,3 +124,15 @@ CurrentMonthTraffic(userID) =
 ## 明确不在本期
 
 Stripe 结账 / webhook / 自动指派、超额按量计费、增值包、对象存储后端、存储 GB·月时长计费、前台定价页与自助升级 UI。
+
+## 附录 · 2026-07-14 实现前现状核对（spec 写于 2026-07-06，落地前的漂移与决策）
+
+实现前对照当前 `main` 的漂移项与拍板（均沿用本 spec 原意）：
+
+1. **断点续传上传（spec 后新增）**：spec 只点名单发 `handleUploadFile`；现有还有 `handleUploadInit`/`handleUploadChunk`/`handleUploadFinalize`（`uploads_resumable.go`）。三处额度门放在 `handleUploadInit`（全局盘闸→按档存储→按档流量的**预检**，用 `?size=` 声明值 fail-fast）；权威预留在 `handleUploadFinalize`（已知真实字节数处）做存储+流量强制。TTL 收敛沿用 `resolveRetention`/`clampTTL`，新增按 `plan.retention_secs` 收敛。
+2. **下载 Range/续传**：`handleFileBlob` 现支持 Range/续传并按**实际服务字节**计量。下载流量门放在**流式发送前**：属主 `CurrentMonthTraffic(owner) >= plan.traffic_bytes` 即拒（429），对 `start==0` 和续传一视同仁（"超额即整体失效"）。
+3. **中继上限归并**：`turn.go` 现有的全局 `relay_monthly_free_bytes`（`SettingRelayMonthlyFree`）relay 上限，被**按档合并流量**判定取代：`CurrentMonthTraffic(owner) >= plan.traffic_bytes` → 扣留 TURN（STUN 仍发、`relayDenied:"quota"`）。Free 档默认 `traffic_bytes`=2GB 与旧 relay-free 默认 2GiB 对齐，无回归。**退休** `SettingRelayMonthlyFree` 设置键与其 admin 输入项（迁移：值不再读取；admin 模板移除该项）。
+4. **`CurrentMonthTraffic(userID)`**：新增单个只读聚合 = `usage_monthly(upload_bytes+download_bytes, period=当月)` + `usage_events` 当月 relay 字节（复用 `UserRelayedSince` 的月起点）。
+5. **全局盘闸与物理盘闸并存**：spec 的 `storage_disk_cap`（逻辑 `SUM(stored_files.size WHERE expires_at>now)`）与现有物理 `blobDiskMax`/`diskUsage`（文件系统占用）**互补保留**——物理闸在真盘满时先拦，逻辑闸限制超售总量。两者都在上传/分块处检查。
+
+其余（`plans` 表+seeding、`users.plan_id`、上传存储/流量门、admin 套餐管理 UI + 用户指派）与上文一致。
