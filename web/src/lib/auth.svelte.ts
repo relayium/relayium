@@ -6,6 +6,15 @@ export interface SessionUser {
   email: string;
   displayName: string;
   hasPassword: boolean;
+  // Billing (phase-2, all optional so older mocks/tests without them still
+  // typecheck): current plan id ("free" absent a subscription), the raw
+  // Stripe subscription status ("", "active", "past_due", "canceled", ...),
+  // its current-period end (unix seconds, 0 = none), and whether a Stripe
+  // customer exists yet (gates the "Manage billing" button).
+  planId?: string;
+  subscriptionStatus?: string;
+  subscriptionEnd?: number;
+  hasBilling?: boolean;
 }
 
 let user = $state<SessionUser | null>(null);

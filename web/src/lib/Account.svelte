@@ -8,8 +8,22 @@
   } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate } from "./router.svelte";
+  import Pricing from "./Pricing.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
+
+  // Billing (phase-2) — English strings only for now — Task 10 replaces these
+  // with the i18n `t.billing.*` keys added there. One const object so that
+  // swap is a mechanical find/replace of `BL.foo` -> `t.billing.foo`
+  // (mirrors Pricing.svelte's `L`).
+  const BL = {
+    currentPlan: "Plan",
+    upgrade: "Upgrade",
+    manageBilling: "Manage billing",
+    portalError: "Couldn't open the billing portal. Please try again.",
+    checkoutSuccess: "Subscription active — thanks!",
+    checkoutCanceled: "Checkout canceled.",
+  };
   let { open = $bindable(false) }: { open?: boolean } = $props();
   let email = $state("");
   let password = $state("");
@@ -35,6 +49,13 @@
   // magic-link 备用入口（仅当后端开启）
   let magicSent = $state(false);
   let magicBusy = $state(false);
+
+  // Billing (phase-2): checkout-return banner (?billing=success|cancel), the
+  // inline-Pricing toggle for free users, and the manage-billing portal button.
+  let billingBanner = $state<"success" | "cancel" | "">("");
+  let showPricing = $state(false);
+  let portalBusy = $state(false);
+  let portalError = $state("");
 
   // 改密表单
   let pwOpen = $state(false);
@@ -103,11 +124,54 @@
     } catch { /* non-fatal */ }
   }
 
+  // Stripe Checkout redirects back to `${BASE_URL}/?billing=success|cancel`
+  // (see server billing.go's SuccessURL/CancelURL). Show a one-shot banner
+  // and strip just that param — mirrors share-target.ts's clean-but-keep-
+  // other-params approach — so a page refresh doesn't re-show it.
+  function consumeBillingReturn() {
+    const params = new URLSearchParams(location.search);
+    const val = params.get("billing");
+    if (val !== "success" && val !== "cancel") return;
+    billingBanner = val;
+    params.delete("billing");
+    const qs = params.toString();
+    history.replaceState(null, "", location.pathname + (qs ? `?${qs}` : "") + location.hash);
+  }
+
   onMount(async () => {
+    consumeBillingReturn();
     methods = await fetchAuthMethods();
     await refreshSession();
     if (session().user) claimDevice();
   });
+
+  function planLabel(id?: string): string {
+    const p = id || "free";
+    return p.charAt(0).toUpperCase() + p.slice(1);
+  }
+
+  async function onManageBilling() {
+    if (portalBusy) return;
+    portalError = "";
+    portalBusy = true;
+    try {
+      const res = await fetch("/api/billing/portal", { method: "POST", credentials: "include" });
+      if (!res.ok) {
+        portalError = BL.portalError;
+        return;
+      }
+      const data = (await res.json()) as { url?: string };
+      if (data.url) {
+        location.href = data.url;
+      } else {
+        portalError = BL.portalError;
+      }
+    } catch {
+      portalError = BL.portalError;
+    } finally {
+      portalBusy = false;
+    }
+  }
 
   function mapError(code?: string): string {
     if (code === "password too short") return t.account.errTooShort;
@@ -204,6 +268,12 @@
 <svelte:window onkeydown={(e) => { if (e.key === "Escape" && open) open = false; }} />
 
 <div class="account">
+  {#if billingBanner}
+    <div class="billing-toast" class:cancel={billingBanner === "cancel"}>
+      <span>{billingBanner === "success" ? BL.checkoutSuccess : BL.checkoutCanceled}</span>
+      <button type="button" class="toast-close" aria-label={t.close} onclick={() => (billingBanner = "")}>✕</button>
+    </div>
+  {/if}
   {#if session().user}
     <button class="acct-btn" onclick={() => (open = !open)}>
       {session().user!.email}
@@ -219,6 +289,22 @@
       {#if session().user}
         <div class="menu">
           <div class="who">{t.account.signedInAs(session().user!.email)}</div>
+
+          <div class="billing-section">
+            <p class="hint plan-line">
+              {BL.currentPlan}: {planLabel(session().user!.planId)}
+              {#if session().user!.subscriptionStatus}<span class="sub-status"> · {session().user!.subscriptionStatus}</span>{/if}
+            </p>
+            {#if session().user!.hasBilling}
+              <button class="btn btn-ghost" disabled={portalBusy} onclick={onManageBilling}>{BL.manageBilling}</button>
+              {#if portalError}<p class="err">{portalError}</p>{/if}
+            {:else}
+              <button class="btn btn-ghost" onclick={() => (showPricing = !showPricing)}>{BL.upgrade}</button>
+              {#if showPricing}
+                <div class="pricing-inline"><Pricing /></div>
+              {/if}
+            {/if}
+          </div>
 
           {#if pwOpen}
             <form class="pwform" onsubmit={(e) => { e.preventDefault(); onChangePassword(); }}>
@@ -369,4 +455,24 @@
   .menu .who { color: var(--text); }
   .menu .hint { color: var(--text); font-size: var(--fs-xs); margin: 0; }
   .menu .err { color: var(--danger); font-size: 12px; margin: 0; }
+
+  .billing-section {
+    display: flex; flex-direction: column; gap: var(--space-2);
+    padding-bottom: var(--space-3); border-bottom: 1px solid var(--border);
+  }
+  .billing-section .plan-line { color: var(--text-h); }
+  .billing-section .sub-status { color: var(--text); }
+  .pricing-inline { margin-top: var(--space-2); }
+
+  .billing-toast {
+    position: fixed; z-index: 42; top: var(--space-3); left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: var(--space-3);
+    padding: var(--space-2) var(--space-4); border-radius: var(--radius-sm); border: 1px solid var(--border);
+    background: var(--bg); box-shadow: var(--shadow); color: var(--text-h); font-size: var(--fs-xs);
+    max-width: calc(100vw - 32px);
+  }
+  .billing-toast.cancel { color: var(--text); }
+  .toast-close {
+    padding: 0; border: 0; background: none; color: var(--text); cursor: pointer; font-size: var(--fs-xs);
+  }
 </style>
