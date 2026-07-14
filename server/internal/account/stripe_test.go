@@ -95,6 +95,58 @@ func TestVerifyWebhookSubscriptionProjection(t *testing.T) {
 	}
 }
 
+func TestVerifyWebhookParsesMetadataUserID(t *testing.T) {
+	c := NewStripeClient("sk_test", "whsec_abc", "")
+	body := `{"type":"customer.subscription.updated","data":{"object":{"customer":"cus_5","status":"active","metadata":{"user_id":"user_77"},"items":{"data":[{"price":{"id":"price_pro_monthly"}}]}}}}`
+	ev, err := c.VerifyWebhook([]byte(body), signStripe("whsec_abc", body, 4500), 4500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ev.MetadataUserID != "user_77" {
+		t.Fatalf("want MetadataUserID user_77, got %q", ev.MetadataUserID)
+	}
+}
+
+func TestVerifyWebhookMetadataAbsentNoPanic(t *testing.T) {
+	c := NewStripeClient("sk_test", "whsec_abc", "")
+	body := `{"type":"checkout.session.completed","data":{"object":{"customer":"cus_1"}}}`
+	ev, err := c.VerifyWebhook([]byte(body), signStripe("whsec_abc", body, 4600), 4600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ev.MetadataUserID != "" {
+		t.Fatalf("want empty MetadataUserID when metadata absent, got %q", ev.MetadataUserID)
+	}
+}
+
+func TestVerifyWebhookCurrentPeriodEndFallsBackToItems(t *testing.T) {
+	c := NewStripeClient("sk_test", "whsec_abc", "")
+	// Modern Stripe API versions (2025+) moved current_period_end off the
+	// subscription object onto each subscription item; top-level field absent.
+	body := `{"type":"customer.subscription.updated","data":{"object":{"customer":"cus_5","status":"active","items":{"data":[{"price":{"id":"price_pro_monthly"},"current_period_end":1800000000}]}}}}`
+	ev, err := c.VerifyWebhook([]byte(body), signStripe("whsec_abc", body, 4700), 4700)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ev.CurrentPeriodEnd != 1800000000 {
+		t.Fatalf("want CurrentPeriodEnd fallback to items.data[0].current_period_end, got %d", ev.CurrentPeriodEnd)
+	}
+}
+
+func TestVerifyWebhookCurrentPeriodEndPrefersTopLevel(t *testing.T) {
+	c := NewStripeClient("sk_test", "whsec_abc", "")
+	// When both are present (older API versions, or Stripe sending both),
+	// the top-level field wins over the items fallback.
+	body := `{"type":"customer.subscription.updated","data":{"object":{"customer":"cus_5","status":"active","current_period_end":1700000000,"items":{"data":[{"price":{"id":"price_pro_monthly"},"current_period_end":1800000000}]}}}}`
+	ev, err := c.VerifyWebhook([]byte(body), signStripe("whsec_abc", body, 4800), 4800)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ev.CurrentPeriodEnd != 1700000000 {
+		t.Fatalf("want top-level CurrentPeriodEnd preferred, got %d", ev.CurrentPeriodEnd)
+	}
+}
+
 func TestVerifyWebhookNoItemsNoPanic(t *testing.T) {
 	c := NewStripeClient("sk_test", "whsec_abc", "")
 	// checkout.session has no items at all -- must not panic, PriceID stays "".

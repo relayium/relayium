@@ -42,7 +42,15 @@ type WebhookEvent struct {
 	Type                                        string // "checkout.session.completed" | "customer.subscription.updated" | "customer.subscription.deleted" | ...
 	CustomerID, SubscriptionID, PriceID, Status string
 	ClientRefUserID                             string
-	CurrentPeriodEnd                            int64
+	// MetadataUserID is data.object.metadata.user_id, present on
+	// customer.subscription.* events because CreateCheckoutSession sets
+	// subscription_data[metadata][user_id] at checkout time. It lets the
+	// handler bind customer->user itself when a subscription event arrives
+	// before (or without) the checkout.session.completed event that normally
+	// does the binding — Stripe does not guarantee delivery order. Empty when
+	// metadata is absent (e.g. checkout.session.completed itself).
+	MetadataUserID   string
+	CurrentPeriodEnd int64
 }
 
 // stripeClient is the real Biller: a thin hand-rolled HTTP client making
@@ -92,6 +100,15 @@ const replayWindowSecs = 300
 //     customer+user, active" and wait for the accompanying
 //     customer.subscription.created/updated event (which Stripe always
 //     sends) to assign the actual plan.
+//   - MetadataUserID comes from data.object.metadata.user_id. CreateCheckoutSession
+//     sets subscription_data[metadata][user_id], so every subscription created
+//     from our checkout carries it — the handler uses it as a fallback bind
+//     when a subscription event races ahead of checkout.session.completed.
+//   - CurrentPeriodEnd first tries data.object.current_period_end (pre-2025
+//     Stripe API versions put it on the subscription object); if that's 0/absent
+//     it falls back to data.object.items.data[0].current_period_end, where
+//     newer API versions moved it. Display-only field, never used for
+//     enforcement, so a best-effort fallback is safe.
 func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64) (WebhookEvent, error) {
 	var ts int64
 	var haveTS bool
@@ -154,11 +171,15 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 				ClientReferenceID string `json:"client_reference_id"`
 				Status            string `json:"status"`
 				CurrentPeriodEnd  int64  `json:"current_period_end"`
-				Items             *struct {
+				Metadata          *struct {
+					UserID string `json:"user_id"`
+				} `json:"metadata"`
+				Items *struct {
 					Data []struct {
 						Price *struct {
 							ID string `json:"id"`
 						} `json:"price"`
+						CurrentPeriodEnd int64 `json:"current_period_end"`
 					} `json:"data"`
 				} `json:"items"`
 			} `json:"object"`
@@ -176,8 +197,16 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 		ClientRefUserID:  envelope.Data.Object.ClientReferenceID,
 		CurrentPeriodEnd: envelope.Data.Object.CurrentPeriodEnd,
 	}
-	if items := envelope.Data.Object.Items; items != nil && len(items.Data) > 0 && items.Data[0].Price != nil {
-		ev.PriceID = items.Data[0].Price.ID
+	if md := envelope.Data.Object.Metadata; md != nil {
+		ev.MetadataUserID = md.UserID
+	}
+	if items := envelope.Data.Object.Items; items != nil && len(items.Data) > 0 {
+		if items.Data[0].Price != nil {
+			ev.PriceID = items.Data[0].Price.ID
+		}
+		if ev.CurrentPeriodEnd == 0 {
+			ev.CurrentPeriodEnd = items.Data[0].CurrentPeriodEnd
+		}
 	}
 	return ev, nil
 }

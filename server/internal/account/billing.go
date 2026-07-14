@@ -2,6 +2,7 @@ package account
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 )
@@ -174,10 +175,31 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !ok {
-			// Unknown customer (e.g. test-mode event, or a race with the
-			// checkout.session.completed bind) — nothing to do.
-			w.WriteHeader(http.StatusOK)
-			return
+			// Unknown customer: either a stray/test-mode event, or a race
+			// where this subscription event arrived before the
+			// checkout.session.completed that normally does the bind —
+			// Stripe does not guarantee delivery order. Our checkout always
+			// stamps subscription_data[metadata][user_id], so fall back to
+			// binding via that metadata before giving up.
+			if ev.MetadataUserID == "" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			if err := s.store.SetUserStripeCustomer(ctx, ev.MetadataUserID, ev.CustomerID); err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+			u, err = s.store.GetUserByID(ctx, ev.MetadataUserID)
+			if err != nil {
+				if errors.Is(err, ErrNotFound) {
+					// Metadata referenced a user that no longer exists —
+					// nothing to assign a plan to.
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
 		}
 		if u.PlanSource == "admin" {
 			// Admin comp wins: record status/end for visibility, but never

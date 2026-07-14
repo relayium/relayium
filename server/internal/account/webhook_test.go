@@ -13,12 +13,23 @@ import (
 // webhookEnv builds a minimal Stripe event envelope JSON body matching the
 // fields VerifyWebhook parses (see stripe.go's envelope struct).
 func webhookEnv(eventType, customer, subscription, clientRefUserID, status, priceID string, currentPeriodEnd int64) string {
+	return webhookEnvWithMetadata(eventType, customer, subscription, clientRefUserID, status, priceID, currentPeriodEnd, "")
+}
+
+// webhookEnvWithMetadata is webhookEnv plus a data.object.metadata.user_id,
+// as CreateCheckoutSession stamps via subscription_data[metadata][user_id]
+// (see stripe.go), used to exercise the out-of-order-delivery fallback.
+func webhookEnvWithMetadata(eventType, customer, subscription, clientRefUserID, status, priceID string, currentPeriodEnd int64, metadataUserID string) string {
 	items := "null"
 	if priceID != "" {
 		items = fmt.Sprintf(`{"data":[{"price":{"id":%q}}]}`, priceID)
 	}
-	return fmt.Sprintf(`{"type":%q,"data":{"object":{"customer":%q,"subscription":%q,"client_reference_id":%q,"status":%q,"current_period_end":%d,"items":%s}}}`,
-		eventType, customer, subscription, clientRefUserID, status, currentPeriodEnd, items)
+	metadata := "null"
+	if metadataUserID != "" {
+		metadata = fmt.Sprintf(`{"user_id":%q}`, metadataUserID)
+	}
+	return fmt.Sprintf(`{"type":%q,"data":{"object":{"customer":%q,"subscription":%q,"client_reference_id":%q,"status":%q,"current_period_end":%d,"metadata":%s,"items":%s}}}`,
+		eventType, customer, subscription, clientRefUserID, status, currentPeriodEnd, metadata, items)
 }
 
 // postWebhook signs body with secret at the current time and POSTs it to the
@@ -290,6 +301,51 @@ func TestWebhookUnknownCustomerIgnored200(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("want 200 (ignore unknown customer), got %d", resp.StatusCode)
+	}
+}
+
+// TestWebhookSubscriptionBeforeCheckoutUsesMetadata proves the out-of-order
+// delivery fix in billing.go: Stripe doesn't guarantee that
+// checkout.session.completed (which normally binds customer->user) arrives
+// before the accompanying customer.subscription.* event. When the
+// subscription event's customer id is not yet bound to any user, the handler
+// must fall back to data.object.metadata.user_id (always present, since
+// CreateCheckoutSession stamps subscription_data[metadata][user_id]) to bind
+// the customer and assign the plan, rather than 200-ignoring and leaving a
+// paying user on Free.
+func TestWebhookSubscriptionBeforeCheckoutUsesMetadata(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	secret := "whsec_race"
+	svc.biller = NewStripeClient("sk_test", secret, "")
+	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
+	cookie := loginCookie(t, ts, mail, "webhook-race@example.com")
+	_ = cookie
+	uid := mustUserID(t, store, "webhook-race@example.com")
+	// Deliberately do NOT bind the customer via checkout.session.completed:
+	// "cus_new" is unknown to the store when the subscription event arrives.
+
+	body := webhookEnvWithMetadata("customer.subscription.updated", "cus_new", "sub_1", "", "active", "price_pro_m", 1700006000, uid)
+	resp := postWebhook(t, ts, secret, body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+
+	u, err := store.GetUserByID(context.Background(), uid)
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	if u.PlanID != "pro" {
+		t.Fatalf("want plan pro assigned via metadata fallback, got %q", u.PlanID)
+	}
+	if u.SubscriptionStatus != "active" {
+		t.Fatalf("want status active, got %q", u.SubscriptionStatus)
+	}
+	if u.PlanSource != "stripe" {
+		t.Fatalf("want source stripe, got %q", u.PlanSource)
+	}
+	if u.StripeCustomerID != "cus_new" {
+		t.Fatalf("want stripe_customer_id bound to cus_new via metadata fallback, got %q", u.StripeCustomerID)
 	}
 }
 
