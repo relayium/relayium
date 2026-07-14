@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relayium مقابل croc: نقل ملفات مُشفَّر من الطرفية · Relayium</title>
+    <meta name="description" content="كلٌّ من Relayium وcroc أداتا سطر أوامر مجانيتان ومفتوحتا المصدر ومُشفَّرتان لنقل الملفات من الند للند. مقارنة منصفة وصادقة تُبيّن أين يكون كلٌّ منهما الأنسب." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ar/compare/croc" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/croc" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/croc" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/croc" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/croc" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/croc" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/croc" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/compare/croc" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/croc" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Relayium مقابل croc: نقل ملفات مُشفَّر من الطرفية" />
+    <meta property="og:description" content="كلٌّ من Relayium وcroc أداتا سطر أوامر مجانيتان ومفتوحتا المصدر ومُشفَّرتان لنقل الملفات من الند للند. مقارنة منصفة وصادقة تُبيّن أين يكون كلٌّ منهما الأنسب." />
+    <meta property="og:url" content="https://relayium.com/ar/compare/croc" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ar_AR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relayium مقابل croc: نقل ملفات مُشفَّر من الطرفية" />
+    <meta name="twitter:description" content="كلٌّ من Relayium وcroc أداتا سطر أوامر مجانيتان ومفتوحتا المصدر ومُشفَّرتان لنقل الملفات من الند للند. مقارنة منصفة وصادقة تُبيّن أين يكون كلٌّ منهما الأنسب." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium مقابل croc: نقل ملفات مُشفَّر من الطرفية","description":"كلٌّ من Relayium وcroc أداتا سطر أوامر مجانيتان ومفتوحتا المصدر ومُشفَّرتان لنقل الملفات من الند للند. مقارنة منصفة وصادقة تُبيّن أين يكون كلٌّ منهما الأنسب.","inLanguage":"ar","dateModified":"2026-07-12","mainEntityOfPage":"https://relayium.com/ar/compare/croc","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل واجهة Relayium على سطر الأوامر مجانية؟","acceptedAnswer":{"@type":"Answer","text":"نعم، مجانية تمامًا. لا فئة مدفوعة ولا شيء يُقاس — كل وضع يوصل الطرفين مباشرةً، والواجهة مرخّصة بـ MIT ومفتوحة المصدر."}},{"@type":"Question","name":"هل تحتاج إلى حساب؟","acceptedAnswer":{"@type":"Answer","text":"لا. push/pull تستخدم وصول SSH الخاص بك، وdaemon-direct يستخدم ثقة شهادة TLS المثبّتة بين أجهزتك، وsend/receive يستخدم رمزًا قصيرًا تتّفقان عليه خارج القناة. لا شيء من ذلك يمسّ حساب Relayium."}},{"@type":"Question","name":"هل يمكنني استخدام رمز الاقتران في الواجهة مع تطبيق Relayium في المتصفّح؟","acceptedAnswer":{"@type":"Answer","text":"ليس بعد لنقل مقترن مباشر — يستخدم send/receive في الواجهة مصافحته المباشرة الخاصة، منفصلةً عن تدفّق الاقتران في المتصفّح المبني على WebRTC، فلا يتفاهم الاثنان اليوم. ولتسليم ملف لشخص يستخدم المتصفّح فقط، استخدِم رابط التنزيل المُخزَّن في Relayium أو وضع رمز الاقتران الخاص بتطبيق المتصفّح."}},{"@type":"Question","name":"هل يمكنني استضافته ذاتيًّا؟","acceptedAnswer":{"@type":"Answer","text":"نعم. يُوزَّع خادم Relayium كصورة Docker ‏(docker compose up -d --build)، ويمكنك توجيه send/receive في الواجهة إلى نسختك الخاصة بـ --server https://your-domain — بالروح نفسها لتشغيل مُرحِّل croc خاص بك."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ar">Relayium</a></header>
+      <h1>Relayium مقابل croc: نقل ملفات مُشفَّر من الطرفية</h1>
+      <p class="updated">آخر تحديث: 2026-07-12</p>
+      <nav class="langbar" aria-label="Language"><a href="/compare/croc">English</a><a href="/zh/compare/croc">中文</a><a href="/ja/compare/croc">日本語</a><a href="/ko/compare/croc">한국어</a><a href="/de/compare/croc">Deutsch</a><a href="/fr/compare/croc">Français</a><a href="/ar/compare/croc" aria-current="true">العربية</a></nav>
+      <p class="lead">croc من أحبّ الأدوات لإرسال ملف من طرفية إلى أخرى: عبارة رمزية قصيرة يسهل تذكّرها، وتبادل مفاتيح PAKE، ثم يعمل ببساطة. وتضع واجهة Relayium على سطر الأوامر لنفسها المهمّة ذاتها وهي مبنية بالطريقة نفسها — مجانية ومفتوحة المصدر ومُشفَّرة من الطرف إلى الطرف، دون الحاجة إلى حساب في أيٍّ منها.</p>
+      <p class="lead">هذه ليست محاولة إسقاط؛ فقد استحقّ croc سمعته. إنها مقارنة مباشرة لِما يشترك فيه الاثنان، وأين تفعل واجهة Relayium أكثر لأنها تتحدّث أيضًا إلى خوادم تُشغّلها أصلاً، والحالة التي يكون فيها croc بصدق الخيار الأبسط.</p>
+      <h2>ما الذي يشترك فيه Relayium وcroc</h2>
+      <p>لنبدأ بما يتقاطعان فيه، فهو كثير: كلاهما ملف تنفيذي صغير واحد تُثبّته مرّة واحدة، وكلاهما مجاني تمامًا بلا فئة مدفوعة، وكلاهما مفتوح المصدر برخصة متساهلة تتيح لك قراءة كل سطر يمسّ ملفاتك.</p>
+      <ul><li>لا حساب للنقل — رمز قصير لا يعرفه إلا الطرفان يكفي كي يجد كلٌّ منهما الآخر ويتّفقا على مفتاح.</li><li>مُشفَّر أثناء النقل من الطرف إلى الطرف: لا يرى المُرحِّل أو نقطة اللقاء في المنتصف محتوى ملفك أبدًا.</li><li>يمكن لعمليات النقل المنقطعة أن تُستأنف بدلاً من البدء من جديد، وكلاهما يتحقّق من أنّ ما وصل يطابق فعلاً ما أُرسل.</li><li>متعدّد المنصّات: macOS وLinux وWindows.</li></ul>
+      <h2>Before you start</h2>
+      <p>Everything below is the relayium CLI, so install it first if you haven&#39;t. On macOS or Linux, one command drops a prebuilt binary on your PATH:</p>
+      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>Prefer to pick the file yourself, or on Windows? Grab a binary from the releases page — relayium.com/cli lists every install option (or go build -o relayium ./cmd/relayium if you have Go).</li><li>relayium --version confirms it&#39;s installed. Skip this and the commands below just print &#39;command not found&#39;.</li></ul>
+      <h2>SSH وdaemon-direct: التحدّث إلى خادم تُشغّله أصلاً</h2>
+      <p>هذا هو الفرق العملي الأكبر. croc مبني حول تدفّق واحد — عبارة رمزية تدخل، وعبارة رمزية تخرج. وتضيف واجهة Relayium طريقتين أخريين لنقل الملفات تعتمدان على بنية تحتية لديك أصلاً.</p>
+      <p>relayium push / pull تعيد استخدام وصول SSH الموجود لديك، فلا شيء جديد تثق به ولا رمز تشاركه. وتعمل push حتى مع خادم لا يوجد عليه relayium مثبّت على الإطلاق، متراجعةً إلى تدفّق tar عادي عبر اتصال SSH — وهذا التراجع خاص بـ push فقط؛ أمّا pull فتحتاج دائمًا إلى relayium على الجهاز البعيد، لأنها تعمل هناك بصفتها المُرسِل.</p>
+      <p>relayium serve تحوّل أي جهاز تملكه إلى هدف daemon-direct، يمكن الوصول إليه عبر TLS 1.3 مثبّت دون SSH ودون عبارة رمزية — تُبنى الثقة عند الاتصال الأول (تُوافَق عليها تفاعليًّا، أو يُصرَّح بها مسبقًا للاستخدام دون إشراف) وتُثبَّت من حينها، وهي الفكرة ذاتها كمفتاح مضيف SSH.</p>
+      <pre><code>relayium push ./photos user@your-server:backups/</code></pre>
+      <pre><code>relayium serve --dir ~/incoming</code></pre>
+      <pre><code>relayium push ./build relayium://your-server</code></pre>
+      <h2>مزامنة المجلدات ورمز تحقق تُدقّقه مرّتين</h2>
+      <p>يُرسل croc دفعةً من الملفات ثم يخرج — أرسِلها ثانيةً لتحديث الطرف الآخر، دون أي مفهوم لما ينبغي حذفه. وتضيف واجهة Relayium أمر relayium sync، وهو مرآة تزايدية أحادية الاتجاه فوق أيٍّ من وسيلتَي النقل أعلاه: لا ينقل إلا ما تغيّر، و‏--delete يحذف من الوجهة الملفات التي اختفت من المصدر (لا يحترمه الـ daemon إلا إذا بدأ بـ --allow-delete، فعلى المُستقبِل أن يوافق صراحةً)، و‏--watch يُبقي المزامنة تتكرّر آنيًّا مع تغيّر الملفات، دون الحاجة إلى مهمّة cron.</p>
+      <p>أمّا للنقل العابر للشبكات لمرّة واحدة، فإنّ relayium send / receive يؤدّي الدور نفسه الذي تؤدّيه عبارة croc الرمزية، إذ يقرن حاسوبين برمز قصير. وهو من الند للند مباشرةً، ويطبع رمز تحقق قصيرًا (سلسلة مصادقة قصيرة) على الطرفين كي تؤكّد بصريًّا أنّ لا أحد جلس في المنتصف قبل أن تتحرّك أي بايتات — ويجدر قول هذا بصدق: هذا الوضع مباشر فقط، فإذا لم يجد الطرفان مسارًا مباشرًا فشل بدلاً من التراجع إلى مُرحِّل.</p>
+      <pre><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
+      <h2>متى يكون croc الخيار الأبسط</h2>
+      <p>هناك حالات حقيقية يكون فيها croc الأداة الأنسب للمهمّة، ويستحقّ الأمر أن يُقال بوضوح.</p>
+      <ul><li>تريد فقط تسليم ملف واحد لصديق الآن بأقلّ قدر من الأجزاء المتحرّكة — لا خادم للوصول إليه، ولا شيء لإعداده على أي من الطرفين.</li><li>أنت خلف NAT صارم دون سبيل لفتح مسار مباشر: يحمل مُرحِّل croc التدفّق المُشفَّر على أي حال، فيكتمل النقل في كلتا الحالتين. أمّا send / receive في Relayium فمباشر فقط وقد يفشل في هذا الموقف (push/pull أو daemon-direct إلى خادم يمكن الوصول إليه لا تزال تعمل، لأنها لا تعتمد على قفزة P2P مباشرة).</li><li>لا تحتاج إلى مرآة مجلدات ولا تكامل SSH ولا مُستمِع طويل الأمد — croc أمر عابر واحد لكل طرف ولا شيء آخر تفكّر فيه.</li><li>أنت تثق أصلاً بمجتمع croc الكبير الراسخ وسنوات استخدامه في الواقع العملي.</li></ul>
+      <h2>مقارنة الميزات في لمحة</h2>
+      <p>أهمّ الفروق جنبًا إلى جنب:</p>
+      <ul><li>التحدّث إلى خادم: يعيد Relayium استخدام وصول SSH لديك (push/pull) أو daemon بـ TLS مثبّت؛ أمّا croc فليس لديه تكامل SSH — ثبّت croc على الطرفين وشارِك عبارة رمزية.</li><li>مزامنة المجلدات: relayium sync يعكس تزايديًّا مع --delete و--watch؛ أمّا croc فيُرسل دفعةً ثم يخرج، دون دلالات مرآة أو حذف.</li><li>لا مسار مباشر متاح: يحمل مُرحِّل croc التدفّق المُشفَّر فيكتمل النقل رغم ذلك؛ أمّا send/receive في Relayium فمباشر فقط.</li><li>التحقّق: كلاهما مُشفَّر من الطرف إلى الطرف؛ ويطبع send/receive في Relayium إضافةً إلى ذلك رمزًا قصيرًا يقارنه الطرفان قبل بدء النقل.</li><li>الاستضافة الذاتية: كلاهما قابل للاستضافة الذاتية — مُرحِّل croc ملف تنفيذي مستقلّ صغير؛ وخادم Relayium يُشغّل أيضًا تطبيق الويب، ويمكن لِـ send/receive في الواجهة أن يشير إلى نسختك الخاصة بـ --server.</li><li>الرخصة والتكلفة: كلاهما مرخّص بـ MIT، وكلاهما مجاني تمامًا، ولا يتطلّب أيٌّ منهما حسابًا.</li></ul>
+      <h2>أسئلة شائعة</h2>
+      <h3>هل واجهة Relayium على سطر الأوامر مجانية؟</h3>
+      <p>نعم، مجانية تمامًا. لا فئة مدفوعة ولا شيء يُقاس — كل وضع يوصل الطرفين مباشرةً، والواجهة مرخّصة بـ MIT ومفتوحة المصدر.</p>
+      <h3>هل تحتاج إلى حساب؟</h3>
+      <p>لا. push/pull تستخدم وصول SSH الخاص بك، وdaemon-direct يستخدم ثقة شهادة TLS المثبّتة بين أجهزتك، وsend/receive يستخدم رمزًا قصيرًا تتّفقان عليه خارج القناة. لا شيء من ذلك يمسّ حساب Relayium.</p>
+      <h3>هل يمكنني استخدام رمز الاقتران في الواجهة مع تطبيق Relayium في المتصفّح؟</h3>
+      <p>ليس بعد لنقل مقترن مباشر — يستخدم send/receive في الواجهة مصافحته المباشرة الخاصة، منفصلةً عن تدفّق الاقتران في المتصفّح المبني على WebRTC، فلا يتفاهم الاثنان اليوم. ولتسليم ملف لشخص يستخدم المتصفّح فقط، استخدِم رابط التنزيل المُخزَّن في Relayium أو وضع رمز الاقتران الخاص بتطبيق المتصفّح.</p>
+      <h3>هل يمكنني استضافته ذاتيًّا؟</h3>
+      <p>نعم. يُوزَّع خادم Relayium كصورة Docker ‏(docker compose up -d --build)، ويمكنك توجيه send/receive في الواجهة إلى نسختك الخاصة بـ --server https://your-domain — بالروح نفسها لتشغيل مُرحِّل croc خاص بك.</p>
+      <div class="ctacard">
+        <p>ثبّت واجهة Relayium المجانية على سطر الأوامر وجرّب push أو sync أو send — بلا حساب، وبسرعة بدء لا تقلّ عن croc.</p>
+        <a class="cta" href="/cli">احصل على الأداة</a>
+      </div>
+      <h2>تابِع القراءة</h2>
+      <ul class="related"><li><a href="/ar/compare/snapdrop">Relayium مقابل Snapdrop وPairDrop: أي نقل ملفات P2P آمن؟</a></li><li><a href="/ar/compare/airdrop">Relayium مقابل AirDrop: بديل AirDrop عبر المنصّات</a></li><li><a href="/ar/compare/wetransfer">Relayium مقابل WeTransfer: أرسل ملفات كبيرة دون الخادم</a></li><li><a href="/ar/how-to/transfer-files-android-to-iphone">كيفية نقل الملفات من Android إلى iPhone (دون كابل)</a></li><li><a href="/ar/how-to/send-files-pc-to-phone-wirelessly">إرسال الملفات من الحاسوب إلى الهاتف لاسلكيًا، دون كابل أو تطبيق</a></li><li><a href="/ar/how-to/send-large-files-without-cloud">كيفية إرسال الملفات الكبيرة دون سحابة</a></li><li><a href="/ar/guides/transfer-files-from-terminal">انقل الملفات من الطرفية باستخدام Relayium CLI</a></li><li><a href="/ar/guides/back-up-a-server-over-ssh">انسخ الملفات احتياطيًا إلى خادمك عبر SSH باستخدام Relayium CLI</a></li><li><a href="/ar/guides/send-a-file-to-someone">إرسال ملف إلى شخص ما عبر الشبكات باستخدام واجهة Relayium الطرفية (CLI)</a></li><li><a href="/ar/guides/server-to-server-transfers">النقل من خادم إلى خادم باستخدام واجهة Relayium الطرفية (daemon direct)</a></li><li><a href="/ar/guides/sync-a-large-folder-between-servers">مزامنة مجلد كبير بين خادمين (قابلة للاستئناف، في الخلفية)</a></li><li><a href="/ar/guides/push-to-cloud-pull-on-another-computer">ادفع الملفات إلى السحابة، واسحبها على حاسوب آخر</a></li><li><a href="/ar/how-to/share-a-file-with-an-expiring-link">مشاركة ملف برابط تنزيل آمن ينتهي صلاحيته</a></li><li><a href="/ar/guides/self-host-relayium">الاستضافة الذاتية لـ Relayium: شغّل خادم نقل الملفات الخاص بك</a></li><li><a href="/ar/how-to/send-files-between-two-computers-over-the-internet">إرسال الملفات بين جهازي كمبيوتر عبر الإنترنت</a></li><li><a href="/ar/guides/how-relayium-encrypts-your-files">كيف يُشفِّر Relayium ملفاتك من الطرف إلى الطرف</a></li><li><a href="/ar/compare/google-drive">Relayium مقابل Google Drive لإرسال الملفات</a></li><li><a href="/ar/compare/rsync">Relayium مقابل rsync: زامِن المجلدات دون إعداد SSH</a></li><li><a href="/ar/compare/firefox-send">أفضل بديل لـ Firefox Send في 2026</a></li><li><a href="/ar/how-to/transfer-files-by-scanning-a-qr-code">نقل الملفات بمسح رمز QR ضوئياً</a></li><li><a href="/ar/guides/receive-files-from-the-command-line">استقبال الملفات من سطر الأوامر</a></li><li><a href="/ar/how-to/send-a-folder">كيفية إرسال مجلد كامل، لا ملفات فقط</a></li><li><a href="/ar/guides/run-relayium-as-an-always-on-service">شغّل Relayium كخدمة استقبال دائمة التشغيل</a></li><li><a href="/ar/how-to/automate-server-backups">أتمتة النسخ الاحتياطي المُشفَّر للخادم باستخدام مهمة cron</a></li><li><a href="/ar/compare/localsend">Relayium مقابل LocalSend: أيّ نقل ملفات محلي تستخدم</a></li><li><a href="/ar/compare/scp">Relayium مقابل scp: نقل ملفات أبسط عبر SSH</a></li><li><a href="/ar/compare/magic-wormhole">Relayium مقابل magic-wormhole: نقل الملفات عبر CLI</a></li><li><a href="/ar/compare/nextcloud">Relayium مقابل Nextcloud لإرسال الملفات</a></li><li><a href="/ar/compare/dropbox">Relayium مقابل Dropbox لإرسال ملف</a></li><li><a href="/ar/how-to/airdrop-for-windows-and-android">AirDrop لأنظمة Windows وLinux وAndroid</a></li><li><a href="/ar/how-to/transfer-files-between-mac-and-windows">نقل الملفات بين جهاز Mac وحاسوب Windows</a></li><li><a href="/ar/how-to/send-files-on-the-same-wifi">إرسال الملفات بين الأجهزة على نفس شبكة Wi-Fi</a></li><li><a href="/ar/guides/what-is-peer-to-peer-file-transfer">ما هو نقل الملفات من الند للند؟</a></li><li><a href="/ar/guides/is-it-safe-to-send-files-over-the-internet">هل من الآمن إرسال الملفات عبر الإنترنت؟</a></li><li><a href="/ar/guides/bring-your-own-node">شغّل عقدتك الخاصة: استخدم مُرحِّل وتخزين Relayium مجانًا</a></li><li><a href="/ar/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ar">← Relayium</a>
+        <a href="/ar/guides">الأدلة</a>
+        <a href="/ar/privacy">undefined</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

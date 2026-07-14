@@ -409,7 +409,7 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
 
   .steps {
     margin: 0;
-    padding-left: 1.3em;
+    padding-inline-start: 1.3em;
   }
   .steps li {
     margin-bottom: var(--space-4);
@@ -431,7 +431,7 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
   }
   th,
   td {
-    text-align: left;
+    text-align: start;
     padding: var(--space-2) var(--space-3);
     border-bottom: 1px solid var(--border);
     vertical-align: top;
@@ -454,7 +454,7 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
   .files {
     color: var(--text);
     line-height: 1.7;
-    padding-left: 1.2em;
+    padding-inline-start: 1.2em;
   }
 
   .guide-cards {

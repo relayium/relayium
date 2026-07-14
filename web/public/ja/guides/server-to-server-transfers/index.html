@@ -13,6 +13,7 @@
     <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/server-to-server-transfers" />
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/server-to-server-transfers" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/server-to-server-transfers" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/server-to-server-transfers" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/server-to-server-transfers" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -42,7 +43,7 @@ h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 .lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
@@ -60,7 +61,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
       <h1>Relayium CLI でサーバー間転送(デーモン直結)</h1>
       <p class="updated">最終更新: 2026-07-12</p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers">English</a><a href="/zh/guides/server-to-server-transfers">中文</a><a href="/ja/guides/server-to-server-transfers" aria-current="true">日本語</a><a href="/ko/guides/server-to-server-transfers">한국어</a><a href="/de/guides/server-to-server-transfers">Deutsch</a><a href="/fr/guides/server-to-server-transfers">Français</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers">English</a><a href="/zh/guides/server-to-server-transfers">中文</a><a href="/ja/guides/server-to-server-transfers" aria-current="true">日本語</a><a href="/ko/guides/server-to-server-transfers">한국어</a><a href="/de/guides/server-to-server-transfers">Deutsch</a><a href="/fr/guides/server-to-server-transfers">Français</a><a href="/ar/guides/server-to-server-transfers">العربية</a></nav>
       <p class="lead">両方のマシンが自分のもので、互いのアドレスを知っている場合、SSH は余計な手間であり、集合場所を介するのは純粋なオーバーヘッドです。デーモン直結はまさにこのために作られています。一方のサーバーが待ち受け、もう一方が固定された TLS 1.3 接続でそこへ直接プッシュします。リレーも SSH もペアリングコードも不要——信頼は公開鍵によるもので、一度設定すれば済みます。</p>
       <p class="lead">本ガイドではリスナーの起動、そこへのプッシュ、初回接触時に新しいプッシュ側を承認すること、自動化、そしてリスナーを systemd サービスとして実行する方法を扱います。</p>
       <h2>始める前に</h2>

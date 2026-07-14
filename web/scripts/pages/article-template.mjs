@@ -1,7 +1,7 @@
 // web/scripts/pages/article-template.mjs — renders one article (one language) to a
 // self-contained static HTML string. No JS, no external CSS: styles are inlined so
 // the page is independent of the Vite asset graph and crawlable with JS disabled.
-import { LANGS, DEFAULT_LANG, LANG_LABELS, GUIDES_LABELS, BCP47, OG_LOCALE, SITE, urlPath, absUrl, esc, ctaHref, landingUrl } from "./shared.mjs";
+import { LANGS, DEFAULT_LANG, LANG_LABELS, GUIDES_LABELS, BCP47, OG_LOCALE, SITE, urlPath, absUrl, esc, ctaHref, landingUrl, dirAttr } from "./shared.mjs";
 
 // Footer link label; matches content/landing.mjs footer.privacy per language.
 const PRIVACY_LABELS = {
@@ -23,7 +23,7 @@ h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 .lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
@@ -177,7 +177,7 @@ export function renderArticlePage({ slug, lang, doc, updated, related = [] }) {
   const relatedBlock = `<h2>${esc(doc.relatedHeading)}</h2>\n      <ul class="related">${relatedLinks}</ul>`;
 
   return `<!doctype html>
-<html lang="${BCP47[lang]}">
+<html lang="${BCP47[lang]}"${dirAttr(lang)}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

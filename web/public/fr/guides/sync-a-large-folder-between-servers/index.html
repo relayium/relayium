@@ -13,6 +13,7 @@
     <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/sync-a-large-folder-between-servers" />
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/sync-a-large-folder-between-servers" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/sync-a-large-folder-between-servers" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/sync-a-large-folder-between-servers" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/sync-a-large-folder-between-servers" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -42,7 +43,7 @@ h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 .lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
@@ -60,7 +61,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=fr">Relayium</a></header>
       <h1>Synchroniser un gros dossier entre deux serveurs (reprenable, en arrière-plan)</h1>
       <p class="updated">Dernière mise à jour: 2026-07-08</p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers">English</a><a href="/zh/guides/sync-a-large-folder-between-servers">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers" aria-current="true">Français</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers">English</a><a href="/zh/guides/sync-a-large-folder-between-servers">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers" aria-current="true">Français</a><a href="/ar/guides/sync-a-large-folder-between-servers">العربية</a></nav>
       <p class="lead">Vous avez un gros dossier — des dizaines de gigaoctets — sur un serveur et vous voulez une copie exacte sur un autre. Vous ne pouvez pas surveiller un terminal pendant des heures, et un transfert qui meurt à mi-chemin ne devrait pas repartir de zéro. relayium sync est fait pour cela : un miroir incrémental à sens unique qui saute ce qui est déjà là, reprend un fichier envoyé à moitié là où il s&#39;est arrêté, et vérifie chaque fichier de bout en bout.</p>
       <p class="lead">Ce guide met en place un transfert sans surveillance et auto-réparateur : autorisez l&#39;émetteur une fois, faites tourner l&#39;écouteur en arrière-plan, et pilotez relayium sync depuis une boucle de reprise dans tmux pour qu&#39;il continue malgré les coupures jusqu&#39;à ce que tout le dossier soit arrivé.</p>
       <h2>Pourquoi relayium sync convient à cette tâche</h2>

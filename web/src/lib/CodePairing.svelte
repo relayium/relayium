@@ -206,7 +206,7 @@
   /* Intentional oversized code display — the whole point is at-a-glance readback. */
   .code {
     font-size: 40px; letter-spacing: 10px; font-weight: 700; color: var(--text-h);
-    font-variant-numeric: tabular-nums; padding-left: 10px;
+    font-variant-numeric: tabular-nums; padding-inline-start: 10px;
   }
   .row { display: flex; align-items: center; gap: var(--space-3); }
   /* The minter's action row can hold copy + copy-link + share + ttl; let it wrap

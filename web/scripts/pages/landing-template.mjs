@@ -1,7 +1,7 @@
 // web/scripts/pages/landing-template.mjs — renders one static localized landing page.
 // Self-contained: no JS, no external CSS. Styles are inlined so the page is
 // independent of the Vite asset graph and fully crawlable with JS disabled.
-import { LANGS, LANG_LABELS, GUIDES_LABELS, BCP47, OG_LOCALE, SITE, landingUrl, ctaHref, urlPath, absUrl, esc } from "./shared.mjs";
+import { LANGS, LANG_LABELS, GUIDES_LABELS, BCP47, OG_LOCALE, SITE, landingUrl, ctaHref, urlPath, absUrl, esc, dirAttr } from "./shared.mjs";
 
 // Exported so mode-template.mjs (and any other landing-style page) can reuse the
 // exact same inline stylesheet + page-shell classes instead of forking them.
@@ -18,8 +18,8 @@ h1{color:var(--text-h);font-size:38px;letter-spacing:-.5px;margin:40px 0 12px}
 h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .pitch{font-size:20px;margin:0 0 24px;max-width:42em}
-p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:8px 0}
-ol.steps{margin:12px 0;padding-left:22px}ol.steps li{margin:10px 0}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:8px 0}
+ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
 .langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
@@ -91,7 +91,7 @@ export function renderLandingPage({ lang, doc, articleLinks = [] }) {
     : "";
 
   return `<!doctype html>
-<html lang="${BCP47[lang]}">
+<html lang="${BCP47[lang]}"${dirAttr(lang)}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

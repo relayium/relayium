@@ -13,6 +13,7 @@
     <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/push-to-cloud-pull-on-another-computer" />
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/push-to-cloud-pull-on-another-computer" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/push-to-cloud-pull-on-another-computer" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/push-to-cloud-pull-on-another-computer" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -42,7 +43,7 @@ h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 .lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
@@ -70,7 +71,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
       <h1>Push files to the cloud, pull them on another computer</h1>
       <p class="updated">Last updated: 2026-07-12</p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/push-to-cloud-pull-on-another-computer" aria-current="true">English</a><a href="/zh/guides/push-to-cloud-pull-on-another-computer">中文</a><a href="/ja/guides/push-to-cloud-pull-on-another-computer">日本語</a><a href="/ko/guides/push-to-cloud-pull-on-another-computer">한국어</a><a href="/de/guides/push-to-cloud-pull-on-another-computer">Deutsch</a><a href="/fr/guides/push-to-cloud-pull-on-another-computer">Français</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/push-to-cloud-pull-on-another-computer" aria-current="true">English</a><a href="/zh/guides/push-to-cloud-pull-on-another-computer">中文</a><a href="/ja/guides/push-to-cloud-pull-on-another-computer">日本語</a><a href="/ko/guides/push-to-cloud-pull-on-another-computer">한국어</a><a href="/de/guides/push-to-cloud-pull-on-another-computer">Deutsch</a><a href="/fr/guides/push-to-cloud-pull-on-another-computer">Français</a><a href="/ar/guides/push-to-cloud-pull-on-another-computer">العربية</a></nav>
       <p class="lead">Sometimes the two computers are never awake at the same time. You want to drop a file from your work laptop tonight and grab it from your home desktop tomorrow, with nobody waiting on a live connection. relayium up and relayium down do exactly that: up encrypts and uploads to your account, and down fetches and decrypts it later on any machine — no peer-to-peer handshake, no server you both ssh into.</p>
       <p class="lead">This is the one part of the CLI that uses your Relayium account, and only for uploads. Binding is optional: everything else — push/pull, send/receive, daemon-direct, sync — keeps working with no login. Downloading needs no account at all, just the link.</p>
       <h2>When to reach for it</h2>

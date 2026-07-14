@@ -46,9 +46,9 @@
   .row:first-child { border-top: none; }
   .cell {
     padding: var(--space-3) var(--space-4); font-size: var(--fs-xs); line-height: 1.5;
-    border-left: 1px solid var(--border);
+    border-inline-start: 1px solid var(--border);
   }
-  .cell.feat { border-left: none; color: var(--text-h); font-weight: 500; }
+  .cell.feat { border-inline-start: none; color: var(--text-h); font-weight: 500; }
   .cell.rt, .cell.st { color: var(--text); }
 
   .row.header .cell { font-weight: 600; color: var(--text-h); background: var(--code-bg); font-size: var(--fs-sm); }
@@ -65,7 +65,7 @@
       border: 1px solid var(--border); border-radius: 14px;
       margin-bottom: 12px; overflow: hidden; background: var(--surface-2);
     }
-    .cell { border-left: none; border-top: 1px solid var(--border); }
+    .cell { border-inline-start: none; border-top: 1px solid var(--border); }
     .cell.feat { border-top: none; background: var(--code-bg); font-size: 14px; }
     .cell.rt::before, .cell.st::before {
       content: attr(data-label) " · "; color: var(--text-h); font-weight: 500;

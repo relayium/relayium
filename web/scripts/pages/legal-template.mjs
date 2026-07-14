@@ -1,7 +1,7 @@
 // web/scripts/pages/legal-template.mjs — renders one legal document (one language) to a
 // self-contained static HTML string. No JS, no external CSS: styles are inlined so
 // the page is independent of the Vite asset graph and crawlable with JS disabled.
-import { LANGS, DEFAULT_LANG, LANG_LABELS, BCP47, SITE, urlPath, absUrl, esc } from "./shared.mjs";
+import { LANGS, DEFAULT_LANG, LANG_LABELS, BCP47, SITE, urlPath, absUrl, esc, dirAttr } from "./shared.mjs";
 
 const STYLE = `
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
@@ -15,7 +15,7 @@ header a{color:var(--text-h);text-decoration:none;font-weight:600}
 h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
 h2{color:var(--text-h);font-size:21px;margin:34px 0 10px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
-p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
 .langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
@@ -59,7 +59,7 @@ export function renderLegalPage({ slug, lang, doc }) {
     isPartOf: { "@type": "WebSite", name: SITE.name, url: SITE.origin + "/" },
   };
   return `<!doctype html>
-<html lang="${BCP47[lang]}">
+<html lang="${BCP47[lang]}"${dirAttr(lang)}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

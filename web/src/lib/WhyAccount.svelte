@@ -41,7 +41,7 @@
   .why {
     max-width: 520px; margin: var(--space-4) auto 0; padding: var(--space-4);
     border: 1px solid var(--border); border-radius: var(--radius); background: var(--social-bg);
-    text-align: left;
+    text-align: start;
   }
   .why.compact { margin-top: var(--space-3); padding: var(--space-3); background: none; }
   .eyebrow {

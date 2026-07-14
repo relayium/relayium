@@ -7,11 +7,12 @@ import { buildArticlePages, articleLinksByLang, buildSitemap } from "./build-pag
 describe("buildArticlePages", () => {
   const pages = buildArticlePages([compareSnapdrop]);
 
-  it("produces 6 pages with en unprefixed", () => {
+  it("produces 7 pages with en unprefixed", () => {
     const paths = pages.map((p) => p.path);
     expect(paths).toContain("compare/snapdrop/index.html");
     expect(paths).toContain("zh/compare/snapdrop/index.html");
-    expect(paths.length).toBe(6);
+    expect(paths).toContain("ar/compare/snapdrop/index.html");
+    expect(paths.length).toBe(7);
   });
 
   it("en page has canonical + full hreflang cluster + Article JSON-LD", () => {

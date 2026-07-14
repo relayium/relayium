@@ -13,6 +13,7 @@
     <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/self-host-relayium" />
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/self-host-relayium" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/self-host-relayium" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/self-host-relayium" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/self-host-relayium" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -42,7 +43,7 @@ h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 .lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
@@ -60,7 +61,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
       <h1>Self-host Relayium: run your own file-transfer server</h1>
       <p class="updated">Last updated: 2026-07-12</p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/self-host-relayium" aria-current="true">English</a><a href="/zh/guides/self-host-relayium">中文</a><a href="/ja/guides/self-host-relayium">日本語</a><a href="/ko/guides/self-host-relayium">한국어</a><a href="/de/guides/self-host-relayium">Deutsch</a><a href="/fr/guides/self-host-relayium">Français</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/self-host-relayium" aria-current="true">English</a><a href="/zh/guides/self-host-relayium">中文</a><a href="/ja/guides/self-host-relayium">日本語</a><a href="/ko/guides/self-host-relayium">한국어</a><a href="/de/guides/self-host-relayium">Deutsch</a><a href="/fr/guides/self-host-relayium">Français</a><a href="/ar/guides/self-host-relayium">العربية</a></nav>
       <p class="lead">Relayium is MIT-licensed and open source, and the server is one self-contained image — no external database, no third-party storage bucket, nothing to sign up for. If you&#39;d rather run the whole thing yourself than rely on relayium.com, this guide gets a server up with Docker and points the CLI at it.</p>
       <p class="lead">Self-hosting gives you full control over where your data lives, your own domain and TLS certificate, and no dependency on anyone else&#39;s infrastructure. Everything below is grounded in the files that ship in the repo — `docker-compose.yml`, `server/.env.example`, and `docs/DEPLOYMENT.md` — so nothing here is a flag or setting that doesn&#39;t actually exist.</p>
       <h2>Why self-host</h2>

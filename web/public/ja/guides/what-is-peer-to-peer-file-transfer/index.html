@@ -13,6 +13,7 @@
     <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/what-is-peer-to-peer-file-transfer" />
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/what-is-peer-to-peer-file-transfer" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/what-is-peer-to-peer-file-transfer" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/what-is-peer-to-peer-file-transfer" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/what-is-peer-to-peer-file-transfer" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -42,7 +43,7 @@ h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 .lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
@@ -60,7 +61,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
       <h1>P2P（ピアツーピア）ファイル転送とは？</h1>
       <p class="updated">最終更新: 2026-07-09</p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/what-is-peer-to-peer-file-transfer">English</a><a href="/zh/guides/what-is-peer-to-peer-file-transfer">中文</a><a href="/ja/guides/what-is-peer-to-peer-file-transfer" aria-current="true">日本語</a><a href="/ko/guides/what-is-peer-to-peer-file-transfer">한국어</a><a href="/de/guides/what-is-peer-to-peer-file-transfer">Deutsch</a><a href="/fr/guides/what-is-peer-to-peer-file-transfer">Français</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/what-is-peer-to-peer-file-transfer">English</a><a href="/zh/guides/what-is-peer-to-peer-file-transfer">中文</a><a href="/ja/guides/what-is-peer-to-peer-file-transfer" aria-current="true">日本語</a><a href="/ko/guides/what-is-peer-to-peer-file-transfer">한국어</a><a href="/de/guides/what-is-peer-to-peer-file-transfer">Deutsch</a><a href="/fr/guides/what-is-peer-to-peer-file-transfer">Français</a><a href="/ar/guides/what-is-peer-to-peer-file-transfer">العربية</a></nav>
       <p class="lead">「ピアツーピア」という言葉はあいまいに使われがちですが、ファイル転送における本当の意味はこうです。ファイルは会社のサーバーに一度アップロードされてからダウンロードされるのではなく、一台のデバイスからもう一台へ直接送られます。途中にコピーが留まりうる寄り道はありません。</p>
       <p class="lead">簡単そうに聞こえますが、インターネットはもともと2台の見知らぬデバイスが勝手に見つけ合って直接話せるようには作られていません——ほとんどの接続はルーターやファイアウォールの内側に隠れていて、外部から到達されることを想定していないのです。このページでは、直接接続が実際にどう確立されるのか、確立できないときはどうなるのか、それがプライバシーと速度にとって何を意味するのかを平易な言葉で説明します。具体例として全編で Relayium を取り上げますが、これはまさにこの仕組みを実装したサービスだからです。</p>
       <h2>P2P と一般的な方式の違い：中間の寄り道を省く</h2>

@@ -13,6 +13,7 @@
     <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/self-host-relayium" />
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/self-host-relayium" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/self-host-relayium" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/self-host-relayium" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/self-host-relayium" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -42,7 +43,7 @@ h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 .lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
@@ -60,7 +61,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=ko">Relayium</a></header>
       <h1>Relayium 셀프 호스팅: 나만의 파일 전송 서버 운영하기</h1>
       <p class="updated">마지막 업데이트: 2026-07-12</p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/self-host-relayium">English</a><a href="/zh/guides/self-host-relayium">中文</a><a href="/ja/guides/self-host-relayium">日本語</a><a href="/ko/guides/self-host-relayium" aria-current="true">한국어</a><a href="/de/guides/self-host-relayium">Deutsch</a><a href="/fr/guides/self-host-relayium">Français</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/self-host-relayium">English</a><a href="/zh/guides/self-host-relayium">中文</a><a href="/ja/guides/self-host-relayium">日本語</a><a href="/ko/guides/self-host-relayium" aria-current="true">한국어</a><a href="/de/guides/self-host-relayium">Deutsch</a><a href="/fr/guides/self-host-relayium">Français</a><a href="/ar/guides/self-host-relayium">العربية</a></nav>
       <p class="lead">Relayium은 MIT 라이선스 오픈소스이며, 서버는 단일한 자체 완결형 이미지입니다 — 외부 데이터베이스도, 서드파티 스토리지 버킷도 필요 없고, 가입할 것도 없습니다. relayium.com에 의존하는 대신 전체를 직접 운영하고 싶다면, 이 가이드는 Docker로 서버를 띄우고 CLI를 그 서버로 연결하는 방법을 안내합니다.</p>
       <p class="lead">셀프 호스팅을 하면 데이터가 어디에 저장되는지 완전히 통제할 수 있고, 자신의 도메인과 TLS 인증서를 쓸 수 있으며, 다른 누구의 운영 판단에도 의존하지 않습니다. 아래 내용은 모두 저장소에 실제로 존재하는 파일 — docker-compose.yml, server/.env.example, docs/DEPLOYMENT.md — 을 근거로 하므로, 실제로 존재하지 않는 플래그나 설정은 등장하지 않습니다.</p>
       <h2>왜 셀프 호스팅을 하나</h2>

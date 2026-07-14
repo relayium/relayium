@@ -13,6 +13,7 @@
     <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/push-to-cloud-pull-on-another-computer" />
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/push-to-cloud-pull-on-another-computer" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/push-to-cloud-pull-on-another-computer" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/push-to-cloud-pull-on-another-computer" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -42,7 +43,7 @@ h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 .lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
@@ -70,7 +71,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=ko">Relayium</a></header>
       <h1>클라우드에 올리고 다른 컴퓨터에서 받기</h1>
       <p class="updated">마지막 업데이트: 2026-07-12</p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/push-to-cloud-pull-on-another-computer">English</a><a href="/zh/guides/push-to-cloud-pull-on-another-computer">中文</a><a href="/ja/guides/push-to-cloud-pull-on-another-computer">日本語</a><a href="/ko/guides/push-to-cloud-pull-on-another-computer" aria-current="true">한국어</a><a href="/de/guides/push-to-cloud-pull-on-another-computer">Deutsch</a><a href="/fr/guides/push-to-cloud-pull-on-another-computer">Français</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/push-to-cloud-pull-on-another-computer">English</a><a href="/zh/guides/push-to-cloud-pull-on-another-computer">中文</a><a href="/ja/guides/push-to-cloud-pull-on-another-computer">日本語</a><a href="/ko/guides/push-to-cloud-pull-on-another-computer" aria-current="true">한국어</a><a href="/de/guides/push-to-cloud-pull-on-another-computer">Deutsch</a><a href="/fr/guides/push-to-cloud-pull-on-another-computer">Français</a><a href="/ar/guides/push-to-cloud-pull-on-another-computer">العربية</a></nav>
       <p class="lead">두 컴퓨터가 동시에 켜져 있는 일이 결코 없을 때가 있습니다. 오늘 밤 업무용 노트북에서 파일을 올려두고 내일 집 데스크톱에서 받고 싶은데, 실시간 연결을 기다리는 사람은 아무도 없습니다. relayium up 과 relayium down 이 바로 그 일을 합니다. up 은 로컬에서 암호화해 계정에 업로드하고, down 은 나중에 아무 기기에서나 가져와 복호화합니다. 피어 투 피어 핸드셰이크도, 둘 다 ssh 할 수 있는 서버도 필요 없습니다.</p>
       <p class="lead">이것은 CLI 에서 Relayium 계정을 사용하는 유일한 부분이며, 그것도 업로드할 때뿐입니다. 바인딩은 선택 사항입니다. 나머지 전부 — push/pull, send/receive, daemon 직결, sync — 는 로그인 없이 계속 동작합니다. 다운로드에는 계정이 전혀 필요 없고 링크만 있으면 됩니다.</p>
       <h2>언제 쓰나</h2>

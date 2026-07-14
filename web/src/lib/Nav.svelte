@@ -67,7 +67,7 @@
   .tab.active { color: #fff; background: var(--grad-accent); border-color: transparent; }
 
   .lang {
-    font: inherit; font-size: var(--fs-xs); padding: 5px 28px 5px 10px;
+    font: inherit; font-size: var(--fs-xs); padding-block: 5px; padding-inline: 10px 28px;
     border-radius: var(--radius-sm); border: 1px solid var(--border);
     background: var(--social-bg); color: var(--text-h); cursor: pointer;
   }

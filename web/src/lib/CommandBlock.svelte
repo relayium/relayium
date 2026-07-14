@@ -65,7 +65,7 @@
     font-family: var(--mono);
   }
   .copy {
-    margin-left: auto;
+    margin-inline-start: auto;
     font: inherit;
     font-size: var(--fs-xs);
     color: var(--text);

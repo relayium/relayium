@@ -41,7 +41,7 @@
     display: flex; flex-direction: column; gap: var(--space-2);
   }
   .step {
-    position: absolute; top: 16px; right: 16px;
+    position: absolute; top: 16px; inset-inline-end: 16px;
     width: 24px; height: 24px; line-height: 24px; text-align: center;
     border-radius: 50%; font-size: 13px; font-weight: 600;
     color: var(--accent); background: var(--accent-bg);

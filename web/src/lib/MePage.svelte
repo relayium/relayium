@@ -338,7 +338,7 @@
   .me-head { text-align: center; padding: var(--space-2) 0 var(--space-5); position: relative; }
   .me-head h1 { font-size: 30px; margin: 0; letter-spacing: -.5px; }
   .back {
-    position: absolute; left: 0; top: var(--space-2);
+    position: absolute; inset-inline-start: 0; top: var(--space-2);
     font: inherit; font-size: var(--fs-xs); background: none; border: 0; color: var(--text); cursor: pointer;
     padding: var(--space-1) 0;
   }
@@ -377,7 +377,7 @@
   .fid { font-family: ui-monospace, monospace; color: var(--text-h); }
   .fsize { color: var(--text); }
   .dl { color: var(--text-h); }
-  .exp { color: var(--text); margin-left: auto; }
+  .exp { color: var(--text); margin-inline-start: auto; }
   .exp.soon { color: var(--danger); }
   .tag.burn { color: var(--accent); }
   .link-hint { margin: 0 0 var(--space-3); font-size: var(--fs-xs); color: var(--text); }
@@ -424,7 +424,7 @@
   .probe.ok { color: var(--accent); }
   .probe.bad { color: var(--danger); }
   .chk {
-    font: inherit; font-size: var(--fs-xs); background: none; cursor: pointer; margin-left: auto;
+    font: inherit; font-size: var(--fs-xs); background: none; cursor: pointer; margin-inline-start: auto;
     border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text);
     padding: 2px 10px; transition: border-color .13s, color .13s;
   }
@@ -432,6 +432,6 @@
   .chk:disabled { opacity: .6; cursor: default; }
 
   @media (max-width: 520px) {
-    .exp { margin-left: 0; }
+    .exp { margin-inline-start: 0; }
   }
 </style>

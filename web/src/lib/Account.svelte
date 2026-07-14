@@ -415,10 +415,10 @@
     width: min(340px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto;
     padding: var(--space-5); border-radius: var(--radius); border: 1px solid var(--border);
     background: var(--bg); box-shadow: var(--shadow);
-    text-align: left;
+    text-align: start;
   }
   .close-x {
-    position: absolute; top: 10px; right: 10px;
+    position: absolute; top: 10px; inset-inline-end: 10px;
     width: 28px; height: 28px; padding: 0; border-radius: var(--radius-sm); cursor: pointer;
     border: 1px solid transparent; background: none; color: var(--text); font-size: var(--fs-sm);
     transition: background .13s, color .13s;

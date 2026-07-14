@@ -13,6 +13,7 @@
     <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/security" />
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/security" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/security" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/security" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/security" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -30,7 +31,7 @@ header a{color:var(--text-h);text-decoration:none;font-weight:600}
 h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
 h2{color:var(--text-h);font-size:21px;margin:34px 0 10px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
-p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
 .langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
@@ -42,7 +43,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
       <h1>Sicherheit &amp; Bedrohungsmodell</h1>
       <p class="updated">Zuletzt aktualisiert: 2026-07-01</p>
-      <nav class="langbar" aria-label="Language"><a href="/security">English</a><a href="/zh/security">中文</a><a href="/ja/security">日本語</a><a href="/ko/security">한국어</a><a href="/de/security" aria-current="true">Deutsch</a><a href="/fr/security">Français</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/security">English</a><a href="/zh/security">中文</a><a href="/ja/security">日本語</a><a href="/ko/security">한국어</a><a href="/de/security" aria-current="true">Deutsch</a><a href="/fr/security">Français</a><a href="/ar/security">العربية</a></nav>
       <p>Relayium ist so gebaut, dass die Personen, die Dateien übertragen — nicht der Server — die Schlüssel besitzen. Diese Seite beschreibt genau, was geschützt ist, wie es funktioniert und wo die Grenzen dieses Schutzes liegen.</p>
       <p>Kurz gesagt: Im Echtzeitmodus berühren Ihre Dateien nie unsere Server; die Verschlüsselungsschlüssel werden auf jedem Gerät neu erzeugt und verlassen es nie; und ein kurzer Prüfcode erlaubt zwei Personen, einen bösartigen Server zu erkennen. Es folgen die Details.</p>
       <h2>Ende-zu-Ende-Verschlüsselung (X25519 + AES-256-GCM)</h2><p>Jede Übertragung erzeugt auf jedem Gerät ein frisches, kurzlebiges X25519-Schlüsselpaar. Die beiden Geräte führen einen Schlüsselaustausch durch und leiten daraus einen gemeinsamen AES-256-GCM-Schlüssel ab, der nur in den beiden Browsern existiert. Jeder Chunk wird mit diesem Schlüssel und einer eindeutigen Nonce verschlüsselt, sodass der Signalisierungsserver — und jede Weiterleitung — stets nur Chiffretext sieht.</p><ul><li>Schlüssel sind kurzlebig und pro Übertragung eigenständig — nichts wird über Sitzungen hinweg wiederverwendet.</li><li>Der gemeinsame Schlüssel wird auf den beiden Geräten abgeleitet; er wird nie an einen Server gesendet oder dort gespeichert.</li><li>Die Verschlüsselung erfolgt auf der Anwendungsebene, oberhalb der Transportsicherheit von WebRTC, und bleibt daher selbst dann wirksam, wenn die Transportebene kompromittiert wird.</li></ul>

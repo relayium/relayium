@@ -115,7 +115,7 @@
   .cardsub { margin: 0; font-size: var(--fs-xs); color: var(--text); line-height: 1.5; }
 
   .mhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
-  .mhead h2 { margin-right: auto; }
+  .mhead h2 { margin-inline-end: auto; }
   .badge {
     flex: none; font-size: 11.5px; padding: 3px 9px; border-radius: 999px; white-space: nowrap;
     color: var(--text); background: var(--code-bg); border: 1px solid var(--border);

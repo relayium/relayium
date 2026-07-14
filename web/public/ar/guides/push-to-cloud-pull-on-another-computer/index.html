@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ادفع الملفات إلى السحابة، واسحبها على حاسوب آخر · Relayium</title>
+    <meta name="description" content="نقل ملفات غير متزامن عبر حساب Relayium الخاص بك: ارفع من جهاز باستخدام relayium up، ونزّل على جهاز آخر باستخدام relayium down متى ناسبك ذلك — مشفّر من الطرف إلى الطرف، والرفع وحده هو ما يحتاج إلى حساب." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ar/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/push-to-cloud-pull-on-another-computer" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="ادفع الملفات إلى السحابة، واسحبها على حاسوب آخر" />
+    <meta property="og:description" content="نقل ملفات غير متزامن عبر حساب Relayium الخاص بك: ارفع من جهاز باستخدام relayium up، ونزّل على جهاز آخر باستخدام relayium down متى ناسبك ذلك — مشفّر من الطرف إلى الطرف، والرفع وحده هو ما يحتاج إلى حساب." />
+    <meta property="og:url" content="https://relayium.com/ar/guides/push-to-cloud-pull-on-another-computer" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ar_AR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="ادفع الملفات إلى السحابة، واسحبها على حاسوب آخر" />
+    <meta name="twitter:description" content="نقل ملفات غير متزامن عبر حساب Relayium الخاص بك: ارفع من جهاز باستخدام relayium up، ونزّل على جهاز آخر باستخدام relayium down متى ناسبك ذلك — مشفّر من الطرف إلى الطرف، والرفع وحده هو ما يحتاج إلى حساب." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"ادفع الملفات إلى السحابة، واسحبها على حاسوب آخر","description":"نقل ملفات غير متزامن عبر حساب Relayium الخاص بك: ارفع من جهاز باستخدام relayium up، ونزّل على جهاز آخر باستخدام relayium down متى ناسبك ذلك — مشفّر من الطرف إلى الطرف، والرفع وحده هو ما يحتاج إلى حساب.","inLanguage":"ar","dateModified":"2026-07-12","mainEntityOfPage":"https://relayium.com/ar/guides/push-to-cloud-pull-on-another-computer","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل أحتاج إلى حساب؟","acceptedAnswer":{"@type":"Answer","text":"للرفع فقط. يتطلب relayium up تسجيل relayium login؛ وrelayium down لا يحتاج إلى حساب، وكل أمر CLI آخر (push/pull، وsend/receive، وdaemon-direct، وsync) يعمل بلا واحد."}},{"@type":"Question","name":"هل ملفي مشفّر؟","acceptedAnswer":{"@type":"Answer","text":"نعم، من الطرف إلى الطرف. يُشفَّر على جهازك قبل الرفع؛ ويعيش المفتاح فقط في الجزء #k= من الرابط ولا يُرسَل إلى الخادم أبدًا. يخزّن Relayium نصًا مُشفَّرًا لا يستطيع قراءته، بما في ذلك أسماء الملفات."}},{"@type":"Question","name":"ماذا لو فقدت الرابط؟","acceptedAnswer":{"@type":"Answer","text":"يحمل الرابط النسخة الوحيدة من مفتاح فك التشفير، فالرابط المفقود يعني ملفًا غير قابل للاسترجاع — لا يوجد على الخادم شيء يمكنه استعادته."}},{"@type":"Question","name":"هل يمكنني تقييد من ينزّله؟","acceptedAnswer":{"@type":"Answer","text":"أي شخص يملك الرابط يستطيع التنزيل، فشاركه بشكل خاص. استخدم --burn للسماح بتنزيل واحد، أو --max-downloads \u003cn> لتحديد العدد، و --ttl \u003cduration> لإنهاء صلاحيته بعد وقت محدد."}},{"@type":"Question","name":"هل يعمل مع الموقع؟","acceptedAnswer":{"@type":"Answer","text":"نعم. رابط من relayium up يُفتح في متصفح، ورابط مشاركة أُنشئ على relayium.com يمكن جلبه بـ relayium down على جهاز آخر."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+    <style>
+.builder{margin:16px 0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
+.builder .bf{display:block;margin:0 0 12px}
+.builder .bf span{display:block;font-size:14px;color:var(--text);margin:0 0 5px}
+.builder .bf input{width:100%;font:15px ui-monospace,SFMono-Regular,Menlo,monospace;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h)}
+.builder .bcmd{margin:14px 0 0}
+.builder .bcmd pre{margin:0}
+.builder .bcopy{margin:10px 0 0;padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h);font:inherit;font-size:14px;cursor:pointer}
+.builder .bcopy:hover{border-color:var(--accent)}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ar">Relayium</a></header>
+      <h1>ادفع الملفات إلى السحابة، واسحبها على حاسوب آخر</h1>
+      <p class="updated">آخر تحديث: 2026-07-12</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/push-to-cloud-pull-on-another-computer">English</a><a href="/zh/guides/push-to-cloud-pull-on-another-computer">中文</a><a href="/ja/guides/push-to-cloud-pull-on-another-computer">日本語</a><a href="/ko/guides/push-to-cloud-pull-on-another-computer">한국어</a><a href="/de/guides/push-to-cloud-pull-on-another-computer">Deutsch</a><a href="/fr/guides/push-to-cloud-pull-on-another-computer">Français</a><a href="/ar/guides/push-to-cloud-pull-on-another-computer" aria-current="true">العربية</a></nav>
+      <p class="lead">أحيانًا لا يكون الحاسوبان مستيقظين في الوقت نفسه أبدًا. تريد أن تُسقط ملفًا من حاسوب العمل المحمول الليلة وتلتقطه من سطح مكتب المنزل غدًا، دون أن ينتظر أحد اتصالًا مباشرًا. يفعل relayium up وrelayium down ذلك بالضبط: up يشفّر ويرفع إلى حسابك، وdown يجلبه ويفكّ تشفيره لاحقًا على أي جهاز — بلا مصافحة من الند للند، وبلا خادم يدخل إليه كلاكما عبر ssh.</p>
+      <p class="lead">هذا هو الجزء الوحيد من CLI الذي يستخدم حساب Relayium الخاص بك، وللرفع فقط. الربط اختياري: كل ما عداه — push/pull، وsend/receive، وdaemon-direct، وsync — يظل يعمل بلا تسجيل دخول. التنزيل لا يحتاج إلى حساب على الإطلاق، فقط الرابط.</p>
+      <h2>متى تلجأ إليه</h2>
+      <p>اختر الوضع بحسب ما إذا كان الطرف البعيد متصلًا وكيف يصل كل جهاز إلى الآخر:</p>
+      <ul><li>‏up / down (هذا الدليل) — الجهازان لا يكونان متصلين معًا أبدًا. ترفع الآن؛ وتنزّل أنت (أو جهاز آخر) لاحقًا. يمرّ عبر حسابك.</li><li>‏send / receive — كلا الطرفين متصل الآن ويريدان نقلًا مباشرًا من الند للند عبر رمز لمرة واحدة.</li><li>‏push / pull — يمكنك بالفعل الدخول إلى الجهاز البعيد عبر ssh.</li><li>كل شيء عدا up لا يحتاج إلى حساب؛ وحده up يتطلب relayium login.</li></ul>
+      <h2>قبل أن تبدأ</h2>
+      <p>شيئان لمرة واحدة قبل أول up لك — ثبّت CLI، وامتلك حسابًا. تملك كليهما بالفعل؟ تخطَّ إلى الأمام.</p>
+      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>ثبّت CLI كي يوجد أمر relayium. يُسقط السطر أعلاه ملفًا ثنائيًا مُسبق البناء في PATH الخاص بك (macOS وLinux؛ على Windows، احصل على ملف .zip من صفحة الإصدارات)؛ ويؤكّده relayium --version، وrelayium.com/cli يسرد كل خيارات التثبيت. تخطَّ هذا وسيطبع relayium login فقط ‘command not found’.</li><li>امتلك حساب Relayium مجانيًا. تعتمد خطوة المتصفح تسجيل الدخول على حسابك، فتحتاج إليه قبل أن تتمكن من الاعتماد — سجّل الدخول في relayium.com أولًا، أو أنشئ واحدًا هناك إن لم تكن قد فعلت. الرفع وحده هو ما يحتاج إلى الحساب؛ أما التنزيل فلا يحتاج أبدًا.</li></ul>
+      <h2>اربط هذا الجهاز بحسابك (مرة واحدة)</h2>
+      <p>يحتاج up إلى معرفة حساب مَن يُخزَّن تحته، فسجّل الدخول مرة واحدة لكل جهاز. إنه تسجيل دخول جهاز معتمَد من المتصفح — لا يُكتب في الطرفية شيء سوى الرمز الذي تؤكّده:</p>
+      <pre><code>relayium login</code></pre>
+      <ul><li>يطبع CLI رمزًا قصيرًا ورابطًا (relayium.com/device). افتحه في المتصفح الذي سجّلت فيه الدخول إلى relayium.com (سجّل الدخول هناك أولًا إن لم تكن قد فعلت)، وأدخل الرمز واعتمد — هذا الجهاز مربوط الآن.</li><li>يُحفظ تسجيل الدخول تحت ~/.config/relayium/، فتفعله مرة واحدة فقط لكل جهاز. يُظهر relayium whoami بمن أنت مربوط؛ وrelayium logout يمسحه.</li><li>لإلغاء جهاز لاحقًا، احذف جهازه من صفحة أجهزة حسابك في المتصفح.</li></ul>
+      <h2>ارفع من الحاسوب الأول</h2>
+      <p>يمرّ up على الملفات التي تعطيه إياها، ويشفّرها محليًا، ويرفع النص المُشفَّر، ويطبع رابط استلام:</p>
+      <pre><code>relayium up ./report.pdf
+#   → https://relayium.com/d/7fK2p…#k=Xr8s…</code></pre>
+      <pre><code># choose how long it lives (otherwise your account&#39;s default applies):
+relayium up ./report.pdf --burn              # deleted after one download
+relayium up ./report.pdf --ttl 7d            # kept for 7 days
+relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone</code></pre>
+      <ul><li>الرابط هو كامل التسليم — انسخه إلى حيث يستطيع الجهاز الآخر قراءته. أي شخص يملك الرابط يستطيع تنزيل الملف، فعامله كأنه كلمة مرور.</li><li>الاحتفاظ: --burn يزيل الملف بعد تنزيل واحد؛ و --ttl &lt;duration&gt; يبقيه مدة ثابتة (مثل 7d، 24h)؛ و --max-downloads &lt;n&gt; يسمح بعدد ثابت من التنزيلات. لا تعطِ شيئًا وينطبق الإعداد الافتراضي لحسابك.</li><li>يحتاج up إلى أن تكون مسجّل الدخول؛ إن لم تكن، يخبرك ولا يفعل شيئًا.</li></ul>
+      <h2>نزّل على الحاسوب الثاني</h2>
+      <p>على الجهاز الآخر، سلّم الرابط إلى down. بلا تسجيل دخول، بلا إعداد — المفتاح الذي يفكّ تشفير الملف داخل الرابط، فلا يحتاج down إلى شيء من حسابك:</p>
+      <pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads</code></pre>
+      <div class="builder" data-download-builder><label class="bf"><span>رابط المشاركة الخاص بك</span><input data-link type="text" placeholder="https://relayium.com/d/…#k=…" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" data-token="رابطك" /></label><label class="bf"><span>احفظ في (الصق مخرجات pwd الخاصة بك)</span><input data-dest type="text" placeholder="/home/you/downloads" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" /></label><div class="bcmd"><pre><code data-cmd>relayium down &#39;&lt;رابطك&gt;&#39; &lt;المجلد الهدف&gt;</code></pre><button type="button" class="bcopy" data-copy data-copied="تم النسخ" hidden>انسخ الأمر</button></div></div>
+      <ul><li>ضع الرابط بين علامتَي اقتباس: يحمل الجزء #k=… مفتاح فك التشفير، وبعض الأصداف تعامل # كبداية تعليق.</li><li>أعطِ مجلد وجهة (هنا ./downloads) أو احذفه لتحطّ في المجلد الحالي.</li><li>إذا ضُبط الملف على الحرق، أو بلغ حد تنزيلاته، أو انتهت صلاحيته، فالرابط مُستنفَد وسيبلّغ down أنه لم يعد موجودًا.</li></ul>
+      <h2>يعمل مع الموقع أيضًا</h2>
+      <p>الرابط هو نفسه الذي يستخدمه الموقع، فيتبادل CLI والمتصفح العمل بحرية:</p>
+      <ul><li>رابط من relayium up يُفتح في متصفح — سلّمه لشخص لا يملك CLI فينزّل من الويب.</li><li>رابط مشاركة أُنشئ على relayium.com يمكن جلبه بـ relayium down على جهاز آخر.</li></ul>
+      <h2>ما يمكن للخادم رؤيته وما لا يمكنه</h2>
+      <p>تظل عمليات النقل السحابي مشفّرة من الطرف إلى الطرف:</p>
+      <ul><li>يُشفَّر ملفك على جهازك قبل رفعه. يعيش مفتاح فك التشفير فقط في الجزء #k= من الرابط ولا يُرسَل إلى الخادم أبدًا — يخزّن Relayium نصًا مُشفَّرًا لا يستطيع قراءته، بما في ذلك أسماء الملفات.</li><li>يعني ذلك أيضًا أن الرابط هو الطريق الوحيد للعودة إلى الملف: افقده يصبح الملف غير قابل للاسترجاع، لا منك ولا منّا.</li></ul>
+      <h2>الأسئلة الشائعة</h2>
+      <h3>هل أحتاج إلى حساب؟</h3>
+      <p>للرفع فقط. يتطلب relayium up تسجيل relayium login؛ وrelayium down لا يحتاج إلى حساب، وكل أمر CLI آخر (push/pull، وsend/receive، وdaemon-direct، وsync) يعمل بلا واحد.</p>
+      <h3>هل ملفي مشفّر؟</h3>
+      <p>نعم، من الطرف إلى الطرف. يُشفَّر على جهازك قبل الرفع؛ ويعيش المفتاح فقط في الجزء #k= من الرابط ولا يُرسَل إلى الخادم أبدًا. يخزّن Relayium نصًا مُشفَّرًا لا يستطيع قراءته، بما في ذلك أسماء الملفات.</p>
+      <h3>ماذا لو فقدت الرابط؟</h3>
+      <p>يحمل الرابط النسخة الوحيدة من مفتاح فك التشفير، فالرابط المفقود يعني ملفًا غير قابل للاسترجاع — لا يوجد على الخادم شيء يمكنه استعادته.</p>
+      <h3>هل يمكنني تقييد من ينزّله؟</h3>
+      <p>أي شخص يملك الرابط يستطيع التنزيل، فشاركه بشكل خاص. استخدم --burn للسماح بتنزيل واحد، أو --max-downloads &lt;n&gt; لتحديد العدد، و --ttl &lt;duration&gt; لإنهاء صلاحيته بعد وقت محدد.</p>
+      <h3>هل يعمل مع الموقع؟</h3>
+      <p>نعم. رابط من relayium up يُفتح في متصفح، ورابط مشاركة أُنشئ على relayium.com يمكن جلبه بـ relayium down على جهاز آخر.</p>
+      <div class="ctacard">
+        <p>مستعد لنقل ملف بين أجهزتك الخاصة؟ ثبّت CLI، ونفّذ relayium login، ثم ارفعه بـ up.</p>
+        <a class="cta" href="/cli">احصل على CLI</a>
+      </div>
+      <h2>تابع القراءة</h2>
+      <ul class="related"><li><a href="/ar/compare/snapdrop">Relayium مقابل Snapdrop وPairDrop: أي نقل ملفات P2P آمن؟</a></li><li><a href="/ar/compare/airdrop">Relayium مقابل AirDrop: بديل AirDrop عبر المنصّات</a></li><li><a href="/ar/compare/wetransfer">Relayium مقابل WeTransfer: أرسل ملفات كبيرة دون الخادم</a></li><li><a href="/ar/how-to/transfer-files-android-to-iphone">كيفية نقل الملفات من Android إلى iPhone (دون كابل)</a></li><li><a href="/ar/how-to/send-files-pc-to-phone-wirelessly">إرسال الملفات من الحاسوب إلى الهاتف لاسلكيًا، دون كابل أو تطبيق</a></li><li><a href="/ar/how-to/send-large-files-without-cloud">كيفية إرسال الملفات الكبيرة دون سحابة</a></li><li><a href="/ar/guides/transfer-files-from-terminal">انقل الملفات من الطرفية باستخدام Relayium CLI</a></li><li><a href="/ar/guides/back-up-a-server-over-ssh">انسخ الملفات احتياطيًا إلى خادمك عبر SSH باستخدام Relayium CLI</a></li><li><a href="/ar/guides/send-a-file-to-someone">إرسال ملف إلى شخص ما عبر الشبكات باستخدام واجهة Relayium الطرفية (CLI)</a></li><li><a href="/ar/guides/server-to-server-transfers">النقل من خادم إلى خادم باستخدام واجهة Relayium الطرفية (daemon direct)</a></li><li><a href="/ar/guides/sync-a-large-folder-between-servers">مزامنة مجلد كبير بين خادمين (قابلة للاستئناف، في الخلفية)</a></li><li><a href="/ar/how-to/share-a-file-with-an-expiring-link">مشاركة ملف برابط تنزيل آمن ينتهي صلاحيته</a></li><li><a href="/ar/guides/self-host-relayium">الاستضافة الذاتية لـ Relayium: شغّل خادم نقل الملفات الخاص بك</a></li><li><a href="/ar/how-to/send-files-between-two-computers-over-the-internet">إرسال الملفات بين جهازي كمبيوتر عبر الإنترنت</a></li><li><a href="/ar/compare/croc">Relayium مقابل croc: نقل ملفات مُشفَّر من الطرفية</a></li><li><a href="/ar/guides/how-relayium-encrypts-your-files">كيف يُشفِّر Relayium ملفاتك من الطرف إلى الطرف</a></li><li><a href="/ar/compare/google-drive">Relayium مقابل Google Drive لإرسال الملفات</a></li><li><a href="/ar/compare/rsync">Relayium مقابل rsync: زامِن المجلدات دون إعداد SSH</a></li><li><a href="/ar/compare/firefox-send">أفضل بديل لـ Firefox Send في 2026</a></li><li><a href="/ar/how-to/transfer-files-by-scanning-a-qr-code">نقل الملفات بمسح رمز QR ضوئياً</a></li><li><a href="/ar/guides/receive-files-from-the-command-line">استقبال الملفات من سطر الأوامر</a></li><li><a href="/ar/how-to/send-a-folder">كيفية إرسال مجلد كامل، لا ملفات فقط</a></li><li><a href="/ar/guides/run-relayium-as-an-always-on-service">شغّل Relayium كخدمة استقبال دائمة التشغيل</a></li><li><a href="/ar/how-to/automate-server-backups">أتمتة النسخ الاحتياطي المُشفَّر للخادم باستخدام مهمة cron</a></li><li><a href="/ar/compare/localsend">Relayium مقابل LocalSend: أيّ نقل ملفات محلي تستخدم</a></li><li><a href="/ar/compare/scp">Relayium مقابل scp: نقل ملفات أبسط عبر SSH</a></li><li><a href="/ar/compare/magic-wormhole">Relayium مقابل magic-wormhole: نقل الملفات عبر CLI</a></li><li><a href="/ar/compare/nextcloud">Relayium مقابل Nextcloud لإرسال الملفات</a></li><li><a href="/ar/compare/dropbox">Relayium مقابل Dropbox لإرسال ملف</a></li><li><a href="/ar/how-to/airdrop-for-windows-and-android">AirDrop لأنظمة Windows وLinux وAndroid</a></li><li><a href="/ar/how-to/transfer-files-between-mac-and-windows">نقل الملفات بين جهاز Mac وحاسوب Windows</a></li><li><a href="/ar/how-to/send-files-on-the-same-wifi">إرسال الملفات بين الأجهزة على نفس شبكة Wi-Fi</a></li><li><a href="/ar/guides/what-is-peer-to-peer-file-transfer">ما هو نقل الملفات من الند للند؟</a></li><li><a href="/ar/guides/is-it-safe-to-send-files-over-the-internet">هل من الآمن إرسال الملفات عبر الإنترنت؟</a></li><li><a href="/ar/guides/bring-your-own-node">شغّل عقدتك الخاصة: استخدم مُرحِّل وتخزين Relayium مجانًا</a></li><li><a href="/ar/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ar">← Relayium</a>
+        <a href="/ar/guides">الأدلة</a>
+        <a href="/ar/privacy">undefined</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+    <script>
+(function(){
+  function q(s){return /^[\w@%+=:,.\/-]+$/.test(s)?s:"'"+s.replace(/'/g,"'\\''")+"'";}
+  document.querySelectorAll('[data-download-builder]').forEach(function(b){
+    var link=b.querySelector('[data-link]'),dest=b.querySelector('[data-dest]'),
+        out=b.querySelector('[data-cmd]'),copy=b.querySelector('[data-copy]');
+    function render(){
+      var l=link.value.trim()||('<'+(link.getAttribute('data-token')||'link')+'>');
+      var d=dest.value.trim();
+      out.textContent="relayium down '"+l+"' "+(d?q(d):".");
+    }
+    link.addEventListener('input',render);
+    dest.addEventListener('input',render);
+    if(copy){
+      copy.hidden=false;
+      copy.addEventListener('click',function(){
+        navigator.clipboard.writeText(out.textContent).then(function(){
+          var o=copy.textContent;copy.textContent=copy.getAttribute('data-copied')||o;
+          setTimeout(function(){copy.textContent=o;},1500);
+        }).catch(function(){});
+      });
+    }
+    render();
+  });
+})();
+</script>
+  </body>
+</html>

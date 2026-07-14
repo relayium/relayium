@@ -13,6 +13,7 @@
     <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/how-relayium-encrypts-your-files" />
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/how-relayium-encrypts-your-files" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/how-relayium-encrypts-your-files" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/how-relayium-encrypts-your-files" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/how-relayium-encrypts-your-files" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -42,7 +43,7 @@ h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 .lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
@@ -60,7 +61,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <h1>Relayium 如何对文件端到端加密</h1>
       <p class="updated">最近更新: 2026-07-09</p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/how-relayium-encrypts-your-files">English</a><a href="/zh/guides/how-relayium-encrypts-your-files" aria-current="true">中文</a><a href="/ja/guides/how-relayium-encrypts-your-files">日本語</a><a href="/ko/guides/how-relayium-encrypts-your-files">한국어</a><a href="/de/guides/how-relayium-encrypts-your-files">Deutsch</a><a href="/fr/guides/how-relayium-encrypts-your-files">Français</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/how-relayium-encrypts-your-files">English</a><a href="/zh/guides/how-relayium-encrypts-your-files" aria-current="true">中文</a><a href="/ja/guides/how-relayium-encrypts-your-files">日本語</a><a href="/ko/guides/how-relayium-encrypts-your-files">한국어</a><a href="/de/guides/how-relayium-encrypts-your-files">Deutsch</a><a href="/fr/guides/how-relayium-encrypts-your-files">Français</a><a href="/ar/guides/how-relayium-encrypts-your-files">العربية</a></nav>
       <p class="lead">「Relayium 安全吗？」是个合理的问题——每个文件传输工具都会说自己保护隐私。本文用大白话讲清 Relayium 到底如何保护文件隐私，让你能自己判断这个说法，而不是单凭信任。</p>
       <p class="lead">这里其实有两套不同的加密方案，因为存在两种不同的场景：把文件实时发给一个此刻在线的人，或者留一个下载链接给对方稍后来取。两种方式都让服务器碰不到你的文件，但实现路径不同——搞清楚什么时候用哪种，是值得的。</p>
       <h2>实时传输：两台设备协商出一个服务器永远看不到的秘密</h2>

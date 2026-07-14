@@ -13,6 +13,7 @@
     <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/back-up-a-server-over-ssh" />
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/back-up-a-server-over-ssh" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/back-up-a-server-over-ssh" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/back-up-a-server-over-ssh" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/back-up-a-server-over-ssh" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -42,7 +43,7 @@ h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 .lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
@@ -60,7 +61,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=fr">Relayium</a></header>
       <h1>Sauvegarder des fichiers sur son propre serveur via SSH avec la CLI Relayium</h1>
       <p class="updated">Dernière mise à jour: 2026-07-12</p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh">English</a><a href="/zh/guides/back-up-a-server-over-ssh">中文</a><a href="/ja/guides/back-up-a-server-over-ssh">日本語</a><a href="/ko/guides/back-up-a-server-over-ssh">한국어</a><a href="/de/guides/back-up-a-server-over-ssh">Deutsch</a><a href="/fr/guides/back-up-a-server-over-ssh" aria-current="true">Français</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh">English</a><a href="/zh/guides/back-up-a-server-over-ssh">中文</a><a href="/ja/guides/back-up-a-server-over-ssh">日本語</a><a href="/ko/guides/back-up-a-server-over-ssh">한국어</a><a href="/de/guides/back-up-a-server-over-ssh">Deutsch</a><a href="/fr/guides/back-up-a-server-over-ssh" aria-current="true">Français</a><a href="/ar/guides/back-up-a-server-over-ssh">العربية</a></nav>
       <p class="lead">Si vous avez déjà un accès SSH à une machine — un VPS, un serveur personnel, un NAS, un poste de travail —, vous pouvez y sauvegarder des fichiers avec la CLI Relayium sans mettre en place un service de synchronisation ni de compte. Le transfert passe par votre connexion SSH existante, si bien que les octets vont directement à votre serveur et ne transitent jamais par Relayium.</p>
       <p class="lead">Ce guide couvre le push et le pull de répertoires, ce que la reprise et la vérification d&#39;intégrité vous apportent, et comment lancer cela sur un calendrier avec cron.</p>
       <h2>Avant de commencer</h2>

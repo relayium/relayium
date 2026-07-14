@@ -96,7 +96,7 @@
     flex-direction: column;
     gap: var(--space-3);
     width: 100%;
-    text-align: left;
+    text-align: start;
   }
   .form input {
     padding: var(--space-2) var(--space-3);

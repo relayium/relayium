@@ -13,6 +13,7 @@
     <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/rsync" />
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/rsync" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/rsync" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/compare/rsync" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/rsync" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -42,7 +43,7 @@ h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 .lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
@@ -60,7 +61,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=de">Relayium</a></header>
       <h1>Relayium vs. rsync: Ordner synchronisieren ohne SSH-Setup</h1>
       <p class="updated">Zuletzt aktualisiert: 2026-07-12</p>
-      <nav class="langbar" aria-label="Language"><a href="/compare/rsync">English</a><a href="/zh/compare/rsync">中文</a><a href="/ja/compare/rsync">日本語</a><a href="/ko/compare/rsync">한국어</a><a href="/de/compare/rsync" aria-current="true">Deutsch</a><a href="/fr/compare/rsync">Français</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/compare/rsync">English</a><a href="/zh/compare/rsync">中文</a><a href="/ja/compare/rsync">日本語</a><a href="/ko/compare/rsync">한국어</a><a href="/de/compare/rsync" aria-current="true">Deutsch</a><a href="/fr/compare/rsync">Français</a><a href="/ar/compare/rsync">العربية</a></nav>
       <p class="lead">rsync spiegelt seit 1996 Ordner, und das aus gutem Grund: bidirektionale Synchronisation, ein Delta-Algorithmus mit Rolling-Checksum, der nur die tatsächlich veränderten Bytes innerhalb einer Datei überträgt, und Jahrzehnte an Flags für jeden Grenzfall. Wenn du schon SSH-Zugang hast und rsync kennst, ist es sehr schwer zu schlagen.</p>
       <p class="lead">Relayiums sync-Befehl deckt eine engere Aufgabe ab — einen einseitigen inkrementellen Spiegel —, entfernt aber einen Schritt, den rsync als bereits erledigt voraussetzt: das Einrichten von SSH. sync läuft über SSH, falls vorhanden, oder verbindet zwei Maschinen direkt, ganz ohne SSH-Server. Dieser Artikel vergleicht beide ehrlich: sync ist kein vollständiger Ersatz für rsync, und die FAQ sagt das unumwunden.</p>
       <h2>Was rsync richtig macht</h2>

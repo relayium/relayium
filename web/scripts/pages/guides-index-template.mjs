@@ -1,7 +1,7 @@
 // web/scripts/pages/guides-index-template.mjs — renders the Guides hub (one language)
 // to a self-contained static HTML string. Same inlined-style, no-JS approach as
 // article-template.mjs so it is crawlable and independent of the Vite asset graph.
-import { LANGS, DEFAULT_LANG, LANG_LABELS, BCP47, OG_LOCALE, SITE, urlPath, absUrl, esc, ctaHref } from "./shared.mjs";
+import { LANGS, DEFAULT_LANG, LANG_LABELS, BCP47, OG_LOCALE, SITE, urlPath, absUrl, esc, ctaHref, dirAttr } from "./shared.mjs";
 
 // Copy this verbatim from article-template.mjs:7-10 (same six labels).
 const PRIVACY_LABELS = {
@@ -21,7 +21,7 @@ header a{color:var(--text-h);text-decoration:none;font-weight:600}
 h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
 h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
 .lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-left:0}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:0}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
 .langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .guidelist{list-style:none;padding:0}.guidelist li{margin:8px 0}.guidelist a{color:var(--accent);text-decoration:none;font-size:18px}
@@ -86,7 +86,7 @@ export function renderGuidesIndexPage({ lang, doc, groups }) {
   const sections = ordered.map(([label, items]) => groupSection(label, items, lang)).filter(Boolean).join("\n      ");
 
   return `<!doctype html>
-<html lang="${BCP47[lang]}">
+<html lang="${BCP47[lang]}"${dirAttr(lang)}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

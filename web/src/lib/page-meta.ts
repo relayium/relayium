@@ -27,6 +27,7 @@ const HREFLANG_PREFIX: [string, string][] = [
   ["ko", "/ko"],
   ["de", "/de"],
   ["fr", "/fr"],
+  ["ar", "/ar"],
   ["x-default", ""],
 ];
 

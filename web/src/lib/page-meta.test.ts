@@ -40,9 +40,9 @@ describe("altHreflangs", () => {
     expect(alt.find((a) => a.hreflang === "x-default")?.path).toBe("/cross-network");
   });
 
-  it("covers all six languages plus x-default", () => {
+  it("covers all seven languages plus x-default", () => {
     expect(altHreflangs("/offline-transfer").map((a) => a.hreflang)).toEqual([
-      "en", "zh-Hans", "ja", "ko", "de", "fr", "x-default",
+      "en", "zh-Hans", "ja", "ko", "de", "fr", "ar", "x-default",
     ]);
   });
 });

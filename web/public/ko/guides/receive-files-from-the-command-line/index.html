@@ -13,6 +13,7 @@
     <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/receive-files-from-the-command-line" />
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/receive-files-from-the-command-line" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/receive-files-from-the-command-line" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/receive-files-from-the-command-line" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/receive-files-from-the-command-line" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -42,7 +43,7 @@ h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 .lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
@@ -60,7 +61,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=ko">Relayium</a></header>
       <h1>명령줄에서 파일 받기</h1>
       <p class="updated">마지막 업데이트: 2026-07-09</p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/receive-files-from-the-command-line">English</a><a href="/zh/guides/receive-files-from-the-command-line">中文</a><a href="/ja/guides/receive-files-from-the-command-line">日本語</a><a href="/ko/guides/receive-files-from-the-command-line" aria-current="true">한국어</a><a href="/de/guides/receive-files-from-the-command-line">Deutsch</a><a href="/fr/guides/receive-files-from-the-command-line">Français</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/receive-files-from-the-command-line">English</a><a href="/zh/guides/receive-files-from-the-command-line">中文</a><a href="/ja/guides/receive-files-from-the-command-line">日本語</a><a href="/ko/guides/receive-files-from-the-command-line" aria-current="true">한국어</a><a href="/de/guides/receive-files-from-the-command-line">Deutsch</a><a href="/fr/guides/receive-files-from-the-command-line">Français</a><a href="/ar/guides/receive-files-from-the-command-line">العربية</a></nav>
       <p class="lead">보내는 것은 이야기의 절반일 뿐입니다——언젠가는 당신이 받는 쪽이 됩니다. 동료가 인터넷 너머로 파일을 건네주고 싶을 때, 당신의 기기 하나가 다른 기기에게 넘겨주고 싶을 때, 또는 당신이 관리하는 서버에서 무언가를 직접 가져오고 싶을 때. Relayium CLI는 이 세 가지 각각에 서로 다른 명령으로 대응하며, 어느 쪽도 계정이 필요 없습니다.</p>
       <p class="lead">상대가 페어링 코드로 당신에게 푸시할 때는 receive를, 신뢰하는 기기들이 언제든 푸시할 수 있는 상시 수신함이 필요할 때는 serve를, 그리고 당신이 이미 SSH로 접속 가능한 서버로 직접 다가갈 때는 pull을 선택하세요.</p>
       <h2>받는 세 가지 방법과 각각이 적용되는 상황</h2>

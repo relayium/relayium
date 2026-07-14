@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>الاستضافة الذاتية لـ Relayium: شغّل خادم نقل الملفات الخاص بك · Relayium</title>
+    <meta name="description" content="شغّل حزمة Relayium بالكامل بنفسك بأمر Docker واحد — نطاقك الخاص، بياناتك الخاصة، بلا حساب مطلوب. يغطّي مفاتيح البيئة، ومُرحِّل TURN الاختياري، وتوجيه الـ CLI إليه." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ar/guides/self-host-relayium" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/self-host-relayium" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/self-host-relayium" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/self-host-relayium" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/self-host-relayium" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/self-host-relayium" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/self-host-relayium" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/self-host-relayium" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/self-host-relayium" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="الاستضافة الذاتية لـ Relayium: شغّل خادم نقل الملفات الخاص بك" />
+    <meta property="og:description" content="شغّل حزمة Relayium بالكامل بنفسك بأمر Docker واحد — نطاقك الخاص، بياناتك الخاصة، بلا حساب مطلوب. يغطّي مفاتيح البيئة، ومُرحِّل TURN الاختياري، وتوجيه الـ CLI إليه." />
+    <meta property="og:url" content="https://relayium.com/ar/guides/self-host-relayium" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ar_AR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="الاستضافة الذاتية لـ Relayium: شغّل خادم نقل الملفات الخاص بك" />
+    <meta name="twitter:description" content="شغّل حزمة Relayium بالكامل بنفسك بأمر Docker واحد — نطاقك الخاص، بياناتك الخاصة، بلا حساب مطلوب. يغطّي مفاتيح البيئة، ومُرحِّل TURN الاختياري، وتوجيه الـ CLI إليه." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"الاستضافة الذاتية لـ Relayium: شغّل خادم نقل الملفات الخاص بك","description":"شغّل حزمة Relayium بالكامل بنفسك بأمر Docker واحد — نطاقك الخاص، بياناتك الخاصة، بلا حساب مطلوب. يغطّي مفاتيح البيئة، ومُرحِّل TURN الاختياري، وتوجيه الـ CLI إليه.","inLanguage":"ar","dateModified":"2026-07-12","mainEntityOfPage":"https://relayium.com/ar/guides/self-host-relayium","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل أحتاج إلى إعداد TURN؟","acceptedAnswer":{"@type":"Answer","text":"فقط إن أردت أن تعمل عمليات النقل الفوري عبر الشبكات عبر أنواع NAT الصارمة. عمليات النقل في نفس الشبكة، وpush/pull القائم على SSH، والدفع المباشر عبر الخدمة، جميعها تعمل بدونه — TURN مخصّص بحتًا لاجتياز NAT على مسار رمز الاقتران عبر الشبكات."}},{"@type":"Question","name":"هل يبقى الـ CLI مجانيًا إن استضفتُ ذاتيًا؟","acceptedAnswer":{"@type":"Answer","text":"نعم. الـ CLI مجاني تمامًا ولا يحتاج حسابًا سواء تحدّث إلى relayium.com أو إلى خادم تشغّله بنفسك — ‎--server‎ يوجّهه فقط إلى نسختك."}},{"@type":"Question","name":"هل يمكنني استخدام نطاقي الخاص وشهادة TLS خاصة بي؟","acceptedAnswer":{"@type":"Answer","text":"نعم. تستمع صورة Docker على HTTP عادي على ‎:8080؛ ضع nginx أو Caddy أمامها بنطاقك الخاص وشهادتك (مثلًا عبر certbot/Let's Encrypt). يحتوي docs/DEPLOYMENT.md على تهيئة nginx كاملة للنسخ."}},{"@type":"Question","name":"ما البيانات التي يخزّنها خادمي المُستضاف ذاتيًا؟","acceptedAnswer":{"@type":"Answer","text":"قاعدة بيانات SQLite (الحسابات، الجلسات) في RELAYIUM_DB، و — لعمليات النقل المُخزَّنة/المبنية على رابط — كتل مشفَّرة في RELAYIUM_BLOB_DIR لا يستطيع الخادم نفسه فكّ تشفيرها. عمليات النقل الفوري من الند للند لا تُخزَّن في أي مكان — يرحّل الخادم مصافحة الإشارة فقط."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ar">Relayium</a></header>
+      <h1>الاستضافة الذاتية لـ Relayium: شغّل خادم نقل الملفات الخاص بك</h1>
+      <p class="updated">آخر تحديث: 2026-07-12</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/self-host-relayium">English</a><a href="/zh/guides/self-host-relayium">中文</a><a href="/ja/guides/self-host-relayium">日本語</a><a href="/ko/guides/self-host-relayium">한국어</a><a href="/de/guides/self-host-relayium">Deutsch</a><a href="/fr/guides/self-host-relayium">Français</a><a href="/ar/guides/self-host-relayium" aria-current="true">العربية</a></nav>
+      <p class="lead">‏Relayium مرخَّص بموجب MIT ومفتوح المصدر، والخادم صورة واحدة مكتفية بذاتها — بلا قاعدة بيانات خارجية، بلا حاوية تخزين لطرف ثالث، ولا شيء للتسجيل فيه. إن كنت تفضّل تشغيل كل شيء بنفسك بدل الاعتماد على relayium.com، فهذا الدليل يشغّل خادمًا بـ Docker ويوجّه الـ CLI إليه.</p>
+      <p class="lead">تمنحك الاستضافة الذاتية تحكمًا كاملًا في مكان بياناتك، ونطاقك الخاص وشهادة TLS خاصة بك، وبلا اعتماد على بنية أحد آخر. كل ما يلي مبني على ملفات موجودة فعلًا في المستودع — `docker-compose.yml` و `server/.env.example` و `docs/DEPLOYMENT.md` — فلا شيء هنا عبارة عن راية أو إعداد غير موجود فعلًا.</p>
+      <h2>لماذا الاستضافة الذاتية</h2>
+      <p>عمليات النقل الفوري في Relayium من الند للند ومشفَّرة من الطرف إلى الطرف أصلًا، لذا لا يرى الخادم بايتات ملفك هناك أبدًا. لكنه يحتفظ بحسابك، و — لعمليات النقل المُخزَّنة/المبنية على رابط — بكتل نص مُشفَّر وقاعدة بيانات SQLite صغيرة. الاستضافة الذاتية تعني أن تعيش تلك البيانات على بنية تتحكم فيها أنت، تحت نطاقك الخاص، دون أن تتدخل قرارات تشغيل أحد آخر.</p>
+      <p>لأن المشروع مرخَّص بموجب MIT ومفتوح المصدر (github.com/relayium/relayium)، يمكنك أن تقرأ بالضبط ما يفعله الخادم قبل أن تأتمنه على أي شيء، وأن تنسخه (fork) أو تعدّله بحرية.</p>
+      <h2>بداية سريعة مع Docker</h2>
+      <p>جذر المستودع يوفّر `Dockerfile` و `docker-compose.yml` يبنيان صورة واحدة مكتفية بذاتها — ثنائي Go ساكن يقدّم تطبيق الويب المبني مسبقًا، فلا حاجة إلى Node منفصل أو سلسلة أدوات Go أو nginx لمجرد تشغيله:</p>
+      <pre><code>docker compose up -d --build</code></pre>
+      <ul><li>هذا هو الخادم بالكامل، يستمع على ‎:8080. ضع nginx أو Caddy أمامه لأجل TLS في الإنتاج — راجع docs/DEPLOYMENT.md للحصول على تهيئة nginx كاملة.</li><li>تأتي تهيئة التطبيق من ملف server/.env اختياري إضافةً إلى كتلة environment: في docker-compose.yml. لكل إعداد مفتاح ‎RELAYIUM_*‎ — انسخ server/.env.example كنقطة انطلاق.</li><li>المفاتيح الأربعة المهمة لنشر أساسي: RELAYIUM_ADDR (عنوان الاستماع)، وRELAYIUM_STATIC (مسار تطبيق الويب المبني)، وRELAYIUM_DB (مسار ملف SQLite)، وRELAYIUM_BLOB_DIR (حيث يُكتَب النص المُشفَّر لروابط التخزين). يضبط docker-compose.yml أصلًا قيمًا افتراضية معقولة للأربعة جميعًا ويحفظها في وحدة تخزين مُسمّاة.</li></ul>
+      <h2>أضف مُرحِّل TURN لعمليات النقل عبر الشبكات</h2>
+      <p>عمليات النقل في نفس الشبكة (LAN) وpush/pull القائم على SSH تعمل بلا أي إضافة. عمليات النقل الفوري عبر الشبكات (جهازان خلف NAT مختلفين) تحتاج أحيانًا مُرحِّل TURN لإنشاء مسار — لا يرى المُرحِّل سوى نص مُشفَّر أبدًا، لا محتوى ملفاتك.</p>
+      <p>لدى docker-compose.yml ملف تعريف relay اختياري يُشغّل coturn (خادم TURN) ونسخة Redis صغيرة لقياس بايتات الترحيل، إلى جانب الخادم الرئيسي:</p>
+      <pre><code>RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build</code></pre>
+      <ul><li>يحتاج coturn عنوان IP العام الحقيقي للمضيف ونطاق منافذ UDP مفتوحًا ليعمل — راجع docs/coturn.md للإعداد الكامل (بما في ذلك برنامج تثبيت بأمر واحد) وdocs/enable-turn.md لاستكشاف فشل يقتصر على اجتياز NAT.</li><li>بدون ‎--profile relay‎ وRELAYIUM_TURN_SECRET، يظل الخادم يعمل جيدًا — تتراجع عمليات النقل عبر الشبكات فقط إلى STUN وحده، وهو يعمل مع أنواع NAT الأسهل لكن ليس الأشد صرامة.</li></ul>
+      <h2>Install the CLI on your machine</h2>
+      <p>This last step runs the relayium CLI on your own computer (not the server), so install it there if you haven&#39;t. On macOS or Linux:</p>
+      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>relayium.com/cli lists every install option — a Windows binary, the releases page, or go build if you have Go.</li><li>relayium --version confirms it. Without the CLI, the command below prints &#39;command not found&#39;.</li></ul>
+      <h2>وجّه الـ CLI إلى خادمك</h2>
+      <p>يستخدم Relayium CLI افتراضيًا خادم الالتقاء الخاص بـ relayium.com لعمليات send/receive عبر الشبكات. مرّر ‎--server‎ لاستخدام خادمك بدلًا منه:</p>
+      <pre><code>relayium send ./report.pdf --server https://your-domain</code></pre>
+      <pre><code>relayium receive --server https://your-domain</code></pre>
+      <ul><li>الـ CLI مجاني ولا يحتاج حسابًا في كلتا الحالتين — ‎--server‎ يغيّر فقط خادم الالتقاء الذي يتحدث إليه لمصافحة رمز الاقتران.</li><li>‏push/pull (عبر SSH الخاص بك) وserve + الدفع المباشر عبر الخدمة push relayium://host لا يلمسان relayium.com إطلاقًا، سواء بالاستضافة الذاتية أم لا — يتصلان مباشرةً بالجهاز البعيد الذي تحدده.</li></ul>
+      <h2>الأسئلة الشائعة</h2>
+      <h3>هل أحتاج إلى إعداد TURN؟</h3>
+      <p>فقط إن أردت أن تعمل عمليات النقل الفوري عبر الشبكات عبر أنواع NAT الصارمة. عمليات النقل في نفس الشبكة، وpush/pull القائم على SSH، والدفع المباشر عبر الخدمة، جميعها تعمل بدونه — TURN مخصّص بحتًا لاجتياز NAT على مسار رمز الاقتران عبر الشبكات.</p>
+      <h3>هل يبقى الـ CLI مجانيًا إن استضفتُ ذاتيًا؟</h3>
+      <p>نعم. الـ CLI مجاني تمامًا ولا يحتاج حسابًا سواء تحدّث إلى relayium.com أو إلى خادم تشغّله بنفسك — ‎--server‎ يوجّهه فقط إلى نسختك.</p>
+      <h3>هل يمكنني استخدام نطاقي الخاص وشهادة TLS خاصة بي؟</h3>
+      <p>نعم. تستمع صورة Docker على HTTP عادي على ‎:8080؛ ضع nginx أو Caddy أمامها بنطاقك الخاص وشهادتك (مثلًا عبر certbot/Let&#39;s Encrypt). يحتوي docs/DEPLOYMENT.md على تهيئة nginx كاملة للنسخ.</p>
+      <h3>ما البيانات التي يخزّنها خادمي المُستضاف ذاتيًا؟</h3>
+      <p>قاعدة بيانات SQLite (الحسابات، الجلسات) في RELAYIUM_DB، و — لعمليات النقل المُخزَّنة/المبنية على رابط — كتل مشفَّرة في RELAYIUM_BLOB_DIR لا يستطيع الخادم نفسه فكّ تشفيرها. عمليات النقل الفوري من الند للند لا تُخزَّن في أي مكان — يرحّل الخادم مصافحة الإشارة فقط.</p>
+      <div class="ctacard">
+        <p>ثبّت Relayium CLI المجاني ووجّهه إلى خادمك الخاص بـ ‎--server‎.</p>
+        <a class="cta" href="/cli">احصل على الـ CLI</a>
+      </div>
+      <h2>تابع القراءة</h2>
+      <ul class="related"><li><a href="/ar/compare/snapdrop">Relayium مقابل Snapdrop وPairDrop: أي نقل ملفات P2P آمن؟</a></li><li><a href="/ar/compare/airdrop">Relayium مقابل AirDrop: بديل AirDrop عبر المنصّات</a></li><li><a href="/ar/compare/wetransfer">Relayium مقابل WeTransfer: أرسل ملفات كبيرة دون الخادم</a></li><li><a href="/ar/how-to/transfer-files-android-to-iphone">كيفية نقل الملفات من Android إلى iPhone (دون كابل)</a></li><li><a href="/ar/how-to/send-files-pc-to-phone-wirelessly">إرسال الملفات من الحاسوب إلى الهاتف لاسلكيًا، دون كابل أو تطبيق</a></li><li><a href="/ar/how-to/send-large-files-without-cloud">كيفية إرسال الملفات الكبيرة دون سحابة</a></li><li><a href="/ar/guides/transfer-files-from-terminal">انقل الملفات من الطرفية باستخدام Relayium CLI</a></li><li><a href="/ar/guides/back-up-a-server-over-ssh">انسخ الملفات احتياطيًا إلى خادمك عبر SSH باستخدام Relayium CLI</a></li><li><a href="/ar/guides/send-a-file-to-someone">إرسال ملف إلى شخص ما عبر الشبكات باستخدام واجهة Relayium الطرفية (CLI)</a></li><li><a href="/ar/guides/server-to-server-transfers">النقل من خادم إلى خادم باستخدام واجهة Relayium الطرفية (daemon direct)</a></li><li><a href="/ar/guides/sync-a-large-folder-between-servers">مزامنة مجلد كبير بين خادمين (قابلة للاستئناف، في الخلفية)</a></li><li><a href="/ar/guides/push-to-cloud-pull-on-another-computer">ادفع الملفات إلى السحابة، واسحبها على حاسوب آخر</a></li><li><a href="/ar/how-to/share-a-file-with-an-expiring-link">مشاركة ملف برابط تنزيل آمن ينتهي صلاحيته</a></li><li><a href="/ar/how-to/send-files-between-two-computers-over-the-internet">إرسال الملفات بين جهازي كمبيوتر عبر الإنترنت</a></li><li><a href="/ar/compare/croc">Relayium مقابل croc: نقل ملفات مُشفَّر من الطرفية</a></li><li><a href="/ar/guides/how-relayium-encrypts-your-files">كيف يُشفِّر Relayium ملفاتك من الطرف إلى الطرف</a></li><li><a href="/ar/compare/google-drive">Relayium مقابل Google Drive لإرسال الملفات</a></li><li><a href="/ar/compare/rsync">Relayium مقابل rsync: زامِن المجلدات دون إعداد SSH</a></li><li><a href="/ar/compare/firefox-send">أفضل بديل لـ Firefox Send في 2026</a></li><li><a href="/ar/how-to/transfer-files-by-scanning-a-qr-code">نقل الملفات بمسح رمز QR ضوئياً</a></li><li><a href="/ar/guides/receive-files-from-the-command-line">استقبال الملفات من سطر الأوامر</a></li><li><a href="/ar/how-to/send-a-folder">كيفية إرسال مجلد كامل، لا ملفات فقط</a></li><li><a href="/ar/guides/run-relayium-as-an-always-on-service">شغّل Relayium كخدمة استقبال دائمة التشغيل</a></li><li><a href="/ar/how-to/automate-server-backups">أتمتة النسخ الاحتياطي المُشفَّر للخادم باستخدام مهمة cron</a></li><li><a href="/ar/compare/localsend">Relayium مقابل LocalSend: أيّ نقل ملفات محلي تستخدم</a></li><li><a href="/ar/compare/scp">Relayium مقابل scp: نقل ملفات أبسط عبر SSH</a></li><li><a href="/ar/compare/magic-wormhole">Relayium مقابل magic-wormhole: نقل الملفات عبر CLI</a></li><li><a href="/ar/compare/nextcloud">Relayium مقابل Nextcloud لإرسال الملفات</a></li><li><a href="/ar/compare/dropbox">Relayium مقابل Dropbox لإرسال ملف</a></li><li><a href="/ar/how-to/airdrop-for-windows-and-android">AirDrop لأنظمة Windows وLinux وAndroid</a></li><li><a href="/ar/how-to/transfer-files-between-mac-and-windows">نقل الملفات بين جهاز Mac وحاسوب Windows</a></li><li><a href="/ar/how-to/send-files-on-the-same-wifi">إرسال الملفات بين الأجهزة على نفس شبكة Wi-Fi</a></li><li><a href="/ar/guides/what-is-peer-to-peer-file-transfer">ما هو نقل الملفات من الند للند؟</a></li><li><a href="/ar/guides/is-it-safe-to-send-files-over-the-internet">هل من الآمن إرسال الملفات عبر الإنترنت؟</a></li><li><a href="/ar/guides/bring-your-own-node">شغّل عقدتك الخاصة: استخدم مُرحِّل وتخزين Relayium مجانًا</a></li><li><a href="/ar/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ar">← Relayium</a>
+        <a href="/ar/guides">الأدلة</a>
+        <a href="/ar/privacy">undefined</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

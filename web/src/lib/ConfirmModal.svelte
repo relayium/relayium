@@ -35,7 +35,7 @@
     width: min(340px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto;
     padding: var(--space-5); border-radius: var(--radius); border: 1px solid var(--border);
     background: var(--bg); box-shadow: var(--shadow);
-    text-align: left;
+    text-align: start;
   }
   .msg { margin: 0 0 var(--space-4); color: var(--text-h); font-size: var(--fs-xs); }
   .actions { display: flex; gap: var(--space-2); justify-content: flex-end; }

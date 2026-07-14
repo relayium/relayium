@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ما هو نقل الملفات من الند للند؟ · Relayium</title>
+    <meta name="description" content="شرح بلغة مبسّطة لنقل الملفات من الند للند (P2P): كيف يختلف عن الرفع إلى خادم، وكيف يُعثَر على اتصال WebRTC مباشر، ولماذا هو خاص وسريع." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ar/guides/what-is-peer-to-peer-file-transfer" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/what-is-peer-to-peer-file-transfer" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/what-is-peer-to-peer-file-transfer" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/what-is-peer-to-peer-file-transfer" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/what-is-peer-to-peer-file-transfer" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/what-is-peer-to-peer-file-transfer" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/what-is-peer-to-peer-file-transfer" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/what-is-peer-to-peer-file-transfer" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/what-is-peer-to-peer-file-transfer" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="ما هو نقل الملفات من الند للند؟" />
+    <meta property="og:description" content="شرح بلغة مبسّطة لنقل الملفات من الند للند (P2P): كيف يختلف عن الرفع إلى خادم، وكيف يُعثَر على اتصال WebRTC مباشر، ولماذا هو خاص وسريع." />
+    <meta property="og:url" content="https://relayium.com/ar/guides/what-is-peer-to-peer-file-transfer" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ar_AR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="ما هو نقل الملفات من الند للند؟" />
+    <meta name="twitter:description" content="شرح بلغة مبسّطة لنقل الملفات من الند للند (P2P): كيف يختلف عن الرفع إلى خادم، وكيف يُعثَر على اتصال WebRTC مباشر، ولماذا هو خاص وسريع." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"ما هو نقل الملفات من الند للند؟","description":"شرح بلغة مبسّطة لنقل الملفات من الند للند (P2P): كيف يختلف عن الرفع إلى خادم، وكيف يُعثَر على اتصال WebRTC مباشر، ولماذا هو خاص وسريع.","inLanguage":"ar","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/ar/guides/what-is-peer-to-peer-file-transfer","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل النقل من الند للند هو نفسه التشفير من الطرف إلى الطرف؟","acceptedAnswer":{"@type":"Answer","text":"هما مترابطان لكنهما ليسا متطابقين. فـ P2P يصف مسار الشبكة — بايتات تنتقل مباشرةً بين جهازين. أما التشفير فيصف ما إذا كانت تلك البايتات غير قابلة للقراءة لأي أحد في المنتصف. والنقل الفوري في Relayium يجمع الاثنين: مسار مباشر (أو عبر مُرحِّل لكنه مُشفَّر)، مع ختم الملف من الطرف إلى الطرف بصرف النظر عن المسار الذي يسلكه."}},{"@type":"Question","name":"هل يمرّ النقل من الند للند بأي خادم على الإطلاق؟","acceptedAnswer":{"@type":"Answer","text":"يساعد خادم إشارة صغير الجهازين على العثور على عنوان كل منهما — لكنه لا يرى سوى معلومات إعداد الاتصال، ولا يرى بايتات الملف قط. وإن تعذّر العثور على مسار مباشر، فإن مُرحِّل TURN يمرّر بيانات الملف المُشفَّرة، لكنه حتى حينئذٍ لا يتعامل إلا مع نص مُشفَّر لا يستطيع فك تشفيره."}},{"@type":"Question","name":"لماذا قد يفشل الاتصال المباشر من الأساس؟","acceptedAnswer":{"@type":"Answer","text":"بعض الشبكات — غالبًا جدران الحماية الصارمة للشركات أو بعض أنواع NAT لدى مشغّلي الهاتف المحمول — مبنية على نحو يجعل من المستحيل اكتشاف عنوان يمكن الوصول إليه من المعلومات الخارجية وحدها. وهذا أندر مما يبدو، لكن حين يحدث يكون المُرحِّل هو ما يُبقي النقل عاملًا بدلًا من أن يفشل تمامًا."}},{"@type":"Question","name":"هل يكون النقل من الند للند أبطأ حين يتراجع إلى مُرحِّل؟","acceptedAnswer":{"@type":"Answer","text":"قد يضيف بعض زمن الاستجابة، إذ إن المُرحِّل قفزة إضافية تمر بها البيانات وهو خادم مشترك لا خادم مخصَّص. لكنه يظل أسرع عمومًا من أسلوب الرفع ثم التنزيل، إذ لا انتظار لاستقرار الملف كاملًا على خادم قبل أن يبدأ جانب التنزيل."}},{"@type":"Question","name":"هل يحتاج الطرفان إلى حساب للنقل من الند للند؟","acceptedAnswer":{"@type":"Answer","text":"جهازان على نفس الشبكة لا يحتاجان إلى حساب على الإطلاق. والإرسال عبر الشبكات برمز اقتران يتطلب أن يسجّل المُرسِل الدخول، أما الشخص المُستقبِل فلا يحتاج إلى حساب مطلقًا في كلتا الحالتين."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ar">Relayium</a></header>
+      <h1>ما هو نقل الملفات من الند للند؟</h1>
+      <p class="updated">آخر تحديث: 2026-07-09</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/what-is-peer-to-peer-file-transfer">English</a><a href="/zh/guides/what-is-peer-to-peer-file-transfer">中文</a><a href="/ja/guides/what-is-peer-to-peer-file-transfer">日本語</a><a href="/ko/guides/what-is-peer-to-peer-file-transfer">한국어</a><a href="/de/guides/what-is-peer-to-peer-file-transfer">Deutsch</a><a href="/fr/guides/what-is-peer-to-peer-file-transfer">Français</a><a href="/ar/guides/what-is-peer-to-peer-file-transfer" aria-current="true">العربية</a></nav>
+      <p class="lead">يُستخدم مصطلح «من الند للند» بشكل فضفاض، وإليك ما يعنيه فعليًا في نقل الملفات: ينتقل ملفك مباشرةً من جهاز إلى آخر، لا صعودًا إلى خادم شركة ونزولًا منه. لا محطة في المنتصف يمكن أن تستقر فيها نسخة.</p>
+      <p class="lead">يبدو ذلك بسيطًا، لكن الإنترنت لم يُبنَ لكي يعثر جهازان عشوائيان على بعضهما ويتحادثا مباشرةً — فمعظم الاتصالات مخفية خلف موجّهات وجدران حماية لم تُصمَّم قط للوصول إليها من الخارج. تشرح هذه الصفحة، بعبارات مبسّطة، كيف يُنشأ الاتصال المباشر فعليًا، ومتى يتعذّر إنشاؤه، وماذا يعني ذلك لخصوصيتك وسرعتك. ويُستخدم Relayium بوصفه المثال الملموس في كل المقال، لأنه تطبيق عملي لهذا الأمر بالضبط.</p>
+      <h2>P2P مقابل الطريقة المعتادة: إلغاء المحطة الوسطى</h2>
+      <p>تعمل معظم أدوات «إرسال ملف» بالرفع: يصعد ملفك من جهازك إلى خادم الشركة، ويُخزَّن هناك، ثم ينزّله الشخص الآخر منه. هذه قفزتان، ولبعض الوقت تستقر نسخة كاملة من ملفك على مساحة تخزين شخص آخر — حتى وإن حُذفت لاحقًا.</p>
+      <p>يتخطى النقل من الند للند تلك المحطة. فما إن يُفتح اتصال بين جهازك وجهاز الشخص الآخر حتى تتدفق بايتات الملف مباشرةً عبر تلك القفزة الواحدة ولا شيء غيرها. لا توجد نسخة على جانب الخادم لتُخزَّن أو تُؤمَّن أو تُحذَف في نهاية المطاف، لأنها لم تُرفع أصلًا.</p>
+      <ul><li>النقل القائم على الرفع: من جهازك إلى خادم إلى جهازهم — قفزتان، ونسخة مُخزَّنة بينهما.</li><li>النقل من الند للند: من جهازك مباشرةً إلى جهازهم — قفزة واحدة، ولا شيء يُخزَّن.</li><li>في Relayium، هذا هو الوضع الفوري: افتح الموقع على الجهازين، واتصل، ويُبَثّ الملف مباشرةً من متصفح إلى متصفح.</li></ul>
+      <h2>كيف يعثر جهازان على بعضهما فعليًا: STUN</h2>
+      <p>إليك الجزء غير البديهي: يكاد يكون مؤكدًا أن جهازك لا يعرف عنوانه الخاص كما يُرى من الإنترنت الخارجي — فهو يقبع خلف موجّه منزلي أو خلف ترجمة عناوين الشبكة (NAT) لمشغّل الهاتف المحمول، التي تخفيه خلف عنوان IP عام مشترك وتعيد تخصيص المنافذ لحظيًا. والجهاز الآخر في الوضع نفسه. ولا يمكن لأي منهما أن «يتصل» بالآخر مباشرةً دون أن يعرف أولًا أي عنوان يصل إليه فعلًا.</p>
+      <p>هذا هو الغرض من STUN (أدوات اجتياز الجلسة عبر NAT). يسأل كل جهاز خادم STUN صغيرًا خفيفًا سؤالًا واحدًا لوهلة: «من أي عنوان ومنفذ تراني قادمًا؟» فتخبره الإجابة بعنوانه المرئي للخارج — لا الملف، ولا أي محتوى، بل ما يكفي من معلومات الشبكة لوصف مسار العودة إليه. ويتبادل الجهازان هذه المعلومات (عبر خطوة إشارة لا تحمل سوى تفاصيل إعداد الاتصال، ولا تحمل بايتات الملف قط) ثم يحاولان فتح مسار مباشر إلى عنوان كل منهما. وفي حصة كبيرة من الحالات الواقعية — لا سيما جهازان على نفس شبكة Wi-Fi، أو أنواع NAT التي تتصرف على نحو متوقّع — ينجح ذلك، ويُفتح اتصال مباشر بالكامل.</p>
+      <ul><li>لا يعرف STUN ويشارك سوى عناوين الشبكة — ولا يعرف قط محتويات الملفات أو أسماءها أو مفاتيح التشفير.</li><li>يستخدم Relayium تقنية WebRTC لهذا الغرض، وهي تقنية الاتصال المباشر نفسها المدمجة في كل متصفح حديث لمكالمات الفيديو — أُعيد توظيفها هنا لنقل بايتات الملفات بدلًا من إطارات الفيديو.</li><li>جهازان على نفس الشبكة (دون حاجة إلى رمز) يتصلان عادةً على النحو الأكثر مباشرةً بينها جميعًا، إذ لا يوجد غالبًا أي NAT يعترض الطريق.</li></ul>
+      <h2>حين يتعذّر العثور على مسار مباشر: مُرحِّل TURN</h2>
+      <p>أحيانًا لا يكفي STUN. فبعض أنواع NAT — لا سيما على شبكات الشركات الأكثر صرامةً أو لدى بعض مشغّلي الهاتف المحمول — يصعب التنبؤ بها إلى حدٍّ يجعل من المستحيل اكتشاف مسار مباشر من المعلومات الخارجية وحدها. وإذا كان كلا الجهازين خلف هذا النوع من NAT، فإن الاتصال المباشر حقًا يكون ببساطة غير ممكن؛ ولا بد لشيء أن يُرحِّل حركة البيانات بينهما.</p>
+      <p>هذا هو TURN (الاجتياز باستخدام المُرحِّلات حول NAT): خادم مُرحِّل احتياطي يتصل به الجهازان حين يفشل المسار المباشر. وهو ليس حيلة التفافية أو تنازلًا عن الخصوصية بقدر ما هو ضرورة تفرضها طريقة بناء بعض الشبكات — لكن من الجدير التدقيق في ما يراه وما لا يراه. في Relayium، يكون الملف مُشفَّرًا من الطرف إلى الطرف مسبقًا قبل أن يصل إلى المُرحِّل، فلا يُمرِّر المُرحِّل سوى نص مُشفَّر — بيانات مختومة لا يملك مفتاحًا لفتحها. إنه ينقل البايتات؛ ولا يستطيع قراءتها.</p>
+      <ul><li>لا يُستخدم TURN إلا حين يتعذّر فعلًا العثور على مسار مباشر — فهو احتياطي، لا الخيار الافتراضي.</li><li>يمرّر المُرحِّل نصًا مُشفَّرًا فقط؛ ولا يملك قط مفتاح فك التشفير ولا يستطيع قراءة محتويات الملفات أو أسمائها أو أي شيء آخر عمّا بداخلها.</li><li>أما إن كان نقل معيّن قد جرى مباشرةً أم عبر مُرحِّل فيمكن رؤيته في تشخيصات الاتصال في Relayium، لكل من يرغب في التحقق.</li></ul>
+      <h2>لماذا يهم هذا: الخصوصية والسرعة</h2>
+      <p>حجة الخصوصية واضحة ومباشرة: حين لا تعبر بايتات الملف سوى قفزة واحدة، مباشرةً بين جهازين، فلا توجد خطوة تخزين على جانب الخادم يمكن أن تستقر فيها نسخة أو تُسجَّل أو يصل إليها أي شخص آخر — لأنها لم تُوضَع هناك قط. وهذا ضمان مختلف بنيويًا عن «نَعِدُ بحذفه في نهاية المطاف».</p>
+      <p>وحجة السرعة تتبع المنطق نفسه. فالنقل بالرفع ثم التنزيل عليه أن يعبر الشبكة مرتين — مرة صعودًا ومرة نزولًا — وكثيرًا ما ينتظر جانب الإرسال حتى ينتهي تمامًا قبل أن يستطيع جانب الاستقبال البدء. أما الاتصال المباشر فيعبر الشبكة مرة واحدة، ويمكن للبيانات أن تُبَثّ باستمرار بين الجهازين بأقصى سرعة يسمح بها الاتصال الأبطأ، دون خادم في المنتصف يحدّ من الإنتاجية أو يضيف زمن استجابته الخاص.</p>
+      <h2>كيف يجمع Relayium هذا كله</h2>
+      <p>افتح relayium.com على جهازين على نفس الشبكة فيعثر كل منهما على الآخر تلقائيًا في العادة — دون حساب ودون رمز ودون أي شيء يُثبَّت؛ تلك هي حالة الشبكة المحلية التي لا يكون STUN فيها ضروريًا غالبًا. أما الإرسال عبر الإنترنت إلى شخص على شبكة مختلفة فيستخدم رمز اقتران: يسجّل المُرسِل الدخول، ويولّد رمزًا (أو يشارك رابطًا، مع رمز QR اختياري للمسح)، وما إن ينضم الشخص الآخر حتى تعمل العملية نفسها — STUN ثم TURN عند الحاجة — لفتح اتصال مباشر أو عبر مُرحِّل — ولا يحتاج المُستقبِل إلى حساب في كلتا الحالتين.</p>
+      <p>في كلتا الحالتين، ما إن يُفتح الاتصال حتى يُبَثّ ما يصل إلى 1000 ملف في دفعة واحدة مباشرةً عبره، ويُتحقَّق من كل منها على حدة بتجزئة SHA-256 كي تعرف أن ما وصل يطابق تمامًا ما أُرسل. وإذا تعذّر الوضع الفوري — كأن يكون الشخص الآخر غير متصل — فذلك وضع مختلف حقًا (رابط مُخزَّن بمعرفة صفرية)، لا نقل من الند للند، ويستحق أن يُفهَم على حدة.</p>
+      <h2>الأسئلة الشائعة</h2>
+      <h3>هل النقل من الند للند هو نفسه التشفير من الطرف إلى الطرف؟</h3>
+      <p>هما مترابطان لكنهما ليسا متطابقين. فـ P2P يصف مسار الشبكة — بايتات تنتقل مباشرةً بين جهازين. أما التشفير فيصف ما إذا كانت تلك البايتات غير قابلة للقراءة لأي أحد في المنتصف. والنقل الفوري في Relayium يجمع الاثنين: مسار مباشر (أو عبر مُرحِّل لكنه مُشفَّر)، مع ختم الملف من الطرف إلى الطرف بصرف النظر عن المسار الذي يسلكه.</p>
+      <h3>هل يمرّ النقل من الند للند بأي خادم على الإطلاق؟</h3>
+      <p>يساعد خادم إشارة صغير الجهازين على العثور على عنوان كل منهما — لكنه لا يرى سوى معلومات إعداد الاتصال، ولا يرى بايتات الملف قط. وإن تعذّر العثور على مسار مباشر، فإن مُرحِّل TURN يمرّر بيانات الملف المُشفَّرة، لكنه حتى حينئذٍ لا يتعامل إلا مع نص مُشفَّر لا يستطيع فك تشفيره.</p>
+      <h3>لماذا قد يفشل الاتصال المباشر من الأساس؟</h3>
+      <p>بعض الشبكات — غالبًا جدران الحماية الصارمة للشركات أو بعض أنواع NAT لدى مشغّلي الهاتف المحمول — مبنية على نحو يجعل من المستحيل اكتشاف عنوان يمكن الوصول إليه من المعلومات الخارجية وحدها. وهذا أندر مما يبدو، لكن حين يحدث يكون المُرحِّل هو ما يُبقي النقل عاملًا بدلًا من أن يفشل تمامًا.</p>
+      <h3>هل يكون النقل من الند للند أبطأ حين يتراجع إلى مُرحِّل؟</h3>
+      <p>قد يضيف بعض زمن الاستجابة، إذ إن المُرحِّل قفزة إضافية تمر بها البيانات وهو خادم مشترك لا خادم مخصَّص. لكنه يظل أسرع عمومًا من أسلوب الرفع ثم التنزيل، إذ لا انتظار لاستقرار الملف كاملًا على خادم قبل أن يبدأ جانب التنزيل.</p>
+      <h3>هل يحتاج الطرفان إلى حساب للنقل من الند للند؟</h3>
+      <p>جهازان على نفس الشبكة لا يحتاجان إلى حساب على الإطلاق. والإرسال عبر الشبكات برمز اقتران يتطلب أن يسجّل المُرسِل الدخول، أما الشخص المُستقبِل فلا يحتاج إلى حساب مطلقًا في كلتا الحالتين.</p>
+      <div class="ctacard">
+        <p>أتتساءل كيف يبدو الأمر؟ افتح Relayium على جهازين وشاهد اتصالًا مباشرًا يتكوّن في الوقت الفوري.</p>
+        <a class="cta" href="/?lang=ar">جرّب Relayium الآن</a>
+      </div>
+      <h2>تابع القراءة</h2>
+      <ul class="related"><li><a href="/ar/compare/snapdrop">Relayium مقابل Snapdrop وPairDrop: أي نقل ملفات P2P آمن؟</a></li><li><a href="/ar/compare/airdrop">Relayium مقابل AirDrop: بديل AirDrop عبر المنصّات</a></li><li><a href="/ar/compare/wetransfer">Relayium مقابل WeTransfer: أرسل ملفات كبيرة دون الخادم</a></li><li><a href="/ar/how-to/transfer-files-android-to-iphone">كيفية نقل الملفات من Android إلى iPhone (دون كابل)</a></li><li><a href="/ar/how-to/send-files-pc-to-phone-wirelessly">إرسال الملفات من الحاسوب إلى الهاتف لاسلكيًا، دون كابل أو تطبيق</a></li><li><a href="/ar/how-to/send-large-files-without-cloud">كيفية إرسال الملفات الكبيرة دون سحابة</a></li><li><a href="/ar/guides/transfer-files-from-terminal">انقل الملفات من الطرفية باستخدام Relayium CLI</a></li><li><a href="/ar/guides/back-up-a-server-over-ssh">انسخ الملفات احتياطيًا إلى خادمك عبر SSH باستخدام Relayium CLI</a></li><li><a href="/ar/guides/send-a-file-to-someone">إرسال ملف إلى شخص ما عبر الشبكات باستخدام واجهة Relayium الطرفية (CLI)</a></li><li><a href="/ar/guides/server-to-server-transfers">النقل من خادم إلى خادم باستخدام واجهة Relayium الطرفية (daemon direct)</a></li><li><a href="/ar/guides/sync-a-large-folder-between-servers">مزامنة مجلد كبير بين خادمين (قابلة للاستئناف، في الخلفية)</a></li><li><a href="/ar/guides/push-to-cloud-pull-on-another-computer">ادفع الملفات إلى السحابة، واسحبها على حاسوب آخر</a></li><li><a href="/ar/how-to/share-a-file-with-an-expiring-link">مشاركة ملف برابط تنزيل آمن ينتهي صلاحيته</a></li><li><a href="/ar/guides/self-host-relayium">الاستضافة الذاتية لـ Relayium: شغّل خادم نقل الملفات الخاص بك</a></li><li><a href="/ar/how-to/send-files-between-two-computers-over-the-internet">إرسال الملفات بين جهازي كمبيوتر عبر الإنترنت</a></li><li><a href="/ar/compare/croc">Relayium مقابل croc: نقل ملفات مُشفَّر من الطرفية</a></li><li><a href="/ar/guides/how-relayium-encrypts-your-files">كيف يُشفِّر Relayium ملفاتك من الطرف إلى الطرف</a></li><li><a href="/ar/compare/google-drive">Relayium مقابل Google Drive لإرسال الملفات</a></li><li><a href="/ar/compare/rsync">Relayium مقابل rsync: زامِن المجلدات دون إعداد SSH</a></li><li><a href="/ar/compare/firefox-send">أفضل بديل لـ Firefox Send في 2026</a></li><li><a href="/ar/how-to/transfer-files-by-scanning-a-qr-code">نقل الملفات بمسح رمز QR ضوئياً</a></li><li><a href="/ar/guides/receive-files-from-the-command-line">استقبال الملفات من سطر الأوامر</a></li><li><a href="/ar/how-to/send-a-folder">كيفية إرسال مجلد كامل، لا ملفات فقط</a></li><li><a href="/ar/guides/run-relayium-as-an-always-on-service">شغّل Relayium كخدمة استقبال دائمة التشغيل</a></li><li><a href="/ar/how-to/automate-server-backups">أتمتة النسخ الاحتياطي المُشفَّر للخادم باستخدام مهمة cron</a></li><li><a href="/ar/compare/localsend">Relayium مقابل LocalSend: أيّ نقل ملفات محلي تستخدم</a></li><li><a href="/ar/compare/scp">Relayium مقابل scp: نقل ملفات أبسط عبر SSH</a></li><li><a href="/ar/compare/magic-wormhole">Relayium مقابل magic-wormhole: نقل الملفات عبر CLI</a></li><li><a href="/ar/compare/nextcloud">Relayium مقابل Nextcloud لإرسال الملفات</a></li><li><a href="/ar/compare/dropbox">Relayium مقابل Dropbox لإرسال ملف</a></li><li><a href="/ar/how-to/airdrop-for-windows-and-android">AirDrop لأنظمة Windows وLinux وAndroid</a></li><li><a href="/ar/how-to/transfer-files-between-mac-and-windows">نقل الملفات بين جهاز Mac وحاسوب Windows</a></li><li><a href="/ar/how-to/send-files-on-the-same-wifi">إرسال الملفات بين الأجهزة على نفس شبكة Wi-Fi</a></li><li><a href="/ar/guides/is-it-safe-to-send-files-over-the-internet">هل من الآمن إرسال الملفات عبر الإنترنت؟</a></li><li><a href="/ar/guides/bring-your-own-node">شغّل عقدتك الخاصة: استخدم مُرحِّل وتخزين Relayium مجانًا</a></li><li><a href="/ar/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ar">← Relayium</a>
+        <a href="/ar/guides">الأدلة</a>
+        <a href="/ar/privacy">undefined</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

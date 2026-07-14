@@ -21,6 +21,7 @@ const loaders: Record<Lang, () => Promise<{ default: Messages }>> = {
   ko: () => import("./i18n/ko"),
   de: () => import("./i18n/de"),
   fr: () => import("./i18n/fr"),
+  ar: () => import("./i18n/ar"),
 };
 
 // Reactive table of the languages loaded so far. Typed as a full Record — not
@@ -36,6 +37,16 @@ export async function loadLang(l: Lang): Promise<void> {
   const mod = await loaders[l]();
   messages[l] = mod.default;
   loaded.add(l);
+}
+
+// Right-to-left languages. Kept as a plain string set (not keyed to the Lang
+// union) so document direction can be resolved independently of, and before,
+// a language is registered. Arabic is the only RTL locale today.
+const RTL = new Set<string>(["ar"]);
+
+/** The `dir` a language should render in. LTR for everything but Arabic. */
+export function dir(l: string): "rtl" | "ltr" {
+  return RTL.has(l) ? "rtl" : "ltr";
 }
 
 const STORAGE_KEY = "relayium-lang";
@@ -56,7 +67,7 @@ export function detect(search?: string): Lang {
     if (saved && CODES.has(saved)) return saved as Lang;
   } catch { /* storage may be unavailable */ }
   const nav = (typeof navigator !== "undefined" ? navigator.language : "en").toLowerCase();
-  for (const code of ["zh", "ja", "ko", "de", "fr"] as Lang[]) {
+  for (const code of ["zh", "ja", "ko", "de", "fr", "ar"] as Lang[]) {
     if (nav.startsWith(code)) return code;
   }
   return "en";
@@ -75,5 +86,8 @@ export async function setLang(l: Lang): Promise<void> {
   await loadLang(l);
   current = l;
   try { localStorage.setItem(STORAGE_KEY, l); } catch { /* ignore */ }
-  if (typeof document !== "undefined") document.documentElement.lang = l;
+  if (typeof document !== "undefined") {
+    document.documentElement.lang = l;
+    document.documentElement.dir = dir(l);
+  }
 }

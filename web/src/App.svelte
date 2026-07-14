@@ -39,7 +39,7 @@
   import { recordTransfer, loadHistory, clearHistory, type HistEntry } from "./lib/history";
   import { fetchIceConfig, hasTurnServer, measureRelays, pickRelay, type RelayEntry } from "./lib/ice";
   import type { Peer } from "./lib/protocol";
-  import { lang, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
+  import { lang, dir, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import { pageMeta, altHreflangs } from "./lib/page-meta";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
   import { outbox, setOutbox, takeOutbox, clearOutbox } from "./lib/outbox.svelte";
@@ -402,6 +402,7 @@
 
   onMount(async () => {
     document.documentElement.lang = lang();
+    document.documentElement.dir = dir(lang());
     initRoomFromLocation();
     syncRouteFromLocation();
     window.addEventListener("popstate", onPopState);
@@ -1477,7 +1478,7 @@
     margin: 0 auto;
     padding: 0 20px 48px;
     box-sizing: border-box;
-    text-align: left;
+    text-align: start;
   }
 
   /* In-app section headings stay modest; marketing sections use the larger global --fs-h2. */
@@ -1543,9 +1544,9 @@
 
   .xfer-head { display: flex; align-items: center; gap: 10px; }
   .xfer-head .label { color: var(--accent); font-size: 14px; font-weight: 500; white-space: nowrap; }
-  .xfer-head .count { color: var(--text); font-size: 13px; margin-left: auto; word-break: break-all; text-align: right; }
+  .xfer-head .count { color: var(--text); font-size: 13px; margin-inline-start: auto; word-break: break-all; text-align: end; }
   button.x {
-    margin-left: 8px; padding: 2px 8px; font: inherit; font-size: var(--fs-xs);
+    margin-inline-start: 8px; padding: 2px 8px; font: inherit; font-size: var(--fs-xs);
     border-radius: 7px; cursor: pointer; border: 1px solid var(--border);
     background: var(--bg); color: var(--text);
     transition: color .13s, box-shadow .13s;
@@ -1669,7 +1670,7 @@
 
   /* ?debug=1 connection diagnostics — fixed, unobtrusive, monospace. */
   .dbg {
-    position: fixed; right: 8px; bottom: 8px; z-index: 9999;
+    position: fixed; inset-inline-end: 8px; bottom: 8px; z-index: 9999;
     max-width: min(92vw, 360px); padding: 8px 10px;
     background: rgba(20, 20, 22, 0.92); color: #e8e8ea;
     border: 1px solid #3a3a40; border-radius: 8px;
@@ -1682,7 +1683,7 @@
   .dbg-head label { display: flex; align-items: center; gap: 3px; white-space: nowrap; opacity: 0.85; }
   .dbg-head button { padding: 3px 10px; border: 1px solid #55555c; border-radius: 5px; background: #2a2a2e; color: inherit; cursor: pointer; }
   .dbg-head button:disabled { opacity: 0.4; cursor: default; }
-  .dbg-head .dbg-x { margin-left: auto; padding: 3px 8px; }
+  .dbg-head .dbg-x { margin-inline-start: auto; padding: 3px 8px; }
   .dbg dl { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; margin: 0; }
   .dbg dt { opacity: 0.6; }
   .dbg dd { margin: 0; word-break: break-all; }

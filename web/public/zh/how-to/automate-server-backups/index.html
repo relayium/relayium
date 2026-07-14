@@ -13,6 +13,7 @@
     <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/automate-server-backups" />
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/automate-server-backups" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/automate-server-backups" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/automate-server-backups" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -42,7 +43,7 @@ h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 .lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
@@ -60,7 +61,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <h1>用 cron 任务自动化加密的服务器备份</h1>
       <p class="updated">最近更新: 2026-07-12</p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/automate-server-backups">English</a><a href="/zh/how-to/automate-server-backups" aria-current="true">中文</a><a href="/ja/how-to/automate-server-backups">日本語</a><a href="/ko/how-to/automate-server-backups">한국어</a><a href="/de/how-to/automate-server-backups">Deutsch</a><a href="/fr/how-to/automate-server-backups">Français</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/automate-server-backups">English</a><a href="/zh/how-to/automate-server-backups" aria-current="true">中文</a><a href="/ja/how-to/automate-server-backups">日本語</a><a href="/ko/how-to/automate-server-backups">한국어</a><a href="/de/how-to/automate-server-backups">Deutsch</a><a href="/fr/how-to/automate-server-backups">Français</a><a href="/ar/how-to/automate-server-backups">العربية</a></nav>
       <p class="lead">需要你记得手动运行的备份,常常就不会发生。cron 会记得,而 Relayium CLI 正是为此而生:一条非交互式命令,把目录复制(或镜像)到另一台机器,校验每一个文件,并且在网络中断时从断点继续。</p>
       <p class="lead">本文介绍如何用 cron 定时运行 relayium push 和增量的 relayium sync、两者都能使用的两种传输方式,以及可以直接复制使用的 crontab 行。</p>
       <h2>push 与 sync:整体复制还是增量镜像</h2>

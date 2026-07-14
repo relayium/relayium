@@ -6,9 +6,9 @@ import { renderLandingPage } from "./landing-template.mjs";
 describe("buildLandingPages", () => {
   const pages = buildLandingPages(landing);
 
-  it("produces 5 pages at <lang>/index.html", () => {
+  it("produces 6 pages at <lang>/index.html", () => {
     expect(pages.map((p) => p.path).sort()).toEqual(
-      ["de/index.html", "fr/index.html", "ja/index.html", "ko/index.html", "zh/index.html"]
+      ["ar/index.html", "de/index.html", "fr/index.html", "ja/index.html", "ko/index.html", "zh/index.html"]
     );
   });
 

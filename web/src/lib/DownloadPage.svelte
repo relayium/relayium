@@ -183,7 +183,7 @@
     display: flex; align-items: center; gap: var(--space-3);
     padding: var(--space-4) var(--space-5) 0;
   }
-  .brand { display: inline-flex; align-items: center; gap: var(--space-2); margin-right: auto; text-decoration: none; color: var(--text-h); font-weight: 600; }
+  .brand { display: inline-flex; align-items: center; gap: var(--space-2); margin-inline-end: auto; text-decoration: none; color: var(--text-h); font-weight: 600; }
   .brand .mark {
     width: 28px; height: 28px; line-height: 28px; text-align: center;
     border-radius: var(--radius-sm); color: #fff; font-size: var(--fs-body);
@@ -197,7 +197,7 @@
   }
   .lang:hover { border-color: var(--accent-border); }
 
-  .dl { width: 560px; max-width: 100%; margin: 0 auto; padding: var(--space-5) var(--space-5) var(--space-7); text-align: left; }
+  .dl { width: 560px; max-width: 100%; margin: 0 auto; padding: var(--space-5) var(--space-5) var(--space-7); text-align: start; }
   .head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin: var(--space-2) 0 var(--space-3); }
   .dl h2 { font-size: var(--fs-h3); margin: 0; }
   .summary { font-size: var(--fs-xs); color: var(--text); white-space: nowrap; }

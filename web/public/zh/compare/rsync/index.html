@@ -13,6 +13,7 @@
     <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/rsync" />
     <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/rsync" />
     <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/rsync" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/compare/rsync" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/rsync" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -42,7 +43,7 @@ h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 .lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-left:22px}li{margin:6px 0}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
@@ -60,7 +61,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <h1>Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</h1>
       <p class="updated">最近更新: 2026-07-12</p>
-      <nav class="langbar" aria-label="Language"><a href="/compare/rsync">English</a><a href="/zh/compare/rsync" aria-current="true">中文</a><a href="/ja/compare/rsync">日本語</a><a href="/ko/compare/rsync">한국어</a><a href="/de/compare/rsync">Deutsch</a><a href="/fr/compare/rsync">Français</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/compare/rsync">English</a><a href="/zh/compare/rsync" aria-current="true">中文</a><a href="/ja/compare/rsync">日本語</a><a href="/ko/compare/rsync">한국어</a><a href="/de/compare/rsync">Deutsch</a><a href="/fr/compare/rsync">Français</a><a href="/ar/compare/rsync">العربية</a></nav>
       <p class="lead">rsync 自 1996 年起就在镜像文件夹，这是有原因的：双向同步、用滚动校验和只传输文件内部真正变化的字节的增量算法，以及几十年积累下来、覆盖各种边界情况的参数。如果你已经有 SSH 访问权限并且熟悉 rsync，它很难被超越。</p>
       <p class="lead">Relayium 的 sync 命令只覆盖一个更窄的场景——单向增量镜像——但它省掉了 rsync 默认你已经做好的一步：搭建 SSH。它既可以跑在你已有的 SSH 之上，也可以让两台机器直接连接，完全不需要 SSH 服务。本文客观对比两者：sync 不是 rsync 的完整替代品，FAQ 里也会直说这一点。</p>
       <h2>rsync 做对了什么</h2>

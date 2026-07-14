@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>النقل من خادم إلى خادم باستخدام واجهة Relayium الطرفية (daemon direct) · Relayium</title>
+    <meta name="description" content="انقل الملفات مباشرةً بين خادمين تتحكم بهما باستخدام relayium serve و push relayium:// — عبر TLS مُثبَّت، دون مُرحِّل، دون SSH، دون رمز. اعتمِد مُرسِلاً جديداً مرةً واحدة عند أول دفعة له، ثم أتمتِه أو شغّله تحت systemd." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ar/guides/server-to-server-transfers" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/server-to-server-transfers" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/server-to-server-transfers" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/server-to-server-transfers" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/server-to-server-transfers" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/server-to-server-transfers" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/server-to-server-transfers" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/server-to-server-transfers" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/server-to-server-transfers" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="النقل من خادم إلى خادم باستخدام واجهة Relayium الطرفية (daemon direct)" />
+    <meta property="og:description" content="انقل الملفات مباشرةً بين خادمين تتحكم بهما باستخدام relayium serve و push relayium:// — عبر TLS مُثبَّت، دون مُرحِّل، دون SSH، دون رمز. اعتمِد مُرسِلاً جديداً مرةً واحدة عند أول دفعة له، ثم أتمتِه أو شغّله تحت systemd." />
+    <meta property="og:url" content="https://relayium.com/ar/guides/server-to-server-transfers" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ar_AR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="النقل من خادم إلى خادم باستخدام واجهة Relayium الطرفية (daemon direct)" />
+    <meta name="twitter:description" content="انقل الملفات مباشرةً بين خادمين تتحكم بهما باستخدام relayium serve و push relayium:// — عبر TLS مُثبَّت، دون مُرحِّل، دون SSH، دون رمز. اعتمِد مُرسِلاً جديداً مرةً واحدة عند أول دفعة له، ثم أتمتِه أو شغّله تحت systemd." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"النقل من خادم إلى خادم باستخدام واجهة Relayium الطرفية (daemon direct)","description":"انقل الملفات مباشرةً بين خادمين تتحكم بهما باستخدام relayium serve و push relayium:// — عبر TLS مُثبَّت، دون مُرحِّل، دون SSH، دون رمز. اعتمِد مُرسِلاً جديداً مرةً واحدة عند أول دفعة له، ثم أتمتِه أو شغّله تحت systemd.","inLanguage":"ar","dateModified":"2026-07-12","mainEntityOfPage":"https://relayium.com/ar/guides/server-to-server-transfers","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"بماذا يختلف daemon direct عن push عبر SSH؟","acceptedAnswer":{"@type":"Answer","text":"يوجِّه push عبر SSH النقل خلال اتصال SSH الخاص بك ويحتاج إلى حساب SSH على الطرف البعيد. أما daemon direct فلا يحتاج SSH ولا حساباً — يصادق الخادمان أحدهما الآخر ببصمة الشهادة عبر TLS مُثبَّت، وهو أخف حين يكون الجهازان كلاهما لك."}},{"@type":"Question","name":"هل عليّ نسخ البصمات يدوياً هنا وهناك؟","acceptedAnswer":{"@type":"Answer","text":"لا. في طرفية، يطالبك serve باعتماد كل مُرسِل جديد عند أول دفعة له — مُظهِراً عنوانه وبصمته — ويحفظه، فتمر الدفعات اللاحقة بصمت. لا تلجأ إلى relayium id أو relayium authorize إلا في الإعدادات غير التفاعلية مثل خدمة systemd، حيث لا أحد ليُجيب على المُطالبة."}},{"@type":"Question","name":"أين تقع ملفات الهوية والثقة؟","acceptedAnswer":{"@type":"Answer","text":"في ~/.config/relayium/ افتراضياً (تُتجاوَز بـ --config-dir). id.key / id.crt هما الهوية الدائمة لهذا المضيف، ويحتفظ known_hosts ببصمات المُنصِتين الذين دفعت إليهم، أما authorized_fingerprints فهو قائمة السماح بالمُرسِلين لدى المُنصِت."}},{"@type":"Question","name":"ماذا يحدث إذا تغيّرت بصمة؟","acceptedAnswer":{"@type":"Answer","text":"تُرفَض الدفعة ويُطلَق تحذير. يُثبَّت مفتاح المُنصِت في known_hosts عند أول استخدام، فأي تغيّر لاحق — مضيف أُعيد ترميزه، أو هجوم وسيط — يُرفَض بدل قبوله بصمت. لا تحذف سطر known_hosts إلا إن كنت قد بدّلت المفتاح عمداً."}},{"@type":"Question","name":"هل هناك احتياطي عبر مُرحِّل؟","acceptedAnswer":{"@type":"Answer","text":"لا. يفترض daemon direct عنوان مُنصِت يمكن الوصول إليه؛ فإن تعذَّر إنشاء الاتصال، يفشل. لا يُوجَّه أي شيء أبداً عبر Relayium — وهذا هو مغزى هذا الوضع."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ar">Relayium</a></header>
+      <h1>النقل من خادم إلى خادم باستخدام واجهة Relayium الطرفية (daemon direct)</h1>
+      <p class="updated">آخر تحديث: 2026-07-12</p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers">English</a><a href="/zh/guides/server-to-server-transfers">中文</a><a href="/ja/guides/server-to-server-transfers">日本語</a><a href="/ko/guides/server-to-server-transfers">한국어</a><a href="/de/guides/server-to-server-transfers">Deutsch</a><a href="/fr/guides/server-to-server-transfers">Français</a><a href="/ar/guides/server-to-server-transfers" aria-current="true">العربية</a></nav>
+      <p class="lead">حين يكون الجهازان كلاهما لك ويعرف كلٌّ منهما عنوان الآخر، يصبح SSH احتكاكاً زائداً واللقاء عبئاً محضاً. صُمِّم daemon direct لهذا تماماً: خادم يُنصِت، والآخر يدفع إليه مباشرةً عبر اتصال TLS 1.3 مُثبَّت. لا مُرحِّل، لا SSH، لا رمز اقتران — الثقة تقوم على المفتاح العام وتُهيَّأ مرةً واحدة.</p>
+      <p class="lead">يغطي هذا الدليل تشغيل المُنصِت، والدفع إليه، واعتماد مُرسِل جديد عند أول اتصال، وأتمتة ذلك، وتشغيل المُنصِت كخدمة systemd.</p>
+      <h2>Before you start</h2>
+      <p>Everything below is the relayium CLI, so install it first if you haven&#39;t. On macOS or Linux, one command drops a prebuilt binary on your PATH:</p>
+      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>Prefer to pick the file yourself, or on Windows? Grab a binary from the releases page — relayium.com/cli lists every install option (or go build -o relayium ./cmd/relayium if you have Go).</li><li>relayium --version confirms it&#39;s installed. Skip this and the commands below just print &#39;command not found&#39;.</li></ul>
+      <h2>شغّل المُنصِت (على المُستقبِل)</h2>
+      <p>على الخادم المُستقبِل، يُنصِت serve للدفعات ويكتبها في مجلد. يعمل باستمرار افتراضياً؛ أضِف --once لقبول نقلة واحدة ثم الخروج. لا تشارك أي شيء مسبقاً — لا بصمات تنسخها سلفاً:</p>
+      <pre><code># on the RECEIVER
+relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031</code></pre>
+      <ul><li>يعالج المُنصِت الاتصالات واحداً تلو الآخر ويُنزِل الملفات تحت --dir.</li><li>المنفذ الافتراضي هو 9031؛ غيّره بـ --port وافتحه على جدارك الناري.</li></ul>
+      <h2>ادفع إليه (على المُرسِل)</h2>
+      <p>من الخادم المُرسِل، ادفع إلى عنوان relayium:// الخاص بالمُستقبِل. يُثبِّت الاتصال الأول بصمة المُستقبِل؛ ويتحقق منها كل اتصال بعده، وتُرفَض البصمة المتغيّرة بدل قبولها بصمت — فالمفتاح المُستبدَل أو هجوم الوسيط يُكتشَف، لا يُوثَق به. عند أول دفعة على الإطلاق، ينتظر المُرسِل لحظةً بينما يعتمده المُستقبِل (الخطوة التالية).</p>
+      <pre><code># on the SENDER
+relayium push ./build.tar.zst relayium://receiver.example.com
+
+# non-default port
+relayium push ./build.tar.zst relayium://receiver.example.com:9040</code></pre>
+      <ul><li>لا مُرحِّل ولا احتياطي: إن تعذَّر الوصول إلى المُنصِت، تفشل الدفعة — ولا تمر بايتات الملف أبداً عبر أي طرف آخر.</li><li>المحرك نفسه المُستخدَم في الأوضاع الأخرى: قابل للاستئناف، مع فحص SHA-256 لكل ملف.</li></ul>
+      <h2>اعتمِد المُرسِل عند أول دفعة (على المُستقبِل)</h2>
+      <p>في أول مرة يدفع فيها جهاز جديد إلى مُنصِتك، يُظهِر لك serve (في طرفية) من أين أتى وبصمته ويطلب منك اعتماده — مثل مُطالبة الاتصال الأول في SSH، لكن على جانب المُستقبِل:</p>
+      <pre><code># on the RECEIVER, when a new sender pushes:
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y</code></pre>
+      <ul><li>أجِب بـ y فتُحفَظ تلك البصمة في authorized_fingerprints؛ عندئذٍ تمر كل دفعة لاحقة من الجهاز نفسه بصمت.</li><li>البصمة هوية ثابتة للجهاز (تصمد عبر إعادة التشغيل وتغيّر عناوين IP)، فالاعتماد خطوة تُنفَّذ مرةً واحدة لكل مُرسِل.</li><li>أما المُرسِل، فيتعلَّم مفتاح المُنصِت عند أول اتصال (الثقة عند أول استخدام) ويُثبِّته في known_hosts.</li></ul>
+      <h2>أتمِتها (أو شغّلها دون طرفية)</h2>
+      <p>بما أن البصمة المعتمَدة تُحفَظ، لا تحتاج الدفعات اللاحقة إلى مُطالبة — لذا يدخل relayium push مباشرةً في cron أو سكربت نشر أو CI لمزامنة مُشفَّرة، مفحوصة السلامة، قابلة للاستئناف من خادم إلى خادم. حين يعمل serve دون طرفية (خدمة systemd، أنبوب) لا يستطيع المُطالبة، فيرفض المُرسِلين المجهولين؛ فوّض لهم مسبقاً بدلاً من ذلك. احصل على البصمة من relayium id لدى المُرسِل، أو انسخها من سطر &quot;rejected unauthorized peer …&quot; في سجل serve، ثم:</p>
+      <pre><code># on the RECEIVER: pre-authorize a sender without a prompt
+relayium authorize 74318e3b...</code></pre>
+      <ul><li>تقيم ملفات الهوية والثقة في ~/.config/relayium/ (تُتجاوَز بـ --config-dir، مثلاً /etc/relayium لخدمة).</li><li>authorize خاملة التكرار (idempotent) — تشغيلها مجدداً للبصمة نفسها لا يفعل شيئاً.</li></ul>
+      <h2>شغّل المُنصِت تحت systemd</h2>
+      <p>لصندوق وارد دائم التشغيل، شغّل serve كخدمة systemd. وجِّه --config-dir إلى موقع ثابت مثل /etc/relayium كي تبقى الهوية مستقرة عبر إعادات التشغيل، ودع systemd يُبقيها حيّة:</p>
+      <pre><code># /etc/systemd/system/relayium-serve.service
+[Unit]
+Description=Relayium daemon-direct listener
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/relayium serve --dir /srv/inbox --config-dir /etc/relayium
+Restart=always
+User=relayium
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+      <ul><li>systemctl enable --now relayium-serve لتشغيلها ولرفعها عند الإقلاع.</li><li>أبقِ /etc/relayium/id.key قابلاً للقراءة من مستخدم الخدمة فقط — يرفض relayium تحميل مفتاح بأذونات فضفاضة.</li></ul>
+      <h2>الأسئلة الشائعة</h2>
+      <h3>بماذا يختلف daemon direct عن push عبر SSH؟</h3>
+      <p>يوجِّه push عبر SSH النقل خلال اتصال SSH الخاص بك ويحتاج إلى حساب SSH على الطرف البعيد. أما daemon direct فلا يحتاج SSH ولا حساباً — يصادق الخادمان أحدهما الآخر ببصمة الشهادة عبر TLS مُثبَّت، وهو أخف حين يكون الجهازان كلاهما لك.</p>
+      <h3>هل عليّ نسخ البصمات يدوياً هنا وهناك؟</h3>
+      <p>لا. في طرفية، يطالبك serve باعتماد كل مُرسِل جديد عند أول دفعة له — مُظهِراً عنوانه وبصمته — ويحفظه، فتمر الدفعات اللاحقة بصمت. لا تلجأ إلى relayium id أو relayium authorize إلا في الإعدادات غير التفاعلية مثل خدمة systemd، حيث لا أحد ليُجيب على المُطالبة.</p>
+      <h3>أين تقع ملفات الهوية والثقة؟</h3>
+      <p>في ~/.config/relayium/ افتراضياً (تُتجاوَز بـ --config-dir). id.key / id.crt هما الهوية الدائمة لهذا المضيف، ويحتفظ known_hosts ببصمات المُنصِتين الذين دفعت إليهم، أما authorized_fingerprints فهو قائمة السماح بالمُرسِلين لدى المُنصِت.</p>
+      <h3>ماذا يحدث إذا تغيّرت بصمة؟</h3>
+      <p>تُرفَض الدفعة ويُطلَق تحذير. يُثبَّت مفتاح المُنصِت في known_hosts عند أول استخدام، فأي تغيّر لاحق — مضيف أُعيد ترميزه، أو هجوم وسيط — يُرفَض بدل قبوله بصمت. لا تحذف سطر known_hosts إلا إن كنت قد بدّلت المفتاح عمداً.</p>
+      <h3>هل هناك احتياطي عبر مُرحِّل؟</h3>
+      <p>لا. يفترض daemon direct عنوان مُنصِت يمكن الوصول إليه؛ فإن تعذَّر إنشاء الاتصال، يفشل. لا يُوجَّه أي شيء أبداً عبر Relayium — وهذا هو مغزى هذا الوضع.</p>
+      <div class="ctacard">
+        <p>اربط خادمين من خوادمك للنقل المباشر — دون مُرحِّل، دون SSH، دون رمز اقتران.</p>
+        <a class="cta" href="/cli">احصل على CLI</a>
+      </div>
+      <h2>تابِع القراءة</h2>
+      <ul class="related"><li><a href="/ar/compare/snapdrop">Relayium مقابل Snapdrop وPairDrop: أي نقل ملفات P2P آمن؟</a></li><li><a href="/ar/compare/airdrop">Relayium مقابل AirDrop: بديل AirDrop عبر المنصّات</a></li><li><a href="/ar/compare/wetransfer">Relayium مقابل WeTransfer: أرسل ملفات كبيرة دون الخادم</a></li><li><a href="/ar/how-to/transfer-files-android-to-iphone">كيفية نقل الملفات من Android إلى iPhone (دون كابل)</a></li><li><a href="/ar/how-to/send-files-pc-to-phone-wirelessly">إرسال الملفات من الحاسوب إلى الهاتف لاسلكيًا، دون كابل أو تطبيق</a></li><li><a href="/ar/how-to/send-large-files-without-cloud">كيفية إرسال الملفات الكبيرة دون سحابة</a></li><li><a href="/ar/guides/transfer-files-from-terminal">انقل الملفات من الطرفية باستخدام Relayium CLI</a></li><li><a href="/ar/guides/back-up-a-server-over-ssh">انسخ الملفات احتياطيًا إلى خادمك عبر SSH باستخدام Relayium CLI</a></li><li><a href="/ar/guides/send-a-file-to-someone">إرسال ملف إلى شخص ما عبر الشبكات باستخدام واجهة Relayium الطرفية (CLI)</a></li><li><a href="/ar/guides/sync-a-large-folder-between-servers">مزامنة مجلد كبير بين خادمين (قابلة للاستئناف، في الخلفية)</a></li><li><a href="/ar/guides/push-to-cloud-pull-on-another-computer">ادفع الملفات إلى السحابة، واسحبها على حاسوب آخر</a></li><li><a href="/ar/how-to/share-a-file-with-an-expiring-link">مشاركة ملف برابط تنزيل آمن ينتهي صلاحيته</a></li><li><a href="/ar/guides/self-host-relayium">الاستضافة الذاتية لـ Relayium: شغّل خادم نقل الملفات الخاص بك</a></li><li><a href="/ar/how-to/send-files-between-two-computers-over-the-internet">إرسال الملفات بين جهازي كمبيوتر عبر الإنترنت</a></li><li><a href="/ar/compare/croc">Relayium مقابل croc: نقل ملفات مُشفَّر من الطرفية</a></li><li><a href="/ar/guides/how-relayium-encrypts-your-files">كيف يُشفِّر Relayium ملفاتك من الطرف إلى الطرف</a></li><li><a href="/ar/compare/google-drive">Relayium مقابل Google Drive لإرسال الملفات</a></li><li><a href="/ar/compare/rsync">Relayium مقابل rsync: زامِن المجلدات دون إعداد SSH</a></li><li><a href="/ar/compare/firefox-send">أفضل بديل لـ Firefox Send في 2026</a></li><li><a href="/ar/how-to/transfer-files-by-scanning-a-qr-code">نقل الملفات بمسح رمز QR ضوئياً</a></li><li><a href="/ar/guides/receive-files-from-the-command-line">استقبال الملفات من سطر الأوامر</a></li><li><a href="/ar/how-to/send-a-folder">كيفية إرسال مجلد كامل، لا ملفات فقط</a></li><li><a href="/ar/guides/run-relayium-as-an-always-on-service">شغّل Relayium كخدمة استقبال دائمة التشغيل</a></li><li><a href="/ar/how-to/automate-server-backups">أتمتة النسخ الاحتياطي المُشفَّر للخادم باستخدام مهمة cron</a></li><li><a href="/ar/compare/localsend">Relayium مقابل LocalSend: أيّ نقل ملفات محلي تستخدم</a></li><li><a href="/ar/compare/scp">Relayium مقابل scp: نقل ملفات أبسط عبر SSH</a></li><li><a href="/ar/compare/magic-wormhole">Relayium مقابل magic-wormhole: نقل الملفات عبر CLI</a></li><li><a href="/ar/compare/nextcloud">Relayium مقابل Nextcloud لإرسال الملفات</a></li><li><a href="/ar/compare/dropbox">Relayium مقابل Dropbox لإرسال ملف</a></li><li><a href="/ar/how-to/airdrop-for-windows-and-android">AirDrop لأنظمة Windows وLinux وAndroid</a></li><li><a href="/ar/how-to/transfer-files-between-mac-and-windows">نقل الملفات بين جهاز Mac وحاسوب Windows</a></li><li><a href="/ar/how-to/send-files-on-the-same-wifi">إرسال الملفات بين الأجهزة على نفس شبكة Wi-Fi</a></li><li><a href="/ar/guides/what-is-peer-to-peer-file-transfer">ما هو نقل الملفات من الند للند؟</a></li><li><a href="/ar/guides/is-it-safe-to-send-files-over-the-internet">هل من الآمن إرسال الملفات عبر الإنترنت؟</a></li><li><a href="/ar/guides/bring-your-own-node">شغّل عقدتك الخاصة: استخدم مُرحِّل وتخزين Relayium مجانًا</a></li><li><a href="/ar/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ar">← Relayium</a>
+        <a href="/ar/guides">الأدلة</a>
+        <a href="/ar/privacy">undefined</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

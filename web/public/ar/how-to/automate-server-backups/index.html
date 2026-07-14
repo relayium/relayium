@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>أتمتة النسخ الاحتياطي المُشفَّر للخادم باستخدام مهمة cron · Relayium</title>
+    <meta name="description" content="جدوِل relayium push أو sync عبر cron لنسخ مجلد إلى خادم آخر تلقائيًا — مُشفَّر، قابل للاستئناف، مُتحقَّق منه بـ SHA-256، ومجاني لتشغيله بأي وتيرة تشاء." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ar/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/automate-server-backups" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/automate-server-backups" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="أتمتة النسخ الاحتياطي المُشفَّر للخادم باستخدام مهمة cron" />
+    <meta property="og:description" content="جدوِل relayium push أو sync عبر cron لنسخ مجلد إلى خادم آخر تلقائيًا — مُشفَّر، قابل للاستئناف، مُتحقَّق منه بـ SHA-256، ومجاني لتشغيله بأي وتيرة تشاء." />
+    <meta property="og:url" content="https://relayium.com/ar/how-to/automate-server-backups" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:locale" content="ar_AR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="أتمتة النسخ الاحتياطي المُشفَّر للخادم باستخدام مهمة cron" />
+    <meta name="twitter:description" content="جدوِل relayium push أو sync عبر cron لنسخ مجلد إلى خادم آخر تلقائيًا — مُشفَّر، قابل للاستئناف، مُتحقَّق منه بـ SHA-256، ومجاني لتشغيله بأي وتيرة تشاء." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"أتمتة النسخ الاحتياطي المُشفَّر للخادم باستخدام مهمة cron","description":"جدوِل relayium push أو sync عبر cron لنسخ مجلد إلى خادم آخر تلقائيًا — مُشفَّر، قابل للاستئناف، مُتحقَّق منه بـ SHA-256، ومجاني لتشغيله بأي وتيرة تشاء.","inLanguage":"ar","dateModified":"2026-07-12","mainEntityOfPage":"https://relayium.com/ar/how-to/automate-server-backups","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل يحتاج خادم النسخ الاحتياطي إلى تثبيت relayium؟","acceptedAnswer":{"@type":"Answer","text":"يعتمد على الأمر. يعمل push في كلتا الحالتين: مع تثبيت relayium يستخدم البروتوكول الأصلي (الاستئناف + SHA-256 لكل ملف)؛ ومن دونه، يتراجع push إلى تدفق tar عادي عبر SSH، فيعمل حتى الخادم المجرّد. أما sync فيحتاج دائمًا إلى بروتوكول relayium الأصلي على الطرف البعيد — لا يوجد بديل tar لـ sync، فثبِّته هناك أولًا."}},{"@type":"Question","name":"هل النسخة الاحتياطية مُشفَّرة ومُتحقَّق منها؟","acceptedAnswer":{"@type":"Answer","text":"نعم. يُفحَص كل ملف بتجزئة SHA-256 من الطرف إلى الطرف، والدفع عبر SSH أو daemon-direct يعني أن البايتات محمية أصلًا بتشفير ذلك الاتصال — لا شيء إضافي لضبطه."}},{"@type":"Question","name":"ماذا يحدث إذا قوطعت مهمة cron في منتصفها؟","acceptedAnswer":{"@type":"Answer","text":"مع وجود relayium على الطرفين، يستأنف التشغيل المُجدوَل التالي الملفات الجزئية بدلًا من إعادة إرسال كل شيء. مرِّر --no-resume إذا أردت في أي وقت إعادة إرسال كاملة ونظيفة بدلًا من ذلك."}},{"@type":"Question","name":"هل يمكن أن يمحو --delete وجهتي بالخطأ؟","acceptedAnswer":{"@type":"Answer","text":"يرفض sync التشغيل مع --delete إذا لم يحتوِ مجلد المصدر على أي ملف، ويجب تشغيل المستقبِل بـ serve --allow-delete حتى تسري عمليات الحذف أصلًا — وإلا تُتجاهَل ويُبلَّغ عنها إليك."}},{"@type":"Question","name":"هل أحتاج إلى حساب، وهل يكلّف هذا شيئًا؟","acceptedAnswer":{"@type":"Answer","text":"لا. واجهة CLI مجانية ولا تحتاج إلى حساب لـ push أو pull أو sync — يجري النقل عبر اتصال SSH الخاص بك أو اتصال daemon مباشر، لا عبر خوادم Relayium."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:24px 0 8px;font-size:14px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ar">Relayium</a></header>
+      <h1>أتمتة النسخ الاحتياطي المُشفَّر للخادم باستخدام مهمة cron</h1>
+      <p class="updated">آخر تحديث: 2026-07-12</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/automate-server-backups">English</a><a href="/zh/how-to/automate-server-backups">中文</a><a href="/ja/how-to/automate-server-backups">日本語</a><a href="/ko/how-to/automate-server-backups">한국어</a><a href="/de/how-to/automate-server-backups">Deutsch</a><a href="/fr/how-to/automate-server-backups">Français</a><a href="/ar/how-to/automate-server-backups" aria-current="true">العربية</a></nav>
+      <p class="lead">النسخ الاحتياطي الذي عليك أن تتذكر تشغيله لا يحدث. أما cron فيتذكر، وواجهة Relayium CLI مبنية لذلك: أمر واحد غير تفاعلي ينسخ (أو يعكس) مجلدًا إلى جهاز آخر، ويتحقق من كل ملف، ويكمل من حيث توقف إذا انقطعت الشبكة.</p>
+      <p class="lead">يغطي هذا الدليل جدولة relayium push و relayium sync التزايدي عبر cron، ووسيلتَي النقل اللتين يمكن توجيه أيٍّ منهما إليهما، وأسطر crontab الجاهزة للنسخ.</p>
+      <h2>push مقابل sync: نسخة كاملة أم مرآة تزايدية</h2>
+      <p>كلٌّ من push و sync ينقل مجلدًا إلى جهاز آخر، وكلاهما آمن للتشغيل المتكرر، لكنهما يحلّان مشكلتَي نسخ احتياطي مختلفتَين قليلًا.</p>
+      <p>يرسل push نسخة عبر SSH أو daemon-direct في كل مرة تُشغّله — بسيط، بل ويعمل حتى مع خادم مجرّد لا يوجد عليه relayium عبر بديل tar. أما sync فيُبقي الوجهة كمرآة تزايدية أحادية الاتجاه للمصدر: تُعاد فقط الملفات المتغيرة، فتصبح مزامنة ليلية لمجلد كبير سريعة بعد التشغيل الأول. يحتاج sync دائمًا إلى بروتوكول relayium الأصلي على الطرفين — ولا يوجد لديه بديل tar.</p>
+      <ul><li>استخدم push لنسخة مجدولة مباشرة، خاصةً إلى خادم قد لا يكون relayium مثبتًا عليه.</li><li>استخدم sync لمجلد كبير أو كثير التغير حيث تكون إعادة إرسال كل شيء كل ليلة إهدارًا.</li><li>كلاهما مُتحقَّق منه بـ SHA-256 لكل ملف وقابل للاستئناف إذا قُطع.</li></ul>
+      <h2>Before you start</h2>
+      <p>Everything below is the relayium CLI, so install it first if you haven&#39;t. On macOS or Linux, one command drops a prebuilt binary on your PATH:</p>
+      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <ul><li>Prefer to pick the file yourself, or on Windows? Grab a binary from the releases page — relayium.com/cli lists every install option (or go build -o relayium ./cmd/relayium if you have Go).</li><li>relayium --version confirms it&#39;s installed. Skip this and the commands below just print &#39;command not found&#39;.</li></ul>
+      <h2>وسيلتا نقل: SSH أو daemon-direct</h2>
+      <p>وجِّه أيًّا من الأمرين إلى وجهة SSH (بأسلوب scp، باستخدام ~/.ssh/config الخاص بك)، أو إذا كان الجهاز الآخر يشغّل relayium serve، فمباشرةً إليه عبر بروتوكول daemon-direct — دون حاجة إلى SSH.</p>
+      <pre><code># SSH destination — uses your existing SSH keys and config
+relayium push ./data user@backup-server:/srv/backups/
+
+# daemon-direct — the destination runs &quot;relayium serve&quot;, no SSH required
+relayium push ./data relayium://backup-server:9031</code></pre>
+      <ul><li>اتصالات daemon-direct مثبَّتة على TLS 1.3 مع الثقة عند الاستخدام الأول، ثم تُثبَّت على تلك البصمة في كل تشغيل لاحق.</li><li>يقبل sync الشكلين نفسيهما للوجهة كما يقبلهما push.</li></ul>
+      <h2>جدولته باستخدام cron</h2>
+      <p>كلٌّ من push و sync أمر واحد غير تفاعلي، فيندرج مباشرةً في crontab. وجِّهه إلى مفتاح SSH بلا عبارة مرور (أو إلى وكيل)، وسجِّل المُخرجات لتظهر حالات الفشل:</p>
+      <pre><code># full copy every night at 2am — add to your crontab (crontab -e)
+0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1
+
+# incremental mirror every 15 minutes instead
+*/15 * * * * relayium sync -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ &gt;&gt; ~/relayium-sync.log 2&gt;&amp;1</code></pre>
+      <ul><li>يخرج الأمر بحالة غير صفرية إذا فشل أي ملف في فحص سلامته، فتلتقط رسالة cron عند الفشل المشكلات.</li><li>التشغيل المُقاطَع يستأنف ببساطة أو يلحق بالركب في التشغيل المُجدوَل التالي.</li></ul>
+      <h2>عكس عمليات الحذف والمزامنة الفورية</h2>
+      <p>افتراضيًا، لا يفعل sync سوى إضافة الملفات أو تحديثها في الوجهة. أضف --delete لجعله مرآة حقيقية تزيل أيضًا الملفات التي لم تعد موجودة في المصدر — يجب أن يكون الطرف المستقبِل مُنصِتًا صراحةً بـ serve --allow-delete، وإلا تُتجاهَل عمليات الحذف بصمت ويُبلَّغ عنها بأنها مرفوضة. كما يرفض sync استخدام --delete تمامًا إذا لم يُحلَّل مجلد المصدر إلى أي ملف، فلا يمكن لخطأ مطبعي في مسار المصدر أن يمحو الوجهة.</p>
+      <p>إذا كنت تفضّل ألا تنتظر الدورة التالية لـ cron، يُبقي --watch عمل relayium sync مستمرًا ويعيد المزامنة تلقائيًا بعد لحظة من تغيّر أي ملف تحت المصدر — بديل خفيف عن الاستطلاع وفق جدول زمني.</p>
+      <ul><li>relayium sync ./data user@backup-server:/srv/backups/ --delete يعكس عمليات الحذف (يحتاج المستقبِل إلى serve --allow-delete).</li><li>relayium sync ./data user@backup-server:/srv/backups/ --watch يبقى مستمرًا ويعيد المزامنة عند التغيّر بدلًا من التشغيل مرة واحدة من cron.</li></ul>
+      <h2>الأسئلة الشائعة</h2>
+      <h3>هل يحتاج خادم النسخ الاحتياطي إلى تثبيت relayium؟</h3>
+      <p>يعتمد على الأمر. يعمل push في كلتا الحالتين: مع تثبيت relayium يستخدم البروتوكول الأصلي (الاستئناف + SHA-256 لكل ملف)؛ ومن دونه، يتراجع push إلى تدفق tar عادي عبر SSH، فيعمل حتى الخادم المجرّد. أما sync فيحتاج دائمًا إلى بروتوكول relayium الأصلي على الطرف البعيد — لا يوجد بديل tar لـ sync، فثبِّته هناك أولًا.</p>
+      <h3>هل النسخة الاحتياطية مُشفَّرة ومُتحقَّق منها؟</h3>
+      <p>نعم. يُفحَص كل ملف بتجزئة SHA-256 من الطرف إلى الطرف، والدفع عبر SSH أو daemon-direct يعني أن البايتات محمية أصلًا بتشفير ذلك الاتصال — لا شيء إضافي لضبطه.</p>
+      <h3>ماذا يحدث إذا قوطعت مهمة cron في منتصفها؟</h3>
+      <p>مع وجود relayium على الطرفين، يستأنف التشغيل المُجدوَل التالي الملفات الجزئية بدلًا من إعادة إرسال كل شيء. مرِّر --no-resume إذا أردت في أي وقت إعادة إرسال كاملة ونظيفة بدلًا من ذلك.</p>
+      <h3>هل يمكن أن يمحو --delete وجهتي بالخطأ؟</h3>
+      <p>يرفض sync التشغيل مع --delete إذا لم يحتوِ مجلد المصدر على أي ملف، ويجب تشغيل المستقبِل بـ serve --allow-delete حتى تسري عمليات الحذف أصلًا — وإلا تُتجاهَل ويُبلَّغ عنها إليك.</p>
+      <h3>هل أحتاج إلى حساب، وهل يكلّف هذا شيئًا؟</h3>
+      <p>لا. واجهة CLI مجانية ولا تحتاج إلى حساب لـ push أو pull أو sync — يجري النقل عبر اتصال SSH الخاص بك أو اتصال daemon مباشر، لا عبر خوادم Relayium.</p>
+      <div class="ctacard">
+        <p>ضع نسخك الاحتياطية على جدول لا يتوجب عليك تذكّره — مُشفَّرة، قابلة للاستئناف، ومجانية.</p>
+        <a class="cta" href="/cli">احصل على CLI</a>
+      </div>
+      <h2>تابع القراءة</h2>
+      <ul class="related"><li><a href="/ar/compare/snapdrop">Relayium مقابل Snapdrop وPairDrop: أي نقل ملفات P2P آمن؟</a></li><li><a href="/ar/compare/airdrop">Relayium مقابل AirDrop: بديل AirDrop عبر المنصّات</a></li><li><a href="/ar/compare/wetransfer">Relayium مقابل WeTransfer: أرسل ملفات كبيرة دون الخادم</a></li><li><a href="/ar/how-to/transfer-files-android-to-iphone">كيفية نقل الملفات من Android إلى iPhone (دون كابل)</a></li><li><a href="/ar/how-to/send-files-pc-to-phone-wirelessly">إرسال الملفات من الحاسوب إلى الهاتف لاسلكيًا، دون كابل أو تطبيق</a></li><li><a href="/ar/how-to/send-large-files-without-cloud">كيفية إرسال الملفات الكبيرة دون سحابة</a></li><li><a href="/ar/guides/transfer-files-from-terminal">انقل الملفات من الطرفية باستخدام Relayium CLI</a></li><li><a href="/ar/guides/back-up-a-server-over-ssh">انسخ الملفات احتياطيًا إلى خادمك عبر SSH باستخدام Relayium CLI</a></li><li><a href="/ar/guides/send-a-file-to-someone">إرسال ملف إلى شخص ما عبر الشبكات باستخدام واجهة Relayium الطرفية (CLI)</a></li><li><a href="/ar/guides/server-to-server-transfers">النقل من خادم إلى خادم باستخدام واجهة Relayium الطرفية (daemon direct)</a></li><li><a href="/ar/guides/sync-a-large-folder-between-servers">مزامنة مجلد كبير بين خادمين (قابلة للاستئناف، في الخلفية)</a></li><li><a href="/ar/guides/push-to-cloud-pull-on-another-computer">ادفع الملفات إلى السحابة، واسحبها على حاسوب آخر</a></li><li><a href="/ar/how-to/share-a-file-with-an-expiring-link">مشاركة ملف برابط تنزيل آمن ينتهي صلاحيته</a></li><li><a href="/ar/guides/self-host-relayium">الاستضافة الذاتية لـ Relayium: شغّل خادم نقل الملفات الخاص بك</a></li><li><a href="/ar/how-to/send-files-between-two-computers-over-the-internet">إرسال الملفات بين جهازي كمبيوتر عبر الإنترنت</a></li><li><a href="/ar/compare/croc">Relayium مقابل croc: نقل ملفات مُشفَّر من الطرفية</a></li><li><a href="/ar/guides/how-relayium-encrypts-your-files">كيف يُشفِّر Relayium ملفاتك من الطرف إلى الطرف</a></li><li><a href="/ar/compare/google-drive">Relayium مقابل Google Drive لإرسال الملفات</a></li><li><a href="/ar/compare/rsync">Relayium مقابل rsync: زامِن المجلدات دون إعداد SSH</a></li><li><a href="/ar/compare/firefox-send">أفضل بديل لـ Firefox Send في 2026</a></li><li><a href="/ar/how-to/transfer-files-by-scanning-a-qr-code">نقل الملفات بمسح رمز QR ضوئياً</a></li><li><a href="/ar/guides/receive-files-from-the-command-line">استقبال الملفات من سطر الأوامر</a></li><li><a href="/ar/how-to/send-a-folder">كيفية إرسال مجلد كامل، لا ملفات فقط</a></li><li><a href="/ar/guides/run-relayium-as-an-always-on-service">شغّل Relayium كخدمة استقبال دائمة التشغيل</a></li><li><a href="/ar/compare/localsend">Relayium مقابل LocalSend: أيّ نقل ملفات محلي تستخدم</a></li><li><a href="/ar/compare/scp">Relayium مقابل scp: نقل ملفات أبسط عبر SSH</a></li><li><a href="/ar/compare/magic-wormhole">Relayium مقابل magic-wormhole: نقل الملفات عبر CLI</a></li><li><a href="/ar/compare/nextcloud">Relayium مقابل Nextcloud لإرسال الملفات</a></li><li><a href="/ar/compare/dropbox">Relayium مقابل Dropbox لإرسال ملف</a></li><li><a href="/ar/how-to/airdrop-for-windows-and-android">AirDrop لأنظمة Windows وLinux وAndroid</a></li><li><a href="/ar/how-to/transfer-files-between-mac-and-windows">نقل الملفات بين جهاز Mac وحاسوب Windows</a></li><li><a href="/ar/how-to/send-files-on-the-same-wifi">إرسال الملفات بين الأجهزة على نفس شبكة Wi-Fi</a></li><li><a href="/ar/guides/what-is-peer-to-peer-file-transfer">ما هو نقل الملفات من الند للند؟</a></li><li><a href="/ar/guides/is-it-safe-to-send-files-over-the-internet">هل من الآمن إرسال الملفات عبر الإنترنت؟</a></li><li><a href="/ar/guides/bring-your-own-node">شغّل عقدتك الخاصة: استخدم مُرحِّل وتخزين Relayium مجانًا</a></li><li><a href="/ar/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ar">← Relayium</a>
+        <a href="/ar/guides">الأدلة</a>
+        <a href="/ar/privacy">undefined</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>
