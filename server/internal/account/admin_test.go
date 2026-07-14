@@ -84,7 +84,7 @@ func TestAdminSettingsUpdateValid(t *testing.T) {
 	// 10 MiB file, 100 MiB quota, 12h default, 48h max, 5 MiB relay cap.
 	req, _ := http.NewRequest("POST", ts.URL+"/admin/settings", strings.NewReader(
 		"max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48"+
-			"&default_retention=0&default_max_downloads=5&max_max_downloads=100"))
+			"&default_retention=0&default_max_downloads=5&max_max_downloads=100&storage_disk_cap_mb=0"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(cookie)
 	resp, _ := client.Do(req)
@@ -112,7 +112,7 @@ func TestAdminSettingsRejectsInvalid(t *testing.T) {
 		resp, _ := client.Do(req)
 		return resp.StatusCode
 	}
-	const okRetention = "&default_retention=0&default_max_downloads=5&max_max_downloads=100"
+	const okRetention = "&default_retention=0&default_max_downloads=5&max_max_downloads=100&storage_disk_cap_mb=0"
 	// default_ttl (48h) > max_ttl (24h) → rejected.
 	if code := post("max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=48&max_ttl_hours=24" + okRetention); code != http.StatusBadRequest {
 		t.Fatalf("default>max: want 400, got %d", code)
@@ -123,12 +123,12 @@ func TestAdminSettingsRejectsInvalid(t *testing.T) {
 	}
 	// default_retention out of range (0..2) → rejected.
 	if code := post("max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48" +
-		"&default_retention=3&default_max_downloads=5&max_max_downloads=100"); code != http.StatusBadRequest {
+		"&default_retention=3&default_max_downloads=5&max_max_downloads=100&storage_disk_cap_mb=0"); code != http.StatusBadRequest {
 		t.Fatalf("default_retention=3: want 400, got %d", code)
 	}
 	// default_max_downloads > max_max_downloads → rejected.
 	if code := post("max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48" +
-		"&default_retention=2&default_max_downloads=999&max_max_downloads=100"); code != http.StatusBadRequest {
+		"&default_retention=2&default_max_downloads=999&max_max_downloads=100&storage_disk_cap_mb=0"); code != http.StatusBadRequest {
 		t.Fatalf("default_max_downloads>max: want 400, got %d", code)
 	}
 	// Nothing persisted by the rejected posts.

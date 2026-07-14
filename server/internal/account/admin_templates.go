@@ -15,6 +15,7 @@ type adminSettingsView struct {
 	DefaultRetention    int64
 	DefaultMaxDownloads int64
 	MaxMaxDownloads     int64
+	StorageDiskCapMB    int64 // global logical storage ceiling (MiB); 0 = unlimited
 }
 
 type adminHomeData struct {
@@ -32,6 +33,7 @@ type adminHomeData struct {
 	NextHref   string            // empty = no next page
 	SortHref   map[string]string // column key ("created"/"email"/"relayed"/"upload"/"download"/"storage") -> sort link on click
 	Nodes      []adminNodeView
+	Plans      []planView
 	Settings   adminSettingsView
 
 	FleetTokens      []adminFleetTokenView
@@ -121,6 +123,12 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 .lim{display:flex;gap:6px;align-items:center}
 .lim input{width:70px;font:inherit;padding:5px 7px;border:1px solid var(--bd);border-radius:6px;background:var(--card);color:var(--fg)}
 .lim button,td .danger{padding:5px 10px;font-size:12px}
+.plan-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.plan-row input,.plan-row button{font:inherit;padding:5px 7px;border:1px solid var(--bd);border-radius:6px;background:var(--card);color:var(--fg)}
+.plan-row input[type=text]{width:110px}
+.plan-row input[type=number]{width:70px}
+.plan-row button{background:var(--a);color:#fff;border:0;cursor:pointer;font-size:12px}
+.plan-row label{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted)}
 .danger{background:#e5484d}</style></head>
 <body>
 <div class="top"><h1>后台概览</h1>
@@ -192,6 +200,31 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 {{end}}
 </section>
 
+<section class="plans">
+<h2>套餐（{{len .Plans}}）</h2>
+<table>
+<thead><tr><th>ID</th><th>名称</th><th>存储(MB)</th><th>流量(GB/月)</th><th>暂存天数</th><th>月付(分)</th><th>年付(分)</th><th>排序</th><th>启用</th><th></th></tr></thead>
+<tbody>
+{{range .Plans}}
+<tr><td colspan="10">
+<form method="post" action="/admin/plans" class="plan-row">
+<input type="hidden" name="id" value="{{.ID}}">
+<span>{{.ID}}</span>
+<input type="text" name="name" value="{{.Name}}" title="名称" required>
+<input type="number" name="storage_mb" min="0" value="{{.StorageMB}}" title="存储(MB)">
+<input type="number" name="traffic_gb" min="0" value="{{.TrafficGB}}" title="流量(GB/月)">
+<input type="number" name="retention_days" min="0" value="{{.RetentionDays}}" title="暂存天数">
+<input type="number" name="price_monthly_cents" min="0" value="{{.PriceMonthlyCents}}" title="月付(分)">
+<input type="number" name="price_yearly_cents" min="0" value="{{.PriceYearlyCents}}" title="年付(分)">
+<input type="number" name="sort_order" min="0" value="{{.SortOrder}}" title="排序">
+<label><input type="checkbox" name="active" value="1"{{if .Active}} checked{{end}}> 启用</label>
+<button type="submit">保存</button>
+</form>
+</td></tr>
+{{end}}
+</tbody></table>
+</section>
+
 <section class="settings">
 <h2>暂存传输设置</h2>
 <form method="post" action="/admin/settings" class="grid">
@@ -206,6 +239,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 </select></label>
 <label>默认下载次数上限<input type="number" name="default_max_downloads" min="1" value="{{.Settings.DefaultMaxDownloads}}"></label>
 <label>下载次数上限的上限<input type="number" name="max_max_downloads" min="1" value="{{.Settings.MaxMaxDownloads}}"></label>
+<label>全局存储上限 (MiB，0=无限)<input type="number" name="storage_disk_cap_mb" min="0" value="{{.Settings.StorageDiskCapMB}}"></label>
 <button type="submit">保存设置</button>
 </form>
 </section>

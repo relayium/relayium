@@ -66,6 +66,37 @@ func nodeRunCommandGo(centralURL, token string) string {
 		" RELAYIUM_NODE_TOKEN=" + token + " RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh"
 }
 
+// planView is a Plan prepared for the admin template: stored bytes/secs/cents
+// converted to the display units its edit form uses (MB/GB/days, cents as-is).
+type planView struct {
+	ID                string
+	Name              string
+	StorageMB         int64
+	TrafficGB         int64
+	RetentionDays     int64
+	PriceMonthlyCents int64
+	PriceYearlyCents  int64
+	SortOrder         int64
+	Active            bool
+}
+
+func planViews(plans []Plan) []planView {
+	out := make([]planView, 0, len(plans))
+	for _, p := range plans {
+		out = append(out, planView{
+			ID: p.ID, Name: p.Name,
+			StorageMB:         p.StorageBytes >> 20,
+			TrafficGB:         p.TrafficBytes >> 30,
+			RetentionDays:     p.RetentionSecs / 86400,
+			PriceMonthlyCents: p.PriceMonthly,
+			PriceYearlyCents:  p.PriceYearly,
+			SortOrder:         p.SortOrder,
+			Active:            p.Active,
+		})
+	}
+	return out
+}
+
 // adminListHref builds a /admin list link, keeping only non-default params, URL-encoded.
 func adminListHref(search, sort, dir, period string, page int) string {
 	v := url.Values{}
@@ -135,6 +166,7 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	mux.Handle("POST /admin/login", s.csrfGuard(http.HandlerFunc(s.handleAdminLogin)))
 	mux.Handle("POST /admin/logout", s.csrfGuard(http.HandlerFunc(s.handleAdminLogout)))
 	mux.Handle("POST /admin/settings", s.csrfGuard(http.HandlerFunc(s.handleAdminSettings)))
+	mux.Handle("POST /admin/plans", s.csrfGuard(http.HandlerFunc(s.handleAdminUpsertPlan)))
 	mux.Handle("POST /admin/nodes/token", s.csrfGuard(http.HandlerFunc(s.handleAdminMintToken)))
 	mux.Handle("POST /admin/nodes/token/{id}/revoke", s.csrfGuard(http.HandlerFunc(s.handleAdminRevokeToken)))
 	mux.Handle("POST /admin/nodes/{id}/limits", s.csrfGuard(http.HandlerFunc(s.handleAdminNodeLimits)))
@@ -315,11 +347,18 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 	}
 
 	st := s.resolveSettings(r.Context())
+	var planVs []planView
+	if plans, plerr := s.store.ListPlans(r.Context()); plerr != nil {
+		log.Printf("admin: ListPlans failed: %v", plerr)
+	} else {
+		planVs = planViews(plans)
+	}
 	return adminHomeData{
 		Metrics: metrics, Users: rows, Total: total, Page: page, TotalPages: totalPages,
 		Search: search, Sort: sortBy, Dir: dir, Period: period, Months: months,
 		PrevHref: prev, NextHref: next, SortHref: sortHref,
 		Nodes: nodeVs, FleetNodeCount: fleetNodeCount, FleetTokens: tokenVs,
+		Plans: planVs,
 		Settings: adminSettingsView{
 			MaxFileSizeMB:       st.MaxFileSize / (1024 * 1024),
 			DailyQuotaMB:        st.DailyQuota / (1024 * 1024),
@@ -328,6 +367,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 			DefaultRetention:    st.DefaultRetention,
 			DefaultMaxDownloads: st.DefaultMaxDownloads,
 			MaxMaxDownloads:     st.MaxMaxDownloads,
+			StorageDiskCapMB:    st.StorageDiskCap / (1024 * 1024),
 		},
 	}, nil
 }
@@ -369,7 +409,8 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 	defRetention, ok5 := enumi("default_retention")
 	defMaxDL, ok6 := atoi("default_max_downloads")
 	maxMaxDL, ok7 := atoi("max_max_downloads")
-	if !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7) ||
+	storageCapMB, ok8 := enumi("storage_disk_cap_mb")
+	if !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8) ||
 		defH > maxH || defRetention > retentionCount || defMaxDL > maxMaxDL {
 		http.Error(w, "invalid settings (positive integers; default_ttl <= max_ttl; "+
 			"default_retention in 0..2; default_max_downloads <= max_max_downloads)", http.StatusBadRequest)
@@ -387,12 +428,63 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		{SettingDefaultRetention, defRetention},
 		{SettingDefaultMaxDownloads, defMaxDL},
 		{SettingMaxMaxDownloads, maxMaxDL},
+		{SettingStorageDiskCap, storageCapMB * 1024 * 1024},
 	}
 	for _, u := range updates {
 		if err := s.store.SetSetting(r.Context(), u.key, u.val, now); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
+	}
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// handleAdminUpsertPlan validates a plan-edit form and upserts the plan,
+// refusing an edit that would leave zero active plans.
+func (s *Service) handleAdminUpsertPlan(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	id := strings.TrimSpace(r.FormValue("id"))
+	name := strings.TrimSpace(r.FormValue("name"))
+	nn := func(k string) (int64, bool) { // non-negative int
+		n, err := strconv.ParseInt(strings.TrimSpace(r.FormValue(k)), 10, 64)
+		return n, err == nil && n >= 0
+	}
+	storageMB, ok1 := nn("storage_mb")
+	trafficGB, ok2 := nn("traffic_gb")
+	retDays, ok3 := nn("retention_days")
+	pm, ok4 := nn("price_monthly_cents")
+	py, ok5 := nn("price_yearly_cents")
+	sort, ok6 := nn("sort_order")
+	active := r.FormValue("active") == "1"
+	if id == "" || name == "" || !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6) {
+		http.Error(w, "invalid plan (non-negative integers; id/name required)", http.StatusBadRequest)
+		return
+	}
+	// Never leave zero active plans.
+	if !active {
+		if n, err := s.store.CountActivePlans(r.Context()); err == nil {
+			if cur, ok, _ := s.store.GetPlan(r.Context(), id); ok && cur.Active && n <= 1 {
+				http.Error(w, "at least one plan must stay active", http.StatusBadRequest)
+				return
+			}
+		}
+	}
+	p := Plan{
+		ID: id, Name: name,
+		StorageBytes: storageMB << 20, TrafficBytes: trafficGB << 30,
+		RetentionSecs: retDays * 86400, PriceMonthly: pm, PriceYearly: py,
+		SortOrder: sort, Active: active, UpdatedAt: s.now().Unix(),
+	}
+	if err := s.store.UpsertPlan(r.Context(), p); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
 	}
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
