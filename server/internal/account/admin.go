@@ -15,6 +15,17 @@ const (
 	adminCookie       = "relayium_admin"
 	adminSessionTTL   = 12 * time.Hour
 	adminUsersPerPage = 50
+
+	// maxConfigMB bounds admin-supplied MB/GB fields before they're shifted
+	// into bytes (<<20 for MB, <<30 for GB). Left unbounded, a huge value
+	// (e.g. from a typo or malicious admin input) wraps negative on the
+	// shift and is then read back as an unlimited (<=0) cap. 1<<30 MB is
+	// ~1 PiB after the shift, safely under int64 max and far beyond any
+	// sane plan/setting.
+	maxConfigMB = int64(1) << 30
+	// maxRetentionDays bounds retention_days before it's multiplied by
+	// 86400 into seconds; 100 years is far beyond any sane retention.
+	maxRetentionDays = int64(100 * 365)
 )
 
 // adminNodeView is a Node prepared for the admin template (online flag derived
@@ -408,18 +419,29 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		n, err := strconv.ParseInt(strings.TrimSpace(r.FormValue(k)), 10, 64)
 		return n, err == nil && n >= 0
 	}
-	mb, ok1 := atoi("max_file_size_mb")
-	quota, ok2 := atoi("daily_quota_mb")
+	// mbMax additionally bounds *_mb fields so the later *1024*1024 (or the
+	// plan handler's <<20/<<30) can't wrap a huge value negative and read
+	// back as an unlimited (<=0) cap.
+	mbMax := func(k string) (int64, bool) {
+		n, ok := atoi(k)
+		return n, ok && n <= maxConfigMB
+	}
+	mb, ok1 := mbMax("max_file_size_mb")
+	quota, ok2 := mbMax("daily_quota_mb")
 	defH, ok3 := atoi("default_ttl_hours")
 	maxH, ok4 := atoi("max_ttl_hours")
 	defRetention, ok5 := enumi("default_retention")
 	defMaxDL, ok6 := atoi("default_max_downloads")
 	maxMaxDL, ok7 := atoi("max_max_downloads")
-	storageCapMB, ok8 := enumi("storage_disk_cap_mb")
+	storageCapMB, ok8 := func() (int64, bool) {
+		n, ok := enumi("storage_disk_cap_mb")
+		return n, ok && n <= maxConfigMB
+	}()
 	if !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8) ||
 		defH > maxH || defRetention > retentionCount || defMaxDL > maxMaxDL {
 		http.Error(w, "invalid settings (positive integers; default_ttl <= max_ttl; "+
-			"default_retention in 0..2; default_max_downloads <= max_max_downloads)", http.StatusBadRequest)
+			"default_retention in 0..2; default_max_downloads <= max_max_downloads; "+
+			"*_mb fields <= 1073741824)", http.StatusBadRequest)
 		return
 	}
 	now := s.now().Unix()
@@ -462,15 +484,23 @@ func (s *Service) handleAdminUpsertPlan(w http.ResponseWriter, r *http.Request) 
 		n, err := strconv.ParseInt(strings.TrimSpace(r.FormValue(k)), 10, 64)
 		return n, err == nil && n >= 0
 	}
-	storageMB, ok1 := nn("storage_mb")
-	trafficGB, ok2 := nn("traffic_gb")
-	retDays, ok3 := nn("retention_days")
+	// nnMax additionally rejects values above maxVal, so storage_mb/traffic_gb
+	// can't overflow int64 once shifted (<<20/<<30) into bytes and wrap
+	// negative, which would silently read back as an unlimited (<=0) cap.
+	nnMax := func(k string, maxVal int64) (int64, bool) {
+		n, ok := nn(k)
+		return n, ok && n <= maxVal
+	}
+	storageMB, ok1 := nnMax("storage_mb", maxConfigMB)
+	trafficGB, ok2 := nnMax("traffic_gb", maxConfigMB)
+	retDays, ok3 := nnMax("retention_days", maxRetentionDays)
 	pm, ok4 := nn("price_monthly_cents")
 	py, ok5 := nn("price_yearly_cents")
 	sort, ok6 := nn("sort_order")
 	active := r.FormValue("active") == "1"
 	if id == "" || name == "" || !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6) {
-		http.Error(w, "invalid plan (non-negative integers; id/name required)", http.StatusBadRequest)
+		http.Error(w, "invalid plan (non-negative integers; id/name required; "+
+			"storage_mb/traffic_gb <= 1073741824; retention_days <= 36500)", http.StatusBadRequest)
 		return
 	}
 	// Never leave zero active plans. Fail closed: any store error here

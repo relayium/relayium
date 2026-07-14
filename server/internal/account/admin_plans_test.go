@@ -70,6 +70,30 @@ func TestAdminUpsertPlanRefusesDeactivatingLastActivePlan(t *testing.T) {
 	}
 }
 
+func TestAdminUpsertPlanRejectsOverflowingSize(t *testing.T) {
+	ts, _ := newAdminSettingsServer(t)
+	admin := adminLogin(t, ts)
+	form := url.Values{
+		"id": {"free"}, "name": {"Free"},
+		"storage_mb": {"999999999999999999"}, // *<<20 overflows int64
+		"traffic_gb": {"5"}, "retention_days": {"7"},
+		"price_monthly_cents": {"0"}, "price_yearly_cents": {"0"},
+		"sort_order": {"0"}, "active": {"1"},
+	}
+	req, _ := http.NewRequest("POST", ts.URL+"/admin/plans", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "http://example.test") // csrfGuard
+	req.AddCookie(admin)
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("overflowing storage_mb = %d, want 400", resp.StatusCode)
+	}
+}
+
 func TestAdminAssignUserPlanActiveOnly(t *testing.T) {
 	ts, store := newAdminSettingsServer(t)
 	admin := adminLogin(t, ts)
