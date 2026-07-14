@@ -2,6 +2,7 @@ package account
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -256,5 +257,21 @@ func TestResumableUploadConcurrentFinalize(t *testing.T) {
 	}
 	if ok != 1 {
 		t.Fatalf("exactly one finalize should succeed, got %d", ok)
+	}
+}
+
+// TestResumableUploadInitRefusedOverTraffic: init pre-checks the plan's
+// traffic cap against the client-declared ?size= and refuses before a session
+// is even minted (429), mirroring the single-shot path's per-plan gates.
+func TestResumableUploadInitRefusedOverTraffic(t *testing.T) {
+	ts, _, store, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "rtr@example.com")
+	u, _ := store.UpsertUserByEmail(context.Background(), "rtr@example.com", "")
+	_ = store.UpsertPlan(context.Background(), Plan{ID: "free", Name: "Free", StorageBytes: 1 << 30, TrafficBytes: 10, RetentionSecs: 3 * 86400, Active: true, UpdatedAt: 1})
+	_ = store.SetUserPlan(context.Background(), u.ID, "free")
+
+	// initUploadStatus posts ?size=100 (see helper); 100 > 10-byte traffic cap.
+	if code := initUploadStatus(t, ts, cookie, []byte("M")); code != http.StatusTooManyRequests {
+		t.Fatalf("over-traffic init = %d, want 429", code)
 	}
 }

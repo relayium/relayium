@@ -171,6 +171,9 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 	reqTTL, _ := strconv.ParseInt(r.URL.Query().Get("ttl"), 10, 64)
 	reqMaxDL, _ := strconv.ParseInt(r.URL.Query().Get("maxDownloads"), 10, 64)
 	ttl, maxDL := resolveRetention(burn, reqTTL, reqMaxDL, st)
+	if capSecs := s.planRetentionCap(r.Context(), u.ID); capSecs > 0 && ttl > capSecs {
+		ttl = capSecs
+	}
 
 	br := bufio.NewReader(r.Body)
 	var mlen uint32
@@ -196,6 +199,24 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 		}
 		if used+declared > st.DailyQuota {
 			http.Error(w, "daily quota exceeded", http.StatusTooManyRequests)
+			return
+		}
+	}
+
+	// Per-plan gates (billable central-stored uploads only; own-node uploads use
+	// the user's own disk and are never metered against a plan). Client-declared
+	// size is trusted only to reject early; finalize is the authoritative gate.
+	if billable {
+		if over, err := s.overGlobalStorage(r.Context(), declared); err == nil && over {
+			http.Error(w, "server storage is full", http.StatusInsufficientStorage)
+			return
+		}
+		if over, err := s.overStorage(r.Context(), u.ID, declared); err == nil && over {
+			http.Error(w, "storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
+			return
+		}
+		if over, err := s.overTraffic(r.Context(), u.ID, declared); err == nil && over {
+			http.Error(w, "monthly traffic limit reached — upgrade to continue", http.StatusTooManyRequests)
 			return
 		}
 	}
@@ -305,6 +326,22 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 
 	size := sess.received
 	now := s.now().Unix()
+	if sess.billable {
+		// Authoritative per-plan gate on the real byte count now that the upload
+		// is complete (the init pre-check only saw the client-declared size).
+		if over, err := s.overStorage(r.Context(), u.ID, size); err == nil && over {
+			s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
+			s.resumable.del(id)
+			http.Error(w, "storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
+			return
+		}
+		if over, err := s.overTraffic(r.Context(), u.ID, size); err == nil && over {
+			s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
+			s.resumable.del(id)
+			http.Error(w, "monthly traffic limit reached — upgrade to continue", http.StatusTooManyRequests)
+			return
+		}
+	}
 	if sess.billable {
 		billed := size
 		if billed < minBillableBytes {
