@@ -186,6 +186,25 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		return
 	}
 
+	// Authoritative post-write re-check on the REAL received size. The pre-gate
+	// above trusts client-declared Content-Length only to fail fast (a chunked
+	// request or an understated Content-Length yields declared<=0 and sails
+	// through it), so a dishonest/broken client could stream up to
+	// MaxFileSize past the pre-gate. This mirrors the resumable path's
+	// finalize-time authoritative check on real bytes written.
+	if billable {
+		if over, err := s.overStorage(r.Context(), u.ID, size); err == nil && over {
+			s.dropBlob(bs, blobKey, nodeID)
+			http.Error(w, "storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
+			return
+		}
+		if over, err := s.overTraffic(r.Context(), u.ID, size); err == nil && over {
+			s.dropBlob(bs, blobKey, nodeID)
+			http.Error(w, "monthly traffic limit reached — upgrade to continue", http.StatusTooManyRequests)
+			return
+		}
+	}
+
 	// Daily quota: atomically re-read the rolling 24h sum, verify this upload
 	// fits, and record the event in one transaction. This closes the read/record
 	// race where concurrent uploads each see a stale sum and collectively bust the

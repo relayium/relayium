@@ -3,6 +3,7 @@ package account
 import (
 	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -38,6 +39,44 @@ func TestUploadRefusedOverTraffic(t *testing.T) {
 	resp := postUpload(t, ts, cookie, "?ttl=0", uploadBody([]byte("m"), bytes.Repeat([]byte("A"), 50)))
 	if resp.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("over-traffic upload = %d, want 429", resp.StatusCode)
+	}
+}
+
+// TestUploadRefusedOverStorageUnderdeclared covers the authoritative post-write
+// re-check added to handleUploadFile (files.go): the pre-Put gates only trust
+// r.ContentLength, which a chunked-transfer-encoding client never sends (Go's
+// server exposes r.ContentLength == -1 for a chunked body), so both the cheap
+// pre-check ("r.ContentLength > 0") and the per-plan pre-gate's declared-size
+// math (a negative r.ContentLength clamps declared to 0) let the request sail
+// through with zero client-declared bytes even though the real body blows past
+// the storage cap. This forges that exact framing using only the stdlib
+// http.Client: wrapping the body in io.NopCloser hides its concrete
+// *bytes.Buffer type from http.NewRequest's auto-sizing, so Content-Length is
+// never set and the transport falls back to chunked encoding. Without the
+// post-Put re-check this file added, the upload would complete with 200 OK
+// despite exceeding the 10-byte cap; with it, the real written size (50 bytes)
+// is caught right after bs.Put and refused with 413.
+func TestUploadRefusedOverStorageUnderdeclared(t *testing.T) {
+	ts, _, store, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "usd@example.com")
+	u, _ := store.UpsertUserByEmail(context.Background(), "usd@example.com", "")
+	setUserPlanWith(t, store, u.ID, 10 /*storage bytes*/, 1<<30, 3*86400)
+
+	body := uploadBody([]byte("m"), bytes.Repeat([]byte("A"), 50))
+	req, err := http.NewRequest("POST", ts.URL+"/api/files?ttl=0", io.NopCloser(body))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.AddCookie(cookie)
+	if req.ContentLength != 0 {
+		t.Fatalf("test invariant broken: ContentLength = %d, want 0 (so the transport sends chunked)", req.ContentLength)
+	}
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatalf("do: %v", err)
+	}
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("under-declared (chunked) over-storage upload = %d, want 413 from the authoritative post-write re-check", resp.StatusCode)
 	}
 }
 
