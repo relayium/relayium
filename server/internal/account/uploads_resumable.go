@@ -207,15 +207,19 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 	// the user's own disk and are never metered against a plan). Client-declared
 	// size is trusted only to reject early; finalize is the authoritative gate.
 	if billable {
-		if over, err := s.overGlobalStorage(r.Context(), declared); err == nil && over {
+		declaredForPlan := declared
+		if declaredForPlan < 0 {
+			declaredForPlan = 0
+		}
+		if over, err := s.overGlobalStorage(r.Context(), declaredForPlan); err == nil && over {
 			http.Error(w, "server storage is full", http.StatusInsufficientStorage)
 			return
 		}
-		if over, err := s.overStorage(r.Context(), u.ID, declared); err == nil && over {
+		if over, err := s.overStorage(r.Context(), u.ID, declaredForPlan); err == nil && over {
 			http.Error(w, "storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
 			return
 		}
-		if over, err := s.overTraffic(r.Context(), u.ID, declared); err == nil && over {
+		if over, err := s.overTraffic(r.Context(), u.ID, declaredForPlan); err == nil && over {
 			http.Error(w, "monthly traffic limit reached — upgrade to continue", http.StatusTooManyRequests)
 			return
 		}

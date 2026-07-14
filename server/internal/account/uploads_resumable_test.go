@@ -275,3 +275,51 @@ func TestResumableUploadInitRefusedOverTraffic(t *testing.T) {
 		t.Fatalf("over-traffic init = %d, want 429", code)
 	}
 }
+
+// TestResumableFinalizeRefusedOverTraffic: init's traffic pre-check only sees
+// the client-declared ?size=, so a client can under-declare it there and still
+// push more real bytes through PATCH than the plan allows. Finalize is the
+// authoritative gate on sess.received (the real byte count): it must refuse
+// (429) and clean up the session — a status probe afterwards 404s, showing
+// both the session and its per-user slot were freed (the blob drop is
+// best-effort and not independently observable here).
+func TestResumableFinalizeRefusedOverTraffic(t *testing.T) {
+	ts, _, store, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "ftr@example.com")
+	u, _ := store.UpsertUserByEmail(context.Background(), "ftr@example.com", "")
+	// TrafficBytes=10: init declares size=5, so init's pre-check (used 0 + 5 =
+	// 5 <= 10) passes. We then PATCH 50 real bytes (well under the test
+	// server's MaxFileSize=1024), so at finalize sess.received=50 and the
+	// authoritative check (used 0 + 50 = 50 > 10) trips.
+	_ = store.UpsertPlan(context.Background(), Plan{ID: "free", Name: "Free", StorageBytes: 1 << 30, TrafficBytes: 10, RetentionSecs: 3 * 86400, Active: true, UpdatedAt: 1})
+	_ = store.SetUserPlan(context.Background(), u.ID, "free")
+
+	blob := bytes.Repeat([]byte("T"), 50)
+	uploadID := initUpload(t, ts, cookie, []byte("M"), 5, 0)
+	if code, received := patchChunk(t, ts, cookie, uploadID, blob, 0, 50, 50); code != 200 || received != 50 {
+		t.Fatalf("chunk: code=%d received=%d, want 200/50", code, received)
+	}
+
+	freq, _ := http.NewRequest("POST", ts.URL+"/api/uploads/"+uploadID+"/finalize", nil)
+	freq.AddCookie(cookie)
+	fresp, err := ts.Client().Do(freq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresp.Body.Close()
+	if fresp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("finalize over traffic: %d, want 429", fresp.StatusCode)
+	}
+
+	// Cleanup: the session must be gone, so a status probe now 404s.
+	sreq, _ := http.NewRequest("GET", ts.URL+"/api/uploads/"+uploadID, nil)
+	sreq.AddCookie(cookie)
+	sresp, err := ts.Client().Do(sreq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sresp.Body.Close()
+	if sresp.StatusCode != http.StatusNotFound {
+		t.Fatalf("after refused finalize, status probe = %d, want 404 (session should be cleaned up)", sresp.StatusCode)
+	}
+}
