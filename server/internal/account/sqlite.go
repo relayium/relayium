@@ -300,6 +300,15 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// Billing plans phase-1: every user is assigned a plan tier, defaulting
 		// to the free plan for existing and new rows alike.
 		`ALTER TABLE users ADD COLUMN plan_id TEXT NOT NULL DEFAULT 'free'`,
+		// Billing Stripe phase-2: plans carry their Stripe Price ids per billing
+		// cycle; users carry their Stripe customer/subscription state. Existing
+		// rows default to '' / 0, which reads as "no Stripe state yet".
+		`ALTER TABLE plans ADD COLUMN stripe_price_monthly_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE plans ADD COLUMN stripe_price_yearly_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE users ADD COLUMN stripe_customer_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE users ADD COLUMN subscription_status TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE users ADD COLUMN subscription_end INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE users ADD COLUMN plan_source TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -501,8 +510,11 @@ func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName 
 	email = normEmail(email)
 	var u User
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after, plan_id FROM users WHERE email = ?`, email,
-	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter, &u.PlanID)
+		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after, plan_id,
+		        stripe_customer_id, subscription_status, subscription_end, plan_source
+		   FROM users WHERE email = ?`, email,
+	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
+		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource)
 	if err == nil {
 		return u, nil
 	}
@@ -522,9 +534,11 @@ func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName 
 func (s *SQLiteStore) UserByCanonicalEmail(ctx context.Context, canonical string) (User, bool, error) {
 	var u User
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after, plan_id
+		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after, plan_id,
+		        stripe_customer_id, subscription_status, subscription_end, plan_source
 		   FROM users WHERE canonical_email = ? LIMIT 1`, canonical,
-	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter, &u.PlanID)
+	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
+		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource)
 	if err == sql.ErrNoRows {
 		return User{}, false, nil
 	}
@@ -575,8 +589,11 @@ func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (User, error) 
 	var u User
 	var strict int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes, deleted_at, purge_after, plan_id FROM users WHERE id = ?`, id,
-	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &strict, &u.DeletedAt, &u.PurgeAfter, &u.PlanID)
+		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes, deleted_at, purge_after, plan_id,
+		        stripe_customer_id, subscription_status, subscription_end, plan_source
+		   FROM users WHERE id = ?`, id,
+	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &strict, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
+		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource)
 	if err == sql.ErrNoRows {
 		return User{}, ErrNotFound
 	}
@@ -593,6 +610,80 @@ func (s *SQLiteStore) SetOnlyOwnNodes(ctx context.Context, userID string, on boo
 func (s *SQLiteStore) SetUserPlan(ctx context.Context, userID, planID string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE users SET plan_id = ? WHERE id = ?`, planID, userID)
 	return err
+}
+
+// SetUserPlanAdmin assigns a user's billing tier from the admin console,
+// recording plan_source='admin' so a later Stripe webhook (see
+// SetUserSubscription) won't fight the manual comp.
+func (s *SQLiteStore) SetUserPlanAdmin(ctx context.Context, userID, planID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET plan_id = ?, plan_source = 'admin' WHERE id = ?`, planID, userID)
+	return err
+}
+
+// SetUserStripeCustomer binds a user to their Stripe customer id, set once on
+// first checkout (or backfilled by the webhook if it observes a new customer).
+func (s *SQLiteStore) SetUserStripeCustomer(ctx context.Context, userID, customerID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET stripe_customer_id = ? WHERE id = ?`, customerID, userID)
+	return err
+}
+
+// GetUserByStripeCustomer looks up a user by Stripe customer id (webhook
+// dispatch). An empty customerID intentionally returns not-found: every
+// pre-Stripe row defaults stripe_customer_id to '', so matching "" would
+// return an arbitrary user instead of "unknown".
+func (s *SQLiteStore) GetUserByStripeCustomer(ctx context.Context, customerID string) (User, bool, error) {
+	if customerID == "" {
+		return User{}, false, nil
+	}
+	var u User
+	var strict int
+	err := s.reader().QueryRowContext(ctx,
+		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes, deleted_at, purge_after, plan_id,
+		        stripe_customer_id, subscription_status, subscription_end, plan_source
+		   FROM users WHERE stripe_customer_id = ?`, customerID,
+	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &strict, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
+		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource)
+	if err == sql.ErrNoRows {
+		return User{}, false, nil
+	}
+	if err != nil {
+		return User{}, false, err
+	}
+	u.OnlyOwnNodes = strict != 0
+	return u, true, nil
+}
+
+// SetUserSubscription updates a user's plan and subscription state together
+// (Stripe webhook path): plan_id, subscription_status, subscription_end, and
+// plan_source in one UPDATE so a reader never observes a torn intermediate
+// state.
+func (s *SQLiteStore) SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET plan_id = ?, subscription_status = ?, subscription_end = ?, plan_source = ? WHERE id = ?`,
+		planID, status, end, source, userID)
+	return err
+}
+
+// PlanByStripePrice resolves a webhook's Stripe Price id to the plan tier
+// mapped to it (either the monthly or the yearly price). An empty priceID
+// intentionally returns not-found: every plan defaults both price columns to
+// '', so matching "" would return an arbitrary plan instead of "unmapped".
+func (s *SQLiteStore) PlanByStripePrice(ctx context.Context, priceID string) (Plan, bool, error) {
+	if priceID == "" {
+		return Plan{}, false, nil
+	}
+	p, err := scanPlan(s.reader().QueryRowContext(ctx,
+		`SELECT `+planCols+` FROM plans WHERE stripe_price_monthly_id = ? OR stripe_price_yearly_id = ?`,
+		priceID, priceID))
+	if err == sql.ErrNoRows {
+		return Plan{}, false, nil
+	}
+	if err != nil {
+		return Plan{}, false, err
+	}
+	return p, true, nil
 }
 
 // SetAccountDeletion schedules a user for deletion (deleted_at + purge_after),
@@ -1569,13 +1660,14 @@ func (s *SQLiteStore) SetSetting(ctx context.Context, key string, value, at int6
 	return err
 }
 
-const planCols = `id, name, storage_bytes, traffic_bytes, retention_secs, price_monthly, price_yearly, sort_order, active, updated_at`
+const planCols = `id, name, storage_bytes, traffic_bytes, retention_secs, price_monthly, price_yearly, sort_order, active, updated_at, stripe_price_monthly_id, stripe_price_yearly_id`
 
 func scanPlan(sc rowScanner) (Plan, error) {
 	var p Plan
 	var active int64
 	err := sc.Scan(&p.ID, &p.Name, &p.StorageBytes, &p.TrafficBytes, &p.RetentionSecs,
-		&p.PriceMonthly, &p.PriceYearly, &p.SortOrder, &active, &p.UpdatedAt)
+		&p.PriceMonthly, &p.PriceYearly, &p.SortOrder, &active, &p.UpdatedAt,
+		&p.StripePriceMonthlyID, &p.StripePriceYearlyID)
 	p.Active = active != 0
 	return p, err
 }
@@ -1615,14 +1707,17 @@ func (s *SQLiteStore) UpsertPlan(ctx context.Context, p Plan) error {
 		active = 1
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO plans (`+planCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO plans (`+planCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   name=excluded.name, storage_bytes=excluded.storage_bytes,
 		   traffic_bytes=excluded.traffic_bytes, retention_secs=excluded.retention_secs,
 		   price_monthly=excluded.price_monthly, price_yearly=excluded.price_yearly,
-		   sort_order=excluded.sort_order, active=excluded.active, updated_at=excluded.updated_at`,
+		   sort_order=excluded.sort_order, active=excluded.active, updated_at=excluded.updated_at,
+		   stripe_price_monthly_id=excluded.stripe_price_monthly_id,
+		   stripe_price_yearly_id=excluded.stripe_price_yearly_id`,
 		p.ID, p.Name, p.StorageBytes, p.TrafficBytes, p.RetentionSecs,
-		p.PriceMonthly, p.PriceYearly, p.SortOrder, active, p.UpdatedAt)
+		p.PriceMonthly, p.PriceYearly, p.SortOrder, active, p.UpdatedAt,
+		p.StripePriceMonthlyID, p.StripePriceYearlyID)
 	return err
 }
 

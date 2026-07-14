@@ -28,6 +28,18 @@ type User struct {
 	PurgeAfter int64
 	// PlanID is the user's billing tier (plans.id); defaults to "free".
 	PlanID string
+	// StripeCustomerID is this user's Stripe customer id, set on first
+	// checkout; '' = no Stripe customer yet.
+	StripeCustomerID string
+	// SubscriptionStatus mirrors the Stripe subscription status ('', 'active',
+	// 'canceled', 'past_due', ...); '' = no subscription on record.
+	SubscriptionStatus string
+	// SubscriptionEnd is the current subscription period's end (unix seconds);
+	// 0 = no subscription on record.
+	SubscriptionEnd int64
+	// PlanSource records who last set PlanID: '' (default/free), 'admin'
+	// (manual comp — a Stripe webhook must not override it), or 'stripe'.
+	PlanSource string
 }
 
 // Plan is an admin-configurable billing tier: per-account storage + monthly
@@ -43,6 +55,11 @@ type Plan struct {
 	SortOrder     int64
 	Active        bool
 	UpdatedAt     int64
+	// StripePriceMonthlyID/StripePriceYearlyID are the Stripe Price ids for
+	// this tier's monthly/yearly billing cycle; '' = that cycle isn't
+	// purchasable via Stripe (e.g. the free tier, or an unmapped price).
+	StripePriceMonthlyID string
+	StripePriceYearlyID  string
 }
 
 // Identity links an external auth subject (google sub, or the email itself) to a user.
@@ -325,6 +342,20 @@ type Store interface {
 	SetOnlyOwnNodes(ctx context.Context, userID string, on bool) error
 	// SetUserPlan assigns a user's billing tier (plans.id).
 	SetUserPlan(ctx context.Context, userID, planID string) error
+	// SetUserPlanAdmin assigns a user's billing tier from the admin console,
+	// recording plan_source='admin' so a later Stripe webhook won't override it.
+	SetUserPlanAdmin(ctx context.Context, userID, planID string) error
+	// SetUserStripeCustomer binds a user to their Stripe customer id.
+	SetUserStripeCustomer(ctx context.Context, userID, customerID string) error
+	// GetUserByStripeCustomer looks up a user by Stripe customer id (webhook
+	// dispatch). An empty customerID returns not-found.
+	GetUserByStripeCustomer(ctx context.Context, customerID string) (User, bool, error)
+	// SetUserSubscription updates plan_id, subscription_status, subscription_end,
+	// and plan_source together (Stripe webhook path).
+	SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source string) error
+	// PlanByStripePrice resolves a webhook's Stripe Price id (monthly or yearly)
+	// to the plan tier mapped to it. An empty priceID returns not-found.
+	PlanByStripePrice(ctx context.Context, priceID string) (Plan, bool, error)
 	// SetAccountDeletion schedules a user for deletion: sets deleted_at and
 	// purge_after (the GC hard-delete deadline), resetting purge_reminder_sent
 	// so a re-request re-arms the reminder.
