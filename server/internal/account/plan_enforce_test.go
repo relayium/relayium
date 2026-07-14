@@ -45,8 +45,8 @@ func TestPlanForUserFallsBackToFree(t *testing.T) {
 	ctx := context.Background()
 	u, _ := st.UpsertUserByEmail(ctx, "z@example.com", "")
 	_ = st.SetUserPlan(ctx, u.ID, "nonexistent-plan")
-	if p := svc.planForUser(ctx, u.ID); p.ID != "free" {
-		t.Fatalf("unknown plan_id must fall back to free, got %q", p.ID)
+	if p, err := svc.planForUser(ctx, u.ID); p.ID != "free" || err != nil {
+		t.Fatalf("unknown plan_id must fall back to free with nil err, got %q, %v", p.ID, err)
 	}
 }
 
@@ -55,9 +55,33 @@ func TestPlanForUserFallsBackToFree(t *testing.T) {
 func TestPlanForUserMissingUser(t *testing.T) {
 	svc, _ := newPlanService(t)
 	ctx := context.Background()
-	if p := svc.planForUser(ctx, "nonexistent-user-id"); p.ID != "free" {
-		t.Fatalf("missing user must fall back to free, got %q", p.ID)
+	if p, err := svc.planForUser(ctx, "nonexistent-user-id"); p.ID != "free" || err != nil {
+		t.Fatalf("missing user must fall back to free with nil err, got %q, %v", p.ID, err)
 	}
+}
+
+// errUserStore wraps a *SQLiteStore but forces GetUserByID to error, to prove the
+// enforcement gates fail OPEN (allow) on a real DB error rather than silently
+// applying the Free cap.
+type errUserStore struct {
+	Store
+}
+
+func (e errUserStore) GetUserByID(ctx context.Context, id string) (User, error) {
+	return User{}, context.DeadlineExceeded
+}
+
+func TestOverHelpersFailOpenOnStoreError(t *testing.T) {
+	st := newTestStore(t)
+	svc := &Service{store: errUserStore{st}, cfg: Config{}, now: func() time.Time { return time.Unix(100, 0) }}
+	if err := (&Service{store: st, cfg: Config{}, now: svc.now}).SeedPlans(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	over, err := svc.overTraffic(context.Background(), "any", 1<<60)
+	if err == nil {
+		t.Fatal("a store error must propagate from overTraffic (so the gate fails open)")
+	}
+	_ = over // gate uses `err == nil && over`, so a non-nil err means "don't block"
 }
 
 // TestOverGlobalStorage covers the global logical cap: disabled by default
