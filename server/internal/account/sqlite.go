@@ -200,6 +200,18 @@ CREATE TABLE IF NOT EXISTS usage_archive (
   upload_bytes   INTEGER NOT NULL DEFAULT 0,
   download_bytes INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS plans (
+  id             TEXT PRIMARY KEY,
+  name           TEXT NOT NULL,
+  storage_bytes  INTEGER NOT NULL,
+  traffic_bytes  INTEGER NOT NULL,
+  retention_secs INTEGER NOT NULL,
+  price_monthly  INTEGER NOT NULL DEFAULT 0,
+  price_yearly   INTEGER NOT NULL DEFAULT 0,
+  sort_order     INTEGER NOT NULL DEFAULT 0,
+  active         INTEGER NOT NULL DEFAULT 1,
+  updated_at     INTEGER NOT NULL
+);
 `
 
 // connPragmas are applied to every connection via the DSN (not a one-shot
@@ -1545,6 +1557,69 @@ func (s *SQLiteStore) SetSetting(ctx context.Context, key string, value, at int6
 		 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
 		key, value, at)
 	return err
+}
+
+const planCols = `id, name, storage_bytes, traffic_bytes, retention_secs, price_monthly, price_yearly, sort_order, active, updated_at`
+
+func scanPlan(sc rowScanner) (Plan, error) {
+	var p Plan
+	var active int64
+	err := sc.Scan(&p.ID, &p.Name, &p.StorageBytes, &p.TrafficBytes, &p.RetentionSecs,
+		&p.PriceMonthly, &p.PriceYearly, &p.SortOrder, &active, &p.UpdatedAt)
+	p.Active = active != 0
+	return p, err
+}
+
+func (s *SQLiteStore) ListPlans(ctx context.Context) ([]Plan, error) {
+	rows, err := s.reader().QueryContext(ctx,
+		`SELECT `+planCols+` FROM plans ORDER BY sort_order, id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Plan
+	for rows.Next() {
+		p, err := scanPlan(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) GetPlan(ctx context.Context, id string) (Plan, bool, error) {
+	p, err := scanPlan(s.reader().QueryRowContext(ctx, `SELECT `+planCols+` FROM plans WHERE id = ?`, id))
+	if err == sql.ErrNoRows {
+		return Plan{}, false, nil
+	}
+	if err != nil {
+		return Plan{}, false, err
+	}
+	return p, true, nil
+}
+
+func (s *SQLiteStore) UpsertPlan(ctx context.Context, p Plan) error {
+	active := int64(0)
+	if p.Active {
+		active = 1
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO plans (`+planCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET
+		   name=excluded.name, storage_bytes=excluded.storage_bytes,
+		   traffic_bytes=excluded.traffic_bytes, retention_secs=excluded.retention_secs,
+		   price_monthly=excluded.price_monthly, price_yearly=excluded.price_yearly,
+		   sort_order=excluded.sort_order, active=excluded.active, updated_at=excluded.updated_at`,
+		p.ID, p.Name, p.StorageBytes, p.TrafficBytes, p.RetentionSecs,
+		p.PriceMonthly, p.PriceYearly, p.SortOrder, active, p.UpdatedAt)
+	return err
+}
+
+func (s *SQLiteStore) CountActivePlans(ctx context.Context) (int, error) {
+	var n int
+	err := s.reader().QueryRowContext(ctx, `SELECT COUNT(*) FROM plans WHERE active = 1`).Scan(&n)
+	return n, err
 }
 
 // periodOf maps a unix timestamp to its billing month bucket 'YYYYMM' (UTC).

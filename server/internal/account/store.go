@@ -28,6 +28,21 @@ type User struct {
 	PurgeAfter int64
 }
 
+// Plan is an admin-configurable billing tier: per-account storage + monthly
+// traffic caps and a staged-file retention ceiling. Prices are US cents.
+type Plan struct {
+	ID            string
+	Name          string
+	StorageBytes  int64
+	TrafficBytes  int64
+	RetentionSecs int64
+	PriceMonthly  int64
+	PriceYearly   int64
+	SortOrder     int64
+	Active        bool
+	UpdatedAt     int64
+}
+
 // Identity links an external auth subject (google sub, or the email itself) to a user.
 type Identity struct {
 	Provider string // "google" | "email"
@@ -487,4 +502,9 @@ type Store interface {
 	CreateCLIToken(ctx context.Context, t CLIToken) error
 	GetCLITokenUser(ctx context.Context, tokenHash string) (userID, deviceID string, ok bool, err error)
 	TouchCLIToken(ctx context.Context, tokenHash string, at int64) error
+	// plans (billing phase-1)
+	ListPlans(ctx context.Context) ([]Plan, error)
+	GetPlan(ctx context.Context, id string) (Plan, bool, error)
+	UpsertPlan(ctx context.Context, p Plan) error
+	CountActivePlans(ctx context.Context) (int, error)
 }

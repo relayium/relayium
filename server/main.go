@@ -299,6 +299,9 @@ func main() {
 			if err := acct.SeedSettings(context.Background()); err != nil {
 				log.Printf("WARNING: seed settings: %v", err)
 			}
+			if err := acct.SeedPlans(context.Background()); err != nil {
+				log.Printf("WARNING: seed plans: %v", err)
+			}
 			gc := &account.GC{
 				Store:          store,
 				Blobs:          disk,
