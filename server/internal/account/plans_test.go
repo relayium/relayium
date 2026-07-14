@@ -40,6 +40,18 @@ func TestSeedPlansCreatesFourDefaultsIdempotently(t *testing.T) {
 	}
 }
 
+func TestStorageDiskCapSettingResolves(t *testing.T) {
+	st := newTestStore(t)
+	svc := &Service{store: st, cfg: Config{StorageDiskCap: 12345}, now: func() time.Time { return time.Unix(1, 0) }}
+	if got := svc.resolveSettings(context.Background()).StorageDiskCap; got != 12345 {
+		t.Fatalf("StorageDiskCap = %d, want 12345 (Config default)", got)
+	}
+	_ = st.SetSetting(context.Background(), SettingStorageDiskCap, 999, 1)
+	if got := svc.resolveSettings(context.Background()).StorageDiskCap; got != 999 {
+		t.Fatalf("StorageDiskCap = %d, want 999 (admin override)", got)
+	}
+}
+
 func TestUserPlanDefaultsFreeAndCanBeSet(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()

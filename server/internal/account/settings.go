@@ -20,6 +20,10 @@ const (
 	// before purge the one-time reminder email is sent.
 	SettingAccountGraceDays    = "account_grace_days"
 	SettingAccountReminderDays = "account_purge_reminder_days"
+	// SettingStorageDiskCap is the global logical storage ceiling: the sum of
+	// live staged-file sizes may not exceed it (oversubscription backstop,
+	// distinct from the physical blob-volume cap). Bytes.
+	SettingStorageDiskCap = "storage_disk_cap"
 )
 
 // minTTL is the floor a requested TTL is clamped up to; well below default_ttl.
@@ -55,6 +59,8 @@ type Settings struct {
 	// AccountReminderDays is how many days before purge the one-time reminder
 	// email is sent.
 	AccountReminderDays int64
+	// StorageDiskCap bounds SUM(live stored_files.size) globally.
+	StorageDiskCap int64
 }
 
 // settingOr returns the DB value for key, or def when unset/on error (fail to env).
@@ -80,6 +86,7 @@ func (s *Service) resolveSettings(ctx context.Context) Settings {
 		MaxMaxDownloads:     s.settingOr(ctx, SettingMaxMaxDownloads, s.cfg.MaxMaxDownloads),
 		AccountGraceDays:    s.settingOr(ctx, SettingAccountGraceDays, s.cfg.AccountGraceDays),
 		AccountReminderDays: s.settingOr(ctx, SettingAccountReminderDays, s.cfg.AccountReminderDays),
+		StorageDiskCap:      s.settingOr(ctx, SettingStorageDiskCap, s.cfg.StorageDiskCap),
 	}
 }
 
@@ -164,6 +171,7 @@ func (s *Service) SeedSettings(ctx context.Context) error {
 		{SettingMaxMaxDownloads, s.cfg.MaxMaxDownloads},
 		{SettingAccountGraceDays, s.cfg.AccountGraceDays},
 		{SettingAccountReminderDays, s.cfg.AccountReminderDays},
+		{SettingStorageDiskCap, s.cfg.StorageDiskCap},
 	}
 	now := s.now().Unix()
 	for _, d := range defaults {

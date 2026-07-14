@@ -92,6 +92,8 @@ type Config struct {
 	// AccountReminderDays is how many days before purge the one-time reminder
 	// email is sent (default 3).
 	AccountReminderDays int64
+	// StorageDiskCap seeds SettingStorageDiskCap (global logical storage ceiling).
+	StorageDiskCap int64
 	// NodeToken is the fleet bootstrap bearer token relay nodes present to
 	// /api/nodes/*. Empty disables the node API (endpoints return 404).
 	NodeToken string
