@@ -2,6 +2,7 @@ package account
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 )
 
@@ -115,4 +116,116 @@ func (s *Service) handlePublicPlans(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// maxWebhookBodyBytes caps the raw Stripe webhook payload we'll read before
+// giving up; real Stripe event payloads are a few KB, so 1 MiB is generous
+// headroom while still bounding memory against a malicious/broken sender.
+const maxWebhookBodyBytes = 1 << 20
+
+// handleStripeWebhook is the SOLE authority that grants or revokes a paid
+// plan: it never trusts the client-side checkout redirect, only a verified
+// Stripe event. 404 when billing is unconfigured; 400 ONLY on a signature
+// verification failure (no state is touched, and no verification detail is
+// leaked to the caller); otherwise every recognized event is a convergent
+// last-writer state-set, so re-delivery of the same event is a no-op, and the
+// handler always returns 200 quickly once dispatched (500 only on a genuine
+// store error).
+//
+// plan_source='admin' is never overridden by a webhook: a subscription event
+// for an admin-comped user still records status/period-end (for visibility in
+// the admin console) but leaves plan_id untouched — see the admin-source
+// branches below.
+func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
+	if s.biller == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes))
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	ev, err := s.biller.VerifyWebhook(body, r.Header.Get("Stripe-Signature"), s.now().Unix())
+	if err != nil {
+		// Bad signature: reject without acting, without leaking why.
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	switch ev.Type {
+	case "checkout.session.completed":
+		// Plan assignment is deferred to the accompanying
+		// customer.subscription.* event Stripe always sends alongside this
+		// one; here we only bind the newly-created (or reused) customer id.
+		if ev.ClientRefUserID != "" {
+			if err := s.store.SetUserStripeCustomer(ctx, ev.ClientRefUserID, ev.CustomerID); err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+
+	case "customer.subscription.created", "customer.subscription.updated":
+		u, ok, err := s.store.GetUserByStripeCustomer(ctx, ev.CustomerID)
+		if err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			// Unknown customer (e.g. test-mode event, or a race with the
+			// checkout.session.completed bind) — nothing to do.
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if u.PlanSource == "admin" {
+			// Admin comp wins: record status/end for visibility, but never
+			// let a webhook change plan_id out from under an admin grant.
+			if err := s.store.SetUserSubscription(ctx, u.ID, u.PlanID, ev.Status, ev.CurrentPeriodEnd, "admin"); err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		planID := "free"
+		if ev.Status == "active" || ev.Status == "trialing" {
+			if p, ok, err := s.store.PlanByStripePrice(ctx, ev.PriceID); err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			} else if ok {
+				planID = p.ID
+			}
+		}
+		if err := s.store.SetUserSubscription(ctx, u.ID, planID, ev.Status, ev.CurrentPeriodEnd, "stripe"); err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+
+	case "customer.subscription.deleted":
+		u, ok, err := s.store.GetUserByStripeCustomer(ctx, ev.CustomerID)
+		if err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		planID, source := "free", "stripe"
+		if u.PlanSource == "admin" {
+			planID, source = u.PlanID, "admin"
+		}
+		if err := s.store.SetUserSubscription(ctx, u.ID, planID, "canceled", ev.CurrentPeriodEnd, source); err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+
+	default:
+		// Unrecognized event type: acknowledge so Stripe doesn't retry.
+		w.WriteHeader(http.StatusOK)
+	}
 }

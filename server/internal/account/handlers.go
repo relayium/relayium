@@ -120,6 +120,14 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/billing/checkout", s.RequireSession(s.handleBillingCheckout))
 	mux.HandleFunc("POST /api/billing/portal", s.RequireSession(s.handleBillingPortal))
 	mux.HandleFunc("GET /api/plans", s.handlePublicPlans)
+	// Stripe webhook: unauthenticated (no session, no CSRF token — Stripe
+	// can't provide either), authenticated instead by its own HMAC signature
+	// inside handleStripeWebhook. Safe to mount on routeMux/csrfGuard because
+	// csrfGuard only rejects a state-changing request whose Origin header is
+	// PRESENT and mismatched; Stripe's webhook POSTs carry no Origin header at
+	// all, so csrfGuard's `if origin != ""` check is false and it falls
+	// through untouched (see csrfGuard above).
+	mux.HandleFunc("POST /api/stripe/webhook", s.handleStripeWebhook)
 	// Device-code CLI login flow (RFC 8628-style): start/poll are called by
 	// the unauthenticated CLI (it has no credential yet), approve is called
 	// by the logged-in web session that confirms the code.
