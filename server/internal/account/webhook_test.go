@@ -293,6 +293,89 @@ func TestWebhookUnknownCustomerIgnored200(t *testing.T) {
 	}
 }
 
+// TestWebhookActiveSubscriptionForgedPriceRevertsToFree is the key
+// anti-escalation test: a forged/unmapped Stripe price id combined with
+// status="active" must NOT grant a paid plan. billing.go's
+// customer.subscription.updated branch only escalates planID away from
+// "free" when PlanByStripePrice resolves the event's price id to a known
+// plan; an unresolved price leaves planID at its "free" default while still
+// recording the reported status/end/source (so the admin console has
+// visibility into the anomalous event) — see handleStripeWebhook's planID
+// resolution block in billing.go.
+func TestWebhookActiveSubscriptionForgedPriceRevertsToFree(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	secret := "whsec_forged_price"
+	svc.biller = NewStripeClient("sk_test", secret, "")
+	if err := svc.SeedPlans(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	cookie := loginCookie(t, ts, mail, "webhook-forged@example.com")
+	_ = cookie
+	uid := mustUserID(t, store, "webhook-forged@example.com")
+	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_forge"); err != nil {
+		t.Fatal(err)
+	}
+
+	body := webhookEnv("customer.subscription.updated", "cus_forge", "sub_1", "", "active", "price_totally_unknown", 1700004000)
+	resp := postWebhook(t, ts, secret, body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	u, ok, err := store.GetUserByStripeCustomer(context.Background(), "cus_forge")
+	if err != nil || !ok {
+		t.Fatalf("GetUserByStripeCustomer: ok=%v err=%v", ok, err)
+	}
+	if u.PlanID != "free" {
+		t.Fatalf("forged/unmapped price with active status must not escalate the plan, got %q", u.PlanID)
+	}
+	// billing.go still records status/end/source even when the price is
+	// unresolved, so the anomalous event stays visible instead of being
+	// silently dropped.
+	if u.SubscriptionStatus != "active" {
+		t.Fatalf("want status active recorded even though the price is unresolved, got %q", u.SubscriptionStatus)
+	}
+	if u.SubscriptionEnd != 1700004000 {
+		t.Fatalf("want end 1700004000, got %d", u.SubscriptionEnd)
+	}
+	if u.PlanSource != "stripe" {
+		t.Fatalf("want source stripe, got %q", u.PlanSource)
+	}
+}
+
+// errWebhookCustomerStore wraps a real Store but forces
+// GetUserByStripeCustomer to error, to prove handleStripeWebhook's
+// customer.subscription.updated branch returns 500 on a genuine store error
+// (rather than silently acking with 200 and dropping the event).
+type errWebhookCustomerStore struct {
+	Store
+}
+
+func (e errWebhookCustomerStore) GetUserByStripeCustomer(ctx context.Context, customerID string) (User, bool, error) {
+	return User{}, false, context.DeadlineExceeded
+}
+
+func TestWebhookStoreErrorReturns500(t *testing.T) {
+	realStore := newTestStore(t)
+	mail := &capturingMailer{}
+	svc := NewService(errWebhookCustomerStore{realStore}, mail, Config{
+		BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute,
+		EnableMagic: true,
+	})
+	ts := httptest.NewServer(svc.Routes())
+	t.Cleanup(ts.Close)
+	secret := "whsec_store_error"
+	svc.biller = NewStripeClient("sk_test", secret, "")
+	mustPlan(t, realStore, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
+
+	body := webhookEnv("customer.subscription.updated", "cus_store_err", "sub_1", "", "active", "price_pro_m", 1700005000)
+	resp := postWebhook(t, ts, secret, body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("want 500 on store error, got %d", resp.StatusCode)
+	}
+}
+
 func TestWebhookUnknownEventTypeIgnored200(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_unknown_type"
