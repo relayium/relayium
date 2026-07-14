@@ -114,6 +114,12 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("DELETE /api/nodes/{id}", s.RequireSession(s.handleDeleteMyNode))
 	mux.HandleFunc("POST /api/nodes/{id}/check", s.RequireSession(s.handleCheckNode))
 	mux.HandleFunc("PUT /api/me/strict-nodes", s.RequireSession(s.handleStrictNodes))
+	// Billing (phase-2): checkout/portal are session-authed like the rest of
+	// routeMux (CSRF-guarded by Routes()); /api/plans is public (like
+	// /api/files/{id}/meta) so the pricing UI can render signed out.
+	mux.HandleFunc("POST /api/billing/checkout", s.RequireSession(s.handleBillingCheckout))
+	mux.HandleFunc("POST /api/billing/portal", s.RequireSession(s.handleBillingPortal))
+	mux.HandleFunc("GET /api/plans", s.handlePublicPlans)
 	// Device-code CLI login flow (RFC 8628-style): start/poll are called by
 	// the unauthenticated CLI (it has no credential yet), approve is called
 	// by the logged-in web session that confirms the code.
@@ -332,6 +338,12 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {
 			"id": u.ID, "email": u.Email, "displayName": u.DisplayName,
 			"hasPassword": hasPass, "emailVerified": u.EmailVerified,
 			"onlyOwnNodes": u.OnlyOwnNodes,
+			// Billing (phase-2): plan + subscription state and whether a Stripe
+			// customer exists yet (gates the "Manage billing" button in the UI).
+			"planId":             u.PlanID,
+			"subscriptionStatus": u.SubscriptionStatus,
+			"subscriptionEnd":    u.SubscriptionEnd,
+			"hasBilling":         u.StripeCustomerID != "",
 		},
 	})
 }
