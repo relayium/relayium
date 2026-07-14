@@ -1631,6 +1631,39 @@ func (s *SQLiteStore) CountActivePlans(ctx context.Context) (int, error) {
 	return n, err
 }
 
+// UserMonthlyUpDown returns a user's upload+download bytes for one period
+// ("YYYYMM") from the usage_monthly rollup (0 when no row exists).
+func (s *SQLiteStore) UserMonthlyUpDown(ctx context.Context, userID, period string) (int64, error) {
+	var up, down sql.NullInt64
+	err := s.reader().QueryRowContext(ctx,
+		`SELECT upload_bytes, download_bytes FROM usage_monthly WHERE user_id = ? AND period = ?`,
+		userID, period).Scan(&up, &down)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return up.Int64 + down.Int64, nil
+}
+
+// CurrentStorage sums a user's live staged-file bytes (expires_at > now).
+func (s *SQLiteStore) CurrentStorage(ctx context.Context, userID string, now int64) (int64, error) {
+	var total sql.NullInt64
+	err := s.reader().QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(size),0) FROM stored_files WHERE user_id = ? AND expires_at > ?`,
+		userID, now).Scan(&total)
+	return total.Int64, err
+}
+
+// GlobalStorageUsed sums all live staged-file bytes (oversubscription backstop).
+func (s *SQLiteStore) GlobalStorageUsed(ctx context.Context, now int64) (int64, error) {
+	var total sql.NullInt64
+	err := s.reader().QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(size),0) FROM stored_files WHERE expires_at > ?`, now).Scan(&total)
+	return total.Int64, err
+}
+
 // periodOf maps a unix timestamp to its billing month bucket 'YYYYMM' (UTC).
 func periodOf(at int64) string { return time.Unix(at, 0).UTC().Format("200601") }
 

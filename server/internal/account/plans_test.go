@@ -73,3 +73,30 @@ func TestUserPlanDefaultsFreeAndCanBeSet(t *testing.T) {
 		t.Fatalf("after set, plan = %q, want pro", got.PlanID)
 	}
 }
+
+func TestUsageReadQueries(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	u, _ := st.UpsertUserByEmail(ctx, "usage@example.com", "")
+	// period 100 seconds → periodOf must map both meters into the same month.
+	_ = st.RecordMeter(ctx, u.ID, MeterUpload, 500, 100)
+	_ = st.RecordMeter(ctx, u.ID, MeterDownload, 300, 100)
+	period := periodOf(100)
+
+	up, err := st.UserMonthlyUpDown(ctx, u.ID, period)
+	if err != nil || up != 800 {
+		t.Fatalf("UserMonthlyUpDown = %d,%v want 800", up, err)
+	}
+
+	_ = st.CreateStoredFile(ctx, StoredFile{ID: newID(), UserID: u.ID, BlobKey: "b1", EncManifest: []byte("x"), Size: 4096, ExpiresAt: 1 << 40, CreatedAt: 1})
+	_ = st.CreateStoredFile(ctx, StoredFile{ID: newID(), UserID: u.ID, BlobKey: "b2", EncManifest: []byte("x"), Size: 1000, ExpiresAt: 5, CreatedAt: 1}) // already expired at now=10
+
+	cs, err := st.CurrentStorage(ctx, u.ID, 10)
+	if err != nil || cs != 4096 {
+		t.Fatalf("CurrentStorage = %d,%v want 4096 (expired file excluded)", cs, err)
+	}
+	gs, err := st.GlobalStorageUsed(ctx, 10)
+	if err != nil || gs != 4096 {
+		t.Fatalf("GlobalStorageUsed = %d,%v want 4096", gs, err)
+	}
+}

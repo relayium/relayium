@@ -511,4 +511,8 @@ type Store interface {
 	GetPlan(ctx context.Context, id string) (Plan, bool, error)
 	UpsertPlan(ctx context.Context, p Plan) error
 	CountActivePlans(ctx context.Context) (int, error)
+	// usage read queries (billing phase-1 enforcement inputs)
+	UserMonthlyUpDown(ctx context.Context, userID, period string) (int64, error)
+	CurrentStorage(ctx context.Context, userID string, now int64) (int64, error)
+	GlobalStorageUsed(ctx context.Context, now int64) (int64, error)
 }
