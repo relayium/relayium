@@ -273,6 +273,13 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	// Per-plan traffic gate, charged to the file's OWNER (downloader identity is
+	// never read — zero-knowledge). Over quota → the owner's shares pause until
+	// the month rolls over or they upgrade. Fail-open on a read error.
+	if over, err := s.overTraffic(r.Context(), sf.UserID, sf.Size); err == nil && over {
+		http.Error(w, "this file's account has reached its monthly traffic limit", http.StatusTooManyRequests)
+		return
+	}
 	bs, err := s.blobFor(r.Context(), sf.NodeID)
 	if err != nil {
 		http.Error(w, "storage node unavailable", http.StatusServiceUnavailable)

@@ -107,3 +107,32 @@ func TestUploadTTLClampedToPlan(t *testing.T) {
 		t.Fatalf("expiresAt=%d is in the past relative to upload start %d", out.ExpiresAt, before)
 	}
 }
+
+// TestDownloadRefusedWhenOwnerOverTraffic covers the download-side traffic
+// gate in handleFileBlob (M-phase-1 task 8): the download is refused BEFORE
+// streaming when the FILE'S OWNER is over their monthly traffic — the
+// anonymous downloader's identity is never read (zero-knowledge), so quota
+// is always charged to the owner regardless of who is fetching the blob.
+func TestDownloadRefusedWhenOwnerOverTraffic(t *testing.T) {
+	ts, _, store, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "ow@example.com")
+	u, _ := store.UpsertUserByEmail(context.Background(), "ow@example.com", "")
+	// Generous storage so the upload itself succeeds; tiny traffic so the
+	// download trips the cap. Upload first (counts some traffic), then shrink.
+	setUserPlanWith(t, store, u.ID, 1<<30, 1<<30, 3*86400)
+
+	resp := postUpload(t, ts, cookie, "?ttl=0", uploadBody([]byte("m"), []byte("PAYLOAD")))
+	var up struct {
+		ID string `json:"id"`
+	}
+	decodeJSON(t, resp, &up)
+
+	// Now set the owner's traffic cap below their month-to-date usage.
+	_ = store.UpsertPlan(context.Background(), Plan{ID: "free", Name: "Free", StorageBytes: 1 << 30, TrafficBytes: 1, RetentionSecs: 3 * 86400, Active: true, UpdatedAt: 2})
+
+	br, _ := ts.Client().Get(ts.URL + "/api/files/" + up.ID + "/blob")
+	br.Body.Close()
+	if br.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("download for over-quota owner = %d, want 429", br.StatusCode)
+	}
+}
