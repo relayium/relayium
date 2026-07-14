@@ -69,3 +69,37 @@ func TestAdminUpsertPlanRefusesDeactivatingLastActivePlan(t *testing.T) {
 		t.Fatalf("plan should remain active: %+v", got)
 	}
 }
+
+func TestAdminAssignUserPlanActiveOnly(t *testing.T) {
+	ts, store := newAdminSettingsServer(t)
+	admin := adminLogin(t, ts)
+	ctx := context.Background()
+	_ = store.UpsertPlan(ctx, Plan{ID: "pro", Name: "Pro", StorageBytes: 1, TrafficBytes: 1, RetentionSecs: 1, Active: true, UpdatedAt: 1})
+	_ = store.UpsertPlan(ctx, Plan{ID: "old", Name: "Old", StorageBytes: 1, TrafficBytes: 1, RetentionSecs: 1, Active: false, UpdatedAt: 1})
+	target, _ := store.UpsertUserByEmail(ctx, "target@example.com", "")
+
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	post := func(plan string) int {
+		form := url.Values{"user_id": {target.ID}, "plan_id": {plan}}
+		req, _ := http.NewRequest("POST", ts.URL+"/admin/users/plan", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(admin)
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	if post("pro") != http.StatusFound {
+		t.Fatal("assigning an active plan should 302")
+	}
+	if got, _ := store.GetUserByID(ctx, target.ID); got.PlanID != "pro" {
+		t.Fatalf("plan = %q, want pro", got.PlanID)
+	}
+	if post("old") != http.StatusBadRequest {
+		t.Fatal("assigning an inactive plan must 400")
+	}
+}

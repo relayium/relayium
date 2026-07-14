@@ -167,6 +167,7 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	mux.Handle("POST /admin/logout", s.csrfGuard(http.HandlerFunc(s.handleAdminLogout)))
 	mux.Handle("POST /admin/settings", s.csrfGuard(http.HandlerFunc(s.handleAdminSettings)))
 	mux.Handle("POST /admin/plans", s.csrfGuard(http.HandlerFunc(s.handleAdminUpsertPlan)))
+	mux.Handle("POST /admin/users/plan", s.csrfGuard(http.HandlerFunc(s.handleAdminSetUserPlan)))
 	mux.Handle("POST /admin/nodes/token", s.csrfGuard(http.HandlerFunc(s.handleAdminMintToken)))
 	mux.Handle("POST /admin/nodes/token/{id}/revoke", s.csrfGuard(http.HandlerFunc(s.handleAdminRevokeToken)))
 	mux.Handle("POST /admin/nodes/{id}/limits", s.csrfGuard(http.HandlerFunc(s.handleAdminNodeLimits)))
@@ -347,18 +348,23 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 	}
 
 	st := s.resolveSettings(r.Context())
-	var planVs []planView
+	var planVs, activePlanVs []planView
 	if plans, plerr := s.store.ListPlans(r.Context()); plerr != nil {
 		log.Printf("admin: ListPlans failed: %v", plerr)
 	} else {
 		planVs = planViews(plans)
+		for _, pv := range planVs {
+			if pv.Active {
+				activePlanVs = append(activePlanVs, pv)
+			}
+		}
 	}
 	return adminHomeData{
 		Metrics: metrics, Users: rows, Total: total, Page: page, TotalPages: totalPages,
 		Search: search, Sort: sortBy, Dir: dir, Period: period, Months: months,
 		PrevHref: prev, NextHref: next, SortHref: sortHref,
 		Nodes: nodeVs, FleetNodeCount: fleetNodeCount, FleetTokens: tokenVs,
-		Plans: planVs,
+		Plans: planVs, ActivePlans: activePlanVs,
 		Settings: adminSettingsView{
 			MaxFileSizeMB:       st.MaxFileSize / (1024 * 1024),
 			DailyQuotaMB:        st.DailyQuota / (1024 * 1024),
@@ -492,6 +498,40 @@ func (s *Service) handleAdminUpsertPlan(w http.ResponseWriter, r *http.Request) 
 		SortOrder: sort, Active: active, UpdatedAt: s.now().Unix(),
 	}
 	if err := s.store.UpsertPlan(r.Context(), p); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// handleAdminSetUserPlan assigns a user to a billing plan. Only ACTIVE plans
+// may be assigned (a deactivated plan is retired for new/changed
+// assignments, though existing holders keep it until moved).
+func (s *Service) handleAdminSetUserPlan(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	userID := strings.TrimSpace(r.FormValue("user_id"))
+	planID := strings.TrimSpace(r.FormValue("plan_id"))
+	if userID == "" || planID == "" {
+		http.Error(w, "user_id and plan_id required", http.StatusBadRequest)
+		return
+	}
+	p, ok, err := s.store.GetPlan(r.Context(), planID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !ok || !p.Active {
+		http.Error(w, "unknown or inactive plan", http.StatusBadRequest)
+		return
+	}
+	if err := s.store.SetUserPlan(r.Context(), userID, planID); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}

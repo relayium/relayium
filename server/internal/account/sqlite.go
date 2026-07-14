@@ -1209,7 +1209,8 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context, q AdminUserQuery) ([]A
 		       (SELECT COALESCE(SUM(um.download_bytes),0) FROM usage_monthly um
 		          WHERE um.user_id = u.id AND um.period = ?) AS download_bytes,
 		       (SELECT COALESCE(SUM(sf.size),0) FROM stored_files sf
-		          WHERE sf.user_id = u.id AND sf.expires_at > ?) AS storage_bytes
+		          WHERE sf.user_id = u.id AND sf.expires_at > ?) AS storage_bytes,
+		       u.plan_id
 		FROM users u`+where+`
 		ORDER BY `+orderCol+` `+dir+`, u.id ASC
 		LIMIT ? OFFSET ?`, listArgs...)
@@ -1224,7 +1225,7 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context, q AdminUserQuery) ([]A
 		var row AdminUserRow
 		if err := rows.Scan(&row.ID, &row.Email, &row.DisplayName, &row.CreatedAt,
 			&row.DeviceCount, &row.RelayedBytes,
-			&row.UploadBytes, &row.DownloadBytes, &row.StorageBytes); err != nil {
+			&row.UploadBytes, &row.DownloadBytes, &row.StorageBytes, &row.PlanID); err != nil {
 			return nil, 0, err
 		}
 		index[row.ID] = len(out)

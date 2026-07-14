@@ -19,22 +19,23 @@ type adminSettingsView struct {
 }
 
 type adminHomeData struct {
-	Metrics    AdminMetrics
-	Users      []AdminUserRow
-	Total      int64
-	Page       int
-	TotalPages int
-	Search     string
-	Sort       string
-	Dir        string
-	Period     string            // 选定月 'YYYYMM'
-	Months     []string          // 最近 12 个月（下拉，最新在前）
-	PrevHref   string            // empty = no previous page
-	NextHref   string            // empty = no next page
-	SortHref   map[string]string // column key ("created"/"email"/"relayed"/"upload"/"download"/"storage") -> sort link on click
-	Nodes      []adminNodeView
-	Plans      []planView
-	Settings   adminSettingsView
+	Metrics     AdminMetrics
+	Users       []AdminUserRow
+	Total       int64
+	Page        int
+	TotalPages  int
+	Search      string
+	Sort        string
+	Dir         string
+	Period      string            // 选定月 'YYYYMM'
+	Months      []string          // 最近 12 个月（下拉，最新在前）
+	PrevHref    string            // empty = no previous page
+	NextHref    string            // empty = no next page
+	SortHref    map[string]string // column key ("created"/"email"/"relayed"/"upload"/"download"/"storage") -> sort link on click
+	Nodes       []adminNodeView
+	Plans       []planView
+	ActivePlans []planView // subset of Plans with Active==true; used for the per-user plan dropdown
+	Settings    adminSettingsView
 
 	FleetTokens      []adminFleetTokenView
 	FleetNodeCount   int    // count of Nodes with OwnerType == "fleet" (matches table body's guard)
@@ -269,13 +270,24 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <th><a href="{{index .SortHref "download"}}">下载</a></th>
 <th><a href="{{index .SortHref "relayed"}}">中继</a></th>
 <th><a href="{{index .SortHref "storage"}}">当前存储占用</a></th>
+<th>套餐</th>
 </tr></thead><tbody>
+{{$plans := .ActivePlans}}
 {{range .Users}}<tr>
 <td>{{.Email}}</td><td>{{.DisplayName}}</td><td>{{ts .CreatedAt}}</td>
 <td>{{range $i, $m := .Methods}}{{if $i}}, {{end}}{{$m}}{{end}}</td>
 <td>{{.DeviceCount}}</td>
 <td>{{bytes .UploadBytes}}</td><td>{{bytes .DownloadBytes}}</td>
 <td>{{bytes .RelayedBytes}}</td><td>{{bytes .StorageBytes}}</td>
+<td>
+<form method="post" action="/admin/users/plan" class="plan-row">
+<input type="hidden" name="user_id" value="{{.ID}}">
+<select name="plan_id">
+{{$cur := .PlanID}}{{range $plans}}<option value="{{.ID}}"{{if eq .ID $cur}} selected{{end}}>{{.Name}}</option>{{end}}
+</select>
+<button type="submit">分配</button>
+</form>
+</td>
 </tr>{{end}}
 </tbody></table>
 

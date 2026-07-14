@@ -266,10 +266,11 @@ type AdminUserRow struct {
 	CreatedAt     int64
 	Methods       []string // identities 表里的 provider 去重升序
 	DeviceCount   int
-	RelayedBytes  int64 // 选定月的中继流量（来自 usage_events）
-	UploadBytes   int64 // 选定月上传（usage_monthly）
-	DownloadBytes int64 // 选定月下载（usage_monthly）
-	StorageBytes  int64 // 当前存储占用（未过期文件 size 之和，与月份无关）
+	RelayedBytes  int64  // 选定月的中继流量（来自 usage_events）
+	UploadBytes   int64  // 选定月上传（usage_monthly）
+	DownloadBytes int64  // 选定月下载（usage_monthly）
+	StorageBytes  int64  // 当前存储占用（未过期文件 size 之和，与月份无关）
+	PlanID        string // 当前套餐（plans.id）
 }
 
 // AdminUserQuery 参数化后台用户列表查询。
