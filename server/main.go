@@ -108,6 +108,14 @@ func main() {
 	trustedProxies := flag.String("trusted-proxies", envStr("RELAYIUM_TRUSTED_PROXIES", ""), "comma-separated CIDRs (or IPs) of reverse proxies whose X-Forwarded-For is trusted; empty (default) ignores XFF and uses the direct peer IP")
 	blobDiskMax := flag.Int64("blob-disk-max", envInt64("RELAYIUM_BLOB_DISK_MAX", 0),
 		"global blob-volume high-water mark in bytes; new uploads 503 once used >= this (0 disables the global soft cap)")
+	// Deprecated and ignored: relay bandwidth is now bounded by each account's
+	// per-plan monthly traffic quota (billing plans phase-1), not this global
+	// allowance. Kept as an accepted-but-unused flag/env so a deployment whose
+	// service unit or .env still passes -relay-monthly-free /
+	// RELAYIUM_RELAY_MONTHLY_FREE keeps booting (flag.Parse fatals on an unknown
+	// flag). Safe to drop from the host config at leisure.
+	_ = flag.Int64("relay-monthly-free", envInt64("RELAYIUM_RELAY_MONTHLY_FREE", 0),
+		"deprecated: superseded by per-plan monthly traffic quota; accepted but ignored")
 	flag.Parse()
 
 	if *genAdminTOTP {
