@@ -614,10 +614,14 @@ func (s *SQLiteStore) SetUserPlan(ctx context.Context, userID, planID string) er
 
 // SetUserPlanAdmin assigns a user's billing tier from the admin console,
 // recording plan_source='admin' so a later Stripe webhook (see
-// SetUserSubscription) won't fight the manual comp.
+// SetUserSubscription) won't fight the manual comp. It also clears any
+// stale subscription_status/subscription_end left over from a prior Stripe
+// subscription: a manual admin comp supersedes that subscription record,
+// and a later webhook for an admin-source user will re-populate
+// status/end while keeping the admin-assigned plan.
 func (s *SQLiteStore) SetUserPlanAdmin(ctx context.Context, userID, planID string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE users SET plan_id = ?, plan_source = 'admin' WHERE id = ?`, planID, userID)
+		`UPDATE users SET plan_id = ?, plan_source = 'admin', subscription_status = '', subscription_end = 0 WHERE id = ?`, planID, userID)
 	return err
 }
 
