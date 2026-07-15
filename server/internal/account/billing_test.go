@@ -20,6 +20,10 @@ type fakeBiller struct {
 
 	lastCheckout       CheckoutInput
 	lastPortalCustomer string
+
+	lastChangeCustomer string
+	lastChangePrice    string
+	changeCalls        int
 }
 
 func (f *fakeBiller) CreateCheckoutSession(ctx context.Context, in CheckoutInput) (string, error) {
@@ -30,6 +34,13 @@ func (f *fakeBiller) CreateCheckoutSession(ctx context.Context, in CheckoutInput
 func (f *fakeBiller) CreatePortalSession(ctx context.Context, customerID, returnURL string) (string, error) {
 	f.lastPortalCustomer = customerID
 	return f.portalURL, nil
+}
+
+func (f *fakeBiller) ChangeSubscriptionPlan(ctx context.Context, customerID, newPriceID string) error {
+	f.changeCalls++
+	f.lastChangeCustomer = customerID
+	f.lastChangePrice = newPriceID
+	return nil
 }
 
 func (f *fakeBiller) VerifyWebhook(payload []byte, sigHeader string, now int64) (WebhookEvent, error) {
@@ -190,6 +201,116 @@ func TestBillingCheckoutYearlyCycle(t *testing.T) {
 	}
 	if fb.lastCheckout.PriceID != "price_yearly_pro" {
 		t.Fatalf("want yearly price id, got %q", fb.lastCheckout.PriceID)
+	}
+}
+
+// changePlan POSTs /api/billing/change-plan and returns the response.
+func changePlan(t *testing.T, ts *httptest.Server, cookie *http.Cookie, body string) *http.Response {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/billing/change-plan", strings.NewReader(body))
+	req.AddCookie(cookie)
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp
+}
+
+// subscribeUser makes an existing user look like a live Stripe subscriber.
+func subscribeUser(t *testing.T, store *SQLiteStore, uid, customer, planID string) {
+	t.Helper()
+	ctx := context.Background()
+	if err := store.SetUserStripeCustomer(ctx, uid, customer); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetUserSubscription(ctx, uid, planID, "active", 1900000000, "stripe"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBillingChangePlanUnconfigured404(t *testing.T) {
+	ts, _, _, mail := newBillingServer(t)
+	cookie := loginCookie(t, ts, mail, "change-unconfigured@example.com")
+	resp := changePlan(t, ts, cookie, `{"planId":"pro","cycle":"monthly"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("want 404 when biller unconfigured, got %d", resp.StatusCode)
+	}
+}
+
+func TestBillingChangePlanNoSubscription409(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	svc.biller = &fakeBiller{}
+	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
+	// A logged-in but un-subscribed (free) user has no customer id.
+	cookie := loginCookie(t, ts, mail, "change-nosub@example.com")
+	resp := changePlan(t, ts, cookie, `{"planId":"pro","cycle":"monthly"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("want 409 when no active subscription, got %d", resp.StatusCode)
+	}
+}
+
+func TestBillingChangePlanAdminSourced409(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	svc.biller = &fakeBiller{}
+	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
+	email := "change-admin@example.com"
+	cookie := loginCookie(t, ts, mail, email)
+	uid := mustUserID(t, store, email)
+	// admin-comped: has a customer but plan_source=admin — must not be changeable here.
+	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_admin"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 1900000000, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	resp := changePlan(t, ts, cookie, `{"planId":"max","cycle":"monthly"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("want 409 for an admin-sourced plan, got %d", resp.StatusCode)
+	}
+}
+
+func TestBillingChangePlanSamePlan400(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	svc.biller = &fakeBiller{}
+	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
+	email := "change-same@example.com"
+	cookie := loginCookie(t, ts, mail, email)
+	subscribeUser(t, store, mustUserID(t, store, email), "cus_same", "pro")
+	resp := changePlan(t, ts, cookie, `{"planId":"pro","cycle":"monthly"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("want 400 when already on the plan, got %d", resp.StatusCode)
+	}
+}
+
+func TestBillingChangePlanHappyPath(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	fb := &fakeBiller{}
+	svc.biller = fb
+	mustPlan(t, store, Plan{
+		ID: "pro", Name: "Pro", Active: true,
+		StripePriceMonthlyID: "price_pro_m", StripePriceYearlyID: "price_pro_y",
+	})
+	email := "change-happy@example.com"
+	cookie := loginCookie(t, ts, mail, email)
+	subscribeUser(t, store, mustUserID(t, store, email), "cus_happy", "plus")
+
+	resp := changePlan(t, ts, cookie, `{"planId":"pro","cycle":"yearly"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	if fb.changeCalls != 1 {
+		t.Fatalf("want 1 ChangeSubscriptionPlan call, got %d", fb.changeCalls)
+	}
+	if fb.lastChangeCustomer != "cus_happy" {
+		t.Fatalf("customer = %q, want cus_happy", fb.lastChangeCustomer)
+	}
+	if fb.lastChangePrice != "price_pro_y" {
+		t.Fatalf("price = %q, want price_pro_y (yearly)", fb.lastChangePrice)
 	}
 }
 

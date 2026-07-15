@@ -46,7 +46,7 @@
   import { shouldConfirmBeforeSend } from "./lib/confirm-send";
   import { folderUploadSupported } from "./lib/platform";
   import Nav from "./lib/Nav.svelte";
-  import { currentRoute, syncRouteFromLocation, downloadId, navigate, setNavGuard } from "./lib/router.svelte";
+  import { currentRoute, syncRouteFromLocation, downloadId, navigate, setNavGuard, PRICING_PATH } from "./lib/router.svelte";
   import Hero from "./lib/Hero.svelte";
   import FeatureStrip from "./lib/FeatureStrip.svelte";
   import CliCallout from "./lib/CliCallout.svelte";
@@ -62,6 +62,7 @@
     offline: () => import("./lib/OfflinePage.svelte"),
     me: () => import("./lib/MePage.svelte"),
     cli: () => import("./lib/CliPage.svelte"),
+    pricing: () => import("./lib/PricingPage.svelte"),
     "verify-email": () => import("./lib/VerifyEmail.svelte"),
     "reset-password": () => import("./lib/ResetPassword.svelte"),
   } as const;
@@ -225,7 +226,7 @@
   // realtime peer is connected. Never on the download page.
   const surfaceShown = $derived(
     currentRoute() === "download" || currentRoute() === "offline" || currentRoute() === "me" || currentRoute() === "cli"
-    || currentRoute() === "verify-email" || currentRoute() === "reset-password"
+    || currentRoute() === "pricing" || currentRoute() === "verify-email" || currentRoute() === "reset-password"
       ? false
       : currentRoute() === "cross"
         ? showTransfer
@@ -1392,6 +1393,10 @@
     {#await routePage("cli") then { default: CliPage }}
       <CliPage />
     {/await}
+  {:else if currentRoute() === "pricing"}
+    {#await routePage("pricing") then { default: PricingPage }}
+      <PricingPage />
+    {/await}
   {:else if currentRoute() === "verify-email"}
     {#await routePage("verify-email") then { default: VerifyEmail }}
       <VerifyEmail />
@@ -1457,6 +1462,7 @@
         <a href="https://github.com/relayium/relayium" target="_blank" rel="noopener noreferrer">GitHub</a>
       </nav>
       <nav class="legal" aria-label="Guides">
+        <a href={PRICING_PATH} onclick={(e) => { e.preventDefault(); navigate("pricing"); }}>{t.pricingPage.navLink}</a>
         <a href={pageUrl("guides", lang())}>{t.learn.hub}</a>
       </nav>
       <span class="fineprint">{t.footer}</span>

@@ -284,6 +284,7 @@
               {#if session().user!.subscriptionStatus}<span class="sub-status"> · {session().user!.subscriptionStatus}</span>{/if}
             </p>
             {#if session().user!.hasBilling}
+              <button class="btn btn-ghost" onclick={() => { open = false; navigate("pricing"); }}>{t.billing.upgrade}</button>
               <button class="btn btn-ghost" disabled={portalBusy} onclick={onManageBilling}>{t.billing.manageBilling}</button>
               {#if portalError}<p class="err">{portalError}</p>{/if}
             {:else}

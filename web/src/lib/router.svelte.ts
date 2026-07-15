@@ -7,13 +7,16 @@
 import { parseCodeParam, CROSS_PATH, DOWNLOAD_PREFIX } from "./transfer-link";
 import { clearRoom } from "./room.svelte";
 
-export type Route = "lan" | "cross" | "offline" | "download" | "me" | "cli" | "verify-email" | "reset-password";
+export type Route = "lan" | "cross" | "offline" | "download" | "me" | "cli" | "pricing" | "verify-email" | "reset-password";
 
 /** Personal center path. Login-gated page; not part of the transfer flows. */
 export const ME_PATH = "/me";
 
 /** CLI docs page (static content; not a transfer flow). */
 export const CLI_PATH = "/cli";
+
+/** Pricing / plans page (public marketing + in-app upgrade/downgrade). */
+export const PRICING_PATH = "/pricing";
 
 /** Path of the async stored-transfer page (login-gated; the paid tier lives here). */
 export const OFFLINE_PATH = "/offline-transfer";
@@ -36,6 +39,7 @@ export function routeFromLocation(pathname: string, hash: string): Route {
   if (pathname === OFFLINE_PATH) return "offline";
   if (pathname === ME_PATH) return "me";
   if (pathname === CLI_PATH) return "cli";
+  if (pathname === PRICING_PATH) return "pricing";
   if (pathname === VERIFY_EMAIL_PATH) return "verify-email";
   if (pathname === RESET_PASSWORD_PATH) return "reset-password";
   return "lan";
@@ -78,6 +82,7 @@ export function navigate(r: Route): void {
     : r === "offline" ? OFFLINE_PATH
     : r === "me" ? ME_PATH
     : r === "cli" ? CLI_PATH
+    : r === "pricing" ? PRICING_PATH
     : r === "verify-email" ? VERIFY_EMAIL_PATH
     : r === "reset-password" ? RESET_PASSWORD_PATH
     : "/";

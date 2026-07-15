@@ -102,8 +102,11 @@ describe("Account billing", () => {
     expect(target.textContent).toContain("active");
     const manageBtn = Array.from(target.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Manage billing");
     expect(manageBtn).toBeTruthy();
-    // Free users' Upgrade control must not also be present.
-    expect(Array.from(target.querySelectorAll("button")).some((b) => b.textContent?.trim() === "Upgrade")).toBe(false);
+    // Subscribed users also get an Upgrade/change-plan link (to the /pricing page),
+    // but it must NOT reveal the inline free-user Pricing component here.
+    const upgradeLink = Array.from(target.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Upgrade");
+    expect(upgradeLink).toBeTruthy();
+    expect(target.querySelector(".pricing")).toBeNull();
 
     manageBtn!.click();
     await new Promise((r) => setTimeout(r, 0));

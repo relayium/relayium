@@ -22,6 +22,11 @@ import (
 type Biller interface {
 	CreateCheckoutSession(ctx context.Context, in CheckoutInput) (url string, err error)
 	CreatePortalSession(ctx context.Context, customerID, returnURL string) (url string, err error)
+	// ChangeSubscriptionPlan switches the customer's existing active subscription
+	// to newPriceID in place (prorated), for in-app upgrade/downgrade without a
+	// second checkout. The resulting customer.subscription.updated webhook is what
+	// actually reassigns the plan (by price), same as any other subscription event.
+	ChangeSubscriptionPlan(ctx context.Context, customerID, newPriceID string) error
 	VerifyWebhook(payload []byte, sigHeader string, now int64) (WebhookEvent, error)
 }
 
@@ -246,27 +251,94 @@ func (c *stripeClient) CreatePortalSession(ctx context.Context, customerID, retu
 	return c.postForSessionURL(ctx, "/v1/billing_portal/sessions", form)
 }
 
-// postForSessionURL performs the shared form-POST + {"url":"..."} decode used
-// by both Checkout and Billing Portal session creation.
-func (c *stripeClient) postForSessionURL(ctx context.Context, path string, form url.Values) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+path, strings.NewReader(form.Encode()))
+// ChangeSubscriptionPlan switches the customer's active subscription to
+// newPriceID in place (prorated), for in-app upgrade/downgrade. It looks the
+// subscription up by customer (we don't persist subscription ids), then updates
+// its single item's price. Stripe emits customer.subscription.updated, which the
+// webhook turns into the plan reassignment — so this method never touches the DB.
+func (c *stripeClient) ChangeSubscriptionPlan(ctx context.Context, customerID, newPriceID string) error {
+	// 1. Find the customer's active subscription and its item id.
+	q := url.Values{}
+	q.Set("customer", customerID)
+	q.Set("status", "active")
+	q.Set("limit", "1")
+	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions?"+q.Encode(), nil)
 	if err != nil {
-		return "", err
+		return err
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	var list struct {
+		Data []struct {
+			ID    string `json:"id"`
+			Items struct {
+				Data []struct {
+					ID    string `json:"id"`
+					Price struct {
+						ID string `json:"id"`
+					} `json:"price"`
+				} `json:"data"`
+			} `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &list); err != nil {
+		return fmt.Errorf("stripe: list subscriptions: parse response: %w", err)
+	}
+	if len(list.Data) == 0 || len(list.Data[0].Items.Data) == 0 {
+		return fmt.Errorf("stripe: no active subscription for customer %s", customerID)
+	}
+	subID := list.Data[0].ID
+	item := list.Data[0].Items.Data[0]
+	if item.Price.ID == newPriceID {
+		return nil // already on this price — nothing to do (idempotent)
+	}
+
+	// 2. Point the item at the new price, prorating the difference.
+	form := url.Values{}
+	form.Set("items[0][id]", item.ID)
+	form.Set("items[0][price]", newPriceID)
+	form.Set("proration_behavior", "create_prorations")
+	if _, err := c.request(ctx, http.MethodPost, "/v1/subscriptions/"+subID, form); err != nil {
+		return err
+	}
+	return nil
+}
+
+// request performs an authenticated Stripe REST call and returns the raw body,
+// erroring on any non-2xx. form==nil means a bodyless GET.
+func (c *stripeClient) request(ctx context.Context, method, path string, form url.Values) ([]byte, error) {
+	var bodyReader io.Reader
+	if form != nil {
+		bodyReader = strings.NewReader(form.Encode())
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.base+path, bodyReader)
+	if err != nil {
+		return nil, err
+	}
+	if form != nil {
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
 	req.Header.Set("Authorization", "Bearer "+c.secretKey)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("stripe: %s %s: status %d: %s", http.MethodPost, path, resp.StatusCode, string(body))
+		return nil, fmt.Errorf("stripe: %s %s: status %d: %s", method, path, resp.StatusCode, string(body))
+	}
+	return body, nil
+}
+
+// postForSessionURL performs the shared form-POST + {"url":"..."} decode used
+// by both Checkout and Billing Portal session creation.
+func (c *stripeClient) postForSessionURL(ctx context.Context, path string, form url.Values) (string, error) {
+	body, err := c.request(ctx, http.MethodPost, path, form)
+	if err != nil {
+		return "", err
 	}
 	var out struct {
 		URL string `json:"url"`

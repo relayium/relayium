@@ -167,4 +167,47 @@ describe("Pricing", () => {
     expect(target.textContent).toContain("Sign in to upgrade");
     expect(window.location.href).toBe("");
   });
+
+  it("a subscribed user upgrades via change-plan (not checkout) and sees their current tier", async () => {
+    const SUB_TIERS = [
+      { id: "free", name: "Free", storageBytes: 1e9, trafficBytes: 1e9, retentionSecs: 86400, priceMonthly: 0, priceYearly: 0, purchasableMonthly: false, purchasableYearly: false },
+      { id: "plus", name: "Plus", storageBytes: 5e9, trafficBytes: 3e11, retentionSecs: 30 * 86400, priceMonthly: 390, priceYearly: 2900, purchasableMonthly: true, purchasableYearly: true },
+      { id: "pro", name: "Pro", storageBytes: 5e10, trafficBytes: 1e12, retentionSecs: 90 * 86400, priceMonthly: 890, priceYearly: 7900, purchasableMonthly: true, purchasableYearly: true },
+    ];
+    const subUser = { id: "u1", email: "sub@example.com", displayName: "", hasPassword: true, planId: "plus", subscriptionStatus: "active", hasBilling: true };
+    let changeBody: unknown = null;
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/plans") return { ok: true, status: 200, json: async () => SUB_TIERS };
+      if (url === "/api/me") return { ok: true, status: 200, json: async () => ({ user: subUser }) };
+      if (url === "/api/billing/change-plan") { changeBody = JSON.parse(init!.body as string); return { ok: true, status: 200, json: async () => ({ status: "ok" }) }; }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+    vi.stubGlobal("confirm", vi.fn(() => true));
+
+    // Seed the session store as a live Plus subscriber before mounting.
+    const { refreshSession } = await import("./auth.svelte");
+    await refreshSession();
+
+    await mountPricing();
+
+    const cards = Array.from(target.querySelectorAll(".tier"));
+    const plusCard = cards.find((c) => c.textContent?.includes("Plus"))!;
+    const proCard = cards.find((c) => c.textContent?.includes("Pro"))!;
+
+    // Their current tier shows a "Current plan" badge and no action button.
+    expect(plusCard.textContent).toContain("Current plan");
+    expect(plusCard.querySelector("button.btn-primary")).toBeNull();
+
+    // The higher tier offers an Upgrade that hits change-plan (in-app), not checkout.
+    const upBtn = proCard.querySelector("button.btn-primary") as HTMLButtonElement;
+    expect(upBtn.textContent?.trim()).toBe("Upgrade");
+    upBtn.click();
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/billing/change-plan", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/billing/checkout", expect.anything());
+    expect(changeBody).toEqual({ planId: "pro", cycle: "monthly" });
+  });
 });

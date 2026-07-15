@@ -1,5 +1,5 @@
 import type { Route } from "./router.svelte";
-import { CROSS_PATH, OFFLINE_PATH } from "./router.svelte";
+import { CROSS_PATH, OFFLINE_PATH, PRICING_PATH } from "./router.svelte";
 import type { Messages } from "./i18n/types";
 
 // pageMeta returns the per-route <title> + <meta description> + canonical path.
@@ -14,6 +14,7 @@ export function pageMeta(
 ): { title: string; description: string; canonicalPath: string } {
   if (route === "cross") return { title: m.titleCross, description: m.descCross, canonicalPath: CROSS_PATH };
   if (route === "offline") return { title: m.titleOffline, description: m.descOffline, canonicalPath: OFFLINE_PATH };
+  if (route === "pricing") return { title: `${m.pricingPage.title} · Relayium`, description: m.pricingPage.subtitle, canonicalPath: PRICING_PATH };
   return { title: m.titleDefault, description: m.descDefault ?? m.titleDefault, canonicalPath: "/" };
 }
 

@@ -76,6 +76,65 @@ func (s *Service) handleBillingPortal(w http.ResponseWriter, r *http.Request, u 
 	writeJSON(w, http.StatusOK, map[string]string{"url": url})
 }
 
+// handleBillingChangePlan switches an already-subscribed user's Stripe
+// subscription to a different tier in place (in-app upgrade/downgrade), so they
+// don't have to cancel + re-checkout. 404 when billing is unconfigured; 409 when
+// the user has no Stripe-sourced subscription to change (they should use
+// /api/billing/checkout instead); 400 for a free/unmapped target or the tier
+// they're already on. The actual plan_id flip happens when Stripe delivers the
+// resulting customer.subscription.updated to the webhook — the sole authority —
+// so the client should refresh /api/me shortly after a 200.
+func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request, u User) {
+	if s.biller == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	var in struct {
+		PlanID string `json:"planId"`
+		Cycle  string `json:"cycle"` // "monthly" | "yearly"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	// Only a live Stripe-sourced subscription can be changed in place. Free users
+	// (no customer) and admin-comped accounts (plan_source=admin, which the
+	// webhook must never override) fall through to a clear 409.
+	if u.StripeCustomerID == "" || u.PlanSource != "stripe" {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "no_active_subscription"})
+		return
+	}
+	plan, ok, err := s.store.GetPlan(r.Context(), in.PlanID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if plan.ID == u.PlanID {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "already_on_plan"})
+		return
+	}
+	var priceID string
+	switch in.Cycle {
+	case "yearly":
+		priceID = plan.StripePriceYearlyID
+	default:
+		priceID = plan.StripePriceMonthlyID
+	}
+	if priceID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "plan not purchasable"})
+		return
+	}
+	if err := s.biller.ChangeSubscriptionPlan(r.Context(), u.StripeCustomerID, priceID); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // publicPlanView is the pricing UI's projection of a Plan: never includes the
 // Stripe price ids or any other secret, only whether each billing cycle is
 // currently purchasable (biller configured AND the tier has a price id).

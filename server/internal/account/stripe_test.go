@@ -368,3 +368,73 @@ func TestCreateCheckoutSessionNon2xxError(t *testing.T) {
 		t.Fatalf("url = %q, want empty on error (no silent success)", got)
 	}
 }
+
+func TestChangeSubscriptionPlanRequestShape(t *testing.T) {
+	var sawList, sawUpdate bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscriptions":
+			sawList = true
+			if got := r.URL.Query().Get("customer"); got != "cus_x" {
+				t.Errorf("list customer = %q, want cus_x", got)
+			}
+			if got := r.URL.Query().Get("status"); got != "active" {
+				t.Errorf("list status = %q, want active", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			// One active subscription with one item on the OLD price.
+			fmt.Fprint(w, `{"data":[{"id":"sub_1","items":{"data":[{"id":"si_1","price":{"id":"price_old"}}]}}]}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscriptions/sub_1":
+			sawUpdate = true
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("ParseForm: %v", err)
+			}
+			if got := r.Form.Get("items[0][id]"); got != "si_1" {
+				t.Errorf("items[0][id] = %q, want si_1", got)
+			}
+			if got := r.Form.Get("items[0][price]"); got != "price_new" {
+				t.Errorf("items[0][price] = %q, want price_new", got)
+			}
+			if got := r.Form.Get("proration_behavior"); got != "create_prorations" {
+				t.Errorf("proration_behavior = %q, want create_prorations", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"id":"sub_1"}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	c := NewStripeClient("sk_test", "whsec_abc", "")
+	c.base = srv.URL
+
+	if err := c.ChangeSubscriptionPlan(context.Background(), "cus_x", "price_new"); err != nil {
+		t.Fatalf("ChangeSubscriptionPlan: %v", err)
+	}
+	if !sawList || !sawUpdate {
+		t.Fatalf("expected both list+update calls; sawList=%v sawUpdate=%v", sawList, sawUpdate)
+	}
+}
+
+func TestChangeSubscriptionPlanNoopWhenSamePrice(t *testing.T) {
+	var updates int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			updates++
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"data":[{"id":"sub_1","items":{"data":[{"id":"si_1","price":{"id":"price_same"}}]}}]}`)
+	}))
+	defer srv.Close()
+
+	c := NewStripeClient("sk_test", "whsec_abc", "")
+	c.base = srv.URL
+
+	if err := c.ChangeSubscriptionPlan(context.Background(), "cus_x", "price_same"); err != nil {
+		t.Fatalf("ChangeSubscriptionPlan: %v", err)
+	}
+	if updates != 0 {
+		t.Fatalf("expected no update POST when already on the target price, got %d", updates)
+	}
+}

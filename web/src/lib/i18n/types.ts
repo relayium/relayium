@@ -146,6 +146,13 @@ export interface Messages {
     free: string; // price shown for the free tier
     currentFree: string; // note under the free tier: you're already on it
     upgrade: string; // CTA on a purchasable tier / account panel
+    downgrade: string; // CTA to switch to a cheaper tier than the current one
+    current: string; // badge/label on the tier the user is currently subscribed to
+    popular: string; // "Most popular" ribbon on the highlighted tier
+    save2mo: string; // yearly-toggle savings badge (yearly = 10x monthly => 2 months free)
+    changeConfirm: (name: string) => string; // confirm() before switching an active subscription
+    changeError: string; // in-app plan change (POST /api/billing/change-plan) failed
+    changeSuccess: string; // toast after a successful plan switch
     notAvailable: string; // tier not yet purchasable
     signInRequired: string; // checkout attempted while signed out (401)
     checkoutError: string; // generic checkout-start failure
@@ -159,6 +166,21 @@ export interface Messages {
     portalError: string; // billing-portal open failure
     checkoutSuccess: string; // banner after Stripe Checkout success redirect
     checkoutCanceled: string; // banner after Stripe Checkout cancel redirect
+  };
+  // Standalone /pricing marketing page (PricingPage.svelte).
+  pricingPage: {
+    navLink: string; // "Pricing" link in the footer / account panel
+    title: string; // page H1
+    subtitle: string; // one-line intro under the H1
+    signedOutCta: string; // note for logged-out visitors above the tiers
+    faqTitle: string; // "Frequently asked questions"
+    q1: string; // is it really free?
+    a1: string;
+    q2: string; // can I change plans later?
+    a2: string;
+    q3: string; // how does billing / cancellation work?
+    a3: string;
+    back: string; // link back to the app/home
   };
   me: {
     title: string;

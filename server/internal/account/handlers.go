@@ -118,6 +118,7 @@ func (s *Service) routeMux() *http.ServeMux {
 	// routeMux (CSRF-guarded by Routes()); /api/plans is public (like
 	// /api/files/{id}/meta) so the pricing UI can render signed out.
 	mux.HandleFunc("POST /api/billing/checkout", s.RequireSession(s.handleBillingCheckout))
+	mux.HandleFunc("POST /api/billing/change-plan", s.RequireSession(s.handleBillingChangePlan))
 	mux.HandleFunc("POST /api/billing/portal", s.RequireSession(s.handleBillingPortal))
 	mux.HandleFunc("GET /api/plans", s.handlePublicPlans)
 	// Stripe webhook: unauthenticated (no session, no CSRF token — Stripe
