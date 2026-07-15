@@ -11,6 +11,7 @@
   import WhyAccount from "./WhyAccount.svelte";
   import { session } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
+  import { navigate, PRICING_PATH } from "./router.svelte";
   import PageFooter from "./PageFooter.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
@@ -48,6 +49,11 @@
   <p class="cli-note">
     {t.offline.cliNote}
     <a href={cloudGuideHref}>{t.offline.cliLink}</a>
+  </p>
+
+  <p class="cli-note plan-note">
+    {t.offline.planNote}
+    <a href={PRICING_PATH} onclick={(e) => { e.preventDefault(); navigate("pricing"); }}>{t.pricingPage.navLink}</a>
   </p>
 
   {#if !session().user}

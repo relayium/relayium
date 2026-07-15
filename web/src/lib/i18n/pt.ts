@@ -370,8 +370,8 @@ const pt: Messages = {
     realtimeSub: "Ambos online agora · ponto a ponto · o servidor nunca vê seus arquivos",
     realtimeFoot: "O destinatário não precisa de conta · criptografia de ponta a ponta",
     signInToSend: "Entre para enviar entre redes. Quem recebe nunca precisa de conta.",
-    relayQuotaWarn: "Você esgotou o tráfego de retransmissão deste mês. Uma conexão ponto a ponto direta ainda funciona — só a alternativa de retransmissão fica indisponível. Ela é reiniciada no começo do próximo mês; para enviar agora, tente um link de download armazenado.",
-    relayQuotaFail: "Não foi possível conectar diretamente, e o tráfego de retransmissão deste mês está esgotado — não há retransmissor para recorrer. Ele é reiniciado no começo do próximo mês; tente um link de download armazenado.",
+    relayQuotaWarn: "Você esgotou o tráfego de retransmissão deste mês. Uma conexão ponto a ponto direta ainda funciona — só a alternativa de retransmissão fica indisponível. Ela é reiniciada no começo do próximo mês; para enviar agora, use um link de download armazenado, faça upgrade do seu plano para ter mais tráfego de retransmissão ou rode seu próprio nó.",
+    relayQuotaFail: "Não foi possível conectar diretamente, e o tráfego de retransmissão deste mês está esgotado — não há retransmissor para recorrer. Ele é reiniciado no começo do próximo mês; use um link de download armazenado, faça upgrade do seu plano para ter mais tráfego de retransmissão ou rode seu próprio nó.",
   },
   offline: {
     tagline: "Criptografado no seu navegador e então armazenado · o servidor só guarda texto cifrado",
@@ -380,6 +380,7 @@ const pt: Messages = {
     cliNote:
       "Prefere o terminal? relayium up envia e imprime o mesmo link, e relayium down o busca em outra máquina — sem login para baixar.",
     cliLink: "Guia da CLI: enviar para a nuvem, baixar em qualquer lugar →",
+    planNote: "Quanto você pode armazenar, sua transferência mensal e por quanto tempo os links de download ficam ativos dependem do seu plano — comece grátis e faça upgrade quando quiser:",
   },
   crossSell: {
     realtime: { lead: "A outra pessoa está online agora? O direto em tempo real é mais rápido — ponto a ponto, e o servidor nunca vê seus arquivos.", cta: "Ir para o direto em tempo real →" },

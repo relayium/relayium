@@ -1,5 +1,6 @@
 <script lang="ts">
   import { lang, messages, type Messages } from "./i18n.svelte";
+  import { navigate, PRICING_PATH } from "./router.svelte";
   import CommandBlock from "./CommandBlock.svelte";
   const t = $derived<Messages>(messages[lang()]);
   const repo = "https://github.com/relayium/relayium";
@@ -240,6 +241,8 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     <a href={repo}>{t.cliPage.footerSource}</a>
     <span class="dot" aria-hidden="true">·</span>
     <a href={`${repo}/releases/latest`}>{t.cliPage.footerReleases}</a>
+    <span class="dot" aria-hidden="true">·</span>
+    <a href={PRICING_PATH} onclick={(e) => { e.preventDefault(); navigate("pricing"); }}>{t.pricingPage.navLink}</a>
     <span class="dot" aria-hidden="true">·</span>
     <span class="muted">{t.cliPage.footerBrowser}</span>
   </footer>

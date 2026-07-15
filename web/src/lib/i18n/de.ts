@@ -371,8 +371,8 @@ const de: Messages = {
     realtimeSub: "Beide jetzt online · Peer-to-Peer · der Server sieht deine Dateien nie",
     realtimeFoot: "Empfänger braucht kein Konto · Ende-zu-Ende-verschlüsselt",
     signInToSend: "Zum netzwerkübergreifenden Senden anmelden. Die empfangende Person braucht nie ein Konto.",
-    relayQuotaWarn: "Das Relay-Kontingent dieses Monats ist aufgebraucht. Eine direkte Peer-to-Peer-Verbindung funktioniert weiterhin — nur der Relay-Rückfall steht nicht zur Verfügung. Es wird zu Beginn des nächsten Monats zurückgesetzt; nutze in der Zwischenzeit einen Download-Link, um jetzt zu senden.",
-    relayQuotaFail: "Direkte Verbindung fehlgeschlagen, und das Relay-Kontingent dieses Monats ist aufgebraucht — kein Relay als Rückfall. Es wird zu Beginn des nächsten Monats zurückgesetzt; nutze stattdessen einen Download-Link.",
+    relayQuotaWarn: "Das Relay-Kontingent dieses Monats ist aufgebraucht. Eine direkte Peer-to-Peer-Verbindung funktioniert weiterhin — nur der Relay-Rückfall steht nicht zur Verfügung. Es wird zu Beginn des nächsten Monats zurückgesetzt; um jetzt zu senden, nutze einen Download-Link, führe ein Upgrade für mehr Relay-Traffic durch oder betreibe deine eigene Node.",
+    relayQuotaFail: "Direkte Verbindung fehlgeschlagen, und das Relay-Kontingent dieses Monats ist aufgebraucht — kein Relay als Rückfall. Es wird zu Beginn des nächsten Monats zurückgesetzt; nutze einen Download-Link, führe ein Upgrade für mehr Relay-Traffic durch oder betreibe deine eigene Node.",
   },
   offline: {
     tagline: "Im Browser verschlüsselt, dann zwischengespeichert · der Server hält nur Chiffretext",
@@ -381,6 +381,7 @@ const de: Messages = {
     cliNote:
       "Lieber im Terminal? relayium up lädt hoch und gibt denselben Link aus, relayium down holt ihn auf einem anderen Rechner ab — zum Herunterladen ist keine Anmeldung nötig.",
     cliLink: "CLI-Anleitung: in die Cloud laden, woanders abholen →",
+    planNote: "Wie viel du speichern kannst, dein monatliches Transfervolumen und wie lange Download-Links aktiv bleiben, hängt von deinem Tarif ab — kostenlos starten, jederzeit upgraden:",
   },
   crossSell: {
     realtime: { lead: "Ist die andere Person gerade online? Direkt in Echtzeit ist schneller – Peer-to-Peer, und der Server sieht deine Dateien nie.", cta: "Zur Echtzeit-Direktübertragung →" },

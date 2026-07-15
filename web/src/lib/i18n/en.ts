@@ -370,8 +370,8 @@ const en: Messages = {
     realtimeSub: "Both online now · peer-to-peer · the server never sees your files",
     realtimeFoot: "Recipient needs no account · end-to-end encrypted",
     signInToSend: "Sign in to send across networks. The person receiving never needs an account.",
-    relayQuotaWarn: "You've used up this month's relay traffic. A direct peer-to-peer connection still works — only the relay fallback is unavailable. It resets at the start of next month; to send now, try a stored download link instead.",
-    relayQuotaFail: "Couldn't connect directly, and this month's relay traffic is used up — no relay to fall back on. It resets at the start of next month; try a stored download link instead.",
+    relayQuotaWarn: "You've used up this month's relay traffic. A direct peer-to-peer connection still works — only the relay fallback is unavailable. It resets at the start of next month; to send now, use a stored download link, upgrade your plan for more relay traffic, or run your own node.",
+    relayQuotaFail: "Couldn't connect directly, and this month's relay traffic is used up — no relay to fall back on. It resets at the start of next month; try a stored download link, upgrade your plan for more relay traffic, or run your own node.",
   },
   offline: {
     tagline: "Encrypted in your browser, then stored · the server only ever holds ciphertext",
@@ -380,6 +380,7 @@ const en: Messages = {
     cliNote:
       "Prefer the terminal? relayium up uploads and prints the same link, and relayium down fetches it on another machine — no login needed to download.",
     cliLink: "CLI guide: push to the cloud, pull anywhere →",
+    planNote: "How much you can store, your monthly transfer, and how long download links stay live depend on your plan — start free, upgrade anytime:",
   },
   crossSell: {
     realtime: { lead: "Is the other person online right now? Realtime direct is faster — peer-to-peer, and the server never sees your files.", cta: "Go to realtime direct →" },

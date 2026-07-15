@@ -360,6 +360,7 @@ export interface Messages {
     signIn: string; // hint beside the sign-in button on the gated card
     cliNote: string; // note that the same flow works from the CLI (relayium up/down)
     cliLink: string; // link label to the cloud-async CLI guide
+    planNote: string; // stored transfers use plan limits; precedes a link to /pricing
   };
   crossSell: {
     // Directional cross-links between the two cross-network pages.

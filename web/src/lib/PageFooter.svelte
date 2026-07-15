@@ -1,5 +1,6 @@
 <script lang="ts">
   import { lang, legalUrl, messages, type Messages } from "./i18n.svelte";
+  import { navigate, PRICING_PATH } from "./router.svelte";
 
   // Fineprint text differs per page (realtime E2E vs at-rest encryption story),
   // so it's passed in rather than read from a fixed i18n key.
@@ -10,6 +11,7 @@
 
 <footer>
   <nav class="legal">
+    <a href={PRICING_PATH} onclick={(e) => { e.preventDefault(); navigate("pricing"); }}>{t.pricingPage.navLink}</a>
     <a href={legalUrl("security", lang())}>{t.legal.security}</a>
     <a href={legalUrl("privacy", lang())}>{t.legal.privacy}</a>
     <a href={legalUrl("terms", lang())}>{t.legal.terms}</a>

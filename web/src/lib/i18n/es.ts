@@ -370,8 +370,8 @@ const es: Messages = {
     realtimeSub: "Ambos en línea ahora · de igual a igual · el servidor nunca ve tus archivos",
     realtimeFoot: "El destinatario no necesita cuenta · cifrado de extremo a extremo",
     signInToSend: "Inicia sesión para enviar entre redes. La persona que recibe nunca necesita una cuenta.",
-    relayQuotaWarn: "Has agotado el tráfico de retransmisión de este mes. Una conexión directa de igual a igual sigue funcionando — solo el respaldo por retransmisión no está disponible. Se restablece al inicio del próximo mes; para enviar ahora, prueba con un enlace de descarga almacenado.",
-    relayQuotaFail: "No se pudo conectar directamente, y el tráfico de retransmisión de este mes está agotado — no hay retransmisor al que recurrir. Se restablece al inicio del próximo mes; prueba con un enlace de descarga almacenado.",
+    relayQuotaWarn: "Has agotado el tráfico de retransmisión de este mes. Una conexión directa de igual a igual sigue funcionando — solo el respaldo por retransmisión no está disponible. Se restablece al inicio del próximo mes; para enviar ahora, usa un enlace de descarga almacenado, mejora tu plan para obtener más tráfico de retransmisión o ejecuta tu propio nodo.",
+    relayQuotaFail: "No se pudo conectar directamente, y el tráfico de retransmisión de este mes está agotado — no hay retransmisor al que recurrir. Se restablece al inicio del próximo mes; usa un enlace de descarga almacenado, mejora tu plan para obtener más tráfico de retransmisión o ejecuta tu propio nodo.",
   },
   offline: {
     tagline: "Cifrado en tu navegador y luego almacenado · el servidor solo conserva texto cifrado",
@@ -380,6 +380,7 @@ const es: Messages = {
     cliNote:
       "¿Prefieres la terminal? relayium up sube e imprime el mismo enlace, y relayium down lo recupera en otra máquina — no se necesita inicio de sesión para descargar.",
     cliLink: "Guía de la CLI: subir a la nube, recuperar en cualquier lugar →",
+    planNote: "Cuánto puedes almacenar, tu transferencia mensual y cuánto tiempo siguen activos los enlaces de descarga dependen de tu plan — empieza gratis y mejora cuando quieras:",
   },
   crossSell: {
     realtime: { lead: "¿La otra persona está en línea ahora mismo? El directo en tiempo real es más rápido — de igual a igual, y el servidor nunca ve tus archivos.", cta: "Ir al directo en tiempo real →" },

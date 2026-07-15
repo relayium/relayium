@@ -371,8 +371,8 @@ const fr: Messages = {
     realtimeSub: "Les deux en ligne · pair-à-pair · le serveur ne voit jamais vos fichiers",
     realtimeFoot: "Le destinataire n'a pas besoin de compte · chiffré de bout en bout",
     signInToSend: "Connectez-vous pour envoyer d'un réseau à l'autre. La personne qui reçoit n'a jamais besoin de compte.",
-    relayQuotaWarn: "Vous avez épuisé le trafic de relais de ce mois-ci. Une connexion directe pair-à-pair fonctionne toujours — seul le relais de secours est indisponible. Il se réinitialise au début du mois prochain ; pour envoyer maintenant, utilisez plutôt un lien de téléchargement.",
-    relayQuotaFail: "Connexion directe impossible, et le trafic de relais de ce mois-ci est épuisé — aucun relais de secours. Il se réinitialise au début du mois prochain ; utilisez plutôt un lien de téléchargement.",
+    relayQuotaWarn: "Vous avez épuisé le trafic de relais de ce mois-ci. Une connexion directe pair-à-pair fonctionne toujours — seul le relais de secours est indisponible. Il se réinitialise au début du mois prochain ; pour envoyer maintenant, utilisez un lien de téléchargement, passez à un forfait supérieur pour plus de trafic de relais, ou exécutez votre propre nœud.",
+    relayQuotaFail: "Connexion directe impossible, et le trafic de relais de ce mois-ci est épuisé — aucun relais de secours. Il se réinitialise au début du mois prochain ; utilisez un lien de téléchargement, passez à un forfait supérieur pour plus de trafic de relais, ou exécutez votre propre nœud.",
   },
   offline: {
     tagline: "Chiffré dans votre navigateur, puis stocké · le serveur ne détient que du chiffré",
@@ -381,6 +381,7 @@ const fr: Messages = {
     cliNote:
       "Vous préférez le terminal ? relayium up téléverse et affiche le même lien, et relayium down le récupère sur une autre machine — aucune connexion requise pour télécharger.",
     cliLink: "Guide CLI : envoyer dans le cloud, récupérer ailleurs →",
+    planNote: "La capacité de stockage, votre volume de transfert mensuel et la durée pendant laquelle les liens de téléchargement restent actifs dépendent de votre forfait — commencez gratuitement, améliorez à tout moment :",
   },
   crossSell: {
     realtime: { lead: "L'autre personne est en ligne maintenant ? Le direct en temps réel est plus rapide — pair-à-pair, et le serveur ne voit jamais vos fichiers.", cta: "Vers le direct en temps réel →" },
