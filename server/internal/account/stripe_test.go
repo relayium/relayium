@@ -476,6 +476,11 @@ func TestScheduleDowngradeRequestShape(t *testing.T) {
 			if got := r.Form.Get("phases[1][items][0][price]"); got != "price_plus" {
 				t.Errorf("phase1 price = %q, want price_plus (the downgrade)", got)
 			}
+			// The trailing phase must be open-ended: real Stripe rejects an
+			// iterations param on it ("unknown parameter: phases[iterations]").
+			if got := r.Form.Get("phases[1][iterations]"); got != "" {
+				t.Errorf("phases[1][iterations] = %q, want empty (Stripe rejects it on a released trailing phase)", got)
+			}
 			w.Header().Set("Content-Type", "application/json")
 			fmt.Fprint(w, `{"id":"sub_sched_1"}`)
 		default:

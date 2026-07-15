@@ -380,14 +380,15 @@ func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPri
 	p0 := sched.Phases[0]
 
 	// 3. Append the downgrade as phase 1: current price until period end, then the
-	//    new price; release afterwards so the subscription continues normally.
+	//    new price. With end_behavior=release the trailing phase is open-ended
+	//    (Stripe rejects a phases[n][iterations] on it), so the subscription
+	//    switches to the new price at period end and then continues on it.
 	upd := url.Values{}
 	upd.Set("end_behavior", "release")
 	upd.Set("phases[0][items][0][price]", p0.Items[0].Price)
 	upd.Set("phases[0][start_date]", strconv.FormatInt(p0.StartDate, 10))
 	upd.Set("phases[0][end_date]", strconv.FormatInt(p0.EndDate, 10))
 	upd.Set("phases[1][items][0][price]", newPriceID)
-	upd.Set("phases[1][iterations]", "1")
 	if _, err := c.request(ctx, http.MethodPost, "/v1/subscription_schedules/"+sched.ID, upd); err != nil {
 		return err
 	}
