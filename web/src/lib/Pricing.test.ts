@@ -210,4 +210,40 @@ describe("Pricing", () => {
     expect(fetchMock).not.toHaveBeenCalledWith("/api/billing/checkout", expect.anything());
     expect(changeBody).toEqual({ planId: "pro", cycle: "monthly" });
   });
+
+  it("shows a pending-downgrade banner and cancels it via cancel-scheduled-change", async () => {
+    const TIERS2 = [
+      { id: "free", name: "Free", storageBytes: 1e9, trafficBytes: 1e9, retentionSecs: 86400, priceMonthly: 0, priceYearly: 0, purchasableMonthly: false, purchasableYearly: false },
+      { id: "plus", name: "Plus", storageBytes: 5e9, trafficBytes: 3e11, retentionSecs: 30 * 86400, priceMonthly: 390, priceYearly: 2900, purchasableMonthly: true, purchasableYearly: true },
+      { id: "pro", name: "Pro", storageBytes: 5e10, trafficBytes: 1e12, retentionSecs: 90 * 86400, priceMonthly: 890, priceYearly: 7900, purchasableMonthly: true, purchasableYearly: true },
+    ];
+    // On Pro, with a pending downgrade to Plus.
+    let meUser: Record<string, unknown> = { id: "u1", email: "s@example.com", displayName: "", hasPassword: true, planId: "pro", subscriptionStatus: "active", hasBilling: true, scheduledPlanId: "plus" };
+    let cancelCalls = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/plans") return { ok: true, status: 200, json: async () => TIERS2 };
+      if (url === "/api/me") return { ok: true, status: 200, json: async () => ({ user: meUser }) };
+      if (url === "/api/billing/cancel-scheduled-change") { cancelCalls++; meUser = { ...meUser, scheduledPlanId: "" }; return { ok: true, status: 200, json: async () => ({ status: "ok" }) }; }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+    const { refreshSession } = await import("./auth.svelte");
+    await refreshSession();
+    await mountPricing();
+
+    // Banner names the scheduled tier; the Plus card shows a "Scheduled" badge.
+    expect(target.querySelector(".sched-banner")?.textContent).toContain("Plus");
+    const plusCard = Array.from(target.querySelectorAll(".tier")).find((c) => c.textContent?.includes("Plus"))!;
+    expect(plusCard.textContent).toContain("Scheduled");
+
+    // "Keep current plan" cancels the pending downgrade.
+    const keepBtn = Array.from(target.querySelectorAll(".sched-banner button")).find((b) => b.textContent?.trim() === "Keep current plan") as HTMLButtonElement;
+    expect(keepBtn).toBeTruthy();
+    keepBtn.click();
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+
+    expect(cancelCalls).toBe(1);
+    expect(fetchMock).toHaveBeenCalledWith("/api/billing/cancel-scheduled-change", expect.objectContaining({ method: "POST" }));
+  });
 });

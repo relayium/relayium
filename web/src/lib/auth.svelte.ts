@@ -15,6 +15,9 @@ export interface SessionUser {
   subscriptionStatus?: string;
   subscriptionEnd?: number;
   hasBilling?: boolean;
+  // Tier a pending period-end downgrade will switch to ("" / absent = none). Lets
+  // the pricing UI show a "scheduled downgrade" banner with a cancel action.
+  scheduledPlanId?: string;
 }
 
 let user = $state<SessionUser | null>(null);

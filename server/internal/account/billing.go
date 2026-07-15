@@ -117,6 +117,11 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "already_on_plan"})
 		return
 	}
+	// Already scheduled to downgrade to exactly this tier — nothing to do.
+	if plan.ID == u.ScheduledPlanID {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "effective": "period_end"})
+		return
+	}
 	var priceID string
 	switch in.Cycle {
 	case "yearly":
@@ -127,6 +132,16 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 	if priceID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "plan not purchasable"})
 		return
+	}
+
+	// If a downgrade is already pending, its Stripe schedule manages the
+	// subscription and blocks a fresh change — release it first so this new
+	// upgrade/downgrade can apply cleanly.
+	if u.ScheduledPlanID != "" {
+		if err := s.biller.ReleaseSchedule(r.Context(), u.StripeCustomerID); err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// Upgrade vs downgrade decides timing. Tier direction is ranked by monthly
@@ -141,9 +156,11 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 
 	var opErr error
 	effective := "now"
+	scheduledPlan := "" // what the pricing UI should show as "pending downgrade"
 	if downgrade {
 		opErr = s.biller.ScheduleDowngrade(r.Context(), u.StripeCustomerID, priceID)
 		effective = "period_end"
+		scheduledPlan = plan.ID
 	} else {
 		opErr = s.biller.ChangeSubscriptionPlan(r.Context(), u.StripeCustomerID, priceID)
 	}
@@ -151,7 +168,35 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
+	// Record (or clear) the pending-downgrade hint. Best-effort: the Stripe op
+	// already succeeded, so don't fail the request if this write hiccups.
+	_ = s.store.SetScheduledPlan(r.Context(), u.ID, scheduledPlan)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "effective": effective})
+}
+
+// handleBillingCancelScheduledChange cancels a pending period-end downgrade,
+// releasing its Stripe schedule so the subscription stays on the current tier.
+// 404 unconfigured; 409 for a non-Stripe subscription; a no-op 200 when nothing
+// is scheduled.
+func (s *Service) handleBillingCancelScheduledChange(w http.ResponseWriter, r *http.Request, u User) {
+	if s.biller == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if u.StripeCustomerID == "" || u.PlanSource != "stripe" {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "no_active_subscription"})
+		return
+	}
+	if u.ScheduledPlanID == "" {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "none"})
+		return
+	}
+	if err := s.biller.ReleaseSchedule(r.Context(), u.StripeCustomerID); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	_ = s.store.SetScheduledPlan(r.Context(), u.ID, "")
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // publicPlanView is the pricing UI's projection of a Plan: never includes the
@@ -302,6 +347,13 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
+		// A pending downgrade has landed once plan_id actually reaches the tier we
+		// scheduled it to — clear the UI hint. (Creating the schedule fires an
+		// earlier updated event whose price is still the higher tier, so this only
+		// matches at the real period-end transition.) Best-effort.
+		if u.ScheduledPlanID != "" && planID == u.ScheduledPlanID {
+			_ = s.store.SetScheduledPlan(ctx, u.ID, "")
+		}
 		w.WriteHeader(http.StatusOK)
 
 	case "customer.subscription.deleted":
@@ -321,6 +373,10 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		if err := s.store.SetUserSubscription(ctx, u.ID, planID, "canceled", ev.CurrentPeriodEnd, source); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
+		}
+		// Subscription gone → any pending scheduled change is moot. Best-effort.
+		if u.ScheduledPlanID != "" {
+			_ = s.store.SetScheduledPlan(ctx, u.ID, "")
 		}
 		w.WriteHeader(http.StatusOK)
 

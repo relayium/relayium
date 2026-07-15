@@ -28,6 +28,8 @@ type fakeBiller struct {
 	lastDowngradeCustomer string
 	lastDowngradePrice    string
 	downgradeCalls        int
+
+	releaseCalls int
 }
 
 func (f *fakeBiller) CreateCheckoutSession(ctx context.Context, in CheckoutInput) (string, error) {
@@ -51,6 +53,11 @@ func (f *fakeBiller) ScheduleDowngrade(ctx context.Context, customerID, newPrice
 	f.downgradeCalls++
 	f.lastDowngradeCustomer = customerID
 	f.lastDowngradePrice = newPriceID
+	return nil
+}
+
+func (f *fakeBiller) ReleaseSchedule(ctx context.Context, customerID string) error {
+	f.releaseCalls++
 	return nil
 }
 
@@ -352,6 +359,109 @@ func TestBillingChangePlanDowngradeIsScheduled(t *testing.T) {
 	}
 	if out["effective"] != "period_end" {
 		t.Fatalf("effective = %q, want period_end", out["effective"])
+	}
+	// A downgrade records the pending target as a UI hint.
+	if got, _ := store.GetUserByID(context.Background(), mustUserID(t, store, email)); got.ScheduledPlanID != "plus" {
+		t.Fatalf("scheduled_plan_id = %q, want plus", got.ScheduledPlanID)
+	}
+}
+
+func cancelScheduled(t *testing.T, ts *httptest.Server, cookie *http.Cookie) *http.Response {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/billing/cancel-scheduled-change", nil)
+	req.AddCookie(cookie)
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp
+}
+
+func TestBillingCancelScheduledChange(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	fb := &fakeBiller{}
+	svc.biller = fb
+	mustTwoPlans(t, store)
+	email := "cancel-sched@example.com"
+	cookie := loginCookie(t, ts, mail, email)
+	uid := mustUserID(t, store, email)
+	subscribeUser(t, store, uid, "cus_c", "pro")
+	// Simulate a pending downgrade to plus.
+	if err := store.SetScheduledPlan(context.Background(), uid, "plus"); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := cancelScheduled(t, ts, cookie)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	if fb.releaseCalls != 1 {
+		t.Fatalf("want 1 ReleaseSchedule call, got %d", fb.releaseCalls)
+	}
+	// The pending-downgrade hint is cleared; the current plan is untouched.
+	got, _ := store.GetUserByID(context.Background(), uid)
+	if got.ScheduledPlanID != "" {
+		t.Fatalf("scheduled_plan_id = %q, want empty after cancel", got.ScheduledPlanID)
+	}
+	if got.PlanID != "pro" {
+		t.Fatalf("plan_id = %q, want pro (cancel keeps the current tier)", got.PlanID)
+	}
+}
+
+func TestBillingCancelWhenNothingScheduled(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	fb := &fakeBiller{}
+	svc.biller = fb
+	mustTwoPlans(t, store)
+	email := "cancel-none@example.com"
+	cookie := loginCookie(t, ts, mail, email)
+	subscribeUser(t, store, mustUserID(t, store, email), "cus_n", "pro")
+
+	resp := cancelScheduled(t, ts, cookie)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	var out map[string]string
+	_ = json.Unmarshal(body, &out)
+	if resp.StatusCode != http.StatusOK || out["status"] != "none" {
+		t.Fatalf("want 200 status=none, got %d %v", resp.StatusCode, out)
+	}
+	if fb.releaseCalls != 0 {
+		t.Fatalf("want no ReleaseSchedule call when nothing scheduled, got %d", fb.releaseCalls)
+	}
+}
+
+func TestBillingChangePlanReleasesPendingScheduleThenUpgrades(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	fb := &fakeBiller{}
+	svc.biller = fb
+	mustPlan(t, store, Plan{ID: "plus", Name: "Plus", Active: true, PriceMonthly: 390, StripePriceMonthlyID: "price_plus_m"})
+	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, PriceMonthly: 890, StripePriceMonthlyID: "price_pro_m"})
+	mustPlan(t, store, Plan{ID: "max", Name: "Max", Active: true, PriceMonthly: 1990, StripePriceMonthlyID: "price_max_m"})
+	email := "change-release@example.com"
+	cookie := loginCookie(t, ts, mail, email)
+	uid := mustUserID(t, store, email)
+	subscribeUser(t, store, uid, "cus_r", "pro")
+	// A downgrade to plus is already pending.
+	if err := store.SetScheduledPlan(context.Background(), uid, "plus"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now upgrade to max: it must release the pending schedule, apply immediately,
+	// and clear the pending hint.
+	resp := changePlan(t, ts, cookie, `{"planId":"max","cycle":"monthly"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	if fb.releaseCalls != 1 {
+		t.Fatalf("want 1 ReleaseSchedule (clear pending downgrade), got %d", fb.releaseCalls)
+	}
+	if fb.changeCalls != 1 || fb.downgradeCalls != 0 {
+		t.Fatalf("want immediate upgrade (change=1 downgrade=0), got change=%d downgrade=%d", fb.changeCalls, fb.downgradeCalls)
+	}
+	if got, _ := store.GetUserByID(context.Background(), uid); got.ScheduledPlanID != "" {
+		t.Fatalf("scheduled_plan_id = %q, want empty after upgrade", got.ScheduledPlanID)
 	}
 }
 

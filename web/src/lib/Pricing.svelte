@@ -34,6 +34,9 @@
   // A live Stripe subscription we can switch in place (vs. a fresh checkout).
   const isSubscribed = $derived(!!session().user && hasBilling && currentPlanId !== "free");
   const currentTier = $derived(tiers.find((x) => x.id === currentPlanId));
+  // Tier a pending period-end downgrade will switch to ("" = none).
+  const scheduledPlanId = $derived(session().user?.scheduledPlanId ?? "");
+  const scheduledTier = $derived(tiers.find((x) => x.id === scheduledPlanId));
 
   onMount(async () => {
     try {
@@ -149,6 +152,29 @@
     if (isSubscribed) changePlan(tier.id, tier.name, relation(tier) === "down");
     else checkout(tier.id);
   }
+
+  // Cancel a pending period-end downgrade (stay on the current tier).
+  async function cancelScheduled() {
+    if (busyPlanId) return;
+    checkoutError = "";
+    changeMsg = "";
+    busyPlanId = "__cancel__";
+    try {
+      const res = await fetch("/api/billing/cancel-scheduled-change", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      if (!res.ok) {
+        checkoutError = t.billing.cancelScheduledError;
+        return;
+      }
+      await refreshSession();
+    } catch {
+      checkoutError = t.billing.cancelScheduledError;
+    } finally {
+      busyPlanId = null;
+    }
+  }
 </script>
 
 <div class="pricing">
@@ -167,6 +193,15 @@
   {#if loadError}<p class="err">{loadError}</p>{/if}
   {#if checkoutError}<p class="err">{checkoutError}</p>{/if}
   {#if changeMsg}<p class="ok-note">{changeMsg}</p>{/if}
+
+  {#if scheduledPlanId && scheduledTier}
+    <div class="sched-banner">
+      <span>{t.billing.scheduledNote(scheduledTier.name)}</span>
+      <button type="button" class="btn btn-ghost" disabled={busyPlanId === "__cancel__"} onclick={cancelScheduled}>
+        {t.billing.keepCurrentPlan}
+      </button>
+    </div>
+  {/if}
 
   <div class="tiers">
     {#each tiers as tier (tier.id)}
@@ -189,6 +224,8 @@
 
         {#if relation(tier) === "current"}
           <div class="current-badge">{isFree(tier) ? t.billing.currentFree : t.billing.current}</div>
+        {:else if tier.id === scheduledPlanId}
+          <div class="current-badge">{t.billing.scheduledBadge}</div>
         {:else if isFree(tier)}
           <div class="tier-note">{t.billing.free}</div>
         {:else}
@@ -234,4 +271,10 @@
   .current-badge { font-size: var(--fs-xs); font-weight: 600; color: var(--text-h); padding: var(--space-1) 0; }
   .err { color: var(--danger); font-size: 12px; margin: 0; }
   .ok-note { color: var(--accent); font-size: 12px; margin: 0; }
+  .sched-banner {
+    display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+    padding: var(--space-2) var(--space-3); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); background: var(--social-bg); font-size: var(--fs-xs);
+  }
+  .sched-banner span { color: var(--text-h); }
 </style>

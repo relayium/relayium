@@ -33,6 +33,11 @@ type Biller interface {
 	// lapses, with no refund and no proration credit. The plan_id only changes
 	// when the phase transition fires customer.subscription.updated at period end.
 	ScheduleDowngrade(ctx context.Context, customerID, newPriceID string) error
+	// ReleaseSchedule cancels any pending subscription schedule (e.g. a scheduled
+	// downgrade), detaching it so the subscription continues on its CURRENT price.
+	// No-op when the subscription has no schedule. Used to cancel a pending
+	// downgrade and to clear the way before another in-app plan change.
+	ReleaseSchedule(ctx context.Context, customerID string) error
 	VerifyWebhook(payload []byte, sigHeader string, now int64) (WebhookEvent, error)
 }
 
@@ -393,6 +398,33 @@ func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPri
 		return err
 	}
 	return nil
+}
+
+// ReleaseSchedule detaches any subscription schedule from the customer's active
+// subscription, so it continues on its current price (canceling a pending
+// downgrade). No-op if there is no active subscription or no schedule.
+func (c *stripeClient) ReleaseSchedule(ctx context.Context, customerID string) error {
+	q := url.Values{}
+	q.Set("customer", customerID)
+	q.Set("status", "active")
+	q.Set("limit", "1")
+	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions?"+q.Encode(), nil)
+	if err != nil {
+		return err
+	}
+	var subs struct {
+		Data []struct {
+			Schedule string `json:"schedule"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &subs); err != nil {
+		return fmt.Errorf("stripe: list subscriptions: parse response: %w", err)
+	}
+	if len(subs.Data) == 0 || subs.Data[0].Schedule == "" {
+		return nil // nothing scheduled — nothing to release
+	}
+	_, err = c.request(ctx, http.MethodPost, "/v1/subscription_schedules/"+subs.Data[0].Schedule+"/release", url.Values{})
+	return err
 }
 
 // request performs an authenticated Stripe REST call and returns the raw body,

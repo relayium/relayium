@@ -40,6 +40,9 @@ type User struct {
 	// PlanSource records who last set PlanID: '' (default/free), 'admin'
 	// (manual comp — a Stripe webhook must not override it), or 'stripe'.
 	PlanSource string
+	// ScheduledPlanID is the tier a pending period-end downgrade will switch to;
+	// '' = no pending change. Display hint only (see the column comment).
+	ScheduledPlanID string
 }
 
 // Plan is an admin-configurable billing tier: per-account storage + monthly
@@ -358,6 +361,9 @@ type Store interface {
 	// SetUserSubscription updates plan_id, subscription_status, subscription_end,
 	// and plan_source together (Stripe webhook path).
 	SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source string) error
+	// SetScheduledPlan records (or clears, with planID="") the tier a pending
+	// period-end downgrade will switch to — a display hint for the pricing UI.
+	SetScheduledPlan(ctx context.Context, userID, planID string) error
 	// PlanByStripePrice resolves a webhook's Stripe Price id (monthly or yearly)
 	// to the plan tier mapped to it. An empty priceID returns not-found.
 	PlanByStripePrice(ctx context.Context, priceID string) (Plan, bool, error)

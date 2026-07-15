@@ -309,6 +309,11 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`ALTER TABLE users ADD COLUMN subscription_status TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE users ADD COLUMN subscription_end INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE users ADD COLUMN plan_source TEXT NOT NULL DEFAULT ''`,
+		// In-app downgrade UX: the tier a pending period-end downgrade will switch
+		// to (via a Stripe subscription schedule); '' = no pending change. It's a
+		// display hint — set when the endpoint schedules a downgrade, cleared when
+		// the downgrade lands (webhook), is canceled, or the subscription ends.
+		`ALTER TABLE users ADD COLUMN scheduled_plan_id TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -511,10 +516,10 @@ func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName 
 	var u User
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after, plan_id,
-		        stripe_customer_id, subscription_status, subscription_end, plan_source
+		        stripe_customer_id, subscription_status, subscription_end, plan_source, scheduled_plan_id
 		   FROM users WHERE email = ?`, email,
 	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
-		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource)
+		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID)
 	if err == nil {
 		return u, nil
 	}
@@ -535,10 +540,10 @@ func (s *SQLiteStore) UserByCanonicalEmail(ctx context.Context, canonical string
 	var u User
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after, plan_id,
-		        stripe_customer_id, subscription_status, subscription_end, plan_source
+		        stripe_customer_id, subscription_status, subscription_end, plan_source, scheduled_plan_id
 		   FROM users WHERE canonical_email = ? LIMIT 1`, canonical,
 	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
-		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource)
+		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID)
 	if err == sql.ErrNoRows {
 		return User{}, false, nil
 	}
@@ -590,10 +595,10 @@ func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (User, error) 
 	var strict int
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes, deleted_at, purge_after, plan_id,
-		        stripe_customer_id, subscription_status, subscription_end, plan_source
+		        stripe_customer_id, subscription_status, subscription_end, plan_source, scheduled_plan_id
 		   FROM users WHERE id = ?`, id,
 	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &strict, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
-		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource)
+		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID)
 	if err == sql.ErrNoRows {
 		return User{}, ErrNotFound
 	}
@@ -645,10 +650,10 @@ func (s *SQLiteStore) GetUserByStripeCustomer(ctx context.Context, customerID st
 	var strict int
 	err := s.reader().QueryRowContext(ctx,
 		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes, deleted_at, purge_after, plan_id,
-		        stripe_customer_id, subscription_status, subscription_end, plan_source
+		        stripe_customer_id, subscription_status, subscription_end, plan_source, scheduled_plan_id
 		   FROM users WHERE stripe_customer_id = ?`, customerID,
 	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &strict, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
-		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource)
+		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID)
 	if err == sql.ErrNoRows {
 		return User{}, false, nil
 	}
@@ -667,6 +672,12 @@ func (s *SQLiteStore) SetUserSubscription(ctx context.Context, userID, planID, s
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE users SET plan_id = ?, subscription_status = ?, subscription_end = ?, plan_source = ? WHERE id = ?`,
 		planID, status, end, source, userID)
+	return err
+}
+
+func (s *SQLiteStore) SetScheduledPlan(ctx context.Context, userID, planID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET scheduled_plan_id = ? WHERE id = ?`, planID, userID)
 	return err
 }
 

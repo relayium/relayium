@@ -119,6 +119,7 @@ func (s *Service) routeMux() *http.ServeMux {
 	// /api/files/{id}/meta) so the pricing UI can render signed out.
 	mux.HandleFunc("POST /api/billing/checkout", s.RequireSession(s.handleBillingCheckout))
 	mux.HandleFunc("POST /api/billing/change-plan", s.RequireSession(s.handleBillingChangePlan))
+	mux.HandleFunc("POST /api/billing/cancel-scheduled-change", s.RequireSession(s.handleBillingCancelScheduledChange))
 	mux.HandleFunc("POST /api/billing/portal", s.RequireSession(s.handleBillingPortal))
 	mux.HandleFunc("GET /api/plans", s.handlePublicPlans)
 	// Stripe webhook: unauthenticated (no session, no CSRF token — Stripe
@@ -353,6 +354,7 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {
 			"subscriptionStatus": u.SubscriptionStatus,
 			"subscriptionEnd":    u.SubscriptionEnd,
 			"hasBilling":         u.StripeCustomerID != "",
+			"scheduledPlanId":    u.ScheduledPlanID,
 		},
 	})
 }

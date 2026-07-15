@@ -521,3 +521,49 @@ func TestScheduleDowngradeNoopWhenSamePrice(t *testing.T) {
 		t.Fatalf("expected no schedule creation when already on the target price, got %d POSTs", creates)
 	}
 }
+
+func TestReleaseScheduleRequestShape(t *testing.T) {
+	var sawRelease bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscriptions":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"data":[{"id":"sub_1","schedule":"sub_sched_7"}]}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules/sub_sched_7/release":
+			sawRelease = true
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"id":"sub_sched_7","status":"released"}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	c := NewStripeClient("sk_test", "whsec_abc", "")
+	c.base = srv.URL
+	if err := c.ReleaseSchedule(context.Background(), "cus_x"); err != nil {
+		t.Fatalf("ReleaseSchedule: %v", err)
+	}
+	if !sawRelease {
+		t.Fatal("expected a release POST")
+	}
+}
+
+func TestReleaseScheduleNoopWhenNoSchedule(t *testing.T) {
+	var posts int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			posts++
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"data":[{"id":"sub_1","schedule":""}]}`)
+	}))
+	defer srv.Close()
+	c := NewStripeClient("sk_test", "whsec_abc", "")
+	c.base = srv.URL
+	if err := c.ReleaseSchedule(context.Background(), "cus_x"); err != nil {
+		t.Fatalf("ReleaseSchedule: %v", err)
+	}
+	if posts != 0 {
+		t.Fatalf("want no POST when there is no schedule, got %d", posts)
+	}
+}

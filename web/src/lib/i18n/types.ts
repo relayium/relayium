@@ -155,6 +155,10 @@ export interface Messages {
     changeError: string; // in-app plan change (POST /api/billing/change-plan) failed
     changeSuccess: string; // toast after a successful (immediate) upgrade
     downgradeScheduled: string; // toast after a downgrade is scheduled for period end
+    scheduledNote: (plan: string) => string; // banner: a downgrade to <plan> is pending at period end
+    scheduledBadge: string; // badge on the tier a pending downgrade will switch to
+    keepCurrentPlan: string; // CTA to cancel the pending downgrade (stay on the current tier)
+    cancelScheduledError: string; // canceling the scheduled downgrade failed
     notAvailable: string; // tier not yet purchasable
     signInRequired: string; // checkout attempted while signed out (401)
     checkoutError: string; // generic checkout-start failure

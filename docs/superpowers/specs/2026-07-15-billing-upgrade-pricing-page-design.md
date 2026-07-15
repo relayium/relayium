@@ -50,12 +50,24 @@ Four asks from the product owner:
     (`end_behavior=release`). No refund, no proration credit — the customer keeps
     the tier they paid for until it lapses. `plan_id` only changes when the phase
     transition fires `customer.subscription.updated` at period end (the same
-    webhook path). **Known limitation:** while a downgrade is pending, the
-    subscription is schedule-managed, so a further in-app change 500s — the
-    customer must wait it out or use the Stripe portal (followup: amend/cancel the
-    schedule in place).
+    webhook path). The trailing phase is open-ended (Stripe rejects an
+    `iterations` param on a released final phase).
   - The webhook still assigns `plan_id` purely by the subscription's current
     price, so creating the schedule (price unchanged) never prematurely downgrades.
+
+- **Cancelling / changing a pending downgrade (2026-07-15 followup):**
+  - `Biller.ReleaseSchedule` detaches any pending schedule so the subscription
+    continues on its current price. `POST /api/billing/cancel-scheduled-change`
+    releases it and clears the hint — the customer stays on the tier they're on.
+  - `change-plan` now releases a pending schedule first, so upgrading or
+    re-downgrading while a downgrade is pending just works (no more error).
+  - A `users.scheduled_plan_id` column tracks the pending target as a UI hint:
+    set by the endpoint on a scheduled downgrade, cleared by the endpoint on
+    cancel/other-change, and cleared by the webhook when the downgrade actually
+    lands (`plan_id` reaches the scheduled tier) or the subscription ends.
+    Exposed via `/api/me` as `scheduledPlanId`; the pricing page shows a banner
+    ("switching to X at period end") with a **Keep current plan** action and a
+    "Scheduled" badge on the target tier.
 - **Pricing.svelte** becomes subscription-aware (reads the session store): each
   paid tier renders "Current plan" (the user's tier), "Upgrade" (higher), or
   "Downgrade" (lower). Subscribed users route the button to change-plan (with a
