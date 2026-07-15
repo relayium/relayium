@@ -25,7 +25,7 @@
   let cycle = $state<"monthly" | "yearly">("monthly");
   let loadError = $state("");
   let checkoutError = $state("");
-  let changeDone = $state(false);
+  let changeMsg = $state("");
   let busyPlanId = $state<string | null>(null);
 
   // Current subscription context (drives per-tier CTA: current / upgrade / downgrade).
@@ -106,11 +106,14 @@
   }
 
   // In-app upgrade/downgrade of an existing subscription (no second checkout).
-  async function changePlan(planId: string, tierName: string) {
+  // Upgrades apply immediately (prorated); downgrades are scheduled for the end
+  // of the current billing period, so the confirm + success copy differ.
+  async function changePlan(planId: string, tierName: string, isDowngrade: boolean) {
     if (busyPlanId) return;
-    if (!confirm(t.billing.changeConfirm(tierName))) return;
+    const prompt = isDowngrade ? t.billing.downgradeConfirm(tierName) : t.billing.changeConfirm(tierName);
+    if (!confirm(prompt)) return;
     checkoutError = "";
-    changeDone = false;
+    changeMsg = "";
     busyPlanId = planId;
     try {
       const res = await fetch("/api/billing/change-plan", {
@@ -123,11 +126,17 @@
         checkoutError = t.billing.changeError;
         return;
       }
-      // The plan_id flips once Stripe delivers customer.subscription.updated to
-      // the webhook (async), so poll /api/me a couple of times to reflect it.
-      changeDone = true;
-      setTimeout(() => refreshSession(), 1500);
-      setTimeout(() => refreshSession(), 4000);
+      if (isDowngrade) {
+        // Nothing flips now — the plan changes when the period ends.
+        changeMsg = t.billing.downgradeScheduled;
+        setTimeout(() => refreshSession(), 1500);
+      } else {
+        // The plan_id flips once Stripe delivers customer.subscription.updated
+        // to the webhook (async), so poll /api/me a couple of times to reflect it.
+        changeMsg = t.billing.changeSuccess;
+        setTimeout(() => refreshSession(), 1500);
+        setTimeout(() => refreshSession(), 4000);
+      }
     } catch {
       checkoutError = t.billing.changeError;
     } finally {
@@ -137,7 +146,7 @@
 
   // Primary action for a paid tier given the user's context.
   function act(tier: Tier) {
-    if (isSubscribed) changePlan(tier.id, tier.name);
+    if (isSubscribed) changePlan(tier.id, tier.name, relation(tier) === "down");
     else checkout(tier.id);
   }
 </script>
@@ -157,7 +166,7 @@
 
   {#if loadError}<p class="err">{loadError}</p>{/if}
   {#if checkoutError}<p class="err">{checkoutError}</p>{/if}
-  {#if changeDone}<p class="ok-note">{t.billing.changeSuccess}</p>{/if}
+  {#if changeMsg}<p class="ok-note">{changeMsg}</p>{/if}
 
   <div class="tiers">
     {#each tiers as tier (tier.id)}

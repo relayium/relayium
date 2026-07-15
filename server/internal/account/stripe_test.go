@@ -438,3 +438,81 @@ func TestChangeSubscriptionPlanNoopWhenSamePrice(t *testing.T) {
 		t.Fatalf("expected no update POST when already on the target price, got %d", updates)
 	}
 }
+
+func TestScheduleDowngradeRequestShape(t *testing.T) {
+	var sawList, sawCreate, sawUpdate bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscriptions":
+			sawList = true
+			w.Header().Set("Content-Type", "application/json")
+			// Active sub on the OLD (higher) price, not schedule-managed yet.
+			fmt.Fprint(w, `{"data":[{"id":"sub_9","schedule":"","items":{"data":[{"price":{"id":"price_pro"}}]}}]}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules":
+			sawCreate = true
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("ParseForm: %v", err)
+			}
+			if got := r.Form.Get("from_subscription"); got != "sub_9" {
+				t.Errorf("from_subscription = %q, want sub_9", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			// Seed schedule: one phase spanning the current period on price_pro.
+			fmt.Fprint(w, `{"id":"sub_sched_1","phases":[{"start_date":1000,"end_date":2000,"items":[{"price":"price_pro"}]}]}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules/sub_sched_1":
+			sawUpdate = true
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("ParseForm: %v", err)
+			}
+			if got := r.Form.Get("end_behavior"); got != "release" {
+				t.Errorf("end_behavior = %q, want release", got)
+			}
+			if got := r.Form.Get("phases[0][items][0][price]"); got != "price_pro" {
+				t.Errorf("phase0 price = %q, want price_pro (unchanged until period end)", got)
+			}
+			if got := r.Form.Get("phases[0][end_date]"); got != "2000" {
+				t.Errorf("phase0 end_date = %q, want 2000 (period end)", got)
+			}
+			if got := r.Form.Get("phases[1][items][0][price]"); got != "price_plus" {
+				t.Errorf("phase1 price = %q, want price_plus (the downgrade)", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"id":"sub_sched_1"}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	c := NewStripeClient("sk_test", "whsec_abc", "")
+	c.base = srv.URL
+
+	if err := c.ScheduleDowngrade(context.Background(), "cus_x", "price_plus"); err != nil {
+		t.Fatalf("ScheduleDowngrade: %v", err)
+	}
+	if !sawList || !sawCreate || !sawUpdate {
+		t.Fatalf("expected list+create+update; list=%v create=%v update=%v", sawList, sawCreate, sawUpdate)
+	}
+}
+
+func TestScheduleDowngradeNoopWhenSamePrice(t *testing.T) {
+	var creates int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			creates++
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"data":[{"id":"sub_9","schedule":"","items":{"data":[{"price":{"id":"price_same"}}]}}]}`)
+	}))
+	defer srv.Close()
+
+	c := NewStripeClient("sk_test", "whsec_abc", "")
+	c.base = srv.URL
+
+	if err := c.ScheduleDowngrade(context.Background(), "cus_x", "price_same"); err != nil {
+		t.Fatalf("ScheduleDowngrade: %v", err)
+	}
+	if creates != 0 {
+		t.Fatalf("expected no schedule creation when already on the target price, got %d POSTs", creates)
+	}
+}

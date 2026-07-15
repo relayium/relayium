@@ -24,6 +24,10 @@ type fakeBiller struct {
 	lastChangeCustomer string
 	lastChangePrice    string
 	changeCalls        int
+
+	lastDowngradeCustomer string
+	lastDowngradePrice    string
+	downgradeCalls        int
 }
 
 func (f *fakeBiller) CreateCheckoutSession(ctx context.Context, in CheckoutInput) (string, error) {
@@ -40,6 +44,13 @@ func (f *fakeBiller) ChangeSubscriptionPlan(ctx context.Context, customerID, new
 	f.changeCalls++
 	f.lastChangeCustomer = customerID
 	f.lastChangePrice = newPriceID
+	return nil
+}
+
+func (f *fakeBiller) ScheduleDowngrade(ctx context.Context, customerID, newPriceID string) error {
+	f.downgradeCalls++
+	f.lastDowngradeCustomer = customerID
+	f.lastDowngradePrice = newPriceID
 	return nil
 }
 
@@ -286,31 +297,61 @@ func TestBillingChangePlanSamePlan400(t *testing.T) {
 	}
 }
 
-func TestBillingChangePlanHappyPath(t *testing.T) {
+// mustTwoPlans seeds a cheap "plus" and pricier "pro" so up/down direction is real.
+func mustTwoPlans(t *testing.T, store *SQLiteStore) {
+	mustPlan(t, store, Plan{ID: "plus", Name: "Plus", Active: true, PriceMonthly: 390, StripePriceMonthlyID: "price_plus_m", StripePriceYearlyID: "price_plus_y"})
+	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, PriceMonthly: 890, StripePriceMonthlyID: "price_pro_m", StripePriceYearlyID: "price_pro_y"})
+}
+
+func TestBillingChangePlanUpgradeIsImmediate(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	fb := &fakeBiller{}
 	svc.biller = fb
-	mustPlan(t, store, Plan{
-		ID: "pro", Name: "Pro", Active: true,
-		StripePriceMonthlyID: "price_pro_m", StripePriceYearlyID: "price_pro_y",
-	})
-	email := "change-happy@example.com"
+	mustTwoPlans(t, store)
+	email := "change-up@example.com"
 	cookie := loginCookie(t, ts, mail, email)
-	subscribeUser(t, store, mustUserID(t, store, email), "cus_happy", "plus")
+	subscribeUser(t, store, mustUserID(t, store, email), "cus_up", "plus")
 
 	resp := changePlan(t, ts, cookie, `{"planId":"pro","cycle":"yearly"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("want 200, got %d", resp.StatusCode)
 	}
-	if fb.changeCalls != 1 {
-		t.Fatalf("want 1 ChangeSubscriptionPlan call, got %d", fb.changeCalls)
+	// Upgrade (plus -> pro): immediate ChangeSubscriptionPlan, NOT a scheduled downgrade.
+	if fb.changeCalls != 1 || fb.downgradeCalls != 0 {
+		t.Fatalf("want immediate change (change=1 downgrade=0), got change=%d downgrade=%d", fb.changeCalls, fb.downgradeCalls)
 	}
-	if fb.lastChangeCustomer != "cus_happy" {
-		t.Fatalf("customer = %q, want cus_happy", fb.lastChangeCustomer)
+	if fb.lastChangeCustomer != "cus_up" || fb.lastChangePrice != "price_pro_y" {
+		t.Fatalf("change args = %q/%q, want cus_up/price_pro_y", fb.lastChangeCustomer, fb.lastChangePrice)
 	}
-	if fb.lastChangePrice != "price_pro_y" {
-		t.Fatalf("price = %q, want price_pro_y (yearly)", fb.lastChangePrice)
+}
+
+func TestBillingChangePlanDowngradeIsScheduled(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	fb := &fakeBiller{}
+	svc.biller = fb
+	mustTwoPlans(t, store)
+	email := "change-down@example.com"
+	cookie := loginCookie(t, ts, mail, email)
+	subscribeUser(t, store, mustUserID(t, store, email), "cus_down", "pro")
+
+	resp := changePlan(t, ts, cookie, `{"planId":"plus","cycle":"monthly"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	var out map[string]string
+	_ = json.Unmarshal(body, &out)
+	// Downgrade (pro -> plus): deferred ScheduleDowngrade, NOT an immediate change.
+	if fb.downgradeCalls != 1 || fb.changeCalls != 0 {
+		t.Fatalf("want scheduled downgrade (downgrade=1 change=0), got downgrade=%d change=%d", fb.downgradeCalls, fb.changeCalls)
+	}
+	if fb.lastDowngradePrice != "price_plus_m" {
+		t.Fatalf("downgrade price = %q, want price_plus_m", fb.lastDowngradePrice)
+	}
+	if out["effective"] != "period_end" {
+		t.Fatalf("effective = %q, want period_end", out["effective"])
 	}
 }
 

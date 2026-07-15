@@ -150,9 +150,11 @@ export interface Messages {
     current: string; // badge/label on the tier the user is currently subscribed to
     popular: string; // "Most popular" ribbon on the highlighted tier
     save2mo: string; // yearly-toggle savings badge (yearly = 10x monthly => 2 months free)
-    changeConfirm: (name: string) => string; // confirm() before switching an active subscription
+    changeConfirm: (name: string) => string; // confirm() before an UPGRADE (immediate, prorated)
+    downgradeConfirm: (name: string) => string; // confirm() before a DOWNGRADE (takes effect at period end)
     changeError: string; // in-app plan change (POST /api/billing/change-plan) failed
-    changeSuccess: string; // toast after a successful plan switch
+    changeSuccess: string; // toast after a successful (immediate) upgrade
+    downgradeScheduled: string; // toast after a downgrade is scheduled for period end
     notAvailable: string; // tier not yet purchasable
     signInRequired: string; // checkout attempted while signed out (401)
     checkoutError: string; // generic checkout-start failure

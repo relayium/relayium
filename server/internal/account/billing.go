@@ -128,11 +128,30 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "plan not purchasable"})
 		return
 	}
-	if err := s.biller.ChangeSubscriptionPlan(r.Context(), u.StripeCustomerID, priceID); err != nil {
+
+	// Upgrade vs downgrade decides timing. Tier direction is ranked by monthly
+	// price (stable regardless of the chosen cycle): a higher tier is an upgrade
+	// (apply now, prorated), a lower tier is a downgrade (defer to period end so
+	// the customer keeps what they paid for — no refund, no proration credit).
+	// If the current plan can't be resolved, treat it as an upgrade (apply now).
+	downgrade := false
+	if cur, ok, err := s.store.GetPlan(r.Context(), u.PlanID); err == nil && ok {
+		downgrade = plan.PriceMonthly < cur.PriceMonthly
+	}
+
+	var opErr error
+	effective := "now"
+	if downgrade {
+		opErr = s.biller.ScheduleDowngrade(r.Context(), u.StripeCustomerID, priceID)
+		effective = "period_end"
+	} else {
+		opErr = s.biller.ChangeSubscriptionPlan(r.Context(), u.StripeCustomerID, priceID)
+	}
+	if opErr != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "effective": effective})
 }
 
 // publicPlanView is the pricing UI's projection of a Plan: never includes the

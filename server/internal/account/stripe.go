@@ -23,10 +23,16 @@ type Biller interface {
 	CreateCheckoutSession(ctx context.Context, in CheckoutInput) (url string, err error)
 	CreatePortalSession(ctx context.Context, customerID, returnURL string) (url string, err error)
 	// ChangeSubscriptionPlan switches the customer's existing active subscription
-	// to newPriceID in place (prorated), for in-app upgrade/downgrade without a
-	// second checkout. The resulting customer.subscription.updated webhook is what
-	// actually reassigns the plan (by price), same as any other subscription event.
+	// to newPriceID in place, immediately and prorated — used for UPGRADES, where
+	// the customer wants the higher tier now and is charged the difference. The
+	// resulting customer.subscription.updated webhook reassigns the plan (by price).
 	ChangeSubscriptionPlan(ctx context.Context, customerID, newPriceID string) error
+	// ScheduleDowngrade switches the subscription to newPriceID at the END of the
+	// current billing period (not now), via a subscription schedule — used for
+	// DOWNGRADES, so the customer keeps the tier they already paid for until it
+	// lapses, with no refund and no proration credit. The plan_id only changes
+	// when the phase transition fires customer.subscription.updated at period end.
+	ScheduleDowngrade(ctx context.Context, customerID, newPriceID string) error
 	VerifyWebhook(payload []byte, sigHeader string, now int64) (WebhookEvent, error)
 }
 
@@ -297,6 +303,92 @@ func (c *stripeClient) ChangeSubscriptionPlan(ctx context.Context, customerID, n
 	form.Set("items[0][price]", newPriceID)
 	form.Set("proration_behavior", "create_prorations")
 	if _, err := c.request(ctx, http.MethodPost, "/v1/subscriptions/"+subID, form); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ScheduleDowngrade defers a plan change to the end of the current billing
+// period using a subscription schedule: phase 0 keeps the current price until
+// the period ends, phase 1 switches to newPriceID, then the schedule releases
+// the subscription to continue on the new price. No proration, no credit — the
+// customer just keeps what they paid for until it lapses.
+func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPriceID string) error {
+	// 1. Find the active subscription (and whether it's already schedule-managed).
+	q := url.Values{}
+	q.Set("customer", customerID)
+	q.Set("status", "active")
+	q.Set("limit", "1")
+	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions?"+q.Encode(), nil)
+	if err != nil {
+		return err
+	}
+	var subs struct {
+		Data []struct {
+			ID       string `json:"id"`
+			Schedule string `json:"schedule"`
+			Items    struct {
+				Data []struct {
+					Price struct {
+						ID string `json:"id"`
+					} `json:"price"`
+				} `json:"data"`
+			} `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &subs); err != nil {
+		return fmt.Errorf("stripe: list subscriptions: parse response: %w", err)
+	}
+	if len(subs.Data) == 0 {
+		return fmt.Errorf("stripe: no active subscription for customer %s", customerID)
+	}
+	sub := subs.Data[0]
+	if len(sub.Items.Data) > 0 && sub.Items.Data[0].Price.ID == newPriceID {
+		return nil // already on the target price — nothing to schedule
+	}
+	if sub.Schedule != "" {
+		// A schedule already governs this subscription (e.g. a prior pending
+		// downgrade). Don't stack schedules; surface an error so the caller can
+		// 500 and the user retries or uses the portal. (Followup: amend in place.)
+		return fmt.Errorf("stripe: subscription %s already has a pending schedule", sub.ID)
+	}
+
+	// 2. Seed a schedule from the subscription; its single phase mirrors the
+	//    current price and spans the current billing period.
+	seed := url.Values{}
+	seed.Set("from_subscription", sub.ID)
+	body, err = c.request(ctx, http.MethodPost, "/v1/subscription_schedules", seed)
+	if err != nil {
+		return err
+	}
+	var sched struct {
+		ID     string `json:"id"`
+		Phases []struct {
+			StartDate int64 `json:"start_date"`
+			EndDate   int64 `json:"end_date"`
+			Items     []struct {
+				Price string `json:"price"`
+			} `json:"items"`
+		} `json:"phases"`
+	}
+	if err := json.Unmarshal(body, &sched); err != nil {
+		return fmt.Errorf("stripe: create schedule: parse response: %w", err)
+	}
+	if len(sched.Phases) == 0 || len(sched.Phases[0].Items) == 0 {
+		return fmt.Errorf("stripe: schedule %s has no seed phase", sched.ID)
+	}
+	p0 := sched.Phases[0]
+
+	// 3. Append the downgrade as phase 1: current price until period end, then the
+	//    new price; release afterwards so the subscription continues normally.
+	upd := url.Values{}
+	upd.Set("end_behavior", "release")
+	upd.Set("phases[0][items][0][price]", p0.Items[0].Price)
+	upd.Set("phases[0][start_date]", strconv.FormatInt(p0.StartDate, 10))
+	upd.Set("phases[0][end_date]", strconv.FormatInt(p0.EndDate, 10))
+	upd.Set("phases[1][items][0][price]", newPriceID)
+	upd.Set("phases[1][iterations]", "1")
+	if _, err := c.request(ctx, http.MethodPost, "/v1/subscription_schedules/"+sched.ID, upd); err != nil {
 		return err
 	}
 	return nil

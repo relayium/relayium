@@ -38,8 +38,24 @@ Four asks from the product owner:
   404 unconfigured; **409** if the user has no Stripe-sourced subscription
   (`stripe_customer_id==""` or `plan_source!="stripe"` — free users and
   admin-comped accounts fall here and should use checkout / stay comped); **400**
-  for the current plan or a free/unmapped target; else calls the biller and 200s.
-  The plan_id flips asynchronously via the webhook; the client refreshes `/api/me`.
+  for the current plan or a free/unmapped target. Direction is ranked by the
+  plans' **monthly** price (stable across cycles): a higher tier is an **upgrade**,
+  a lower tier a **downgrade**. Returns `{status:"ok", effective:"now"|"period_end"}`.
+
+- **Upgrade vs downgrade timing (the fix, 2026-07-15 followup):**
+  - *Upgrade* → `ChangeSubscriptionPlan`: switch the price immediately with
+    `proration_behavior=create_prorations` (charge the difference now).
+  - *Downgrade* → `ScheduleDowngrade`: a Stripe **subscription schedule** keeps
+    the current price until `current_period_end`, then switches to the new price
+    (`end_behavior=release`). No refund, no proration credit — the customer keeps
+    the tier they paid for until it lapses. `plan_id` only changes when the phase
+    transition fires `customer.subscription.updated` at period end (the same
+    webhook path). **Known limitation:** while a downgrade is pending, the
+    subscription is schedule-managed, so a further in-app change 500s — the
+    customer must wait it out or use the Stripe portal (followup: amend/cancel the
+    schedule in place).
+  - The webhook still assigns `plan_id` purely by the subscription's current
+    price, so creating the schedule (price unchanged) never prematurely downgrades.
 - **Pricing.svelte** becomes subscription-aware (reads the session store): each
   paid tier renders "Current plan" (the user's tier), "Upgrade" (higher), or
   "Downgrade" (lower). Subscribed users route the button to change-plan (with a
