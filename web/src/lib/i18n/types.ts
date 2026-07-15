@@ -179,13 +179,32 @@ export interface Messages {
     title: string; // page H1
     subtitle: string; // one-line intro under the H1
     signedOutCta: string; // note for logged-out visitors above the tiers
-    faqTitle: string; // "Frequently asked questions"
-    q1: string; // is it really free?
-    a1: string;
-    q2: string; // can I change plans later?
-    a2: string;
-    q3: string; // how does billing / cancellation work?
-    a3: string;
+    // "Always free" explainer card
+    freeTitle: string;
+    freeLead: string;
+    free1: string; // LAN transfers
+    free2: string; // direct P2P
+    free3: string; // E2E, unlimited, never touch servers
+    freeWhy: string; // why they're free
+    // "What you pay for" explainer card
+    paidTitle: string;
+    paidLead: string;
+    paid1: string; // relay fallback
+    paid2: string; // temporary cloud storage
+    paid3: string; // higher limits
+    paidWhy: string; // why we charge for these
+    // Self-host (BYO node) callout
+    selfhostTitle: string;
+    selfhostBody: string;
+    selfhostCta: string; // link to the account page's Add-node flow
+    // FAQ
+    faqTitle: string;
+    q1: string; a1: string; // is it really free?
+    q2: string; a2: string; // direct vs relayed transfers
+    q3: string; a3: string; // why is there a paid tier?
+    q4: string; a4: string; // can I avoid paying entirely? (self-host)
+    q5: string; a5: string; // can I change plans later?
+    q6: string; a6: string; // billing / cancellation
     back: string; // link back to the app/home
   };
   me: {
