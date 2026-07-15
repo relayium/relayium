@@ -204,8 +204,11 @@ func TestCreateCheckoutSessionRequestShape(t *testing.T) {
 		if got := r.Form.Get("customer_email"); got != "user@example.com" {
 			t.Errorf("customer_email = %q, want user@example.com", got)
 		}
-		if got := r.Form.Get("customer_creation"); got != "always" {
-			t.Errorf("customer_creation = %q, want always", got)
+		// customer_creation must NOT be sent: it's only valid in payment mode,
+		// and subscription-mode Checkout creates the Customer itself. Sending it
+		// makes Stripe 400 the first-time subscriber's checkout.
+		if got := r.Form.Get("customer_creation"); got != "" {
+			t.Errorf("customer_creation = %q, want empty (invalid in subscription mode)", got)
 		}
 		if got := r.Form.Get("customer"); got != "" {
 			t.Errorf("customer = %q, want empty (CustomerID unset)", got)

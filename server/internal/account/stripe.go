@@ -225,8 +225,11 @@ func (c *stripeClient) CreateCheckoutSession(ctx context.Context, in CheckoutInp
 	if in.CustomerID != "" {
 		form.Set("customer", in.CustomerID)
 	} else {
+		// subscription-mode Checkout always creates a Customer on its own, so we
+		// only prefill the email; sending customer_creation here is invalid
+		// (Stripe: "customer_creation can only be used in payment mode") and
+		// would 400 every first-time subscriber's checkout.
 		form.Set("customer_email", in.CustomerEmail)
-		form.Set("customer_creation", "always")
 	}
 	return c.postForSessionURL(ctx, "/v1/checkout/sessions", form)
 }
