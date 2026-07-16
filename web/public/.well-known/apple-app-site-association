@@ -1,0 +1,17 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["TEAMID.com.relayium.app", "TEAMID.com.relayium.mac"],
+        "components": [
+          { "/": "/d/*", "comment": "shared download links open in the app" },
+          { "/": "/cross-network", "comment": "realtime pairing links open in the app" }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["TEAMID.com.relayium.app", "TEAMID.com.relayium.mac"]
+  }
+}
