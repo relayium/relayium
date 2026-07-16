@@ -96,6 +96,15 @@ func (s *Service) routeMux() *http.ServeMux {
 		mux.HandleFunc("GET /api/auth/google/start", s.handleGoogleStart)
 		mux.HandleFunc("GET /api/auth/google/callback", s.handleGoogleCallback)
 	}
+	// Sign in with Apple (native app token exchange). Dormant until configured.
+	if s.cfg.EnableApple {
+		mux.HandleFunc("POST /api/auth/apple/native", s.handleAppleNative)
+	}
+	// Native (iOS/macOS) app login: same credential guards as the cookie login
+	// but returns a bearer token the app stores in the Keychain.
+	mux.HandleFunc("POST /api/auth/native/login", s.handleNativeLogin)
+	// Manage linked login methods (session- or bearer-authed).
+	mux.HandleFunc("DELETE /api/auth/identities/{provider}", s.RequireAuth(s.handleUnlinkIdentity))
 	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/me", s.RequireSession(s.handleMe))
 	mux.HandleFunc("GET /api/devices", s.RequireSession(s.handleListDevices))
@@ -344,11 +353,13 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
+	linked, _ := s.store.ListIdentityProviders(r.Context(), u.ID)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user": map[string]any{
 			"id": u.ID, "email": u.Email, "displayName": u.DisplayName,
 			"hasPassword": hasPass, "emailVerified": u.EmailVerified,
-			"onlyOwnNodes": u.OnlyOwnNodes,
+			"linkedMethods": loginMethods(hasPass, linked),
+			"onlyOwnNodes":  u.OnlyOwnNodes,
 			// Billing (phase-2): plan + subscription state and whether a Stripe
 			// customer exists yet (gates the "Manage billing" button in the UI).
 			"planId":             u.PlanID,
@@ -390,6 +401,7 @@ func (s *Service) handleAuthMethods(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{
 		"password": true,
 		"google":   s.cfg.EnableGoogle,
+		"apple":    s.cfg.EnableApple,
 		"magic":    s.cfg.EnableMagic,
 	})
 }

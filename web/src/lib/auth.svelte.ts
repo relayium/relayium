@@ -6,6 +6,9 @@ export interface SessionUser {
   email: string;
   displayName: string;
   hasPassword: boolean;
+  // Ways this account can sign in: "password" (if set) + linked OAuth providers
+  // ("google"/"apple"). Absent on older responses → treated as empty.
+  linkedMethods?: string[];
   // Billing (phase-2, all optional so older mocks/tests without them still
   // typecheck): current plan id ("free" absent a subscription), the raw
   // Stripe subscription status ("", "active", "past_due", "canceled", ...),
@@ -281,6 +284,34 @@ export async function changePassword(
     /* non-JSON body */
   }
   return { ok: false, error };
+}
+
+/** Remove a linked OAuth provider from the current account. The server refuses
+ *  (409) to remove the last remaining login method. On success the returned
+ *  linkedMethods are folded back into the session so the UI updates live. */
+export async function unlinkIdentity(
+  provider: string,
+): Promise<{ ok: boolean; error?: string }> {
+  let res: Response;
+  try {
+    res = await fetch(`/api/auth/identities/${provider}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+  } catch {
+    return { ok: false, error: "network" };
+  }
+  if (res.ok) {
+    try {
+      const body = (await res.json()) as { linkedMethods?: string[] };
+      if (user && body.linkedMethods) user = { ...user, linkedMethods: body.linkedMethods };
+    } catch {
+      /* non-JSON body — leave session as-is; a refresh will reconcile */
+    }
+    return { ok: true };
+  }
+  if (res.status === 409) return { ok: false, error: "last_login_method" };
+  return { ok: false, error: "error" };
 }
 
 const DEVICE_KEY = "relayium_device_id";

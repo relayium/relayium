@@ -89,40 +89,52 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 }
 
 // Login 校验邮箱+密码并签发会话。任何失败都返回 ErrBadCredentials。
-func (s *Service) Login(ctx context.Context, email, password string) (Session, error) {
+// authenticate validates email+password and the login preconditions — verified
+// email, not a frozen (pending-deletion) account — returning the user id. Shared
+// by the cookie-session Login and the native bearer-token login so both enforce
+// byte-for-byte identical credential/verification/frozen guards.
+func (s *Service) authenticate(ctx context.Context, email, password string) (string, error) {
 	email = normEmail(email)
 	uid, hash, ok, err := s.store.GetCredentials(ctx, email)
 	if err != nil {
-		return Session{}, err
+		return "", err
 	}
 	if !ok {
 		// Equalize timing against the account-exists path: run a comparable bcrypt
 		// against a dummy hash so response time doesn't leak account existence.
 		_ = bcrypt.CompareHashAndPassword(dummyBcryptHash, []byte(password))
-		return Session{}, ErrBadCredentials
+		return "", ErrBadCredentials
 	}
 	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
-		return Session{}, ErrBadCredentials
+		return "", ErrBadCredentials
 	}
 	if verified, err := s.store.EmailVerified(ctx, uid); err != nil {
-		return Session{}, err
+		return "", err
 	} else if !verified {
-		return Session{}, ErrEmailUnverified
+		return "", ErrEmailUnverified
 	}
 	// Frozen-login guard (Task 4): load the full user row so DeletedAt is
-	// visible, and refuse to issue a session for a pending-deletion account —
-	// checked after credentials/verification pass but strictly before
-	// IssueSession, so a frozen account can never end up with a live session.
+	// visible, and refuse to authenticate a pending-deletion account — checked
+	// after credentials/verification pass but strictly before any session or
+	// bearer token is issued, so a frozen account can never get live access.
 	u, err := s.store.GetUserByID(ctx, uid)
 	if err != nil {
-		return Session{}, err
+		return "", err
 	}
 	if u.DeletedAt > 0 {
 		raw, terr := s.issueReactivateToken(ctx, u.ID, u.Email)
 		if terr != nil {
-			return Session{}, terr
+			return "", terr
 		}
-		return Session{}, &PendingDeletionError{PurgeAfter: u.PurgeAfter, ReactivateToken: raw}
+		return "", &PendingDeletionError{PurgeAfter: u.PurgeAfter, ReactivateToken: raw}
+	}
+	return uid, nil
+}
+
+func (s *Service) Login(ctx context.Context, email, password string) (Session, error) {
+	uid, err := s.authenticate(ctx, email, password)
+	if err != nil {
+		return Session{}, err
 	}
 	return s.IssueSession(ctx, uid)
 }

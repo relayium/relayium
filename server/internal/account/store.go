@@ -328,6 +328,12 @@ type Store interface {
 	GetUserByID(ctx context.Context, id string) (User, error)
 	LinkIdentity(ctx context.Context, provider, subject, userID string) error
 	GetUserByIdentity(ctx context.Context, provider, subject string) (User, bool, error)
+	// ListIdentityProviders returns the distinct OAuth providers linked to a
+	// user ("google"/"apple"/…), sorted, for surfacing + the unlink guard.
+	ListIdentityProviders(ctx context.Context, userID string) ([]string, error)
+	// UnlinkIdentity removes a user's link to one provider (owner-scoped).
+	// Returns ErrNotFound when no such link exists.
+	UnlinkIdentity(ctx context.Context, provider, userID string) error
 	SetPassword(ctx context.Context, userID, passwordHash string) error
 	GetCredentials(ctx context.Context, email string) (userID, passwordHash string, ok bool, err error)
 	// UserByCanonicalEmail looks up an account by its folded canonical email form

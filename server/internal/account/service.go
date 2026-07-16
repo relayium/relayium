@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -51,21 +52,27 @@ type RelayConfig struct {
 }
 
 type Config struct {
-	BaseURL         string
-	SessionTTL      time.Duration
-	MagicTTL        time.Duration
-	VerifyTTL       time.Duration // email verification link lifetime (default 24h)
-	ResetTTL        time.Duration // password reset link lifetime (default 1h)
-	STUNURLs        []string
-	TURNURLs        []string
-	TURNSecret      string
-	TURNCredTTL     time.Duration
-	TURNRelays      []RelayConfig // multi-relay pool; empty = legacy single TURN only
-	GoogleClientID  string
-	GoogleSecret    string
-	GoogleRedirect  string
-	EnableGoogle    bool
-	EnableMagic     bool
+	BaseURL        string
+	SessionTTL     time.Duration
+	MagicTTL       time.Duration
+	VerifyTTL      time.Duration // email verification link lifetime (default 24h)
+	ResetTTL       time.Duration // password reset link lifetime (default 1h)
+	STUNURLs       []string
+	TURNURLs       []string
+	TURNSecret     string
+	TURNCredTTL    time.Duration
+	TURNRelays     []RelayConfig // multi-relay pool; empty = legacy single TURN only
+	GoogleClientID string
+	GoogleSecret   string
+	GoogleRedirect string
+	EnableGoogle   bool
+	EnableMagic    bool
+	// Sign in with Apple. EnableApple gates the /api/auth/apple/* routes (off by
+	// default → dormant until an Apple developer account is configured).
+	// AppleClientIDs is the aud allowlist: the app's Bundle ID (native SiwA) and
+	// the web Services ID both present tokens, so both must be accepted.
+	EnableApple     bool
+	AppleClientIDs  []string
 	AdminUser       string
 	AdminPassword   string
 	AdminTOTPSecret string // base32 TOTP secret; empty disables admin 2FA
@@ -107,11 +114,15 @@ type Config struct {
 }
 
 type Service struct {
-	store             Store
-	mailer            Mailer
-	cfg               Config
-	now               func() time.Time
-	fetchGoogleUser   func(ctx context.Context, code string) (sub, email, name string, verified bool, err error)
+	store           Store
+	mailer          Mailer
+	cfg             Config
+	now             func() time.Time
+	fetchGoogleUser func(ctx context.Context, code string) (sub, email, name string, verified bool, err error)
+	// appleKey resolves Apple's signing public key for a given JWKS `kid`.
+	// Injectable so tests verify tokens against a local key without touching the
+	// network; the default fetches + caches Apple's public JWKS.
+	appleKey          func(ctx context.Context, kid string) (*rsa.PublicKey, error)
 	adminSessions     map[string]int64 // token -> 过期 unix 秒
 	adminMu           sync.Mutex
 	adminTOTPMu       sync.Mutex
@@ -172,6 +183,7 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 		uploadSem:      newUploadSem(maxConcurrentUploadsPerUser)}
 	svc.clientIP = clientIP
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
+	svc.appleKey = newAppleKeyStore().key
 	svc.allowPrivateNodeURLs = os.Getenv("RELAYIUM_ALLOW_PRIVATE_NODE_URLS") == "true"
 	svc.nodeHTTP = &http.Client{Transport: &http.Transport{
 		ResponseHeaderTimeout: 15 * time.Second,

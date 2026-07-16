@@ -914,6 +914,36 @@ func (s *SQLiteStore) GetUserByIdentity(ctx context.Context, provider, subject s
 	return u, err == nil, err
 }
 
+func (s *SQLiteStore) ListIdentityProviders(ctx context.Context, userID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT provider FROM identities WHERE user_id = ? ORDER BY provider`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) UnlinkIdentity(ctx context.Context, provider, userID string) error {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM identities WHERE provider = ? AND user_id = ?`, provider, userID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *SQLiteStore) CreateSession(ctx context.Context, sess Session) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions (id, user_id, created_at, expires_at, revoked) VALUES (?, ?, ?, ?, 0)`,

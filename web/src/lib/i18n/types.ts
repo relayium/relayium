@@ -126,6 +126,9 @@ export interface Messages {
     pwChanged: string;
     errCurrentWrong: string;
     errMismatch: string;
+    linkedTitle: string; // heading for the linked-login-methods list
+    unlink: string; // remove a linked provider button
+    errLastMethod: string; // refused: can't remove the only login method
     personalCenter: string; // menu entry → /me
     verifySentBody: (email: string) => string; // "check your email" panel body after register
     resendVerification: string; // resend button label on the "check your email" panel

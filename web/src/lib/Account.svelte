@@ -4,7 +4,7 @@
     session, refreshSession, logout, localDeviceId,
     googleLoginUrl, requestMagicLink,
     register, passwordLogin, fetchAuthMethods, changePassword, type AuthMethods,
-    resendVerification, forgotPassword,
+    resendVerification, forgotPassword, unlinkIdentity,
   } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate } from "./router.svelte";
@@ -72,6 +72,15 @@
   });
 
   let pwBusy = $state(false);
+
+  // Linked-login-method management (unlink an OAuth provider).
+  let unlinkErr = $state("");
+  const provLabel = (p: string) => p.charAt(0).toUpperCase() + p.slice(1);
+  async function doUnlink(provider: string) {
+    unlinkErr = "";
+    const res = await unlinkIdentity(provider);
+    if (!res.ok) unlinkErr = res.error === "last_login_method" ? t.account.errLastMethod : t.account.errNetwork;
+  }
 
   function mapPwError(code?: string): string {
     if (code === "current password incorrect") return t.account.errCurrentWrong;
@@ -321,6 +330,21 @@
             </button>
           {/if}
 
+          {#if (session().user!.linkedMethods?.length ?? 0) > 0}
+            <div class="linked">
+              <p class="hint">{t.account.linkedTitle}</p>
+              {#each session().user!.linkedMethods! as m (m)}
+                <div class="linked-row">
+                  <span>{provLabel(m)}</span>
+                  {#if m !== "password"}
+                    <button type="button" class="btn-link" onclick={() => doUnlink(m)}>{t.account.unlink}</button>
+                  {/if}
+                </div>
+              {/each}
+              {#if unlinkErr}<p class="err">{unlinkErr}</p>{/if}
+            </div>
+          {/if}
+
           <button class="btn btn-ghost" onclick={() => { open = false; navigate("me"); }}>{t.account.personalCenter}</button>
           <button class="btn btn-ghost" onclick={onLogout}>{t.account.signOut}</button>
         </div>
@@ -442,6 +466,9 @@
   }
   .menu .sep { text-align: center; color: var(--text); font-size: 12px; }
   .menu .who { color: var(--text); }
+  .linked { display: flex; flex-direction: column; gap: var(--space-1); padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); }
+  .linked-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); font-size: var(--fs-xs); color: var(--text-h); }
+  .linked-row .btn-link { padding: 0; }
   .menu .hint { color: var(--text); font-size: var(--fs-xs); margin: 0; }
   .menu .err { color: var(--danger); font-size: 12px; margin: 0; }
 
