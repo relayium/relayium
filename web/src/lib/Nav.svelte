@@ -1,7 +1,9 @@
 <script lang="ts">
   import { currentRoute, navigate, CROSS_PATH, OFFLINE_PATH, CLI_PATH, type Route } from "./router.svelte";
   import { lang, setLang, LANGS, messages, type Lang, type Messages } from "./i18n.svelte";
+  import { loginOpen, setLoginOpen } from "./login.svelte";
   import ThemeSelect from "./ThemeSelect.svelte";
+  import Account from "./Account.svelte";
   import Logo from "./Logo.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
@@ -11,6 +13,14 @@
     { id: "offline", label: () => t.nav.offlineTab },
     { id: "cli", label: () => t.nav.cliTab },
   ];
+
+  // The account control only appears on the login-gated flows (async storage,
+  // realtime pairing, personal center) — the same set that used to render their
+  // own top-right Account row. Rendering it here folds it into the nav bar so it
+  // no longer sits on a lonely row of its own.
+  const showAccount = $derived(
+    currentRoute() === "cross" || currentRoute() === "offline" || currentRoute() === "me",
+  );
 </script>
 
 <nav class="topnav">
@@ -33,18 +43,24 @@
     {/each}
   </div>
 
-  <select
-    class="lang"
-    aria-label={t.langLabel}
-    value={lang()}
-    onchange={(e) => setLang((e.currentTarget as HTMLSelectElement).value as Lang)}
-  >
-    {#each LANGS as l (l.code)}
-      <option value={l.code}>{l.label}</option>
-    {/each}
-  </select>
+  <div class="util">
+    <select
+      class="lang"
+      aria-label={t.langLabel}
+      value={lang()}
+      onchange={(e) => setLang((e.currentTarget as HTMLSelectElement).value as Lang)}
+    >
+      {#each LANGS as l (l.code)}
+        <option value={l.code}>{l.label}</option>
+      {/each}
+    </select>
 
-  <ThemeSelect />
+    <ThemeSelect />
+
+    {#if showAccount}
+      <Account bind:open={() => loginOpen(), (v) => setLoginOpen(v)} />
+    {/if}
+  </div>
 </nav>
 
 <style>
@@ -54,6 +70,8 @@
   }
   .brand { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text-h); font-weight: 600; }
   .brand .word { font-size: 16px; letter-spacing: -0.4px; }
+
+  .util { display: flex; align-items: center; gap: var(--space-3); }
 
   .tabs { display: flex; gap: 6px; margin: 0 auto 0 8px; }
   .tab {
@@ -74,9 +92,14 @@
   .lang:hover { border-color: var(--accent-border); }
 
   @media (max-width: 560px) {
-    .topnav { flex-wrap: wrap; gap: 8px; }
+    /* Row 1: brand on the left, the utility group (lang · theme · account)
+       pushed to the right. Row 2: the mode tabs, full width. No lonely rows. */
+    .topnav { flex-wrap: wrap; gap: 8px; row-gap: 10px; }
     .brand .word { display: none; }
+    .util { margin-inline-start: auto; gap: var(--space-2); }
     .tabs { margin: 0; order: 3; width: 100%; }
     .tab { flex: 1; }
+    /* Trim the selects so brand + all three controls fit one row on small phones. */
+    .lang { padding-inline: 8px 24px; max-width: 40vw; }
   }
 </style>

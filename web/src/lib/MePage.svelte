@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import Account from "./Account.svelte";
   import ConfirmModal from "./ConfirmModal.svelte";
   import { confirmDialog } from "./confirm-dialog.svelte";
   import { session, refreshSession } from "./auth.svelte";
+  import { setLoginOpen } from "./login.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate } from "./router.svelte";
   import { formatSize, formatRemaining } from "./format";
@@ -14,7 +14,6 @@
   import CommandBlock from "./CommandBlock.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
-  let loginOpen = $state(false);
 
   interface Stats {
     transfers: number; downloads: number;
@@ -199,7 +198,6 @@
 
 <section class="me">
   <ConfirmModal />
-  <div class="acct"><Account bind:open={loginOpen} /></div>
 
   <header class="me-head">
     <button class="back" onclick={() => navigate("lan")}>{t.me.back}</button>
@@ -209,7 +207,7 @@
   {#if !session().user}
     <div class="gate">
       <p>{t.me.loginRequired}</p>
-      <button class="btn btn-primary" onclick={() => (loginOpen = true)}>{t.me.signIn}</button>
+      <button class="btn btn-primary" onclick={() => setLoginOpen(true)}>{t.me.signIn}</button>
       <WhyAccount compact />
     </div>
   {:else}
@@ -333,7 +331,6 @@
 
 <style>
   .me { position: relative; max-width: 1120px; margin: 0 auto; }
-  .acct { display: flex; justify-content: flex-end; min-height: 32px; }
 
   .me-head { text-align: center; padding: var(--space-2) 0 var(--space-5); position: relative; }
   .me-head h1 { font-size: 30px; margin: 0; letter-spacing: -.5px; }
@@ -343,6 +340,15 @@
     padding: var(--space-1) 0;
   }
   .back:hover { color: var(--text-h); }
+
+  /* Narrow screens: the centred title is wide enough to collide with the
+     absolutely-positioned back link. Drop out of that overlay layout — back
+     link on its own line, title left-aligned below it. */
+  @media (max-width: 560px) {
+    .me-head { text-align: start; padding-top: 0; }
+    .me-head .back { position: static; display: inline-block; margin-bottom: var(--space-3); }
+    .me-head h1 { font-size: 24px; }
+  }
 
   .gate {
     display: flex; flex-direction: column; align-items: center; gap: var(--space-3);

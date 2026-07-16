@@ -1,6 +1,5 @@
 <!-- web/src/lib/OfflinePage.svelte -->
 <script lang="ts">
-  import Account from "./Account.svelte";
   import StoredUpload from "./StoredUpload.svelte";
   import HowItWorks from "./HowItWorks.svelte";
   import CrossSell from "./CrossSell.svelte";
@@ -10,21 +9,20 @@
   import Faq from "./Faq.svelte";
   import WhyAccount from "./WhyAccount.svelte";
   import { session } from "./auth.svelte";
+  import { setLoginOpen } from "./login.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate, PRICING_PATH } from "./router.svelte";
   import PageFooter from "./PageFooter.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
-  let loginOpen = $state(false);
   const cloudGuideSlug = "guides/push-to-cloud-pull-on-another-computer";
   const cloudGuideHref = $derived(lang() === "en" ? `/${cloudGuideSlug}` : `/${lang()}/${cloudGuideSlug}`);
 </script>
 
 <section class="offlinepage">
-  <!-- The async page is the ONLY page with account UI: sign-in lives here (and /me),
-       so the two free pages never show an account concept at all. -->
-  <div class="acct"><Account bind:open={loginOpen} /></div>
-
+  <!-- Sign-in for this login-gated flow lives in the top nav (Nav.svelte renders
+       the Account control for cross/offline/me); the two free pages never show
+       an account concept at all. -->
   <header class="cn-head">
     <h1>{t.offlineTitle}</h1>
     <p class="tagline">{t.offline.tagline}</p>
@@ -39,7 +37,7 @@
         <StoredUpload />
       {:else}
         <div class="signin">
-          <button class="btn btn-primary" onclick={() => (loginOpen = true)}>{t.account.signIn}</button>
+          <button class="btn btn-primary" onclick={() => setLoginOpen(true)}>{t.account.signIn}</button>
           <p class="hint">{t.offline.signIn}</p>
         </div>
       {/if}
@@ -72,7 +70,6 @@
 
 <style>
   .offlinepage { position: relative; }
-  .acct { display: flex; justify-content: flex-end; min-height: 32px; }
 
   .cn-head { text-align: center; padding: var(--space-3) 0 var(--space-5); }
   /* Mirrors CrossPage's page-header scale — smaller than the marketing hero. */
