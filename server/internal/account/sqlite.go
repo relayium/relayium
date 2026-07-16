@@ -283,6 +283,9 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// monthly relay traffic and disk usage.
 		`ALTER TABLE nodes ADD COLUMN traffic_limit_bytes INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE nodes ADD COLUMN disk_limit_bytes INTEGER NOT NULL DEFAULT 0`,
+		// Human-set display name / note for a node. Seeded from the node token's
+		// name at first register, then editable from the dashboard/admin.
+		`ALTER TABLE nodes ADD COLUMN label TEXT NOT NULL DEFAULT ''`,
 		// device-code CLI login flow: distinguishes a CLI-registered device
 		// ("cli") from the default browser device. Existing rows default to ''.
 		`ALTER TABLE devices ADD COLUMN kind TEXT NOT NULL DEFAULT ''`,
@@ -1858,7 +1861,7 @@ func nullStr(s string) any {
 const nodeCols = `id, owner_type, owner_user_id, region, urls, turn_secret, version,
   relayed_bytes, stored_bytes, created_at, last_seen_at,
   storage_url, storage_secret, storage_enabled, storage_total, storage_free,
-  traffic_limit_bytes, disk_limit_bytes`
+  traffic_limit_bytes, disk_limit_bytes, label`
 
 func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	if n.ID == "" {
@@ -1870,7 +1873,7 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO nodes (`+nodeCols+`)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   owner_type=excluded.owner_type, owner_user_id=excluded.owner_user_id,
 		   region=excluded.region, urls=excluded.urls, turn_secret=excluded.turn_secret,
@@ -1878,10 +1881,12 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 		   storage_url=excluded.storage_url, storage_secret=excluded.storage_secret,
 		   storage_enabled=excluded.storage_enabled, storage_total=excluded.storage_total,
 		   storage_free=excluded.storage_free`,
+		// label is intentionally set only on INSERT (seeded from the token name) and
+		// preserved on re-register, so a user's rename survives the node's heartbeats.
 		n.ID, n.OwnerType, nullStr(n.OwnerUserID), n.Region, string(urls), n.TURNSecret,
 		n.Version, n.RelayedBytes, n.StoredBytes, n.CreatedAt, n.LastSeenAt,
 		nullStr(n.StorageURL), nullStr(n.StorageSecret), b2i(n.StorageEnabled), n.StorageTotal, n.StorageFree,
-		n.TrafficLimitBytes, n.DiskLimitBytes)
+		n.TrafficLimitBytes, n.DiskLimitBytes, n.Label)
 	if err != nil {
 		return Node{}, err
 	}
@@ -1991,6 +1996,42 @@ func (s *SQLiteStore) SetNodeLimits(ctx context.Context, nodeID string, trafficL
 	return nil
 }
 
+func (s *SQLiteStore) SetUserNodeLabel(ctx context.Context, id, ownerUserID, label string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE nodes SET label = ? WHERE id = ? AND owner_type = 'user' AND owner_user_id = ?`,
+		label, id, ownerUserID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *SQLiteStore) SetNodeLabel(ctx context.Context, id, label string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE nodes SET label = ? WHERE id = ?`, label, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// CentralStoredBytes sums live file sizes held on central-local storage — rows
+// whose node_id is unset (NULL or ”), i.e. the app server's own disk fallback.
+func (s *SQLiteStore) CentralStoredBytes(ctx context.Context) (int64, error) {
+	var total sql.NullInt64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(size), 0) FROM stored_files WHERE node_id IS NULL OR node_id = ''`).Scan(&total)
+	if err != nil {
+		return 0, err
+	}
+	return total.Int64, nil
+}
+
 // DeleteFleetNode removes an official (fleet) node, scoped to owner_type='fleet'
 // so a user node id cannot be deleted through the admin path. Also clears the
 // node's pending_node_deletes entries (mirrors DeleteNode).
@@ -2022,7 +2063,7 @@ func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]
 		if err := rows.Scan(&n.ID, &n.OwnerType, &ownerUser, &n.Region, &urls, &n.TURNSecret,
 			&n.Version, &n.RelayedBytes, &n.StoredBytes, &n.CreatedAt, &n.LastSeenAt,
 			&storageURL, &storageSecret, &storageEnabled, &n.StorageTotal, &n.StorageFree,
-			&n.TrafficLimitBytes, &n.DiskLimitBytes); err != nil {
+			&n.TrafficLimitBytes, &n.DiskLimitBytes, &n.Label); err != nil {
 			return nil, err
 		}
 		n.OwnerUserID = ownerUser.String

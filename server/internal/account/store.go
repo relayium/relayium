@@ -214,6 +214,7 @@ type Node struct {
 	ID             string
 	OwnerType      string // "fleet" (SP3 adds "user")
 	OwnerUserID    string // "" for fleet
+	Label          string // human-set display name / note; seeded from the node token's name, editable
 	Region         string
 	URLs           []string
 	TURNSecret     string
@@ -505,6 +506,14 @@ type Store interface {
 	DeleteNode(ctx context.Context, id, ownerUserID string) error
 	// SetNodeLimits sets a node's admin hard caps (bytes; 0 = unlimited).
 	SetNodeLimits(ctx context.Context, nodeID string, trafficLimit, diskLimit int64) error
+	// SetUserNodeLabel renames a user-owned node, scoped to its owner so a user
+	// can only rename their own nodes.
+	SetUserNodeLabel(ctx context.Context, id, ownerUserID, label string) error
+	// SetNodeLabel renames any node (admin, unscoped) — used for fleet nodes.
+	SetNodeLabel(ctx context.Context, id, label string) error
+	// CentralStoredBytes sums the live sizes of files held on central-local
+	// storage (node_id unset) — the app server's own disk fallback.
+	CentralStoredBytes(ctx context.Context) (int64, error)
 	// DeleteFleetNode removes an official (fleet) node, scoped to owner_type='fleet'.
 	DeleteFleetNode(ctx context.Context, id string) error
 	// pending_node_deletes (orphan-retry queue for GC when a node's DELETE fails)

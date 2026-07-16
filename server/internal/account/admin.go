@@ -33,6 +33,8 @@ const (
 type adminNodeView struct {
 	ID                string
 	OwnerType         string
+	Label             string
+	Host              string
 	Region            string
 	Version           string
 	Online            bool
@@ -52,7 +54,8 @@ func nodeViews(nodes []Node, monthly map[string]int64, now time.Time) []adminNod
 	out := make([]adminNodeView, 0, len(nodes))
 	for _, n := range nodes {
 		out = append(out, adminNodeView{
-			ID: n.ID, OwnerType: n.OwnerType, Region: n.Region, Version: n.Version,
+			ID: n.ID, OwnerType: n.OwnerType, Label: n.Label, Host: nodeHost(n.URLs),
+			Region: n.Region, Version: n.Version,
 			Online:            n.LastSeenAt >= cutoff,
 			RelayedBytes:      n.RelayedBytes,
 			MonthRelayedBytes: monthly[n.ID],
@@ -188,6 +191,7 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	mux.Handle("POST /admin/nodes/token", s.csrfGuard(http.HandlerFunc(s.handleAdminMintToken)))
 	mux.Handle("POST /admin/nodes/token/{id}/revoke", s.csrfGuard(http.HandlerFunc(s.handleAdminRevokeToken)))
 	mux.Handle("POST /admin/nodes/{id}/limits", s.csrfGuard(http.HandlerFunc(s.handleAdminNodeLimits)))
+	mux.Handle("POST /admin/nodes/{id}/label", s.csrfGuard(http.HandlerFunc(s.handleAdminNodeLabel)))
 	mux.Handle("POST /admin/nodes/{id}/delete", s.csrfGuard(http.HandlerFunc(s.handleAdminDeleteNode)))
 }
 
@@ -365,6 +369,10 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 	}
 
 	st := s.resolveSettings(r.Context())
+	centralStored, cerr := s.store.CentralStoredBytes(r.Context())
+	if cerr != nil {
+		log.Printf("admin: CentralStoredBytes failed: %v", cerr)
+	}
 	var planVs, activePlanVs []planView
 	if plans, plerr := s.store.ListPlans(r.Context()); plerr != nil {
 		log.Printf("admin: ListPlans failed: %v", plerr)
@@ -382,15 +390,17 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		PrevHref: prev, NextHref: next, SortHref: sortHref,
 		Nodes: nodeVs, FleetNodeCount: fleetNodeCount, FleetTokens: tokenVs,
 		Plans: planVs, ActivePlans: activePlanVs,
+		CentralStoredBytes: centralStored,
 		Settings: adminSettingsView{
-			MaxFileSizeMB:       st.MaxFileSize / (1024 * 1024),
-			DailyQuotaMB:        st.DailyQuota / (1024 * 1024),
-			DefaultTTLHrs:       st.DefaultTTL / 3600,
-			MaxTTLHrs:           st.MaxTTL / 3600,
-			DefaultRetention:    st.DefaultRetention,
-			DefaultMaxDownloads: st.DefaultMaxDownloads,
-			MaxMaxDownloads:     st.MaxMaxDownloads,
-			StorageDiskCapMB:    st.StorageDiskCap / (1024 * 1024),
+			MaxFileSizeMB:          st.MaxFileSize / (1024 * 1024),
+			DailyQuotaMB:           st.DailyQuota / (1024 * 1024),
+			DefaultTTLHrs:          st.DefaultTTL / 3600,
+			MaxTTLHrs:              st.MaxTTL / 3600,
+			DefaultRetention:       st.DefaultRetention,
+			DefaultMaxDownloads:    st.DefaultMaxDownloads,
+			MaxMaxDownloads:        st.MaxMaxDownloads,
+			StorageDiskCapMB:       st.StorageDiskCap / (1024 * 1024),
+			DisableCentralFallback: st.DisableCentralFallback,
 		},
 	}, nil
 }
@@ -450,6 +460,11 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 			"*_mb fields <= 1073741824)", http.StatusBadRequest)
 		return
 	}
+	// Unchecked checkboxes submit no value; present (any value) = on.
+	disableCentral := int64(0)
+	if strings.TrimSpace(r.FormValue("disable_central_fallback")) != "" {
+		disableCentral = 1
+	}
 	now := s.now().Unix()
 	updates := []struct {
 		key string
@@ -463,6 +478,7 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		{SettingDefaultMaxDownloads, defMaxDL},
 		{SettingMaxMaxDownloads, maxMaxDL},
 		{SettingStorageDiskCap, storageCapMB * 1024 * 1024},
+		{SettingDisableCentralFallback, disableCentral},
 	}
 	for _, u := range updates {
 		if err := s.store.SetSetting(r.Context(), u.key, u.val, now); err != nil {
@@ -635,6 +651,23 @@ func (s *Service) handleAdminNodeLimits(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := s.store.SetNodeLimits(r.Context(), id, tGB<<30, dGB<<30); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// handleAdminNodeLabel renames an official (fleet) node.
+func (s *Service) handleAdminNodeLabel(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	label := strings.TrimSpace(r.FormValue("label"))
+	if len(label) > 64 {
+		label = label[:64]
+	}
+	if err := s.store.SetNodeLabel(r.Context(), r.PathValue("id"), label); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}

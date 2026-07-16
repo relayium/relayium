@@ -61,6 +61,11 @@ func (s *Service) placeUpload(ctx context.Context, userID string) (string, stora
 		log.Printf("placeUpload: StorageNodes read failed: %v (central)", err)
 	}
 	if len(nodes) == 0 {
+		// Admin opted out of central storage: no node → fail rather than land the
+		// file on the app server's own disk.
+		if s.resolveSettings(ctx).DisableCentralFallback {
+			return "", nil, false, errStrictNoNode
+		}
 		return "", s.blobs, true, nil
 	}
 	n := nodes[s.pickN(len(nodes))]

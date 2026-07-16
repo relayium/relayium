@@ -23,6 +23,11 @@ const (
 	// live staged-file sizes may not exceed it (oversubscription backstop,
 	// distinct from the physical blob-volume cap). Bytes.
 	SettingStorageDiskCap = "storage_disk_cap"
+	// SettingDisableCentralFallback, when set (1), stops uploads from falling
+	// back to the app server's own local disk: a transfer with no available
+	// storage node fails instead of landing on central. 0 = allow central
+	// fallback (the default, current behaviour).
+	SettingDisableCentralFallback = "disable_central_fallback"
 )
 
 // minTTL is the floor a requested TTL is clamped up to; well below default_ttl.
@@ -59,6 +64,9 @@ type Settings struct {
 	AccountReminderDays int64
 	// StorageDiskCap bounds SUM(live stored_files.size) globally.
 	StorageDiskCap int64
+	// DisableCentralFallback stops uploads landing on the app server's own disk
+	// when no storage node is available (they fail instead).
+	DisableCentralFallback bool
 }
 
 // settingOr returns the DB value for key, or def when unset/on error (fail to env).
@@ -74,16 +82,17 @@ func (s *Service) settingOr(ctx context.Context, key string, def int64) int64 {
 // env/flag default seeded into Config. "Admin change > env default."
 func (s *Service) resolveSettings(ctx context.Context) Settings {
 	return Settings{
-		MaxFileSize:         s.settingOr(ctx, SettingMaxFileSize, s.cfg.MaxFileSize),
-		DailyQuota:          s.settingOr(ctx, SettingDailyQuota, s.cfg.DailyQuota),
-		DefaultTTL:          s.settingOr(ctx, SettingDefaultTTL, s.cfg.DefaultTTL),
-		MaxTTL:              s.settingOr(ctx, SettingMaxTTL, s.cfg.MaxTTL),
-		DefaultRetention:    s.settingOr(ctx, SettingDefaultRetention, s.cfg.DefaultRetention),
-		DefaultMaxDownloads: s.settingOr(ctx, SettingDefaultMaxDownloads, s.cfg.DefaultMaxDownloads),
-		MaxMaxDownloads:     s.settingOr(ctx, SettingMaxMaxDownloads, s.cfg.MaxMaxDownloads),
-		AccountGraceDays:    s.settingOr(ctx, SettingAccountGraceDays, s.cfg.AccountGraceDays),
-		AccountReminderDays: s.settingOr(ctx, SettingAccountReminderDays, s.cfg.AccountReminderDays),
-		StorageDiskCap:      s.settingOr(ctx, SettingStorageDiskCap, s.cfg.StorageDiskCap),
+		MaxFileSize:            s.settingOr(ctx, SettingMaxFileSize, s.cfg.MaxFileSize),
+		DailyQuota:             s.settingOr(ctx, SettingDailyQuota, s.cfg.DailyQuota),
+		DefaultTTL:             s.settingOr(ctx, SettingDefaultTTL, s.cfg.DefaultTTL),
+		MaxTTL:                 s.settingOr(ctx, SettingMaxTTL, s.cfg.MaxTTL),
+		DefaultRetention:       s.settingOr(ctx, SettingDefaultRetention, s.cfg.DefaultRetention),
+		DefaultMaxDownloads:    s.settingOr(ctx, SettingDefaultMaxDownloads, s.cfg.DefaultMaxDownloads),
+		MaxMaxDownloads:        s.settingOr(ctx, SettingMaxMaxDownloads, s.cfg.MaxMaxDownloads),
+		AccountGraceDays:       s.settingOr(ctx, SettingAccountGraceDays, s.cfg.AccountGraceDays),
+		AccountReminderDays:    s.settingOr(ctx, SettingAccountReminderDays, s.cfg.AccountReminderDays),
+		StorageDiskCap:         s.settingOr(ctx, SettingStorageDiskCap, s.cfg.StorageDiskCap),
+		DisableCentralFallback: s.settingOr(ctx, SettingDisableCentralFallback, 0) != 0,
 	}
 }
 
@@ -168,6 +177,7 @@ func (s *Service) SeedSettings(ctx context.Context) error {
 		{SettingAccountGraceDays, s.cfg.AccountGraceDays},
 		{SettingAccountReminderDays, s.cfg.AccountReminderDays},
 		{SettingStorageDiskCap, s.cfg.StorageDiskCap},
+		{SettingDisableCentralFallback, 0}, // default off: central fallback allowed
 	}
 	now := s.now().Unix()
 	for _, d := range defaults {

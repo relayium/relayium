@@ -24,7 +24,7 @@
     burnAfterRead: boolean; downloadCount: number;
   }
   interface NodeRow {
-    id: string; region: string; online: boolean;
+    id: string; name: string; host: string; region: string; online: boolean;
     relayedBytes: number; storedBytes: number;
     storageFree: number; storageTotal: number; lastSeen: number;
   }
@@ -51,6 +51,22 @@
   interface CheckResult { reachable: boolean; online: boolean; latencyMs: number; error?: string }
   let checking = $state<Record<string, boolean>>({});
   let checkResult = $state<Record<string, CheckResult>>({});
+
+  // Inline node rename: which node id is being edited, and the draft label.
+  let renamingId = $state<string | null>(null);
+  let renameDraft = $state("");
+  function startRename(n: NodeRow) { renamingId = n.id; renameDraft = n.name; }
+  function focusRename(node: HTMLInputElement) { node.focus(); node.select(); }
+  async function saveRename(id: string) {
+    const label = renameDraft.trim();
+    renamingId = null;
+    const res = await fetch(`/api/nodes/${id}/label`, {
+      method: "PUT", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: label }),
+    });
+    if (res.ok) nodes = nodes.map((n) => (n.id === id ? { ...n, name: label } : n));
+  }
 
   async function loadNodes() {
     try {
@@ -141,16 +157,17 @@
     if (res.ok) nodes = nodes.filter((n) => n.id !== id);
   }
 
-  async function toggleStrict() {
-    const next = !strict;
-    strict = next; // optimistic — matches the checkbox the user just clicked
+  async function setStrict(next: boolean) {
+    if (next === strict) return;
+    const prev = strict;
+    strict = next; // optimistic — matches the option the user just picked
     const res = await fetch("/api/me/strict-nodes", {
       method: "PUT",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ onlyOwnNodes: next }),
     });
-    if (!res.ok) strict = !next; // revert on failure
+    if (!res.ok) strict = prev; // revert on failure
   }
 
   async function del(id: string) {
@@ -184,7 +201,7 @@
     if (!uid) {
       loadedFor = "";
       stats = null; files = []; loading = false;
-      nodes = []; strict = false; newToken = null; addingNode = false;
+      nodes = []; strict = false; newToken = null; addingNode = false; renamingId = null;
     }
   });
 
@@ -270,12 +287,17 @@
     <section class="nodes">
       <div class="nodes-head">
         <h2>{t.me.nodesTitle}</h2>
-        <label class="strict">
-          <input type="checkbox" checked={strict} onchange={toggleStrict} />
-          {t.me.strictLabel}
+      </div>
+      <div class="routing" role="radiogroup" aria-label={t.me.routingTitle}>
+        <label class="routeopt" class:sel={!strict}>
+          <input type="radio" name="node-routing" checked={!strict} onchange={() => setStrict(false)} />
+          <span class="ropt-text"><b>{t.me.routeAuto}</b><span class="hint">{t.me.routeAutoHint}</span></span>
+        </label>
+        <label class="routeopt" class:sel={strict}>
+          <input type="radio" name="node-routing" checked={strict} onchange={() => setStrict(true)} />
+          <span class="ropt-text"><b>{t.me.strictLabel}</b><span class="hint">{t.me.strictHint}</span></span>
         </label>
       </div>
-      <p class="hint">{t.me.strictHint}</p>
       <p class="hint">{t.me.nodesTrafficHint}</p>
 
       {#if newToken}
@@ -309,7 +331,19 @@
             {@const cr = checkResult[n.id]}
             <li>
               <span class="dot" class:on={n.online} aria-label={n.online ? t.me.nodeOnline : t.me.nodeOffline}></span>
-              <span class="nid">{n.region || "—"} · #{n.id.slice(0, 8)}</span>
+              {#if renamingId === n.id}
+                <input
+                  class="rename"
+                  bind:value={renameDraft}
+                  placeholder={t.me.nodeNamePlaceholder}
+                  use:focusRename
+                  onkeydown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveRename(n.id); } else if (e.key === "Escape") { renamingId = null; } }}
+                  onblur={() => saveRename(n.id)}
+                />
+              {:else if n.name}
+                <button class="nname" onclick={() => startRename(n)} title={t.me.nodeRename}>{n.name}</button>
+              {/if}
+              <span class="nid">{#if n.host}{n.host} · {/if}{n.region || "—"} · #{n.id.slice(0, 8)}</span>
               <span class="nstat">{t.me.nodeRelayed(formatSize(n.relayedBytes))} ({t.me.nodeFreeTag})</span>
               <span class="nstat">{t.me.nodeStorageFree(formatSize(n.storageFree), formatSize(n.storageTotal))}</span>
               {#if cr}
@@ -317,6 +351,7 @@
                   {cr.reachable ? t.me.nodeReachable(String(cr.latencyMs)) : t.me.nodeUnreachable}
                 </span>
               {/if}
+              <button class="chk" onclick={() => startRename(n)}>{t.me.nodeRename}</button>
               <button class="chk" disabled={checking[n.id]} onclick={() => checkNode(n.id)}>
                 {checking[n.id] ? "…" : t.me.checkNode}
               </button>
@@ -403,8 +438,30 @@
   .nodes { margin-top: var(--space-6); }
   .nodes-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 10px; margin-bottom: var(--space-2); }
   .nodes-head h2 { font-size: var(--fs-h3); margin: 0; }
-  .strict { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text); cursor: pointer; }
   .nodes > .hint { margin: 0 0 var(--space-3); font-size: var(--fs-xs); color: var(--text); }
+
+  /* Routing choice: auto-fastest vs only-my-nodes, as two radio cards. */
+  .routing { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-3); }
+  .routeopt {
+    display: flex; align-items: flex-start; gap: var(--space-2);
+    padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--social-bg); cursor: pointer; transition: border-color .13s;
+  }
+  .routeopt.sel { border-color: var(--accent-border); }
+  .routeopt input { margin-top: 2px; flex: none; accent-color: var(--accent); }
+  .ropt-text { display: flex; flex-direction: column; gap: 2px; }
+  .ropt-text b { color: var(--text-h); font-weight: 600; font-size: var(--fs-sm); }
+  .ropt-text .hint { color: var(--text); font-size: var(--fs-xs); }
+
+  .nname {
+    font: inherit; font-size: var(--fs-xs); font-weight: 600; color: var(--text-h);
+    background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px;
+  }
+  .nname:hover { color: var(--accent); }
+  .rename {
+    font: inherit; font-size: var(--fs-xs); padding: 2px 8px; width: 14ch; max-width: 45vw;
+    border: 1px solid var(--accent); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-h);
+  }
 
   .add-form { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
   .add-form input {

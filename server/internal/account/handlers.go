@@ -112,6 +112,7 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/nodes/provision", s.RequireSession(s.handleProvisionNode))
 	mux.HandleFunc("GET /api/nodes/mine", s.RequireSession(s.handleMyNodes))
 	mux.HandleFunc("DELETE /api/nodes/{id}", s.RequireSession(s.handleDeleteMyNode))
+	mux.HandleFunc("PUT /api/nodes/{id}/label", s.RequireSession(s.handleRenameMyNode))
 	mux.HandleFunc("POST /api/nodes/{id}/check", s.RequireSession(s.handleCheckNode))
 	mux.HandleFunc("PUT /api/me/strict-nodes", s.RequireSession(s.handleStrictNodes))
 	// Billing (phase-2): checkout/portal are session-authed like the rest of

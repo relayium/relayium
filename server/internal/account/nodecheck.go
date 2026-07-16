@@ -12,10 +12,10 @@ import (
 // flag: reachable is a live round-trip from central to the node's storage
 // endpoint right now.
 type nodeCheckResp struct {
-	Reachable bool   `json:"reachable"`         // central got an HTTP response from the node just now
-	Online    bool   `json:"online"`            // heartbeat seen within the online window
-	LatencyMs int64  `json:"latencyMs"`         // probe round-trip, when reachable
-	Error     string `json:"error,omitempty"`   // why the probe couldn't confirm reachability
+	Reachable bool   `json:"reachable"`       // central got an HTTP response from the node just now
+	Online    bool   `json:"online"`          // heartbeat seen within the online window
+	LatencyMs int64  `json:"latencyMs"`       // probe round-trip, when reachable
+	Error     string `json:"error,omitempty"` // why the probe couldn't confirm reachability
 }
 
 // handleCheckNode actively probes one of the caller's nodes so a user can

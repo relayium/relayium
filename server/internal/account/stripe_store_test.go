@@ -181,7 +181,7 @@ func TestPlanByStripePriceMatchesMonthlyOrYearly(t *testing.T) {
 }
 
 // TestPlanByStripePriceEmptyNotFound guards against the empty-string default
-// on every plan row (free tier and any unmapped plan default to '').
+// on every plan row (free tier and any unmapped plan default to ”).
 func TestPlanByStripePriceEmptyNotFound(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

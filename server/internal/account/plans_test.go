@@ -95,7 +95,7 @@ func TestUsageReadQueries(t *testing.T) {
 	}
 
 	_ = st.CreateStoredFile(ctx, StoredFile{ID: newID(), UserID: u.ID, BlobKey: "b1", EncManifest: []byte("x"), Size: 4096, ExpiresAt: 1 << 40, CreatedAt: 1}) // live
-	_ = st.CreateStoredFile(ctx, StoredFile{ID: newID(), UserID: u.ID, BlobKey: "b2", EncManifest: []byte("x"), Size: 1000, ExpiresAt: 5, CreatedAt: 1})      // already expired at now=10
+	_ = st.CreateStoredFile(ctx, StoredFile{ID: newID(), UserID: u.ID, BlobKey: "b2", EncManifest: []byte("x"), Size: 1000, ExpiresAt: 5, CreatedAt: 1})       // already expired at now=10
 
 	cs, err := st.CurrentStorage(ctx, u.ID, 10)
 	if err != nil || cs != 4096 {

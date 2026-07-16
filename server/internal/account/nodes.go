@@ -164,9 +164,25 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	// Resolve the presented token once: its name seeds the node's initial label
+	// (only used on first INSERT — UpsertNode preserves a later rename), and its
+	// id binds the token to the node for per-node revoke/delete.
+	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	var userTok *NodeToken
+	var fleetTok *FleetToken
+	label := ""
+	if ownerType == "user" {
+		if nt, found, e := s.store.NodeTokenByHash(r.Context(), hashToken(tok)); e == nil && found {
+			userTok = &nt
+			label = nt.Name
+		}
+	} else if ft, found, e := s.store.FleetTokenByHash(r.Context(), hashToken(tok)); e == nil && found {
+		fleetTok = &ft
+		label = ft.Name
+	}
 	now := s.now().Unix()
 	n := Node{
-		ID: req.NodeID, OwnerType: ownerType, OwnerUserID: ownerUserID,
+		ID: req.NodeID, OwnerType: ownerType, OwnerUserID: ownerUserID, Label: label,
 		Region: req.Region, URLs: req.URLs, TURNSecret: req.TURNSecret, Version: req.Version,
 		CreatedAt: now, LastSeenAt: now,
 		StorageURL: req.StorageURL, StorageSecret: req.StorageSecret,
@@ -179,14 +195,11 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Bind the presented token to its node for per-node revoke/delete.
-	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if ownerType == "user" {
-		if nt, found, e := s.store.NodeTokenByHash(r.Context(), hashToken(tok)); e == nil && found {
-			_ = s.store.BindNodeToken(r.Context(), nt.ID, saved.ID)
-		}
-	} else if ft, found, e := s.store.FleetTokenByHash(r.Context(), hashToken(tok)); e == nil && found {
+	if userTok != nil {
+		_ = s.store.BindNodeToken(r.Context(), userTok.ID, saved.ID)
+	} else if fleetTok != nil {
 		// An admin-minted fleet token (not the shared env token) binds to its node.
-		_ = s.store.BindFleetToken(r.Context(), ft.ID, saved.ID)
+		_ = s.store.BindFleetToken(r.Context(), fleetTok.ID, saved.ID)
 	}
 	writeJSON(w, http.StatusOK, nodeRegisterResp{
 		NodeID: saved.ID, HeartbeatInterval: nodeHeartbeatInterval,

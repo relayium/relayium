@@ -228,8 +228,12 @@ export interface Messages {
     confirmDel: string; // confirm() before deleting a file
     nodesTitle: string; // "My Nodes" section heading
     nodesEmpty: string; // no BYO relay nodes registered yet
-    strictLabel: string; // checkbox: restrict this account to only its own nodes
-    strictHint: string; // one-line explanation under the strict-mode checkbox
+    routingTitle: string; // aria-label for the routing radio group
+    routeAuto: string; // option 1: auto-pick the fastest node by speed test
+    routeAutoHint: string; // hint under the auto-routing option
+    strictLabel: string; // option 2 label: restrict this account to only its own nodes
+    strictHint: string; // one-line explanation under the only-own-nodes option
+    nodeRename: string; // rename/label a node button
     addNode: string; // "Add node" button
     nodeNamePlaceholder: string; // placeholder for the new-node name field
     addNodeSubmit: string; // confirm button inside the add-node mini-form

@@ -3,9 +3,32 @@ package account
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 const maxNodeTokensPerUser = 10
+
+// nodeHost extracts the host (IP or DNS name) from a node's first TURN URL,
+// e.g. "turn:8.212.173.136:3478?transport=udp" -> "8.212.173.136". Returns ""
+// when there are no URLs. Public info for the node's own dashboard/admin.
+func nodeHost(urls []string) string {
+	if len(urls) == 0 {
+		return ""
+	}
+	u := urls[0]
+	if i := strings.IndexByte(u, ':'); i >= 0 { // strip the turn:/turns: scheme
+		u = u[i+1:]
+	}
+	if i := strings.IndexAny(u, "?"); i >= 0 { // strip ?transport=…
+		u = u[:i]
+	}
+	// Strip the port: for "host:port" take the part before the LAST colon (IPv6
+	// bare addresses aren't emitted by coturn-setup, which uses turn:<ip>:3478).
+	if i := strings.LastIndexByte(u, ':'); i >= 0 {
+		u = u[:i]
+	}
+	return strings.Trim(u, "[]")
+}
 
 type provisionReq struct {
 	Name string `json:"name"`
@@ -52,13 +75,37 @@ func (s *Service) handleMyNodes(w http.ResponseWriter, r *http.Request, u User) 
 	out := make([]map[string]any, 0, len(nodes))
 	for _, n := range nodes {
 		out = append(out, map[string]any{
-			"id": n.ID, "name": "", "region": n.Region,
+			"id": n.ID, "name": n.Label, "region": n.Region, "host": nodeHost(n.URLs),
 			"online":       n.LastSeenAt >= since,
 			"relayedBytes": n.RelayedBytes, "storedBytes": n.StoredBytes,
 			"storageFree": n.StorageFree, "storageTotal": n.StorageTotal, "lastSeen": n.LastSeenAt,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"nodes": out})
+}
+
+type renameReq struct {
+	Name string `json:"name"`
+}
+
+// handleRenameMyNode sets the display label of one of the caller's own nodes.
+// Owner-scoped in SQL, so a non-owner or missing id is an indistinguishable 404.
+func (s *Service) handleRenameMyNode(w http.ResponseWriter, r *http.Request, u User) {
+	id := r.PathValue("id")
+	var req renameReq
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	label := strings.TrimSpace(req.Name)
+	if len(label) > 64 {
+		label = label[:64]
+	}
+	if err := s.store.SetUserNodeLabel(r.Context(), id, u.ID, label); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"name": label})
 }
 
 // handleDeleteMyNode removes one of the caller's own nodes and revokes any
