@@ -6,22 +6,34 @@ on:
 
 permissions:
   contents: write
-  id-token: write # OIDC token for keyless cosign signing
+  id-token: write       # OIDC token for keyless cosign signing + provenance attestation
+  attestations: write   # write SLSA build-provenance attestations for the release artifacts
 
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Third-party actions are pinned to a full commit SHA (with the human-readable
+      # version in a trailing comment) so a compromised or retagged upstream release
+      # can't silently change what runs in this trusted, token-holding workflow.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: server/go.mod
-      - uses: sigstore/cosign-installer@v3
-      - uses: goreleaser/goreleaser-action@v6
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+      - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:
           version: '~> v2'
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # SLSA build provenance for every distributable archive goreleaser produced.
+      # Verifiable with: gh attestation verify <archive> --repo relayium/relayium
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: |
+            dist/relayium_*.tar.gz
+            dist/relayium_*.zip
+            dist/relayium-node_*.tar.gz
