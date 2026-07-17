@@ -1,15 +1,21 @@
 package account
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"math/big"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -106,4 +112,88 @@ func TestAppleClientSecret(t *testing.T) {
 func sha256Sum(b []byte) []byte { h := sha256.Sum256(b); return h[:] }
 func ecdsaVerify(pub *ecdsa.PublicKey, digest []byte, r, s *big.Int) bool {
 	return ecdsa.Verify(pub, digest, r, s)
+}
+
+// newAppleWebTestService builds a Service backed by a real store, configured
+// for the web Sign in with Apple flow, with a fixed clock (matching
+// validAppleClaims' expectations from apple_test.go).
+func newAppleWebTestService(t *testing.T) (*Service, *SQLiteStore) {
+	t.Helper()
+	store := newTestStore(t)
+	svc := NewService(store, &capturingMailer{}, Config{
+		BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: time.Minute,
+		EnableApple: true, AppleClientIDs: []string{"com.relayium.web"}, AppleServicesID: "com.relayium.web",
+	})
+	svc.now = func() time.Time { return time.Unix(1_700_000_000, 0) }
+	return svc, store
+}
+
+func TestAppleWebCallback_HappyPath(t *testing.T) {
+	svc, store := newAppleWebTestService(t)
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := svc.now()
+	claims := validAppleClaims(now)
+	claims["aud"] = "com.relayium.web"
+	claims["nonce"] = "NONCE1"
+	idToken := signAppleJWT(t, key, map[string]any{"alg": "RS256", "kid": "k1"}, claims)
+
+	svc.appleKey = func(_ context.Context, kid string) (*rsa.PublicKey, error) {
+		if kid != "k1" {
+			return nil, errors.New("unknown kid")
+		}
+		return &key.PublicKey, nil
+	}
+	svc.exchangeAppleCode = func(_ context.Context, code string) (string, error) {
+		if code != "CODE1" {
+			return "", errors.New("bad code")
+		}
+		return idToken, nil
+	}
+
+	form := url.Values{"code": {"CODE1"}, "state": {"STATE1"},
+		"user": {`{"name":{"firstName":"Ada","lastName":"Lovelace"}}`}}
+	req := httptest.NewRequest("POST", "/api/auth/apple/web/callback", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: oauthStateCookie, Value: "STATE1"})
+	req.AddCookie(&http.Cookie{Name: oauthNonceCookie, Value: "NONCE1"})
+	rec := httptest.NewRecorder()
+
+	svc.handleAppleWebCallback(rec, req)
+
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/" {
+		t.Fatalf("want 302 → /, got %d → %q", rec.Code, rec.Header().Get("Location"))
+	}
+	if !hasSessionCookie(rec.Result().Cookies()) {
+		t.Fatal("expected a session cookie")
+	}
+	u, ok, err := store.GetUserByIdentity(context.Background(), "apple", claims["sub"].(string))
+	if err != nil || !ok {
+		t.Fatalf("apple identity not linked: ok=%v err=%v", ok, err)
+	}
+	if u.DisplayName != "Ada Lovelace" {
+		t.Fatalf("display name = %q, want %q", u.DisplayName, "Ada Lovelace")
+	}
+	if v, _ := store.EmailVerified(context.Background(), u.ID); !v {
+		t.Fatal("apple login should mark email verified")
+	}
+}
+
+func TestAppleWebCallback_StateMismatch(t *testing.T) {
+	svc, _ := newAppleWebTestService(t)
+	form := url.Values{"code": {"CODE1"}, "state": {"WRONG"}}
+	req := httptest.NewRequest("POST", "/api/auth/apple/web/callback", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: oauthStateCookie, Value: "STATE1"})
+	rec := httptest.NewRecorder()
+	svc.handleAppleWebCallback(rec, req)
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/?login=error" {
+		t.Fatalf("want redirect to /?login=error, got %d → %q", rec.Code, rec.Header().Get("Location"))
+	}
+	if hasSessionCookie(rec.Result().Cookies()) {
+		t.Fatal("state mismatch must not create a session")
+	}
 }

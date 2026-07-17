@@ -58,6 +58,14 @@ func (s *Service) csrfGuard(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		// Sign in with Apple's callback is a legitimate cross-site form_post from
+		// appleid.apple.com — it necessarily carries a foreign Origin, so it must
+		// be exempted here. The `state` cookie (checked in handleAppleWebCallback)
+		// is its CSRF defense instead.
+		if r.Method == http.MethodPost && r.URL.Path == "/api/auth/apple/web/callback" {
+			next.ServeHTTP(w, r)
+			return
+		}
 		if origin := r.Header.Get("Origin"); origin != "" {
 			if self := s.selfOrigin(); self != "" && origin != self {
 				http.Error(w, "cross-origin request rejected", http.StatusForbidden)
@@ -99,6 +107,13 @@ func (s *Service) routeMux() *http.ServeMux {
 	// Sign in with Apple (native app token exchange). Dormant until configured.
 	if s.cfg.EnableApple {
 		mux.HandleFunc("POST /api/auth/apple/native", s.handleAppleNative)
+		// Browser Sign in with Apple: additionally gated on appleWebConfigured
+		// so a half-configured deploy (EnableApple set but no Services ID/team/
+		// key yet) never exposes a 500-ing button.
+		if s.appleWebConfigured() {
+			mux.HandleFunc("GET /api/auth/apple/web/start", s.handleAppleWebStart)
+			mux.HandleFunc("POST /api/auth/apple/web/callback", s.handleAppleWebCallback)
+		}
 	}
 	// Native (iOS/macOS) app login: same credential guards as the cookie login
 	// but returns a bearer token the app stores in the Keychain.
