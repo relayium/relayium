@@ -137,7 +137,12 @@ type Service struct {
 	// appleKey resolves Apple's signing public key for a given JWKS `kid`.
 	// Injectable so tests verify tokens against a local key without touching the
 	// network; the default fetches + caches Apple's public JWKS.
-	appleKey          func(ctx context.Context, kid string) (*rsa.PublicKey, error)
+	appleKey func(ctx context.Context, kid string) (*rsa.PublicKey, error)
+	// appleSecMu guards appleSecTok/appleSecExp, the cached appleClientSecret()
+	// JWT; regenerated once it's within 2 minutes of appleSecExp.
+	appleSecMu        sync.Mutex
+	appleSecTok       string
+	appleSecExp       time.Time
 	adminSessions     map[string]int64 // token -> 过期 unix 秒
 	adminMu           sync.Mutex
 	adminTOTPMu       sync.Mutex
