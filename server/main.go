@@ -163,8 +163,34 @@ func main() {
 			log.Fatalf("apple: parsing private key %q: %v", *applePrivKeyFile, err)
 		}
 	}
-	if *enableApple && *appleServicesID != "" && applePrivKey == nil {
-		log.Fatal("apple: web Sign in with Apple requires RELAYIUM_APPLE_PRIVATE_KEY_FILE")
+	if *enableApple && *appleServicesID != "" {
+		var missing []string
+		if *appleTeamID == "" {
+			missing = append(missing, "RELAYIUM_APPLE_TEAM_ID")
+		}
+		if *appleKeyID == "" {
+			missing = append(missing, "RELAYIUM_APPLE_KEY_ID")
+		}
+		if applePrivKey == nil {
+			missing = append(missing, "RELAYIUM_APPLE_PRIVATE_KEY_FILE")
+		}
+		if len(missing) > 0 {
+			log.Fatalf("apple: web Sign in with Apple requires %s", strings.Join(missing, ", "))
+		}
+		// The web id_token's aud is the Services ID; verifyAppleIDToken checks it
+		// against AppleClientIDs. Without this, /api/auth/methods reports apple:true
+		// and boot succeeds, but every web login fails at callback with "aud not in
+		// allowlist" — a broken button that only fails once a real user tries it.
+		allowed := false
+		for _, id := range splitURLs(*appleClientIDs) {
+			if id == *appleServicesID {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			log.Fatal("apple: RELAYIUM_APPLE_SERVICES_ID must be included in RELAYIUM_APPLE_CLIENT_IDS")
+		}
 	}
 
 	// X-Forwarded-For is only trusted from configured reverse proxies; otherwise

@@ -66,7 +66,11 @@ func (s *Service) handleAppleWebStart(w http.ResponseWriter, r *http.Request) {
 	} {
 		http.SetCookie(w, &http.Cookie{
 			Name: c.name, Value: c.val, Path: "/", MaxAge: 600,
-			HttpOnly: true, Secure: s.cookieSecure(), SameSite: http.SameSiteLaxMode,
+			// Apple's callback is a cross-site top-level POST (response_mode=form_post
+			// from appleid.apple.com) — SameSite=Lax cookies are NOT sent on
+			// cross-site POST navigations, so this MUST be None (requires Secure)
+			// or the callback never sees the cookie. Do not "fix" this back to Lax.
+			HttpOnly: true, Secure: s.cookieSecure(), SameSite: http.SameSiteNoneMode,
 		})
 	}
 	q := url.Values{
@@ -95,10 +99,15 @@ func (s *Service) handleAppleWebCallback(w http.ResponseWriter, r *http.Request)
 		fail()
 		return
 	}
-	nonce := ""
-	if nc, err := r.Cookie(oauthNonceCookie); err == nil {
-		nonce = nc.Value
+	nc, err := r.Cookie(oauthNonceCookie)
+	if err != nil || nc.Value == "" {
+		// The start handler always sets this cookie; a missing/empty value is
+		// anomalous, not a legitimate flow. Reject rather than degrading to a
+		// nonce-less verification (which would skip the replay-binding check).
+		fail()
+		return
 	}
+	nonce := nc.Value
 	idToken, err := s.exchangeAppleCode(r.Context(), r.FormValue("code"))
 	if err != nil {
 		fail()

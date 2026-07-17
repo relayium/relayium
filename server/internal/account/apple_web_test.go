@@ -182,6 +182,81 @@ func TestAppleWebCallback_HappyPath(t *testing.T) {
 	}
 }
 
+func TestAppleWebStart_CookiesSameSiteNone(t *testing.T) {
+	store := newTestStore(t)
+	svc := NewService(store, &capturingMailer{}, Config{
+		BaseURL: "https://example.test", EnableApple: true,
+		AppleServicesID: "com.relayium.web", AppleClientIDs: []string{"com.relayium.web"},
+	})
+
+	req := httptest.NewRequest("GET", "/api/auth/apple/web/start", nil)
+	rec := httptest.NewRecorder()
+	svc.handleAppleWebStart(rec, req)
+
+	seen := map[string]*http.Cookie{}
+	for _, c := range rec.Result().Cookies() {
+		seen[c.Name] = c
+	}
+	for _, name := range []string{oauthStateCookie, oauthNonceCookie} {
+		c, ok := seen[name]
+		if !ok {
+			t.Fatalf("missing %s cookie", name)
+		}
+		if c.SameSite != http.SameSiteNoneMode {
+			t.Errorf("%s: SameSite = %v, want SameSiteNoneMode", name, c.SameSite)
+		}
+		if !c.Secure {
+			t.Errorf("%s: Secure = false, want true (BaseURL is https)", name)
+		}
+		if !c.HttpOnly {
+			t.Errorf("%s: HttpOnly = false, want true", name)
+		}
+	}
+}
+
+func TestAppleWebCallback_MissingNonceRejected(t *testing.T) {
+	svc, _ := newAppleWebTestService(t)
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := svc.now()
+	claims := validAppleClaims(now)
+	claims["aud"] = "com.relayium.web"
+	claims["nonce"] = "NONCE1"
+	idToken := signAppleJWT(t, key, map[string]any{"alg": "RS256", "kid": "k1"}, claims)
+
+	svc.appleKey = func(_ context.Context, kid string) (*rsa.PublicKey, error) {
+		if kid != "k1" {
+			return nil, errors.New("unknown kid")
+		}
+		return &key.PublicKey, nil
+	}
+	svc.exchangeAppleCode = func(_ context.Context, code string) (string, error) {
+		if code != "CODE1" {
+			return "", errors.New("bad code")
+		}
+		return idToken, nil
+	}
+
+	form := url.Values{"code": {"CODE1"}, "state": {"STATE1"}}
+	req := httptest.NewRequest("POST", "/api/auth/apple/web/callback", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: oauthStateCookie, Value: "STATE1"})
+	// Deliberately no oauthNonceCookie.
+	rec := httptest.NewRecorder()
+
+	svc.handleAppleWebCallback(rec, req)
+
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/?login=error" {
+		t.Fatalf("want redirect to /?login=error, got %d → %q", rec.Code, rec.Header().Get("Location"))
+	}
+	if hasSessionCookie(rec.Result().Cookies()) {
+		t.Fatal("missing nonce cookie must not create a session")
+	}
+}
+
 func TestAppleWebCallback_StateMismatch(t *testing.T) {
 	svc, _ := newAppleWebTestService(t)
 	form := url.Values{"code": {"CODE1"}, "state": {"WRONG"}}

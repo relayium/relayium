@@ -471,7 +471,6 @@
   /* Apple brand guidance: a solid black button, legible in both themes (fixed
      colors, not the theme's ghost-button background). */
   .btn-apple { background: #000; color: #fff; border-color: #000; }
-  :global(:root[data-theme="light"]) .btn-apple { background: #000; color: #fff; }
   .menu .who { color: var(--text); }
   .linked { display: flex; flex-direction: column; gap: var(--space-1); padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); }
   .linked-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); font-size: var(--fs-xs); color: var(--text-h); }
