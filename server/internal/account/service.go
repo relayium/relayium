@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -71,11 +72,20 @@ type Config struct {
 	// default → dormant until an Apple developer account is configured).
 	// AppleClientIDs is the aud allowlist: the app's Bundle ID (native SiwA) and
 	// the web Services ID both present tokens, so both must be accepted.
-	EnableApple     bool
-	AppleClientIDs  []string
-	AdminUser       string
-	AdminPassword   string
-	AdminTOTPSecret string // base32 TOTP secret; empty disables admin 2FA
+	EnableApple    bool
+	AppleClientIDs []string
+	// Web Sign in with Apple. Distinct from the native flow: the browser button
+	// runs the OAuth code flow, so the server needs the Services ID (web
+	// client_id / aud) plus the .p8 signing key to mint the client_secret JWT.
+	AppleServicesID      string            // web client_id; also belongs in AppleClientIDs
+	AppleTeamID          string            // client_secret `iss`
+	AppleKeyID           string            // .p8 Key ID; client_secret JWT header `kid`
+	AppleRedirect        string            // derived: BaseURL + /api/auth/apple/web/callback
+	ApplePrivateKey      *ecdsa.PrivateKey // parsed .p8; nil when web SiwA is off
+	AppleDomainAssocFile string            // path to apple-developer-domain-association.txt
+	AdminUser            string
+	AdminPassword        string
+	AdminTOTPSecret      string // base32 TOTP secret; empty disables admin 2FA
 	// Stored-transfer limits (env/flag defaults; DB settings table overrides these live).
 	MaxFileSize int64 // bytes
 	DailyQuota  int64 // bytes per rolling 24h
@@ -119,6 +129,11 @@ type Service struct {
 	cfg             Config
 	now             func() time.Time
 	fetchGoogleUser func(ctx context.Context, code string) (sub, email, name string, verified bool, err error)
+	// exchangeAppleCode swaps a web Sign in with Apple OAuth authorization code
+	// for an identity token. Injectable like fetchGoogleUser; the default posts
+	// to Apple's token endpoint using a client_secret JWT signed with
+	// cfg.ApplePrivateKey (implemented in Task 3).
+	exchangeAppleCode func(ctx context.Context, code string) (idToken string, err error)
 	// appleKey resolves Apple's signing public key for a given JWKS `kid`.
 	// Injectable so tests verify tokens against a local key without touching the
 	// network; the default fetches + caches Apple's public JWKS.
@@ -183,6 +198,7 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 		uploadSem:      newUploadSem(maxConcurrentUploadsPerUser)}
 	svc.clientIP = clientIP
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
+	svc.exchangeAppleCode = svc.realExchangeAppleCode
 	svc.appleKey = newAppleKeyStore().key
 	svc.allowPrivateNodeURLs = os.Getenv("RELAYIUM_ALLOW_PRIVATE_NODE_URLS") == "true"
 	svc.nodeHTTP = &http.Client{Transport: &http.Transport{

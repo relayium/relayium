@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -88,6 +89,11 @@ func main() {
 	enableApple := flag.Bool("enable-apple", envBool("RELAYIUM_ENABLE_APPLE", false), "enable Sign in with Apple (disabled by default)")
 	appleClientIDs := flag.String("apple-client-ids", envStr("RELAYIUM_APPLE_CLIENT_IDS", ""), "comma-separated Apple aud allowlist: app Bundle ID + web Services ID")
 	appleAppIDs := flag.String("apple-app-ids", envStr("RELAYIUM_APPLE_APP_IDS", ""), "comma-separated Apple appIDs (<TeamID>.<BundleID>) for the Universal Links AASA file; empty = 404")
+	appleServicesID := flag.String("apple-services-id", envStr("RELAYIUM_APPLE_SERVICES_ID", ""), "Apple Services ID (web Sign in with Apple client_id)")
+	appleTeamID := flag.String("apple-team-id", envStr("RELAYIUM_APPLE_TEAM_ID", ""), "Apple Team ID (client_secret issuer)")
+	appleKeyID := flag.String("apple-key-id", envStr("RELAYIUM_APPLE_KEY_ID", ""), "Apple .p8 Key ID (client_secret JWT kid)")
+	applePrivKeyFile := flag.String("apple-private-key-file", envStr("RELAYIUM_APPLE_PRIVATE_KEY_FILE", ""), "path to the Apple Sign in with Apple .p8 private key")
+	appleDomainAssoc := flag.String("apple-domain-assoc-file", envStr("RELAYIUM_APPLE_DOMAIN_ASSOC_FILE", ""), "path to apple-developer-domain-association.txt")
 	enableMagic := flag.Bool("enable-magic", envBool("RELAYIUM_ENABLE_MAGIC", false), "enable email magic-link login (disabled by default)")
 	adminUser := flag.String("admin-user", envStr("RELAYIUM_ADMIN_USER", "admin"), "admin dashboard username at /admin (defaults to 'admin')")
 	adminPass := flag.String("admin-pass", envStr("RELAYIUM_ADMIN_PASS", ""), "admin dashboard password at /admin (empty disables the dashboard)")
@@ -142,6 +148,23 @@ func main() {
 	}
 	if *adminTOTPSecret != "" && *adminPass == "" {
 		log.Printf("WARNING: RELAYIUM_ADMIN_TOTP_SECRET set but admin password empty; /admin disabled, 2FA ignored")
+	}
+
+	// Web Sign in with Apple's .p8 key must parse at boot, not on the first
+	// login attempt — a broken key should never ship a login button that 500s.
+	var applePrivKey *ecdsa.PrivateKey
+	if *applePrivKeyFile != "" {
+		raw, err := os.ReadFile(*applePrivKeyFile)
+		if err != nil {
+			log.Fatalf("apple: reading private key file %q: %v", *applePrivKeyFile, err)
+		}
+		applePrivKey, err = account.LoadApplePrivateKey(raw)
+		if err != nil {
+			log.Fatalf("apple: parsing private key %q: %v", *applePrivKeyFile, err)
+		}
+	}
+	if *enableApple && *appleServicesID != "" && applePrivKey == nil {
+		log.Fatal("apple: web Sign in with Apple requires RELAYIUM_APPLE_PRIVATE_KEY_FILE")
 	}
 
 	// X-Forwarded-For is only trusted from configured reverse proxies; otherwise
@@ -240,40 +263,46 @@ func main() {
 			mailer = account.NewSMTPMailer(*smtpAddr, *smtpFrom, *smtpUser, *smtpPass)
 		}
 		acct := account.NewService(store, mailer, account.Config{
-			BaseURL:             *baseURL,
-			SessionTTL:          720 * time.Hour, // 30 days
-			MagicTTL:            15 * time.Minute,
-			VerifyTTL:           24 * time.Hour,
-			ResetTTL:            time.Hour,
-			GoogleClientID:      *googleID,
-			GoogleSecret:        *googleSecret,
-			GoogleRedirect:      *baseURL + "/api/auth/google/callback",
-			STUNURLs:            splitURLs(*stunURLs),
-			TURNURLs:            splitURLs(*turnURLs),
-			TURNSecret:          *turnSecret,
-			TURNRelays:          parseTURNRelays(*turnRelays),
-			TURNCredTTL:         time.Hour,
-			EnableGoogle:        *enableGoogle,
-			EnableApple:         *enableApple,
-			AppleClientIDs:      splitURLs(*appleClientIDs),
-			EnableMagic:         *enableMagic,
-			AdminUser:           *adminUser,
-			AdminPassword:       *adminPass,
-			AdminTOTPSecret:     *adminTOTPSecret,
-			MaxFileSize:         *maxFileSize,
-			DailyQuota:          *dailyQuota,
-			DefaultTTL:          *fileTTL,
-			MaxTTL:              *fileTTLMax,
-			DefaultRetention:    *defaultRetention,
-			DefaultMaxDownloads: *defaultMaxDownloads,
-			MaxMaxDownloads:     *maxMaxDownloads,
-			AccountGraceDays:    *accountGraceDays,
-			AccountReminderDays: *accountReminderDays,
-			NodeToken:           *nodeToken,
-			EnableUserNodes:     *enableUserNodes,
-			StripeSecretKey:     *stripeSecretKey,
-			StripeWebhookSecret: *stripeWebhookSecret,
-			StripePortalConfig:  *stripePortalConfig,
+			BaseURL:              *baseURL,
+			SessionTTL:           720 * time.Hour, // 30 days
+			MagicTTL:             15 * time.Minute,
+			VerifyTTL:            24 * time.Hour,
+			ResetTTL:             time.Hour,
+			GoogleClientID:       *googleID,
+			GoogleSecret:         *googleSecret,
+			GoogleRedirect:       *baseURL + "/api/auth/google/callback",
+			STUNURLs:             splitURLs(*stunURLs),
+			TURNURLs:             splitURLs(*turnURLs),
+			TURNSecret:           *turnSecret,
+			TURNRelays:           parseTURNRelays(*turnRelays),
+			TURNCredTTL:          time.Hour,
+			EnableGoogle:         *enableGoogle,
+			EnableApple:          *enableApple,
+			AppleClientIDs:       splitURLs(*appleClientIDs),
+			AppleServicesID:      *appleServicesID,
+			AppleTeamID:          *appleTeamID,
+			AppleKeyID:           *appleKeyID,
+			AppleRedirect:        *baseURL + "/api/auth/apple/web/callback",
+			ApplePrivateKey:      applePrivKey,
+			AppleDomainAssocFile: *appleDomainAssoc,
+			EnableMagic:          *enableMagic,
+			AdminUser:            *adminUser,
+			AdminPassword:        *adminPass,
+			AdminTOTPSecret:      *adminTOTPSecret,
+			MaxFileSize:          *maxFileSize,
+			DailyQuota:           *dailyQuota,
+			DefaultTTL:           *fileTTL,
+			MaxTTL:               *fileTTLMax,
+			DefaultRetention:     *defaultRetention,
+			DefaultMaxDownloads:  *defaultMaxDownloads,
+			MaxMaxDownloads:      *maxMaxDownloads,
+			AccountGraceDays:     *accountGraceDays,
+			AccountReminderDays:  *accountReminderDays,
+			NodeToken:            *nodeToken,
+			EnableUserNodes:      *enableUserNodes,
+			StripeSecretKey:      *stripeSecretKey,
+			StripeWebhookSecret:  *stripeWebhookSecret,
+			StripePortalConfig:   *stripePortalConfig,
 		})
 		// Wire /api/ice to validate anonymous pairing codes so it can hand out
 		// TURN credentials for them — otherwise code transfers are STUN-only
