@@ -395,6 +395,7 @@ func main() {
 	// pattern than "/", so it wins over the SPA fallback. Dormant (404) until
 	// RELAYIUM_APPLE_APP_IDS is set.
 	mux.HandleFunc("GET /.well-known/apple-app-site-association", appleAppSiteAssociation(splitURLs(*appleAppIDs)))
+	mux.HandleFunc("GET /.well-known/apple-developer-domain-association.txt", appleDomainAssociation(*appleDomainAssoc))
 
 	mux.Handle("/", spaHandler(*static))
 
