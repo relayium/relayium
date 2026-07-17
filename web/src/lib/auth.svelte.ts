@@ -81,9 +81,14 @@ export function googleLoginUrl(): string {
   return "/api/auth/google/start";
 }
 
+export function appleLoginUrl(): string {
+  return "/api/auth/apple/web/start";
+}
+
 export interface AuthMethods {
   password: boolean;
   google: boolean;
+  apple: boolean;
   magic: boolean;
 }
 
@@ -94,7 +99,7 @@ export async function fetchAuthMethods(): Promise<AuthMethods> {
   } catch {
     /* fall through to default */
   }
-  return { password: true, google: false, magic: false };
+  return { password: true, google: false, apple: false, magic: false };
 }
 
 // Shared shape for endpoints that, on success, receive {user} and set the

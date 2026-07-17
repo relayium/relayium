@@ -85,6 +85,7 @@ const pt: Messages = {
     sendLink: "Envie-me um link de acesso por e-mail",
     linkSent: "Confira seu e-mail para o link de acesso.",
     continueGoogle: "Continuar com o Google",
+    continueApple: "Continuar com a Apple",
     or: "ou",
     signedInAs: (e) => `Conectado como ${e}`,
     password: "Senha",

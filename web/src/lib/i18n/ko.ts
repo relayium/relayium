@@ -85,6 +85,7 @@ const ko: Messages = {
     sendLink: "로그인 링크 보내기",
     linkSent: "이메일로 로그인 링크를 보냈습니다. 확인해 주세요.",
     continueGoogle: "Google로 계속",
+    continueApple: "Apple로 계속하기",
     or: "또는",
     signedInAs: (e) => `로그인됨: ${e}`,
     password: "비밀번호",

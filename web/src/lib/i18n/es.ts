@@ -85,6 +85,7 @@ const es: Messages = {
     sendLink: "Envíame un enlace de inicio de sesión por correo",
     linkSent: "Revisa tu correo para encontrar un enlace de inicio de sesión.",
     continueGoogle: "Continuar con Google",
+    continueApple: "Continuar con Apple",
     or: "o",
     signedInAs: (e) => `Sesión iniciada como ${e}`,
     password: "Contraseña",

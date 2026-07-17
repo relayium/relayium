@@ -85,6 +85,7 @@ const de: Messages = {
     sendLink: "Anmelde-Link senden",
     linkSent: "Prüfen Sie Ihr E-Mail-Postfach nach dem Anmelde-Link.",
     continueGoogle: "Mit Google fortfahren",
+    continueApple: "Mit Apple fortfahren",
     or: "oder",
     signedInAs: (e) => `Angemeldet als ${e}`,
     password: "Passwort",

@@ -85,6 +85,7 @@ const ar: Messages = {
     sendLink: "أرسِل إليّ رابط تسجيل دخول",
     linkSent: "تحقق من بريدك الإلكتروني بحثًا عن رابط تسجيل الدخول.",
     continueGoogle: "المتابعة عبر Google",
+    continueApple: "المتابعة باستخدام Apple",
     or: "أو",
     signedInAs: (e) => `مُسجَّل الدخول باسم ${e}`,
     password: "كلمة المرور",

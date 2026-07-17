@@ -85,6 +85,7 @@ const zh: Messages = {
     sendLink: "给我发送登录链接",
     linkSent: "登录链接已发送，请查收邮箱。",
     continueGoogle: "用 Google 继续",
+    continueApple: "使用 Apple 继续",
     or: "或",
     signedInAs: (e) => `已登录：${e}`,
     password: "密码",

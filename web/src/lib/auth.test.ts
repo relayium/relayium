@@ -1,8 +1,22 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, test, vi, beforeEach } from "vitest";
 import {
   session, refreshSession, localDeviceId, changePassword,
   passwordLogin, requestMagicLink, logout,
+  appleLoginUrl, fetchAuthMethods,
 } from "./auth.svelte";
+
+test("appleLoginUrl points at the web start route", () => {
+  expect(appleLoginUrl()).toBe("/api/auth/apple/web/start");
+});
+
+test("fetchAuthMethods default includes apple:false", async () => {
+  // With fetch unavailable/erroring, the safe default must carry apple:false.
+  const orig = globalThis.fetch;
+  globalThis.fetch = () => Promise.reject(new Error("no net"));
+  const m = await fetchAuthMethods();
+  expect(m.apple).toBe(false);
+  globalThis.fetch = orig;
+});
 
 beforeEach(() => {
   localStorage.clear();
@@ -36,7 +50,7 @@ describe("auth", () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("network"); }) as unknown as typeof fetch);
     const { fetchAuthMethods } = await import("./auth.svelte");
     const m = await fetchAuthMethods();
-    expect(m).toEqual({ password: true, google: false, magic: false });
+    expect(m).toEqual({ password: true, google: false, apple: false, magic: false });
   });
 
   it("register reports verification_sent without logging the user in", async () => {

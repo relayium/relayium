@@ -107,6 +107,7 @@ export interface Messages {
     sendLink: string;
     linkSent: string;
     continueGoogle: string;
+    continueApple: string;
     or: string;
     signedInAs: (email: string) => string;
     password: string;

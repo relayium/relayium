@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import {
     session, refreshSession, logout, localDeviceId,
-    googleLoginUrl, requestMagicLink,
+    googleLoginUrl, appleLoginUrl, requestMagicLink,
     register, passwordLogin, fetchAuthMethods, changePassword, type AuthMethods,
     resendVerification, forgotPassword, unlinkIdentity,
   } from "./auth.svelte";
@@ -18,7 +18,7 @@
   let mode = $state<"login" | "register" | "forgot">("login");
   let error = $state("");
   let submitting = $state(false); // in-flight guard for the password login/register form
-  let methods = $state<AuthMethods>({ password: true, google: false, magic: false });
+  let methods = $state<AuthMethods>({ password: true, google: false, apple: false, magic: false });
 
   // Register no longer logs the user in — it only queues a verification email —
   // so a successful register switches the form to this "check your email" panel.
@@ -403,11 +403,14 @@
             </button>
           {/if}
 
-          {#if methods.google || methods.magic}
+          {#if methods.google || methods.apple || methods.magic}
             <div class="sep">{t.account.or}</div>
           {/if}
           {#if methods.google}
             <a class="btn btn-ghost" href={googleLoginUrl()}>{t.account.continueGoogle}</a>
+          {/if}
+          {#if methods.apple}
+            <a class="btn btn-ghost btn-apple" href={appleLoginUrl()}>{t.account.continueApple}</a>
           {/if}
           {#if methods.magic}
             {#if magicSent}
@@ -465,6 +468,10 @@
     font: inherit; background: var(--social-bg); color: var(--text-h);
   }
   .menu .sep { text-align: center; color: var(--text); font-size: 12px; }
+  /* Apple brand guidance: a solid black button, legible in both themes (fixed
+     colors, not the theme's ghost-button background). */
+  .btn-apple { background: #000; color: #fff; border-color: #000; }
+  :global(:root[data-theme="light"]) .btn-apple { background: #000; color: #fff; }
   .menu .who { color: var(--text); }
   .linked { display: flex; flex-direction: column; gap: var(--space-1); padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); }
   .linked-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); font-size: var(--fs-xs); color: var(--text-h); }

@@ -85,6 +85,7 @@ const ja: Messages = {
     sendLink: "ログインリンクを送る",
     linkSent: "メールにログインリンクを送りました。ご確認ください。",
     continueGoogle: "Google で続ける",
+    continueApple: "Appleで続ける",
     or: "または",
     signedInAs: (e) => `ログイン中：${e}`,
     password: "パスワード",
