@@ -48,6 +48,7 @@
   import Nav from "./lib/Nav.svelte";
   import { currentRoute, syncRouteFromLocation, downloadId, navigate, setNavGuard, PRICING_PATH } from "./lib/router.svelte";
   import Hero from "./lib/Hero.svelte";
+  import DeviceRadar from "./lib/DeviceRadar.svelte";
   import FeatureStrip from "./lib/FeatureStrip.svelte";
   import CliCallout from "./lib/CliCallout.svelte";
   import HowToSteps from "./lib/HowToSteps.svelte";
@@ -205,6 +206,15 @@
 
   const t = $derived<Messages>(messages[lang()]);
   const visiblePeers = $derived(peers.filter((p) => p.id !== selfId));
+  // Which peer's send card is expanded below the radar. Solo auto-selects; a
+  // stale selection (peer left) falls back to none.
+  let selectedPeerId = $state("");
+  const effectiveSelected = $derived(
+    visiblePeers.length === 1
+      ? visiblePeers[0].id
+      : visiblePeers.some((p) => p.id === selectedPeerId) ? selectedPeerId : "",
+  );
+  const selectedPeer = $derived(visiblePeers.find((p) => p.id === effectiveSelected) ?? null);
   const busy = $derived(
     !!incoming || !!(recv && !recv.done) || !!(send && !send.done),
   );
@@ -1248,6 +1258,40 @@
 </script>
 
 <main>
+{#snippet peerCard(p: Peer, solo: boolean)}
+  <li
+    class="peer"
+    class:disabled={busy}
+    ondragover={(e) => { e.preventDefault(); if (!busy) (e.currentTarget as HTMLElement).classList.add("drag"); }}
+    ondragleave={(e) => (e.currentTarget as HTMLElement).classList.remove("drag")}
+    ondrop={(e) => { e.stopPropagation(); if (busy) { e.preventDefault(); flash(messages[lang()].busy); return; } onDrop(e, p.id); }}
+  >
+    <label class="pcard">
+      <span class="pavatar" class:big={solo}>{p.name.slice(0, 1).toUpperCase()}</span>
+      <span class="ptext">
+        {#if solo}
+          <span class="pname">{t.pickSendTo(p.name)}</span>
+        {:else}
+          <span class="pname">{p.name}</span>
+          <span class="pick">{t.pickHint(MAX_FILES)}</span>
+        {/if}
+      </span>
+      <input id={`pick-${p.id}`} type="file" multiple disabled={busy}
+        onclick={(e) => { if (outbox().length) { e.preventDefault(); sendFiles(p.id, takeOutbox()); } }}
+        onchange={(e) => pickFile(e, p.id)} />
+    </label>
+    <div class="peer-actions">
+      <label class="act-btn" class:disabled={busy} for={`pick-${p.id}`}>📄 {t.sendFile}</label>
+      {#if folderUploadSupported}
+        <label class="act-btn" class:disabled={busy}>
+          📁 {t.sendFolder}
+          <input type="file" webkitdirectory multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
+        </label>
+      {/if}
+    </div>
+  </li>
+{/snippet}
+
 {#snippet transferSurface()}
   {@const solo = visiblePeers.length === 1}
   <section class="peers">
@@ -1262,6 +1306,12 @@
         <button class="btn" onclick={cancelSend}>{t.confirmRecvCancel}</button>
       </div>
     {/if}
+    <DeviceRadar
+      peers={visiblePeers}
+      {selfName}
+      selectedId={effectiveSelected}
+      onSelect={(id) => (selectedPeerId = id)}
+    />
     {#if visiblePeers.length === 0}
       <div class="empty">
         <p class="empty-lead">{t.emptyPeers}</p>
@@ -1269,41 +1319,9 @@
           <button class="btn btn-ghost empty-cta" onclick={() => navigate("cross")}>{t.emptyCrossCta}</button>
         {/if}
       </div>
-    {:else}
+    {:else if selectedPeer}
       <ul class:solo class:dragging={dragActive && dropTarget(visiblePeers.length, busy) === "pick"}>
-        {#each visiblePeers as p (p.id)}
-          <li
-            class="peer"
-            class:disabled={busy}
-            ondragover={(e) => { e.preventDefault(); if (!busy) (e.currentTarget as HTMLElement).classList.add("drag"); }}
-            ondragleave={(e) => (e.currentTarget as HTMLElement).classList.remove("drag")}
-            ondrop={(e) => { e.stopPropagation(); if (busy) { e.preventDefault(); flash(messages[lang()].busy); return; } onDrop(e, p.id); }}
-          >
-            <label class="pcard">
-              <span class="pavatar" class:big={solo}>{p.name.slice(0, 1).toUpperCase()}</span>
-              <span class="ptext">
-                {#if solo}
-                  <span class="pname">{t.pickSendTo(p.name)}</span>
-                {:else}
-                  <span class="pname">{p.name}</span>
-                  <span class="pick">{t.pickHint(MAX_FILES)}</span>
-                {/if}
-              </span>
-              <input id={`pick-${p.id}`} type="file" multiple disabled={busy}
-                onclick={(e) => { if (outbox().length) { e.preventDefault(); sendFiles(p.id, takeOutbox()); } }}
-                onchange={(e) => pickFile(e, p.id)} />
-            </label>
-            <div class="peer-actions">
-              <label class="act-btn" class:disabled={busy} for={`pick-${p.id}`}>📄 {t.sendFile}</label>
-              {#if folderUploadSupported}
-                <label class="act-btn" class:disabled={busy}>
-                  📁 {t.sendFolder}
-                  <input type="file" webkitdirectory multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
-                </label>
-              {/if}
-            </div>
-          </li>
-        {/each}
+        {@render peerCard(selectedPeer, visiblePeers.length === 1)}
       </ul>
     {/if}
   </section>
