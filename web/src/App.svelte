@@ -1306,23 +1306,35 @@
         <button class="btn" onclick={cancelSend}>{t.confirmRecvCancel}</button>
       </div>
     {/if}
-    <DeviceRadar
-      peers={visiblePeers}
-      {selfName}
-      selectedId={effectiveSelected}
-      onSelect={(id) => (selectedPeerId = id)}
-    />
-    {#if visiblePeers.length === 0}
-      <div class="empty">
-        <p class="empty-lead">{t.emptyPeers}</p>
-        {#if currentRoute() === "lan"}
+    {#if currentRoute() === "lan"}
+      <DeviceRadar
+        peers={visiblePeers}
+        {selfName}
+        selectedId={effectiveSelected}
+        onSelect={(id) => (selectedPeerId = id)}
+      />
+      {#if visiblePeers.length === 0}
+        <div class="empty">
+          <p class="empty-lead">{t.emptyPeers}</p>
           <button class="btn btn-ghost empty-cta" onclick={() => navigate("cross")}>{t.emptyCrossCta}</button>
-        {/if}
-      </div>
-    {:else if selectedPeer}
-      <ul class:solo class:dragging={dragActive && dropTarget(visiblePeers.length, busy) === "pick"}>
-        {@render peerCard(selectedPeer, visiblePeers.length === 1)}
-      </ul>
+        </div>
+      {:else if selectedPeer}
+        <ul class:solo class:dragging={dragActive && dropTarget(visiblePeers.length, busy) === "pick"}>
+          {@render peerCard(selectedPeer, solo)}
+        </ul>
+      {/if}
+    {:else}
+      {#if visiblePeers.length === 0}
+        <div class="empty">
+          <p class="empty-lead">{t.emptyPeers}</p>
+        </div>
+      {:else}
+        <ul class:solo class:dragging={dragActive && dropTarget(visiblePeers.length, busy) === "pick"}>
+          {#each visiblePeers as p (p.id)}
+            {@render peerCard(p, solo)}
+          {/each}
+        </ul>
+      {/if}
     {/if}
   </section>
 
