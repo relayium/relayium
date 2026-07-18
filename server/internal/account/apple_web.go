@@ -11,6 +11,8 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -205,6 +207,11 @@ func (s *Service) realExchangeAppleCode(ctx context.Context, code string) (strin
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		// Apple returns a JSON error body (e.g. {"error":"invalid_client"}) that
+		// names the exact reason the exchange failed. It carries no secret, so log
+		// it — without this, every token-stage failure is an opaque status code.
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		log.Printf("apple: token exchange failed: status %d, body %s", resp.StatusCode, strings.TrimSpace(string(body)))
 		return "", fmt.Errorf("apple token status %d", resp.StatusCode)
 	}
 	var out struct {
