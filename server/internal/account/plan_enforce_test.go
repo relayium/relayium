@@ -20,11 +20,11 @@ func TestOverTrafficAndStorage(t *testing.T) {
 	svc, st := newPlanService(t)
 	ctx := context.Background()
 	u, _ := st.UpsertUserByEmail(ctx, "e@example.com", "")
-	_ = st.SetUserPlan(ctx, u.ID, "free") // 100MB storage, 2GB traffic
+	_ = st.SetUserPlan(ctx, u.ID, "free") // 100MB storage, 1GB traffic
 
 	// Under both caps.
 	if over, _ := svc.overTraffic(ctx, u.ID, 1<<20); over {
-		t.Fatal("1MB should be under the 2GB traffic cap")
+		t.Fatal("1MB should be under the 1GB traffic cap")
 	}
 	if over, _ := svc.overStorage(ctx, u.ID, 1<<20); over {
 		t.Fatal("1MB should be under the 100MB storage cap")
@@ -33,10 +33,10 @@ func TestOverTrafficAndStorage(t *testing.T) {
 	if over, _ := svc.overStorage(ctx, u.ID, 200<<20); !over {
 		t.Fatal("200MB must exceed the 100MB free storage cap")
 	}
-	// Record traffic near the 2GB cap, then a small add trips it.
-	_ = st.RecordMeter(ctx, u.ID, MeterUpload, 2<<30, 100)
+	// Record traffic at the 1GB cap, then a small add trips it.
+	_ = st.RecordMeter(ctx, u.ID, MeterUpload, 1<<30, 100)
 	if over, _ := svc.overTraffic(ctx, u.ID, 1); !over {
-		t.Fatal("already at 2GB → any add must exceed the free traffic cap")
+		t.Fatal("already at 1GB → any add must exceed the free traffic cap")
 	}
 }
 
