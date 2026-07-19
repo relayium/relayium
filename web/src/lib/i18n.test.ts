@@ -96,6 +96,18 @@ describe("i18n completeness", () => {
       expect(m.resetPassword.invalidBody, `${code}.resetPassword.invalidBody`).toBeTruthy();
     }
   });
+
+  it("every language has the account-page quota-meter strings", () => {
+    for (const { code } of LANGS) {
+      const m = messages[code];
+      expect(m.quota.title, `${code}.quota.title`).toBeTruthy();
+      expect(m.quota.traffic, `${code}.quota.traffic`).toBeTruthy();
+      expect(m.quota.storage, `${code}.quota.storage`).toBeTruthy();
+      expect(m.quota.left("5 GB"), `${code}.quota.left`).toContain("5 GB");
+      expect(m.quota.resets("Aug 1"), `${code}.quota.resets`).toContain("Aug 1");
+      expect(m.quota.unlimited, `${code}.quota.unlimited`).toBeTruthy();
+    }
+  });
 });
 
 describe("detect", () => {

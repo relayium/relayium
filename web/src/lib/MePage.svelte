@@ -13,6 +13,7 @@
   import WhyAccount from "./WhyAccount.svelte";
   import CommandBlock from "./CommandBlock.svelte";
   import { reveal, countUp } from "./reveal";
+  import QuotaMeters from "./QuotaMeters.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
 
@@ -249,6 +250,7 @@
       </div>
     </div>
     <p class="privacy">{t.me.privacyNote}</p>
+    <QuotaMeters />
 
     <section class="files">
       <div class="files-head">
