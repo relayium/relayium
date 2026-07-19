@@ -32,20 +32,24 @@
 
 | 列 | 类型 | 说明 |
 |---|---|---|
-| `id` | TEXT PK | credential ID，base64url |
-| `public_key` | BLOB | COSE 公钥 |
-| `sign_count` | INTEGER | 克隆检测计数器 |
+| `id` | TEXT PK | credential ID，base64url，查询键 |
+| `user_handle` | BLOB | WebAuthn user ID，32 字节；所有行共用同一值 |
+| `cred_json` | BLOB | `webauthn.Credential` 完整记录的 JSON |
 | `name` | TEXT | 用户命名，如「MacBook」 |
 | `created_at` | INTEGER | unix 秒 |
 | `last_used_at` | INTEGER | unix 秒，0 表示从未使用 |
 
-**user handle 必须与用户名解耦**。WebAuthn 要求稳定的 user ID；`RELAYIUM_ADMIN_USER` 是可变配置项，若直接用作 handle，改用户名会静默作废全部已注册 passkey 且极难排查。做法：首次注册时生成 32 字节随机 handle 存入既有 `settings` 表（key `admin_webauthn_user_handle`），此后永不变更。用户名仅作 `DisplayName` 展示。
+公钥与 sign_count 不单独建列，而是随 `webauthn.Credential` 整体以 JSON 存入 `cred_json`。该结构除公钥/计数器外还含 flags、transports、AAGUID、attestation 等字段，库的持久化指南明确要求完整保存并在每次登录成功后回写；拆列存储会静默丢弃这些字段。`id` 单独成列是因为它是查询键。
+
+**user handle 必须与用户名解耦**。WebAuthn 要求稳定的 user ID；`RELAYIUM_ADMIN_USER` 是可变配置项，若直接用作 handle，改用户名会静默作废全部已注册 passkey 且极难排查。用户名仅作 `DisplayName` 展示。
+
+handle 存为 `admin_credentials` 上的 `user_handle` 列，而**不是**存入既有 `settings` 表——该表的 `value` 列是 `INTEGER NOT NULL`（`sqlite.go:100-104`），存不下 32 字节 blob。注册第一枚凭据时生成一个随机 handle；此后每次注册复用任意现有行的 handle。删光全部凭据后下次注册会生成新 handle，这是正确行为（此时已无凭据与旧 handle 绑定）。
 
 **RP ID** 从 `Config.BaseURL` 的 host 推导并去掉端口（`localhost:8080` → `localhost`；RP ID 不允许含端口）。origin 校验使用完整 BaseURL。
 
 **启用条件**跟随既有 `AdminEnabled()`，不新增开关。
 
-**sign_count 策略**：仅当上报值非 0 且**小于**已存值时判定为克隆并拒绝。iCloud 钥匙串等同步型 passkey 恒报 0，严格要求递增会把管理员锁在门外。
+**sign_count 策略**：库已实现所需的容忍逻辑——`Authenticator.UpdateCounter`（`authenticator.go:60`）仅在 `authDataCount <= SignCount && (authDataCount != 0 || SignCount != 0)` 时置 `CloneWarning`，即两者同为 0（iCloud 钥匙串等同步型 passkey 恒报 0）不告警。实现侧只需在登录成功后检查 `credential.Authenticator.CloneWarning` 并拒绝，无需自行比较计数器。
 
 ## 2. 端点与流程
 
