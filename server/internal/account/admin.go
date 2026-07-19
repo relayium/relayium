@@ -406,14 +406,17 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		}
 	}
 	// A passkey that was never used is how a planted credential shows itself,
-	// so the list is part of the security surface, not just a convenience.
-	// Unlike the other fetches here this one fails the whole page rather than
-	// logging and carrying on: rendering an empty table on a failed query would
-	// hide exactly the credential the table exists to expose.
-	passkeys, err := s.store.ListAdminCredentials(r.Context())
-	if err != nil {
-		log.Printf("passkey: ListAdminCredentials failed: %v", err)
-		return adminHomeData{}, err
+	// so the list is part of the security surface, not just a convenience. A
+	// failed read must therefore never render as an empty table. It must not
+	// 500 the page either — that would take down the user list, nodes, plans
+	// and settings just as the operator starts diagnosing the database. So
+	// carry on like the fetches above and flag it, and the template swaps the
+	// table for an explicit error.
+	passkeys, pkerr := s.store.ListAdminCredentials(r.Context())
+	passkeysErr := pkerr != nil
+	if pkerr != nil {
+		log.Printf("passkey: ListAdminCredentials failed: %v", pkerr)
+		passkeys = nil
 	}
 	return adminHomeData{
 		Metrics: metrics, Users: rows, Total: total, Page: page, TotalPages: totalPages,
@@ -423,6 +426,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		Plans: planVs, ActivePlans: activePlanVs,
 		CentralStoredBytes: centralStored,
 		Passkeys:           passkeys,
+		PasskeysErr:        passkeysErr,
 		Settings: adminSettingsView{
 			MaxFileSizeMB:          st.MaxFileSize / (1024 * 1024),
 			DailyQuotaMB:           st.DailyQuota / (1024 * 1024),

@@ -1,11 +1,14 @@
 package account
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fetchAdminLogin GETs /admin with no session, which renders the login page.
@@ -90,6 +93,11 @@ func TestLoginPageShowsPasskeyButtonAndKeepsPasswordForm(t *testing.T) {
 	if !strings.Contains(html, `name="username"`) {
 		t.Fatalf("username field disappeared")
 	}
+	// 渐进增强的全部依据是「密码表单先写完，passkey 块才开始」：
+	// 顺序反了的话，passkey 块里的模板错误就能把已写出的表单截断。
+	if strings.Index(html, "</form>") > strings.Index(html, "passkey-login") {
+		t.Fatalf("passkey block precedes the password form — a failure inside it could truncate the form")
+	}
 	// 取消平台弹窗是正常操作，不该报红：这条分支必须存在。
 	if !strings.Contains(html, "NotAllowedError") {
 		t.Fatalf("cancel (NotAllowedError) branch missing from login script")
@@ -121,9 +129,48 @@ func TestAdminHomeListsPasskeys(t *testing.T) {
 		t.Fatalf("registered passkey not listed on admin home")
 	}
 	// 刚注册、尚未用过的凭据必须显眼地标为「从未使用」——被植入的
-	// 后门凭据正是靠这一列现形的。
-	if !strings.Contains(html, "从未使用") {
-		t.Fatalf("never-used credential not marked as such")
+	// 后门凭据正是靠这一列现形的。断言要连样式钩子一起盯：光有文字、
+	// 丢了 class="never" 的话视觉区分就没了，而这才是要求的本体。
+	if !strings.Contains(html, `<span class="never">从未使用</span>`) {
+		t.Fatalf("never-used credential not visually marked (class=never) as such")
+	}
+}
+
+// passkeyListFailStore 只让凭据查询失败，其余照常，用来模拟局部 DB 故障。
+type passkeyListFailStore struct {
+	Store
+}
+
+func (passkeyListFailStore) ListAdminCredentials(context.Context) ([]AdminCredential, error) {
+	return nil, errors.New("simulated passkey read failure")
+}
+
+// 凭据读失败时：整页不能 500（用户列表/节点/套餐正是此刻要用的），
+// 但也绝不能拿一张空表冒充「零凭据」——那会把被植入的凭据藏起来。
+func TestAdminHomeShowsPasskeyReadFailureInsteadOfEmptyList(t *testing.T) {
+	store := newTestStore(t)
+	_, _ = store.UpsertUserByEmail(context.Background(), "seen@example.com", "Seen")
+	svc := NewService(passkeyListFailStore{store}, &capturingMailer{}, Config{
+		BaseURL: "http://example.test", SessionTTL: time.Hour,
+		AdminUser: "admin", AdminPassword: "pw",
+	})
+	mux := http.NewServeMux()
+	svc.RegisterAdmin(mux)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	session := adminPasswordLogin(t, srv, svc)
+	// fetchAdminHome 对非 200 直接 fatal：读失败不得把整个后台打挂。
+	html := fetchAdminHome(t, srv, session)
+	if !strings.Contains(html, "凭据列表读取失败") {
+		t.Fatalf("failed credential read did not render an explicit error state")
+	}
+	if strings.Contains(html, "尚未添加 passkey") {
+		t.Fatalf("failed read rendered the empty state — indistinguishable from zero credentials")
+	}
+	// 页面其余部分必须完好，否则就退回成了变相的 500。
+	if !strings.Contains(html, "seen@example.com") {
+		t.Fatalf("user list lost — passkey read failure should degrade only its own section")
 	}
 }
 

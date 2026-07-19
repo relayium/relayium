@@ -38,8 +38,11 @@ type adminHomeData struct {
 	ActivePlans []planView // subset of Plans with Active==true; used for the per-user plan dropdown
 	Settings    adminSettingsView
 	// Passkeys are the registered admin credentials, listed so a never-used
-	// entry (an attacker's planted credential) is visible.
-	Passkeys []AdminCredential
+	// entry (an attacker's planted credential) is visible. PasskeysErr marks a
+	// failed read so the template can show an error instead of an empty table —
+	// "could not read" must never be mistaken for "none registered".
+	Passkeys    []AdminCredential
+	PasskeysErr bool
 
 	FleetTokens      []adminFleetTokenView
 	FleetNodeCount   int    // count of Nodes with OwnerType == "fleet" (matches table body's guard)
@@ -91,8 +94,8 @@ func withPasskeyJS(t *template.Template) *template.Template {
 
 var adminLoginTmpl = template.Must(withPasskeyJS(template.New("login")).Parse(`<!doctype html>
 <html><head><meta charset="utf-8"><title>Relayium Admin</title>
-<style>:root{--a:#7c3aad;--bg:#faf9fb;--fg:#1a1420;--bd:#e5e4e7;--card:#fff}
-@media(prefers-color-scheme:dark){:root{--a:#c084fc;--bg:#16171d;--fg:#f3f4f6;--bd:#2e303a;--card:#1c1d25}}
+<style>:root{--a:#7c3aad;--bg:#faf9fb;--fg:#1a1420;--bd:#e5e4e7;--card:#fff;--muted:#6b6375}
+@media(prefers-color-scheme:dark){:root{--a:#c084fc;--bg:#16171d;--fg:#f3f4f6;--bd:#2e303a;--card:#1c1d25;--muted:#9ca3af}}
 *{box-sizing:border-box}
 body{font:15px system-ui;max-width:360px;margin:80px auto;padding:0 16px;color:var(--fg);background:var(--bg)}
 h1{font-size:20px;margin:0 0 16px}
@@ -102,6 +105,7 @@ button{font:inherit;font-weight:500;padding:10px 11px;width:100%;margin:10px 0 0
 button:hover{filter:brightness(1.07)}
 :focus-visible{outline:2px solid var(--a);outline-offset:2px}
 .err{color:#e5484d;margin:0 0 10px}
+.muted{color:var(--muted);margin:0 0 10px}
 [hidden]{display:none!important}</style></head>
 <body><h1>Relayium 后台</h1>
 {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
@@ -122,16 +126,6 @@ button:hover{filter:brightness(1.07)}
   // and the password form above is untouched.
   if (!window.PublicKeyCredential || !navigator.credentials) { btn.hidden = true; return; }
 {{template "passkeyB64"}}
-  var NO_CRED = '这台设备还没注册 passkey，请用密码登录后在设置里添加';
-  // WebAuthn reports "user cancelled" and "no credential on this device" with
-  // the same NotAllowedError, so ask the platform up front whether it has an
-  // authenticator at all — that is what tells the two apart on the way out.
-  // A capability query raises no prompt, so it is safe outside the click.
-  var hasAuthenticator = true;
-  if (PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
-    PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
-      .then(function(v){ hasAuthenticator = !!v; }, function(){});
-  }
   btn.addEventListener('click', function(){
     err.hidden = true; btn.disabled = true;
     fetch('/admin/passkey/login/begin', {method:'POST'})
@@ -149,8 +143,6 @@ button:hover{filter:brightness(1.07)}
         return navigator.credentials.get({publicKey: pk});
       })
       .then(function(c){
-        // A null credential means the platform had nothing to offer here.
-        if (!c) throw new Error(NO_CRED);
         return fetch('/admin/passkey/login/finish', {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({
@@ -172,13 +164,17 @@ button:hover{filter:brightness(1.07)}
       .catch(function(e){
         btn.disabled = false;
         if (e && e.name === 'NotAllowedError') {
-          // Cancelling the platform prompt is a normal action, not an error —
-          // stay silent. With no authenticator present it was never a cancel,
-          // so point at the way forward instead.
-          if (hasAuthenticator) return;
-          err.textContent = NO_CRED; err.hidden = false; return;
+          // WebAuthn fuses "user cancelled" and "no usable credential here"
+          // into one NotAllowedError on purpose (it refuses to let a page
+          // enumerate who is enrolled), and nothing on the client can split
+          // them back apart. So say the one thing true of both, in muted text
+          // rather than red: neither case is a failure the operator caused.
+          err.className = 'muted';
+          err.textContent = '已取消，或这台设备上没有可用的 passkey。可用下方密码登录后在设置里添加';
+        } else {
+          err.className = 'err';
+          err.textContent = (e && e.message) || '登录失败，请改用下方密码登录';
         }
-        err.textContent = (e && e.message) || '登录失败，请改用下方密码登录';
         err.hidden = false;
       });
   });
@@ -371,7 +367,10 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 </section>
 
 <section class="passkeys">
-<h2>Passkey 登录（{{len .Passkeys}}）</h2>
+<h2>Passkey 登录{{if not .PasskeysErr}}（{{len .Passkeys}}）{{end}}</h2>
+{{if .PasskeysErr}}
+<p class="err">凭据列表读取失败，请查看服务端日志</p>
+{{else}}
 <table>
 <thead><tr><th>名称</th><th>添加时间(UTC)</th><th>最后使用</th><th></th></tr></thead>
 <tbody>
@@ -387,6 +386,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <tr><td colspan="4">尚未添加 passkey</td></tr>
 {{end}}
 </tbody></table>
+{{end}}
 
 <form id="passkey-add" class="mint" hidden>
 <input type="text" name="name" placeholder="设备名称，如 MacBook" required>
