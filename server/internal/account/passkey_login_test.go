@@ -359,8 +359,13 @@ func TestPasskeyLoginCeremonyIsOneShot(t *testing.T) {
 	if code := doFinish(); code != http.StatusOK {
 		t.Fatalf("first finish status=%d want 200", code)
 	}
-	if code := doFinish(); code == http.StatusOK {
-		t.Fatalf("replaying the exact same ceremony cookie+body succeeded a second time")
+	// 断言必须是 takeCeremony 消费失败时唯一会走到的 400（"验证已过期，请重试"），
+	// 而不是宽松的 != 200：克隆计数器检查在重放时也会独立触发（测试用的认证器每次
+	// 签名都会递增 signCount），返回 401，会在 guard 被拿掉的情况下悄悄让断言通过。
+	if code := doFinish(); code != http.StatusBadRequest {
+		t.Fatalf("replay status=%d want 400 (one-shot guard); a non-400 rejection means "+
+			"the ceremony may not have been consumed and something else (e.g. the clone-warning "+
+			"check) independently rejected the replay", code)
 	}
 }
 
