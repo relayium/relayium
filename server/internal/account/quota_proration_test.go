@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 // Free 档的月流量在 2026-07 从 2 GiB 降到 1 GiB。新库直接由 defaultPlans 播种。
@@ -413,5 +414,157 @@ func wantApprox(want, tolerance int64) func(t *testing.T, got int64) {
 		if diff < -tolerance || diff > tolerance {
 			t.Fatalf("prorate result = %d, want within ±%d of %d", got, tolerance, want)
 		}
+	}
+}
+
+// 本月没改过档的用户走满额分支 —— 绝大多数用户都在这条路上，不能有任何折扣。
+func TestMonthlyCapFullWhenNoChangeThisMonth(t *testing.T) {
+	ctx := context.Background()
+	svc, store := newPlanService(t)
+	// InsertUser isn't a real Store method (see TestAccrueFreezesPreviousSegment
+	// above / task 2's report): use UpsertUserByEmail and its generated id.
+	u, err := store.UpsertUserByEmail(ctx, "a@b.c", "")
+	if err != nil {
+		t.Fatalf("UpsertUserByEmail: %v", err)
+	}
+	cap, err := svc.monthlyTrafficCap(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("monthlyTrafficCap: %v", err)
+	}
+	if cap != 1073741824 {
+		t.Fatalf("cap = %d, want 1073741824 (full free tier)", cap)
+	}
+}
+
+// 月中升级的当月上限 = 旧档冻结的那段 + 新档剩余那段。这正是 spec 里那个例子：
+// 单纯按比例只给新档的一小段，会让月中超额的用户升级后几乎没解封。
+func TestMonthlyCapSumsSegmentsAfterUpgrade(t *testing.T) {
+	ctx := context.Background()
+	svc, store := newPlanService(t)
+	u, err := store.UpsertUserByEmail(ctx, "a@b.c", "")
+	if err != nil {
+		t.Fatalf("UpsertUserByEmail: %v", err)
+	}
+	uid := u.ID
+	period := periodOf(svc.now().Unix())
+	monthStart, monthEnd, monthSecs := monthAt(t, period)
+	t1 := monthStart + monthSecs/2
+
+	if err := store.SetUserPlan(ctx, uid, "plus", t1); err != nil {
+		t.Fatalf("SetUserPlan: %v", err)
+	}
+	// 把服务时钟推到 t1 之后，让读路径看到"本月已改过档"。
+	svc.now = func() time.Time { return time.Unix(t1+60, 0) }
+
+	got1, _ := store.GetUserByID(ctx, uid)
+	plusCap := int64(300) << 30
+	segSecs := monthEnd - t1
+	wantSeg := plusCap/monthSecs*segSecs + (plusCap%monthSecs)*segSecs/monthSecs
+	want := got1.QuotaAccruedBytes + wantSeg
+
+	got, err := svc.monthlyTrafficCap(ctx, uid)
+	if err != nil {
+		t.Fatalf("monthlyTrafficCap: %v", err)
+	}
+	if got != want {
+		t.Fatalf("cap = %d, want %d (accrued %d + plus segment %d)",
+			got, want, got1.QuotaAccruedBytes, wantSeg)
+	}
+	// 关键性质：分段累加必须严格大于"纯按比例"，否则月中超额用户升级后没解封。
+	if got <= wantSeg {
+		t.Fatalf("segment sum %d must exceed the new tier's slice alone %d", got, wantSeg)
+	}
+}
+
+// 无限档（cap<=0）在任何分支下都必须继续表示无限，不能被比例计算变成有限值。
+func TestMonthlyCapUnlimitedStaysUnlimited(t *testing.T) {
+	ctx := context.Background()
+	svc, store := newPlanService(t)
+	if err := store.UpsertPlan(ctx, Plan{ID: "unl", Name: "Unlimited", StorageBytes: 0,
+		TrafficBytes: 0, RetentionSecs: 0, Active: true, UpdatedAt: 1}); err != nil {
+		t.Fatalf("UpsertPlan: %v", err)
+	}
+	u, err := store.UpsertUserByEmail(ctx, "a@b.c", "")
+	if err != nil {
+		t.Fatalf("UpsertUserByEmail: %v", err)
+	}
+	uid := u.ID
+	monthStart, _, monthSecs := monthAt(t, periodOf(svc.now().Unix()))
+	t1 := monthStart + monthSecs/2
+	if err := store.SetUserPlan(ctx, uid, "unl", t1); err != nil {
+		t.Fatalf("SetUserPlan: %v", err)
+	}
+	svc.now = func() time.Time { return time.Unix(t1+60, 0) }
+
+	cap, err := svc.monthlyTrafficCap(ctx, uid)
+	if err != nil {
+		t.Fatalf("monthlyTrafficCap: %v", err)
+	}
+	if cap > 0 {
+		t.Fatalf("cap = %d, want <= 0 (unlimited)", cap)
+	}
+	over, err := svc.overTraffic(ctx, uid, 1<<50)
+	if err != nil {
+		t.Fatalf("overTraffic: %v", err)
+	}
+	if over {
+		t.Fatal("unlimited tier must never be over quota")
+	}
+}
+
+// fail-open：store 报错时门必须放行，而不是把付费用户误判成 Free。
+// 复用 plan_enforce_test.go:66 的 errUserStore 包装器。
+func TestMonthlyCapFailsOpenOnStoreError(t *testing.T) {
+	svc, store := newPlanService(t)
+	svc.store = errUserStore{Store: store}
+	if _, err := svc.monthlyTrafficCap(context.Background(), "u1"); err == nil {
+		t.Fatal("monthlyTrafficCap must propagate store errors so the gate fails open")
+	}
+	over, err := svc.overTraffic(context.Background(), "u1", 1)
+	if err == nil {
+		t.Fatal("overTraffic must propagate the store error")
+	}
+	if over {
+		t.Fatal("overTraffic must fail OPEN (false) on a store error")
+	}
+}
+
+// 月长不是常数：2 月 28/29 天、其它月 30/31 天。比例分母必须取当月的真实秒
+// 数，用固定的 30 天会让 2 月的额度虚高、31 天的月份虚低。这里用闰年 2 月
+// （1972-02，29 天）把这个错误钉死。
+func TestMonthlyCapUsesRealMonthLength(t *testing.T) {
+	ctx := context.Background()
+	svc, store := newPlanService(t)
+	u, err := store.UpsertUserByEmail(ctx, "a@b.c", "")
+	if err != nil {
+		t.Fatalf("UpsertUserByEmail: %v", err)
+	}
+	uid := u.ID
+	febStart, febEnd, febSecs := monthAt(t, "197202")
+	if febSecs != 29*86400 {
+		t.Fatalf("1972-02 length = %d s, want %d (29 days, leap year)", febSecs, 29*86400)
+	}
+	// 月中改档，然后把读侧时钟也挪进这个月。
+	t1 := febStart + febSecs/2
+	if err := store.SetUserPlan(ctx, uid, "plus", t1); err != nil {
+		t.Fatalf("SetUserPlan: %v", err)
+	}
+	svc.now = func() time.Time { return time.Unix(t1+60, 0) }
+
+	got1, _ := store.GetUserByID(ctx, uid)
+	plusCap := int64(300) << 30
+	segSecs := febEnd - t1
+	wantSeg := plusCap/febSecs*segSecs + (plusCap%febSecs)*segSecs/febSecs
+	got, err := svc.monthlyTrafficCap(ctx, uid)
+	if err != nil {
+		t.Fatalf("monthlyTrafficCap: %v", err)
+	}
+	if got != got1.QuotaAccruedBytes+wantSeg {
+		t.Fatalf("cap = %d, want %d — the divisor must be february's real length",
+			got, got1.QuotaAccruedBytes+wantSeg)
+	}
+	// 半个月的 plus 段必须明显小于整月 cap，否则比例根本没生效。
+	if wantSeg >= plusCap {
+		t.Fatalf("half-month segment %d must be well under the full cap %d", wantSeg, plusCap)
 	}
 }

@@ -179,6 +179,15 @@ func TestOverStorageExactBoundary(t *testing.T) {
 
 // TestOverTrafficExactBoundary is overStorage's boundary case, mirrored for
 // overTraffic: used+add landing exactly on the cap must not trip it.
+//
+// overTraffic's cap now comes from monthlyTrafficCap, which sums prorated
+// segments for a user who changed plans THIS month (see quota_proration_test.go).
+// To keep this test's cap a clean, unprorated 500 — the exact boundary the test
+// name promises — the plan assignment below happens in the month BEFORE the
+// service clock's "now" (svc.now()==100, period "197001"), by passing a
+// timestamp of -1 (period "196912"). That lands u.QuotaAccruedPeriod in a past
+// period, so monthlyTrafficCap takes its "no change this month" branch and
+// returns plan.TrafficBytes verbatim, with no proration.
 func TestOverTrafficExactBoundary(t *testing.T) {
 	svc, st := newPlanService(t)
 	ctx := context.Background()
@@ -191,7 +200,7 @@ func TestOverTrafficExactBoundary(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_ = st.SetUserPlan(ctx, u.ID, "traffic-cap-500", svc.now().Unix())
+	_ = st.SetUserPlan(ctx, u.ID, "traffic-cap-500", -1) // previous period — see comment above
 
 	// Record 300 bytes of used traffic in the current month (now=100, per
 	// newPlanService's stub clock, so periodOf(100) is "this period").
