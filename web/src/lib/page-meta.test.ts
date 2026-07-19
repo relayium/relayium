@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { pageMeta, altHreflangs } from "./page-meta";
-import { CROSS_PATH, OFFLINE_PATH } from "./router.svelte";
+import { CROSS_PATH, OFFLINE_PATH, APPS_PATH } from "./router.svelte";
 // `messages` in i18n.svelte is populated lazily (code-split per language), so it's
 // empty at import time in a test — import the English table directly instead,
 // matching the pattern in i18n.test.ts.
@@ -44,6 +44,15 @@ describe("altHreflangs", () => {
     expect(altHreflangs("/offline-transfer").map((a) => a.hreflang)).toEqual([
       "en", "zh-Hans", "ja", "ko", "de", "fr", "ar", "es", "pt", "x-default",
     ]);
+  });
+});
+
+describe("pageMeta apps route", () => {
+  it("uses the appsPage meta title/description and its own canonical", () => {
+    const a = pageMeta("apps", m);
+    expect(a.title).toBe(m.appsPage.metaTitle);
+    expect(a.description).toBe(m.appsPage.metaDesc);
+    expect(a.canonicalPath).toBe(APPS_PATH);
   });
 });
 
