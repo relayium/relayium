@@ -6,21 +6,21 @@
     <title>Sécurité et modèle de menace · Relayium</title>
     <meta name="description" content="Comment Relayium protège vos fichiers : des clés X25519 propres à chaque transfert et AES-256-GCM, un code de vérification SAS avec une poignée de main « engagement puis révélation » pour déjouer un serveur malveillant, des liens de téléchargement à connaissance nulle, et un exposé honnête de ce contre quoi nous protégeons ou non." />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://relayium.com/fr/security" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/security" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/security" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/security" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/security" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/security" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/security" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/security" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/security" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/security" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/security" />
+    <link rel="canonical" href="https://relayium.com/fr/security/" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/security/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/security/" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/security/" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/security/" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/security/" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/security/" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/security/" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/security/" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/security/" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/security/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Sécurité et modèle de menace · Relayium","description":"Comment Relayium protège vos fichiers : des clés X25519 propres à chaque transfert et AES-256-GCM, un code de vérification SAS avec une poignée de main « engagement puis révélation » pour déjouer un serveur malveillant, des liens de téléchargement à connaissance nulle, et un exposé honnête de ce contre quoi nous protégeons ou non.","url":"https://relayium.com/fr/security","inLanguage":"fr","dateModified":"2026-07-01","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Sécurité et modèle de menace · Relayium","description":"Comment Relayium protège vos fichiers : des clés X25519 propres à chaque transfert et AES-256-GCM, un code de vérification SAS avec une poignée de main « engagement puis révélation » pour déjouer un serveur malveillant, des liens de téléchargement à connaissance nulle, et un exposé honnête de ce contre quoi nous protégeons ou non.","url":"https://relayium.com/fr/security/","inLanguage":"fr","dateModified":"2026-07-01","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -45,7 +45,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
       <h1>Sécurité et modèle de menace</h1>
       <p class="updated">Dernière mise à jour: 2026-07-01</p>
-      <nav class="langbar" aria-label="Language"><a href="/security">English</a><a href="/zh/security">中文</a><a href="/ja/security">日本語</a><a href="/ko/security">한국어</a><a href="/de/security">Deutsch</a><a href="/fr/security" aria-current="true">Français</a><a href="/ar/security">العربية</a><a href="/es/security">Español</a><a href="/pt/security">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/security/">English</a><a href="/zh/security/">中文</a><a href="/ja/security/">日本語</a><a href="/ko/security/">한국어</a><a href="/de/security/">Deutsch</a><a href="/fr/security/" aria-current="true">Français</a><a href="/ar/security/">العربية</a><a href="/es/security/">Español</a><a href="/pt/security/">Português</a></nav>
       <p>Relayium est conçu pour que ce soient les personnes qui transfèrent les fichiers — et non le serveur — qui détiennent les clés. Cette page décrit précisément ce qui est protégé, comment cela fonctionne, et les limites de cette protection.</p>
       <p>En bref : en mode temps réel, vos fichiers ne touchent jamais nos serveurs ; les clés de chiffrement sont générées à neuf sur chaque appareil et n&#39;en sortent jamais ; et un court code de vérification permet à deux personnes de détecter un serveur malveillant. Les détails suivent.</p>
       <h2>Chiffrement de bout en bout (X25519 + AES-256-GCM)</h2><p>Chaque transfert génère une paire de clés X25519 éphémère et nouvelle sur chaque appareil. Les deux appareils effectuent un échange de clés pour dériver une clé AES-256-GCM partagée qui n&#39;existe qu&#39;à l&#39;intérieur des deux navigateurs. Chaque bloc est chiffré avec cette clé et un nonce unique, si bien que le serveur de signalisation — et tout relais — ne voit jamais que du chiffré.</p><ul><li>Les clés sont éphémères et propres à chaque transfert — rien n&#39;est réutilisé d&#39;une session à l&#39;autre.</li><li>La clé partagée est dérivée sur les deux appareils ; elle n&#39;est jamais envoyée à un serveur ni stockée sur celui-ci.</li><li>Le chiffrement est appliqué au niveau applicatif, au-dessus de la sécurité de transport propre à WebRTC, et tient donc même si la couche de transport est compromise.</li></ul>
@@ -59,8 +59,8 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>Open source et signalement des problèmes</h2><p>La conception du protocole ainsi que tout le code client et serveur sont publics sur GitHub, de sorte que chacun peut auditer la cryptographie, exploiter son propre serveur ou contribuer. Si vous découvrez un problème de sécurité, veuillez le signaler en privé via le signalement de vulnérabilité GitHub du dépôt, plutôt que d&#39;ouvrir un ticket public.</p>
       <footer>
         <a href="/">← Relayium</a>
-        <a href="/fr/apps">Applis</a>
-        <a href="/fr/privacy">Politique de confidentialité</a>
+        <a href="/fr/apps/">Applis</a>
+        <a href="/fr/privacy/">Politique de confidentialité</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

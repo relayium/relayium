@@ -6,31 +6,31 @@
     <title>Relayium 对比 croc：从终端加密传输文件 · Relayium</title>
     <meta name="description" content="Relayium 和 croc 都是免费、开源、加密的命令行点对点传输工具。本文客观对比两者，看看各自更适合什么场景。" />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://relayium.com/zh/compare/croc" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/croc" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/croc" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/croc" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/croc" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/croc" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/croc" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/compare/croc" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/compare/croc" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/compare/croc" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/croc" />
+    <link rel="canonical" href="https://relayium.com/zh/compare/croc/" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/croc/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/croc/" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/croc/" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/croc/" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/croc/" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/croc/" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/compare/croc/" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/compare/croc/" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/compare/croc/" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/croc/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:title" content="Relayium 对比 croc：从终端加密传输文件" />
     <meta property="og:description" content="Relayium 和 croc 都是免费、开源、加密的命令行点对点传输工具。本文客观对比两者，看看各自更适合什么场景。" />
-    <meta property="og:url" content="https://relayium.com/zh/compare/croc" />
+    <meta property="og:url" content="https://relayium.com/zh/compare/croc/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Relayium 对比 croc：从终端加密传输文件" />
     <meta name="twitter:description" content="Relayium 和 croc 都是免费、开源、加密的命令行点对点传输工具。本文客观对比两者，看看各自更适合什么场景。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 croc：从终端加密传输文件","description":"Relayium 和 croc 都是免费、开源、加密的命令行点对点传输工具。本文客观对比两者，看看各自更适合什么场景。","inLanguage":"zh-Hans","dateModified":"2026-07-12","mainEntityOfPage":"https://relayium.com/zh/compare/croc","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Relayium 的 CLI 免费吗？","acceptedAnswer":{"@type":"Answer","text":"完全免费。没有付费档位，也没有什么可计量的——每种模式都是两端直接连接，CLI 采用 MIT 许可并开源。"}},{"@type":"Question","name":"需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。push/pull 用你自己的 SSH 权限，daemon-direct 用你机器之间锁定的 TLS 证书信任，send/receive 用你们线下约定的一段简短代码。三者都不涉及 Relayium 账号。"}},{"@type":"Question","name":"CLI 的配对码能和 Relayium 的浏览器版互通吗？","acceptedAnswer":{"@type":"Answer","text":"目前还不能实时配对传输——CLI 的 send/receive 用的是自己的直连握手协议，和浏览器基于 WebRTC 的配对流程不是一回事，两者暂不互通。如果只想用浏览器把文件交给对方，可以用 Relayium 的存储下载链接，或者浏览器版自己的配对码模式。"}},{"@type":"Question","name":"可以自托管吗？","acceptedAnswer":{"@type":"Answer","text":"可以。Relayium 的服务器以 Docker 镜像形式发布（docker compose up -d --build），你也可以用 --server https://your-domain 让 CLI 的 send/receive 指向你自己的实例——和自建 croc 中继是同样的思路。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 croc：从终端加密传输文件","description":"Relayium 和 croc 都是免费、开源、加密的命令行点对点传输工具。本文客观对比两者，看看各自更适合什么场景。","inLanguage":"zh-Hans","dateModified":"2026-07-12","mainEntityOfPage":"https://relayium.com/zh/compare/croc/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Relayium 的 CLI 免费吗？","acceptedAnswer":{"@type":"Answer","text":"完全免费。没有付费档位，也没有什么可计量的——每种模式都是两端直接连接，CLI 采用 MIT 许可并开源。"}},{"@type":"Question","name":"需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。push/pull 用你自己的 SSH 权限，daemon-direct 用你机器之间锁定的 TLS 证书信任，send/receive 用你们线下约定的一段简短代码。三者都不涉及 Relayium 账号。"}},{"@type":"Question","name":"CLI 的配对码能和 Relayium 的浏览器版互通吗？","acceptedAnswer":{"@type":"Answer","text":"目前还不能实时配对传输——CLI 的 send/receive 用的是自己的直连握手协议，和浏览器基于 WebRTC 的配对流程不是一回事，两者暂不互通。如果只想用浏览器把文件交给对方，可以用 Relayium 的存储下载链接，或者浏览器版自己的配对码模式。"}},{"@type":"Question","name":"可以自托管吗？","acceptedAnswer":{"@type":"Answer","text":"可以。Relayium 的服务器以 Docker 镜像形式发布（docker compose up -d --build），你也可以用 --server https://your-domain 让 CLI 的 send/receive 指向你自己的实例——和自建 croc 中继是同样的思路。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -63,7 +63,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <h1>Relayium 对比 croc：从终端加密传输文件</h1>
       <p class="updated">最近更新: 2026-07-12</p>
-      <nav class="langbar" aria-label="Language"><a href="/compare/croc">English</a><a href="/zh/compare/croc" aria-current="true">中文</a><a href="/ja/compare/croc">日本語</a><a href="/ko/compare/croc">한국어</a><a href="/de/compare/croc">Deutsch</a><a href="/fr/compare/croc">Français</a><a href="/ar/compare/croc">العربية</a><a href="/es/compare/croc">Español</a><a href="/pt/compare/croc">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/compare/croc/">English</a><a href="/zh/compare/croc/" aria-current="true">中文</a><a href="/ja/compare/croc/">日本語</a><a href="/ko/compare/croc/">한국어</a><a href="/de/compare/croc/">Deutsch</a><a href="/fr/compare/croc/">Français</a><a href="/ar/compare/croc/">العربية</a><a href="/es/compare/croc/">Español</a><a href="/pt/compare/croc/">Português</a></nav>
       <p class="lead">croc 是最受欢迎的终端间传输文件工具之一：一个简短好记的暗号短语、一次 PAKE 密钥交换，就能直接用。Relayium CLI 想做的是同一件事，实现方式也相似——免费、开源、端到端加密，任何模式都不需要账号。</p>
       <p class="lead">这不是一篇贬低文。croc 的口碑是实至名归的。本文客观对比两者的共同点、Relayium CLI 因为能对接你已有的服务器而多出的能力，以及 croc 老实说更简单的场景。</p>
       <h2>Relayium 与 croc 的共同点</h2>
@@ -104,12 +104,12 @@ footer a{color:var(--text-h);text-decoration:none}
         <a class="cta" href="/cli">获取 CLI</a>
       </div>
       <h2>继续阅读</h2>
-      <ul class="related"><li><a href="/zh/compare/snapdrop">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/transfer-files-android-to-iphone">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud">如何不用网盘传输大文件</a></li><li><a href="/zh/guides/transfer-files-from-terminal">用 Relayium CLI 从终端传输文件</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/guides/send-a-file-to-someone">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/server-to-server-transfers">用 Relayium CLI 实现服务器到服务器直传（守护进程直连）</a></li><li><a href="/zh/guides/sync-a-large-folder-between-servers">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li><li><a href="/zh/guides/push-to-cloud-pull-on-another-computer">在一台电脑上传到云端，在另一台电脑取回</a></li><li><a href="/zh/how-to/share-a-file-with-an-expiring-link">用会过期的安全链接分享文件</a></li><li><a href="/zh/guides/self-host-relayium">自托管 Relayium：运行属于你自己的文件传输服务器</a></li><li><a href="/zh/how-to/send-files-between-two-computers-over-the-internet">如何通过互联网在两台电脑之间传文件</a></li><li><a href="/zh/guides/how-relayium-encrypts-your-files">Relayium 如何对文件端到端加密</a></li><li><a href="/zh/compare/google-drive">Relayium 对比 Google Drive：发送文件更直接</a></li><li><a href="/zh/compare/rsync">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</a></li><li><a href="/zh/compare/firefox-send">2026 年最佳 Firefox Send 替代品</a></li><li><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code">扫描二维码传输文件</a></li><li><a href="/zh/guides/receive-files-from-the-command-line">在命令行接收文件</a></li><li><a href="/zh/how-to/send-a-folder">如何直接发送整个文件夹，而不只是文件</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/how-to/automate-server-backups">用 cron 任务自动化加密的服务器备份</a></li><li><a href="/zh/compare/localsend">Relayium 对比 LocalSend：局域网传输该选哪个</a></li><li><a href="/zh/compare/scp">Relayium 对比 scp：更简单的 SSH 文件传输</a></li><li><a href="/zh/compare/magic-wormhole">Relayium 对比 magic-wormhole：命令行文件传输</a></li><li><a href="/zh/compare/nextcloud">Relayium 对比 Nextcloud：发送文件该选谁</a></li><li><a href="/zh/compare/dropbox">Relayium 对比 Dropbox：发送单个文件更直接</a></li><li><a href="/zh/how-to/airdrop-for-windows-and-android">Windows、Linux、Android 的隔空投送替代方案</a></li><li><a href="/zh/how-to/transfer-files-between-mac-and-windows">如何在 Mac 和 Windows 电脑之间传输文件</a></li><li><a href="/zh/how-to/send-files-on-the-same-wifi">同一 Wi-Fi 下的设备之间互传文件</a></li><li><a href="/zh/guides/what-is-peer-to-peer-file-transfer">什么是点对点（P2P）文件传输？</a></li><li><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet">在网上发送文件到底安全吗?</a></li><li><a href="/zh/guides/bring-your-own-node">自建节点：免费使用 Relayium 的中转与存储</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      <ul class="related"><li><a href="/zh/compare/snapdrop/">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop/">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer/">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/transfer-files-android-to-iphone/">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly/">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud/">如何不用网盘传输大文件</a></li><li><a href="/zh/guides/transfer-files-from-terminal/">用 Relayium CLI 从终端传输文件</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh/">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/guides/send-a-file-to-someone/">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/server-to-server-transfers/">用 Relayium CLI 实现服务器到服务器直传（守护进程直连）</a></li><li><a href="/zh/guides/sync-a-large-folder-between-servers/">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li><li><a href="/zh/guides/push-to-cloud-pull-on-another-computer/">在一台电脑上传到云端，在另一台电脑取回</a></li><li><a href="/zh/how-to/share-a-file-with-an-expiring-link/">用会过期的安全链接分享文件</a></li><li><a href="/zh/guides/self-host-relayium/">自托管 Relayium：运行属于你自己的文件传输服务器</a></li><li><a href="/zh/how-to/send-files-between-two-computers-over-the-internet/">如何通过互联网在两台电脑之间传文件</a></li><li><a href="/zh/guides/how-relayium-encrypts-your-files/">Relayium 如何对文件端到端加密</a></li><li><a href="/zh/compare/google-drive/">Relayium 对比 Google Drive：发送文件更直接</a></li><li><a href="/zh/compare/rsync/">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</a></li><li><a href="/zh/compare/firefox-send/">2026 年最佳 Firefox Send 替代品</a></li><li><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code/">扫描二维码传输文件</a></li><li><a href="/zh/guides/receive-files-from-the-command-line/">在命令行接收文件</a></li><li><a href="/zh/how-to/send-a-folder/">如何直接发送整个文件夹，而不只是文件</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service/">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/how-to/automate-server-backups/">用 cron 任务自动化加密的服务器备份</a></li><li><a href="/zh/compare/localsend/">Relayium 对比 LocalSend：局域网传输该选哪个</a></li><li><a href="/zh/compare/scp/">Relayium 对比 scp：更简单的 SSH 文件传输</a></li><li><a href="/zh/compare/magic-wormhole/">Relayium 对比 magic-wormhole：命令行文件传输</a></li><li><a href="/zh/compare/nextcloud/">Relayium 对比 Nextcloud：发送文件该选谁</a></li><li><a href="/zh/compare/dropbox/">Relayium 对比 Dropbox：发送单个文件更直接</a></li><li><a href="/zh/how-to/airdrop-for-windows-and-android/">Windows、Linux、Android 的隔空投送替代方案</a></li><li><a href="/zh/how-to/transfer-files-between-mac-and-windows/">如何在 Mac 和 Windows 电脑之间传输文件</a></li><li><a href="/zh/how-to/send-files-on-the-same-wifi/">同一 Wi-Fi 下的设备之间互传文件</a></li><li><a href="/zh/guides/what-is-peer-to-peer-file-transfer/">什么是点对点（P2P）文件传输？</a></li><li><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet/">在网上发送文件到底安全吗?</a></li><li><a href="/zh/guides/bring-your-own-node/">自建节点：免费使用 Relayium 的中转与存储</a></li><li><a href="/zh/">Relayium</a></li></ul>
       <footer>
         <a href="/?lang=zh">← Relayium</a>
-        <a href="/zh/apps">应用</a>
-        <a href="/zh/guides">使用指南</a>
-        <a href="/zh/privacy">隐私政策</a>
+        <a href="/zh/apps/">应用</a>
+        <a href="/zh/guides/">使用指南</a>
+        <a href="/zh/privacy/">隐私政策</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

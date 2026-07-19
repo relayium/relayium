@@ -19,9 +19,9 @@ describe("buildArticlePages", () => {
 
   it("en page has canonical + full hreflang cluster + Article JSON-LD", () => {
     const en = pages.find((p) => p.path === "compare/snapdrop/index.html").html;
-    expect(en).toContain('<link rel="canonical" href="https://relayium.com/compare/snapdrop" />');
-    expect(en).toContain('hreflang="zh-Hans" href="https://relayium.com/zh/compare/snapdrop"');
-    expect(en).toContain('hreflang="x-default" href="https://relayium.com/compare/snapdrop"');
+    expect(en).toContain('<link rel="canonical" href="https://relayium.com/compare/snapdrop/" />');
+    expect(en).toContain('hreflang="zh-Hans" href="https://relayium.com/zh/compare/snapdrop/"');
+    expect(en).toContain('hreflang="x-default" href="https://relayium.com/compare/snapdrop/"');
     expect(en).toContain('"@type":"Article"');
   });
 
@@ -55,21 +55,21 @@ describe("buildArticlePages", () => {
 
   it("localizes the footer privacy label", () => {
     const zh = pages.find((p) => p.path === "zh/compare/snapdrop/index.html").html;
-    expect(zh).toContain('<a href="/zh/privacy">隐私政策</a>');
+    expect(zh).toContain('<a href="/zh/privacy/">隐私政策</a>');
     const en = pages.find((p) => p.path === "compare/snapdrop/index.html").html;
-    expect(en).toContain('<a href="/privacy">Privacy</a>');
+    expect(en).toContain('<a href="/privacy/">Privacy</a>');
   });
 
   it("links the Guides hub in the footer", () => {
     const en = pages.find((p) => p.path === "compare/snapdrop/index.html").html;
-    expect(en).toContain('href="/guides">Guides<');
+    expect(en).toContain('href="/guides/">Guides<');
   });
 
   it("footer order: Relayium link, then Guides, then Privacy", () => {
     const en = pages.find((p) => p.path === "compare/snapdrop/index.html").html;
     const relayiumIdx = en.indexOf(">← Relayium<");
-    const guidesIdx = en.indexOf('href="/guides">Guides<');
-    const privacyIdx = en.indexOf('href="/privacy">Privacy<');
+    const guidesIdx = en.indexOf('href="/guides/">Guides<');
+    const privacyIdx = en.indexOf('href="/privacy/">Privacy<');
     expect(relayiumIdx).toBeGreaterThan(-1);
     expect(guidesIdx).toBeGreaterThan(-1);
     expect(privacyIdx).toBeGreaterThan(-1);

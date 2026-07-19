@@ -33,10 +33,10 @@ describe("buildModePages", () => {
 
   it("zh page: self-canonical + hreflang cluster incl english SPA route + x-default + JSON-LD", () => {
     const zh = pages.find((p) => p.path === "zh/cross-network/index.html").html;
-    expect(zh).toContain('<link rel="canonical" href="https://relayium.com/zh/cross-network" />');
+    expect(zh).toContain('<link rel="canonical" href="https://relayium.com/zh/cross-network/" />');
     expect(zh).toContain('hreflang="en" href="https://relayium.com/cross-network"');       // SPA route
     expect(zh).toContain('hreflang="x-default" href="https://relayium.com/cross-network"');
-    expect(zh).toContain('hreflang="ja" href="https://relayium.com/ja/cross-network"');
+    expect(zh).toContain('hreflang="ja" href="https://relayium.com/ja/cross-network/"');
     expect(zh).toContain('"@type":"FAQPage"');
     expect(zh).toContain('<html lang="zh-Hans"');
   });

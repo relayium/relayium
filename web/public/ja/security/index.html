@@ -6,21 +6,21 @@
     <title>セキュリティと脅威モデル · Relayium</title>
     <meta name="description" content="Relayium がファイルを保護する仕組み：転送ごとの X25519 鍵と AES-256-GCM、悪意あるサーバーを見破るためのコミット後開示ハンドシェイクを備えた SAS 検証コード、ゼロ知識ダウンロードリンク、そして何を守り何を守らないかの率直な説明。" />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://relayium.com/ja/security" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/security" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/security" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/security" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/security" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/security" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/security" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/security" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/security" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/security" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/security" />
+    <link rel="canonical" href="https://relayium.com/ja/security/" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/security/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/security/" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/security/" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/security/" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/security/" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/security/" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/security/" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/security/" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/security/" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/security/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"セキュリティと脅威モデル · Relayium","description":"Relayium がファイルを保護する仕組み：転送ごとの X25519 鍵と AES-256-GCM、悪意あるサーバーを見破るためのコミット後開示ハンドシェイクを備えた SAS 検証コード、ゼロ知識ダウンロードリンク、そして何を守り何を守らないかの率直な説明。","url":"https://relayium.com/ja/security","inLanguage":"ja","dateModified":"2026-07-01","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"セキュリティと脅威モデル · Relayium","description":"Relayium がファイルを保護する仕組み：転送ごとの X25519 鍵と AES-256-GCM、悪意あるサーバーを見破るためのコミット後開示ハンドシェイクを備えた SAS 検証コード、ゼロ知識ダウンロードリンク、そして何を守り何を守らないかの率直な説明。","url":"https://relayium.com/ja/security/","inLanguage":"ja","dateModified":"2026-07-01","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -45,7 +45,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
       <h1>セキュリティと脅威モデル</h1>
       <p class="updated">最終更新: 2026-07-01</p>
-      <nav class="langbar" aria-label="Language"><a href="/security">English</a><a href="/zh/security">中文</a><a href="/ja/security" aria-current="true">日本語</a><a href="/ko/security">한국어</a><a href="/de/security">Deutsch</a><a href="/fr/security">Français</a><a href="/ar/security">العربية</a><a href="/es/security">Español</a><a href="/pt/security">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/security/">English</a><a href="/zh/security/">中文</a><a href="/ja/security/" aria-current="true">日本語</a><a href="/ko/security/">한국어</a><a href="/de/security/">Deutsch</a><a href="/fr/security/">Français</a><a href="/ar/security/">العربية</a><a href="/es/security/">Español</a><a href="/pt/security/">Português</a></nav>
       <p>Relayium は、鍵を握るのはサーバーではなくファイルを転送する当事者であるように設計されています。このページでは、何がどのように保護されるのか、そしてその保護の限界を説明します。</p>
       <p>要点：リアルタイムモードではファイルは当社のサーバーを一切通りません。暗号鍵は各デバイスで新たに生成され、デバイスの外に出ることはありません。そして短い検証コードによって、当事者は悪意あるサーバーを見破ることができます。以下に詳細を記します。</p>
       <h2>エンドツーエンド暗号化（X25519 + AES-256-GCM）</h2><p>転送ごとに、各デバイスで新しい一時的な X25519 鍵ペアが生成されます。2 台のデバイスは鍵交換を行い、両ブラウザ内にのみ存在する共有 AES-256-GCM 鍵を導出します。各チャンクはその鍵と一意のノンスで暗号化されるため、シグナリングサーバー、そしてあらゆる中継サーバーが目にするのは暗号文だけです。</p><ul><li>鍵は一時的で転送ごとに独立しており、セッションをまたいで再利用されることはありません。</li><li>共有鍵は 2 台のデバイス上で導出され、いかなるサーバーにも送信・保存されません。</li><li>暗号化は WebRTC 自身のトランスポート層セキュリティの上のアプリケーション層で適用されるため、トランスポート層が侵害されても有効性を保ちます。</li></ul>
@@ -59,8 +59,8 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>オープンソースと問題の報告</h2><p>プロトコル設計とクライアント・サーバーの全コードは GitHub で公開されており、誰でも暗号方式を監査し、自分のサーバーを運用し、貢献できます。セキュリティ上の問題を見つけた場合は、公開の issue を作成するのではなく、リポジトリの GitHub 非公開脆弱性報告を通じて非公開でご報告ください。</p>
       <footer>
         <a href="/">← Relayium</a>
-        <a href="/ja/apps">アプリ</a>
-        <a href="/ja/privacy">プライバシーポリシー</a>
+        <a href="/ja/apps/">アプリ</a>
+        <a href="/ja/privacy/">プライバシーポリシー</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

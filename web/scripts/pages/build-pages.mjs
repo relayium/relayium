@@ -1,5 +1,5 @@
 // web/scripts/pages/build-pages.mjs — pure builders (no disk IO).
-import { LANGS, LANDING_LANGS, DEFAULT_LANG, SITE, pagePath, urlPath, absUrl, landingUrl, landingPath, validateLangs } from "./shared.mjs";
+import { LANGS, LANDING_LANGS, DEFAULT_LANG, SITE, SPA_ONLY_EN_SLUGS, pagePath, urlPath, absUrl, landingUrl, landingPath, validateLangs } from "./shared.mjs";
 import { renderLegalPage } from "./legal-template.mjs";
 import { renderLandingPage } from "./landing-template.mjs";
 import { renderArticlePage } from "./article-template.mjs";
@@ -89,6 +89,13 @@ export function buildModePages(modeDef, { slug, learn = null }) {
 }
 
 export function buildSitemap(docs, { home = true, landing = null, articles = [], guidesIndex = null, modes = [] } = {}) {
+  // urlPath() only keeps a mode's English URL slash-less if the slug is listed in
+  // SPA_ONLY_EN_SLUGS. A mode added here but not there would emit /new-mode/ —
+  // a URL with no directory behind it. Fail the build instead.
+  const unlisted = modes.map((m) => m.slug).filter((s) => !SPA_ONLY_EN_SLUGS.has(s));
+  if (unlisted.length) {
+    throw new Error(`buildSitemap: mode slugs missing from SPA_ONLY_EN_SLUGS in shared.mjs: ${unlisted.join(", ")}`);
+  }
   const urls = [];
   const newest = [
     ...docs.map((d) => d.langs.en.updated),

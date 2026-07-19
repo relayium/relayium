@@ -31,8 +31,20 @@ export const SITE = { origin: "https://relayium.com", name: "Relayium" };
 export function pagePath(slug, lang) {
   return lang === DEFAULT_LANG ? `${slug}/index.html` : `${lang}/${slug}/index.html`;
 }
+// Slugs that have no generated <slug>/index.html in English — they are SPA routes
+// (see LANDING_LANGS: mode pages are built for every language *except* en). Keep
+// this in sync with the `modes` list in gen-pages.mjs; buildSitemap asserts it.
+export const SPA_ONLY_EN_SLUGS = new Set(["cross-network", "offline-transfer", "apps"]);
+
+// Every generated page is written to <slug>/index.html, and the origin 301s the
+// slash-less form to the slashed one. So generated URLs MUST carry the trailing
+// slash — otherwise canonical/hreflang/sitemap all point at a redirect, which is
+// what put ~390 URLs in Search Console's "Page with redirect" bucket. The English
+// SPA-only routes are the exception: they have no directory, serve 200 slash-less,
+// and would 404-to-SPA-shell if we invented a slashed form for them.
 export function urlPath(slug, lang) {
-  return lang === DEFAULT_LANG ? `/${slug}` : `/${lang}/${slug}`;
+  if (lang === DEFAULT_LANG) return SPA_ONLY_EN_SLUGS.has(slug) ? `/${slug}` : `/${slug}/`;
+  return `/${lang}/${slug}/`;
 }
 export function absUrl(path) {
   return SITE.origin + path;

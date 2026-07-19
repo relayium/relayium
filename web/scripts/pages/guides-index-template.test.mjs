@@ -20,15 +20,15 @@ describe("renderGuidesIndexPage", () => {
   });
 
   it("links every article with the language-correct URL", () => {
-    expect(en).toContain('href="/guides/y"');
-    expect(en).toContain('href="/how-to/x"');
-    expect(en).toContain('href="/compare/snapdrop"');
-    expect(zh).toContain('href="/zh/guides/y"');
+    expect(en).toContain('href="/guides/y/"');
+    expect(en).toContain('href="/how-to/x/"');
+    expect(en).toContain('href="/compare/snapdrop/"');
+    expect(zh).toContain('href="/zh/guides/y/"');
   });
 
   it("sets canonical + hreflang for the hub", () => {
-    expect(en).toContain('<link rel="canonical" href="https://relayium.com/guides" />');
-    expect(en).toContain('href="https://relayium.com/zh/guides"');
+    expect(en).toContain('<link rel="canonical" href="https://relayium.com/guides/" />');
+    expect(en).toContain('href="https://relayium.com/zh/guides/"');
   });
 
   it("skips an empty category", () => {

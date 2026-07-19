@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import privacy from "./content/legal/privacy.mjs";
 import terms from "./content/legal/terms.mjs";
 import { buildLegalPages, buildSitemap, articleGroupsByLang, buildGuidesIndexPages } from "./build-pages.mjs";
-import { landingUrl, landingPath, ctaHref, validateLangs, LANDING_LANGS } from "./shared.mjs";
+import { landingUrl, landingPath, ctaHref, validateLangs, LANDING_LANGS, SPA_ONLY_EN_SLUGS, urlPath } from "./shared.mjs";
 import guidesIndex from "./content/guides-index.mjs";
 
 const docs = [privacy, terms];
@@ -33,8 +33,8 @@ describe("buildSitemap", () => {
 
   it("includes the homepage and all 18 legal URLs", () => {
     expect(xml).toContain("<loc>https://relayium.com/</loc>");
-    expect(xml).toContain("<loc>https://relayium.com/privacy</loc>");
-    expect(xml).toContain("<loc>https://relayium.com/zh/terms</loc>");
+    expect(xml).toContain("<loc>https://relayium.com/privacy/</loc>");
+    expect(xml).toContain("<loc>https://relayium.com/zh/terms/</loc>");
     expect((xml.match(/<loc>/g) || []).length).toBe(19);
   });
 });
@@ -105,15 +105,57 @@ describe("buildGuidesIndexPages", () => {
   it("renders the localized H1 and links the grouped articles", () => {
     const zh = pages.find((p) => p.path === "zh/guides/index.html");
     expect(zh.html).toContain("<h1>使用指南</h1>");
-    expect(zh.html).toContain('href="/zh/guides/y"');
-    expect(zh.html).toContain('href="/zh/compare/snapdrop"');
+    expect(zh.html).toContain('href="/zh/guides/y/"');
+    expect(zh.html).toContain('href="/zh/compare/snapdrop/"');
   });
 });
 
 describe("buildSitemap with guidesIndex", () => {
   const xml = buildSitemap(docs, { home: true, guidesIndex });
   it("adds the six hub URLs", () => {
-    expect(xml).toContain("<loc>https://relayium.com/guides</loc>");
-    expect(xml).toContain("<loc>https://relayium.com/fr/guides</loc>");
+    expect(xml).toContain("<loc>https://relayium.com/guides/</loc>");
+    expect(xml).toContain("<loc>https://relayium.com/fr/guides/</loc>");
+  });
+});
+
+// ── SEO URL-form invariants ───────────────────────────────────────────────────
+// Generated pages are written to <slug>/index.html and the origin 301s the
+// slash-less form to the slashed one. When canonical/hreflang/sitemap emitted the
+// slash-less form, every one of them pointed at a redirect — ~390 URLs landed in
+// Search Console's "Page with redirect" bucket and the canonical tags pointed at
+// URLs that 301'd away. These tests pin the two halves of the rule so the
+// convention can't drift back silently.
+describe("SEO URL forms", () => {
+  const crossNetwork = { updated: "2026-01-01", langs: Object.fromEntries(LANDING_LANGS.map((l) => [l, {}])) };
+  const xml = buildSitemap(docs, {
+    home: true,
+    guidesIndex,
+    modes: [{ def: crossNetwork, slug: "cross-network" }],
+  });
+  const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+
+  it("every sitemap URL ends in a slash except the English SPA-only routes", () => {
+    const slashless = locs.filter((u) => !u.endsWith("/"));
+    expect(slashless).toEqual(["https://relayium.com/cross-network"]);
+  });
+
+  it("keeps English SPA-only routes slash-less (they have no directory to 301 to)", () => {
+    for (const slug of SPA_ONLY_EN_SLUGS) {
+      expect(urlPath(slug, "en")).toBe(`/${slug}`);
+      expect(urlPath(slug, "zh")).toBe(`/zh/${slug}/`);
+    }
+  });
+
+  it("gives every directory-backed page a trailing slash in both languages", () => {
+    expect(urlPath("compare/croc", "en")).toBe("/compare/croc/");
+    expect(urlPath("compare/croc", "de")).toBe("/de/compare/croc/");
+    expect(urlPath("privacy", "en")).toBe("/privacy/");
+    expect(urlPath("guides", "ja")).toBe("/ja/guides/");
+  });
+
+  it("fails the build when a new mode slug is not registered as SPA-only", () => {
+    expect(() =>
+      buildSitemap(docs, { modes: [{ def: crossNetwork, slug: "brand-new-mode" }] })
+    ).toThrow(/SPA_ONLY_EN_SLUGS/);
   });
 });

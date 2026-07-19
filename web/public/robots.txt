@@ -3,8 +3,23 @@
 
 User-agent: *
 Allow: /
+# Not pages: per-user/app routes and the install script. Search Console was
+# crawling /install.sh as if it were a document. Nothing here is indexable
+# content, and /d/ links are single-use transfer URLs that must not be published.
+Disallow: /install.sh
+Disallow: /me
+Disallow: /admin
+Disallow: /d/
+Disallow: /verify-email
+Disallow: /reset-password
 
 # ── AI / LLM crawlers: explicitly allowed so Relayium can be cited in answers ──
+# NOTE: a crawler obeys only its most specific matching group, so the groups below
+# do NOT inherit the Disallow rules above. That is deliberate for the AI/answer
+# engines (they only fetch what they are pointed at, and blanket Allow is the point
+# of this section). Real search indexes that have their own group — Bingbot — repeat
+# the Disallow list, since those are the ones that would otherwise report the
+# non-pages as indexing errors. Googlebot has no group here and matches "*".
 # OpenAI
 User-agent: GPTBot
 Allow: /
@@ -38,6 +53,12 @@ Allow: /
 # Microsoft / Bing (Copilot)
 User-agent: Bingbot
 Allow: /
+Disallow: /install.sh
+Disallow: /me
+Disallow: /admin
+Disallow: /d/
+Disallow: /verify-email
+Disallow: /reset-password
 
 # Apple (Apple Intelligence / Siri)
 User-agent: Applebot
