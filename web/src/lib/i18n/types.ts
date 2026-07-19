@@ -292,13 +292,32 @@ export interface Messages {
     errGeneric: string; // any other server error on submit
     backHome: string; // link back to the app
   };
-  nav: { lanTab: string; crossTab: string; offlineTab: string; cliTab: string };
+  nav: { lanTab: string; crossTab: string; offlineTab: string; cliTab: string; appsTab: string };
   // Full page headings for the cross/offline pages. The nav.*Tab strings are the
   // short pill labels; these are the descriptive <h1> titles.
   crossTitle: string;
   offlineTitle: string;
   cli: { subtitle: string };
   cliCallout: { heading: string; blurb: string; cta: string };
+  // /apps downloads/apps hub page (AppsPage.svelte). One end-to-end encrypted
+  // transfer across web, CLI, macOS & iOS; mac/ios cards are "coming soon" (no cta).
+  appsPage: {
+    metaTitle: string; // <title> for /apps (page-meta.ts)
+    metaDesc: string; // <meta description> for /apps
+    heading: string; // <h1>
+    subhead: string; // one-line pitch under the h1
+    availableBadge: string; // "Available"
+    comingSoonBadge: string; // "Coming soon"
+    yourPlatformNote: (os: string) => string; // "We think you're on {os}." highlight caption
+    cliInstallLabel: string; // label above the curl one-liner
+    androidNote: string; // "On Android? Use the web app — it runs in your browser."
+    cards: {
+      web: { name: string; desc: string; cta: string };
+      cli: { name: string; desc: string; cta: string };
+      mac: { name: string; desc: string }; // no cta — coming soon
+      ios: { name: string; desc: string }; // no cta — coming soon
+    };
+  };
   // /cli docs page body. Command blocks stay literal English (code); only prose
   // and labels are localised. Arrays keep a fixed length matching CliPage.svelte:
   // badges 3, pickWhen 5, flagMeanings 8, fileDescs 3.

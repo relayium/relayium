@@ -266,7 +266,7 @@ const fr: Messages = {
     errGeneric: "Une erreur s'est produite. Veuillez réessayer.",
     backHome: "Retour à l'accueil",
   },
-  nav: { lanTab: "LAN", crossTab: "Temps réel", offlineTab: "Asynchrone", cliTab: "CLI" },
+  nav: { lanTab: "LAN", crossTab: "Temps réel", offlineTab: "Asynchrone", cliTab: "CLI", appsTab: "Applis" },
   crossTitle: "Direct en temps réel",
   offlineTitle: "Transfert asynchrone",
   cli: { subtitle: "Transférez des fichiers depuis votre terminal — chiffré de bout en bout, auto-hébergeable." },
@@ -274,6 +274,24 @@ const fr: Messages = {
     heading: "Vous préférez le terminal ?",
     blurb: "Installez une CLI de transfert chiffrée de bout en bout et auto-hébergeable en une seule commande.",
     cta: "Découvrir la CLI →",
+  },
+  appsPage: {
+    metaTitle: "Obtenir Relayium — applis pour le web, le CLI, macOS et iOS",
+    metaDesc:
+      "Téléchargez Relayium : utilisez-le dans n'importe quel navigateur, installez l'outil en ligne de commande ou obtenez les applis natives macOS et iOS (bientôt disponibles). Transfert de fichiers chiffré de bout en bout sur chaque appareil.",
+    heading: "Obtenir Relayium",
+    subhead: "Un même transfert de fichiers chiffré de bout en bout, partout où vous travaillez. Choisissez votre plateforme.",
+    availableBadge: "Disponible",
+    comingSoonBadge: "Bientôt disponible",
+    yourPlatformNote: (os) => `Vous semblez être sous ${os} — mis en avant ci-dessous.`,
+    cliInstallLabel: "Installer depuis votre terminal :",
+    androidNote: "Sous Android ? Utilisez l'appli web — elle tourne directement dans votre navigateur, rien à installer.",
+    cards: {
+      web: { name: "Appli web", desc: "Rien à installer. Ouvrez-la dans n'importe quel navigateur moderne, sur n'importe quel OS, et commencez à transférer.", cta: "Ouvrir l'appli web" },
+      cli: { name: "Ligne de commande", desc: "Transferts scriptables, synchronisation de dossiers et sauvegardes de serveur à serveur pour macOS, Linux et Windows.", cta: "Doc & installation du CLI" },
+      mac: { name: "Appli macOS", desc: "Une vraie appli native dans la barre de menus (com.relayium.mac). Signée et notariée pour une installation en un clic — en cours de développement." },
+      ios: { name: "Appli iOS", desc: "Une appli native iPhone et iPad (com.relayium.app) avec envoi via la feuille de partage. Bientôt sur l'App Store." },
+    },
   },
   cliPage: {
     badges: ["P2P gratuit", "Chiffré de bout en bout", "Auto-hébergeable"],

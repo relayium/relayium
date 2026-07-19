@@ -266,7 +266,7 @@ const en: Messages = {
     errGeneric: "Something went wrong. Please try again.",
     backHome: "Back to home",
   },
-  nav: { lanTab: "LAN", crossTab: "Realtime", offlineTab: "Async", cliTab: "CLI" },
+  nav: { lanTab: "LAN", crossTab: "Realtime", offlineTab: "Async", cliTab: "CLI", appsTab: "Apps" },
   crossTitle: "Realtime direct",
   offlineTitle: "Async transfer",
   cli: { subtitle: "Transfer files from your terminal — end-to-end encrypted, self-hostable." },
@@ -274,6 +274,38 @@ const en: Messages = {
     heading: "Prefer the terminal?",
     blurb: "Install a self-hostable, end-to-end-encrypted transfer CLI in one command.",
     cta: "Explore the CLI →",
+  },
+  appsPage: {
+    metaTitle: "Get Relayium — apps for web, CLI, macOS & iOS",
+    metaDesc:
+      "Download Relayium: use it in any browser, install the command-line tool, or get the native macOS and iOS apps (coming soon). End-to-end encrypted file transfer on every device.",
+    heading: "Get Relayium",
+    subhead: "One end-to-end encrypted file transfer, everywhere you work. Pick your platform.",
+    availableBadge: "Available",
+    comingSoonBadge: "Coming soon",
+    yourPlatformNote: (os) => `Looks like you're on ${os} — highlighted below.`,
+    cliInstallLabel: "Install from your terminal:",
+    androidNote: "On Android? Use the web app — it runs right in your browser, nothing to install.",
+    cards: {
+      web: {
+        name: "Web app",
+        desc: "Nothing to install. Open it in any modern browser on any OS and start transferring.",
+        cta: "Open the web app",
+      },
+      cli: {
+        name: "Command line",
+        desc: "Scriptable transfers, folder sync and server-to-server backups for macOS, Linux and Windows.",
+        cta: "CLI docs & install",
+      },
+      mac: {
+        name: "macOS app",
+        desc: "A true native menu-bar app (com.relayium.mac). Signed & notarized for a one-click install — in the works.",
+      },
+      ios: {
+        name: "iOS app",
+        desc: "A native iPhone & iPad app (com.relayium.app) with share-sheet sending. Coming to the App Store.",
+      },
+    },
   },
   cliPage: {
     badges: ["Free P2P", "End-to-end encrypted", "Self-hostable"],

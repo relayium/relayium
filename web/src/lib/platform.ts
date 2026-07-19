@@ -11,3 +11,19 @@ export function isIOS(): boolean {
 }
 
 export const folderUploadSupported = !isIOS();
+
+// A coarse OS class from the User-Agent, used only to highlight the matching card
+// on the /apps hub. Best-effort and never throws — an unknown UA reads as "unknown".
+// This is intentionally separate from App.svelte's deviceLabel() (which names the
+// device for the peer roster): here we want an OS bucket, not a display name.
+export type Platform = "mac" | "ios" | "windows" | "linux" | "android" | "unknown";
+
+export function detectPlatform(ua: string): Platform {
+  const s = ua || "";
+  if (/iPhone|iPad|iPod/.test(s)) return "ios";
+  if (/Android/.test(s)) return "android";
+  if (/Macintosh|Mac OS X/.test(s)) return "mac";
+  if (/Windows/.test(s)) return "windows";
+  if (/Linux/.test(s)) return "linux";
+  return "unknown";
+}

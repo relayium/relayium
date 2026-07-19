@@ -1,7 +1,7 @@
 // web/scripts/pages/guides-index-template.mjs — renders the Guides hub (one language)
 // to a self-contained static HTML string. Same inlined-style, no-JS approach as
 // article-template.mjs so it is crawlable and independent of the Vite asset graph.
-import { LANGS, DEFAULT_LANG, LANG_LABELS, BCP47, OG_LOCALE, SITE, urlPath, absUrl, esc, ctaHref, dirAttr } from "./shared.mjs";
+import { LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, BCP47, OG_LOCALE, SITE, urlPath, absUrl, esc, ctaHref, dirAttr } from "./shared.mjs";
 
 // Copy this verbatim from article-template.mjs:7-10 (same six labels).
 const PRIVACY_LABELS = {
@@ -120,6 +120,7 @@ export function renderGuidesIndexPage({ lang, doc, groups }) {
       ${sections}
       <footer>
         <a href="${ctaHref(lang)}">← ${esc(SITE.name)}</a>
+        <a href="${urlPath("apps", lang)}">${esc(APPS_LABELS[lang])}</a>
         <a href="${urlPath("privacy", lang)}">${esc(PRIVACY_LABELS[lang])}</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>

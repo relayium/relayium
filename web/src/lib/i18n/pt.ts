@@ -266,7 +266,7 @@ const pt: Messages = {
     errGeneric: "Algo deu errado. Tente novamente.",
     backHome: "Voltar ao início",
   },
-  nav: { lanTab: "LAN", crossTab: "Tempo real", offlineTab: "Assíncrono", cliTab: "CLI" },
+  nav: { lanTab: "LAN", crossTab: "Tempo real", offlineTab: "Assíncrono", cliTab: "CLI", appsTab: "Apps" },
   crossTitle: "Direto em tempo real",
   offlineTitle: "Transferência assíncrona",
   cli: { subtitle: "Transfira arquivos do seu terminal — com criptografia de ponta a ponta, hospedável por você mesmo." },
@@ -274,6 +274,24 @@ const pt: Messages = {
     heading: "Prefere o terminal?",
     blurb: "Instale uma CLI de transferência hospedável por você e com criptografia de ponta a ponta em um único comando.",
     cta: "Conheça a CLI →",
+  },
+  appsPage: {
+    metaTitle: "Obtenha o Relayium — apps para web, CLI, macOS e iOS",
+    metaDesc:
+      "Baixe o Relayium: use em qualquer navegador, instale a ferramenta de linha de comando ou obtenha os apps nativos para macOS e iOS (em breve). Transferência de arquivos criptografada de ponta a ponta em todos os dispositivos.",
+    heading: "Obtenha o Relayium",
+    subhead: "Uma mesma transferência de arquivos criptografada de ponta a ponta, onde quer que você trabalhe. Escolha sua plataforma.",
+    availableBadge: "Disponível",
+    comingSoonBadge: "Em breve",
+    yourPlatformNote: (os) => `Parece que você está no ${os} — destacado abaixo.`,
+    cliInstallLabel: "Instale pelo seu terminal:",
+    androidNote: "No Android? Use o app web mesmo — ele roda direto no seu navegador, nada para instalar.",
+    cards: {
+      web: { name: "App web", desc: "Nada para instalar. Abra em qualquer navegador moderno, em qualquer sistema, e comece a transferir.", cta: "Abrir o app web" },
+      cli: { name: "Linha de comando", desc: "Transferências programáveis, sincronização de pastas e backups de servidor para servidor para macOS, Linux e Windows.", cta: "Docs e instalação do CLI" },
+      mac: { name: "App para macOS", desc: "Um verdadeiro app nativo na barra de menus (com.relayium.mac). Assinado e autenticado para instalação com um clique — em desenvolvimento." },
+      ios: { name: "App para iOS", desc: "Um app nativo para iPhone e iPad (com.relayium.app) com envio pela folha de compartilhamento. Em breve na App Store." },
+    },
   },
   cliPage: {
     badges: ["P2P gratuito", "Criptografia de ponta a ponta", "Hospedável por você"],

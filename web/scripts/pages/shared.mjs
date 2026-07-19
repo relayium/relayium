@@ -10,6 +10,10 @@ export const LANG_LABELS = {
 export const GUIDES_LABELS = {
   en: "Guides", zh: "使用指南", ja: "ガイド", ko: "가이드", de: "Anleitungen", fr: "Guides", ar: "الأدلة", es: "Guías", pt: "Guias",
 };
+// Footer link label for the Apps hub, per language.
+export const APPS_LABELS = {
+  en: "Apps", zh: "应用", ja: "アプリ", ko: "앱", de: "Apps", fr: "Applis", ar: "التطبيقات", es: "Apps", pt: "Apps",
+};
 export const BCP47 = { en: "en", zh: "zh-Hans", ja: "ja", ko: "ko", de: "de", fr: "fr", ar: "ar", es: "es", pt: "pt" };
 // Open Graph wants language_TERRITORY with an underscore, not BCP47.
 export const OG_LOCALE = { en: "en_US", zh: "zh_CN", ja: "ja_JP", ko: "ko_KR", de: "de_DE", fr: "fr_FR", ar: "ar_AR", es: "es_ES", pt: "pt_BR" };

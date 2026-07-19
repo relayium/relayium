@@ -1,7 +1,7 @@
 // web/scripts/pages/landing-template.mjs — renders one static localized landing page.
 // Self-contained: no JS, no external CSS. Styles are inlined so the page is
 // independent of the Vite asset graph and fully crawlable with JS disabled.
-import { LANGS, LANG_LABELS, GUIDES_LABELS, BCP47, OG_LOCALE, SITE, landingUrl, ctaHref, urlPath, absUrl, esc, dirAttr } from "./shared.mjs";
+import { LANGS, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, BCP47, OG_LOCALE, SITE, landingUrl, ctaHref, urlPath, absUrl, esc, dirAttr } from "./shared.mjs";
 
 // Exported so mode-template.mjs (and any other landing-style page) can reuse the
 // exact same inline stylesheet + page-shell classes instead of forking them.
@@ -167,6 +167,7 @@ export function renderLandingPage({ lang, doc, articleLinks = [] }) {
       ${learn ? `<section class="reveal">${learn}</section>` : ""}
       <footer>
         <a href="${ctaHref(lang)}">← ${esc(SITE.name)}</a>
+        <a href="${urlPath("apps", lang)}">${esc(APPS_LABELS[lang])}</a>
         <a href="${urlPath("guides", lang)}">${esc(GUIDES_LABELS[lang])}</a>
         <a href="${urlPath("privacy", lang)}">${esc(doc.footer.privacy)}</a>
         <a href="${urlPath("terms", lang)}">${esc(doc.footer.terms)}</a>

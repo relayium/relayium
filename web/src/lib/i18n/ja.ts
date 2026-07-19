@@ -266,7 +266,7 @@ const ja: Messages = {
     errGeneric: "エラーが発生しました。もう一度お試しください。",
     backHome: "ホームに戻る",
   },
-  nav: { lanTab: "LAN", crossTab: "リアルタイム", offlineTab: "非同期", cliTab: "CLI" },
+  nav: { lanTab: "LAN", crossTab: "リアルタイム", offlineTab: "非同期", cliTab: "CLI", appsTab: "アプリ" },
   crossTitle: "リアルタイム直接転送",
   offlineTitle: "非同期転送",
   cli: { subtitle: "ターミナルからファイルを転送 — エンドツーエンド暗号化、セルフホスト可能。" },
@@ -274,6 +274,24 @@ const ja: Messages = {
     heading: "ターミナル派ですか？",
     blurb: "エンドツーエンド暗号化・セルフホスト可能な転送 CLI を 1 コマンドでインストール。",
     cta: "CLI を見る →",
+  },
+  appsPage: {
+    metaTitle: "Relayium を入手 — ウェブ、CLI、macOS、iOS 向けアプリ",
+    metaDesc:
+      "Relayium をダウンロード：任意のブラウザで使う、コマンドラインツールをインストールする、またはネイティブの macOS・iOS アプリ（近日公開）を入手。すべてのデバイスでエンドツーエンド暗号化のファイル転送を。",
+    heading: "Relayium を入手",
+    subhead: "同じエンドツーエンド暗号化のファイル転送を、あらゆる場所で。プラットフォームを選んでください。",
+    availableBadge: "利用可能",
+    comingSoonBadge: "近日公開",
+    yourPlatformNote: (os) => `${os} をお使いのようです — 下でハイライトしています。`,
+    cliInstallLabel: "ターミナルからインストール：",
+    androidNote: "Android をお使いですか？ ウェブアプリをそのままどうぞ — ブラウザで動作し、インストールは不要です。",
+    cards: {
+      web: { name: "ウェブアプリ", desc: "インストール不要。どの OS でも最新のブラウザで開けばすぐに転送を開始できます。", cta: "ウェブアプリを開く" },
+      cli: { name: "コマンドライン", desc: "スクリプト化できる転送、フォルダー同期、サーバー間バックアップに対応。macOS、Linux、Windows で利用可能。", cta: "CLI のドキュメントとインストール" },
+      mac: { name: "macOS アプリ", desc: "本物のネイティブなメニューバーアプリ（com.relayium.mac）。署名・公証済みでワンクリックインストール — 開発中です。" },
+      ios: { name: "iOS アプリ", desc: "共有シートからの送信に対応したネイティブな iPhone・iPad アプリ（com.relayium.app）。App Store に近日登場。" },
+    },
   },
   cliPage: {
     badges: ["無料の P2P", "エンドツーエンド暗号化", "セルフホスト可能"],
