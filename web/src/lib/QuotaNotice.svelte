@@ -19,11 +19,21 @@
     fetch("/api/me/usage", { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then((u) => {
+        // 陈旧响应守卫：这个 fetch 是给 `uid` 发的，但它兑现时会话可能已经登出
+        // 或切到了别的账号——登出控件和本组件同页共存（Nav 不会卸载
+        // QuotaNotice），所以“无条件写 pct”会把上一个账号的百分比在登出后
+        // 重新画出来。一旦会话已经不是发起请求时的那个，直接丢弃这次响应，
+        // 不要动 pct。不要因为看着像多余判断就删掉这行。
+        if (session().user?.id !== uid) return;
         // cap === 0 是无限档，永远不提醒。
         const cap = u?.traffic?.cap ?? 0;
         pct = cap > 0 ? Math.min(100, Math.round((u.traffic.used / cap) * 100)) : 0;
       })
-      .catch(() => { pct = 0; });
+      .catch(() => {
+        // 同样的陈旧响应守卫：失败的旧请求也不该覆盖新会话（含已登出）的状态。
+        if (session().user?.id !== uid) return;
+        pct = 0;
+      });
   });
 </script>
 

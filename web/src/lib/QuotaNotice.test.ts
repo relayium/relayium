@@ -61,12 +61,21 @@ describe("QuotaNotice", () => {
   it("stays hidden and never fetches usage when logged out", async () => {
     await setSession(null);
     // Any fetch at all (besides the /api/me above) is a bug: an anonymous
-    // visitor has no quota to warn about.
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-      throw new Error(`must not fetch ${url} while logged out`);
-    }) as unknown as typeof fetch);
+    // visitor has no quota to warn about. NOTE: a throwing mock alone does NOT
+    // prove the fetch never happened — the component's own
+    // `.catch(() => { pct = 0 })` swallows the rejection from a forbidden call
+    // and produces the exact same "no banner" outcome as never calling fetch
+    // at all. So this test asserts on the mock's call log directly, not just
+    // on the rendered DOM.
+    const usageFetch = vi.fn(async (url: string) => {
+      if (url === "/api/me/usage") return usageResponse(90, 100);
+      throw new Error(`unexpected fetch ${url} while logged out`);
+    });
+    vi.stubGlobal("fetch", usageFetch as unknown as typeof fetch);
     await mountNotice();
     expect(target.querySelector(".quota-warn")).toBeNull();
+    const calledUrls = usageFetch.mock.calls.map((args) => args[0]);
+    expect(calledUrls).not.toContain("/api/me/usage");
   });
 
   it("shows the warning + Upgrade button once usage crosses 80%", async () => {
@@ -92,6 +101,41 @@ describe("QuotaNotice", () => {
     }) as unknown as typeof fetch);
     await mountNotice();
     expect(target.querySelector(".quota-warn")).toBeNull();
+  });
+
+  // Exact boundary coverage around WARN_AT (0.8). cap=100 makes the rounded
+  // percentage unambiguous (79/80/81 map straight through Math.round). These
+  // guard against a `>` vs `>=` typo in the threshold comparison, or a change
+  // to the rounding rule, either of which would slip past the old 85%/10%
+  // tests since neither sits anywhere near the boundary.
+  it("stays hidden at 79%, one point under the threshold", async () => {
+    await setSession({ id: "u6", email: "f@b.com", displayName: "F" });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url === "/api/me/usage") return usageResponse(79, 100);
+      throw new Error(`unexpected fetch ${url}`);
+    }) as unknown as typeof fetch);
+    await mountNotice();
+    expect(target.querySelector(".quota-warn")).toBeNull();
+  });
+
+  it("shows the warning exactly at 80%, the threshold itself", async () => {
+    await setSession({ id: "u7", email: "g@b.com", displayName: "G" });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url === "/api/me/usage") return usageResponse(80, 100);
+      throw new Error(`unexpected fetch ${url}`);
+    }) as unknown as typeof fetch);
+    await mountNotice();
+    expect(target.querySelector(".quota-warn")).not.toBeNull();
+  });
+
+  it("shows the warning at 81%, one point over the threshold", async () => {
+    await setSession({ id: "u8", email: "h@b.com", displayName: "H" });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url === "/api/me/usage") return usageResponse(81, 100);
+      throw new Error(`unexpected fetch ${url}`);
+    }) as unknown as typeof fetch);
+    await mountNotice();
+    expect(target.querySelector(".quota-warn")).not.toBeNull();
   });
 
   it("never warns on an unlimited plan (cap 0), no matter how much is used", async () => {
@@ -135,6 +179,52 @@ describe("QuotaNotice", () => {
       throw new Error(`must not fetch ${url} while logged out`);
     }) as unknown as typeof fetch);
     await refreshSession();
+    flushSync();
+
+    expect(target.querySelector(".quota-warn")).toBeNull();
+  });
+
+  it("ignores a stale /api/me/usage response that resolves after logout (race)", async () => {
+    // Reproduces the real-world sequence: user u9 is logged in and the
+    // /api/me/usage request is in flight; before it resolves, they click
+    // logout (Nav's logout control lives on the same page and does NOT
+    // unmount QuotaNotice). The in-flight promise then finally settles with
+    // u9's data. Without the session guard in QuotaNotice's .then, that stale
+    // response would overwrite pct and redraw the banner with the previous
+    // account's percentage.
+    await setSession({ id: "u9", email: "i@b.com", displayName: "I" });
+
+    let resolveUsage!: (value: unknown) => void;
+    const pendingUsage = new Promise((resolve) => { resolveUsage = resolve; });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url === "/api/me/usage") return pendingUsage;
+      throw new Error(`unexpected fetch ${url}`);
+    }) as unknown as typeof fetch);
+
+    await loadLang("en");
+    target = document.createElement("div");
+    document.body.appendChild(target);
+    app = mount(QuotaNotice, { target });
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    // u9's /api/me/usage is in flight; nothing has resolved yet.
+    expect(target.querySelector(".quota-warn")).toBeNull();
+
+    // Log out while that request is still pending.
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url === "/api/me") return { ok: false, status: 401, json: async () => ({}) };
+      throw new Error(`must not fetch ${url} while logged out`);
+    }) as unknown as typeof fetch);
+    await refreshSession();
+    flushSync();
+    expect(target.querySelector(".quota-warn")).toBeNull();
+
+    // The stale u9 request finally resolves, well above the warn threshold.
+    // It must be dropped: the session moved on (logged out) since it was issued.
+    resolveUsage(usageResponse(90, 100));
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    await new Promise((r) => setTimeout(r, 0));
     flushSync();
 
     expect(target.querySelector(".quota-warn")).toBeNull();
