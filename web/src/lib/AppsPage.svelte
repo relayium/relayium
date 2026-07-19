@@ -8,7 +8,7 @@
 
   // Which OS the visitor is on (browser-only; SSR/tests never run this effect).
   const platform: Platform =
-    typeof navigator !== "undefined" ? detectPlatform(navigator.userAgent) : "unknown";
+    typeof navigator !== "undefined" ? detectPlatform(navigator.userAgent, navigator.maxTouchPoints ?? 0) : "unknown";
   // Map the OS to the card it should highlight. windows/linux → CLI; android/unknown → web.
   const highlightId = $derived(
     platform === "mac" ? "mac"

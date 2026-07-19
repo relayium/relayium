@@ -185,7 +185,7 @@ const ko = {
       },
       {
         title: "macOS 앱",
-        desc: "진짜 네이티브 메뉴 막대 앱(com.relayium.mac). 서명 및 공증을 마쳐 한 번의 클릭으로 설치 — 개발 중입니다.",
+        desc: "진짜 네이티브 메뉴 바 앱(com.relayium.mac). 서명 및 공증을 마쳐 한 번의 클릭으로 설치 — 개발 중입니다.",
       },
       {
         title: "iOS 앱",
@@ -240,7 +240,7 @@ const de = {
       },
       {
         title: "macOS-App",
-        desc: "Eine echte native Menüleisten-App (com.relayium.mac). Signiert & notariell beglaubigt für die Ein-Klick-Installation — in Arbeit.",
+        desc: "Eine echte native Menüleisten-App (com.relayium.mac). Signiert & notarisiert für die Ein-Klick-Installation — in Arbeit.",
       },
       {
         title: "iOS-App",
@@ -295,7 +295,7 @@ const fr = {
       },
       {
         title: "Appli macOS",
-        desc: "Une vraie appli native dans la barre de menus (com.relayium.mac). Signée et notariée pour une installation en un clic — en cours de développement.",
+        desc: "Une vraie appli native dans la barre de menus (com.relayium.mac). Signée et notarisée pour une installation en un clic — en cours de développement.",
       },
       {
         title: "Appli iOS",
@@ -460,7 +460,7 @@ const pt = {
       },
       {
         title: "App para macOS",
-        desc: "Um verdadeiro app nativo na barra de menus (com.relayium.mac). Assinado e autenticado para instalação com um clique — em desenvolvimento.",
+        desc: "Um verdadeiro app nativo na barra de menus (com.relayium.mac). Assinado e notarizado para instalação com um clique — em desenvolvimento.",
       },
       {
         title: "App para iOS",

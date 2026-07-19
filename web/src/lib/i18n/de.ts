@@ -289,7 +289,7 @@ const de: Messages = {
     cards: {
       web: { name: "Web-App", desc: "Nichts zu installieren. In jedem modernen Browser auf jedem Betriebssystem öffnen und loslegen.", cta: "Web-App öffnen" },
       cli: { name: "Kommandozeile", desc: "Skriptbare Übertragungen, Ordner-Sync und Server-zu-Server-Backups für macOS, Linux und Windows.", cta: "CLI-Doku & Installation" },
-      mac: { name: "macOS-App", desc: "Eine echte native Menüleisten-App (com.relayium.mac). Signiert & notariell beglaubigt für die Ein-Klick-Installation — in Arbeit." },
+      mac: { name: "macOS-App", desc: "Eine echte native Menüleisten-App (com.relayium.mac). Signiert & notarisiert für die Ein-Klick-Installation — in Arbeit." },
       ios: { name: "iOS-App", desc: "Eine native iPhone- & iPad-App (com.relayium.app) mit Versand über das Teilen-Menü. Kommt in den App Store." },
     },
   },

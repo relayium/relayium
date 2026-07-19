@@ -289,7 +289,7 @@ const ko: Messages = {
     cards: {
       web: { name: "웹 앱", desc: "설치 불필요. 어떤 OS의 최신 브라우저에서든 열어 바로 전송을 시작하세요.", cta: "웹 앱 열기" },
       cli: { name: "명령줄", desc: "스크립트로 자동화하는 전송, 폴더 동기화, 서버 간 백업. macOS, Linux, Windows 지원.", cta: "CLI 문서 및 설치" },
-      mac: { name: "macOS 앱", desc: "진짜 네이티브 메뉴 막대 앱(com.relayium.mac). 서명 및 공증을 마쳐 한 번의 클릭으로 설치 — 개발 중입니다." },
+      mac: { name: "macOS 앱", desc: "진짜 네이티브 메뉴 바 앱(com.relayium.mac). 서명 및 공증을 마쳐 한 번의 클릭으로 설치 — 개발 중입니다." },
       ios: { name: "iOS 앱", desc: "공유 시트 전송을 지원하는 네이티브 iPhone·iPad 앱(com.relayium.app). App Store에 곧 출시됩니다." },
     },
   },

@@ -11,6 +11,14 @@ describe("detectPlatform", () => {
     // iPad UAs contain "Mac OS X" — iOS must win
     expect(detectPlatform("Mozilla/5.0 (iPad; CPU OS 16 like Mac OS X)")).toBe("ios");
   });
+  it("treats a touch-capable Macintosh UA (iPadOS desktop mode) as iOS", () => {
+    const iPadDesktopUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)";
+    // iPadOS 13+ desktop mode: Macintosh UA but maxTouchPoints > 1
+    expect(detectPlatform(iPadDesktopUA, 5)).toBe("ios");
+    // a real Mac has no touch screen (0/undefined) → stays mac
+    expect(detectPlatform(iPadDesktopUA, 0)).toBe("mac");
+    expect(detectPlatform(iPadDesktopUA)).toBe("mac");
+  });
   it("detects Android before Linux (Android UAs contain 'Linux')", () => {
     expect(detectPlatform("Mozilla/5.0 (Linux; Android 14; Pixel 8)")).toBe("android");
   });

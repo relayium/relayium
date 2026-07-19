@@ -289,7 +289,7 @@ const pt: Messages = {
     cards: {
       web: { name: "App web", desc: "Nada para instalar. Abra em qualquer navegador moderno, em qualquer sistema, e comece a transferir.", cta: "Abrir o app web" },
       cli: { name: "Linha de comando", desc: "Transferências programáveis, sincronização de pastas e backups de servidor para servidor para macOS, Linux e Windows.", cta: "Docs e instalação do CLI" },
-      mac: { name: "App para macOS", desc: "Um verdadeiro app nativo na barra de menus (com.relayium.mac). Assinado e autenticado para instalação com um clique — em desenvolvimento." },
+      mac: { name: "App para macOS", desc: "Um verdadeiro app nativo na barra de menus (com.relayium.mac). Assinado e notarizado para instalação com um clique — em desenvolvimento." },
       ios: { name: "App para iOS", desc: "Um app nativo para iPhone e iPad (com.relayium.app) com envio pela folha de compartilhamento. Em breve na App Store." },
     },
   },
