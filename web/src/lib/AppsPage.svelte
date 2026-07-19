@@ -86,10 +86,10 @@
   .grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
   .card {
     display: flex; flex-direction: column; gap: var(--space-2);
-    padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius);
     background: var(--social-bg);
   }
-  .card h2 { font-size: var(--fs-lg); color: var(--text-h); }
+  .card h2 { font-size: var(--fs-h3); color: var(--text-h); }
   .card p { color: var(--text); font-size: var(--fs-sm); }
   .card .cta { margin-top: auto; }
   .card.soon { opacity: 0.82; }
