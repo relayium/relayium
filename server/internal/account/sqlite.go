@@ -346,40 +346,6 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
-	// One-shot: 2026-07 定价调整把 Free 档月流量从 2 GiB 降到 1 GiB。
-	//
-	// SeedPlans 只在 plan id 不存在时写入（保护管理员的手工编辑），所以光改
-	// defaultPlans() 对已上线的库无效，必须在这里显式改一次。
-	//
-	// 用 settings 里的一次性标记而不是只靠值判断：如果管理员之后主动把 Free
-	// 设回 2 GiB，纯值判断会在下次启动时静默改回 1 GiB，等于管理员永远改不动
-	// 这个数。值判断仍然保留 —— 管理员若已经把 Free 挪到别的数，我们不动它的
-	// 数字，只把标记烧掉。
-	//
-	// 顺序不能反：先 UPDATE 再写标记。反过来会让 UPDATE 的 NOT EXISTS 立刻为
-	// 假，迁移永远不执行。
-	if _, err := db.ExecContext(context.Background(),
-		`UPDATE plans SET traffic_bytes = 1073741824, updated_at = ?
-		   WHERE id = 'free' AND traffic_bytes = 2147483648
-		     AND NOT EXISTS (SELECT 1 FROM settings WHERE key = 'migration.free_traffic_1gib')`,
-		time.Now().Unix()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	// 标记只在 free 档行已存在时写入：OpenSQLite 早于 SeedPlans 运行（后者由
-	// Service 在启动时另行调用），全新库第一次 Open 时 plans 表还是空的——若
-	// 这里无条件写标记，会在 free 行诞生之前就把一次性开关烧掉，导致老库的
-	// 迁移窗口被这次意外的"空表 Open"提前关闭。用 EXISTS 把标记写入推迟到
-	// free 行确实存在的那次 Open，其余的一次性语义（管理员挪到别的值/挪回
-	// 2GiB 后不再被覆盖）不变。
-	if _, err := db.ExecContext(context.Background(),
-		`INSERT OR IGNORE INTO settings (key, value, updated_at)
-		   SELECT 'migration.free_traffic_1gib', 1, ?
-		    WHERE EXISTS (SELECT 1 FROM plans WHERE id = 'free')`,
-		time.Now().Unix()); err != nil {
-		db.Close()
-		return nil, err
-	}
 	// The billing hot paths now read the usage_periods buckets (see below), not
 	// usage_events, so the recorded_at composite indexes an earlier version added
 	// here are dead weight — and they added write cost to every heartbeat's

@@ -373,6 +373,9 @@ func main() {
 			if err := acct.SeedPlans(context.Background()); err != nil {
 				log.Printf("WARNING: seed plans: %v", err)
 			}
+			if err := acct.MigrateFreeTrafficCap(context.Background()); err != nil {
+				log.Printf("WARNING: migrate free traffic cap: %v", err)
+			}
 			gc := &account.GC{
 				Store:          store,
 				Blobs:          disk,
