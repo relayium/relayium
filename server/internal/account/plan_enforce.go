@@ -80,11 +80,7 @@ func (s *Service) monthlyTrafficCap(ctx context.Context, userID string) (int64, 
 		return plan.TrafficBytes, nil
 	}
 
-	monthStart, monthEnd := monthRange(period)
-	segStart := u.PlanStartedAt
-	if segStart < monthStart {
-		segStart = monthStart
-	}
+	segStart, monthStart, monthEnd := segmentBounds(period, u.PlanStartedAt)
 	monthSecs := monthEnd - monthStart
 	segSecs := monthEnd - segStart
 	// prorate 自带 segSecs<=0/monthSecs<=0 的守卫（返回0），但那两种退化情况

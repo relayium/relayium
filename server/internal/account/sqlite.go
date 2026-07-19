@@ -656,7 +656,7 @@ func accrueQuotaTx(ctx context.Context, tx *sql.Tx, userID, newPlanID string, no
 	}
 
 	period := periodOf(now)
-	monthStart, monthEnd := monthRange(period)
+	segStart, monthStart, monthEnd := segmentBounds(period, startedAt)
 	if accruedPeriod != period {
 		accrued = 0
 	}
@@ -667,10 +667,6 @@ func accrueQuotaTx(ctx context.Context, tx *sql.Tx, userID, newPlanID string, no
 		return err
 	}
 
-	segStart := startedAt
-	if segStart < monthStart {
-		segStart = monthStart // 上个月就开始的段，本月只从月首算起
-	}
 	monthSecs := monthEnd - monthStart
 	segSecs := now - segStart
 	if cap.Valid {
@@ -1929,6 +1925,36 @@ func monthRange(period string) (start, end int64) {
 		return 0, 0
 	}
 	return t.Unix(), t.AddDate(0, 1, 0).Unix()
+}
+
+// segmentBounds derives the current-month segment boundaries shared by the
+// write path (accrueQuotaTx, which freezes the segment that just ended) and
+// the read path (monthlyTrafficCap, which projects the segment still in
+// progress). Both call this instead of separately re-deriving
+// monthRange(period) and clamping planStartedAt into it — prorate's own doc
+// comment warns that a divergence between the write and read sides silently
+// miscomputes the user's monthly quota, and the segment-boundary derivation
+// (not the arithmetic prorate does) is where that drift would actually creep
+// in if the two call sites were left free to write it twice.
+//
+// The clamp (segStart < monthStart → monthStart) matters differently on each
+// side that calls this:
+//   - Write side: reachable in normal operation whenever a user's plan_id
+//     hasn't changed yet this month, so plan_started_at still points into a
+//     previous month.
+//   - Read side (monthlyTrafficCap): only calls this after confirming
+//     QuotaAccruedPeriod == period, which is only ever set by accrueQuotaTx —
+//     and accrueQuotaTx sets plan_started_at = now in that same transaction,
+//     so planStartedAt is provably >= monthStart already. The clamp is
+//     unreachable there under current invariants; it stays as a defense
+//     against clock rollback and manual DB edits, not dead code.
+func segmentBounds(period string, planStartedAt int64) (segStart, monthStart, monthEnd int64) {
+	monthStart, monthEnd = monthRange(period)
+	segStart = planStartedAt
+	if segStart < monthStart {
+		segStart = monthStart // segment that began before this month only counts from month start
+	}
+	return segStart, monthStart, monthEnd
 }
 
 // prorate returns cap scaled to segSecs' share of monthSecs — the amount of a
