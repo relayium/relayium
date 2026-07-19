@@ -211,6 +211,17 @@ export interface Messages {
     q6: string; a6: string; // billing / cancellation
     back: string; // link back to the app/home
   };
+  // 当月用量表（个人中心）与接近上限时的提醒条（传输界面）。cap === 0 表示无限。
+  quota: {
+    title: string;
+    traffic: string;
+    storage: string;
+    left: (left: string) => string; // 剩余量，left 已是格式化好的体积字符串
+    resets: (date: string) => string; // date 已按当前语言本地化
+    unlimited: string;
+    warn: (pct: number) => string; // 用量达 80% 时的提醒
+    upgrade: string; // 提醒条上的按钮文案
+  };
   me: {
     title: string;
     back: string; // link back to the home page

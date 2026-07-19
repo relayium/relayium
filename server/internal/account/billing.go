@@ -327,7 +327,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		if u.PlanSource == "admin" {
 			// Admin comp wins: record status/end for visibility, but never
 			// let a webhook change plan_id out from under an admin grant.
-			if err := s.store.SetUserSubscription(ctx, u.ID, u.PlanID, ev.Status, ev.CurrentPeriodEnd, "admin"); err != nil {
+			if err := s.store.SetUserSubscription(ctx, u.ID, u.PlanID, ev.Status, ev.CurrentPeriodEnd, "admin", s.now().Unix()); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
@@ -343,7 +343,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 				planID = p.ID
 			}
 		}
-		if err := s.store.SetUserSubscription(ctx, u.ID, planID, ev.Status, ev.CurrentPeriodEnd, "stripe"); err != nil {
+		if err := s.store.SetUserSubscription(ctx, u.ID, planID, ev.Status, ev.CurrentPeriodEnd, "stripe", s.now().Unix()); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
@@ -370,7 +370,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		if u.PlanSource == "admin" {
 			planID, source = u.PlanID, "admin"
 		}
-		if err := s.store.SetUserSubscription(ctx, u.ID, planID, "canceled", ev.CurrentPeriodEnd, source); err != nil {
+		if err := s.store.SetUserSubscription(ctx, u.ID, planID, "canceled", ev.CurrentPeriodEnd, source, s.now().Unix()); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}

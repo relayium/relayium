@@ -50,6 +50,7 @@
   import { currentRoute, syncRouteFromLocation, downloadId, navigate, setNavGuard, PRICING_PATH } from "./lib/router.svelte";
   import Hero from "./lib/Hero.svelte";
   import DeviceRadar from "./lib/DeviceRadar.svelte";
+  import QuotaNotice from "./lib/QuotaNotice.svelte";
   import FeatureStrip from "./lib/FeatureStrip.svelte";
   import CliCallout from "./lib/CliCallout.svelte";
   import HowToSteps from "./lib/HowToSteps.svelte";
@@ -1299,6 +1300,7 @@
   {@const solo = visiblePeers.length === 1}
   <section class="peers">
     <h2>{currentRoute() === "cross" ? t.crossPeersTitle : t.peersTitle}</h2>
+    <QuotaNotice />
     {#if outbox().length && visiblePeers.length !== 1}
       <p class="share-pending">{t.sharePending(outbox().length)}</p>
     {/if}

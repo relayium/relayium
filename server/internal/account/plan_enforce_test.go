@@ -20,11 +20,11 @@ func TestOverTrafficAndStorage(t *testing.T) {
 	svc, st := newPlanService(t)
 	ctx := context.Background()
 	u, _ := st.UpsertUserByEmail(ctx, "e@example.com", "")
-	_ = st.SetUserPlan(ctx, u.ID, "free") // 100MB storage, 2GB traffic
+	_ = st.SetUserPlan(ctx, u.ID, "free", svc.now().Unix()) // 100MB storage, 1GB traffic
 
 	// Under both caps.
 	if over, _ := svc.overTraffic(ctx, u.ID, 1<<20); over {
-		t.Fatal("1MB should be under the 2GB traffic cap")
+		t.Fatal("1MB should be under the 1GB traffic cap")
 	}
 	if over, _ := svc.overStorage(ctx, u.ID, 1<<20); over {
 		t.Fatal("1MB should be under the 100MB storage cap")
@@ -33,10 +33,10 @@ func TestOverTrafficAndStorage(t *testing.T) {
 	if over, _ := svc.overStorage(ctx, u.ID, 200<<20); !over {
 		t.Fatal("200MB must exceed the 100MB free storage cap")
 	}
-	// Record traffic near the 2GB cap, then a small add trips it.
-	_ = st.RecordMeter(ctx, u.ID, MeterUpload, 2<<30, 100)
+	// Record traffic at the 1GB cap, then a small add trips it.
+	_ = st.RecordMeter(ctx, u.ID, MeterUpload, 1<<30, 100)
 	if over, _ := svc.overTraffic(ctx, u.ID, 1); !over {
-		t.Fatal("already at 2GB → any add must exceed the free traffic cap")
+		t.Fatal("already at 1GB → any add must exceed the free traffic cap")
 	}
 }
 
@@ -44,7 +44,7 @@ func TestPlanForUserFallsBackToFree(t *testing.T) {
 	svc, st := newPlanService(t)
 	ctx := context.Background()
 	u, _ := st.UpsertUserByEmail(ctx, "z@example.com", "")
-	_ = st.SetUserPlan(ctx, u.ID, "nonexistent-plan")
+	_ = st.SetUserPlan(ctx, u.ID, "nonexistent-plan", svc.now().Unix())
 	if p, err := svc.planForUser(ctx, u.ID); p.ID != "free" || err != nil {
 		t.Fatalf("unknown plan_id must fall back to free with nil err, got %q, %v", p.ID, err)
 	}
@@ -129,7 +129,7 @@ func TestPlanRetentionCap(t *testing.T) {
 	svc, st := newPlanService(t)
 	ctx := context.Background()
 	u, _ := st.UpsertUserByEmail(ctx, "retention@example.com", "")
-	_ = st.SetUserPlan(ctx, u.ID, "free")
+	_ = st.SetUserPlan(ctx, u.ID, "free", svc.now().Unix())
 
 	const wantFreeRetentionSecs = 3 * 86400 // matches defaultPlans()'s seeded "free" entry
 	if got := svc.planRetentionCap(ctx, u.ID); got != wantFreeRetentionSecs {
@@ -145,7 +145,7 @@ func TestPlanRetentionCap(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_ = st.SetUserPlan(ctx, u.ID, "custom-retention")
+	_ = st.SetUserPlan(ctx, u.ID, "custom-retention", svc.now().Unix())
 	if got := svc.planRetentionCap(ctx, u.ID); got != customRetentionSecs {
 		t.Fatalf("planRetentionCap(custom) = %d, want %d", got, customRetentionSecs)
 	}
@@ -165,7 +165,7 @@ func TestOverStorageExactBoundary(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_ = st.SetUserPlan(ctx, u.ID, "storage-cap-100")
+	_ = st.SetUserPlan(ctx, u.ID, "storage-cap-100", svc.now().Unix())
 
 	// No existing storage: used=0. 0+100 == cap(100) → NOT over.
 	if over, err := svc.overStorage(ctx, u.ID, capBytes); err != nil || over {
@@ -179,6 +179,15 @@ func TestOverStorageExactBoundary(t *testing.T) {
 
 // TestOverTrafficExactBoundary is overStorage's boundary case, mirrored for
 // overTraffic: used+add landing exactly on the cap must not trip it.
+//
+// overTraffic's cap now comes from monthlyTrafficCap, which sums prorated
+// segments for a user who changed plans THIS month (see quota_proration_test.go).
+// To keep this test's cap a clean, unprorated 500 — the exact boundary the test
+// name promises — the plan assignment below happens in the month BEFORE the
+// service clock's "now" (svc.now()==100, period "197001"), by passing a
+// timestamp of -1 (period "196912"). That lands u.QuotaAccruedPeriod in a past
+// period, so monthlyTrafficCap takes its "no change this month" branch and
+// returns plan.TrafficBytes verbatim, with no proration.
 func TestOverTrafficExactBoundary(t *testing.T) {
 	svc, st := newPlanService(t)
 	ctx := context.Background()
@@ -191,7 +200,7 @@ func TestOverTrafficExactBoundary(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_ = st.SetUserPlan(ctx, u.ID, "traffic-cap-500")
+	_ = st.SetUserPlan(ctx, u.ID, "traffic-cap-500", -1) // previous period — see comment above
 
 	// Record 300 bytes of used traffic in the current month (now=100, per
 	// newPlanService's stub clock, so periodOf(100) is "this period").

@@ -23,7 +23,7 @@ func TestFreePlanEndToEnd(t *testing.T) {
 	// storage 100 bytes, traffic 500 bytes, retention 3 days.
 	const retentionSecs = 3 * 86400
 	_ = store.UpsertPlan(context.Background(), Plan{ID: "free", Name: "Free", StorageBytes: 100, TrafficBytes: 500, RetentionSecs: retentionSecs, Active: true, UpdatedAt: 1})
-	_ = store.SetUserPlan(context.Background(), u.ID, "free")
+	_ = store.SetUserPlan(context.Background(), u.ID, "free", time.Now().Unix())
 
 	// Small upload succeeds and its TTL is clamped to <= 3 days even if asked for more.
 	before := time.Now().Unix()

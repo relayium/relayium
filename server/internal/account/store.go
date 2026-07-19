@@ -43,6 +43,17 @@ type User struct {
 	// ScheduledPlanID is the tier a pending period-end downgrade will switch to;
 	// '' = no pending change. Display hint only (see the column comment).
 	ScheduledPlanID string
+	// PlanStartedAt 是当前档位生效的时刻（unix 秒）；0 表示从未改过档。
+	// 与 QuotaAccrued* 一起把当月切成若干"档位段"，用来给月中改档的用户按段
+	// 计算流量上限，而不是每次改档都白送一整个月的额度。
+	PlanStartedAt int64
+	// QuotaAccruedBytes 是本月 PlanStartedAt 之前那些已结束的段累计下来的流量
+	// 额度（每段 = 该段档位上限 × 该段占全月的比例）。
+	QuotaAccruedBytes int64
+	// QuotaAccruedPeriod 是 QuotaAccruedBytes 所属的 'YYYYMM' 桶。与当前月份不
+	// 符即视为过期作废，用户直接拿当前档的整月上限——这也让存量用户（三列全为
+	// 零值）天然走满额分支，无需回填。
+	QuotaAccruedPeriod string
 }
 
 // Plan is an admin-configurable billing tier: per-account storage + monthly
@@ -355,19 +366,21 @@ type Store interface {
 	SetEmailVerified(ctx context.Context, userID string) error
 	// SetOnlyOwnNodes toggles the BYO-nodes-only restriction (SP3) for a user.
 	SetOnlyOwnNodes(ctx context.Context, userID string, on bool) error
-	// SetUserPlan assigns a user's billing tier (plans.id).
-	SetUserPlan(ctx context.Context, userID, planID string) error
+	// SetUserPlan assigns a user's billing tier (plans.id). now is the change
+	// timestamp, used to freeze the outgoing tier's earned quota segment.
+	SetUserPlan(ctx context.Context, userID, planID string, now int64) error
 	// SetUserPlanAdmin assigns a user's billing tier from the admin console,
 	// recording plan_source='admin' so a later Stripe webhook won't override it.
-	SetUserPlanAdmin(ctx context.Context, userID, planID string) error
+	SetUserPlanAdmin(ctx context.Context, userID, planID string, now int64) error
 	// SetUserStripeCustomer binds a user to their Stripe customer id.
 	SetUserStripeCustomer(ctx context.Context, userID, customerID string) error
 	// GetUserByStripeCustomer looks up a user by Stripe customer id (webhook
 	// dispatch). An empty customerID returns not-found.
 	GetUserByStripeCustomer(ctx context.Context, customerID string) (User, bool, error)
 	// SetUserSubscription updates plan_id, subscription_status, subscription_end,
-	// and plan_source together (Stripe webhook path).
-	SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source string) error
+	// and plan_source together (Stripe webhook path). now is the change timestamp,
+	// used to freeze the outgoing tier's earned quota segment.
+	SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source string, now int64) error
 	// SetScheduledPlan records (or clears, with planID="") the tier a pending
 	// period-end downgrade will switch to — a display hint for the pricing UI.
 	SetScheduledPlan(ctx context.Context, userID, planID string) error

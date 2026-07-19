@@ -46,14 +46,58 @@ func (s *Service) currentMonthTraffic(ctx context.Context, userID string) (int64
 	return upDown + relay, nil
 }
 
+// monthlyTrafficCap 返回用户当月的流量上限。通常就是其档位的整月 cap；只有当
+// 本月改过档时，才把当月拆成若干段、每段按 cap × 该段占全月的比例相加（写侧
+// 见 accrueQuotaTx）。返回值 <= 0 表示"无限"，与 overTraffic/overStorage 的既
+// 有约定一致。
+//
+// 这里没有复用 planForUser：分段计算既要档位也要用户行上的三个配额字段，而
+// planForUser 只返回 Plan。错误处理沿用同一条原则——真实的 store 错误往上传，
+// 让门 fail-open；查不到的用户/档位才回落到 Free。
+func (s *Service) monthlyTrafficCap(ctx context.Context, userID string) (int64, error) {
+	u, err := s.store.GetUserByID(ctx, userID)
+	if err != nil {
+		if err == ErrNotFound {
+			return freePlanFallback().TrafficBytes, nil
+		}
+		return 0, err
+	}
+	plan, ok, err := s.store.GetPlan(ctx, u.PlanID)
+	if err != nil {
+		return 0, err
+	}
+	if !ok {
+		plan = freePlanFallback()
+	}
+
+	period := periodOf(s.now().Unix())
+	// 本月没改过档（含全部存量用户，三列都是零值）→ 整月满额。
+	if u.QuotaAccruedPeriod != period {
+		return plan.TrafficBytes, nil
+	}
+	// 无限档不参与比例计算，否则会被算成一个有限的小数字。
+	if plan.TrafficBytes <= 0 {
+		return plan.TrafficBytes, nil
+	}
+
+	segStart, monthStart, monthEnd := segmentBounds(period, u.PlanStartedAt)
+	monthSecs := monthEnd - monthStart
+	segSecs := monthEnd - segStart
+	// prorate 自带 segSecs<=0/monthSecs<=0 的守卫（返回0），但那两种退化情况
+	// 下这里的语义是"当前段没有额外贡献"，不是"cap是0"——所以不能直接把
+	// prorate 的返回值当作最终 cap，还是要落到 accrued 之上。monthRange 解析
+	// 失败（period 格式错）时 monthStart==monthEnd==0，segSecs 会是 0，prorate
+	// 照样返回0，结果自然退化成只剩 accrued，语义不变。
+	return u.QuotaAccruedBytes + prorate(plan.TrafficBytes, segSecs, monthSecs), nil
+}
+
 // overTraffic reports whether userID's month-to-date traffic plus add exceeds
-// their plan's traffic cap. A non-positive cap means "unlimited".
+// their monthly traffic allowance. A non-positive cap means "unlimited".
 func (s *Service) overTraffic(ctx context.Context, userID string, add int64) (bool, error) {
-	plan, err := s.planForUser(ctx, userID)
+	cap, err := s.monthlyTrafficCap(ctx, userID)
 	if err != nil {
 		return false, err
 	}
-	cap := plan.TrafficBytes
 	if cap <= 0 {
 		return false, nil
 	}

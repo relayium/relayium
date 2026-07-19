@@ -268,7 +268,7 @@ func TestResumableUploadInitRefusedOverTraffic(t *testing.T) {
 	cookie := loginCookie(t, ts, mail, "rtr@example.com")
 	u, _ := store.UpsertUserByEmail(context.Background(), "rtr@example.com", "")
 	_ = store.UpsertPlan(context.Background(), Plan{ID: "free", Name: "Free", StorageBytes: 1 << 30, TrafficBytes: 10, RetentionSecs: 3 * 86400, Active: true, UpdatedAt: 1})
-	_ = store.SetUserPlan(context.Background(), u.ID, "free")
+	_ = store.SetUserPlan(context.Background(), u.ID, "free", 1)
 
 	// initUploadStatus posts ?size=100 (see helper); 100 > 10-byte traffic cap.
 	if code := initUploadStatus(t, ts, cookie, []byte("M")); code != http.StatusTooManyRequests {
@@ -292,7 +292,7 @@ func TestResumableFinalizeRefusedOverTraffic(t *testing.T) {
 	// server's MaxFileSize=1024), so at finalize sess.received=50 and the
 	// authoritative check (used 0 + 50 = 50 > 10) trips.
 	_ = store.UpsertPlan(context.Background(), Plan{ID: "free", Name: "Free", StorageBytes: 1 << 30, TrafficBytes: 10, RetentionSecs: 3 * 86400, Active: true, UpdatedAt: 1})
-	_ = store.SetUserPlan(context.Background(), u.ID, "free")
+	_ = store.SetUserPlan(context.Background(), u.ID, "free", 1)
 
 	blob := bytes.Repeat([]byte("T"), 50)
 	uploadID := initUpload(t, ts, cookie, []byte("M"), 5, 0)

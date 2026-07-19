@@ -200,7 +200,7 @@ func (s *Service) SeedSettings(ctx context.Context) error {
 func defaultPlans() []Plan {
 	const mb, gb, tb, day = int64(1) << 20, int64(1) << 30, int64(1) << 40, int64(86400)
 	return []Plan{
-		{ID: "free", Name: "Free", StorageBytes: 100 * mb, TrafficBytes: 2 * gb, RetentionSecs: 3 * day, PriceMonthly: 0, PriceYearly: 0, SortOrder: 0, Active: true},
+		{ID: "free", Name: "Free", StorageBytes: 100 * mb, TrafficBytes: 1 * gb, RetentionSecs: 3 * day, PriceMonthly: 0, PriceYearly: 0, SortOrder: 0, Active: true},
 		{ID: "plus", Name: "Plus", StorageBytes: 5 * gb, TrafficBytes: 300 * gb, RetentionSecs: 30 * day, PriceMonthly: 390, PriceYearly: 2900, SortOrder: 1, Active: true},
 		{ID: "pro", Name: "Pro", StorageBytes: 50 * gb, TrafficBytes: 1 * tb, RetentionSecs: 90 * day, PriceMonthly: 890, PriceYearly: 7900, SortOrder: 2, Active: true},
 		{ID: "max", Name: "Max", StorageBytes: 250 * gb, TrafficBytes: 5 * tb, RetentionSecs: 180 * day, PriceMonthly: 1990, PriceYearly: 19900, SortOrder: 3, Active: true},
@@ -222,4 +222,55 @@ func (s *Service) SeedPlans(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// settingFreeTrafficMigrated is the one-shot marker for MigrateFreeTrafficCap.
+// freeTrafficCapOld/New are the Free plan's traffic_bytes before/after the
+// 2026-07 pricing change (2 GiB / 1 GiB), named so the migration's intent
+// reads at the call site instead of as bare byte counts.
+const (
+	settingFreeTrafficMigrated = "migration.free_traffic_1gib"
+	freeTrafficCapOld          = 2 * 1024 * 1024 * 1024 // 2 GiB
+	freeTrafficCapNew          = 1024 * 1024 * 1024     // 1 GiB
+)
+
+// MigrateFreeTrafficCap is the one-shot 2026-07 pricing migration: it lowers
+// the Free plan's monthly traffic cap from 2 GiB to 1 GiB for installs that
+// were seeded before the change. SeedPlans only writes a plan id that's
+// absent (protecting admin edits), so changing defaultPlans() alone never
+// touches an already-seeded Free row — this explicit pass is what moves it.
+//
+// It runs at most once, guarded by a settings-table marker, and NOT purely by
+// value comparison: if we only checked "is Free still 2 GiB", an admin who
+// deliberately dials Free back to 2 GiB (recreating the old sentinel value)
+// would see it silently flipped back to 1 GiB on the next restart. The marker
+// makes "already migrated" durable independent of the current value.
+//
+// Caller contract: this must run after SeedPlans, never before. On a brand
+// new install the plans table is empty until SeedPlans runs; if this ran
+// first, the Free row wouldn't exist yet, there'd be nothing to migrate, and
+// — if the marker were written anyway — the migration would be marked "done"
+// before it ever had a chance to run. Writing the marker unconditionally here
+// is only safe because SeedPlans has already guaranteed the Free row exists.
+// Moving this call ahead of SeedPlans reopens exactly the admin-override race
+// this function exists to close (see the code-review finding on Task 1).
+func (s *Service) MigrateFreeTrafficCap(ctx context.Context) error {
+	if _, done, err := s.store.GetSetting(ctx, settingFreeTrafficMigrated); err != nil {
+		return err
+	} else if done {
+		return nil
+	}
+	if p, ok, err := s.store.GetPlan(ctx, "free"); err != nil {
+		return err
+	} else if ok && p.TrafficBytes == freeTrafficCapOld {
+		p.TrafficBytes = freeTrafficCapNew
+		p.UpdatedAt = s.now().Unix()
+		if err := s.store.UpsertPlan(ctx, p); err != nil {
+			return err
+		}
+	}
+	// Unconditional: whether or not a row needed changing (already-1GiB,
+	// admin-customized to something else, or migrated just above), this
+	// install has now had its one shot — never revisit it.
+	return s.store.SetSetting(ctx, settingFreeTrafficMigrated, 1, s.now().Unix())
 }

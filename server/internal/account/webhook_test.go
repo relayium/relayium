@@ -195,7 +195,7 @@ func TestWebhookSubscriptionUpdatedPastDueRevertsToFree(t *testing.T) {
 	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_pastdue_1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 1700000000, "stripe"); err != nil {
+	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 1700000000, "stripe", time.Now().Unix()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -229,7 +229,7 @@ func TestWebhookSubscriptionDeletedRevertsToFreeCanceled(t *testing.T) {
 	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_deleted_1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 1700000000, "stripe"); err != nil {
+	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 1700000000, "stripe", time.Now().Unix()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -251,6 +251,153 @@ func TestWebhookSubscriptionDeletedRevertsToFreeCanceled(t *testing.T) {
 	}
 }
 
+// signedWebhookRequest builds a Stripe-Signature-signed POST to the webhook
+// endpoint using an explicit timestamp, instead of postWebhook's hardcoded
+// time.Now(). Needed whenever the test also overrides svc.now to a synthetic
+// clock for deterministic proration math: VerifyWebhook checks the signed
+// timestamp against svc.now() (see stripe.go's replayWindowSecs tolerance),
+// so signing with real wall-clock time while svc.now() points at a synthetic
+// month would fail signature verification for an unrelated reason.
+func signedWebhookRequest(t *testing.T, ts *httptest.Server, secret, body string, at int64) *http.Response {
+	t.Helper()
+	sig := signStripe(secret, body, at)
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/stripe/webhook", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Stripe-Signature", sig)
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp
+}
+
+// TestWebhookSubscriptionUpdatedAccruesPreviousSegment proves the C2 monthly
+// proration write path (decision 4) is actually wired into the Stripe
+// webhook entry point — spec's "测试要点" names three change entry points
+// (webhook / in-app upgrade / admin) that must each freeze the previous
+// segment; TestAccrueOnAdminPlanChange already covers admin, this covers
+// webhook. This drives the real HTTP handler (handleStripeWebhook, via a
+// signed POST through the actual mux) rather than calling SetUserSubscription
+// directly, so it's an HTTP-layer test, not just a store-layer one.
+func TestWebhookSubscriptionUpdatedAccruesPreviousSegment(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	secret := "whsec_accrue"
+	svc.biller = NewStripeClient("sk_test", secret, "")
+	plusCap := int64(300) << 30
+	mustPlan(t, store, Plan{ID: "plus", Name: "Plus", Active: true, TrafficBytes: plusCap, StripePriceMonthlyID: "price_plus_m"})
+	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, TrafficBytes: int64(1) << 40, StripePriceMonthlyID: "price_pro_m"})
+	cookie := loginCookie(t, ts, mail, "webhook-accrue@example.com")
+	_ = cookie
+	uid := mustUserID(t, store, "webhook-accrue@example.com")
+	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_accrue"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Put the user on "plus" starting at a known month's start, then freeze
+	// svc.now at that same instant so the login/setup above (which ran on the
+	// real wall clock) isn't affected.
+	monthStart, _, monthSecs := monthAt(t, "202603")
+	t0 := monthStart
+	svc.now = func() time.Time { return time.Unix(t0, 0) }
+	if err := store.SetUserSubscription(context.Background(), uid, "plus", "active", 0, "stripe", t0); err != nil {
+		t.Fatal(err)
+	}
+
+	// Mid-month: a customer.subscription.updated webhook moves the user to
+	// "pro". svc.now advances to the same instant the request is signed with.
+	t1 := monthStart + monthSecs/2
+	svc.now = func() time.Time { return time.Unix(t1, 0) }
+	body := webhookEnv("customer.subscription.updated", "cus_accrue", "sub_1", "", "active", "price_pro_m", 0)
+	resp := signedWebhookRequest(t, ts, secret, body, t1)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+
+	// GetUserByStripeCustomer's SELECT list doesn't include plan_started_at /
+	// quota_accrued_bytes / quota_accrued_period (see its doc comment in
+	// sqlite.go) — those three are always zero on the User it returns, which
+	// is harmless for production (billing.go never reads them off that
+	// particular call) but would silently make this assertion pass against
+	// zero values instead of the real ones. Use GetUserByID, like every other
+	// quota_proration_test.go assertion, to read the columns for real.
+	u, err := store.GetUserByID(context.Background(), uid)
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	if u.PlanID != "pro" {
+		t.Fatalf("want plan pro, got %q", u.PlanID)
+	}
+	seg := t1 - t0
+	want := plusCap/monthSecs*seg + (plusCap%monthSecs)*seg/monthSecs
+	if u.QuotaAccruedBytes != want {
+		t.Fatalf("quota_accrued_bytes = %d, want %d (frozen plus segment via webhook)", u.QuotaAccruedBytes, want)
+	}
+	if u.QuotaAccruedBytes == 0 {
+		t.Fatal("a webhook-driven mid-month plan change must accrue a non-zero previous segment")
+	}
+	if u.PlanStartedAt != t1 {
+		t.Fatalf("plan_started_at = %d, want %d", u.PlanStartedAt, t1)
+	}
+}
+
+// TestWebhookSubscriptionDeletedAccruesPreviousSegment covers the spec's
+// scenario table row "取消订阅 | subscription.deleted 降回 free，走同一路径":
+// canceling mid-month must freeze the previous (paid) segment exactly like
+// any other plan change, not just reset plan_id to free for free. Same
+// HTTP-layer approach as the .updated test above.
+func TestWebhookSubscriptionDeletedAccruesPreviousSegment(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	secret := "whsec_cancel_accrue"
+	svc.biller = NewStripeClient("sk_test", secret, "")
+	proCap := int64(50) << 30
+	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, TrafficBytes: proCap, StripePriceMonthlyID: "price_pro_m"})
+	mustPlan(t, store, Plan{ID: "free", Name: "Free", Active: true, TrafficBytes: 1073741824})
+	cookie := loginCookie(t, ts, mail, "webhook-cancel-accrue@example.com")
+	_ = cookie
+	uid := mustUserID(t, store, "webhook-cancel-accrue@example.com")
+	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_cancel_accrue"); err != nil {
+		t.Fatal(err)
+	}
+
+	monthStart, _, monthSecs := monthAt(t, "202604")
+	t0 := monthStart
+	svc.now = func() time.Time { return time.Unix(t0, 0) }
+	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 0, "stripe", t0); err != nil {
+		t.Fatal(err)
+	}
+
+	// Cancel a third of the way through the month.
+	t1 := monthStart + monthSecs/3
+	svc.now = func() time.Time { return time.Unix(t1, 0) }
+	body := webhookEnv("customer.subscription.deleted", "cus_cancel_accrue", "sub_1", "", "canceled", "", 0)
+	resp := signedWebhookRequest(t, ts, secret, body, t1)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+
+	// See the .updated test above: GetUserByStripeCustomer doesn't select the
+	// quota columns, so read them back via GetUserByID instead.
+	u, err := store.GetUserByID(context.Background(), uid)
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	if u.PlanID != "free" {
+		t.Fatalf("want plan reverted to free after cancellation, got %q", u.PlanID)
+	}
+	seg := t1 - t0
+	want := proCap/monthSecs*seg + (proCap%monthSecs)*seg/monthSecs
+	if u.QuotaAccruedBytes != want {
+		t.Fatalf("quota_accrued_bytes = %d, want %d (frozen pro segment on cancellation)", u.QuotaAccruedBytes, want)
+	}
+	if u.QuotaAccruedBytes == 0 {
+		t.Fatal("cancelling mid-month must accrue a non-zero previous segment, not just drop plan_id to free for free")
+	}
+}
+
 func TestWebhookAdminSourceNotOverridden(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_admin"
@@ -265,7 +412,7 @@ func TestWebhookAdminSourceNotOverridden(t *testing.T) {
 	}
 	// Admin comps this user onto "enterprise" — must survive a Stripe webhook
 	// for an unrelated "pro" subscription.
-	if err := store.SetUserPlanAdmin(context.Background(), uid, "enterprise"); err != nil {
+	if err := store.SetUserPlanAdmin(context.Background(), uid, "enterprise", time.Now().Unix()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -311,7 +458,7 @@ func TestWebhookAdminSourceNotOverriddenViaMetadata(t *testing.T) {
 	// left unbound (no checkout.session.completed / SetUserStripeCustomer
 	// call), forcing the subscription event below to resolve the user via
 	// the metadata.user_id fallback instead of the direct customer lookup.
-	if err := store.SetUserPlanAdmin(context.Background(), uid, "pro"); err != nil {
+	if err := store.SetUserPlanAdmin(context.Background(), uid, "pro", time.Now().Unix()); err != nil {
 		t.Fatal(err)
 	}
 
