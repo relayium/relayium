@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/url"
 
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -69,6 +70,7 @@ func (s *Service) loadAdminPasskeyUser(ctx context.Context) (*adminPasskeyUser, 
 		var c webauthn.Credential
 		if err := json.Unmarshal(row.CredJSON, &c); err != nil {
 			// A single corrupt row must not lock the admin out of every passkey.
+			log.Printf("passkey: skipping unreadable credential row: %v", err)
 			continue
 		}
 		u.creds = append(u.creds, c)
@@ -81,6 +83,7 @@ func (s *Service) loadAdminPasskeyUser(ctx context.Context) (*adminPasskeyUser, 
 func (s *Service) adminPasskeyCount(ctx context.Context) int {
 	rows, err := s.store.ListAdminCredentials(ctx)
 	if err != nil {
+		log.Printf("passkey: ListAdminCredentials failed: %v (hiding passkey button)", err)
 		return 0
 	}
 	return len(rows)

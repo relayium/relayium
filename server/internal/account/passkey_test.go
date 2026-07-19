@@ -11,17 +11,19 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 )
 
-// RP ID 必须是去端口的 host：带端口会被浏览器拒绝。
+// RP ID 必须是去端口的 host：带端口会被浏览器拒绝。RPOrigins 则相反，必须保留
+// 端口，否则非 443 端口部署的登录会因 origin 校验失败而全部拒绝。
 func TestAdminRPIDDerivation(t *testing.T) {
 	cases := []struct {
-		baseURL string
-		wantRP  string
-		wantErr bool
+		baseURL    string
+		wantRP     string
+		wantOrigin string
+		wantErr    bool
 	}{
-		{"https://relayium.com", "relayium.com", false},
-		{"https://relayium.com:8443", "relayium.com", false},
-		{"http://localhost:8080", "localhost", false},
-		{"", "", true},
+		{"https://relayium.com", "relayium.com", "https://relayium.com", false},
+		{"https://relayium.com:8443", "relayium.com", "https://relayium.com:8443", false},
+		{"http://localhost:8080", "localhost", "http://localhost:8080", false},
+		{"", "", "", true},
 	}
 	for _, tc := range cases {
 		s := &Service{cfg: Config{BaseURL: tc.baseURL}}
@@ -37,6 +39,12 @@ func TestAdminRPIDDerivation(t *testing.T) {
 		}
 		if rp.Config.RPID != tc.wantRP {
 			t.Fatalf("%q: RPID=%q want %q", tc.baseURL, rp.Config.RPID, tc.wantRP)
+		}
+		if rp.Config.RPDisplayName != "Relayium 后台" {
+			t.Fatalf("%q: RPDisplayName=%q want %q", tc.baseURL, rp.Config.RPDisplayName, "Relayium 后台")
+		}
+		if got := rp.Config.RPOrigins; len(got) != 1 || got[0] != tc.wantOrigin {
+			t.Fatalf("%q: RPOrigins=%v want [%q]", tc.baseURL, got, tc.wantOrigin)
 		}
 	}
 }
