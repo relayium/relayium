@@ -476,6 +476,112 @@ func TestMonthlyCapSumsSegmentsAfterUpgrade(t *testing.T) {
 	}
 }
 
+// spec 的测试要点点名要求"一月内多次改档"——整个 C2 设计的正确性压在这上面：
+// accrueQuotaTx 必须在同一个月里被连续调用三次时正确累加，既不能重复计数
+// （比如把已经冻结过的段再算一遍），也不能被后一次调用覆盖掉前面冻结的值。
+//
+// 时间线（free → plus → max → plus，全部落在同一个月，四等分）：
+//
+//	monthStart → t1: free 段
+//	t1 → t2:         plus 段
+//	t2 → t3:         max 段
+//	t3 起:            plus（第三次改档刚发生，尚未走完）
+//
+// 每一步都用不经过 prorate() 调用、手写的比例公式独立算出期望值再比对，
+// 这样即使 prorate 本身有 bug 也不会和这里的期望值"手拉手"凑巧一致。
+func TestAccrueMultipleChangesWithinSameMonth(t *testing.T) {
+	ctx := context.Background()
+	svc, store := newPlanService(t)
+	newUser, err := store.UpsertUserByEmail(ctx, "a@b.c", "")
+	if err != nil {
+		t.Fatalf("UpsertUserByEmail: %v", err)
+	}
+	uid := newUser.ID
+
+	period := periodOf(svc.now().Unix())
+	monthStart, _, monthSecs := monthAt(t, period)
+	q := monthSecs / 4
+	t1 := monthStart + q
+	t2 := monthStart + 2*q
+	t3 := monthStart + 3*q
+
+	freeCap := int64(1073741824) // 1 GiB
+	plusCap := int64(300) << 30  // 300 GiB
+	maxCap := int64(5) << 40     // 5 TiB
+
+	// 1st change: free -> plus at t1. Fresh user's plan_started_at is 0,
+	// which segmentBounds clamps to monthStart, so the frozen free segment
+	// is exactly q seconds.
+	if err := store.SetUserPlan(ctx, uid, "plus", t1); err != nil {
+		t.Fatalf("SetUserPlan free->plus: %v", err)
+	}
+	u1, err := store.GetUserByID(ctx, uid)
+	if err != nil {
+		t.Fatalf("GetUserByID after 1st change: %v", err)
+	}
+	wantFreeSeg := freeCap/monthSecs*q + (freeCap%monthSecs)*q/monthSecs
+	if u1.QuotaAccruedBytes != wantFreeSeg {
+		t.Fatalf("after free->plus: accrued = %d, want %d (free segment only)", u1.QuotaAccruedBytes, wantFreeSeg)
+	}
+
+	// 2nd change: plus -> max at t2. Must ADD the plus segment on top of the
+	// already-frozen free segment, not replace it.
+	if err := store.SetUserPlan(ctx, uid, "max", t2); err != nil {
+		t.Fatalf("SetUserPlan plus->max: %v", err)
+	}
+	u2, err := store.GetUserByID(ctx, uid)
+	if err != nil {
+		t.Fatalf("GetUserByID after 2nd change: %v", err)
+	}
+	plusSeg := t2 - t1
+	wantPlusSeg := plusCap/monthSecs*plusSeg + (plusCap%monthSecs)*plusSeg/monthSecs
+	wantAfter2 := wantFreeSeg + wantPlusSeg
+	if u2.QuotaAccruedBytes != wantAfter2 {
+		t.Fatalf("after plus->max: accrued = %d, want %d (free+plus segments)", u2.QuotaAccruedBytes, wantAfter2)
+	}
+
+	// 3rd change: max -> plus at t3. Must ADD the max segment on top of both
+	// previously-frozen segments.
+	if err := store.SetUserPlan(ctx, uid, "plus", t3); err != nil {
+		t.Fatalf("SetUserPlan max->plus: %v", err)
+	}
+	u3, err := store.GetUserByID(ctx, uid)
+	if err != nil {
+		t.Fatalf("GetUserByID after 3rd change: %v", err)
+	}
+	maxSeg := t3 - t2
+	wantMaxSeg := maxCap/monthSecs*maxSeg + (maxCap%monthSecs)*maxSeg/monthSecs
+	wantAfter3 := wantAfter2 + wantMaxSeg
+	if u3.QuotaAccruedBytes != wantAfter3 {
+		t.Fatalf("after max->plus (3rd change): accrued = %d, want %d (free+plus+max segments)", u3.QuotaAccruedBytes, wantAfter3)
+	}
+	if u3.PlanStartedAt != t3 || u3.QuotaAccruedPeriod != period {
+		t.Fatalf("3rd change did not stamp the segment: started=%d period=%q", u3.PlanStartedAt, u3.QuotaAccruedPeriod)
+	}
+
+	// Sanity ceiling: the total accrued across all three frozen segments must
+	// never exceed what the user could have gotten by staying on the single
+	// most generous plan (max) for the entire elapsed time — a loose but real
+	// bound that would catch gross double-counting.
+	elapsedSoFar := t3 - monthStart
+	ceiling := maxCap/monthSecs*elapsedSoFar + (maxCap%monthSecs)*elapsedSoFar/monthSecs
+	if u3.QuotaAccruedBytes > ceiling {
+		t.Fatalf("accrued %d exceeds the all-max ceiling %d for elapsed time — looks like double counting", u3.QuotaAccruedBytes, ceiling)
+	}
+
+	// Read path right after the 3rd change: must be at least the frozen sum
+	// (plus a sliver for the just-started final plus segment), proving the
+	// write-side history and the read-side projection agree.
+	svc.now = func() time.Time { return time.Unix(t3, 0) }
+	cap, err := svc.monthlyTrafficCap(ctx, uid)
+	if err != nil {
+		t.Fatalf("monthlyTrafficCap: %v", err)
+	}
+	if cap < wantAfter3 {
+		t.Fatalf("cap right after 3rd change = %d, must be >= frozen accrued %d", cap, wantAfter3)
+	}
+}
+
 // 无限档（cap<=0）在任何分支下都必须继续表示无限，不能被比例计算变成有限值。
 func TestMonthlyCapUnlimitedStaysUnlimited(t *testing.T) {
 	ctx := context.Background()
