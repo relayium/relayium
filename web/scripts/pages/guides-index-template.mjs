@@ -120,6 +120,7 @@ export function renderGuidesIndexPage({ lang, doc, groups }) {
       ${sections}
       <footer>
         <a href="${ctaHref(lang)}">← ${esc(SITE.name)}</a>
+        <a href="${urlPath("apps", lang)}">Apps</a>
         <a href="${urlPath("privacy", lang)}">${esc(PRIVACY_LABELS[lang])}</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>

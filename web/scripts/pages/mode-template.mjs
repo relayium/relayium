@@ -139,6 +139,7 @@ export function renderModePage({ slug, lang, doc, updated, articleLinks = [] }) 
       ${body(slug, lang, doc, articleLinks)}
       <footer>
         <a href="${ctaHref(lang)}">← ${esc(SITE.name)}</a>
+        <a href="${urlPath("apps", lang)}">Apps</a>
         <a href="${urlPath("privacy", lang)}">${esc(doc.footer.privacy)}</a>
         <a href="${urlPath("terms", lang)}">${esc(doc.footer.terms)}</a>
         <a href="${urlPath("security", lang)}">${esc(doc.footer.security)}</a>

@@ -84,6 +84,7 @@ export function renderLegalPage({ slug, lang, doc }) {
       ${doc.sections.map(sectionHtml).join("\n      ")}
       <footer>
         <a href="/">← ${esc(SITE.name)}</a>
+        <a href="${urlPath("apps", lang)}">Apps</a>
         <a href="${urlPath(otherSlug, lang)}">${esc(doc.otherDocLabel)}</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>

@@ -167,6 +167,7 @@ export function renderLandingPage({ lang, doc, articleLinks = [] }) {
       ${learn ? `<section class="reveal">${learn}</section>` : ""}
       <footer>
         <a href="${ctaHref(lang)}">← ${esc(SITE.name)}</a>
+        <a href="${urlPath("apps", lang)}">Apps</a>
         <a href="${urlPath("guides", lang)}">${esc(GUIDES_LABELS[lang])}</a>
         <a href="${urlPath("privacy", lang)}">${esc(doc.footer.privacy)}</a>
         <a href="${urlPath("terms", lang)}">${esc(doc.footer.terms)}</a>
