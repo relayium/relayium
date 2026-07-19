@@ -27,10 +27,29 @@ const (
 	passkeyCeremonyCap = 2000
 )
 
+// ceremonyKind distinguishes a login ceremony from a registration one. Both
+// kinds travel in the same cookie and live in the same map, so without an
+// explicit tag either finish handler would accept either ceremony. That matters
+// asymmetrically: login/begin needs no authentication at all, so an attacker
+// holding only a stolen admin session could mint a ceremony there and spend it
+// at register/finish, walking straight around the password+TOTP step-up that
+// makes a session leak recoverable rather than permanent. go-webauthn's own
+// structural defense (comparing user.WebAuthnID() to session.UserID) cannot
+// help here because register/finish deliberately assigns the handle from the
+// ceremony — see handleAdminPasskeyRegisterFinish. This tag is what makes that
+// assignment safe.
+type ceremonyKind string
+
+const (
+	ceremonyLogin    ceremonyKind = "login"
+	ceremonyRegister ceremonyKind = "register"
+)
+
 // passkeyCeremony is one in-flight WebAuthn ceremony. name carries the
 // operator-supplied credential label through registration (finish reads the raw
 // body as the credential response, so the label cannot ride along there).
 type passkeyCeremony struct {
+	kind    ceremonyKind
 	session webauthn.SessionData
 	name    string
 	expires time.Time
@@ -51,7 +70,11 @@ func adminRegistrationOpts() []webauthn.RegistrationOption {
 // or returns false without writing a cookie if the in-flight ceremony cap is
 // already at passkeyCeremonyCap. On false, the caller must reject the request
 // rather than fall through — see passkeyCeremonyCap's comment for why.
-func (s *Service) putCeremony(w http.ResponseWriter, sess webauthn.SessionData, name string) bool {
+//
+// kind is a parameter rather than a field set by the caller afterwards so that
+// a ceremony cannot be stored untagged: the compiler forces every present and
+// future call site to state which ceremony it is minting.
+func (s *Service) putCeremony(w http.ResponseWriter, kind ceremonyKind, sess webauthn.SessionData, name string) bool {
 	tok := randToken()
 	s.passkeyMu.Lock()
 	// Opportunistically drop expired ceremonies so the map stays bounded even
@@ -71,7 +94,7 @@ func (s *Service) putCeremony(w http.ResponseWriter, sess webauthn.SessionData, 
 		return false
 	}
 	s.passkeyCeremonies[tok] = passkeyCeremony{
-		session: sess, name: name, expires: now.Add(passkeyCeremonyTTL),
+		kind: kind, session: sess, name: name, expires: now.Add(passkeyCeremonyTTL),
 	}
 	s.passkeyMu.Unlock()
 	http.SetCookie(w, &http.Cookie{
@@ -118,7 +141,7 @@ func (s *Service) handleAdminPasskeyLoginBegin(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "无法发起验证"})
 		return
 	}
-	if !s.putCeremony(w, *sess, "") {
+	if !s.putCeremony(w, ceremonyLogin, *sess, "") {
 		log.Printf("passkey: ceremony cap (%d) reached, rejecting login/begin", passkeyCeremonyCap)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "系统繁忙，请稍后再试"})
 		return
@@ -132,8 +155,11 @@ func (s *Service) handleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "尝试过于频繁，请稍后再试"})
 		return
 	}
+	// takeCeremony deletes unconditionally, so a wrong-kind attempt burns the
+	// ceremony just like a missing/expired one — it cannot be retried, and the
+	// response is identical so the two are indistinguishable to a caller.
 	cer, ok := s.takeCeremony(r)
-	if !ok {
+	if !ok || cer.kind != ceremonyLogin {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "验证已过期，请重试"})
 		return
 	}

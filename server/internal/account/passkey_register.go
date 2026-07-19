@@ -68,7 +68,7 @@ func (s *Service) handleAdminPasskeyRegisterBegin(w http.ResponseWriter, r *http
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "无法发起注册"})
 		return
 	}
-	if !s.putCeremony(w, *sess, name) {
+	if !s.putCeremony(w, ceremonyRegister, *sess, name) {
 		log.Printf("passkey: ceremony cap (%d) reached, rejecting register/begin", passkeyCeremonyCap)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "系统繁忙，请稍后再试"})
 		return
@@ -81,8 +81,12 @@ func (s *Service) handleAdminPasskeyRegisterFinish(w http.ResponseWriter, r *htt
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "未登录"})
 		return
 	}
+	// The kind check is the step-up boundary. login/begin is unauthenticated, so
+	// without it a stolen session alone could mint a ceremony there and spend it
+	// here, never facing the password+TOTP re-check above. takeCeremony deletes
+	// unconditionally, so a wrong-kind attempt is consumed and cannot be retried.
 	cer, ok := s.takeCeremony(r)
-	if !ok {
+	if !ok || cer.kind != ceremonyRegister {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "注册已过期，请重试"})
 		return
 	}

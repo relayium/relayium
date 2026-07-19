@@ -380,7 +380,7 @@ func TestPasskeyCeremonyCapEnforced(t *testing.T) {
 	// 不需要每条 ceremony 都携带真实、可校验的 challenge。
 	discard := httptest.NewRecorder()
 	for i := 0; i < passkeyCeremonyCap; i++ {
-		if !s.putCeremony(discard, webauthn.SessionData{}, "") {
+		if !s.putCeremony(discard, ceremonyLogin, webauthn.SessionData{}, "") {
 			t.Fatalf("putCeremony rejected before reaching the cap at i=%d", i)
 		}
 	}
@@ -392,7 +392,7 @@ func TestPasskeyCeremonyCapEnforced(t *testing.T) {
 	}
 
 	// 再灌一条必须被拒绝，且 map 不得继续增长（不驱逐已有条目，只拒绝新的）。
-	if s.putCeremony(discard, webauthn.SessionData{}, "") {
+	if s.putCeremony(discard, ceremonyLogin, webauthn.SessionData{}, "") {
 		t.Fatalf("putCeremony accepted a ceremony past the cap")
 	}
 	s.passkeyMu.Lock()

@@ -49,14 +49,27 @@ func registerViaHTTP(t *testing.T, srv *httptest.Server, s *Service, session *ht
 	if err != nil {
 		t.Fatalf("register begin: %v", err)
 	}
+	// Check begin before touching its body: a 503 (ceremony cap) or 401 (step-up)
+	// here otherwise resurfaces as an opaque 400 from finish, pointing at the
+	// wrong endpoint entirely.
+	if bresp.StatusCode != http.StatusOK {
+		bresp.Body.Close()
+		t.Fatalf("register begin %q: status=%d want 200", name, bresp.StatusCode)
+	}
 	var opts struct {
 		PublicKey struct {
 			Challenge string `json:"challenge"`
 		} `json:"publicKey"`
 	}
-	json.NewDecoder(bresp.Body).Decode(&opts)
+	if err := json.NewDecoder(bresp.Body).Decode(&opts); err != nil {
+		bresp.Body.Close()
+		t.Fatalf("register begin %q: decode: %v", name, err)
+	}
 	cookies := bresp.Cookies()
 	bresp.Body.Close()
+	if opts.PublicKey.Challenge == "" {
+		t.Fatalf("register begin %q: empty challenge", name)
+	}
 
 	rp, _ := s.adminRP()
 	auth := newTestAuthenticator(t)
@@ -262,6 +275,203 @@ func TestPasskeySurvivesAdminUsernameChange(t *testing.T) {
 	}
 	if len(user.creds) != 1 {
 		t.Fatalf("credentials lost after rename: %d", len(user.creds))
+	}
+}
+
+// ceremonyErr 读出 JSON 错误体里的 error 字段。跨 kind 的断言必须落到具体消息上：
+// register/finish 对"ceremony 取不到/kind 不对"和"attestation 验签失败"都返回 400，
+// 单看状态码无法区分二者，而这两者的差别正是本组测试存在的理由。
+func ceremonyErr(t *testing.T, resp *http.Response) string {
+	t.Helper()
+	var body struct {
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	return body.Error
+}
+
+// 本功能最重要的安全边界：仅凭一枚被盗的管理员会话不得注册新 passkey。
+// login/begin 完全不需要认证，所以攻击者可以在那里免费铸一枚 ceremony，再拿去
+// register/finish 兑换 —— 若 ceremony 不区分种类，这条路径就绕开了 step-up，
+// 一次会话泄露即升级为永久后门。
+//
+// 断言必须精确到"注册已过期，请重试"（kind/takeCeremony 拒绝路径的唯一消息），
+// 不能用宽松的 != 200：登录 ceremony 的 SessionData.CredParams 是空的，
+// attestation 会顺带以"algorithm not supported"失败，同样返回 400。那是
+// go-webauthn 的实现细节而非我们的检查，换个默认填充 CredParams 的版本就会
+// 悄悄失效。拿掉 kind 检查后，这条断言必须变红。
+func TestPasskeyLoginCeremonyCannotBeSpentAtRegisterFinish(t *testing.T) {
+	srv, s := newAdminServer(t, "admin", "pw")
+	session := adminPasswordLogin(t, srv, s)
+
+	// 无需任何认证即可拿到一枚登录 ceremony
+	breq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/login/begin", nil)
+	breq.Header.Set("Origin", s.selfOrigin())
+	bresp, err := srv.Client().Do(breq)
+	if err != nil {
+		t.Fatalf("login begin: %v", err)
+	}
+	if bresp.StatusCode != http.StatusOK {
+		bresp.Body.Close()
+		t.Fatalf("login begin status=%d want 200", bresp.StatusCode)
+	}
+	var opts struct {
+		PublicKey struct {
+			Challenge string `json:"challenge"`
+		} `json:"publicKey"`
+	}
+	if err := json.NewDecoder(bresp.Body).Decode(&opts); err != nil {
+		bresp.Body.Close()
+		t.Fatalf("login begin decode: %v", err)
+	}
+	cookies := bresp.Cookies()
+	bresp.Body.Close()
+	if opts.PublicKey.Challenge == "" {
+		t.Fatalf("empty challenge")
+	}
+
+	// 用被盗会话 + 登录 ceremony 去兑换注册
+	rp, _ := s.adminRP()
+	auth := newTestAuthenticator(t)
+	freq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/register/finish",
+		strings.NewReader(auth.registerBody(t, rp.Config.RPID, s.selfOrigin(), opts.PublicKey.Challenge)))
+	freq.Header.Set("Content-Type", "application/json")
+	freq.Header.Set("Origin", s.selfOrigin())
+	freq.AddCookie(session)
+	for _, c := range cookies {
+		freq.AddCookie(c)
+	}
+	fresp, err := srv.Client().Do(freq)
+	if err != nil {
+		t.Fatalf("register finish: %v", err)
+	}
+	defer fresp.Body.Close()
+	if fresp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("cross-kind register/finish status=%d want 400", fresp.StatusCode)
+	}
+	if msg := ceremonyErr(t, fresp); msg != "注册已过期，请重试" {
+		t.Fatalf("cross-kind register/finish error=%q, want %q — a different message means the "+
+			"ceremony kind check did not reject this; attestation (or something else) did, which is "+
+			"exactly the incidental defense this test exists to replace",
+			msg, "注册已过期，请重试")
+	}
+
+	// 绝不能有凭据落库
+	rows, _ := s.store.ListAdminCredentials(context.Background())
+	if len(rows) != 0 {
+		t.Fatalf("a credential was registered via a login ceremony: %d rows", len(rows))
+	}
+}
+
+// 反方向同样必须关死：注册 ceremony 不得在 login/finish 兑换成管理员会话。
+// （这一向另有 ValidatePasskeyLogin 对非空 UserID 的拒绝兜底，但那同样是库的
+// 实现细节，这里断言的是我们自己的 kind 检查。）
+func TestPasskeyRegisterCeremonyCannotBeSpentAtLoginFinish(t *testing.T) {
+	srv, s := newAdminServer(t, "admin", "pw")
+	// 先注册一枚真实凭据，好让 login/finish 在 kind 检查之外本可以走通
+	auth, handle := registerTestPasskey(t, s)
+	session := adminPasswordLogin(t, srv, s)
+
+	breq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/register/begin",
+		strings.NewReader("username=admin&password=pw&name=Laptop"))
+	breq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	breq.Header.Set("Origin", s.selfOrigin())
+	breq.AddCookie(session)
+	bresp, err := srv.Client().Do(breq)
+	if err != nil {
+		t.Fatalf("register begin: %v", err)
+	}
+	if bresp.StatusCode != http.StatusOK {
+		bresp.Body.Close()
+		t.Fatalf("register begin status=%d want 200", bresp.StatusCode)
+	}
+	var opts struct {
+		PublicKey struct {
+			Challenge string `json:"challenge"`
+		} `json:"publicKey"`
+	}
+	if err := json.NewDecoder(bresp.Body).Decode(&opts); err != nil {
+		bresp.Body.Close()
+		t.Fatalf("register begin decode: %v", err)
+	}
+	cookies := bresp.Cookies()
+	bresp.Body.Close()
+	if opts.PublicKey.Challenge == "" {
+		t.Fatalf("empty challenge")
+	}
+
+	rp, _ := s.adminRP()
+	freq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/login/finish",
+		strings.NewReader(auth.assertBody(t, rp.Config.RPID, s.selfOrigin(), opts.PublicKey.Challenge, handle)))
+	freq.Header.Set("Content-Type", "application/json")
+	freq.Header.Set("Origin", s.selfOrigin())
+	for _, c := range cookies {
+		freq.AddCookie(c)
+	}
+	fresp, err := srv.Client().Do(freq)
+	if err != nil {
+		t.Fatalf("login finish: %v", err)
+	}
+	defer fresp.Body.Close()
+	if fresp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("cross-kind login/finish status=%d want 400", fresp.StatusCode)
+	}
+	for _, c := range fresp.Cookies() {
+		if c.Name == adminCookie && c.Value != "" {
+			t.Fatalf("a register ceremony minted an admin session at login/finish")
+		}
+	}
+	if msg := ceremonyErr(t, fresp); msg != "验证已过期，请重试" {
+		t.Fatalf("cross-kind login/finish error=%q, want %q — a different message means something "+
+			"other than the ceremony kind check rejected this", msg, "验证已过期，请重试")
+	}
+}
+
+// 跨 kind 的尝试必须同样消费掉 ceremony：错一次就作废，不得换个端点重试。
+func TestPasskeyCrossKindAttemptConsumesCeremony(t *testing.T) {
+	srv, s := newAdminServer(t, "admin", "pw")
+	session := adminPasswordLogin(t, srv, s)
+
+	breq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/login/begin", nil)
+	breq.Header.Set("Origin", s.selfOrigin())
+	bresp, err := srv.Client().Do(breq)
+	if err != nil {
+		t.Fatalf("login begin: %v", err)
+	}
+	var opts struct {
+		PublicKey struct {
+			Challenge string `json:"challenge"`
+		} `json:"publicKey"`
+	}
+	json.NewDecoder(bresp.Body).Decode(&opts)
+	cookies := bresp.Cookies()
+	bresp.Body.Close()
+
+	// 先拿去 register/finish 用错（被拒），ceremony 应当已被吃掉
+	rp, _ := s.adminRP()
+	auth := newTestAuthenticator(t)
+	wrong, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/register/finish",
+		strings.NewReader(auth.registerBody(t, rp.Config.RPID, s.selfOrigin(), opts.PublicKey.Challenge)))
+	wrong.Header.Set("Content-Type", "application/json")
+	wrong.Header.Set("Origin", s.selfOrigin())
+	wrong.AddCookie(session)
+	for _, c := range cookies {
+		wrong.AddCookie(c)
+	}
+	wresp, err := srv.Client().Do(wrong)
+	if err != nil {
+		t.Fatalf("register finish: %v", err)
+	}
+	wresp.Body.Close()
+
+	// 同一枚 ceremony 现在连它本来的用途也不该再能用
+	s.passkeyMu.Lock()
+	n := len(s.passkeyCeremonies)
+	s.passkeyMu.Unlock()
+	if n != 0 {
+		t.Fatalf("cross-kind attempt left %d ceremonies alive; it must consume like any other finish", n)
 	}
 }
 
