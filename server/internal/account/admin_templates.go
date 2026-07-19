@@ -37,6 +37,9 @@ type adminHomeData struct {
 	Plans       []planView
 	ActivePlans []planView // subset of Plans with Active==true; used for the per-user plan dropdown
 	Settings    adminSettingsView
+	// Passkeys are the registered admin credentials, listed so a never-used
+	// entry (an attacker's planted credential) is visible.
+	Passkeys []AdminCredential
 
 	FleetTokens      []adminFleetTokenView
 	FleetNodeCount   int    // count of Nodes with OwnerType == "fleet" (matches table body's guard)
@@ -57,11 +60,36 @@ type adminFleetTokenView struct {
 }
 
 type adminLoginData struct {
-	Error string
-	TOTP  bool // render the 6-digit code field
+	Error   string
+	TOTP    bool // render the 6-digit code field
+	Passkey bool // render the passkey button (only when a credential exists)
 }
 
-var adminLoginTmpl = template.Must(template.New("login").Parse(`<!doctype html>
+// passkeyB64JS is the base64url <-> ArrayBuffer pair WebAuthn needs on both the
+// login page and the dashboard. Defined once here and pulled into each page's
+// inline <script> with {{template "passkeyB64"}}, so the two never drift apart.
+const passkeyB64JS = `{{define "passkeyB64"}}
+  function dec(s){
+    s = s.replace(/-/g,'+').replace(/_/g,'/');
+    var pad = s.length % 4 ? '='.repeat(4 - s.length % 4) : '';
+    var bin = atob(s + pad), out = new Uint8Array(bin.length);
+    for (var i=0;i<bin.length;i++) out[i] = bin.charCodeAt(i);
+    return out.buffer;
+  }
+  function enc(buf){
+    var b = new Uint8Array(buf), s = '';
+    for (var i=0;i<b.length;i++) s += String.fromCharCode(b[i]);
+    return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  }
+{{end}}`
+
+// withPasskeyJS associates the shared passkeyB64 snippet with t. Both admin
+// pages are parsed separately, so each has to be given its own association.
+func withPasskeyJS(t *template.Template) *template.Template {
+	return template.Must(t.Parse(passkeyB64JS))
+}
+
+var adminLoginTmpl = template.Must(withPasskeyJS(template.New("login")).Parse(`<!doctype html>
 <html><head><meta charset="utf-8"><title>Relayium Admin</title>
 <style>:root{--a:#7c3aad;--bg:#faf9fb;--fg:#1a1420;--bd:#e5e4e7;--card:#fff}
 @media(prefers-color-scheme:dark){:root{--a:#c084fc;--bg:#16171d;--fg:#f3f4f6;--bd:#2e303a;--card:#1c1d25}}
@@ -73,7 +101,8 @@ input{font:inherit;padding:9px 11px;width:100%;margin:6px 0;border:1px solid var
 button{font:inherit;font-weight:500;padding:10px 11px;width:100%;margin:10px 0 0;border:0;border-radius:8px;background:var(--a);color:#fff;cursor:pointer}
 button:hover{filter:brightness(1.07)}
 :focus-visible{outline:2px solid var(--a);outline-offset:2px}
-.err{color:#e5484d;margin:0 0 10px}</style></head>
+.err{color:#e5484d;margin:0 0 10px}
+[hidden]{display:none!important}</style></head>
 <body><h1>Relayium 后台</h1>
 {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
 <form method="post" action="/admin/login">
@@ -81,9 +110,84 @@ button:hover{filter:brightness(1.07)}
 <input type="password" name="password" placeholder="管理员密码" autocomplete="current-password">
 {{if .TOTP}}<input type="text" name="totp" placeholder="6 位验证码" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6">{{end}}
 <button type="submit">登录</button>
-</form></body></html>`))
+</form>
+{{if .Passkey}}
+<button type="button" id="passkey-login" style="margin-top:12px;background:transparent;color:var(--a);border:1px solid var(--bd)">使用 passkey 登录</button>
+<p class="err" id="passkey-error" style="margin-top:10px" hidden></p>
+<script>
+(function(){
+  var btn = document.getElementById('passkey-login');
+  var err = document.getElementById('passkey-error');
+  // Progressive enhancement: on anything without WebAuthn the button vanishes
+  // and the password form above is untouched.
+  if (!window.PublicKeyCredential || !navigator.credentials) { btn.hidden = true; return; }
+{{template "passkeyB64"}}
+  var NO_CRED = '这台设备还没注册 passkey，请用密码登录后在设置里添加';
+  // WebAuthn reports "user cancelled" and "no credential on this device" with
+  // the same NotAllowedError, so ask the platform up front whether it has an
+  // authenticator at all — that is what tells the two apart on the way out.
+  // A capability query raises no prompt, so it is safe outside the click.
+  var hasAuthenticator = true;
+  if (PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
+    PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+      .then(function(v){ hasAuthenticator = !!v; }, function(){});
+  }
+  btn.addEventListener('click', function(){
+    err.hidden = true; btn.disabled = true;
+    fetch('/admin/passkey/login/begin', {method:'POST'})
+      .then(function(r){
+        if (r.ok) return r.json();
+        // A non-JSON body (a proxy's 502 page) must not surface as a parser
+        // error; fall back to the status so the operator can diagnose it.
+        return r.json().then(function(j){ return j.error; }, function(){ return null; })
+          .then(function(m){ throw new Error(m || '服务器错误 ' + r.status); });
+      })
+      .then(function(o){
+        var pk = o.publicKey;
+        pk.challenge = dec(pk.challenge);
+        if (pk.allowCredentials) pk.allowCredentials.forEach(function(c){ c.id = dec(c.id); });
+        return navigator.credentials.get({publicKey: pk});
+      })
+      .then(function(c){
+        // A null credential means the platform had nothing to offer here.
+        if (!c) throw new Error(NO_CRED);
+        return fetch('/admin/passkey/login/finish', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            id: c.id, rawId: enc(c.rawId), type: c.type,
+            response: {
+              clientDataJSON: enc(c.response.clientDataJSON),
+              authenticatorData: enc(c.response.authenticatorData),
+              signature: enc(c.response.signature),
+              userHandle: c.response.userHandle ? enc(c.response.userHandle) : null
+            }
+          })
+        });
+      })
+      .then(function(r){
+        if (r.ok) { location.href = '/admin'; return; }
+        return r.json().then(function(j){ return j.error; }, function(){ return null; })
+          .then(function(m){ throw new Error(m || '验证失败（服务器 ' + r.status + '）'); });
+      })
+      .catch(function(e){
+        btn.disabled = false;
+        if (e && e.name === 'NotAllowedError') {
+          // Cancelling the platform prompt is a normal action, not an error —
+          // stay silent. With no authenticator present it was never a cancel,
+          // so point at the way forward instead.
+          if (hasAuthenticator) return;
+          err.textContent = NO_CRED; err.hidden = false; return;
+        }
+        err.textContent = (e && e.message) || '登录失败，请改用下方密码登录';
+        err.hidden = false;
+      });
+  });
+})();
+</script>
+{{end}}
+</body></html>`))
 
-var adminUsersTmpl = template.Must(template.New("users").Funcs(template.FuncMap{
+var adminUsersTmpl = template.Must(withPasskeyJS(template.New("users").Funcs(template.FuncMap{
 	"ts":    func(sec int64) string { return time.Unix(sec, 0).UTC().Format("2006-01-02 15:04") },
 	"bytes": humanBytes,
 	"gib":   func(b int64) int64 { return b / (1 << 30) },
@@ -93,7 +197,7 @@ var adminUsersTmpl = template.Must(template.New("users").Funcs(template.FuncMap{
 		}
 		return p
 	},
-}).Parse(`<!doctype html>
+})).Parse(`<!doctype html>
 <html><head><meta charset="utf-8"><title>Relayium Admin · 用户</title>
 <style>:root{--a:#7c3aad;--bg:#faf9fb;--fg:#1a1420;--muted:#6b6375;--bd:#e5e4e7;--card:#fff;--soft:#f4f3ec}
 @media(prefers-color-scheme:dark){:root{--a:#c084fc;--bg:#16171d;--fg:#f3f4f6;--muted:#9ca3af;--bd:#2e303a;--card:#1c1d25;--soft:#1f2028}}
@@ -135,7 +239,13 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 .plan-row input[type=number]{width:70px}
 .plan-row button{background:var(--a);color:#fff;border:0;cursor:pointer;font-size:12px}
 .plan-row label{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted)}
-.danger{background:#e5484d}</style></head>
+.danger{background:#e5484d}
+.passkeys{margin:0 0 28px}.passkeys h2{margin-bottom:12px}
+.passkeys .mint{flex-wrap:wrap;margin-top:12px}
+.never{color:#e5484d;font-weight:600}
+.err{color:#e5484d;margin:10px 0 0}
+/* [hidden] alone loses to .mint's display:flex, so state it outright. */
+[hidden]{display:none!important}</style></head>
 <body>
 <div class="top"><h1>后台概览</h1>
 <form method="post" action="/admin/logout"><button type="submit">退出</button></form></div>
@@ -258,6 +368,91 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <label style="flex-direction:row;align-items:center;gap:8px;grid-column:1/-1"><input type="checkbox" name="disable_central_fallback" value="1" style="width:auto"{{if .Settings.DisableCentralFallback}} checked{{end}}>关闭中央兜底：无可用存储节点时上传直接失败，不再落到本站服务器磁盘</label>
 <button type="submit">保存设置</button>
 </form>
+</section>
+
+<section class="passkeys">
+<h2>Passkey 登录（{{len .Passkeys}}）</h2>
+<table>
+<thead><tr><th>名称</th><th>添加时间(UTC)</th><th>最后使用</th><th></th></tr></thead>
+<tbody>
+{{range .Passkeys}}
+<tr>
+<td>{{.Name}}</td>
+<td>{{ts .CreatedAt}}</td>
+<td>{{if .LastUsedAt}}{{ts .LastUsedAt}}{{else}}<span class="never">从未使用</span>{{end}}</td>
+<td><form method="post" action="/admin/passkey/delete" onsubmit="return confirm('删除这枚 passkey？')">
+<input type="hidden" name="id" value="{{.ID}}"><button type="submit" class="danger">删除</button></form></td>
+</tr>
+{{else}}
+<tr><td colspan="4">尚未添加 passkey</td></tr>
+{{end}}
+</tbody></table>
+
+<form id="passkey-add" class="mint" hidden>
+<input type="text" name="name" placeholder="设备名称，如 MacBook" required>
+<input type="text" name="username" placeholder="管理员账号" autocomplete="username" required>
+<input type="password" name="password" placeholder="管理员密码" autocomplete="current-password" required>
+<input type="text" name="totp" placeholder="6 位验证码（如已启用）" inputmode="numeric" autocomplete="one-time-code">
+<button type="submit">添加 passkey</button>
+</form>
+<p class="err" id="passkey-add-error" hidden></p>
+<script>
+(function(){
+  var form = document.getElementById('passkey-add');
+  var err = document.getElementById('passkey-add-error');
+  // The form ships hidden and is revealed only here, so a browser without
+  // WebAuthn (or with JS off) never shows a control that cannot work.
+  if (!window.PublicKeyCredential || !navigator.credentials) return;
+{{template "passkeyB64"}}
+  form.addEventListener('submit', function(ev){
+    ev.preventDefault();
+    err.hidden = true;
+    fetch('/admin/passkey/register/begin', {
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body: new URLSearchParams(new FormData(form)).toString()
+    })
+      .then(function(r){
+        if (r.ok) return r.json();
+        return r.json().then(function(j){ return j.error; }, function(){ return null; })
+          .then(function(m){ throw new Error(m || '验证失败（服务器 ' + r.status + '）'); });
+      })
+      .then(function(o){
+        var pk = o.publicKey;
+        pk.challenge = dec(pk.challenge);
+        pk.user.id = dec(pk.user.id);
+        if (pk.excludeCredentials) pk.excludeCredentials.forEach(function(c){ c.id = dec(c.id); });
+        return navigator.credentials.create({publicKey: pk});
+      })
+      .then(function(c){
+        return fetch('/admin/passkey/register/finish', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            id: c.id, rawId: enc(c.rawId), type: c.type,
+            response: {
+              clientDataJSON: enc(c.response.clientDataJSON),
+              attestationObject: enc(c.response.attestationObject)
+            }
+          })
+        });
+      })
+      .then(function(r){
+        if (r.ok) { location.reload(); return; }
+        return r.json().then(function(j){ return j.error; }, function(){ return null; })
+          .then(function(m){ throw new Error(m || '注册失败（服务器 ' + r.status + '）'); });
+      })
+      .catch(function(e){
+        // Cancelling the platform prompt is a normal action, not an error.
+        if (e && e.name === 'NotAllowedError') return;
+        err.textContent = (e && e.message) || '注册失败';
+        err.hidden = false;
+      });
+  });
+  // Revealed only now that the handler is attached, so the form can never be
+  // submitted as a plain GET by a half-initialised page.
+  form.hidden = false;
+})();
+</script>
 </section>
 
 <div class="top"><h2>用量月份</h2>

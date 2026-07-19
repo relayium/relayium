@@ -81,6 +81,12 @@ func (s *Service) loadAdminPasskeyUser(ctx context.Context) (*adminPasskeyUser, 
 // adminPasskeyCount reports how many passkeys are registered; 0 means the login
 // page must not offer the passkey button.
 func (s *Service) adminPasskeyCount(ctx context.Context) int {
+	// The login page calls this on every render, including the failure paths.
+	// Password+TOTP is the fallback channel, so nothing here may take that page
+	// down: with no store to ask, answer "no passkeys" and render the form.
+	if s.store == nil {
+		return 0
+	}
 	rows, err := s.store.ListAdminCredentials(ctx)
 	if err != nil {
 		log.Printf("passkey: ListAdminCredentials failed: %v (hiding passkey button)", err)

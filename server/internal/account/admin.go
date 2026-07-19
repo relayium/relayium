@@ -257,7 +257,8 @@ func (s *Service) verifyAdminCreds(user, pass, code string) (totpStep int64, ok 
 func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	ip := s.clientIP(r)
 	if s.adminLogins.locked(ip, s.now()) {
-		s.renderAdminLogin(w, http.StatusTooManyRequests, "尝试过于频繁，请稍后再试")
+		s.renderAdminLogin(w, http.StatusTooManyRequests, "尝试过于频繁，请稍后再试",
+			s.adminPasskeyCount(r.Context()) > 0)
 		return
 	}
 
@@ -265,7 +266,8 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		r.FormValue("username"), r.FormValue("password"), r.FormValue("totp"))
 	if !ok {
 		s.adminLogins.recordFail(ip, s.now())
-		s.renderAdminLogin(w, http.StatusUnauthorized, "账号、密码或验证码错误")
+		s.renderAdminLogin(w, http.StatusUnauthorized, "账号、密码或验证码错误",
+			s.adminPasskeyCount(r.Context()) > 0)
 		return
 	}
 
@@ -403,6 +405,16 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 			}
 		}
 	}
+	// A passkey that was never used is how a planted credential shows itself,
+	// so the list is part of the security surface, not just a convenience.
+	// Unlike the other fetches here this one fails the whole page rather than
+	// logging and carrying on: rendering an empty table on a failed query would
+	// hide exactly the credential the table exists to expose.
+	passkeys, err := s.store.ListAdminCredentials(r.Context())
+	if err != nil {
+		log.Printf("passkey: ListAdminCredentials failed: %v", err)
+		return adminHomeData{}, err
+	}
 	return adminHomeData{
 		Metrics: metrics, Users: rows, Total: total, Page: page, TotalPages: totalPages,
 		Search: search, Sort: sortBy, Dir: dir, Period: period, Months: months,
@@ -410,6 +422,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		Nodes: nodeVs, FleetNodeCount: fleetNodeCount, FleetTokens: tokenVs,
 		Plans: planVs, ActivePlans: activePlanVs,
 		CentralStoredBytes: centralStored,
+		Passkeys:           passkeys,
 		Settings: adminSettingsView{
 			MaxFileSizeMB:          st.MaxFileSize / (1024 * 1024),
 			DailyQuotaMB:           st.DailyQuota / (1024 * 1024),
@@ -426,7 +439,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 
 func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
-		s.renderAdminLogin(w, http.StatusOK, "")
+		s.renderAdminLogin(w, http.StatusOK, "", s.adminPasskeyCount(r.Context()) > 0)
 		return
 	}
 	data, err := s.buildAdminHomeData(r)
@@ -720,8 +733,13 @@ func (s *Service) handleAdminRevokeToken(w http.ResponseWriter, r *http.Request)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 
-func (s *Service) renderAdminLogin(w http.ResponseWriter, status int, errMsg string) {
+// renderAdminLogin draws the login page. passkey controls only the extra
+// passkey button; the password+TOTP form below it is the fallback channel and
+// renders unconditionally.
+func (s *Service) renderAdminLogin(w http.ResponseWriter, status int, errMsg string, passkey bool) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	_ = adminLoginTmpl.Execute(w, adminLoginData{Error: errMsg, TOTP: s.AdminTOTPEnabled()})
+	_ = adminLoginTmpl.Execute(w, adminLoginData{
+		Error: errMsg, TOTP: s.AdminTOTPEnabled(), Passkey: passkey,
+	})
 }
