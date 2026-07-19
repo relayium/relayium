@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
-  routeFromLocation as rfl, downloadId, CROSS_PATH, CLI_PATH,
+  routeFromLocation as rfl, downloadId, CROSS_PATH, CLI_PATH, APPS_PATH,
   VERIFY_EMAIL_PATH, RESET_PASSWORD_PATH,
   navigate, currentRoute, setNavGuard, syncRouteFromLocation,
 } from "./router.svelte";
@@ -42,6 +42,19 @@ describe("routeFromLocation offline page", () => {
   });
   it("a pairing code still wins over the offline path", () => {
     expect(rfl("/offline-transfer", "#c=424242")).toBe("cross");
+  });
+});
+
+describe("routeFromLocation apps page", () => {
+  it("is apps on the /apps path", () => {
+    expect(rfl(APPS_PATH, "")).toBe("apps");
+  });
+  it("a pairing code still wins over /apps", () => {
+    expect(rfl("/apps", "#c=424242")).toBe("cross");
+  });
+  it("does not collide with the /d/ download prefix", () => {
+    expect(rfl("/apps", "")).toBe("apps");
+    expect(rfl("/d/abc123", "")).toBe("download");
   });
 });
 
@@ -114,5 +127,11 @@ describe("navigate", () => {
     navigate("reset-password");
     expect(currentRoute()).toBe("reset-password");
     expect(location.pathname).toBe(RESET_PASSWORD_PATH);
+  });
+
+  it("switches to apps and sets the /apps path", () => {
+    navigate("apps");
+    expect(currentRoute()).toBe("apps");
+    expect(location.pathname).toBe(APPS_PATH);
   });
 });
