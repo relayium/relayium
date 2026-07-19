@@ -630,14 +630,14 @@ func (s *SQLiteStore) SetOnlyOwnNodes(ctx context.Context, userID string, on boo
 // 几毛钱差价，但按整月发额度的话用户当场白拿一整个 Max 月的流量。
 //
 // 三条短路：
-//   1. 档位没变 → 直接返回。Stripe 的 subscription.updated 会在纯状态变更时
-//      反复投递同一个 plan_id；每次切段数学上等价，但整数除法的截断会一点点
-//      蚕食用户额度。
-//   2. 累计值属于上个月 → 归零。上月冻结的额度不能带进新月份。
-//   3. 旧档是无限档（traffic_bytes <= 0）→ 不贡献任何累计。cap<=0 在别处一律
-//      表示"无限"，用户离开该档后本月应当回落到新档的普通比例，而不是继承一
-//      个无意义的天文数字。（这一条以及 segSecs<=0/monthSecs<=0 的短路由
-//      prorate 自己守卫，见其注释。）
+//  1. 档位没变 → 直接返回。Stripe 的 subscription.updated 会在纯状态变更时
+//     反复投递同一个 plan_id；每次切段数学上等价，但整数除法的截断会一点点
+//     蚕食用户额度。
+//  2. 累计值属于上个月 → 归零。上月冻结的额度不能带进新月份。
+//  3. 旧档是无限档（traffic_bytes <= 0）→ 不贡献任何累计。cap<=0 在别处一律
+//     表示"无限"，用户离开该档后本月应当回落到新档的普通比例，而不是继承一
+//     个无意义的天文数字。（这一条以及 segSecs<=0/monthSecs<=0 的短路由
+//     prorate 自己守卫，见其注释。）
 func accrueQuotaTx(ctx context.Context, tx *sql.Tx, userID, newPlanID string, now int64) error {
 	var curPlan, accruedPeriod string
 	var startedAt, accrued int64
@@ -1940,11 +1940,16 @@ func monthRange(period string) (start, end int64) {
 // 写路径（accrueQuotaTx，冻结已过去的段）与读路径（monthlyTrafficCap，计算当前
 // 段）必须用同一个算法：两处一旦漂移，冻结的累计值和算出的上限就对不上，用户的
 // 当月配额会静默算错。
-func prorate(cap, segSecs, monthSecs int64) int64 {
-	if cap <= 0 || segSecs <= 0 || monthSecs <= 0 {
+//
+// 前置条件：调用方必须保证 segSecs <= monthSecs，即 segment 落在当月范围内
+// （accrueQuotaTx 靠 monthRange(periodOf(now)) 把 now 夹在月首月末之间来满足
+// 这一点）。一旦 segSecs 超出 monthSecs，算出的额度会超过整月上限，函数本身
+// 不做这个校验。
+func prorate(capBytes, segSecs, monthSecs int64) int64 {
+	if capBytes <= 0 || segSecs <= 0 || monthSecs <= 0 {
 		return 0
 	}
-	return cap/monthSecs*segSecs + (cap%monthSecs)*segSecs/monthSecs
+	return capBytes/monthSecs*segSecs + (capBytes%monthSecs)*segSecs/monthSecs
 }
 
 // RecordMeter adds a one-shot upload/download event to the user's current-month

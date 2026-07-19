@@ -150,7 +150,9 @@ func monthAt(t *testing.T, period string) (start, end, secs int64) {
 
 // 月中升级必须冻结旧档已得的那一段，而不是从零开始重算。
 // 时间线（用 1970-01 这个月，因为测试时钟就落在这里）：
-//   月首 → t1 是 free 段，t1 → 月末 是 plus 段。
+//
+//	月首 → t1 是 free 段，t1 → 月末 是 plus 段。
+//
 // 冻结值应当是 freeCap × (t1-月首)/月长。
 func TestAccrueFreezesPreviousSegment(t *testing.T) {
 	ctx := context.Background()
@@ -288,5 +290,128 @@ func TestAccrueOnAdminPlanChange(t *testing.T) {
 	if u.PlanSource != "admin" || u.SubscriptionStatus != "" || u.SubscriptionEnd != 0 {
 		t.Fatalf("admin path lost its existing side effects: source=%q status=%q end=%d",
 			u.PlanSource, u.SubscriptionStatus, u.SubscriptionEnd)
+	}
+}
+
+// TestProrate 直接测 prorate 本身。上面几条 TestAccrue* 只是通过
+// accrueQuotaTx 间接跑到它，覆盖不到两条它独有、受 spec 约束的行为：无限档
+// 不贡献累计、以及大 cap × 大 segSecs 不溢出。
+func TestProrate(t *testing.T) {
+	cases := []struct {
+		name                         string
+		capBytes, segSecs, monthSecs int64
+		check                        func(t *testing.T, got int64)
+	}{
+		{
+			// cap<=0 在整个代码库里表示"无限档"；用户离开无限档后，那一段
+			// 不该折算出任何累计，否则无限档反而变成有限档里额度最高的那个。
+			name:     "unlimited tier contributes nothing",
+			capBytes: 0, segSecs: 1000, monthSecs: 2000,
+			check: wantExact(0),
+		},
+		{
+			// 同上，负值也必须按"无限"处理，不能被当成有效上限带出负累计。
+			name:     "negative cap treated as unlimited",
+			capBytes: -1, segSecs: 1000, monthSecs: 2000,
+			check: wantExact(0),
+		},
+		{
+			// 空段（比如两次改档时间戳相同）不该凭空长出额度。
+			name:     "zero-length segment earns nothing",
+			capBytes: 1000, segSecs: 0, monthSecs: 2000,
+			check: wantExact(0),
+		},
+		{
+			// 负的段长是调用方的 bug，但 prorate 自己也得兜底，不能算出负数
+			// 或者除零 panic。
+			name:     "negative segSecs guarded",
+			capBytes: 1000, segSecs: -1, monthSecs: 2000,
+			check: wantExact(0),
+		},
+		{
+			// monthSecs<=0（比如 monthRange 解析失败返回 0,0）必须短路，
+			// 否则下面的除法直接除零 panic。
+			name:     "zero monthSecs guarded (would otherwise divide by zero)",
+			capBytes: 1000, segSecs: 500, monthSecs: 0,
+			check: wantExact(0),
+		},
+		{
+			// 整段等于整月：应当拿到档位的全部上限，一分不多一分不少。
+			name:     "full month earns the whole cap",
+			capBytes: 12345, segSecs: 2592000, monthSecs: 2592000,
+			check: wantExact(12345),
+		},
+		{
+			// 半个月应该约等于一半——留一点余量给整数除法的截断。
+			name:     "half month earns about half the cap",
+			capBytes: 1000000, segSecs: 1296000, monthSecs: 2592000,
+			check: wantApprox(500000, 1),
+		},
+		{
+			// 溢出安全：cap=5 TiB、几乎整月的段，朴素的 cap*segSecs 会先算出
+			// ≈1.3e19，超过 int64 上限 9.2e18 直接溢出成负数或荒谬的大数。
+			// prorate 的先除后乘必须躲开这一步，结果应当为正且不超过 cap。
+			name:     "large cap × near-full-month segment does not overflow",
+			capBytes: 5 << 40, segSecs: 31*86400 - 1, monthSecs: 31 * 86400,
+			check: func(t *testing.T, got int64) {
+				t.Helper()
+				capBytes := int64(5 << 40)
+				if got <= 0 {
+					t.Fatalf("prorate(5TiB, monthSecs-1, monthSecs) = %d, want positive (overflow?)", got)
+				}
+				if got > capBytes {
+					t.Fatalf("prorate(5TiB, monthSecs-1, monthSecs) = %d, want <= cap %d", got, capBytes)
+				}
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := prorate(c.capBytes, c.segSecs, c.monthSecs)
+			c.check(t, got)
+		})
+	}
+
+	// 一致性检查：在不会溢出的小输入上，prorate 必须和"先乘后除"的朴素算法
+	// 给出完全一样的结果——两段式拆分只是为了避开溢出，不能改变截断行为，
+	// 否则写路径（accrueQuotaTx）和读路径（monthlyTrafficCap）对同一笔额度
+	// 的算法要是碰巧走到不同分支，就会悄悄对不上。
+	t.Run("matches naive cap*segSecs/monthSecs on small inputs", func(t *testing.T) {
+		small := []struct{ capBytes, segSecs, monthSecs int64 }{
+			{1073741824, 1296000, 2592000},  // 1 GiB 档，半个月
+			{322122547200, 700000, 2678400}, // 300 GiB 档（plus 月流量），任意段
+			{7, 3, 5},                       // 会产生非零余数的小数字
+			{1000000, 2592000, 2592000},     // 整段等于整月
+		}
+		for _, s := range small {
+			got := prorate(s.capBytes, s.segSecs, s.monthSecs)
+			want := s.capBytes * s.segSecs / s.monthSecs
+			if got != want {
+				t.Fatalf("prorate(%d, %d, %d) = %d, want %d (naive cap*segSecs/monthSecs)",
+					s.capBytes, s.segSecs, s.monthSecs, got, want)
+			}
+		}
+	})
+}
+
+// wantExact 断言 prorate 的结果恰好等于 want。
+func wantExact(want int64) func(t *testing.T, got int64) {
+	return func(t *testing.T, got int64) {
+		t.Helper()
+		if got != want {
+			t.Fatalf("prorate result = %d, want exactly %d", got, want)
+		}
+	}
+}
+
+// wantApprox 断言 prorate 的结果落在 [want-tolerance, want+tolerance] 区间内，
+// 用于半个月这类必然带整数除法截断误差的场景。
+func wantApprox(want, tolerance int64) func(t *testing.T, got int64) {
+	return func(t *testing.T, got int64) {
+		t.Helper()
+		diff := got - want
+		if diff < -tolerance || diff > tolerance {
+			t.Fatalf("prorate result = %d, want within ±%d of %d", got, tolerance, want)
+		}
 	}
 }
