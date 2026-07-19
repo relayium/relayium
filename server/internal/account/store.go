@@ -331,6 +331,22 @@ type AdminMetrics struct {
 	RelayBytes        int64 // 选定月中继合计
 }
 
+// AdminCredential is one registered admin passkey. CredJSON holds the full
+// webauthn.Credential record (public key, sign counter, flags, transports,
+// attestation) as JSON: the library requires the whole record be preserved and
+// written back after each successful login, so it is not split into columns.
+// UserHandle is the WebAuthn user ID, identical across all rows and
+// deliberately decoupled from RELAYIUM_ADMIN_USER so renaming the admin does
+// not silently invalidate every registered passkey.
+type AdminCredential struct {
+	ID         string
+	UserHandle []byte
+	CredJSON   []byte
+	Name       string
+	CreatedAt  int64
+	LastUsedAt int64
+}
+
 // Store is the only abstraction that touches persistent storage. Implemented by
 // SQLiteStore today; a Postgres impl could replace it without changing callers.
 type Store interface {
@@ -586,4 +602,15 @@ type Store interface {
 	UserMonthlyUpDown(ctx context.Context, userID, period string) (int64, error)
 	CurrentStorage(ctx context.Context, userID string, now int64) (int64, error)
 	GlobalStorageUsed(ctx context.Context, now int64) (int64, error)
+	// admin passkeys
+	ListAdminCredentials(ctx context.Context) ([]AdminCredential, error)
+	GetAdminCredential(ctx context.Context, id string) (AdminCredential, bool, error)
+	InsertAdminCredential(ctx context.Context, c AdminCredential) error
+	// TouchAdminCredential writes back the updated credential record and the
+	// last-used timestamp after a successful login.
+	TouchAdminCredential(ctx context.Context, id string, credJSON []byte, lastUsedAt int64) error
+	DeleteAdminCredential(ctx context.Context, id string) error
+	// AdminUserHandle returns the shared WebAuthn user handle, ok=false when no
+	// credential is registered yet (the first registration mints one).
+	AdminUserHandle(ctx context.Context) ([]byte, bool, error)
 }

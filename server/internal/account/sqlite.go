@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -211,6 +212,14 @@ CREATE TABLE IF NOT EXISTS plans (
   sort_order     INTEGER NOT NULL DEFAULT 0,
   active         INTEGER NOT NULL DEFAULT 1,
   updated_at     INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS admin_credentials (
+  id           TEXT PRIMARY KEY,
+  user_handle  BLOB NOT NULL,
+  cred_json    BLOB NOT NULL,
+  name         TEXT NOT NULL,
+  created_at   INTEGER NOT NULL,
+  last_used_at INTEGER NOT NULL DEFAULT 0
 );
 `
 
@@ -2567,4 +2576,71 @@ func (s *SQLiteStore) TouchCLIToken(ctx context.Context, tokenHash string, at in
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE cli_tokens SET last_seen_at = ? WHERE token_hash = ?`, at, tokenHash)
 	return err
+}
+
+func (s *SQLiteStore) ListAdminCredentials(ctx context.Context) ([]AdminCredential, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, user_handle, cred_json, name, created_at, last_used_at
+FROM admin_credentials ORDER BY created_at, id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AdminCredential
+	for rows.Next() {
+		var c AdminCredential
+		if err := rows.Scan(&c.ID, &c.UserHandle, &c.CredJSON, &c.Name, &c.CreatedAt, &c.LastUsedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) GetAdminCredential(ctx context.Context, id string) (AdminCredential, bool, error) {
+	var c AdminCredential
+	err := s.db.QueryRowContext(ctx, `
+SELECT id, user_handle, cred_json, name, created_at, last_used_at
+FROM admin_credentials WHERE id = ?`, id).
+		Scan(&c.ID, &c.UserHandle, &c.CredJSON, &c.Name, &c.CreatedAt, &c.LastUsedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return AdminCredential{}, false, nil
+	}
+	if err != nil {
+		return AdminCredential{}, false, err
+	}
+	return c, true, nil
+}
+
+func (s *SQLiteStore) InsertAdminCredential(ctx context.Context, c AdminCredential) error {
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO admin_credentials (id, user_handle, cred_json, name, created_at, last_used_at)
+VALUES (?, ?, ?, ?, ?, ?)`,
+		c.ID, c.UserHandle, c.CredJSON, c.Name, c.CreatedAt, c.LastUsedAt)
+	return err
+}
+
+func (s *SQLiteStore) TouchAdminCredential(ctx context.Context, id string, credJSON []byte, lastUsedAt int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE admin_credentials SET cred_json = ?, last_used_at = ? WHERE id = ?`,
+		credJSON, lastUsedAt, id)
+	return err
+}
+
+func (s *SQLiteStore) DeleteAdminCredential(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM admin_credentials WHERE id = ?`, id)
+	return err
+}
+
+func (s *SQLiteStore) AdminUserHandle(ctx context.Context) ([]byte, bool, error) {
+	var h []byte
+	err := s.db.QueryRowContext(ctx,
+		`SELECT user_handle FROM admin_credentials ORDER BY created_at, id LIMIT 1`).Scan(&h)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return h, true, nil
 }
