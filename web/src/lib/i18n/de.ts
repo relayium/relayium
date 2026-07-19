@@ -266,7 +266,7 @@ const de: Messages = {
     errGeneric: "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
     backHome: "Zurück zur Startseite",
   },
-  nav: { lanTab: "LAN", crossTab: "Echtzeit", offlineTab: "Asynchron", cliTab: "CLI" },
+  nav: { lanTab: "LAN", crossTab: "Echtzeit", offlineTab: "Asynchron", cliTab: "CLI", appsTab: "Apps" },
   crossTitle: "Echtzeit-Direkt",
   offlineTitle: "Asynchron senden",
   cli: { subtitle: "Dateien vom Terminal übertragen — Ende-zu-Ende-verschlüsselt, selbst hostbar." },
@@ -274,6 +274,24 @@ const de: Messages = {
     heading: "Lieber das Terminal?",
     blurb: "Installiere eine selbst-hostbare, Ende-zu-Ende-verschlüsselte Transfer-CLI mit einem Befehl.",
     cta: "CLI entdecken →",
+  },
+  appsPage: {
+    metaTitle: "Relayium holen — Apps für Web, CLI, macOS & iOS",
+    metaDesc:
+      "Relayium herunterladen: in jedem Browser nutzen, das Kommandozeilen-Tool installieren oder die nativen macOS- und iOS-Apps holen (in Kürze). Ende-zu-Ende-verschlüsselte Dateiübertragung auf jedem Gerät.",
+    heading: "Relayium holen",
+    subhead: "Eine Ende-zu-Ende-verschlüsselte Dateiübertragung, überall wo du arbeitest. Wähle deine Plattform.",
+    availableBadge: "Verfügbar",
+    comingSoonBadge: "Demnächst",
+    yourPlatformNote: (os) => `Sieht aus, als wärst du auf ${os} — unten hervorgehoben.`,
+    cliInstallLabel: "Im Terminal installieren:",
+    androidNote: "Auf Android? Nutze einfach die Web-App — sie läuft direkt im Browser, nichts zu installieren.",
+    cards: {
+      web: { name: "Web-App", desc: "Nichts zu installieren. In jedem modernen Browser auf jedem Betriebssystem öffnen und loslegen.", cta: "Web-App öffnen" },
+      cli: { name: "Kommandozeile", desc: "Skriptbare Übertragungen, Ordner-Sync und Server-zu-Server-Backups für macOS, Linux und Windows.", cta: "CLI-Doku & Installation" },
+      mac: { name: "macOS-App", desc: "Eine echte native Menüleisten-App (com.relayium.mac). Signiert & notariell beglaubigt für die Ein-Klick-Installation — in Arbeit." },
+      ios: { name: "iOS-App", desc: "Eine native iPhone- & iPad-App (com.relayium.app) mit Versand über das Teilen-Menü. Kommt in den App Store." },
+    },
   },
   cliPage: {
     badges: ["Kostenloses P2P", "Ende-zu-Ende-verschlüsselt", "Selbst hostbar"],
