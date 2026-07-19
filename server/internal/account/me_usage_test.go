@@ -23,6 +23,13 @@ func TestMeUsageReportsMonthToDate(t *testing.T) {
 	if err := store.RecordMeter(t.Context(), u.ID, MeterUpload, 500, now); err != nil {
 		t.Fatalf("RecordMeter: %v", err)
 	}
+	// 再记一笔上个月（必定跨 period）的用量。它存在的唯一目的是钉死
+	// 「当月 vs 终身」这个区别：如果 handler 回退成终身累计，下面的
+	// traffic.used 断言就会从 500 变成 7500 而失败。不要把它当无关噪音删掉。
+	lastMonth := now - 40*86400
+	if err := store.RecordMeter(t.Context(), u.ID, MeterUpload, 7000, lastMonth); err != nil {
+		t.Fatalf("RecordMeter (last month): %v", err)
+	}
 
 	req, _ := http.NewRequest("GET", ts.URL+"/api/me/usage", nil)
 	req.AddCookie(cookie)
@@ -51,7 +58,7 @@ func TestMeUsageReportsMonthToDate(t *testing.T) {
 		t.Fatalf("resetsAt = %d, want %d (end of the current month)", body.ResetsAt, wantEnd)
 	}
 	if body.Traffic.Used != 500 {
-		t.Fatalf("traffic.used = %d, want 500", body.Traffic.Used)
+		t.Fatalf("traffic.used = %d, want 500 — 上个月的 7000 字节不得计入当月用量（回归成终身累计会得到 7500）", body.Traffic.Used)
 	}
 	if body.Traffic.Cap != 1073741824 {
 		t.Fatalf("traffic.cap = %d, want 1073741824 (free tier)", body.Traffic.Cap)
