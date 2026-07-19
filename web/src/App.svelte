@@ -64,6 +64,7 @@
     offline: () => import("./lib/OfflinePage.svelte"),
     me: () => import("./lib/MePage.svelte"),
     cli: () => import("./lib/CliPage.svelte"),
+    apps: () => import("./lib/AppsPage.svelte"),
     pricing: () => import("./lib/PricingPage.svelte"),
     "verify-email": () => import("./lib/VerifyEmail.svelte"),
     "reset-password": () => import("./lib/ResetPassword.svelte"),
@@ -237,6 +238,7 @@
   // realtime peer is connected. Never on the download page.
   const surfaceShown = $derived(
     currentRoute() === "download" || currentRoute() === "offline" || currentRoute() === "me" || currentRoute() === "cli"
+    || currentRoute() === "apps"
     || currentRoute() === "pricing" || currentRoute() === "verify-email" || currentRoute() === "reset-password"
       ? false
       : currentRoute() === "cross"
@@ -1423,6 +1425,10 @@
   {:else if currentRoute() === "cli"}
     {#await routePage("cli") then { default: CliPage }}
       <CliPage />
+    {/await}
+  {:else if currentRoute() === "apps"}
+    {#await routePage("apps") then { default: AppsPage }}
+      <AppsPage />
     {/await}
   {:else if currentRoute() === "pricing"}
     {#await routePage("pricing") then { default: PricingPage }}
