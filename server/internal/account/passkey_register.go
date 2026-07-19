@@ -62,7 +62,10 @@ func (s *Service) handleAdminPasskeyRegisterBegin(w http.ResponseWriter, r *http
 	if name == "" {
 		name = "未命名设备"
 	}
-	creation, sess, err := rp.BeginRegistration(user, adminRegistrationOpts()...)
+	// Already-registered credentials go out as excludeCredentials so a device
+	// that already holds one refuses instead of silently replacing it — see
+	// adminRegistrationOpts for why that matters to last_used_at.
+	creation, sess, err := rp.BeginRegistration(user, adminRegistrationOpts(user.creds)...)
 	if err != nil {
 		log.Printf("passkey: BeginRegistration failed: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "无法发起注册"})

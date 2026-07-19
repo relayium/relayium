@@ -57,12 +57,29 @@ type passkeyCeremony struct {
 
 // adminRegistrationOpts pins registration to a discoverable credential with
 // user verification, which is what makes username-less one-tap login possible.
-func adminRegistrationOpts() []webauthn.RegistrationOption {
+//
+// existing must be the credentials already registered for this user. They are
+// passed to the authenticator as excludeCredentials so it refuses to mint a
+// second credential on a device that already holds one. Without that list a
+// platform authenticator asked for a *resident* credential under the same
+// (rpID, user.id) silently replaces the one it already has and hands back a new
+// credential ID — the superseded DB row then lives on forever with
+// last_used_at = 0. Since a never-used credential is this feature's only signal
+// for a planted backdoor, a merely careless double registration would otherwise
+// manufacture a permanent false positive on the single intrusion detector.
+// BeginRegistration never populates CredentialExcludeList on its own; this
+// option is the only thing that fills it.
+func adminRegistrationOpts(existing []webauthn.Credential) []webauthn.RegistrationOption {
+	exclude := make([]protocol.CredentialDescriptor, 0, len(existing))
+	for i := range existing {
+		exclude = append(exclude, existing[i].Descriptor())
+	}
 	return []webauthn.RegistrationOption{
 		webauthn.WithAuthenticatorSelection(protocol.AuthenticatorSelection{
 			ResidentKey:      protocol.ResidentKeyRequirementRequired,
 			UserVerification: protocol.VerificationRequired,
 		}),
+		webauthn.WithExclusions(exclude),
 	}
 }
 
@@ -171,6 +188,15 @@ func (s *Service) handleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.R
 	}
 	user, err := s.loadAdminPasskeyUser(r.Context())
 	if err != nil || len(user.creds) == 0 {
+		// A store failure and a genuinely empty table get the same response on
+		// purpose — the caller is unauthenticated and must not learn which.
+		// The operator, however, needs to tell a DB outage apart from "nobody
+		// registered a passkey yet", so the distinction goes to the log only.
+		if err != nil {
+			log.Printf("passkey: loading admin passkey user failed: %v", err)
+		} else {
+			log.Printf("passkey: login attempted with no credentials registered")
+		}
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "尚未注册 passkey"})
 		return
 	}

@@ -604,6 +604,10 @@ type Store interface {
 	GlobalStorageUsed(ctx context.Context, now int64) (int64, error)
 	// admin passkeys
 	ListAdminCredentials(ctx context.Context) ([]AdminCredential, error)
+	// CountAdminCredentials reports how many passkeys are registered without
+	// reading any credential material. The unauthenticated login page asks this
+	// on every render, so it must not pull cred_json blobs into memory.
+	CountAdminCredentials(ctx context.Context) (int, error)
 	GetAdminCredential(ctx context.Context, id string) (AdminCredential, bool, error)
 	InsertAdminCredential(ctx context.Context, c AdminCredential) error
 	// TouchAdminCredential writes back the updated credential record and the

@@ -440,6 +440,13 @@ func TestPasskeyCrossKindAttemptConsumesCeremony(t *testing.T) {
 	if err != nil {
 		t.Fatalf("login begin: %v", err)
 	}
+	// begin 必须真的成功过。若它返回 429/503，压根就不会有 ceremony 被建出来，
+	// 末尾那句 len(...)==0 会因为完全无关的理由通过——这个测试守的是安全边界，
+	// 不能允许它空转。
+	if bresp.StatusCode != http.StatusOK {
+		bresp.Body.Close()
+		t.Fatalf("login begin: status=%d want 200", bresp.StatusCode)
+	}
 	var opts struct {
 		PublicKey struct {
 			Challenge string `json:"challenge"`
@@ -448,6 +455,15 @@ func TestPasskeyCrossKindAttemptConsumesCeremony(t *testing.T) {
 	json.NewDecoder(bresp.Body).Decode(&opts)
 	cookies := bresp.Cookies()
 	bresp.Body.Close()
+
+	// 用错之前先确认确实有且只有这一枚 ceremony 在飞：这样末尾的 0 才代表
+	// "被吃掉了"，而不是"从来没有过"。
+	s.passkeyMu.Lock()
+	before := len(s.passkeyCeremonies)
+	s.passkeyMu.Unlock()
+	if before != 1 {
+		t.Fatalf("before cross-kind attempt: %d ceremonies alive, want exactly 1", before)
+	}
 
 	// 先拿去 register/finish 用错（被拒），ceremony 应当已被吃掉
 	rp, _ := s.adminRP()
@@ -464,7 +480,22 @@ func TestPasskeyCrossKindAttemptConsumesCeremony(t *testing.T) {
 	if err != nil {
 		t.Fatalf("register finish: %v", err)
 	}
+	// 必须是 kind 判别器那条 400（"注册已过期，请重试"）。只断言"非 200"是不够的：
+	// 401（未登录）、400（真的验签失败）都能让宽松断言过关，而那两条都说明请求
+	// 死在了别处，根本没触到跨 kind 这道门。
+	var werr struct {
+		Error string `json:"error"`
+	}
+	json.NewDecoder(wresp.Body).Decode(&werr)
 	wresp.Body.Close()
+	if wresp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("cross-kind register/finish: status=%d want 400", wresp.StatusCode)
+	}
+	if werr.Error != "注册已过期，请重试" {
+		t.Fatalf("cross-kind register/finish: error=%q want %q (a different message means the "+
+			"request was rejected somewhere other than the ceremony-kind check)",
+			werr.Error, "注册已过期，请重试")
+	}
 
 	// 同一枚 ceremony 现在连它本来的用途也不该再能用
 	s.passkeyMu.Lock()
@@ -472,6 +503,67 @@ func TestPasskeyCrossKindAttemptConsumesCeremony(t *testing.T) {
 	s.passkeyMu.Unlock()
 	if n != 0 {
 		t.Fatalf("cross-kind attempt left %d ceremonies alive; it must consume like any other finish", n)
+	}
+}
+
+// 第二次注册必须把已有凭据放进 excludeCredentials 下发。
+//
+// 平台认证器在同一个 (rpID, user.id) 下再造一枚 resident 凭据时，是「替换」而不是
+// 「新增」：旧凭据在设备上没了，返回的却是一个新 credential ID，于是库里那行旧记录
+// 永远留着且 last_used_at = 0。而「从未使用」正是本功能识别被植入凭据的唯一信号，
+// 所以一次无心的重复注册就会在唯一的入侵探测器上制造出永久误报。
+// go-webauthn 的 BeginRegistration 不会自己填 CredentialExcludeList，
+// 只有 webauthn.WithExclusions 会——这个测试盯的就是那一个选项。
+func TestPasskeyRegisterExcludesExistingCredentials(t *testing.T) {
+	srv, s := newAdminServer(t, "admin", "pw")
+	session := adminPasswordLogin(t, srv, s)
+	registerViaHTTP(t, srv, s, session, "MacBook")
+
+	rows, err := s.store.ListAdminCredentials(context.Background())
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("setup: rows=%d err=%v want exactly 1 credential", len(rows), err)
+	}
+	existingID := rows[0].ID
+
+	// 再发起一次注册，只看 begin 下发的创建参数，不必走完 finish。
+	breq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/register/begin",
+		strings.NewReader("username=admin&password=pw&name="+url.QueryEscape("第二台")))
+	breq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	breq.Header.Set("Origin", s.selfOrigin())
+	breq.AddCookie(session)
+	bresp, err := srv.Client().Do(breq)
+	if err != nil {
+		t.Fatalf("second register begin: %v", err)
+	}
+	defer bresp.Body.Close()
+	if bresp.StatusCode != http.StatusOK {
+		t.Fatalf("second register begin: status=%d want 200", bresp.StatusCode)
+	}
+	var opts struct {
+		PublicKey struct {
+			ExcludeCredentials []struct {
+				ID string `json:"id"`
+			} `json:"excludeCredentials"`
+		} `json:"publicKey"`
+	}
+	if err := json.NewDecoder(bresp.Body).Decode(&opts); err != nil {
+		t.Fatalf("decode creation options: %v", err)
+	}
+
+	if len(opts.PublicKey.ExcludeCredentials) == 0 {
+		t.Fatalf("second registration sent no excludeCredentials; the authenticator would " +
+			"silently replace the existing resident credential and strand its DB row at " +
+			"last_used_at = 0 (a permanent false positive on the planted-credential signal)")
+	}
+	var found bool
+	for _, c := range opts.PublicKey.ExcludeCredentials {
+		if c.ID == existingID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("excludeCredentials %v does not carry the registered credential %q",
+			opts.PublicKey.ExcludeCredentials, existingID)
 	}
 }
 

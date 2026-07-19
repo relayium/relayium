@@ -26,7 +26,7 @@ func registerTestPasskey(t *testing.T, s *Service) (*testAuthenticator, []byte) 
 		t.Fatalf("handle: %v", err)
 	}
 	user := &adminPasskeyUser{handle: handle, name: s.adminUser()}
-	_, sess, err := rp.BeginRegistration(user, adminRegistrationOpts()...)
+	_, sess, err := rp.BeginRegistration(user, adminRegistrationOpts(user.creds)...)
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}

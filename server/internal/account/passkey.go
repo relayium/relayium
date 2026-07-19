@@ -87,10 +87,10 @@ func (s *Service) adminPasskeyCount(ctx context.Context) int {
 	if s.store == nil {
 		return 0
 	}
-	rows, err := s.store.ListAdminCredentials(ctx)
+	n, err := s.store.CountAdminCredentials(ctx)
 	if err != nil {
-		log.Printf("passkey: ListAdminCredentials failed: %v (hiding passkey button)", err)
+		log.Printf("passkey: CountAdminCredentials failed: %v (hiding passkey button)", err)
 		return 0
 	}
-	return len(rows)
+	return n
 }

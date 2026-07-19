@@ -2597,6 +2597,16 @@ FROM admin_credentials ORDER BY created_at, id`)
 	return out, rows.Err()
 }
 
+// CountAdminCredentials counts rows without touching cred_json. The login page
+// renders this on every unauthenticated GET /admin, so reading credential
+// material just to take its length would let anyone drive repeated full reads
+// of it into memory.
+func (s *SQLiteStore) CountAdminCredentials(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM admin_credentials`).Scan(&n)
+	return n, err
+}
+
 func (s *SQLiteStore) GetAdminCredential(ctx context.Context, id string) (AdminCredential, bool, error) {
 	var c AdminCredential
 	err := s.db.QueryRowContext(ctx, `
