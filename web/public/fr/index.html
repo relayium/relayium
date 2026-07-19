@@ -53,6 +53,20 @@ ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
+.cta{transition:transform .18s ease,filter .18s ease}.cta:hover{transform:translateY(-1px);filter:brightness(1.06)}
+/* Pure-CSS staggered entrance — keeps these pages JS-free and crawlable while
+   still giving the content a little life on load. animation fill-mode:both ends
+   fully visible, so nothing is ever stuck hidden (no-JS, old browsers, or IO
+   quirks all resolve to visible). */
+.reveal{animation:sec-in .55s cubic-bezier(.22,1,.36,1) both}
+section.reveal:nth-of-type(1){animation-delay:.04s}
+section.reveal:nth-of-type(2){animation-delay:.11s}
+section.reveal:nth-of-type(3){animation-delay:.18s}
+section.reveal:nth-of-type(4){animation-delay:.25s}
+section.reveal:nth-of-type(5){animation-delay:.32s}
+@keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
 </style>
   </head>
   <body>
@@ -63,6 +77,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="pitch">Reliez deux appareils directement dans le navigateur ; les fichiers sont chiffrés de bout en bout et transférés bloc par bloc. Sur le même réseau, ils ne passent jamais par le serveur ; entre réseaux différents, ils transitent par un relais chiffré qui ne voit que du chiffré. Aucune installation, aucune inscription — ouvrez la page web et commencez.</p>
       <a class="cta" href="/?lang=fr">Démarrer le transfert</a>
 
+      <section class="reveal">
       <h2>Transférer en quatre étapes</h2>
       <ol class="steps">
         <li>Ouvrez relayium.com sur les deux appareils dans un navigateur moderne.</li>
@@ -70,7 +85,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li>Comparez sur les deux écrans le même code de vérification à 6 chiffres (SAS) et confirmez la correspondance pour écarter tout homme du milieu.</li>
         <li>Une connexion directe pair-à-pair s&#39;établit ; les fichiers sont transférés bloc par bloc, chiffrés en AES-256-GCM, et chaque fichier est vérifié en intégrité via SHA-256.</li>
       </ol>
+      </section>
 
+      <section class="reveal">
       <h2>Pourquoi Relayium</h2>
       <ul class="why">
         <li><b>Chiffré de bout en bout</b> — Échange de clés X25519 et AES-256-GCM par bloc ; les clés sont négociées uniquement entre les deux appareils et le serveur ne peut pas déchiffrer.</li>
@@ -79,7 +96,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li><b>Multiplateforme</b> — Windows, macOS, Linux, Android, iOS — un navigateur moderne suffit, aucune installation requise.</li>
         <li><b>Gratuit et open source</b> — Licence MIT ; le protocole et tout le code sont publics sur GitHub. Sur le même réseau, les transferts en temps réel ne nécessitent aucun compte ; pour s&#39;appairer entre réseaux différents, seul l&#39;expéditeur se connecte.</li>
       </ul>
+      </section>
 
+      <section class="reveal">
       <h2>En comparaison</h2>
       <div class="compare">
       <h3>Face à AirDrop</h3>
@@ -89,7 +108,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>Face à WeTransfer / stockage en ligne</h3>
       <p>WeTransfer et les stockages en ligne sont asynchrones et pratiques, mais l&#39;offre gratuite plafonne souvent à 2 Go et les fichiers sont téléversés sur leurs serveurs. Le mode temps réel de Relayium n&#39;a aucune limite de taille et ne stocke rien sur le serveur.</p>
       </div>
+      </section>
 
+      <section class="reveal">
       <h2>Questions fréquentes</h2>
       <h3>Est-ce gratuit ?</h3>
       <p>Oui. Relayium est open source sous licence MIT et s&#39;utilise sans aucun frais. Sur le même réseau, les transferts en temps réel ne demandent aucune connexion ; pour s&#39;appairer entre réseaux différents, seul l&#39;expéditeur doit se connecter — le destinataire n&#39;a jamais besoin de compte.</p>
@@ -103,9 +124,10 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>Le transfert direct en temps réel diffuse les données en flux, il n&#39;y a donc en pratique aucune limite stricte de taille (Chrome et Edge écrivent directement sur le disque ; Firefox et Safari mettent en mémoire tampon, environ 200 Mo par fichier sont conseillés). Jusqu&#39;à 1 000 fichiers par lot.</p>
       <h3>Quelle différence avec Snapdrop ?</h3>
       <p>Relayium ajoute un chiffrement de bout en bout au niveau applicatif et un code de vérification SAS, si bien qu&#39;un serveur de signalisation compromis ne peut ni écouter ni usurper. Il prend aussi en charge les transferts inter-réseaux et des liens de téléchargement optionnels à connaissance nulle.</p>
+      </section>
 
-      <h2>En savoir plus</h2>
-      <ul class="learn"><li><a href="/fr/compare/snapdrop">Relayium vs Snapdrop et PairDrop : quel transfert P2P sécurisé ?</a></li><li><a href="/fr/compare/airdrop">Relayium vs AirDrop : une alternative multiplateforme</a></li><li><a href="/fr/compare/wetransfer">Relayium vs WeTransfer : envoyer de gros fichiers sans serveur</a></li><li><a href="/fr/how-to/transfer-files-android-to-iphone">Transférer des fichiers d&#39;Android vers iPhone (sans câble)</a></li><li><a href="/fr/how-to/send-files-pc-to-phone-wirelessly">Envoyer des fichiers du PC au téléphone sans fil, sans câble ni appli</a></li><li><a href="/fr/how-to/send-large-files-without-cloud">Envoyer de gros fichiers sans le cloud</a></li><li><a href="/fr/guides/transfer-files-from-terminal">Transférer des fichiers depuis le terminal avec la CLI Relayium</a></li><li><a href="/fr/guides/back-up-a-server-over-ssh">Sauvegarder des fichiers sur son propre serveur via SSH avec la CLI Relayium</a></li><li><a href="/fr/guides/send-a-file-to-someone">Envoyer un fichier à quelqu&#39;un à travers les réseaux avec la CLI Relayium</a></li><li><a href="/fr/guides/server-to-server-transfers">Transferts serveur à serveur avec la CLI Relayium (daemon direct)</a></li><li><a href="/fr/guides/sync-a-large-folder-between-servers">Synchroniser un gros dossier entre deux serveurs (reprenable, en arrière-plan)</a></li><li><a href="/fr/guides/push-to-cloud-pull-on-another-computer">Envoyer des fichiers dans le cloud, les récupérer sur un autre ordinateur</a></li><li><a href="/fr/how-to/share-a-file-with-an-expiring-link">Partager un fichier avec un lien de téléchargement à expiration</a></li><li><a href="/fr/guides/self-host-relayium">Auto-héberger Relayium : gérez votre propre serveur de transfert</a></li><li><a href="/fr/how-to/send-files-between-two-computers-over-the-internet">Envoyer des fichiers entre deux ordinateurs par Internet</a></li><li><a href="/fr/compare/croc">Relayium vs croc : transfert de fichiers chiffré en terminal</a></li><li><a href="/fr/guides/how-relayium-encrypts-your-files">Comment Relayium chiffre vos fichiers de bout en bout</a></li><li><a href="/fr/compare/google-drive">Relayium vs Google Drive pour envoyer des fichiers</a></li><li><a href="/fr/compare/rsync">Relayium vs rsync : synchroniser des dossiers sans configurer SSH</a></li><li><a href="/fr/compare/firefox-send">La meilleure alternative à Firefox Send en 2026</a></li><li><a href="/fr/how-to/transfer-files-by-scanning-a-qr-code">Transférer des fichiers en scannant un code QR</a></li><li><a href="/fr/guides/receive-files-from-the-command-line">Recevoir des fichiers depuis la ligne de commande</a></li><li><a href="/fr/how-to/send-a-folder">Envoyer un dossier entier, pas seulement des fichiers</a></li><li><a href="/fr/guides/run-relayium-as-an-always-on-service">Faire tourner Relayium en service de réception permanent</a></li><li><a href="/fr/how-to/automate-server-backups">Automatiser les sauvegardes serveur chiffrées avec une tâche cron</a></li><li><a href="/fr/compare/localsend">Relayium vs LocalSend : quel transfert local choisir</a></li><li><a href="/fr/compare/scp">Relayium vs scp : transfert plus simple par SSH</a></li><li><a href="/fr/compare/magic-wormhole">Relayium vs magic-wormhole : transfert de fichiers CLI</a></li><li><a href="/fr/compare/nextcloud">Relayium vs Nextcloud pour l&#39;envoi de fichiers</a></li><li><a href="/fr/compare/dropbox">Relayium vs Dropbox pour envoyer un fichier</a></li><li><a href="/fr/how-to/airdrop-for-windows-and-android">AirDrop pour Windows, Linux et Android</a></li><li><a href="/fr/how-to/transfer-files-between-mac-and-windows">Transférer des fichiers entre un Mac et un PC Windows</a></li><li><a href="/fr/how-to/send-files-on-the-same-wifi">Envoyer des fichiers entre appareils sur le même Wi-Fi</a></li><li><a href="/fr/guides/what-is-peer-to-peer-file-transfer">Qu&#39;est-ce que le transfert de fichiers pair à pair ?</a></li><li><a href="/fr/guides/is-it-safe-to-send-files-over-the-internet">Est-il sûr d&#39;envoyer des fichiers sur Internet ?</a></li><li><a href="/fr/guides/bring-your-own-node">Bring Your Own Node : utilisez gratuitement le relais et le stockage de Relayium</a></li></ul>
+      <section class="reveal"><h2>En savoir plus</h2>
+      <ul class="learn"><li><a href="/fr/compare/snapdrop">Relayium vs Snapdrop et PairDrop : quel transfert P2P sécurisé ?</a></li><li><a href="/fr/compare/airdrop">Relayium vs AirDrop : une alternative multiplateforme</a></li><li><a href="/fr/compare/wetransfer">Relayium vs WeTransfer : envoyer de gros fichiers sans serveur</a></li><li><a href="/fr/how-to/transfer-files-android-to-iphone">Transférer des fichiers d&#39;Android vers iPhone (sans câble)</a></li><li><a href="/fr/how-to/send-files-pc-to-phone-wirelessly">Envoyer des fichiers du PC au téléphone sans fil, sans câble ni appli</a></li><li><a href="/fr/how-to/send-large-files-without-cloud">Envoyer de gros fichiers sans le cloud</a></li><li><a href="/fr/guides/transfer-files-from-terminal">Transférer des fichiers depuis le terminal avec la CLI Relayium</a></li><li><a href="/fr/guides/back-up-a-server-over-ssh">Sauvegarder des fichiers sur son propre serveur via SSH avec la CLI Relayium</a></li><li><a href="/fr/guides/send-a-file-to-someone">Envoyer un fichier à quelqu&#39;un à travers les réseaux avec la CLI Relayium</a></li><li><a href="/fr/guides/server-to-server-transfers">Transferts serveur à serveur avec la CLI Relayium (daemon direct)</a></li><li><a href="/fr/guides/sync-a-large-folder-between-servers">Synchroniser un gros dossier entre deux serveurs (reprenable, en arrière-plan)</a></li><li><a href="/fr/guides/push-to-cloud-pull-on-another-computer">Envoyer des fichiers dans le cloud, les récupérer sur un autre ordinateur</a></li><li><a href="/fr/how-to/share-a-file-with-an-expiring-link">Partager un fichier avec un lien de téléchargement à expiration</a></li><li><a href="/fr/guides/self-host-relayium">Auto-héberger Relayium : gérez votre propre serveur de transfert</a></li><li><a href="/fr/how-to/send-files-between-two-computers-over-the-internet">Envoyer des fichiers entre deux ordinateurs par Internet</a></li><li><a href="/fr/compare/croc">Relayium vs croc : transfert de fichiers chiffré en terminal</a></li><li><a href="/fr/guides/how-relayium-encrypts-your-files">Comment Relayium chiffre vos fichiers de bout en bout</a></li><li><a href="/fr/compare/google-drive">Relayium vs Google Drive pour envoyer des fichiers</a></li><li><a href="/fr/compare/rsync">Relayium vs rsync : synchroniser des dossiers sans configurer SSH</a></li><li><a href="/fr/compare/firefox-send">La meilleure alternative à Firefox Send en 2026</a></li><li><a href="/fr/how-to/transfer-files-by-scanning-a-qr-code">Transférer des fichiers en scannant un code QR</a></li><li><a href="/fr/guides/receive-files-from-the-command-line">Recevoir des fichiers depuis la ligne de commande</a></li><li><a href="/fr/how-to/send-a-folder">Envoyer un dossier entier, pas seulement des fichiers</a></li><li><a href="/fr/guides/run-relayium-as-an-always-on-service">Faire tourner Relayium en service de réception permanent</a></li><li><a href="/fr/how-to/automate-server-backups">Automatiser les sauvegardes serveur chiffrées avec une tâche cron</a></li><li><a href="/fr/compare/localsend">Relayium vs LocalSend : quel transfert local choisir</a></li><li><a href="/fr/compare/scp">Relayium vs scp : transfert plus simple par SSH</a></li><li><a href="/fr/compare/magic-wormhole">Relayium vs magic-wormhole : transfert de fichiers CLI</a></li><li><a href="/fr/compare/nextcloud">Relayium vs Nextcloud pour l&#39;envoi de fichiers</a></li><li><a href="/fr/compare/dropbox">Relayium vs Dropbox pour envoyer un fichier</a></li><li><a href="/fr/how-to/airdrop-for-windows-and-android">AirDrop pour Windows, Linux et Android</a></li><li><a href="/fr/how-to/transfer-files-between-mac-and-windows">Transférer des fichiers entre un Mac et un PC Windows</a></li><li><a href="/fr/how-to/send-files-on-the-same-wifi">Envoyer des fichiers entre appareils sur le même Wi-Fi</a></li><li><a href="/fr/guides/what-is-peer-to-peer-file-transfer">Qu&#39;est-ce que le transfert de fichiers pair à pair ?</a></li><li><a href="/fr/guides/is-it-safe-to-send-files-over-the-internet">Est-il sûr d&#39;envoyer des fichiers sur Internet ?</a></li><li><a href="/fr/guides/bring-your-own-node">Bring Your Own Node : utilisez gratuitement le relais et le stockage de Relayium</a></li></ul></section>
       <footer>
         <a href="/?lang=fr">← Relayium</a>
         <a href="/fr/guides">Guides</a>

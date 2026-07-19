@@ -53,6 +53,20 @@ ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
+.cta{transition:transform .18s ease,filter .18s ease}.cta:hover{transform:translateY(-1px);filter:brightness(1.06)}
+/* Pure-CSS staggered entrance — keeps these pages JS-free and crawlable while
+   still giving the content a little life on load. animation fill-mode:both ends
+   fully visible, so nothing is ever stuck hidden (no-JS, old browsers, or IO
+   quirks all resolve to visible). */
+.reveal{animation:sec-in .55s cubic-bezier(.22,1,.36,1) both}
+section.reveal:nth-of-type(1){animation-delay:.04s}
+section.reveal:nth-of-type(2){animation-delay:.11s}
+section.reveal:nth-of-type(3){animation-delay:.18s}
+section.reveal:nth-of-type(4){animation-delay:.25s}
+section.reveal:nth-of-type(5){animation-delay:.32s}
+@keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
 </style>
   </head>
   <body>
@@ -63,6 +77,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="pitch">Quand l&#39;autre personne n&#39;est pas en ligne, téléversez maintenant et partagez un lien. Votre navigateur chiffre avant l&#39;envoi ; le serveur ne conserve que du contenu chiffré qu&#39;il ne peut pas lire — la clé ne quitte jamais le lien.</p>
       <a class="cta" href="/offline-transfer?lang=fr">Téléverser un fichier</a>
 
+      <section class="reveal">
       <h2>Transférer en quatre étapes</h2>
       <ol class="steps">
         <li>Connectez-vous et choisissez un fichier — votre navigateur le chiffre localement avant que quoi que ce soit ne quitte l&#39;appareil.</li>
@@ -70,7 +85,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li>Partagez le lien de téléchargement (avec, en option, l&#39;autodestruction après lecture et une expiration de votre choix).</li>
         <li>Le destinataire ouvre le lien ; son navigateur récupère le contenu chiffré et le déchiffre avec la clé du lien.</li>
       </ol>
+      </section>
 
+      <section class="reveal">
       <h2>Pourquoi Relayium</h2>
       <ul class="why">
         <li><b>À divulgation nulle</b> — Le fichier est chiffré dans le navigateur ; le serveur ne détient jamais que du contenu chiffré qu&#39;il ne peut pas déchiffrer.</li>
@@ -80,7 +97,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li><b>Complément asynchrone</b> — Utilisez ceci quand l&#39;autre personne n&#39;est pas en ligne pour l&#39;instant ; utilisez le transfert inter-réseaux en temps réel quand les deux sont présentes.</li>
         <li><b>Aussi depuis le terminal</b> — Dans le terminal, relayium up téléverse et affiche le même lien, relayium down le récupère sur une autre machine — la CLI et le web partagent un seul lien.</li>
       </ul>
+      </section>
 
+      <section class="reveal">
       <h2>En comparaison</h2>
       <div class="compare">
       <h3>Face aux liens WeTransfer/Dropbox</h3>
@@ -88,8 +107,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>Face au mode temps réel</h3>
       <p>Le temps réel est pair-à-pair et exige que les deux parties soient en ligne ; ce mode stocke le fichier chiffré pour que le destinataire puisse le récupérer plus tard.</p>
       </div>
+      </section>
 
-      <h2>Questions fréquentes</h2>
+      <section class="reveal"><h2>Questions fréquentes</h2>
       <h3>Le serveur peut-il lire mon fichier ?</h3>
       <p>Non — il est chiffré dans votre navigateur ; le serveur ne stocke que du contenu chiffré, et la clé ne l&#39;atteint jamais.</p>
       <h3>Où se trouve la clé ?</h3>
@@ -97,10 +117,10 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>Ai-je besoin d&#39;un compte ?</h3>
       <p>Pour téléverser, oui (cela utilise du stockage). Pour télécharger, non — il suffit du lien.</p>
       <h3>Puis-je le rendre à usage unique ?</h3>
-      <p>Oui — activez l&#39;autodestruction après lecture et définissez une expiration.</p>
+      <p>Oui — activez l&#39;autodestruction après lecture et définissez une expiration.</p></section>
 
-      <h2>En savoir plus</h2>
-      <ul class="learn"><li><a href="/fr/guides/push-to-cloud-pull-on-another-computer">Envoyer des fichiers dans le cloud, les récupérer sur un autre ordinateur</a></li></ul>
+      <section class="reveal"><h2>En savoir plus</h2>
+      <ul class="learn"><li><a href="/fr/guides/push-to-cloud-pull-on-another-computer">Envoyer des fichiers dans le cloud, les récupérer sur un autre ordinateur</a></li></ul></section>
       <footer>
         <a href="/?lang=fr">← Relayium</a>
         <a href="/fr/privacy">Confidentialité</a>

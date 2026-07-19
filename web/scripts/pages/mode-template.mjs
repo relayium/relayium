@@ -77,24 +77,30 @@ function body(slug, lang, doc, articleLinks) {
       <p class="pitch">${esc(doc.hero.pitch)}</p>
       <a class="cta" href="/${slug}?lang=${lang}">${esc(doc.hero.cta)}</a>
 
+      <section class="reveal">
       <h2>${esc(doc.how.heading)}</h2>
       <ol class="steps">
         ${steps}
       </ol>
+      </section>
 
+      <section class="reveal">
       <h2>${esc(doc.why.heading)}</h2>
       <ul class="why">
         ${why}
       </ul>
+      </section>
 
+      <section class="reveal">
       <h2>${esc(doc.compare.heading)}</h2>
       <div class="compare">
       ${compare}
       </div>
+      </section>
 
-      ${doc.faq ? `<h2>${esc(doc.faq.heading)}</h2>\n      ${faq}` : ""}
+      ${doc.faq ? `<section class="reveal"><h2>${esc(doc.faq.heading)}</h2>\n      ${faq}</section>` : ""}
 
-      ${learn}`;
+      ${learn ? `<section class="reveal">${learn}</section>` : ""}`;
 }
 
 export function renderModePage({ slug, lang, doc, updated, articleLinks = [] }) {

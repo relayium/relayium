@@ -52,7 +52,7 @@
   }
 </script>
 
-<section class="reset">
+<section class="reset page-enter">
   {#if phase === "no-token"}
     <p class="msg err">{t.resetPassword.noToken}</p>
     <button type="button" class="btn-link" onclick={() => navigate("lan")}>{t.resetPassword.backHome}</button>

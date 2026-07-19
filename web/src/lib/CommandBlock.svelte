@@ -17,7 +17,7 @@
   <div class="bar">
     <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
     {#if title}<span class="title">{title}</span>{/if}
-    <button class="copy" onclick={copy} aria-label="Copy to clipboard">
+    <button class="copy" class:copied onclick={copy} aria-label="Copy to clipboard">
       {copied ? "Copied ✓" : "Copy"}
     </button>
   </div>
@@ -82,6 +82,13 @@
     color: var(--text-h);
     border-color: var(--accent-border);
   }
+  /* Success flash: the label pops and greens for its brief "Copied ✓" window. */
+  .copy.copied {
+    color: #2ecc71;
+    border-color: #2ecc71;
+    animation: pop-in .3s ease;
+  }
+  @media (prefers-reduced-motion: reduce) { .copy.copied { animation: none; } }
   pre {
     margin: 0;
     padding: var(--space-4);

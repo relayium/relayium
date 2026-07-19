@@ -53,6 +53,20 @@ ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
+.cta{transition:transform .18s ease,filter .18s ease}.cta:hover{transform:translateY(-1px);filter:brightness(1.06)}
+/* Pure-CSS staggered entrance — keeps these pages JS-free and crawlable while
+   still giving the content a little life on load. animation fill-mode:both ends
+   fully visible, so nothing is ever stuck hidden (no-JS, old browsers, or IO
+   quirks all resolve to visible). */
+.reveal{animation:sec-in .55s cubic-bezier(.22,1,.36,1) both}
+section.reveal:nth-of-type(1){animation-delay:.04s}
+section.reveal:nth-of-type(2){animation-delay:.11s}
+section.reveal:nth-of-type(3){animation-delay:.18s}
+section.reveal:nth-of-type(4){animation-delay:.25s}
+section.reveal:nth-of-type(5){animation-delay:.32s}
+@keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
 </style>
   </head>
   <body>
@@ -63,6 +77,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="pitch">当对方不在线时，先上传，再分享一个链接。你的浏览器会在上传前加密文件；服务器只保存它无法读取的密文——密钥始终只存在于链接里。</p>
       <a class="cta" href="/offline-transfer?lang=zh">上传文件</a>
 
+      <section class="reveal">
       <h2>四步完成一次传输</h2>
       <ol class="steps">
         <li>登录后选择一个文件——你的浏览器会在文件离开设备前于本地完成加密。</li>
@@ -70,7 +85,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li>分享这个下载链接（可选阅后即焚，以及你设定的有效期）。</li>
         <li>接收方打开链接后，其浏览器会获取密文，并用链接中的密钥解密。</li>
       </ol>
+      </section>
 
+      <section class="reveal">
       <h2>为什么选择 Relayium</h2>
       <ul class="why">
         <li><b>零知识</b> — 文件在浏览器里完成加密；服务器只经手它无法解密的密文。</li>
@@ -80,7 +97,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li><b>异步场景的补充</b> — 当对方暂时不在线时使用；若双方同时在线，可改用实时跨网络传输。</li>
         <li><b>也能用命令行</b> — 在终端里，relayium up 会上传并打印同一个链接，relayium down 在另一台机器上取回——CLI 与网页端共用同一条链接。</li>
       </ul>
+      </section>
 
+      <section class="reveal">
       <h2>与其他方式相比</h2>
       <div class="compare">
       <h3>对比 WeTransfer / Dropbox 链接</h3>
@@ -88,8 +107,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>对比实时模式</h3>
       <p>实时模式点对点直连，需要双方同时在线；这种模式则加密存储，方便接收方之后再取。</p>
       </div>
+      </section>
 
-      <h2>常见问题</h2>
+      <section class="reveal"><h2>常见问题</h2>
       <h3>服务器能读到我的文件吗？</h3>
       <p>不能——文件在你的浏览器里完成加密；服务器只保存密文，密钥永远不会到达服务器。</p>
       <h3>密钥在哪里？</h3>
@@ -97,10 +117,10 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>需要账号吗？</h3>
       <p>上传需要（会占用存储空间）。下载不需要——只要有链接即可。</p>
       <h3>能设置成只能下载一次吗？</h3>
-      <p>可以——开启阅后即焚，并设置有效期。</p>
+      <p>可以——开启阅后即焚，并设置有效期。</p></section>
 
-      <h2>深入了解</h2>
-      <ul class="learn"><li><a href="/zh/guides/push-to-cloud-pull-on-another-computer">在一台电脑上传到云端，在另一台电脑取回</a></li></ul>
+      <section class="reveal"><h2>深入了解</h2>
+      <ul class="learn"><li><a href="/zh/guides/push-to-cloud-pull-on-another-computer">在一台电脑上传到云端，在另一台电脑取回</a></li></ul></section>
       <footer>
         <a href="/?lang=zh">← Relayium</a>
         <a href="/zh/privacy">隐私政策</a>

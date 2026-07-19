@@ -53,6 +53,20 @@ ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
+.cta{transition:transform .18s ease,filter .18s ease}.cta:hover{transform:translateY(-1px);filter:brightness(1.06)}
+/* Pure-CSS staggered entrance — keeps these pages JS-free and crawlable while
+   still giving the content a little life on load. animation fill-mode:both ends
+   fully visible, so nothing is ever stuck hidden (no-JS, old browsers, or IO
+   quirks all resolve to visible). */
+.reveal{animation:sec-in .55s cubic-bezier(.22,1,.36,1) both}
+section.reveal:nth-of-type(1){animation-delay:.04s}
+section.reveal:nth-of-type(2){animation-delay:.11s}
+section.reveal:nth-of-type(3){animation-delay:.18s}
+section.reveal:nth-of-type(4){animation-delay:.25s}
+section.reveal:nth-of-type(5){animation-delay:.32s}
+@keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
 </style>
   </head>
   <body>
@@ -63,6 +77,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="pitch">Dois dispositivos em redes diferentes se emparelham com um código de 6 dígitos (ou seu link/QR). Os arquivos circulam por um canal criptografado através do retransmissor rápido do Relayium — o retransmissor só vê conteúdo cifrado, e as chaves nunca saem dos dois dispositivos.</p>
       <a class="cta" href="/cross-network?lang=pt">Iniciar transferência</a>
 
+      <section class="reveal">
       <h2>Transferir em quatro passos</h2>
       <ol class="steps">
         <li>O remetente faz login e gera um código de emparelhamento de 6 dígitos (ou compartilha seu link de acesso/QR).</li>
@@ -70,7 +85,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li>As duas partes verificam na tela o mesmo código SAS de 6 dígitos para descartar qualquer intermediário.</li>
         <li>Os arquivos são transferidos com criptografia de ponta a ponta (AES-256-GCM por bloco) através do retransmissor rápido do Relayium, que só transporta conteúdo cifrado que não consegue ler.</li>
       </ol>
+      </section>
 
+      <section class="reveal">
       <h2>Por que o Relayium</h2>
       <ul class="why">
         <li><b>Criptografia de ponta a ponta</b> — Troca de chaves X25519 e AES-256-GCM por bloco; as chaves são negociadas apenas entre os dois dispositivos, de modo que nem o retransmissor nem o servidor conseguem descriptografar.</li>
@@ -79,7 +96,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li><b>Multiplataforma</b> — Windows, macOS, Linux, Android, iOS — basta um navegador moderno, nada a instalar.</li>
         <li><b>Gratuito</b> — Gratuito dentro de uma cota mensal de tráfego de retransmissor; gerar um código exige que o remetente esteja com login feito, o destinatário entra de forma anônima.</li>
       </ul>
+      </section>
 
+      <section class="reveal">
       <h2>Em comparação</h2>
       <div class="compare">
       <h3>Comparado ao AirDrop</h3>
@@ -87,8 +106,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>Comparado ao Snapdrop / PairDrop</h3>
       <p>Esses só funcionam na mesma rede; o Relayium acrescenta o emparelhamento entre redes, além de uma criptografia de ponta a ponta na camada de aplicação e um código SAS, de modo que um retransmissor ou um servidor de sinalização comprometido não consegue espionar.</p>
       </div>
+      </section>
 
-      <h2>Perguntas frequentes</h2>
+      <section class="reveal"><h2>Perguntas frequentes</h2>
       <h3>Meus arquivos passam pelo servidor de vocês?</h3>
       <p>O fluxo criptografado passa pelo retransmissor do Relayium para garantir uma conexão confiável entre redes — mas tudo é criptografado de ponta a ponta, então o retransmissor só vê conteúdo cifrado que não consegue ler.</p>
       <h3>Um código é obrigatório?</h3>
@@ -96,7 +116,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>Preciso de uma conta?</h3>
       <p>O remetente faz login para gerar um código; o destinatário entra de forma anônima.</p>
       <h3>É criptografia de ponta a ponta?</h3>
-      <p>Sim — X25519 e AES-256-GCM por bloco, verificado com o código SAS; nem o retransmissor nem o servidor conseguem descriptografar.</p>
+      <p>Sim — X25519 e AES-256-GCM por bloco, verificado com o código SAS; nem o retransmissor nem o servidor conseguem descriptografar.</p></section>
 
       
       <footer>

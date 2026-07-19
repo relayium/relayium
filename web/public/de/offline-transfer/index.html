@@ -53,6 +53,20 @@ ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
+.cta{transition:transform .18s ease,filter .18s ease}.cta:hover{transform:translateY(-1px);filter:brightness(1.06)}
+/* Pure-CSS staggered entrance — keeps these pages JS-free and crawlable while
+   still giving the content a little life on load. animation fill-mode:both ends
+   fully visible, so nothing is ever stuck hidden (no-JS, old browsers, or IO
+   quirks all resolve to visible). */
+.reveal{animation:sec-in .55s cubic-bezier(.22,1,.36,1) both}
+section.reveal:nth-of-type(1){animation-delay:.04s}
+section.reveal:nth-of-type(2){animation-delay:.11s}
+section.reveal:nth-of-type(3){animation-delay:.18s}
+section.reveal:nth-of-type(4){animation-delay:.25s}
+section.reveal:nth-of-type(5){animation-delay:.32s}
+@keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
 </style>
   </head>
   <body>
@@ -63,6 +77,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="pitch">Wenn die andere Seite nicht online ist: jetzt hochladen und einen Link teilen. Dein Browser verschlüsselt vor dem Upload; der Server behält nur Chiffretext, den er nicht lesen kann — der Schlüssel verlässt nie den Link.</p>
       <a class="cta" href="/offline-transfer?lang=de">Datei hochladen</a>
 
+      <section class="reveal">
       <h2>In vier Schritten übertragen</h2>
       <ol class="steps">
         <li>Melde dich an und wähle eine Datei — dein Browser verschlüsselt sie lokal, bevor irgendetwas das Gerät verlässt.</li>
@@ -70,7 +85,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li>Teile den Download-Link (optional mit Löschung nach dem ersten Download und einer selbst gewählten Ablaufzeit).</li>
         <li>Die empfangende Person öffnet den Link; ihr Browser lädt den Chiffretext und entschlüsselt ihn mit dem Schlüssel aus dem Link.</li>
       </ol>
+      </section>
 
+      <section class="reveal">
       <h2>Warum Relayium</h2>
       <ul class="why">
         <li><b>Zero-Knowledge</b> — Die Datei wird im Browser verschlüsselt; der Server hält immer nur Chiffretext, den er nicht entschlüsseln kann.</li>
@@ -80,7 +97,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li><b>Ergänzung für asynchrone Fälle</b> — Nutze dies, wenn die andere Seite gerade nicht online ist; für Echtzeit-Transfers über Netzwerke hinweg, wenn beide Seiten da sind.</li>
         <li><b>Auch vom Terminal</b> — Im Terminal lädt relayium up hoch und gibt denselben Link aus, relayium down holt ihn auf einem anderen Rechner ab — CLI und Web teilen sich einen Link.</li>
       </ul>
+      </section>
 
+      <section class="reveal">
       <h2>Im Vergleich</h2>
       <div class="compare">
       <h3>Gegenüber WeTransfer-/Dropbox-Links</h3>
@@ -88,8 +107,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>Gegenüber dem Echtzeitmodus</h3>
       <p>Echtzeit ist Peer-to-Peer und braucht beide Seiten online; dieser Modus speichert verschlüsselt, damit die empfangende Person später abrufen kann.</p>
       </div>
+      </section>
 
-      <h2>Häufige Fragen</h2>
+      <section class="reveal"><h2>Häufige Fragen</h2>
       <h3>Kann der Server meine Datei lesen?</h3>
       <p>Nein — sie wird in deinem Browser verschlüsselt; der Server speichert nur Chiffretext, und der Schlüssel erreicht ihn nie.</p>
       <h3>Wo ist der Schlüssel?</h3>
@@ -97,10 +117,10 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>Brauche ich ein Konto?</h3>
       <p>Zum Hochladen ja (es nutzt Speicherplatz). Zum Herunterladen nein — nur der Link genügt.</p>
       <h3>Kann ich es einmalig machen?</h3>
-      <p>Ja — aktiviere Löschung nach dem ersten Download und setze eine Ablaufzeit.</p>
+      <p>Ja — aktiviere Löschung nach dem ersten Download und setze eine Ablaufzeit.</p></section>
 
-      <h2>Mehr erfahren</h2>
-      <ul class="learn"><li><a href="/de/guides/push-to-cloud-pull-on-another-computer">Dateien in die Cloud laden und auf einem anderen Computer abholen</a></li></ul>
+      <section class="reveal"><h2>Mehr erfahren</h2>
+      <ul class="learn"><li><a href="/de/guides/push-to-cloud-pull-on-another-computer">Dateien in die Cloud laden und auf einem anderen Computer abholen</a></li></ul></section>
       <footer>
         <a href="/?lang=de">← Relayium</a>
         <a href="/de/privacy">Datenschutz</a>

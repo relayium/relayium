@@ -19,7 +19,7 @@
   const cloudGuideHref = $derived(lang() === "en" ? `/${cloudGuideSlug}` : `/${lang()}/${cloudGuideSlug}`);
 </script>
 
-<section class="offlinepage">
+<section class="offlinepage page-enter">
   <!-- Sign-in for this login-gated flow lives in the top nav (Nav.svelte renders
        the Account control for cross/offline/me); the two free pages never show
        an account concept at all. -->

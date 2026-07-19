@@ -1,5 +1,6 @@
 <script lang="ts">
   import { lang, messages, type Messages } from "./i18n.svelte";
+  import { reveal } from "./reveal";
   let { variant }: { variant: "realtime" | "offline" } = $props();
   const t = $derived<Messages>(messages[lang()]);
   const sec = $derived(t.howItWorks[variant]);
@@ -12,7 +13,7 @@
   </div>
   <ol class="ways">
     {#each sec.ways as w, i (w.name)}
-      <li class="way">
+      <li class="way reveal" use:reveal={{ delay: i * 70 }}>
         <span class="step">{i + 1}</span>
         <span class="icon" aria-hidden="true">{w.icon}</span>
         <h3>{w.name}</h3>

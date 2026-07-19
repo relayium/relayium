@@ -53,6 +53,20 @@ ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
+.cta{transition:transform .18s ease,filter .18s ease}.cta:hover{transform:translateY(-1px);filter:brightness(1.06)}
+/* Pure-CSS staggered entrance — keeps these pages JS-free and crawlable while
+   still giving the content a little life on load. animation fill-mode:both ends
+   fully visible, so nothing is ever stuck hidden (no-JS, old browsers, or IO
+   quirks all resolve to visible). */
+.reveal{animation:sec-in .55s cubic-bezier(.22,1,.36,1) both}
+section.reveal:nth-of-type(1){animation-delay:.04s}
+section.reveal:nth-of-type(2){animation-delay:.11s}
+section.reveal:nth-of-type(3){animation-delay:.18s}
+section.reveal:nth-of-type(4){animation-delay:.25s}
+section.reveal:nth-of-type(5){animation-delay:.32s}
+@keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
 </style>
   </head>
   <body>
@@ -63,6 +77,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="pitch">異なるネットワーク上の2台の端末が、6桁のコード（またはその参加リンク/QR）でペアリングします。ファイルは暗号化されたチャネルを通じて、Relayiumの高速リレーを経由して流れます——リレーが目にするのは暗号文だけで、鍵は常に2台の端末間にとどまります。</p>
       <a class="cta" href="/cross-network?lang=ja">転送を始める</a>
 
+      <section class="reveal">
       <h2>4ステップで転送</h2>
       <ol class="steps">
         <li>送信側がサインインし、6桁のペアリングコードを発行します（参加リンク/QRの共有も可能）。</li>
@@ -70,7 +85,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li>両方の画面に表示される同じ6桁のSASコードを照合し、中間者がいないことを確認します。</li>
         <li>ファイルはエンドツーエンドで暗号化され（チャンクごとにAES-256-GCM）、Relayiumの高速リレーを経由してストリーミング転送されます。リレーは復号できない暗号文しか扱いません。</li>
       </ol>
+      </section>
 
+      <section class="reveal">
       <h2>Relayiumが選ばれる理由</h2>
       <ul class="why">
         <li><b>エンドツーエンド暗号化</b> — X25519鍵交換とチャンクごとのAES-256-GCM。鍵は2台の端末間だけでネゴシエートされ、リレーもサーバーも復号できません。</li>
@@ -79,7 +96,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li><b>クロスプラットフォーム</b> — Windows・macOS・Linux・Android・iOS——モダンブラウザさえあればインストール不要です。</li>
         <li><b>無料</b> — 月々の中継トラフィック枠の範囲内で無料で利用できます。コードの発行には送信側のサインインが必要で、受信側は匿名のまま参加できます。</li>
       </ul>
+      </section>
 
+      <section class="reveal">
       <h2>他の方法との比較</h2>
       <div class="compare">
       <h3>AirDropとの比較</h3>
@@ -87,8 +106,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>Snapdrop / PairDropとの比較</h3>
       <p>それらは同一ネットワーク限定です。Relayiumはネットワークをまたぐペアリングに加え、アプリケーション層のエンドツーエンド暗号化とSASコードを備え、リレーやシグナリングサーバーが侵害されていても盗聴できません。</p>
       </div>
+      </section>
 
-      <h2>よくある質問</h2>
+      <section class="reveal"><h2>よくある質問</h2>
       <h3>ファイルは御社のサーバーを経由しますか？</h3>
       <p>暗号化されたデータストリームはRelayiumのリレーを経由し、ネットワークをまたいでも確実に接続できるようにしています——ただしエンドツーエンドで暗号化されているため、リレーが目にするのは復号できない暗号文だけです。</p>
       <h3>コードは必須ですか？</h3>
@@ -96,7 +116,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>アカウントは必要ですか？</h3>
       <p>送信側はコードを発行するためにサインインが必要ですが、受信側は匿名で参加できます。</p>
       <h3>エンドツーエンド暗号化されていますか？</h3>
-      <p>はい——X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、SASコードで検証します。リレーもサーバーも復号できません。</p>
+      <p>はい——X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、SASコードで検証します。リレーもサーバーも復号できません。</p></section>
 
       
       <footer>

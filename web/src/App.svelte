@@ -45,6 +45,7 @@
   import { outbox, setOutbox, takeOutbox, clearOutbox } from "./lib/outbox.svelte";
   import { shouldConfirmBeforeSend } from "./lib/confirm-send";
   import { folderUploadSupported } from "./lib/platform";
+  import { reveal } from "./lib/reveal";
   import Nav from "./lib/Nav.svelte";
   import { currentRoute, syncRouteFromLocation, downloadId, navigate, setNavGuard, PRICING_PATH } from "./lib/router.svelte";
   import Hero from "./lib/Hero.svelte";
@@ -1391,7 +1392,7 @@
 {/snippet}
 
   {#if surfaceShown && dragActive && dropTarget(visiblePeers.length, busy) !== "off"}
-    <div class="dropzone">
+    <div class="dropzone" transition:fade={{ duration: 140 }}>
       <div class="dropzone-inner">
         {dropTarget(visiblePeers.length, busy) === "send"
           ? t.dragSendOne(visiblePeers[0].name)
@@ -1468,7 +1469,7 @@
 
     <HowToSteps maxFiles={MAX_FILES} />
 
-    <section class="crosscta">
+    <section class="crosscta reveal" use:reveal>
       <div class="cc-text">
         <h3>{t.homeCross.title}</h3>
         <p>{t.homeCross.desc}</p>
@@ -1582,7 +1583,11 @@
     margin-bottom: 16px;
     background: var(--social-bg);
   }
-  .card.ok { border-color: #2ecc71; }
+  .card.ok { border-color: #2ecc71; animation: card-ok-pop .55s ease-out; }
+  @keyframes card-ok-pop {
+    0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, .45); }
+    100% { box-shadow: 0 0 0 7px rgba(46, 204, 113, 0); }
+  }
   .card.bad { border-color: var(--accent-border); }
   .card.request { border-color: var(--accent-border); background: var(--accent-bg); }
 
@@ -1633,12 +1638,36 @@
   }
 
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; }
-  .fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--accent-deep)); transition: width .2s ease; }
+  /* A translucent sheen sweeps across the filled portion so an in-flight transfer
+     reads as actively moving, not stalled. The fill only renders while !done. */
+  .fill {
+    height: 100%; border-radius: 999px;
+    background:
+      linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, .35) 50%, transparent 100%),
+      linear-gradient(90deg, var(--accent), var(--accent-deep));
+    background-size: 40% 100%, 100% 100%;
+    background-repeat: no-repeat;
+    transition: width .2s ease;
+    animation: fill-sheen 1.4s linear infinite;
+  }
+  @keyframes fill-sheen {
+    from { background-position: -45% 0, 0 0; }
+    to   { background-position: 145% 0, 0 0; }
+  }
   .meta { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 12.5px; color: var(--text); }
   .meta-right { display: inline-flex; align-items: center; gap: 12px; }
   /* Connection-path badge: a coloured dot + label. Green LAN, blue P2P, orange relay. */
   .path { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-  .path .dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; flex: none; }
+  .path .dot {
+    width: 7px; height: 7px; border-radius: 999px; background: currentColor; flex: none;
+    animation: dot-pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes dot-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) {
+    .fill { animation: none; background: linear-gradient(90deg, var(--accent), var(--accent-deep)); }
+    .path .dot { animation: none; }
+    .card.ok { animation: none; }
+  }
   .path-lan { color: #16a34a; }
   .path-p2p { color: #2563eb; }
   .path-relay { color: #d97706; }
@@ -1728,7 +1757,18 @@
     border: 2px dashed var(--accent); color: var(--text-h);
     background: var(--bg); box-shadow: var(--shadow);
     font-size: 18px; font-weight: 500;
+    animation: dz-pop .28s cubic-bezier(.22, 1, .36, 1), dz-breathe 1.8s ease-in-out .28s infinite;
   }
+  /* Pop in on grab, then a slow accent breathe so the target reads as "live". */
+  @keyframes dz-pop {
+    0% { opacity: 0; transform: scale(.9); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  @keyframes dz-breathe {
+    0%, 100% { box-shadow: var(--shadow), 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); }
+    50% { box-shadow: var(--shadow), 0 0 0 6px color-mix(in srgb, var(--accent) 0%, transparent); }
+  }
+  @media (prefers-reduced-motion: reduce) { .dropzone-inner { animation: none; } }
   .peers ul.dragging .peer { border-color: var(--accent-border); background: var(--accent-bg); }
 
   /* ?debug=1 connection diagnostics — fixed, unobtrusive, monospace. */

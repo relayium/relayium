@@ -53,6 +53,20 @@ ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
+.cta{transition:transform .18s ease,filter .18s ease}.cta:hover{transform:translateY(-1px);filter:brightness(1.06)}
+/* Pure-CSS staggered entrance — keeps these pages JS-free and crawlable while
+   still giving the content a little life on load. animation fill-mode:both ends
+   fully visible, so nothing is ever stuck hidden (no-JS, old browsers, or IO
+   quirks all resolve to visible). */
+.reveal{animation:sec-in .55s cubic-bezier(.22,1,.36,1) both}
+section.reveal:nth-of-type(1){animation-delay:.04s}
+section.reveal:nth-of-type(2){animation-delay:.11s}
+section.reveal:nth-of-type(3){animation-delay:.18s}
+section.reveal:nth-of-type(4){animation-delay:.25s}
+section.reveal:nth-of-type(5){animation-delay:.32s}
+@keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
 </style>
   </head>
   <body>
@@ -63,6 +77,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="pitch">Zwei Geräte in unterschiedlichen Netzwerken koppeln sich mit einem 6-stelligen Code (oder dessen Beitrittslink/QR). Dateien fließen über einen verschlüsselten Kanal durch Relayiums schnelles Relay — das Relay sieht dabei ausschließlich Chiffretext, die Schlüssel verlassen nie die beiden Geräte.</p>
       <a class="cta" href="/cross-network?lang=de">Übertragung starten</a>
 
+      <section class="reveal">
       <h2>In vier Schritten übertragen</h2>
       <ol class="steps">
         <li>Der Absender meldet sich an und erzeugt einen 6-stelligen Kopplungscode (oder teilt dessen Beitrittslink/QR).</li>
@@ -70,7 +85,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li>Beide Seiten vergleichen denselben 6-stelligen SAS-Code auf dem Bildschirm, um einen Mittelsmann auszuschließen.</li>
         <li>Dateien werden Ende-zu-Ende-verschlüsselt gestreamt (Chunk für Chunk mit AES-256-GCM) — über Relayiums schnelles Relay, das nur Chiffretext transportiert, den es nicht entschlüsseln kann.</li>
       </ol>
+      </section>
 
+      <section class="reveal">
       <h2>Warum Relayium</h2>
       <ul class="why">
         <li><b>Ende-zu-Ende-verschlüsselt</b> — X25519-Schlüsselaustausch und AES-256-GCM pro Chunk; die Schlüssel werden ausschließlich zwischen den beiden Geräten ausgehandelt, weder das Relay noch der Server können entschlüsseln.</li>
@@ -79,7 +96,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li><b>Plattformübergreifend</b> — Windows, macOS, Linux, Android, iOS — ein moderner Browser genügt, keine Installation nötig.</li>
         <li><b>Kostenlos</b> — Kostenlos nutzbar innerhalb eines monatlichen Relay-Kontingents; für einen Code muss sich der Absender anmelden, der Empfänger tritt anonym bei.</li>
       </ul>
+      </section>
 
+      <section class="reveal">
       <h2>Im Vergleich</h2>
       <div class="compare">
       <h3>Gegenüber AirDrop</h3>
@@ -87,8 +106,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>Gegenüber Snapdrop / PairDrop</h3>
       <p>Diese funktionieren nur im selben Netzwerk; Relayium ergänzt netzwerkübergreifendes Koppeln plus Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und den SAS-Code, sodass selbst ein kompromittiertes Relay oder ein kompromittierter Signalisierungsserver nicht mithören kann.</p>
       </div>
+      </section>
 
-      <h2>Häufige Fragen</h2>
+      <section class="reveal"><h2>Häufige Fragen</h2>
       <h3>Laufen meine Dateien über euren Server?</h3>
       <p>Der verschlüsselte Datenstrom läuft über Relayiums Relay, um eine zuverlässige netzwerkübergreifende Verbindung zu ermöglichen — da alles Ende-zu-Ende-verschlüsselt ist, sieht das Relay dabei nur Chiffretext, den es nicht lesen kann.</p>
       <h3>Ist ein Code erforderlich?</h3>
@@ -96,7 +116,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>Brauche ich ein Konto?</h3>
       <p>Der Absender meldet sich an, um einen Code zu erzeugen; der Empfänger tritt anonym bei.</p>
       <h3>Ist es Ende-zu-Ende-verschlüsselt?</h3>
-      <p>Ja — X25519 plus AES-256-GCM pro Chunk, verifiziert mit dem SAS-Code; weder das Relay noch der Server können entschlüsseln.</p>
+      <p>Ja — X25519 plus AES-256-GCM pro Chunk, verifiziert mit dem SAS-Code; weder das Relay noch der Server können entschlüsseln.</p></section>
 
       
       <footer>

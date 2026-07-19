@@ -1,5 +1,6 @@
 <script lang="ts">
   import { lang, messages, type Messages } from "./i18n.svelte";
+  import { reveal } from "./reveal";
   const t = $derived<Messages>(messages[lang()]);
 </script>
 
@@ -9,8 +10,8 @@
     <p class="sub">{t.useCases.sub}</p>
   </div>
   <div class="grid">
-    {#each t.useCases.items as c (c.title)}
-      <div class="case">
+    {#each t.useCases.items as c, i (c.title)}
+      <div class="case reveal" use:reveal={{ delay: i * 60 }}>
         <span class="icon" aria-hidden="true">{c.icon}</span>
         <div class="body">
           <h3>{c.title}</h3>

@@ -86,7 +86,7 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
   const guideUrl = (slug: string) => (lang() === "en" ? `/${slug}` : `/${lang()}/${slug}`);
 </script>
 
-<section class="cli">
+<section class="cli page-enter">
   <header class="hero">
     <div class="logo" aria-hidden="true">❯</div>
     <h1>Relayium CLI</h1>

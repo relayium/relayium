@@ -48,7 +48,7 @@
   });
 </script>
 
-<section class="verify">
+<section class="verify page-enter">
   {#if phase === "checking"}
     <p class="msg">{t.verifyEmail.checking}</p>
   {:else if phase === "success"}

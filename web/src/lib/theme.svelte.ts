@@ -23,6 +23,18 @@ export function applyTheme(t: Theme): void {
   else root.setAttribute("data-theme", t);
 }
 
+// Briefly enable a global colour transition around a theme flip so palettes
+// cross-fade instead of hard-cutting. The class (see app.css `.theme-anim`)
+// exists only for the switch's duration, never during normal interaction.
+let animTimer: ReturnType<typeof setTimeout> | null = null;
+function flashThemeTransition(): void {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  root.classList.add("theme-anim");
+  if (animTimer) clearTimeout(animTimer);
+  animTimer = setTimeout(() => root.classList.remove("theme-anim"), 320);
+}
+
 let current = $state<Theme>(read());
 
 /** Reactive read of the current theme choice. */
@@ -32,6 +44,7 @@ export function theme(): Theme {
 
 export function setTheme(t: Theme): void {
   current = t;
+  flashThemeTransition(); // class on <html> before the attribute change so the swap animates
   applyTheme(t);
   try { localStorage.setItem(KEY, t); } catch { /* ignore */ }
 }

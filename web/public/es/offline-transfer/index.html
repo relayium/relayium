@@ -53,6 +53,20 @@ ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
+.cta{transition:transform .18s ease,filter .18s ease}.cta:hover{transform:translateY(-1px);filter:brightness(1.06)}
+/* Pure-CSS staggered entrance — keeps these pages JS-free and crawlable while
+   still giving the content a little life on load. animation fill-mode:both ends
+   fully visible, so nothing is ever stuck hidden (no-JS, old browsers, or IO
+   quirks all resolve to visible). */
+.reveal{animation:sec-in .55s cubic-bezier(.22,1,.36,1) both}
+section.reveal:nth-of-type(1){animation-delay:.04s}
+section.reveal:nth-of-type(2){animation-delay:.11s}
+section.reveal:nth-of-type(3){animation-delay:.18s}
+section.reveal:nth-of-type(4){animation-delay:.25s}
+section.reveal:nth-of-type(5){animation-delay:.32s}
+@keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
 </style>
   </head>
   <body>
@@ -63,6 +77,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="pitch">Cuando la otra persona no está en línea, sube ahora y comparte un enlace. Tu navegador cifra antes de subir; el servidor conserva únicamente texto cifrado que no puede leer — la clave nunca sale del enlace.</p>
       <a class="cta" href="/offline-transfer?lang=es">Subir un archivo</a>
 
+      <section class="reveal">
       <h2>Transferir en cuatro pasos</h2>
       <ol class="steps">
         <li>Inicia sesión y elige un archivo — tu navegador lo cifra localmente antes de que nada salga del dispositivo.</li>
@@ -70,7 +85,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li>Comparte el enlace de descarga (opcionalmente con autodestrucción tras la lectura y una caducidad que tú eliges).</li>
         <li>El destinatario abre el enlace; su navegador obtiene el texto cifrado y lo descifra con la clave del enlace.</li>
       </ol>
+      </section>
 
+      <section class="reveal">
       <h2>Por qué Relayium</h2>
       <ul class="why">
         <li><b>De conocimiento cero</b> — El archivo se cifra en el navegador; el servidor solo llega a tener texto cifrado que no puede descifrar.</li>
@@ -80,7 +97,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li><b>Complemento asíncrono</b> — Úsalo cuando la otra persona no está en línea ahora mismo; usa la transferencia entre redes en tiempo real cuando ambas están presentes.</li>
         <li><b>También desde la terminal</b> — En la terminal, relayium up sube y muestra el mismo enlace, y relayium down lo recupera en otra máquina — la CLI y la web comparten un mismo enlace.</li>
       </ul>
+      </section>
 
+      <section class="reveal">
       <h2>En comparación</h2>
       <div class="compare">
       <h3>Frente a los enlaces de WeTransfer/Dropbox</h3>
@@ -88,8 +107,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>Frente al modo en tiempo real</h3>
       <p>El tiempo real es de igual a igual y exige que ambas partes estén en línea; este modo almacena el archivo cifrado para que el destinatario pueda recuperarlo después.</p>
       </div>
+      </section>
 
-      <h2>Preguntas frecuentes</h2>
+      <section class="reveal"><h2>Preguntas frecuentes</h2>
       <h3>¿Puede el servidor leer mi archivo?</h3>
       <p>No — se cifra en tu navegador; el servidor solo almacena texto cifrado, y la clave nunca llega a él.</p>
       <h3>¿Dónde está la clave?</h3>
@@ -97,10 +117,10 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>¿Necesito una cuenta?</h3>
       <p>Para subir, sí (usa almacenamiento). Para descargar, no — basta con el enlace.</p>
       <h3>¿Puedo hacerlo de un solo uso?</h3>
-      <p>Sí — activa la autodestrucción tras la lectura y fija una caducidad.</p>
+      <p>Sí — activa la autodestrucción tras la lectura y fija una caducidad.</p></section>
 
-      <h2>Más información</h2>
-      <ul class="learn"><li><a href="/es/guides/push-to-cloud-pull-on-another-computer">Sube archivos a la nube y recógelos en otro ordenador</a></li></ul>
+      <section class="reveal"><h2>Más información</h2>
+      <ul class="learn"><li><a href="/es/guides/push-to-cloud-pull-on-another-computer">Sube archivos a la nube y recógelos en otro ordenador</a></li></ul></section>
       <footer>
         <a href="/?lang=es">← Relayium</a>
         <a href="/es/privacy">Privacidad</a>

@@ -16,7 +16,7 @@
   ]);
 </script>
 
-<main class="pricing-page">
+<main class="pricing-page page-enter">
   <button class="back" onclick={() => navigate("lan")}>{p.back}</button>
 
   <header class="head">

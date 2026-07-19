@@ -53,6 +53,20 @@ ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
+.cta{transition:transform .18s ease,filter .18s ease}.cta:hover{transform:translateY(-1px);filter:brightness(1.06)}
+/* Pure-CSS staggered entrance — keeps these pages JS-free and crawlable while
+   still giving the content a little life on load. animation fill-mode:both ends
+   fully visible, so nothing is ever stuck hidden (no-JS, old browsers, or IO
+   quirks all resolve to visible). */
+.reveal{animation:sec-in .55s cubic-bezier(.22,1,.36,1) both}
+section.reveal:nth-of-type(1){animation-delay:.04s}
+section.reveal:nth-of-type(2){animation-delay:.11s}
+section.reveal:nth-of-type(3){animation-delay:.18s}
+section.reveal:nth-of-type(4){animation-delay:.25s}
+section.reveal:nth-of-type(5){animation-delay:.32s}
+@keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
 </style>
   </head>
   <body>
@@ -63,6 +77,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="pitch">브라우저에서 두 기기를 직접 연결하고, 파일은 종단간 암호화되어 청크 단위로 전송됩니다. 같은 네트워크에서는 서버를 전혀 거치지 않고, 네트워크를 넘을 때는 암호화된 릴레이를 거칩니다(릴레이는 암호문만 봅니다). 설치도 가입도 필요 없이 웹 페이지만 열면 시작할 수 있습니다.</p>
       <a class="cta" href="/?lang=ko">전송 시작</a>
 
+      <section class="reveal">
       <h2>4단계로 전송</h2>
       <ol class="steps">
         <li>두 기기에서 최신 브라우저로 relayium.com에 접속합니다.</li>
@@ -70,7 +85,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li>양쪽 화면에 표시되는 동일한 6자리 검증 코드(SAS)를 대조해 일치를 확인하고 중간자를 차단합니다.</li>
         <li>P2P 직접 연결을 맺고, 파일은 청크마다 AES-256-GCM으로 암호화되어 전송되며 각 파일은 SHA-256으로 무결성을 검증합니다.</li>
       </ol>
+      </section>
 
+      <section class="reveal">
       <h2>Relayium을 선택하는 이유</h2>
       <ul class="why">
         <li><b>종단간 암호화</b> — X25519 키 교환과 청크별 AES-256-GCM. 키는 두 기기 사이에서만 협상되며 서버는 복호화할 수 없습니다.</li>
@@ -79,7 +96,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li><b>크로스 플랫폼</b> — Windows, macOS, Linux, Android, iOS — 최신 브라우저만 있으면 설치 없이 바로 사용할 수 있습니다.</li>
         <li><b>무료 오픈소스</b> — MIT 라이선스로 프로토콜과 모든 코드가 GitHub에 공개되어 있습니다. 같은 네트워크에서는 실시간 전송에 로그인이 필요 없고, 네트워크를 넘는 페어링 코드 전송은 보내는 쪽만 로그인하면 됩니다.</li>
       </ul>
+      </section>
 
+      <section class="reveal">
       <h2>다른 방식과 비교</h2>
       <div class="compare">
       <h3>AirDrop과 비교</h3>
@@ -89,7 +108,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>WeTransfer / 클라우드 드라이브와 비교</h3>
       <p>WeTransfer와 클라우드 드라이브는 비동기라 편리하지만 무료 요금제는 보통 2GB로 제한되고 파일이 그들의 서버에 업로드됩니다. Relayium 실시간 모드는 크기 제한이 없고 서버 저장도 없습니다.</p>
       </div>
+      </section>
 
+      <section class="reveal">
       <h2>자주 묻는 질문</h2>
       <h3>무료인가요?</h3>
       <p>무료입니다. Relayium은 MIT 라이선스의 오픈소스이며 비용은 전혀 들지 않습니다. 같은 네트워크에서는 실시간 전송에 로그인이 필요 없고, 네트워크를 넘는 페어링 코드 전송은 보내는 쪽만 로그인하면 됩니다 — 받는 쪽은 어느 경우든 계정이 필요 없습니다.</p>
@@ -103,9 +124,10 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>실시간 직접 전송은 스트리밍 방식이라 실질적인 크기 상한이 없습니다(Chrome·Edge는 디스크로 바로 스트리밍하고, Firefox·Safari는 메모리에 버퍼링하므로 파일당 약 200MB 이하를 권장). 한 번에 최대 1,000개 파일입니다.</p>
       <h3>Snapdrop과 무엇이 다른가요?</h3>
       <p>Relayium은 애플리케이션 계층의 종단간 암호화와 SAS 검증 코드를 추가해, 시그널링 서버가 침해되어도 도청이나 위장을 할 수 없습니다. 또한 네트워크를 넘는 전송과 선택적 영지식 다운로드 링크도 지원합니다.</p>
+      </section>
 
-      <h2>더 알아보기</h2>
-      <ul class="learn"><li><a href="/ko/compare/snapdrop">Relayium vs Snapdrop·PairDrop: 어떤 P2P 파일 전송이 더 안전할까?</a></li><li><a href="/ko/compare/airdrop">Relayium vs AirDrop: 크로스플랫폼 에어드롭 대안</a></li><li><a href="/ko/compare/wetransfer">Relayium vs WeTransfer: 서버 없이 대용량 파일 보내기</a></li><li><a href="/ko/how-to/transfer-files-android-to-iphone">안드로이드에서 아이폰으로 파일 전송하는 방법 (케이블 없이)</a></li><li><a href="/ko/how-to/send-files-pc-to-phone-wirelessly">PC에서 폰으로 무선 파일 전송: 케이블도 앱도 필요 없이</a></li><li><a href="/ko/how-to/send-large-files-without-cloud">클라우드 없이 대용량 파일 보내는 방법</a></li><li><a href="/ko/guides/transfer-files-from-terminal">Relayium CLI로 터미널에서 파일 전송하기</a></li><li><a href="/ko/guides/back-up-a-server-over-ssh">Relayium CLI로 SSH를 통해 자신의 서버에 파일 백업하기</a></li><li><a href="/ko/guides/send-a-file-to-someone">Relayium CLI로 네트워크를 넘어 상대에게 파일 보내기</a></li><li><a href="/ko/guides/server-to-server-transfers">Relayium CLI로 서버 간 전송(데몬 다이렉트)</a></li><li><a href="/ko/guides/sync-a-large-folder-between-servers">두 서버 사이에서 큰 폴더 동기화하기(재개 가능, 백그라운드)</a></li><li><a href="/ko/guides/push-to-cloud-pull-on-another-computer">클라우드에 올리고 다른 컴퓨터에서 받기</a></li><li><a href="/ko/how-to/share-a-file-with-an-expiring-link">만료되는 안전한 다운로드 링크로 파일 공유하기</a></li><li><a href="/ko/guides/self-host-relayium">Relayium 셀프 호스팅: 나만의 파일 전송 서버 운영하기</a></li><li><a href="/ko/how-to/send-files-between-two-computers-over-the-internet">인터넷으로 컴퓨터 두 대 사이에 파일 보내는 방법</a></li><li><a href="/ko/compare/croc">Relayium vs croc: 터미널에서 암호화 파일 전송</a></li><li><a href="/ko/guides/how-relayium-encrypts-your-files">Relayium이 파일을 종단간 암호화하는 방식</a></li><li><a href="/ko/compare/google-drive">Relayium vs Google Drive: 파일을 더 직접적으로 보내기</a></li><li><a href="/ko/compare/rsync">Relayium vs rsync: SSH 설정 없이 폴더 동기화하기</a></li><li><a href="/ko/compare/firefox-send">2026년 최고의 Firefox Send 대안</a></li><li><a href="/ko/how-to/transfer-files-by-scanning-a-qr-code">QR 코드를 스캔해서 파일 전송하기</a></li><li><a href="/ko/guides/receive-files-from-the-command-line">명령줄에서 파일 받기</a></li><li><a href="/ko/how-to/send-a-folder">파일이 아니라 폴더째로 보내는 방법</a></li><li><a href="/ko/guides/run-relayium-as-an-always-on-service">Relayium을 상시 실행되는 수신 서비스로 운영하기</a></li><li><a href="/ko/how-to/automate-server-backups">cron 작업으로 암호화된 서버 백업 자동화하기</a></li><li><a href="/ko/compare/localsend">Relayium vs LocalSend: 로컬 파일 전송, 무엇을 쓸까</a></li><li><a href="/ko/compare/scp">Relayium vs scp: 더 간단한 SSH 파일 전송</a></li><li><a href="/ko/compare/magic-wormhole">Relayium vs magic-wormhole: CLI 파일 전송</a></li><li><a href="/ko/compare/nextcloud">Relayium vs Nextcloud: 파일 전송에는 무엇을 써야 할까</a></li><li><a href="/ko/compare/dropbox">Relayium vs Dropbox: 파일 하나를 더 직접적으로 보내기</a></li><li><a href="/ko/how-to/airdrop-for-windows-and-android">Windows·Linux·Android용 AirDrop 대안</a></li><li><a href="/ko/how-to/transfer-files-between-mac-and-windows">Mac와 Windows PC 사이에서 파일 전송하는 방법</a></li><li><a href="/ko/how-to/send-files-on-the-same-wifi">같은 Wi-Fi에 있는 기기끼리 파일 보내기</a></li><li><a href="/ko/guides/what-is-peer-to-peer-file-transfer">P2P(피어투피어) 파일 전송이란?</a></li><li><a href="/ko/guides/is-it-safe-to-send-files-over-the-internet">인터넷으로 파일을 보내도 안전할까요?</a></li><li><a href="/ko/guides/bring-your-own-node">Bring Your Own Node: Relayium 릴레이 및 스토리지를 무료로 사용하기</a></li></ul>
+      <section class="reveal"><h2>더 알아보기</h2>
+      <ul class="learn"><li><a href="/ko/compare/snapdrop">Relayium vs Snapdrop·PairDrop: 어떤 P2P 파일 전송이 더 안전할까?</a></li><li><a href="/ko/compare/airdrop">Relayium vs AirDrop: 크로스플랫폼 에어드롭 대안</a></li><li><a href="/ko/compare/wetransfer">Relayium vs WeTransfer: 서버 없이 대용량 파일 보내기</a></li><li><a href="/ko/how-to/transfer-files-android-to-iphone">안드로이드에서 아이폰으로 파일 전송하는 방법 (케이블 없이)</a></li><li><a href="/ko/how-to/send-files-pc-to-phone-wirelessly">PC에서 폰으로 무선 파일 전송: 케이블도 앱도 필요 없이</a></li><li><a href="/ko/how-to/send-large-files-without-cloud">클라우드 없이 대용량 파일 보내는 방법</a></li><li><a href="/ko/guides/transfer-files-from-terminal">Relayium CLI로 터미널에서 파일 전송하기</a></li><li><a href="/ko/guides/back-up-a-server-over-ssh">Relayium CLI로 SSH를 통해 자신의 서버에 파일 백업하기</a></li><li><a href="/ko/guides/send-a-file-to-someone">Relayium CLI로 네트워크를 넘어 상대에게 파일 보내기</a></li><li><a href="/ko/guides/server-to-server-transfers">Relayium CLI로 서버 간 전송(데몬 다이렉트)</a></li><li><a href="/ko/guides/sync-a-large-folder-between-servers">두 서버 사이에서 큰 폴더 동기화하기(재개 가능, 백그라운드)</a></li><li><a href="/ko/guides/push-to-cloud-pull-on-another-computer">클라우드에 올리고 다른 컴퓨터에서 받기</a></li><li><a href="/ko/how-to/share-a-file-with-an-expiring-link">만료되는 안전한 다운로드 링크로 파일 공유하기</a></li><li><a href="/ko/guides/self-host-relayium">Relayium 셀프 호스팅: 나만의 파일 전송 서버 운영하기</a></li><li><a href="/ko/how-to/send-files-between-two-computers-over-the-internet">인터넷으로 컴퓨터 두 대 사이에 파일 보내는 방법</a></li><li><a href="/ko/compare/croc">Relayium vs croc: 터미널에서 암호화 파일 전송</a></li><li><a href="/ko/guides/how-relayium-encrypts-your-files">Relayium이 파일을 종단간 암호화하는 방식</a></li><li><a href="/ko/compare/google-drive">Relayium vs Google Drive: 파일을 더 직접적으로 보내기</a></li><li><a href="/ko/compare/rsync">Relayium vs rsync: SSH 설정 없이 폴더 동기화하기</a></li><li><a href="/ko/compare/firefox-send">2026년 최고의 Firefox Send 대안</a></li><li><a href="/ko/how-to/transfer-files-by-scanning-a-qr-code">QR 코드를 스캔해서 파일 전송하기</a></li><li><a href="/ko/guides/receive-files-from-the-command-line">명령줄에서 파일 받기</a></li><li><a href="/ko/how-to/send-a-folder">파일이 아니라 폴더째로 보내는 방법</a></li><li><a href="/ko/guides/run-relayium-as-an-always-on-service">Relayium을 상시 실행되는 수신 서비스로 운영하기</a></li><li><a href="/ko/how-to/automate-server-backups">cron 작업으로 암호화된 서버 백업 자동화하기</a></li><li><a href="/ko/compare/localsend">Relayium vs LocalSend: 로컬 파일 전송, 무엇을 쓸까</a></li><li><a href="/ko/compare/scp">Relayium vs scp: 더 간단한 SSH 파일 전송</a></li><li><a href="/ko/compare/magic-wormhole">Relayium vs magic-wormhole: CLI 파일 전송</a></li><li><a href="/ko/compare/nextcloud">Relayium vs Nextcloud: 파일 전송에는 무엇을 써야 할까</a></li><li><a href="/ko/compare/dropbox">Relayium vs Dropbox: 파일 하나를 더 직접적으로 보내기</a></li><li><a href="/ko/how-to/airdrop-for-windows-and-android">Windows·Linux·Android용 AirDrop 대안</a></li><li><a href="/ko/how-to/transfer-files-between-mac-and-windows">Mac와 Windows PC 사이에서 파일 전송하는 방법</a></li><li><a href="/ko/how-to/send-files-on-the-same-wifi">같은 Wi-Fi에 있는 기기끼리 파일 보내기</a></li><li><a href="/ko/guides/what-is-peer-to-peer-file-transfer">P2P(피어투피어) 파일 전송이란?</a></li><li><a href="/ko/guides/is-it-safe-to-send-files-over-the-internet">인터넷으로 파일을 보내도 안전할까요?</a></li><li><a href="/ko/guides/bring-your-own-node">Bring Your Own Node: Relayium 릴레이 및 스토리지를 무료로 사용하기</a></li></ul></section>
       <footer>
         <a href="/?lang=ko">← Relayium</a>
         <a href="/ko/guides">가이드</a>

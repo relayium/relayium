@@ -53,6 +53,20 @@ ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
+.cta{transition:transform .18s ease,filter .18s ease}.cta:hover{transform:translateY(-1px);filter:brightness(1.06)}
+/* Pure-CSS staggered entrance — keeps these pages JS-free and crawlable while
+   still giving the content a little life on load. animation fill-mode:both ends
+   fully visible, so nothing is ever stuck hidden (no-JS, old browsers, or IO
+   quirks all resolve to visible). */
+.reveal{animation:sec-in .55s cubic-bezier(.22,1,.36,1) both}
+section.reveal:nth-of-type(1){animation-delay:.04s}
+section.reveal:nth-of-type(2){animation-delay:.11s}
+section.reveal:nth-of-type(3){animation-delay:.18s}
+section.reveal:nth-of-type(4){animation-delay:.25s}
+section.reveal:nth-of-type(5){animation-delay:.32s}
+@keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
 </style>
   </head>
   <body>
@@ -63,6 +77,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="pitch">相手がオンラインでないときは、今すぐアップロードしてリンクを共有しましょう。ブラウザはアップロード前に暗号化します。サーバーは復号できない暗号文だけを保持します——鍵はリンクから出ることはありません。</p>
       <a class="cta" href="/offline-transfer?lang=ja">ファイルをアップロード</a>
 
+      <section class="reveal">
       <h2>4ステップで転送</h2>
       <ol class="steps">
         <li>サインインしてファイルを選びます——ブラウザが端末を離れる前にローカルで暗号化します。</li>
@@ -70,7 +85,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li>ダウンロードリンクを共有します（任意で閲覧後に削除、選んだ有効期限も設定できます）。</li>
         <li>受信者がリンクを開くと、ブラウザが暗号文を取得し、リンク内の鍵で復号します。</li>
       </ol>
+      </section>
 
+      <section class="reveal">
       <h2>Relayiumが選ばれる理由</h2>
       <ul class="why">
         <li><b>ゼロ知識</b> — ファイルはブラウザ内で暗号化されます。サーバーが持つのは復号できない暗号文だけです。</li>
@@ -80,7 +97,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li><b>非同期モードとしての補完</b> — 相手が今オンラインでないときに使います。双方がオンラインならリアルタイムのクロスネットワーク転送を使ってください。</li>
         <li><b>コマンドラインからも</b> — ターミナルでは relayium up が同じリンクを表示してアップロードし、relayium down が別のマシンで取得します——CLI とウェブは同じリンクを共有します。</li>
       </ul>
+      </section>
 
+      <section class="reveal">
       <h2>他の方法との比較</h2>
       <div class="compare">
       <h3>WeTransfer / Dropboxのリンクとの比較</h3>
@@ -88,8 +107,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>リアルタイムモードとの比較</h3>
       <p>リアルタイムモードはピアツーピアで双方のオンラインが必要です。こちらは暗号化して保存するため、受信者は後から取得できます。</p>
       </div>
+      </section>
 
-      <h2>よくある質問</h2>
+      <section class="reveal"><h2>よくある質問</h2>
       <h3>サーバーは私のファイルを読めますか？</h3>
       <p>いいえ——ファイルはブラウザ内で暗号化されます。サーバーは暗号文だけを保存し、鍵がサーバーに届くことはありません。</p>
       <h3>鍵はどこにありますか？</h3>
@@ -97,10 +117,10 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>アカウントは必要ですか？</h3>
       <p>アップロードには必要です（ストレージを使用するため）。ダウンロードには不要——リンクさえあれば十分です。</p>
       <h3>一度きりのダウンロードにできますか？</h3>
-      <p>できます——閲覧後に削除を有効にし、有効期限も設定してください。</p>
+      <p>できます——閲覧後に削除を有効にし、有効期限も設定してください。</p></section>
 
-      <h2>さらに詳しく</h2>
-      <ul class="learn"><li><a href="/ja/guides/push-to-cloud-pull-on-another-computer">クラウドにアップロードし、別のコンピュータで取得する</a></li></ul>
+      <section class="reveal"><h2>さらに詳しく</h2>
+      <ul class="learn"><li><a href="/ja/guides/push-to-cloud-pull-on-another-computer">クラウドにアップロードし、別のコンピュータで取得する</a></li></ul></section>
       <footer>
         <a href="/?lang=ja">← Relayium</a>
         <a href="/ja/privacy">プライバシーポリシー</a>

@@ -53,6 +53,20 @@ ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
+.cta{transition:transform .18s ease,filter .18s ease}.cta:hover{transform:translateY(-1px);filter:brightness(1.06)}
+/* Pure-CSS staggered entrance — keeps these pages JS-free and crawlable while
+   still giving the content a little life on load. animation fill-mode:both ends
+   fully visible, so nothing is ever stuck hidden (no-JS, old browsers, or IO
+   quirks all resolve to visible). */
+.reveal{animation:sec-in .55s cubic-bezier(.22,1,.36,1) both}
+section.reveal:nth-of-type(1){animation-delay:.04s}
+section.reveal:nth-of-type(2){animation-delay:.11s}
+section.reveal:nth-of-type(3){animation-delay:.18s}
+section.reveal:nth-of-type(4){animation-delay:.25s}
+section.reveal:nth-of-type(5){animation-delay:.32s}
+@keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
 </style>
   </head>
   <body>
@@ -63,6 +77,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="pitch">在浏览器里让两台设备直接相连，文件端到端加密、逐块传输；同一网络下根本不经过服务器，跨网络则经加密中继转发（中继只见密文）。无需安装、无需注册，打开网页即可开始。</p>
       <a class="cta" href="/?lang=zh">开始传输</a>
 
+      <section class="reveal">
       <h2>四步完成一次传输</h2>
       <ol class="steps">
         <li>两台设备用现代浏览器打开 relayium.com。</li>
@@ -70,7 +85,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li>双方核对屏幕上同一段 6 位校验码（SAS），确认一致以排除中间人。</li>
         <li>建立点对点直连，文件逐块经 AES-256-GCM 加密传输，并对每个文件做 SHA-256 完整性校验。</li>
       </ol>
+      </section>
 
+      <section class="reveal">
       <h2>为什么选择 Relayium</h2>
       <ul class="why">
         <li><b>端到端加密</b> — X25519 密钥交换 + 每块 AES-256-GCM 加密，密钥只在两台设备间协商，服务器无从解密。</li>
@@ -79,7 +96,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li><b>跨平台</b> — Windows、macOS、Linux、Android、iOS——只要有现代浏览器就能用，无需安装任何 App。</li>
         <li><b>免费开源</b> — MIT 许可，协议与全部前后端代码都在 GitHub 公开；同一网络下实时传输免登录，跨网络配对码传输仅发送方需登录。</li>
       </ul>
+      </section>
 
+      <section class="reveal">
       <h2>与其他方式相比</h2>
       <div class="compare">
       <h3>对比 AirDrop</h3>
@@ -89,7 +108,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>对比 WeTransfer / 网盘</h3>
       <p>WeTransfer 与网盘异步方便，但免费版通常有 2GB 上限，且文件要先上传到它们的服务器。Relayium 实时模式没有大小上限，文件零服务器存储。</p>
       </div>
+      </section>
 
+      <section class="reveal">
       <h2>常见问题</h2>
       <h3>免费吗？</h3>
       <p>免费。Relayium 采用 MIT 许可开源，完全无任何费用；同一网络下实时传输无需登录，跨网络配对码传输仅发送方需登录，接收方始终无需账号。</p>
@@ -103,9 +124,10 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>实时直传采用流式传输，理论上没有硬性大小上限（Chrome、Edge 直接流式落盘；Firefox、Safari 在内存中缓冲，建议单文件不超过约 200 MB）。每批最多 1,000 个文件。</p>
       <h3>和 Snapdrop 有什么区别？</h3>
       <p>Relayium 在同类思路上增加了应用层端到端加密与 SAS 校验码，即使信令服务器被入侵也无法窃听或冒充，并支持跨网络传输与可选的零知识下载链接。</p>
+      </section>
 
-      <h2>深入了解</h2>
-      <ul class="learn"><li><a href="/zh/compare/snapdrop">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/transfer-files-android-to-iphone">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud">如何不用网盘传输大文件</a></li><li><a href="/zh/guides/transfer-files-from-terminal">用 Relayium CLI 从终端传输文件</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/guides/send-a-file-to-someone">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/server-to-server-transfers">用 Relayium CLI 实现服务器到服务器直传（守护进程直连）</a></li><li><a href="/zh/guides/sync-a-large-folder-between-servers">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li><li><a href="/zh/guides/push-to-cloud-pull-on-another-computer">在一台电脑上传到云端，在另一台电脑取回</a></li><li><a href="/zh/how-to/share-a-file-with-an-expiring-link">用会过期的安全链接分享文件</a></li><li><a href="/zh/guides/self-host-relayium">自托管 Relayium：运行属于你自己的文件传输服务器</a></li><li><a href="/zh/how-to/send-files-between-two-computers-over-the-internet">如何通过互联网在两台电脑之间传文件</a></li><li><a href="/zh/compare/croc">Relayium 对比 croc：从终端加密传输文件</a></li><li><a href="/zh/guides/how-relayium-encrypts-your-files">Relayium 如何对文件端到端加密</a></li><li><a href="/zh/compare/google-drive">Relayium 对比 Google Drive：发送文件更直接</a></li><li><a href="/zh/compare/rsync">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</a></li><li><a href="/zh/compare/firefox-send">2026 年最佳 Firefox Send 替代品</a></li><li><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code">扫描二维码传输文件</a></li><li><a href="/zh/guides/receive-files-from-the-command-line">在命令行接收文件</a></li><li><a href="/zh/how-to/send-a-folder">如何直接发送整个文件夹，而不只是文件</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/how-to/automate-server-backups">用 cron 任务自动化加密的服务器备份</a></li><li><a href="/zh/compare/localsend">Relayium 对比 LocalSend：局域网传输该选哪个</a></li><li><a href="/zh/compare/scp">Relayium 对比 scp：更简单的 SSH 文件传输</a></li><li><a href="/zh/compare/magic-wormhole">Relayium 对比 magic-wormhole：命令行文件传输</a></li><li><a href="/zh/compare/nextcloud">Relayium 对比 Nextcloud：发送文件该选谁</a></li><li><a href="/zh/compare/dropbox">Relayium 对比 Dropbox：发送单个文件更直接</a></li><li><a href="/zh/how-to/airdrop-for-windows-and-android">Windows、Linux、Android 的隔空投送替代方案</a></li><li><a href="/zh/how-to/transfer-files-between-mac-and-windows">如何在 Mac 和 Windows 电脑之间传输文件</a></li><li><a href="/zh/how-to/send-files-on-the-same-wifi">同一 Wi-Fi 下的设备之间互传文件</a></li><li><a href="/zh/guides/what-is-peer-to-peer-file-transfer">什么是点对点（P2P）文件传输？</a></li><li><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet">在网上发送文件到底安全吗?</a></li><li><a href="/zh/guides/bring-your-own-node">自建节点：免费使用 Relayium 的中转与存储</a></li></ul>
+      <section class="reveal"><h2>深入了解</h2>
+      <ul class="learn"><li><a href="/zh/compare/snapdrop">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/transfer-files-android-to-iphone">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud">如何不用网盘传输大文件</a></li><li><a href="/zh/guides/transfer-files-from-terminal">用 Relayium CLI 从终端传输文件</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/guides/send-a-file-to-someone">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/server-to-server-transfers">用 Relayium CLI 实现服务器到服务器直传（守护进程直连）</a></li><li><a href="/zh/guides/sync-a-large-folder-between-servers">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li><li><a href="/zh/guides/push-to-cloud-pull-on-another-computer">在一台电脑上传到云端，在另一台电脑取回</a></li><li><a href="/zh/how-to/share-a-file-with-an-expiring-link">用会过期的安全链接分享文件</a></li><li><a href="/zh/guides/self-host-relayium">自托管 Relayium：运行属于你自己的文件传输服务器</a></li><li><a href="/zh/how-to/send-files-between-two-computers-over-the-internet">如何通过互联网在两台电脑之间传文件</a></li><li><a href="/zh/compare/croc">Relayium 对比 croc：从终端加密传输文件</a></li><li><a href="/zh/guides/how-relayium-encrypts-your-files">Relayium 如何对文件端到端加密</a></li><li><a href="/zh/compare/google-drive">Relayium 对比 Google Drive：发送文件更直接</a></li><li><a href="/zh/compare/rsync">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</a></li><li><a href="/zh/compare/firefox-send">2026 年最佳 Firefox Send 替代品</a></li><li><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code">扫描二维码传输文件</a></li><li><a href="/zh/guides/receive-files-from-the-command-line">在命令行接收文件</a></li><li><a href="/zh/how-to/send-a-folder">如何直接发送整个文件夹，而不只是文件</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/how-to/automate-server-backups">用 cron 任务自动化加密的服务器备份</a></li><li><a href="/zh/compare/localsend">Relayium 对比 LocalSend：局域网传输该选哪个</a></li><li><a href="/zh/compare/scp">Relayium 对比 scp：更简单的 SSH 文件传输</a></li><li><a href="/zh/compare/magic-wormhole">Relayium 对比 magic-wormhole：命令行文件传输</a></li><li><a href="/zh/compare/nextcloud">Relayium 对比 Nextcloud：发送文件该选谁</a></li><li><a href="/zh/compare/dropbox">Relayium 对比 Dropbox：发送单个文件更直接</a></li><li><a href="/zh/how-to/airdrop-for-windows-and-android">Windows、Linux、Android 的隔空投送替代方案</a></li><li><a href="/zh/how-to/transfer-files-between-mac-and-windows">如何在 Mac 和 Windows 电脑之间传输文件</a></li><li><a href="/zh/how-to/send-files-on-the-same-wifi">同一 Wi-Fi 下的设备之间互传文件</a></li><li><a href="/zh/guides/what-is-peer-to-peer-file-transfer">什么是点对点（P2P）文件传输？</a></li><li><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet">在网上发送文件到底安全吗?</a></li><li><a href="/zh/guides/bring-your-own-node">自建节点：免费使用 Relayium 的中转与存储</a></li></ul></section>
       <footer>
         <a href="/?lang=zh">← Relayium</a>
         <a href="/zh/guides">使用指南</a>

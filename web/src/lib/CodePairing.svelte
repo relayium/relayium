@@ -133,8 +133,8 @@
       <p class="lead">{t.pair.yourCode}</p>
       <div class="code">{roomCode}</div>
       <div class="row wrap">
-        <button class="btn btn-ghost" onclick={() => copyText("code")}>{copied === "code" ? t.pair.copied : t.pair.copy}</button>
-        <button class="btn btn-ghost" onclick={() => copyText("link")}>{copied === "link" ? t.pair.copied : t.pair.copyLink}</button>
+        <button class="btn btn-ghost" class:copied={copied === "code"} onclick={() => copyText("code")}>{copied === "code" ? t.pair.copied : t.pair.copy}</button>
+        <button class="btn btn-ghost" class:copied={copied === "link"} onclick={() => copyText("link")}>{copied === "link" ? t.pair.copied : t.pair.copyLink}</button>
         {#if canShare()}<button class="btn btn-ghost" onclick={() => share({ title: "Relayium", text: `Relayium: ${roomCode}`, url: joinLink })}>{t.share}</button>{/if}
         {#if remaining}<span class="ttl">{t.pair.expiresIn(remaining)}</span>{/if}
       </div>
@@ -209,6 +209,9 @@
     font-variant-numeric: tabular-nums; padding-inline-start: 10px;
   }
   .row { display: flex; align-items: center; gap: var(--space-3); }
+  /* Copy success: brief green + pop on the button that just fired. */
+  .btn.copied { color: #2ecc71; border-color: #2ecc71; animation: pop-in .3s ease; }
+  @media (prefers-reduced-motion: reduce) { .btn.copied { animation: none; } }
   /* The minter's action row can hold copy + copy-link + share + ttl; let it wrap
      on narrow screens instead of overflowing the card. */
   .row.wrap { flex-wrap: wrap; justify-content: center; }

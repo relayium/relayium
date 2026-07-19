@@ -27,6 +27,20 @@ ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
+.cta{transition:transform .18s ease,filter .18s ease}.cta:hover{transform:translateY(-1px);filter:brightness(1.06)}
+/* Pure-CSS staggered entrance — keeps these pages JS-free and crawlable while
+   still giving the content a little life on load. animation fill-mode:both ends
+   fully visible, so nothing is ever stuck hidden (no-JS, old browsers, or IO
+   quirks all resolve to visible). */
+.reveal{animation:sec-in .55s cubic-bezier(.22,1,.36,1) both}
+section.reveal:nth-of-type(1){animation-delay:.04s}
+section.reveal:nth-of-type(2){animation-delay:.11s}
+section.reveal:nth-of-type(3){animation-delay:.18s}
+section.reveal:nth-of-type(4){animation-delay:.25s}
+section.reveal:nth-of-type(5){animation-delay:.32s}
+@keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
 `;
 
 function langBar(lang) {
@@ -124,25 +138,33 @@ export function renderLandingPage({ lang, doc, articleLinks = [] }) {
       <p class="pitch">${esc(doc.hero.pitch)}</p>
       <a class="cta" href="${ctaHref(lang)}">${esc(doc.hero.cta)}</a>
 
+      <section class="reveal">
       <h2>${esc(doc.how.heading)}</h2>
       <ol class="steps">
         ${steps}
       </ol>
+      </section>
 
+      <section class="reveal">
       <h2>${esc(doc.why.heading)}</h2>
       <ul class="why">
         ${why}
       </ul>
+      </section>
 
+      <section class="reveal">
       <h2>${esc(doc.compare.heading)}</h2>
       <div class="compare">
       ${compare}
       </div>
+      </section>
 
+      <section class="reveal">
       <h2>${esc(doc.faq.heading)}</h2>
       ${faq}
+      </section>
 
-      ${learn}
+      ${learn ? `<section class="reveal">${learn}</section>` : ""}
       <footer>
         <a href="${ctaHref(lang)}">← ${esc(SITE.name)}</a>
         <a href="${urlPath("guides", lang)}">${esc(GUIDES_LABELS[lang])}</a>

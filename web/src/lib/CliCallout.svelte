@@ -2,11 +2,12 @@
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate, CLI_PATH } from "./router.svelte";
   import CommandBlock from "./CommandBlock.svelte";
+  import { reveal } from "./reveal";
   const t = $derived<Messages>(messages[lang()]);
   const installCmd = "curl -fsSL https://relayium.com/install.sh | sh";
 </script>
 
-<section class="cli-callout" aria-label={t.cliCallout.heading}>
+<section class="cli-callout reveal" use:reveal aria-label={t.cliCallout.heading}>
   <div class="text">
     <h2>{t.cliCallout.heading}</h2>
     <p>{t.cliCallout.blurb}</p>

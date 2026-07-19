@@ -53,6 +53,20 @@ ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
+.cta{transition:transform .18s ease,filter .18s ease}.cta:hover{transform:translateY(-1px);filter:brightness(1.06)}
+/* Pure-CSS staggered entrance — keeps these pages JS-free and crawlable while
+   still giving the content a little life on load. animation fill-mode:both ends
+   fully visible, so nothing is ever stuck hidden (no-JS, old browsers, or IO
+   quirks all resolve to visible). */
+.reveal{animation:sec-in .55s cubic-bezier(.22,1,.36,1) both}
+section.reveal:nth-of-type(1){animation-delay:.04s}
+section.reveal:nth-of-type(2){animation-delay:.11s}
+section.reveal:nth-of-type(3){animation-delay:.18s}
+section.reveal:nth-of-type(4){animation-delay:.25s}
+section.reveal:nth-of-type(5){animation-delay:.32s}
+@keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
 </style>
   </head>
   <body>
@@ -63,6 +77,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="pitch">عندما لا يكون الطرف الآخر متصلًا، ارفع الآن وشارِك رابطًا. يشفّر متصفحك قبل الإرسال؛ ولا يحتفظ الخادم إلا بنص مُشفَّر لا يستطيع قراءته — والمفتاح لا يغادر الرابط أبدًا.</p>
       <a class="cta" href="/offline-transfer?lang=ar">ارفع ملفًا</a>
 
+      <section class="reveal">
       <h2>انقل في أربع خطوات</h2>
       <ol class="steps">
         <li>سجّل الدخول واختر ملفًا — يشفّره متصفحك محليًا قبل أن يغادر أي شيء الجهاز.</li>
@@ -70,7 +85,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li>شارِك رابط التنزيل (مع خيار الحذف بعد القراءة ومدة صلاحية تختارها).</li>
         <li>يفتح المُستقبِل الرابط؛ فيجلب متصفحه النص المُشفَّر ويفك تشفيره بالمفتاح الموجود في الرابط.</li>
       </ol>
+      </section>
 
+      <section class="reveal">
       <h2>لماذا Relayium</h2>
       <ul class="why">
         <li><b>بمعرفة صفرية</b> — يُشفَّر الملف في المتصفح؛ ولا يحتفظ الخادم أبدًا إلا بنص مُشفَّر لا يستطيع فك تشفيره.</li>
@@ -80,7 +97,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li><b>مكمّل غير متزامن</b> — استخدم هذا عندما لا يكون الطرف الآخر متصلًا الآن؛ واستخدم النقل الفوري عبر الشبكات عندما يكون كلاهما حاضرًا.</li>
         <li><b>من الطرفية أيضًا</b> — في الطرفية، يرفع relayium up ويعرض الرابط نفسه، ويجلبه relayium down على جهاز آخر — تتشارك CLI والويب رابطًا واحدًا.</li>
       </ul>
+      </section>
 
+      <section class="reveal">
       <h2>بالمقارنة</h2>
       <div class="compare">
       <h3>مقابل روابط WeTransfer/Dropbox</h3>
@@ -88,8 +107,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>مقابل الوضع الفوري</h3>
       <p>الوضع الفوري من الند للند ويتطلب أن يكون الطرفان متصلين؛ أما هذا الوضع فيخزّن الملف مُشفَّرًا كي يتمكّن المُستقبِل من جلبه لاحقًا.</p>
       </div>
+      </section>
 
-      <h2>الأسئلة الشائعة</h2>
+      <section class="reveal"><h2>الأسئلة الشائعة</h2>
       <h3>هل يستطيع الخادم قراءة ملفي؟</h3>
       <p>لا — يُشفَّر في متصفحك؛ ولا يخزّن الخادم سوى نص مُشفَّر، والمفتاح لا يصله أبدًا.</p>
       <h3>أين يوجد المفتاح؟</h3>
@@ -97,10 +117,10 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>هل أحتاج إلى حساب؟</h3>
       <p>للرفع، نعم (فهو يستهلك مساحة تخزين). للتنزيل، لا — يكفي الرابط.</p>
       <h3>هل يمكنني جعله لمرة واحدة؟</h3>
-      <p>نعم — فعّل الحذف بعد القراءة وحدّد مدة صلاحية.</p>
+      <p>نعم — فعّل الحذف بعد القراءة وحدّد مدة صلاحية.</p></section>
 
-      <h2>اعرف المزيد</h2>
-      <ul class="learn"><li><a href="/ar/guides/push-to-cloud-pull-on-another-computer">ادفع الملفات إلى السحابة، واسحبها على حاسوب آخر</a></li></ul>
+      <section class="reveal"><h2>اعرف المزيد</h2>
+      <ul class="learn"><li><a href="/ar/guides/push-to-cloud-pull-on-another-computer">ادفع الملفات إلى السحابة، واسحبها على حاسوب آخر</a></li></ul></section>
       <footer>
         <a href="/?lang=ar">← Relayium</a>
         <a href="/ar/privacy">الخصوصية</a>

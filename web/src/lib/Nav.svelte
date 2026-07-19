@@ -70,6 +70,12 @@
   }
   .brand { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text-h); font-weight: 600; }
   .brand .word { font-size: 16px; letter-spacing: -0.4px; }
+  /* Playful nudge on the mark when hovering the wordmark. */
+  .brand :global(svg) { transition: transform .25s cubic-bezier(.22, 1, .36, 1); }
+  .brand:hover :global(svg) { transform: rotate(-8deg) scale(1.08); }
+  @media (prefers-reduced-motion: reduce) {
+    .brand :global(svg), .brand:hover :global(svg) { transition: none; transform: none; }
+  }
 
   .util { display: flex; align-items: center; gap: var(--space-3); }
 

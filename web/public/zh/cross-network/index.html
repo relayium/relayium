@@ -53,6 +53,20 @@ ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
+.cta{transition:transform .18s ease,filter .18s ease}.cta:hover{transform:translateY(-1px);filter:brightness(1.06)}
+/* Pure-CSS staggered entrance — keeps these pages JS-free and crawlable while
+   still giving the content a little life on load. animation fill-mode:both ends
+   fully visible, so nothing is ever stuck hidden (no-JS, old browsers, or IO
+   quirks all resolve to visible). */
+.reveal{animation:sec-in .55s cubic-bezier(.22,1,.36,1) both}
+section.reveal:nth-of-type(1){animation-delay:.04s}
+section.reveal:nth-of-type(2){animation-delay:.11s}
+section.reveal:nth-of-type(3){animation-delay:.18s}
+section.reveal:nth-of-type(4){animation-delay:.25s}
+section.reveal:nth-of-type(5){animation-delay:.32s}
+@keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
 </style>
   </head>
   <body>
@@ -63,6 +77,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="pitch">两台设备身处不同网络，用 6 位配对码（或其加入链接/二维码）完成配对。文件通过加密通道流动，途经 Relayium 的快速中继转发——中继只能看到密文，密钥始终只留在两台设备之间。</p>
       <a class="cta" href="/cross-network?lang=zh">开始传输</a>
 
+      <section class="reveal">
       <h2>四步完成一次传输</h2>
       <ol class="steps">
         <li>发送方登录后生成一个 6 位配对码（也可分享其加入链接/二维码）。</li>
@@ -70,7 +85,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li>双方核对屏幕上同一段 6 位 SAS 校验码，确认一致以排除中间人。</li>
         <li>文件端到端加密流式传输（逐块 AES-256-GCM），经由 Relayium 的快速中继转发；中继只经手它无法解密的密文。</li>
       </ol>
+      </section>
 
+      <section class="reveal">
       <h2>为什么选择 Relayium</h2>
       <ul class="why">
         <li><b>端到端加密</b> — X25519 密钥交换 + 每块 AES-256-GCM 加密，密钥只在两台设备间协商，中继与服务器均无法解密。</li>
@@ -79,7 +96,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li><b>跨平台</b> — Windows、macOS、Linux、Android、iOS——只要有现代浏览器，无需安装任何 App。</li>
         <li><b>免费</b> — 在每月中继流量额度内免费使用；生成配对码需发送方登录，接收方可匿名加入。</li>
       </ul>
+      </section>
 
+      <section class="reveal">
       <h2>与其他方式相比</h2>
       <div class="compare">
       <h3>对比 AirDrop</h3>
@@ -87,8 +106,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>对比 Snapdrop / PairDrop</h3>
       <p>它们仅限同一网络内使用；Relayium 在此之上增加了跨网络配对，以及应用层端到端加密 + SAS 校验码，即便中继或信令服务器被入侵也无法窃听。</p>
       </div>
+      </section>
 
-      <h2>常见问题</h2>
+      <section class="reveal"><h2>常见问题</h2>
       <h3>文件会经过你们的服务器吗？</h3>
       <p>加密数据流会经由 Relayium 的中继转发，以实现跨网络的可靠连接——但由于端到端加密，中继只能看到它无法解密的密文。</p>
       <h3>一定要用配对码吗？</h3>
@@ -96,7 +116,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>需要注册账号吗？</h3>
       <p>发送方需登录才能生成配对码；接收方可匿名加入。</p>
       <h3>是端到端加密的吗？</h3>
-      <p>是——采用 X25519 密钥交换 + 每块 AES-256-GCM 加密，并通过 SAS 校验码核验，中继与服务器均无法解密。</p>
+      <p>是——采用 X25519 密钥交换 + 每块 AES-256-GCM 加密，并通过 SAS 校验码核验，中继与服务器均无法解密。</p></section>
 
       
       <footer>

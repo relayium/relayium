@@ -1,5 +1,6 @@
 <script lang="ts">
   import { lang, messages, type Messages } from "./i18n.svelte";
+  import { reveal } from "./reveal";
 
   // Each page shows the shared questions plus its own page-specific set, so the
   // FAQ is tailored to what a visitor on that page is likely asking.
@@ -15,8 +16,8 @@
     <p class="sub">{t.faq.sub}</p>
   </div>
   <div class="list">
-    {#each items as item (item.q)}
-      <details class="qa">
+    {#each items as item, i (item.q)}
+      <details class="qa reveal" use:reveal={{ delay: (i % 2) * 50 }}>
         <summary>
           <span class="q">{item.q}</span>
           <span class="chev" aria-hidden="true">+</span>
@@ -58,4 +59,8 @@
   .a {
     margin: 0; padding: 0 var(--space-5) var(--space-4); font-size: var(--fs-xs); line-height: 1.6; color: var(--text);
   }
+  /* Native <details> pops open instantly; fade+lift the answer so the reveal
+     reads as motion rather than a jump. */
+  .qa[open] .a { animation: fade-up .28s ease both; }
+  @media (prefers-reduced-motion: reduce) { .qa[open] .a { animation: none; } }
 </style>

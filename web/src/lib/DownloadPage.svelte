@@ -220,7 +220,23 @@
   }
 
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; }
-  .fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-deep)); transition: width .2s; }
+  .fill {
+    height: 100%;
+    background:
+      linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, .35) 50%, transparent 100%),
+      linear-gradient(90deg, var(--accent), var(--accent-deep));
+    background-size: 40% 100%, 100% 100%;
+    background-repeat: no-repeat;
+    transition: width .2s;
+    animation: fill-sheen 1.4s linear infinite;
+  }
+  @keyframes fill-sheen {
+    from { background-position: -45% 0, 0 0; }
+    to   { background-position: 145% 0, 0 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fill { animation: none; background: linear-gradient(90deg, var(--accent), var(--accent-deep)); }
+  }
   .error { color: var(--danger); } .ok { color: #2ecc71; }
 
   .sendcta {

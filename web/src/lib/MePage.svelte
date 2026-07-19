@@ -12,6 +12,7 @@
   import { uploadKey, forgetUploadKey, pruneUploadKeys } from "./upload-keys";
   import WhyAccount from "./WhyAccount.svelte";
   import CommandBlock from "./CommandBlock.svelte";
+  import { reveal, countUp } from "./reveal";
 
   const t = $derived<Messages>(messages[lang()]);
 
@@ -213,7 +214,7 @@
   onDestroy(() => clearInterval(tick));
 </script>
 
-<section class="me">
+<section class="me page-enter">
   <ConfirmModal />
 
   <header class="me-head">
@@ -228,13 +229,13 @@
       <WhyAccount compact />
     </div>
   {:else}
-    <div class="stats">
+    <div class="stats reveal" use:reveal>
       <div class="stat">
-        <span class="num">{stats?.transfers ?? 0}</span>
+        <span class="num" use:countUp={stats?.transfers ?? 0}>{stats?.transfers ?? 0}</span>
         <span class="lbl">{t.me.transfers}</span>
       </div>
       <div class="stat">
-        <span class="num">{stats?.downloads ?? 0}</span>
+        <span class="num" use:countUp={stats?.downloads ?? 0}>{stats?.downloads ?? 0}</span>
         <span class="lbl">{t.me.downloads}</span>
       </div>
       <div class="stat wide">
@@ -273,7 +274,7 @@
                 ⏳ {t.me.expiresIn(formatRemaining(secLeft, t.download.durUnits))}
               </span>
               {#if fileKeys[f.id]}
-                <button class="linkbtn" onclick={() => copyLink(f.id)}>
+                <button class="linkbtn" class:copied={copiedId === f.id} onclick={() => copyLink(f.id)}>
                   {copiedId === f.id ? "✓" : "🔗 " + t.me.copyLink}
                 </button>
               {/if}
@@ -428,6 +429,8 @@
     padding: 2px 10px; transition: border-color .13s;
   }
   .linkbtn:hover { border-color: var(--accent-border); }
+  .linkbtn.copied { color: #2ecc71; border-color: #2ecc71; animation: pop-in .3s ease; }
+  @media (prefers-reduced-motion: reduce) { .linkbtn.copied { animation: none; } }
   .del {
     font: inherit; font-size: var(--fs-xs); background: none; cursor: pointer;
     border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text);

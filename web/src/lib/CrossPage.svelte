@@ -39,7 +39,7 @@
   }
 </script>
 
-<section class="crosspage">
+<section class="crosspage page-enter">
 
   <header class="cn-head">
     <h1>{t.crossTitle}</h1>

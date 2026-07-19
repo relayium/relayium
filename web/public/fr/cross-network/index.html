@@ -53,6 +53,20 @@ ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
+.cta{transition:transform .18s ease,filter .18s ease}.cta:hover{transform:translateY(-1px);filter:brightness(1.06)}
+/* Pure-CSS staggered entrance — keeps these pages JS-free and crawlable while
+   still giving the content a little life on load. animation fill-mode:both ends
+   fully visible, so nothing is ever stuck hidden (no-JS, old browsers, or IO
+   quirks all resolve to visible). */
+.reveal{animation:sec-in .55s cubic-bezier(.22,1,.36,1) both}
+section.reveal:nth-of-type(1){animation-delay:.04s}
+section.reveal:nth-of-type(2){animation-delay:.11s}
+section.reveal:nth-of-type(3){animation-delay:.18s}
+section.reveal:nth-of-type(4){animation-delay:.25s}
+section.reveal:nth-of-type(5){animation-delay:.32s}
+@keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
 </style>
   </head>
   <body>
@@ -63,6 +77,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="pitch">Deux appareils sur des réseaux différents s&#39;appairent avec un code à 6 chiffres (ou son lien/QR). Les fichiers circulent via un canal chiffré à travers le relais rapide de Relayium — le relais ne voit jamais que du contenu chiffré, les clés ne quittent jamais les deux appareils.</p>
       <a class="cta" href="/cross-network?lang=fr">Démarrer le transfert</a>
 
+      <section class="reveal">
       <h2>Transférer en quatre étapes</h2>
       <ol class="steps">
         <li>L&#39;expéditeur se connecte et génère un code d&#39;appairage à 6 chiffres (ou partage son lien d&#39;accès/QR).</li>
@@ -70,7 +85,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li>Les deux parties vérifient le même code SAS à 6 chiffres à l&#39;écran pour écarter tout homme du milieu.</li>
         <li>Les fichiers sont transférés chiffrés de bout en bout (AES-256-GCM par bloc) via le relais rapide de Relayium, qui ne transporte que du contenu chiffré qu&#39;il ne peut pas lire.</li>
       </ol>
+      </section>
 
+      <section class="reveal">
       <h2>Pourquoi Relayium</h2>
       <ul class="why">
         <li><b>Chiffré de bout en bout</b> — Échange de clés X25519 et AES-256-GCM par bloc ; les clés sont négociées uniquement entre les deux appareils, ni le relais ni le serveur ne peuvent donc déchiffrer.</li>
@@ -79,7 +96,9 @@ footer a{color:var(--text-h);text-decoration:none}
         <li><b>Multiplateforme</b> — Windows, macOS, Linux, Android, iOS — un navigateur moderne suffit, rien à installer.</li>
         <li><b>Gratuit</b> — Gratuit dans la limite d&#39;un quota mensuel de trafic relais ; générer un code exige que l&#39;expéditeur soit connecté, le destinataire rejoint de façon anonyme.</li>
       </ul>
+      </section>
 
+      <section class="reveal">
       <h2>En comparaison</h2>
       <div class="compare">
       <h3>Face à AirDrop</h3>
@@ -87,8 +106,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>Face à Snapdrop / PairDrop</h3>
       <p>Ceux-ci ne fonctionnent que sur le même réseau ; Relayium ajoute l&#39;appairage inter-réseaux ainsi qu&#39;un chiffrement de bout en bout au niveau applicatif et un code SAS, si bien qu&#39;un relais ou un serveur de signalisation compromis ne peut pas espionner.</p>
       </div>
+      </section>
 
-      <h2>Questions fréquentes</h2>
+      <section class="reveal"><h2>Questions fréquentes</h2>
       <h3>Mes fichiers passent-ils par votre serveur ?</h3>
       <p>Le flux chiffré transite par le relais de Relayium pour garantir une connexion inter-réseaux fiable — mais tout est chiffré de bout en bout, donc le relais ne voit jamais que du contenu chiffré qu&#39;il ne peut pas lire.</p>
       <h3>Un code est-il obligatoire ?</h3>
@@ -96,7 +116,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>Faut-il un compte ?</h3>
       <p>L&#39;expéditeur se connecte pour générer un code ; le destinataire rejoint de façon anonyme.</p>
       <h3>Est-ce chiffré de bout en bout ?</h3>
-      <p>Oui — X25519 et AES-256-GCM par bloc, vérifié avec le code SAS ; ni le relais ni le serveur ne peuvent déchiffrer.</p>
+      <p>Oui — X25519 et AES-256-GCM par bloc, vérifié avec le code SAS ; ni le relais ni le serveur ne peuvent déchiffrer.</p></section>
 
       
       <footer>

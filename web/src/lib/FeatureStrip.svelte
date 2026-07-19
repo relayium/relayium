@@ -1,5 +1,6 @@
 <script lang="ts">
   import { lang, messages, legalUrl, type Messages } from "./i18n.svelte";
+  import { reveal } from "./reveal";
   const t = $derived<Messages>(messages[lang()]);
 </script>
 
@@ -9,8 +10,8 @@
     <p class="sub">{t.features.sub}</p>
   </div>
   <div class="features">
-    {#each t.features.items as f (f.title)}
-      <div class="feature">
+    {#each t.features.items as f, i (f.title)}
+      <div class="feature reveal" use:reveal={{ delay: i * 60 }}>
         <h3>{f.title}</h3>
         <p>{f.desc}</p>
       </div>

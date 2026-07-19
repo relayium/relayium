@@ -1,5 +1,6 @@
 <script lang="ts">
   import { lang, messages, type Messages } from "./i18n.svelte";
+  import { reveal } from "./reveal";
   let { maxFiles }: { maxFiles: number } = $props();
   const t = $derived<Messages>(messages[lang()]);
   // Reuses the existing step copy (step1–step4); the icons make the flow scannable.
@@ -15,7 +16,7 @@
   <h2>{t.guideTitle}</h2>
   <ol class="flow">
     {#each steps as s, i (i)}
-      <li class="step">
+      <li class="step reveal" use:reveal={{ delay: i * 70 }}>
         <span class="badge" aria-hidden="true">
           <span class="num">{i + 1}</span>
           {#if s.icon === "devices"}
@@ -60,7 +61,10 @@
     display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3);
     border: 1px solid var(--border); border-radius: var(--radius);
     background: var(--surface-2); padding: var(--space-5) var(--space-4) var(--space-4);
+    transition: border-color .15s, box-shadow .15s;
   }
+  .step:hover { border-color: var(--accent-border); box-shadow: var(--shadow); }
+  .step:hover .badge { transform: scale(1.08) rotate(-3deg); }
   /* Connector chevron between steps (desktop only). */
   .step:not(:last-child)::after {
     content: "›";
@@ -76,6 +80,11 @@
     border-radius: 14px;
     color: var(--accent); background: var(--accent-bg);
     border: 1px solid var(--accent-border);
+    transition: transform .2s cubic-bezier(.22, 1, .36, 1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .step { transition: none; }
+    .badge, .step:hover .badge { transition: none; transform: none; }
   }
   .badge svg { width: 24px; height: 24px; }
   .num {
