@@ -185,6 +185,19 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin", s.handleAdminHome)
 	mux.Handle("POST /admin/login", s.csrfGuard(http.HandlerFunc(s.handleAdminLogin)))
 	mux.Handle("POST /admin/logout", s.csrfGuard(http.HandlerFunc(s.handleAdminLogout)))
+	// The passkey endpoints are fetch-only, so a missing Origin (which csrfGuard
+	// lets through for form posts and native clients) is a forgery signal here.
+	mux.Handle("POST /admin/passkey/login/begin",
+		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminPasskeyLoginBegin))))
+	mux.Handle("POST /admin/passkey/login/finish",
+		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminPasskeyLoginFinish))))
+	mux.Handle("POST /admin/passkey/register/begin",
+		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminPasskeyRegisterBegin))))
+	mux.Handle("POST /admin/passkey/register/finish",
+		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminPasskeyRegisterFinish))))
+	// Delete is a plain form submission, not fetch, so it gets csrfGuard only.
+	mux.Handle("POST /admin/passkey/delete",
+		s.csrfGuard(http.HandlerFunc(s.handleAdminPasskeyDelete)))
 	mux.Handle("POST /admin/settings", s.csrfGuard(http.HandlerFunc(s.handleAdminSettings)))
 	mux.Handle("POST /admin/plans", s.csrfGuard(http.HandlerFunc(s.handleAdminUpsertPlan)))
 	mux.Handle("POST /admin/users/plan", s.csrfGuard(http.HandlerFunc(s.handleAdminSetUserPlan)))
@@ -225,28 +238,36 @@ func (s *Service) isAdminReq(r *http.Request) bool {
 	return err == nil && s.validAdmin(c.Value)
 }
 
-func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
-	ip := s.clientIP(r)
-	if s.adminLogins.locked(ip, s.now()) {
-		s.renderAdminLogin(w, http.StatusTooManyRequests, "尝试过于频繁，请稍后再试")
-		return
-	}
-
-	user := r.FormValue("username")
-	pass := r.FormValue("password")
-	// Compare both fields in constant time and combine without short-circuit,
-	// so neither a wrong username nor a wrong password is distinguishable by timing.
+// verifyAdminCreds runs the constant-time username/password comparison plus the
+// TOTP match shared by password login and passkey-registration step-up. Both
+// fields are combined without short-circuit, so neither a wrong username nor a
+// wrong password is distinguishable by timing. It does NOT consume the TOTP
+// step; callers commit it only after full success.
+func (s *Service) verifyAdminCreds(user, pass, code string) (totpStep int64, ok bool) {
 	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(s.adminUser()))
 	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(s.cfg.AdminPassword))
 	credsOK := userOK&passOK == 1
-	totpStep, totpOK := int64(0), true
+	step, totpOK := int64(0), true
 	if s.AdminTOTPEnabled() {
-		totpStep, totpOK = s.matchAdminTOTPStep(r.FormValue("totp"))
+		step, totpOK = s.matchAdminTOTPStep(code)
+	}
+	return step, credsOK && totpOK
+}
+
+func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
+	ip := s.clientIP(r)
+	if s.adminLogins.locked(ip, s.now()) {
+		s.renderAdminLogin(w, http.StatusTooManyRequests, "尝试过于频繁，请稍后再试",
+			s.adminPasskeyCount(r.Context()) > 0)
+		return
 	}
 
-	if !credsOK || !totpOK {
+	totpStep, ok := s.verifyAdminCreds(
+		r.FormValue("username"), r.FormValue("password"), r.FormValue("totp"))
+	if !ok {
 		s.adminLogins.recordFail(ip, s.now())
-		s.renderAdminLogin(w, http.StatusUnauthorized, "账号、密码或验证码错误")
+		s.renderAdminLogin(w, http.StatusUnauthorized, "账号、密码或验证码错误",
+			s.adminPasskeyCount(r.Context()) > 0)
 		return
 	}
 
@@ -384,6 +405,19 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 			}
 		}
 	}
+	// A passkey that was never used is how a planted credential shows itself,
+	// so the list is part of the security surface, not just a convenience. A
+	// failed read must therefore never render as an empty table. It must not
+	// 500 the page either — that would take down the user list, nodes, plans
+	// and settings just as the operator starts diagnosing the database. So
+	// carry on like the fetches above and flag it, and the template swaps the
+	// table for an explicit error.
+	passkeys, pkerr := s.store.ListAdminCredentials(r.Context())
+	passkeysErr := pkerr != nil
+	if pkerr != nil {
+		log.Printf("passkey: ListAdminCredentials failed: %v", pkerr)
+		passkeys = nil
+	}
 	return adminHomeData{
 		Metrics: metrics, Users: rows, Total: total, Page: page, TotalPages: totalPages,
 		Search: search, Sort: sortBy, Dir: dir, Period: period, Months: months,
@@ -391,6 +425,8 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		Nodes: nodeVs, FleetNodeCount: fleetNodeCount, FleetTokens: tokenVs,
 		Plans: planVs, ActivePlans: activePlanVs,
 		CentralStoredBytes: centralStored,
+		Passkeys:           passkeys,
+		PasskeysErr:        passkeysErr,
 		Settings: adminSettingsView{
 			MaxFileSizeMB:          st.MaxFileSize / (1024 * 1024),
 			DailyQuotaMB:           st.DailyQuota / (1024 * 1024),
@@ -407,7 +443,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 
 func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
-		s.renderAdminLogin(w, http.StatusOK, "")
+		s.renderAdminLogin(w, http.StatusOK, "", s.adminPasskeyCount(r.Context()) > 0)
 		return
 	}
 	data, err := s.buildAdminHomeData(r)
@@ -701,8 +737,13 @@ func (s *Service) handleAdminRevokeToken(w http.ResponseWriter, r *http.Request)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 
-func (s *Service) renderAdminLogin(w http.ResponseWriter, status int, errMsg string) {
+// renderAdminLogin draws the login page. passkey controls only the extra
+// passkey button; the password+TOTP form below it is the fallback channel and
+// renders unconditionally.
+func (s *Service) renderAdminLogin(w http.ResponseWriter, status int, errMsg string, passkey bool) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	_ = adminLoginTmpl.Execute(w, adminLoginData{Error: errMsg, TOTP: s.AdminTOTPEnabled()})
+	_ = adminLoginTmpl.Execute(w, adminLoginData{
+		Error: errMsg, TOTP: s.AdminTOTPEnabled(), Passkey: passkey,
+	})
 }

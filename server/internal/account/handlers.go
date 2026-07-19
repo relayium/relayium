@@ -76,6 +76,21 @@ func (s *Service) csrfGuard(next http.Handler) http.Handler {
 	})
 }
 
+// requireOrigin rejects requests that carry no Origin header. csrfGuard
+// deliberately exempts those (top-level form posts, native clients need it),
+// but the passkey JSON endpoints are only ever called by fetch, which always
+// sends Origin — so a missing one there is a forgery signal, not a legitimate
+// client. Compose as csrfGuard(requireOrigin(h)).
+func (s *Service) requireOrigin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Origin") == "" {
+			http.Error(w, "origin required", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Service) routeMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/auth/register", s.handleRegister)
