@@ -9,6 +9,7 @@ import security from "./pages/content/legal/security.mjs";
 import landing from "./pages/content/landing.mjs";
 import crossNetwork from "./pages/content/cross-network.mjs";
 import offlineTransfer from "./pages/content/offline-transfer.mjs";
+import apps from "./pages/content/apps.mjs";
 import guidesIndex from "./pages/content/guides-index.mjs";
 import compareSnapdrop from "./pages/content/articles/compare-snapdrop.mjs";
 import compareAirdrop from "./pages/content/articles/compare-airdrop.mjs";
@@ -110,6 +111,7 @@ async function main() {
       slug: "offline-transfer",
       learn: articleLinksByLang([cliCloudAsync]),
     }),
+    ...buildModePages(apps, { slug: "apps" }),
   ];
   for (const page of pages) {
     const abs = join(publicDir, page.path);
@@ -126,6 +128,7 @@ async function main() {
       modes: [
         { def: crossNetwork, slug: "cross-network" },
         { def: offlineTransfer, slug: "offline-transfer" },
+        { def: apps, slug: "apps" },
       ],
     }),
     "utf8"
