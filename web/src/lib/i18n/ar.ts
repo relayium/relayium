@@ -206,7 +206,7 @@ const ar: Messages = {
     signIn: "تسجيل الدخول",
     transfers: "عمليات النقل",
     downloads: "التنزيلات",
-    traffic: "إجمالي حركة البيانات التراكمية",
+    traffic: "الحركة التراكمية للبيانات",
     trafficParts: (up, down, relay) => `رفع ${up} · تنزيل ${down} · ترحيل ${relay}`,
     privacyNote: "أعداد إجمالية فقط — لا مَن نزّل ولا متى أبدًا.",
     filesTitle: "ملفاتي",

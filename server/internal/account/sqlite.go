@@ -737,6 +737,11 @@ func (s *SQLiteStore) SetUserStripeCustomer(ctx context.Context, userID, custome
 // dispatch). An empty customerID intentionally returns not-found: every
 // pre-Stripe row defaults stripe_customer_id to ”, so matching "" would
 // return an arbitrary user instead of "unknown".
+//
+// 这条 SELECT 有意不取配额分段三列（plan_started_at / quota_accrued_bytes /
+// quota_accrued_period），因此该路径返回的 User 上这三个字段恒为零值。现有
+// 调用方（billing.go）只读 PlanSource/PlanID/ScheduledPlanID，所以无害；但
+// 任何将来要从这条路径读配额字段的代码，都必须先把这三列加进 SELECT。
 func (s *SQLiteStore) GetUserByStripeCustomer(ctx context.Context, customerID string) (User, bool, error) {
 	if customerID == "" {
 		return User{}, false, nil
