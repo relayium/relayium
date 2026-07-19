@@ -317,6 +317,11 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// display hint — set when the endpoint schedules a downgrade, cleared when
 		// the downgrade lands (webhook), is canceled, or the subscription ends.
 		`ALTER TABLE users ADD COLUMN scheduled_plan_id TEXT NOT NULL DEFAULT ''`,
+		// 配额防套利（2026-07）：月中改档不再白送整月流量额度，而是把当月按档位
+		// 分段、每段按占比计算。见 accrueQuotaTx 与 Service.monthlyTrafficCap。
+		`ALTER TABLE users ADD COLUMN plan_started_at INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE users ADD COLUMN quota_accrued_bytes INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE users ADD COLUMN quota_accrued_period TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -598,10 +603,12 @@ func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (User, error) 
 	var strict int
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes, deleted_at, purge_after, plan_id,
-		        stripe_customer_id, subscription_status, subscription_end, plan_source, scheduled_plan_id
+		        stripe_customer_id, subscription_status, subscription_end, plan_source, scheduled_plan_id,
+		        plan_started_at, quota_accrued_bytes, quota_accrued_period
 		   FROM users WHERE id = ?`, id,
 	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &strict, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
-		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID)
+		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID,
+		&u.PlanStartedAt, &u.QuotaAccruedBytes, &u.QuotaAccruedPeriod)
 	if err == sql.ErrNoRows {
 		return User{}, ErrNotFound
 	}

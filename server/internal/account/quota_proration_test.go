@@ -118,3 +118,22 @@ func TestFreshInstallAdminOverrideSurvivesMigration(t *testing.T) {
 		t.Fatalf("fresh-install admin override was overwritten to %d; want 2147483648 (2 GiB) preserved", p2.TrafficBytes)
 	}
 }
+
+// 新列必须能被 GetUserByID 读回来 —— 忘了扩 SELECT/Scan 是这类改动最常见的漏。
+// 存量用户是零值，语义上等于"本月没改过档"。
+func TestUserQuotaColumnsRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	u, err := store.UpsertUserByEmail(ctx, "a@b.c", "")
+	if err != nil {
+		t.Fatalf("UpsertUserByEmail: %v", err)
+	}
+	got, err := store.GetUserByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	if got.PlanStartedAt != 0 || got.QuotaAccruedBytes != 0 || got.QuotaAccruedPeriod != "" {
+		t.Fatalf("fresh user quota fields = (%d, %d, %q), want all zero",
+			got.PlanStartedAt, got.QuotaAccruedBytes, got.QuotaAccruedPeriod)
+	}
+}

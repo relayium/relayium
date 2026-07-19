@@ -43,6 +43,17 @@ type User struct {
 	// ScheduledPlanID is the tier a pending period-end downgrade will switch to;
 	// '' = no pending change. Display hint only (see the column comment).
 	ScheduledPlanID string
+	// PlanStartedAt 是当前档位生效的时刻（unix 秒）；0 表示从未改过档。
+	// 与 QuotaAccrued* 一起把当月切成若干"档位段"，用来给月中改档的用户按段
+	// 计算流量上限，而不是每次改档都白送一整个月的额度。
+	PlanStartedAt int64
+	// QuotaAccruedBytes 是本月 PlanStartedAt 之前那些已结束的段累计下来的流量
+	// 额度（每段 = 该段档位上限 × 该段占全月的比例）。
+	QuotaAccruedBytes int64
+	// QuotaAccruedPeriod 是 QuotaAccruedBytes 所属的 'YYYYMM' 桶。与当前月份不
+	// 符即视为过期作废，用户直接拿当前档的整月上限——这也让存量用户（三列全为
+	// 零值）天然走满额分支，无需回填。
+	QuotaAccruedPeriod string
 }
 
 // Plan is an admin-configurable billing tier: per-account storage + monthly
