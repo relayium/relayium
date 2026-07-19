@@ -189,6 +189,16 @@ const ko: Messages = {
     a6: "결제는 Stripe를 통해 안전하게 처리됩니다. ‘결제 관리’에서 언제든지 해지할 수 있으며, 요금제는 결제 기간이 끝날 때까지 유지된 후 무료로 전환됩니다.",
     back: "← Relayium으로 돌아가기",
   },
+  quota: {
+    title: "이번 달 사용량",
+    traffic: "트래픽",
+    storage: "저장 공간",
+    left: (left) => `${left} 남음`,
+    resets: (date) => `${date}에 초기화`,
+    unlimited: "무제한",
+    warn: (pct) => `이번 달 할당량의 ${pct}%를 사용했습니다`,
+    upgrade: "업그레이드",
+  },
   me: {
     title: "마이페이지",
     back: "← 홈으로",

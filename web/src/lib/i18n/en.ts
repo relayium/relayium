@@ -189,6 +189,16 @@ const en: Messages = {
     a6: "Payments are handled securely by Stripe. Cancel anytime from Manage billing; your plan stays active until the end of the paid period, then reverts to Free.",
     back: "← Back to Relayium",
   },
+  quota: {
+    title: "This month's usage",
+    traffic: "Traffic",
+    storage: "Storage",
+    left: (left) => `${left} left`,
+    resets: (date) => `Resets ${date}`,
+    unlimited: "Unlimited",
+    warn: (pct) => `You've used ${pct}% of this month's quota`,
+    upgrade: "Upgrade",
+  },
   me: {
     title: "Personal center",
     back: "← Back to home",

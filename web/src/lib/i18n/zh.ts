@@ -189,6 +189,16 @@ const zh: Messages = {
     a6: "付款由 Stripe 安全处理。你可以随时在“管理账单”中取消；套餐在已付费周期结束前保持有效，之后自动恢复为免费版。",
     back: "← 返回 Relayium",
   },
+  quota: {
+    title: "本月用量",
+    traffic: "流量",
+    storage: "存储",
+    left: (left) => `剩余 ${left}`,
+    resets: (date) => `${date} 重置`,
+    unlimited: "无限制",
+    warn: (pct) => `本月配额已用 ${pct}%`,
+    upgrade: "升级套餐",
+  },
   me: {
     title: "个人中心",
     back: "← 返回首页",

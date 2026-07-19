@@ -189,6 +189,16 @@ const pt: Messages = {
     a6: "Os pagamentos são processados com segurança pelo Stripe. Você pode cancelar quando quiser em Gerenciar cobrança; seu plano permanece ativo até o fim do período pago e depois volta para o Gratuito.",
     back: "← Voltar para o Relayium",
   },
+  quota: {
+    title: "Uso deste mês",
+    traffic: "Tráfego",
+    storage: "Armazenamento",
+    left: (left) => `${left} restante`,
+    resets: (date) => `Redefine em ${date}`,
+    unlimited: "Ilimitado",
+    warn: (pct) => `Você usou ${pct}% da sua cota mensal`,
+    upgrade: "Fazer upgrade",
+  },
   me: {
     title: "Central pessoal",
     back: "← Voltar ao início",

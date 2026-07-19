@@ -189,6 +189,16 @@ const ja: Messages = {
     a6: "お支払いは Stripe によって安全に処理されます。「請求の管理」からいつでも解約できます。プランは有料期間の終了までは有効で、その後は無料プランに戻ります。",
     back: "← Relayium に戻る",
   },
+  quota: {
+    title: "今月の使用量",
+    traffic: "通信量",
+    storage: "ストレージ",
+    left: (left) => `残り ${left}`,
+    resets: (date) => `${date} にリセット`,
+    unlimited: "無制限",
+    warn: (pct) => `今月の割り当ての ${pct}% を使用しました`,
+    upgrade: "アップグレード",
+  },
   me: {
     title: "マイページ",
     back: "← ホームに戻る",

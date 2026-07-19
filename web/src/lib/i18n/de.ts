@@ -189,6 +189,16 @@ const de: Messages = {
     a6: "Zahlungen werden sicher von Stripe abgewickelt. Sie können jederzeit über „Abrechnung verwalten“ kündigen; Ihr Tarif bleibt bis zum Ende des bezahlten Zeitraums aktiv und wechselt danach zu Free.",
     back: "← Zurück zu Relayium",
   },
+  quota: {
+    title: "Nutzung diesen Monat",
+    traffic: "Datenvolumen",
+    storage: "Speicher",
+    left: (left) => `${left} übrig`,
+    resets: (date) => `Zurücksetzung am ${date}`,
+    unlimited: "Unbegrenzt",
+    warn: (pct) => `Sie haben ${pct} % Ihres Monatskontingents verbraucht`,
+    upgrade: "Upgrade",
+  },
   me: {
     title: "Mein Bereich",
     back: "← Zurück zur Startseite",
