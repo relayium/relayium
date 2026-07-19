@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func newAdminServer(t *testing.T, user, pass string) *httptest.Server {
+func newAdminServer(t *testing.T, user, pass string) (*httptest.Server, *Service) {
 	t.Helper()
 	store := newTestStore(t)
 	// 种一个用户，列表里能看到。
@@ -24,11 +24,11 @@ func newAdminServer(t *testing.T, user, pass string) *httptest.Server {
 	svc.RegisterAdmin(mux)
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
-	return ts
+	return ts, svc
 }
 
 func TestAdminDisabledWhenNoPassword(t *testing.T) {
-	ts := newAdminServer(t, "admin", "")
+	ts, _ := newAdminServer(t, "admin", "")
 	resp, _ := ts.Client().Get(ts.URL + "/admin")
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("admin off => /admin should 404, got %d", resp.StatusCode)
@@ -37,7 +37,7 @@ func TestAdminDisabledWhenNoPassword(t *testing.T) {
 
 func TestAdminUserDefaultsToAdminWhenUnset(t *testing.T) {
 	// 不配账号时默认为 "admin"（向后兼容只设密码的部署）。
-	ts := newAdminServer(t, "", "s3cret")
+	ts, _ := newAdminServer(t, "", "s3cret")
 	client := ts.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	resp, _ := client.PostForm(ts.URL+"/admin/login",
@@ -147,7 +147,7 @@ func TestAdminSettingsRequiresAdmin(t *testing.T) {
 }
 
 func TestAdminLoginGate(t *testing.T) {
-	ts := newAdminServer(t, "boss", "s3cret")
+	ts, _ := newAdminServer(t, "boss", "s3cret")
 	client := ts.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 

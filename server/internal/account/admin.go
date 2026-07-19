@@ -185,6 +185,12 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin", s.handleAdminHome)
 	mux.Handle("POST /admin/login", s.csrfGuard(http.HandlerFunc(s.handleAdminLogin)))
 	mux.Handle("POST /admin/logout", s.csrfGuard(http.HandlerFunc(s.handleAdminLogout)))
+	// The passkey endpoints are fetch-only, so a missing Origin (which csrfGuard
+	// lets through for form posts and native clients) is a forgery signal here.
+	mux.Handle("POST /admin/passkey/login/begin",
+		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminPasskeyLoginBegin))))
+	mux.Handle("POST /admin/passkey/login/finish",
+		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminPasskeyLoginFinish))))
 	mux.Handle("POST /admin/settings", s.csrfGuard(http.HandlerFunc(s.handleAdminSettings)))
 	mux.Handle("POST /admin/plans", s.csrfGuard(http.HandlerFunc(s.handleAdminUpsertPlan)))
 	mux.Handle("POST /admin/users/plan", s.csrfGuard(http.HandlerFunc(s.handleAdminSetUserPlan)))

@@ -148,6 +148,15 @@ type Service struct {
 	adminTOTPMu       sync.Mutex
 	adminTOTPLastStep int64 // last TOTP time-step accepted for admin login (replay guard)
 	adminLogins       *loginThrottle
+	// adminPasskeyLogins is a SEPARATE bucket from adminLogins on purpose: if
+	// passkey failures counted against the password bucket, an attacker could
+	// spam failed passkey attempts to lock out the password fallback — the one
+	// escape hatch when passkeys are unavailable.
+	adminPasskeyLogins *loginThrottle
+	// passkeyCeremonies holds in-flight WebAuthn challenges keyed by an opaque
+	// cookie value, mirroring how adminSessions works (process-local, short TTL).
+	passkeyCeremonies map[string]passkeyCeremony
+	passkeyMu         sync.Mutex
 	pwLogins          *loginThrottle              // per email+IP failed password-login limiter
 	magicRequests     *loginThrottle              // per email+IP magic-link request rate limiter
 	verifyRequests    *loginThrottle              // per email+IP resend-verification limiter
@@ -201,6 +210,8 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 		deleteRequests: newLoginThrottle(),
 		resumable:      newResumableUploads(),
 		uploadSem:      newUploadSem(maxConcurrentUploadsPerUser)}
+	svc.adminPasskeyLogins = newLoginThrottle()
+	svc.passkeyCeremonies = map[string]passkeyCeremony{}
 	svc.clientIP = clientIP
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
 	svc.exchangeAppleCode = svc.realExchangeAppleCode

@@ -9,7 +9,7 @@ import (
 
 func TestAdminDashboardShowsPerUserColumns(t *testing.T) {
 	// newAdminServer (admin_test.go) already seeds one user and sets admin creds.
-	ts := newAdminServer(t, "admin", "s3cret")
+	ts, _ := newAdminServer(t, "admin", "s3cret")
 	client := ts.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
