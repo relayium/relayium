@@ -14,7 +14,7 @@ func setUserPlanWith(t *testing.T, st *SQLiteStore, userID string, storage, traf
 	t.Helper()
 	ctx := context.Background()
 	_ = st.UpsertPlan(ctx, Plan{ID: "free", Name: "Free", StorageBytes: storage, TrafficBytes: traffic, RetentionSecs: retention, Active: true, UpdatedAt: 1})
-	_ = st.SetUserPlan(ctx, userID, "free")
+	_ = st.SetUserPlan(ctx, userID, "free", time.Now().Unix())
 }
 
 func TestUploadRefusedOverStorage(t *testing.T) {

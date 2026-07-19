@@ -116,7 +116,7 @@ func TestSetUserSubscriptionSetsAllFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertUserByEmail: %v", err)
 	}
-	if err := s.SetUserSubscription(ctx, u.ID, "pro", "active", 1234567890, "stripe"); err != nil {
+	if err := s.SetUserSubscription(ctx, u.ID, "pro", "active", 1234567890, "stripe", 1); err != nil {
 		t.Fatalf("SetUserSubscription: %v", err)
 	}
 
@@ -210,7 +210,7 @@ func TestSetUserPlanAdminSetsSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertUserByEmail: %v", err)
 	}
-	if err := s.SetUserPlanAdmin(ctx, u.ID, "pro"); err != nil {
+	if err := s.SetUserPlanAdmin(ctx, u.ID, "pro", 1); err != nil {
 		t.Fatalf("SetUserPlanAdmin: %v", err)
 	}
 
@@ -237,10 +237,10 @@ func TestSetUserPlanAdminClearsStaleSubscription(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertUserByEmail: %v", err)
 	}
-	if err := s.SetUserSubscription(ctx, u.ID, "pro", "active", 9999999999, "stripe"); err != nil {
+	if err := s.SetUserSubscription(ctx, u.ID, "pro", "active", 9999999999, "stripe", 1); err != nil {
 		t.Fatalf("SetUserSubscription: %v", err)
 	}
-	if err := s.SetUserPlanAdmin(ctx, u.ID, "plus"); err != nil {
+	if err := s.SetUserPlanAdmin(ctx, u.ID, "plus", 2); err != nil {
 		t.Fatalf("SetUserPlanAdmin: %v", err)
 	}
 

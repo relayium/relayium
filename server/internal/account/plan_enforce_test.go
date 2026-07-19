@@ -20,7 +20,7 @@ func TestOverTrafficAndStorage(t *testing.T) {
 	svc, st := newPlanService(t)
 	ctx := context.Background()
 	u, _ := st.UpsertUserByEmail(ctx, "e@example.com", "")
-	_ = st.SetUserPlan(ctx, u.ID, "free") // 100MB storage, 1GB traffic
+	_ = st.SetUserPlan(ctx, u.ID, "free", svc.now().Unix()) // 100MB storage, 1GB traffic
 
 	// Under both caps.
 	if over, _ := svc.overTraffic(ctx, u.ID, 1<<20); over {
@@ -44,7 +44,7 @@ func TestPlanForUserFallsBackToFree(t *testing.T) {
 	svc, st := newPlanService(t)
 	ctx := context.Background()
 	u, _ := st.UpsertUserByEmail(ctx, "z@example.com", "")
-	_ = st.SetUserPlan(ctx, u.ID, "nonexistent-plan")
+	_ = st.SetUserPlan(ctx, u.ID, "nonexistent-plan", svc.now().Unix())
 	if p, err := svc.planForUser(ctx, u.ID); p.ID != "free" || err != nil {
 		t.Fatalf("unknown plan_id must fall back to free with nil err, got %q, %v", p.ID, err)
 	}
@@ -129,7 +129,7 @@ func TestPlanRetentionCap(t *testing.T) {
 	svc, st := newPlanService(t)
 	ctx := context.Background()
 	u, _ := st.UpsertUserByEmail(ctx, "retention@example.com", "")
-	_ = st.SetUserPlan(ctx, u.ID, "free")
+	_ = st.SetUserPlan(ctx, u.ID, "free", svc.now().Unix())
 
 	const wantFreeRetentionSecs = 3 * 86400 // matches defaultPlans()'s seeded "free" entry
 	if got := svc.planRetentionCap(ctx, u.ID); got != wantFreeRetentionSecs {
@@ -145,7 +145,7 @@ func TestPlanRetentionCap(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_ = st.SetUserPlan(ctx, u.ID, "custom-retention")
+	_ = st.SetUserPlan(ctx, u.ID, "custom-retention", svc.now().Unix())
 	if got := svc.planRetentionCap(ctx, u.ID); got != customRetentionSecs {
 		t.Fatalf("planRetentionCap(custom) = %d, want %d", got, customRetentionSecs)
 	}
@@ -165,7 +165,7 @@ func TestOverStorageExactBoundary(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_ = st.SetUserPlan(ctx, u.ID, "storage-cap-100")
+	_ = st.SetUserPlan(ctx, u.ID, "storage-cap-100", svc.now().Unix())
 
 	// No existing storage: used=0. 0+100 == cap(100) → NOT over.
 	if over, err := svc.overStorage(ctx, u.ID, capBytes); err != nil || over {
@@ -191,7 +191,7 @@ func TestOverTrafficExactBoundary(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_ = st.SetUserPlan(ctx, u.ID, "traffic-cap-500")
+	_ = st.SetUserPlan(ctx, u.ID, "traffic-cap-500", svc.now().Unix())
 
 	// Record 300 bytes of used traffic in the current month (now=100, per
 	// newPlanService's stub clock, so periodOf(100) is "this period").

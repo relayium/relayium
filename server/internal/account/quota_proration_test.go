@@ -137,3 +137,156 @@ func TestUserQuotaColumnsRoundTrip(t *testing.T) {
 			got.PlanStartedAt, got.QuotaAccruedBytes, got.QuotaAccruedPeriod)
 	}
 }
+
+// monthAt 返回给定 'YYYYMM' 的月首、月末与月长（秒），供比例断言使用。
+func monthAt(t *testing.T, period string) (start, end, secs int64) {
+	t.Helper()
+	start, end = monthRange(period)
+	if start == 0 && end == 0 {
+		t.Fatalf("monthRange(%q) = 0,0 — malformed period", period)
+	}
+	return start, end, end - start
+}
+
+// 月中升级必须冻结旧档已得的那一段，而不是从零开始重算。
+// 时间线（用 1970-01 这个月，因为测试时钟就落在这里）：
+//   月首 → t1 是 free 段，t1 → 月末 是 plus 段。
+// 冻结值应当是 freeCap × (t1-月首)/月长。
+func TestAccrueFreezesPreviousSegment(t *testing.T) {
+	ctx := context.Background()
+	svc, store := newPlanService(t)
+	// InsertUser isn't a real Store method (see quota_proration_test.go's
+	// existing TestUserQuotaColumnsRoundTrip / task 2's report for the same
+	// substitution): use UpsertUserByEmail and its generated id instead.
+	newUser, err := store.UpsertUserByEmail(ctx, "a@b.c", "")
+	if err != nil {
+		t.Fatalf("UpsertUserByEmail: %v", err)
+	}
+	uid := newUser.ID
+	monthStart, _, monthSecs := monthAt(t, periodOf(svc.now().Unix()))
+	t1 := monthStart + monthSecs/2 // 月中
+
+	if err := store.SetUserPlan(ctx, uid, "plus", t1); err != nil {
+		t.Fatalf("SetUserPlan: %v", err)
+	}
+	u, err := store.GetUserByID(ctx, uid)
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	freeCap := int64(1073741824)
+	want := freeCap/monthSecs*(monthSecs/2) + (freeCap%monthSecs)*(monthSecs/2)/monthSecs
+	if u.QuotaAccruedBytes != want {
+		t.Fatalf("accrued = %d, want %d (free cap × half a month)", u.QuotaAccruedBytes, want)
+	}
+	if u.PlanStartedAt != t1 {
+		t.Fatalf("plan_started_at = %d, want %d", u.PlanStartedAt, t1)
+	}
+	if u.QuotaAccruedPeriod != periodOf(t1) {
+		t.Fatalf("accrued period = %q, want %q", u.QuotaAccruedPeriod, periodOf(t1))
+	}
+	if u.PlanID != "plus" {
+		t.Fatalf("plan_id = %q, want plus", u.PlanID)
+	}
+}
+
+// 档位没变时不得累计。Stripe 的 subscription.updated 会在纯状态变更（比如
+// 续费成功）时反复投递同一个 plan_id；每次都切一段虽然数学上等价，但整数
+// 除法的截断会一点点吃掉用户的额度。
+func TestAccrueSkipsWhenPlanUnchanged(t *testing.T) {
+	ctx := context.Background()
+	svc, store := newPlanService(t)
+	newUser, err := store.UpsertUserByEmail(ctx, "a@b.c", "")
+	if err != nil {
+		t.Fatalf("UpsertUserByEmail: %v", err)
+	}
+	uid := newUser.ID
+	monthStart, _, monthSecs := monthAt(t, periodOf(svc.now().Unix()))
+	t1 := monthStart + monthSecs/2
+
+	if err := store.SetUserPlan(ctx, uid, "plus", t1); err != nil {
+		t.Fatalf("SetUserPlan 1: %v", err)
+	}
+	first, _ := store.GetUserByID(ctx, uid)
+
+	// 同一个档再写一次，晚 1000 秒。
+	if err := store.SetUserSubscription(ctx, uid, "plus", "active", 0, "stripe", t1+1000); err != nil {
+		t.Fatalf("SetUserSubscription: %v", err)
+	}
+	second, _ := store.GetUserByID(ctx, uid)
+
+	if second.QuotaAccruedBytes != first.QuotaAccruedBytes {
+		t.Fatalf("accrued changed on a no-op plan write: %d → %d",
+			first.QuotaAccruedBytes, second.QuotaAccruedBytes)
+	}
+	if second.PlanStartedAt != first.PlanStartedAt {
+		t.Fatalf("plan_started_at moved on a no-op plan write: %d → %d",
+			first.PlanStartedAt, second.PlanStartedAt)
+	}
+}
+
+// 跨月的累计值必须作废：上个月冻结的额度不能带进新的一个月。
+func TestAccrueDropsStaleMonth(t *testing.T) {
+	ctx := context.Background()
+	_, store := newPlanService(t)
+	newUser, err := store.UpsertUserByEmail(ctx, "a@b.c", "")
+	if err != nil {
+		t.Fatalf("UpsertUserByEmail: %v", err)
+	}
+	uid := newUser.ID
+	janStart, janEnd, janSecs := monthAt(t, "197001")
+	if err := store.SetUserPlan(ctx, uid, "plus", janStart+janSecs/2); err != nil {
+		t.Fatalf("SetUserPlan jan: %v", err)
+	}
+	// 二月里再改一次档。一月冻结的那笔必须被丢弃。
+	febMid := janEnd + 3600
+	if err := store.SetUserPlan(ctx, uid, "pro", febMid); err != nil {
+		t.Fatalf("SetUserPlan feb: %v", err)
+	}
+	u, _ := store.GetUserByID(ctx, uid)
+	if u.QuotaAccruedPeriod != periodOf(febMid) {
+		t.Fatalf("accrued period = %q, want %q", u.QuotaAccruedPeriod, periodOf(febMid))
+	}
+	febStart, _, febSecs := monthAt(t, periodOf(febMid))
+	plusCap := int64(300) << 30
+	seg := febMid - febStart
+	want := plusCap/febSecs*seg + (plusCap%febSecs)*seg/febSecs
+	if u.QuotaAccruedBytes != want {
+		t.Fatalf("accrued = %d, want %d (february's plus segment only)", u.QuotaAccruedBytes, want)
+	}
+}
+
+// admin 手工改档是三个改档入口里唯一不经 Stripe 的一条，必须同样冻结前一段
+// ——漏掉它，管理员给用户提档就成了绕过防套利的后门。
+func TestAccrueOnAdminPlanChange(t *testing.T) {
+	ctx := context.Background()
+	svc, store := newPlanService(t)
+	newUser, err := store.UpsertUserByEmail(ctx, "a@b.c", "")
+	if err != nil {
+		t.Fatalf("UpsertUserByEmail: %v", err)
+	}
+	uid := newUser.ID
+	monthStart, _, monthSecs := monthAt(t, periodOf(svc.now().Unix()))
+	t1 := monthStart + monthSecs/2
+
+	if err := store.SetUserPlanAdmin(ctx, uid, "pro", t1); err != nil {
+		t.Fatalf("SetUserPlanAdmin: %v", err)
+	}
+	u, err := store.GetUserByID(ctx, uid)
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	if u.PlanStartedAt != t1 || u.QuotaAccruedPeriod != periodOf(t1) {
+		t.Fatalf("admin change did not stamp the segment: started=%d period=%q",
+			u.PlanStartedAt, u.QuotaAccruedPeriod)
+	}
+	freeCap := int64(1073741824)
+	want := freeCap/monthSecs*(monthSecs/2) + (freeCap%monthSecs)*(monthSecs/2)/monthSecs
+	if u.QuotaAccruedBytes != want {
+		t.Fatalf("accrued = %d, want %d", u.QuotaAccruedBytes, want)
+	}
+	// admin 路径既有的副作用必须保留。
+	if u.PlanSource != "admin" || u.SubscriptionStatus != "" || u.SubscriptionEnd != 0 {
+		t.Fatalf("admin path lost its existing side effects: source=%q status=%q end=%d",
+			u.PlanSource, u.SubscriptionStatus, u.SubscriptionEnd)
+	}
+}

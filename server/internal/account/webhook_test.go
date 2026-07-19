@@ -195,7 +195,7 @@ func TestWebhookSubscriptionUpdatedPastDueRevertsToFree(t *testing.T) {
 	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_pastdue_1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 1700000000, "stripe"); err != nil {
+	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 1700000000, "stripe", time.Now().Unix()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -229,7 +229,7 @@ func TestWebhookSubscriptionDeletedRevertsToFreeCanceled(t *testing.T) {
 	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_deleted_1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 1700000000, "stripe"); err != nil {
+	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 1700000000, "stripe", time.Now().Unix()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -265,7 +265,7 @@ func TestWebhookAdminSourceNotOverridden(t *testing.T) {
 	}
 	// Admin comps this user onto "enterprise" — must survive a Stripe webhook
 	// for an unrelated "pro" subscription.
-	if err := store.SetUserPlanAdmin(context.Background(), uid, "enterprise"); err != nil {
+	if err := store.SetUserPlanAdmin(context.Background(), uid, "enterprise", time.Now().Unix()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -311,7 +311,7 @@ func TestWebhookAdminSourceNotOverriddenViaMetadata(t *testing.T) {
 	// left unbound (no checkout.session.completed / SetUserStripeCustomer
 	// call), forcing the subscription event below to resolve the user via
 	// the metadata.user_id fallback instead of the direct customer lookup.
-	if err := store.SetUserPlanAdmin(context.Background(), uid, "pro"); err != nil {
+	if err := store.SetUserPlanAdmin(context.Background(), uid, "pro", time.Now().Unix()); err != nil {
 		t.Fatal(err)
 	}
 

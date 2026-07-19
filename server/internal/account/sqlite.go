@@ -621,10 +621,85 @@ func (s *SQLiteStore) SetOnlyOwnNodes(ctx context.Context, userID string, on boo
 	return err
 }
 
-// SetUserPlan assigns a user's billing tier (plans.id).
-func (s *SQLiteStore) SetUserPlan(ctx context.Context, userID, planID string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE users SET plan_id = ? WHERE id = ?`, planID, userID)
+// accrueQuotaTx 冻结用户在**当前**档位下已经挣到的那部分流量额度，然后把新段
+// 的起点打上时间戳。必须在同一个事务里、并且在覆盖 plan_id **之前**调用——
+// 覆盖之后就读不到改档前的档位了。
+//
+// 当月的流量上限 = Σ(各档位段的 cap × 该段秒数 / 当月秒数)。每次改档都冻结一
+// 次，是为了堵住这个套利：31 号从 Plus 升到 Max，Stripe 只按 ~2/31 的比例收
+// 几毛钱差价，但按整月发额度的话用户当场白拿一整个 Max 月的流量。
+//
+// 三条短路：
+//   1. 档位没变 → 直接返回。Stripe 的 subscription.updated 会在纯状态变更时
+//      反复投递同一个 plan_id；每次切段数学上等价，但整数除法的截断会一点点
+//      蚕食用户额度。
+//   2. 累计值属于上个月 → 归零。上月冻结的额度不能带进新月份。
+//   3. 旧档是无限档（traffic_bytes <= 0）→ 不贡献任何累计。cap<=0 在别处一律
+//      表示"无限"，用户离开该档后本月应当回落到新档的普通比例，而不是继承一
+//      个无意义的天文数字。（这一条以及 segSecs<=0/monthSecs<=0 的短路由
+//      prorate 自己守卫，见其注释。）
+func accrueQuotaTx(ctx context.Context, tx *sql.Tx, userID, newPlanID string, now int64) error {
+	var curPlan, accruedPeriod string
+	var startedAt, accrued int64
+	err := tx.QueryRowContext(ctx,
+		`SELECT plan_id, plan_started_at, quota_accrued_bytes, quota_accrued_period
+		   FROM users WHERE id = ?`, userID).
+		Scan(&curPlan, &startedAt, &accrued, &accruedPeriod)
+	if err == sql.ErrNoRows {
+		return nil // 用户不存在：让后面的 UPDATE 自己去影响 0 行，语义不变
+	}
+	if err != nil {
+		return err
+	}
+	if curPlan == newPlanID {
+		return nil
+	}
+
+	period := periodOf(now)
+	monthStart, monthEnd := monthRange(period)
+	if accruedPeriod != period {
+		accrued = 0
+	}
+
+	var cap sql.NullInt64
+	if err := tx.QueryRowContext(ctx,
+		`SELECT traffic_bytes FROM plans WHERE id = ?`, curPlan).Scan(&cap); err != nil && err != sql.ErrNoRows {
+		return err
+	}
+
+	segStart := startedAt
+	if segStart < monthStart {
+		segStart = monthStart // 上个月就开始的段，本月只从月首算起
+	}
+	monthSecs := monthEnd - monthStart
+	segSecs := now - segStart
+	if cap.Valid {
+		accrued += prorate(cap.Int64, segSecs, monthSecs)
+	}
+
+	_, err = tx.ExecContext(ctx,
+		`UPDATE users SET quota_accrued_bytes = ?, quota_accrued_period = ?, plan_started_at = ? WHERE id = ?`,
+		accrued, period, now, userID)
 	return err
+}
+
+// SetUserPlan assigns a user's billing tier (plans.id).
+//
+// 累计与 plan_id 的写入放在同一事务里：如果两者分开，进程在中间崩溃会留下
+// "额度已冻结但档位没变"或反之的脏状态，用户的当月上限就永久算错了。
+func (s *SQLiteStore) SetUserPlan(ctx context.Context, userID, planID string, now int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() // Commit 成功后是 no-op
+	if err := accrueQuotaTx(ctx, tx, userID, planID, now); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET plan_id = ? WHERE id = ?`, planID, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // SetUserPlanAdmin assigns a user's billing tier from the admin console,
@@ -634,10 +709,24 @@ func (s *SQLiteStore) SetUserPlan(ctx context.Context, userID, planID string) er
 // subscription: a manual admin comp supersedes that subscription record,
 // and a later webhook for an admin-source user will re-populate
 // status/end while keeping the admin-assigned plan.
-func (s *SQLiteStore) SetUserPlanAdmin(ctx context.Context, userID, planID string) error {
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE users SET plan_id = ?, plan_source = 'admin', subscription_status = '', subscription_end = 0 WHERE id = ?`, planID, userID)
-	return err
+//
+// 累计与 plan_id 的写入放在同一事务里：如果两者分开，进程在中间崩溃会留下
+// "额度已冻结但档位没变"或反之的脏状态，用户的当月上限就永久算错了。
+func (s *SQLiteStore) SetUserPlanAdmin(ctx context.Context, userID, planID string, now int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := accrueQuotaTx(ctx, tx, userID, planID, now); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE users SET plan_id = ?, plan_source = 'admin', subscription_status = '', subscription_end = 0 WHERE id = ?`,
+		planID, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // SetUserStripeCustomer binds a user to their Stripe customer id, set once on
@@ -678,11 +767,24 @@ func (s *SQLiteStore) GetUserByStripeCustomer(ctx context.Context, customerID st
 // (Stripe webhook path): plan_id, subscription_status, subscription_end, and
 // plan_source in one UPDATE so a reader never observes a torn intermediate
 // state.
-func (s *SQLiteStore) SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source string) error {
-	_, err := s.db.ExecContext(ctx,
+//
+// 累计与 plan_id 的写入放在同一事务里：如果两者分开，进程在中间崩溃会留下
+// "额度已冻结但档位没变"或反之的脏状态，用户的当月上限就永久算错了。
+func (s *SQLiteStore) SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source string, now int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := accrueQuotaTx(ctx, tx, userID, planID, now); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
 		`UPDATE users SET plan_id = ?, subscription_status = ?, subscription_end = ?, plan_source = ? WHERE id = ?`,
-		planID, status, end, source, userID)
-	return err
+		planID, status, end, source, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *SQLiteStore) SetScheduledPlan(ctx context.Context, userID, planID string) error {
@@ -1827,6 +1929,22 @@ func monthRange(period string) (start, end int64) {
 		return 0, 0
 	}
 	return t.Unix(), t.AddDate(0, 1, 0).Unix()
+}
+
+// prorate returns cap scaled to segSecs' share of monthSecs — the amount of a
+// tier's monthly traffic allowance earned by holding that tier for segSecs.
+//
+// 先除后乘是为了避免溢出：5 TiB × 2.6e6 秒 ≈ 1.4e19，超过 int64 上限 9.2e18。
+// 拆成商部分和余数部分两段相加，结果与直接乘除的整数除法一致。
+//
+// 写路径（accrueQuotaTx，冻结已过去的段）与读路径（monthlyTrafficCap，计算当前
+// 段）必须用同一个算法：两处一旦漂移，冻结的累计值和算出的上限就对不上，用户的
+// 当月配额会静默算错。
+func prorate(cap, segSecs, monthSecs int64) int64 {
+	if cap <= 0 || segSecs <= 0 || monthSecs <= 0 {
+		return 0
+	}
+	return cap/monthSecs*segSecs + (cap%monthSecs)*segSecs/monthSecs
 }
 
 // RecordMeter adds a one-shot upload/download event to the user's current-month

@@ -366,19 +366,21 @@ type Store interface {
 	SetEmailVerified(ctx context.Context, userID string) error
 	// SetOnlyOwnNodes toggles the BYO-nodes-only restriction (SP3) for a user.
 	SetOnlyOwnNodes(ctx context.Context, userID string, on bool) error
-	// SetUserPlan assigns a user's billing tier (plans.id).
-	SetUserPlan(ctx context.Context, userID, planID string) error
+	// SetUserPlan assigns a user's billing tier (plans.id). now is the change
+	// timestamp, used to freeze the outgoing tier's earned quota segment.
+	SetUserPlan(ctx context.Context, userID, planID string, now int64) error
 	// SetUserPlanAdmin assigns a user's billing tier from the admin console,
 	// recording plan_source='admin' so a later Stripe webhook won't override it.
-	SetUserPlanAdmin(ctx context.Context, userID, planID string) error
+	SetUserPlanAdmin(ctx context.Context, userID, planID string, now int64) error
 	// SetUserStripeCustomer binds a user to their Stripe customer id.
 	SetUserStripeCustomer(ctx context.Context, userID, customerID string) error
 	// GetUserByStripeCustomer looks up a user by Stripe customer id (webhook
 	// dispatch). An empty customerID returns not-found.
 	GetUserByStripeCustomer(ctx context.Context, customerID string) (User, bool, error)
 	// SetUserSubscription updates plan_id, subscription_status, subscription_end,
-	// and plan_source together (Stripe webhook path).
-	SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source string) error
+	// and plan_source together (Stripe webhook path). now is the change timestamp,
+	// used to freeze the outgoing tier's earned quota segment.
+	SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source string, now int64) error
 	// SetScheduledPlan records (or clears, with planID="") the tier a pending
 	// period-end downgrade will switch to — a display hint for the pricing UI.
 	SetScheduledPlan(ctx context.Context, userID, planID string) error

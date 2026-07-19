@@ -592,7 +592,7 @@ func (s *Service) handleAdminSetUserPlan(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "unknown or inactive plan", http.StatusBadRequest)
 		return
 	}
-	if err := s.store.SetUserPlanAdmin(r.Context(), userID, planID); err != nil {
+	if err := s.store.SetUserPlanAdmin(r.Context(), userID, planID, s.now().Unix()); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}

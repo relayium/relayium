@@ -65,7 +65,7 @@ func TestUserPlanDefaultsFreeAndCanBeSet(t *testing.T) {
 		t.Fatalf("new user plan = %q, want free", got.PlanID)
 	}
 
-	if err := st.SetUserPlan(ctx, u.ID, "pro"); err != nil {
+	if err := st.SetUserPlan(ctx, u.ID, "pro", time.Now().Unix()); err != nil {
 		t.Fatal(err)
 	}
 	got, _ = st.GetUserByID(ctx, u.ID)
