@@ -191,6 +191,13 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminPasskeyLoginBegin))))
 	mux.Handle("POST /admin/passkey/login/finish",
 		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminPasskeyLoginFinish))))
+	mux.Handle("POST /admin/passkey/register/begin",
+		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminPasskeyRegisterBegin))))
+	mux.Handle("POST /admin/passkey/register/finish",
+		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminPasskeyRegisterFinish))))
+	// Delete is a plain form submission, not fetch, so it gets csrfGuard only.
+	mux.Handle("POST /admin/passkey/delete",
+		s.csrfGuard(http.HandlerFunc(s.handleAdminPasskeyDelete)))
 	mux.Handle("POST /admin/settings", s.csrfGuard(http.HandlerFunc(s.handleAdminSettings)))
 	mux.Handle("POST /admin/plans", s.csrfGuard(http.HandlerFunc(s.handleAdminUpsertPlan)))
 	mux.Handle("POST /admin/users/plan", s.csrfGuard(http.HandlerFunc(s.handleAdminSetUserPlan)))
@@ -231,6 +238,22 @@ func (s *Service) isAdminReq(r *http.Request) bool {
 	return err == nil && s.validAdmin(c.Value)
 }
 
+// verifyAdminCreds runs the constant-time username/password comparison plus the
+// TOTP match shared by password login and passkey-registration step-up. Both
+// fields are combined without short-circuit, so neither a wrong username nor a
+// wrong password is distinguishable by timing. It does NOT consume the TOTP
+// step; callers commit it only after full success.
+func (s *Service) verifyAdminCreds(user, pass, code string) (totpStep int64, ok bool) {
+	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(s.adminUser()))
+	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(s.cfg.AdminPassword))
+	credsOK := userOK&passOK == 1
+	step, totpOK := int64(0), true
+	if s.AdminTOTPEnabled() {
+		step, totpOK = s.matchAdminTOTPStep(code)
+	}
+	return step, credsOK && totpOK
+}
+
 func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	ip := s.clientIP(r)
 	if s.adminLogins.locked(ip, s.now()) {
@@ -238,19 +261,9 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := r.FormValue("username")
-	pass := r.FormValue("password")
-	// Compare both fields in constant time and combine without short-circuit,
-	// so neither a wrong username nor a wrong password is distinguishable by timing.
-	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(s.adminUser()))
-	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(s.cfg.AdminPassword))
-	credsOK := userOK&passOK == 1
-	totpStep, totpOK := int64(0), true
-	if s.AdminTOTPEnabled() {
-		totpStep, totpOK = s.matchAdminTOTPStep(r.FormValue("totp"))
-	}
-
-	if !credsOK || !totpOK {
+	totpStep, ok := s.verifyAdminCreds(
+		r.FormValue("username"), r.FormValue("password"), r.FormValue("totp"))
+	if !ok {
 		s.adminLogins.recordFail(ip, s.now())
 		s.renderAdminLogin(w, http.StatusUnauthorized, "账号、密码或验证码错误")
 		return
