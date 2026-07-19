@@ -230,6 +230,8 @@
       <WhyAccount compact />
     </div>
   {:else}
+    <QuotaMeters />
+
     <div class="stats reveal" use:reveal>
       <div class="stat">
         <span class="num" use:countUp={stats?.transfers ?? 0}>{stats?.transfers ?? 0}</span>
@@ -250,7 +252,6 @@
       </div>
     </div>
     <p class="privacy">{t.me.privacyNote}</p>
-    <QuotaMeters />
 
     <section class="files">
       <div class="files-head">
@@ -393,7 +394,7 @@
     padding: var(--space-8) var(--space-4); text-align: center; color: var(--text);
   }
 
-  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); margin-top: var(--space-5); }
   .stat {
     display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center;
     padding: var(--space-5) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius);

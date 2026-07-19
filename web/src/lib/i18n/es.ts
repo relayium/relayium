@@ -206,7 +206,7 @@ const es: Messages = {
     signIn: "Iniciar sesión",
     transfers: "Transferencias",
     downloads: "Descargas",
-    traffic: "Tráfico total",
+    traffic: "Tráfico acumulado",
     trafficParts: (up, down, relay) => `Subida ${up} · Descarga ${down} · Retransmisión ${relay}`,
     privacyNote: "Solo recuentos agregados — nunca quién descargó, ni cuándo.",
     filesTitle: "Mis archivos",

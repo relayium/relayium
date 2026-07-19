@@ -206,7 +206,7 @@ const en: Messages = {
     signIn: "Sign in",
     transfers: "Transfers",
     downloads: "Downloads",
-    traffic: "Total traffic",
+    traffic: "Lifetime traffic",
     trafficParts: (up, down, relay) => `Upload ${up} · Download ${down} · Relay ${relay}`,
     privacyNote: "Aggregate counts only — never who downloaded, or when.",
     filesTitle: "My files",

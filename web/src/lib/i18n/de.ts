@@ -206,7 +206,7 @@ const de: Messages = {
     signIn: "Anmelden",
     transfers: "Übertragungen",
     downloads: "Downloads",
-    traffic: "Gesamter Datenverkehr",
+    traffic: "Kumulierter Datenverkehr",
     trafficParts: (up, down, relay) => `Upload ${up} · Download ${down} · Relay ${relay}`,
     privacyNote: "Nur aggregierte Zahlen — niemals wer heruntergeladen hat oder wann.",
     filesTitle: "Meine Dateien",

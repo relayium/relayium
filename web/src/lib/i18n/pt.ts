@@ -206,7 +206,7 @@ const pt: Messages = {
     signIn: "Entrar",
     transfers: "Transferências",
     downloads: "Downloads",
-    traffic: "Tráfego total",
+    traffic: "Tráfego acumulado",
     trafficParts: (up, down, relay) => `Envio ${up} · Download ${down} · Retransmissão ${relay}`,
     privacyNote: "Apenas contagens agregadas — nunca quem baixou, ou quando.",
     filesTitle: "Meus arquivos",

@@ -206,7 +206,7 @@ const ja: Messages = {
     signIn: "ログイン",
     transfers: "転送回数",
     downloads: "ダウンロード回数",
-    traffic: "合計トラフィック",
+    traffic: "累計トラフィック",
     trafficParts: (up, down, relay) => `アップロード ${up}・ダウンロード ${down}・中継 ${relay}`,
     privacyNote: "集計のみ。ダウンロードした相手や時刻は一切記録しません。",
     filesTitle: "マイファイル",

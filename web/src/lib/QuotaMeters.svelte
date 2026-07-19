@@ -57,10 +57,20 @@
 {/if}
 
 <style>
-  .quota { margin-top: var(--space-5); }
+  /* Same card treatment as MePage.svelte's .stat — this block is the primary
+     content of the page (current-month quota), not a footnote to the lifetime
+     stats below it, so it needs the same visual weight. */
+  .quota {
+    padding: var(--space-5) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--social-bg);
+  }
+  .quota h3 { margin: 0; font-size: var(--fs-h3); color: var(--text-h); }
   .row { margin-top: var(--space-3); }
   .head { display: flex; justify-content: space-between; gap: var(--space-3); }
-  .lbl { color: var(--text); }
+  .lbl { color: var(--text-h); }
+  .val { color: var(--text-h); }
   /* 进度条沿用 App.svelte:1646 / StoredUpload.svelte:225 的既有样式（本仓没有 --muted，
      统一用 --text 做次要文字色） */
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; margin-top: var(--space-2); }

@@ -206,7 +206,7 @@ const ko: Messages = {
     signIn: "로그인",
     transfers: "전송 횟수",
     downloads: "다운로드 횟수",
-    traffic: "총 트래픽",
+    traffic: "누적 트래픽",
     trafficParts: (up, down, relay) => `업로드 ${up} · 다운로드 ${down} · 중계 ${relay}`,
     privacyNote: "집계만 기록하며, 다운로드한 사람이나 시각은 기록하지 않습니다.",
     filesTitle: "내 파일",

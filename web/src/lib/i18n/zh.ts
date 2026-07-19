@@ -206,7 +206,7 @@ const zh: Messages = {
     signIn: "登录",
     transfers: "传输次数",
     downloads: "被下载次数",
-    traffic: "总流量",
+    traffic: "累计流量",
     trafficParts: (up, down, relay) => `上传 ${up} · 下载 ${down} · 中继 ${relay}`,
     privacyNote: "仅聚合统计，绝不记录下载者身份或时间。",
     filesTitle: "我的文件",
