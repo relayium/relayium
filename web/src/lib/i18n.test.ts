@@ -108,6 +108,14 @@ describe("i18n completeness", () => {
       expect(m.quota.unlimited, `${code}.quota.unlimited`).toBeTruthy();
     }
   });
+
+  it("every language has the transfer-surface 80%-quota-warning strings", () => {
+    for (const { code } of LANGS) {
+      const m = messages[code];
+      expect(m.quota.warn(80), `${code}.quota.warn`).toContain("80");
+      expect(m.quota.upgrade, `${code}.quota.upgrade`).toBeTruthy();
+    }
+  });
 });
 
 describe("detect", () => {
