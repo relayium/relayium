@@ -122,6 +122,7 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("DELETE /api/auth/identities/{provider}", s.RequireAuth(s.handleUnlinkIdentity))
 	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/me", s.RequireSession(s.handleMe))
+	mux.HandleFunc("GET /api/me/usage", s.RequireSession(s.handleMeUsage))
 	mux.HandleFunc("GET /api/devices", s.RequireSession(s.handleListDevices))
 	mux.HandleFunc("POST /api/devices", s.RequireSession(s.handleUpsertDevice))
 	mux.HandleFunc("PATCH /api/devices/{id}", s.RequireSession(s.handleRenameDevice))
@@ -383,6 +384,59 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {
 			"hasBilling":         u.StripeCustomerID != "",
 			"scheduledPlanId":    u.ScheduledPlanID,
 		},
+	})
+}
+
+// handleMeUsage 报告调用者当月的配额位置：当月流量对当月上限（可能因为月中改
+// 档而按段计算），以及当前存活存储对档位上限。cap == 0 表示无限，前端据此隐
+// 藏进度条。
+//
+// 这是用户侧第一个能看到配额的接口。在它之前，用户只有撞上 429 才知道自己超
+// 了；而 /api/stats 报的是**终身累计**，和真正生效的当月配额是两个数，反而误
+// 导人。
+func (s *Service) handleMeUsage(w http.ResponseWriter, r *http.Request, u User) {
+	ctx := r.Context()
+	now := s.now().Unix()
+	period := periodOf(now)
+	_, monthEnd := monthRange(period)
+
+	traffic, err := s.currentMonthTraffic(ctx, u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	trafficCap, err := s.monthlyTrafficCap(ctx, u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	storage, err := s.store.CurrentStorage(ctx, u.ID, now)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	plan, ok, err := s.store.GetPlan(ctx, u.PlanID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		plan = freePlanFallback()
+	}
+
+	// 对外一律把"无限"规约成 0，前端只需判断一个值。
+	storageCap := plan.StorageBytes
+	if storageCap < 0 {
+		storageCap = 0
+	}
+	if trafficCap < 0 {
+		trafficCap = 0
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"period":   period,
+		"resetsAt": monthEnd,
+		"traffic":  map[string]any{"used": traffic, "cap": trafficCap},
+		"storage":  map[string]any{"used": storage, "cap": storageCap},
 	})
 }
 
