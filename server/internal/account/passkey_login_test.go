@@ -5,9 +5,12 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-webauthn/webauthn/webauthn"
 )
 
 // registerTestPasskey 走库层注册一枚凭据并写库，返回 authenticator 与 handle。
@@ -129,27 +132,42 @@ func TestPasskeyLoginFinishWithoutCeremony(t *testing.T) {
 }
 
 // 缺失 Origin 头必须被拒：这些端点只由 fetch 调用，fetch 必带 Origin。
+// finish 是真正种下管理员会话的端点，是这条防线里最值钱的一环，必须一并覆盖。
 func TestPasskeyEndpointsRequireOrigin(t *testing.T) {
 	srv, s := newAdminServer(t, "admin", "pw")
 	registerTestPasskey(t, s)
+
 	req, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/login/begin", nil)
 	resp, err := srv.Client().Do(req)
 	if err != nil {
-		t.Fatalf("do: %v", err)
+		t.Fatalf("begin do: %v", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("no-Origin begin status=%d want 403", resp.StatusCode)
 	}
+
+	freq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/login/finish",
+		strings.NewReader(`{"id":"x","type":"public-key"}`))
+	freq.Header.Set("Content-Type", "application/json")
+	fresp, err := srv.Client().Do(freq)
+	if err != nil {
+		t.Fatalf("finish do: %v", err)
+	}
+	defer fresp.Body.Close()
+	if fresp.StatusCode != http.StatusForbidden {
+		t.Fatalf("no-Origin finish status=%d want 403", fresp.StatusCode)
+	}
 }
 
-// 核心安全断言：passkey 失败刷爆后，密码后备通道必须仍然可用。
-// 两者共用一个 throttle 桶会让攻击者用 passkey 失败锁死唯一退路。
+// 核心安全断言：passkey 失败刷爆后，密码后备通道必须仍然可用；同时 passkey
+// 自己的桶必须确实生效（否则下面"密码没被锁"这条断言在桶是空操作时也会通过）。
 func TestPasskeyThrottleDoesNotLockPasswordLogin(t *testing.T) {
 	srv, s := newAdminServer(t, "admin", "pw")
 	auth, handle := registerTestPasskey(t, s)
 	rp, _ := s.adminRP()
 
+	sawThrottled := false
 	for i := 0; i < adminLoginMaxFails+3; i++ {
 		// 取一个合法 ceremony，再用错误 challenge 签名 → 必然验签失败
 		breq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/login/begin", nil)
@@ -157,6 +175,9 @@ func TestPasskeyThrottleDoesNotLockPasswordLogin(t *testing.T) {
 		bresp, err := srv.Client().Do(breq)
 		if err != nil {
 			t.Fatalf("begin %d: %v", i, err)
+		}
+		if bresp.StatusCode == http.StatusTooManyRequests {
+			sawThrottled = true
 		}
 		cookies := bresp.Cookies()
 		bresp.Body.Close()
@@ -174,10 +195,17 @@ func TestPasskeyThrottleDoesNotLockPasswordLogin(t *testing.T) {
 		if err != nil {
 			t.Fatalf("finish %d: %v", i, err)
 		}
+		if fresp.StatusCode == http.StatusTooManyRequests {
+			sawThrottled = true
+		}
 		fresp.Body.Close()
 		if fresp.StatusCode == http.StatusOK {
 			t.Fatalf("bad challenge accepted at attempt %d", i)
 		}
+	}
+	if !sawThrottled {
+		t.Fatalf("passkey throttle never returned 429 after %d failures — bucket may be a no-op",
+			adminLoginMaxFails+3)
 	}
 
 	// 密码通道必须没被连带锁死
@@ -287,5 +315,97 @@ func TestPasskeyCeremonyExpires(t *testing.T) {
 	defer fresp.Body.Close()
 	if fresp.StatusCode == http.StatusOK {
 		t.Fatalf("expired ceremony was accepted")
+	}
+}
+
+// ceremony 必须一次性消费：同一枚 cookie+body 成功登录一次后，重放必须被拒。
+// 这是 spec 明确要求的"一次性消费，不得可重放"。
+func TestPasskeyLoginCeremonyIsOneShot(t *testing.T) {
+	srv, s := newAdminServer(t, "admin", "pw")
+	auth, handle := registerTestPasskey(t, s)
+	rp, _ := s.adminRP()
+
+	breq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/login/begin", nil)
+	breq.Header.Set("Origin", s.selfOrigin())
+	bresp, err := srv.Client().Do(breq)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	var o struct {
+		PublicKey struct {
+			Challenge string `json:"challenge"`
+		} `json:"publicKey"`
+	}
+	json.NewDecoder(bresp.Body).Decode(&o)
+	cookies := bresp.Cookies()
+	bresp.Body.Close()
+
+	body := auth.assertBody(t, rp.Config.RPID, s.selfOrigin(), o.PublicKey.Challenge, handle)
+	doFinish := func() int {
+		freq, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/login/finish", strings.NewReader(body))
+		freq.Header.Set("Content-Type", "application/json")
+		freq.Header.Set("Origin", s.selfOrigin())
+		for _, c := range cookies {
+			freq.AddCookie(c)
+		}
+		resp, err := srv.Client().Do(freq)
+		if err != nil {
+			t.Fatalf("finish: %v", err)
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	if code := doFinish(); code != http.StatusOK {
+		t.Fatalf("first finish status=%d want 200", code)
+	}
+	if code := doFinish(); code == http.StatusOK {
+		t.Fatalf("replaying the exact same ceremony cookie+body succeeded a second time")
+	}
+}
+
+// 未认证的 login/begin 必须存在容量上限：否则攻击者可以循环调用 begin，
+// 让 in-flight ceremony 的 map 无界增长，并让每次 begin 里的过期清扫
+// 退化成越来越大的 O(n) 全表扫描（还是在持锁状态下做的）。
+func TestPasskeyCeremonyCapEnforced(t *testing.T) {
+	srv, s := newAdminServer(t, "admin", "pw")
+	registerTestPasskey(t, s)
+
+	// 直接灌 s.putCeremony 而不走完整 WebAuthn 握手：验证的是容量上限本身，
+	// 不需要每条 ceremony 都携带真实、可校验的 challenge。
+	discard := httptest.NewRecorder()
+	for i := 0; i < passkeyCeremonyCap; i++ {
+		if !s.putCeremony(discard, webauthn.SessionData{}, "") {
+			t.Fatalf("putCeremony rejected before reaching the cap at i=%d", i)
+		}
+	}
+	s.passkeyMu.Lock()
+	n := len(s.passkeyCeremonies)
+	s.passkeyMu.Unlock()
+	if n != passkeyCeremonyCap {
+		t.Fatalf("map size=%d want %d after filling to the cap", n, passkeyCeremonyCap)
+	}
+
+	// 再灌一条必须被拒绝，且 map 不得继续增长（不驱逐已有条目，只拒绝新的）。
+	if s.putCeremony(discard, webauthn.SessionData{}, "") {
+		t.Fatalf("putCeremony accepted a ceremony past the cap")
+	}
+	s.passkeyMu.Lock()
+	n2 := len(s.passkeyCeremonies)
+	s.passkeyMu.Unlock()
+	if n2 != passkeyCeremonyCap {
+		t.Fatalf("map grew past the cap: size=%d want %d", n2, passkeyCeremonyCap)
+	}
+
+	// HTTP 层：到达上限后，login/begin 必须开始拒绝新请求（503），而不是悄悄放行。
+	req, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/login/begin", nil)
+	req.Header.Set("Origin", s.selfOrigin())
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("begin at cap status=%d want 503", resp.StatusCode)
 	}
 }

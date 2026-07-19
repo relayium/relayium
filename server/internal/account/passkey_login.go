@@ -17,6 +17,14 @@ const (
 	// requires SessionData be anchored to the user agent and not client-modifiable.
 	passkeyCeremonyCookie = "relayium_admin_ceremony"
 	passkeyCeremonyTTL    = 5 * time.Minute
+	// passkeyCeremonyCap bounds the number of concurrent in-flight ceremonies.
+	// login/begin requires no authentication, so without a cap an unauthenticated
+	// client could loop on begin and hold one live webauthn.SessionData per call
+	// for the full TTL, growing the map without bound and turning putCeremony's
+	// expiry sweep into an ever-larger O(n) scan taken under passkeyMu. The
+	// legitimate concurrent-ceremony count for a single-admin panel is tiny, so
+	// this can stay generous without ever affecting real use.
+	passkeyCeremonyCap = 2000
 )
 
 // passkeyCeremony is one in-flight WebAuthn ceremony. name carries the
@@ -39,15 +47,28 @@ func adminRegistrationOpts() []webauthn.RegistrationOption {
 	}
 }
 
-func (s *Service) putCeremony(w http.ResponseWriter, sess webauthn.SessionData, name string) {
+// putCeremony stores sess under a fresh cookie-borne token and returns true,
+// or returns false without writing a cookie if the in-flight ceremony cap is
+// already at passkeyCeremonyCap. On false, the caller must reject the request
+// rather than fall through — see passkeyCeremonyCap's comment for why.
+func (s *Service) putCeremony(w http.ResponseWriter, sess webauthn.SessionData, name string) bool {
 	tok := randToken()
 	s.passkeyMu.Lock()
-	// Opportunistically drop expired ceremonies so the map stays bounded.
+	// Opportunistically drop expired ceremonies so the map stays bounded even
+	// between cap rejections.
 	now := s.now()
 	for k, c := range s.passkeyCeremonies {
 		if now.After(c.expires) {
 			delete(s.passkeyCeremonies, k)
 		}
+	}
+	if len(s.passkeyCeremonies) >= passkeyCeremonyCap {
+		// Reject rather than evict: evicting an existing entry would let an
+		// attacker knock a legitimate in-flight login out just by flooding
+		// begin. This is an O(1) check, so the rejection path itself cannot
+		// become the DoS.
+		s.passkeyMu.Unlock()
+		return false
 	}
 	s.passkeyCeremonies[tok] = passkeyCeremony{
 		session: sess, name: name, expires: now.Add(passkeyCeremonyTTL),
@@ -58,6 +79,7 @@ func (s *Service) putCeremony(w http.ResponseWriter, sess webauthn.SessionData, 
 		HttpOnly: true, Secure: s.cookieSecure(), SameSite: http.SameSiteLaxMode,
 		MaxAge: int(passkeyCeremonyTTL / time.Second),
 	})
+	return true
 }
 
 // takeCeremony consumes the ceremony one-shot: a challenge must never be
@@ -96,7 +118,11 @@ func (s *Service) handleAdminPasskeyLoginBegin(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "无法发起验证"})
 		return
 	}
-	s.putCeremony(w, *sess, "")
+	if !s.putCeremony(w, *sess, "") {
+		log.Printf("passkey: ceremony cap (%d) reached, rejecting login/begin", passkeyCeremonyCap)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "系统繁忙，请稍后再试"})
+		return
+	}
 	writeJSON(w, http.StatusOK, assertion)
 }
 
@@ -148,6 +174,11 @@ func (s *Service) handleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.R
 		if err := s.store.TouchAdminCredential(r.Context(), b64url(cred.ID), blob, s.now().Unix()); err != nil {
 			log.Printf("passkey: TouchAdminCredential failed: %v", err)
 		}
+	} else {
+		// Realistically unreachable for a webauthn.Credential, but silently
+		// losing the sign-counter/last_used_at write-back would otherwise go
+		// unnoticed.
+		log.Printf("passkey: marshaling credential for write-back failed: %v", err)
 	}
 	s.adminPasskeyLogins.reset(ip)
 	tok := s.newAdminSession()
