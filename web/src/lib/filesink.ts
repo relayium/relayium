@@ -1,4 +1,5 @@
 import { ZipWriter, safeSegments } from "./zip";
+import { streamURL, contentDisposition } from "./sw-stream";
 
 export interface FileSink {
   write(chunk: Uint8Array): Promise<void>;
@@ -60,7 +61,169 @@ export const LARGE_DOWNLOAD_WARN_BYTES = 256 * 1024 * 1024; // 256 MiB
 export function canStreamToDisk(fileCount: number): boolean {
   const w = window as unknown as SavePickerWindow;
   if (fileCount === 1 && w.showSaveFilePicker) return true;
-  return !!w.showDirectoryPicker;
+  if (w.showDirectoryPicker) return true;
+  return fileCount === 1 && swStreamReady();
+}
+
+// --- service worker 流式下载 -------------------------------------------------
+
+/**
+ * 探测结果缓存。**必须是同步可读的**：canStreamToDisk 是同步函数，pickSaveTarget
+ * 又必须整个跑在用户手势里，在里面 await navigator.serviceWorker.ready 会把手势
+ * 花掉（之后 showSaveFilePicker 之类就开不出来了）。所以就绪判断在启动时异步做完，
+ * 这里只留一个布尔。
+ */
+let swStreamProbed = false;
+
+/**
+ * 探测正在控制本页的 SW 认不认识流式路由，结果存进 swStreamProbed。
+ * 由 share-target.ts 的 registerServiceWorker 在启动时调用（dev 不注册 SW，
+ * 因此 dev 下这条路径永远不就绪，和既有的 import.meta.env.PROD 门一致）。
+ *
+ * 为什么要真的握一次手，而不是只看 controller 非空：部署换版时控制本页的可能还是
+ * 一个旧 SW（skipWaiting + clients.claim 换版有窗口），旧 SW 不认识 STREAM_ROUTE，
+ * 下载请求会漏到 nginx 被 try_files 兜底成 index.html——用户下载到一个网页。
+ */
+export function probeStreamSupport(): void {
+  swStreamProbed = false; // 重新探测就重新验证
+  const sw = navigator.serviceWorker;
+  if (!sw || typeof MessageChannel === "undefined") return;
+  const ping = () => {
+    const c = sw.controller;
+    if (!c) return; // 首次访问：SW 刚注册还没 claim，controller 是 null
+    const ch = new MessageChannel();
+    ch.port1.onmessage = (e) => {
+      if ((e.data as { type?: string } | null)?.type === "stream-probe-ok") swStreamProbed = true;
+    };
+    c.postMessage({ type: "stream-probe" }, [ch.port2]);
+  };
+  // claim 到来（首次访问）或换版都会触发 controllerchange，两种情况都要重探。
+  sw.addEventListener("controllerchange", () => { swStreamProbed = false; ping(); });
+  sw.ready.then(ping).catch(() => {});
+  ping();
+}
+
+/**
+ * 这个浏览器现在能不能走 SW 流式下载。
+ *
+ * controller 非空这一项**每次都现查**而不是缓存：它随时可能变回 null（SW 注销、
+ * 换版窗口）。缓存它就等于在 controller 已经没了的时候仍然承诺能流式下载，那次
+ * 下载会漏到 nginx 变成一个 index.html。filesink.test.ts 有一条用例守这个。
+ */
+export function swStreamReady(): boolean {
+  return swStreamProbed && !!navigator.serviceWorker?.controller;
+}
+
+/** 16 字节随机 token，字母表落在 sw-stream.ts 的 TOKEN_RE 里（十六进制是其子集）。 */
+function randomToken(): string {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  return Array.from(b, (n) => n.toString(16).padStart(2, "0")).join("");
+}
+
+/** 等 stream-ready 握手的上限。超时就当 SW 不可用，回落到内存分支。 */
+const STREAM_OPEN_TIMEOUT_MS = 5000;
+/** 保活心跳间隔，必须明显小于浏览器约 30s 的 SW 空闲回收窗口。 */
+const STREAM_KEEPALIVE_MS = 10_000;
+/** 从触发 iframe 导航到 SW 真的开始供流的上限。超时说明这次下载根本没被接住。 */
+const STREAM_SERVE_TIMEOUT_MS = 30_000;
+
+/**
+ * 打开一条 SW 流并触发浏览器下载，返回写入端。
+ *
+ * 触发方式是隐藏 iframe 而不是 <a download> 或 location.href：万一 SW 没接住
+ * （探测和这一刻之间 SW 被换掉），iframe 里静默加载一个 index.html，页面本身
+ * 毫发无损；换成顶层导航同样的故障会把用户整个带走。
+ *
+ * iframe 的 src 赋值不需要用户激活，所以这里 await 握手是安全的——不像
+ * showSaveFilePicker 那样必须在手势里同步开出来。
+ */
+async function openSwStream(name: string, cd: string): Promise<FileSink> {
+  const controller = navigator.serviceWorker.controller!;
+  const path = streamURL(randomToken(), name);
+  const ch = new MessageChannel();
+  const port = ch.port1;
+
+  let failure: Error | null = null;
+  let settle: { ok: () => void; fail: (e: Error) => void } | null = null;
+  let keepalive: ReturnType<typeof setInterval> | undefined;
+  let serveTimer: ReturnType<typeof setTimeout> | undefined;
+  let iframe: HTMLIFrameElement | undefined;
+
+  const stopTimers = () => {
+    clearInterval(keepalive);
+    clearTimeout(serveTimer);
+    navigator.serviceWorker.removeEventListener("controllerchange", onSwapped);
+  };
+  const fail = (msg: string) => {
+    if (!failure) failure = new Error(msg);
+    const s = settle;
+    settle = null;
+    stopTimers();
+    port.onmessage = null;
+    port.close();
+    iframe?.remove(); // 失败时确实要掐断这次导航
+    s?.fail(failure);
+  };
+  // 部署换版会顶掉旧 SW，注册表随之蒸发，这条流再也不会有 ack。宁可立刻报错，
+  // 也不要让下载永远卡在 99%。
+  const onSwapped = () => fail("service worker replaced mid-download");
+
+  const opened = new Promise<void>((resolve, reject) => { settle = { ok: resolve, fail: reject }; });
+  port.onmessage = (e) => {
+    const t = (e.data as { type?: string } | null)?.type;
+    if (t === "stream-ready" || t === "ack") {
+      const s = settle;
+      settle = null;
+      s?.ok();
+    } else if (t === "stream-serving") {
+      clearTimeout(serveTimer); // iframe 的请求到了 SW，这条流真的在供
+    } else if (t === "cancel") {
+      fail("download cancelled in the browser");
+    }
+  };
+  navigator.serviceWorker.addEventListener("controllerchange", onSwapped);
+  const timer = setTimeout(() => fail("service worker did not open the stream"), STREAM_OPEN_TIMEOUT_MS);
+  controller.postMessage(
+    { type: "stream-open", path, headers: { "Content-Disposition": cd, "Content-Type": "application/octet-stream", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } },
+    [ch.port2],
+  );
+  try {
+    await opened;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  // SW 空闲约 30s 会被回收，注册表跟着没。写入本身就是消息，会不断刷新计时器；
+  // 心跳只覆盖上游长时间不出数据的那段（对端卡住、暂停）。
+  keepalive = setInterval(() => controller.postMessage({ type: "stream-ping" }), STREAM_KEEPALIVE_MS);
+
+  serveTimer = setTimeout(() => fail("the browser never fetched the stream"), STREAM_SERVE_TIMEOUT_MS);
+  iframe = document.createElement("iframe");
+  iframe.hidden = true;
+  iframe.src = path;
+  document.body.appendChild(iframe);
+
+  return {
+    write: async (chunk) => {
+      if (failure) throw failure;
+      // slice 拷一份：chunk 常常是更大缓冲区的 subarray（DownloadPage 就是这么切的），
+      // 直接转移会把调用方手里的缓冲区一并 detach 掉。
+      const copy = chunk.slice();
+      const ack = new Promise<void>((resolve, reject) => { settle = { ok: resolve, fail: reject }; });
+      port.postMessage({ type: "chunk", chunk: copy }, [copy.buffer]);
+      await ack; // ← 背压：SW 只在消费方真的要下一块时才 ack
+    },
+    close: async () => {
+      if (failure) throw failure;
+      port.postMessage({ type: "close" });
+      stopTimers();
+      // 不在这里 close() 端口、也不立刻摘 iframe：流虽然已经收尾，浏览器可能还在
+      // 把最后几块落盘，摘掉承载这次导航的 iframe 有可能把它掐了。晚一点再收。
+      const el = iframe;
+      setTimeout(() => { port.onmessage = null; port.close(); el?.remove(); }, STREAM_KEEPALIVE_MS);
+    },
+  };
 }
 
 /**
@@ -195,6 +358,34 @@ export async function pickSaveTarget(files: FileMetaLite[]): Promise<SaveTarget>
         return nativeSink(await fh.createWritable());
       },
     };
+  }
+
+  // 没有 File System Access API，但 SW 在管着这一页：让 SW 造一个流式响应，
+  // 浏览器边收边写盘。这条排在目录选择器**之后**有两个理由：原生句柄那条路不
+  // 依赖 SW 生命周期（空闲回收、部署换版都能掐断 SW 流），可靠性更高；而且插到
+  // 前面会把「只有 showDirectoryPicker + 单文件」这个组合从既有分支上抢走，等于
+  // 改了现有分支的行为。所以这条只服务真正没有 FSA 的浏览器——Firefox / Safari /
+  // 所有手机，也正是这一步想覆盖的人群。
+  //
+  // 只接单文件：SW 流是一条字节流，多文件仍走目录句柄或 ZIP。单文件即使带着
+  // 文件夹路径也走这里，落盘就是那个文件本身（丢掉一层只有它自己的目录）——
+  // 比为了一个文件打一个 ZIP 更接近用户想要的东西。
+  if (files.length === 1 && swStreamReady()) {
+    try {
+      const sink = await openSwStream(files[0].name, contentDisposition(files[0].name));
+      let used = false;
+      return {
+        label: "将流式下载到默认下载目录",
+        file: async () => {
+          if (used) throw new Error("single-file target already consumed");
+          used = true;
+          return sink;
+        },
+      };
+    } catch {
+      // 握手没成（SW 刚被换掉/回收）。别把下载弄死，落到下面的内存分支——
+      // 代价只是本该无提示的一次下载吃了内存。
+    }
   }
 
   // No File System Access API (Firefox/Safari). A folder send can't stream to

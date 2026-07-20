@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type { Plugin } from "vite";
+import { STREAM_ROUTE } from "./src/lib/sw-stream.js";
 
 const SHARE_ROUTE = "/share-target";
 
@@ -28,7 +29,11 @@ export function pwaPlugin(): Plugin {
       const sw = template
         .replace("__PRECACHE__", JSON.stringify(precache))
         .replace("__VERSION__", version)
-        .replace("__SHARE_ROUTE__", SHARE_ROUTE);
+        .replace("__SHARE_ROUTE__", SHARE_ROUTE)
+        // STREAM_ROUTE 直接从 lib/sw-stream.ts import：SW 侧和页面侧必须逐字相同，
+        // 差一个字符就是「下载到一个网页」。sw-template.js 不参与打包，import 不了，
+        // 所以只能在这里替换（和 __SHARE_ROUTE__ 一个路子）。
+        .replace("__STREAM_ROUTE__", STREAM_ROUTE);
 
       this.emitFile({ type: "asset", fileName: "sw.js", source: sw });
     },
