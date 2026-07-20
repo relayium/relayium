@@ -155,7 +155,17 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 		http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	nodeID, bs, billable, perr := s.placeUpload(r.Context(), u.ID)
+	// ?size= is the client-declared ciphertext size. Parsed here (unchanged
+	// semantics: advisory, never stored, never re-checked at finalize) so placement
+	// can ask "does this node fit THIS upload" instead of "does it fit a
+	// MaxFileSize one". A liar declaring 0 gets floored by placementMinFree and
+	// still cannot buy a bigger write budget — sessionWriteCap below ignores ?size=.
+	declared, _ := strconv.ParseInt(r.URL.Query().Get("size"), 10, 64)
+	nodeID, bs, billable, perr := s.placeUpload(r.Context(), u.ID, declared)
+	if errors.Is(perr, errStrictNodeFull) {
+		http.Error(w, "your storage node has no free space", http.StatusServiceUnavailable)
+		return
+	}
 	if errors.Is(perr, errStrictNoNode) {
 		http.Error(w, "your storage node is offline", http.StatusServiceUnavailable)
 		return
@@ -191,7 +201,6 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 	// Fail fast if the declared ciphertext size already overflows the remaining
 	// daily quota (client-supplied, trusted only to reject; finalize is the
 	// authoritative gate). Own-node uploads don't bill against DailyQuota.
-	declared, _ := strconv.ParseInt(r.URL.Query().Get("size"), 10, 64)
 	if billable && declared > 0 {
 		used, err := s.store.UserUploadedSince(r.Context(), u.ID, s.now().Unix()-dayWindow)
 		if err != nil {

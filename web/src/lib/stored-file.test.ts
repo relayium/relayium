@@ -396,6 +396,35 @@ describe("uploadFileResumable", () => {
     expect(concat(parts)).toEqual(bytes);
   });
 
+  it("refuses to fall back to the single POST for a large file", async () => {
+    // 单发路径把整份密文攒起来再 new Blob 复制一遍，峰值约 2× 密文。1 GiB 文件回落
+    // ≈ 2 GiB 峰值 = 手机标签页直接崩，用户连重试按钮都点不到。所以密文超过阈值时
+    // 必须把原始错误抛出去，而不是"好心"回落。
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 404, json: async () => ({}) })));
+    const captured = installFakeXHR({ status: 200, response: JSON.stringify({ id: "fid", expiresAt: 9 }), network: false });
+    // 只伪造 size：cipherSizeFor 只读它，于是不用真的分配几百 MiB 就能走到阈值判断。
+    const big = new File([new Uint8Array(40)], "big.bin");
+    Object.defineProperty(big, "size", { value: 512 << 20 });
+
+    await expect(uploadFileResumable([big], { burnAfterRead: false, ttl: 0 })).rejects.toBeInstanceOf(
+      UploadError,
+    );
+    // 关键断言：单发请求根本没发出去。回落发生的话这里会是 "/api/files?..."。
+    expect(captured.url).toBe("");
+    expect(captured.body).toBeNull();
+  });
+
+  it("still falls back for a small file (the size gate must not kill the safety net)", async () => {
+    // 上一条的对照组：同样的失败信号，小文件必须继续走既有的回落退路。
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 404, json: async () => ({}) })));
+    const captured = installFakeXHR({ status: 200, response: JSON.stringify({ id: "fid", expiresAt: 9 }), network: false });
+    const small = new File([new Uint8Array(4096)], "small.bin");
+
+    const out = await uploadFileResumable([small], { burnAfterRead: false, ttl: 0 });
+    expect(out.id).toBe("fid");
+    expect(captured.url).toContain("/api/files");
+  });
+
   it("gives up instead of replaying from an offset behind the buffered bytes", async () => {
     // 网络错误后服务端把已确认偏移退到我们保留的字节之前（会话丢失/被重建）。那些
     // 字节已经不在重放缓冲里了：硬发只会把缓冲区里错误位置的字节当成流的这一段发

@@ -80,7 +80,15 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	}
 	defer s.uploadSem.release(u.ID)
 
-	nodeID, bs, billable, perr := s.placeUpload(r.Context(), u.ID)
+	// Content-Length is the whole body (4-byte manifest length + encManifest +
+	// ciphertext), so it slightly OVER-states the ciphertext — conservative in the
+	// right direction for a free-space bar, and it is all we have this early (mlen
+	// is only read below). <=0 for a chunked request; placementMinFree floors it.
+	nodeID, bs, billable, perr := s.placeUpload(r.Context(), u.ID, r.ContentLength)
+	if errors.Is(perr, errStrictNodeFull) {
+		http.Error(w, "your storage node has no free space", http.StatusServiceUnavailable)
+		return
+	}
 	if errors.Is(perr, errStrictNoNode) {
 		http.Error(w, "your storage node is offline", http.StatusServiceUnavailable)
 		return

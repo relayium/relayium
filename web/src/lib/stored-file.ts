@@ -95,12 +95,27 @@ export async function uploadFile(
   return { id, expiresAt, key: encodeKey(sk.raw) };
 }
 
+/** 允许回落到单发路径的最大密文体积。
+ *
+ *  uploadFile 会把整份密文攒成帧数组再 `new Blob(parts)` 复制一遍，峰值约 2× 密文。
+ *  分片路径的峰值是 chunkSize + 一帧（约 8.6 MiB），与文件大小无关 —— 所以"分片失败
+ *  就回落"这条既有退路，在单文件上限提到 1 GiB 之后，最坏情况是 ~2 GiB 峰值，手机
+ *  标签页必崩。崩掉的标签页比一条错误提示糟得多：用户连"重试"都点不到。
+ *
+ *  64 MiB 密文 ≈ 128 MiB 峰值，正好是本分支之前就一直在跑的量级（旧上限 50 MiB
+ *  明文实测峰值 136 MiB）。也就是说：本来就跑得动的尺寸，退路原样保留；只有这个
+ *  分支新放开的大文件才拒绝回落。 */
+const FALLBACK_MAX_CIPHER_BYTES = 64 << 20;
+
 /** Resumable upload with a safety net: try the chunked flow, but fall back to
  *  the single-shot uploadFile if the chunked endpoints aren't usable — an older
  *  server without /api/uploads, a storage node without PATCH-append support, or
  *  retries exhausted. A real user/quota error (413/429/401) or an abort is NOT
  *  masked: it propagates. This keeps the rollout from ever regressing an upload
- *  that the single POST would have completed. */
+ *  that the single POST would have completed.
+ *
+ *  回落有体积闸门：见 FALLBACK_MAX_CIPHER_BYTES。密文超过它就把原始错误原样抛出，
+ *  因为单发路径的 2× 峰值会直接把标签页打崩 —— 报错好过崩溃。 */
 export async function uploadFileResumable(
   files: File[],
   opts: { burnAfterRead: boolean; ttl: number },
@@ -112,6 +127,7 @@ export async function uploadFileResumable(
   } catch (e) {
     if (signal?.aborted) throw e;
     if (e instanceof UploadError && (e.status === 413 || e.status === 429 || e.status === 401)) throw e;
+    if (cipherSizeFor(files) > FALLBACK_MAX_CIPHER_BYTES) throw e;
     return uploadFile(files, opts, onProgress, signal);
   }
 }

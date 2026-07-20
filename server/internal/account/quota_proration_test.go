@@ -616,6 +616,22 @@ func TestMonthlyCapUnlimitedStaysUnlimited(t *testing.T) {
 	if over {
 		t.Fatal("unlimited tier must never be over quota")
 	}
+	// 存储侧同理：StorageBytes<=0 也是"无限"。少了这条断言，remainingStorage 的
+	// unlimited 出口一旦丢失，一个无限档会从"随便存"静默翻成"全拒"而没人发现。
+	remaining, unlimited, err := svc.remainingStorage(ctx, uid)
+	if err != nil {
+		t.Fatalf("remainingStorage: %v", err)
+	}
+	if !unlimited {
+		t.Fatalf("StorageBytes<=0 must be unlimited, got unlimited=false remaining=%d", remaining)
+	}
+	overS, err := svc.overStorage(ctx, uid, 1<<50)
+	if err != nil {
+		t.Fatalf("overStorage: %v", err)
+	}
+	if overS {
+		t.Fatal("unlimited storage tier must never be over its storage cap")
+	}
 }
 
 // fail-open：store 报错时门必须放行，而不是把付费用户误判成 Free。
