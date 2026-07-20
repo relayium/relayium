@@ -62,8 +62,13 @@ describe("PlanCard", () => {
     await mountWith(plan());
     const html = target.textContent ?? "";
     expect(html).toContain("Free");
-    expect(html).toContain("100 MB");         // 存储权益
-    expect(html).toContain("Files kept 3 days"); // 保留期
+    // 钉整条权益串（而不是分别 toContain 各个子串）：免费档的 storageBytes
+    // (100 MB) 和 trafficBytes (1 GB) 数值不同，能区分参数顺序被打乱的情况——
+    // 分别 toContain 的写法对"两个参数传反了"完全无感，因为两个子串都还在
+    // 页面某处，只是顺序错了。
+    expect(target.querySelector(".perks")?.textContent).toBe(
+      "100 MB storage · 1.0 GB/mo traffic · Files kept 3 days",
+    );
     expect(html).toContain("Running out of room?"); // 引导句
     const btns = buttons();
     expect(btns).toContain("Upgrade");
