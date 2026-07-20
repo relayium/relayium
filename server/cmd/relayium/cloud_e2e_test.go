@@ -175,7 +175,7 @@ func TestCloudUpDownE2E(t *testing.T) {
 	if err := os.WriteFile(src, []byte(content), 0o644); err != nil {
 		t.Fatalf("write src: %v", err)
 	}
-	id, key, err := c.Upload(ctx, []string{src}, cloud.UploadOpts{MaxDownloads: 2})
+	id, key, _, err := c.Upload(ctx, []string{src}, cloud.UploadOpts{MaxDownloads: 2})
 	if err != nil {
 		t.Fatalf("upload: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestCloudPlainUpDownE2E(t *testing.T) {
 	if err := os.WriteFile(src, []byte(content), 0o644); err != nil {
 		t.Fatalf("write src: %v", err)
 	}
-	id, key, err := c.Upload(ctx, []string{src}, cloud.UploadOpts{})
+	id, key, _, err := c.Upload(ctx, []string{src}, cloud.UploadOpts{})
 	if err != nil {
 		t.Fatalf("upload: %v", err)
 	}
@@ -266,7 +266,7 @@ func TestCloudDownResumeE2E(t *testing.T) {
 	if err := os.WriteFile(src, content, 0o644); err != nil {
 		t.Fatalf("write src: %v", err)
 	}
-	id, key, err := c.Upload(ctx, []string{src}, cloud.UploadOpts{}) // unlimited (ttl retention)
+	id, key, _, err := c.Upload(ctx, []string{src}, cloud.UploadOpts{}) // unlimited (ttl retention)
 	if err != nil {
 		t.Fatalf("upload: %v", err)
 	}

@@ -106,6 +106,46 @@ func parseTTL(s string) (int64, error) {
 	return n, nil
 }
 
+// formatTTL renders a second count the way --ttl accepts it back ("7d", "2h"),
+// so a notice can be pasted straight into the next command.
+func formatTTL(secs int64) string {
+	switch {
+	case secs%86400 == 0:
+		return fmt.Sprintf("%dd", secs/86400)
+	case secs%3600 == 0:
+		return fmt.Sprintf("%dh", secs/3600)
+	case secs%60 == 0:
+		return fmt.Sprintf("%dm", secs/60)
+	default:
+		return fmt.Sprintf("%ds", secs)
+	}
+}
+
+// truncatedTTLNotice reports when the server kept the upload for less time than
+// --ttl asked for. The server clamps a request that exceeds the plan's
+// retention cap SILENTLY — it returns 200 with a shorter expiresAt and no
+// explanation — so without this the user is told nothing and only finds out
+// when the link dies early. Returns "" when there is nothing to report.
+//
+// requestedSecs is 0 when --ttl was not passed (the server picks its own
+// default, which is not a truncation), and expiresAt is 0 on servers old
+// enough not to report it; both mean "cannot compare, stay quiet".
+func truncatedTTLNotice(requestedSecs, expiresAt, now int64) string {
+	if requestedSecs <= 0 || expiresAt <= 0 {
+		return ""
+	}
+	granted := expiresAt - now
+	// Client/server clocks differ by a few seconds routinely; comparing
+	// strictly would make every single upload print a bogus warning.
+	const skewToleranceSecs = 60
+	if granted >= requestedSecs-skewToleranceSecs {
+		return ""
+	}
+	return fmt.Sprintf(
+		"note: your plan caps retention, so this link is kept %s, not the %s you asked for",
+		formatTTL(granted), formatTTL(requestedSecs))
+}
+
 // runUp encrypts paths client-side and uploads them to the account-bound
 // cloud store, printing a claim link that works both in a browser (the
 // web /d/ page) and via `relayium down`.
@@ -161,7 +201,7 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	bar := newProgressBar(stderr, "⇡", "Uploading")
 	client.Progress = bar.update
 
-	id, key, err := client.Upload(context.Background(), paths, cloud.UploadOpts{
+	id, key, expiresAt, err := client.Upload(context.Background(), paths, cloud.UploadOpts{
 		Burn:         burn,
 		TTLSeconds:   ttlSeconds,
 		MaxDownloads: maxDownloads,
@@ -175,6 +215,12 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	link := client.DownloadLink(client.Server, id, key)
 	fmt.Fprintln(stdout, link)
 	fmt.Fprintln(stdout, "opens in a browser, or fetch it with `relayium down <link>`")
+	// Goes to stderr, not stdout: `relayium up ... | pbcopy` must keep piping a
+	// clean link. Printed after the link so it reads as a footnote rather than
+	// looking like the upload failed.
+	if notice := truncatedTTLNotice(ttlSeconds, expiresAt, time.Now().Unix()); notice != "" {
+		fmt.Fprintln(stderr, notice)
+	}
 	return 0
 }
 

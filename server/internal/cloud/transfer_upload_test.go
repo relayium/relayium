@@ -31,7 +31,7 @@ func TestUploadWireFormat(t *testing.T) {
 
 	c := NewClient(srv.URL)
 	c.Token = "rlm_cli_t"
-	id, key, err := c.Upload(context.Background(), []string{p}, UploadOpts{Burn: true})
+	id, key, _, err := c.Upload(context.Background(), []string{p}, UploadOpts{Burn: true})
 	if err != nil || id != "abc123" || key == "" {
 		t.Fatalf("upload: %v id=%q key=%q", err, id, key)
 	}

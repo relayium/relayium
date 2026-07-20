@@ -115,15 +115,15 @@ func uploadQuery(opt UploadOpts) string {
 // encoded via storecrypto.FrameChunk(key, seq, chunk) using one GLOBAL seq
 // counter across all files, starting at 1 (the manifest itself occupies
 // seq 0, per EncryptManifest).
-func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id, keyB64Url string, err error) {
+func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id, keyB64Url string, expiresAt int64, err error) {
 	files, err := walkUploadPaths(paths)
 	if err != nil {
-		return "", "", err
+		return "", "", 0, err
 	}
 
 	key, err := storecrypto.GenerateKey()
 	if err != nil {
-		return "", "", err
+		return "", "", 0, err
 	}
 
 	manifest := storecrypto.Manifest{Files: make([]storecrypto.FileEntry, len(files))}
@@ -131,7 +131,7 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 	for i, f := range files {
 		info, err := os.Stat(f.path)
 		if err != nil {
-			return "", "", err
+			return "", "", 0, err
 		}
 		manifest.Files[i] = storecrypto.FileEntry{Name: f.name, Size: info.Size()}
 		total += info.Size()
@@ -139,7 +139,7 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 
 	encManifest, err := storecrypto.EncryptManifest(key, manifest)
 	if err != nil {
-		return "", "", err
+		return "", "", 0, err
 	}
 
 	var onProgress func(sent int64)
@@ -161,7 +161,7 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, pr)
 	if err != nil {
 		pr.Close()
-		return "", "", err
+		return "", "", 0, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	req.Header.Set("Content-Type", "application/octet-stream")
@@ -172,21 +172,25 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 	}
 	resp, err := httpc.Do(req)
 	if err != nil {
-		return "", "", err
+		return "", "", 0, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", "", uploadStatusError(resp.StatusCode)
+		return "", "", 0, uploadStatusError(resp.StatusCode)
 	}
 
 	var out struct {
 		ID string `json:"id"`
+		// ExpiresAt is the EFFECTIVE expiry, already clamped to the account's
+		// plan retention cap. Callers compare it against the requested TTL to
+		// notice a silent truncation; 0 means the server did not report one.
+		ExpiresAt int64 `json:"expiresAt"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", "", err
+		return "", "", 0, err
 	}
-	return out.ID, storecrypto.EncodeKey(key), nil
+	return out.ID, storecrypto.EncodeKey(key), out.ExpiresAt, nil
 }
 
 // writeUploadBody writes the framed request body (manifest header + each

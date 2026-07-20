@@ -67,7 +67,7 @@ func TestUploadReportsProgress(t *testing.T) {
 	c.Token = "t"
 	c.Progress = func(done, total int64) { calls++; lastDone, lastTotal = done, total }
 
-	if _, _, err := c.Upload(context.Background(), []string{p}, UploadOpts{}); err != nil {
+	if _, _, _, err := c.Upload(context.Background(), []string{p}, UploadOpts{}); err != nil {
 		t.Fatal(err)
 	}
 	if calls == 0 {

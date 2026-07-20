@@ -7,6 +7,9 @@
   import { hasFiles, filesFromDataTransfer } from "./drag";
   import { rememberUploadKey } from "./upload-keys";
   import { LARGE_DOWNLOAD_WARN_BYTES } from "./filesink";
+  import { session } from "./auth.svelte";
+  import { fetchUsage } from "./usage.svelte";
+  import { allowedTtls, clampTtl } from "./ttl-options";
 
   const t = $derived<Messages>(messages[lang()]);
 
@@ -22,6 +25,37 @@
 
   let burn = $state(false);
   let ttl = $state(86400); // default 1 day
+
+  // 档位的留存上限。0 = 未知（未登录、老服务端、请求失败）或无限档，两种情况都
+  // 提供全部四挡：服务端仍然会兜底截断，宁可多给选项也不要因为取不到用量就把
+  // 能用的有效期藏起来。
+  let retentionCap = $state(0);
+  const ttlChoices = $derived(allowedTtls(retentionCap));
+
+  // 与 QuotaMeters/QuotaNotice 共用 fetchUsage 的缓存，同页不会重复请求。
+  $effect(() => {
+    const uid = session().user?.id ?? null;
+    if (!uid) { retentionCap = 0; return; }
+    fetchUsage(uid).then((u) => {
+      // 陈旧响应守卫，同 QuotaNotice：请求兑现时会话可能已登出或换了账号。
+      if (session().user?.id !== uid) return;
+      retentionCap = u?.plan?.retentionSecs ?? 0;
+    });
+  });
+
+  // 选项收窄后把已选值拉回合法范围。少了这一步，默认的 1 天（或用户先手选的
+  // 7 天）会停在一个不再渲染的 <option> 上：下拉框空白，提交的仍是会被截断的值。
+  $effect(() => {
+    const next = clampTtl(ttl, ttlChoices);
+    if (next !== ttl) ttl = next;
+  });
+
+  const ttlLabels: Record<number, string> = $derived({
+    3600: t.stored.ttl1h,
+    86400: t.stored.ttl1d,
+    259200: t.stored.ttl3d,
+    604800: t.stored.ttl7d,
+  });
   let busy = $state(false);
   let progress = $state(0); // 0..100 — progress of whichever phase the API reports
   // The chunked path encrypts and uploads at the same time, so it reports a single
@@ -160,10 +194,9 @@
     <label class="opt"><input type="checkbox" bind:checked={burn} />{t.stored.burnLabel}</label>
     <label class="opt">{t.stored.ttlLabel}
       <select bind:value={ttl}>
-        <option value={3600}>{t.stored.ttl1h}</option>
-        <option value={86400}>{t.stored.ttl1d}</option>
-        <option value={259200}>{t.stored.ttl3d}</option>
-        <option value={604800}>{t.stored.ttl7d}</option>
+        {#each ttlChoices as secs (secs)}
+          <option value={secs}>{ttlLabels[secs]}</option>
+        {/each}
       </select>
     </label>
   </div>
