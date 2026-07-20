@@ -198,6 +198,14 @@ async function chunkedUpload(
       offset = received;
       onProgress?.({ phase: "uploading", sent: offset, total: cipherSize });
     }
+    // 主循环靠 offset >= cipherSize 收尾，所以这个守卫是**不对称**保护的另一半：
+    //   cipherSizeFor 多报 → 生成器先耗尽 → 上面的 filled === 0 兜住；
+    //   cipherSizeFor 少报 → 循环提前退出，剩下的帧永远发不出去，而我们会 finalize
+    //                        一份被截断、永远解不开的密文，UI 还显示上传成功。
+    // 所以 finalize 之前必须确认生成器真的耗尽了。这一次 next() 会再拉一帧，拿到了
+    // 就直接丢弃 —— 此时已经决定回落到单发路径整份重传，这一帧没有用；生成器仍由
+    // 下面的 finally 关掉。
+    if (!(await gen.next()).done) throw new UploadError(0);
   } finally {
     // 抛错/取消路径上终止生成器，不留悬挂的加密工作。
     await gen.return(undefined).catch(() => {});

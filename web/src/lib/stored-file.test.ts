@@ -158,7 +158,11 @@ async function toBytes(body: unknown): Promise<Uint8Array> {
 //                   — the real server does exactly this (`sess.received = newSize`
 //                   even on error), leaving the committed offset inside the chunk.
 function installFakeUploadFetch(opts?: { chunkSize?: number; failPatches?: number; partialPatches?: number }) {
-  const state = { received: 0, patches: 0, finalized: false, committed: [] as Uint8Array[] };
+  // patchBytes = 实际发出的 PATCH body 字节总数；staleBytes = 其中落在服务端**已经
+  // 确认过**的偏移上、被幂等 ack 掉一个字节都没写进去的部分。两者一起是「重放缓冲
+  // 有没有退化成整块重发」的直接度量：正确实现续传时先 GET 到真实偏移、只补那一截，
+  // staleBytes 恒为 0；退化成从块起点整块重发就会把已确认的半个块再发一遍。
+  const state = { received: 0, patches: 0, patchBytes: 0, staleBytes: 0, emptyPatches: 0, finalized: false, committed: [] as Uint8Array[] };
   const chunkSize = opts?.chunkSize ?? 8;
   let failsLeft = opts?.failPatches ?? 0;
   let partialsLeft = opts?.partialPatches ?? 0;
@@ -183,9 +187,20 @@ function installFakeUploadFetch(opts?: { chunkSize?: number; failPatches?: numbe
       state.patches++;
       const cr = (init!.headers as Record<string, string>)["Content-Range"];
       const start = Number(/bytes (\d+)-/.exec(cr)![1]);
-      if (start > state.received) return json({ received: state.received }, 409);
-      if (start < state.received) return json({ received: state.received }); // stale start: ack, write nothing
       const buf = await toBytes(init!.body);
+      state.patchBytes += buf.length; // 计在分支之前：被幂等 ack 掉的重发同样耗带宽
+      // 空 PATCH 是客户端 bug（没有字节可发却还在发），真实服务端也不接受。记下来
+      // 并当成致命错误，免得对端一路 ack 0 字节把客户端拖进死循环。
+      if (buf.length === 0) {
+        state.emptyPatches++;
+        return json({}, 500);
+      }
+      if (start > state.received) return json({ received: state.received }, 409);
+      if (start < state.received) {
+        // stale start: ack, write nothing. 已确认的字节又被发了一遍 = 纯浪费带宽。
+        state.staleBytes += Math.min(buf.length, state.received - start);
+        return json({ received: state.received });
+      }
       if (partialsLeft > 0 && buf.length > 1) {
         partialsLeft--;
         const half = Math.floor(buf.length / 2);
@@ -214,6 +229,21 @@ async function decryptCommitted(state: { committed: Uint8Array[] }, key: string)
 
 // A plaintext fixture that spans several 192 KiB store chunks, so the ciphertext
 // is several frames and really has to be packed into more than one upload chunk.
+// 客户端在同一个绝对偏移上必须永远发出同一个字节。任何冲突都说明它把缓冲区里
+// 错误位置的字节当成了流的这一段。返回第一个冲突的偏移，没有冲突返回 -1。
+function firstInconsistentOffset(sent: { start: number; bytes: Uint8Array }[]): number {
+  const seen = new Map<number, number>();
+  for (const s of sent) {
+    for (let i = 0; i < s.bytes.length; i++) {
+      const off = s.start + i;
+      const prev = seen.get(off);
+      if (prev === undefined) seen.set(off, s.bytes[i]);
+      else if (prev !== s.bytes[i]) return off;
+    }
+  }
+  return -1;
+}
+
 function multiChunkFixture(chunks = 3): { file: File; bytes: Uint8Array } {
   const bytes = new Uint8Array(STORE_CHUNK_SIZE * (chunks - 1) + 1234);
   for (let i = 0; i < bytes.length; i++) bytes[i] = i & 0xff;
@@ -265,6 +295,14 @@ describe("uploadFileResumable", () => {
     const { file, bytes } = multiChunkFixture(3);
     const out = await uploadFileResumable([file], { burnAfterRead: false, ttl: 0 });
     expect(state.finalized).toBe(true);
+    // 直接断言（放在最前面，别让下面那条间接启发式先炸掉把它遮住）：重放只补服务端
+    // 确认之后的那一截。退化成「从块起点整块重发」时 received/解密两条断言照样通过
+    // （服务端对 start < received 是幂等 ack，只是白费带宽），所以必须单独盯住实际
+    // 发出的字节。
+    expect(state.staleBytes).toBe(0); // 已确认的字节一个都不该重发
+    // 总量上界：1.0× 是密文本身，多出来的是两次模拟重置时在途丢掉的半个块（真实网络
+    // 里也一样收不回来）。整块重发会再多出两个半块，把比值顶到 1.8× 以上。
+    expect(state.patchBytes).toBeLessThan(cipherSizeFor([file]) * 1.5);
     // A partial commit really happened at an offset that is not a chunk boundary.
     expect(state.committed.length).toBeGreaterThan(state.patches - 2);
     expect(state.received).toBe(cipherSizeFor([file]));
@@ -309,6 +347,133 @@ describe("uploadFileResumable", () => {
     const file = new File([new Uint8Array(40)], "f.bin");
     const out = await uploadFileResumable([file], { burnAfterRead: false, ttl: 0 });
     expect(out.id).toBe("fid");
+    expect(captured.url).toContain("/api/files");
+  });
+
+  it("falls back mid-upload with a complete, decryptable single-shot body", async () => {
+    // 上一条是在 init 就 404，生成器根本没启动过。这一条才是真正的中途回落：第一个
+    // PATCH 成功、第二个 500。回落会**重新加密一遍** —— 如果哪天实现复用了已经被
+    // 消费掉一半的生成器，单发 body 会缺掉前面的帧，服务端照收不误，只有下载时才炸。
+    // 所以直接把 XHR 的 body 解密出来逐字节比对，而不是只看 id。
+    let received = 0;
+    let patches = 0;
+    let finalized = false;
+    const json = (body: unknown, status = 200) => ({
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => body,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const method = init?.method ?? "GET";
+        if (method === "POST" && url.startsWith("/api/uploads?")) return json({ uploadId: "u1", chunkSize: 100 * 1024 });
+        if (method === "POST" && url.endsWith("/finalize")) {
+          finalized = true;
+          return json({ id: "id1", expiresAt: 1 });
+        }
+        if (method === "GET") return json({ received });
+        patches++;
+        if (patches > 1) return json({}, 500); // 中途翻车，非 413/429/401 → 回落
+        received += (await toBytes(init!.body)).length;
+        return json({ received });
+      }),
+    );
+    const captured = installFakeXHR({ status: 200, response: JSON.stringify({ id: "fid", expiresAt: 9 }), network: false });
+    const { file, bytes } = multiChunkFixture(3);
+
+    const out = await uploadFileResumable([file], { burnAfterRead: false, ttl: 0 });
+    expect(out.id).toBe("fid");
+    expect(patches).toBe(2);
+    expect(finalized).toBe(false);
+    // body = uint32BE(len(encManifest)) ‖ encManifest ‖ 帧流；帧流必须是完整的原文。
+    const body = new Uint8Array(await captured.body!.arrayBuffer());
+    const manifestLen = new DataView(body.buffer, body.byteOffset, 4).getUint32(0);
+    const dec = new StoreDecryptor(await keyFromFragment(out.key));
+    const parts: Uint8Array[] = [];
+    for await (const pt of dec.push(body.subarray(4 + manifestLen))) parts.push(pt);
+    for await (const pt of dec.end()) parts.push(pt);
+    expect(concat(parts)).toEqual(bytes);
+  });
+
+  it("gives up instead of replaying from an offset behind the buffered bytes", async () => {
+    // 网络错误后服务端把已确认偏移退到我们保留的字节之前（会话丢失/被重建）。那些
+    // 字节已经不在重放缓冲里了：硬发只会把缓冲区里错误位置的字节当成流的这一段发
+    // 出去（chunk.subarray(负数) 是从**尾部**取），静默写出一份错位的密文。
+    const sent: { start: number; bytes: Uint8Array }[] = [];
+    let received = 0;
+    let finalized = false;
+    let rewound = false;
+    const json = (body: unknown, status = 200) => ({
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => body,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const method = init?.method ?? "GET";
+        if (method === "POST" && url.startsWith("/api/uploads?")) return json({ uploadId: "u1", chunkSize: 100 * 1024 });
+        if (method === "POST" && url.endsWith("/finalize")) {
+          finalized = true;
+          return json({ id: "id1", expiresAt: 1 });
+        }
+        if (method === "GET") return json({ received });
+        const cr = (init!.headers as Record<string, string>)["Content-Range"];
+        const start = Number(/bytes (\d+)-/.exec(cr)![1]);
+        const buf = await toBytes(init!.body);
+        sent.push({ start, bytes: buf.slice() });
+        if (!rewound && start > 0) {
+          rewound = true;
+          received = 0; // 连接重置，会话连同已收字节一起没了
+          throw new TypeError("network");
+        }
+        received = start + buf.length;
+        return json({ received });
+      }),
+    );
+    const captured = installFakeXHR({ status: 200, response: JSON.stringify({ id: "fid", expiresAt: 9 }), network: false });
+    const { file } = multiChunkFixture(3);
+
+    const out = await uploadFileResumable([file], { burnAfterRead: false, ttl: 0 });
+    // 直接断言：同一个绝对偏移上，客户端从头到尾只发出过同一个字节。
+    expect(firstInconsistentOffset(sent)).toBe(-1);
+    // 而且是干净回落到单发 POST，不是硬着头皮 finalize 一份错位的密文。
+    expect(out.id).toBe("fid");
+    expect(captured.url).toContain("/api/files");
+    expect(finalized).toBe(false);
+  });
+
+  it("aborts instead of PATCHing nothing when the declared size overshoots", async () => {
+    // 一个 .size 撒谎（大于真实内容）的 File —— 文件在上传途中被截断就是这样。
+    // cipherSizeFor 按 size 算，实际产出却更少，于是生成器耗尽时 offset 还没到
+    // cipherSize。没有守卫的话循环会一直 PATCH 空 body、服务端一直 ack 同一个偏移，
+    // 谁也不前进。
+    const state = installFakeUploadFetch({ chunkSize: 100 * 1024 });
+    const captured = installFakeXHR({ status: 200, response: JSON.stringify({ id: "fid", expiresAt: 9 }), network: false });
+    const file = new File([new Uint8Array(1234)], "shrunk.bin");
+    Object.defineProperty(file, "size", { value: STORE_CHUNK_SIZE * 3 });
+
+    const out = await uploadFileResumable([file], { burnAfterRead: false, ttl: 0 });
+    expect(out.id).toBe("fid"); // 干净回落到单发 POST
+    expect(state.finalized).toBe(false);
+    expect(state.emptyPatches).toBe(0); // 一个空 PATCH 都不该发出去
+  });
+
+  it("refuses to finalize when the declared size undershoots the ciphertext", async () => {
+    // 反过来：.size 小于真实内容，于是 cipherSizeFor **少报**。主循环靠
+    // offset >= cipherSize 收尾，会在生成器还压着后面文件的帧时提前退出 ——
+    // 那就 finalize 了一份被截断、永远解不开的密文，而 UI 显示上传成功。
+    // 这是唯一一条会**静默损坏数据**的失败模式，必须在 finalize 之前挡住。
+    const state = installFakeUploadFetch({ chunkSize: 100 * 1024 });
+    const captured = installFakeXHR({ status: 200, response: JSON.stringify({ id: "fid", expiresAt: 9 }), network: false });
+    const liar = new File([new Uint8Array(STORE_CHUNK_SIZE)], "liar.bin");
+    Object.defineProperty(liar, "size", { value: 1 }); // 声明 1 字节，实际吐出一整帧
+    const tail = new File([new Uint8Array(1234)], "tail.bin"); // 它的帧会被落下
+
+    const out = await uploadFileResumable([liar, tail], { burnAfterRead: false, ttl: 0 });
+    expect(out.id).toBe("fid"); // 干净回落到单发 POST
+    expect(state.finalized).toBe(false); // ← 守卫没了的话这里是 true，且密文解不开
     expect(captured.url).toContain("/api/files");
   });
 
@@ -377,8 +542,9 @@ describe("uploadFileResumable", () => {
     await expect(uploadFileResumable([file], { burnAfterRead: false, ttl: 0 })).rejects.toBeInstanceOf(
       UploadError,
     );
-    // The 413 aborts the flow; the encrypt generator must be closed, not left
-    // pulling more chunks in the background.
+    // 注意这条断言证明不了「生成器被 gen.return() 关掉了」：async generator 是拉取式
+    // 的，没人调 .next() 它本来就不会继续,所以有没有 gen.return() 这里的结果恒等
+    // （删掉整个 finally 全部测试照过）。它只证明抛错路径上没有人在背后继续拉帧。
     const after = slices;
     for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
     expect(slices).toBe(after);
