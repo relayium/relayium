@@ -439,6 +439,20 @@ func (s *Service) handleMeUsage(w http.ResponseWriter, r *http.Request, u User) 
 		plan = freePlanFallback()
 	}
 
+	// isTop: 用户已经在最高档时，卡片要把"升级"换成"已是最高档"——把 Max 用户
+	// 往定价页赶是负体验。用 ListPlans 而不是新加一个 store 方法，是因为 plans
+	// 表只有个位数行、且已被 /api/plans 以同样方式读取；新增接口方法还得在所有
+	// 测试替身里实现，不划算。
+	isTop := true
+	if plans, perr := s.store.ListPlans(ctx); perr == nil {
+		for _, p := range plans {
+			if p.Active && p.SortOrder > plan.SortOrder {
+				isTop = false
+				break
+			}
+		}
+	}
+
 	// 对外一律把"无限"规约成 0，前端只需判断一个值。
 	storageCap := plan.StorageBytes
 	if storageCap < 0 {
@@ -452,7 +466,29 @@ func (s *Service) handleMeUsage(w http.ResponseWriter, r *http.Request, u User) 
 		"resetsAt": monthEnd,
 		"traffic":  map[string]any{"used": traffic, "cap": trafficCap},
 		"storage":  map[string]any{"used": storage, "cap": storageCap},
+		// 套餐信息复用上面已经查出的 plan 行，不额外打 DB。
+		// trafficBytes 是这个档的**标称**月上限，和上面 traffic.cap 不同：后者
+		// 对月中改过档的用户是按段折算过的实际额度。卡片要宣传的是标称值。
+		"plan": map[string]any{
+			"id":                 plan.ID,
+			"name":               plan.Name,
+			"storageBytes":       storageCap,
+			"trafficBytes":       nonNegCap(plan.TrafficBytes),
+			"retentionSecs":      nonNegCap(plan.RetentionSecs),
+			"priceMonthly":       plan.PriceMonthly,
+			"isTop":              isTop,
+			"subscriptionStatus": u.SubscriptionStatus,
+			"subscriptionEnd":    u.SubscriptionEnd,
+		},
 	})
+}
+
+// nonNegCap 把"无限"的各种内部表示（负数）规约成对外约定的 0。前端只判断一个值。
+func nonNegCap(v int64) int64 {
+	if v < 0 {
+		return 0
+	}
+	return v
 }
 
 func (s *Service) handleChangePassword(w http.ResponseWriter, r *http.Request, u User) {
