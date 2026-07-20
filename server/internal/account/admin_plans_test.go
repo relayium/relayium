@@ -9,8 +9,14 @@ import (
 	"testing"
 )
 
+// The plan/user-plan tests below call the handlers directly rather than
+// through POST /admin/plans or /admin/users/plan: those routes now sit
+// behind requireStepUp (Task 7), which renders a confirmation page instead
+// of applying anything. These tests target the handlers' own
+// validation/persistence logic, which is unchanged; the routes' step-up
+// gating is covered separately by stepup_test.go.
 func TestAdminUpsertPlanUpdatesValues(t *testing.T) {
-	ts, store := newAdminSettingsServer(t)
+	ts, svc, store := newAdminSettingsServer(t)
 	admin := adminLogin(t, ts)
 	_ = store.UpsertPlan(context.Background(), Plan{ID: "free", Name: "Free", StorageBytes: 1, TrafficBytes: 1, RetentionSecs: 1, Active: true, UpdatedAt: 1})
 
@@ -21,19 +27,9 @@ func TestAdminUpsertPlanUpdatesValues(t *testing.T) {
 		"daily_quota_mb": {"0"},
 		"sort_order":     {"0"}, "active": {"1"},
 	}
-	req, _ := http.NewRequest("POST", ts.URL+"/admin/plans", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Origin", "http://example.test")
-	req.AddCookie(admin)
-	client := ts.Client()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("upsert plan = %d, want 302", resp.StatusCode)
+	w := callAdminHandler(svc.handleAdminUpsertPlan, admin, form, nil)
+	if w.Code != http.StatusFound {
+		t.Fatalf("upsert plan = %d, want 302", w.Code)
 	}
 	got, _, _ := store.GetPlan(context.Background(), "free")
 	if got.StorageBytes != 200<<20 || got.TrafficBytes != 5<<30 || got.RetentionSecs != 7*86400 {
@@ -42,7 +38,7 @@ func TestAdminUpsertPlanUpdatesValues(t *testing.T) {
 }
 
 func TestAdminUpsertPlanRefusesDeactivatingLastActivePlan(t *testing.T) {
-	ts, store := newAdminSettingsServer(t)
+	ts, svc, store := newAdminSettingsServer(t)
 	admin := adminLogin(t, ts)
 	_ = store.UpsertPlan(context.Background(), Plan{ID: "free", Name: "Free", StorageBytes: 1, TrafficBytes: 1, RetentionSecs: 1, Active: true, UpdatedAt: 1})
 
@@ -52,19 +48,9 @@ func TestAdminUpsertPlanRefusesDeactivatingLastActivePlan(t *testing.T) {
 		"price_monthly_cents": {"0"}, "price_yearly_cents": {"0"},
 		"sort_order": {"0"}, // active omitted => false
 	}
-	req, _ := http.NewRequest("POST", ts.URL+"/admin/plans", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Origin", "http://example.test")
-	req.AddCookie(admin)
-	client := ts.Client()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("deactivate last active plan = %d, want 400", resp.StatusCode)
+	w := callAdminHandler(svc.handleAdminUpsertPlan, admin, form, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("deactivate last active plan = %d, want 400", w.Code)
 	}
 	got, _, _ := store.GetPlan(context.Background(), "free")
 	if !got.Active {
@@ -73,7 +59,7 @@ func TestAdminUpsertPlanRefusesDeactivatingLastActivePlan(t *testing.T) {
 }
 
 func TestAdminUpsertPlanRejectsOverflowingSize(t *testing.T) {
-	ts, _ := newAdminSettingsServer(t)
+	ts, svc, _ := newAdminSettingsServer(t)
 	admin := adminLogin(t, ts)
 	form := url.Values{
 		"id": {"free"}, "name": {"Free"},
@@ -82,41 +68,23 @@ func TestAdminUpsertPlanRejectsOverflowingSize(t *testing.T) {
 		"price_monthly_cents": {"0"}, "price_yearly_cents": {"0"},
 		"sort_order": {"0"}, "active": {"1"},
 	}
-	req, _ := http.NewRequest("POST", ts.URL+"/admin/plans", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Origin", "http://example.test") // csrfGuard
-	req.AddCookie(admin)
-	resp, err := ts.Client().Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("overflowing storage_mb = %d, want 400", resp.StatusCode)
+	w := callAdminHandler(svc.handleAdminUpsertPlan, admin, form, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("overflowing storage_mb = %d, want 400", w.Code)
 	}
 }
 
 func TestAdminAssignUserPlanActiveOnly(t *testing.T) {
-	ts, store := newAdminSettingsServer(t)
+	ts, svc, store := newAdminSettingsServer(t)
 	admin := adminLogin(t, ts)
 	ctx := context.Background()
 	_ = store.UpsertPlan(ctx, Plan{ID: "pro", Name: "Pro", StorageBytes: 1, TrafficBytes: 1, RetentionSecs: 1, Active: true, UpdatedAt: 1})
 	_ = store.UpsertPlan(ctx, Plan{ID: "old", Name: "Old", StorageBytes: 1, TrafficBytes: 1, RetentionSecs: 1, Active: false, UpdatedAt: 1})
 	target, _ := store.UpsertUserByEmail(ctx, "target@example.com", "")
 
-	client := ts.Client()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	post := func(plan string) int {
 		form := url.Values{"user_id": {target.ID}, "plan_id": {plan}}
-		req, _ := http.NewRequest("POST", ts.URL+"/admin/users/plan", strings.NewReader(form.Encode()))
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.AddCookie(admin)
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		resp.Body.Close()
-		return resp.StatusCode
+		return callAdminHandler(svc.handleAdminSetUserPlan, admin, form, nil).Code
 	}
 
 	if post("pro") != http.StatusFound {
@@ -140,7 +108,7 @@ func TestAdminAssignUserPlanActiveOnly(t *testing.T) {
 // stripe_price_monthly_id/stripe_price_yearly_id fields round-trip through
 // UpsertPlan untouched (free-form Stripe ids, no numeric validation).
 func TestAdminUpsertPlanPersistsStripePriceIDs(t *testing.T) {
-	ts, store := newAdminSettingsServer(t)
+	ts, svc, store := newAdminSettingsServer(t)
 	admin := adminLogin(t, ts)
 	_ = store.UpsertPlan(context.Background(), Plan{ID: "pro", Name: "Pro", StorageBytes: 1, TrafficBytes: 1, RetentionSecs: 1, Active: true, UpdatedAt: 1})
 
@@ -152,19 +120,9 @@ func TestAdminUpsertPlanPersistsStripePriceIDs(t *testing.T) {
 		"sort_order":     {"0"}, "active": {"1"},
 		"stripe_price_monthly_id": {"price_M"}, "stripe_price_yearly_id": {"price_Y"},
 	}
-	req, _ := http.NewRequest("POST", ts.URL+"/admin/plans", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Origin", "http://example.test")
-	req.AddCookie(admin)
-	client := ts.Client()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("upsert plan = %d, want 302", resp.StatusCode)
+	w := callAdminHandler(svc.handleAdminUpsertPlan, admin, form, nil)
+	if w.Code != http.StatusFound {
+		t.Fatalf("upsert plan = %d, want 302", w.Code)
 	}
 	got, ok, err := store.GetPlan(context.Background(), "pro")
 	if err != nil || !ok {
@@ -179,7 +137,7 @@ func TestAdminUpsertPlanPersistsStripePriceIDs(t *testing.T) {
 // query surfaces subscription_status + plan_source per row, and that the
 // rendered dashboard page reflects them.
 func TestAdminUserListCarriesSubscriptionAndSource(t *testing.T) {
-	ts, store := newAdminSettingsServer(t)
+	ts, _, store := newAdminSettingsServer(t)
 	admin := adminLogin(t, ts)
 	ctx := context.Background()
 	_ = store.UpsertPlan(ctx, Plan{ID: "pro", Name: "Pro", StorageBytes: 1, TrafficBytes: 1, RetentionSecs: 1, Active: true, UpdatedAt: 1})

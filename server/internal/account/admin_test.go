@@ -47,7 +47,7 @@ func TestAdminUserDefaultsToAdminWhenUnset(t *testing.T) {
 	}
 }
 
-func newAdminSettingsServer(t *testing.T) (*httptest.Server, *SQLiteStore) {
+func newAdminSettingsServer(t *testing.T) (*httptest.Server, *Service, *SQLiteStore) {
 	t.Helper()
 	store := newTestStore(t)
 	svc := NewService(store, &capturingMailer{}, Config{
@@ -58,7 +58,28 @@ func newAdminSettingsServer(t *testing.T) (*httptest.Server, *SQLiteStore) {
 	svc.RegisterAdmin(mux)
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
-	return ts, store
+	return ts, svc, store
+}
+
+// callAdminHandler invokes a high-risk admin handler DIRECTLY (bypassing
+// RegisterAdmin's mux and, with it, requireStepUp), for tests whose purpose
+// is the handler's own business logic/validation rather than the step-up
+// gate in front of it — that gate is exercised separately by
+// stepup_test.go. Mirrors the existing pattern of calling handlers straight
+// (see TestAdminLoginTOTP calling s.handleAdminLogin above), extended with
+// SetPathValue since some of these handlers read r.PathValue("id").
+func callAdminHandler(h http.HandlerFunc, cookie *http.Cookie, form url.Values, pathValues map[string]string) *httptest.ResponseRecorder {
+	r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(form.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if cookie != nil {
+		r.AddCookie(cookie)
+	}
+	for k, v := range pathValues {
+		r.SetPathValue(k, v)
+	}
+	w := httptest.NewRecorder()
+	h(w, r)
+	return w
 }
 
 func adminLogin(t *testing.T, ts *httptest.Server) *http.Cookie {
@@ -76,21 +97,23 @@ func adminLogin(t *testing.T, ts *httptest.Server) *http.Cookie {
 	return nil
 }
 
+// These settings tests call handleAdminSettings directly rather than through
+// POST /admin/settings: that route now sits behind requireStepUp (Task 7),
+// which renders a confirmation page instead of applying anything — the
+// point of these tests is handleAdminSettings' OWN validation/persistence
+// logic, which is unchanged and still worth testing on its own. The route's
+// step-up gating is covered separately by stepup_test.go.
 func TestAdminSettingsUpdateValid(t *testing.T) {
-	ts, store := newAdminSettingsServer(t)
+	ts, svc, store := newAdminSettingsServer(t)
 	cookie := adminLogin(t, ts)
-	client := ts.Client()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	// 10 MiB file, 100 MiB quota, 12h default, 48h max, 5 MiB relay cap, 50 GB node traffic default.
-	req, _ := http.NewRequest("POST", ts.URL+"/admin/settings", strings.NewReader(
-		"max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48"+
-			"&default_retention=0&default_max_downloads=5&max_max_downloads=100&storage_disk_cap_mb=0"+
-			"&node_traffic_default_gb=50"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.AddCookie(cookie)
-	resp, _ := client.Do(req)
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("valid settings POST: want 302, got %d", resp.StatusCode)
+	form, _ := url.ParseQuery(
+		"max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48" +
+			"&default_retention=0&default_max_downloads=5&max_max_downloads=100&storage_disk_cap_mb=0" +
+			"&node_traffic_default_gb=50")
+	w := callAdminHandler(svc.handleAdminSettings, cookie, form, nil)
+	if w.Code != http.StatusFound {
+		t.Fatalf("valid settings POST: want 302, got %d", w.Code)
 	}
 	v, _, _ := store.GetSetting(context.Background(), SettingMaxFileSize)
 	if v != 10*1024*1024 {
@@ -110,19 +133,15 @@ func TestAdminSettingsUpdateValid(t *testing.T) {
 // for this field would silently start rejecting 0 and, because the whole
 // settings POST is all-or-nothing, block saving every other field too.
 func TestAdminSettingsNodeTrafficDefaultZeroAllowed(t *testing.T) {
-	ts, store := newAdminSettingsServer(t)
+	ts, svc, store := newAdminSettingsServer(t)
 	cookie := adminLogin(t, ts)
-	client := ts.Client()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	req, _ := http.NewRequest("POST", ts.URL+"/admin/settings", strings.NewReader(
-		"max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48"+
-			"&default_retention=0&default_max_downloads=5&max_max_downloads=100&storage_disk_cap_mb=0"+
-			"&node_traffic_default_gb=0"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.AddCookie(cookie)
-	resp, _ := client.Do(req)
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("node_traffic_default_gb=0 (unlimited): want 302, got %d", resp.StatusCode)
+	form, _ := url.ParseQuery(
+		"max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48" +
+			"&default_retention=0&default_max_downloads=5&max_max_downloads=100&storage_disk_cap_mb=0" +
+			"&node_traffic_default_gb=0")
+	w := callAdminHandler(svc.handleAdminSettings, cookie, form, nil)
+	if w.Code != http.StatusFound {
+		t.Fatalf("node_traffic_default_gb=0 (unlimited): want 302, got %d", w.Code)
 	}
 	if nt, ok, _ := store.GetSetting(context.Background(), SettingNodeTrafficDefault); !ok || nt != 0 {
 		t.Fatalf("node_traffic_default = %d (ok=%v), want 0 (unlimited)", nt, ok)
@@ -130,16 +149,11 @@ func TestAdminSettingsNodeTrafficDefaultZeroAllowed(t *testing.T) {
 }
 
 func TestAdminSettingsRejectsInvalid(t *testing.T) {
-	ts, store := newAdminSettingsServer(t)
+	ts, svc, store := newAdminSettingsServer(t)
 	cookie := adminLogin(t, ts)
-	client := ts.Client()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	post := func(form string) int {
-		req, _ := http.NewRequest("POST", ts.URL+"/admin/settings", strings.NewReader(form))
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.AddCookie(cookie)
-		resp, _ := client.Do(req)
-		return resp.StatusCode
+	post := func(formStr string) int {
+		form, _ := url.ParseQuery(formStr)
+		return callAdminHandler(svc.handleAdminSettings, cookie, form, nil).Code
 	}
 	const okRetention = "&default_retention=0&default_max_downloads=5&max_max_downloads=100&storage_disk_cap_mb=0&node_traffic_default_gb=0"
 	// default_ttl (48h) > max_ttl (24h) → rejected.
@@ -171,12 +185,19 @@ func TestAdminSettingsRejectsInvalid(t *testing.T) {
 	}
 }
 
+// Through the real route, an unauthenticated POST /admin/settings never
+// reaches handleAdminSettings at all — requireStepUp's own isAdminReq gate
+// intercepts it first and redirects to /admin (302), which is what an
+// operator's browser needs. handleAdminSettings keeps its own isAdminReq
+// check regardless (defense in depth, and the contract any direct caller —
+// including handleAdminConfirm once Task 8 lands — relies on), so that's
+// what this test targets directly.
 func TestAdminSettingsRequiresAdmin(t *testing.T) {
-	ts, _ := newAdminSettingsServer(t)
-	resp, _ := ts.Client().Post(ts.URL+"/admin/settings", "application/x-www-form-urlencoded",
-		strings.NewReader("max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48"))
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("unauth settings POST: want 401, got %d", resp.StatusCode)
+	_, svc, _ := newAdminSettingsServer(t)
+	form, _ := url.ParseQuery("max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48")
+	w := callAdminHandler(svc.handleAdminSettings, nil, form, nil)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("unauth settings POST: want 401, got %d", w.Code)
 	}
 }
 

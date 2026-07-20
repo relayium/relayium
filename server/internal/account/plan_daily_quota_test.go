@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
 )
 
@@ -199,27 +197,21 @@ func TestFreePlanUploadStillHitsGlobalDailyQuota(t *testing.T) {
 	}
 }
 
-// postPlanForm posts the admin plan editor form and returns the status code.
-func postPlanForm(t *testing.T, ts *httptest.Server, admin *http.Cookie, form url.Values) int {
+// postPlanForm calls handleAdminUpsertPlan directly and returns the status
+// code. It used to POST through the real /admin/plans route, but that route
+// now sits behind requireStepUp (Task 7), which renders a confirmation page
+// instead of applying anything — these tests target
+// handleAdminUpsertPlan's own persistence logic, which is unchanged; the
+// route's step-up gating is covered separately by stepup_test.go.
+func postPlanForm(t *testing.T, svc *Service, admin *http.Cookie, form url.Values) int {
 	t.Helper()
-	req, _ := http.NewRequest("POST", ts.URL+"/admin/plans", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Origin", "http://example.test")
-	req.AddCookie(admin)
-	client := ts.Client()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	return resp.StatusCode
+	return callAdminHandler(svc.handleAdminUpsertPlan, admin, form, nil).Code
 }
 
 // TestAdminUpsertPlanAcceptsDailyQuota: the admin editor round-trips the new
 // column.
 func TestAdminUpsertPlanAcceptsDailyQuota(t *testing.T) {
-	ts, store := newAdminSettingsServer(t)
+	ts, svc, store := newAdminSettingsServer(t)
 	admin := adminLogin(t, ts)
 	_ = store.UpsertPlan(context.Background(), Plan{ID: "free", Name: "Free", StorageBytes: 1, TrafficBytes: 1, RetentionSecs: 1, Active: true, UpdatedAt: 1})
 
@@ -230,7 +222,7 @@ func TestAdminUpsertPlanAcceptsDailyQuota(t *testing.T) {
 		"daily_quota_mb": {"500"},
 		"sort_order":     {"0"}, "active": {"1"},
 	}
-	if code := postPlanForm(t, ts, admin, form); code != http.StatusFound {
+	if code := postPlanForm(t, svc, admin, form); code != http.StatusFound {
 		t.Fatalf("upsert plan = %d, want 302", code)
 	}
 	got, _, _ := store.GetPlan(context.Background(), "free")
@@ -245,7 +237,7 @@ func TestAdminUpsertPlanAcceptsDailyQuota(t *testing.T) {
 // this way (a >0 parser swapped in) with every test still green, so this case
 // exists to catch that swap.
 func TestAdminUpsertPlanAcceptsZeroDailyQuota(t *testing.T) {
-	ts, store := newAdminSettingsServer(t)
+	ts, svc, store := newAdminSettingsServer(t)
 	admin := adminLogin(t, ts)
 	_ = store.UpsertPlan(context.Background(), Plan{ID: "free", Name: "Free", StorageBytes: 1, TrafficBytes: 1,
 		RetentionSecs: 1, DailyQuotaBytes: 999 << 20, Active: true, UpdatedAt: 1})
@@ -257,7 +249,7 @@ func TestAdminUpsertPlanAcceptsZeroDailyQuota(t *testing.T) {
 		"daily_quota_mb": {"0"},
 		"sort_order":     {"0"}, "active": {"1"},
 	}
-	if code := postPlanForm(t, ts, admin, form); code != http.StatusFound {
+	if code := postPlanForm(t, svc, admin, form); code != http.StatusFound {
 		t.Fatalf("daily_quota_mb=0 rejected with %d, want 302 — 0 means \"fall back to the global setting\"", code)
 	}
 	got, _, _ := store.GetPlan(context.Background(), "free")

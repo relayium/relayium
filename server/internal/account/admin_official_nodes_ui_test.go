@@ -4,12 +4,13 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 )
 
 func TestAdminDashboardShowsOfficialNodesSection(t *testing.T) {
-	ts, store := newAdminSettingsServer(t)
+	ts, _, store := newAdminSettingsServer(t)
 	cookie := adminLogin(t, ts)
 	// A fleet node with limits set, plus an active token. Storage is enabled
 	// with concrete free/total so the 剩余/总量 and 可存储 cells render their
@@ -105,7 +106,7 @@ func TestAdminDashboardShowsOfficialNodesSection(t *testing.T) {
 // node's cell would show ∞ instead of the global default's rendered value,
 // and the count-based assertions below would fail.
 func TestAdminDashboardShowsEffectiveNodeTrafficLimit(t *testing.T) {
-	ts, store := newAdminSettingsServer(t)
+	ts, _, store := newAdminSettingsServer(t)
 	cookie := adminLogin(t, ts)
 	ctx := context.Background()
 
@@ -150,17 +151,15 @@ func TestAdminDashboardShowsEffectiveNodeTrafficLimit(t *testing.T) {
 	}
 }
 
+// TestAdminMintShowsTokenOnce calls handleAdminMintToken directly: through
+// the real route it now sits behind requireStepUp (Task 7). See the comment
+// on TestAdminMintFleetToken in admin_official_nodes_test.go.
 func TestAdminMintShowsTokenOnce(t *testing.T) {
-	ts, _ := newAdminSettingsServer(t)
+	ts, svc, _ := newAdminSettingsServer(t)
 	cookie := adminLogin(t, ts)
-	client := ts.Client()
 
-	req, _ := http.NewRequest("POST", ts.URL+"/admin/nodes/token", strings.NewReader("name=n1"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.AddCookie(cookie)
-	resp, _ := client.Do(req)
-	body, _ := io.ReadAll(resp.Body)
-	html := string(body)
+	w := callAdminHandler(svc.handleAdminMintToken, cookie, url.Values{"name": {"n1"}}, nil)
+	html := w.Body.String()
 	if !strings.Contains(html, "install-node.sh") || !strings.Contains(html, "RELAYIUM_NODE_TOKEN=") {
 		t.Fatalf("mint response should show the install command once, got:\n%s", html)
 	}

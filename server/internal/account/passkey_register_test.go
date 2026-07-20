@@ -587,17 +587,21 @@ func TestPasskeyDelete(t *testing.T) {
 		t.Fatalf("credential deleted without a session")
 	}
 
-	// 有会话 → 删除
-	req, _ := http.NewRequest("POST", srv.URL+"/admin/passkey/delete",
+	// 有会话 → 删除。
+	//
+	// Calls handleAdminPasskeyDelete directly rather than through the real
+	// POST /admin/passkey/delete route: that route now sits behind
+	// requireStepUp (Task 7 gates passkey deletion as high-risk — see the
+	// doc comment on handleAdminPasskeyDelete), which renders a confirmation
+	// page instead of deleting anything. This asserts the handler's own
+	// deletion logic; the route's step-up gating is covered by
+	// stepup_test.go.
+	req, _ := http.NewRequest("POST", "/admin/passkey/delete",
 		strings.NewReader("id="+url.QueryEscape(id)))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Origin", s.selfOrigin())
 	req.AddCookie(session)
-	resp, err := srv.Client().Do(req)
-	if err != nil {
-		t.Fatalf("delete: %v", err)
-	}
-	resp.Body.Close()
+	w := httptest.NewRecorder()
+	s.handleAdminPasskeyDelete(w, req)
 	rows, _ = s.store.ListAdminCredentials(context.Background())
 	if len(rows) != 0 {
 		t.Fatalf("credential still present after delete: %d", len(rows))

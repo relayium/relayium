@@ -133,9 +133,14 @@ func (s *Service) handleAdminPasskeyRegisterFinish(w http.ResponseWriter, r *htt
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// handleAdminPasskeyDelete is a plain form post (no JS) like the other admin
-// mutations. No step-up: deleting can only lock the operator out, and the
-// password path remains as the way back in.
+// handleAdminPasskeyDelete removes one registered credential.
+//
+// This used to be deliberately exempt from step-up, on the grounds that
+// deleting your own credential can only lock you out and never harms anyone
+// else. That reasoning was overridden: credential removal is now treated as a
+// high-risk action like the rest, because a stolen session that can silently
+// strip the operator's passkeys turns a recoverable compromise into a lockout.
+// The gating lives in RegisterAdmin (requireStepUp), not here.
 func (s *Service) handleAdminPasskeyDelete(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
 		http.Redirect(w, r, "/admin", http.StatusFound)

@@ -69,6 +69,24 @@ type adminLoginData struct {
 	Passkey bool // render the passkey button (only when a credential exists)
 }
 
+// confirmPageData is passed to adminConfirmTmpl (requireStepUp's confirmation
+// page): the diff a pending high-risk write would apply, plus the token that
+// identifies it so the confirm POST can retrieve (and burn) it.
+type confirmPageData struct {
+	Token  string // pending-action token; echoed back as the confirm_token field
+	Action string // audit action name (AuditSettings etc.), shown for context
+	Target string // "-" for global actions, "plan:x" / "node:x" for scoped ones
+	// Changes is the field-level diff (diffFields' output) — the actual
+	// anti-misclick mechanism: naming exactly what would change, not just
+	// that "something" would.
+	Changes []ChangeField
+	// NeedFactor is false only inside the step-up grace window. It must
+	// NEVER affect whether this page renders at all — only whether the
+	// factor input below is required. See requireStepUp's doc comment.
+	NeedFactor bool
+	Factor     string // which factor to prompt for: StepUpPasskey/TOTP/Password
+}
+
 // passkeyB64JS is the base64url <-> ArrayBuffer pair WebAuthn needs on both the
 // login page and the dashboard. Defined once here and pulled into each page's
 // inline <script> with {{template "passkeyB64"}}, so the two never drift apart.
@@ -182,6 +200,65 @@ button:hover{filter:brightness(1.07)}
 })();
 </script>
 {{end}}
+</body></html>`))
+
+// adminConfirmTmpl draws requireStepUp's confirmation page: the field-level
+// diff a pending high-risk write would apply, plus a form that posts the
+// pending-action token (and, once Task 8 lands, the second factor) to
+// /admin/confirm. Values interpolated below (Field/Old/New, Action, Target)
+// include admin-supplied strings such as plan names, so this MUST stay
+// html/template (auto-escaping), never text/template or raw string building.
+var adminConfirmTmpl = template.Must(template.New("confirm").Parse(`<!doctype html>
+<html><head><meta charset="utf-8"><title>Relayium Admin · 确认操作</title>
+<style>:root{--a:#7c3aad;--bg:#faf9fb;--fg:#1a1420;--bd:#e5e4e7;--card:#fff;--muted:#6b6375;--soft:#f4f3ec}
+@media(prefers-color-scheme:dark){:root{--a:#c084fc;--bg:#16171d;--fg:#f3f4f6;--bd:#2e303a;--card:#1c1d25;--muted:#9ca3af;--soft:#1f2028}}
+*{box-sizing:border-box}
+body{font:15px system-ui;max-width:520px;margin:60px auto;padding:0 16px;color:var(--fg);background:var(--bg)}
+h1{font-size:20px;margin:0 0 6px}
+.sub{color:var(--muted);font-size:13px;margin:0 0 18px}
+.sub code{background:var(--soft);border-radius:4px;padding:1px 5px}
+table{border-collapse:separate;border-spacing:0;width:100%;background:var(--card);border:1px solid var(--bd);border-radius:12px;overflow:hidden;margin:0 0 18px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--bd);font-size:13px}
+th{background:var(--soft);font-weight:600}
+tbody tr:last-child td{border-bottom:0}
+td.old{color:var(--muted);text-decoration:line-through}
+td.new{color:var(--a);font-weight:600}
+form{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:20px}
+input{font:inherit;padding:9px 11px;width:100%;margin:6px 0;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--fg)}
+button{font:inherit;font-weight:500;padding:10px 14px;border:0;border-radius:8px;background:var(--a);color:#fff;cursor:pointer}
+button:hover{filter:brightness(1.07)}
+:focus-visible{outline:2px solid var(--a);outline-offset:2px}
+.actions{display:flex;gap:12px;align-items:center;margin-top:10px}
+.actions a{color:var(--muted);text-decoration:none;font-size:13px}
+.actions a:hover{text-decoration:underline}
+.muted{color:var(--muted);font-size:13px;margin:0 0 10px}</style></head>
+<body>
+<h1>请确认这项操作</h1>
+<p class="sub">动作：<code>{{.Action}}</code>{{if ne .Target "-"}} · 目标：<code>{{.Target}}</code>{{end}}</p>
+
+{{if .Changes}}
+<table>
+<thead><tr><th>字段</th><th>原值</th><th>新值</th></tr></thead>
+<tbody>
+{{range .Changes}}<tr><td>{{.Field}}</td><td class="old">{{.Old}}</td><td class="new">{{.New}}</td></tr>{{end}}
+</tbody>
+</table>
+{{else}}
+<p class="muted">该操作没有逐字段的差异可展示，请确认操作本身无误。</p>
+{{end}}
+
+<form method="post" action="/admin/confirm">
+<input type="hidden" name="confirm_token" value="{{.Token}}">
+{{if .NeedFactor}}
+<label>验证（{{.Factor}}）<input type="text" name="factor_code" autocomplete="off" placeholder="第二因子验证码/凭据"></label>
+{{else}}
+<p class="muted">刚验证过第二因子，此次操作仍在宽限期内，免再输入 —— 但请确认上面的改动无误。</p>
+{{end}}
+<div class="actions">
+<button type="submit">确认执行</button>
+<a href="/admin">取消</a>
+</div>
+</form>
 </body></html>`))
 
 var adminUsersTmpl = template.Must(withPasskeyJS(template.New("users").Funcs(template.FuncMap{

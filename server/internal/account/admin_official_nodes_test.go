@@ -3,23 +3,25 @@ package account
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 )
 
 // Reuse newAdminSettingsServer + adminLogin from admin_test.go.
 
+// TestAdminMintFleetToken calls handleAdminMintToken directly: through the
+// real route it now sits behind requireStepUp (Task 7), which renders a
+// confirmation page instead of minting anything. This test targets the
+// handler's own persistence logic; the route's gating is covered by
+// stepup_test.go.
 func TestAdminMintFleetToken(t *testing.T) {
-	ts, store := newAdminSettingsServer(t)
+	ts, svc, store := newAdminSettingsServer(t)
 	cookie := adminLogin(t, ts)
-	client := ts.Client()
 
-	req, _ := http.NewRequest("POST", ts.URL+"/admin/nodes/token", strings.NewReader("name=shanghai-1"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.AddCookie(cookie)
-	resp, _ := client.Do(req)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("mint token: want 200, got %d", resp.StatusCode)
+	w := callAdminHandler(svc.handleAdminMintToken, cookie, url.Values{"name": {"shanghai-1"}}, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("mint token: want 200, got %d", w.Code)
 	}
 	toks, _ := store.ListActiveFleetTokens(context.Background())
 	if len(toks) != 1 || toks[0].Name != "shanghai-1" {
@@ -28,7 +30,7 @@ func TestAdminMintFleetToken(t *testing.T) {
 }
 
 func TestAdminSetNodeLimits(t *testing.T) {
-	ts, store := newAdminSettingsServer(t)
+	ts, _, store := newAdminSettingsServer(t)
 	cookie := adminLogin(t, ts)
 	client := ts.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -49,18 +51,17 @@ func TestAdminSetNodeLimits(t *testing.T) {
 	}
 }
 
+// TestAdminDeleteFleetNode calls handleAdminDeleteNode directly: through the
+// real route it now sits behind requireStepUp (Task 7). See the comment on
+// TestAdminMintFleetToken above.
 func TestAdminDeleteFleetNode(t *testing.T) {
-	ts, store := newAdminSettingsServer(t)
+	ts, svc, store := newAdminSettingsServer(t)
 	cookie := adminLogin(t, ts)
-	client := ts.Client()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 	n, _ := store.UpsertNode(context.Background(), Node{OwnerType: "fleet", URLs: []string{"turn:1.1.1.1:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1})
-	req, _ := http.NewRequest("POST", ts.URL+"/admin/nodes/"+n.ID+"/delete", nil)
-	req.AddCookie(cookie)
-	resp, _ := client.Do(req)
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("delete node: want 302, got %d", resp.StatusCode)
+	w := callAdminHandler(svc.handleAdminDeleteNode, cookie, nil, map[string]string{"id": n.ID})
+	if w.Code != http.StatusFound {
+		t.Fatalf("delete node: want 302, got %d", w.Code)
 	}
 	if _, ok, _ := store.GetNode(context.Background(), n.ID); ok {
 		t.Fatal("node still present after delete")
@@ -68,7 +69,7 @@ func TestAdminDeleteFleetNode(t *testing.T) {
 }
 
 func TestAdminRevokeFleetToken(t *testing.T) {
-	ts, store := newAdminSettingsServer(t)
+	ts, _, store := newAdminSettingsServer(t)
 	cookie := adminLogin(t, ts)
 	client := ts.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -92,7 +93,7 @@ func TestAdminRevokeFleetToken(t *testing.T) {
 }
 
 func TestAdminSetNodeLimitsUserNodeNotFound(t *testing.T) {
-	ts, store := newAdminSettingsServer(t)
+	ts, _, store := newAdminSettingsServer(t)
 	cookie := adminLogin(t, ts)
 	client := ts.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -112,15 +113,14 @@ func TestAdminSetNodeLimitsUserNodeNotFound(t *testing.T) {
 	}
 }
 
+// Through the real route, an unauthed POST /admin/nodes/token is caught by
+// requireStepUp's own isAdminReq gate (302 to /admin) before it ever reaches
+// handleAdminMintToken. This test targets handleAdminMintToken's own
+// isAdminReq check directly — see the comment on TestAdminSettingsRequiresAdmin.
 func TestAdminNodeRoutesRequireAdmin(t *testing.T) {
-	ts, _ := newAdminSettingsServer(t)
-	client := ts.Client()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	// No admin cookie and no Origin header (csrfGuard allows Origin-less requests,
-	// matching the other admin tests), so the handler's isAdminReq gate rejects.
-	req, _ := http.NewRequest("POST", ts.URL+"/admin/nodes/token", nil)
-	resp, _ := client.Do(req)
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("unauthed mint: want 401, got %d", resp.StatusCode)
+	_, svc, _ := newAdminSettingsServer(t)
+	w := callAdminHandler(svc.handleAdminMintToken, nil, nil, nil)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthed mint: want 401, got %d", w.Code)
 	}
 }

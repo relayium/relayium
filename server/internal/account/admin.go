@@ -272,16 +272,31 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	mux.Handle("POST /admin/passkey/register/finish",
 		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminPasskeyRegisterFinish))))
 	// Delete is a plain form submission, not fetch, so it gets csrfGuard only.
+	// It is high-risk (see the reversed exemption note on
+	// handleAdminPasskeyDelete in passkey_register.go) so it also goes
+	// through requireStepUp, same as the other five below.
 	mux.Handle("POST /admin/passkey/delete",
-		s.csrfGuard(http.HandlerFunc(s.handleAdminPasskeyDelete)))
-	mux.Handle("POST /admin/settings", s.csrfGuard(http.HandlerFunc(s.handleAdminSettings)))
-	mux.Handle("POST /admin/plans", s.csrfGuard(http.HandlerFunc(s.handleAdminUpsertPlan)))
-	mux.Handle("POST /admin/users/plan", s.csrfGuard(http.HandlerFunc(s.handleAdminSetUserPlan)))
-	mux.Handle("POST /admin/nodes/token", s.csrfGuard(http.HandlerFunc(s.handleAdminMintToken)))
+		s.csrfGuard(s.requireStepUp(AuditPasskeyDelete, s.handleAdminPasskeyDelete)))
+	// These six are high-risk writes: requireStepUp intercepts the POST,
+	// stashes it as a pending action, and renders a confirmation page
+	// showing the diff instead of applying it directly. The actual write
+	// only happens via POST /admin/confirm (handleAdminConfirm) below.
+	mux.Handle("POST /admin/settings",
+		s.csrfGuard(s.requireStepUp(AuditSettings, s.handleAdminSettings)))
+	mux.Handle("POST /admin/plans",
+		s.csrfGuard(s.requireStepUp(AuditPlanUpsert, s.handleAdminUpsertPlan)))
+	mux.Handle("POST /admin/users/plan",
+		s.csrfGuard(s.requireStepUp(AuditUserPlan, s.handleAdminSetUserPlan)))
+	mux.Handle("POST /admin/nodes/token",
+		s.csrfGuard(s.requireStepUp(AuditTokenMint, s.handleAdminMintToken)))
+	mux.Handle("POST /admin/nodes/{id}/delete",
+		s.csrfGuard(s.requireStepUp(AuditNodeDelete, s.handleAdminDeleteNode)))
+	mux.Handle("POST /admin/confirm", s.csrfGuard(http.HandlerFunc(s.handleAdminConfirm)))
+	// Low-risk writes (no lockout/destructive-at-scale potential) apply
+	// directly — no confirmation page.
 	mux.Handle("POST /admin/nodes/token/{id}/revoke", s.csrfGuard(http.HandlerFunc(s.handleAdminRevokeToken)))
 	mux.Handle("POST /admin/nodes/{id}/limits", s.csrfGuard(http.HandlerFunc(s.handleAdminNodeLimits)))
 	mux.Handle("POST /admin/nodes/{id}/label", s.csrfGuard(http.HandlerFunc(s.handleAdminNodeLabel)))
-	mux.Handle("POST /admin/nodes/{id}/delete", s.csrfGuard(http.HandlerFunc(s.handleAdminDeleteNode)))
 }
 
 // newAdminSession mints a session token and records how it was established
