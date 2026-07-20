@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { splitExtension, nextAvailableName, canStreamToDisk, pickSaveTarget, LARGE_DOWNLOAD_WARN_BYTES } from "./filesink";
+import { splitExtension, nextAvailableName, canStreamToDisk, pickSaveTarget, memoryPeakBytes, warnsAboutMemory, LARGE_DOWNLOAD_WARN_BYTES } from "./filesink";
 
 describe("splitExtension", () => {
   it("splits a normal name", () => {
@@ -121,5 +121,60 @@ describe("canStreamToDisk", () => {
 describe("LARGE_DOWNLOAD_WARN_BYTES", () => {
   it("is 256 MiB", () => {
     expect(LARGE_DOWNLOAD_WARN_BYTES).toBe(256 * 1024 * 1024);
+  });
+});
+
+const flat = (sizes: number[]) => sizes.map((size, i) => ({ name: `f${i}.bin`, size }));
+const folder = (sizes: number[]) =>
+  sizes.map((size, i) => ({ name: `f${i}.bin`, size, path: `trip/f${i}.bin` }));
+
+describe("memoryPeakBytes", () => {
+  it("扁平批次按总量算（blobSink 逐个下载，偏保守）", () => {
+    expect(memoryPeakBytes(flat([100, 200]), 300)).toBe(300);
+  });
+
+  it("文件夹批次算 2×：ZipWriter 先攒 parts[]，concat 再复制一份进 zip", () => {
+    expect(memoryPeakBytes(folder([100, 200]), 300)).toBe(600);
+  });
+
+  it("path 不含 '/' 不算文件夹 —— 必须与 pickSaveTarget 的 ZIP 分支同条件", () => {
+    expect(memoryPeakBytes([{ name: "a.bin", size: 10, path: "a.bin" }], 10)).toBe(10);
+  });
+
+  it("与 pickSaveTarget 实际选中的分支一致：只有 ZIP 那条是 2×", async () => {
+    const restore = stubPickers({});
+    try {
+      for (const files of [flat([1, 2]), folder([1, 2])]) {
+        const target = await pickSaveTarget(files);
+        const isZip = target.label === "将打包为 ZIP 下载";
+        expect(memoryPeakBytes(files, 3), `label=${target.label}`).toBe(isZip ? 6 : 3);
+      }
+    } finally { restore(); }
+  });
+});
+
+describe("warnsAboutMemory", () => {
+  it("有流式落盘能力时永不提示，多大都行", () => {
+    const restore = stubPickers({ save: true, dir: true });
+    try {
+      expect(warnsAboutMemory(folder([10 * LARGE_DOWNLOAD_WARN_BYTES]), 10 * LARGE_DOWNLOAD_WARN_BYTES)).toBe(false);
+    } finally { restore(); }
+  });
+
+  it("无流式落盘能力 + 扁平批次：越过阈值才提示", () => {
+    const restore = stubPickers({});
+    try {
+      expect(warnsAboutMemory(flat([256 * 1024 * 1024]), 256 * 1024 * 1024)).toBe(false);
+      expect(warnsAboutMemory(flat([256 * 1024 * 1024 + 1]), 256 * 1024 * 1024 + 1)).toBe(true);
+    } finally { restore(); }
+  });
+
+  it("无流式落盘能力 + 文件夹：峰值 2×，所以一半的量就越线", () => {
+    const restore = stubPickers({});
+    try {
+      const half = 130 * 1024 * 1024; // 扁平不会提示，×2 后越过 256 MiB
+      expect(warnsAboutMemory(flat([half]), half)).toBe(false);
+      expect(warnsAboutMemory(folder([half]), half)).toBe(true);
+    } finally { restore(); }
   });
 });

@@ -26,6 +26,8 @@ const pt: Messages = {
   sendFolder: "Enviar uma pasta",
   accept: "Aceitar",
   decline: "Recusar",
+  recvMemWarn: (s) => `Estes arquivos somam ${s}. Seu navegador não consegue transmitir direto para o disco, então precisa manter o lote inteiro na memória — o navegador pode travar. Aceite no Chrome ou Edge em um computador para transmitir direto para o disco.`,
+  recvMemWarnAccept: "Aceitar mesmo assim",
   sendTo: (n) => `Enviar → ${n}`,
   recvFrom: (n) => `Receber ← ${n}`,
   fileCounter: (i, n) => `Arquivo ${i}/${n}`,

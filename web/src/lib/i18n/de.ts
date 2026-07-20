@@ -26,6 +26,8 @@ const de: Messages = {
   sendFolder: "Ordner senden",
   accept: "Annehmen",
   decline: "Ablehnen",
+  recvMemWarn: (s) => `Diese Dateien umfassen insgesamt ${s}. Ihr Browser kann nicht direkt auf die Festplatte streamen und muss den ganzen Stapel im Speicher halten — der Browser kann abstürzen. Nehmen Sie sie in Chrome oder Edge auf einem Computer an, dann wird direkt auf die Festplatte gestreamt.`,
+  recvMemWarnAccept: "Trotzdem annehmen",
   sendTo: (n) => `Senden → ${n}`,
   recvFrom: (n) => `Empfangen ← ${n}`,
   fileCounter: (i, n) => `Datei ${i}/${n}`,

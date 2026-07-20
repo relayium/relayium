@@ -26,6 +26,8 @@ const zh: Messages = {
   sendFolder: "发送文件夹",
   accept: "接收",
   decline: "拒绝",
+  recvMemWarn: (s) => `这批文件一共 ${s}。你的浏览器不支持流式落盘，必须先把整批文件整份读进内存，浏览器可能因此崩溃。用电脑上的 Chrome 或 Edge 接收就能直接流式落盘。`,
+  recvMemWarnAccept: "仍要接收",
   sendTo: (n) => `发送 → ${n}`,
   recvFrom: (n) => `接收 ← ${n}`,
   fileCounter: (i, n) => `文件 ${i}/${n}`,

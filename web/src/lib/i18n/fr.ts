@@ -26,6 +26,8 @@ const fr: Messages = {
   sendFolder: "Envoyer un dossier",
   accept: "Accepter",
   decline: "Refuser",
+  recvMemWarn: (s) => `Ces fichiers représentent ${s} au total. Votre navigateur ne peut pas diffuser directement sur le disque : il doit garder tout le lot en mémoire, et le navigateur risque de planter. Acceptez-les dans Chrome ou Edge sur un ordinateur pour diffuser directement sur le disque.`,
+  recvMemWarnAccept: "Accepter quand même",
   sendTo: (n) => `Envoi → ${n}`,
   recvFrom: (n) => `Réception ← ${n}`,
   fileCounter: (i, n) => `Fichier ${i}/${n}`,

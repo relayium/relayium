@@ -26,6 +26,8 @@ const en: Messages = {
   sendFolder: "Send a folder",
   accept: "Accept",
   decline: "Decline",
+  recvMemWarn: (s) => `These files add up to ${s}. Your browser can’t stream to disk, so it has to hold the whole batch in memory — the browser may crash. Receive them in Chrome or Edge on a computer to stream straight to disk.`,
+  recvMemWarnAccept: "Accept anyway",
   sendTo: (n) => `Send → ${n}`,
   recvFrom: (n) => `Receive ← ${n}`,
   fileCounter: (i, n) => `File ${i}/${n}`,

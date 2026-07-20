@@ -63,6 +63,35 @@ export function canStreamToDisk(fileCount: number): boolean {
   return !!w.showDirectoryPicker;
 }
 
+/**
+ * 没有流式落盘能力时，把这一批文件交付给用户的内存峰值估算。
+ *
+ * 两条内存分支的峰值差一倍：
+ * - 文件夹（有 path 含 "/"）走 ZipWriter：每个文件先攒 parts[]，close 时 concat
+ *   复制一份进 zip 缓冲，finish 再拼出完整 zip —— 整批同时在内存里且被复制过，
+ *   峰值约 2× 批次总量。
+ * - 扁平批次走 blobSink 逐个下载，真实峰值约等于最大单文件；这里仍按总量算，
+ *   偏保守，与下载页的既有口径一致（宁可多提示一次，不要崩了才知道）。
+ *
+ * 判文件夹的条件必须与 pickSaveTarget 的 ZIP 分支逐字一致，否则这个估算会
+ * 系统性偏低。filesink.test.ts 里有一条用例真跑 pickSaveTarget 比对 label。
+ */
+export function memoryPeakBytes(files: FileMetaLite[], totalBytes: number): number {
+  return files.some((f) => f.path && f.path.includes("/")) ? totalBytes * 2 : totalBytes;
+}
+
+/**
+ * 开始接收/下载这一批文件之前，要不要先提示内存风险。
+ *
+ * 阈值只有 LARGE_DOWNLOAD_WARN_BYTES 一个，而且它比的是**估算峰值**而不是批次
+ * 总量 —— 这样 ZIP 分支的 2× 不需要第二个常量就能被算进去。两个都是没实测过的
+ * 估计值，再拆一个只是多一个同样没底的数字。
+ */
+export function warnsAboutMemory(files: FileMetaLite[], totalBytes: number): boolean {
+  if (canStreamToDisk(files.length)) return false;
+  return memoryPeakBytes(files, totalBytes) > LARGE_DOWNLOAD_WARN_BYTES;
+}
+
 function nativeSink(writable: FsWritable): FileSink {
   return { write: (c) => writable.write(c), close: () => writable.close() };
 }

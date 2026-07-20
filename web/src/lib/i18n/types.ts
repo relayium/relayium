@@ -49,6 +49,10 @@ export interface Messages {
   sendFolder: string; // button: choose a folder to send
   accept: string;
   decline: string;
+  // 接收侧内存提示：为什么 + 会怎样 + 怎么办，带上这一批的总大小。下载页的
+  // download.memWarn* 讲的是「这个链接」，实时接收没有链接，措辞不能复用。
+  recvMemWarn: (size: string) => string;
+  recvMemWarnAccept: string; // 按钮：仍要接收
   sendTo: (name: string) => string;
   recvFrom: (name: string) => string;
   fileCounter: (i: number, n: number) => string;

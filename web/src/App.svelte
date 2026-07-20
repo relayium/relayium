@@ -51,6 +51,7 @@
   import Hero from "./lib/Hero.svelte";
   import DeviceRadar from "./lib/DeviceRadar.svelte";
   import QuotaNotice from "./lib/QuotaNotice.svelte";
+  import ReceiveActions from "./lib/ReceiveActions.svelte";
   import FeatureStrip from "./lib/FeatureStrip.svelte";
   import CliCallout from "./lib/CliCallout.svelte";
   import HowToSteps from "./lib/HowToSteps.svelte";
@@ -1354,10 +1355,14 @@
       {#if sasCode}
         <div class="sas">{t.codeLabel} <code>{sasCode}</code> — {t.codeCompare}</div>
       {/if}
-      <div class="actions">
-        <button class="btn btn-primary" onclick={() => acceptFn?.()}>{t.accept}</button>
-        <button class="btn btn-ghost" onclick={() => rejectFn?.()}>{t.decline}</button>
-      </div>
+      <!-- 收/拒按钮住在 ReceiveActions 里，因为大批次的内存提示必须拦在这一下
+           点击之前：接受即用户手势，pickSaveTarget 在同一个手势里开选择器。 -->
+      <ReceiveActions
+        files={incoming.files}
+        total={incoming.total}
+        onAccept={() => acceptFn?.()}
+        onReject={() => rejectFn?.()}
+      />
     </section>
   {/if}
 
@@ -1616,7 +1621,6 @@
   }
   .sas code { font-size: 16px; font-weight: 700; letter-spacing: 1px; background: transparent; padding: 0 2px; }
 
-  .actions { display: flex; gap: var(--space-3); }
 
   .xfer-head { display: flex; align-items: center; gap: 10px; }
   .xfer-head .label { color: var(--accent); font-size: 14px; font-weight: 500; white-space: nowrap; }

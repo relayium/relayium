@@ -26,6 +26,8 @@ const ko: Messages = {
   sendFolder: "폴더 보내기",
   accept: "받기",
   decline: "거부",
+  recvMemWarn: (s) => `이 파일들은 총 ${s}입니다. 사용 중인 브라우저는 디스크로 바로 스트리밍하지 못해 전체를 메모리에 담아야 하므로 브라우저가 다운될 수 있습니다. 컴퓨터의 Chrome 또는 Edge에서 받으면 디스크로 바로 스트리밍합니다.`,
+  recvMemWarnAccept: "그래도 받기",
   sendTo: (n) => `보내기 → ${n}`,
   recvFrom: (n) => `받기 ← ${n}`,
   fileCounter: (i, n) => `파일 ${i}/${n}`,

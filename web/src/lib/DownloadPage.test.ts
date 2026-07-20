@@ -133,7 +133,10 @@ describe("DownloadPage 大文件内存提示", () => {
   });
 
   it("恰好等于阈值不提示，超过一个字节才提示（守 > 与 >= 的手滑）", async () => {
-    await mountPage({ canStream: false, files: [{ name: "edge.bin", size: LARGE_DOWNLOAD_WARN_BYTES }] });
+    // 尺寸写死 256 MiB 而不是引用常量：引用常量时这条会随阈值一起漂（阈值改成 0
+    // 它退化成 0 > 0，照样不提示）。写死之后它同时守两件事：> 与 >= 的手滑，
+    // 以及阈值的取值本身。
+    await mountPage({ canStream: false, files: [{ name: "edge.bin", size: 256 * 1024 * 1024 }] });
     await clickDownload();
     expect(target.querySelector(".memwarn")).toBeNull();
     expect(downloadBlob).toHaveBeenCalledTimes(1);
