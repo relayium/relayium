@@ -44,6 +44,12 @@ type adminNodeView struct {
 	StorageEnabled    bool
 	StorageTotal      int64
 	StorageFree       int64
+	// UsableBytes is how much of StorageFree placement will actually offer:
+	// 70%, leaving a 30% cushion so a node is never driven right up to its
+	// disk. Same storageHeadroomNum/storageHeadroomDen ratio used by
+	// SQLiteStore.StorageNodes, via usableBytes. Purely derived; not stored
+	// and not reported by the node.
+	UsableBytes       int64
 	TrafficLimitBytes int64
 	DiskLimitBytes    int64
 	LastSeenAt        int64
@@ -63,6 +69,7 @@ func nodeViews(nodes []Node, monthly map[string]int64, now time.Time) []adminNod
 			StorageEnabled:    n.StorageEnabled,
 			StorageTotal:      n.StorageTotal,
 			StorageFree:       n.StorageFree,
+			UsableBytes:       usableBytes(n.StorageFree),
 			TrafficLimitBytes: n.TrafficLimitBytes,
 			DiskLimitBytes:    n.DiskLimitBytes,
 			LastSeenAt:        n.LastSeenAt,
