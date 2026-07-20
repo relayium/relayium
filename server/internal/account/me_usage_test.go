@@ -130,6 +130,19 @@ func TestMeUsageIncludesPlan(t *testing.T) {
 		t.Fatalf("plan perks = storage %d / traffic %d / retention %d; free tier has finite values for all three",
 			body.Plan.StorageBytes, body.Plan.TrafficBytes, body.Plan.RetentionSecs)
 	}
+	// 逐字段精确断言，而不是只判正负：免费档的存储(100 MB)与流量(1 GB)是两个**不同**
+	// 的数，所以把 handler 里这两行的数据源写反会在这里失败。只判 `> 0` 的话对调后
+	// 依旧全绿，而代价是免费用户的会员卡直接印出"1 GB 存储 · 100 MB/月流量"——错在
+	// 变现界面上。（Task 8 在前端 perks() 上抓到过同一个 bug 类，服务端这半边同样要钉。）
+	const freeStorage, freeTraffic = int64(100) << 20, int64(1) << 30
+	if body.Plan.StorageBytes != freeStorage {
+		t.Fatalf("plan.storageBytes = %d, want %d (free tier's 100 MB); if this equals the traffic cap, the two fields' sources are swapped",
+			body.Plan.StorageBytes, freeStorage)
+	}
+	if body.Plan.TrafficBytes != freeTraffic {
+		t.Fatalf("plan.trafficBytes = %d, want %d (free tier's 1 GB); if this equals the storage cap, the two fields' sources are swapped",
+			body.Plan.TrafficBytes, freeTraffic)
+	}
 	if body.Plan.PriceMonthly != 0 {
 		t.Fatalf("plan.priceMonthly = %d, want 0 for the free tier", body.Plan.PriceMonthly)
 	}
@@ -140,6 +153,81 @@ func TestMeUsageIncludesPlan(t *testing.T) {
 	if body.Plan.SubscriptionStatus != "" || body.Plan.SubscriptionEnd != 0 {
 		t.Fatalf("subscription = %q/%d, want empty for a user who never checked out",
 			body.Plan.SubscriptionStatus, body.Plan.SubscriptionEnd)
+	}
+}
+
+// 同一条守卫的 DB 版：上一条走的是免费档（可能命中 freePlanFallback 的内存常量），
+// 这条把一个**自定义**档写进 plans 表再断言，钉死"plan 行 → JSON 字段"这段映射本身。
+// 两个额度取彼此相差一个数量级的值，且与响应里其它数字都不相同，所以任何把
+// storageBytes/trafficBytes 数据源接错的改动都躲不过去。
+func TestMeUsagePlanStorageAndTrafficAreNotSwapped(t *testing.T) {
+	ts, _, store, mail := newBillingServer(t)
+	cookie := loginCookie(t, ts, mail, "swap@b.c")
+	// 刻意选互不相同、也不与 retention/price 相同的值。
+	const wantStorage int64 = 7 << 30   // 7516192768
+	const wantTraffic int64 = 300 << 30 // 322122547200
+	const wantRetention int64 = 45 * 86400
+	const wantPrice int64 = 1290
+	mustPlan(t, store, Plan{
+		ID: "swaptest", Name: "SwapTest", Active: true, SortOrder: 10,
+		StorageBytes: wantStorage, TrafficBytes: wantTraffic, RetentionSecs: wantRetention,
+		PriceMonthly: wantPrice,
+	})
+
+	u, ok, err := store.UserByCanonicalEmail(t.Context(), "swap@b.c")
+	if err != nil || !ok {
+		t.Fatalf("lookup user: %v ok=%v", err, ok)
+	}
+	// plan_started_at 取很早的时间点，避开 accrueQuotaTx 的月中折算，让这条用例只
+	// 考察字段映射。
+	if err := store.SetUserPlanAdmin(t.Context(), u.ID, "swaptest", 1); err != nil {
+		t.Fatalf("SetUserPlanAdmin: %v", err)
+	}
+
+	req, _ := http.NewRequest("GET", ts.URL+"/api/me/usage", nil)
+	req.AddCookie(cookie)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", res.StatusCode)
+	}
+	var body struct {
+		Plan struct {
+			StorageBytes  int64 `json:"storageBytes"`
+			TrafficBytes  int64 `json:"trafficBytes"`
+			RetentionSecs int64 `json:"retentionSecs"`
+			PriceMonthly  int64 `json:"priceMonthly"`
+		} `json:"plan"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// 鉴别力自检：四个数必须两两不同，否则下面的断言可能被错误的源字段满足。
+	fixtures := map[string]int64{
+		"storageBytes": wantStorage, "trafficBytes": wantTraffic,
+		"retentionSecs": wantRetention, "priceMonthly": wantPrice,
+	}
+	for aName, a := range fixtures {
+		for bName, b := range fixtures {
+			if aName < bName && a == b {
+				t.Fatalf("fixture %s and %s are both %d; pick distinct values or a swapped source would still satisfy the assertions", aName, bName, a)
+			}
+		}
+	}
+	if body.Plan.StorageBytes != wantStorage {
+		t.Fatalf("plan.storageBytes = %d, want %d (got the traffic cap? the two fields' sources are swapped)", body.Plan.StorageBytes, wantStorage)
+	}
+	if body.Plan.TrafficBytes != wantTraffic {
+		t.Fatalf("plan.trafficBytes = %d, want %d (got the storage cap? the two fields' sources are swapped)", body.Plan.TrafficBytes, wantTraffic)
+	}
+	if body.Plan.RetentionSecs != wantRetention {
+		t.Fatalf("plan.retentionSecs = %d, want %d", body.Plan.RetentionSecs, wantRetention)
+	}
+	if body.Plan.PriceMonthly != wantPrice {
+		t.Fatalf("plan.priceMonthly = %d, want %d", body.Plan.PriceMonthly, wantPrice)
 	}
 }
 

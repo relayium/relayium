@@ -2094,10 +2094,18 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 }
 
 // TouchNode records a heartbeat: relayed_bytes is a cumulative counter
-// (keep-MAX, never decrease), while stored_bytes is a live gauge of the
-// node's current whole-volume usage and storage_total/storage_free are live
-// snapshots of the node's disk state; none of those three are monotonic, so
-// they are SET.
+// (keep-MAX, never decrease), while stored_bytes is a live gauge of the bytes
+// the node's own blob directory occupies and storage_total/storage_free are
+// live snapshots of the node's disk state; none of those three are monotonic,
+// so they are SET.
+//
+// This is central's only definition of stored_bytes, so to be explicit: it is
+// NOT the whole volume's used space (total - free). It used to be, and that
+// was the bug — a whole-volume reading counts the OS and every unrelated
+// program sharing the disk as relayium storage, which inflated the admin
+// dashboard and made the placement filter treat healthy nodes as out of quota.
+// storage_total/storage_free keep the whole-volume meaning; stored_bytes does
+// not. Do not "fix" stored_bytes back toward total - free.
 func (s *SQLiteStore) TouchNode(ctx context.Context, id string, relayedBytes, storedBytes, storageTotal, storageFree, at int64) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE nodes SET last_seen_at=?,
