@@ -142,10 +142,12 @@ type Service struct {
 	appleKey func(ctx context.Context, kid string) (*rsa.PublicKey, error)
 	// appleSecMu guards appleSecTok/appleSecExp, the cached appleClientSecret()
 	// JWT; regenerated once it's within 2 minutes of appleSecExp.
-	appleSecMu        sync.Mutex
-	appleSecTok       string
-	appleSecExp       time.Time
-	adminSessions     map[string]int64 // token -> 过期 unix 秒
+	appleSecMu  sync.Mutex
+	appleSecTok string
+	appleSecExp time.Time
+	// adminSessions: token -> 会话状态。原先只存过期时间，加入步进认证后还需要
+	// 知道会话是怎么建立的（审计的 auth 列）以及上次步进是什么时候（宽限期）。
+	adminSessions     map[string]adminSession
 	adminMu           sync.Mutex
 	adminTOTPMu       sync.Mutex
 	adminTOTPLastStep int64 // last TOTP time-step accepted for admin login (replay guard)
@@ -206,7 +208,7 @@ type rateLimiter interface{ Allow(key string) bool }
 
 func NewService(store Store, mailer Mailer, cfg Config) *Service {
 	svc := &Service{store: store, mailer: mailer, cfg: cfg, now: time.Now,
-		adminSessions: map[string]int64{}, adminLogins: newLoginThrottle(),
+		adminSessions: map[string]adminSession{}, adminLogins: newLoginThrottle(),
 		pwLogins: newLoginThrottle(), magicRequests: newLoginThrottle(),
 		verifyRequests: newLoginThrottle(), resetRequests: newLoginThrottle(),
 		deleteRequests: newLoginThrottle(),

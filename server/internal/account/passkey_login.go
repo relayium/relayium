@@ -233,11 +233,16 @@ func (s *Service) handleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.R
 		log.Printf("passkey: marshaling credential for write-back failed: %v", err)
 	}
 	s.adminPasskeyLogins.reset(ip)
-	tok := s.newAdminSession()
+	tok := s.newAdminSession("passkey")
 	http.SetCookie(w, &http.Cookie{
 		Name: adminCookie, Value: tok, Path: "/admin",
 		HttpOnly: true, Secure: s.cookieSecure(), SameSite: http.SameSiteLaxMode,
 		MaxAge: int(adminSessionTTL / time.Second),
 	})
+	// adminAuthMethod 从 r 的 cookie 反查会话；这个请求本身还没带上刚铸造的
+	// cookie（它只被写进了响应），所以这里手动补一份到 r 上，writeAudit 才能
+	// 读出 auth=passkey 而不是空字符串。
+	r.AddCookie(&http.Cookie{Name: adminCookie, Value: tok})
+	s.writeAudit(r, AuditLoginOK, "-", nil, StepUpNone)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

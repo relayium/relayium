@@ -26,7 +26,25 @@ const (
 	// maxRetentionDays bounds retention_days before it's multiplied by
 	// 86400 into seconds; 100 years is far beyond any sane retention.
 	maxRetentionDays = int64(100 * 365)
+
+	// defaultAdminUser is the admin username used when AdminUser is unconfigured
+	// (deployments that only set a password).
+	defaultAdminUser = "admin"
+
+	// stepUpGraceSecs 是一次成功步进之后，同一会话内高危操作免再验第二因子的窗口。
+	//
+	// 存在的理由是 TOTP：totp.go 的单调计数器让同一个 30 秒窗口的验证码只能用一次，
+	// 没有宽限期的话连续两次高危操作必须干等下一个码。**确认页不受影响，照常展示**，
+	// 所以防误点击的能力一点没打折 —— 免掉的只是重复掉码。
+	stepUpGraceSecs = 60
 )
+
+// adminSession is the state kept for a logged-in admin session token.
+type adminSession struct {
+	expires      int64  // unix 秒
+	auth         string // "password" | "passkey"，建立会话时用的方式
+	lastStepUpAt int64  // 上次步进成功的 unix 秒；0 = 从未步进
+}
 
 // adminNodeView is a Node prepared for the admin template (online flag derived
 // from last_seen against nodeOnlineWindow).
@@ -226,7 +244,7 @@ func (s *Service) AdminEnabled() bool { return s.cfg.AdminPassword != "" }
 // adminUser 返回有效管理员账号，未配置时默认为 "admin"（向后兼容只设密码的部署）。
 func (s *Service) adminUser() string {
 	if s.cfg.AdminUser == "" {
-		return "admin"
+		return defaultAdminUser
 	}
 	return s.cfg.AdminUser
 }
@@ -266,10 +284,14 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	mux.Handle("POST /admin/nodes/{id}/delete", s.csrfGuard(http.HandlerFunc(s.handleAdminDeleteNode)))
 }
 
-func (s *Service) newAdminSession() string {
+// newAdminSession mints a session token and records how it was established
+// (auth: "password" | "passkey") so the audit trail can report it later.
+func (s *Service) newAdminSession(auth string) string {
 	tok := randToken()
 	s.adminMu.Lock()
-	s.adminSessions[tok] = s.now().Add(adminSessionTTL).Unix()
+	s.adminSessions[tok] = adminSession{
+		expires: s.now().Add(adminSessionTTL).Unix(), auth: auth,
+	}
 	s.adminMu.Unlock()
 	return tok
 }
@@ -280,20 +302,61 @@ func (s *Service) validAdmin(tok string) bool {
 	}
 	s.adminMu.Lock()
 	defer s.adminMu.Unlock()
-	exp, ok := s.adminSessions[tok]
+	sess, ok := s.adminSessions[tok]
 	if !ok {
 		return false
 	}
-	if s.now().Unix() >= exp {
+	if s.now().Unix() >= sess.expires {
 		delete(s.adminSessions, tok)
 		return false
 	}
 	return true
 }
 
+// markStepUp 记下这次步进成功的时刻，开启宽限期。
+func (s *Service) markStepUp(tok string) {
+	s.adminMu.Lock()
+	defer s.adminMu.Unlock()
+	if sess, ok := s.adminSessions[tok]; ok {
+		sess.lastStepUpAt = s.now().Unix()
+		s.adminSessions[tok] = sess
+	}
+}
+
+// stepUpFresh 报告该会话是否仍在宽限期内。
+func (s *Service) stepUpFresh(tok string) bool {
+	s.adminMu.Lock()
+	defer s.adminMu.Unlock()
+	sess, ok := s.adminSessions[tok]
+	if !ok || sess.lastStepUpAt == 0 {
+		return false
+	}
+	return s.now().Unix()-sess.lastStepUpAt < stepUpGraceSecs
+}
+
 func (s *Service) isAdminReq(r *http.Request) bool {
 	c, err := r.Cookie(adminCookie)
 	return err == nil && s.validAdmin(c.Value)
+}
+
+// adminUsername 返回配置的管理员用户名，用于审计的 actor 列。管理员不是 users
+// 表里的行，而是配置身份，所以审计里的 actor 恒等于它 —— 真正有区分度的是 IP。
+func (s *Service) adminUsername() string {
+	return s.adminUser()
+}
+
+// adminAuthMethod 报告当前会话是怎么建立的（password / passkey），供审计记录使用。
+func (s *Service) adminAuthMethod(r *http.Request) string {
+	c, err := r.Cookie(adminCookie)
+	if err != nil {
+		return ""
+	}
+	s.adminMu.Lock()
+	defer s.adminMu.Unlock()
+	if sess, ok := s.adminSessions[c.Value]; ok {
+		return sess.auth
+	}
+	return ""
 }
 
 // verifyAdminCreds runs the constant-time username/password comparison plus the
@@ -326,6 +389,9 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		s.adminLogins.recordFail(ip, s.now())
 		s.renderAdminLogin(w, http.StatusUnauthorized, "账号、密码或验证码错误",
 			s.adminPasskeyCount(r.Context()) > 0)
+		// 只记"有人试过且失败了"。绝不记录尝试的用户名或密码：
+		// 用户名常被误输成密码，把它记下来等于把密码写进日志。
+		s.writeAudit(r, AuditLoginFail, "-", nil, StepUpNone)
 		return
 	}
 
@@ -333,16 +399,24 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		s.commitAdminTOTPStep(totpStep)
 	}
 	s.adminLogins.reset(ip)
-	tok := s.newAdminSession()
+	tok := s.newAdminSession("password")
 	http.SetCookie(w, &http.Cookie{
 		Name: adminCookie, Value: tok, Path: "/admin",
 		HttpOnly: true, Secure: s.cookieSecure(), SameSite: http.SameSiteLaxMode,
 		MaxAge: int(adminSessionTTL / time.Second),
 	})
+	// adminAuthMethod 从 r 的 cookie 反查会话；这个请求本身还没带上刚铸造的
+	// cookie（它只被写进了响应），所以这里手动补一份到 r 上，writeAudit 才能
+	// 读出 auth=password 而不是空字符串。
+	r.AddCookie(&http.Cookie{Name: adminCookie, Value: tok})
+	s.writeAudit(r, AuditLoginOK, "-", nil, StepUpNone)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 
 func (s *Service) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
+	// writeAudit 在删除会话之前调用：它经 adminAuthMethod 从 r 的 cookie 反查
+	// s.adminSessions 得到 auth，删除之后就查不到了，记出来的 auth 会永远是空。
+	s.writeAudit(r, AuditLogout, "-", nil, StepUpNone)
 	if c, err := r.Cookie(adminCookie); err == nil {
 		s.adminMu.Lock()
 		delete(s.adminSessions, c.Value)
@@ -759,10 +833,20 @@ func (s *Service) handleAdminNodeLimits(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "invalid limits (non-negative integers, GB)", http.StatusBadRequest)
 		return
 	}
-	if err := s.store.SetNodeLimits(r.Context(), id, tGB<<30, dGB<<30); err != nil {
+	trafficBytes, diskBytes := tGB<<30, dGB<<30
+	before, _, err := s.store.GetNode(r.Context(), id)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if err := s.store.SetNodeLimits(r.Context(), id, trafficBytes, diskBytes); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	s.writeAudit(r, AuditNodeLimits, "node:"+id, []ChangeField{
+		{Field: "traffic_limit_bytes", Old: before.TrafficLimitBytes, New: trafficBytes},
+		{Field: "disk_limit_bytes", Old: before.DiskLimitBytes, New: diskBytes},
+	}, StepUpNone)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 
@@ -772,14 +856,22 @@ func (s *Service) handleAdminNodeLabel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	id := r.PathValue("id")
 	label := strings.TrimSpace(r.FormValue("label"))
 	if len(label) > 64 {
 		label = label[:64]
 	}
-	if err := s.store.SetNodeLabel(r.Context(), r.PathValue("id"), label); err != nil {
+	before, _, err := s.store.GetNode(r.Context(), id)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if err := s.store.SetNodeLabel(r.Context(), id, label); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	s.writeAudit(r, AuditNodeLabel, "node:"+id,
+		[]ChangeField{{Field: "label", Old: before.Label, New: label}}, StepUpNone)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 
@@ -803,10 +895,15 @@ func (s *Service) handleAdminRevokeToken(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	if err := s.store.RevokeFleetToken(r.Context(), r.PathValue("id"), s.now().Unix()); err != nil {
+	id := r.PathValue("id")
+	revokedAt := s.now().Unix()
+	if err := s.store.RevokeFleetToken(r.Context(), id, revokedAt); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
+	// 只记 token id，绝不记明文 —— 明文只在铸造时内联显示一次，库里存的是哈希。
+	s.writeAudit(r, AuditTokenRevoke, "token:"+id,
+		[]ChangeField{{Field: "revoked_at", Old: int64(0), New: revokedAt}}, StepUpNone)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 
