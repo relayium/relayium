@@ -1,0 +1,163 @@
+package account
+
+import (
+	"context"
+	"errors"
+	"net/url"
+	"strconv"
+	"strings"
+)
+
+// beforeImageFor 返回某个高危动作的前后镜像，供确认页展示 diff、供审计记录变更。
+//
+// 两个镜像都用**存储层原始值**（bytes / secs）。表单提交的是 MB/GB/天，
+// 若在这里混用单位，确认页说"改成 1"而库里写的是 1073741824，对不上。
+//
+// 关键约束：这里的转换必须复用 handleAdminSettings / handleAdminUpsertPlan
+// 写库时实际用的那份解析（parseSettingsForm / parsePlanForm）。绝不能另写
+// 一份平行解析——两份迟早漂移，确认页显示的就不再是即将写入的值。
+func (s *Service) beforeImageFor(ctx context.Context, action string, form url.Values) (before, after map[string]any, target string, err error) {
+	switch action {
+	case AuditSettings:
+		cur := s.resolveSettings(ctx)
+		return settingsImage(cur), parseSettingsForm(form), "-", nil
+
+	case AuditPlanUpsert:
+		id := form.Get("id")
+		before = map[string]any{}
+		if p, ok, err := s.store.GetPlan(ctx, id); err != nil {
+			return nil, nil, "", err
+		} else if ok {
+			before = planImage(p)
+		}
+		p, err := parsePlanForm(form)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		return before, planImage(p), "plan:" + id, nil
+
+	// 其余高危动作没有"字段级 diff"可言：用户改档只有一个目标值，节点删除
+	// 没有新值，铸 token 是纯新增。它们各自在 handler 里构造 ChangeField。
+	default:
+		return map[string]any{}, map[string]any{}, "-", nil
+	}
+}
+
+// settingsImage / planImage 把结构体摊平成字段名 -> 存储层值。
+// 字段名直接用数据库列名/设置键名，这样审计日志里的 field 能直接对到库里。
+func planImage(p Plan) map[string]any {
+	return map[string]any{
+		"name":                    p.Name,
+		"storage_bytes":           p.StorageBytes,
+		"traffic_bytes":           p.TrafficBytes,
+		"retention_secs":          p.RetentionSecs,
+		"price_monthly":           p.PriceMonthly,
+		"price_yearly":            p.PriceYearly,
+		"sort_order":              p.SortOrder,
+		"active":                  p.Active,
+		"daily_quota_bytes":       p.DailyQuotaBytes,
+		"stripe_price_monthly_id": p.StripePriceMonthlyID,
+		"stripe_price_yearly_id":  p.StripePriceYearlyID,
+	}
+}
+
+func settingsImage(s Settings) map[string]any {
+	return map[string]any{
+		SettingMaxFileSize:            s.MaxFileSize,
+		SettingDailyQuota:             s.DailyQuota,
+		SettingDefaultTTL:             s.DefaultTTL,
+		SettingMaxTTL:                 s.MaxTTL,
+		SettingDefaultRetention:       s.DefaultRetention,
+		SettingDefaultMaxDownloads:    s.DefaultMaxDownloads,
+		SettingMaxMaxDownloads:        s.MaxMaxDownloads,
+		SettingStorageDiskCap:         s.StorageDiskCap,
+		SettingDisableCentralFallback: s.DisableCentralFallback,
+		SettingNodeTrafficDefault:     s.NodeTrafficDefault,
+	}
+}
+
+// parseSettingsForm converts a settings-edit form (MB/GB/hours, as the admin
+// UI submits and as settingsFormFrom in the test file renders back) into the
+// storage-layer values (bytes/seconds) that get written to the settings
+// table, keyed by the Setting* constants used everywhere else.
+//
+// This is the SAME arithmetic (mb*1024*1024, hours*3600, ...) that used to
+// live inline in handleAdminSettings' `updates` slice — moved here so there
+// is exactly one place that turns form units into storage units.
+// handleAdminSettings calls this AFTER validating the raw form (bounds,
+// default<=max, etc. — validation stays in the handler since it needs to
+// produce a specific 400 message); beforeImageFor calls it directly to
+// compute the after-image for the confirmation-page diff and audit log.
+// Malformed numeric strings parse as 0 (ParseInt's zero value on error);
+// callers that need to reject bad input validate the raw form first.
+func parseSettingsForm(form url.Values) map[string]any {
+	atoi := func(k string) int64 {
+		n, _ := strconv.ParseInt(strings.TrimSpace(form.Get(k)), 10, 64)
+		return n
+	}
+	// Unchecked checkboxes submit no value; present (any value) = on.
+	disableCentral := strings.TrimSpace(form.Get("disable_central_fallback")) != ""
+	return map[string]any{
+		SettingMaxFileSize:            atoi("max_file_size_mb") * 1024 * 1024,
+		SettingDailyQuota:             atoi("daily_quota_mb") * 1024 * 1024,
+		SettingDefaultTTL:             atoi("default_ttl_hours") * 3600,
+		SettingMaxTTL:                 atoi("max_ttl_hours") * 3600,
+		SettingDefaultRetention:       atoi("default_retention"),
+		SettingDefaultMaxDownloads:    atoi("default_max_downloads"),
+		SettingMaxMaxDownloads:        atoi("max_max_downloads"),
+		SettingStorageDiskCap:         atoi("storage_disk_cap_mb") * 1024 * 1024,
+		SettingDisableCentralFallback: disableCentral,
+		SettingNodeTrafficDefault:     atoi("node_traffic_default_gb") * 1024 * 1024 * 1024,
+	}
+}
+
+// parsePlanForm parses and validates a plan-edit form into the Plan values
+// that would be written (bytes/seconds, not the form's MB/GB/days). Shared
+// by handleAdminUpsertPlan (which then does the "stay active" store check
+// with the real ctx/store, and stamps UpdatedAt) and beforeImageFor (which
+// needs the same after-image for the confirmation-page diff/audit, without
+// writing anything). This is the exact validation/conversion that used to
+// live inline in handleAdminUpsertPlan.
+func parsePlanForm(form url.Values) (Plan, error) {
+	id := strings.TrimSpace(form.Get("id"))
+	name := strings.TrimSpace(form.Get("name"))
+	nn := func(k string) (int64, bool) { // non-negative int
+		n, err := strconv.ParseInt(strings.TrimSpace(form.Get(k)), 10, 64)
+		return n, err == nil && n >= 0
+	}
+	// nnMax additionally rejects values above maxVal, so storage_mb/traffic_gb
+	// can't overflow int64 once shifted (<<20/<<30) into bytes and wrap
+	// negative, which would silently read back as an unlimited (<=0) cap.
+	nnMax := func(k string, maxVal int64) (int64, bool) {
+		n, ok := nn(k)
+		return n, ok && n <= maxVal
+	}
+	storageMB, ok1 := nnMax("storage_mb", maxConfigMB)
+	trafficGB, ok2 := nnMax("traffic_gb", maxConfigMB)
+	retDays, ok3 := nnMax("retention_days", maxRetentionDays)
+	pm, ok4 := nn("price_monthly_cents")
+	py, ok5 := nn("price_yearly_cents")
+	sort, ok6 := nn("sort_order")
+	// daily_quota_mb: 0 是有意义的取值（= 回落到全局「每账号每日额度」设置），
+	// 所以这里必须用 nnMax/nn 这类接受 0 的解析，绝不能换成要求 > 0 的那种。
+	dailyQuotaMB, ok7 := nnMax("daily_quota_mb", maxConfigMB)
+	active := form.Get("active") == "1"
+	// Stripe price ids are free-form strings (e.g. "price_1AbCDe...") assigned
+	// by the operator after creating Prices in the Stripe dashboard — no
+	// numeric validation, just trim.
+	stripePriceMonthlyID := strings.TrimSpace(form.Get("stripe_price_monthly_id"))
+	stripePriceYearlyID := strings.TrimSpace(form.Get("stripe_price_yearly_id"))
+	if id == "" || name == "" || !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7) {
+		return Plan{}, errors.New("invalid plan (non-negative integers; id/name required; " +
+			"storage_mb/traffic_gb/daily_quota_mb <= 1073741824; retention_days <= 36500)")
+	}
+	return Plan{
+		ID: id, Name: name,
+		StorageBytes: storageMB << 20, TrafficBytes: trafficGB << 30,
+		RetentionSecs: retDays * 86400, PriceMonthly: pm, PriceYearly: py,
+		SortOrder: sort, Active: active,
+		StripePriceMonthlyID: stripePriceMonthlyID,
+		StripePriceYearlyID:  stripePriceYearlyID,
+		DailyQuotaBytes:      dailyQuotaMB << 20,
+	}, nil
+}

@@ -614,20 +614,20 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		n, ok := atoi(k)
 		return n, ok && n <= maxConfigMB
 	}
-	mb, ok1 := mbMax("max_file_size_mb")
-	quota, ok2 := mbMax("daily_quota_mb")
+	_, ok1 := mbMax("max_file_size_mb")
+	_, ok2 := mbMax("daily_quota_mb")
 	defH, ok3 := atoi("default_ttl_hours")
 	maxH, ok4 := atoi("max_ttl_hours")
 	defRetention, ok5 := enumi("default_retention")
 	defMaxDL, ok6 := atoi("default_max_downloads")
 	maxMaxDL, ok7 := atoi("max_max_downloads")
-	storageCapMB, ok8 := func() (int64, bool) {
+	_, ok8 := func() (int64, bool) {
 		n, ok := enumi("storage_disk_cap_mb")
 		return n, ok && n <= maxConfigMB
 	}()
 	// node_traffic_default_gb must allow 0 (0 = unlimited), so it uses enumi
 	// (n >= 0) rather than atoi (n > 0) — same reasoning as default_retention above.
-	nodeTrafficGB, ok9 := func() (int64, bool) {
+	_, ok9 := func() (int64, bool) {
 		n, ok := enumi("node_traffic_default_gb")
 		return n, ok && n <= maxConfigMB // 复用同一个上界，远超任何真实盘/流量规模
 	}()
@@ -638,29 +638,21 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 			"*_mb / *_gb fields <= 1073741824)", http.StatusBadRequest)
 		return
 	}
-	// Unchecked checkboxes submit no value; present (any value) = on.
-	disableCentral := int64(0)
-	if strings.TrimSpace(r.FormValue("disable_central_fallback")) != "" {
-		disableCentral = 1
-	}
+	// Bounds are enforced above; parseSettingsForm supplies the actual bytes/
+	// seconds to write, so the write path and the confirmation-page/audit
+	// diff (beforeImageFor) share the exact same unit conversion.
 	now := s.now().Unix()
-	updates := []struct {
-		key string
-		val int64
-	}{
-		{SettingMaxFileSize, mb * 1024 * 1024},
-		{SettingDailyQuota, quota * 1024 * 1024},
-		{SettingDefaultTTL, defH * 3600},
-		{SettingMaxTTL, maxH * 3600},
-		{SettingDefaultRetention, defRetention},
-		{SettingDefaultMaxDownloads, defMaxDL},
-		{SettingMaxMaxDownloads, maxMaxDL},
-		{SettingStorageDiskCap, storageCapMB * 1024 * 1024},
-		{SettingDisableCentralFallback, disableCentral},
-		{SettingNodeTrafficDefault, nodeTrafficGB * 1024 * 1024 * 1024},
-	}
-	for _, u := range updates {
-		if err := s.store.SetSetting(r.Context(), u.key, u.val, now); err != nil {
+	for key, v := range parseSettingsForm(r.Form) {
+		n := int64(0)
+		switch t := v.(type) {
+		case int64:
+			n = t
+		case bool:
+			if t {
+				n = 1
+			}
+		}
+		if err := s.store.SetSetting(r.Context(), key, n, now); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
@@ -679,48 +671,20 @@ func (s *Service) handleAdminUpsertPlan(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	id := strings.TrimSpace(r.FormValue("id"))
-	name := strings.TrimSpace(r.FormValue("name"))
-	nn := func(k string) (int64, bool) { // non-negative int
-		n, err := strconv.ParseInt(strings.TrimSpace(r.FormValue(k)), 10, 64)
-		return n, err == nil && n >= 0
-	}
-	// nnMax additionally rejects values above maxVal, so storage_mb/traffic_gb
-	// can't overflow int64 once shifted (<<20/<<30) into bytes and wrap
-	// negative, which would silently read back as an unlimited (<=0) cap.
-	nnMax := func(k string, maxVal int64) (int64, bool) {
-		n, ok := nn(k)
-		return n, ok && n <= maxVal
-	}
-	storageMB, ok1 := nnMax("storage_mb", maxConfigMB)
-	trafficGB, ok2 := nnMax("traffic_gb", maxConfigMB)
-	retDays, ok3 := nnMax("retention_days", maxRetentionDays)
-	pm, ok4 := nn("price_monthly_cents")
-	py, ok5 := nn("price_yearly_cents")
-	sort, ok6 := nn("sort_order")
-	// daily_quota_mb: 0 是有意义的取值（= 回落到全局「每账号每日额度」设置），
-	// 所以这里必须用 nnMax/nn 这类接受 0 的解析，绝不能换成要求 > 0 的那种。
-	dailyQuotaMB, ok7 := nnMax("daily_quota_mb", maxConfigMB)
-	active := r.FormValue("active") == "1"
-	// Stripe price ids are free-form strings (e.g. "price_1AbCDe...") assigned
-	// by the operator after creating Prices in the Stripe dashboard — no
-	// numeric validation, just trim.
-	stripePriceMonthlyID := strings.TrimSpace(r.FormValue("stripe_price_monthly_id"))
-	stripePriceYearlyID := strings.TrimSpace(r.FormValue("stripe_price_yearly_id"))
-	if id == "" || name == "" || !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7) {
-		http.Error(w, "invalid plan (non-negative integers; id/name required; "+
-			"storage_mb/traffic_gb/daily_quota_mb <= 1073741824; retention_days <= 36500)", http.StatusBadRequest)
+	p, err := parsePlanForm(r.Form)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	// Never leave zero active plans. Fail closed: any store error here
 	// blocks the deactivation rather than silently allowing it.
-	if !active {
+	if !p.Active {
 		n, err := s.store.CountActivePlans(r.Context())
 		if err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
-		cur, ok, err := s.store.GetPlan(r.Context(), id)
+		cur, ok, err := s.store.GetPlan(r.Context(), p.ID)
 		if err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
@@ -730,15 +694,7 @@ func (s *Service) handleAdminUpsertPlan(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	p := Plan{
-		ID: id, Name: name,
-		StorageBytes: storageMB << 20, TrafficBytes: trafficGB << 30,
-		RetentionSecs: retDays * 86400, PriceMonthly: pm, PriceYearly: py,
-		SortOrder: sort, Active: active, UpdatedAt: s.now().Unix(),
-		StripePriceMonthlyID: stripePriceMonthlyID,
-		StripePriceYearlyID:  stripePriceYearlyID,
-		DailyQuotaBytes:      dailyQuotaMB << 20,
-	}
+	p.UpdatedAt = s.now().Unix()
 	if err := s.store.UpsertPlan(r.Context(), p); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
