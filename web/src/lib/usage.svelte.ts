@@ -1,8 +1,17 @@
 // /api/me/usage 被三个组件读：PlanCard 与 QuotaMeters（都在 /me 页），以及传输
 // 页的 QuotaNotice。三者各自 fetch 会在打开个人中心时打出三次同样的请求，所以
-// 这里按用户 id 缓存在途 promise。换用户（登录、切号、登出）自然失效。
+// 这里按用户 id 缓存在途 promise。
 //
 // 缓存的是 promise 而非结果：三个组件在同一帧挂载时都能命中同一个在途请求。
+//
+// 失效时机，如实说明（别按直觉推）：
+//   - 换到另一个 userId：cacheKey 不匹配，自然重新请求。
+//   - 请求失败（网络错误或非 2xx）：失败结果不留在缓存里，下次调用重新请求。
+//   - 进入 /me 页：MePage 初始化时调 invalidateUsage()，所以每次访问个人中心
+//     都拿新数字。
+//   - **登出并不会失效**：调用方在 `!uid` 时早退，根本不会调到这里，cacheKey
+//     原封不动。同一账号登出后再登回来，命中的是登出前那份缓存，直到进 /me
+//     或有人显式调 invalidateUsage()。这是已知的、被接受的行为。
 
 export interface Bucket {
   used: number;
@@ -38,10 +47,28 @@ let cached: Promise<Usage | null> | null = null;
 export function fetchUsage(userId: string): Promise<Usage | null> {
   if (cacheKey === userId && cached) return cached;
   cacheKey = userId;
-  cached = fetch("/api/me/usage", { credentials: "include" })
-    .then((r) => (r.ok ? (r.json() as Promise<Usage>) : null))
-    .catch(() => null);
-  return cached;
+  // 失败结果绝不能留在缓存里。缓存的是 promise，所以一次瞬时网络抖动或一次 500
+  // 会把"resolve 成 null"的 promise 永久存住，同一 userId 后续调用永不重试——
+  // 用量条和预警条会在整个 SPA 会话内静默消失。两条失败路径（fetch 抛错、响应
+  // 非 2xx）都要把缓存清掉，让下一次调用重新发请求。
+  const p: Promise<Usage | null> = fetch("/api/me/usage", { credentials: "include" })
+    .then((r) => {
+      if (!r.ok) { forget(p); return null; }
+      return r.json() as Promise<Usage>;
+    })
+    .catch(() => { forget(p); return null; });
+  cached = p;
+  return p;
+}
+
+// 只在缓存里存的还是 `p` 本身时才清。这个身份检查不是多余的：一个迟到的失败
+// （对应的调用早已被换用户或 invalidateUsage() 挤出缓存）如果无条件清空，会把
+// 后来者刚建立的、完全有效的在途缓存误伤掉，导致又多打一次请求。
+function forget(p: Promise<Usage | null>): void {
+  if (cached === p) {
+    cacheKey = null;
+    cached = null;
+  }
 }
 
 // 丢弃缓存，下次 fetchUsage 重新请求。用量或套餐变化后调用（上传完成、改档）。
