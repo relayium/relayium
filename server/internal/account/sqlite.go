@@ -211,7 +211,9 @@ CREATE TABLE IF NOT EXISTS plans (
   price_yearly   INTEGER NOT NULL DEFAULT 0,
   sort_order     INTEGER NOT NULL DEFAULT 0,
   active         INTEGER NOT NULL DEFAULT 1,
-  updated_at     INTEGER NOT NULL
+  updated_at     INTEGER NOT NULL,
+  -- 0 = fall back to the global daily_quota setting (see dailyQuotaFor).
+  daily_quota_bytes INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS admin_credentials (
   id           TEXT PRIMARY KEY,
@@ -331,6 +333,12 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`ALTER TABLE users ADD COLUMN plan_started_at INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE users ADD COLUMN quota_accrued_bytes INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE users ADD COLUMN quota_accrued_period TEXT NOT NULL DEFAULT ''`,
+		// Per-plan daily upload quota (2026-07): the 24h cap used to be a single
+		// global setting, so no paid tier could upload a file larger than it.
+		// 0 = fall back to the global daily_quota setting, which is what every
+		// pre-existing row gets — the migration is behaviour-neutral until the
+		// tiers are seeded or edited. See Service.dailyQuotaFor.
+		`ALTER TABLE plans ADD COLUMN daily_quota_bytes INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -1828,14 +1836,14 @@ func (s *SQLiteStore) SetSetting(ctx context.Context, key string, value, at int6
 	return err
 }
 
-const planCols = `id, name, storage_bytes, traffic_bytes, retention_secs, price_monthly, price_yearly, sort_order, active, updated_at, stripe_price_monthly_id, stripe_price_yearly_id`
+const planCols = `id, name, storage_bytes, traffic_bytes, retention_secs, price_monthly, price_yearly, sort_order, active, updated_at, stripe_price_monthly_id, stripe_price_yearly_id, daily_quota_bytes`
 
 func scanPlan(sc rowScanner) (Plan, error) {
 	var p Plan
 	var active int64
 	err := sc.Scan(&p.ID, &p.Name, &p.StorageBytes, &p.TrafficBytes, &p.RetentionSecs,
 		&p.PriceMonthly, &p.PriceYearly, &p.SortOrder, &active, &p.UpdatedAt,
-		&p.StripePriceMonthlyID, &p.StripePriceYearlyID)
+		&p.StripePriceMonthlyID, &p.StripePriceYearlyID, &p.DailyQuotaBytes)
 	p.Active = active != 0
 	return p, err
 }
@@ -1875,17 +1883,18 @@ func (s *SQLiteStore) UpsertPlan(ctx context.Context, p Plan) error {
 		active = 1
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO plans (`+planCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO plans (`+planCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   name=excluded.name, storage_bytes=excluded.storage_bytes,
 		   traffic_bytes=excluded.traffic_bytes, retention_secs=excluded.retention_secs,
 		   price_monthly=excluded.price_monthly, price_yearly=excluded.price_yearly,
 		   sort_order=excluded.sort_order, active=excluded.active, updated_at=excluded.updated_at,
 		   stripe_price_monthly_id=excluded.stripe_price_monthly_id,
-		   stripe_price_yearly_id=excluded.stripe_price_yearly_id`,
+		   stripe_price_yearly_id=excluded.stripe_price_yearly_id,
+		   daily_quota_bytes=excluded.daily_quota_bytes`,
 		p.ID, p.Name, p.StorageBytes, p.TrafficBytes, p.RetentionSecs,
 		p.PriceMonthly, p.PriceYearly, p.SortOrder, active, p.UpdatedAt,
-		p.StripePriceMonthlyID, p.StripePriceYearlyID)
+		p.StripePriceMonthlyID, p.StripePriceYearlyID, p.DailyQuotaBytes)
 	return err
 }
 

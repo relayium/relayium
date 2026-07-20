@@ -142,7 +142,14 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
-			if used+declared > st.DailyQuota {
+			// Same fail-closed orientation as the UserUploadedSince read above:
+			// a store error here aborts with 500 rather than guessing a quota.
+			quota, err := s.dailyQuotaFor(r.Context(), u.ID)
+			if err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+			if used+declared > quota {
 				http.Error(w, "daily quota exceeded", http.StatusTooManyRequests)
 				return
 			}
@@ -219,9 +226,18 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		if billed < minBillableBytes {
 			billed = minBillableBytes
 		}
+		// This is the authoritative gate, so a quota read error fails CLOSED
+		// exactly like the ReserveUpload error just below: drop the blob and 500,
+		// never admit an upload against an unknown cap.
+		quota, err := s.dailyQuotaFor(r.Context(), u.ID)
+		if err != nil {
+			s.dropBlob(bs, blobKey, nodeID)
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
 		ok, err := s.store.ReserveUpload(r.Context(),
 			UploadEvent{ID: newID(), UserID: u.ID, Bytes: billed, UploadedAt: now},
-			now-dayWindow, st.DailyQuota)
+			now-dayWindow, quota)
 		if err != nil {
 			s.dropBlob(bs, blobKey, nodeID)
 			http.Error(w, "server error", http.StatusInternalServerError)

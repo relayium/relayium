@@ -197,7 +197,14 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
-		if used+declared > st.DailyQuota {
+		// Fail-closed, matching the UserUploadedSince read above: a store error
+		// aborts with 500 rather than falling back to some other cap.
+		quota, err := s.dailyQuotaFor(r.Context(), u.ID)
+		if err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if used+declared > quota {
 			http.Error(w, "daily quota exceeded", http.StatusTooManyRequests)
 			return
 		}
@@ -351,9 +358,18 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		if billed < minBillableBytes {
 			billed = minBillableBytes
 		}
+		// Authoritative gate: a quota read error fails CLOSED just like the
+		// ReserveUpload error below — drop the blob, kill the session, 500.
+		quota, err := s.dailyQuotaFor(r.Context(), u.ID)
+		if err != nil {
+			s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
+			s.resumable.del(id)
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
 		reserved, err := s.store.ReserveUpload(r.Context(),
 			UploadEvent{ID: newID(), UserID: u.ID, Bytes: billed, UploadedAt: now},
-			now-dayWindow, s.resolveSettings(r.Context()).DailyQuota)
+			now-dayWindow, quota)
 		if err != nil {
 			s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
 			s.resumable.del(id)

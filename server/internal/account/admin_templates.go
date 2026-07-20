@@ -324,10 +324,10 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <section class="plans">
 <h2>套餐（{{len .Plans}}）</h2>
 <table>
-<thead><tr><th>ID</th><th>名称</th><th>存储(MB)</th><th>流量(GB/月)</th><th>暂存天数</th><th>月付(分)</th><th>年付(分)</th><th>排序</th><th>启用</th><th>Stripe 月付价格ID</th><th>Stripe 年付价格ID</th><th></th></tr></thead>
+<thead><tr><th>ID</th><th>名称</th><th>存储(MB)</th><th>流量(GB/月)</th><th>暂存天数</th><th>每日额度(MiB)</th><th>月付(分)</th><th>年付(分)</th><th>排序</th><th>启用</th><th>Stripe 月付价格ID</th><th>Stripe 年付价格ID</th><th></th></tr></thead>
 <tbody>
 {{range .Plans}}
-<tr><td colspan="12">
+<tr><td colspan="13">
 <form method="post" action="/admin/plans" class="plan-row">
 <input type="hidden" name="id" value="{{.ID}}">
 <span>{{.ID}}</span>
@@ -335,6 +335,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <input type="number" name="storage_mb" min="0" value="{{.StorageMB}}" title="存储(MB)">
 <input type="number" name="traffic_gb" min="0" value="{{.TrafficGB}}" title="流量(GB/月)">
 <input type="number" name="retention_days" min="0" value="{{.RetentionDays}}" title="暂存天数">
+<input type="number" name="daily_quota_mb" min="0" value="{{.DailyQuotaMB}}" title="每日额度(MiB)，0 = 用全局设置">
 <input type="number" name="price_monthly_cents" min="0" value="{{.PriceMonthlyCents}}" title="月付(分)">
 <input type="number" name="price_yearly_cents" min="0" value="{{.PriceYearlyCents}}" title="年付(分)">
 <input type="number" name="sort_order" min="0" value="{{.SortOrder}}" title="排序">

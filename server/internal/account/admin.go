@@ -115,6 +115,8 @@ type planView struct {
 	// mapped to this tier's monthly/yearly billing cycle; '' = unmapped.
 	StripePriceMonthlyID string
 	StripePriceYearlyID  string
+	// DailyQuotaMB 是该档的每日上传额度（MiB）；0 = 用全局「每账号每日额度」。
+	DailyQuotaMB int64
 }
 
 func planViews(plans []Plan) []planView {
@@ -131,6 +133,7 @@ func planViews(plans []Plan) []planView {
 			Active:               p.Active,
 			StripePriceMonthlyID: p.StripePriceMonthlyID,
 			StripePriceYearlyID:  p.StripePriceYearlyID,
+			DailyQuotaMB:         p.DailyQuotaBytes >> 20,
 		})
 	}
 	return out
@@ -585,15 +588,18 @@ func (s *Service) handleAdminUpsertPlan(w http.ResponseWriter, r *http.Request) 
 	pm, ok4 := nn("price_monthly_cents")
 	py, ok5 := nn("price_yearly_cents")
 	sort, ok6 := nn("sort_order")
+	// daily_quota_mb: 0 是有意义的取值（= 回落到全局「每账号每日额度」设置），
+	// 所以这里必须用 nnMax/nn 这类接受 0 的解析，绝不能换成要求 > 0 的那种。
+	dailyQuotaMB, ok7 := nnMax("daily_quota_mb", maxConfigMB)
 	active := r.FormValue("active") == "1"
 	// Stripe price ids are free-form strings (e.g. "price_1AbCDe...") assigned
 	// by the operator after creating Prices in the Stripe dashboard — no
 	// numeric validation, just trim.
 	stripePriceMonthlyID := strings.TrimSpace(r.FormValue("stripe_price_monthly_id"))
 	stripePriceYearlyID := strings.TrimSpace(r.FormValue("stripe_price_yearly_id"))
-	if id == "" || name == "" || !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6) {
+	if id == "" || name == "" || !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7) {
 		http.Error(w, "invalid plan (non-negative integers; id/name required; "+
-			"storage_mb/traffic_gb <= 1073741824; retention_days <= 36500)", http.StatusBadRequest)
+			"storage_mb/traffic_gb/daily_quota_mb <= 1073741824; retention_days <= 36500)", http.StatusBadRequest)
 		return
 	}
 	// Never leave zero active plans. Fail closed: any store error here
@@ -621,6 +627,7 @@ func (s *Service) handleAdminUpsertPlan(w http.ResponseWriter, r *http.Request) 
 		SortOrder: sort, Active: active, UpdatedAt: s.now().Unix(),
 		StripePriceMonthlyID: stripePriceMonthlyID,
 		StripePriceYearlyID:  stripePriceYearlyID,
+		DailyQuotaBytes:      dailyQuotaMB << 20,
 	}
 	if err := s.store.UpsertPlan(r.Context(), p); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)

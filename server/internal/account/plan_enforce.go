@@ -5,7 +5,17 @@ import "context"
 // freePlanFallback is the in-memory Free tier used when a user's plan_id can't
 // be resolved (missing row, DB blip). Matches defaultPlans()[0] so enforcement
 // never crashes and never silently grants unlimited quota.
-func freePlanFallback() Plan { return defaultPlans()[0] }
+//
+// DailyQuotaBytes is deliberately zeroed here: this Plan stands in for a tier we
+// could NOT resolve, so it must not invent a daily quota. Leaving it 0 makes
+// dailyQuotaFor defer to the global SettingDailyQuota — which is exactly the
+// behaviour an unresolvable tier had before quotas moved into the plans table,
+// and it keeps the global knob authoritative for users with no plan row.
+func freePlanFallback() Plan {
+	p := defaultPlans()[0]
+	p.DailyQuotaBytes = 0
+	return p
+}
 
 // planForUser resolves a user's billing tier. A genuine not-found falls back to
 // Free with a nil error (a user with a bogus plan_id is legitimately Free); a
@@ -27,6 +37,19 @@ func (s *Service) planForUser(ctx context.Context, userID string) (Plan, error) 
 		return freePlanFallback(), nil
 	}
 	return p, nil
+}
+
+// dailyQuotaFor 给出 userID 当前档位的 24 小时上传额度。档位没配（<= 0）时回落
+// 到全局 SettingDailyQuota——存量 plans 行都是 0，这让迁移后的行为保持不变。
+func (s *Service) dailyQuotaFor(ctx context.Context, userID string) (int64, error) {
+	plan, err := s.planForUser(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	if plan.DailyQuotaBytes > 0 {
+		return plan.DailyQuotaBytes, nil
+	}
+	return s.resolveSettings(ctx).DailyQuota, nil
 }
 
 // currentMonthTraffic sums a user's staged upload+download (usage_monthly) plus
