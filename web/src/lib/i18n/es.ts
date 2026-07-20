@@ -476,6 +476,7 @@ const es: Messages = {
     errTooLarge: "El archivo supera el límite de tamaño por archivo.",
     errQuota: "Has superado la cuota de subida de hoy — inténtalo de nuevo más tarde.",
     errUpload: "Fallo al subir, inténtalo de nuevo.",
+    bigNote: "Estos archivos son grandes: si quien los recibe abre el enlace en un móvil, o en Firefox o Safari, el navegador debe mantener el archivo entero en memoria y la descarga puede fallar. Recomiéndale Chrome/Edge en un ordenador, o la herramienta de línea de comandos.",
   },
   download: {
     loading: "Leyendo el enlace…",
@@ -495,6 +496,9 @@ const es: Messages = {
     decryptFail: "Fallo al descifrar: clave incorrecta o archivo dañado.",
     netFail: "Descarga interrumpida — comprueba tu conexión e inténtalo de nuevo.",
     retry: "Reintentar",
+    memWarn: (size) => `Este enlace suma ${size}. Tu navegador no puede transmitir la descarga directamente al disco, así que debe mantener el archivo entero en memoria y el navegador podría fallar.`,
+    memWarnHow: "Abre este enlace en Chrome o Edge en un ordenador, o descárgalo con la herramienta de línea de comandos: ambos transmiten directamente al disco.",
+    memWarnContinue: "Descargar de todos modos",
     unsupported: "El descifrado requiere HTTPS (o localhost).",
   },
   features: {

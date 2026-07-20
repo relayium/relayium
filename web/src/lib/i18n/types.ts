@@ -462,6 +462,8 @@ export interface Messages {
     errTooLarge: string;
     errQuota: string;
     errUpload: string;
+    // 提示发送方：这批文件大到接收方的手机浏览器可能下载不了。只提示，不拦上传。
+    bigNote: string;
   };
   download: {
     loading: string;
@@ -482,6 +484,11 @@ export interface Messages {
     unsupported: string;
     netFail: string; // download connection dropped — retryable, distinct from a decrypt failure
     retry: string; // button: retry a network-failed download
+    // 没有流式落盘能力的浏览器（Firefox/Safari/所有手机）必须把整个文件读进
+    // 内存，大文件足以掀掉页面 —— 下载开始前先说清楚，并给一个明确的继续入口。
+    memWarn: (size: string) => string; // 为什么 + 会怎样，带上这批文件的总大小
+    memWarnHow: string; // 怎么办：电脑上的 Chrome/Edge，或命令行工具
+    memWarnContinue: string; // 按钮：仍要下载
   };
   features: { title: string; sub: string; secureLink: string; items: { title: string; desc: string }[] };
   howItWorks: {

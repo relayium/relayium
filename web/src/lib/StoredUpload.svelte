@@ -6,6 +6,7 @@
   import { maxSizeHint } from "./max-size";
   import { hasFiles, filesFromDataTransfer } from "./drag";
   import { rememberUploadKey } from "./upload-keys";
+  import { LARGE_DOWNLOAD_WARN_BYTES } from "./filesink";
 
   const t = $derived<Messages>(messages[lang()]);
 
@@ -59,6 +60,8 @@
   });
 
   let dragOver = $state(false); // window/card drag hover, for the drop-zone highlight
+  // 这一批的总量大到接收方的手机浏览器可能下载不了 —— 提醒发送方，不阻止上传。
+  let bigBatch = $state(false);
 
   async function onPick(e: Event) {
     const input = e.currentTarget as HTMLInputElement;
@@ -93,6 +96,10 @@
     // first upload (cancel would only abort the last one). Bail if one is live.
     if (busy) return;
     if (files.length === 0) return;
+    // 发送方是唯一决定文件多大的人，代价却落在接收方身上：没有流式落盘能力的
+    // 浏览器（Firefox/Safari/所有手机）必须把整份文件读进内存。只提醒，不拦上传
+    // ——1 GiB 的服务端上限本身是合理的，CLI 在这个尺寸上真能跑。
+    bigBatch = files.reduce((n, f) => n + f.size, 0) > LARGE_DOWNLOAD_WARN_BYTES;
     err = "";
     link = "";
     expiresAt = 0;
@@ -174,6 +181,7 @@
     <span class="drophint">{t.stored.dropHint}</span>
   </label>
   {#if hint}<span class="max-hint">{t.maxSize(hint)}</span>{/if}
+  {#if bigBatch}<p class="bignote">{t.stored.bigNote}</p>{/if}
 
   {#if busy}
     <div class="bar" role="progressbar" aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"><div class="fill" style:width="{progress}%"></div></div>
@@ -222,6 +230,11 @@
   .pick input[type="file"] { display: none; }
   .pick .drophint { width: 100%; font-size: var(--fs-xs); color: var(--text); }
   .max-hint { display: block; margin-top: var(--space-2); font-size: var(--fs-xs); color: var(--text); }
+  .bignote {
+    margin: var(--space-3) 0 0; padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-sm); background: var(--code-bg); border: 1px solid var(--accent-border);
+    font-size: var(--fs-xs); line-height: 1.55; color: var(--text-h);
+  }
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; margin-top: var(--space-3); }
   .fill {
     height: 100%;

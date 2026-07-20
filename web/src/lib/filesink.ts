@@ -35,6 +35,34 @@ interface FsWritable {
   close: () => Promise<void>;
 }
 
+/**
+ * 下载总量超过这个数，且浏览器没有流式落盘能力时，下载页会先提示再下载。
+ *
+ * 保守估计，不是实测出来的硬数字：没有 File System Access API 的浏览器
+ * （Firefox、Safari、以及所有手机浏览器——iOS 上全是 WebKit）必须把整个文件
+ * 攒在内存里才能交给用户，手机标签页在这个量级上已经很容易被系统回收。真实
+ * 崩溃点随设备内存、系统和标签页数量浮动，需要真机验证后再调。
+ */
+export const LARGE_DOWNLOAD_WARN_BYTES = 256 * 1024 * 1024; // 256 MiB
+
+/**
+ * 这一批文件在当前浏览器里能不能流式写盘（而不是先攒进内存）。
+ *
+ * 必须与下面 pickSaveTarget 的分支选择保持一致——它是同一套条件的提前问法，
+ * 供下载页在开始下载前判断要不要提示。两者不一致就意味着下载页会在一条其实
+ * 能落盘的路径上误报，或者更糟：在内存路径上一声不吭。filesink.test.ts 里有
+ * 一条用例真跑 pickSaveTarget 逐个组合比对，专门守这个耦合。
+ *
+ * 多文件走的是目录选择器那条路：拿到目录句柄后每个文件仍是原生流式写入，同样
+ * 不吃内存。所以单文件看 showSaveFilePicker（拿不到则回落到目录选择器），
+ * 多文件只看 showDirectoryPicker。
+ */
+export function canStreamToDisk(fileCount: number): boolean {
+  const w = window as unknown as SavePickerWindow;
+  if (fileCount === 1 && w.showSaveFilePicker) return true;
+  return !!w.showDirectoryPicker;
+}
+
 function nativeSink(writable: FsWritable): FileSink {
   return { write: (c) => writable.write(c), close: () => writable.close() };
 }

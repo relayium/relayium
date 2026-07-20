@@ -477,6 +477,7 @@ const de: Messages = {
     errTooLarge: "Die Datei überschreitet das Einzeldatei-Limit.",
     errQuota: "Das heutige Upload-Kontingent ist erschöpft — bitte später erneut versuchen.",
     errUpload: "Upload fehlgeschlagen, bitte erneut versuchen.",
+    bigNote: "Diese Dateien sind groß: Öffnet die empfangende Person den Link auf einem Handy oder in Firefox bzw. Safari, muss der Browser die ganze Datei im Speicher halten und der Download kann fehlschlagen. Empfehlen Sie Chrome/Edge auf einem Computer oder die Kommandozeile.",
   },
   download: {
     loading: "Link wird gelesen…",
@@ -496,6 +497,9 @@ const de: Messages = {
     decryptFail: "Entschlüsselung fehlgeschlagen: falscher Schlüssel oder beschädigte Datei.",
     netFail: "Download unterbrochen – bitte Verbindung prüfen und erneut versuchen.",
     retry: "Erneut versuchen",
+    memWarn: (size) => `Dieser Link umfasst insgesamt ${size}. Ihr Browser kann einen Download nicht direkt auf die Festplatte streamen und muss die ganze Datei im Speicher halten — der Browser kann abstürzen.`,
+    memWarnHow: "Öffnen Sie diesen Link in Chrome oder Edge auf einem Computer, oder holen Sie ihn mit dem Kommandozeilen-Werkzeug ab — beide streamen direkt auf die Festplatte.",
+    memWarnContinue: "Trotzdem herunterladen",
     unsupported: "Für den entschlüsselten Download ist HTTPS (oder localhost) erforderlich.",
   },
   features: {

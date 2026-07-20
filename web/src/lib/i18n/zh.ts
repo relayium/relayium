@@ -476,6 +476,7 @@ const zh: Messages = {
     errTooLarge: "文件超过单文件大小上限。",
     errQuota: "已超过今日上传额度，请稍后再试。",
     errUpload: "上传失败，请重试。",
+    bigNote: "这批文件较大：接收方如果在手机上、或用 Firefox、Safari 打开链接，浏览器必须把整个文件读进内存，下载可能失败。建议对方用电脑上的 Chrome/Edge，或者命令行工具。",
   },
   download: {
     loading: "正在读取链接…",
@@ -495,6 +496,9 @@ const zh: Messages = {
     decryptFail: "解密失败：密钥错误或文件已损坏。",
     netFail: "下载中断：请检查网络后重试。",
     retry: "重试",
+    memWarn: (size) => `这个链接一共 ${size}。你的浏览器不支持流式落盘，必须先把整个文件整份读进内存，浏览器可能因此崩溃。`,
+    memWarnHow: "用电脑上的 Chrome 或 Edge 打开这个链接，或者用命令行工具取回——两者都能直接流式落盘。",
+    memWarnContinue: "仍要下载",
     unsupported: "需要 HTTPS（或 localhost）才能解密下载。",
   },
   features: {

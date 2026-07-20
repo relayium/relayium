@@ -477,6 +477,7 @@ const fr: Messages = {
     errTooLarge: "Le fichier dépasse la taille maximale par fichier.",
     errQuota: "Quota d'envoi du jour dépassé — réessayez plus tard.",
     errUpload: "Échec de l'envoi, veuillez réessayer.",
+    bigNote: "Ces fichiers sont volumineux : si le destinataire ouvre le lien sur un téléphone, ou dans Firefox ou Safari, le navigateur doit garder tout le fichier en mémoire et le téléchargement peut échouer. Conseillez-lui Chrome/Edge sur un ordinateur, ou l’outil en ligne de commande.",
   },
   download: {
     loading: "Lecture du lien…",
@@ -496,6 +497,9 @@ const fr: Messages = {
     decryptFail: "Échec du déchiffrement : mauvaise clé ou fichier corrompu.",
     netFail: "Téléchargement interrompu — vérifiez votre connexion et réessayez.",
     retry: "Réessayer",
+    memWarn: (size) => `Ce lien représente ${size} au total. Votre navigateur ne peut pas diffuser un téléchargement directement sur le disque : il doit garder tout le fichier en mémoire, et le navigateur risque de planter.`,
+    memWarnHow: "Ouvrez ce lien dans Chrome ou Edge sur un ordinateur, ou récupérez-le avec l’outil en ligne de commande — les deux diffusent directement sur le disque.",
+    memWarnContinue: "Télécharger quand même",
     unsupported: "Le téléchargement déchiffré nécessite HTTPS (ou localhost).",
   },
   features: {
