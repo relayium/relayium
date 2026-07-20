@@ -109,9 +109,9 @@ func TestSeededPlansCarryDailyQuota(t *testing.T) {
 		// knob keeps working for free users. See defaultPlans() and
 		// TestFreePlanFollowsGlobalDailyQuota.
 		"free": 0,
-		"plus": 100 << 30,
-		"pro":  340 << 30,
-		"max":  1700 << 30,
+		"plus": 7 << 30,
+		"pro":  34 << 30,
+		"max":  267 << 30,
 	}
 	for _, p := range defaultPlans() {
 		if w, ok := want[p.ID]; ok && p.DailyQuotaBytes != w {

@@ -131,7 +131,7 @@ func TestPlanRetentionCap(t *testing.T) {
 	u, _ := st.UpsertUserByEmail(ctx, "retention@example.com", "")
 	_ = st.SetUserPlan(ctx, u.ID, "free", svc.now().Unix())
 
-	const wantFreeRetentionSecs = 3 * 86400 // matches defaultPlans()'s seeded "free" entry
+	const wantFreeRetentionSecs = 1 * 86400 // matches defaultPlans()'s seeded "free" entry
 	if got := svc.planRetentionCap(ctx, u.ID); got != wantFreeRetentionSecs {
 		t.Fatalf("planRetentionCap(free) = %d, want %d", got, wantFreeRetentionSecs)
 	}

@@ -230,10 +230,10 @@ func defaultPlans() []Plan {
 		// 同时保住后台「每账号每日额度」这个旋钮对免费用户（绝大多数用户）仍然有效。
 		// 反过来填死 200 MiB，全新部署的免费档从此就不受那个旋钮控制了——这不该是
 		// 种子数据顺手做掉的决定。见 TestFreePlanFollowsGlobalDailyQuota。
-		{ID: "free", Name: "Free", StorageBytes: 100 * mb, TrafficBytes: 1 * gb, RetentionSecs: 3 * day, PriceMonthly: 0, PriceYearly: 0, SortOrder: 0, Active: true, DailyQuotaBytes: 0},
-		{ID: "plus", Name: "Plus", StorageBytes: 5 * gb, TrafficBytes: 300 * gb, RetentionSecs: 30 * day, PriceMonthly: 390, PriceYearly: 2900, SortOrder: 1, Active: true, DailyQuotaBytes: 100 * gb},
-		{ID: "pro", Name: "Pro", StorageBytes: 50 * gb, TrafficBytes: 1 * tb, RetentionSecs: 90 * day, PriceMonthly: 890, PriceYearly: 7900, SortOrder: 2, Active: true, DailyQuotaBytes: 340 * gb},
-		{ID: "max", Name: "Max", StorageBytes: 250 * gb, TrafficBytes: 5 * tb, RetentionSecs: 180 * day, PriceMonthly: 1990, PriceYearly: 19900, SortOrder: 3, Active: true, DailyQuotaBytes: 1700 * gb},
+		{ID: "free", Name: "Free", StorageBytes: 100 * mb, TrafficBytes: 1 * gb, RetentionSecs: 1 * day, PriceMonthly: 0, PriceYearly: 0, SortOrder: 0, Active: true, DailyQuotaBytes: 0},
+		{ID: "plus", Name: "Plus", StorageBytes: 1 * gb, TrafficBytes: 20 * gb, RetentionSecs: 3 * day, PriceMonthly: 199, PriceYearly: 1999, SortOrder: 1, Active: true, DailyQuotaBytes: 7 * gb},
+		{ID: "pro", Name: "Pro", StorageBytes: 5 * gb, TrafficBytes: 100 * gb, RetentionSecs: 7 * day, PriceMonthly: 499, PriceYearly: 4999, SortOrder: 2, Active: true, DailyQuotaBytes: 34 * gb},
+		{ID: "max", Name: "Max", StorageBytes: 10 * gb, TrafficBytes: 800 * gb, RetentionSecs: 14 * day, PriceMonthly: 999, PriceYearly: 9999, SortOrder: 3, Active: true, DailyQuotaBytes: 267 * gb},
 	}
 }
 

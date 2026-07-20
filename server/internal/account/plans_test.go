@@ -22,7 +22,7 @@ func TestSeedPlansCreatesFourDefaultsIdempotently(t *testing.T) {
 	}
 	// free must be first (sort_order 0) with the spec's factory values.
 	free := plans[0]
-	if free.ID != "free" || free.StorageBytes != 100<<20 || free.TrafficBytes != 1<<30 || free.RetentionSecs != 3*86400 {
+	if free.ID != "free" || free.StorageBytes != 100<<20 || free.TrafficBytes != 1<<30 || free.RetentionSecs != 1*86400 {
 		t.Fatalf("free defaults wrong: %+v", free)
 	}
 

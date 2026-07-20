@@ -139,6 +139,21 @@ func TestUserQuotaColumnsRoundTrip(t *testing.T) {
 	}
 }
 
+// seedTraffic 返回工厂档位表里某档的月流量。这些比例断言必须跟着
+// defaultPlans() 走，不能手抄一份字面量：档位调价时手抄的那份会悄悄过期，
+// 断言仍然「通过」却在验一个已经不存在的档位。（2026-07 改价时正是这样
+// 一次性挂掉四个测试。）
+func seedTraffic(t *testing.T, id string) int64 {
+	t.Helper()
+	for _, p := range defaultPlans() {
+		if p.ID == id {
+			return p.TrafficBytes
+		}
+	}
+	t.Fatalf("defaultPlans() has no %q tier", id)
+	return 0
+}
+
 // monthAt 返回给定 'YYYYMM' 的月首、月末与月长（秒），供比例断言使用。
 func monthAt(t *testing.T, period string) (start, end, secs int64) {
 	t.Helper()
@@ -176,7 +191,7 @@ func TestAccrueFreezesPreviousSegment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetUserByID: %v", err)
 	}
-	freeCap := int64(1073741824)
+	freeCap := seedTraffic(t, "free")
 	want := freeCap/monthSecs*(monthSecs/2) + (freeCap%monthSecs)*(monthSecs/2)/monthSecs
 	if u.QuotaAccruedBytes != want {
 		t.Fatalf("accrued = %d, want %d (free cap × half a month)", u.QuotaAccruedBytes, want)
@@ -250,7 +265,7 @@ func TestAccrueDropsStaleMonth(t *testing.T) {
 		t.Fatalf("accrued period = %q, want %q", u.QuotaAccruedPeriod, periodOf(febMid))
 	}
 	febStart, _, febSecs := monthAt(t, periodOf(febMid))
-	plusCap := int64(300) << 30
+	plusCap := seedTraffic(t, "plus")
 	seg := febMid - febStart
 	want := plusCap/febSecs*seg + (plusCap%febSecs)*seg/febSecs
 	if u.QuotaAccruedBytes != want {
@@ -282,7 +297,7 @@ func TestAccrueOnAdminPlanChange(t *testing.T) {
 		t.Fatalf("admin change did not stamp the segment: started=%d period=%q",
 			u.PlanStartedAt, u.QuotaAccruedPeriod)
 	}
-	freeCap := int64(1073741824)
+	freeCap := seedTraffic(t, "free")
 	want := freeCap/monthSecs*(monthSecs/2) + (freeCap%monthSecs)*(monthSecs/2)/monthSecs
 	if u.QuotaAccruedBytes != want {
 		t.Fatalf("accrued = %d, want %d", u.QuotaAccruedBytes, want)
@@ -457,7 +472,7 @@ func TestMonthlyCapSumsSegmentsAfterUpgrade(t *testing.T) {
 	svc.now = func() time.Time { return time.Unix(t1+60, 0) }
 
 	got1, _ := store.GetUserByID(ctx, uid)
-	plusCap := int64(300) << 30
+	plusCap := seedTraffic(t, "plus")
 	segSecs := monthEnd - t1
 	wantSeg := plusCap/monthSecs*segSecs + (plusCap%monthSecs)*segSecs/monthSecs
 	want := got1.QuotaAccruedBytes + wantSeg
@@ -505,9 +520,9 @@ func TestAccrueMultipleChangesWithinSameMonth(t *testing.T) {
 	t2 := monthStart + 2*q
 	t3 := monthStart + 3*q
 
-	freeCap := int64(1073741824) // 1 GiB
-	plusCap := int64(300) << 30  // 300 GiB
-	maxCap := int64(5) << 40     // 5 TiB
+	freeCap := seedTraffic(t, "free")
+	plusCap := seedTraffic(t, "plus")
+	maxCap := seedTraffic(t, "max")
 
 	// 1st change: free -> plus at t1. Fresh user's plan_started_at is 0,
 	// which segmentBounds clamps to monthStart, so the frozen free segment
@@ -674,7 +689,7 @@ func TestMonthlyCapUsesRealMonthLength(t *testing.T) {
 	svc.now = func() time.Time { return time.Unix(t1+60, 0) }
 
 	got1, _ := store.GetUserByID(ctx, uid)
-	plusCap := int64(300) << 30
+	plusCap := seedTraffic(t, "plus")
 	segSecs := febEnd - t1
 	wantSeg := plusCap/febSecs*segSecs + (plusCap%febSecs)*segSecs/febSecs
 	got, err := svc.monthlyTrafficCap(ctx, uid)
