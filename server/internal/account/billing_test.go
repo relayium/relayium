@@ -18,8 +18,9 @@ type fakeBiller struct {
 	checkoutURL string
 	portalURL   string
 
-	lastCheckout       CheckoutInput
-	lastPortalCustomer string
+	lastCheckout        CheckoutInput
+	lastPortalCustomer  string
+	lastPortalReturnURL string
 
 	lastChangeCustomer string
 	lastChangePrice    string
@@ -39,6 +40,7 @@ func (f *fakeBiller) CreateCheckoutSession(ctx context.Context, in CheckoutInput
 
 func (f *fakeBiller) CreatePortalSession(ctx context.Context, customerID, returnURL string) (string, error) {
 	f.lastPortalCustomer = customerID
+	f.lastPortalReturnURL = returnURL
 	return f.portalURL, nil
 }
 
@@ -535,6 +537,12 @@ func TestBillingPortalHappyPath(t *testing.T) {
 	}
 	if fb.lastPortalCustomer != "cus_123" {
 		t.Fatalf("want customer id cus_123, got %q", fb.lastPortalCustomer)
+	}
+	// Send them back to the account page, not the marketing home page: the
+	// portal is reached from /me, and after cancelling or switching plans the
+	// user wants to see the resulting plan state, which only /me shows.
+	if want := svc.cfg.BaseURL + "/me"; fb.lastPortalReturnURL != want {
+		t.Fatalf("want return_url %q, got %q", want, fb.lastPortalReturnURL)
 	}
 }
 

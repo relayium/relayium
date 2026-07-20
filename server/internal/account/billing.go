@@ -68,7 +68,11 @@ func (s *Service) handleBillingPortal(w http.ResponseWriter, r *http.Request, u 
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	url, err := s.biller.CreatePortalSession(r.Context(), u.StripeCustomerID, s.cfg.BaseURL)
+	// return_url is set per session and overrides the "Redirect link" configured
+	// in the Stripe dashboard, so that field is dead config — change this line,
+	// not the dashboard. /me rather than the home page: the user arrived from
+	// there and expects to land back on their plan state.
+	url, err := s.biller.CreatePortalSession(r.Context(), u.StripeCustomerID, s.cfg.BaseURL+"/me")
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
