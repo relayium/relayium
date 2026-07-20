@@ -7,6 +7,8 @@ import {
   encryptManifest,
   decryptManifest,
   encryptFiles,
+  cipherSizeFor,
+  STORE_CHUNK_SIZE,
   StoreDecryptor,
   type StoredManifest,
 } from "./store-crypto";
@@ -43,6 +45,56 @@ describe("store-crypto manifest", () => {
     const ct = await encryptManifest(sk.key, { files: [{ name: "a", size: 1 }] });
     ct[0] ^= 0xff;
     await expect(decryptManifest(sk.key, ct)).rejects.toBeTruthy();
+  });
+});
+
+describe("cipherSizeFor", () => {
+  const file = (size: number, name = "f.bin") => new File([new Uint8Array(size)], name);
+
+  it("returns 0 for no files and for empty files", () => {
+    expect(cipherSizeFor([])).toBe(0);
+    // 空文件不产生任何帧（encryptFiles 的循环一次都不执行）。
+    expect(cipherSizeFor([file(0)])).toBe(0);
+    expect(cipherSizeFor([file(0), file(0)])).toBe(0);
+  });
+
+  it("adds 20 bytes per frame for a single-chunk file", () => {
+    expect(cipherSizeFor([file(1)])).toBe(1 + 20);
+    expect(cipherSizeFor([file(1000)])).toBe(1000 + 20);
+    expect(cipherSizeFor([file(STORE_CHUNK_SIZE)])).toBe(STORE_CHUNK_SIZE + 20);
+  });
+
+  it("counts one frame per chunk for a multi-chunk file", () => {
+    const size = STORE_CHUNK_SIZE * 2 + 7; // 3 帧，末块不补齐
+    expect(cipherSizeFor([file(size)])).toBe(size + 3 * 20);
+  });
+
+  it("does not add a phantom frame when the size is an exact multiple of the chunk", () => {
+    const size = STORE_CHUNK_SIZE * 3;
+    expect(cipherSizeFor([file(size)])).toBe(size + 3 * 20);
+  });
+
+  it("sums a mixed batch (empty + partial + exact multiple), with no separator frames", () => {
+    const files = [file(0, "a"), file(5, "b"), file(STORE_CHUNK_SIZE * 2, "c"), file(STORE_CHUNK_SIZE + 1, "d")];
+    expect(cipherSizeFor(files)).toBe(0 + (5 + 20) + (STORE_CHUNK_SIZE * 2 + 2 * 20) + (STORE_CHUNK_SIZE + 1 + 2 * 20));
+  });
+
+  it("matches the bytes encryptFiles actually produces", async () => {
+    // 公式不能只用公式来验：真跑一遍 encryptFiles，累加实际产出的字节数。
+    const sk = await generateStoreKey();
+    const cases: File[][] = [
+      [file(1)],
+      [file(STORE_CHUNK_SIZE)], // 恰好一块
+      [file(STORE_CHUNK_SIZE + 1)], // 跨块，末块 1 字节
+      [file(STORE_CHUNK_SIZE * 2)], // 恰好两块
+      [file(0, "empty"), file(300, "small"), file(STORE_CHUNK_SIZE * 2 + 9, "big")], // 混合多文件
+      [], // 零文件
+    ];
+    for (const files of cases) {
+      let actual = 0;
+      for await (const fr of encryptFiles(files, sk.key)) actual += fr.length;
+      expect(actual).toBe(cipherSizeFor(files));
+    }
   });
 });
 

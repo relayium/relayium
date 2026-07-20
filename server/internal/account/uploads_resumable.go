@@ -2,6 +2,7 @@ package account
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -36,7 +37,7 @@ type uploadSession struct {
 	encManifest []byte
 	ttl         int64
 	maxDL       int64
-	maxSize     int64 // MaxFileSize snapshot at init
+	maxSize     int64 // write cap fixed at init; see sessionWriteCap
 	received    int64 // bytes committed to the blob so far
 	createdAt   int64
 	// done is set (under mu) by the first terminal action — finalize, or the
@@ -154,7 +155,17 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 		http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	nodeID, bs, billable, perr := s.placeUpload(r.Context(), u.ID)
+	// ?size= is the client-declared ciphertext size. Parsed here (unchanged
+	// semantics: advisory, never stored, never re-checked at finalize) so placement
+	// can ask "does this node fit THIS upload" instead of "does it fit a
+	// MaxFileSize one". A liar declaring 0 gets floored by placementMinFree and
+	// still cannot buy a bigger write budget — sessionWriteCap below ignores ?size=.
+	declared, _ := strconv.ParseInt(r.URL.Query().Get("size"), 10, 64)
+	nodeID, bs, billable, perr := s.placeUpload(r.Context(), u.ID, declared)
+	if errors.Is(perr, errStrictNodeFull) {
+		http.Error(w, "your storage node has no free space", http.StatusServiceUnavailable)
+		return
+	}
 	if errors.Is(perr, errStrictNoNode) {
 		http.Error(w, "your storage node is offline", http.StatusServiceUnavailable)
 		return
@@ -190,14 +201,20 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 	// Fail fast if the declared ciphertext size already overflows the remaining
 	// daily quota (client-supplied, trusted only to reject; finalize is the
 	// authoritative gate). Own-node uploads don't bill against DailyQuota.
-	declared, _ := strconv.ParseInt(r.URL.Query().Get("size"), 10, 64)
 	if billable && declared > 0 {
 		used, err := s.store.UserUploadedSince(r.Context(), u.ID, s.now().Unix()-dayWindow)
 		if err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
-		if used+declared > st.DailyQuota {
+		// Fail-closed, matching the UserUploadedSince read above: a store error
+		// aborts with 500 rather than falling back to some other cap.
+		quota, err := s.dailyQuotaFor(r.Context(), u.ID)
+		if err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if used+declared > quota {
 			http.Error(w, "daily quota exceeded", http.StatusTooManyRequests)
 			return
 		}
@@ -227,7 +244,8 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 
 	sess := &uploadSession{
 		userID: u.ID, blobKey: randToken(), nodeID: nodeID, bs: bs, billable: billable,
-		encManifest: encManifest, ttl: ttl, maxDL: maxDL, maxSize: st.MaxFileSize,
+		encManifest: encManifest, ttl: ttl, maxDL: maxDL,
+		maxSize:   s.sessionWriteCap(r.Context(), u.ID, st.MaxFileSize, billable),
 		createdAt: s.now().Unix(),
 	}
 	uploadID := newID()
@@ -237,6 +255,48 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"uploadId": uploadID, "chunkSize": uploadChunkSize})
+}
+
+// sessionWriteCap 给一个 chunked 上传会话定写入上限：单文件上限与用户三项剩余
+// 额度（日额度 / 存储 / 流量）的最小值。四个量全部由服务端自算，**不看客户端
+// 声明的 ?size=**——那个值只用来提前拒绝，谎报 size=0 只能跳过那道早失败，换不
+// 到更大的写入配额。否则一个免费账号能用 maxSessionsPerUser 个会话，每个写满
+// MaxFileSize，把这些半成品 blob 在磁盘上占住整个 pendingUploadTTL。
+//
+// 读失败时 fail-OPEN：某项额度读不出来就让它不参与 min（而不是收紧到 0）。理由
+// 是这里定的只是一个**上界**，不是额度门本身——读挂了还有 MaxFileSize 兜底，而
+// 真正的权威闸门（finalize 按 sess.received 重跑全部额度检查）一道没少。反过来
+// 一次 DB 抖动就把 maxSize 压成 0，会让所有正常上传在 PATCH 阶段 413。注意这与
+// handleUploadInit/handleUploadFinalize 里日额度读失败就 500 的 fail-CLOSED 并不
+// 矛盾：那两处是放不放行的判决点，这里只是给会话挑一个尺寸。
+//
+// billable=false（文件落在用户自己的存储节点上）整条豁免：这类上传本来就不计入
+// 任何套餐额度（init 和 finalize 的额度闸对它们全部跳过），拿"剩余额度"去卡它
+// 等于在执行一份根本没在花的预算，用户中心额度一见底自带节点就传不动了。它们
+// 占的是用户自己的盘，由节点自身的 StorageFree/磁盘上限管。
+func (s *Service) sessionWriteCap(ctx context.Context, userID string, maxFileSize int64, billable bool) int64 {
+	cap := maxFileSize
+	if !billable {
+		return cap
+	}
+	clamp := func(v int64) {
+		if v < 0 {
+			v = 0
+		}
+		if v < cap {
+			cap = v
+		}
+	}
+	if remaining, err := s.remainingDailyQuota(ctx, userID); err == nil {
+		clamp(remaining)
+	}
+	if remaining, unlimited, err := s.remainingStorage(ctx, userID); err == nil && !unlimited {
+		clamp(remaining)
+	}
+	if remaining, unlimited, err := s.remainingTraffic(ctx, userID); err == nil && !unlimited {
+		clamp(remaining)
+	}
+	return cap
 }
 
 // handleUploadChunk (PATCH /api/files/uploads/{uploadId}) appends one chunk. The
@@ -351,9 +411,18 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		if billed < minBillableBytes {
 			billed = minBillableBytes
 		}
+		// Authoritative gate: a quota read error fails CLOSED just like the
+		// ReserveUpload error below — drop the blob, kill the session, 500.
+		quota, err := s.dailyQuotaFor(r.Context(), u.ID)
+		if err != nil {
+			s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
+			s.resumable.del(id)
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
 		reserved, err := s.store.ReserveUpload(r.Context(),
 			UploadEvent{ID: newID(), UserID: u.ID, Bytes: billed, UploadedAt: now},
-			now-dayWindow, s.resolveSettings(r.Context()).DailyQuota)
+			now-dayWindow, quota)
 		if err != nil {
 			s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
 			s.resumable.del(id)

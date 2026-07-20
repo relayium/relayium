@@ -18,7 +18,8 @@ func TestAdminUpsertPlanUpdatesValues(t *testing.T) {
 		"id": {"free"}, "name": {"Free"},
 		"storage_mb": {"200"}, "traffic_gb": {"5"}, "retention_days": {"7"},
 		"price_monthly_cents": {"0"}, "price_yearly_cents": {"0"},
-		"sort_order": {"0"}, "active": {"1"},
+		"daily_quota_mb": {"0"},
+		"sort_order":     {"0"}, "active": {"1"},
 	}
 	req, _ := http.NewRequest("POST", ts.URL+"/admin/plans", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -147,7 +148,8 @@ func TestAdminUpsertPlanPersistsStripePriceIDs(t *testing.T) {
 		"id": {"pro"}, "name": {"Pro"},
 		"storage_mb": {"200"}, "traffic_gb": {"5"}, "retention_days": {"7"},
 		"price_monthly_cents": {"999"}, "price_yearly_cents": {"9999"},
-		"sort_order": {"0"}, "active": {"1"},
+		"daily_quota_mb": {"0"},
+		"sort_order":     {"0"}, "active": {"1"},
 		"stripe_price_monthly_id": {"price_M"}, "stripe_price_yearly_id": {"price_Y"},
 	}
 	req, _ := http.NewRequest("POST", ts.URL+"/admin/plans", strings.NewReader(form.Encode()))

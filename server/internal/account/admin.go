@@ -58,28 +58,33 @@ type adminNodeView struct {
 	// column. Purely derived; not stored and not reported by the node.
 	UsableBytes       int64
 	TrafficLimitBytes int64
-	DiskLimitBytes    int64
-	LastSeenAt        int64
+	// EffectiveTrafficLimitBytes 是这台节点真正生效的月度上限：节点自己配的值，
+	// 或（为 0 时）全局默认。直接显示 TrafficLimitBytes 会让继承默认的节点显示
+	// ∞，与实际行为矛盾。
+	EffectiveTrafficLimitBytes int64
+	DiskLimitBytes             int64
+	LastSeenAt                 int64
 }
 
-func nodeViews(nodes []Node, monthly map[string]int64, now time.Time) []adminNodeView {
+func nodeViews(nodes []Node, monthly map[string]int64, now time.Time, st Settings) []adminNodeView {
 	cutoff := now.Add(-nodeOnlineWindow).Unix()
 	out := make([]adminNodeView, 0, len(nodes))
 	for _, n := range nodes {
 		out = append(out, adminNodeView{
 			ID: n.ID, OwnerType: n.OwnerType, Label: n.Label, Host: nodeHost(n.URLs),
 			Region: n.Region, Version: n.Version,
-			Online:            n.LastSeenAt >= cutoff,
-			RelayedBytes:      n.RelayedBytes,
-			MonthRelayedBytes: monthly[n.ID],
-			StoredBytes:       n.StoredBytes,
-			StorageEnabled:    n.StorageEnabled,
-			StorageTotal:      n.StorageTotal,
-			StorageFree:       n.StorageFree,
-			UsableBytes:       usableBytes(n.StorageFree),
-			TrafficLimitBytes: n.TrafficLimitBytes,
-			DiskLimitBytes:    n.DiskLimitBytes,
-			LastSeenAt:        n.LastSeenAt,
+			Online:                     n.LastSeenAt >= cutoff,
+			RelayedBytes:               n.RelayedBytes,
+			MonthRelayedBytes:          monthly[n.ID],
+			StoredBytes:                n.StoredBytes,
+			StorageEnabled:             n.StorageEnabled,
+			StorageTotal:               n.StorageTotal,
+			StorageFree:                n.StorageFree,
+			UsableBytes:                usableBytes(n.StorageFree),
+			TrafficLimitBytes:          n.TrafficLimitBytes,
+			EffectiveTrafficLimitBytes: resolveNodeTrafficLimit(n, st),
+			DiskLimitBytes:             n.DiskLimitBytes,
+			LastSeenAt:                 n.LastSeenAt,
 		})
 	}
 	return out
@@ -110,6 +115,8 @@ type planView struct {
 	// mapped to this tier's monthly/yearly billing cycle; '' = unmapped.
 	StripePriceMonthlyID string
 	StripePriceYearlyID  string
+	// DailyQuotaMB 是该档的每日上传额度（MiB）；0 = 用全局「每账号每日额度」。
+	DailyQuotaMB int64
 }
 
 func planViews(plans []Plan) []planView {
@@ -126,6 +133,7 @@ func planViews(plans []Plan) []planView {
 			Active:               p.Active,
 			StripePriceMonthlyID: p.StripePriceMonthlyID,
 			StripePriceYearlyID:  p.StripePriceYearlyID,
+			DailyQuotaMB:         p.DailyQuotaBytes >> 20,
 		})
 	}
 	return out
@@ -376,6 +384,10 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		next = adminListHref(search, sortBy, dir, period, page+1)
 	}
 
+	// st is resolved here (rather than down by CentralStoredBytes below) because
+	// nodeViews needs it to derive each node's EffectiveTrafficLimitBytes.
+	st := s.resolveSettings(r.Context())
+
 	// Per-node monthly relayed bytes (current month) for the fleet traffic column.
 	monthStart, _ := monthRange(periodOf(now))
 	monthly, mErr := s.store.NodeRelayedSince(r.Context(), monthStart)
@@ -386,7 +398,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 	if ns, nerr := s.store.ListNodes(r.Context()); nerr != nil {
 		log.Printf("admin: ListNodes failed: %v", nerr)
 	} else {
-		nodeVs = nodeViews(ns, monthly, s.now())
+		nodeVs = nodeViews(ns, monthly, s.now(), st)
 	}
 	fleetNodeCount := 0
 	for _, nv := range nodeVs {
@@ -403,7 +415,6 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		}
 	}
 
-	st := s.resolveSettings(r.Context())
 	centralStored, cerr := s.store.CentralStoredBytes(r.Context())
 	if cerr != nil {
 		log.Printf("admin: CentralStoredBytes failed: %v", cerr)
@@ -451,6 +462,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 			MaxMaxDownloads:        st.MaxMaxDownloads,
 			StorageDiskCapMB:       st.StorageDiskCap / (1024 * 1024),
 			DisableCentralFallback: st.DisableCentralFallback,
+			NodeTrafficDefaultGB:   st.NodeTrafficDefault / (1024 * 1024 * 1024),
 		},
 	}, nil
 }
@@ -503,11 +515,17 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		n, ok := enumi("storage_disk_cap_mb")
 		return n, ok && n <= maxConfigMB
 	}()
-	if !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8) ||
+	// node_traffic_default_gb must allow 0 (0 = unlimited), so it uses enumi
+	// (n >= 0) rather than atoi (n > 0) — same reasoning as default_retention above.
+	nodeTrafficGB, ok9 := func() (int64, bool) {
+		n, ok := enumi("node_traffic_default_gb")
+		return n, ok && n <= maxConfigMB // 复用同一个上界，远超任何真实盘/流量规模
+	}()
+	if !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9) ||
 		defH > maxH || defRetention > retentionCount || defMaxDL > maxMaxDL {
 		http.Error(w, "invalid settings (positive integers; default_ttl <= max_ttl; "+
 			"default_retention in 0..2; default_max_downloads <= max_max_downloads; "+
-			"*_mb fields <= 1073741824)", http.StatusBadRequest)
+			"*_mb / *_gb fields <= 1073741824)", http.StatusBadRequest)
 		return
 	}
 	// Unchecked checkboxes submit no value; present (any value) = on.
@@ -529,6 +547,7 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		{SettingMaxMaxDownloads, maxMaxDL},
 		{SettingStorageDiskCap, storageCapMB * 1024 * 1024},
 		{SettingDisableCentralFallback, disableCentral},
+		{SettingNodeTrafficDefault, nodeTrafficGB * 1024 * 1024 * 1024},
 	}
 	for _, u := range updates {
 		if err := s.store.SetSetting(r.Context(), u.key, u.val, now); err != nil {
@@ -569,15 +588,18 @@ func (s *Service) handleAdminUpsertPlan(w http.ResponseWriter, r *http.Request) 
 	pm, ok4 := nn("price_monthly_cents")
 	py, ok5 := nn("price_yearly_cents")
 	sort, ok6 := nn("sort_order")
+	// daily_quota_mb: 0 是有意义的取值（= 回落到全局「每账号每日额度」设置），
+	// 所以这里必须用 nnMax/nn 这类接受 0 的解析，绝不能换成要求 > 0 的那种。
+	dailyQuotaMB, ok7 := nnMax("daily_quota_mb", maxConfigMB)
 	active := r.FormValue("active") == "1"
 	// Stripe price ids are free-form strings (e.g. "price_1AbCDe...") assigned
 	// by the operator after creating Prices in the Stripe dashboard — no
 	// numeric validation, just trim.
 	stripePriceMonthlyID := strings.TrimSpace(r.FormValue("stripe_price_monthly_id"))
 	stripePriceYearlyID := strings.TrimSpace(r.FormValue("stripe_price_yearly_id"))
-	if id == "" || name == "" || !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6) {
+	if id == "" || name == "" || !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7) {
 		http.Error(w, "invalid plan (non-negative integers; id/name required; "+
-			"storage_mb/traffic_gb <= 1073741824; retention_days <= 36500)", http.StatusBadRequest)
+			"storage_mb/traffic_gb/daily_quota_mb <= 1073741824; retention_days <= 36500)", http.StatusBadRequest)
 		return
 	}
 	// Never leave zero active plans. Fail closed: any store error here
@@ -605,6 +627,7 @@ func (s *Service) handleAdminUpsertPlan(w http.ResponseWriter, r *http.Request) 
 		SortOrder: sort, Active: active, UpdatedAt: s.now().Unix(),
 		StripePriceMonthlyID: stripePriceMonthlyID,
 		StripePriceYearlyID:  stripePriceYearlyID,
+		DailyQuotaBytes:      dailyQuotaMB << 20,
 	}
 	if err := s.store.UpsertPlan(r.Context(), p); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)

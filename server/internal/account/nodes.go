@@ -32,7 +32,7 @@ type nodeRegisterReq struct {
 // total, so the node can enforce them locally in real time (workstream B) instead
 // of relying on central to withhold it at ICE time between heartbeats.
 type nodeLimits struct {
-	TrafficLimitBytes int64 `json:"trafficLimitBytes"` // 0 = unlimited
+	TrafficLimitBytes int64 `json:"trafficLimitBytes"` // resolved (node override or global default); 0 = unlimited
 	DiskLimitBytes    int64 `json:"diskLimitBytes"`    // 0 = unlimited
 	RelayedThisMonth  int64 `json:"relayedThisMonth"`  // central's authoritative month-to-date
 }
@@ -49,6 +49,31 @@ type nodeHeartbeatResp struct {
 	nodeLimits
 }
 
+// 中继流量的调度余量：中心端只把生效上限的 90% 发出去，留 10% 给已经建连的
+// 会话吐完。比例只在这里定义一次（与存储侧 storageHeadroomNum/Den 同纪律）。
+const nodeTrafficHeadroomNum, nodeTrafficHeadroomDen = 9, 10
+
+// usableTraffic 是中心端愿意排给一台节点的月度流量。limit <= 0（不限）时原样返回。
+func usableTraffic(limit int64) int64 {
+	if limit <= 0 {
+		return limit
+	}
+	return limit * nodeTrafficHeadroomNum / nodeTrafficHeadroomDen
+}
+
+// resolveNodeTrafficLimit 给出一台节点本月真正生效的中继流量上限（字节）。
+//
+// 节点行里的 traffic_limit_bytes 为 0 表示"继承全局默认"，不再是"无限"——
+// 这条语义在 2026-07 改过：官方节点默认应当有一个上限（出厂 1 TiB），管理员
+// 想给某台机器单独放开就填一个大数，而不是靠 0。返回 0 仍表示不限，那只会在
+// 全局默认也被设成 0（整体关掉这套机制）时发生。
+func resolveNodeTrafficLimit(node Node, st Settings) int64 {
+	if node.TrafficLimitBytes > 0 {
+		return node.TrafficLimitBytes
+	}
+	return st.NodeTrafficDefault
+}
+
 // nodeLimitsFor assembles a node's caps and month-to-date relayed total.
 func (s *Service) nodeLimitsFor(ctx context.Context, node Node) nodeLimits {
 	monthStart, _ := monthRange(periodOf(s.now().Unix()))
@@ -57,7 +82,9 @@ func (s *Service) nodeLimitsFor(ctx context.Context, node Node) nodeLimits {
 		relayed = m[node.ID]
 	}
 	return nodeLimits{
-		TrafficLimitBytes: node.TrafficLimitBytes,
+		// 下发**解析后**的上限：节点行里可能是 0（继承全局默认），直接发 0 会让
+		// 节点以为自己不限流量，本地硬闸永远不触发。
+		TrafficLimitBytes: resolveNodeTrafficLimit(node, s.resolveSettings(ctx)),
 		DiskLimitBytes:    node.DiskLimitBytes,
 		RelayedThisMonth:  relayed,
 	}

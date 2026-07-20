@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,19 @@ func fakeNode(t *testing.T, store map[string][]byte) *httptest.Server {
 			b, _ := io.ReadAll(r.Body)
 			store[key] = b
 			io.WriteString(w, `{"size":`+intToStr(len(b))+`}`)
+		case http.MethodPatch:
+			// Chunked append, mirroring the real node handler: X-Blob-Offset must
+			// equal the current size, and the new size comes back as JSON.
+			off, _ := strconv.ParseInt(r.Header.Get("X-Blob-Offset"), 10, 64)
+			cur := int64(len(store[key]))
+			if off != cur {
+				w.WriteHeader(http.StatusConflict)
+				io.WriteString(w, `{"size":`+intToStr(int(cur))+`}`)
+				return
+			}
+			b, _ := io.ReadAll(r.Body)
+			store[key] = append(store[key], b...)
+			io.WriteString(w, `{"size":`+intToStr(len(store[key]))+`}`)
 		case http.MethodGet:
 			b, ok := store[key]
 			if !ok {
@@ -91,7 +105,7 @@ func TestPlaceUploadPicksNodeOrFallsBack(t *testing.T) {
 		pickN: func(n int) int { return 0 }}
 
 	// No storage nodes -> central fallback ("", local blobs, billable).
-	id, _, billable, err := s.placeUpload(ctx, "nobody")
+	id, _, billable, err := s.placeUpload(ctx, "nobody", 1<<10)
 	if id != "" || !billable || err != nil {
 		t.Fatalf("want central fallback billable, got node %q billable=%v err=%v", id, billable, err)
 	}
@@ -99,7 +113,7 @@ func TestPlaceUploadPicksNodeOrFallsBack(t *testing.T) {
 	// One eligible fleet node -> chosen (billable, since it's not the user's own).
 	n, _ := st.UpsertNode(ctx, Node{OwnerType: "fleet", URLs: []string{"turn:x:3478"}, TURNSecret: "t",
 		StorageEnabled: true, StorageURL: "http://x:8081", StorageSecret: "ss", StorageFree: 100 << 30, CreatedAt: 1, LastSeenAt: 1000})
-	id, _, billable, err = s.placeUpload(ctx, "nobody")
+	id, _, billable, err = s.placeUpload(ctx, "nobody", 1<<10)
 	if id != n.ID || !billable || err != nil {
 		t.Fatalf("want node %q billable, got %q billable=%v err=%v", n.ID, id, billable, err)
 	}

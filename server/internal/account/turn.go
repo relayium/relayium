@@ -135,21 +135,27 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if !strict {
-			// Per-node monthly traffic hard cap: skip any fleet node whose
-			// relayed bytes this month have reached its admin-set limit. Computed
-			// once per request; a read error fails open (no node withheld).
+			// Per-node monthly traffic cap: withhold any fleet node that has
+			// reached 90% of its effective cap. The 90% is a *scheduling*
+			// reserve, not the hard stop — traffic is checked once at ICE time
+			// but accrues for the whole session, so a node sitting at 99.9%
+			// would still be handed out and then blow well past its cap. The
+			// node's own 100% blackhole (counter.go overTraffic) is the hard
+			// gate; this leaves it 10% to drain established sessions with.
+			// Computed once per request; a read error fails open.
 			monthStart, _ := monthRange(periodOf(now.Unix()))
 			monthlyUsed, muErr := s.store.NodeRelayedSince(r.Context(), monthStart)
 			if muErr != nil {
 				log.Printf("ice: NodeRelayedSince read failed: %v (traffic caps not enforced this request)", muErr)
 			}
+			st := s.resolveSettings(r.Context())
 			if nodes, err := s.store.OnlineNodes(r.Context(), since); err == nil {
 				for _, n := range nodes {
 					if n.ID == "" || n.TURNSecret == "" || len(n.URLs) == 0 || seen[n.ID] {
 						continue
 					}
-					if n.TrafficLimitBytes > 0 && monthlyUsed[n.ID] >= n.TrafficLimitBytes {
-						continue // over monthly traffic cap — withhold this node
+					if cap := usableTraffic(resolveNodeTrafficLimit(n, st)); cap > 0 && monthlyUsed[n.ID] >= cap {
+						continue // at/over the 90% scheduling reserve — withhold this node
 					}
 					relays = append(relays, relayEntry{ID: n.ID, Region: n.Region,
 						ICEServers: []ICEServer{turnCredentials(n.TURNSecret, token, expiry, n.URLs)}})

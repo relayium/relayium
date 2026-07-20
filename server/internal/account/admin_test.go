@@ -81,10 +81,11 @@ func TestAdminSettingsUpdateValid(t *testing.T) {
 	cookie := adminLogin(t, ts)
 	client := ts.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	// 10 MiB file, 100 MiB quota, 12h default, 48h max, 5 MiB relay cap.
+	// 10 MiB file, 100 MiB quota, 12h default, 48h max, 5 MiB relay cap, 50 GB node traffic default.
 	req, _ := http.NewRequest("POST", ts.URL+"/admin/settings", strings.NewReader(
 		"max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48"+
-			"&default_retention=0&default_max_downloads=5&max_max_downloads=100&storage_disk_cap_mb=0"))
+			"&default_retention=0&default_max_downloads=5&max_max_downloads=100&storage_disk_cap_mb=0"+
+			"&node_traffic_default_gb=50"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(cookie)
 	resp, _ := client.Do(req)
@@ -97,6 +98,34 @@ func TestAdminSettingsUpdateValid(t *testing.T) {
 	}
 	if d, _, _ := store.GetSetting(context.Background(), SettingDefaultTTL); d != 12*3600 {
 		t.Fatalf("default_ttl = %d, want 43200", d)
+	}
+	if nt, _, _ := store.GetSetting(context.Background(), SettingNodeTrafficDefault); nt != 50*1024*1024*1024 {
+		t.Fatalf("node_traffic_default = %d, want 50 GiB", nt)
+	}
+}
+
+// node_traffic_default_gb=0 means "unlimited" and must be accepted, not
+// rejected — this is the same 0-is-valid contract as default_retention and
+// storage_disk_cap_mb. A naive switch from enumi (n >= 0) to atoi (n > 0)
+// for this field would silently start rejecting 0 and, because the whole
+// settings POST is all-or-nothing, block saving every other field too.
+func TestAdminSettingsNodeTrafficDefaultZeroAllowed(t *testing.T) {
+	ts, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	req, _ := http.NewRequest("POST", ts.URL+"/admin/settings", strings.NewReader(
+		"max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48"+
+			"&default_retention=0&default_max_downloads=5&max_max_downloads=100&storage_disk_cap_mb=0"+
+			"&node_traffic_default_gb=0"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookie)
+	resp, _ := client.Do(req)
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("node_traffic_default_gb=0 (unlimited): want 302, got %d", resp.StatusCode)
+	}
+	if nt, ok, _ := store.GetSetting(context.Background(), SettingNodeTrafficDefault); !ok || nt != 0 {
+		t.Fatalf("node_traffic_default = %d (ok=%v), want 0 (unlimited)", nt, ok)
 	}
 }
 
@@ -112,7 +141,7 @@ func TestAdminSettingsRejectsInvalid(t *testing.T) {
 		resp, _ := client.Do(req)
 		return resp.StatusCode
 	}
-	const okRetention = "&default_retention=0&default_max_downloads=5&max_max_downloads=100&storage_disk_cap_mb=0"
+	const okRetention = "&default_retention=0&default_max_downloads=5&max_max_downloads=100&storage_disk_cap_mb=0&node_traffic_default_gb=0"
 	// default_ttl (48h) > max_ttl (24h) → rejected.
 	if code := post("max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=48&max_ttl_hours=24" + okRetention); code != http.StatusBadRequest {
 		t.Fatalf("default>max: want 400, got %d", code)
@@ -123,13 +152,18 @@ func TestAdminSettingsRejectsInvalid(t *testing.T) {
 	}
 	// default_retention out of range (0..2) → rejected.
 	if code := post("max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48" +
-		"&default_retention=3&default_max_downloads=5&max_max_downloads=100&storage_disk_cap_mb=0"); code != http.StatusBadRequest {
+		"&default_retention=3&default_max_downloads=5&max_max_downloads=100&storage_disk_cap_mb=0&node_traffic_default_gb=0"); code != http.StatusBadRequest {
 		t.Fatalf("default_retention=3: want 400, got %d", code)
 	}
 	// default_max_downloads > max_max_downloads → rejected.
 	if code := post("max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48" +
-		"&default_retention=2&default_max_downloads=999&max_max_downloads=100&storage_disk_cap_mb=0"); code != http.StatusBadRequest {
+		"&default_retention=2&default_max_downloads=999&max_max_downloads=100&storage_disk_cap_mb=0&node_traffic_default_gb=0"); code != http.StatusBadRequest {
 		t.Fatalf("default_max_downloads>max: want 400, got %d", code)
+	}
+	// node_traffic_default_gb negative → rejected (enumi requires n >= 0, same as storage_disk_cap_mb).
+	if code := post("max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48" +
+		"&default_retention=0&default_max_downloads=5&max_max_downloads=100&storage_disk_cap_mb=0&node_traffic_default_gb=-1"); code != http.StatusBadRequest {
+		t.Fatalf("node_traffic_default_gb=-1: want 400, got %d", code)
 	}
 	// Nothing persisted by the rejected posts.
 	if _, ok, _ := store.GetSetting(context.Background(), SettingMaxFileSize); ok {

@@ -74,6 +74,9 @@ type Plan struct {
 	// purchasable via Stripe (e.g. the free tier, or an unmapped price).
 	StripePriceMonthlyID string
 	StripePriceYearlyID  string
+	// DailyQuotaBytes 是该档每 24 小时的上传额度；<= 0 表示回落到全局
+	// SettingDailyQuota。存量 plans 行的该列默认 0，因此迁移后行为不变。
+	DailyQuotaBytes int64
 }
 
 // Identity links an external auth subject (google sub, or the email itself) to a user.

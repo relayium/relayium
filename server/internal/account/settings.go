@@ -28,6 +28,10 @@ const (
 	// storage node fails instead of landing on central. 0 = allow central
 	// fallback (the default, current behaviour).
 	SettingDisableCentralFallback = "disable_central_fallback"
+	// SettingNodeTrafficDefault 是官方节点每月中继流量的**默认**上限（字节）。
+	// 节点自己的 traffic_limit_bytes 为 0 时继承它；节点有值则以节点为准。
+	// 本身为 0 表示"未单独配置的节点不限流量"，保留整体关掉这套机制的能力。
+	SettingNodeTrafficDefault = "node_traffic_default"
 )
 
 // minTTL is the floor a requested TTL is clamped up to; well below default_ttl.
@@ -67,6 +71,8 @@ type Settings struct {
 	// DisableCentralFallback stops uploads landing on the app server's own disk
 	// when no storage node is available (they fail instead).
 	DisableCentralFallback bool
+	// NodeTrafficDefault 是官方节点月度中继流量的默认上限（字节）；0 = 不限。
+	NodeTrafficDefault int64
 }
 
 // settingOr returns the DB value for key, or def when unset/on error (fail to env).
@@ -93,6 +99,7 @@ func (s *Service) resolveSettings(ctx context.Context) Settings {
 		AccountReminderDays:    s.settingOr(ctx, SettingAccountReminderDays, s.cfg.AccountReminderDays),
 		StorageDiskCap:         s.settingOr(ctx, SettingStorageDiskCap, s.cfg.StorageDiskCap),
 		DisableCentralFallback: s.settingOr(ctx, SettingDisableCentralFallback, 0) != 0,
+		NodeTrafficDefault:     s.settingOr(ctx, SettingNodeTrafficDefault, s.cfg.NodeTrafficDefault),
 	}
 }
 
@@ -200,10 +207,18 @@ func (s *Service) SeedSettings(ctx context.Context) error {
 func defaultPlans() []Plan {
 	const mb, gb, tb, day = int64(1) << 20, int64(1) << 30, int64(1) << 40, int64(86400)
 	return []Plan{
-		{ID: "free", Name: "Free", StorageBytes: 100 * mb, TrafficBytes: 1 * gb, RetentionSecs: 3 * day, PriceMonthly: 0, PriceYearly: 0, SortOrder: 0, Active: true},
-		{ID: "plus", Name: "Plus", StorageBytes: 5 * gb, TrafficBytes: 300 * gb, RetentionSecs: 30 * day, PriceMonthly: 390, PriceYearly: 2900, SortOrder: 1, Active: true},
-		{ID: "pro", Name: "Pro", StorageBytes: 50 * gb, TrafficBytes: 1 * tb, RetentionSecs: 90 * day, PriceMonthly: 890, PriceYearly: 7900, SortOrder: 2, Active: true},
-		{ID: "max", Name: "Max", StorageBytes: 250 * gb, TrafficBytes: 5 * tb, RetentionSecs: 180 * day, PriceMonthly: 1990, PriceYearly: 19900, SortOrder: 3, Active: true},
+		// DailyQuotaBytes 的付费档按"月流量 ÷ 3"定。0 = 回落到全局 SettingDailyQuota。
+		//
+		// Free 的 0 是**有意为之，不是漏填**——别看到 plus/pro/max 都有值就顺手补上。
+		// 需求写的是"Free 200 MiB（维持现值）"，但那句话的意图是"别让现有免费用户
+		// 觉得变严"。全局默认本来就是 200 MiB，所以填 0 继承全局达到完全相同的效果，
+		// 同时保住后台「每账号每日额度」这个旋钮对免费用户（绝大多数用户）仍然有效。
+		// 反过来填死 200 MiB，全新部署的免费档从此就不受那个旋钮控制了——这不该是
+		// 种子数据顺手做掉的决定。见 TestFreePlanFollowsGlobalDailyQuota。
+		{ID: "free", Name: "Free", StorageBytes: 100 * mb, TrafficBytes: 1 * gb, RetentionSecs: 3 * day, PriceMonthly: 0, PriceYearly: 0, SortOrder: 0, Active: true, DailyQuotaBytes: 0},
+		{ID: "plus", Name: "Plus", StorageBytes: 5 * gb, TrafficBytes: 300 * gb, RetentionSecs: 30 * day, PriceMonthly: 390, PriceYearly: 2900, SortOrder: 1, Active: true, DailyQuotaBytes: 100 * gb},
+		{ID: "pro", Name: "Pro", StorageBytes: 50 * gb, TrafficBytes: 1 * tb, RetentionSecs: 90 * day, PriceMonthly: 890, PriceYearly: 7900, SortOrder: 2, Active: true, DailyQuotaBytes: 340 * gb},
+		{ID: "max", Name: "Max", StorageBytes: 250 * gb, TrafficBytes: 5 * tb, RetentionSecs: 180 * day, PriceMonthly: 1990, PriceYearly: 19900, SortOrder: 3, Active: true, DailyQuotaBytes: 1700 * gb},
 	}
 }
 

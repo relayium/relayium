@@ -17,6 +17,7 @@ type adminSettingsView struct {
 	MaxMaxDownloads        int64
 	StorageDiskCapMB       int64 // global logical storage ceiling (MiB); 0 = unlimited
 	DisableCentralFallback bool  // when true, uploads never fall back to the app server's own disk
+	NodeTrafficDefaultGB   int64 // default monthly relay traffic cap for official nodes (GB); 0 = unlimited
 }
 
 type adminHomeData struct {
@@ -274,7 +275,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 </form>
 
 <table>
-<thead><tr><th>备注 / ID</th><th>IP</th><th>区域</th><th>状态</th><th>中继(本月/累计) / 上限</th><th>存储 / 硬盘上限</th><th>盘 剩余/总量</th><th>可用(70%)</th><th>版本</th><th>备注名 · 限额(GB)</th><th></th></tr></thead>
+<thead><tr><th>备注 / ID</th><th>IP</th><th>区域</th><th>状态</th><th>中继(本月/累计) / 上限</th><th>存储 / 硬盘上限</th><th>盘 剩余/总量</th><th>可存储(70%)</th><th>版本</th><th>备注名 · 限额(GB)</th><th></th></tr></thead>
 <tbody>
 {{range .Nodes}}{{if eq .OwnerType "fleet"}}
 <tr>
@@ -282,7 +283,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <td>{{if .Host}}{{.Host}}{{else}}—{{end}}</td>
 <td>{{.Region}}</td>
 <td>{{if .Online}}在线{{else}}离线{{end}}</td>
-<td>{{bytes .MonthRelayedBytes}} / {{bytes .RelayedBytes}} / {{if .TrafficLimitBytes}}{{bytes .TrafficLimitBytes}}{{else}}∞{{end}}</td>
+<td>{{bytes .MonthRelayedBytes}} / {{bytes .RelayedBytes}} / {{if .EffectiveTrafficLimitBytes}}{{bytes .EffectiveTrafficLimitBytes}}{{else}}∞{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StoredBytes}}{{else}}—{{end}} / {{if .DiskLimitBytes}}{{bytes .DiskLimitBytes}}{{else}}∞{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StorageFree}} / {{bytes .StorageTotal}}{{else}}—{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .UsableBytes}}{{else}}—{{end}}</td>
@@ -293,7 +294,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <button type="submit">改名</button>
 </form>
 <form method="post" action="/admin/nodes/{{.ID}}/limits" class="lim">
-<input type="number" name="traffic_limit_gb" min="0" value="{{gib .TrafficLimitBytes}}" title="流量上限 GB/月，0=无限">
+<input type="number" name="traffic_limit_gb" min="0" value="{{gib .TrafficLimitBytes}}" title="流量上限 GB/月，0=用全局默认">
 <input type="number" name="disk_limit_gb" min="0" value="{{gib .DiskLimitBytes}}" title="硬盘上限 GB，0=无限">
 <button type="submit">保存</button>
 </form>
@@ -323,10 +324,10 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <section class="plans">
 <h2>套餐（{{len .Plans}}）</h2>
 <table>
-<thead><tr><th>ID</th><th>名称</th><th>存储(MB)</th><th>流量(GB/月)</th><th>暂存天数</th><th>月付(分)</th><th>年付(分)</th><th>排序</th><th>启用</th><th>Stripe 月付价格ID</th><th>Stripe 年付价格ID</th><th></th></tr></thead>
+<thead><tr><th>ID</th><th>名称</th><th>存储(MB)</th><th>流量(GB/月)</th><th>暂存天数</th><th>每日额度(MiB)</th><th>月付(分)</th><th>年付(分)</th><th>排序</th><th>启用</th><th>Stripe 月付价格ID</th><th>Stripe 年付价格ID</th><th></th></tr></thead>
 <tbody>
 {{range .Plans}}
-<tr><td colspan="12">
+<tr><td colspan="13">
 <form method="post" action="/admin/plans" class="plan-row">
 <input type="hidden" name="id" value="{{.ID}}">
 <span>{{.ID}}</span>
@@ -334,6 +335,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <input type="number" name="storage_mb" min="0" value="{{.StorageMB}}" title="存储(MB)">
 <input type="number" name="traffic_gb" min="0" value="{{.TrafficGB}}" title="流量(GB/月)">
 <input type="number" name="retention_days" min="0" value="{{.RetentionDays}}" title="暂存天数">
+<input type="number" name="daily_quota_mb" min="0" value="{{.DailyQuotaMB}}" title="每日额度(MiB)，0 = 用全局设置">
 <input type="number" name="price_monthly_cents" min="0" value="{{.PriceMonthlyCents}}" title="月付(分)">
 <input type="number" name="price_yearly_cents" min="0" value="{{.PriceYearlyCents}}" title="年付(分)">
 <input type="number" name="sort_order" min="0" value="{{.SortOrder}}" title="排序">
@@ -362,6 +364,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <label>默认下载次数上限<input type="number" name="default_max_downloads" min="1" value="{{.Settings.DefaultMaxDownloads}}"></label>
 <label>下载次数上限的上限<input type="number" name="max_max_downloads" min="1" value="{{.Settings.MaxMaxDownloads}}"></label>
 <label>全局存储上限 (MiB，0=无限)<input type="number" name="storage_disk_cap_mb" min="0" value="{{.Settings.StorageDiskCapMB}}"></label>
+<label>节点默认流量上限 (GB/月，0=不限)<input type="number" name="node_traffic_default_gb" min="0" value="{{.Settings.NodeTrafficDefaultGB}}"></label>
 <label style="flex-direction:row;align-items:center;gap:8px;grid-column:1/-1"><input type="checkbox" name="disable_central_fallback" value="1" style="width:auto"{{if .Settings.DisableCentralFallback}} checked{{end}}>关闭中央兜底：无可用存储节点时上传直接失败，不再落到本站服务器磁盘</label>
 <button type="submit">保存设置</button>
 </form>
