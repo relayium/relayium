@@ -2,6 +2,8 @@
 // shared into the installed PWA in a cache and redirects here with a token;
 // we read them back into File objects. Android/Chromium only — iOS Safari has
 // no inbound share target, where this simply finds no token and no-ops.
+import { probeStreamSupport } from "./filesink";
+
 const SHARE_CACHE = "relayium-share";
 
 /** Register the service worker. Production + secure context only; the offline
@@ -10,6 +12,9 @@ export function registerServiceWorker(): void {
   if (!import.meta.env.PROD) return;
   if (!("serviceWorker" in navigator) || !window.isSecureContext) return;
   navigator.serviceWorker.register("/sw.js").catch(() => {});
+  // 顺带把流式下载的就绪状态探出来。必须现在（异步）做完：canStreamToDisk 是
+  // 同步的，pickSaveTarget 又必须整个跑在用户手势里，到那时已经来不及等 SW。
+  probeStreamSupport();
 }
 
 /** If the current URL carries a share-target token, drain the SW-stashed files

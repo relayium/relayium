@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { fetchMeta, downloadBlob, parseDownloadKey, keyFromFragment, DownloadNetworkError } from "./stored-file";
   import { decryptManifest, type StoredManifest } from "./store-crypto";
-  import { pickSaveTarget, canStreamToDisk, LARGE_DOWNLOAD_WARN_BYTES, type SaveTarget, type FileSink } from "./filesink";
+  import { pickSaveTarget, canStreamToDisk, LARGE_DOWNLOAD_WARN_BYTES, SinkCancelledError, SinkTransportError, type SaveOptions, type SaveTarget, type FileSink } from "./filesink";
   import { lang, setLang, LANGS, messages, legalUrl, type Lang, type Messages } from "./i18n.svelte";
   import ThemeSelect from "./ThemeSelect.svelte";
   import { formatRemaining, formatSize } from "./format";
@@ -13,7 +13,17 @@
 
   type PageState = "loading" | "ready" | "downloading" | "done" | "error";
   let pageState: PageState = $state("loading");
-  let errKey: "notFound" | "noKey" | "decryptFail" | "unsupported" | "netFail" | "" = $state("");
+  let errKey: "notFound" | "noKey" | "decryptFail" | "unsupported" | "netFail" | "cancelled" | "swFail" | "" = $state("");
+
+  /**
+   * 下载页是**唯一**打开 service worker 流式落盘的地方。
+   *
+   * 这条路让没有 File System Access API 的浏览器（Firefox / Safari / 所有手机）
+   * 也能把大文件边收边写盘，而不是整份堆进内存。实时接收路（App.svelte）刻意不开：
+   * 那边的「已 ack」被当成 durability 信号回给发送端，而 SW 的 ack 只代表字节进了
+   * ReadableStream，不代表落盘。理由详见 filesink.ts 的 SaveOptions。
+   */
+  const SAVE_OPTS: SaveOptions = { swStream: true };
   let manifest = $state<StoredManifest | null>(null);
   let key: CryptoKey | null = null;
   let progress = $state(0); // 0..100
@@ -74,14 +84,14 @@
    */
   async function startDownload(force: boolean) {
     if (!manifest || !key) return;
-    if (!force && !canStreamToDisk(manifest.files.length) && totalBytes > LARGE_DOWNLOAD_WARN_BYTES) {
+    if (!force && !canStreamToDisk(manifest.files.length, SAVE_OPTS) && totalBytes > LARGE_DOWNLOAD_WARN_BYTES) {
       memWarn = true;
       return; // 一个字节都还没取
     }
     memWarn = false;
     let target: SaveTarget;
     try {
-      target = await pickSaveTarget(manifest.files.map((f) => ({ name: f.name, size: f.size })));
+      target = await pickSaveTarget(manifest.files.map((f) => ({ name: f.name, size: f.size })), SAVE_OPTS);
     } catch {
       return; // user cancelled the save picker
     }
@@ -112,12 +122,18 @@
         (received) => { progress = totalBytes > 0 ? Math.round((received / totalBytes) * 100) : 0; },
       );
       if (sink) await sink.close();
+      // 收尾这一批。ZIP 分支要靠它把整个 zip 拼出来并触发下载；流式分支没有 done。
+      // 少了这一步，打包下载会静默地什么都不产出，而页面照样显示"完成"。
+      await target.done?.();
       pageState = "done";
     } catch (e) {
       pageState = "error";
-      // A dropped connection is retryable; only a genuine decrypt/integrity failure
-      // warrants the "wrong key or corrupt file" message.
-      errKey = e instanceof DownloadNetworkError ? "netFail" : "decryptFail";
+      // 用户自己取消下载不是故障，更不是"密钥错误或文件损坏"——如实说。
+      // 掉线可重试；SW 落盘那一段出问题也可重试（字节一个都没错，只是没交到磁盘）；
+      // 只有真正的解密/完整性失败才配得上那句"密钥错误或文件损坏"。
+      if (e instanceof SinkCancelledError) errKey = "cancelled";
+      else if (e instanceof SinkTransportError) errKey = "swFail";
+      else errKey = e instanceof DownloadNetworkError ? "netFail" : "decryptFail";
     }
   }
 
@@ -147,9 +163,13 @@
       {:else if errKey === "noKey"}{t.download.noKey}
       {:else if errKey === "unsupported"}{t.download.unsupported}
       {:else if errKey === "netFail"}{t.download.netFail}
+      {:else if errKey === "swFail"}{t.download.swFail}
+      {:else if errKey === "cancelled"}{t.download.cancelled}
       {:else}{t.download.decryptFail}{/if}
     </p>
-    {#if errKey === "netFail" && manifest}
+    <!-- 传输类故障（掉线 / SW 落盘中断）和用户主动取消都可以原地重来；
+         只有 decryptFail / notFound / noKey / unsupported 重试没有意义。 -->
+    {#if (errKey === "netFail" || errKey === "swFail" || errKey === "cancelled") && manifest}
       <button class="btn btn-primary" onclick={download}>{t.download.retry}</button>
     {/if}
   {:else if pageState === "ready" && expired}

@@ -1,0 +1,193 @@
+import { describe, it, expect } from "vitest";
+import { STREAM_ROUTE, streamURL, contentDisposition } from "./sw-stream";
+
+describe("STREAM_ROUTE", () => {
+  it("is a dunder-namespaced prefix that cannot collide with a real route", () => {
+    expect(STREAM_ROUTE).toBe("/__stream__/");
+    expect(STREAM_ROUTE.startsWith("/")).toBe(true);
+    expect(STREAM_ROUTE.endsWith("/")).toBe(true);
+  });
+});
+
+describe("streamURL", () => {
+  it("puts the token and the filename in the path", () => {
+    expect(streamURL("abc123", "report.pdf")).toBe("/__stream__/abc123/report.pdf");
+  });
+
+  it("percent-encodes non-ASCII filenames", () => {
+    expect(streamURL("t-1_2", "图 片.svg")).toBe("/__stream__/t-1_2/%E5%9B%BE%20%E7%89%87.svg");
+  });
+
+  it("encodes separators so the filename cannot forge extra path segments or a query", () => {
+    expect(streamURL("t", "a/b?c#d.txt")).toBe("/__stream__/t/a%2Fb%3Fc%23d.txt");
+    expect(streamURL("t", "../../etc/passwd")).toBe("/__stream__/t/..%2F..%2Fetc%2Fpasswd");
+  });
+
+  it("falls back to a placeholder segment for an empty filename", () => {
+    expect(streamURL("t", "")).toBe("/__stream__/t/download");
+  });
+
+  it("falls back to a placeholder segment for a filename that is exactly a dot-segment", () => {
+    // "." and ".." are the two values the browser normalizes out of a path
+    // before the request is even sent (encodeURIComponent leaves both alone,
+    // since neither contains a character it escapes). Left unguarded, the
+    // resulting URL collapses to STREAM_ROUTE itself and the download
+    // silently falls through to the SPA shell.
+    expect(streamURL("t", ".")).toBe("/__stream__/t/download");
+    expect(streamURL("t", "..")).toBe("/__stream__/t/download");
+    // Three dots is not a dot-segment — browsers do not normalize it away —
+    // so it must pass through unchanged.
+    expect(streamURL("t", "...")).toBe("/__stream__/t/...");
+  });
+
+  it("rejects a token that could forge a path segment or blow the length budget", () => {
+    expect(() => streamURL("", "f.txt")).toThrow(/token/i);
+    expect(() => streamURL("../x", "f.txt")).toThrow(/token/i);
+    expect(() => streamURL("a/b", "f.txt")).toThrow(/token/i);
+    expect(() => streamURL("a".repeat(65), "f.txt")).toThrow(/token/i);
+  });
+});
+
+describe("contentDisposition", () => {
+  it("emits both a quoted ASCII fallback and an RFC 5987 filename*", () => {
+    expect(contentDisposition("report.pdf")).toBe(
+      `attachment; filename="report.pdf"; filename*=UTF-8''report.pdf`,
+    );
+  });
+
+  it("keeps a non-ASCII name in filename* and degrades the fallback to underscores", () => {
+    expect(contentDisposition("图 片.svg")).toBe(
+      `attachment; filename="_ _.svg"; filename*=UTF-8''%E5%9B%BE%20%E7%89%87.svg`,
+    );
+  });
+
+  it("handles an all-non-ASCII name (fallback is still non-empty)", () => {
+    expect(contentDisposition("你好世界")).toBe(
+      `attachment; filename="____"; filename*=UTF-8''%E4%BD%A0%E5%A5%BD%E4%B8%96%E7%95%8C`,
+    );
+  });
+
+  it("neutralizes a double quote so it cannot close the quoted-string", () => {
+    expect(contentDisposition('a"b.txt')).toBe(
+      `attachment; filename="a_b.txt"; filename*=UTF-8''a%22b.txt`,
+    );
+    // The classic escape attempt: close the quote and append a bogus parameter.
+    expect(contentDisposition('x.txt"; filename="evil.exe')).toBe(
+      `attachment; filename="x.txt__ filename=_evil.exe"; filename*=UTF-8''x.txt%22%3B%20filename%3D%22evil.exe`,
+    );
+  });
+
+  it("neutralizes a semicolon so it cannot start a new parameter", () => {
+    expect(contentDisposition("a;b.txt")).toBe(
+      `attachment; filename="a_b.txt"; filename*=UTF-8''a%3Bb.txt`,
+    );
+  });
+
+  it("strips CR/LF — a header-injection attempt must not survive into the value", () => {
+    expect(contentDisposition("a\r\nX-Evil: 1.txt")).toBe(
+      `attachment; filename="aX-Evil: 1.txt"; filename*=UTF-8''aX-Evil%3A%201.txt`,
+    );
+    expect(contentDisposition("ok.txt\r\n\r\n<script>alert(1)</script>")).toBe(
+      `attachment; filename="ok.txt<script>alert(1)<_script>"; filename*=UTF-8''ok.txt%3Cscript%3Ealert%281%29%3C%2Fscript%3E`,
+    );
+    // A name that is nothing but CR/LF collapses to the placeholder, not to "".
+    expect(contentDisposition("\r\n")).toBe(
+      `attachment; filename="download"; filename*=UTF-8''download`,
+    );
+  });
+
+  it("strips NUL, DEL and other control characters", () => {
+    expect(contentDisposition("a\u0000b\u007fc\u0085d.txt")).toBe(
+      `attachment; filename="abcd.txt"; filename*=UTF-8''abcd.txt`,
+    );
+  });
+
+  it("strips a bidi override so a displayed name cannot lie about its own extension", () => {
+    // RLO (U+202E) reverses the visual order of everything after it: the stored
+    // name "evil<RLO>gnp.exe" *displays* as "evilexe.png" while the actual
+    // extension is still ".exe" — the classic disguised-executable trick.
+    // Built via String.fromCodePoint (not a literal escape or a literal
+    // character in this source file) so this test file never itself carries
+    // a raw bidi-control character.
+    const rlo = String.fromCodePoint(0x202e);
+    expect(contentDisposition(`evil${rlo}gnp.exe`)).toBe(
+      `attachment; filename="evilgnp.exe"; filename*=UTF-8''evilgnp.exe`,
+    );
+  });
+
+  it("strips the rest of the Bidi_Control code points (LRM/RLM/isolates/embeddings/ALM)", () => {
+    const [lrm, rlm, lri, rli, fsi, pdi, lre, rle, pdf, lro, alm] = [
+      0x200e, 0x200f, 0x2066, 0x2067, 0x2068, 0x2069, 0x202a, 0x202b, 0x202c, 0x202d, 0x061c,
+    ].map((cp) => String.fromCodePoint(cp));
+    const hostile = `1${lrm}2${rlm}3${lri}4${rli}5${fsi}6${pdi}7${lre}8${rle}9${pdf}0${lro}1${alm}2.txt`;
+    expect(contentDisposition(hostile)).toBe(
+      `attachment; filename="123456789012.txt"; filename*=UTF-8''123456789012.txt`,
+    );
+  });
+
+  it("strips a backslash so the quoted-string has no escape sequences", () => {
+    expect(contentDisposition("a\\b.txt")).toBe(
+      `attachment; filename="a_b.txt"; filename*=UTF-8''a%5Cb.txt`,
+    );
+    expect(contentDisposition("C:\\Windows\\evil.exe")).toBe(
+      `attachment; filename="C:_Windows_evil.exe"; filename*=UTF-8''C%3A%5CWindows%5Cevil.exe`,
+    );
+  });
+
+  it("uses the placeholder for an empty name", () => {
+    expect(contentDisposition("")).toBe(
+      `attachment; filename="download"; filename*=UTF-8''download`,
+    );
+  });
+
+  it("percent-encodes the characters encodeURIComponent leaves raw but RFC 5987 forbids", () => {
+    // ' ( ) * are not attr-chars; a raw ' in particular breaks the UTF-8''<value>
+    // delimiter parsing. ! is a legal attr-char and stays raw.
+    expect(contentDisposition("it's (a) *file*!.txt")).toBe(
+      `attachment; filename="it's (a) *file*!.txt"; filename*=UTF-8''it%27s%20%28a%29%20%2Afile%2A!.txt`,
+    );
+  });
+
+  it("truncates an over-long name but keeps the extension", () => {
+    expect(contentDisposition("a".repeat(300) + ".txt")).toBe(
+      `attachment; filename="${"a".repeat(116)}.txt"; filename*=UTF-8''${"a".repeat(116)}.txt`,
+    );
+  });
+
+  it("truncates by code point, never splitting a surrogate pair", () => {
+    const out = contentDisposition("😀".repeat(200) + ".png");
+    expect(out).toBe(
+      `attachment; filename="${"_".repeat(116)}.png"; filename*=UTF-8''${"%F0%9F%98%80".repeat(116)}.png`,
+    );
+    // A split pair would have made encodeURIComponent throw, or emitted U+FFFD.
+    expect(out).not.toContain("%EF%BF%BD");
+  });
+
+  it("drops lone surrogates instead of throwing", () => {
+    expect(contentDisposition("\ud800bad\udfff.txt")).toBe(
+      `attachment; filename="bad.txt"; filename*=UTF-8''bad.txt`,
+    );
+  });
+
+  it("never emits CR, LF, NUL or an unbalanced quote for any of the hostile inputs", () => {
+    const hostile = [
+      "",
+      "\r\n",
+      'a"b',
+      "a;b",
+      "a\r\nSet-Cookie: x=1",
+      "\u0000\u0001\u001f\u007f",
+      "😀".repeat(200),
+      "a".repeat(1000),
+      "\ud800",
+      "../../etc/passwd",
+      "evil" + String.fromCodePoint(0x202e) + "gnp.exe",
+    ];
+    for (const name of hostile) {
+      const out = contentDisposition(name);
+      expect(out).toMatch(
+        /^attachment; filename="[^"\\\r\n\u0000;]+"; filename\*=UTF-8''[!#$&+\-.^_`|~a-zA-Z0-9%]+$/,
+      );
+    }
+  });
+});
