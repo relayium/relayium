@@ -161,14 +161,18 @@ type Service struct {
 	// cookie value, mirroring how adminSessions works (process-local, short TTL).
 	passkeyCeremonies map[string]passkeyCeremony
 	passkeyMu         sync.Mutex
-	pwLogins          *loginThrottle              // per email+IP failed password-login limiter
-	magicRequests     *loginThrottle              // per email+IP magic-link request rate limiter
-	verifyRequests    *loginThrottle              // per email+IP resend-verification limiter
-	resetRequests     *loginThrottle              // per email+IP forgot-password limiter
-	deleteRequests    *loginThrottle              // per user+IP account-deletion-request limiter
-	blobs             storage.BlobStore           // nil until SetBlobStore; stored-transfer disabled when nil
-	resumable         *resumableUploads           // in-memory chunked-upload sessions
-	pairCodeOwner     func(string) (string, bool) // resolves a live code to its owner userID; nil until wired
+	// pendingActions: 步进 token -> 待执行的高危操作。与 passkeyCeremonies 同构
+	// （进程内、一次性、短 TTL、有上限），但多绑一个会话 token —— 见 takePending。
+	pendingActions map[string]pendingAction
+	pendingMu      sync.Mutex
+	pwLogins       *loginThrottle              // per email+IP failed password-login limiter
+	magicRequests  *loginThrottle              // per email+IP magic-link request rate limiter
+	verifyRequests *loginThrottle              // per email+IP resend-verification limiter
+	resetRequests  *loginThrottle              // per email+IP forgot-password limiter
+	deleteRequests *loginThrottle              // per user+IP account-deletion-request limiter
+	blobs          storage.BlobStore           // nil until SetBlobStore; stored-transfer disabled when nil
+	resumable      *resumableUploads           // in-memory chunked-upload sessions
+	pairCodeOwner  func(string) (string, bool) // resolves a live code to its owner userID; nil until wired
 	// clientIP resolves the request's rate-limit key IP. Defaults to the
 	// package clientIP (trusts XFF's left entry — legacy behavior kept so
 	// existing tests are unchanged); main.go injects signal.IPExtractor.IP,
@@ -216,6 +220,7 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 		uploadSem:      newUploadSem(maxConcurrentUploadsPerUser)}
 	svc.adminPasskeyLogins = newLoginThrottle()
 	svc.passkeyCeremonies = map[string]passkeyCeremony{}
+	svc.pendingActions = map[string]pendingAction{}
 	svc.clientIP = clientIP
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
 	svc.exchangeAppleCode = svc.realExchangeAppleCode
