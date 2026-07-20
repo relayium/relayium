@@ -230,6 +230,32 @@ describe("sw-template close 回执", () => {
     expect((await reader.read()).done).toBe(true);
   });
 
+  it("页面发 abort 时流被判废，注册表条目也删掉 —— 否则 reader 永远 pending", async () => {
+    // 页面侧任何放弃（ack 停滞超时、controllerchange、并发误用）都会走 filesink.ts
+    // 的 fail()，它必须在 port.close() 之前发这条 abort。不发的话 SW 这边什么都不
+    // 知道：下面的 reader.read() 永远不 settle，浏览器那份下载吊在一个半截临时文件上。
+    const sw = loadSW();
+    const s = openStream(sw);
+    const res = await sw.fetch({ url: s.url, mode: "navigate" })!;
+    const reader = res.body!.getReader();
+
+    s.page.postMessage({ type: "abort" });
+    await expect(reader.read()).rejects.toThrow(/aborted by page/);
+  });
+
+  it("供流之前就 abort：注册表条目删掉，之后的 GET 拿到 404 而不是一条死流", async () => {
+    // 页面在握手期或 iframe 导航到达之前放弃（open 超时、controllerchange）。
+    // 条目留在注册表里的话，那次导航还是会拿到 200 + 一条永远不出数据的流。
+    const sw = loadSW();
+    const s = openStream(sw);
+    s.page.postMessage({ type: "abort" });
+    // abort 不带回执，没有可轮询的信号；而这里又只能 fetch 一次（第一次 GET 会把
+    // served 置真，之后无论条目在不在都是 404，再轮询就成了假阳性）。所以固定排空
+    // 一批宏任务，让 jsdom 把这条 MessagePort 消息投递完。
+    for (let i = 0; i < 20; i++) await tick();
+    expect((await sw.fetch({ url: s.url, mode: "navigate" })!).status).toBe(404);
+  });
+
   it("enqueue 抛错（流已废）时上报 cancel，绝不静默丢块", async () => {
     // 静默 return 会同时丢掉这一块**和**页面等的 ack：磁盘上少一段，页面永久挂死。
     const sw = loadSW();

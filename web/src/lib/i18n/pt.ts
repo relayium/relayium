@@ -497,6 +497,7 @@ const pt: Messages = {
     noKey: "Link incompleto: a chave de descriptografia (#k=) está faltando.",
     decryptFail: "Falha na descriptografia: chave errada ou arquivo corrompido.",
     netFail: "Download interrompido — verifique sua conexão e tente novamente.",
+    swFail: "Falha ao salvar no disco — tente novamente.",
     cancelled: "Download cancelado. Nada foi salvo — você pode iniciá-lo novamente.",
     retry: "Tentar novamente",
     memWarn: (size) => `Este link soma ${size}. Seu navegador não consegue transmitir o download direto para o disco, então precisa manter o arquivo inteiro na memória — o navegador pode travar.`,

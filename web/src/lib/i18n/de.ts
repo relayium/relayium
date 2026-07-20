@@ -498,6 +498,7 @@ const de: Messages = {
     noKey: "Unvollständiger Link: Der Entschlüsselungsschlüssel (#k=) fehlt.",
     decryptFail: "Entschlüsselung fehlgeschlagen: falscher Schlüssel oder beschädigte Datei.",
     netFail: "Download unterbrochen – bitte Verbindung prüfen und erneut versuchen.",
+    swFail: "Speichern auf die Festplatte unterbrochen – bitte erneut versuchen.",
     cancelled: "Download abgebrochen. Es wurde nichts gespeichert – du kannst ihn erneut starten.",
     retry: "Erneut versuchen",
     memWarn: (size) => `Dieser Link umfasst insgesamt ${size}. Ihr Browser kann einen Download nicht direkt auf die Festplatte streamen und muss die ganze Datei im Speicher halten — der Browser kann abstürzen.`,

@@ -24,6 +24,39 @@ export class SinkCancelledError extends Error {
   }
 }
 
+/**
+ * 把字节交给磁盘这一段出了问题：SW 被回收、部署换版顶掉了它、浏览器一直没来取流。
+ *
+ * 和 SinkCancelledError（用户自己取消）、DownloadNetworkError（取字节的那一段断了）
+ * 并列，三者都**不是**「密钥错误或文件损坏」。分出这个类型只有一个目的：下载页据此
+ * 如实归因并给出重试按钮。把 SW 故障落进 decryptFail 等于告诉用户他的文件坏了，
+ * 而且连重试的入口都不给——数据其实一个字节都没错。
+ */
+export class SinkTransportError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SinkTransportError";
+  }
+}
+
+/**
+ * 目标选择的能力开关。
+ *
+ * `swStream` 就是「允许走 service worker 流式落盘那条分支」，**默认关**，目前只有
+ * 下载页（DownloadPage.svelte）打开。
+ *
+ * 为什么是显式开关而不是「能用就用」：SW sink 的「已 ack」只代表 SW 把这一块塞进了
+ * ReadableStream，**不代表已经落盘**。实时接收路（App.svelte）拿这个 ack 当作
+ * durability 信号回给发送端（`resumable` 与流控 ACK），语义对不上，而且完全没验证过。
+ * 下载页那条路没有对端、没有 durability 承诺，是干净的试验田。
+ *
+ * 开关必须显式传，不能靠「有没有 path」「是不是单文件」这类隐式判别——那种判别会在
+ * 下一次有人改调用方形状时悄悄把实时路也打开。filesink.test.ts 有用例钉住这一点。
+ */
+export interface SaveOptions {
+  swStream?: boolean;
+}
+
 export interface FileMetaLite {
   name: string;
   size: number;
@@ -75,12 +108,14 @@ export const LARGE_DOWNLOAD_WARN_BYTES = 256 * 1024 * 1024; // 256 MiB
  * 多文件走的是目录选择器那条路：拿到目录句柄后每个文件仍是原生流式写入，同样
  * 不吃内存。所以单文件看 showSaveFilePicker（拿不到则回落到目录选择器），
  * 多文件只看 showDirectoryPicker。
+ *
+ * opts 必须和传给 pickSaveTarget 的那一份**一致**，否则这个提前问法就问的是另一条路。
  */
-export function canStreamToDisk(fileCount: number): boolean {
+export function canStreamToDisk(fileCount: number, opts: SaveOptions = {}): boolean {
   const w = window as unknown as SavePickerWindow;
   if (fileCount === 1 && w.showSaveFilePicker) return true;
   if (w.showDirectoryPicker) return true;
-  return fileCount === 1 && swStreamReady();
+  return fileCount === 1 && !!opts.swStream && swStreamReady();
 }
 
 // --- service worker 流式下载 -------------------------------------------------
@@ -93,6 +128,11 @@ export function canStreamToDisk(fileCount: number): boolean {
  */
 let swStreamProbed = false;
 
+/** 上一次 probeStreamSupport 挂的 controllerchange 监听器的摘除函数。
+ *  探测可以被调用多次（启动一次，测试里每条用例一次），不摘旧的就会一次叠一个，
+ *  之后每次换版都触发 N 遍重探。 */
+let swProbeCleanup: (() => void) | null = null;
+
 /**
  * 探测正在控制本页的 SW 认不认识流式路由，结果存进 swStreamProbed。
  * 由 share-target.ts 的 registerServiceWorker 在启动时调用（dev 不注册 SW，
@@ -104,6 +144,8 @@ let swStreamProbed = false;
  */
 export function probeStreamSupport(): void {
   swStreamProbed = false; // 重新探测就重新验证
+  swProbeCleanup?.(); // 摘掉上一轮的 controllerchange，别每次调用都叠一个
+  swProbeCleanup = null;
   const sw = navigator.serviceWorker;
   if (!sw || typeof MessageChannel === "undefined") return;
   const ping = () => {
@@ -116,7 +158,10 @@ export function probeStreamSupport(): void {
     c.postMessage({ type: "stream-probe" }, [ch.port2]);
   };
   // claim 到来（首次访问）或换版都会触发 controllerchange，两种情况都要重探。
-  sw.addEventListener("controllerchange", () => { swStreamProbed = false; ping(); });
+  const onChange = () => { swStreamProbed = false; ping(); };
+  sw.addEventListener("controllerchange", onChange);
+  // 闭包捕获的是**这一次**的 sw 对象，即使之后 navigator.serviceWorker 被换掉也摘得干净。
+  swProbeCleanup = () => sw.removeEventListener("controllerchange", onChange);
   sw.ready.then(ping).catch(() => {});
   ping();
 }
@@ -198,11 +243,18 @@ async function openSwStream(name: string, cd: string): Promise<FileSink> {
     navigator.serviceWorker.removeEventListener("controllerchange", onSwapped);
   };
   const fail = (err: Error): Error => {
+    const first = !failure;
     if (!failure) failure = err;
     const s = settle;
     settle = null;
     stopTimers();
     port.onmessage = null;
+    if (first) {
+      // 必须在 port.close() **之前**通知 SW 放弃这条流。只关端口的话 SW 那边什么都
+      // 不知道：ReadableStream 的 reader.read() 永远 pending，注册表条目一直活着，
+      // 浏览器那份下载吊在一个半截临时文件上，直到 SW 被回收才连带蒸发。
+      try { port.postMessage({ type: "abort" }); } catch { /* 端口已经没了 */ }
+    }
     port.close();
     iframe?.remove(); // 失败时确实要掐断这次导航
     s?.fail(failure);
@@ -210,13 +262,17 @@ async function openSwStream(name: string, cd: string): Promise<FileSink> {
   };
   // 部署换版会顶掉旧 SW，注册表随之蒸发，这条流再也不会有 ack。宁可立刻报错，
   // 也不要让下载永远卡在 99%。
-  const onSwapped = () => fail(new Error("service worker replaced mid-download"));
+  const onSwapped = () => fail(new SinkTransportError("service worker replaced mid-download"));
 
   /**
    * 占住唯一的 settle 槽，等 SW 的一次回执，带**独立的停滞超时**。
    *
    * 每一次等待都要有超时，不只是握手期：SW 被浏览器回收时既不会触发
    * controllerchange 也不会有任何回执，唯一还能让 write()/close() 结束的就是这里。
+   *
+   * 这里所有的失败都用 SinkTransportError：调用方（下载页）据此归因成「传输问题，
+   * 可重试」。并发误用严格说是调用方的 bug 而不是传输故障，但它照样不是「文件损坏」，
+   * 归到可重试那一类比让用户看到「密钥错误或文件损坏」诚实得多。
    *
    * 槽被占着就说明调用方并发调用了 write/close，违反了 FileSink 的串行约定。
    * 这时不排队而是直接把整条流判死（两侧 promise 都 reject）：并发写入的字节序
@@ -225,11 +281,11 @@ async function openSwStream(name: string, cd: string): Promise<FileSink> {
   const awaitReply = (what: string, ms: number): Promise<void> =>
     new Promise<void>((resolve, reject) => {
       if (settle) {
-        reject(fail(new Error(`FileSink misuse: concurrent ${what} — calls must be serialised`)));
+        reject(fail(new SinkTransportError(`FileSink misuse: concurrent ${what} — calls must be serialised`)));
         return;
       }
       const timer = setTimeout(
-        () => fail(new Error(`service worker stopped responding (${what} timed out)`)),
+        () => fail(new SinkTransportError(`service worker stopped responding (${what} timed out)`)),
         ms,
       );
       settle = {
@@ -263,7 +319,7 @@ async function openSwStream(name: string, cd: string): Promise<FileSink> {
   keepalive = setInterval(() => controller.postMessage({ type: "stream-ping" }), STREAM_KEEPALIVE_MS);
 
   serveTimer = setTimeout(
-    () => fail(new Error("the browser never fetched the stream")),
+    () => fail(new SinkTransportError("the browser never fetched the stream")),
     STREAM_SERVE_TIMEOUT_MS,
   );
   iframe = document.createElement("iframe");
@@ -323,8 +379,8 @@ export function memoryPeakBytes(files: FileMetaLite[], totalBytes: number): numb
  * 总量 —— 这样 ZIP 分支的 2× 不需要第二个常量就能被算进去。两个都是没实测过的
  * 估计值，再拆一个只是多一个同样没底的数字。
  */
-export function warnsAboutMemory(files: FileMetaLite[], totalBytes: number): boolean {
-  if (canStreamToDisk(files.length)) return false;
+export function warnsAboutMemory(files: FileMetaLite[], totalBytes: number, opts: SaveOptions = {}): boolean {
+  if (canStreamToDisk(files.length, opts)) return false;
   return memoryPeakBytes(files, totalBytes) > LARGE_DOWNLOAD_WARN_BYTES;
 }
 
@@ -367,9 +423,10 @@ function blobSink(name: string): FileSink {
  *
  * - 1 file + File System Access API → a familiar "Save As" dialog, streamed to disk.
  * - >1 file + API → one directory picker; files stream into the chosen folder.
+ * - 1 file + opts.swStream + a SW that owns this page → streamed to disk via the SW.
  * - No API (Firefox/Safari) → in-memory Blob, downloaded per file on completion.
  */
-export async function pickSaveTarget(files: FileMetaLite[]): Promise<SaveTarget> {
+export async function pickSaveTarget(files: FileMetaLite[], opts: SaveOptions = {}): Promise<SaveTarget> {
   const w = window as unknown as SavePickerWindow;
 
   if (files.length === 1 && w.showSaveFilePicker) {
@@ -443,7 +500,10 @@ export async function pickSaveTarget(files: FileMetaLite[]): Promise<SaveTarget>
   // 只接单文件：SW 流是一条字节流，多文件仍走目录句柄或 ZIP。单文件即使带着
   // 文件夹路径也走这里，落盘就是那个文件本身（丢掉一层只有它自己的目录）——
   // 比为了一个文件打一个 ZIP 更接近用户想要的东西。
-  if (files.length === 1 && swStreamReady()) {
+  //
+  // opts.swStream 是显式开关，只有下载页打开；实时接收路（App.svelte）一律走不到
+  // 这里，理由见 SaveOptions 的注释（ack ≠ 已落盘，与那条路的 durability 语义冲突）。
+  if (files.length === 1 && opts.swStream && swStreamReady()) {
     try {
       const sink = await openSwStream(files[0].name, contentDisposition(files[0].name));
       let used = false;

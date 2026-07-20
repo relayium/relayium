@@ -109,6 +109,9 @@ function stubServiceWorker(o: { controller?: boolean; supports?: boolean } = {})
   };
 }
 
+/** SW 流式落盘的显式开关。只有下载页传它；实时接收路一律不传（默认关）。 */
+const SW_ON = { swStream: true };
+
 /** 让 MessageChannel 的消息真的送到（jsdom 的投递是异步的）。 */
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -190,12 +193,12 @@ describe("canStreamToDisk", () => {
     } finally { restore(); }
   });
 
-  it("SW 就绪时单文件能流式落盘，多文件仍然不能（Firefox/Safari/手机）", async () => {
+  it("SW 就绪 + 显式开关时单文件能流式落盘，多文件仍然不能（Firefox/Safari/手机）", async () => {
     const restore = stubPickers({});
     const s = await readySW();
     try {
-      expect(canStreamToDisk(1)).toBe(true);
-      expect(canStreamToDisk(2)).toBe(false);
+      expect(canStreamToDisk(1, SW_ON)).toBe(true);
+      expect(canStreamToDisk(2, SW_ON)).toBe(false);
     } finally { s.restore(); restore(); }
   });
 
@@ -210,21 +213,37 @@ describe("canStreamToDisk", () => {
           const s = sw ? await readySW() : null;
           try {
             const files = Array.from({ length: count }, (_, i) => ({ name: `f${i}.bin`, size: 1 }));
-            const target = await pickSaveTarget(files);
+            const target = await pickSaveTarget(files, SW_ON);
             const streamed = !memoryLabels.has(target.label);
             expect(streamed, `caps=${JSON.stringify(caps)} sw=${sw} count=${count} label=${target.label}`)
-              .toBe(canStreamToDisk(count));
+              .toBe(canStreamToDisk(count, SW_ON));
           } finally { s?.restore(); restore(); }
         }
       }
     }
   });
 
+  it("不传开关时 SW 分支整条关闭 —— 实时接收路（App.svelte）的行为逐字不变", async () => {
+    // 这条守的是一个刻意的产品裁定，不是实现细节：实时接收路把「已 ack」当作
+    // durability 信号回给发送端，而 SW 的 ack 只代表字节进了 ReadableStream。
+    // 语义对不上，且完全没验证过。第 1 步只想拿到「iOS Safari 行不行」这一个
+    // 干净答案，多一个未测变量就毁了这个目的。
+    const restore = stubPickers({}); // Firefox/Safari/手机：没有 File System Access API
+    const s = await readySW(); // SW 完全就绪 —— 唯一挡住它的只能是那个开关
+    try {
+      expect(canStreamToDisk(1)).toBe(false);
+      const target = await pickSaveTarget([{ name: "a.bin", size: 1 }]);
+      expect(target.label, "没传开关就必须落回既有的内存分支").toBe("将逐个下载到默认下载目录");
+      // 内存提示同样要照旧出现：实时路那条提示不能被 SW 分支悄悄摘掉。
+      expect(warnsAboutMemory(flat([LARGE_DOWNLOAD_WARN_BYTES + 1]), LARGE_DOWNLOAD_WARN_BYTES + 1)).toBe(true);
+    } finally { s.restore(); restore(); }
+  });
+
   it("SW 分支排在目录选择器之后：单文件 + 只有目录选择器仍走既有的目录分支", async () => {
     const restore = stubPickers({ dir: true });
     const s = await readySW();
     try {
-      const target = await pickSaveTarget([{ name: "a.bin", size: 1 }]);
+      const target = await pickSaveTarget([{ name: "a.bin", size: 1 }], SW_ON);
       expect(target.label).toBe("已选择目标文件夹");
     } finally { s.restore(); restore(); }
   });
@@ -271,7 +290,7 @@ describe("memoryPeakBytes", () => {
 async function openSink(name = "a.bin") {
   const restorePickers = stubPickers({});
   const s = await readySW();
-  const target = await pickSaveTarget([{ name, size: 3 }]);
+  const target = await pickSaveTarget([{ name, size: 3 }], SW_ON);
   const sink = await target.file(name, 3);
   return {
     sink,
@@ -460,6 +479,33 @@ describe("swStreamSink", () => {
     } finally { o.restore(); }
   });
 
+  it("放弃这条流时先给 SW 发 abort，再关端口 —— 否则 SW 侧的流被遗弃", async () => {
+    // 只 port.close() 的话 SW 那边什么都不知道：reader.read() 永远 pending，
+    // 注册表条目一直活着，浏览器那份下载吊在一个半截临时文件上。
+    // abort 到了 SW 会发生什么由 sw-template.test.ts 真跑那份脚本验证。
+    const o = await openSink();
+    try {
+      const seen: string[] = [];
+      o.swPort.onmessage = (e) => seen.push((e.data as { type: string }).type);
+      o.fire("controllerchange"); // 页面侧放弃的一种：部署换版顶掉了 SW
+      await until(() => seen.includes("abort"));
+      expect(seen, "fail() 必须在 port.close() 之前发 abort").toContain("abort");
+    } finally { o.restore(); }
+  });
+
+  it("重复放弃只发一次 abort（端口已关，再发就是抛异常）", async () => {
+    const o = await openSink();
+    try {
+      const seen: string[] = [];
+      o.swPort.onmessage = (e) => seen.push((e.data as { type: string }).type);
+      o.fire("controllerchange");
+      o.fire("controllerchange");
+      await until(() => seen.includes("abort"));
+      await tick();
+      expect(seen.filter((t) => t === "abort").length).toBe(1);
+    } finally { o.restore(); }
+  });
+
   it("单文件目标只能取一次 sink", async () => {
     const o = await openSink();
     try {
@@ -485,6 +531,17 @@ describe("warnsAboutMemory", () => {
       expect(warnsAboutMemory(flat([256 * 1024 * 1024]), 256 * 1024 * 1024)).toBe(false);
       expect(warnsAboutMemory(flat([256 * 1024 * 1024 + 1]), 256 * 1024 * 1024 + 1)).toBe(true);
     } finally { restore(); }
+  });
+
+  it("SW 就绪 + 开关打开：单文件多大都不提示（这一步的用户可见效果）", async () => {
+    const restore = stubPickers({}); // Firefox/Safari/手机
+    const s = await readySW();
+    try {
+      const big = 10 * LARGE_DOWNLOAD_WARN_BYTES;
+      expect(warnsAboutMemory(flat([big]), big, SW_ON), "SW 能流式落盘就不该再吓唬用户").toBe(false);
+      // 多文件 SW 接不了，提示照旧。
+      expect(warnsAboutMemory(flat([big, big]), 2 * big, SW_ON)).toBe(true);
+    } finally { s.restore(); restore(); }
   });
 
   it("无流式落盘能力 + 文件夹：峰值 2×，所以一半的量就越线", () => {

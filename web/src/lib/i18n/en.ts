@@ -511,6 +511,7 @@ const en: Messages = {
     noKey: "Incomplete link: the decryption key (#k=) is missing.",
     decryptFail: "Decryption failed: wrong key or corrupted file.",
     netFail: "Download interrupted — check your connection and try again.",
+    swFail: "Saving to disk was interrupted — please try again.",
     cancelled: "Download cancelled. Nothing was saved — you can start it again.",
     retry: "Retry",
     memWarn: (size) => `This link is ${size} in total. Your browser can’t stream a download straight to disk, so it has to hold the whole file in memory — the browser may crash.`,
