@@ -253,3 +253,186 @@ func TestMeUsagePlanTrafficBytesIsNominalNotProrated(t *testing.T) {
 			"can't tell nominal from prorated with this fixture", body.Traffic.Cap)
 	}
 }
+
+// isTop 必须 fail-closed：枚举不到 plans（ListPlans 出错，或 plans 表为空）时
+// 判 false，而不是 true。方向写反的代价极不对称——恒 true 会让**所有**用户的
+// 会员卡都显示"已是最高档"、升级入口全站消失且无人察觉。
+//
+// 这里走"空 plans 表"这条路径：newBillingServer 本来就不播种 plans，是天然的
+// 空表场景（也正是 ListPlans 成功但无从判断档位高低的情形）。此时 GetPlan 查不
+// 到用户的 free 档，handler 回落到 freePlanFallback()，依旧不得宣称最高档。
+func TestMeUsageIsTopFailsClosedWithoutPlans(t *testing.T) {
+	ts, _, store, mail := newBillingServer(t)
+	cookie := loginCookie(t, ts, mail, "noplans@b.c")
+
+	// 自检：这条用例的前提是 plans 表确实是空的。若将来 newBillingServer 改成
+	// 自带种子数据，这里会立刻报错，而不是悄悄退化成一条测不到东西的用例。
+	plans, err := store.ListPlans(t.Context())
+	if err != nil {
+		t.Fatalf("ListPlans: %v", err)
+	}
+	if len(plans) != 0 {
+		t.Fatalf("fixture seeds %d plans; this case needs an empty plans table to exercise the fail-closed path", len(plans))
+	}
+
+	req, _ := http.NewRequest("GET", ts.URL+"/api/me/usage", nil)
+	req.AddCookie(cookie)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", res.StatusCode)
+	}
+	var body struct {
+		Plan struct {
+			IsTop bool `json:"isTop"`
+		} `json:"plan"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Plan.IsTop {
+		t.Fatalf("plan.isTop = true with no plans enumerable; a DB hiccup would tell every user (free ones included) they are already on the top tier and hide the upgrade CTA site-wide")
+	}
+}
+
+// subscriptionStatus/subscriptionEnd 是 Task 6/8 用来渲染"订阅状态 + 到期日"的
+// 两个字段。之前所有用例里的用户在这两个字段上都恰好是零值，把实现硬编码成
+// ""/0 也全绿——字段接错源（例如误接 u.PlanSource）不会有任何报警。这条用例给
+// 用户写入非零、彼此不同、且与响应里其它数值都不相同的订阅数据，钉死透传。
+func TestMeUsagePassesThroughSubscriptionFields(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	cookie := loginCookie(t, ts, mail, "sub@b.c")
+	mustPlan(t, store, Plan{
+		ID: "pro", Name: "Pro", Active: true, SortOrder: 10,
+		StorageBytes: 500 << 20, TrafficBytes: 500 << 20, RetentionSecs: 30 * 86400,
+		PriceMonthly: 900,
+	})
+
+	u, ok, err := store.UserByCanonicalEmail(t.Context(), "sub@b.c")
+	if err != nil || !ok {
+		t.Fatalf("lookup user: %v ok=%v", err, ok)
+	}
+	// 走 Stripe webhook 的落库路径（plan_id + subscription_status +
+	// subscription_end + plan_source 一次写全），而不是直接写 SQL。
+	//
+	// wantStatus 刻意选 "past_due" 而不是常见的 "active"：它同时不等于 plan.id
+	// ("pro")、plan.name ("Pro") 和 plan_source ("stripe")，所以实现若把
+	// subscriptionStatus 接到别的字符串字段上，断言必然失败。
+	// wantEnd 选 1234567891——见下面的碰撞自检。
+	const wantStatus = "past_due"
+	const wantEnd int64 = 1234567891
+	if err := store.SetUserSubscription(t.Context(), u.ID, "pro", wantStatus, wantEnd, "stripe", svc.now().Unix()); err != nil {
+		t.Fatalf("SetUserSubscription: %v", err)
+	}
+
+	req, _ := http.NewRequest("GET", ts.URL+"/api/me/usage", nil)
+	req.AddCookie(cookie)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", res.StatusCode)
+	}
+	var body struct {
+		ResetsAt int64                     `json:"resetsAt"`
+		Traffic  struct{ Used, Cap int64 } `json:"traffic"`
+		Storage  struct{ Used, Cap int64 } `json:"storage"`
+		Plan     struct {
+			ID                 string `json:"id"`
+			Name               string `json:"name"`
+			StorageBytes       int64  `json:"storageBytes"`
+			TrafficBytes       int64  `json:"trafficBytes"`
+			RetentionSecs      int64  `json:"retentionSecs"`
+			PriceMonthly       int64  `json:"priceMonthly"`
+			SubscriptionStatus string `json:"subscriptionStatus"`
+			SubscriptionEnd    int64  `json:"subscriptionEnd"`
+		} `json:"plan"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Plan.SubscriptionStatus != wantStatus {
+		t.Fatalf("plan.subscriptionStatus = %q, want %q", body.Plan.SubscriptionStatus, wantStatus)
+	}
+	if body.Plan.SubscriptionEnd != wantEnd {
+		t.Fatalf("plan.subscriptionEnd = %d, want %d", body.Plan.SubscriptionEnd, wantEnd)
+	}
+	// 碰撞自检：上面两条断言只有在 wantEnd 不与响应里任何**其它**数值相等时才
+	// 真正证明"接对了源"。把这个前提显式验证掉，否则将来某个字段偶然变成同一个
+	// 数，断言就会被别人满足而失去鉴别力。
+	others := map[string]int64{
+		"resetsAt":           body.ResetsAt,
+		"traffic.used":       body.Traffic.Used,
+		"traffic.cap":        body.Traffic.Cap,
+		"storage.used":       body.Storage.Used,
+		"storage.cap":        body.Storage.Cap,
+		"plan.storageBytes":  body.Plan.StorageBytes,
+		"plan.trafficBytes":  body.Plan.TrafficBytes,
+		"plan.retentionSecs": body.Plan.RetentionSecs,
+		"plan.priceMonthly":  body.Plan.PriceMonthly,
+	}
+	for name, v := range others {
+		if v == wantEnd {
+			t.Fatalf("subscriptionEnd fixture %d collides with %s; pick a different value or the assertion could be satisfied by the wrong source field", wantEnd, name)
+		}
+	}
+	if body.Plan.ID == wantStatus || body.Plan.Name == wantStatus {
+		t.Fatalf("subscriptionStatus fixture %q collides with plan.id/%q or plan.name/%q", wantStatus, body.Plan.ID, body.Plan.Name)
+	}
+}
+
+// nonNegCap 的规约：档位里用负数表示"无限"（包内内部约定），对外一律规约成 0，
+// 前端只判断一个值。没有这条用例，把 nonNegCap 改成直接返回原值不会有任何测试
+// 报警，前端会拿到负数并把它当成一个真实的（负的）额度渲染。
+func TestMeUsageNegativePlanCapsNormalizeToZero(t *testing.T) {
+	ts, _, store, mail := newBillingServer(t)
+	cookie := loginCookie(t, ts, mail, "unlimited@b.c")
+	mustPlan(t, store, Plan{
+		ID: "unlimited", Name: "Unlimited", Active: true, SortOrder: 99,
+		StorageBytes: -1, TrafficBytes: -1, RetentionSecs: -1,
+		PriceMonthly: 9900,
+	})
+
+	u, ok, err := store.UserByCanonicalEmail(t.Context(), "unlimited@b.c")
+	if err != nil || !ok {
+		t.Fatalf("lookup user: %v ok=%v", err, ok)
+	}
+	if err := store.SetUserPlanAdmin(t.Context(), u.ID, "unlimited", 1); err != nil {
+		t.Fatalf("SetUserPlanAdmin: %v", err)
+	}
+
+	req, _ := http.NewRequest("GET", ts.URL+"/api/me/usage", nil)
+	req.AddCookie(cookie)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", res.StatusCode)
+	}
+	var body struct {
+		Plan struct {
+			StorageBytes  int64 `json:"storageBytes"`
+			TrafficBytes  int64 `json:"trafficBytes"`
+			RetentionSecs int64 `json:"retentionSecs"`
+		} `json:"plan"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Plan.TrafficBytes != 0 {
+		t.Fatalf("plan.trafficBytes = %d, want 0 (negative means unlimited internally; the wire contract is 0)", body.Plan.TrafficBytes)
+	}
+	if body.Plan.RetentionSecs != 0 {
+		t.Fatalf("plan.retentionSecs = %d, want 0 (negative means unlimited internally; the wire contract is 0)", body.Plan.RetentionSecs)
+	}
+	if body.Plan.StorageBytes != 0 {
+		t.Fatalf("plan.storageBytes = %d, want 0 (negative means unlimited internally; the wire contract is 0)", body.Plan.StorageBytes)
+	}
+}
