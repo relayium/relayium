@@ -30,7 +30,11 @@ func TestICEWithholdsFleetNodeOverTrafficLimit(t *testing.T) {
 
 	// capped: limit 1 GiB, already used 2 GiB this period -> withheld.
 	// under:  limit 1 GiB, used 0 -> offered.
-	// nolimit: limit 0 (unlimited) -> offered.
+	// nolimit: limit 0 -> inherits Settings.NodeTrafficDefault (resolveNodeTrafficLimit).
+	// This test's Service is built with no NodeTrafficDefault set in Config and no
+	// SettingNodeTrafficDefault row in the store, so that default resolves to 0
+	// too, and 0 still means "unlimited" end-to-end (usableTraffic/resolveNodeTrafficLimit
+	// both treat <=0 as no cap) -> offered.
 	st.UpsertNode(ctx, Node{OwnerType: "fleet", ID: "capped", URLs: []string{"turn:1.1.1.1:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: now.Unix(), TrafficLimitBytes: 1 << 30})
 	st.UpsertNode(ctx, Node{OwnerType: "fleet", ID: "under", URLs: []string{"turn:2.2.2.2:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: now.Unix(), TrafficLimitBytes: 1 << 30})
 	st.UpsertNode(ctx, Node{OwnerType: "fleet", ID: "nolimit", URLs: []string{"turn:3.3.3.3:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: now.Unix()})
