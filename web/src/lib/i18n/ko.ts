@@ -26,6 +26,8 @@ const ko: Messages = {
   sendFolder: "폴더 보내기",
   accept: "받기",
   decline: "거부",
+  recvMemWarn: (s) => `이 파일들은 총 ${s}입니다. 사용 중인 브라우저는 디스크로 바로 스트리밍하지 못해 전체를 메모리에 담아야 하므로 브라우저가 다운될 수 있습니다. 컴퓨터의 Chrome 또는 Edge에서 받으면 디스크로 바로 스트리밍합니다.`,
+  recvMemWarnAccept: "그래도 받기",
   sendTo: (n) => `보내기 → ${n}`,
   recvFrom: (n) => `받기 ← ${n}`,
   fileCounter: (i, n) => `파일 ${i}/${n}`,
@@ -476,6 +478,7 @@ const ko: Messages = {
     errTooLarge: "파일이 단일 파일 크기 한도를 초과했습니다.",
     errQuota: "오늘 업로드 한도를 초과했습니다. 나중에 다시 시도하세요.",
     errUpload: "업로드에 실패했습니다. 다시 시도하세요.",
+    bigNote: "파일이 큽니다: 받는 사람이 휴대폰에서, 또는 Firefox나 Safari로 링크를 열면 브라우저가 파일 전체를 메모리에 담아야 해서 다운로드가 실패할 수 있습니다. 컴퓨터의 Chrome/Edge나 명령줄 도구를 권해 주세요.",
   },
   download: {
     loading: "링크를 읽는 중…",
@@ -495,6 +498,9 @@ const ko: Messages = {
     decryptFail: "복호화 실패: 키가 틀리거나 파일이 손상되었습니다.",
     netFail: "다운로드가 중단되었습니다. 연결을 확인한 후 다시 시도하세요.",
     retry: "다시 시도",
+    memWarn: (size) => `이 링크는 총 ${size}입니다. 사용 중인 브라우저는 디스크로 바로 스트리밍하지 못해 파일 전체를 메모리에 담아야 하므로 브라우저가 다운될 수 있습니다.`,
+    memWarnHow: "컴퓨터의 Chrome 또는 Edge에서 이 링크를 열거나 명령줄 도구로 받으세요——둘 다 디스크로 바로 스트리밍합니다.",
+    memWarnContinue: "그래도 다운로드",
     unsupported: "복호화 다운로드에는 HTTPS(또는 localhost)가 필요합니다.",
   },
   features: {

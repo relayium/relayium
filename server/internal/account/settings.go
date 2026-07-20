@@ -166,9 +166,23 @@ func clampTTL(req int64, st Settings) int64 {
 	return req
 }
 
-// SeedSettings writes the Config defaults into the settings table for any of the
-// four keys not already present, so the admin form shows live values. Existing
-// (admin-set) values are left untouched.
+// SeedSettings writes the Config (flag/env) defaults into the settings table
+// for any admin-editable key not already present, so the admin form shows
+// live values and so the flag/env value only ever governs the *first* boot.
+// Existing (admin-set) values are left untouched — once a key has a DB row,
+// settingOr prefers it forever and the corresponding flag/env var stops
+// having any effect.
+//
+// The rule is one rule with no exceptions: command-line flag / env var =
+// the initial value at first deploy; after that, the admin backend always
+// wins. Every key in this package's Settings struct MUST have an entry
+// below, seeded from its Config counterpart — a key missing from this slice
+// silently breaks the rule for that one setting only, leaving its flag live
+// forever while all its siblings are pinned by their seeded DB row (see
+// SettingNodeTrafficDefault's bug history and
+// TestSeedSettingsIncludesNodeTrafficDefault). When you add setting #13,
+// add its row here too, and add both a "seeds to Config default" test and a
+// "existing value survives SeedSettings" test for it.
 func (s *Service) SeedSettings(ctx context.Context) error {
 	defaults := []struct {
 		key string
@@ -185,6 +199,7 @@ func (s *Service) SeedSettings(ctx context.Context) error {
 		{SettingAccountReminderDays, s.cfg.AccountReminderDays},
 		{SettingStorageDiskCap, s.cfg.StorageDiskCap},
 		{SettingDisableCentralFallback, 0}, // default off: central fallback allowed
+		{SettingNodeTrafficDefault, s.cfg.NodeTrafficDefault},
 	}
 	now := s.now().Unix()
 	for _, d := range defaults {

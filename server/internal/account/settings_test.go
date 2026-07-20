@@ -18,6 +18,7 @@ func newSettingsService(t *testing.T) (*Service, *SQLiteStore) {
 		DefaultRetention:    retentionTTL, // keep this suite's uploads unlimited-until-TTL, not burn
 		DefaultMaxDownloads: 5,
 		MaxMaxDownloads:     100,
+		NodeTrafficDefault:  300 << 30, // distinct nonzero value so seeding is verifiable
 	})
 	svc.now = func() time.Time { return time.Unix(1000, 0) }
 	return svc, store
@@ -69,8 +70,8 @@ func TestSeedSettingsInsertsDefaultsOnceAndKeepsExisting(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	all, _ := store.ListSettings(ctx)
-	if len(all) != 11 {
-		t.Fatalf("want 11 settings seeded, got %d (%+v)", len(all), all)
+	if len(all) != 12 {
+		t.Fatalf("want 12 settings seeded, got %d (%+v)", len(all), all)
 	}
 	if v, _, _ := store.GetSetting(ctx, SettingDefaultRetention); v != retentionTTL {
 		t.Fatalf("seed default_retention = %d, want %d", v, int64(retentionTTL))
@@ -86,5 +87,43 @@ func TestSeedSettingsInsertsDefaultsOnceAndKeepsExisting(t *testing.T) {
 	}
 	if v, _, _ := store.GetSetting(ctx, SettingMaxFileSize); v != 50<<20 {
 		t.Fatalf("seed max_file_size = %d, want default", v)
+	}
+}
+
+// TestSeedSettingsIncludesNodeTrafficDefault guards against the regression
+// where node_traffic_default was the one setting (of twelve) missing from
+// SeedSettings' defaults slice: its flag/env value stayed live forever
+// because it never got pinned into the DB on first boot like the others.
+func TestSeedSettingsIncludesNodeTrafficDefault(t *testing.T) {
+	svc, store := newSettingsService(t)
+	ctx := context.Background()
+	if err := svc.SeedSettings(ctx); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	v, ok, err := store.GetSetting(ctx, SettingNodeTrafficDefault)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if !ok {
+		t.Fatalf("node_traffic_default not seeded")
+	}
+	if v != svc.cfg.NodeTrafficDefault {
+		t.Fatalf("seed node_traffic_default = %d, want %d", v, svc.cfg.NodeTrafficDefault)
+	}
+}
+
+// TestSeedSettingsKeepsExistingNodeTrafficDefault asserts node_traffic_default
+// obeys the same "existing value wins" semantics as every other seeded key:
+// an admin-set value already in the DB must survive a SeedSettings call
+// unchanged, not get clobbered back to the Config/env default.
+func TestSeedSettingsKeepsExistingNodeTrafficDefault(t *testing.T) {
+	svc, store := newSettingsService(t)
+	ctx := context.Background()
+	_ = store.SetSetting(ctx, SettingNodeTrafficDefault, 999, 1) // pre-existing admin override
+	if err := svc.SeedSettings(ctx); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if v, _, _ := store.GetSetting(ctx, SettingNodeTrafficDefault); v != 999 {
+		t.Fatalf("seed overwrote existing node_traffic_default = %d, want 999", v)
 	}
 }

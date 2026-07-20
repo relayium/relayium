@@ -61,3 +61,62 @@ func TestUsableBytes(t *testing.T) {
 		})
 	}
 }
+
+// 整卷保留（volumeReserveDen）在 SQL 里出现两处 —— StorageNodes（车队节点）与
+// UserStorageNodes（用户自带节点）。这两个测试把边界钉死在 1/volumeReserveDen
+// 上：剩余正好等于总量的 1/den 时过闸，略低于就被整台排除。把常量从 5 改成别
+// 的值，两边都会红 —— 这正是「这两处 SQL 真的在用那个常量」的证明。
+func TestStorageNodesVolumeReserveBoundary(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	const now = 10000
+	const gib = int64(1) << 30
+
+	// 剩余正好 1/5 = 20% 的总量：SQL 是 >=，所以刚好过闸。
+	// den=4 时 22×4 = 88 < 100，这台会掉出池子。
+	st.UpsertNode(ctx, Node{OwnerType: "fleet", ID: "atreserve", URLs: []string{"turn:1.1.1.1:3478"}, TURNSecret: "s",
+		CreatedAt: 1, LastSeenAt: now, StorageEnabled: true,
+		StorageTotal: 100 * gib, StorageFree: 22 * gib})
+	// 剩余 18%：低于保留线，任何 den <= 5 都排除它。钉住「这道闸确实存在」。
+	st.UpsertNode(ctx, Node{OwnerType: "fleet", ID: "belowreserve", URLs: []string{"turn:2.2.2.2:3478"}, TURNSecret: "s",
+		CreatedAt: 1, LastSeenAt: now, StorageEnabled: true,
+		StorageTotal: 100 * gib, StorageFree: 18 * gib})
+
+	nodes, err := st.StorageNodes(ctx, now-1, 1*gib)
+	if err != nil {
+		t.Fatalf("StorageNodes: %v", err)
+	}
+	if len(nodes) != 1 || nodes[0].ID != "atreserve" {
+		var ids []string
+		for _, n := range nodes {
+			ids = append(ids, n.ID)
+		}
+		t.Fatalf("StorageNodes returned %v, want exactly [atreserve]: 22/100 GiB is at the 1/%d volume reserve and must pass, 18/100 GiB is under it and must be excluded", ids, volumeReserveDen)
+	}
+}
+
+func TestUserStorageNodesVolumeReserveBoundary(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	const now = 10000
+	const gib = int64(1) << 30
+
+	st.UpsertNode(ctx, Node{OwnerType: "user", OwnerUserID: "u1", ID: "atreserve", URLs: []string{"turn:1.1.1.1:3478"}, TURNSecret: "s",
+		CreatedAt: 1, LastSeenAt: now, StorageEnabled: true,
+		StorageTotal: 100 * gib, StorageFree: 22 * gib})
+	st.UpsertNode(ctx, Node{OwnerType: "user", OwnerUserID: "u1", ID: "belowreserve", URLs: []string{"turn:2.2.2.2:3478"}, TURNSecret: "s",
+		CreatedAt: 1, LastSeenAt: now, StorageEnabled: true,
+		StorageTotal: 100 * gib, StorageFree: 18 * gib})
+
+	nodes, err := st.UserStorageNodes(ctx, "u1", now-1, 1*gib)
+	if err != nil {
+		t.Fatalf("UserStorageNodes: %v", err)
+	}
+	if len(nodes) != 1 || nodes[0].ID != "atreserve" {
+		var ids []string
+		for _, n := range nodes {
+			ids = append(ids, n.ID)
+		}
+		t.Fatalf("UserStorageNodes returned %v, want exactly [atreserve]: 22/100 GiB is at the 1/%d volume reserve and must pass, 18/100 GiB is under it and must be excluded", ids, volumeReserveDen)
+	}
+}

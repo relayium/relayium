@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { fetchMeta, downloadBlob, parseDownloadKey, keyFromFragment, DownloadNetworkError } from "./stored-file";
   import { decryptManifest, type StoredManifest } from "./store-crypto";
-  import { pickSaveTarget, type SaveTarget, type FileSink } from "./filesink";
+  import { pickSaveTarget, canStreamToDisk, LARGE_DOWNLOAD_WARN_BYTES, type SaveTarget, type FileSink } from "./filesink";
   import { lang, setLang, LANGS, messages, legalUrl, type Lang, type Messages } from "./i18n.svelte";
   import ThemeSelect from "./ThemeSelect.svelte";
   import { formatRemaining, formatSize } from "./format";
@@ -56,8 +56,29 @@
   // template so it can't interrupt an in-flight download.
   const expired = $derived(expiresAt > 0 && secLeft <= 0);
 
+  // 内存提示已经显示，等用户决定继续还是换个浏览器。
+  let memWarn = $state(false);
+
   async function download() {
+    await startDownload(false);
+  }
+
+  /**
+   * 下载页是唯一同时知道「总共多大」和「这个浏览器能不能流式落盘」的地方，
+   * 而且这两件事在下载开始之前就已经知道。没有流式能力（Firefox/Safari/所有
+   * 手机浏览器）时整个文件必须先攒进内存，接收方却从来没参与决定文件多大 ——
+   * 所以在按下下载之后、真正取字节之前先说一声。
+   *
+   * 这是提示不是硬拦：桌面 Firefox 上内存管够的用户比我们更清楚自己的情况，
+   * 给一个明确的「仍要下载」（force=true）。默认不继续。
+   */
+  async function startDownload(force: boolean) {
     if (!manifest || !key) return;
+    if (!force && !canStreamToDisk(manifest.files.length) && totalBytes > LARGE_DOWNLOAD_WARN_BYTES) {
+      memWarn = true;
+      return; // 一个字节都还没取
+    }
+    memWarn = false;
     let target: SaveTarget;
     try {
       target = await pickSaveTarget(manifest.files.map((f) => ({ name: f.name, size: f.size })));
@@ -160,6 +181,12 @@
       <p aria-live="polite">{t.download.downloading} {progress}%</p>
     {:else if pageState === "done"}
       <p class="ok">{t.download.done}</p>
+    {:else if memWarn}
+      <div class="memwarn" role="alert">
+        <p>{t.download.memWarn(formatSize(totalBytes))}</p>
+        <p class="how">{t.download.memWarnHow}</p>
+        <button class="btn btn-ghost" onclick={() => startDownload(true)}>{t.download.memWarnContinue}</button>
+      </div>
     {:else}
       <button class="btn btn-primary" onclick={download}>{t.download.downloadBtn}</button>
     {/if}
@@ -218,6 +245,14 @@
     margin: 0 0 var(--space-4); padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm);
     background: var(--code-bg); border: 1px solid var(--accent-border);
   }
+
+  .memwarn {
+    font-size: var(--fs-xs); line-height: 1.55; color: var(--text-h);
+    margin: 0 0 var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm);
+    background: var(--code-bg); border: 1px solid var(--danger);
+  }
+  .memwarn p { margin: 0 0 var(--space-2); }
+  .memwarn .how { color: var(--text); }
 
   .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; }
   .fill {

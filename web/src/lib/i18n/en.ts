@@ -26,6 +26,8 @@ const en: Messages = {
   sendFolder: "Send a folder",
   accept: "Accept",
   decline: "Decline",
+  recvMemWarn: (s) => `These files add up to ${s}. Your browser can’t stream to disk, so it has to hold the whole batch in memory — the browser may crash. Receive them in Chrome or Edge on a computer to stream straight to disk.`,
+  recvMemWarnAccept: "Accept anyway",
   sendTo: (n) => `Send → ${n}`,
   recvFrom: (n) => `Receive ← ${n}`,
   fileCounter: (i, n) => `File ${i}/${n}`,
@@ -490,6 +492,7 @@ const en: Messages = {
     errTooLarge: "The file exceeds the single-file size limit.",
     errQuota: "You've exceeded today's upload quota — please try again later.",
     errUpload: "Upload failed, please try again.",
+    bigNote: "These files are large: if the recipient opens the link on a phone, or in Firefox or Safari, the browser has to hold the whole file in memory and the download may fail. Suggest Chrome/Edge on a computer, or the command-line tool.",
   },
   download: {
     loading: "Reading the link…",
@@ -509,6 +512,9 @@ const en: Messages = {
     decryptFail: "Decryption failed: wrong key or corrupted file.",
     netFail: "Download interrupted — check your connection and try again.",
     retry: "Retry",
+    memWarn: (size) => `This link is ${size} in total. Your browser can’t stream a download straight to disk, so it has to hold the whole file in memory — the browser may crash.`,
+    memWarnHow: "Open this link in Chrome or Edge on a computer, or fetch it with the command-line tool — both stream straight to disk.",
+    memWarnContinue: "Download anyway",
     unsupported: "Decryption requires HTTPS (or localhost).",
   },
   features: {

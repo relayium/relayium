@@ -275,7 +275,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 </form>
 
 <table>
-<thead><tr><th>备注 / ID</th><th>IP</th><th>区域</th><th>状态</th><th>中继(本月/累计) / 上限</th><th>存储 / 硬盘上限</th><th>盘 剩余/总量</th><th>可存储(70%)</th><th>版本</th><th>备注名 · 限额(GB)</th><th></th></tr></thead>
+<thead><tr><th>备注 / ID</th><th>IP</th><th>区域</th><th>状态</th><th>中继(本月/累计) / 上限</th><th>存储 / 硬盘上限</th><th>盘 剩余/总量</th><th>可存储</th><th>版本</th><th>备注名 · 限额(GB)</th><th></th></tr></thead>
 <tbody>
 {{range .Nodes}}{{if eq .OwnerType "fleet"}}
 <tr>
@@ -286,7 +286,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <td>{{bytes .MonthRelayedBytes}} / {{bytes .RelayedBytes}} / {{if .EffectiveTrafficLimitBytes}}{{bytes .EffectiveTrafficLimitBytes}}{{else}}∞{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StoredBytes}}{{else}}—{{end}} / {{if .DiskLimitBytes}}{{bytes .DiskLimitBytes}}{{else}}∞{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StorageFree}} / {{bytes .StorageTotal}}{{else}}—{{end}}</td>
-<td>{{if .StorageEnabled}}{{bytes .UsableBytes}}{{else}}—{{end}}</td>
+<td>{{if .StorageEnabled}}{{bytes .StorableBytes}}{{else}}—{{end}}</td>
 <td>{{.Version}}</td>
 <td>
 <form method="post" action="/admin/nodes/{{.ID}}/label" class="lim">

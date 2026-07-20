@@ -26,6 +26,8 @@ const pt: Messages = {
   sendFolder: "Enviar uma pasta",
   accept: "Aceitar",
   decline: "Recusar",
+  recvMemWarn: (s) => `Estes arquivos somam ${s}. Seu navegador não consegue transmitir direto para o disco, então precisa manter o lote inteiro na memória — o navegador pode travar. Aceite no Chrome ou Edge em um computador para transmitir direto para o disco.`,
+  recvMemWarnAccept: "Aceitar mesmo assim",
   sendTo: (n) => `Enviar → ${n}`,
   recvFrom: (n) => `Receber ← ${n}`,
   fileCounter: (i, n) => `Arquivo ${i}/${n}`,
@@ -476,6 +478,7 @@ const pt: Messages = {
     errTooLarge: "O arquivo excede o limite de tamanho por arquivo.",
     errQuota: "Você excedeu a cota de envio de hoje — tente novamente mais tarde.",
     errUpload: "Falha no envio, tente novamente.",
+    bigNote: "Estes arquivos são grandes: se quem recebe abrir o link no celular, ou no Firefox ou Safari, o navegador precisa manter o arquivo inteiro na memória e o download pode falhar. Recomende o Chrome/Edge em um computador, ou a ferramenta de linha de comando.",
   },
   download: {
     loading: "Lendo o link…",
@@ -495,6 +498,9 @@ const pt: Messages = {
     decryptFail: "Falha na descriptografia: chave errada ou arquivo corrompido.",
     netFail: "Download interrompido — verifique sua conexão e tente novamente.",
     retry: "Tentar novamente",
+    memWarn: (size) => `Este link soma ${size}. Seu navegador não consegue transmitir o download direto para o disco, então precisa manter o arquivo inteiro na memória — o navegador pode travar.`,
+    memWarnHow: "Abra este link no Chrome ou Edge em um computador, ou baixe com a ferramenta de linha de comando — os dois transmitem direto para o disco.",
+    memWarnContinue: "Baixar mesmo assim",
     unsupported: "A descriptografia exige HTTPS (ou localhost).",
   },
   features: {

@@ -44,19 +44,15 @@ type adminNodeView struct {
 	StorageEnabled    bool
 	StorageTotal      int64
 	StorageFree       int64
-	// UsableBytes is the headroom term of the placement filter alone: 70% of
-	// StorageFree, leaving a 30% cushion so a node is never driven right up
-	// to its disk. Same storageHeadroomNum/storageHeadroomDen ratio used by
-	// SQLiteStore.StorageNodes, via usableBytes.
+	// StorableBytes is what placement will actually offer on this node right
+	// now: the minimum of all three conditions in SQLiteStore.StorageNodes,
+	// and 0 when any of them excludes the node outright. See storableBytes.
 	//
-	// It is NOT "what placement will actually offer". StorageNodes gates on
-	// two further conditions this column does not reflect — the disk-limit
-	// remainder (disk_limit_bytes - stored_bytes) and the 80%-full reserve
-	// (storage_free*5 >= storage_total) — either of which can rule out a node
-	// that shows a non-zero figure here. A volume already 90% full is not a
-	// placement candidate at all, yet still renders usable capacity in this
-	// column. Purely derived; not stored and not reported by the node.
-	UsableBytes       int64
+	// It used to be the 70% headroom term alone, which lied: a 100 GB volume
+	// with 8 GB left advertised 5.6 GB while the volume reserve had already
+	// dropped it out of the placement pool entirely. Purely derived; not
+	// stored and not reported by the node.
+	StorableBytes     int64
 	TrafficLimitBytes int64
 	// EffectiveTrafficLimitBytes 是这台节点真正生效的月度上限：节点自己配的值，
 	// 或（为 0 时）全局默认。直接显示 TrafficLimitBytes 会让继承默认的节点显示
@@ -80,7 +76,7 @@ func nodeViews(nodes []Node, monthly map[string]int64, now time.Time, st Setting
 			StorageEnabled:             n.StorageEnabled,
 			StorageTotal:               n.StorageTotal,
 			StorageFree:                n.StorageFree,
-			UsableBytes:                usableBytes(n.StorageFree),
+			StorableBytes:              storableBytes(n),
 			TrafficLimitBytes:          n.TrafficLimitBytes,
 			EffectiveTrafficLimitBytes: resolveNodeTrafficLimit(n, st),
 			DiskLimitBytes:             n.DiskLimitBytes,
@@ -88,6 +84,46 @@ func nodeViews(nodes []Node, monthly map[string]int64, now time.Time, st Setting
 		})
 	}
 	return out
+}
+
+// storableBytes 是这台节点的**容量**上还能接收多少字节——放置过滤的三道容量闸
+// 取最小值，任一道把它整台排除时为 0。
+//
+// 只算容量，不算在线状态：StorageNodes 还有一道 last_seen_at >= since，离线节点
+// 在放置里是完全排除的，但这里仍会显示一个非零的容量数。这是刻意的——判在线要
+// 一个时钟参数，而相邻的「状态」列已经写着离线了，同一行里不会读错。所以别把这
+// 个数读成「放置现在会往这台机器放这么多」，它是「这台机器的盘还剩这么多可用」。
+//
+// 必须与 SQLiteStore.StorageNodes 的 WHERE 保持一致：那边是「够不够放下这一个
+// 文件」的布尔判断，这边是「还能放多少」的数值，同一组条件的两种问法。改一边就
+// 要改另一边——这是这两处之间唯一的耦合，没有更好的共享方式（SQL 里算不出 min，
+// 而且这个数只给后台看，不参与放置决策）。
+//
+// 镜像的是 StorageNodes（owner_type='fleet'），不是 UserStorageNodes——后者的闸
+// 不一样（没有 70% 余量、没有管理员限额，只有裸的 storage_free 和整卷保留）。
+// 后台节点表只渲染 fleet 行（模板里的 {{if eq .OwnerType "fleet"}}），所以现在
+// 对得上；哪天那张表开始显示用户自带节点，这个函数对它们就是错的。
+func storableBytes(n Node) int64 {
+	// 闸 2（整卷保留）是全有全无的：过了线就整台退出放置池，不是把额度压小。
+	// storage_total = 0（节点从未上报盘信息）在 SQL 里是豁免的，这里照样豁免——
+	// 那种节点通常 storage_free 也是 0，闸 1 自己就会算出 0。
+	if n.StorageTotal > 0 && n.StorageFree*volumeReserveDen < n.StorageTotal {
+		return 0
+	}
+	// 闸 1：70% 余量。
+	b := usableBytes(n.StorageFree)
+	// 闸 3：管理员硬盘限额的剩余额度（0 = 无限）。管理员可以把限额调到低于已存
+	// 量，此时余量是负的、SQL 那边必然排除该节点，所以下面统一夹到 0——这一列
+	// 绝不能显示负数。
+	if n.DiskLimitBytes > 0 {
+		if remaining := n.DiskLimitBytes - n.StoredBytes; remaining < b {
+			b = remaining
+		}
+	}
+	if b < 0 {
+		return 0
+	}
+	return b
 }
 
 // nodeRunCommandGo is the server-side twin of web/src/lib/nodes.ts

@@ -2148,6 +2148,18 @@ func usableBytes(free int64) int64 {
 	return free * storageHeadroomNum / storageHeadroomDen
 }
 
+// volumeReserveDen 是整卷保留的分母：剩余空间必须至少占总量的
+// 1/volumeReserveDen，否则该节点整台退出放置池，免得 relayium 把宿主机的盘撑
+// 爆。与 storageHeadroom* 是两回事——那个限制「一次放多少」（按需求量算的调度
+// 余量），这个限制「整块盘能用到多满」（到线即整台排除，与需求量无关）。
+//
+// 定义一次，StorageNodes 与 UserStorageNodes 两处 SQL 都从这里 Sprintf 进去。
+//
+// 注意：cmd/relayium-node/relay.go 的 blobGates 里有同口径的**节点本地**绝对写
+// 闸（`f*5 < t`）。那是另一个二进制，编译单元不通，共享不了这个常量——改这里
+// 的值就必须同时改那边，否则中心端和节点端会静默地按两条不同的线做决定。
+const volumeReserveDen = 5 // storage_free * 5 >= storage_total ⇔ 剩余 ≥ 20%
+
 // StorageNodes returns fleet storage nodes that are online since `since` and
 // can offer at least minFree bytes — candidates for placing a new
 // node-backed blob.
@@ -2163,15 +2175,15 @@ func (s *SQLiteStore) StorageNodes(ctx context.Context, since, minFree int64) ([
 	// place a new blob on a node whose disk is already past that reserve, so a
 	// node can't be filled to the point of wedging its host.
 	//
-	// The 7/10 ratio is spliced in via fmt.Sprintf from the constants above —
-	// not from any request input, which stays parameterized via `?` — so this
-	// SQL and usableBytes can never fall out of sync.
+	// The 7/10 and 1/5 ratios are spliced in via fmt.Sprintf from the constants
+	// above — not from any request input, which stays parameterized via `?` —
+	// so this SQL, usableBytes and storableBytes can never fall out of sync.
 	query := fmt.Sprintf(
 		`SELECT `+nodeCols+` FROM nodes
 		   WHERE owner_type='fleet' AND storage_enabled=1 AND last_seen_at >= ? AND storage_free * %d / %d >= ?
 		     AND (disk_limit_bytes = 0 OR disk_limit_bytes - stored_bytes >= ?)
-		     AND (storage_total = 0 OR storage_free * 5 >= storage_total)
-		   ORDER BY last_seen_at DESC`, storageHeadroomNum, storageHeadroomDen)
+		     AND (storage_total = 0 OR storage_free * %d >= storage_total)
+		   ORDER BY last_seen_at DESC`, storageHeadroomNum, storageHeadroomDen, volumeReserveDen)
 	return s.queryNodes(ctx, query, since, minFree, minFree)
 }
 
@@ -2202,12 +2214,14 @@ func (s *SQLiteStore) UserNodesAll(ctx context.Context, userID string) ([]Node, 
 // UserStorageNodes is UserNodes filtered to storage-enabled nodes with at
 // least minFree bytes free.
 func (s *SQLiteStore) UserStorageNodes(ctx context.Context, userID string, since, minFree int64) ([]Node, error) {
-	// Same 80%-full reserve as StorageNodes: even the user's own node is skipped
+	// Same volume reserve as StorageNodes: even the user's own node is skipped
 	// once its volume is past 80% used, so a full disk never bricks their host.
-	return s.queryNodes(ctx,
+	// Spliced from volumeReserveDen (not a literal) so the two SQL sites and
+	// storableBytes stay one definition; the request input stays on `?`.
+	query := fmt.Sprintf(
 		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? AND last_seen_at >= ? AND storage_enabled=1 AND storage_free >= ?
-		   AND (storage_total = 0 OR storage_free * 5 >= storage_total) ORDER BY last_seen_at DESC`,
-		userID, since, minFree)
+		   AND (storage_total = 0 OR storage_free * %d >= storage_total) ORDER BY last_seen_at DESC`, volumeReserveDen)
+	return s.queryNodes(ctx, query, userID, since, minFree)
 }
 
 // DeleteNode removes a user-owned node, owner-scoped.

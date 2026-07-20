@@ -35,6 +35,63 @@ interface FsWritable {
   close: () => Promise<void>;
 }
 
+/**
+ * 下载总量超过这个数，且浏览器没有流式落盘能力时，下载页会先提示再下载。
+ *
+ * 保守估计，不是实测出来的硬数字：没有 File System Access API 的浏览器
+ * （Firefox、Safari、以及所有手机浏览器——iOS 上全是 WebKit）必须把整个文件
+ * 攒在内存里才能交给用户，手机标签页在这个量级上已经很容易被系统回收。真实
+ * 崩溃点随设备内存、系统和标签页数量浮动，需要真机验证后再调。
+ */
+export const LARGE_DOWNLOAD_WARN_BYTES = 256 * 1024 * 1024; // 256 MiB
+
+/**
+ * 这一批文件在当前浏览器里能不能流式写盘（而不是先攒进内存）。
+ *
+ * 必须与下面 pickSaveTarget 的分支选择保持一致——它是同一套条件的提前问法，
+ * 供下载页在开始下载前判断要不要提示。两者不一致就意味着下载页会在一条其实
+ * 能落盘的路径上误报，或者更糟：在内存路径上一声不吭。filesink.test.ts 里有
+ * 一条用例真跑 pickSaveTarget 逐个组合比对，专门守这个耦合。
+ *
+ * 多文件走的是目录选择器那条路：拿到目录句柄后每个文件仍是原生流式写入，同样
+ * 不吃内存。所以单文件看 showSaveFilePicker（拿不到则回落到目录选择器），
+ * 多文件只看 showDirectoryPicker。
+ */
+export function canStreamToDisk(fileCount: number): boolean {
+  const w = window as unknown as SavePickerWindow;
+  if (fileCount === 1 && w.showSaveFilePicker) return true;
+  return !!w.showDirectoryPicker;
+}
+
+/**
+ * 没有流式落盘能力时，把这一批文件交付给用户的内存峰值估算。
+ *
+ * 两条内存分支的峰值差一倍：
+ * - 文件夹（有 path 含 "/"）走 ZipWriter：每个文件先攒 parts[]，close 时 concat
+ *   复制一份进 zip 缓冲，finish 再拼出完整 zip —— 整批同时在内存里且被复制过，
+ *   峰值约 2× 批次总量。
+ * - 扁平批次走 blobSink 逐个下载，真实峰值约等于最大单文件；这里仍按总量算，
+ *   偏保守，与下载页的既有口径一致（宁可多提示一次，不要崩了才知道）。
+ *
+ * 判文件夹的条件必须与 pickSaveTarget 的 ZIP 分支逐字一致，否则这个估算会
+ * 系统性偏低。filesink.test.ts 里有一条用例真跑 pickSaveTarget 比对 label。
+ */
+export function memoryPeakBytes(files: FileMetaLite[], totalBytes: number): number {
+  return files.some((f) => f.path && f.path.includes("/")) ? totalBytes * 2 : totalBytes;
+}
+
+/**
+ * 开始接收/下载这一批文件之前，要不要先提示内存风险。
+ *
+ * 阈值只有 LARGE_DOWNLOAD_WARN_BYTES 一个，而且它比的是**估算峰值**而不是批次
+ * 总量 —— 这样 ZIP 分支的 2× 不需要第二个常量就能被算进去。两个都是没实测过的
+ * 估计值，再拆一个只是多一个同样没底的数字。
+ */
+export function warnsAboutMemory(files: FileMetaLite[], totalBytes: number): boolean {
+  if (canStreamToDisk(files.length)) return false;
+  return memoryPeakBytes(files, totalBytes) > LARGE_DOWNLOAD_WARN_BYTES;
+}
+
 function nativeSink(writable: FsWritable): FileSink {
   return { write: (c) => writable.write(c), close: () => writable.close() };
 }
