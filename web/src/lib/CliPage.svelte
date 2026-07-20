@@ -69,7 +69,7 @@ relayium authorize 74318e3b…`;
 
 # retention (otherwise your account's default applies)
 relayium up ./report.pdf --burn              # one download, then gone
-relayium up ./report.pdf --ttl 7d            # kept for 7 days
+relayium up ./report.pdf --ttl 7d            # kept up to 7 days (plan-dependent)
 relayium up ./report.pdf --max-downloads 5   # allow 5 downloads`;
   const downCmd = `# on another machine — no login needed
 relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;

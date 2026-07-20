@@ -382,7 +382,7 @@ const en: Messages = {
       "Keep running and re-sync on any change",
       "Permit a sync sender's --delete to actually remove files",
       "Delete the cloud upload after a single download",
-      "How long a cloud upload lives, e.g. 7d or 24h",
+      "How long a cloud upload lives, e.g. 7d or 24h (capped by your plan)",
       "Allow a fixed number of cloud downloads, then delete",
       "Point login / up / down at a self-hosted server",
     ],
@@ -416,7 +416,7 @@ const en: Messages = {
     cloudIntro:
       "Upload from one machine and download on another whenever you like — the two never need to be online at the same time. This is the only mode that uses your account, and only for uploading: run relayium login once, then up. Downloading needs no account. Everything else in the CLI stays no-login.",
     cloudBody:
-      "up encrypts the files locally, uploads the ciphertext, and prints a claim link. Add a retention flag to control how long it lives (otherwise your account's default applies): --burn (one download), --ttl 7d (a fixed time), or --max-downloads 5 (a fixed count). On the other machine, hand the link to down — no login needed.",
+      "up encrypts the files locally, uploads the ciphertext, and prints a claim link. Add a retention flag to control how long it lives (otherwise your account's default applies): --burn (one download), --ttl 7d (a fixed time, capped by your plan), or --max-downloads 5 (a fixed count). On the other machine, hand the link to down — no login needed.",
     cloudLoginNote:
       "login is a browser-approved device sign-in: the CLI shows a code, you open relayium.com/device and confirm it. You need a free account for the upload side, so sign in — or create one — at relayium.com first. whoami shows the bound account; logout clears it.",
     cloudInteropNote:
@@ -529,7 +529,7 @@ const en: Messages = {
       { title: "Man-in-the-middle check", desc: "Both screens show the same code (SAS); match it to rule out an eavesdropping MITM." },
       { title: "Cross-platform", desc: "Windows, macOS, Linux, Android, iOS — any modern browser, nothing to install." },
       { title: "Open source & auditable", desc: "The protocol and all the code are public on GitHub — anyone can review it, self-host, or contribute." },
-      { title: "Ephemeral by design", desc: "Download links can expire in 1/3/7 days or burn after the first download, leaving no lasting trace." },
+      { title: "Ephemeral by design", desc: "Download links can expire in up to 7 days, depending on your plan, or burn after the first download, leaving no lasting trace." },
     ],
   },
   howItWorks: {
@@ -547,7 +547,7 @@ const en: Messages = {
       sub: "Send even when they're offline: encrypt and store now, they fetch by link later.",
       ways: [
         { icon: "🔒", name: "Sign in and pick files", how: "Files are encrypted with AES-256-GCM in your browser before upload — the server only ever stores ciphertext it cannot decrypt.", tag: "Zero-knowledge" },
-        { icon: "🔗", name: "Create the download link", how: "Set an expiry from 1 hour to 7 days, or burn-after-reading; the decryption key lives in the link's # fragment and is never sent to the server.", tag: "Expiry you control" },
+        { icon: "🔗", name: "Create the download link", how: "Set an expiry from 1 hour up to 7 days, depending on your plan, or burn-after-reading; the decryption key lives in the link's # fragment and is never sent to the server.", tag: "Expiry you control" },
         { icon: "📥", name: "They download anytime", how: "Send them the link; no account and no waiting online — they decrypt and download right in the browser.", tag: "No account for recipients" },
       ],
     },
@@ -562,7 +562,7 @@ const en: Messages = {
       { label: "Sign-in needed", realtime: "Only to send across networks", stored: "Sender signs in" },
       { label: "Recipient online?", realtime: "Yes — both online at once", stored: "No — download asynchronously" },
       { label: "Files via server?", realtime: "No — peer-to-peer (cross-network transfers can fall back to an encrypted relay)", stored: "Yes, but zero-knowledge ciphertext only" },
-      { label: "Lifetime", realtime: "Send and gone, nothing stored", stored: "1 / 3 / 7 days, or burn after reading" },
+      { label: "Lifetime", realtime: "Send and gone, nothing stored", stored: "Up to 7 days (by plan), or burn after reading" },
       { label: "Best for", realtime: "Direct big-file transfer while both online", stored: "Recipient offline, or one link for many" },
     ],
   },
@@ -604,7 +604,7 @@ const en: Messages = {
       { q: "What determines speed, and how do I make it faster?", a: "On a direct link it's your two networks' up/down bandwidth and latency; via a relay it's also the relay node's bandwidth. Deploying your own node from the account page can noticeably speed up cross-network relaying — and it's free." },
     ],
     offline: [
-      { q: "How long does a download link last?", a: "As long as the expiry you set — from 1 hour to 7 days — after which it's deleted automatically. You can also enable burn-after-read, which deletes it right after one successful download." },
+      { q: "How long does a download link last?", a: "As long as the expiry you set — from 1 hour up to 7 days, depending on your plan — after which it's deleted automatically. You can also enable burn-after-read, which deletes it right after one successful download." },
       { q: "Does the recipient need an account to download?", a: "No. They just open the link and download — no sign-in, nothing to install." },
       { q: "Can I send multiple files or a whole folder at once?", a: "Yes. Pick multiple files, or just drag files and folders onto the upload area — folders are expanded and encrypted and uploaded together." },
       { q: "Can I recover a link I accidentally closed?", a: "Because of zero-knowledge encryption, a link's key is kept only in the browser you uploaded from. You can copy the link back from 'Account → My Files' in that same browser — but on another device or after clearing browser data it can't be recovered, so save the link." },

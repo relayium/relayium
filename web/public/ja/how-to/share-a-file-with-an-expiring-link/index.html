@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>期限付きの安全なダウンロードリンクでファイルを共有する · Relayium</title>
-    <meta name="description" content="ブラウザでファイルを暗号化し、サーバーが復号できないリンクを作成。有効期限は1時間・1日・3日・7日、または初回ダウンロード後に消去から選べます——準備ができたときに送れます。" />
+    <meta name="description" content="ブラウザでファイルを暗号化し、サーバーが復号できないリンクを作成。有効期限は1時間・1日・3日・最長7日（プランによる）、または初回ダウンロード後に消去から選べます——準備ができたときに送れます。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/how-to/share-a-file-with-an-expiring-link/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/share-a-file-with-an-expiring-link/" />
@@ -22,15 +22,15 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:title" content="期限付きの安全なダウンロードリンクでファイルを共有する" />
-    <meta property="og:description" content="ブラウザでファイルを暗号化し、サーバーが復号できないリンクを作成。有効期限は1時間・1日・3日・7日、または初回ダウンロード後に消去から選べます——準備ができたときに送れます。" />
+    <meta property="og:description" content="ブラウザでファイルを暗号化し、サーバーが復号できないリンクを作成。有効期限は1時間・1日・3日・最長7日（プランによる）、または初回ダウンロード後に消去から選べます——準備ができたときに送れます。" />
     <meta property="og:url" content="https://relayium.com/ja/how-to/share-a-file-with-an-expiring-link/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:locale" content="ja_JP" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="期限付きの安全なダウンロードリンクでファイルを共有する" />
-    <meta name="twitter:description" content="ブラウザでファイルを暗号化し、サーバーが復号できないリンクを作成。有効期限は1時間・1日・3日・7日、または初回ダウンロード後に消去から選べます——準備ができたときに送れます。" />
+    <meta name="twitter:description" content="ブラウザでファイルを暗号化し、サーバーが復号できないリンクを作成。有効期限は1時間・1日・3日・最長7日（プランによる）、または初回ダウンロード後に消去から選べます——準備ができたときに送れます。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"期限付きの安全なダウンロードリンクでファイルを共有する","description":"ブラウザでファイルを暗号化し、サーバーが復号できないリンクを作成。有効期限は1時間・1日・3日・7日、または初回ダウンロード後に消去から選べます——準備ができたときに送れます。","inLanguage":"ja","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/ja/how-to/share-a-file-with-an-expiring-link/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"リンクを送る相手にアカウントは必要ですか?","acceptedAnswer":{"@type":"Answer","text":"いいえ。`#` の後の部分を含む完全なリンクを持っている人なら誰でも開いてファイルをダウンロードできます。リンクを作成するときにサインインが必要なのは送信側だけです。"}},{"@type":"Question","name":"Relayium は私のファイルを読めますか?","acceptedAnswer":{"@type":"Answer","text":"いいえ。あなたのブラウザは、何かをアップロードする前にランダムに生成した AES-256-GCM 鍵でファイルを暗号化し、その鍵は URL フラグメントにしか存在せず、サーバーには決して届きません。サーバーが保存するのは復号する方法のない暗号文だけです——ゼロ知識設計です。"}},{"@type":"Question","name":"リンクはどのくらい持ちますか?","acceptedAnswer":{"@type":"Answer","text":"リンクを作成するときに選べます: 1時間、1日、3日、7日、あるいは固定の期限の代わりに初回の完全なダウンロード後に消去するよう設定できます。その時点を過ぎるとリンクは機能しなくなります。"}},{"@type":"Question","name":"初回ダウンロード後の消去で、ファイルは本当になくなりますか?","acceptedAnswer":{"@type":"Answer","text":"初回ダウンロード後の消去は、まさに1回きりのダウンロードのために設計されています。受信者がファイルのダウンロードを終えた時点で、それ以降にリンクを開いても機能しなくなるため、こっそり二度目を見られることはありません。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"期限付きの安全なダウンロードリンクでファイルを共有する","description":"ブラウザでファイルを暗号化し、サーバーが復号できないリンクを作成。有効期限は1時間・1日・3日・最長7日（プランによる）、または初回ダウンロード後に消去から選べます——準備ができたときに送れます。","inLanguage":"ja","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/ja/how-to/share-a-file-with-an-expiring-link/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"リンクを送る相手にアカウントは必要ですか?","acceptedAnswer":{"@type":"Answer","text":"いいえ。`#` の後の部分を含む完全なリンクを持っている人なら誰でも開いてファイルをダウンロードできます。リンクを作成するときにサインインが必要なのは送信側だけです。"}},{"@type":"Question","name":"Relayium は私のファイルを読めますか?","acceptedAnswer":{"@type":"Answer","text":"いいえ。あなたのブラウザは、何かをアップロードする前にランダムに生成した AES-256-GCM 鍵でファイルを暗号化し、その鍵は URL フラグメントにしか存在せず、サーバーには決して届きません。サーバーが保存するのは復号する方法のない暗号文だけです——ゼロ知識設計です。"}},{"@type":"Question","name":"リンクはどのくらい持ちますか?","acceptedAnswer":{"@type":"Answer","text":"リンクを作成するときに選べます: 1時間、1日、3日、最長7日（プランによる）、あるいは固定の期限の代わりに初回の完全なダウンロード後に消去するよう設定できます。その時点を過ぎるとリンクは機能しなくなります。"}},{"@type":"Question","name":"初回ダウンロード後の消去で、ファイルは本当になくなりますか?","acceptedAnswer":{"@type":"Answer","text":"初回ダウンロード後の消去は、まさに1回きりのダウンロードのために設計されています。受信者がファイルのダウンロードを終えた時点で、それ以降にリンクを開いても機能しなくなるため、こっそり二度目を見られることはありません。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -75,7 +75,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>有効期限と初回ダウンロード後の消去</h2>
       <p>どのリンクにも寿命が必要です——永久に有効なままにしておくのは、一度きりの受け渡しの趣旨に反します。リンクを作成するとき、どれだけ有効にしておくかを選べますし、一度使われたら即座に消えるよう設定することもできます。</p>
       <p>初回ダウンロード後の消去とは、受信者がダウンロードを完了した瞬間にリンクが機能しなくなるということです。ファイルが機微な内容で、一人に一度だけ見せて、その後は何も残したくないときに便利です。どちらを選んでも、受信者はダウンロードページでリアルタイムのカウントダウンを見られるので、残り時間(またはダウンロード回数)がわかります。</p>
-      <ul><li>1時間</li><li>1日(既定値)</li><li>3日</li><li>7日</li><li>または: 固定の期限の代わりに、初回の完全なダウンロード後に消去</li></ul>
+      <ul><li>1時間</li><li>1日(既定値)</li><li>3日</li><li>7日（最長。上位プランのみ）</li><li>または: 固定の期限の代わりに、初回の完全なダウンロード後に消去</li></ul>
       <h2>ゼロ知識保証と、その限界</h2>
       <p>リンクを作成するとき実際に起きていることはこうです。あなたのブラウザはランダムな AES-256-GCM 鍵を生成します——これは Relayium のリアルタイムモードとは異なる仕組みで、リアルタイムモードは X25519 で2つの端末間の鍵を協議します。保存リンクの鍵はローカルで生成され、誰とも協議する必要がありません。その鍵は、何かが端末を離れる前にファイル本体とファイル名のリストを暗号化し、ダウンロードリンクの `#` の後に付加されます——ここはブラウザが決してどのサーバーにも送信しない URL の部分です。サーバーは渡された暗号文を、暗号文だけを保存します。鍵を一切受け取らないため、それを復号する方法がありません。</p>
       <p>この設計には知っておくべき現実的なトレードオフがあります。リンク自体が鍵の唯一のコピーなので、それを失うとパスワードリセットのようなものは存在せず、サーバー上のデータは永久に読めなくなります。リンクの作成には送信側がサインインしている必要があり、削除または期限切れになるまで各リンクはアカウントのストレージ容量を消費します。そして「ゼロ知識」がここで何を意味するかは正確に言っておく価値があります——暗号文は作成からダウンロードまでの間、実際に Relayium のサーバーに保存されています。ただ、あなたのブラウザを一度も離れなかった鍵がなければ読めない、というだけです。</p>
@@ -85,7 +85,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>Relayium は私のファイルを読めますか?</h3>
       <p>いいえ。あなたのブラウザは、何かをアップロードする前にランダムに生成した AES-256-GCM 鍵でファイルを暗号化し、その鍵は URL フラグメントにしか存在せず、サーバーには決して届きません。サーバーが保存するのは復号する方法のない暗号文だけです——ゼロ知識設計です。</p>
       <h3>リンクはどのくらい持ちますか?</h3>
-      <p>リンクを作成するときに選べます: 1時間、1日、3日、7日、あるいは固定の期限の代わりに初回の完全なダウンロード後に消去するよう設定できます。その時点を過ぎるとリンクは機能しなくなります。</p>
+      <p>リンクを作成するときに選べます: 1時間、1日、3日、最長7日（プランによる）、あるいは固定の期限の代わりに初回の完全なダウンロード後に消去するよう設定できます。その時点を過ぎるとリンクは機能しなくなります。</p>
       <h3>初回ダウンロード後の消去で、ファイルは本当になくなりますか?</h3>
       <p>初回ダウンロード後の消去は、まさに1回きりのダウンロードのために設計されています。受信者がファイルのダウンロードを終えた時点で、それ以降にリンクを開いても機能しなくなるため、こっそり二度目を見られることはありません。</p>
       <div class="ctacard">

@@ -64,7 +64,7 @@ const en = {
       bullets: [
         "The server stores only ciphertext, plus the ciphertext size and timestamps for quota and cleanup — never plaintext, filenames, or keys.",
         "Anyone with the full link can decrypt, so treat the link like the file itself and share it over a trusted channel.",
-        "Links can be set to expire (1 hour, 1, 3, or 7 days) or to burn after the first complete download.",
+        "Links can be set to expire (from 1 hour up to 7 days, depending on your plan) or to burn after the first complete download.",
       ],
     },
     {
@@ -170,7 +170,7 @@ const zh = {
       bullets: [
         "服务器只存储密文，外加用于配额与清理的密文大小和时间戳——绝不存明文、文件名或密钥。",
         "任何拿到完整链接的人都能解密，因此请把链接本身当作文件对待，通过可信渠道分享。",
-        "链接可设置有效期（1 小时、1、3 或 7 天），或设为首次完整下载后即焚。",
+        "链接可设置有效期（1 小时起，最长 7 天，取决于你的套餐），或设为首次完整下载后即焚。",
       ],
     },
     {
@@ -276,7 +276,7 @@ const ja = {
       bullets: [
         "サーバーが保存するのは暗号文と、クォータおよびクリーンアップのための暗号文サイズとタイムスタンプだけで、平文・ファイル名・鍵は決して保存しません。",
         "完全なリンクを持つ人は誰でも復号できるため、リンクをファイルそのものと同様に扱い、信頼できる経路で共有してください。",
-        "リンクには有効期限（1 時間、1、3、または 7 日）を設定するか、最初の完全なダウンロード後に消える設定にできます。",
+        "リンクには有効期限（1 時間から最長 7 日、プランにより異なります）を設定するか、最初の完全なダウンロード後に消える設定にできます。",
       ],
     },
     {
@@ -382,7 +382,7 @@ const ko = {
       bullets: [
         "서버는 암호문과, 할당량 및 정리를 위한 암호문 크기와 타임스탬프만 저장하며, 평문·파일 이름·키는 절대 저장하지 않습니다.",
         "완전한 링크를 가진 사람은 누구나 복호화할 수 있으므로, 링크를 파일 자체처럼 취급하고 신뢰할 수 있는 경로로 공유하십시오.",
-        "링크는 만료(1시간, 1, 3, 또는 7일)를 설정하거나 첫 번째 완전한 다운로드 후 소멸되도록 설정할 수 있습니다.",
+        "링크는 만료(1시간부터 최대 7일까지, 요금제에 따라 다름)를 설정하거나 첫 번째 완전한 다운로드 후 소멸되도록 설정할 수 있습니다.",
       ],
     },
     {
@@ -488,7 +488,7 @@ const de = {
       bullets: [
         "Der Server speichert nur Chiffretext sowie die Chiffretextgröße und Zeitstempel für Kontingent und Bereinigung — niemals Klartext, Dateinamen oder Schlüssel.",
         "Jeder mit dem vollständigen Link kann entschlüsseln; behandeln Sie den Link daher wie die Datei selbst und teilen Sie ihn über einen vertrauenswürdigen Kanal.",
-        "Links können so eingestellt werden, dass sie ablaufen (1 Stunde, 1, 3 oder 7 Tage) oder nach dem ersten vollständigen Download verfallen.",
+        "Links können so eingestellt werden, dass sie ablaufen (von 1 Stunde bis zu 7 Tagen, je nach Tarif) oder nach dem ersten vollständigen Download verfallen.",
       ],
     },
     {
@@ -594,7 +594,7 @@ const fr = {
       bullets: [
         "Le serveur ne stocke que du chiffré, plus la taille du chiffré et des horodatages pour les quotas et le nettoyage — jamais de clair, de noms de fichiers ni de clés.",
         "Quiconque possède le lien complet peut déchiffrer ; traitez donc le lien comme le fichier lui-même et partagez-le par un canal de confiance.",
-        "Les liens peuvent être réglés pour expirer (1 heure, 1, 3 ou 7 jours) ou pour s'effacer après le premier téléchargement complet.",
+        "Les liens peuvent être réglés pour expirer (de 1 heure à 7 jours au maximum, selon votre offre) ou pour s'effacer après le premier téléchargement complet.",
       ],
     },
     {
@@ -700,7 +700,7 @@ const ar = {
       bullets: [
         "لا يخزّن الخادم سوى النص المُشفَّر، إضافةً إلى حجم النص المُشفَّر والطوابع الزمنية لأغراض الحصة والتنظيف — ولا يخزّن أبدًا نصًا صريحًا أو أسماء ملفات أو مفاتيح.",
         "يستطيع أي شخص يملك الرابط الكامل فكّ التشفير، لذا تعامَل مع الرابط كأنه الملف نفسه وشارِكه عبر قناة موثوقة.",
-        "يمكن ضبط الروابط لتنتهي صلاحيتها (ساعة واحدة، أو 1 أو 3 أو 7 أيام) أو لتُحذَف بعد أول تنزيل كامل.",
+        "يمكن ضبط الروابط لتنتهي صلاحيتها (من ساعة واحدة وحتى 7 أيام، حسب خطتك) أو لتُحذَف بعد أول تنزيل كامل.",
       ],
     },
     {
@@ -806,7 +806,7 @@ const es = {
       bullets: [
         "El servidor almacena solo texto cifrado, además del tamaño del texto cifrado y marcas de tiempo para la cuota y la limpieza; nunca texto plano, nombres de archivos ni claves.",
         "Cualquiera que tenga el enlace completo puede descifrar, así que trata el enlace como el archivo mismo y compártelo por un canal de confianza.",
-        "Los enlaces pueden configurarse para que caduquen (1 hora, 1, 3 o 7 días) o para que se destruyan tras la primera descarga completa.",
+        "Los enlaces pueden configurarse para que caduquen (de 1 hora hasta 7 días, según tu plan) o para que se destruyan tras la primera descarga completa.",
       ],
     },
     {
@@ -912,7 +912,7 @@ const pt = {
       bullets: [
         "O servidor armazena apenas texto cifrado, além do tamanho do texto cifrado e marcas de tempo para cota e limpeza — nunca texto simples, nomes de arquivos ou chaves.",
         "Qualquer pessoa com o link completo pode descriptografar, então trate o link como o próprio arquivo e compartilhe-o por um canal confiável.",
-        "Os links podem ser configurados para expirar (1 hora, 1, 3 ou 7 dias) ou para se destruir após o primeiro download completo.",
+        "Os links podem ser configurados para expirar (de 1 hora até 7 dias, dependendo do seu plano) ou para se destruir após o primeiro download completo.",
       ],
     },
     {

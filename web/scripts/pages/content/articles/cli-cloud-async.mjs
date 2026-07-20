@@ -54,7 +54,7 @@ const en = {
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
         `# choose how long it lives (otherwise your account's default applies):
 relayium up ./report.pdf --burn              # deleted after one download
-relayium up ./report.pdf --ttl 7d            # kept for 7 days
+relayium up ./report.pdf --ttl 7d            # kept up to 7 days (plan-dependent)
 relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
       ],
       bullets: [
@@ -187,7 +187,7 @@ const zh = {
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
         `# 选择它能存活多久（不给则用你账号的默认策略）：
 relayium up ./report.pdf --burn              # 下载一次后即删除
-relayium up ./report.pdf --ttl 7d            # 保留 7 天
+relayium up ./report.pdf --ttl 7d            # 最长保留 7 天（取决于套餐）
 relayium up ./report.pdf --max-downloads 5   # 允许下载 5 次，之后删除`,
       ],
       bullets: [
@@ -320,7 +320,7 @@ const ja = {
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
         `# 保持期間を選ぶ（指定しなければアカウントの既定が適用）：
 relayium up ./report.pdf --burn              # 一度ダウンロードすると削除
-relayium up ./report.pdf --ttl 7d            # 7日間保持
+relayium up ./report.pdf --ttl 7d            # 最長7日間保持（プランによる）
 relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除`,
       ],
       bullets: [
@@ -453,7 +453,7 @@ const ko = {
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
         `# 얼마나 살려둘지 고르기(없으면 계정 기본값 적용):
 relayium up ./report.pdf --burn              # 한 번 다운로드 후 삭제
-relayium up ./report.pdf --ttl 7d            # 7일간 보관
+relayium up ./report.pdf --ttl 7d            # 최대 7일간 보관(요금제에 따라 다름)
 relayium up ./report.pdf --max-downloads 5   # 5회까지 허용 후 삭제`,
       ],
       bullets: [
@@ -586,7 +586,7 @@ const de = {
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
         `# wähle, wie lange sie lebt (sonst gilt die Vorgabe deines Kontos):
 relayium up ./report.pdf --burn              # nach einem Download gelöscht
-relayium up ./report.pdf --ttl 7d            # 7 Tage aufbewahrt
+relayium up ./report.pdf --ttl 7d            # bis zu 7 Tage aufbewahrt (je nach Tarif)
 relayium up ./report.pdf --max-downloads 5   # 5 Downloads erlaubt, dann weg`,
       ],
       bullets: [
@@ -719,7 +719,7 @@ const fr = {
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
         `# choisissez sa durée de vie (sinon la valeur par défaut de votre compte s'applique) :
 relayium up ./report.pdf --burn              # supprimé après un téléchargement
-relayium up ./report.pdf --ttl 7d            # conservé 7 jours
+relayium up ./report.pdf --ttl 7d            # conservé jusqu'à 7 jours (selon l'offre)
 relayium up ./report.pdf --max-downloads 5   # 5 téléchargements autorisés, puis supprimé`,
       ],
       bullets: [
@@ -852,7 +852,7 @@ const ar = {
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
         `# choose how long it lives (otherwise your account's default applies):
 relayium up ./report.pdf --burn              # deleted after one download
-relayium up ./report.pdf --ttl 7d            # kept for 7 days
+relayium up ./report.pdf --ttl 7d            # kept up to 7 days (plan-dependent)
 relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
       ],
       bullets: [
@@ -985,7 +985,7 @@ const es = {
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
         `# choose how long it lives (otherwise your account's default applies):
 relayium up ./report.pdf --burn              # deleted after one download
-relayium up ./report.pdf --ttl 7d            # kept for 7 days
+relayium up ./report.pdf --ttl 7d            # kept up to 7 days (plan-dependent)
 relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
       ],
       bullets: [
@@ -1118,7 +1118,7 @@ const pt = {
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
         `# choose how long it lives (otherwise your account's default applies):
 relayium up ./report.pdf --burn              # deleted after one download
-relayium up ./report.pdf --ttl 7d            # kept for 7 days
+relayium up ./report.pdf --ttl 7d            # kept up to 7 days (plan-dependent)
 relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
       ],
       bullets: [

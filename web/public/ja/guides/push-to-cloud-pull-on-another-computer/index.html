@@ -93,7 +93,7 @@ footer a{color:var(--text-h);text-decoration:none}
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…</code></pre>
       <pre><code># 保持期間を選ぶ（指定しなければアカウントの既定が適用）：
 relayium up ./report.pdf --burn              # 一度ダウンロードすると削除
-relayium up ./report.pdf --ttl 7d            # 7日間保持
+relayium up ./report.pdf --ttl 7d            # 最長7日間保持（プランによる）
 relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除</code></pre>
       <ul><li>リンクが受け渡しのすべてです——相手のマシンが読める場所にコピーしてください。リンクを持つ誰もがダウンロードできるので、パスワードのように扱ってください。</li><li>保持：--burn は一度のダウンロードで削除。--ttl &lt;期間&gt; は一定時間保持（例：7d、24h）。--max-downloads &lt;n&gt; は一定回数まで。いずれも指定しなければアカウントの既定が適用されます。</li><li>up はログインが必要です。していなければその旨を伝え、何もしません。</li></ul>
       <h2>二台目のコンピュータでダウンロード</h2>

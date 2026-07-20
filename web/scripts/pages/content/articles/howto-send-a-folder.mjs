@@ -36,7 +36,7 @@ const en = {
       heading: "Realtime, or a link for later",
       body: [
         "If you can both be online at the same time, send the folder directly — it goes peer-to-peer and nothing is stored on any server in between. This is the fastest path and needs no account if you're on the same network; sending across networks with a pairing code just needs the sender to sign in, and the receiver never needs an account at all.",
-        "If the other person isn't around right now, create a stored link instead. Your browser encrypts the folder's files before upload with a random AES-256-GCM key that only ever lives in the link itself, so the server holds ciphertext it can't read. Creating a link needs the sender to sign in; set it to expire in 1 hour, 1 day, 3 days, or 7 days, or make it burn after the first download.",
+        "If the other person isn't around right now, create a stored link instead. Your browser encrypts the folder's files before upload with a random AES-256-GCM key that only ever lives in the link itself, so the server holds ciphertext it can't read. Creating a link needs the sender to sign in; set it to expire in 1 hour, 1 day, 3 days, or up to 7 days depending on your plan, or make it burn after the first download.",
       ],
     },
   ],
@@ -105,7 +105,7 @@ const zh = {
       heading: "实时传输，或留个链接稍后取",
       body: [
         "如果双方能同时在线，直接发送文件夹即可——它走点对点，中途不会存在任何服务器上。这是最快的方式，同一网络下不需要账号；跨网络用配对码发送只需要发送方登录一下，接收方任何情况下都不需要账号。",
-        "如果对方现在不在，可以改为创建一个存储链接。你的浏览器会在上传前用一把只存在于链接本身的随机 AES-256-GCM 密钥加密文件夹里的文件，服务器只保存它读不懂的密文。创建链接需要发送方登录；可以设置 1 小时、1 天、3 天或 7 天后过期，也可以设置为首次下载后即焚。",
+        "如果对方现在不在，可以改为创建一个存储链接。你的浏览器会在上传前用一把只存在于链接本身的随机 AES-256-GCM 密钥加密文件夹里的文件，服务器只保存它读不懂的密文。创建链接需要发送方登录；可以设置 1 小时、1 天、3 天或最长 7 天后过期（上限取决于套餐），也可以设置为首次下载后即焚。",
       ],
     },
   ],
@@ -174,7 +174,7 @@ const ja = {
       heading: "今すぐリアルタイムで、または後で取れるリンクを",
       body: [
         "双方が同時にオンラインになれるなら、フォルダを直接送りましょう——P2P で流れ、途中どのサーバーにも何も保存されません。これが最も速い方法で、同じネットワークならアカウントは不要です。ネットワークをまたいでペアリングコードで送る場合も送信側がサインインするだけで、受信側はどちらの場合もアカウント不要です。",
-        "相手が今いない場合は、代わりに保存リンクを作成できます。ブラウザはアップロード前に、そのリンク自体にしか存在しないランダムな AES-256-GCM 鍵でフォルダ内のファイルを暗号化するため、サーバーは読めない暗号文だけを保持します。リンクの作成には送信側のサインインが必要です。有効期限は1時間・1日・3日・7日から選ぶか、初回ダウンロード後に消去する設定にもできます。",
+        "相手が今いない場合は、代わりに保存リンクを作成できます。ブラウザはアップロード前に、そのリンク自体にしか存在しないランダムな AES-256-GCM 鍵でフォルダ内のファイルを暗号化するため、サーバーは読めない暗号文だけを保持します。リンクの作成には送信側のサインインが必要です。有効期限は1時間・1日・3日・最長7日（プランによる）から選ぶか、初回ダウンロード後に消去する設定にもできます。",
       ],
     },
   ],
@@ -243,7 +243,7 @@ const ko = {
       heading: "지금 실시간으로, 또는 나중을 위해 링크로",
       body: [
         "양쪽이 동시에 온라인일 수 있다면 폴더를 직접 보내세요——P2P로 전달되며 그 사이 어떤 서버에도 아무것도 저장되지 않습니다. 이것이 가장 빠른 방법이며, 같은 네트워크에서는 계정이 필요 없습니다. 네트워크를 넘어 페어링 코드로 보낼 때도 보내는 쪽이 로그인만 하면 되고, 받는 쪽은 어느 경우든 계정이 전혀 필요 없습니다.",
-        "상대가 지금 없다면 대신 저장 링크를 만들 수 있습니다. 브라우저는 업로드 전에 그 링크에만 존재하는 무작위 AES-256-GCM 키로 폴더 안의 파일들을 암호화하므로, 서버는 읽을 수 없는 암호문만 보관합니다. 링크 생성에는 보내는 쪽의 로그인이 필요합니다. 1시간·1일·3일·7일 중 만료 시점을 정하거나, 첫 다운로드 후 소각되도록 설정할 수도 있습니다.",
+        "상대가 지금 없다면 대신 저장 링크를 만들 수 있습니다. 브라우저는 업로드 전에 그 링크에만 존재하는 무작위 AES-256-GCM 키로 폴더 안의 파일들을 암호화하므로, 서버는 읽을 수 없는 암호문만 보관합니다. 링크 생성에는 보내는 쪽의 로그인이 필요합니다. 1시간·1일·3일·최대 7일(요금제에 따라 다름) 중 만료 시점을 정하거나, 첫 다운로드 후 소각되도록 설정할 수도 있습니다.",
       ],
     },
   ],
@@ -312,7 +312,7 @@ const de = {
       heading: "Jetzt in Echtzeit oder als Link für später",
       body: [
         "Könnt ihr beide gleichzeitig online sein, sende den Ordner direkt — er läuft Peer-to-Peer, und dazwischen wird nichts auf irgendeinem Server gespeichert. Das ist der schnellste Weg und braucht im selben Netz kein Konto; beim Senden über Netzwerke hinweg per Pairing-Code muss sich nur der Absender anmelden, und die empfangende Person braucht in keinem Fall ein Konto.",
-        "Ist die andere Person gerade nicht da, erstelle stattdessen einen gespeicherten Link. Dein Browser verschlüsselt die Dateien des Ordners vor dem Upload mit einem zufälligen AES-256-GCM-Schlüssel, der nur im Link selbst existiert, sodass der Server Chiffretext hält, den er nicht lesen kann. Das Erstellen eines Links erfordert die Anmeldung des Absenders; lege eine Gültigkeit von 1 Stunde, 1 Tag, 3 Tagen oder 7 Tagen fest, oder lass ihn nach dem ersten Download verfallen.",
+        "Ist die andere Person gerade nicht da, erstelle stattdessen einen gespeicherten Link. Dein Browser verschlüsselt die Dateien des Ordners vor dem Upload mit einem zufälligen AES-256-GCM-Schlüssel, der nur im Link selbst existiert, sodass der Server Chiffretext hält, den er nicht lesen kann. Das Erstellen eines Links erfordert die Anmeldung des Absenders; lege eine Gültigkeit von 1 Stunde, 1 Tag, 3 Tagen oder bis zu 7 Tagen je nach Tarif fest, oder lass ihn nach dem ersten Download verfallen.",
       ],
     },
   ],
@@ -381,7 +381,7 @@ const fr = {
       heading: "En temps réel maintenant, ou un lien pour plus tard",
       body: [
         "Si vous pouvez être en ligne en même temps tous les deux, envoyez le dossier directement — il passe en pair-à-pair et rien n'est stocké sur un serveur entre les deux. C'est la voie la plus rapide et elle ne demande aucun compte sur le même réseau ; envoyer entre réseaux différents avec un code d'appairage exige seulement que l'expéditeur se connecte, et le destinataire n'a jamais besoin de compte.",
-        "Si l'autre personne n'est pas disponible maintenant, créez plutôt un lien stocké. Votre navigateur chiffre les fichiers du dossier avant l'envoi avec une clé AES-256-GCM aléatoire qui ne vit que dans le lien lui-même, de sorte que le serveur conserve un texte chiffré qu'il ne peut pas lire. Créer un lien exige que l'expéditeur se connecte ; réglez son expiration à 1 heure, 1 jour, 3 jours ou 7 jours, ou faites-le s'autodétruire après le premier téléchargement.",
+        "Si l'autre personne n'est pas disponible maintenant, créez plutôt un lien stocké. Votre navigateur chiffre les fichiers du dossier avant l'envoi avec une clé AES-256-GCM aléatoire qui ne vit que dans le lien lui-même, de sorte que le serveur conserve un texte chiffré qu'il ne peut pas lire. Créer un lien exige que l'expéditeur se connecte ; réglez son expiration à 1 heure, 1 jour, 3 jours ou jusqu'à 7 jours selon votre offre, ou faites-le s'autodétruire après le premier téléchargement.",
       ],
     },
   ],
@@ -450,7 +450,7 @@ const ar = {
       heading: "فوريًا، أو رابط لوقت لاحق",
       body: [
         "إن أمكنكما أن تكونا متصلين في الوقت نفسه، أرسِل المجلد مباشرةً — يمرّ من الند للند ولا يُخزَّن شيء على أي خادم بينكما. هذا المسار الأسرع ولا يحتاج إلى حساب إن كنتما على نفس الشبكة؛ أما الإرسال عبر الشبكات برمز اقتران فيتطلب فقط أن يسجّل المُرسِل الدخول، والمُستقبِل لا يحتاج أبدًا إلى حساب على الإطلاق.",
-        "إن لم يكن الشخص الآخر متاحًا الآن، فأنشئ رابطًا مُخزَّنًا بدلًا من ذلك. يشفّر متصفحك ملفات المجلد قبل الرفع بمفتاح AES-256-GCM عشوائي لا يعيش إلا في الرابط نفسه، فيحمل الخادم نصًا مُشفَّرًا لا يستطيع قراءته. يتطلب إنشاء رابط أن يسجّل المُرسِل الدخول؛ اضبطه لينتهي بعد ساعة واحدة، أو يوم واحد، أو 3 أيام، أو 7 أيام، أو اجعله يحترق بعد أول تنزيل.",
+        "إن لم يكن الشخص الآخر متاحًا الآن، فأنشئ رابطًا مُخزَّنًا بدلًا من ذلك. يشفّر متصفحك ملفات المجلد قبل الرفع بمفتاح AES-256-GCM عشوائي لا يعيش إلا في الرابط نفسه، فيحمل الخادم نصًا مُشفَّرًا لا يستطيع قراءته. يتطلب إنشاء رابط أن يسجّل المُرسِل الدخول؛ اضبطه لينتهي بعد ساعة واحدة، أو يوم واحد، أو 3 أيام، أو حتى 7 أيام حسب خطتك، أو اجعله يحترق بعد أول تنزيل.",
       ],
     },
   ],
@@ -519,7 +519,7 @@ const es = {
       heading: "En tiempo real, o un enlace para más tarde",
       body: [
         "Si ambos podéis estar en línea a la vez, envía la carpeta directamente — va de igual a igual y nada se almacena en ningún servidor por el camino. Esta es la vía más rápida y no necesita cuenta si estáis en la misma red; enviar entre redes con un código de emparejamiento solo requiere que el remitente inicie sesión, y quien recibe nunca necesita cuenta en absoluto.",
-        "Si la otra persona no está disponible ahora mismo, crea en su lugar un enlace almacenado. Tu navegador cifra los archivos de la carpeta antes de subirlos con una clave AES-256-GCM aleatoria que solo vive en el propio enlace, de modo que el servidor guarda texto cifrado que no puede leer. Crear un enlace requiere que el remitente inicie sesión; configúralo para que caduque en 1 hora, 1 día, 3 días o 7 días, o haz que se destruya tras la primera descarga.",
+        "Si la otra persona no está disponible ahora mismo, crea en su lugar un enlace almacenado. Tu navegador cifra los archivos de la carpeta antes de subirlos con una clave AES-256-GCM aleatoria que solo vive en el propio enlace, de modo que el servidor guarda texto cifrado que no puede leer. Crear un enlace requiere que el remitente inicie sesión; configúralo para que caduque en 1 hora, 1 día, 3 días o hasta 7 días según tu plan, o haz que se destruya tras la primera descarga.",
       ],
     },
   ],
@@ -588,7 +588,7 @@ const pt = {
       heading: "Em tempo real, ou um link para depois",
       body: [
         "Se vocês dois puderem estar on-line ao mesmo tempo, envie a pasta diretamente — ela vai ponto a ponto e nada é armazenado em nenhum servidor no meio. Este é o caminho mais rápido e não precisa de conta se vocês estão na mesma rede; enviar entre redes com um código de emparelhamento só exige que o remetente faça login, e quem recebe nunca precisa de conta alguma.",
-        "Se a outra pessoa não estiver por perto agora, crie um link armazenado em vez disso. Seu navegador criptografa os arquivos da pasta antes do upload com uma chave AES-256-GCM aleatória que só existe no próprio link, de modo que o servidor guarda texto cifrado que não consegue ler. Criar um link exige que o remetente faça login; defina para expirar em 1 hora, 1 dia, 3 dias ou 7 dias, ou faça-o se autodestruir após o primeiro download.",
+        "Se a outra pessoa não estiver por perto agora, crie um link armazenado em vez disso. Seu navegador criptografa os arquivos da pasta antes do upload com uma chave AES-256-GCM aleatória que só existe no próprio link, de modo que o servidor guarda texto cifrado que não consegue ler. Criar um link exige que o remetente faça login; defina para expirar em 1 hora, 1 dia, 3 dias ou até 7 dias conforme o seu plano, ou faça-o se autodestruir após o primeiro download.",
       ],
     },
   ],

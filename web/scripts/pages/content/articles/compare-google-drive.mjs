@@ -38,7 +38,7 @@ const en = {
       heading: "Still want a link? Zero-knowledge stored links",
       body: [
         "Sometimes a link really is what you need — the recipient isn't online, or you want one URL you can paste anywhere. Relayium's stored-link mode covers that case without giving up the privacy of realtime mode.",
-        "You choose an expiry — 1 hour, 1 day, 3 days, or 7 days — or set the link to burn after the first completed download. Creating a link requires the sender to sign in (it counts against a storage quota on your account), but the recipient just opens the link and downloads, no account required. Because the decryption key never leaves the URL fragment, Google's model and Relayium's stored-link model differ on one core point: Google can technically decrypt Drive-hosted files; Relayium's server, for stored links, structurally cannot.",
+        "You choose an expiry — 1 hour, 1 day, 3 days, or up to 7 days depending on your plan — or set the link to burn after the first completed download. Creating a link requires the sender to sign in (it counts against a storage quota on your account), but the recipient just opens the link and downloads, no account required. Because the decryption key never leaves the URL fragment, Google's model and Relayium's stored-link model differ on one core point: Google can technically decrypt Drive-hosted files; Relayium's server, for stored links, structurally cannot.",
       ],
     },
     {
@@ -46,7 +46,7 @@ const en = {
       body: ["The differences that matter most, side by side:"],
       bullets: [
         "Purpose: Google Drive is durable, always-there storage with collaboration built in; Relayium is built for a one-off send — realtime P2P or a self-expiring link.",
-        "Where files live: Drive keeps an indefinite copy on Google's servers until you delete it; Relayium realtime never stores the file at all, and stored links auto-expire (1h/1d/3d/7d) or burn after first download.",
+        "Where files live: Drive keeps an indefinite copy on Google's servers until you delete it; Relayium realtime never stores the file at all, and stored links auto-expire (1h/1d/3d/7d, depending on plan) or burn after first download.",
         "Who can read it: Google's infrastructure can technically decrypt Drive files; Relayium's stored links are zero-knowledge — the key lives only in the URL fragment, so the server holds ciphertext it can't read.",
         "Accounts: Drive requires a Google account for the sender, and often for the recipient depending on sharing settings; Relayium needs no account on the same network, and only the sender signs in for cross-network or stored-link sending — the recipient never needs one.",
         "Size limits: Drive is bounded by your storage quota; Relayium realtime has no server-side cap (Chrome/Edge stream to disk for tens of GB; keep Firefox/Safari under ~200 MB).",
@@ -59,7 +59,7 @@ const en = {
     items: [
       {
         q: "Does Relayium store my files like Google Drive does?",
-        a: "Not in realtime mode — the file goes directly between devices and is never stored on a server. If you create a download link, the server does store something, but only zero-knowledge ciphertext it cannot decrypt; it expires (1h/1d/3d/7d) or burns after the first download.",
+        a: "Not in realtime mode — the file goes directly between devices and is never stored on a server. If you create a download link, the server does store something, but only zero-knowledge ciphertext it cannot decrypt; it expires (1h/1d/3d/7d, depending on plan) or burns after the first download.",
       },
       {
         q: "Do I need an account?",
@@ -117,7 +117,7 @@ const zh = {
       heading: "还是想要一个链接？零知识存储链接",
       body: [
         "有时候你确实需要一个链接——收件人不在线，或者你想要一个可以贴到任何地方的 URL。Relayium 的存储链接模式覆盖了这种场景，同时不牺牲实时模式的隐私性。",
-        "你可以选择有效期——1 小时、1 天、3 天或 7 天——或者设置为首次下载完成后即焚。创建链接需要发送方登录（会计入账号的存储配额），但收件人只需打开链接下载，无需账号。因为解密密钥从不离开 URL 片段，Google 的模式和 Relayium 存储链接的模式在一个核心点上不同：Google 在技术上可以解密 Drive 上托管的文件；而 Relayium 的服务器对存储链接来说，从结构上就做不到这一点。",
+        "你可以选择有效期——1 小时、1 天、3 天或最长 7 天（取决于套餐）——或者设置为首次下载完成后即焚。创建链接需要发送方登录（会计入账号的存储配额），但收件人只需打开链接下载，无需账号。因为解密密钥从不离开 URL 片段，Google 的模式和 Relayium 存储链接的模式在一个核心点上不同：Google 在技术上可以解密 Drive 上托管的文件；而 Relayium 的服务器对存储链接来说，从结构上就做不到这一点。",
       ],
     },
     {
@@ -125,7 +125,7 @@ const zh = {
       body: ["把最关键的差别并排列出："],
       bullets: [
         "定位：Google Drive 是内置协作能力的、始终在线的持久存储；Relayium 是为一次性发送而生——实时点对点或自动到期的链接。",
-        "文件存放：Drive 会把副本无限期留在 Google 服务器上，直到你删除；Relayium 实时模式根本不存储文件，存储链接则会自动到期（1小时/1天/3天/7天）或首次下载后即焚。",
+        "文件存放：Drive 会把副本无限期留在 Google 服务器上，直到你删除；Relayium 实时模式根本不存储文件，存储链接则会自动到期（1小时/1天/3天/7天，视套餐而定）或首次下载后即焚。",
         "谁能读取：Google 的基础设施在技术上可以解密 Drive 上的文件；Relayium 的存储链接是零知识的——密钥只存在于 URL 片段中，服务器保存的是它无法解读的密文。",
         "账号要求：Drive 要求发送方有 Google 账号，收件方是否需要则取决于分享设置；Relayium 在同一网络下完全无需账号，跨网络发送或创建存储链接时只需发送方登录——接收方始终无需账号。",
         "大小限制：Drive 的限制取决于你的存储配额；Relayium 实时模式没有服务器端上限（Chrome/Edge 可流式写盘应对几十 GB；Firefox/Safari 建议保持在约 200 MB 以内）。",
@@ -138,7 +138,7 @@ const zh = {
     items: [
       {
         q: "Relayium 会像 Google Drive 一样存储我的文件吗？",
-        a: "实时模式下不会——文件直接在设备之间传输，从不存到服务器上。如果你创建了下载链接，服务器确实会保存一些内容，但只是它无法解密的零知识密文；链接会到期（1小时/1天/3天/7天）或首次下载后即焚。",
+        a: "实时模式下不会——文件直接在设备之间传输，从不存到服务器上。如果你创建了下载链接，服务器确实会保存一些内容，但只是它无法解密的零知识密文；链接会到期（1小时/1天/3天/7天，视套餐而定）或首次下载后即焚。",
       },
       {
         q: "需要账号吗？",
@@ -196,7 +196,7 @@ const ja = {
       heading: "それでもリンクが欲しいときは：ゼロ知識の保存リンク",
       body: [
         "リンクが本当に必要な場面もあります——受信者がオンラインでない、あるいはどこにでも貼れる1つの URL が欲しいときです。Relayium の保存リンクモードは、リアルタイムモードのプライバシーを犠牲にせずこのケースをカバーします。",
-        "有効期限は1時間・1日・3日・7日から選ぶか、最初のダウンロード完了後に消去する設定にできます。リンクの作成には送信側のサインインが必要です（アカウントの保存容量枠に計上されます）が、受信側はリンクを開いてダウンロードするだけでアカウントは不要です。復号鍵が URL フラグメントから外に出ることは決してないため、Google のモデルと Relayium の保存リンクのモデルには核心的な違いがあります。Google は Drive にホストされたファイルを技術的に復号できますが、Relayium のサーバーは保存リンクについて構造的にそれができません。",
+        "有効期限は1時間・1日・3日・最長7日（プランによる）から選ぶか、最初のダウンロード完了後に消去する設定にできます。リンクの作成には送信側のサインインが必要です（アカウントの保存容量枠に計上されます）が、受信側はリンクを開いてダウンロードするだけでアカウントは不要です。復号鍵が URL フラグメントから外に出ることは決してないため、Google のモデルと Relayium の保存リンクのモデルには核心的な違いがあります。Google は Drive にホストされたファイルを技術的に復号できますが、Relayium のサーバーは保存リンクについて構造的にそれができません。",
       ],
     },
     {
@@ -204,7 +204,7 @@ const ja = {
       body: ["最も重要な違いを並べて示します。"],
       bullets: [
         "目的：Google Drive は協業機能を備えた常時利用可能な永続ストレージ；Relayium は一度きりの送信のために作られている——リアルタイム P2P か、自動失効するリンク。",
-        "ファイルの置き場所：Drive はあなたが削除するまでコピーを Google のサーバーに無期限に保持；Relayium のリアルタイムはファイルを一切保存せず、保存リンクは自動失効（1時間/1日/3日/7日）または初回ダウンロード後に消去。",
+        "ファイルの置き場所：Drive はあなたが削除するまでコピーを Google のサーバーに無期限に保持；Relayium のリアルタイムはファイルを一切保存せず、保存リンクは自動失効（1時間/1日/3日/7日、プランによる）または初回ダウンロード後に消去。",
         "誰が読めるか：Google のインフラは技術的に Drive 上のファイルを復号できる；Relayium の保存リンクはゼロ知識で、鍵は URL フラグメントにだけ存在し、サーバーは読めない暗号文を保持する。",
         "アカウント：Drive は送信側に Google アカウントを要求し、共有設定によっては受信側にも必要；Relayium は同一ネットワークではアカウント不要、ネットワークをまたぐ送信や保存リンクの作成では送信側のみサインインが必要——受信側は常にアカウント不要。",
         "サイズ上限：Drive はあなたの保存容量枠に制約される；Relayium のリアルタイムはサーバー側の上限なし（Chrome/Edge は数十GBまでディスクへストリーミング、Firefox/Safari は約200MB以内に）。",
@@ -217,7 +217,7 @@ const ja = {
     items: [
       {
         q: "Relayium は Google Drive のようにファイルを保存しますか？",
-        a: "リアルタイムモードでは保存しません——ファイルは端末間を直接移動し、サーバーには一切保存されません。ダウンロードリンクを作成した場合、サーバーは何かを保存しますが、それは復号できないゼロ知識の暗号文だけです。リンクは失効するか（1時間/1日/3日/7日）、最初のダウンロード後に消去されます。",
+        a: "リアルタイムモードでは保存しません——ファイルは端末間を直接移動し、サーバーには一切保存されません。ダウンロードリンクを作成した場合、サーバーは何かを保存しますが、それは復号できないゼロ知識の暗号文だけです。リンクは失効するか（1時間/1日/3日/7日、プランによる）、最初のダウンロード後に消去されます。",
       },
       {
         q: "アカウントは必要ですか？",
@@ -275,7 +275,7 @@ const ko = {
       heading: "그래도 링크가 필요하다면: 영지식 저장 링크",
       body: [
         "때로는 정말로 링크가 필요합니다——받는 사람이 온라인이 아니거나, 어디에든 붙여넣을 수 있는 URL 하나가 필요할 때입니다. Relayium의 저장 링크 모드는 실시간 모드의 프라이버시를 포기하지 않고 이 경우를 다룹니다.",
-        "만료 기간을 1시간, 1일, 3일, 7일 중에서 고르거나, 첫 다운로드 완료 후 소각되도록 설정할 수 있습니다. 링크 생성에는 보내는 쪽의 로그인이 필요하지만(계정의 저장 용량 한도에 포함됩니다), 받는 쪽은 링크를 열어 다운로드하기만 하면 되고 계정은 필요 없습니다. 복호화 키가 URL 프래그먼트를 벗어나는 일이 없기 때문에, Google의 모델과 Relayium의 저장 링크 모델은 핵심적인 지점에서 다릅니다. Google은 기술적으로 Drive에 호스팅된 파일을 복호화할 수 있지만, Relayium의 서버는 저장 링크에 대해 구조적으로 그렇게 할 수 없습니다.",
+        "만료 기간을 1시간, 1일, 3일, 최대 7일(요금제에 따라 다름) 중에서 고르거나, 첫 다운로드 완료 후 소각되도록 설정할 수 있습니다. 링크 생성에는 보내는 쪽의 로그인이 필요하지만(계정의 저장 용량 한도에 포함됩니다), 받는 쪽은 링크를 열어 다운로드하기만 하면 되고 계정은 필요 없습니다. 복호화 키가 URL 프래그먼트를 벗어나는 일이 없기 때문에, Google의 모델과 Relayium의 저장 링크 모델은 핵심적인 지점에서 다릅니다. Google은 기술적으로 Drive에 호스팅된 파일을 복호화할 수 있지만, Relayium의 서버는 저장 링크에 대해 구조적으로 그렇게 할 수 없습니다.",
       ],
     },
     {
@@ -283,7 +283,7 @@ const ko = {
       body: ["가장 중요한 차이를 나란히 정리하면:"],
       bullets: [
         "목적: Google Drive는 협업 기능을 갖춘, 항상 그 자리에 있는 영구 저장소; Relayium은 일회성 전송을 위해 만들어짐——실시간 P2P 또는 자동 만료 링크.",
-        "파일이 놓이는 곳: Drive는 당신이 삭제할 때까지 사본을 Google 서버에 무기한 보관; Relayium 실시간은 파일을 아예 저장하지 않고, 저장 링크는 자동 만료(1시간/1일/3일/7일)되거나 첫 다운로드 후 소각됨.",
+        "파일이 놓이는 곳: Drive는 당신이 삭제할 때까지 사본을 Google 서버에 무기한 보관; Relayium 실시간은 파일을 아예 저장하지 않고, 저장 링크는 자동 만료(1시간/1일/3일/7일, 요금제에 따라 다름)되거나 첫 다운로드 후 소각됨.",
         "누가 읽을 수 있는가: Google의 인프라는 기술적으로 Drive 파일을 복호화할 수 있음; Relayium의 저장 링크는 영지식으로, 키가 URL 프래그먼트에만 있어 서버는 읽을 수 없는 암호문을 보관함.",
         "계정: Drive는 보내는 쪽에 Google 계정을 요구하고, 공유 설정에 따라 받는 쪽에도 필요할 수 있음; Relayium은 같은 네트워크에서 계정이 전혀 필요 없고, 네트워크를 넘거나 저장 링크를 만들 때만 보내는 쪽이 로그인함——받는 쪽은 항상 계정 불필요.",
         "크기 제한: Drive는 저장 용량 한도에 제약됨; Relayium 실시간은 서버 측 제한 없음(Chrome/Edge는 수십 GB까지 디스크로 스트리밍, Firefox/Safari는 약 200 MB 이내로 유지).",
@@ -296,7 +296,7 @@ const ko = {
     items: [
       {
         q: "Relayium도 Google Drive처럼 제 파일을 저장하나요?",
-        a: "실시간 모드에서는 아닙니다——파일이 기기 사이에서 직접 이동하며 서버에 전혀 저장되지 않습니다. 다운로드 링크를 만들면 서버가 무언가를 저장하지만, 그것은 복호화할 수 없는 영지식 암호문뿐입니다. 링크는 만료되거나(1시간/1일/3일/7일) 첫 다운로드 후 소각됩니다.",
+        a: "실시간 모드에서는 아닙니다——파일이 기기 사이에서 직접 이동하며 서버에 전혀 저장되지 않습니다. 다운로드 링크를 만들면 서버가 무언가를 저장하지만, 그것은 복호화할 수 없는 영지식 암호문뿐입니다. 링크는 만료되거나(1시간/1일/3일/7일, 요금제에 따라 다름) 첫 다운로드 후 소각됩니다.",
       },
       {
         q: "계정이 필요한가요?",
@@ -354,7 +354,7 @@ const de = {
       heading: "Doch einen Link gewünscht? Zero-Knowledge-Speicherlinks",
       body: [
         "Manchmal ist ein Link wirklich das, was du brauchst — der Empfänger ist nicht online, oder du willst eine URL, die du überall einfügen kannst. Relayiums Speicherlink-Modus deckt diesen Fall ab, ohne die Privatsphäre des Echtzeitmodus aufzugeben.",
-        "Du wählst eine Ablaufzeit — 1 Stunde, 1 Tag, 3 Tage oder 7 Tage — oder stellst den Link so ein, dass er nach dem ersten vollständigen Download vernichtet wird. Das Erstellen eines Links erfordert die Anmeldung des Absenders (er zählt gegen ein Speicherkontingent deines Kontos), aber der Empfänger öffnet den Link einfach und lädt herunter, ohne Konto. Da der Entschlüsselungsschlüssel das URL-Fragment nie verlässt, unterscheiden sich Googles Modell und Relayiums Speicherlink-Modell in einem zentralen Punkt: Google kann Drive-gehostete Dateien technisch entschlüsseln; Relayiums Server kann das bei Speicherlinks strukturell nicht.",
+        "Du wählst eine Ablaufzeit — 1 Stunde, 1 Tag, 3 Tage oder bis zu 7 Tage je nach Tarif — oder stellst den Link so ein, dass er nach dem ersten vollständigen Download vernichtet wird. Das Erstellen eines Links erfordert die Anmeldung des Absenders (er zählt gegen ein Speicherkontingent deines Kontos), aber der Empfänger öffnet den Link einfach und lädt herunter, ohne Konto. Da der Entschlüsselungsschlüssel das URL-Fragment nie verlässt, unterscheiden sich Googles Modell und Relayiums Speicherlink-Modell in einem zentralen Punkt: Google kann Drive-gehostete Dateien technisch entschlüsseln; Relayiums Server kann das bei Speicherlinks strukturell nicht.",
       ],
     },
     {
@@ -362,7 +362,7 @@ const de = {
       body: ["Die wichtigsten Unterschiede nebeneinander:"],
       bullets: [
         "Zweck: Google Drive ist dauerhafter, stets verfügbarer Speicher mit eingebauter Zusammenarbeit; Relayium ist für den einmaligen Versand gebaut — Echtzeit-P2P oder ein Link mit Ablaufdatum.",
-        "Wo Dateien liegen: Drive behält eine unbefristete Kopie auf Googles Servern, bis du sie löschst; Relayium-Echtzeit speichert die Datei überhaupt nicht, und Speicherlinks laufen automatisch ab (1 Std./1 Tag/3 Tage/7 Tage) oder werden nach dem ersten Download vernichtet.",
+        "Wo Dateien liegen: Drive behält eine unbefristete Kopie auf Googles Servern, bis du sie löschst; Relayium-Echtzeit speichert die Datei überhaupt nicht, und Speicherlinks laufen automatisch ab (1 Std./1 Tag/3 Tage/7 Tage, je nach Tarif) oder werden nach dem ersten Download vernichtet.",
         "Wer es lesen kann: Googles Infrastruktur kann Drive-Dateien technisch entschlüsseln; Relayiums Speicherlinks sind Zero-Knowledge — der Schlüssel lebt nur im URL-Fragment, sodass der Server Chiffretext hält, den er nicht lesen kann.",
         "Konten: Drive verlangt vom Absender ein Google-Konto und je nach Freigabeeinstellung oft auch vom Empfänger; Relayium braucht im selben Netz kein Konto, und nur der Absender meldet sich beim netzübergreifenden Senden oder beim Erstellen eines Speicherlinks an — der Empfänger nie.",
         "Größenlimits: Drive ist durch dein Speicherkontingent begrenzt; Relayium-Echtzeit hat kein serverseitiges Limit (Chrome/Edge streamen für mehrere Dutzend Gigabyte auf die Festplatte; Firefox/Safari unter ~200 MB halten).",
@@ -375,7 +375,7 @@ const de = {
     items: [
       {
         q: "Speichert Relayium meine Dateien wie Google Drive?",
-        a: "Im Echtzeitmodus nicht — die Datei geht direkt zwischen den Geräten und wird nie auf einem Server gespeichert. Erstellst du einen Download-Link, speichert der Server zwar etwas, aber nur Zero-Knowledge-Chiffretext, den er nicht entschlüsseln kann; er läuft ab (1 Std./1 Tag/3 Tage/7 Tage) oder wird nach dem ersten Download vernichtet.",
+        a: "Im Echtzeitmodus nicht — die Datei geht direkt zwischen den Geräten und wird nie auf einem Server gespeichert. Erstellst du einen Download-Link, speichert der Server zwar etwas, aber nur Zero-Knowledge-Chiffretext, den er nicht entschlüsseln kann; er läuft ab (1 Std./1 Tag/3 Tage/7 Tage, je nach Tarif) oder wird nach dem ersten Download vernichtet.",
       },
       {
         q: "Brauche ich ein Konto?",
@@ -433,7 +433,7 @@ const fr = {
       heading: "Vous voulez quand même un lien ? Liens stockés à divulgation nulle",
       body: [
         "Parfois un lien est vraiment ce qu'il vous faut — le destinataire n'est pas en ligne, ou vous voulez une seule URL à coller n'importe où. Le mode lien stocké de Relayium couvre ce cas sans renoncer à la confidentialité du mode temps réel.",
-        "Vous choisissez une expiration — 1 heure, 1 jour, 3 jours ou 7 jours — ou réglez le lien pour qu'il se détruise après le premier téléchargement complet. Créer un lien exige que l'expéditeur se connecte (cela compte dans un quota de stockage lié à votre compte), mais le destinataire n'a qu'à ouvrir le lien et télécharger, sans compte requis. Comme la clé de déchiffrement ne quitte jamais le fragment de l'URL, le modèle de Google et celui des liens stockés de Relayium diffèrent sur un point essentiel : Google peut techniquement déchiffrer les fichiers hébergés sur Drive ; le serveur de Relayium, pour les liens stockés, ne le peut structurellement pas.",
+        "Vous choisissez une expiration — 1 heure, 1 jour, 3 jours ou jusqu'à 7 jours selon votre offre — ou réglez le lien pour qu'il se détruise après le premier téléchargement complet. Créer un lien exige que l'expéditeur se connecte (cela compte dans un quota de stockage lié à votre compte), mais le destinataire n'a qu'à ouvrir le lien et télécharger, sans compte requis. Comme la clé de déchiffrement ne quitte jamais le fragment de l'URL, le modèle de Google et celui des liens stockés de Relayium diffèrent sur un point essentiel : Google peut techniquement déchiffrer les fichiers hébergés sur Drive ; le serveur de Relayium, pour les liens stockés, ne le peut structurellement pas.",
       ],
     },
     {
@@ -441,7 +441,7 @@ const fr = {
       body: ["Les différences qui comptent le plus, côte à côte :"],
       bullets: [
         "Objectif : Google Drive est un stockage durable, toujours disponible, avec collaboration intégrée ; Relayium est conçu pour un envoi ponctuel — P2P en temps réel ou lien à expiration automatique.",
-        "Où résident les fichiers : Drive garde une copie indéfinie sur les serveurs de Google jusqu'à ce que vous la supprimiez ; le temps réel de Relayium ne stocke jamais le fichier du tout, et les liens stockés expirent automatiquement (1 h/1 j/3 j/7 j) ou se détruisent après le premier téléchargement.",
+        "Où résident les fichiers : Drive garde une copie indéfinie sur les serveurs de Google jusqu'à ce que vous la supprimiez ; le temps réel de Relayium ne stocke jamais le fichier du tout, et les liens stockés expirent automatiquement (1 h/1 j/3 j/7 j, selon l'offre) ou se détruisent après le premier téléchargement.",
         "Qui peut le lire : l'infrastructure de Google peut techniquement déchiffrer les fichiers Drive ; les liens stockés de Relayium sont à divulgation nulle — la clé ne vit que dans le fragment de l'URL, donc le serveur détient un texte chiffré qu'il ne peut pas lire.",
         "Comptes : Drive exige un compte Google pour l'expéditeur, et souvent pour le destinataire selon les réglages de partage ; Relayium ne demande aucun compte sur le même réseau, et seul l'expéditeur se connecte pour un envoi entre réseaux ou un lien stocké — le destinataire n'en a jamais besoin.",
         "Limites de taille : Drive est borné par votre quota de stockage ; le temps réel de Relayium n'a aucune limite côté serveur (Chrome/Edge diffusent sur le disque pour plusieurs dizaines de Go ; gardez Firefox/Safari sous ~200 Mo).",
@@ -454,7 +454,7 @@ const fr = {
     items: [
       {
         q: "Relayium stocke-t-il mes fichiers comme Google Drive ?",
-        a: "Pas en mode temps réel — le fichier va directement entre les appareils et n'est jamais stocké sur un serveur. Si vous créez un lien de téléchargement, le serveur stocke bien quelque chose, mais uniquement un texte chiffré à divulgation nulle qu'il ne peut pas déchiffrer ; il expire (1 h/1 j/3 j/7 j) ou se détruit après le premier téléchargement.",
+        a: "Pas en mode temps réel — le fichier va directement entre les appareils et n'est jamais stocké sur un serveur. Si vous créez un lien de téléchargement, le serveur stocke bien quelque chose, mais uniquement un texte chiffré à divulgation nulle qu'il ne peut pas déchiffrer ; il expire (1 h/1 j/3 j/7 j, selon l'offre) ou se détruit après le premier téléchargement.",
       },
       {
         q: "Ai-je besoin d'un compte ?",
@@ -512,7 +512,7 @@ const ar = {
       heading: "ما زلت تريد رابطًا؟ روابط مُخزَّنة بمعرفة صفرية",
       body: [
         "أحيانًا يكون الرابط فعلًا ما تحتاجه — المُستقبِل غير متصل، أو تريد عنوان URL واحدًا يمكنك لصقه في أي مكان. يغطّي وضع الرابط المُخزَّن في Relayium تلك الحالة دون التخلي عن خصوصية الوضع الفوري.",
-        "تختار مدة انتهاء — ساعة واحدة أو يوم واحد أو 3 أيام أو 7 أيام — أو تضبط الرابط ليحترق بعد أول تنزيل مكتمل. يتطلب إنشاء رابط تسجيل دخول المُرسِل (يُحتسب ضمن حصة تخزين في حسابك)، لكن المُستقبِل يفتح الرابط ويُنزّل فحسب، دون الحاجة إلى حساب. ولأن مفتاح فكّ التشفير لا يغادر جزء الـ URL أبدًا، يختلف نموذج Google ونموذج الرابط المُخزَّن في Relayium في نقطة جوهرية واحدة: تستطيع Google تقنيًا فكّ تشفير الملفات المستضافة على Drive؛ أما خادم Relayium فلا يمكنه ذلك بنيويًا بالنسبة إلى الروابط المُخزَّنة.",
+        "تختار مدة انتهاء — ساعة واحدة أو يوم واحد أو 3 أيام أو حتى 7 أيام حسب خطتك — أو تضبط الرابط ليحترق بعد أول تنزيل مكتمل. يتطلب إنشاء رابط تسجيل دخول المُرسِل (يُحتسب ضمن حصة تخزين في حسابك)، لكن المُستقبِل يفتح الرابط ويُنزّل فحسب، دون الحاجة إلى حساب. ولأن مفتاح فكّ التشفير لا يغادر جزء الـ URL أبدًا، يختلف نموذج Google ونموذج الرابط المُخزَّن في Relayium في نقطة جوهرية واحدة: تستطيع Google تقنيًا فكّ تشفير الملفات المستضافة على Drive؛ أما خادم Relayium فلا يمكنه ذلك بنيويًا بالنسبة إلى الروابط المُخزَّنة.",
       ],
     },
     {
@@ -520,7 +520,7 @@ const ar = {
       body: ["الفروق الأهمّ، جنبًا إلى جنب:"],
       bullets: [
         "الغرض: Google Drive تخزين دائم متاح دومًا مع تعاون مدمج؛ أما Relayium فمبني للإرسال لمرة واحدة — إما فوري من الند للند أو رابط ذاتي الانتهاء.",
-        "أين تعيش الملفات: يحتفظ Drive بنسخة غير محددة المدة على خوادم Google حتى تحذفها؛ أما Relayium الفوري فلا يخزّن الملف على الإطلاق، والروابط المُخزَّنة تنتهي تلقائيًا (ساعة/يوم/3 أيام/7 أيام) أو تحترق بعد أول تنزيل.",
+        "أين تعيش الملفات: يحتفظ Drive بنسخة غير محددة المدة على خوادم Google حتى تحذفها؛ أما Relayium الفوري فلا يخزّن الملف على الإطلاق، والروابط المُخزَّنة تنتهي تلقائيًا (ساعة/يوم/3 أيام/7 أيام، حسب الخطة) أو تحترق بعد أول تنزيل.",
         "من يمكنه قراءتها: تستطيع بنية Google التحتية تقنيًا فكّ تشفير ملفات Drive؛ أما روابط Relayium المُخزَّنة فبمعرفة صفرية — يعيش المفتاح في جزء الـ URL فقط، فيحتفظ الخادم بنص مُشفَّر لا يستطيع قراءته.",
         "الحسابات: يتطلب Drive حساب Google للمُرسِل، وغالبًا للمُستقبِل بحسب إعدادات المشاركة؛ أما Relayium فلا يحتاج إلى حساب على نفس الشبكة، والمُرسِل وحده يسجّل الدخول للإرسال عبر الشبكات أو للرابط المُخزَّن — والمُستقبِل لا يحتاج إليه أبدًا.",
         "حدود الحجم: Drive محدود بحصة التخزين لديك؛ أما Relayium الفوري فلا حدّ له من جانب الخادم (يبثّ Chrome/Edge إلى القرص لعشرات الغيغابايت؛ أبقِ Firefox/Safari دون نحو 200 MB).",
@@ -533,7 +533,7 @@ const ar = {
     items: [
       {
         q: "هل يخزّن Relayium ملفاتي كما يفعل Google Drive؟",
-        a: "ليس في الوضع الفوري — ينتقل الملف مباشرةً بين الأجهزة ولا يُخزَّن أبدًا على خادم. إن أنشأت رابط تنزيل، فإن الخادم يخزّن شيئًا بالفعل، لكنه نص مُشفَّر بمعرفة صفرية لا يستطيع فكّ تشفيره؛ وينتهي (ساعة/يوم/3 أيام/7 أيام) أو يحترق بعد أول تنزيل.",
+        a: "ليس في الوضع الفوري — ينتقل الملف مباشرةً بين الأجهزة ولا يُخزَّن أبدًا على خادم. إن أنشأت رابط تنزيل، فإن الخادم يخزّن شيئًا بالفعل، لكنه نص مُشفَّر بمعرفة صفرية لا يستطيع فكّ تشفيره؛ وينتهي (ساعة/يوم/3 أيام/7 أيام، حسب الخطة) أو يحترق بعد أول تنزيل.",
       },
       {
         q: "هل أحتاج إلى حساب؟",
@@ -591,7 +591,7 @@ const es = {
       heading: "¿Aun así quieres un enlace? Enlaces almacenados de conocimiento cero",
       body: [
         "A veces un enlace es realmente lo que necesitas: el destinatario no está conectado, o quieres una única URL que puedas pegar en cualquier parte. El modo de enlace almacenado de Relayium cubre ese caso sin renunciar a la privacidad del modo en tiempo real.",
-        "Eliges una caducidad —1 hora, 1 día, 3 días o 7 días— o configuras el enlace para que se consuma tras la primera descarga completada. Crear un enlace requiere que el remitente inicie sesión (cuenta para una cuota de almacenamiento de tu cuenta), pero el destinatario solo abre el enlace y descarga, sin necesidad de cuenta. Como la clave de descifrado nunca sale del fragmento de la URL, el modelo de Google y el modelo de enlace almacenado de Relayium difieren en un punto central: Google puede técnicamente descifrar los archivos alojados en Drive; el servidor de Relayium, para los enlaces almacenados, estructuralmente no puede.",
+        "Eliges una caducidad —1 hora, 1 día, 3 días o hasta 7 días según tu plan— o configuras el enlace para que se consuma tras la primera descarga completada. Crear un enlace requiere que el remitente inicie sesión (cuenta para una cuota de almacenamiento de tu cuenta), pero el destinatario solo abre el enlace y descarga, sin necesidad de cuenta. Como la clave de descifrado nunca sale del fragmento de la URL, el modelo de Google y el modelo de enlace almacenado de Relayium difieren en un punto central: Google puede técnicamente descifrar los archivos alojados en Drive; el servidor de Relayium, para los enlaces almacenados, estructuralmente no puede.",
       ],
     },
     {
@@ -599,7 +599,7 @@ const es = {
       body: ["Las diferencias que más importan, una al lado de la otra:"],
       bullets: [
         "Propósito: Google Drive es almacenamiento duradero, siempre disponible, con colaboración integrada; Relayium está hecho para un envío puntual: P2P en tiempo real o un enlace que caduca solo.",
-        "Dónde viven los archivos: Drive conserva una copia indefinida en los servidores de Google hasta que la eliminas; el tiempo real de Relayium no almacena el archivo en absoluto, y los enlaces almacenados caducan automáticamente (1h/1d/3d/7d) o se consumen tras la primera descarga.",
+        "Dónde viven los archivos: Drive conserva una copia indefinida en los servidores de Google hasta que la eliminas; el tiempo real de Relayium no almacena el archivo en absoluto, y los enlaces almacenados caducan automáticamente (1h/1d/3d/7d, según el plan) o se consumen tras la primera descarga.",
         "Quién puede leerlo: la infraestructura de Google puede técnicamente descifrar los archivos de Drive; los enlaces almacenados de Relayium son de conocimiento cero: la clave vive únicamente en el fragmento de la URL, así que el servidor guarda texto cifrado que no puede leer.",
         "Cuentas: Drive requiere una cuenta de Google para el remitente, y a menudo para el destinatario según los ajustes de uso compartido; Relayium no necesita cuenta en la misma red, y solo el remitente inicia sesión para el envío entre redes o de enlace almacenado; el destinatario nunca la necesita.",
         "Límites de tamaño: Drive está limitado por tu cuota de almacenamiento; el tiempo real de Relayium no tiene límite en el servidor (Chrome/Edge transmiten al disco para decenas de GB; mantén Firefox/Safari por debajo de ~200 MB).",
@@ -612,7 +612,7 @@ const es = {
     items: [
       {
         q: "¿Relayium almacena mis archivos como lo hace Google Drive?",
-        a: "En el modo en tiempo real no: el archivo va directamente entre dispositivos y nunca se almacena en un servidor. Si creas un enlace de descarga, el servidor sí almacena algo, pero solo texto cifrado de conocimiento cero que no puede descifrar; caduca (1h/1d/3d/7d) o se consume tras la primera descarga.",
+        a: "En el modo en tiempo real no: el archivo va directamente entre dispositivos y nunca se almacena en un servidor. Si creas un enlace de descarga, el servidor sí almacena algo, pero solo texto cifrado de conocimiento cero que no puede descifrar; caduca (1h/1d/3d/7d, según el plan) o se consume tras la primera descarga.",
       },
       {
         q: "¿Necesito una cuenta?",
@@ -670,7 +670,7 @@ const pt = {
       heading: "Ainda quer um link? Links armazenados de conhecimento zero",
       body: [
         "Às vezes um link é realmente o que você precisa — o destinatário não está on-line, ou você quer uma única URL que possa colar em qualquer lugar. O modo de link armazenado do Relayium cobre esse caso sem abrir mão da privacidade do modo em tempo real.",
-        "Você escolhe uma expiração — 1 hora, 1 dia, 3 dias ou 7 dias — ou configura o link para se consumir após o primeiro download concluído. Criar um link exige que o remetente faça login (conta para uma cota de armazenamento da sua conta), mas o destinatário apenas abre o link e baixa, sem precisar de conta. Como a chave de descriptografia nunca sai do fragmento da URL, o modelo do Google e o modelo de link armazenado do Relayium diferem em um ponto central: o Google pode tecnicamente descriptografar os arquivos hospedados no Drive; o servidor do Relayium, para os links armazenados, estruturalmente não pode.",
+        "Você escolhe uma expiração — 1 hora, 1 dia, 3 dias ou até 7 dias conforme o seu plano — ou configura o link para se consumir após o primeiro download concluído. Criar um link exige que o remetente faça login (conta para uma cota de armazenamento da sua conta), mas o destinatário apenas abre o link e baixa, sem precisar de conta. Como a chave de descriptografia nunca sai do fragmento da URL, o modelo do Google e o modelo de link armazenado do Relayium diferem em um ponto central: o Google pode tecnicamente descriptografar os arquivos hospedados no Drive; o servidor do Relayium, para os links armazenados, estruturalmente não pode.",
       ],
     },
     {
@@ -678,7 +678,7 @@ const pt = {
       body: ["As diferenças que mais importam, lado a lado:"],
       bullets: [
         "Propósito: o Google Drive é armazenamento duradouro, sempre disponível, com colaboração integrada; o Relayium foi feito para um envio pontual — P2P em tempo real ou um link que expira sozinho.",
-        "Onde os arquivos ficam: o Drive mantém uma cópia indefinida nos servidores do Google até você excluí-la; o tempo real do Relayium não armazena o arquivo de forma alguma, e os links armazenados expiram automaticamente (1h/1d/3d/7d) ou se consomem após o primeiro download.",
+        "Onde os arquivos ficam: o Drive mantém uma cópia indefinida nos servidores do Google até você excluí-la; o tempo real do Relayium não armazena o arquivo de forma alguma, e os links armazenados expiram automaticamente (1h/1d/3d/7d, conforme o plano) ou se consomem após o primeiro download.",
         "Quem pode lê-lo: a infraestrutura do Google pode tecnicamente descriptografar os arquivos do Drive; os links armazenados do Relayium são de conhecimento zero — a chave vive apenas no fragmento da URL, então o servidor guarda texto cifrado que não consegue ler.",
         "Contas: o Drive exige uma conta Google para o remetente e, muitas vezes, para o destinatário, conforme as configurações de compartilhamento; o Relayium não precisa de conta na mesma rede, e só o remetente faz login para o envio entre redes ou de link armazenado — o destinatário nunca precisa.",
         "Limites de tamanho: o Drive é limitado pela sua cota de armazenamento; o tempo real do Relayium não tem limite no servidor (Chrome/Edge transmitem para o disco para dezenas de GB; mantenha Firefox/Safari abaixo de ~200 MB).",
@@ -691,7 +691,7 @@ const pt = {
     items: [
       {
         q: "O Relayium armazena meus arquivos como o Google Drive faz?",
-        a: "No modo em tempo real, não — o arquivo vai diretamente entre dispositivos e nunca é armazenado em um servidor. Se você criar um link de download, o servidor até armazena algo, mas apenas texto cifrado de conhecimento zero que ele não consegue descriptografar; ele expira (1h/1d/3d/7d) ou se consome após o primeiro download.",
+        a: "No modo em tempo real, não — o arquivo vai diretamente entre dispositivos e nunca é armazenado em um servidor. Se você criar um link de download, o servidor até armazena algo, mas apenas texto cifrado de conhecimento zero que ele não consegue descriptografar; ele expira (1h/1d/3d/7d, conforme o plano) ou se consome após o primeiro download.",
       },
       {
         q: "Preciso de uma conta?",
