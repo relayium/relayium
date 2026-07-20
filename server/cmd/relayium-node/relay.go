@@ -77,6 +77,35 @@ func storageReport(dir string) (total, free int64, err error) {
 	return int64(tot), int64(tot - used), nil
 }
 
+// blobGates returns the two independent conditions under which a blob write is
+// refused. They are grouped here because the pairing is the point: they answer
+// different questions, and every past bug in this area came from conflating
+// them.
+//
+// diskUsed is relayium's own footprint — the blob directory's real size, read
+// from the cached gauge — and is what the admin disk cap is measured against.
+// It must never become the whole volume's occupancy: that counts the OS and
+// every unrelated program on the host as relayium storage, which inflates the
+// admin dashboard and makes central's placement filter treat a nearly empty
+// node as out of quota.
+//
+// diskFull is the opposite question: is the *host* about to run out of room?
+// It stays on whole-volume statfs on purpose, because it is the absolute floor
+// protecting the machine from everything running on it, not just relayium. It
+// re-stats on every call rather than caching, since it is the last line of
+// defense against wedging the host and must not act on a stale reading. It
+// fails open on a stat error — a failed statfs must not block writes.
+//
+// Do not "unify" the two.
+func blobGates(gauge *blobUsage, storageDir string) (diskUsed func() int64, diskFull func() bool) {
+	return gauge.get, func() bool {
+		// Refuse writes once the volume is past 80% used (free < 20%),
+		// independent of any admin cap.
+		t, f, err := storageReport(storageDir)
+		return err == nil && t > 0 && f*5 < t
+	}
+}
+
 // newTURNServer builds the node's pion TURN server: a counting relay generator
 // wired to reg, plus an auth handler that rejects expired credentials and — the
 // local cost cap (workstream B) — refuses new allocations once lim is over the
@@ -168,19 +197,7 @@ func run(c config, st nodeState) error {
 				blobGauge.refresh(ds)
 			}
 		}()
-		diskUsed := blobGauge.get
-		// Built-in safety reserve: refuse writes once the volume is past 80% used
-		// (free < 20%), independent of any admin cap, so relayium can never fill
-		// the disk and wedge the host. Fails open on a stat error (don't block).
-		//
-		// This stays whole-volume on purpose. It is the absolute floor that
-		// protects the host from everything on it, whereas diskUsed above is
-		// relayium's own footprint measured against the admin cap. Do not
-		// "unify" the two — they answer different questions.
-		diskFull := func() bool {
-			t, f, err := storageReport(c.StorageDir)
-			return err == nil && t > 0 && f*5 < t
-		}
+		diskUsed, diskFull := blobGates(blobGauge, c.StorageDir)
 		blobSrv := &http.Server{Addr: fmt.Sprintf(":%d", c.StoragePort), Handler: newBlobHandler(ds, storageSecret, lim, diskUsed, diskFull)}
 		go func() {
 			if err := blobSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

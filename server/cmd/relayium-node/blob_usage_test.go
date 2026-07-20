@@ -140,6 +140,44 @@ func TestBlobHandlerEnforcesDiskCapFromRealGauge(t *testing.T) {
 	}
 }
 
+// The write gate handed to the blob handler must be the gauge, not the volume.
+// This pins the wiring itself, which is where the whole-volume reading kept
+// creeping back in: the handler can only use the function it is given, so a
+// test on the handler alone cannot see which one run() picked.
+//
+// Same discriminating trick as the heartbeat test: a few hundred bytes of blob
+// against a volume with gigabytes in use, so the two readings cannot be
+// confused for one another.
+func TestBlobGatesUsedIsGaugeNotVolume(t *testing.T) {
+	dir := t.TempDir()
+	ds := seedStore(t, filepath.Join(dir, "blobs"), 777)
+	gauge := &blobUsage{}
+	gauge.refresh(ds)
+
+	diskUsed, diskFull := blobGates(gauge, dir)
+
+	if got := diskUsed(); got != 777 {
+		t.Fatalf("diskUsed() = %d, want the gauge's 777", got)
+	}
+	total, free, err := storageReport(dir)
+	if err != nil {
+		t.Fatalf("storageReport: %v", err)
+	}
+	volumeUsed := total - free
+	if volumeUsed <= 777 {
+		t.Fatalf("test cannot discriminate: whole-volume used = %d, expected it to dwarf the 777-byte store", volumeUsed)
+	}
+	if got := diskUsed(); got == volumeUsed {
+		t.Fatalf("diskUsed() = %d equals whole-volume used: the write gate is back on the total-free reading", got)
+	}
+
+	// diskFull answers the other question and must stay whole-volume: it is
+	// true exactly when the host's own free space drops under 20%.
+	if got, want := diskFull(), free*5 < total; got != want {
+		t.Fatalf("diskFull() = %v, want %v for a volume with %d of %d free", got, want, free, total)
+	}
+}
+
 // A failed walk must leave the last good reading in place. Zeroing the gauge
 // would read as "plenty of room": the heartbeat would report an empty node and
 // storage.go's `diskUsed() >= cap` could never fire, silently switching off the
