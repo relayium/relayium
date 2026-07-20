@@ -10,6 +10,7 @@ import QuotaNotice from "./QuotaNotice.svelte";
 import { refreshSession } from "./auth.svelte";
 import { loadLang } from "./i18n.svelte";
 import { currentRoute } from "./router.svelte";
+import { invalidateUsage } from "./usage.svelte";
 
 let target: HTMLDivElement;
 let app: unknown;
@@ -55,6 +56,9 @@ afterEach(() => {
   target?.remove();
   vi.unstubAllGlobals();
   history.replaceState(null, "", "/");
+  // usage.svelte.ts 按用户 id 缓存在途 promise。用例之间用的是同一个 user id，
+  // 不清掉的话第二个用例会命中第一个用例 mock 出来的响应。
+  invalidateUsage();
 });
 
 describe("QuotaNotice", () => {
