@@ -223,6 +223,18 @@ CREATE TABLE IF NOT EXISTS admin_credentials (
   created_at   INTEGER NOT NULL,
   last_used_at INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS admin_audit (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  at         INTEGER NOT NULL,
+  actor      TEXT NOT NULL,
+  ip         TEXT NOT NULL,
+  auth       TEXT NOT NULL,
+  action     TEXT NOT NULL,
+  target     TEXT NOT NULL,
+  changes    TEXT NOT NULL,
+  step_up    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_at ON admin_audit(at DESC);
 `
 
 // connPragmas are applied to every connection via the DSN (not a one-shot
@@ -347,6 +359,13 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// pre-existing row gets — the migration is behaviour-neutral until the
 		// tiers are seeded or edited. See Service.dailyQuotaFor.
 		`ALTER TABLE plans ADD COLUMN daily_quota_bytes INTEGER NOT NULL DEFAULT 0`,
+		// 管理员操作审计（2026-07）。新库由 schema 常量建出，老库靠这条补。
+		// CREATE TABLE IF NOT EXISTS 是幂等的，两条路径不会打架。
+		`CREATE TABLE IF NOT EXISTS admin_audit (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, actor TEXT NOT NULL,
+  ip TEXT NOT NULL, auth TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL,
+  changes TEXT NOT NULL, step_up TEXT NOT NULL)`,
+		`CREATE INDEX IF NOT EXISTS idx_admin_audit_at ON admin_audit(at DESC)`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -2724,4 +2743,41 @@ func (s *SQLiteStore) AdminUserHandle(ctx context.Context) ([]byte, bool, error)
 		return nil, false, err
 	}
 	return h, true, nil
+}
+
+func (s *SQLiteStore) InsertAudit(ctx context.Context, e AuditEntry) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO admin_audit (at, actor, ip, auth, action, target, changes, step_up)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		e.At, e.Actor, e.IP, e.Auth, e.Action, e.Target, e.Changes, e.StepUp)
+	return err
+}
+
+func (s *SQLiteStore) ListAudit(ctx context.Context, limit, offset int, action string) ([]AuditEntry, error) {
+	q := `SELECT id, at, actor, ip, auth, action, target, changes, step_up
+	        FROM admin_audit`
+	args := []any{}
+	if action != "" {
+		q += ` WHERE action = ?`
+		args = append(args, action)
+	}
+	// id 作为次级排序键：同一秒内写入的多条记录（一次表单提交可能连着写）
+	// 否则顺序不确定，分页会重复或漏行。
+	q += ` ORDER BY at DESC, id DESC LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AuditEntry
+	for rows.Next() {
+		var e AuditEntry
+		if err := rows.Scan(&e.ID, &e.At, &e.Actor, &e.IP, &e.Auth,
+			&e.Action, &e.Target, &e.Changes, &e.StepUp); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }

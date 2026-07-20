@@ -354,6 +354,27 @@ type AdminCredential struct {
 	LastUsedAt int64
 }
 
+// AuditEntry 是一条管理员操作记录。永久保留，不参与 GC。
+//
+// Auth 与 StepUp 是两个不同的维度：Auth 是**建立当前会话**时用的登录方式，
+// StepUp 是**这一次操作**实际验的第二因子。用 passkey 登录、用 TOTP 步进是
+// 完全正常的组合，合并成一列就再也还原不出当时发生了什么。
+type AuditEntry struct {
+	ID     int64
+	At     int64
+	Actor  string
+	IP     string
+	Auth   string // "password" | "passkey"
+	Action string
+	Target string
+	// Changes 是 []ChangeField 的 JSON。存**存储层原始值**（bytes/secs），
+	// 不存表单里的 MB/GB/天 —— 单位混用会让日志和库里的实际值对不上。
+	Changes string
+	// StepUp: "" = 该操作无需步进；"grace" = 落在 60 秒宽限期内跳过了因子校验。
+	// grace 必须单独标记而不是记成验过了，否则日志会在最要紧的地方说谎。
+	StepUp string
+}
+
 // Store is the only abstraction that touches persistent storage. Implemented by
 // SQLiteStore today; a Postgres impl could replace it without changing callers.
 type Store interface {
@@ -624,4 +645,9 @@ type Store interface {
 	// AdminUserHandle returns the shared WebAuthn user handle, ok=false when no
 	// credential is registered yet (the first registration mints one).
 	AdminUserHandle(ctx context.Context) ([]byte, bool, error)
+	// InsertAudit 追加一条管理员操作记录。审计写入失败绝不能让业务操作回滚：
+	// 调用方记录错误后继续（见 writeAudit）。
+	InsertAudit(ctx context.Context, e AuditEntry) error
+	// ListAudit 按时间倒序返回审计记录。action 非空时按动作过滤。
+	ListAudit(ctx context.Context, limit, offset int, action string) ([]AuditEntry, error)
 }
