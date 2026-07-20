@@ -522,7 +522,7 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		defH > maxH || defRetention > retentionCount || defMaxDL > maxMaxDL {
 		http.Error(w, "invalid settings (positive integers; default_ttl <= max_ttl; "+
 			"default_retention in 0..2; default_max_downloads <= max_max_downloads; "+
-			"*_mb fields <= 1073741824)", http.StatusBadRequest)
+			"*_mb / *_gb fields <= 1073741824)", http.StatusBadRequest)
 		return
 	}
 	// Unchecked checkboxes submit no value; present (any value) = on.

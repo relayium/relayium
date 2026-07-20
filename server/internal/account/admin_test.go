@@ -104,6 +104,31 @@ func TestAdminSettingsUpdateValid(t *testing.T) {
 	}
 }
 
+// node_traffic_default_gb=0 means "unlimited" and must be accepted, not
+// rejected — this is the same 0-is-valid contract as default_retention and
+// storage_disk_cap_mb. A naive switch from enumi (n >= 0) to atoi (n > 0)
+// for this field would silently start rejecting 0 and, because the whole
+// settings POST is all-or-nothing, block saving every other field too.
+func TestAdminSettingsNodeTrafficDefaultZeroAllowed(t *testing.T) {
+	ts, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	req, _ := http.NewRequest("POST", ts.URL+"/admin/settings", strings.NewReader(
+		"max_file_size_mb=10&daily_quota_mb=100&default_ttl_hours=12&max_ttl_hours=48"+
+			"&default_retention=0&default_max_downloads=5&max_max_downloads=100&storage_disk_cap_mb=0"+
+			"&node_traffic_default_gb=0"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookie)
+	resp, _ := client.Do(req)
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("node_traffic_default_gb=0 (unlimited): want 302, got %d", resp.StatusCode)
+	}
+	if nt, ok, _ := store.GetSetting(context.Background(), SettingNodeTrafficDefault); !ok || nt != 0 {
+		t.Fatalf("node_traffic_default = %d (ok=%v), want 0 (unlimited)", nt, ok)
+	}
+}
+
 func TestAdminSettingsRejectsInvalid(t *testing.T) {
 	ts, store := newAdminSettingsServer(t)
 	cookie := adminLogin(t, ts)
