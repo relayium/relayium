@@ -207,9 +207,15 @@ func (s *Service) SeedSettings(ctx context.Context) error {
 func defaultPlans() []Plan {
 	const mb, gb, tb, day = int64(1) << 20, int64(1) << 30, int64(1) << 40, int64(86400)
 	return []Plan{
-		// DailyQuotaBytes 的付费档按"月流量 ÷ 3"定；Free 维持现行的全局 200 MiB，
-		// 不按该公式收紧，免得现有免费用户感觉变严。0 = 用全局 SettingDailyQuota。
-		{ID: "free", Name: "Free", StorageBytes: 100 * mb, TrafficBytes: 1 * gb, RetentionSecs: 3 * day, PriceMonthly: 0, PriceYearly: 0, SortOrder: 0, Active: true, DailyQuotaBytes: 200 * mb},
+		// DailyQuotaBytes 的付费档按"月流量 ÷ 3"定。0 = 回落到全局 SettingDailyQuota。
+		//
+		// Free 的 0 是**有意为之，不是漏填**——别看到 plus/pro/max 都有值就顺手补上。
+		// 需求写的是"Free 200 MiB（维持现值）"，但那句话的意图是"别让现有免费用户
+		// 觉得变严"。全局默认本来就是 200 MiB，所以填 0 继承全局达到完全相同的效果，
+		// 同时保住后台「每账号每日额度」这个旋钮对免费用户（绝大多数用户）仍然有效。
+		// 反过来填死 200 MiB，全新部署的免费档从此就不受那个旋钮控制了——这不该是
+		// 种子数据顺手做掉的决定。见 TestFreePlanFollowsGlobalDailyQuota。
+		{ID: "free", Name: "Free", StorageBytes: 100 * mb, TrafficBytes: 1 * gb, RetentionSecs: 3 * day, PriceMonthly: 0, PriceYearly: 0, SortOrder: 0, Active: true, DailyQuotaBytes: 0},
 		{ID: "plus", Name: "Plus", StorageBytes: 5 * gb, TrafficBytes: 300 * gb, RetentionSecs: 30 * day, PriceMonthly: 390, PriceYearly: 2900, SortOrder: 1, Active: true, DailyQuotaBytes: 100 * gb},
 		{ID: "pro", Name: "Pro", StorageBytes: 50 * gb, TrafficBytes: 1 * tb, RetentionSecs: 90 * day, PriceMonthly: 890, PriceYearly: 7900, SortOrder: 2, Active: true, DailyQuotaBytes: 340 * gb},
 		{ID: "max", Name: "Max", StorageBytes: 250 * gb, TrafficBytes: 5 * tb, RetentionSecs: 180 * day, PriceMonthly: 1990, PriceYearly: 19900, SortOrder: 3, Active: true, DailyQuotaBytes: 1700 * gb},

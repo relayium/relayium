@@ -105,7 +105,10 @@ func TestPlanDailyQuotaRoundTrip(t *testing.T) {
 // free deliberately keeping today's 200 MiB.
 func TestSeededPlansCarryDailyQuota(t *testing.T) {
 	want := map[string]int64{
-		"free": 200 << 20,
+		// Free is 0 ON PURPOSE: it inherits the global daily quota so the admin
+		// knob keeps working for free users. See defaultPlans() and
+		// TestFreePlanFollowsGlobalDailyQuota.
+		"free": 0,
 		"plus": 100 << 30,
 		"pro":  340 << 30,
 		"max":  1700 << 30,
@@ -118,6 +121,41 @@ func TestSeededPlansCarryDailyQuota(t *testing.T) {
 	}
 	if len(want) != 0 {
 		t.Fatalf("defaultPlans() missing tiers: %v", want)
+	}
+}
+
+// TestFreePlanFollowsGlobalDailyQuota guards the deliberate 0 in defaultPlans()
+// for the Free tier: a free user's daily quota must TRACK the global
+// "每账号每日额度" setting, not be pinned to whatever the seed happened to say.
+// Unlike the fallback-path tests, this one assigns a genuinely seeded free plan
+// row, so it fails even if freePlanFallback() were to normalize the field away.
+// Pinning free's seed to a literal (e.g. 200 MiB) makes this fail — which is the
+// point: that would quietly take free users out from under the admin knob.
+func TestFreePlanFollowsGlobalDailyQuota(t *testing.T) {
+	svc, st := newPlanService(t) // SeedPlans() ran, so a real "free" row exists
+	ctx := context.Background()
+	u, _ := st.UpsertUserByEmail(ctx, "freeglobal@example.com", "")
+	_ = st.SetUserPlan(ctx, u.ID, "free", svc.now().Unix())
+
+	// Confirm the fixture really is a stored row, not the in-memory fallback.
+	if p, ok, err := st.GetPlan(ctx, "free"); err != nil || !ok {
+		t.Fatalf("test invariant broken: free plan row must exist (ok=%v err=%v)", ok, err)
+	} else if p.DailyQuotaBytes != 0 {
+		t.Fatalf("seeded free plan DailyQuotaBytes = %d, want 0 so it inherits the global setting", p.DailyQuotaBytes)
+	}
+
+	// Move the global knob twice; the free user must follow it both times.
+	for _, want := range []int64{7 << 20, 512 << 20} {
+		if err := st.SetSetting(ctx, SettingDailyQuota, want, svc.now().Unix()); err != nil {
+			t.Fatal(err)
+		}
+		got, err := svc.dailyQuotaFor(ctx, u.ID)
+		if err != nil {
+			t.Fatalf("dailyQuotaFor: %v", err)
+		}
+		if got != want {
+			t.Fatalf("free user's daily quota = %d, want %d (it must track the global setting, not a pinned seed)", got, want)
+		}
 	}
 }
 

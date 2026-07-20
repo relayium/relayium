@@ -6,16 +6,14 @@ import "context"
 // be resolved (missing row, DB blip). Matches defaultPlans()[0] so enforcement
 // never crashes and never silently grants unlimited quota.
 //
-// DailyQuotaBytes is deliberately zeroed here: this Plan stands in for a tier we
-// could NOT resolve, so it must not invent a daily quota. Leaving it 0 makes
-// dailyQuotaFor defer to the global SettingDailyQuota — which is exactly the
-// behaviour an unresolvable tier had before quotas moved into the plans table,
-// and it keeps the global knob authoritative for users with no plan row.
-func freePlanFallback() Plan {
-	p := defaultPlans()[0]
-	p.DailyQuotaBytes = 0
-	return p
-}
+// It must stay a verbatim copy of defaultPlans()[0] — do NOT normalize
+// individual fields here. An earlier draft zeroed DailyQuotaBytes so an
+// unresolvable tier would defer to the global setting; that looked prudent but
+// silently absorbed a bad Free seed value, turning a loud test failure into a
+// behaviour split between users with and without a plans row. The Free tier's
+// "inherit the global daily quota" property belongs in defaultPlans() (where
+// it's asserted by TestFreePlanFollowsGlobalDailyQuota), not in a fixup here.
+func freePlanFallback() Plan { return defaultPlans()[0] }
 
 // planForUser resolves a user's billing tier. A genuine not-found falls back to
 // Free with a nil error (a user with a bogus plan_id is legitimately Free); a
