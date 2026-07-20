@@ -49,6 +49,19 @@ type nodeHeartbeatResp struct {
 	nodeLimits
 }
 
+// resolveNodeTrafficLimit 给出一台节点本月真正生效的中继流量上限（字节）。
+//
+// 节点行里的 traffic_limit_bytes 为 0 表示"继承全局默认"，不再是"无限"——
+// 这条语义在 2026-07 改过：官方节点默认应当有一个上限（出厂 1 TiB），管理员
+// 想给某台机器单独放开就填一个大数，而不是靠 0。返回 0 仍表示不限，那只会在
+// 全局默认也被设成 0（整体关掉这套机制）时发生。
+func resolveNodeTrafficLimit(node Node, st Settings) int64 {
+	if node.TrafficLimitBytes > 0 {
+		return node.TrafficLimitBytes
+	}
+	return st.NodeTrafficDefault
+}
+
 // nodeLimitsFor assembles a node's caps and month-to-date relayed total.
 func (s *Service) nodeLimitsFor(ctx context.Context, node Node) nodeLimits {
 	monthStart, _ := monthRange(periodOf(s.now().Unix()))

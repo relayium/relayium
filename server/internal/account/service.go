@@ -88,9 +88,11 @@ type Config struct {
 	AdminTOTPSecret      string // base32 TOTP secret; empty disables admin 2FA
 	// Stored-transfer limits (env/flag defaults; DB settings table overrides these live).
 	MaxFileSize int64 // bytes
-	DailyQuota  int64 // bytes per rolling 24h
-	DefaultTTL  int64 // seconds
-	MaxTTL      int64 // seconds
+	// NodeTrafficDefault 是官方节点月度中继流量的默认上限（字节）；0 = 不限。
+	NodeTrafficDefault int64
+	DailyQuota         int64 // bytes per rolling 24h
+	DefaultTTL         int64 // seconds
+	MaxTTL             int64 // seconds
 	// DefaultRetention is the admin default retention policy (0=burn, 1=ttl,
 	// 2=count) applied when an upload request specifies none of
 	// burnAfterRead/ttl/maxDownloads. See Settings.DefaultRetention.

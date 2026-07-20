@@ -28,6 +28,10 @@ const (
 	// storage node fails instead of landing on central. 0 = allow central
 	// fallback (the default, current behaviour).
 	SettingDisableCentralFallback = "disable_central_fallback"
+	// SettingNodeTrafficDefault 是官方节点每月中继流量的**默认**上限（字节）。
+	// 节点自己的 traffic_limit_bytes 为 0 时继承它；节点有值则以节点为准。
+	// 本身为 0 表示"未单独配置的节点不限流量"，保留整体关掉这套机制的能力。
+	SettingNodeTrafficDefault = "node_traffic_default"
 )
 
 // minTTL is the floor a requested TTL is clamped up to; well below default_ttl.
@@ -67,6 +71,8 @@ type Settings struct {
 	// DisableCentralFallback stops uploads landing on the app server's own disk
 	// when no storage node is available (they fail instead).
 	DisableCentralFallback bool
+	// NodeTrafficDefault 是官方节点月度中继流量的默认上限（字节）；0 = 不限。
+	NodeTrafficDefault int64
 }
 
 // settingOr returns the DB value for key, or def when unset/on error (fail to env).
@@ -93,6 +99,7 @@ func (s *Service) resolveSettings(ctx context.Context) Settings {
 		AccountReminderDays:    s.settingOr(ctx, SettingAccountReminderDays, s.cfg.AccountReminderDays),
 		StorageDiskCap:         s.settingOr(ctx, SettingStorageDiskCap, s.cfg.StorageDiskCap),
 		DisableCentralFallback: s.settingOr(ctx, SettingDisableCentralFallback, 0) != 0,
+		NodeTrafficDefault:     s.settingOr(ctx, SettingNodeTrafficDefault, s.cfg.NodeTrafficDefault),
 	}
 }
 
