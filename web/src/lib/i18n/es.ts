@@ -497,6 +497,7 @@ const es: Messages = {
     noKey: "Enlace incompleto: falta la clave de descifrado (#k=).",
     decryptFail: "Fallo al descifrar: clave incorrecta o archivo dañado.",
     netFail: "Descarga interrumpida — comprueba tu conexión e inténtalo de nuevo.",
+    cancelled: "Descarga cancelada. No se guardó nada: puedes volver a iniciarla.",
     retry: "Reintentar",
     memWarn: (size) => `Este enlace suma ${size}. Tu navegador no puede transmitir la descarga directamente al disco, así que debe mantener el archivo entero en memoria y el navegador podría fallar.`,
     memWarnHow: "Abre este enlace en Chrome o Edge en un ordenador, o descárgalo con la herramienta de línea de comandos: ambos transmiten directamente al disco.",

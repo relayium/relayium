@@ -1,9 +1,27 @@
 import { ZipWriter, safeSegments } from "./zip";
 import { streamURL, contentDisposition } from "./sw-stream";
 
+/**
+ * 一个文件的写入端。
+ *
+ * **调用必须串行**：每次 write/close 都要 await 到 settle 之后才能发起下一次。
+ * 这不是实现偷懒——sink 写的是一条字节流，两个并发的 write 谁先落盘是未定义的，
+ * 文件内容本身就已经错了，再怎么排队也救不回来。所以违约不是「不支持」而是
+ * 「调用方的字节序已经没有意义」，实现应当**响亮地失败**（swStreamSink 会直接
+ * 把这次下载判死并让两侧的 promise 都 reject），而不是默默排队掩盖问题。
+ */
 export interface FileSink {
   write(chunk: Uint8Array): Promise<void>;
   close(): Promise<void>;
+}
+
+/** 用户在浏览器的下载界面里主动取消了这次下载（或浏览器掐了它）。
+ *  和「解密失败」「网络中断」都不是一回事，下载页要按取消如实提示。 */
+export class SinkCancelledError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SinkCancelledError";
+  }
 }
 
 export interface FileMetaLite {
@@ -127,6 +145,30 @@ const STREAM_OPEN_TIMEOUT_MS = 5000;
 const STREAM_KEEPALIVE_MS = 10_000;
 /** 从触发 iframe 导航到 SW 真的开始供流的上限。超时说明这次下载根本没被接住。 */
 const STREAM_SERVE_TIMEOUT_MS = 30_000;
+/**
+ * **每一次** ack 等待的停滞上限。
+ *
+ * 这是整条路径上唯一能兜住「SW 被浏览器回收」的东西，而回收恰恰是手机上最常见的
+ * 失败方式：SW 死了不会触发 controllerchange（registration 没变），stream-ping 只会
+ * 把 SW 拉起来一个**新实例**——新实例的 streams 是空的、旧 port 已随 worker 消失，
+ * 之后的 chunk 全发进虚空。没有这个超时，write() 就永远 pending，下载界面停在
+ * 某个百分比上一动不动。
+ *
+ * 取 60s 的理由：ack 由浏览器的下载消费方 pull 触发，它写的是本地磁盘，正常节奏
+ * 是毫秒级；真实停顿只可能来自磁盘忙或系统压力，60s 远超这些。再长就等于让用户
+ * 盯着一个已经死掉的进度条多熬一分钟。
+ * 已知取舍：用户在浏览器下载界面里**暂停**这次下载会让消费方停止 pull，超过 60s
+ * 就会被判成停滞而中止。相比「永久挂死」，一个明确的报错 + 重下更可接受。
+ */
+const STREAM_ACK_TIMEOUT_MS = 60_000;
+/**
+ * 等 close 回执（SW 确认流已收尾）的上限。
+ *
+ * SW 活着时这就是一次 postMessage 往返，毫秒级；等不到基本只有一种解释——SW 已经
+ * 被回收，这条流永远不会收尾。15s 给手机上被抢占的主线程留足余量，又不至于让用户
+ * 在「就差最后一步」的地方干等太久。
+ */
+const STREAM_CLOSE_TIMEOUT_MS = 15_000;
 
 /**
  * 打开一条 SW 流并触发浏览器下载，返回写入端。
@@ -155,8 +197,8 @@ async function openSwStream(name: string, cd: string): Promise<FileSink> {
     clearTimeout(serveTimer);
     navigator.serviceWorker.removeEventListener("controllerchange", onSwapped);
   };
-  const fail = (msg: string) => {
-    if (!failure) failure = new Error(msg);
+  const fail = (err: Error): Error => {
+    if (!failure) failure = err;
     const s = settle;
     settle = null;
     stopTimers();
@@ -164,41 +206,66 @@ async function openSwStream(name: string, cd: string): Promise<FileSink> {
     port.close();
     iframe?.remove(); // 失败时确实要掐断这次导航
     s?.fail(failure);
+    return failure;
   };
   // 部署换版会顶掉旧 SW，注册表随之蒸发，这条流再也不会有 ack。宁可立刻报错，
   // 也不要让下载永远卡在 99%。
-  const onSwapped = () => fail("service worker replaced mid-download");
+  const onSwapped = () => fail(new Error("service worker replaced mid-download"));
 
-  const opened = new Promise<void>((resolve, reject) => { settle = { ok: resolve, fail: reject }; });
+  /**
+   * 占住唯一的 settle 槽，等 SW 的一次回执，带**独立的停滞超时**。
+   *
+   * 每一次等待都要有超时，不只是握手期：SW 被浏览器回收时既不会触发
+   * controllerchange 也不会有任何回执，唯一还能让 write()/close() 结束的就是这里。
+   *
+   * 槽被占着就说明调用方并发调用了 write/close，违反了 FileSink 的串行约定。
+   * 这时不排队而是直接把整条流判死（两侧 promise 都 reject）：并发写入的字节序
+   * 本来就已经是未定义的，落一个内容错乱的文件比响亮地失败糟得多。
+   */
+  const awaitReply = (what: string, ms: number): Promise<void> =>
+    new Promise<void>((resolve, reject) => {
+      if (settle) {
+        reject(fail(new Error(`FileSink misuse: concurrent ${what} — calls must be serialised`)));
+        return;
+      }
+      const timer = setTimeout(
+        () => fail(new Error(`service worker stopped responding (${what} timed out)`)),
+        ms,
+      );
+      settle = {
+        ok: () => { clearTimeout(timer); resolve(); },
+        fail: (e) => { clearTimeout(timer); reject(e); },
+      };
+    });
+
   port.onmessage = (e) => {
     const t = (e.data as { type?: string } | null)?.type;
-    if (t === "stream-ready" || t === "ack") {
+    if (t === "stream-ready" || t === "ack" || t === "closed") {
       const s = settle;
       settle = null;
       s?.ok();
     } else if (t === "stream-serving") {
       clearTimeout(serveTimer); // iframe 的请求到了 SW，这条流真的在供
     } else if (t === "cancel") {
-      fail("download cancelled in the browser");
+      fail(new SinkCancelledError("download cancelled in the browser"));
     }
   };
   navigator.serviceWorker.addEventListener("controllerchange", onSwapped);
-  const timer = setTimeout(() => fail("service worker did not open the stream"), STREAM_OPEN_TIMEOUT_MS);
+  const opened = awaitReply("open", STREAM_OPEN_TIMEOUT_MS);
   controller.postMessage(
-    { type: "stream-open", path, headers: { "Content-Disposition": cd, "Content-Type": "application/octet-stream", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } },
+    { type: "stream-open", path, headers: { "Content-Disposition": cd } },
     [ch.port2],
   );
-  try {
-    await opened;
-  } finally {
-    clearTimeout(timer);
-  }
+  await opened;
 
   // SW 空闲约 30s 会被回收，注册表跟着没。写入本身就是消息，会不断刷新计时器；
   // 心跳只覆盖上游长时间不出数据的那段（对端卡住、暂停）。
   keepalive = setInterval(() => controller.postMessage({ type: "stream-ping" }), STREAM_KEEPALIVE_MS);
 
-  serveTimer = setTimeout(() => fail("the browser never fetched the stream"), STREAM_SERVE_TIMEOUT_MS);
+  serveTimer = setTimeout(
+    () => fail(new Error("the browser never fetched the stream")),
+    STREAM_SERVE_TIMEOUT_MS,
+  );
   iframe = document.createElement("iframe");
   iframe.hidden = true;
   iframe.src = path;
@@ -210,13 +277,19 @@ async function openSwStream(name: string, cd: string): Promise<FileSink> {
       // slice 拷一份：chunk 常常是更大缓冲区的 subarray（DownloadPage 就是这么切的），
       // 直接转移会把调用方手里的缓冲区一并 detach 掉。
       const copy = chunk.slice();
-      const ack = new Promise<void>((resolve, reject) => { settle = { ok: resolve, fail: reject }; });
+      const ack = awaitReply("write", STREAM_ACK_TIMEOUT_MS);
       port.postMessage({ type: "chunk", chunk: copy }, [copy.buffer]);
       await ack; // ← 背压：SW 只在消费方真的要下一块时才 ack
     },
     close: async () => {
       if (failure) throw failure;
+      // 必须等 SW 回 closed 才算收尾。只发不等的话，SW 早被回收时 ctrl.close()
+      // 根本没发生，浏览器那份下载永远不收尾（用户拿到半个文件），而页面已经把
+      // 界面置成「完成」——比它要取代的内存提示糟得多。
+      const closed = awaitReply("close", STREAM_CLOSE_TIMEOUT_MS);
       port.postMessage({ type: "close" });
+      await closed;
+      // 收尾成功之后才停心跳/摘监听：在此之前 controllerchange 仍是最后的救场。
       stopTimers();
       // 不在这里 close() 端口、也不立刻摘 iframe：流虽然已经收尾，浏览器可能还在
       // 把最后几块落盘，摘掉承载这次导航的 iframe 有可能把它掐了。晚一点再收。

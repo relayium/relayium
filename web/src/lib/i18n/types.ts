@@ -487,6 +487,7 @@ export interface Messages {
     decryptFail: string;
     unsupported: string;
     netFail: string; // download connection dropped — retryable, distinct from a decrypt failure
+    cancelled: string; // user cancelled the browser download — not a failure, and NOT a decrypt error
     retry: string; // button: retry a network-failed download
     // 没有流式落盘能力的浏览器（Firefox/Safari/所有手机）必须把整个文件读进
     // 内存，大文件足以掀掉页面 —— 下载开始前先说清楚，并给一个明确的继续入口。

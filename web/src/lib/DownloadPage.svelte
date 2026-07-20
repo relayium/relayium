@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { fetchMeta, downloadBlob, parseDownloadKey, keyFromFragment, DownloadNetworkError } from "./stored-file";
   import { decryptManifest, type StoredManifest } from "./store-crypto";
-  import { pickSaveTarget, canStreamToDisk, LARGE_DOWNLOAD_WARN_BYTES, type SaveTarget, type FileSink } from "./filesink";
+  import { pickSaveTarget, canStreamToDisk, LARGE_DOWNLOAD_WARN_BYTES, SinkCancelledError, type SaveTarget, type FileSink } from "./filesink";
   import { lang, setLang, LANGS, messages, legalUrl, type Lang, type Messages } from "./i18n.svelte";
   import ThemeSelect from "./ThemeSelect.svelte";
   import { formatRemaining, formatSize } from "./format";
@@ -13,7 +13,7 @@
 
   type PageState = "loading" | "ready" | "downloading" | "done" | "error";
   let pageState: PageState = $state("loading");
-  let errKey: "notFound" | "noKey" | "decryptFail" | "unsupported" | "netFail" | "" = $state("");
+  let errKey: "notFound" | "noKey" | "decryptFail" | "unsupported" | "netFail" | "cancelled" | "" = $state("");
   let manifest = $state<StoredManifest | null>(null);
   let key: CryptoKey | null = null;
   let progress = $state(0); // 0..100
@@ -115,9 +115,10 @@
       pageState = "done";
     } catch (e) {
       pageState = "error";
-      // A dropped connection is retryable; only a genuine decrypt/integrity failure
-      // warrants the "wrong key or corrupt file" message.
-      errKey = e instanceof DownloadNetworkError ? "netFail" : "decryptFail";
+      // 用户自己取消下载不是故障，更不是"密钥错误或文件损坏"——如实说。
+      // 掉线可重试；只有真正的解密/完整性失败才配得上那句"密钥错误或文件损坏"。
+      if (e instanceof SinkCancelledError) errKey = "cancelled";
+      else errKey = e instanceof DownloadNetworkError ? "netFail" : "decryptFail";
     }
   }
 
@@ -147,9 +148,10 @@
       {:else if errKey === "noKey"}{t.download.noKey}
       {:else if errKey === "unsupported"}{t.download.unsupported}
       {:else if errKey === "netFail"}{t.download.netFail}
+      {:else if errKey === "cancelled"}{t.download.cancelled}
       {:else}{t.download.decryptFail}{/if}
     </p>
-    {#if errKey === "netFail" && manifest}
+    {#if (errKey === "netFail" || errKey === "cancelled") && manifest}
       <button class="btn btn-primary" onclick={download}>{t.download.retry}</button>
     {/if}
   {:else if pageState === "ready" && expired}

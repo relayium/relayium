@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { STREAM_ROUTE, streamURL, parseStreamPath, contentDisposition } from "./sw-stream";
+import { STREAM_ROUTE, streamURL, contentDisposition } from "./sw-stream";
 
 describe("STREAM_ROUTE", () => {
   it("is a dunder-namespaced prefix that cannot collide with a real route", () => {
@@ -40,56 +40,11 @@ describe("streamURL", () => {
     expect(streamURL("t", "...")).toBe("/__stream__/t/...");
   });
 
-  it("rejects a token that would not survive parseStreamPath", () => {
+  it("rejects a token that could forge a path segment or blow the length budget", () => {
     expect(() => streamURL("", "f.txt")).toThrow(/token/i);
     expect(() => streamURL("../x", "f.txt")).toThrow(/token/i);
     expect(() => streamURL("a/b", "f.txt")).toThrow(/token/i);
     expect(() => streamURL("a".repeat(65), "f.txt")).toThrow(/token/i);
-  });
-
-  it("round-trips through parseStreamPath", () => {
-    const url = streamURL("Tok_en-09", "图 片.svg");
-    expect(parseStreamPath(url)).toEqual({ token: "Tok_en-09" });
-  });
-});
-
-describe("parseStreamPath", () => {
-  it("extracts the token from a well-formed path", () => {
-    expect(parseStreamPath("/__stream__/abc123/report.pdf")).toEqual({ token: "abc123" });
-    expect(parseStreamPath("/__stream__/A-b_9/%E5%9B%BE.svg")).toEqual({ token: "A-b_9" });
-  });
-
-  it("rejects paths outside the stream route", () => {
-    expect(parseStreamPath("")).toBeNull();
-    expect(parseStreamPath("/")).toBeNull();
-    expect(parseStreamPath("/d/abc")).toBeNull();
-    expect(parseStreamPath("/api/files/abc/blob")).toBeNull();
-    expect(parseStreamPath("/__STREAM__/abc/f.txt")).toBeNull();
-    expect(parseStreamPath("__stream__/abc/f.txt")).toBeNull();
-    expect(parseStreamPath("/x/__stream__/abc/f.txt")).toBeNull();
-  });
-
-  it("rejects a missing or empty token", () => {
-    expect(parseStreamPath("/__stream__")).toBeNull();
-    expect(parseStreamPath("/__stream__/")).toBeNull();
-    expect(parseStreamPath("/__stream__//f.txt")).toBeNull();
-    expect(parseStreamPath("/__stream__/abc")).toBeNull(); // filename segment missing
-    expect(parseStreamPath("/__stream__/abc/")).toBeNull(); // filename segment empty
-  });
-
-  it("rejects a token with characters outside the URL-safe alphabet", () => {
-    expect(parseStreamPath("/__stream__/../f.txt")).toBeNull();
-    expect(parseStreamPath("/__stream__/./f.txt")).toBeNull();
-    expect(parseStreamPath("/__stream__/a%2Fb/f.txt")).toBeNull();
-    expect(parseStreamPath("/__stream__/a.b/f.txt")).toBeNull();
-    expect(parseStreamPath("/__stream__/a b/f.txt")).toBeNull();
-    expect(parseStreamPath("/__stream__/图/f.txt")).toBeNull();
-    expect(parseStreamPath("/__stream__/" + "a".repeat(65) + "/f.txt")).toBeNull();
-  });
-
-  it("rejects extra path segments after the filename", () => {
-    expect(parseStreamPath("/__stream__/abc/f.txt/extra")).toBeNull();
-    expect(parseStreamPath("/__stream__/abc/dir/f.txt")).toBeNull();
   });
 });
 

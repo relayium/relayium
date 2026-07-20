@@ -4,9 +4,11 @@
 // 写进磁盘，只能整份堆进内存。绕开办法是让页面向一个假 URL 发起下载导航，由 SW
 // 拦截并用一个 ReadableStream 作为响应体——浏览器边收边写盘，内存占用恒定。
 //
-// jsdom 没有 service worker，SW 脚本本身测不了，所以这里只放**不依赖 SW 运行时**
-// 的部分，sw.js 侧只做 glue（拦截 → parseStreamPath → 取流 → 带 contentDisposition
-// 响应）。和 zip.ts 导出纯 crc32/safeSegments 是同一个路子。
+// 这里只放**不依赖 SW 运行时**的纯逻辑（和 zip.ts 导出纯 crc32/safeSegments 同一个
+// 路子）。分工是：**页面**用 streamURL 造出路径、用 contentDisposition 造出文件名头，
+// 然后把两者一起登记给 SW；**sw.js** 不解析路径，只拿完整 pathname 做 Map 精确匹配，
+// 并自己强制响应头（见 sw-template.js 的 streamHeaders——消息内容不可信）。
+// 精确匹配比在 SW 里重新解析一遍更严格，也免了把解析逻辑复制进那个不参与打包的文件。
 
 /**
  * 流式 URL 的路径前缀。用 dunder 命名与真实路由隔离：
@@ -18,7 +20,8 @@
 export const STREAM_ROUTE = "/__stream__/";
 
 /** 令牌字母表：URL-safe base64 的字符集。故意不含 "."、"%" 和 "/"，
- *  所以 "."、".."、百分号编码和多段路径都会被 parseStreamPath 直接判死。 */
+ *  所以 "."、".."、百分号编码和多段路径都会被 streamURL 直接判死，造不出这一种
+ *  形状之外的路径。 */
 const TOKEN_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** 名字被清干净后什么都不剩时的兜底名（必须非空，否则 header 里会出现 filename=""）。 */
@@ -49,25 +52,12 @@ export function streamURL(token: string, filename: string): string {
   // 但 "."、".." 这两个值 encodeURIComponent 不编码（它们本来就是普通字符），
   // 而它们恰好是 URL 里的点段：浏览器在发请求前就会把路径规范化，
   // 把 "/__stream__/<token>/.." 折成 "/__stream__/"，请求根本不会带着
-  // token 一起发出去，parseStreamPath 也就无从解析——这不是安全逃逸
+  // token 一起发出去，SW 的注册表也就查不到这条流——这不是安全逃逸
   // （"/" 已经被编码成 "%2F"，点段只能把路径折回 STREAM_ROUTE 自身这一个
   // 非路由的前缀），但会让下载静默地落到 SPA 外壳。这里直接把这两个值当
   // 空文件名处理，换成兜底名。
   const safeName = filename === "." || filename === ".." ? FALLBACK_NAME : filename || FALLBACK_NAME;
   return STREAM_ROUTE + token + "/" + encodeURIComponent(safeName);
-}
-
-/**
- * SW 侧解析：只接受 streamURL 产出的那一种形状，即
- * `/__stream__/<token>/<filename>` 恰好两段、token 合法、文件名段非空。
- * 其余一律 null（畸形输入不该走进取流逻辑）。
- */
-export function parseStreamPath(pathname: string): { token: string } | null {
-  if (!pathname.startsWith(STREAM_ROUTE)) return null;
-  const segs = pathname.slice(STREAM_ROUTE.length).split("/");
-  if (segs.length !== 2 || segs[1] === "") return null;
-  if (!TOKEN_RE.test(segs[0])) return null;
-  return { token: segs[0] };
 }
 
 /**

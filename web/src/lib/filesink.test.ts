@@ -1,6 +1,4 @@
 import { describe, it, expect, vi } from "vitest";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { splitExtension, nextAvailableName, canStreamToDisk, pickSaveTarget, memoryPeakBytes, warnsAboutMemory, LARGE_DOWNLOAD_WARN_BYTES, probeStreamSupport, swStreamReady } from "./filesink";
 import { STREAM_ROUTE, contentDisposition } from "./sw-stream";
 
@@ -286,13 +284,16 @@ async function openSink(name = "a.bin") {
 }
 
 describe("swStreamSink", () => {
-  it("登记的路径在 STREAM_ROUTE 下，头里带 Content-Disposition 和 octet-stream", async () => {
+  it("登记的路径在 STREAM_ROUTE 下，只把 Content-Disposition 交给 SW", async () => {
     const o = await openSink("图 片.svg");
     try {
       expect(String(o.msg.path).startsWith(STREAM_ROUTE)).toBe(true);
       const h = o.msg.headers as Record<string, string>;
       expect(h["Content-Disposition"]).toBe(contentDisposition("图 片.svg"));
-      expect(h["Content-Type"]).toBe("application/octet-stream");
+      // Content-Type / nosniff / no-store 由 SW 自己强制（sw-template.test.ts 守），
+      // 页面**不该**参与：那条路上的字节完全由对端控制，反射消息内容就是把同源
+      // 任意 Content-Type 托管权交出去。
+      expect(Object.keys(h)).toEqual(["Content-Disposition"]);
     } finally { o.restore(); }
   });
 
@@ -369,6 +370,96 @@ describe("swStreamSink", () => {
     } finally { vi.useRealTimers(); }
   });
 
+  it("SW 被回收后 write 不会永久挂死：每一次 ack 等待都有独立的停滞超时", async () => {
+    // 这是手机上最可能发生的失败方式。SW 被浏览器回收**不会**触发 controllerchange
+    // （registration 没变），stream-ping 只会拉起一个 streams 为空的新实例，旧 port
+    // 随 worker 一起没了——之后的 chunk 全发进虚空。握手期那个一次性超时早就被
+    // stream-serving 清掉了，兜不住这里。
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const o = await openSink();
+      try {
+        o.swPort.postMessage({ type: "stream-serving" }); // 先让 serveTimer 被清掉
+        await tick();
+        const p = o.sink.write(new Uint8Array([1]));
+        vi.advanceTimersByTime(30_000); // 越过 serve 超时：它已经不管这条流了
+        vi.advanceTimersByTime(31_000); // 越过 ack 停滞超时
+        await expect(p).rejects.toThrow(/stopped responding/i);
+      } finally { o.restore(); }
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("stream-serving 会清掉 serve 超时 —— 否则每一次下载都会在 30s 被掐断", async () => {
+    // 变异守卫：删掉 SW 侧那条 clearTimeout(serveTimer)，正常下载也会在 30s 报
+    // 「never fetched」，功能整个作废。
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const o = await openSink();
+      try {
+        o.swPort.postMessage({ type: "stream-serving" });
+        await tick();
+        const p = o.sink.write(new Uint8Array([1]));
+        vi.advanceTimersByTime(35_000); // 越过 30s serve 超时，但没到 ack 超时
+        o.swPort.postMessage({ type: "ack" });
+        await expect(p).resolves.toBeUndefined();
+      } finally { o.restore(); }
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("close 必须等 SW 回 closed 才 resolve —— 否则用户被告知成功，磁盘上是半个文件", async () => {
+    const o = await openSink();
+    try {
+      let done = false;
+      const p = o.sink.close().then(() => { done = true; });
+      await tick(); await tick();
+      expect(done, "没有回执就无从知道 SW 是否还活着、流是否真的收尾了").toBe(false);
+      o.swPort.postMessage({ type: "closed" });
+      await p;
+      expect(done).toBe(true);
+    } finally { o.restore(); }
+  });
+
+  it("SW 已死时 close 超时 reject，绝不 resolve", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const o = await openSink();
+      try {
+        const p = o.sink.close();
+        vi.advanceTimersByTime(16_000);
+        await expect(p).rejects.toThrow(/stopped responding/i);
+      } finally { o.restore(); }
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("close 期间 SW 被换掉也 reject，而不是被摘掉监听后永远搁浅", async () => {
+    const o = await openSink();
+    try {
+      const p = o.sink.close();
+      o.fire("controllerchange");
+      await expect(p).rejects.toThrow(/replaced/i);
+    } finally { o.restore(); }
+  });
+
+  it("违反串行约定（并发 write，或 close 撞上在途 write）是响亮的失败，不是挂死", async () => {
+    const o = await openSink();
+    try {
+      const first = o.sink.write(new Uint8Array([1]));
+      const second = o.sink.write(new Uint8Array([2]));
+      await expect(second).rejects.toThrow(/serialised/i);
+      // 并发写入的字节序本来就已经未定义，整条流一并判死比落一个内容错乱的文件好。
+      await expect(first).rejects.toThrow(/serialised/i);
+    } finally { o.restore(); }
+  });
+
+  it("close 撞上在途 write 同样立刻报错", async () => {
+    const o = await openSink();
+    try {
+      const w = o.sink.write(new Uint8Array([1]));
+      await expect(o.sink.close()).rejects.toThrow(/serialised/i);
+      await expect(w).rejects.toThrow(/serialised/i);
+    } finally { o.restore(); }
+  });
+
   it("单文件目标只能取一次 sink", async () => {
     const o = await openSink();
     try {
@@ -377,33 +468,8 @@ describe("swStreamSink", () => {
   });
 });
 
-// --- sw-template.js 的拦截顺序 ----------------------------------------------
-// sw-template.js 从不被打包也从不被 import，jsdom 里更没有 service worker，所以
-// 它的运行时行为一行都测不到。唯一还能守住的是**源码顺序**：流式分支必须排在
-// navigate 分支之前，否则 iframe 发出的请求（mode === "navigate"）会被「网络优先」
-// 那条抢走，漏到 nginx 的 try_files，用户下载到一个 index.html。这条故障只在
-// 生产复现（Go 的 spa.go 对带扩展名的未知路径返真 404），本地永远看不见——所以
-// 这个笨拙的源码断言是有价值的。
-describe("sw-template.js", () => {
-  // vitest 的 root 是 web/；import.meta.url 在这里是 http:// 的，不能喂给 fs。
-  const src = readFileSync(resolve(process.cwd(), "src/sw-template.js"), "utf8");
-
-  it("流式分支排在 navigate 分支之前", () => {
-    const stream = src.indexOf("STREAM_ROUTE)");
-    const navigate = src.indexOf('req.mode === "navigate"');
-    expect(stream).toBeGreaterThan(0);
-    expect(navigate).toBeGreaterThan(0);
-    expect(stream, "流式拦截必须在 navigate 之前，否则 iframe 的请求会被送去网络").toBeLessThan(navigate);
-  });
-
-  it("留着给 vite-plugin-pwa 替换的 __STREAM_ROUTE__ 占位符", () => {
-    expect(src).toContain("__STREAM_ROUTE__");
-  });
-
-  it("未登记的 /__stream__/ 路径由 SW 自己 404，不放行到 nginx", () => {
-    expect(src).toContain('status: 404');
-  });
-});
+// sw-template.js 自己的行为（拦截顺序、pull/ack 汇合、close 回执、强制响应头）
+// 由 src/sw-template.test.ts 用 new Function 真跑那份脚本来测。这里只测页面侧。
 
 describe("warnsAboutMemory", () => {
   it("有流式落盘能力时永不提示，多大都行", () => {

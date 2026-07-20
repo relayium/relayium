@@ -17,7 +17,7 @@ const STREAM_ROUTE = "__STREAM_ROUTE__"; // e.g. "/__stream__/" — see lib/sw-s
  *
  * 键是**完整 pathname** 而不是 token：页面用 sw-stream.ts 的 streamURL 产出路径并
  * 原样登记，SW 只做精确匹配。精确匹配比在这里重新解析一遍路径更严格，也省掉了把
- * TOKEN_RE / parseStreamPath 复制进这个文件的必要（本文件不参与打包，import 不了）。
+ * TOKEN_RE 之类的解析逻辑复制进这个文件的必要（本文件不参与打包，import 不了）。
  *
  * 注册表只活在 SW 的全局作用域里，SW 被浏览器回收（约 30s 空闲）就整个蒸发。
  * 页面侧靠 stream-ping 保活；细节见 filesink.ts 的 openSwStream。
@@ -58,8 +58,9 @@ self.addEventListener("fetch", (e) => {
 
   // 流式下载。**必须排在下面的 navigate 分支之前**：这个请求由隐藏 iframe 发出，
   // req.mode 就是 "navigate"，放到后面会被那条「网络优先」抢走送去网络，落到
-  // nginx 的 try_files 兜底成 index.html——用户下载到一个网页。改动顺序前先看
-  // filesink.test.ts 里那条读本文件源码比对分支位置的用例。
+  // nginx 的 try_files 兜底成 index.html——用户下载到一个网页。
+  // sw-template.test.ts 里有一条用例真的用 mode:"navigate" 打一条已登记的流式
+  // 路径，顺序错了它就红。
   //
   // 没登记过的 /__stream__/ 一律 404 而不是放行：同样是为了不让它漏到 nginx。
   // 注意 Go 的 spa.go 对带扩展名的未知路径返真 404，所以这个故障只在生产（nginx）
@@ -120,7 +121,7 @@ function openStream(d, port) {
   if (!port || typeof d.path !== "string" || !d.path.startsWith(STREAM_ROUTE)) return;
   const entry = {
     port,
-    headers: d.headers && typeof d.headers === "object" ? d.headers : {},
+    headers: streamHeaders(d.headers),
     body: null,
     ctrl: null,
     served: false,
@@ -144,12 +145,26 @@ function openStream(d, port) {
     const m = ev.data;
     if (!m || !entry.ctrl) return;
     if (m.type === "chunk") {
-      try { entry.ctrl.enqueue(m.chunk); } catch { return; } // 流已关/已废，静默丢弃
+      try {
+        entry.ctrl.enqueue(m.chunk);
+      } catch {
+        // 流已关/已废（消费方消失、浏览器掐了这次下载）。**绝不能静默 return**：
+        // 那样这一块就丢了，而且页面等的 ack 永远不来——落盘一个缺了一段的文件，
+        // 或者干脆永远挂住。当作取消上报，页面会让 write() 报错。
+        streams.delete(d.path);
+        port.postMessage({ type: "cancel" });
+        return;
+      }
       if (entry.wantsChunk) { entry.wantsChunk = false; ack(); }
       else entry.ackDue = true;
     } else if (m.type === "close") {
       streams.delete(d.path);
-      try { entry.ctrl.close(); } catch {}
+      let ok = true;
+      try { entry.ctrl.close(); } catch { ok = false; }
+      // 回执。页面的 close() 必须等到这一条才 resolve：没有回执就没法区分
+      // 「流已收尾」和「SW 早就被回收、close 发进了虚空」，后者会让浏览器拿到
+      // 一份永不收尾的截断文件，而页面照样把界面置成「完成」。
+      port.postMessage({ type: ok ? "closed" : "cancel" });
     } else if (m.type === "abort") {
       streams.delete(d.path);
       try { entry.ctrl.error(new Error("aborted by page")); } catch {}
@@ -157,6 +172,28 @@ function openStream(d, port) {
   };
   streams.set(d.path, entry);
   port.postMessage({ type: "stream-ready" });
+}
+
+/**
+ * 响应头由 SW 自己定，**不反射页面给的内容**。
+ *
+ * /__stream__/ 是同源 URL 上一段完全由对端控制的字节流（实时模式下发送端连文件名
+ * 都是任意的，见 zip.ts 的注释）。把消息里的 headers 原样交给 Response，就等于把
+ * 「在 relayium.com 上以任意 Content-Type 托管任意字节」这个能力交出去了——今天
+ * 只靠页面自己硬编码 octet-stream 兜着，而消息内容不是页面的专有物。
+ *
+ * 只有 Content-Disposition 从消息里取（文件名必须由页面定），且强制 attachment 前缀、
+ * 只收可打印 ASCII —— 非 ASCII 会让 Response 的 header 校验直接抛，把下载打断。
+ */
+function streamHeaders(given) {
+  const raw = given && typeof given === "object" ? given["Content-Disposition"] : "";
+  const cd = typeof raw === "string" && /^attachment(;[\x20-\x7e]*)?$/.test(raw) ? raw : "attachment";
+  return {
+    "Content-Type": "application/octet-stream",
+    "X-Content-Type-Options": "nosniff",
+    "Cache-Control": "no-store",
+    "Content-Disposition": cd,
+  };
 }
 
 // Read the shared files out of the multipart POST, park them in a dedicated
