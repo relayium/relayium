@@ -22,6 +22,17 @@ const (
 	AuditPasskeyDelete = "passkey.delete"
 )
 
+// auditActions lists every known action, in the same order as the const
+// block above, for the audit page's filter dropdown. Kept as a derived slice
+// rather than hand-typed literals so it can never drift from the constants
+// themselves — a new action added above and forgotten here would just be
+// unfilterable, not wrong.
+var auditActions = []string{
+	AuditLoginOK, AuditLoginFail, AuditLogout, AuditSettings,
+	AuditPlanUpsert, AuditUserPlan, AuditNodeDelete, AuditNodeLimits,
+	AuditNodeLabel, AuditTokenMint, AuditTokenRevoke, AuditPasskeyDelete,
+}
+
 // 步进因子取值。"" = 该操作无需步进；grace = 落在宽限期内跳过了校验。
 const (
 	StepUpNone     = ""

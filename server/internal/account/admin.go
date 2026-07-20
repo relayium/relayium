@@ -15,6 +15,8 @@ const (
 	adminCookie       = "relayium_admin"
 	adminSessionTTL   = 12 * time.Hour
 	adminUsersPerPage = 50
+	// auditPageSize is the audit page's page size (rows per /admin/audit page).
+	auditPageSize = 100
 
 	// maxConfigMB bounds admin-supplied MB/GB fields before they're shifted
 	// into bytes (<<20 for MB, <<30 for GB). Left unbounded, a huge value
@@ -259,6 +261,10 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// legitimate submissions carry a matching Origin; a cross-site forgery does
 	// not. GET /admin (the login/dashboard page) is a safe method, left alone.
 	mux.HandleFunc("GET /admin", s.handleAdminHome)
+	// Read-only: no csrfGuard (GET is a safe method, same as GET /admin
+	// above) and NOT wrapped in requireStepUp (that guard is for writes —
+	// this handler never mutates anything).
+	mux.HandleFunc("GET /admin/audit", s.handleAdminAudit)
 	mux.Handle("POST /admin/login", s.csrfGuard(http.HandlerFunc(s.handleAdminLogin)))
 	mux.Handle("POST /admin/logout", s.csrfGuard(http.HandlerFunc(s.handleAdminLogout)))
 	// The passkey endpoints are fetch-only, so a missing Origin (which csrfGuard
@@ -603,6 +609,76 @@ func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := adminUsersTmpl.Execute(w, data); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+	}
+}
+
+// adminAuditHref builds a /admin/audit list link, keeping only non-default
+// params — mirrors adminListHref's approach for the user list above, so the
+// same "no cookie leaves the URL to the last search" property applies here.
+func adminAuditHref(action string, page int) string {
+	v := url.Values{}
+	if action != "" {
+		v.Set("action", action)
+	}
+	if page > 1 {
+		v.Set("page", strconv.Itoa(page))
+	}
+	if len(v) == 0 {
+		return "/admin/audit"
+	}
+	return "/admin/audit?" + v.Encode()
+}
+
+// handleAdminAudit renders the read-only audit log page. It is the only new
+// read endpoint in the step-up/audit feature and MUST NOT be gated by
+// requireStepUp — that guard exists to confirm writes, and this handler never
+// writes anything. Its one security property is the redirect below: an
+// unauthenticated request must never see a single audit row.
+func (s *Service) handleAdminAudit(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Redirect(w, r, "/admin", http.StatusFound)
+		return
+	}
+	q := r.URL.Query()
+	action := q.Get("action")
+	page, perr := strconv.Atoi(q.Get("page"))
+	if perr != nil || page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * auditPageSize
+	entries, err := s.store.ListAudit(r.Context(), auditPageSize, offset, action)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	rows := make([]adminAuditRow, 0, len(entries))
+	for _, e := range entries {
+		rows = append(rows, adminAuditRow{
+			Time:    time.Unix(e.At, 0).UTC().Format("2006-01-02 15:04:05"),
+			Action:  e.Action,
+			Target:  e.Target,
+			Changes: renderAuditChanges(e.Changes),
+			IP:      e.IP,
+			Auth:    e.Auth,
+			StepUp:  e.StepUp,
+		})
+	}
+	prev, next := "", ""
+	if page > 1 {
+		prev = adminAuditHref(action, page-1)
+	}
+	// A full page doesn't guarantee a next page exists, but a short page
+	// guarantees it doesn't — same "good enough" heuristic adminListHref's
+	// caller uses via TotalPages elsewhere, without a second COUNT query here.
+	if len(entries) == auditPageSize {
+		next = adminAuditHref(action, page+1)
+	}
+	data := adminAuditData{
+		Rows: rows, Actions: auditActions, Action: action, Page: page,
+		PrevHref: prev, NextHref: next,
+	}
+	if err := adminAuditTmpl.Execute(w, data); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 	}
 }

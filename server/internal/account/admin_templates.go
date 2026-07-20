@@ -1,8 +1,11 @@
 package account
 
 import (
+	"encoding/json"
+	"fmt"
 	"html/template"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -322,7 +325,10 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 [hidden]{display:none!important}</style></head>
 <body>
 <div class="top"><h1>后台概览</h1>
-<form method="post" action="/admin/logout"><button type="submit">退出</button></form></div>
+<div style="display:flex;gap:12px;align-items:center">
+<a href="/admin/audit" style="color:var(--a);text-decoration:none">审计日志</a>
+<form method="post" action="/admin/logout"><button type="submit">退出</button></form>
+</div></div>
 
 <section class="cards">
 <div class="card"><div class="n">{{.Metrics.TotalUsers}}</div><div class="l">总用户数</div></div>
@@ -590,6 +596,140 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 {{if .NextHref}}<a href="{{.NextHref}}">下一页 →</a>{{else}}<span class="off">下一页 →</span>{{end}}
 </div>
 </body></html>`))
+
+// adminAuditRow is one audit_audit row, pre-formatted for display. Formatting
+// (time, changes) happens in handleAdminAudit rather than via template funcs
+// because renderAuditChanges needs to unmarshal Changes' JSON, which is
+// awkward to express as a one-line template func and easier to unit-test as
+// a plain Go function.
+type adminAuditRow struct {
+	Time    string
+	Action  string
+	Target  string
+	Changes string // pre-rendered by renderAuditChanges; "—" when empty
+	IP      string
+	Auth    string
+	StepUp  string
+}
+
+type adminAuditData struct {
+	Rows     []adminAuditRow
+	Actions  []string // known action constants (audit.go's auditActions), for the filter dropdown
+	Action   string   // currently selected filter; "" = all actions
+	Page     int
+	PrevHref string
+	NextHref string
+}
+
+// adminAuditTmpl draws the read-only audit log page. Action/Target/Changes/IP
+// all carry admin- or user-controlled strings (plan names, node labels, IP
+// headers), so — same rule as adminConfirmTmpl above — this MUST stay
+// html/template (auto-escaping), never text/template or raw string building.
+var adminAuditTmpl = template.Must(template.New("audit").Parse(`<!doctype html>
+<html><head><meta charset="utf-8"><title>Relayium Admin · 审计日志</title>
+<style>:root{--a:#7c3aad;--bg:#faf9fb;--fg:#1a1420;--bd:#e5e4e7;--card:#fff;--muted:#6b6375;--soft:#f4f3ec}
+@media(prefers-color-scheme:dark){:root{--a:#c084fc;--bg:#16171d;--fg:#f3f4f6;--bd:#2e303a;--card:#1c1d25;--muted:#9ca3af;--soft:#1f2028}}
+*{box-sizing:border-box}
+body{font:14px system-ui;margin:0 auto;max-width:1080px;padding:24px;color:var(--fg);background:var(--bg)}
+h1{font-size:20px;margin:0}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:20px}
+.top a{color:var(--a);text-decoration:none}.top a:hover{text-decoration:underline}
+.filter{margin:0 0 16px}
+.filter select{font:inherit;padding:7px 9px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg)}
+table{border-collapse:separate;border-spacing:0;width:100%;background:var(--card);border:1px solid var(--bd);border-radius:12px;overflow:hidden}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--bd);font-size:13px}
+th{background:var(--soft);font-weight:600}
+tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:var(--soft)}
+.pager{display:flex;gap:16px;align-items:center;margin:18px 0}
+.pager a{color:var(--a);text-decoration:none}.pager a:hover{text-decoration:underline}
+.pager .off{color:var(--muted);opacity:.55}
+:focus-visible{outline:2px solid var(--a);outline-offset:2px}</style></head>
+<body>
+<div class="top"><h1>审计日志</h1><a href="/admin">← 返回后台</a></div>
+
+<form method="get" action="/admin/audit" class="filter">
+<select name="action" onchange="this.form.submit()">
+<option value=""{{if eq .Action ""}} selected{{end}}>全部动作</option>
+{{$sel := .Action}}{{range .Actions}}<option value="{{.}}"{{if eq . $sel}} selected{{end}}>{{.}}</option>{{end}}
+</select>
+<noscript><button type="submit">筛选</button></noscript>
+</form>
+
+<table>
+<thead><tr><th>时间(UTC)</th><th>动作</th><th>目标</th><th>变更</th><th>IP</th><th>登录方式</th><th>步进因子</th></tr></thead>
+<tbody>
+{{range .Rows}}<tr>
+<td>{{.Time}}</td>
+<td>{{.Action}}</td>
+<td>{{.Target}}</td>
+<td>{{.Changes}}</td>
+<td>{{.IP}}</td>
+<td>{{.Auth}}</td>
+<td>{{if .StepUp}}{{.StepUp}}{{else}}—{{end}}</td>
+</tr>{{else}}
+<tr><td colspan="7">暂无记录</td></tr>
+{{end}}
+</tbody></table>
+
+<div class="pager">
+{{if .PrevHref}}<a href="{{.PrevHref}}">← 上一页</a>{{else}}<span class="off">← 上一页</span>{{end}}
+<span>第 {{.Page}} 页</span>
+{{if .NextHref}}<a href="{{.NextHref}}">下一页 →</a>{{else}}<span class="off">下一页 →</span>{{end}}
+</div>
+</body></html>`))
+
+// auditChangeRaw mirrors ChangeField's JSON shape for decoding a stored
+// changes column back out. It's a separate type (rather than reusing
+// ChangeField directly) only because that's clearer about which direction
+// this file's code moves in — DB JSON in, display string out — though the
+// wire shape is identical on purpose.
+type auditChangeRaw struct {
+	Field string `json:"field"`
+	Old   any    `json:"old"`
+	New   any    `json:"new"`
+}
+
+// renderAuditChanges turns a stored changes JSON array into a compact,
+// one-line, human-readable string for the audit table's "变更" column.
+// Values are storage-layer raw (bytes/seconds, see AuditEntry.Changes'
+// doc comment) — this deliberately does NOT invent a bytes/duration
+// formatter per field (there's no reliable way to know which fields are
+// which unit from the JSON alone); "field: old → new" is enough to make
+// the row legible, and the raw numbers are still there for anyone who
+// needs the exact value.
+//
+// An empty array ("[]", encodeChanges' floor value) renders as "—", never
+// the literal "[]" — a bare bracket pair reads as a rendering bug, not as
+// "nothing changed".
+func renderAuditChanges(raw string) string {
+	var fields []auditChangeRaw
+	if err := json.Unmarshal([]byte(raw), &fields); err != nil || len(fields) == 0 {
+		return "—"
+	}
+	parts := make([]string, 0, len(fields))
+	for _, f := range fields {
+		old := "(新增)"
+		if f.Old != nil {
+			old = formatChangeValue(f.Old)
+		}
+		parts = append(parts, fmt.Sprintf("%s: %s → %s", f.Field, old, formatChangeValue(f.New)))
+	}
+	return strings.Join(parts, "; ")
+}
+
+// formatChangeValue stringifies one ChangeField Old/New value for display.
+// encoding/json decodes every JSON number into a Go float64, and fmt.Sprint
+// on a float64 the size of a byte count (e.g. 104857600) prints in
+// scientific notation ("1.048576e+08") — technically correct, unreadable in
+// a log. 'f'/-1 asks strconv for the shortest decimal representation with no
+// exponent, which round-trips whole numbers (the overwhelming majority of
+// this column's values: bytes, seconds, counts) back to plain digits.
+func formatChangeValue(v any) string {
+	if f, ok := v.(float64); ok {
+		return strconv.FormatFloat(f, 'f', -1, 64)
+	}
+	return fmt.Sprint(v)
+}
 
 // humanBytes 把字节数格式化为人类可读字符串（使用 strconv 标准库）。
 func humanBytes(n int64) string {
