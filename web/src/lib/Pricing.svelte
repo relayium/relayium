@@ -3,6 +3,7 @@
   import { formatSize } from "./format";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { session, refreshSession } from "./auth.svelte";
+  import { planRelation } from "./plan-relation";
 
   const t = $derived<Messages>(messages[lang()]);
 
@@ -68,12 +69,30 @@
     return t.billing.days(Math.round(secs / 86400));
   }
 
-  // "current" | "up" | "down" relative to the user's active plan (ranked by monthly
-  // price, a stable ordering independent of the selected cycle).
+  // "current" | "up" | "down" relative to the user's active plan AND cycle.
+  // Cycle matters: the same tier billed yearly is a real, purchasable change,
+  // so comparing tier alone would leave a monthly subscriber with no way to
+  // switch to yearly. See plan-relation.ts for the rules (kept in step with the
+  // server's handleBillingChangePlan).
   function relation(tier: Tier): "current" | "up" | "down" {
-    if (tier.id === currentPlanId) return "current";
-    const cur = currentTier?.priceMonthly ?? 0;
-    return tier.priceMonthly > cur ? "up" : "down";
+    return planRelation({
+      tierId: tier.id,
+      tierPriceMonthly: tier.priceMonthly,
+      currentPlanId,
+      currentPriceMonthly: currentTier?.priceMonthly ?? 0,
+      currentCycle: session().user?.billingCycle ?? "",
+      selectedCycle: cycle,
+    });
+  }
+
+  // On the tier the user already holds, only the cycle can be changing, and
+  // "Upgrade"/"Downgrade" would read as a tier move that isn't happening.
+  function ctaLabel(tier: Tier): string {
+    if (!isSubscribed) return t.billing.upgrade;
+    if (tier.id === currentPlanId) {
+      return cycle === "yearly" ? t.billing.switchToYearly : t.billing.switchToMonthly;
+    }
+    return relation(tier) === "down" ? t.billing.downgrade : t.billing.upgrade;
   }
 
   async function checkout(planId: string) {
@@ -235,7 +254,7 @@
             disabled={!purchasable(tier) || busyPlanId === tier.id}
             onclick={() => act(tier)}
           >
-            {isSubscribed ? (relation(tier) === "down" ? t.billing.downgrade : t.billing.upgrade) : t.billing.upgrade}
+            {ctaLabel(tier)}
           </button>
           {#if !purchasable(tier)}<div class="tier-note">{t.billing.notAvailable}</div>{/if}
         {/if}

@@ -21,6 +21,10 @@ export interface SessionUser {
   // Tier a pending period-end downgrade will switch to ("" / absent = none). Lets
   // the pricing UI show a "scheduled downgrade" banner with a cancel action.
   scheduledPlanId?: string;
+  // Billing cycle of the active subscription: "monthly" | "yearly", or ""/absent
+  // when unknown (a subscription predating the column). Unknown must NOT be read
+  // as monthly — that would offer "switch to yearly" to someone already yearly.
+  billingCycle?: string;
 }
 
 let user = $state<SessionUser | null>(null);

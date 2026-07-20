@@ -130,6 +130,8 @@ const ja: Messages = {
     currentFree: "無料プラン",
     upgrade: "アップグレード",
     downgrade: "ダウングレード",
+    switchToYearly: "年払いに変更",
+    switchToMonthly: "月払いに変更",
     current: "現在のプラン",
     popular: "一番人気",
     save2mo: "2か月分無料",

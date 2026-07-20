@@ -155,6 +155,10 @@ export interface Messages {
     currentFree: string; // note under the free tier: you're already on it
     upgrade: string; // CTA on a purchasable tier / account panel
     downgrade: string; // CTA to switch to a cheaper tier than the current one
+    // CTA when only the billing cycle changes on the tier the user already has.
+    // "Upgrade"/"Downgrade" would misread there — the tier is not moving.
+    switchToYearly: string;
+    switchToMonthly: string;
     current: string; // badge/label on the tier the user is currently subscribed to
     popular: string; // "Most popular" ribbon on the highlighted tier
     save2mo: string; // yearly-toggle savings badge (yearly = 10x monthly => 2 months free)

@@ -130,6 +130,8 @@ const ar: Messages = {
     currentFree: "الخطة المجانية",
     upgrade: "الترقية",
     downgrade: "خفض الباقة",
+    switchToYearly: "التحويل إلى الدفع السنوي",
+    switchToMonthly: "التحويل إلى الدفع الشهري",
     current: "الباقة الحالية",
     popular: "الأكثر شيوعًا",
     save2mo: "شهران مجانًا",

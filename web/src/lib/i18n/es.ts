@@ -130,6 +130,8 @@ const es: Messages = {
     currentFree: "Plan gratis",
     upgrade: "Mejorar",
     downgrade: "Bajar de plan",
+    switchToYearly: "Cambiar a anual",
+    switchToMonthly: "Cambiar a mensual",
     current: "Plan actual",
     popular: "El más popular",
     save2mo: "2 meses gratis",

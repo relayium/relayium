@@ -130,6 +130,8 @@ const ko: Messages = {
     currentFree: "무료 플랜",
     upgrade: "업그레이드",
     downgrade: "다운그레이드",
+    switchToYearly: "연간 결제로 변경",
+    switchToMonthly: "월간 결제로 변경",
     current: "현재 요금제",
     popular: "가장 인기",
     save2mo: "2개월 무료",

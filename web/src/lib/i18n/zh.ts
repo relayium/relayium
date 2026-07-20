@@ -130,6 +130,8 @@ const zh: Messages = {
     currentFree: "免费版",
     upgrade: "升级",
     downgrade: "降级",
+    switchToYearly: "改为年付",
+    switchToMonthly: "改为月付",
     current: "当前套餐",
     popular: "最受欢迎",
     save2mo: "免费赠送 2 个月",
