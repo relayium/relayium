@@ -44,11 +44,18 @@ type adminNodeView struct {
 	StorageEnabled    bool
 	StorageTotal      int64
 	StorageFree       int64
-	// UsableBytes is how much of StorageFree placement will actually offer:
-	// 70%, leaving a 30% cushion so a node is never driven right up to its
-	// disk. Same storageHeadroomNum/storageHeadroomDen ratio used by
-	// SQLiteStore.StorageNodes, via usableBytes. Purely derived; not stored
-	// and not reported by the node.
+	// UsableBytes is the headroom term of the placement filter alone: 70% of
+	// StorageFree, leaving a 30% cushion so a node is never driven right up
+	// to its disk. Same storageHeadroomNum/storageHeadroomDen ratio used by
+	// SQLiteStore.StorageNodes, via usableBytes.
+	//
+	// It is NOT "what placement will actually offer". StorageNodes gates on
+	// two further conditions this column does not reflect — the disk-limit
+	// remainder (disk_limit_bytes - stored_bytes) and the 80%-full reserve
+	// (storage_free*5 >= storage_total) — either of which can rule out a node
+	// that shows a non-zero figure here. A volume already 90% full is not a
+	// placement candidate at all, yet still renders usable capacity in this
+	// column. Purely derived; not stored and not reported by the node.
 	UsableBytes       int64
 	TrafficLimitBytes int64
 	DiskLimitBytes    int64
