@@ -204,6 +204,13 @@ const ko: Messages = {
     back: "← 홈으로",
     loginRequired: "로그인하면 전송 통계와 파일을 볼 수 있습니다.",
     signIn: "로그인",
+    plan: {
+      perks: (storage, traffic, retention) => `저장 공간 ${storage} · 월 트래픽 ${traffic} · ${retention}`,
+      retentionDays: (n) => `파일 ${n}일 보관`,
+      retentionForever: "파일 무기한 보관",
+      hint: "공간이 부족한가요? 업그레이드하면 용량과 보관 기간이 늘어납니다.",
+      topTier: "이미 최고 등급입니다.",
+    },
     transfers: "전송 횟수",
     downloads: "다운로드 횟수",
     traffic: "누적 트래픽",

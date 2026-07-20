@@ -1,20 +1,22 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
+  import { session } from "./auth.svelte";
   import { formatSize } from "./format";
+  import { fetchUsage, type Bucket, type Usage } from "./usage.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
 
-  interface Bucket { used: number; cap: number }
-  interface Usage { period: string; resetsAt: number; traffic: Bucket; storage: Bucket }
-
   let usage = $state<Usage | null>(null);
 
-  onMount(() => {
-    fetch("/api/me/usage", { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((u) => { usage = u; })
-      .catch(() => { /* 用量表是附加信息，取不到就整块不渲染 */ });
+  // 跟着会话走：登出清空，换账号重取。与 QuotaNotice 同款守卫——本组件所在的
+  // /me 页在登出后不会立刻卸载，无条件写 usage 会把上一个账号的数字画出来。
+  $effect(() => {
+    const uid = session().user?.id ?? null;
+    if (!uid) { usage = null; return; }
+    fetchUsage(uid).then((u) => {
+      if (session().user?.id !== uid) return; // 陈旧响应，丢弃
+      usage = u;
+    });
   });
 
   // cap === 0 表示无限档，此时不画进度条——画一条永远填不满的槽只会误导。

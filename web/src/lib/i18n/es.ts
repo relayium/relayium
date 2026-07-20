@@ -204,6 +204,13 @@ const es: Messages = {
     back: "← Volver al inicio",
     loginRequired: "Inicia sesión para ver tus estadísticas de transferencia y tus archivos.",
     signIn: "Iniciar sesión",
+    plan: {
+      perks: (storage, traffic, retention) => `${storage} de almacenamiento · ${traffic}/mes de tráfico · ${retention}`,
+      retentionDays: (n) => `Archivos guardados ${n} día${n === 1 ? "" : "s"}`,
+      retentionForever: "Archivos guardados indefinidamente",
+      hint: "¿Te quedas sin espacio? Mejorar tu plan te da más capacidad y mayor retención.",
+      topTier: "Ya tienes el plan más alto.",
+    },
     transfers: "Transferencias",
     downloads: "Descargas",
     traffic: "Tráfico acumulado",

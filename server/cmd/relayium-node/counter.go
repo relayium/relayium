@@ -3,9 +3,13 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"log"
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
+
+	"github.com/relayium/relayium/internal/storage"
 )
 
 // limits holds the node's live month-to-date relayed total and its hard caps,
@@ -169,4 +173,44 @@ func (r *allocRegistry) snapshot() []allocSample {
 		}
 	}
 	return out
+}
+
+// blobUsageRefresh is how often the blob-directory size gauge is recomputed.
+// It is deliberately independent of the heartbeat cadence, which central
+// dictates (registerResp.HeartbeatInterval; the node's own 30s is only a
+// fallback for an unset value). A faster heartbeat therefore just means several
+// heartbeats in a row can carry the same gauge reading.
+const blobUsageRefresh = 30 * time.Second
+
+// blobUsage caches the blob directory's total size.
+//
+// Both readers are hot: the heartbeat fires every ~30s and the blob handler
+// consults it on every PUT. Walking the tree on each of those would be O(files)
+// work in the request path, so the walk happens on a ticker and readers get an
+// atomic load. A value up to one refresh interval stale is fine — the 80%
+// volume reserve in relay.go is the real backstop against overshoot.
+type blobUsage struct {
+	bytes int64 // atomic
+}
+
+// get returns the last refreshed total (0 before the first refresh).
+func (b *blobUsage) get() int64 { return atomic.LoadInt64(&b.bytes) }
+
+// refresh recomputes the total. A walk error leaves the previous value in place
+// rather than zeroing the gauge — reporting 0 used would read as "plenty of
+// room" and invite an overfill.
+//
+// That fail-open choice is why the error is logged rather than swallowed: a
+// persistent failure (lost permissions, store dir removed) pins the gauge
+// forever, and every consequence of that is silent. The heartbeat keeps
+// reporting the frozen figure, and if the gauge never got past 0 the admin disk
+// cap stops being enforced entirely (storage.go's `diskUsed() >= cap` can never
+// fire), leaving only the 80% whole-volume reserve.
+func (b *blobUsage) refresh(ds *storage.DiskStore) {
+	n, err := ds.UsedBytes()
+	if err != nil {
+		log.Printf("relayium-node: blob usage refresh failed: %v", err)
+		return
+	}
+	atomic.StoreInt64(&b.bytes, n)
 }

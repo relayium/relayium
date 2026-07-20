@@ -227,6 +227,16 @@ export interface Messages {
     back: string; // link back to the home page
     loginRequired: string; // shown when /me is opened without a session
     signIn: string; // sign-in button on the login-required state
+    // 个人中心的会员卡（PlanCard）。等级名与升级/管理订阅按钮复用 billing.* 的
+    // 既有文案，这里只补卡片独有的三段。
+    plan: {
+      // 权益一行；三个参数都已格式化好（体积字符串 + 下面两个 retention 文案之一）
+      perks: (storage: string, traffic: string, retention: string) => string;
+      retentionDays: (n: number) => string; // 文件保留 n 天
+      retentionForever: string; // retentionSecs === 0 的无限档
+      hint: string; // 引导句：不够用可以升级
+      topTier: string; // 已在最高档时替代升级按钮
+    };
     transfers: string; // stat card: stored links created
     downloads: string; // stat card: total downloads of my files
     traffic: string; // stat card: total bytes

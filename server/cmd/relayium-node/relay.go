@@ -77,6 +77,35 @@ func storageReport(dir string) (total, free int64, err error) {
 	return int64(tot), int64(tot - used), nil
 }
 
+// blobGates returns the two independent conditions under which a blob write is
+// refused. They are grouped here because the pairing is the point: they answer
+// different questions, and every past bug in this area came from conflating
+// them.
+//
+// diskUsed is relayium's own footprint — the blob directory's real size, read
+// from the cached gauge — and is what the admin disk cap is measured against.
+// It must never become the whole volume's occupancy: that counts the OS and
+// every unrelated program on the host as relayium storage, which inflates the
+// admin dashboard and makes central's placement filter treat a nearly empty
+// node as out of quota.
+//
+// diskFull is the opposite question: is the *host* about to run out of room?
+// It stays on whole-volume statfs on purpose, because it is the absolute floor
+// protecting the machine from everything running on it, not just relayium. It
+// re-stats on every call rather than caching, since it is the last line of
+// defense against wedging the host and must not act on a stale reading. It
+// fails open on a stat error — a failed statfs must not block writes.
+//
+// Do not "unify" the two.
+func blobGates(gauge *blobUsage, storageDir string) (diskUsed func() int64, diskFull func() bool) {
+	return gauge.get, func() bool {
+		// Refuse writes once the volume is past 80% used (free < 20%),
+		// independent of any admin cap.
+		t, f, err := storageReport(storageDir)
+		return err == nil && t > 0 && f*5 < t
+	}
+}
+
 // newTURNServer builds the node's pion TURN server: a counting relay generator
 // wired to reg, plus an auth handler that rejects expired credentials and — the
 // local cost cap (workstream B) — refuses new allocations once lim is over the
@@ -150,25 +179,25 @@ func run(c config, st nodeState) error {
 
 	var storageURL, storageSecret string
 	var storTotal, storFree int64
+	var blobGauge *blobUsage
 	if c.StorageDir != "" {
 		ds, derr := storage.NewDiskStore(c.StorageDir)
 		if derr != nil {
 			return fmt.Errorf("open storage dir %s: %w", c.StorageDir, derr)
 		}
 		storageSecret = st.StorageSecret
-		diskUsed := func() int64 {
-			if t, f, err := storageReport(c.StorageDir); err == nil {
-				return t - f
+		// Seed the gauge before anything can read it, so the first PUT and the
+		// first heartbeat see a real number rather than 0.
+		blobGauge = &blobUsage{}
+		blobGauge.refresh(ds)
+		go func() {
+			tk := time.NewTicker(blobUsageRefresh)
+			defer tk.Stop()
+			for range tk.C {
+				blobGauge.refresh(ds)
 			}
-			return 0
-		}
-		// Built-in safety reserve: refuse writes once the volume is past 80% used
-		// (free < 20%), independent of any admin cap, so relayium can never fill
-		// the disk and wedge the host. Fails open on a stat error (don't block).
-		diskFull := func() bool {
-			t, f, err := storageReport(c.StorageDir)
-			return err == nil && t > 0 && f*5 < t
-		}
+		}()
+		diskUsed, diskFull := blobGates(blobGauge, c.StorageDir)
 		blobSrv := &http.Server{Addr: fmt.Sprintf(":%d", c.StoragePort), Handler: newBlobHandler(ds, storageSecret, lim, diskUsed, diskFull)}
 		go func() {
 			if err := blobSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -219,12 +248,12 @@ func run(c config, st nodeState) error {
 			log.Printf("relayium-node: shutting down")
 			return nil
 		case <-ticker.C:
-			sendHeartbeat(rp, nodeID, reg, c.StorageDir, lim)
+			sendHeartbeat(rp, nodeID, reg, c.StorageDir, blobGauge, lim)
 		}
 	}
 }
 
-func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir string, lim *limits) {
+func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir string, blobGauge *blobUsage, lim *limits) {
 	samples := reg.snapshot()
 	usage := make([]usageItem, 0, len(samples))
 	var total int64
@@ -239,7 +268,11 @@ func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir s
 	if storageDir != "" {
 		if t, f, err := storageReport(storageDir); err == nil {
 			storTotal, storFree = t, f
-			storedBytes = t - f // blob-dir (filesystem) used bytes
+		}
+		// relayium's own footprint, NOT total-free. total-free is the whole
+		// volume's occupancy and would count every unrelated byte on the host.
+		if blobGauge != nil {
+			storedBytes = blobGauge.get()
 		}
 	}
 	body := heartbeatBody{

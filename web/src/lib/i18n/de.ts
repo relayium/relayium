@@ -204,6 +204,13 @@ const de: Messages = {
     back: "← Zurück zur Startseite",
     loginRequired: "Melde dich an, um deine Übertragungsstatistik und Dateien zu sehen.",
     signIn: "Anmelden",
+    plan: {
+      perks: (storage, traffic, retention) => `${storage} Speicher · ${traffic}/Monat Traffic · ${retention}`,
+      retentionDays: (n) => `Dateien ${n} Tag${n === 1 ? "" : "e"} aufbewahrt`,
+      retentionForever: "Dateien unbegrenzt aufbewahrt",
+      hint: "Platz wird knapp? Ein Upgrade bringt mehr Kapazität und längere Aufbewahrung.",
+      topTier: "Du nutzt bereits den höchsten Tarif.",
+    },
     transfers: "Übertragungen",
     downloads: "Downloads",
     traffic: "Kumulierter Datenverkehr",

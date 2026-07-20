@@ -204,6 +204,13 @@ const en: Messages = {
     back: "← Back to home",
     loginRequired: "Sign in to see your transfer stats and files.",
     signIn: "Sign in",
+    plan: {
+      perks: (storage, traffic, retention) => `${storage} storage · ${traffic}/mo traffic · ${retention}`,
+      retentionDays: (n) => `Files kept ${n} day${n === 1 ? "" : "s"}`,
+      retentionForever: "Files kept indefinitely",
+      hint: "Running out of room? Upgrading gets you more capacity and longer retention.",
+      topTier: "You're on the highest tier.",
+    },
     transfers: "Transfers",
     downloads: "Downloads",
     traffic: "Lifetime traffic",

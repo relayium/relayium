@@ -204,6 +204,13 @@ const ja: Messages = {
     back: "← ホームに戻る",
     loginRequired: "ログインすると転送の統計とファイルを確認できます。",
     signIn: "ログイン",
+    plan: {
+      perks: (storage, traffic, retention) => `ストレージ ${storage} · 月間トラフィック ${traffic} · ${retention}`,
+      retentionDays: (n) => `ファイル保持 ${n} 日`,
+      retentionForever: "ファイルを無期限に保持",
+      hint: "容量が足りませんか？アップグレードで容量と保持期間が増えます。",
+      topTier: "最上位プランをご利用中です。",
+    },
     transfers: "転送回数",
     downloads: "ダウンロード回数",
     traffic: "累計トラフィック",

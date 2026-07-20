@@ -204,6 +204,13 @@ const ar: Messages = {
     back: "← العودة إلى الصفحة الرئيسية",
     loginRequired: "سجّل الدخول لرؤية إحصائيات النقل والملفات الخاصة بك.",
     signIn: "تسجيل الدخول",
+    plan: {
+      perks: (storage, traffic, retention) => `${storage} تخزين · ${traffic}/شهر حركة بيانات · ${retention}`,
+      retentionDays: (n) => `يتم الاحتفاظ بالملفات ${n} يوم`,
+      retentionForever: "يتم الاحتفاظ بالملفات إلى أجل غير مسمى",
+      hint: "هل تنفد المساحة؟ الترقية تمنحك سعة أكبر ومدة احتفاظ أطول.",
+      topTier: "أنت على أعلى باقة بالفعل.",
+    },
     transfers: "عمليات النقل",
     downloads: "التنزيلات",
     traffic: "الحركة التراكمية للبيانات",

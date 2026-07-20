@@ -439,6 +439,36 @@ func (s *Service) handleMeUsage(w http.ResponseWriter, r *http.Request, u User) 
 		plan = freePlanFallback()
 	}
 
+	// isTop: 用户已经在最高档时，卡片要把"升级"换成"已是最高档"——把 Max 用户
+	// 往定价页赶是负体验。用 ListPlans 而不是新加一个 store 方法，是因为 plans
+	// 表只有个位数行、且已被 /api/plans 以同样方式读取；新增接口方法还得在所有
+	// 测试替身里实现，不划算。
+	//
+	// 默认 false（fail-closed），只有在**成功枚举出 plans、确实看到了 active 档、
+	// 且其中没有比当前档更高的**时才置 true。这个方向是刻意选的，不要"简化"回
+	// `isTop := true` 再找反例——两个方向的误报代价严重不对称：
+	//   - 误报 false：Max 用户多看到一个"升级"按钮，点进去发现没得升，轻微尴尬。
+	//   - 误报 true：ListPlans 出错（DB 抖一下）或 plans 表意外为空时，全站每个
+	//     用户（含免费用户）的会员卡都会显示"已是最高档"，升级入口整体消失，而
+	//     且静默、用户与我们都无感知——等于掐断变现路径。
+	// 空 plans 表（或全是 inactive）同样得到 false：我们没有任何依据宣称用户已
+	// 经在最高档。
+	isTop := false
+	if plans, perr := s.store.ListPlans(ctx); perr == nil {
+		sawActive, higher := false, false
+		for _, p := range plans {
+			if !p.Active {
+				continue
+			}
+			sawActive = true
+			if p.SortOrder > plan.SortOrder {
+				higher = true
+				break
+			}
+		}
+		isTop = sawActive && !higher
+	}
+
 	// 对外一律把"无限"规约成 0，前端只需判断一个值。
 	storageCap := plan.StorageBytes
 	if storageCap < 0 {
@@ -452,7 +482,29 @@ func (s *Service) handleMeUsage(w http.ResponseWriter, r *http.Request, u User) 
 		"resetsAt": monthEnd,
 		"traffic":  map[string]any{"used": traffic, "cap": trafficCap},
 		"storage":  map[string]any{"used": storage, "cap": storageCap},
+		// 套餐信息复用上面已经查出的 plan 行，不额外打 DB。
+		// trafficBytes 是这个档的**标称**月上限，和上面 traffic.cap 不同：后者
+		// 对月中改过档的用户是按段折算过的实际额度。卡片要宣传的是标称值。
+		"plan": map[string]any{
+			"id":                 plan.ID,
+			"name":               plan.Name,
+			"storageBytes":       nonNegCap(plan.StorageBytes),
+			"trafficBytes":       nonNegCap(plan.TrafficBytes),
+			"retentionSecs":      nonNegCap(plan.RetentionSecs),
+			"priceMonthly":       plan.PriceMonthly,
+			"isTop":              isTop,
+			"subscriptionStatus": u.SubscriptionStatus,
+			"subscriptionEnd":    u.SubscriptionEnd,
+		},
 	})
+}
+
+// nonNegCap 把"无限"的各种内部表示（负数）规约成对外约定的 0。前端只判断一个值。
+func nonNegCap(v int64) int64 {
+	if v < 0 {
+		return 0
+	}
+	return v
 }
 
 func (s *Service) handleChangePassword(w http.ResponseWriter, r *http.Request, u User) {

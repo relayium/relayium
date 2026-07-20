@@ -13,7 +13,20 @@
   import WhyAccount from "./WhyAccount.svelte";
   import CommandBlock from "./CommandBlock.svelte";
   import { reveal, countUp } from "./reveal";
+  import PlanCard from "./PlanCard.svelte";
   import QuotaMeters from "./QuotaMeters.svelte";
+  import { invalidateUsage } from "./usage.svelte";
+
+  // 每次进入 /me 都要拿新的用量数字：/me 是懒加载路由（App.svelte 的
+  // `{#if currentRoute() === "me"}`），离开再回来会真的重新挂载本组件，所以在
+  // 组件初始化时丢掉共享缓存，让页内的 QuotaMeters 重新请求一次。没有这一句，
+  // 用量数字会在整个 SPA 会话内冻结——上传完文件回到个人中心，存储数字不动。
+  //
+  // 必须放在 <script> 顶层，不能放进 onMount：实测过（不是推理），放 onMount
+  // 时子组件的 $effect 已经先跑完并建立了在途缓存，这里再清一次会让同一次访问
+  // 多打一次 /api/me/usage 请求（测试实测 2 次而不是 1 次）。顶层代码在子组件
+  // 初始化之前执行，清的是上一次访问留下的缓存，两条契约才能同时成立。
+  invalidateUsage();
 
   const t = $derived<Messages>(messages[lang()]);
 
@@ -230,6 +243,7 @@
       <WhyAccount compact />
     </div>
   {:else}
+    <PlanCard />
     <QuotaMeters />
 
     <div class="stats reveal" use:reveal>

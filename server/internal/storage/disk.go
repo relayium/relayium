@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -44,6 +45,41 @@ func (d *DiskStore) paths(key string) (shardDir, full string) {
 	}
 	shardDir = filepath.Join(d.dir, shard)
 	return shardDir, filepath.Join(shardDir, key)
+}
+
+// UsedBytes reports the total size of the blobs this store holds, by walking
+// the store directory.
+//
+// This is deliberately NOT storage.DiskUsage: that one reports the whole
+// filesystem's occupancy (OS, logs, anything else on the volume), which is the
+// wrong number to compare against a relayium-specific disk cap. A node that
+// shares its volume with other software would otherwise report itself full
+// while holding almost no blobs.
+//
+// In-progress temp files (tmpPrefix) are counted — they occupy the disk right
+// now, and a cap check must see them. Entries that vanish mid-walk (a concurrent
+// Delete, or a temp file renamed out from under us) are skipped rather than
+// failing the whole total: a slightly stale gauge beats no gauge.
+func (d *DiskStore) UsedBytes() (int64, error) {
+	var total int64
+	err := filepath.WalkDir(d.dir, func(_ string, e fs.DirEntry, err error) error {
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
+			return err
+		}
+		if e.IsDir() {
+			return nil
+		}
+		info, ierr := e.Info()
+		if ierr != nil {
+			return nil // raced with a delete; skip this entry
+		}
+		total += info.Size()
+		return nil
+	})
+	return total, err
 }
 
 func (d *DiskStore) Put(ctx context.Context, key string, r io.Reader) (int64, error) {
