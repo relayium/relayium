@@ -213,7 +213,7 @@ Expected: `PASS`，两个用例都 ok
 ```bash
 cd /Users/lily/code/relayium/relayium
 git add server/internal/storage/disk.go server/internal/storage/disk_used_test.go
-git commit -m "feat(storage): DiskStore.UsedBytes 统计 blob 目录真实占用
+git commit -m "feat(storage): add DiskStore.UsedBytes for real blob-dir footprint
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
@@ -439,11 +439,13 @@ Expected: 构建无输出，两个包 `ok`。若 `sendHeartbeat` 还有其它调
 ```bash
 cd /Users/lily/code/relayium/relayium
 git add server/cmd/relayium-node/
-git commit -m "fix(node): storedBytes 上报 blob 目录真实占用而非整卷已用
+git commit -m "fix(node): report blob-dir footprint instead of whole-volume usage
 
-整卷 statfs 口径把系统和其它程序的数据算进了 relayium 存量，导致后台
-数字虚高、中心端调度误判节点配额耗尽。改为缓存的 blob 目录遍历结果。
-写入硬闸仍按整卷 80% 判断，两者回答不同的问题。
+The whole-volume statfs reading counted the OS and every other program on
+the host as relayium storage, inflating the admin dashboard and making
+central's placement filter treat nodes as out of quota. Replaced with a
+cached walk of the blob directory. The write gate still uses the 80%
+whole-volume reserve -- the two answer different questions.
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
@@ -556,7 +558,7 @@ Expected: 两个测试都 `PASS`。`TestStorageNodesRespectsDiskLimit` 的节点
 ```bash
 cd /Users/lily/code/relayium/relayium
 git add server/internal/account/sqlite.go server/internal/account/storage_headroom_test.go
-git commit -m "fix(nodes): 放置调度只承诺节点剩余空间的 70%
+git commit -m "fix(nodes): offer only 70% of a node's free space during placement
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
@@ -664,7 +666,7 @@ Expected: `PASS`。表头与数据行的 `<td>` 数量必须一致——若 `adm
 ```bash
 cd /Users/lily/code/relayium/relayium
 git add server/internal/account/admin.go server/internal/account/admin_templates.go server/internal/account/admin_usable_test.go
-git commit -m "feat(admin): 节点表新增「可用(70%)」列
+git commit -m "feat(admin): add usable-capacity (70%) column to the node table
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
@@ -873,7 +875,7 @@ Expected: 三个 `TestMeUsage*` 全部 `PASS`（含原有的 `TestMeUsageReports
 ```bash
 cd /Users/lily/code/relayium/relayium
 git add server/internal/account/handlers.go server/internal/account/me_usage_test.go
-git commit -m "feat(api): /api/me/usage 返回当前套餐与权益
+git commit -m "feat(api): return current plan and its perks from /api/me/usage
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
@@ -1048,7 +1050,7 @@ Expected: QuotaNotice 全部用例 `PASS`；`npm run check` 无错误
 ```bash
 cd /Users/lily/code/relayium/relayium
 git add web/src/lib/usage.svelte.ts web/src/lib/QuotaMeters.svelte web/src/lib/QuotaNotice.svelte web/src/lib/QuotaNotice.test.ts
-git commit -m "refactor(web): 抽出按用户缓存的 /api/me/usage 共享 fetch
+git commit -m "refactor(web): share a per-user cached fetch for /api/me/usage
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
@@ -1206,7 +1208,7 @@ Expected: 无错误
 ```bash
 cd /Users/lily/code/relayium/relayium
 git add web/src/lib/i18n/
-git commit -m "i18n: 个人中心会员卡文案（9 语言）
+git commit -m "i18n: add member-card copy for all nine languages
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
@@ -1489,7 +1491,7 @@ Expected: 类型检查无错误；全部前端测试 `PASS`；构建成功
 ```bash
 cd /Users/lily/code/relayium/relayium
 git add web/src/lib/PlanCard.svelte web/src/lib/PlanCard.test.ts web/src/lib/MePage.svelte
-git commit -m "feat(me): 个人中心新增会员卡（等级/权益/升级入口）
+git commit -m "feat(me): add member card with tier, perks and upgrade CTA
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
