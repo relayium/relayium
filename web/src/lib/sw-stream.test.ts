@@ -27,6 +27,19 @@ describe("streamURL", () => {
     expect(streamURL("t", "")).toBe("/__stream__/t/download");
   });
 
+  it("falls back to a placeholder segment for a filename that is exactly a dot-segment", () => {
+    // "." and ".." are the two values the browser normalizes out of a path
+    // before the request is even sent (encodeURIComponent leaves both alone,
+    // since neither contains a character it escapes). Left unguarded, the
+    // resulting URL collapses to STREAM_ROUTE itself and the download
+    // silently falls through to the SPA shell.
+    expect(streamURL("t", ".")).toBe("/__stream__/t/download");
+    expect(streamURL("t", "..")).toBe("/__stream__/t/download");
+    // Three dots is not a dot-segment — browsers do not normalize it away —
+    // so it must pass through unchanged.
+    expect(streamURL("t", "...")).toBe("/__stream__/t/...");
+  });
+
   it("rejects a token that would not survive parseStreamPath", () => {
     expect(() => streamURL("", "f.txt")).toThrow(/token/i);
     expect(() => streamURL("../x", "f.txt")).toThrow(/token/i);
@@ -134,6 +147,29 @@ describe("contentDisposition", () => {
     );
   });
 
+  it("strips a bidi override so a displayed name cannot lie about its own extension", () => {
+    // RLO (U+202E) reverses the visual order of everything after it: the stored
+    // name "evil<RLO>gnp.exe" *displays* as "evilexe.png" while the actual
+    // extension is still ".exe" — the classic disguised-executable trick.
+    // Built via String.fromCodePoint (not a literal escape or a literal
+    // character in this source file) so this test file never itself carries
+    // a raw bidi-control character.
+    const rlo = String.fromCodePoint(0x202e);
+    expect(contentDisposition(`evil${rlo}gnp.exe`)).toBe(
+      `attachment; filename="evilgnp.exe"; filename*=UTF-8''evilgnp.exe`,
+    );
+  });
+
+  it("strips the rest of the Bidi_Control code points (LRM/RLM/isolates/embeddings/ALM)", () => {
+    const [lrm, rlm, lri, rli, fsi, pdi, lre, rle, pdf, lro, alm] = [
+      0x200e, 0x200f, 0x2066, 0x2067, 0x2068, 0x2069, 0x202a, 0x202b, 0x202c, 0x202d, 0x061c,
+    ].map((cp) => String.fromCodePoint(cp));
+    const hostile = `1${lrm}2${rlm}3${lri}4${rli}5${fsi}6${pdi}7${lre}8${rle}9${pdf}0${lro}1${alm}2.txt`;
+    expect(contentDisposition(hostile)).toBe(
+      `attachment; filename="123456789012.txt"; filename*=UTF-8''123456789012.txt`,
+    );
+  });
+
   it("strips a backslash so the quoted-string has no escape sequences", () => {
     expect(contentDisposition("a\\b.txt")).toBe(
       `attachment; filename="a_b.txt"; filename*=UTF-8''a%5Cb.txt`,
@@ -190,6 +226,7 @@ describe("contentDisposition", () => {
       "a".repeat(1000),
       "\ud800",
       "../../etc/passwd",
+      "evil" + String.fromCodePoint(0x202e) + "gnp.exe",
     ];
     for (const name of hostile) {
       const out = contentDisposition(name);
