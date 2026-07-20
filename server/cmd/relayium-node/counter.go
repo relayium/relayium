@@ -6,6 +6,9 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
+
+	"github.com/relayium/relayium/internal/storage"
 )
 
 // limits holds the node's live month-to-date relayed total and its hard caps,
@@ -169,4 +172,32 @@ func (r *allocRegistry) snapshot() []allocSample {
 		}
 	}
 	return out
+}
+
+// blobUsageRefresh is how often the blob-directory size gauge is recomputed.
+// Matches the default heartbeat cadence, so central never reports a value more
+// than one interval stale.
+const blobUsageRefresh = 30 * time.Second
+
+// blobUsage caches the blob directory's total size.
+//
+// Both readers are hot: the heartbeat fires every ~30s and the blob handler
+// consults it on every PUT. Walking the tree on each of those would be O(files)
+// work in the request path, so the walk happens on a ticker and readers get an
+// atomic load. A value up to one refresh interval stale is fine — the 80%
+// volume reserve in relay.go is the real backstop against overshoot.
+type blobUsage struct {
+	bytes int64 // atomic
+}
+
+// get returns the last refreshed total (0 before the first refresh).
+func (b *blobUsage) get() int64 { return atomic.LoadInt64(&b.bytes) }
+
+// refresh recomputes the total. A walk error leaves the previous value in place
+// rather than zeroing the gauge -- reporting 0 used would read as "plenty of
+// room" and invite an overfill.
+func (b *blobUsage) refresh(ds *storage.DiskStore) {
+	if n, err := ds.UsedBytes(); err == nil {
+		atomic.StoreInt64(&b.bytes, n)
+	}
 }

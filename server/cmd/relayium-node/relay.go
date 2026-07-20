@@ -150,21 +150,33 @@ func run(c config, st nodeState) error {
 
 	var storageURL, storageSecret string
 	var storTotal, storFree int64
+	var blobGauge *blobUsage
 	if c.StorageDir != "" {
 		ds, derr := storage.NewDiskStore(c.StorageDir)
 		if derr != nil {
 			return fmt.Errorf("open storage dir %s: %w", c.StorageDir, derr)
 		}
 		storageSecret = st.StorageSecret
-		diskUsed := func() int64 {
-			if t, f, err := storageReport(c.StorageDir); err == nil {
-				return t - f
+		// Seed the gauge before anything can read it, so the first PUT and the
+		// first heartbeat see a real number rather than 0.
+		blobGauge = &blobUsage{}
+		blobGauge.refresh(ds)
+		go func() {
+			tk := time.NewTicker(blobUsageRefresh)
+			defer tk.Stop()
+			for range tk.C {
+				blobGauge.refresh(ds)
 			}
-			return 0
-		}
+		}()
+		diskUsed := blobGauge.get
 		// Built-in safety reserve: refuse writes once the volume is past 80% used
 		// (free < 20%), independent of any admin cap, so relayium can never fill
 		// the disk and wedge the host. Fails open on a stat error (don't block).
+		//
+		// This stays whole-volume on purpose. It is the absolute floor that
+		// protects the host from everything on it, whereas diskUsed above is
+		// relayium's own footprint measured against the admin cap. Do not
+		// "unify" the two — they answer different questions.
 		diskFull := func() bool {
 			t, f, err := storageReport(c.StorageDir)
 			return err == nil && t > 0 && f*5 < t
@@ -219,12 +231,12 @@ func run(c config, st nodeState) error {
 			log.Printf("relayium-node: shutting down")
 			return nil
 		case <-ticker.C:
-			sendHeartbeat(rp, nodeID, reg, c.StorageDir, lim)
+			sendHeartbeat(rp, nodeID, reg, c.StorageDir, blobGauge, lim)
 		}
 	}
 }
 
-func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir string, lim *limits) {
+func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir string, blobGauge *blobUsage, lim *limits) {
 	samples := reg.snapshot()
 	usage := make([]usageItem, 0, len(samples))
 	var total int64
@@ -239,7 +251,11 @@ func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir s
 	if storageDir != "" {
 		if t, f, err := storageReport(storageDir); err == nil {
 			storTotal, storFree = t, f
-			storedBytes = t - f // blob-dir (filesystem) used bytes
+		}
+		// relayium's own footprint, NOT total-free. total-free is the whole
+		// volume's occupancy and would count every unrelated byte on the host.
+		if blobGauge != nil {
+			storedBytes = blobGauge.get()
 		}
 	}
 	body := heartbeatBody{
