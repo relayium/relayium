@@ -205,7 +205,7 @@ const ko: Messages = {
     loginRequired: "로그인하면 전송 통계와 파일을 볼 수 있습니다.",
     signIn: "로그인",
     plan: {
-      perks: (storage, traffic, retention) => `저장공간 ${storage} · 월 트래픽 ${traffic} · ${retention}`,
+      perks: (storage, traffic, retention) => `저장 공간 ${storage} · 월 트래픽 ${traffic} · ${retention}`,
       retentionDays: (n) => `파일 ${n}일 보관`,
       retentionForever: "파일 무기한 보관",
       hint: "공간이 부족한가요? 업그레이드하면 용량과 보관 기간이 늘어납니다.",
