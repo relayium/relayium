@@ -112,39 +112,87 @@ func (s *Service) monthlyTrafficCap(ctx context.Context, userID string) (int64, 
 	return u.QuotaAccruedBytes + prorate(plan.TrafficBytes, segSecs, monthSecs), nil
 }
 
-// overTraffic reports whether userID's month-to-date traffic plus add exceeds
-// their monthly traffic allowance. A non-positive cap means "unlimited".
-func (s *Service) overTraffic(ctx context.Context, userID string, add int64) (bool, error) {
+// remainingTraffic 返回 userID 当月还剩多少流量字节。unlimited=true 表示该项没有
+// 上限（cap <= 0），此时 remaining 无意义。剩余量可能为负（改档后额度缩水等），
+// 由调用方自行 clamp。
+//
+// overTraffic 就建在它上面，两者共用同一个 monthlyTrafficCap（含月中改档的分段
+// 折算）和同一个 currentMonthTraffic——不要在别处另算一份"剩余流量"，那必然会
+// 和分段折算走散。
+func (s *Service) remainingTraffic(ctx context.Context, userID string) (remaining int64, unlimited bool, err error) {
 	cap, err := s.monthlyTrafficCap(ctx, userID)
 	if err != nil {
-		return false, err
+		return 0, false, err
 	}
 	if cap <= 0 {
-		return false, nil
+		return 0, true, nil
 	}
 	used, err := s.currentMonthTraffic(ctx, userID)
 	if err != nil {
+		return 0, false, err
+	}
+	return cap - used, false, nil
+}
+
+// overTraffic reports whether userID's month-to-date traffic plus add exceeds
+// their monthly traffic allowance. A non-positive cap means "unlimited".
+func (s *Service) overTraffic(ctx context.Context, userID string, add int64) (bool, error) {
+	remaining, unlimited, err := s.remainingTraffic(ctx, userID)
+	if err != nil {
 		return false, err
 	}
-	return used+add > cap, nil
+	if unlimited {
+		return false, nil
+	}
+	// used+add > cap ⟺ add > cap-used，与改写前逐字等价。
+	return add > remaining, nil
+}
+
+// remainingStorage 返回 userID 还能再存多少字节。unlimited=true 表示档位没有存储
+// 上限。同上：overStorage 建在它上面，保证两条路读的是同一个 cap 和同一个 used。
+func (s *Service) remainingStorage(ctx context.Context, userID string) (remaining int64, unlimited bool, err error) {
+	plan, err := s.planForUser(ctx, userID)
+	if err != nil {
+		return 0, false, err
+	}
+	if plan.StorageBytes <= 0 {
+		return 0, true, nil
+	}
+	used, err := s.store.CurrentStorage(ctx, userID, s.now().Unix())
+	if err != nil {
+		return 0, false, err
+	}
+	return plan.StorageBytes - used, false, nil
 }
 
 // overStorage reports whether userID's current live storage plus add exceeds
 // their plan's storage cap. A non-positive cap means "unlimited".
 func (s *Service) overStorage(ctx context.Context, userID string, add int64) (bool, error) {
-	plan, err := s.planForUser(ctx, userID)
+	remaining, unlimited, err := s.remainingStorage(ctx, userID)
 	if err != nil {
 		return false, err
 	}
-	cap := plan.StorageBytes
-	if cap <= 0 {
+	if unlimited {
 		return false, nil
 	}
-	used, err := s.store.CurrentStorage(ctx, userID, s.now().Unix())
+	return add > remaining, nil
+}
+
+// remainingDailyQuota 返回 userID 滚动 24 小时窗口内还剩多少上传额度。
+//
+// 这里没有 unlimited 出口：日额度 <= 0 在既有语义里是"什么都传不了"，不是"无限"
+// ——finalize 把 quota 原样交给 ReserveUpload，那边判的是 used+bytes > quota，
+// quota=0 时任何字节都会被拒。所以这里也不能把 0 解释成无限。
+func (s *Service) remainingDailyQuota(ctx context.Context, userID string) (int64, error) {
+	quota, err := s.dailyQuotaFor(ctx, userID)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
-	return used+add > cap, nil
+	used, err := s.store.UserUploadedSince(ctx, userID, s.now().Unix()-dayWindow)
+	if err != nil {
+		return 0, err
+	}
+	return quota - used, nil
 }
 
 // overGlobalStorage reports whether total live storage plus add exceeds the

@@ -276,29 +276,36 @@ func TestResumableUploadInitRefusedOverTraffic(t *testing.T) {
 	}
 }
 
-// TestResumableFinalizeRefusedOverTraffic: init's traffic pre-check only sees
-// the client-declared ?size=, so a client can under-declare it there and still
-// push more real bytes through PATCH than the plan allows. Finalize is the
-// authoritative gate on sess.received (the real byte count): it must refuse
-// (429) and clean up the session — a status probe afterwards 404s, showing
-// both the session and its per-user slot were freed (the blob drop is
+// TestResumableFinalizeRefusedOverTraffic pins finalize as the AUTHORITATIVE
+// traffic gate, judging sess.received (the real byte count) rather than
+// anything the client declared.
+//
+// The session's write cap is now derived from the account's remaining quota at
+// init (see sessionWriteCap), which is what stops the "under-declare ?size=,
+// then write a whole MaxFileSize" squat — during PATCH, not here. But that cap
+// is a snapshot: the allowance can shrink while a session is open (a parallel
+// upload spending it, a downgrade, an admin edit). So this fixture moves the
+// cap between PATCH and finalize: the 50 bytes land legitimately under the
+// then-current 1 MiB allowance, the plan is then cut to 10 bytes, and finalize
+// must still refuse (429) and clean up — a status probe afterwards 404s,
+// showing both the session and its per-user slot were freed (the blob drop is
 // best-effort and not independently observable here).
 func TestResumableFinalizeRefusedOverTraffic(t *testing.T) {
 	ts, _, store, mail := newFileServer(t)
 	cookie := loginCookie(t, ts, mail, "ftr@example.com")
-	u, _ := store.UpsertUserByEmail(context.Background(), "ftr@example.com", "")
-	// TrafficBytes=10: init declares size=5, so init's pre-check (used 0 + 5 =
-	// 5 <= 10) passes. We then PATCH 50 real bytes (well under the test
-	// server's MaxFileSize=1024), so at finalize sess.received=50 and the
-	// authoritative check (used 0 + 50 = 50 > 10) trips.
-	_ = store.UpsertPlan(context.Background(), Plan{ID: "free", Name: "Free", StorageBytes: 1 << 30, TrafficBytes: 10, RetentionSecs: 3 * 86400, Active: true, UpdatedAt: 1})
-	_ = store.SetUserPlan(context.Background(), u.ID, "free", 1)
+	ctx := context.Background()
+	u, _ := store.UpsertUserByEmail(ctx, "ftr@example.com", "")
+	_ = store.UpsertPlan(ctx, Plan{ID: "free", Name: "Free", StorageBytes: 1 << 30, TrafficBytes: 1 << 20, RetentionSecs: 3 * 86400, Active: true, UpdatedAt: 1})
+	_ = store.SetUserPlan(ctx, u.ID, "free", 1)
 
 	blob := bytes.Repeat([]byte("T"), 50)
 	uploadID := initUpload(t, ts, cookie, []byte("M"), 5, 0)
 	if code, received := patchChunk(t, ts, cookie, uploadID, blob, 0, 50, 50); code != 200 || received != 50 {
 		t.Fatalf("chunk: code=%d received=%d, want 200/50", code, received)
 	}
+
+	// The allowance collapses after those bytes are already committed: 50 > 10.
+	_ = store.UpsertPlan(ctx, Plan{ID: "free", Name: "Free", StorageBytes: 1 << 30, TrafficBytes: 10, RetentionSecs: 3 * 86400, Active: true, UpdatedAt: 2})
 
 	freq, _ := http.NewRequest("POST", ts.URL+"/api/uploads/"+uploadID+"/finalize", nil)
 	freq.AddCookie(cookie)

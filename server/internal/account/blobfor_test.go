@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,19 @@ func fakeNode(t *testing.T, store map[string][]byte) *httptest.Server {
 			b, _ := io.ReadAll(r.Body)
 			store[key] = b
 			io.WriteString(w, `{"size":`+intToStr(len(b))+`}`)
+		case http.MethodPatch:
+			// Chunked append, mirroring the real node handler: X-Blob-Offset must
+			// equal the current size, and the new size comes back as JSON.
+			off, _ := strconv.ParseInt(r.Header.Get("X-Blob-Offset"), 10, 64)
+			cur := int64(len(store[key]))
+			if off != cur {
+				w.WriteHeader(http.StatusConflict)
+				io.WriteString(w, `{"size":`+intToStr(int(cur))+`}`)
+				return
+			}
+			b, _ := io.ReadAll(r.Body)
+			store[key] = append(store[key], b...)
+			io.WriteString(w, `{"size":`+intToStr(len(store[key]))+`}`)
 		case http.MethodGet:
 			b, ok := store[key]
 			if !ok {
