@@ -606,7 +606,7 @@ const es: Messages = {
     realtimeCta: "Directo en tiempo real →",
     offlineCta: "Transferencia asíncrona →",
   },
-  legal: { privacy: "Política de privacidad", terms: "Términos del servicio", security: "Seguridad" },
+  legal: { privacy: "Política de privacidad", terms: "Términos del servicio", security: "Seguridad", support: "Soporte" },
   learn: { hub: "Guías" },
   historyTitle: "Transferencias recientes",
   historyEmpty: "Aún no hay transferencias",

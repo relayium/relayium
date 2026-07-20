@@ -606,7 +606,7 @@ const ja: Messages = {
     realtimeCta: "リアルタイム直接転送 →",
     offlineCta: "非同期転送 →",
   },
-  legal: { privacy: "プライバシーポリシー", terms: "利用規約", security: "セキュリティ" },
+  legal: { privacy: "プライバシーポリシー", terms: "利用規約", security: "セキュリティ", support: "サポート" },
   learn: { hub: "ガイド" },
   historyTitle: "最近の転送",
   historyEmpty: "まだ転送履歴はありません",

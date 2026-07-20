@@ -526,7 +526,7 @@ export interface Messages {
   };
   crossPitch: string; // one-line pitch under the realtime page header
   homeCross: { title: string; desc: string; realtimeCta: string; offlineCta: string }; // homepage → the two cross-network pages
-  legal: { privacy: string; terms: string; security: string };
+  legal: { privacy: string; terms: string; security: string; support: string };
   // Footer link label for the generated static Guides hub page.
   learn: { hub: string };
   // Client-local "recent transfers" panel (localStorage-backed, this device only).
@@ -535,7 +535,7 @@ export interface Messages {
   historyClear: string;
 }
 
-export function legalUrl(slug: "privacy" | "terms" | "security", l: Lang): string {
+export function legalUrl(slug: "privacy" | "terms" | "security" | "support", l: Lang): string {
   return pageUrl(slug, l);
 }
 

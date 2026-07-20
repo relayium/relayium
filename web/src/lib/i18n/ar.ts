@@ -606,7 +606,7 @@ const ar: Messages = {
     realtimeCta: "مباشر فوري ←",
     offlineCta: "نقل غير متزامن ←",
   },
-  legal: { privacy: "سياسة الخصوصية", terms: "شروط الخدمة", security: "الأمان" },
+  legal: { privacy: "سياسة الخصوصية", terms: "شروط الخدمة", security: "الأمان", support: "الدعم" },
   learn: { hub: "الأدلة" },
   historyTitle: "عمليات النقل الأخيرة",
   historyEmpty: "لا توجد عمليات نقل بعد",

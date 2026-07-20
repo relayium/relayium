@@ -606,7 +606,7 @@ const ko: Messages = {
     realtimeCta: "실시간 직접 전송 →",
     offlineCta: "비동기 전송 →",
   },
-  legal: { privacy: "개인정보 처리방침", terms: "이용약관", security: "보안" },
+  legal: { privacy: "개인정보 처리방침", terms: "이용약관", security: "보안", support: "지원" },
   learn: { hub: "가이드" },
   historyTitle: "최근 전송",
   historyEmpty: "아직 전송 기록이 없습니다",

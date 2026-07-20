@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import privacy from "./pages/content/legal/privacy.mjs";
 import terms from "./pages/content/legal/terms.mjs";
 import security from "./pages/content/legal/security.mjs";
+import support from "./pages/content/legal/support.mjs";
 import landing from "./pages/content/landing.mjs";
 import crossNetwork from "./pages/content/cross-network.mjs";
 import offlineTransfer from "./pages/content/offline-transfer.mjs";
@@ -60,7 +61,7 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const publicDir = resolve(here, "..", "public");
-const legalDocs = [privacy, terms, security];
+const legalDocs = [privacy, terms, security, support];
 const articles = [
   compareSnapdrop,
   compareAirdrop,

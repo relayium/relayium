@@ -2,9 +2,10 @@ import { describe, it, expect } from "vitest";
 import privacy from "./privacy.mjs";
 import terms from "./terms.mjs";
 import security from "./security.mjs";
+import support from "./support.mjs";
 import { LANGS } from "../../shared.mjs";
 
-const docs = { privacy, terms, security };
+const docs = { privacy, terms, security, support };
 const REQUIRED = ["title", "description", "updatedLabel", "updated", "otherDocLabel", "lead", "sections"];
 
 describe("legal content", () => {
@@ -19,7 +20,12 @@ describe("legal content", () => {
       it(`${name}.${lang} has every required field`, () => {
         const d = doc.langs[lang];
         for (const k of REQUIRED) expect(d, `${name}.${lang}.${k}`).toHaveProperty(k);
-        expect(d.updated).toBe("2026-07-01");
+        // Pin every language to the doc's own English date rather than one
+        // hardcoded literal: a per-doc date lets documents be revised
+        // independently, while still catching the real bug (one language
+        // silently keeping a stale "last updated" after a revision).
+        expect(d.updated, `${name}.${lang}.updated`).toBe(doc.langs.en.updated);
+        expect(d.updated).toMatch(/^\d{4}-\d{2}-\d{2}$/);
         expect(d.lead.length).toBeGreaterThan(0);
         expect(d.sections.length).toBeGreaterThan(0);
         for (const s of d.sections) expect(typeof s.heading).toBe("string");

@@ -607,7 +607,7 @@ const fr: Messages = {
     realtimeCta: "Direct en temps réel →",
     offlineCta: "Transfert asynchrone →",
   },
-  legal: { privacy: "Politique de confidentialité", terms: "Conditions d'utilisation", security: "Sécurité" },
+  legal: { privacy: "Politique de confidentialité", terms: "Conditions d'utilisation", security: "Sécurité", support: "Assistance" },
   learn: { hub: "Guides" },
   historyTitle: "Transferts récents",
   historyEmpty: "Aucun transfert pour l'instant",

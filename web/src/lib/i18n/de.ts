@@ -607,7 +607,7 @@ const de: Messages = {
     realtimeCta: "Echtzeit-Direkt →",
     offlineCta: "Asynchron senden →",
   },
-  legal: { privacy: "Datenschutzerklärung", terms: "Nutzungsbedingungen", security: "Sicherheit" },
+  legal: { privacy: "Datenschutzerklärung", terms: "Nutzungsbedingungen", security: "Sicherheit", support: "Support" },
   learn: { hub: "Anleitungen" },
   historyTitle: "Letzte Übertragungen",
   historyEmpty: "Noch keine Übertragungen",

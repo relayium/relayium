@@ -13,6 +13,7 @@
   <nav class="legal">
     <a href={APPS_PATH} onclick={(e) => { e.preventDefault(); navigate("apps"); }}>{t.nav.appsTab}</a>
     <a href={PRICING_PATH} onclick={(e) => { e.preventDefault(); navigate("pricing"); }}>{t.pricingPage.navLink}</a>
+    <a href={legalUrl("support", lang())}>{t.legal.support}</a>
     <a href={legalUrl("security", lang())}>{t.legal.security}</a>
     <a href={legalUrl("privacy", lang())}>{t.legal.privacy}</a>
     <a href={legalUrl("terms", lang())}>{t.legal.terms}</a>

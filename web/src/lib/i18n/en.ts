@@ -620,7 +620,7 @@ const en: Messages = {
     realtimeCta: "Realtime direct →",
     offlineCta: "Async transfer →",
   },
-  legal: { privacy: "Privacy Policy", terms: "Terms of Service", security: "Security" },
+  legal: { privacy: "Privacy Policy", terms: "Terms of Service", security: "Security", support: "Support" },
   learn: { hub: "Guides" },
   historyTitle: "Recent transfers",
   historyEmpty: "No transfers yet",
