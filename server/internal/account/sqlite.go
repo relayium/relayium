@@ -2118,19 +2118,44 @@ func (s *SQLiteStore) GetNode(ctx context.Context, id string) (Node, bool, error
 	return nodes[0], true, nil
 }
 
+// storageHeadroomNum/storageHeadroomDen is the fraction of a node's free
+// space we're willing to promise during placement — defined exactly once so
+// the SQL below and usableBytes (used by the per-request placement check)
+// can't drift apart.
+const storageHeadroomNum, storageHeadroomDen = 7, 10
+
+// usableBytes is the number of bytes we're willing to promise out of a
+// node's free space when placing a new blob: 70% of what's left, leaving a
+// 30% cushion so placement never drives a node right up to its disk.
+func usableBytes(free int64) int64 {
+	return free * storageHeadroomNum / storageHeadroomDen
+}
+
 // StorageNodes returns fleet storage nodes that are online since `since` and
-// have at least minFree bytes free — candidates for placing a new node-backed
-// blob.
+// can offer at least minFree bytes — candidates for placing a new
+// node-backed blob.
 func (s *SQLiteStore) StorageNodes(ctx context.Context, since, minFree int64) ([]Node, error) {
+	// storage_free*7/10 >= minFree only ever promises 70% of what's left on the
+	// volume, keeping a 30% cushion so placement never drives a node right up to
+	// its disk. Note this is a *scheduling* reserve, evaluated per placement —
+	// it is not a write gate. A gate defined against free space would be
+	// self-referential (writing shrinks free, which shrinks the threshold, which
+	// never converges); the node's own absolute floor in relay.go handles that.
+	//
 	// storage_free*5 >= storage_total keeps the volume at most 80% full: never
 	// place a new blob on a node whose disk is already past that reserve, so a
 	// node can't be filled to the point of wedging its host.
-	return s.queryNodes(ctx,
+	//
+	// The 7/10 ratio is spliced in via fmt.Sprintf from the constants above —
+	// not from any request input, which stays parameterized via `?` — so this
+	// SQL and usableBytes can never fall out of sync.
+	query := fmt.Sprintf(
 		`SELECT `+nodeCols+` FROM nodes
-		   WHERE owner_type='fleet' AND storage_enabled=1 AND last_seen_at >= ? AND storage_free >= ?
+		   WHERE owner_type='fleet' AND storage_enabled=1 AND last_seen_at >= ? AND storage_free * %d / %d >= ?
 		     AND (disk_limit_bytes = 0 OR disk_limit_bytes - stored_bytes >= ?)
 		     AND (storage_total = 0 OR storage_free * 5 >= storage_total)
-		   ORDER BY last_seen_at DESC`, since, minFree, minFree)
+		   ORDER BY last_seen_at DESC`, storageHeadroomNum, storageHeadroomDen)
+	return s.queryNodes(ctx, query, since, minFree, minFree)
 }
 
 func (s *SQLiteStore) OnlineNodes(ctx context.Context, since int64) ([]Node, error) {
