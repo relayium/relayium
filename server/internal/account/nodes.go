@@ -32,7 +32,7 @@ type nodeRegisterReq struct {
 // total, so the node can enforce them locally in real time (workstream B) instead
 // of relying on central to withhold it at ICE time between heartbeats.
 type nodeLimits struct {
-	TrafficLimitBytes int64 `json:"trafficLimitBytes"` // 0 = unlimited
+	TrafficLimitBytes int64 `json:"trafficLimitBytes"` // resolved (node override or global default); 0 = unlimited
 	DiskLimitBytes    int64 `json:"diskLimitBytes"`    // 0 = unlimited
 	RelayedThisMonth  int64 `json:"relayedThisMonth"`  // central's authoritative month-to-date
 }
@@ -47,6 +47,18 @@ type nodeHeartbeatResp struct {
 	OK                bool `json:"ok"`
 	HeartbeatInterval int  `json:"heartbeatInterval"`
 	nodeLimits
+}
+
+// 中继流量的调度余量：中心端只把生效上限的 90% 发出去，留 10% 给已经建连的
+// 会话吐完。比例只在这里定义一次（与存储侧 storageHeadroomNum/Den 同纪律）。
+const nodeTrafficHeadroomNum, nodeTrafficHeadroomDen = 9, 10
+
+// usableTraffic 是中心端愿意排给一台节点的月度流量。limit <= 0（不限）时原样返回。
+func usableTraffic(limit int64) int64 {
+	if limit <= 0 {
+		return limit
+	}
+	return limit * nodeTrafficHeadroomNum / nodeTrafficHeadroomDen
 }
 
 // resolveNodeTrafficLimit 给出一台节点本月真正生效的中继流量上限（字节）。
@@ -70,7 +82,9 @@ func (s *Service) nodeLimitsFor(ctx context.Context, node Node) nodeLimits {
 		relayed = m[node.ID]
 	}
 	return nodeLimits{
-		TrafficLimitBytes: node.TrafficLimitBytes,
+		// 下发**解析后**的上限：节点行里可能是 0（继承全局默认），直接发 0 会让
+		// 节点以为自己不限流量，本地硬闸永远不触发。
+		TrafficLimitBytes: resolveNodeTrafficLimit(node, s.resolveSettings(ctx)),
 		DiskLimitBytes:    node.DiskLimitBytes,
 		RelayedThisMonth:  relayed,
 	}
