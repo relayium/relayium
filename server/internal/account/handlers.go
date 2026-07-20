@@ -398,6 +398,10 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {
 			"subscriptionEnd":    u.SubscriptionEnd,
 			"hasBilling":         u.StripeCustomerID != "",
 			"scheduledPlanId":    u.ScheduledPlanID,
+			// '' when unknown (a subscription that predates the column). The UI
+			// must not assume monthly in that case — it would render "switch to
+			// yearly" as if it were a no-op for someone already billed yearly.
+			"billingCycle": u.BillingCycle,
 		},
 	})
 }

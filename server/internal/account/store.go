@@ -43,6 +43,10 @@ type User struct {
 	// ScheduledPlanID is the tier a pending period-end downgrade will switch to;
 	// '' = no pending change. Display hint only (see the column comment).
 	ScheduledPlanID string
+	// BillingCycle is 'monthly' or 'yearly' for a Stripe-sourced subscription;
+	// '' means unknown (a row that predates the column). Treat '' as "cannot
+	// compare cycles" rather than as a third cycle — see handleBillingChangePlan.
+	BillingCycle string
 	// PlanStartedAt 是当前档位生效的时刻（unix 秒）；0 表示从未改过档。
 	// 与 QuotaAccrued* 一起把当月切成若干"档位段"，用来给月中改档的用户按段
 	// 计算流量上限，而不是每次改档都白送一整个月的额度。
@@ -399,7 +403,7 @@ type Store interface {
 	// SetUserSubscription updates plan_id, subscription_status, subscription_end,
 	// and plan_source together (Stripe webhook path). now is the change timestamp,
 	// used to freeze the outgoing tier's earned quota segment.
-	SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source string, now int64) error
+	SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source, cycle string, now int64) error
 	// SetScheduledPlan records (or clears, with planID="") the tier a pending
 	// period-end downgrade will switch to — a display hint for the pricing UI.
 	SetScheduledPlan(ctx context.Context, userID, planID string) error

@@ -328,6 +328,14 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// display hint — set when the endpoint schedules a downgrade, cleared when
 		// the downgrade lands (webhook), is canceled, or the subscription ends.
 		`ALTER TABLE users ADD COLUMN scheduled_plan_id TEXT NOT NULL DEFAULT ''`,
+		// 计费周期（'monthly' | 'yearly'），和档位正交的第二个维度。webhook 拿
+		// 事件里的 price id 跟该档的月/年两个 price id 比对推出来 —— Stripe 的
+		// 订阅事件不单独给 interval 字段，这是唯一来源。
+		//
+		// '' = 未知：迁移之前就存在的订阅行没人记录过周期。换档端点必须把 ''
+		// 当作"只按档位判断"，不能当成一次周期变更（否则老用户点一下当前档就
+		// 会触发一次无谓的 Stripe 订阅修改）。
+		`ALTER TABLE users ADD COLUMN billing_cycle TEXT NOT NULL DEFAULT ''`,
 		// 配额防套利（2026-07）：月中改档不再白送整月流量额度，而是把当月按档位
 		// 分段、每段按占比计算。见 accrueQuotaTx 与 Service.monthlyTrafficCap。
 		`ALTER TABLE users ADD COLUMN plan_started_at INTEGER NOT NULL DEFAULT 0`,
@@ -541,10 +549,10 @@ func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName 
 	var u User
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after, plan_id,
-		        stripe_customer_id, subscription_status, subscription_end, plan_source, scheduled_plan_id
+		        stripe_customer_id, subscription_status, subscription_end, plan_source, scheduled_plan_id, billing_cycle
 		   FROM users WHERE email = ?`, email,
 	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
-		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID)
+		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID, &u.BillingCycle)
 	if err == nil {
 		return u, nil
 	}
@@ -565,10 +573,10 @@ func (s *SQLiteStore) UserByCanonicalEmail(ctx context.Context, canonical string
 	var u User
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after, plan_id,
-		        stripe_customer_id, subscription_status, subscription_end, plan_source, scheduled_plan_id
+		        stripe_customer_id, subscription_status, subscription_end, plan_source, scheduled_plan_id, billing_cycle
 		   FROM users WHERE canonical_email = ? LIMIT 1`, canonical,
 	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
-		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID)
+		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID, &u.BillingCycle)
 	if err == sql.ErrNoRows {
 		return User{}, false, nil
 	}
@@ -620,11 +628,11 @@ func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (User, error) 
 	var strict int
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes, deleted_at, purge_after, plan_id,
-		        stripe_customer_id, subscription_status, subscription_end, plan_source, scheduled_plan_id,
+		        stripe_customer_id, subscription_status, subscription_end, plan_source, scheduled_plan_id, billing_cycle,
 		        plan_started_at, quota_accrued_bytes, quota_accrued_period
 		   FROM users WHERE id = ?`, id,
 	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &strict, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
-		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID,
+		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID, &u.BillingCycle,
 		&u.PlanStartedAt, &u.QuotaAccruedBytes, &u.QuotaAccruedPeriod)
 	if err == sql.ErrNoRows {
 		return User{}, ErrNotFound
@@ -767,10 +775,10 @@ func (s *SQLiteStore) GetUserByStripeCustomer(ctx context.Context, customerID st
 	var strict int
 	err := s.reader().QueryRowContext(ctx,
 		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes, deleted_at, purge_after, plan_id,
-		        stripe_customer_id, subscription_status, subscription_end, plan_source, scheduled_plan_id
+		        stripe_customer_id, subscription_status, subscription_end, plan_source, scheduled_plan_id, billing_cycle
 		   FROM users WHERE stripe_customer_id = ?`, customerID,
 	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &strict, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
-		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID)
+		&u.StripeCustomerID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID, &u.BillingCycle)
 	if err == sql.ErrNoRows {
 		return User{}, false, nil
 	}
@@ -788,7 +796,12 @@ func (s *SQLiteStore) GetUserByStripeCustomer(ctx context.Context, customerID st
 //
 // 累计与 plan_id 的写入放在同一事务里：如果两者分开，进程在中间崩溃会留下
 // "额度已冻结但档位没变"或反之的脏状态，用户的当月上限就永久算错了。
-func (s *SQLiteStore) SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source string, now int64) error {
+// cycle is 'monthly'/'yearly' when the caller could derive it from the event's
+// price id, or ” when it could not. An empty cycle LEAVES THE STORED VALUE
+// ALONE rather than blanking it: a subscription event that carries no
+// resolvable price (a cancellation, an unmapped price) must not erase a cycle
+// we already knew, or the next in-app change would misread the direction.
+func (s *SQLiteStore) SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source, cycle string, now int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -798,8 +811,10 @@ func (s *SQLiteStore) SetUserSubscription(ctx context.Context, userID, planID, s
 		return err
 	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE users SET plan_id = ?, subscription_status = ?, subscription_end = ?, plan_source = ? WHERE id = ?`,
-		planID, status, end, source, userID); err != nil {
+		`UPDATE users SET plan_id = ?, subscription_status = ?, subscription_end = ?, plan_source = ?,
+		        billing_cycle = CASE WHEN ? = '' THEN billing_cycle ELSE ? END
+		  WHERE id = ?`,
+		planID, status, end, source, cycle, cycle, userID); err != nil {
 		return err
 	}
 	return tx.Commit()

@@ -412,7 +412,7 @@ func TestMeUsagePassesThroughSubscriptionFields(t *testing.T) {
 	// wantEnd 选 1234567891——见下面的碰撞自检。
 	const wantStatus = "past_due"
 	const wantEnd int64 = 1234567891
-	if err := store.SetUserSubscription(t.Context(), u.ID, "pro", wantStatus, wantEnd, "stripe", svc.now().Unix()); err != nil {
+	if err := store.SetUserSubscription(t.Context(), u.ID, "pro", wantStatus, wantEnd, "stripe", "", svc.now().Unix()); err != nil {
 		t.Fatalf("SetUserSubscription: %v", err)
 	}
 

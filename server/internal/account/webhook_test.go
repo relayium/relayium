@@ -195,7 +195,7 @@ func TestWebhookSubscriptionUpdatedPastDueRevertsToFree(t *testing.T) {
 	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_pastdue_1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 1700000000, "stripe", time.Now().Unix()); err != nil {
+	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 1700000000, "stripe", "", time.Now().Unix()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -229,7 +229,7 @@ func TestWebhookSubscriptionDeletedRevertsToFreeCanceled(t *testing.T) {
 	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_deleted_1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 1700000000, "stripe", time.Now().Unix()); err != nil {
+	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 1700000000, "stripe", "", time.Now().Unix()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -301,7 +301,7 @@ func TestWebhookSubscriptionUpdatedAccruesPreviousSegment(t *testing.T) {
 	monthStart, _, monthSecs := monthAt(t, "202603")
 	t0 := monthStart
 	svc.now = func() time.Time { return time.Unix(t0, 0) }
-	if err := store.SetUserSubscription(context.Background(), uid, "plus", "active", 0, "stripe", t0); err != nil {
+	if err := store.SetUserSubscription(context.Background(), uid, "plus", "active", 0, "stripe", "", t0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -365,7 +365,7 @@ func TestWebhookSubscriptionDeletedAccruesPreviousSegment(t *testing.T) {
 	monthStart, _, monthSecs := monthAt(t, "202604")
 	t0 := monthStart
 	svc.now = func() time.Time { return time.Unix(t0, 0) }
-	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 0, "stripe", t0); err != nil {
+	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 0, "stripe", "", t0); err != nil {
 		t.Fatal(err)
 	}
 

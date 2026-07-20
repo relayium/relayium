@@ -184,7 +184,7 @@ func TestAdminUserListCarriesSubscriptionAndSource(t *testing.T) {
 	ctx := context.Background()
 	_ = store.UpsertPlan(ctx, Plan{ID: "pro", Name: "Pro", StorageBytes: 1, TrafficBytes: 1, RetentionSecs: 1, Active: true, UpdatedAt: 1})
 	u, _ := store.UpsertUserByEmail(ctx, "subrow@example.com", "")
-	if err := store.SetUserSubscription(ctx, u.ID, "pro", "active", 0, "stripe", 1); err != nil {
+	if err := store.SetUserSubscription(ctx, u.ID, "pro", "active", 0, "stripe", "", 1); err != nil {
 		t.Fatalf("SetUserSubscription: %v", err)
 	}
 

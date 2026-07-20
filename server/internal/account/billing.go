@@ -80,6 +80,25 @@ func (s *Service) handleBillingPortal(w http.ResponseWriter, r *http.Request, u 
 	writeJSON(w, http.StatusOK, map[string]string{"url": url})
 }
 
+// cycleOfPrice tells which billing cycle a Stripe Price id represents for the
+// plan it belongs to. Stripe's subscription events carry no interval field, so
+// matching the price id against the tier's two ids is the only way to know
+// whether a subscription is monthly or yearly.
+//
+// Returns "" when the id matches neither — an admin mid-edit of the price ids,
+// or a price retired in Stripe but still attached to a live subscription.
+// Callers must treat "" as "unknown", never as a default cycle.
+func cycleOfPrice(p Plan, priceID string) string {
+	switch priceID {
+	case p.StripePriceMonthlyID:
+		return "monthly"
+	case p.StripePriceYearlyID:
+		return "yearly"
+	default:
+		return ""
+	}
+}
+
 // handleBillingChangePlan switches an already-subscribed user's Stripe
 // subscription to a different tier in place (in-app upgrade/downgrade), so they
 // don't have to cancel + re-checkout. 404 when billing is unconfigured; 409 when
@@ -117,7 +136,21 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	if plan.ID == u.PlanID {
+	// Cycle is a second, independent axis: the same tier billed yearly instead
+	// of monthly is a real change, so "already on this plan" must compare BOTH.
+	// Comparing the tier alone is what made an in-app monthly -> yearly switch
+	// impossible — it 400'd before ever reaching Stripe.
+	//
+	// A stored cycle of '' (row predates the column) means we cannot compare
+	// cycles at all. Fall back to the tier-only check there, so a legacy
+	// subscriber clicking their current tier still gets a no-op instead of a
+	// pointless Stripe write.
+	wantCycle := "monthly"
+	if in.Cycle == "yearly" {
+		wantCycle = "yearly"
+	}
+	sameTier := plan.ID == u.PlanID
+	if sameTier && (u.BillingCycle == "" || u.BillingCycle == wantCycle) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "already_on_plan"})
 		return
 	}
@@ -148,14 +181,27 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// Upgrade vs downgrade decides timing. Tier direction is ranked by monthly
-	// price (stable regardless of the chosen cycle): a higher tier is an upgrade
-	// (apply now, prorated), a lower tier is a downgrade (defer to period end so
-	// the customer keeps what they paid for — no refund, no proration credit).
+	// Upgrade vs downgrade decides timing. TIER DIRECTION OUTRANKS CYCLE:
+	//
+	//   - higher tier            -> upgrade, apply now (prorated)
+	//   - lower tier             -> downgrade, defer to period end
+	//   - same tier, mo -> yr    -> upgrade, apply now (the point of switching
+	//                               to yearly is to pay it off in one charge)
+	//   - same tier, yr -> mo    -> downgrade, defer to period end
+	//
+	// Tier wins even when the cash flows the other way (pro/monthly ->
+	// plus/yearly costs more up front but is still a downgrade), because
+	// deferring never surprises anyone with a charge they did not expect.
 	// If the current plan can't be resolved, treat it as an upgrade (apply now).
 	downgrade := false
 	if cur, ok, err := s.store.GetPlan(r.Context(), u.PlanID); err == nil && ok {
-		downgrade = plan.PriceMonthly < cur.PriceMonthly
+		switch {
+		case plan.PriceMonthly != cur.PriceMonthly:
+			downgrade = plan.PriceMonthly < cur.PriceMonthly
+		case sameTier:
+			// Only the cycle changed. Shortening the commitment is the downgrade.
+			downgrade = wantCycle == "monthly"
+		}
 	}
 
 	var opErr error
@@ -331,7 +377,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		if u.PlanSource == "admin" {
 			// Admin comp wins: record status/end for visibility, but never
 			// let a webhook change plan_id out from under an admin grant.
-			if err := s.store.SetUserSubscription(ctx, u.ID, u.PlanID, ev.Status, ev.CurrentPeriodEnd, "admin", s.now().Unix()); err != nil {
+			if err := s.store.SetUserSubscription(ctx, u.ID, u.PlanID, ev.Status, ev.CurrentPeriodEnd, "admin", "", s.now().Unix()); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
@@ -339,15 +385,17 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		planID := "free"
+		cycle := ""
 		if ev.Status == "active" || ev.Status == "trialing" {
 			if p, ok, err := s.store.PlanByStripePrice(ctx, ev.PriceID); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			} else if ok {
 				planID = p.ID
+				cycle = cycleOfPrice(p, ev.PriceID)
 			}
 		}
-		if err := s.store.SetUserSubscription(ctx, u.ID, planID, ev.Status, ev.CurrentPeriodEnd, "stripe", s.now().Unix()); err != nil {
+		if err := s.store.SetUserSubscription(ctx, u.ID, planID, ev.Status, ev.CurrentPeriodEnd, "stripe", cycle, s.now().Unix()); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
@@ -374,7 +422,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		if u.PlanSource == "admin" {
 			planID, source = u.PlanID, "admin"
 		}
-		if err := s.store.SetUserSubscription(ctx, u.ID, planID, "canceled", ev.CurrentPeriodEnd, source, s.now().Unix()); err != nil {
+		if err := s.store.SetUserSubscription(ctx, u.ID, planID, "canceled", ev.CurrentPeriodEnd, source, "", s.now().Unix()); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}

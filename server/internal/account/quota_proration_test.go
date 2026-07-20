@@ -227,7 +227,7 @@ func TestAccrueSkipsWhenPlanUnchanged(t *testing.T) {
 	first, _ := store.GetUserByID(ctx, uid)
 
 	// 同一个档再写一次，晚 1000 秒。
-	if err := store.SetUserSubscription(ctx, uid, "plus", "active", 0, "stripe", t1+1000); err != nil {
+	if err := store.SetUserSubscription(ctx, uid, "plus", "active", 0, "stripe", "", t1+1000); err != nil {
 		t.Fatalf("SetUserSubscription: %v", err)
 	}
 	second, _ := store.GetUserByID(ctx, uid)
