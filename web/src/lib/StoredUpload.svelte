@@ -22,9 +22,10 @@
   let burn = $state(false);
   let ttl = $state(86400); // default 1 day
   let busy = $state(false);
-  let progress = $state(0); // 0..100 — encryption progress (the only phase the API reports)
-  // The API reports encryption progress; the POST that follows has none. Track the
-  // phase so the bar hitting 100% reads as "now uploading…" rather than a silent stall.
+  let progress = $state(0); // 0..100 — progress of whichever phase the API reports
+  // The chunked path encrypts and uploads at the same time, so it reports a single
+  // "uploading" phase that runs 0→100 once. Only the single-shot fallback still has
+  // two phases (encrypt, then POST); the label says which one is live.
   let phase = $state<"encrypting" | "uploading">("encrypting");
   let link = $state("");
   let expiresAt = $state(0); // unix seconds of the generated link, 0 until ready
@@ -101,8 +102,7 @@
     controller = new AbortController();
     try {
       const out = await uploadFileResumable(files, { burnAfterRead: burn, ttl }, (p) => {
-        // The bar tracks whichever phase is live; it fills 0→100 for encryption,
-        // then resets and fills again for the real upload (the label says which).
+        // The bar tracks whichever phase is live.
         phase = p.phase;
         progress = p.total > 0 ? Math.round((p.sent / p.total) * 100) : 0;
       }, controller.signal);

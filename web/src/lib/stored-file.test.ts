@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import v8 from "node:v8";
+import vm from "node:vm";
 import {
   uploadFile,
   uploadFileResumable,
@@ -6,9 +8,18 @@ import {
   buildDownloadLink,
   parseDownloadKey,
   downloadBlob,
+  keyFromFragment,
+  uploadBufferPeak,
   UploadError,
 } from "./stored-file";
-import { generateStoreKey, encryptFiles, encryptManifest } from "./store-crypto";
+import {
+  generateStoreKey,
+  encryptFiles,
+  encryptManifest,
+  cipherSizeFor,
+  StoreDecryptor,
+  STORE_CHUNK_SIZE,
+} from "./store-crypto";
 
 // Concatenate Uint8Array parts into a single buffer.
 function concat(parts: Uint8Array[]): Uint8Array {
@@ -29,6 +40,17 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 afterEach(() => vi.unstubAllGlobals());
+
+// A forced full GC, so a memory measurement reads live bytes instead of whatever
+// V8 has not swept yet. Vitest runs without --expose-gc, so unlock it in-process.
+function exposeGc(): (() => void) | undefined {
+  try {
+    v8.setFlagsFromString("--expose-gc");
+    return vm.runInNewContext("gc") as () => void;
+  } catch {
+    return undefined;
+  }
+}
 
 // A minimal XMLHttpRequest double for the upload path — uploadFile POSTs via XHR
 // (not fetch) so it can report real upload progress. Captures the sent body and
@@ -121,14 +143,25 @@ describe("uploadFile", () => {
   });
 });
 
-// A fetch double for the resumable upload endpoints. init hands back a small
-// chunkSize (forcing multiple chunks), PATCH appends by offset (409 on a gap),
-// GET reports the offset, finalize returns id/expiresAt. failPatches makes the
-// first N PATCH fetches reject (network error) before letting them through.
-function installFakeUploadFetch(opts?: { chunkSize?: number; failPatches?: number }) {
-  const state = { received: 0, patches: 0, finalized: false };
+async function toBytes(body: unknown): Promise<Uint8Array> {
+  if (body instanceof Uint8Array) return body;
+  return new Uint8Array(await (body as Blob).arrayBuffer());
+}
+
+// A fetch double for the resumable upload endpoints. init hands back a chunkSize,
+// PATCH appends by offset (409 on a gap, idempotent ack on an overshoot — this
+// mirrors uploads_resumable.go), GET reports the offset, finalize returns
+// id/expiresAt. It keeps every committed byte so a test can decrypt the assembled
+// ciphertext and prove the stream was reassembled correctly.
+//   failPatches:    the first N PATCH fetches reject (network error), nothing committed.
+//   partialPatches: the first N PATCH fetches commit *half* the body and then reject
+//                   — the real server does exactly this (`sess.received = newSize`
+//                   even on error), leaving the committed offset inside the chunk.
+function installFakeUploadFetch(opts?: { chunkSize?: number; failPatches?: number; partialPatches?: number }) {
+  const state = { received: 0, patches: 0, finalized: false, committed: [] as Uint8Array[] };
   const chunkSize = opts?.chunkSize ?? 8;
   let failsLeft = opts?.failPatches ?? 0;
+  let partialsLeft = opts?.partialPatches ?? 0;
   const json = (body: unknown, status = 200) => ({
     ok: status >= 200 && status < 300,
     status,
@@ -151,8 +184,17 @@ function installFakeUploadFetch(opts?: { chunkSize?: number; failPatches?: numbe
       const cr = (init!.headers as Record<string, string>)["Content-Range"];
       const start = Number(/bytes (\d+)-/.exec(cr)![1]);
       if (start > state.received) return json({ received: state.received }, 409);
-      const buf = new Uint8Array(await (init!.body as Blob).arrayBuffer());
-      if (start === state.received) state.received += buf.length;
+      if (start < state.received) return json({ received: state.received }); // stale start: ack, write nothing
+      const buf = await toBytes(init!.body);
+      if (partialsLeft > 0 && buf.length > 1) {
+        partialsLeft--;
+        const half = Math.floor(buf.length / 2);
+        state.committed.push(buf.slice(0, half));
+        state.received += half;
+        throw new TypeError("network"); // connection reset after a partial write
+      }
+      state.committed.push(buf.slice());
+      state.received += buf.length;
       return json({ received: state.received });
     }
     throw new Error(`unexpected ${method} ${url}`);
@@ -161,25 +203,102 @@ function installFakeUploadFetch(opts?: { chunkSize?: number; failPatches?: numbe
   return state;
 }
 
+// Decrypt everything the fake server committed and return the plaintext.
+async function decryptCommitted(state: { committed: Uint8Array[] }, key: string): Promise<Uint8Array> {
+  const dec = new StoreDecryptor(await keyFromFragment(key));
+  const out: Uint8Array[] = [];
+  for await (const pt of dec.push(concat(state.committed))) out.push(pt);
+  for await (const pt of dec.end()) out.push(pt);
+  return concat(out);
+}
+
+// A plaintext fixture that spans several 192 KiB store chunks, so the ciphertext
+// is several frames and really has to be packed into more than one upload chunk.
+function multiChunkFixture(chunks = 3): { file: File; bytes: Uint8Array } {
+  const bytes = new Uint8Array(STORE_CHUNK_SIZE * (chunks - 1) + 1234);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = i & 0xff;
+  return { file: new File([bytes], "f.bin"), bytes };
+}
+
 describe("uploadFileResumable", () => {
   it("uploads in chunks (init → PATCH×N → finalize) and returns id/key", async () => {
-    const state = installFakeUploadFetch({ chunkSize: 8 });
-    const file = new File([new Uint8Array(40).fill(7)], "f.bin");
+    const state = installFakeUploadFetch({ chunkSize: 100 * 1024 });
+    const { file, bytes } = multiChunkFixture(3);
     const out = await uploadFileResumable([file], { burnAfterRead: false, ttl: 0 });
     expect(out.id).toBe("id1");
     expect(out.expiresAt).toBe(123);
     expect(out.key).toBeTruthy();
     expect(state.finalized).toBe(true);
     expect(state.patches).toBeGreaterThan(1); // ciphertext split across several chunks
-    expect(state.received).toBeGreaterThan(0);
+    // The declared ?size= must match what actually arrived, and the assembled
+    // ciphertext must decrypt back to the original bytes.
+    expect(state.received).toBe(cipherSizeFor([file]));
+    expect(await decryptCommitted(state, out.key)).toEqual(bytes);
+  });
+
+  it("declares the exact ciphertext size to init", async () => {
+    const state = installFakeUploadFetch({ chunkSize: 100 * 1024 });
+    const { file } = multiChunkFixture(2);
+    await uploadFileResumable([file], { burnAfterRead: false, ttl: 0 });
+    const initCall = (fetch as unknown as { mock: { calls: any[][] } }).mock.calls.find((c) =>
+      String(c[0]).startsWith("/api/uploads?"),
+    )!;
+    expect(String(initCall[0])).toContain(`size=${cipherSizeFor([file])}`);
+    expect(state.received).toBe(cipherSizeFor([file]));
   });
 
   it("resumes after a mid-upload network error", async () => {
-    const state = installFakeUploadFetch({ chunkSize: 8, failPatches: 1 });
-    const file = new File([new Uint8Array(40).fill(3)], "f.bin");
+    const state = installFakeUploadFetch({ chunkSize: 100 * 1024, failPatches: 1 });
+    const { file, bytes } = multiChunkFixture(3);
     const out = await uploadFileResumable([file], { burnAfterRead: false, ttl: 0 });
     expect(out.id).toBe("id1");
     expect(state.finalized).toBe(true);
+    expect(state.received).toBe(cipherSizeFor([file]));
+    expect(await decryptCommitted(state, out.key)).toEqual(bytes);
+  });
+
+  it("resumes when the server's committed offset falls inside the chunk", async () => {
+    // The server commits whatever landed before the reset, so the offset it
+    // reports can be mid-chunk. Streaming means those bytes are no longer
+    // re-sliceable from a Blob — the replay buffer has to serve them.
+    const state = installFakeUploadFetch({ chunkSize: 100 * 1024, partialPatches: 2 });
+    const { file, bytes } = multiChunkFixture(3);
+    const out = await uploadFileResumable([file], { burnAfterRead: false, ttl: 0 });
+    expect(state.finalized).toBe(true);
+    // A partial commit really happened at an offset that is not a chunk boundary.
+    expect(state.committed.length).toBeGreaterThan(state.patches - 2);
+    expect(state.received).toBe(cipherSizeFor([file]));
+    expect(await decryptCommitted(state, out.key)).toEqual(bytes);
+  });
+
+  it("keeps a single uploading phase — encryption is interleaved, not a phase", async () => {
+    const state = installFakeUploadFetch({ chunkSize: 100 * 1024 });
+    const { file } = multiChunkFixture(3);
+    const phases: string[] = [];
+    const sent: number[] = [];
+    const out = await uploadFileResumable([file], { burnAfterRead: false, ttl: 0 }, (p) => {
+      if (phases[phases.length - 1] !== p.phase) phases.push(p.phase);
+      sent.push(p.sent);
+      expect(p.total).toBe(cipherSizeFor([file]));
+    });
+    expect(out.id).toBe("id1");
+    expect(phases).toEqual(["uploading"]);
+    // Progress counts server-confirmed bytes: monotonic, ending at the full size.
+    expect(sent).toEqual([...sent].sort((a, b) => a - b));
+    expect(sent[sent.length - 1]).toBe(state.received);
+  });
+
+  it("keeps the packing buffer bounded regardless of file size", async () => {
+    // 本任务的核心交付：旧实现把全部密文攒进数组再 new Blob，峰值 ≈ 2× 密文。
+    // 现在驻留的只有「已加密未确认」的那一段，上界是 chunkSize + 一帧。
+    const chunkSize = 256 * 1024;
+    const state = installFakeUploadFetch({ chunkSize });
+    const bytes = new Uint8Array(STORE_CHUNK_SIZE * 40); // 7.5 MiB，远大于 chunkSize
+    const file = new File([bytes], "big.bin");
+    await uploadFileResumable([file], { burnAfterRead: false, ttl: 0 });
+    expect(state.received).toBe(cipherSizeFor([file]));
+    expect(uploadBufferPeak()).toBeLessThanOrEqual(chunkSize + STORE_CHUNK_SIZE + 20);
+    expect(uploadBufferPeak()).toBeLessThan(state.received / 4); // 与文件大小无关
   });
 
   it("falls back to the single POST when /api/uploads is unavailable", async () => {
@@ -193,6 +312,50 @@ describe("uploadFileResumable", () => {
     expect(captured.url).toContain("/api/files");
   });
 
+  it("does not retain the ciphertext — resident bytes stay far below the file size", async () => {
+    // 上一条测的是我们自己记的计数器；这条测的是**真实驻留**。旧实现（把每一帧都
+    // push 进数组再 new Blob）在这里的 delta 会随文件线性增长，计数器却看不见。
+    // 实测（128 MiB 输入，Node 25 / jsdom）：流式 ≈ 31 MiB，攒全部密文 ≈ 149 MiB；
+    // 64 MiB 输入时流式仍是 ≈ 31 MiB（与文件大小无关），攒密文降到 ≈ 81 MiB。
+    const forceGc = exposeGc();
+    expect(forceGc, "需要 gc() 才能读出真实驻留（v8.setFlagsFromString 失败了）").toBeTypeOf("function");
+    const arrayBufferBytes = () => {
+      forceGc!(); // twice: V8 releases external (ArrayBuffer) memory a sweep late
+      forceGc!();
+      return process.memoryUsage().arrayBuffers;
+    };
+
+    const chunkSize = 8 << 20;
+    let peak = 0;
+    let received = 0;
+    const json = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const method = init?.method ?? "GET";
+        if (method === "POST" && url.startsWith("/api/uploads?")) return json({ uploadId: "u1", chunkSize });
+        if (method === "POST" && url.endsWith("/finalize")) return json({ id: "id1", expiresAt: 1 });
+        if (method === "PATCH") {
+          received += (init!.body as Uint8Array).length;
+          peak = Math.max(peak, arrayBufferBytes()); // 密文在途时采样
+          return json({ received });
+        }
+        return json({ received });
+      }),
+    );
+
+    // 明文必须一直被引用着：如果只让 File 持有它，它在基线之后才被回收，那 128 MiB
+    // 的释放会正好抵消掉「攒全部密文」的 128 MiB 增长，测试就永远发现不了回归。
+    const plaintext = new Uint8Array(128 << 20);
+    const file = new File([plaintext], "big.bin");
+    const base = arrayBufferBytes(); // 基线已包含明文与 File 自身持有的副本
+    await uploadFileResumable([file], { burnAfterRead: false, ttl: 0 });
+    expect(received).toBe(cipherSizeFor([file]));
+    expect(plaintext.length).toBe(128 << 20); // 别让它在采样之前变成垃圾
+    const residentMiB = (peak - base) / (1 << 20);
+    expect(residentMiB, `peak resident ${residentMiB.toFixed(1)} MiB over baseline`).toBeLessThan(64);
+  }, 120_000);
+
   it("throws UploadError on a fatal chunk status (e.g. 413)", async () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
@@ -202,10 +365,23 @@ describe("uploadFileResumable", () => {
       throw new Error("unexpected");
     });
     vi.stubGlobal("fetch", fetchMock);
-    const file = new File([new Uint8Array(40)], "f.bin");
+    // Several frames' worth, so an un-terminated generator would keep encrypting.
+    const { file } = multiChunkFixture(4);
+    let slices = 0;
+    const realSlice = file.slice.bind(file);
+    file.slice = ((...a: Parameters<Blob["slice"]>) => {
+      slices++;
+      return realSlice(...a);
+    }) as Blob["slice"];
+
     await expect(uploadFileResumable([file], { burnAfterRead: false, ttl: 0 })).rejects.toBeInstanceOf(
       UploadError,
     );
+    // The 413 aborts the flow; the encrypt generator must be closed, not left
+    // pulling more chunks in the background.
+    const after = slices;
+    for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+    expect(slices).toBe(after);
   });
 });
 

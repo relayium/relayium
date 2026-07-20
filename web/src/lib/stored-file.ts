@@ -6,9 +6,12 @@ import {
   encryptManifest,
   decryptManifest,
   encryptFiles,
+  cipherSizeFor,
   decodeKey,
   encodeKey,
   StoreDecryptor,
+  STORE_CHUNK_SIZE,
+  FRAME_OVERHEAD,
   type StoredManifest,
 } from "./store-crypto";
 import { DOWNLOAD_PREFIX } from "./transfer-link";
@@ -44,9 +47,11 @@ export class DownloadNetworkError extends Error {
   }
 }
 
-/** Upload progress, split into the two sequential phases so the UI can show real
- *  bytes for each: in-browser encryption, then the network POST of the ciphertext.
- *  `total` differs per phase (plaintext size vs. ciphertext blob size). */
+/** Upload progress. The single-shot fallback (`uploadFile`) reports two sequential
+ *  phases — in-browser encryption, then the network POST of the assembled blob —
+ *  and `total` differs per phase (plaintext size vs. ciphertext blob size). The
+ *  chunked path encrypts and uploads at the same time, so it stays in "uploading"
+ *  throughout and counts server-confirmed ciphertext bytes against `cipherSize`. */
 export interface UploadProgress {
   phase: "encrypting" | "uploading";
   sent: number;
@@ -111,9 +116,24 @@ export async function uploadFileResumable(
   }
 }
 
+// 上一次分片上传中「已加密但尚未被服务端确认」的字节数峰值。只给内存回归测试
+// 用：它是本次改动（边加密边上传，而不是先把整份密文攒在内存里）的唯一自动守卫。
+let bufferPeak = 0;
+
+/** Peak bytes held in the chunked upload's packing buffer during the last run.
+ *  Exposed for the memory regression test. */
+export function uploadBufferPeak(): number {
+  return bufferPeak;
+}
+
 /** The chunked flow: init → PATCH each chunk (per-chunk retry re-syncing to the
  *  server's committed offset) → finalize. A transient reset loses only the
- *  current chunk, not the whole upload. */
+ *  current chunk, not the whole upload.
+ *
+ *  加密与上传是**交织**的：帧从 encryptFiles 一边产出一边填进一个固定容量的打包
+ *  缓冲区，填满一个 chunk 就 PATCH 出去，服务端确认后立即丢弃。驻留内存约等于
+ *  chunkSize + 一帧，与文件大小无关（旧实现把全部密文攒进数组再 new Blob，峰值
+ *  约 2× 密文，1 GiB 上传在手机上必 OOM）。 */
 async function chunkedUpload(
   files: File[],
   opts: { burnAfterRead: boolean; ttl: number },
@@ -124,17 +144,9 @@ async function chunkedUpload(
   const manifest: StoredManifest = { files: files.map((f) => ({ name: f.name, size: f.size })) };
   const encManifest = await encryptManifest(sk.key, manifest);
 
-  const total = files.reduce((n, f) => n + f.size, 0);
-  const frames: Uint8Array[] = [];
-  let enc = 0;
-  for await (const fr of encryptFiles(files, sk.key)) {
-    if (signal?.aborted) throw new DOMException("aborted", "AbortError");
-    frames.push(fr);
-    enc += fr.length - 4 - 16; // frame = 4-byte len + (plaintext + 16-byte tag)
-    onProgress?.({ phase: "encrypting", sent: Math.min(enc, total), total });
-  }
-  const cipherBlob = new Blob(frames as BlobPart[]);
-  const cipherSize = cipherBlob.size;
+  // 密文总长可以在加密之前精确算出来 —— 流式之后没有 Blob 可以问 .size，而 init
+  // 的 ?size= 需要它（服务端只拿它做提前拒绝，不入库、finalize 不校验）。
+  const cipherSize = cipherSizeFor(files);
 
   // init: hand over the manifest header and the declared ciphertext size.
   const header = new Uint8Array(4);
@@ -144,14 +156,51 @@ async function chunkedUpload(
   const uploadId: string = init.uploadId;
   const chunkSize: number = init.chunkSize > 0 ? init.chunkSize : 8 << 20;
 
-  // Append chunks, resuming from the server's committed offset on failure.
-  let offset = 0;
-  onProgress?.({ phase: "uploading", sent: 0, total: cipherSize });
-  while (offset < cipherSize) {
-    if (signal?.aborted) throw new DOMException("aborted", "AbortError");
-    const end = Math.min(offset + chunkSize, cipherSize);
-    offset = await uploadChunk(uploadId, cipherBlob, offset, end, cipherSize, signal);
-    onProgress?.({ phase: "uploading", sent: offset, total: cipherSize });
+  // 打包缓冲：贪婪填到 >= chunkSize 就发。容量留出一整帧的余量，因为最后一帧可能
+  // 跨过 chunkSize 的界 —— 上传块边界不需要对齐帧边界，服务端看到的只是不透明
+  // 字节流。pending[0, filled) 同时也是**重放缓冲**：它必须保留到服务端确认为止，
+  // 因为服务端会提交部分块，重发的起点可能落在块内部。
+  const pending = new Uint8Array(chunkSize + STORE_CHUNK_SIZE + FRAME_OVERHEAD);
+  let filled = 0; // 已加密未确认的字节数
+  let chunkStart = 0; // pending[0] 对应的全局偏移
+  let offset = 0; // 服务端已确认的偏移
+  bufferPeak = 0;
+
+  const gen = encryptFiles(files, sk.key);
+  try {
+    onProgress?.({ phase: "uploading", sent: 0, total: cipherSize });
+    while (offset < cipherSize) {
+      if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+      while (filled < chunkSize) {
+        const r = await gen.next();
+        if (r.done) break;
+        // Honour a cancel mid-encryption instead of only at the network boundary.
+        if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+        pending.set(r.value, filled);
+        filled += r.value.length;
+      }
+      // 生成器已耗尽却还没喂满声明的 cipherSize —— 公式和实际产出对不上，与其发一个
+      // 永远 finalize 不了的截断 blob，不如报错让上层回落到单发路径。
+      if (filled === 0) throw new UploadError(0);
+      if (filled > bufferPeak) bufferPeak = filled;
+
+      const received = await uploadChunk(uploadId, pending.subarray(0, filled), chunkStart, cipherSize, signal);
+      const consumed = received - chunkStart;
+      // 服务端偏移倒退，或者跑到我们根本还没产出的字节之后：两种情况我们都无法再
+      // 对齐流位置，继续发只会写出一份错位的密文。
+      if (consumed < 0 || consumed > filled) throw new UploadError(0);
+      if (consumed < filled) {
+        // 部分提交：把没被确认的尾巴挪到缓冲区开头，下一轮从这里接着发。
+        pending.copyWithin(0, consumed, filled);
+      }
+      filled -= consumed;
+      chunkStart = received;
+      offset = received;
+      onProgress?.({ phase: "uploading", sent: offset, total: cipherSize });
+    }
+  } finally {
+    // 抛错/取消路径上终止生成器，不留悬挂的加密工作。
+    await gen.return(undefined).catch(() => {});
   }
 
   // finalize (small; retried so a flaky moment doesn't waste the whole upload).
@@ -159,18 +208,20 @@ async function chunkedUpload(
   return { id: fin.id, expiresAt: fin.expiresAt, key: encodeKey(sk.raw) };
 }
 
-/** PATCH cipherBlob[start:end], returning the server's new committed offset. On
- *  a network error it re-syncs to the server's real offset (some of the chunk
- *  may have committed before the reset) and retries; a 409 means the server was
- *  already ahead — take its offset. Non-2xx (413/429/401) is fatal. */
+/** PATCH `chunk`, which covers ciphertext bytes [start, start+chunk.length), and
+ *  return the server's new committed offset. On a network error it re-syncs to
+ *  the server's real offset — the server commits whatever bytes landed before the
+ *  reset, so that offset can fall *inside* the chunk — and replays from there; a
+ *  409 means the server was already ahead — take its offset. Non-2xx (413/429/401)
+ *  is fatal. */
 async function uploadChunk(
   uploadId: string,
-  blob: Blob,
+  chunk: Uint8Array,
   start: number,
-  end: number,
   total: number,
   signal?: AbortSignal,
 ): Promise<number> {
+  const end = start + chunk.length;
   const maxAttempts = 5;
   let from = start;
   for (let attempt = 1; ; attempt++) {
@@ -181,13 +232,15 @@ async function uploadChunk(
         credentials: "include",
         signal,
         headers: { "Content-Range": `bytes ${from}-${end - 1}/${total}` },
-        body: blob.slice(from, end),
+        body: chunk.subarray(from - start) as Uint8Array<ArrayBuffer>,
       });
     } catch (e) {
       if (signal?.aborted) throw new DOMException("aborted", "AbortError");
       if (attempt >= maxAttempts) throw new UploadError(0);
       from = await uploadOffset(uploadId, signal).catch(() => from);
       if (from >= end) return from;
+      // 服务端偏移退到我们保留的字节之前 —— 那些字节已经丢了，重放不出来。
+      if (from < start) throw new UploadError(0);
       await uploadSleep(uploadBackoff(attempt), signal);
       continue;
     }

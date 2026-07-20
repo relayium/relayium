@@ -72,6 +72,20 @@ function frame(ct: Uint8Array): Bytes {
   return out;
 }
 
+// 每帧的固定开销：4 字节长度前缀 + 16 字节 GCM tag。
+export const FRAME_OVERHEAD = 4 + 16;
+
+// 密文总长（不含 manifest，manifest 走 init 的 body）。每个文件独立按
+// STORE_CHUNK_SIZE 分块、末块不补齐、文件之间没有分隔帧，所以总长可以在加密之前
+// 精确算出来——上传流式化之后没有 Blob 可以问 .size，而 init 的 ?size= 需要它。
+export function cipherSizeFor(files: File[]): number {
+  let n = 0;
+  for (const f of files) {
+    n += f.size + FRAME_OVERHEAD * Math.ceil(f.size / STORE_CHUNK_SIZE);
+  }
+  return n;
+}
+
 // Stream every file's chunks as encrypted frames; seq is global across files,
 // starting at 1 (0 is the manifest).
 export async function* encryptFiles(files: File[], key: CryptoKey): AsyncGenerator<Bytes> {
