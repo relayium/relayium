@@ -204,6 +204,13 @@ const fr: Messages = {
     back: "← Retour à l'accueil",
     loginRequired: "Connectez-vous pour voir vos statistiques de transfert et vos fichiers.",
     signIn: "Se connecter",
+    plan: {
+      perks: (storage, traffic, retention) => `${storage} de stockage · ${traffic}/mois de trafic · ${retention}`,
+      retentionDays: (n) => `Fichiers conservés ${n} jour${n === 1 ? "" : "s"}`,
+      retentionForever: "Fichiers conservés indéfiniment",
+      hint: "Vous manquez d'espace ? Passer à l'offre supérieure augmente la capacité et la durée de conservation.",
+      topTier: "Vous êtes déjà sur l'offre la plus élevée.",
+    },
     transfers: "Transferts",
     downloads: "Téléchargements",
     traffic: "Trafic cumulé",

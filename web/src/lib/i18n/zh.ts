@@ -204,6 +204,13 @@ const zh: Messages = {
     back: "← 返回首页",
     loginRequired: "登录后查看你的传输统计与文件。",
     signIn: "登录",
+    plan: {
+      perks: (storage, traffic, retention) => `${storage} 存储 · ${traffic}/月流量 · ${retention}`,
+      retentionDays: (n) => `文件保留 ${n} 天`,
+      retentionForever: "文件永久保留",
+      hint: "空间不够用？升级可获得更大容量和更长保留期。",
+      topTier: "你已在最高档。",
+    },
     transfers: "传输次数",
     downloads: "被下载次数",
     traffic: "累计流量",
