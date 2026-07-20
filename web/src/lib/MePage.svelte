@@ -13,6 +13,7 @@
   import WhyAccount from "./WhyAccount.svelte";
   import CommandBlock from "./CommandBlock.svelte";
   import { reveal, countUp } from "./reveal";
+  import PlanCard from "./PlanCard.svelte";
   import QuotaMeters from "./QuotaMeters.svelte";
   import { invalidateUsage } from "./usage.svelte";
 
@@ -242,6 +243,7 @@
       <WhyAccount compact />
     </div>
   {:else}
+    <PlanCard />
     <QuotaMeters />
 
     <div class="stats reveal" use:reveal>

@@ -6,6 +6,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { mount, unmount, flushSync, type Component } from "svelte";
 import QuotaMeters from "./QuotaMeters.svelte";
 import QuotaNotice from "./QuotaNotice.svelte";
+import PlanCard from "./PlanCard.svelte";
 import MePage from "./MePage.svelte";
 import { refreshSession } from "./auth.svelte";
 import { loadLang } from "./i18n.svelte";
@@ -151,11 +152,10 @@ describe("QuotaMeters", () => {
 });
 
 describe("usage.svelte.ts shared cache — cross-component dedup", () => {
-  it("mounting QuotaMeters and QuotaNotice in the same frame issues exactly one /api/me/usage request", async () => {
-    // This is the entire reason Task 6 exists: without the shared cache, two
+  it("mounting QuotaMeters, QuotaNotice and PlanCard in the same frame issues exactly one /api/me/usage request", async () => {
+    // This is the entire reason Task 6 exists: without the shared cache, three
     // components independently reading the same session would each fire
-    // their own fetch("/api/me/usage"). A third consumer (Task 8's PlanCard)
-    // would make it three. Pin the count at one.
+    // their own fetch("/api/me/usage"). Pin the count at one.
     await setSession({ id: "s1", email: "s1@b.com", displayName: "S1" });
     const usageFetch = vi.fn(async (url: string) => {
       if (url === "/api/me/usage") return usageResponse(85, 100);
@@ -165,6 +165,7 @@ describe("usage.svelte.ts shared cache — cross-component dedup", () => {
     await loadLang("en");
     mountComponent(QuotaMeters);
     mountComponent(QuotaNotice);
+    mountComponent(PlanCard);
     await settle();
 
     const usageCalls = usageFetch.mock.calls.filter((args) => args[0] === "/api/me/usage");
