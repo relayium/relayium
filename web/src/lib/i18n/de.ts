@@ -290,6 +290,9 @@ const de: Messages = {
     privacyBody: "Die von dir übermittelten Daten und Konfigurationen sind ausschließlich für dich nutzbar. Wir versprechen — und setzen es technisch durch —, dass niemand sonst auf deine Daten oder Node-Konfiguration zugreifen oder sie nutzen kann.",
   },
   verifyEmail: {
+    confirmPrompt: "Gib das gewählte Passwort ein, um die Verifizierung abzuschließen.",
+    confirmBtn: "Konto verifizieren",
+    noPasswordLink: "Ich habe mich ohne Passwort registriert",
     checking: "E-Mail wird überprüft…",
     successBody: "E-Mail bestätigt — du wirst angemeldet…",
     noToken: "Dieser Link ist ungültig.",

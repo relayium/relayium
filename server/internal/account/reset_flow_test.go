@@ -13,7 +13,7 @@ func registerAndVerify(t *testing.T, svc *Service, m *captureMailer, email, pw s
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.VerifyEmail(ctx, tokenFromLink(t, m.verify)); err != nil {
+	if _, err := svc.VerifyEmail(ctx, tokenFromLink(t, m.verify), pw); err != nil {
 		t.Fatal(err)
 	}
 	return u

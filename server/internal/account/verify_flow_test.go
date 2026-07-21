@@ -45,8 +45,9 @@ func TestRegisterSendsVerifyAndNoLoginUntilVerified(t *testing.T) {
 	if _, err := svc.Login(ctx, "new@example.com", "supersecret"); err != ErrEmailUnverified {
 		t.Fatalf("want ErrEmailUnverified, got %v", err)
 	}
-	// verify with the emailed token → session, and now verified
-	sess, err := svc.VerifyEmail(ctx, tokenFromLink(t, m.verify))
+	// verify with the emailed token (+ the registration password, confirming it so
+	// it's kept) → session, and now verified
+	sess, err := svc.VerifyEmail(ctx, tokenFromLink(t, m.verify), "supersecret")
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -65,7 +66,7 @@ func TestRegisterSendsVerifyAndNoLoginUntilVerified(t *testing.T) {
 func TestVerifyBadTokenRejected(t *testing.T) {
 	ctx := context.Background()
 	svc, _ := newTestService(t)
-	if _, err := svc.VerifyEmail(ctx, "not-a-real-token"); err != ErrInvalidToken {
+	if _, err := svc.VerifyEmail(ctx, "not-a-real-token", ""); err != ErrInvalidToken {
 		t.Fatalf("want ErrInvalidToken, got %v", err)
 	}
 }

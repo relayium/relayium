@@ -290,6 +290,9 @@ const en: Messages = {
     privacyBody: "The data and config you submit are only ever usable by you. We promise — and enforce it in the engineering — that no one else can access or use your data or node configuration.",
   },
   verifyEmail: {
+    confirmPrompt: "Enter the password you chose to finish verifying your account.",
+    confirmBtn: "Verify account",
+    noPasswordLink: "I signed up without a password",
     checking: "Verifying your email…",
     successBody: "Email verified — signing you in…",
     noToken: "This link is invalid.",

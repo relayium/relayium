@@ -224,8 +224,12 @@ export async function passwordLogin(email: string, password: string): Promise<Lo
 // Verifies the emailed token; on success the server sets the session cookie
 // and returns {user}, which updates the current-user store just like
 // passwordLogin does.
-export async function verifyEmail(token: string): Promise<{ ok: boolean; error?: string }> {
-  return postForUser("/api/auth/email/verify", { token });
+// verifyEmail confirms the emailed token. password (optional) is the one the user
+// chose at signup: presenting it proves they set it, so the server keeps it;
+// verifying without it leaves the account passwordless (the pre-hijack defense —
+// a victim clicking the link can't activate an attacker's registration password).
+export async function verifyEmail(token: string, password = ""): Promise<{ ok: boolean; error?: string }> {
+  return postForUser("/api/auth/email/verify", { token, password });
 }
 
 // Fire-and-forget resend; the server always answers 200 (anti-enumeration —

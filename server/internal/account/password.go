@@ -134,6 +134,31 @@ func (s *Service) dropUnverifiedPassword(ctx context.Context, userID string) err
 	return nil
 }
 
+// reconcileUnverifiedPassword decides the fate of a password that was set at
+// registration (before the email was ever proven) at the moment the email is
+// verified via its emailed link. A registration password is only trustworthy if
+// the person completing verification KNOWS it — i.e. is the same person who set
+// it. So: if the caller presents the matching password, keep it (the legitimate
+// owner just confirmed it); otherwise DROP it (and the "password" identity),
+// leaving a verified, passwordless account whose real owner sets a password via
+// the first-time-set flow. This closes the pre-hijack variant where an attacker
+// registers victim@email with a known password and the VICTIM, by clicking the
+// verification link, would otherwise activate the attacker's password. Must run
+// BEFORE SetEmailVerified (dropUnverifiedPassword no-ops once verified).
+func (s *Service) reconcileUnverifiedPassword(ctx context.Context, u User, password string) error {
+	_, hash, hasPass, err := s.store.GetCredentials(ctx, u.Email)
+	if err != nil {
+		return err
+	}
+	if !hasPass {
+		return nil // passwordless (magic/OAuth) — nothing to reconcile
+	}
+	if password != "" && bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil {
+		return nil // the verifier proved they set it → trusted, keep it
+	}
+	return s.dropUnverifiedPassword(ctx, u.ID)
+}
+
 // Login 校验邮箱+密码并签发会话。任何失败都返回 ErrBadCredentials。
 // authenticate validates email+password and the login preconditions — verified
 // email, not a frozen (pending-deletion) account — returning the user id. Shared

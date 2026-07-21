@@ -666,13 +666,14 @@ func (s *Service) handlePasswordLogin(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) handleEmailVerify(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Token string `json:"token"`
+		Token    string `json:"token"`
+		Password string `json:"password"` // optional: confirms the registration password so it's kept
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Token == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	sess, err := s.VerifyEmail(r.Context(), in.Token)
+	sess, err := s.VerifyEmail(r.Context(), in.Token, in.Password)
 	var pd *PendingDeletionError
 	if errors.As(err, &pd) {
 		// Frozen account (blocker fix, mirrors handlePasswordLogin's Task 4

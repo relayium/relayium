@@ -323,6 +323,9 @@ export interface Messages {
   };
   // /verify-email — landing page for the emailed verification link (?token=).
   verifyEmail: {
+    confirmPrompt: string; // ask the user to confirm their signup password before verifying
+    confirmBtn: string; // submit the confirm-password form
+    noPasswordLink: string; // "I signed up without a password" — verify passwordless
     checking: string; // transient state while the token is being verified
     successBody: string; // token accepted, session cookie set, redirecting home
     noToken: string; // opened without a ?token= param

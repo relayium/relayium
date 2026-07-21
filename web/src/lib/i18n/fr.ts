@@ -290,6 +290,9 @@ const fr: Messages = {
     privacyBody: "Les données et la configuration que vous soumettez ne sont utilisables que par vous. Nous promettons — et le garantissons techniquement — que personne d'autre ne peut accéder à vos données ou à la configuration de votre nœud, ni les utiliser.",
   },
   verifyEmail: {
+    confirmPrompt: "Saisissez le mot de passe choisi pour vérifier votre compte.",
+    confirmBtn: "Vérifier le compte",
+    noPasswordLink: "Je me suis inscrit sans mot de passe",
     checking: "Vérification de votre e-mail…",
     successBody: "E-mail vérifié — connexion en cours…",
     noToken: "Ce lien n'est pas valide.",

@@ -290,6 +290,9 @@ const pt: Messages = {
     privacyBody: "Os dados e a configuração que você envia só podem ser usados por você. Prometemos — e reforçamos isso na engenharia — que ninguém mais pode acessar ou usar seus dados ou a configuração do seu nó.",
   },
   verifyEmail: {
+    confirmPrompt: "Digite a senha que você escolheu para verificar sua conta.",
+    confirmBtn: "Verificar conta",
+    noPasswordLink: "Cadastrei-me sem senha",
     checking: "Verificando seu e-mail…",
     successBody: "E-mail verificado — conectando você…",
     noToken: "Este link é inválido.",

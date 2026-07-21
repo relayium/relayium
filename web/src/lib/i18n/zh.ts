@@ -290,6 +290,9 @@ const zh: Messages = {
     privacyBody: "你提交的数据和配置只为你自己所用。我们承诺、也从工程上保证：任何其他人都无法访问或使用你的数据与节点配置。",
   },
   verifyEmail: {
+    confirmPrompt: "输入你注册时设置的密码以完成验证。",
+    confirmBtn: "验证账户",
+    noPasswordLink: "我注册时没有设置密码",
     checking: "正在验证邮箱…",
     successBody: "邮箱验证成功，正在进入…",
     noToken: "链接无效。",

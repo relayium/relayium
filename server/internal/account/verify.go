@@ -25,8 +25,13 @@ func (s *Service) SendVerifyEmail(ctx context.Context, u User) error {
 	return s.mailer.SendVerifyEmail(ctx, u.Email, link)
 }
 
-// VerifyEmail consumes a verify token, marks the user verified, and issues a session.
-func (s *Service) VerifyEmail(ctx context.Context, rawToken string) (Session, error) {
+// VerifyEmail consumes a verify token, marks the user verified, and issues a
+// session. password (optional) is the one the user set at registration: it is
+// used only to CONFIRM a registration-time password so it can be kept — an
+// unconfirmed one is dropped (see reconcileUnverifiedPassword), closing the
+// pre-hijack variant where a victim's click would activate an attacker's
+// password. Passwordless (magic/OAuth) verifications pass "".
+func (s *Service) VerifyEmail(ctx context.Context, rawToken, password string) (Session, error) {
 	tok, ok, err := s.store.UseEmailToken(ctx, hashToken(rawToken), "verify", s.now().Unix())
 	if err != nil {
 		return Session{}, err
@@ -50,6 +55,11 @@ func (s *Service) VerifyEmail(ctx context.Context, rawToken string) (Session, er
 			return Session{}, terr
 		}
 		return Session{}, &PendingDeletionError{PurgeAfter: u.PurgeAfter, ReactivateToken: raw}
+	}
+	// Keep the registration password only if the verifier proves they set it;
+	// otherwise drop it (pre-hijack defense). MUST run before SetEmailVerified.
+	if err := s.reconcileUnverifiedPassword(ctx, u, password); err != nil {
+		return Session{}, err
 	}
 	if err := s.store.SetEmailVerified(ctx, tok.UserID); err != nil {
 		return Session{}, err

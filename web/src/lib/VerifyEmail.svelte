@@ -10,8 +10,24 @@
 
   const t = $derived<Messages>(messages[lang()]);
 
-  type Phase = "checking" | "success" | "no-token" | "invalid";
+  type Phase = "confirm" | "checking" | "success" | "no-token" | "invalid";
   let phase = $state<Phase>("checking");
+  // The token is kept out of the URL (stripped on mount) and confirmed with the
+  // password the user chose at signup — proving they set it so the server keeps
+  // it, rather than a victim's click activating an attacker's password.
+  let token = $state("");
+  let password = $state("");
+
+  async function runVerify() {
+    phase = "checking";
+    const res = await verifyEmail(token, password);
+    if (res.ok) {
+      phase = "success";
+      setTimeout(() => navigate("lan"), 1200);
+    } else {
+      phase = "invalid";
+    }
+  }
 
   // Resend affordance shown on the invalid/expired state — mirrors Account.svelte's
   // onResend (30s disable + a neutral "sent" ack, since resendVerification never
@@ -31,25 +47,29 @@
     }
   }
 
-  onMount(async () => {
-    const token = new URLSearchParams(location.search).get("token");
+  onMount(() => {
+    const tok = new URLSearchParams(location.search).get("token");
     // Strip the token from the URL so it doesn't linger in browser history or
     // leak via the Referer header on a later navigation.
-    if (token) history.replaceState(null, "", location.pathname);
-    if (!token) { phase = "no-token"; return; }
-    const res = await verifyEmail(token);
-    if (res.ok) {
-      phase = "success";
-      // Brief pause so the success message is readable before the app takes over.
-      setTimeout(() => navigate("lan"), 1200);
-    } else {
-      phase = "invalid";
-    }
+    if (tok) history.replaceState(null, "", location.pathname);
+    if (!tok) { phase = "no-token"; return; }
+    token = tok;
+    // Ask the user to confirm their signup password before verifying, instead of
+    // auto-verifying — see the token/password rationale above.
+    phase = "confirm";
   });
 </script>
 
 <section class="verify page-enter">
-  {#if phase === "checking"}
+  {#if phase === "confirm"}
+    <p class="msg">{t.verifyEmail.confirmPrompt}</p>
+    <form class="confirm" onsubmit={(e) => { e.preventDefault(); runVerify(); }}>
+      <input type="password" name="password" autocomplete="current-password"
+             bind:value={password} placeholder={t.account.password} />
+      <button type="submit" class="btn btn-primary">{t.verifyEmail.confirmBtn}</button>
+    </form>
+    <button type="button" class="btn-link" onclick={() => runVerify()}>{t.verifyEmail.noPasswordLink}</button>
+  {:else if phase === "checking"}
     <p class="msg">{t.verifyEmail.checking}</p>
   {:else if phase === "success"}
     <p class="msg">{t.verifyEmail.successBody}</p>
@@ -86,11 +106,19 @@
   }
   .msg { color: var(--text-h); font-size: var(--fs-body); margin: 0; }
   .msg.err { color: var(--danger); }
-  .resend {
+  .resend, .confirm {
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
     width: 100%;
+  }
+  .confirm input {
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    font: inherit;
+    background: var(--social-bg);
+    color: var(--text-h);
   }
   .resend input {
     padding: var(--space-2) var(--space-3);
