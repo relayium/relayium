@@ -52,7 +52,7 @@ func (s *Service) requireStepUp(action string, next http.HandlerFunc) http.Handl
 		// Carry the {id} path wildcard (empty for form-only actions) so the
 		// confirmation POST, which lands on the id-less /admin/confirm route, can
 		// re-apply it before forwarding to a path-scoped handler.
-		tok, ok := s.putPending(c.Value, action, r.PathValue("id"), r.PostForm)
+		tok, ok := s.putPending(r.Context(), c.Value, action, r.PathValue("id"), r.PostForm)
 		if !ok {
 			http.Error(w, "too many pending confirmations", http.StatusTooManyRequests)
 			return
@@ -183,7 +183,7 @@ func (s *Service) handleAdminConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c, _ := r.Cookie(adminCookie)
-	pending, ok := s.takePending(r.FormValue("confirm_token"), c.Value)
+	pending, ok := s.takePending(r.Context(), r.FormValue("confirm_token"), c.Value)
 	if !ok {
 		http.Error(w, "confirmation expired or invalid; go back and try again", http.StatusBadRequest)
 		return

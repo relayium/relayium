@@ -1,6 +1,7 @@
 package account
 
 import (
+	"context"
 	"net/url"
 	"time"
 )
@@ -34,24 +35,15 @@ type pendingAction struct {
 }
 
 // putPending 暂存一个待确认操作，返回其 token。容量已满时返回 false，
-// 调用方必须据此拒绝请求而不是继续往下走。
-func (s *Service) putPending(sessionTok, action, pathID string, form url.Values) (string, bool) {
+// 调用方必须据此拒绝请求而不是继续往下走。Stored in the DB so the confirm token
+// is claimable on any instance (form is query-string encoded).
+func (s *Service) putPending(ctx context.Context, sessionTok, action, pathID string, form url.Values) (string, bool) {
 	tok := randToken()
-	s.pendingMu.Lock()
-	defer s.pendingMu.Unlock()
-	now := s.now()
-	for k, p := range s.pendingActions {
-		if now.After(p.expires) {
-			delete(s.pendingActions, k)
-		}
-	}
-	if len(s.pendingActions) >= pendingActionCap {
-		// 拒绝而非驱逐：驱逐会让洪泛把管理员正在确认的操作挤掉。
+	now := s.now().Unix()
+	ok, err := s.store.PutPendingAction(ctx, tok, sessionTok, action, form.Encode(), pathID,
+		now, now+int64(pendingActionTTL.Seconds()), pendingActionCap)
+	if err != nil || !ok {
 		return "", false
-	}
-	s.pendingActions[tok] = pendingAction{
-		action: action, sessionTok: sessionTok, form: form, pathID: pathID,
-		expires: now.Add(pendingActionTTL),
 	}
 	return tok, true
 }
@@ -59,22 +51,25 @@ func (s *Service) putPending(sessionTok, action, pathID string, form url.Values)
 // takePending 一次性取出待执行操作，且只在 sessionTok 与铸造时一致才成功。
 //
 // 无条件删除（与 takeCeremony 同样的处理）：会话不匹配的尝试也要烧掉 token，
-// 否则攻击者可以拿着它反复试探而不消耗掉这次机会。
-func (s *Service) takePending(tok, sessionTok string) (pendingAction, bool) {
+// 否则攻击者可以拿着它反复试探而不消耗掉这次机会。The atomic DELETE ... RETURNING
+// in the store makes the claim exactly-once across instances.
+func (s *Service) takePending(ctx context.Context, tok, sessionTok string) (pendingAction, bool) {
 	if tok == "" || sessionTok == "" {
 		return pendingAction{}, false
 	}
-	s.pendingMu.Lock()
-	p, ok := s.pendingActions[tok]
-	delete(s.pendingActions, tok)
-	s.pendingMu.Unlock()
-	if !ok || s.now().After(p.expires) {
+	st, action, formEnc, pathID, expires, ok, err := s.store.TakePendingAction(ctx, tok)
+	if err != nil || !ok {
 		return pendingAction{}, false
 	}
-	// 常量时间比较不是必需的：token 是本地 map 的键，攻击者无法通过时序
-	// 逐字节猜出它 —— 猜错一次就被上面的 delete 烧掉了。
-	if p.sessionTok != sessionTok {
+	if s.now().Unix() > expires {
 		return pendingAction{}, false
 	}
-	return p, true
+	if st != sessionTok {
+		return pendingAction{}, false // burned above; a mismatched session can't retry
+	}
+	form, _ := url.ParseQuery(formEnc)
+	return pendingAction{
+		action: action, sessionTok: st, form: form, pathID: pathID,
+		expires: time.Unix(expires, 0),
+	}, true
 }

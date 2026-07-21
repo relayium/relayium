@@ -160,11 +160,9 @@ type Service struct {
 	// actions into the store like admin sessions already are.
 	passkeyCeremonies map[string]passkeyCeremony
 	passkeyMu         sync.Mutex
-	// pendingActions: 步进 token -> 待执行的高危操作。与 passkeyCeremonies 同构
-	// （进程内、一次性、短 TTL、有上限），但多绑一个会话 token —— 见 takePending。
-	pendingActions map[string]pendingAction
-	pendingMu      sync.Mutex
-	pwLogins       *loginThrottle              // per email+IP failed password-login limiter
+	// pendingActions now live in the store (admin_pending_actions, item #2),
+	// claimable exactly once on any instance — no process-local map here.
+	pwLogins *loginThrottle // per email+IP failed password-login limiter
 	magicRequests  *loginThrottle              // per email+IP magic-link request rate limiter
 	verifyRequests *loginThrottle              // per email+IP resend-verification limiter
 	resetRequests  *loginThrottle              // per email+IP forgot-password limiter
@@ -232,7 +230,6 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 		uploadSem:      newUploadSem(maxConcurrentUploadsPerUser)}
 	svc.adminPasskeyLogins = newLoginThrottle()
 	svc.passkeyCeremonies = map[string]passkeyCeremony{}
-	svc.pendingActions = map[string]pendingAction{}
 	svc.clientIP = clientIP
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
 	svc.exchangeAppleCode = svc.realExchangeAppleCode

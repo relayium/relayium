@@ -435,6 +435,10 @@ type Store interface {
 	MarkAdminStepUp(ctx context.Context, token string, at int64) error
 	DeleteAdminSession(ctx context.Context, token string) error
 	PurgeExpiredAdminSessions(ctx context.Context, now int64) error
+	// Pending high-risk actions live in the store (claimable exactly once on any
+	// instance). See docs/multi-instance-state-migration.md item #2.
+	PutPendingAction(ctx context.Context, token, sessionTok, action, form, pathID string, now, expires int64, cap int) (ok bool, err error)
+	TakePendingAction(ctx context.Context, token string) (sessionTok, action, form, pathID string, expires int64, ok bool, err error)
 	EmailVerified(ctx context.Context, userID string) (bool, error)
 	SetEmailVerified(ctx context.Context, userID string) error
 	// SetOnlyOwnNodes toggles the BYO-nodes-only restriction (SP3) for a user.

@@ -390,6 +390,11 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`CREATE TABLE IF NOT EXISTS admin_sessions (
   token TEXT PRIMARY KEY, auth TEXT NOT NULL,
   expires INTEGER NOT NULL, last_step_up_at INTEGER NOT NULL DEFAULT 0)`,
+		// Pending high-risk actions (multi-instance): the confirm-page token must be
+		// claimable exactly once on any instance. See migration item #2.
+		`CREATE TABLE IF NOT EXISTS admin_pending_actions (
+  token TEXT PRIMARY KEY, session_tok TEXT NOT NULL, action TEXT NOT NULL,
+  form TEXT NOT NULL, path_id TEXT NOT NULL DEFAULT '', expires INTEGER NOT NULL)`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -1574,6 +1579,52 @@ func (s *SQLiteStore) DeleteAdminSession(ctx context.Context, token string) erro
 func (s *SQLiteStore) PurgeExpiredAdminSessions(ctx context.Context, now int64) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM admin_sessions WHERE expires <= ?`, now)
 	return err
+}
+
+// PutPendingAction stores a pending high-risk action, purging expired rows and
+// enforcing the cap in one transaction. ok=false (nothing stored) when the cap
+// is reached — the caller must reject rather than proceed.
+func (s *SQLiteStore) PutPendingAction(ctx context.Context, token, sessionTok, action, form, pathID string, now, expires int64, cap int) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM admin_pending_actions WHERE expires <= ?`, now); err != nil {
+		return false, err
+	}
+	var n int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM admin_pending_actions`).Scan(&n); err != nil {
+		return false, err
+	}
+	if n >= cap {
+		return false, nil // reject, don't evict (a flood must not push out a real one)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO admin_pending_actions (token, session_tok, action, form, path_id, expires)
+		 VALUES (?, ?, ?, ?, ?, ?)`, token, sessionTok, action, form, pathID, expires); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
+}
+
+// TakePendingAction atomically claims (deletes) a pending action by token,
+// returning its stored fields. ok=false means no such token. It deletes on the
+// token alone — even a session-mismatch attempt burns it (the caller checks the
+// session and expiry) — so a stolen token can't be probed repeatedly. The delete
+// + return is one statement, so exactly one instance claims a given token.
+func (s *SQLiteStore) TakePendingAction(ctx context.Context, token string) (sessionTok, action, form, pathID string, expires int64, ok bool, err error) {
+	err = s.db.QueryRowContext(ctx,
+		`DELETE FROM admin_pending_actions WHERE token = ?
+		 RETURNING session_tok, action, form, path_id, expires`, token,
+	).Scan(&sessionTok, &action, &form, &pathID, &expires)
+	if err == sql.ErrNoRows {
+		return "", "", "", "", 0, false, nil
+	}
+	if err != nil {
+		return "", "", "", "", 0, false, err
+	}
+	return sessionTok, action, form, pathID, expires, true, nil
 }
 
 // ClearPassword NULLs the password hash so the account has no usable password
