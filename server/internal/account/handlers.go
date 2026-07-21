@@ -328,7 +328,9 @@ func (s *Service) handleMagicVerify(w http.ResponseWriter, r *http.Request) {
 	if errors.As(err, &pd) {
 		// Frozen login (Task 4): no session cookie, redirect carrying a fresh
 		// reactivate token instead of the usual post-login "/".
-		http.Redirect(w, r, "/?account=pending_deletion&token="+url.QueryEscape(pd.ReactivateToken), http.StatusFound)
+		// Fragment, not query: keeps the reactivate token out of server logs and
+		// Referer (see oauth.go's frozen-login redirect).
+		http.Redirect(w, r, "/#account=pending_deletion&token="+url.QueryEscape(pd.ReactivateToken), http.StatusFound)
 		return
 	}
 	if err != nil {

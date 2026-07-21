@@ -88,7 +88,11 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/?login=error", http.StatusFound)
 			return
 		}
-		http.Redirect(w, r, "/?account=pending_deletion&token="+url.QueryEscape(raw), http.StatusFound)
+		// Token goes in the URL fragment, not the query: fragments are never sent
+		// to the server (access logs) or in a Referer header, so this multi-week
+		// reactivate credential doesn't leak off-box. The SPA reads it from
+		// location.hash and scrubs it from the URL.
+		http.Redirect(w, r, "/#account=pending_deletion&token="+url.QueryEscape(raw), http.StatusFound)
 		return
 	}
 	err = s.store.LinkIdentity(r.Context(), "google", sub, u.ID)

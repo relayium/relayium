@@ -328,8 +328,13 @@ func TestMagicLoginFrozenWhenPendingDeletion(t *testing.T) {
 		t.Fatalf("want redirect, got %d", resp.StatusCode)
 	}
 	loc := resp.Header.Get("Location")
-	if !strings.Contains(loc, "account=pending_deletion") || !strings.Contains(loc, "token=") {
-		t.Fatalf("want pending_deletion redirect with token, got %q", loc)
+	// The reactivate token must ride the URL FRAGMENT, not the query, so it never
+	// reaches server logs or a Referer header.
+	if !strings.Contains(loc, "#account=pending_deletion") || !strings.Contains(loc, "token=") {
+		t.Fatalf("want pending_deletion fragment redirect with token, got %q", loc)
+	}
+	if strings.Contains(loc, "?account=pending_deletion") {
+		t.Fatalf("reactivate token must not be in the query string: %q", loc)
 	}
 	if hasSessionCookie(resp.Cookies()) {
 		t.Fatal("no session cookie must be set for a frozen account via magic link")
@@ -372,8 +377,12 @@ func TestOAuthCallbackFrozenWhenPendingDeletion(t *testing.T) {
 		t.Fatalf("want redirect, got %d", resp.StatusCode)
 	}
 	loc := resp.Header.Get("Location")
-	if !strings.Contains(loc, "account=pending_deletion") || !strings.Contains(loc, "token=") {
-		t.Fatalf("want pending_deletion redirect with token, got %q", loc)
+	// Reactivate token in the fragment, never the query (no log/Referer leak).
+	if !strings.Contains(loc, "#account=pending_deletion") || !strings.Contains(loc, "token=") {
+		t.Fatalf("want pending_deletion fragment redirect with token, got %q", loc)
+	}
+	if strings.Contains(loc, "?account=pending_deletion") {
+		t.Fatalf("reactivate token must not be in the query string: %q", loc)
 	}
 	if hasSessionCookie(resp.Cookies()) {
 		t.Fatal("no session cookie must be set for a frozen account via OAuth")

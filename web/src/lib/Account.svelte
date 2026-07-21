@@ -45,6 +45,16 @@
   let portalBusy = $state(false);
   let portalError = $state("");
 
+  // Frozen-account reactivation: a frozen-login attempt (Google/Apple/magic
+  // link on a pending-deletion account) redirects to
+  // `/#account=pending_deletion&token=<t>`. The token is in the URL FRAGMENT,
+  // never the query, so it is not sent to the server (access logs) or in a
+  // Referer header. We read it, scrub the fragment from the URL, and offer a
+  // one-click reactivate.
+  let reactivateToken = $state("");
+  let reactivateBusy = $state(false);
+  let reactivateError = $state("");
+
   // 改密表单
   let pwOpen = $state(false);
   let curPw = $state("");
@@ -137,8 +147,46 @@
     history.replaceState(null, "", location.pathname + (qs ? `?${qs}` : "") + location.hash);
   }
 
+  // Read the reactivate token from the URL fragment and scrub it immediately.
+  // The fragment already keeps it out of server logs / Referer; the scrub
+  // (dropping location.hash) also keeps it out of history and bookmarks — the
+  // one vector a fragment doesn't close by itself.
+  function consumeReactivateReturn() {
+    if (!location.hash) return;
+    const params = new URLSearchParams(location.hash.slice(1));
+    if (params.get("account") !== "pending_deletion") return;
+    const token = params.get("token") ?? "";
+    history.replaceState(null, "", location.pathname + location.search);
+    if (token) reactivateToken = token;
+  }
+
+  async function onReactivate() {
+    if (reactivateBusy || !reactivateToken) return;
+    reactivateBusy = true;
+    reactivateError = "";
+    try {
+      const res = await fetch("/api/account/reactivate", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: reactivateToken }),
+      });
+      if (!res.ok) {
+        reactivateError = t.account.reactivateError;
+        return;
+      }
+      reactivateToken = ""; // consumed — the endpoint also cleared the deletion + set a session cookie
+      await refreshSession();
+    } catch {
+      reactivateError = t.account.reactivateError;
+    } finally {
+      reactivateBusy = false;
+    }
+  }
+
   onMount(async () => {
     consumeBillingReturn();
+    consumeReactivateReturn();
     methods = await fetchAuthMethods();
     await refreshSession();
     if (session().user) claimDevice();
@@ -271,6 +319,15 @@
     <div class="billing-toast" class:cancel={billingBanner === "cancel"}>
       <span>{billingBanner === "success" ? t.billing.checkoutSuccess : t.billing.checkoutCanceled}</span>
       <button type="button" class="toast-close" aria-label={t.close} onclick={() => (billingBanner = "")}>✕</button>
+    </div>
+  {/if}
+  {#if reactivateToken}
+    <div class="billing-toast reactivate-toast">
+      <span>{reactivateError || t.account.pendingDeletion}</span>
+      <button type="button" class="reactivate-btn" onclick={onReactivate} disabled={reactivateBusy}>
+        {t.account.reactivate}
+      </button>
+      <button type="button" class="toast-close" aria-label={t.close} onclick={() => { reactivateToken = ""; reactivateError = ""; }}>✕</button>
     </div>
   {/if}
   {#if session().user}
@@ -496,6 +553,11 @@
     max-width: calc(100vw - 32px);
   }
   .billing-toast.cancel { color: var(--text); }
+  .reactivate-btn {
+    padding: 2px var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--accent); color: var(--accent-contrast, #fff); cursor: pointer; font-size: var(--fs-xs);
+  }
+  .reactivate-btn:disabled { opacity: 0.6; cursor: default; }
   .toast-close {
     padding: 0; border: 0; background: none; color: var(--text); cursor: pointer; font-size: var(--fs-xs);
   }

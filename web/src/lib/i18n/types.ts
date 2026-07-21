@@ -123,6 +123,9 @@ export interface Messages {
     errEmailTaken: string;
     errLogin: string;
     errNetwork: string; // request never reached the server (offline / fetch threw)
+    pendingDeletion: string; // frozen-account reactivate banner (fragment token)
+    reactivate: string;
+    reactivateError: string;
     changePassword: string;
     setPassword: string;
     currentPassword: string;

@@ -144,7 +144,9 @@ func (s *Service) handleAppleWebCallback(w http.ResponseWriter, r *http.Request)
 			fail()
 			return
 		}
-		http.Redirect(w, r, "/?account=pending_deletion&token="+url.QueryEscape(raw), http.StatusFound)
+		// Fragment, not query: keeps the reactivate token out of server logs and
+		// Referer (see oauth.go's frozen-login redirect).
+		http.Redirect(w, r, "/#account=pending_deletion&token="+url.QueryEscape(raw), http.StatusFound)
 		return
 	}
 	if err := s.store.LinkIdentity(r.Context(), "apple", claims.Sub, u.ID); err != nil {
