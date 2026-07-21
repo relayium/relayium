@@ -61,22 +61,23 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 		owner, validCode = s.pairCodeOwner(code)
 	}
 
-	// Global brute-force breaker (shared with /ws). A single successful /api/ice
-	// call both confirms a code is live AND returns a working TURN credential
-	// billed to the code's owner, so the per-IP 5/min cap alone still leaves a
-	// fan-out-across-IPs guessing attack that mines validity + victim-billed
-	// credentials. Feed every invalid non-empty code into the process-wide
-	// breaker, and while it is OPEN serve STUN-only for ALL requests (valid ones
-	// included): no TURN credential is issued and every response looks identical,
-	// removing both the oracle and the credential tap during a flood. Direct P2P
-	// still works; this mirrors the shedding /ws already does.
+	// Feed every invalid non-empty code into the process-wide brute-force breaker
+	// (shared with /ws, which sheds invalid joins while OPEN). We deliberately do
+	// NOT force valid codes to STUN-only while the breaker is OPEN: doing so —
+	// 1fd64db's original behaviour — turned a cheap guess-flood (≈7 source IPs is
+	// enough to hold the breaker OPEN) into a fleet-wide relay outage, stranding
+	// every legitimate hard-NAT / CGNAT transfer for the whole cooldown, which is
+	// a far worse and easier-to-trigger harm than the marginal protection it gave.
+	// An attacker only obtains a (victim-billed) credential by actually GUESSING a
+	// live code, which is already bounded by the per-IP 5/min cap, the
+	// email-verified relay gate, and the owner's own monthly traffic cap; the
+	// breaker withholding creds on such a rare successful guess bought little. So,
+	// symmetric with /ws: invalid codes get STUN-only (they always did), valid
+	// codes keep working.
 	if code != "" && !validCode && s.iceBreaker != nil {
 		if open, logNow := s.iceBreaker.RecordInvalid(); open && logNow {
-			log.Printf("WARNING: pairing-code guess breaker OPEN — /api/ice serving STUN-only")
+			log.Printf("WARNING: pairing-code guess breaker OPEN — shedding invalid /ws joins; /api/ice valid codes unaffected")
 		}
-	}
-	if s.iceBreaker != nil && s.iceBreaker.IsOpen() {
-		validCode = false
 	}
 
 	now := s.now()

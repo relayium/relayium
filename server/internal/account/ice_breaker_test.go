@@ -16,14 +16,17 @@ func (b *fakeBreaker) RecordInvalid() (bool, bool) {
 	return b.open, false
 }
 
-// While the shared brute-force breaker is OPEN, /api/ice must serve STUN-only
-// even for a VALID code — no TURN credential, no relays — so it cannot be used
-// as a validity oracle or a victim-billed credential tap during a flood.
-func TestICEBreakerOpenServesStunOnly(t *testing.T) {
+// While the shared brute-force breaker is OPEN, /api/ice stays symmetric with
+// /ws: a VALID code still gets its TURN credential (forcing valid codes to
+// STUN-only turned a cheap guess-flood into a fleet-wide relay outage), while an
+// invalid code gets STUN-only and feeds the breaker. An attacker only obtains a
+// credential by actually guessing a live code, still bounded by the per-IP cap.
+func TestICEBreakerOpenStillServesValidCodes(t *testing.T) {
 	ts, svc, _ := newICEServer(t, "secret")
 	svc.SetPairCodeOwner(ownerResolver("owner-1", "424242"))
 	svc.SetGuessBreaker(&fakeBreaker{open: true})
 
+	// Valid code while OPEN → TURN credential still issued (availability preserved).
 	resp, err := ts.Client().Get(ts.URL + "/api/ice?code=424242")
 	if err != nil {
 		t.Fatal(err)
@@ -32,8 +35,16 @@ func TestICEBreakerOpenServesStunOnly(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("want 200, got %d", resp.StatusCode)
 	}
-	if hasTURN(iceServersFromBody(t, resp)) {
-		t.Fatal("SECURITY: /api/ice handed out a TURN credential while the guess breaker was open")
+	if !hasTURN(iceServersFromBody(t, resp)) {
+		t.Fatal("a valid code must keep getting relay while the breaker is OPEN (no legit outage)")
+	}
+
+	// Invalid code while OPEN → STUN-only (no credential leaked to a guesser).
+	svc.SetPairCodeOwner(func(string) (string, bool) { return "", false })
+	resp2, _ := ts.Client().Get(ts.URL + "/api/ice?code=999999")
+	defer resp2.Body.Close()
+	if hasTURN(iceServersFromBody(t, resp2)) {
+		t.Fatal("SECURITY: /api/ice handed a TURN credential to an INVALID code")
 	}
 }
 
