@@ -109,7 +109,7 @@
           {isPaid ? t.billing.changePlan : t.billing.upgrade}
         </button>
       {/if}
-      {#if isPaid}
+      {#if session().user?.hasBilling}
         <button class="btn" disabled={portalBusy} onclick={onManageBilling}>{t.billing.manageBilling}</button>
       {/if}
     </div>

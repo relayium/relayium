@@ -79,14 +79,20 @@ describe("PlanCard", () => {
   it("付费档额外给出管理订阅入口", async () => {
     // 免费档以外、已在付费的档位：CTA 从"Upgrade"换成"Change plan"（可升可降可
     // 换周期，不再只是单向的"升级"）。
-    await mountWith(plan({ id: "pro", name: "Pro", priceMonthly: 890, subscriptionStatus: "active" }));
+    await mountWith(
+      plan({ id: "pro", name: "Pro", priceMonthly: 890, subscriptionStatus: "active" }),
+      { hasBilling: true },
+    );
     const btns = buttons();
     expect(btns).toContain("Change plan");
     expect(btns).toContain("Manage billing");
   });
 
   it("最高档不再引导升级", async () => {
-    await mountWith(plan({ id: "max", name: "Max", priceMonthly: 2900, isTop: true, subscriptionStatus: "active" }));
+    await mountWith(
+      plan({ id: "max", name: "Max", priceMonthly: 2900, isTop: true, subscriptionStatus: "active" }),
+      { hasBilling: true },
+    );
     const btns = buttons();
     // 已经买到顶了还催升级是负体验，也没有目标页可去。
     expect(btns).not.toContain("Upgrade");
@@ -146,6 +152,20 @@ describe("PlanCard", () => {
     await mountWith(plan()); // free defaults
     expect(target.textContent ?? "").not.toContain("Yearly");
     expect(buttons()).not.toContain("Change plan");
+  });
+
+  it("past_due 后 webhook 把 plan 重置成 free，仍要保留管理订阅入口", async () => {
+    // webhook 在 past_due/canceled 时会把 plan_id 落回 free（priceMonthly 0），
+    // 但 hasBilling 是单调的——只要开过 Stripe 客户就不会因为套餐回落而消失。
+    // 用户此时最需要的正是这个入口去修支付方式，不能因为 isPaid 变 false 就把
+    // 按钮一起吞掉。
+    await mountWith(
+      plan({ id: "free", name: "Free", priceMonthly: 0, subscriptionStatus: "past_due" }),
+      { hasBilling: true },
+    );
+    const btns = buttons();
+    expect(btns).toContain("Manage billing");
+    expect(target.textContent ?? "").toContain("Payment failed");
   });
 
   it("取不到套餐时整块不渲染", async () => {
