@@ -261,7 +261,16 @@ func withPragmas(dsn string, pragmas ...string) string {
 }
 
 func OpenSQLite(dsn string) (*SQLiteStore, error) {
-	db, err := sql.Open("sqlite", withPragmas(dsn, connPragmas...))
+	// _txlock=immediate makes every read-write transaction on this (write) pool
+	// begin with BEGIN IMMEDIATE, taking the write lock up front. A DEFERRED
+	// transaction that SELECTs then upgrades to a write can hit
+	// SQLITE_BUSY_SNAPSHOT when another PROCESS committed after the read snapshot
+	// — a conflict SQLite cannot resolve by waiting, so busy_timeout does NOT
+	// apply and the whole tx fails immediately. Multi-instance deployments (N
+	// processes sharing one WAL file) rely on this; a single process is
+	// unaffected. modernc applies the mode only to non-readonly BeginTx, so the
+	// reader pool below (plain reads) keeps DEFERRED locking.
+	db, err := sql.Open("sqlite", withPragmas(dsn, connPragmas...)+"&_txlock=immediate")
 	if err != nil {
 		return nil, err
 	}
@@ -1557,11 +1566,19 @@ func (s *SQLiteStore) ClaimTOTPStep(ctx context.Context, step int64) (bool, erro
 	return n == 1, nil
 }
 
+// Admin bearer tokens (session cookie, pending-action token + its bound session
+// token, passkey-ceremony token) are stored as SHA-256 hashes, never raw — the
+// same discipline the rest of the codebase applies to magic/CLI/fleet/node
+// tokens. Callers pass the raw secret; the store hashes it on every write and
+// every lookup, so a read of the DB file or a backup yields only hashes, not a
+// copy-pasteable live admin credential. Hashing is confined to the store so no
+// caller can accidentally persist a raw token.
+
 // CreateAdminSession stores a new admin session (shared across instances).
 func (s *SQLiteStore) CreateAdminSession(ctx context.Context, token, auth string, expires int64) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO admin_sessions (token, auth, expires, last_step_up_at) VALUES (?, ?, ?, 0)`,
-		token, auth, expires)
+		hashToken(token), auth, expires)
 	return err
 }
 
@@ -1570,7 +1587,7 @@ func (s *SQLiteStore) CreateAdminSession(ctx context.Context, token, auth string
 func (s *SQLiteStore) AdminSession(ctx context.Context, token string, now int64) (auth string, lastStepUpAt int64, ok bool, err error) {
 	err = s.db.QueryRowContext(ctx,
 		`SELECT auth, last_step_up_at FROM admin_sessions WHERE token = ? AND expires > ?`,
-		token, now).Scan(&auth, &lastStepUpAt)
+		hashToken(token), now).Scan(&auth, &lastStepUpAt)
 	if err == sql.ErrNoRows {
 		return "", 0, false, nil
 	}
@@ -1583,13 +1600,13 @@ func (s *SQLiteStore) AdminSession(ctx context.Context, token string, now int64)
 // MarkAdminStepUp records the time of a successful step-up (opens the grace window).
 func (s *SQLiteStore) MarkAdminStepUp(ctx context.Context, token string, at int64) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE admin_sessions SET last_step_up_at = ? WHERE token = ?`, at, token)
+		`UPDATE admin_sessions SET last_step_up_at = ? WHERE token = ?`, at, hashToken(token))
 	return err
 }
 
 // DeleteAdminSession removes a session (logout).
 func (s *SQLiteStore) DeleteAdminSession(ctx context.Context, token string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM admin_sessions WHERE token = ?`, token)
+	_, err := s.db.ExecContext(ctx, `DELETE FROM admin_sessions WHERE token = ?`, hashToken(token))
 	return err
 }
 
@@ -1620,7 +1637,7 @@ func (s *SQLiteStore) PutPendingAction(ctx context.Context, token, sessionTok, a
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO admin_pending_actions (token, session_tok, action, form, path_id, expires)
-		 VALUES (?, ?, ?, ?, ?, ?)`, token, sessionTok, action, form, pathID, expires); err != nil {
+		 VALUES (?, ?, ?, ?, ?, ?)`, hashToken(token), hashToken(sessionTok), action, form, pathID, expires); err != nil {
 		return false, err
 	}
 	return true, tx.Commit()
@@ -1631,10 +1648,13 @@ func (s *SQLiteStore) PutPendingAction(ctx context.Context, token, sessionTok, a
 // token alone — even a session-mismatch attempt burns it (the caller checks the
 // session and expiry) — so a stolen token can't be probed repeatedly. The delete
 // + return is one statement, so exactly one instance claims a given token.
+// The returned sessionTok is the STORED hash of the minting session's cookie
+// (hashToken), so the caller compares it against hashToken(current cookie), not
+// the raw cookie.
 func (s *SQLiteStore) TakePendingAction(ctx context.Context, token string) (sessionTok, action, form, pathID string, expires int64, ok bool, err error) {
 	err = s.db.QueryRowContext(ctx,
 		`DELETE FROM admin_pending_actions WHERE token = ?
-		 RETURNING session_tok, action, form, path_id, expires`, token,
+		 RETURNING session_tok, action, form, path_id, expires`, hashToken(token),
 	).Scan(&sessionTok, &action, &form, &pathID, &expires)
 	if err == sql.ErrNoRows {
 		return "", "", "", "", 0, false, nil
@@ -1666,7 +1686,7 @@ func (s *SQLiteStore) PutPasskeyCeremony(ctx context.Context, token, kind, sessi
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO admin_passkey_ceremonies (token, kind, session, name, expires)
-		 VALUES (?, ?, ?, ?, ?)`, token, kind, session, name, expires); err != nil {
+		 VALUES (?, ?, ?, ?, ?)`, hashToken(token), kind, session, name, expires); err != nil {
 		return false, err
 	}
 	return true, tx.Commit()
@@ -1679,7 +1699,7 @@ func (s *SQLiteStore) PutPasskeyCeremony(ctx context.Context, token, kind, sessi
 func (s *SQLiteStore) TakePasskeyCeremony(ctx context.Context, token string) (kind, session, name string, expires int64, ok bool, err error) {
 	err = s.db.QueryRowContext(ctx,
 		`DELETE FROM admin_passkey_ceremonies WHERE token = ?
-		 RETURNING kind, session, name, expires`, token,
+		 RETURNING kind, session, name, expires`, hashToken(token),
 	).Scan(&kind, &session, &name, &expires)
 	if err == sql.ErrNoRows {
 		return "", "", "", 0, false, nil

@@ -37,11 +37,31 @@ func NewRemoteBlobStore(baseURL, secret, fingerprint string, hc *http.Client) *R
 	return &RemoteBlobStore{baseURL: strings.TrimRight(baseURL, "/"), secret: secret, hc: hc}
 }
 
-// pinnedClient returns a copy of hc whose TLS verification is replaced by a
-// fingerprint pin. It clones hc's *http.Transport so all other settings —
-// crucially the SSRF-guarded DialContext and the ResponseHeaderTimeout — are
-// preserved; only TLSClientConfig changes.
+// pinCacheKey identifies a pinned client by its base client + fingerprint, so
+// every RemoteBlobStore built for the same node reuses one client (one
+// connection pool). NewRemoteBlobStore is called per blob request — including
+// once per resumable-upload PATCH chunk — so minting a fresh *http.Transport
+// each time (as this used to) leaked its keep-alive idle connections and their
+// goroutines forever (neither the central nor the node sets an idle timeout),
+// exhausting file descriptors under normal traffic.
+type pinCacheKey struct {
+	base        *http.Client
+	fingerprint string
+}
+
+var pinnedClientCache sync.Map // pinCacheKey -> *http.Client
+
+// pinnedClient returns a client (cached per base+fingerprint) whose TLS
+// verification is replaced by a fingerprint pin. It clones hc's *http.Transport
+// so all other settings — crucially the SSRF-guarded DialContext and the
+// ResponseHeaderTimeout — are preserved; only TLSClientConfig changes. The
+// clone's connection pool is shared across all requests to the node, so idle
+// connections are reused (and pool-capped) rather than accumulating.
 func pinnedClient(hc *http.Client, fingerprint string) *http.Client {
+	key := pinCacheKey{base: hc, fingerprint: fingerprint}
+	if c, ok := pinnedClientCache.Load(key); ok {
+		return c.(*http.Client)
+	}
 	var tr *http.Transport
 	if base, ok := hc.Transport.(*http.Transport); ok && base != nil {
 		tr = base.Clone()
@@ -55,7 +75,8 @@ func pinnedClient(hc *http.Client, fingerprint string) *http.Client {
 	}
 	c := *hc
 	c.Transport = tr
-	return &c
+	actual, _ := pinnedClientCache.LoadOrStore(key, &c)
+	return actual.(*http.Client)
 }
 
 // pinVerify matches the leaf cert's SHA-256 (hex) against want in constant time.

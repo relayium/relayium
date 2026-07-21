@@ -64,12 +64,17 @@ func (s *Service) takePending(ctx context.Context, tok, sessionTok string) (pend
 	if s.now().Unix() > expires {
 		return pendingAction{}, false
 	}
-	if st != sessionTok {
+	// st is the STORED hash of the minting session's cookie (the store hashes
+	// session_tok on write), so compare it against the hash of the current cookie.
+	if st != hashToken(sessionTok) {
 		return pendingAction{}, false // burned above; a mismatched session can't retry
 	}
 	form, _ := url.ParseQuery(formEnc)
+	// Carry the raw current cookie (equal to the minting session, just verified)
+	// as sessionTok — downstream stepUpFresh re-looks it up and the store hashes
+	// it again, so a hash here would double-hash and never match.
 	return pendingAction{
-		action: action, sessionTok: st, form: form, pathID: pathID,
+		action: action, sessionTok: sessionTok, form: form, pathID: pathID,
 		expires: time.Unix(expires, 0),
 	}, true
 }

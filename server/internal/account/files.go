@@ -401,19 +401,42 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", strconv.FormatInt(sf.Size, 10))
 	}
 	n, err := io.Copy(w, rc)
-	if err != nil || n != sf.Size-start {
+	complete := err == nil && n == sf.Size-start
+
+	// Meter/stat the OWNER for the bytes THIS request actually egressed — whether
+	// or not the transfer completed — never the downloader (no downloader identity
+	// is read or stored). Bytes that physically left the server count against the
+	// owner's monthly traffic even on a mid-stream abort: without this a link/key
+	// holder could `Range: bytes=0-`, drain all-but-the-last frame, RST, and pull
+	// an unlimited file an unbounded number of times with ZERO metering, so the
+	// overTraffic gate at the top of this handler never trips — a download-side
+	// traffic-cap bypass and egress amplifier. The stored blob is chunk-AEAD, so
+	// partial bytes ARE usable plaintext. Metering the served count (n), not
+	// sf.Size, avoids over-charging a resume for bytes a prior (already-metered)
+	// attempt sent: a start=0 partial then a Range resume together meter the whole
+	// file exactly once.
+	//
+	// These writes MUST NOT ride r.Context(): a client typically drops the
+	// connection the instant it receives the last byte (and an abort cancels it
+	// mid-copy), which would silently lose every best-effort write below. A fresh,
+	// short-lived context detaches the accounting from the client.
+	if n > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = s.store.AddDownloadStat(ctx, sf.UserID, n)
+		_ = s.store.RecordMeter(ctx, sf.UserID, MeterDownload, n, s.now().Unix())
+		cancel()
+	}
+
+	if !complete {
 		// Incomplete delivery (client hung up / network hiccup). Refund the claim
 		// ONLY when nothing was delivered (n == 0): a genuine connect-then-drop
 		// that leaked no content shouldn't cost the owner a download. Once ANY
 		// bytes were sent, the slot is spent — otherwise a link/key holder could
 		// drain all-but-the-last frame and RST on every request, so the slot was
 		// always released, download_count never advanced, and a burn/limited file
-		// stayed alive to be pulled an unbounded number of times. The stored blob
-		// is chunk-AEAD, so partial bytes ARE usable plaintext; treating a
-		// near-complete read as "free" is exactly the bypass. A flaky mid-stream
-		// failure therefore spends the download — the download-once guarantee wins
-		// over a mid-transfer retry for limited files. Fresh context: r.Context()
-		// is likely already cancelled, which is what aborted the copy.
+		// stayed alive to be pulled an unbounded number of times. Treating a
+		// near-complete read as "free" is exactly the burn bypass; the
+		// download-once guarantee wins over a mid-transfer retry for limited files.
 		if limited && n == 0 {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			_ = s.store.ReleaseDownloadSlot(ctx, sf.ID)
@@ -421,25 +444,11 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	// Meter/stat the OWNER for the bytes THIS request actually egressed — never
-	// the downloader (no downloader identity is read or stored). A Range
-	// continuation (start>0) is metered too: it delivered real bytes off the
-	// blob volume, so exempting it (as an earlier version did) let a client pull
-	// a whole unlimited file via `Range: bytes=1-` — or resume past a failed
-	// start==0 attempt — with zero metering and zero download_count, an unmetered
-	// egress amplifier. Metering the served count (n), not sf.Size, avoids
-	// over-charging a resume for bytes a prior (already-uncounted) attempt sent.
-	// Best-effort: a stats failure must not turn a delivered file into an error.
-	//
-	// These writes MUST NOT ride r.Context(): a client typically drops the
-	// connection the instant it receives the last byte, which cancels r.Context()
-	// and silently loses every best-effort write below — the very reason an
-	// unlimited file's download_count kept reading 0 after a successful download.
-	// A fresh, short-lived context detaches the accounting from the client.
+
+	// Complete delivery: finalize the burn/limited deletion or bump the unlimited
+	// download count. Fresh context for the same reason as the metering above.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = s.store.AddDownloadStat(ctx, sf.UserID, n)
-	_ = s.store.RecordMeter(ctx, sf.UserID, MeterDownload, n, s.now().Unix())
 	if limited {
 		// Delete iff THIS request took the final slot (its own claimed slot
 		// number is >= MaxDownloads) — never by re-reading download_count, which
