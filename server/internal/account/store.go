@@ -631,6 +631,9 @@ type Store interface {
 	// concurrent uploads cannot collectively exceed the quota. ok=false means the
 	// reservation was refused (over quota) and nothing was written.
 	ReserveUpload(ctx context.Context, e UploadEvent, since, quota int64) (ok bool, err error)
+	// RefundUpload removes a reserved upload event (by id) when a later gate fails,
+	// so the daily quota isn't charged for a file that never landed.
+	RefundUpload(ctx context.Context, id string) error
 	PruneUploadEvents(ctx context.Context, before int64) error
 	// settings (admin-editable limits)
 	GetSetting(ctx context.Context, key string) (int64, bool, error)

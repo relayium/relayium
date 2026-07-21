@@ -365,11 +365,18 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		return
 	}
 
+	// reservedUploadID is the daily-quota event this finalize reserved (if any);
+	// fail refunds it so a file rejected by the later storage-cap gate doesn't
+	// leave the user charged daily quota for bytes that never landed.
+	var reservedUploadID string
 	// fail drops the partial blob + the (already done-claimed) session row and
 	// writes the given HTTP error.
 	fail := func(msg string, code int) {
 		s.dropUploadBlob(r.Context(), sess.NodeID, sess.BlobKey)
 		_ = s.store.DeleteUploadSession(r.Context(), sess.ID)
+		if reservedUploadID != "" {
+			_ = s.store.RefundUpload(r.Context(), reservedUploadID)
+		}
 		http.Error(w, msg, code)
 	}
 
@@ -393,8 +400,9 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 			fail("server error", http.StatusInternalServerError)
 			return
 		}
+		evID := newID()
 		reserved, err := s.store.ReserveUpload(r.Context(),
-			UploadEvent{ID: newID(), UserID: u.ID, Bytes: billed, UploadedAt: now},
+			UploadEvent{ID: evID, UserID: u.ID, Bytes: billed, UploadedAt: now},
 			now-dayWindow, quota)
 		if err != nil {
 			fail("server error", http.StatusInternalServerError)
@@ -404,6 +412,7 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 			fail("daily quota exceeded", http.StatusTooManyRequests)
 			return
 		}
+		reservedUploadID = evID // committed — a later failure must refund it
 	}
 
 	fid := newID()

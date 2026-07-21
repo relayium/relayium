@@ -234,6 +234,7 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	// row/stats below stay at the actual size.
 	// Own-node uploads (billable=false) skip this entirely: they never reserved
 	// against the daily quota, so there is nothing to refund on failure below.
+	var reservedUploadID string
 	if billable {
 		billed := size
 		if billed < minBillableBytes {
@@ -248,8 +249,9 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
+		reservedUploadID = newID()
 		ok, err := s.store.ReserveUpload(r.Context(),
-			UploadEvent{ID: newID(), UserID: u.ID, Bytes: billed, UploadedAt: now},
+			UploadEvent{ID: reservedUploadID, UserID: u.ID, Bytes: billed, UploadedAt: now},
 			now-dayWindow, quota)
 		if err != nil {
 			s.dropBlob(bs, blobKey, nodeID)
@@ -260,6 +262,14 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 			s.dropBlob(bs, blobKey, nodeID)
 			http.Error(w, "daily quota exceeded", http.StatusTooManyRequests)
 			return
+		}
+	}
+	// refundReserved undoes the daily-quota reservation above when a LATER gate
+	// (the authoritative storage-cap check) rejects the upload — otherwise the
+	// user is charged daily quota for a file that never landed.
+	refundReserved := func() {
+		if reservedUploadID != "" {
+			_ = s.store.RefundUpload(r.Context(), reservedUploadID)
 		}
 	}
 	id := newID()
@@ -279,14 +289,17 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	switch reason, err := s.persistStoredFile(r.Context(), sf, billable); {
 	case err != nil:
 		s.dropBlob(bs, blobKey, nodeID)
+		refundReserved()
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	case reason == "global":
 		s.dropBlob(bs, blobKey, nodeID)
+		refundReserved()
 		http.Error(w, "server storage is full", http.StatusInsufficientStorage)
 		return
 	case reason == "storage":
 		s.dropBlob(bs, blobKey, nodeID)
+		refundReserved()
 		http.Error(w, "storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
 		return
 	}

@@ -2437,6 +2437,14 @@ func (s *SQLiteStore) ReserveUpload(ctx context.Context, e UploadEvent, since, q
 	return true, tx.Commit()
 }
 
+// RefundUpload removes a previously-reserved upload event by id — used when a
+// finalize reserves the daily quota but then fails the authoritative storage-cap
+// check, so the quota isn't charged for a file that never landed.
+func (s *SQLiteStore) RefundUpload(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM upload_events WHERE id = ?`, id)
+	return err
+}
+
 func (s *SQLiteStore) PruneUploadEvents(ctx context.Context, before int64) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM upload_events WHERE uploaded_at < ?`, before)
 	return err
