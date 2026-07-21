@@ -77,7 +77,7 @@ func (s *Service) handleAdminPasskeyRegisterBegin(w http.ResponseWriter, r *http
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "无法发起注册"})
 		return
 	}
-	if !s.putCeremony(w, ceremonyRegister, *sess, name) {
+	if !s.putCeremony(r.Context(), w, ceremonyRegister, *sess, name) {
 		log.Printf("passkey: ceremony cap (%d) reached, rejecting register/begin", passkeyCeremonyCap)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "系统繁忙，请稍后再试"})
 		return

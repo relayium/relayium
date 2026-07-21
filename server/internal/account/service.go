@@ -154,12 +154,8 @@ type Service struct {
 	// spam failed passkey attempts to lock out the password fallback — the one
 	// escape hatch when passkeys are unavailable.
 	adminPasskeyLogins *loginThrottle
-	// passkeyCeremonies holds in-flight WebAuthn challenges keyed by an opaque
-	// cookie value (process-local, short TTL). Still in-memory: migration items
-	// #2/#3 (docs/multi-instance-state-migration.md) will move these + pending
-	// actions into the store like admin sessions already are.
-	passkeyCeremonies map[string]passkeyCeremony
-	passkeyMu         sync.Mutex
+	// passkeyCeremonies now live in the store (admin_passkey_ceremonies, item #3),
+	// spendable exactly once on any instance — no process-local map here.
 	// pendingActions now live in the store (admin_pending_actions, item #2),
 	// claimable exactly once on any instance — no process-local map here.
 	pwLogins *loginThrottle // per email+IP failed password-login limiter
@@ -229,7 +225,6 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 		resumable:      newResumableUploads(),
 		uploadSem:      newUploadSem(maxConcurrentUploadsPerUser)}
 	svc.adminPasskeyLogins = newLoginThrottle()
-	svc.passkeyCeremonies = map[string]passkeyCeremony{}
 	svc.clientIP = clientIP
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
 	svc.exchangeAppleCode = svc.realExchangeAppleCode

@@ -268,7 +268,7 @@ func TestLoginCeremonyCannotSatisfyStepUp(t *testing.T) {
 
 	// 铸一个 login 类型的 ceremony，把它的 cookie 混进 /admin/confirm。
 	rec := httptest.NewRecorder()
-	if !svc.putCeremony(rec, ceremonyLogin, webauthn.SessionData{}, "") {
+	if !svc.putCeremony(context.Background(), rec, ceremonyLogin, webauthn.SessionData{}, "") {
 		t.Fatal("putCeremony failed")
 	}
 	var ceremonyCookie *http.Cookie

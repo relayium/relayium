@@ -395,6 +395,11 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`CREATE TABLE IF NOT EXISTS admin_pending_actions (
   token TEXT PRIMARY KEY, session_tok TEXT NOT NULL, action TEXT NOT NULL,
   form TEXT NOT NULL, path_id TEXT NOT NULL DEFAULT '', expires INTEGER NOT NULL)`,
+		// In-flight WebAuthn ceremonies (multi-instance): the challenge cookie must
+		// be spendable exactly once on any instance. See migration item #3.
+		`CREATE TABLE IF NOT EXISTS admin_passkey_ceremonies (
+  token TEXT PRIMARY KEY, kind TEXT NOT NULL, session TEXT NOT NULL,
+  name TEXT NOT NULL DEFAULT '', expires INTEGER NOT NULL)`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -1625,6 +1630,51 @@ func (s *SQLiteStore) TakePendingAction(ctx context.Context, token string) (sess
 		return "", "", "", "", 0, false, err
 	}
 	return sessionTok, action, form, pathID, expires, true, nil
+}
+
+// PutPasskeyCeremony stores an in-flight WebAuthn ceremony (session is the
+// json-encoded webauthn.SessionData), purging expired rows and enforcing the cap
+// in one transaction. ok=false (nothing stored) when the cap is reached.
+func (s *SQLiteStore) PutPasskeyCeremony(ctx context.Context, token, kind, session, name string, now, expires int64, cap int) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM admin_passkey_ceremonies WHERE expires <= ?`, now); err != nil {
+		return false, err
+	}
+	var n int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM admin_passkey_ceremonies`).Scan(&n); err != nil {
+		return false, err
+	}
+	if n >= cap {
+		return false, nil // reject, don't evict (a flood must not knock out a live login)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO admin_passkey_ceremonies (token, kind, session, name, expires)
+		 VALUES (?, ?, ?, ?, ?)`, token, kind, session, name, expires); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
+}
+
+// TakePasskeyCeremony atomically claims (deletes) a ceremony by token. ok=false
+// means no such token. The DELETE ... RETURNING makes it exactly-once across
+// instances; a wrong-kind/replayed attempt still burns the challenge (the caller
+// checks kind and expiry).
+func (s *SQLiteStore) TakePasskeyCeremony(ctx context.Context, token string) (kind, session, name string, expires int64, ok bool, err error) {
+	err = s.db.QueryRowContext(ctx,
+		`DELETE FROM admin_passkey_ceremonies WHERE token = ?
+		 RETURNING kind, session, name, expires`, token,
+	).Scan(&kind, &session, &name, &expires)
+	if err == sql.ErrNoRows {
+		return "", "", "", 0, false, nil
+	}
+	if err != nil {
+		return "", "", "", 0, false, err
+	}
+	return kind, session, name, expires, true, nil
 }
 
 // ClearPassword NULLs the password hash so the account has no usable password

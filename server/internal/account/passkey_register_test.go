@@ -458,10 +458,7 @@ func TestPasskeyCrossKindAttemptConsumesCeremony(t *testing.T) {
 
 	// 用错之前先确认确实有且只有这一枚 ceremony 在飞：这样末尾的 0 才代表
 	// "被吃掉了"，而不是"从来没有过"。
-	s.passkeyMu.Lock()
-	before := len(s.passkeyCeremonies)
-	s.passkeyMu.Unlock()
-	if before != 1 {
+	if before := ceremonyCount(t, s); before != 1 {
 		t.Fatalf("before cross-kind attempt: %d ceremonies alive, want exactly 1", before)
 	}
 
@@ -498,10 +495,7 @@ func TestPasskeyCrossKindAttemptConsumesCeremony(t *testing.T) {
 	}
 
 	// 同一枚 ceremony 现在连它本来的用途也不该再能用
-	s.passkeyMu.Lock()
-	n := len(s.passkeyCeremonies)
-	s.passkeyMu.Unlock()
-	if n != 0 {
+	if n := ceremonyCount(t, s); n != 0 {
 		t.Fatalf("cross-kind attempt left %d ceremonies alive; it must consume like any other finish", n)
 	}
 }

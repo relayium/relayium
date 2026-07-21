@@ -2,6 +2,7 @@ package account
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -99,29 +100,21 @@ func adminRegistrationOpts(existing []webauthn.Credential) []webauthn.Registrati
 // kind is a parameter rather than a field set by the caller afterwards so that
 // a ceremony cannot be stored untagged: the compiler forces every present and
 // future call site to state which ceremony it is minting.
-func (s *Service) putCeremony(w http.ResponseWriter, kind ceremonyKind, sess webauthn.SessionData, name string) bool {
-	tok := randToken()
-	s.passkeyMu.Lock()
-	// Opportunistically drop expired ceremonies so the map stays bounded even
-	// between cap rejections.
-	now := s.now()
-	for k, c := range s.passkeyCeremonies {
-		if now.After(c.expires) {
-			delete(s.passkeyCeremonies, k)
-		}
-	}
-	if len(s.passkeyCeremonies) >= passkeyCeremonyCap {
-		// Reject rather than evict: evicting an existing entry would let an
-		// attacker knock a legitimate in-flight login out just by flooding
-		// begin. This is an O(1) check, so the rejection path itself cannot
-		// become the DoS.
-		s.passkeyMu.Unlock()
+func (s *Service) putCeremony(ctx context.Context, w http.ResponseWriter, kind ceremonyKind, sess webauthn.SessionData, name string) bool {
+	blob, err := json.Marshal(sess)
+	if err != nil {
 		return false
 	}
-	s.passkeyCeremonies[tok] = passkeyCeremony{
-		kind: kind, session: sess, name: name, expires: now.Add(passkeyCeremonyTTL),
+	tok := randToken()
+	now := s.now().Unix()
+	// The store transaction drops expired rows + enforces the cap (reject, not
+	// evict — see passkeyCeremonyCap) + inserts, so the challenge is spendable on
+	// any instance exactly once.
+	ok, err := s.store.PutPasskeyCeremony(ctx, tok, string(kind), string(blob), name,
+		now, now+int64(passkeyCeremonyTTL.Seconds()), passkeyCeremonyCap)
+	if err != nil || !ok {
+		return false
 	}
-	s.passkeyMu.Unlock()
 	http.SetCookie(w, &http.Cookie{
 		Name: passkeyCeremonyCookie, Value: tok, Path: "/admin",
 		HttpOnly: true, Secure: s.cookieSecure(), SameSite: http.SameSiteLaxMode,
@@ -131,20 +124,22 @@ func (s *Service) putCeremony(w http.ResponseWriter, kind ceremonyKind, sess web
 }
 
 // takeCeremony consumes the ceremony one-shot: a challenge must never be
-// replayable.
+// replayable. The atomic DELETE ... RETURNING in the store makes the claim
+// exactly-once across instances.
 func (s *Service) takeCeremony(r *http.Request) (passkeyCeremony, bool) {
 	c, err := r.Cookie(passkeyCeremonyCookie)
 	if err != nil || c.Value == "" {
 		return passkeyCeremony{}, false
 	}
-	s.passkeyMu.Lock()
-	cer, ok := s.passkeyCeremonies[c.Value]
-	delete(s.passkeyCeremonies, c.Value)
-	s.passkeyMu.Unlock()
-	if !ok || s.now().After(cer.expires) {
+	kind, blob, name, expires, ok, err := s.store.TakePasskeyCeremony(r.Context(), c.Value)
+	if err != nil || !ok || s.now().Unix() > expires {
 		return passkeyCeremony{}, false
 	}
-	return cer, true
+	var sess webauthn.SessionData
+	if err := json.Unmarshal([]byte(blob), &sess); err != nil {
+		return passkeyCeremony{}, false
+	}
+	return passkeyCeremony{kind: ceremonyKind(kind), session: sess, name: name, expires: time.Unix(expires, 0)}, true
 }
 
 // handleAdminStepUpPasskeyBegin issues a WebAuthn assertion challenge for a
@@ -171,7 +166,7 @@ func (s *Service) handleAdminStepUpPasskeyBegin(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "无法发起验证"})
 		return
 	}
-	if !s.putCeremony(w, ceremonyStepUp, *sess, "") {
+	if !s.putCeremony(r.Context(), w, ceremonyStepUp, *sess, "") {
 		log.Printf("passkey: ceremony cap (%d) reached, rejecting stepup/begin", passkeyCeremonyCap)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "系统繁忙，请稍后再试"})
 		return
@@ -252,7 +247,7 @@ func (s *Service) handleAdminPasskeyLoginBegin(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "无法发起验证"})
 		return
 	}
-	if !s.putCeremony(w, ceremonyLogin, *sess, "") {
+	if !s.putCeremony(r.Context(), w, ceremonyLogin, *sess, "") {
 		log.Printf("passkey: ceremony cap (%d) reached, rejecting login/begin", passkeyCeremonyCap)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "系统繁忙，请稍后再试"})
 		return

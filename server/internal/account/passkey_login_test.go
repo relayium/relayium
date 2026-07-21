@@ -372,6 +372,57 @@ func TestPasskeyLoginCeremonyIsOneShot(t *testing.T) {
 // 未认证的 login/begin 必须存在容量上限：否则攻击者可以循环调用 begin，
 // 让 in-flight ceremony 的 map 无界增长，并让每次 begin 里的过期清扫
 // 退化成越来越大的 O(n) 全表扫描（还是在持锁状态下做的）。
+// ceremonyCount reads the number of stored in-flight ceremonies (replaces the
+// old in-memory map length now that ceremonies live in the DB).
+func ceremonyCount(t *testing.T, s *Service) int {
+	t.Helper()
+	var n int
+	if err := s.store.(*SQLiteStore).db.QueryRow(`SELECT COUNT(*) FROM admin_passkey_ceremonies`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// Two Service values sharing ONE store: a ceremony minted on instance A is
+// spendable on instance B (with its SessionData intact across the JSON round
+// trip) and only once — the second attempt on A fails.
+func TestPasskeyCeremonySharedAcrossInstances(t *testing.T) {
+	store := newTestStore(t)
+	mk := func() *Service { return NewService(store, nil, Config{AdminUser: "admin", AdminPassword: "pw"}) }
+	svcA, svcB := mk(), mk()
+
+	rec := httptest.NewRecorder()
+	sess := webauthn.SessionData{UserID: []byte("user-handle-42")}
+	if !svcA.putCeremony(context.Background(), rec, ceremonyLogin, sess, "laptop") {
+		t.Fatal("A: putCeremony failed")
+	}
+	var cookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == passkeyCeremonyCookie {
+			cookie = c
+		}
+	}
+	if cookie == nil {
+		t.Fatal("no ceremony cookie written")
+	}
+
+	r := httptest.NewRequest("POST", "/admin/passkey/login/finish", nil)
+	r.AddCookie(cookie)
+	cer, ok := svcB.takeCeremony(r)
+	if !ok || cer.kind != ceremonyLogin || cer.name != "laptop" {
+		t.Fatalf("B must spend the ceremony A minted: ok=%v cer=%+v", ok, cer)
+	}
+	if string(cer.session.UserID) != "user-handle-42" {
+		t.Fatalf("SessionData did not round-trip through the store: %q", cer.session.UserID)
+	}
+
+	r2 := httptest.NewRequest("POST", "/admin/passkey/login/finish", nil)
+	r2.AddCookie(cookie)
+	if _, ok := svcA.takeCeremony(r2); ok {
+		t.Fatal("SECURITY: the ceremony was spendable a second time on instance A")
+	}
+}
+
 func TestPasskeyCeremonyCapEnforced(t *testing.T) {
 	srv, s := newAdminServer(t, "admin", "pw")
 	registerTestPasskey(t, s)
@@ -380,26 +431,20 @@ func TestPasskeyCeremonyCapEnforced(t *testing.T) {
 	// 不需要每条 ceremony 都携带真实、可校验的 challenge。
 	discard := httptest.NewRecorder()
 	for i := 0; i < passkeyCeremonyCap; i++ {
-		if !s.putCeremony(discard, ceremonyLogin, webauthn.SessionData{}, "") {
+		if !s.putCeremony(context.Background(), discard, ceremonyLogin, webauthn.SessionData{}, "") {
 			t.Fatalf("putCeremony rejected before reaching the cap at i=%d", i)
 		}
 	}
-	s.passkeyMu.Lock()
-	n := len(s.passkeyCeremonies)
-	s.passkeyMu.Unlock()
-	if n != passkeyCeremonyCap {
-		t.Fatalf("map size=%d want %d after filling to the cap", n, passkeyCeremonyCap)
+	if n := ceremonyCount(t, s); n != passkeyCeremonyCap {
+		t.Fatalf("stored ceremonies=%d want %d after filling to the cap", n, passkeyCeremonyCap)
 	}
 
-	// 再灌一条必须被拒绝，且 map 不得继续增长（不驱逐已有条目，只拒绝新的）。
-	if s.putCeremony(discard, ceremonyLogin, webauthn.SessionData{}, "") {
+	// 再灌一条必须被拒绝，且不得继续增长（不驱逐已有条目，只拒绝新的）。
+	if s.putCeremony(context.Background(), discard, ceremonyLogin, webauthn.SessionData{}, "") {
 		t.Fatalf("putCeremony accepted a ceremony past the cap")
 	}
-	s.passkeyMu.Lock()
-	n2 := len(s.passkeyCeremonies)
-	s.passkeyMu.Unlock()
-	if n2 != passkeyCeremonyCap {
-		t.Fatalf("map grew past the cap: size=%d want %d", n2, passkeyCeremonyCap)
+	if n2 := ceremonyCount(t, s); n2 != passkeyCeremonyCap {
+		t.Fatalf("stored ceremonies grew past the cap: %d want %d", n2, passkeyCeremonyCap)
 	}
 
 	// HTTP 层：到达上限后，login/begin 必须开始拒绝新请求（503），而不是悄悄放行。
