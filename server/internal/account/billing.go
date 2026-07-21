@@ -209,8 +209,11 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "already_on_plan"})
 		return
 	}
-	// Already scheduled to downgrade to exactly this tier — nothing to do.
-	if plan.ID == u.ScheduledPlanID {
+	// Already scheduled to downgrade to exactly this tier AND cycle — nothing to
+	// do. A same tier but DIFFERENT cycle must fall through: it's a real change to
+	// the pending schedule (release + reschedule below). A '' scheduled cycle is a
+	// legacy row → fall back to tier-only matching.
+	if plan.ID == u.ScheduledPlanID && (u.ScheduledCycle == "" || wantCycle == u.ScheduledCycle) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "effective": "period_end"})
 		return
 	}
@@ -226,19 +229,21 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// If a downgrade is already pending, its Stripe schedule manages the
-	// subscription and blocks a fresh change — release it first so this new
-	// upgrade/downgrade can apply cleanly.
+	// A pending downgrade's Stripe schedule manages the subscription and blocks a
+	// fresh change. Release it unconditionally: ReleaseSchedule is a documented
+	// no-op when nothing is scheduled, and relying on ScheduledPlanID != "" as the
+	// guard is what wedged this path at 500 whenever the marker desynced from
+	// Stripe (e.g. the same-tier-cycle premature-clear bug). One extra Stripe list
+	// call on the change path is cheap insurance against that lockout.
+	if err := s.biller.ReleaseSchedule(r.Context(), u.StripeCustomerID); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	// Clear the local hint the instant Stripe releases the schedule. If the change
+	// below then fails (500), the DB must not keep advertising a pending downgrade
+	// that no longer exists in Stripe and will never fire.
 	if u.ScheduledPlanID != "" {
-		if err := s.biller.ReleaseSchedule(r.Context(), u.StripeCustomerID); err != nil {
-			http.Error(w, "server error", http.StatusInternalServerError)
-			return
-		}
-		// Clear the local hint the instant Stripe releases the schedule. If the
-		// change below then fails (500), the DB must not keep advertising a
-		// pending downgrade that no longer exists in Stripe and will never fire —
-		// a ghost the webhook's `planID == ScheduledPlanID` clear can't reach.
-		_ = s.store.SetScheduledPlan(r.Context(), u.ID, "")
+		_ = s.store.SetScheduledPlan(r.Context(), u.ID, "", "")
 	}
 
 	// Upgrade vs downgrade decides timing; see resolveChange for the rule.
@@ -250,11 +255,13 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 
 	var opErr error
 	effective := "now"
-	scheduledPlan := "" // what the pricing UI should show as "pending downgrade"
+	scheduledPlan := ""  // pending-downgrade tier the pricing UI should show
+	scheduledCycle := "" // and its cycle, so the webhook can detect it landing
 	if downgrade {
 		opErr = s.biller.ScheduleDowngrade(r.Context(), u.StripeCustomerID, priceID)
 		effective = "period_end"
 		scheduledPlan = plan.ID
+		scheduledCycle = wantCycle
 	} else {
 		opErr = s.biller.ChangeSubscriptionPlan(r.Context(), u.StripeCustomerID, priceID)
 	}
@@ -264,7 +271,7 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 	}
 	// Record (or clear) the pending-downgrade hint. Best-effort: the Stripe op
 	// already succeeded, so don't fail the request if this write hiccups.
-	_ = s.store.SetScheduledPlan(r.Context(), u.ID, scheduledPlan)
+	_ = s.store.SetScheduledPlan(r.Context(), u.ID, scheduledPlan, scheduledCycle)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "effective": effective})
 }
 
@@ -368,7 +375,7 @@ func (s *Service) handleBillingCancelScheduledChange(w http.ResponseWriter, r *h
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	_ = s.store.SetScheduledPlan(r.Context(), u.ID, "")
+	_ = s.store.SetScheduledPlan(r.Context(), u.ID, "", "")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -447,7 +454,7 @@ func (s *Service) reconcileSubscriptions(ctx context.Context, u User, evCreated 
 			return false, err
 		}
 		if u.ScheduledPlanID != "" {
-			_ = s.store.SetScheduledPlan(ctx, u.ID, "")
+			_ = s.store.SetScheduledPlan(ctx, u.ID, "", "")
 		}
 		return true, nil
 	}
@@ -482,8 +489,9 @@ func (s *Service) reconcileSubscriptions(ctx context.Context, u User, evCreated 
 	if err := s.store.SetUserSubscription(ctx, u.ID, planID, canonical.Status, canonical.CurrentPeriodEnd, "stripe", cycle, s.now().Unix(), evCreated); err != nil {
 		return false, err
 	}
-	if u.ScheduledPlanID != "" && planID == u.ScheduledPlanID {
-		_ = s.store.SetScheduledPlan(ctx, u.ID, "")
+	if u.ScheduledPlanID != "" && planID == u.ScheduledPlanID &&
+		(u.ScheduledCycle == "" || cycle == u.ScheduledCycle) {
+		_ = s.store.SetScheduledPlan(ctx, u.ID, "", "")
 	}
 	return true, nil
 }
@@ -640,12 +648,17 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
-		// A pending downgrade has landed once plan_id actually reaches the tier we
-		// scheduled it to — clear the UI hint. (Creating the schedule fires an
-		// earlier updated event whose price is still the higher tier, so this only
-		// matches at the real period-end transition.) Best-effort.
-		if u.ScheduledPlanID != "" && planID == u.ScheduledPlanID {
-			_ = s.store.SetScheduledPlan(ctx, u.ID, "")
+		// A pending downgrade has landed once BOTH the tier and the cycle reach what
+		// we scheduled — clear the UI hint. Matching the tier alone was wrong for a
+		// same-tier cycle downgrade (yearly→monthly on one plan): scheduled_plan_id
+		// equals the current tier, so the intermediate schedule-creation event
+		// (price still the old cycle) matched and cleared the marker seconds after
+		// it was set, wedging later in-app plan changes at 500. Requiring the cycle
+		// to match too defers the clear to the real period-end transition. A ''
+		// scheduled cycle is a legacy row → fall back to tier-only. Best-effort.
+		if u.ScheduledPlanID != "" && planID == u.ScheduledPlanID &&
+			(u.ScheduledCycle == "" || cycle == u.ScheduledCycle) {
+			_ = s.store.SetScheduledPlan(ctx, u.ID, "", "")
 		}
 		w.WriteHeader(http.StatusOK)
 
@@ -684,7 +697,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if u.ScheduledPlanID != "" {
-			_ = s.store.SetScheduledPlan(ctx, u.ID, "")
+			_ = s.store.SetScheduledPlan(ctx, u.ID, "", "")
 		}
 		w.WriteHeader(http.StatusOK)
 

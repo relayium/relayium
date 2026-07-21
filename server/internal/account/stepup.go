@@ -71,6 +71,7 @@ func (s *Service) requireStepUp(action string, next http.HandlerFunc) http.Handl
 			// this page renders at all — see the doc comment above.
 			NeedFactor: !s.stepUpFresh(r.Context(), c.Value),
 			Factor:     s.availableStepUpFactor(r.Context()),
+			Nonce:      CSPNonce(r),
 		})
 	}
 }

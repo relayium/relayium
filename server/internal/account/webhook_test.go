@@ -28,7 +28,16 @@ func webhookEnvWithMetadata(eventType, customer, subscription, clientRefUserID, 
 	if metadataUserID != "" {
 		metadata = fmt.Sprintf(`{"user_id":%q}`, metadataUserID)
 	}
-	return fmt.Sprintf(`{"type":%q,"data":{"object":{"customer":%q,"subscription":%q,"client_reference_id":%q,"status":%q,"current_period_end":%d,"metadata":%s,"items":%s}}}`,
+	// Mirror the two real Stripe object shapes so this payload exercises the
+	// same parsing branch production does. On customer.subscription.* the object
+	// IS the subscription (id at data.object.id, object=="subscription", no
+	// "subscription" key); on checkout.session.completed the object is the
+	// session, which references its subscription at data.object.subscription.
+	if strings.HasPrefix(eventType, "customer.subscription") {
+		return fmt.Sprintf(`{"type":%q,"data":{"object":{"id":%q,"object":"subscription","customer":%q,"client_reference_id":%q,"status":%q,"current_period_end":%d,"metadata":%s,"items":%s}}}`,
+			eventType, subscription, customer, clientRefUserID, status, currentPeriodEnd, metadata, items)
+	}
+	return fmt.Sprintf(`{"type":%q,"data":{"object":{"object":"checkout.session","customer":%q,"subscription":%q,"client_reference_id":%q,"status":%q,"current_period_end":%d,"metadata":%s,"items":%s}}}`,
 		eventType, customer, subscription, clientRefUserID, status, currentPeriodEnd, metadata, items)
 }
 
@@ -166,6 +175,15 @@ func TestWebhookSubscriptionUpdatedActiveAssignsPlan(t *testing.T) {
 	}
 	if u.PlanSource != "stripe" {
 		t.Fatalf("want source stripe, got %q", u.PlanSource)
+	}
+	// P1-1 regression: the subscription id must be adopted as canonical. It lives
+	// at data.object.id on a real customer.subscription.* event (NOT
+	// data.object.subscription). Parsing only the latter left SubscriptionID empty
+	// in production, so this was never written and the double-checkout dedup /
+	// duplicate-deletion guard were dead code. An empty value here means that
+	// regression is back.
+	if u.StripeSubscriptionID != "sub_1" {
+		t.Fatalf("canonical subscription id not adopted: got %q, want sub_1 (ev.SubscriptionID must come from data.object.id)", u.StripeSubscriptionID)
 	}
 
 	// Idempotent re-delivery of the same event: same final state.

@@ -56,6 +56,9 @@ type adminHomeData struct {
 	// disk (node_id unset) — the default fallback store, shown so the operator can
 	// see how much rides on central and decide whether to disable it.
 	CentralStoredBytes int64
+	// Nonce is the per-request CSP script nonce, stamped on this page's inline
+	// <script> tags so they run under a script-src without 'unsafe-inline'.
+	Nonce string
 }
 
 type adminFleetTokenView struct {
@@ -68,8 +71,9 @@ type adminFleetTokenView struct {
 
 type adminLoginData struct {
 	Error   string
-	TOTP    bool // render the 6-digit code field
-	Passkey bool // render the passkey button (only when a credential exists)
+	TOTP    bool   // render the 6-digit code field
+	Passkey bool   // render the passkey button (only when a credential exists)
+	Nonce   string // per-request CSP script nonce for the inline passkey script
 }
 
 // confirmPageData is passed to adminConfirmTmpl (requireStepUp's confirmation
@@ -88,6 +92,7 @@ type confirmPageData struct {
 	// factor input below is required. See requireStepUp's doc comment.
 	NeedFactor bool
 	Factor     string // which factor to prompt for: StepUpPasskey/TOTP/Password
+	Nonce      string // per-request CSP script nonce for the inline passkey script
 }
 
 // passkeyB64JS is the base64url <-> ArrayBuffer pair WebAuthn needs on both the
@@ -140,7 +145,7 @@ button:hover{filter:brightness(1.07)}
 {{if .Passkey}}
 <button type="button" id="passkey-login" style="margin-top:12px;background:transparent;color:var(--a);border:1px solid var(--bd)">使用 passkey 登录</button>
 <p class="err" id="passkey-error" style="margin-top:10px" hidden></p>
-<script>
+<script nonce="{{.Nonce}}">
 (function(){
   var btn = document.getElementById('passkey-login');
   var err = document.getElementById('passkey-error');
@@ -275,7 +280,7 @@ button:hover{filter:brightness(1.07)}
 </div>
 </form>
 {{if and .NeedFactor (eq .Factor "passkey")}}
-<script>
+<script nonce="{{.Nonce}}">
 (function(){
   var btn = document.getElementById('passkey-confirm');
   var err = document.getElementById('passkey-error');
@@ -554,7 +559,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <button type="submit">添加 passkey</button>
 </form>
 <p class="err" id="passkey-add-error" hidden></p>
-<script>
+<script nonce="{{.Nonce}}">
 (function(){
   var form = document.getElementById('passkey-add');
   var err = document.getElementById('passkey-add-error');

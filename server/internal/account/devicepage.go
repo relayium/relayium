@@ -13,6 +13,7 @@ type devicePageData struct {
 	SignedIn bool
 	Email    string
 	Code     string
+	Nonce    string // per-request CSP script nonce, stamped on the inline script tags
 }
 
 // devicePageTmpl renders the browser landing page a CLI login flow sends a
@@ -56,7 +57,7 @@ a{color:var(--a)}</style></head>
 <button id="approve-btn" type="button">Approve</button>
 <div id="msg"></div>
 </div>
-<script>
+<script nonce="{{.Nonce}}">
 // Show what a code is authorizing (origin + how long ago) so a phished user has
 // a chance to notice an unfamiliar device before approving. Best-effort: a fetch
 // failure just hides the panel, it never blocks approval.
@@ -89,7 +90,7 @@ function loadDetails() {
 document.getElementById('user_code').addEventListener('input', loadDetails);
 if (document.getElementById('user_code').value.trim()) loadDetails();
 </script>
-<script>
+<script nonce="{{.Nonce}}">
 document.getElementById('approve-btn').addEventListener('click', function () {
   var btn = document.getElementById('approve-btn');
   var msg = document.getElementById('msg');
@@ -130,6 +131,14 @@ document.getElementById('approve-btn').addEventListener('click', function () {
 {{end}}
 </body></html>`))
 
+// RegisterDevicePage mounts the human-facing CLI-login approval page on the
+// ROOT mux at GET /device (the verification_uri the CLI prints). It must live on
+// the root mux, not on Routes()' /api/-mounted sub-mux, where its pattern would
+// be unreachable and the request would fall through to the SPA shell.
+func (s *Service) RegisterDevicePage(mux *http.ServeMux) {
+	mux.HandleFunc("GET /device", s.handleDevicePage)
+}
+
 // handleDevicePage serves the browser landing page for CLI device-code
 // login approval (verification_uri = <BaseURL>/device). Anonymous visitors
 // are prompted to sign in; a signed-in session sees which account the
@@ -140,6 +149,7 @@ func (s *Service) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 	data := devicePageData{
 		SignedIn: ok,
 		Code:     r.URL.Query().Get("code"),
+		Nonce:    CSPNonce(r),
 	}
 	if ok {
 		data.Email = u.Email

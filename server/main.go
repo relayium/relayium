@@ -436,6 +436,7 @@ func main() {
 		}
 		mux.Handle("/api/", acct.Routes())
 		acct.RegisterAdmin(mux)
+		acct.RegisterDevicePage(mux) // GET /device on the root mux (see RegisterDevicePage)
 	}
 
 	// Universal Links / Sign in with Apple domain association. A more specific
@@ -445,6 +446,12 @@ func main() {
 	mux.HandleFunc("GET /.well-known/apple-developer-domain-association.txt", appleDomainAssociation(*appleDomainAssoc))
 
 	mux.Handle("/", spaHandler(*static))
+
+	// Hash the SPA's inline scripts once at startup so the CSP can drop
+	// 'unsafe-inline' from script-src without a per-request nonce on the static
+	// shell (which is served as a plain file). Recomputed from the built files,
+	// so a Vite rebuild never silently breaks the policy.
+	spaHashes := spaScriptHashes(*static)
 
 	// Explicit timeouts instead of http.ListenAndServe's unbounded defaults.
 	// ReadHeaderTimeout caps the request-header read phase, which is the Slowloris
@@ -456,7 +463,7 @@ func main() {
 	// detects dead peers instead).
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           securityHeaders(mux),
+		Handler:           securityHeaders(spaHashes, mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}

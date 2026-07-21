@@ -13,7 +13,9 @@ func webhookEnvCreated(eventType, customer, status, priceID string, created int6
 	if priceID != "" {
 		items = fmt.Sprintf(`{"data":[{"price":{"id":%q}}]}`, priceID)
 	}
-	return fmt.Sprintf(`{"type":%q,"created":%d,"data":{"object":{"customer":%q,"subscription":"sub_x","status":%q,"current_period_end":0,"metadata":null,"items":%s}}}`,
+	// Real customer.subscription.* shape: the object IS the subscription, id at
+	// data.object.id with object=="subscription" (see webhookEnvWithMetadata).
+	return fmt.Sprintf(`{"type":%q,"created":%d,"data":{"object":{"id":"sub_x","object":"subscription","customer":%q,"status":%q,"current_period_end":0,"metadata":null,"items":%s}}}`,
 		eventType, created, customer, status, items)
 }
 

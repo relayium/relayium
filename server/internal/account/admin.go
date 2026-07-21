@@ -395,7 +395,7 @@ func (s *Service) verifyAdminCreds(user, pass, code string) (totpStep int64, ok 
 func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	ip := s.clientIP(r)
 	if s.adminLogins.locked(ip, s.now()) {
-		s.renderAdminLogin(w, http.StatusTooManyRequests, "尝试过于频繁，请稍后再试",
+		s.renderAdminLogin(w, r, http.StatusTooManyRequests, "尝试过于频繁，请稍后再试",
 			s.adminPasskeyCount(r.Context()) > 0)
 		return
 	}
@@ -404,7 +404,7 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		r.FormValue("username"), r.FormValue("password"), r.FormValue("totp"))
 	if !ok {
 		s.adminLogins.recordFail(ip, s.now())
-		s.renderAdminLogin(w, http.StatusUnauthorized, "账号、密码或验证码错误",
+		s.renderAdminLogin(w, r, http.StatusUnauthorized, "账号、密码或验证码错误",
 			s.adminPasskeyCount(r.Context()) > 0)
 		// 只记"有人试过且失败了"。绝不记录尝试的用户名或密码：
 		// 用户名常被误输成密码，把它记下来等于把密码写进日志。
@@ -418,7 +418,7 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		// like a bad credential: record the failure and show the generic error.
 		if claimed, cerr := s.store.ClaimTOTPStep(r.Context(), totpStep); cerr != nil || !claimed {
 			s.adminLogins.recordFail(ip, s.now())
-			s.renderAdminLogin(w, http.StatusUnauthorized, "账号、密码或验证码错误",
+			s.renderAdminLogin(w, r, http.StatusUnauthorized, "账号、密码或验证码错误",
 				s.adminPasskeyCount(r.Context()) > 0)
 			s.writeAudit(r, AuditLoginFail, "-", nil, StepUpNone)
 			return
@@ -427,7 +427,7 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	s.adminLogins.reset(ip)
 	tok, err := s.newAdminSession(r.Context(), "password")
 	if err != nil {
-		s.renderAdminLogin(w, http.StatusInternalServerError, "服务器错误，请稍后再试",
+		s.renderAdminLogin(w, r, http.StatusInternalServerError, "服务器错误，请稍后再试",
 			s.adminPasskeyCount(r.Context()) > 0)
 		return
 	}
@@ -591,6 +591,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		CentralStoredBytes: centralStored,
 		Passkeys:           passkeys,
 		PasskeysErr:        passkeysErr,
+		Nonce:              CSPNonce(r),
 		Settings: adminSettingsView{
 			MaxFileSizeMB:          st.MaxFileSize / (1024 * 1024),
 			DailyQuotaMB:           st.DailyQuota / (1024 * 1024),
@@ -608,7 +609,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 
 func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
-		s.renderAdminLogin(w, http.StatusOK, "", s.adminPasskeyCount(r.Context()) > 0)
+		s.renderAdminLogin(w, r, http.StatusOK, "", s.adminPasskeyCount(r.Context()) > 0)
 		return
 	}
 	data, err := s.buildAdminHomeData(r)
@@ -965,10 +966,10 @@ func (s *Service) handleAdminRevokeToken(w http.ResponseWriter, r *http.Request)
 // renderAdminLogin draws the login page. passkey controls only the extra
 // passkey button; the password+TOTP form below it is the fallback channel and
 // renders unconditionally.
-func (s *Service) renderAdminLogin(w http.ResponseWriter, status int, errMsg string, passkey bool) {
+func (s *Service) renderAdminLogin(w http.ResponseWriter, r *http.Request, status int, errMsg string, passkey bool) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	_ = adminLoginTmpl.Execute(w, adminLoginData{
-		Error: errMsg, TOTP: s.AdminTOTPEnabled(), Passkey: passkey,
+		Error: errMsg, TOTP: s.AdminTOTPEnabled(), Passkey: passkey, Nonce: CSPNonce(r),
 	})
 }

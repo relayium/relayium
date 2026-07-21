@@ -20,7 +20,8 @@ func writeFile(t *testing.T, path, body string) {
 }
 
 func TestSecurityHeaders(t *testing.T) {
-	h := securityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	spaHashes := []string{"'sha256-deadbeef'"}
+	h := securityHeaders(spaHashes, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	rr := httptest.NewRecorder()
@@ -37,13 +38,51 @@ func TestSecurityHeaders(t *testing.T) {
 		}
 	}
 	csp := rr.Header().Get("Content-Security-Policy")
-	for _, must := range []string{"frame-ancestors 'none'", "object-src 'none'", "connect-src 'self' https: wss:"} {
+	for _, must := range []string{
+		"frame-ancestors 'none'",
+		"object-src 'none'",
+		"connect-src 'self';", // tightened: no more 'https:'/'wss:' exfil wildcard
+		"'nonce-",             // per-request script nonce present
+		"'sha256-deadbeef'",   // SPA inline-script hash folded in
+	} {
 		if !strings.Contains(csp, must) {
 			t.Errorf("CSP missing %q; got %q", must, csp)
 		}
 	}
+	// The XSS-containment win: script-src and connect-src must NOT allow inline
+	// scripts or arbitrary-host exfiltration anymore.
+	if strings.Contains(csp, "'unsafe-inline'; connect") || strings.Contains(csp, "script-src 'self' 'unsafe-inline'") {
+		t.Errorf("script-src must not allow 'unsafe-inline'; got %q", csp)
+	}
+	if strings.Contains(csp, "connect-src 'self' https:") || strings.Contains(csp, "connect-src 'self' wss:") {
+		t.Errorf("connect-src must be 'self' only (no exfil wildcard); got %q", csp)
+	}
+	// Each request must mint a distinct nonce.
+	rr2 := httptest.NewRecorder()
+	h.ServeHTTP(rr2, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rr.Header().Get("Content-Security-Policy") == rr2.Header().Get("Content-Security-Policy") {
+		t.Error("CSP nonce must differ per request")
+	}
 	if rr.Header().Get("Permissions-Policy") == "" {
 		t.Error("Permissions-Policy not set")
+	}
+}
+
+func TestSPAScriptHashes(t *testing.T) {
+	dir := t.TempDir()
+	// An executable inline script (theme snippet), an ld+json block (not
+	// executed), and an external script (governed by 'self') — only the first
+	// should yield a hash.
+	writeFile(t, filepath.Join(dir, "index.html"),
+		`<script>var t=1;</script>`+
+			`<script type="application/ld+json">{"@type":"WebPage"}</script>`+
+			`<script type="module" src="/assets/app.js"></script>`)
+	hashes := spaScriptHashes(dir)
+	if len(hashes) != 1 {
+		t.Fatalf("want exactly 1 inline-script hash, got %d: %v", len(hashes), hashes)
+	}
+	if !strings.HasPrefix(hashes[0], "'sha256-") {
+		t.Fatalf("hash token malformed: %q", hashes[0])
 	}
 }
 

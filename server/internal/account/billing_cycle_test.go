@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 )
 
 // 计费周期（月付/年付）是和档位正交的一个维度，但原先整条链路都只认档位 ID：
@@ -203,5 +204,61 @@ func TestChangePlanUnknownCycleFallsBackToTierOnly(t *testing.T) {
 	if fb.changeCalls != 0 || fb.downgradeCalls != 0 {
 		t.Fatalf("legacy unknown cycle must not trigger a Stripe call, got change=%d downgrade=%d",
 			fb.changeCalls, fb.downgradeCalls)
+	}
+}
+
+// P1-2 regression: a SAME-TIER cycle downgrade (pro yearly -> pro monthly) has
+// scheduled_plan_id == the current tier, so the webhook's "landed" clear used to
+// fire on the intermediate updated event Stripe emits when the schedule is first
+// attached (price still yearly), wiping the marker seconds after it was set and
+// wedging every later in-app plan change at 500. The clear now also requires the
+// CYCLE to match, so the marker survives until the change actually lands.
+func TestWebhookSameTierCycleDowngradeMarkerSurvivesUntilLanded(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	secret := "whsec_cycle_sched"
+	svc.biller = NewStripeClient("sk_test", secret, "")
+	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true,
+		StripePriceMonthlyID: "price_pro_m", StripePriceYearlyID: "price_pro_y"})
+	_ = loginCookie(t, ts, mail, "cyc-sched@example.com")
+	uid := mustUserID(t, store, "cyc-sched@example.com")
+	ctx := context.Background()
+
+	// On pro yearly, with a pending same-tier downgrade to pro monthly recorded.
+	if err := store.SetUserStripeCustomer(ctx, uid, "cus_cyc"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetUserSubscription(ctx, uid, "pro", "active", 1900000000, "stripe", "yearly", time.Now().Unix(), 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetScheduledPlan(ctx, uid, "pro", "monthly"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pre-landing event: tier matches (pro) but the price is still YEARLY. The
+	// marker must NOT be cleared.
+	resp := postWebhook(t, ts, secret,
+		webhookEnv("customer.subscription.updated", "cus_cyc", "sub_1", "", "active", "price_pro_y", 1900000000))
+	resp.Body.Close()
+	u, err := store.GetUserByID(ctx, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.ScheduledPlanID != "pro" || u.ScheduledCycle != "monthly" {
+		t.Fatalf("pending cycle-downgrade marker cleared prematurely by the pre-landing (yearly) event: plan=%q cycle=%q",
+			u.ScheduledPlanID, u.ScheduledCycle)
+	}
+
+	// Landing event: the price is now MONTHLY — tier AND cycle match, so the
+	// marker clears.
+	resp2 := postWebhook(t, ts, secret,
+		webhookEnv("customer.subscription.updated", "cus_cyc", "sub_1", "", "active", "price_pro_m", 1900000000))
+	resp2.Body.Close()
+	u2, err := store.GetUserByID(ctx, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u2.ScheduledPlanID != "" || u2.ScheduledCycle != "" {
+		t.Fatalf("marker must clear once the downgrade lands (monthly price): plan=%q cycle=%q",
+			u2.ScheduledPlanID, u2.ScheduledCycle)
 	}
 }

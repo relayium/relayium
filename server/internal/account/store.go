@@ -49,6 +49,11 @@ type User struct {
 	// ScheduledPlanID is the tier a pending period-end downgrade will switch to;
 	// '' = no pending change. Display hint only (see the column comment).
 	ScheduledPlanID string
+	// ScheduledCycle is the billing cycle ('monthly'|'yearly') that pending
+	// downgrade switches to, stored next to ScheduledPlanID so a same-tier cycle
+	// downgrade can be told apart from "already landed". '' = legacy (predates the
+	// column) → clear falls back to tier-only matching. See handleStripeWebhook.
+	ScheduledCycle string
 	// BillingCycle is 'monthly' or 'yearly' for a Stripe-sourced subscription;
 	// '' means unknown (a row that predates the column). Treat '' as "cannot
 	// compare cycles" rather than as a third cycle — see handleBillingChangePlan.
@@ -253,20 +258,20 @@ type UploadEvent struct {
 // mint ephemeral credentials it will validate). relayed_bytes/stored_bytes are the
 // node's own cumulative, keep-max counters fed from heartbeats.
 type Node struct {
-	ID             string
-	OwnerType      string // "fleet" (SP3 adds "user")
-	OwnerUserID    string // "" for fleet
-	Label          string // human-set display name / note; seeded from the node token's name, editable
-	Region         string
-	URLs           []string
-	TURNSecret     string
-	Version        string
-	RelayedBytes   int64
-	StoredBytes    int64
-	CreatedAt      int64
-	LastSeenAt     int64
-	StorageURL     string
-	StorageSecret  string
+	ID            string
+	OwnerType     string // "fleet" (SP3 adds "user")
+	OwnerUserID   string // "" for fleet
+	Label         string // human-set display name / note; seeded from the node token's name, editable
+	Region        string
+	URLs          []string
+	TURNSecret    string
+	Version       string
+	RelayedBytes  int64
+	StoredBytes   int64
+	CreatedAt     int64
+	LastSeenAt    int64
+	StorageURL    string
+	StorageSecret string
 	// StorageFP is the SHA-256 fingerprint (hex) of the node's self-signed TLS
 	// cert for its blob endpoint, reported at registration. When set (and the
 	// StorageURL is https), central pins it on every blob call so the bearer
@@ -517,9 +522,10 @@ type Store interface {
 	// LastSubEventAt returns the event.created of the last subscription event
 	// applied to a user (0 if none), so the webhook can drop stale re-deliveries.
 	LastSubEventAt(ctx context.Context, userID string) (int64, error)
-	// SetScheduledPlan records (or clears, with planID="") the tier a pending
-	// period-end downgrade will switch to — a display hint for the pricing UI.
-	SetScheduledPlan(ctx context.Context, userID, planID string) error
+	// SetScheduledPlan records (or clears, with planID="" and cycle="") the tier
+	// AND cycle a pending period-end downgrade will switch to — a display hint for
+	// the pricing UI and the key the webhook uses to detect when the change lands.
+	SetScheduledPlan(ctx context.Context, userID, planID, cycle string) error
 	// PlanByStripePrice resolves a webhook's Stripe Price id (monthly or yearly)
 	// to the plan tier mapped to it. An empty priceID returns not-found.
 	PlanByStripePrice(ctx context.Context, priceID string) (Plan, bool, error)

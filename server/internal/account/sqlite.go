@@ -361,6 +361,16 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// display hint — set when the endpoint schedules a downgrade, cleared when
 		// the downgrade lands (webhook), is canceled, or the subscription ends.
 		`ALTER TABLE users ADD COLUMN scheduled_plan_id TEXT NOT NULL DEFAULT ''`,
+		// The billing cycle a pending downgrade will switch to ('monthly'|'yearly'),
+		// stored ALONGSIDE scheduled_plan_id. Without it, a SAME-TIER cycle downgrade
+		// (e.g. yearly→monthly on the same plan) has scheduled_plan_id == the current
+		// tier, so the webhook's "landed" check (planID == scheduled_plan_id) matched
+		// the intermediate schedule-creation event and cleared the marker seconds
+		// after it was set — wedging every later in-app plan change at 500 until
+		// period end. The clear now also requires the cycle to match. '' = a legacy
+		// pending downgrade from before this column; the clear falls back to
+		// tier-only matching there (see billing.go).
+		`ALTER TABLE users ADD COLUMN scheduled_cycle TEXT NOT NULL DEFAULT ''`,
 		// 计费周期（'monthly' | 'yearly'），和档位正交的第二个维度。webhook 拿
 		// 事件里的 price id 跟该档的月/年两个 price id 比对推出来 —— Stripe 的
 		// 订阅事件不单独给 interval 字段，这是唯一来源。
@@ -663,10 +673,10 @@ func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName 
 	var u User
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after, plan_id,
-		        stripe_customer_id, stripe_subscription_id, subscription_status, subscription_end, plan_source, scheduled_plan_id, billing_cycle
+		        stripe_customer_id, stripe_subscription_id, subscription_status, subscription_end, plan_source, scheduled_plan_id, scheduled_cycle, billing_cycle
 		   FROM users WHERE email = ?`, email,
 	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
-		&u.StripeCustomerID, &u.StripeSubscriptionID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID, &u.BillingCycle)
+		&u.StripeCustomerID, &u.StripeSubscriptionID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID, &u.ScheduledCycle, &u.BillingCycle)
 	if err == nil {
 		return u, nil
 	}
@@ -687,10 +697,10 @@ func (s *SQLiteStore) UserByCanonicalEmail(ctx context.Context, canonical string
 	var u User
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, email, display_name, created_at, email_verified, deleted_at, purge_after, plan_id,
-		        stripe_customer_id, stripe_subscription_id, subscription_status, subscription_end, plan_source, scheduled_plan_id, billing_cycle
+		        stripe_customer_id, stripe_subscription_id, subscription_status, subscription_end, plan_source, scheduled_plan_id, scheduled_cycle, billing_cycle
 		   FROM users WHERE canonical_email = ? LIMIT 1`, canonical,
 	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
-		&u.StripeCustomerID, &u.StripeSubscriptionID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID, &u.BillingCycle)
+		&u.StripeCustomerID, &u.StripeSubscriptionID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID, &u.ScheduledCycle, &u.BillingCycle)
 	if err == sql.ErrNoRows {
 		return User{}, false, nil
 	}
@@ -742,11 +752,11 @@ func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (User, error) 
 	var strict int
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes, deleted_at, purge_after, plan_id,
-		        stripe_customer_id, stripe_subscription_id, subscription_status, subscription_end, plan_source, scheduled_plan_id, billing_cycle,
+		        stripe_customer_id, stripe_subscription_id, subscription_status, subscription_end, plan_source, scheduled_plan_id, scheduled_cycle, billing_cycle,
 		        plan_started_at, quota_accrued_bytes, quota_accrued_period
 		   FROM users WHERE id = ?`, id,
 	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &strict, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
-		&u.StripeCustomerID, &u.StripeSubscriptionID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID, &u.BillingCycle,
+		&u.StripeCustomerID, &u.StripeSubscriptionID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID, &u.ScheduledCycle, &u.BillingCycle,
 		&u.PlanStartedAt, &u.QuotaAccruedBytes, &u.QuotaAccruedPeriod)
 	if err == sql.ErrNoRows {
 		return User{}, ErrNotFound
@@ -922,10 +932,10 @@ func (s *SQLiteStore) GetUserByStripeCustomer(ctx context.Context, customerID st
 	var strict int
 	err := s.reader().QueryRowContext(ctx,
 		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes, deleted_at, purge_after, plan_id,
-		        stripe_customer_id, stripe_subscription_id, subscription_status, subscription_end, plan_source, scheduled_plan_id, billing_cycle
+		        stripe_customer_id, stripe_subscription_id, subscription_status, subscription_end, plan_source, scheduled_plan_id, scheduled_cycle, billing_cycle
 		   FROM users WHERE stripe_customer_id = ?`, customerID,
 	).Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &strict, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
-		&u.StripeCustomerID, &u.StripeSubscriptionID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID, &u.BillingCycle)
+		&u.StripeCustomerID, &u.StripeSubscriptionID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID, &u.ScheduledCycle, &u.BillingCycle)
 	if err == sql.ErrNoRows {
 		return User{}, false, nil
 	}
@@ -1001,9 +1011,9 @@ func (s *SQLiteStore) LastSubEventAt(ctx context.Context, userID string) (int64,
 	return at, err
 }
 
-func (s *SQLiteStore) SetScheduledPlan(ctx context.Context, userID, planID string) error {
+func (s *SQLiteStore) SetScheduledPlan(ctx context.Context, userID, planID, cycle string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE users SET scheduled_plan_id = ? WHERE id = ?`, planID, userID)
+		`UPDATE users SET scheduled_plan_id = ?, scheduled_cycle = ? WHERE id = ?`, planID, cycle, userID)
 	return err
 }
 

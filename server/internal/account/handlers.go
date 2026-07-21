@@ -179,11 +179,10 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/cli/device/poll", s.handleDevicePoll)
 	mux.HandleFunc("GET /api/cli/device/pending", s.RequireSession(s.handleDevicePending))
 	mux.HandleFunc("POST /api/cli/device/approve", s.RequireSession(s.handleDeviceApprove))
-	// GET /device is the human-facing verification_uri the CLI shows
-	// (RFC 8628-style): server-rendered, session-gated for the authed view,
-	// public for the anon "please sign in" view. Session-authed POSTs to
-	// approve happen client-side via fetch, see devicepage.go.
-	mux.HandleFunc("GET /device", s.handleDevicePage)
+	// GET /device (the human-facing verification_uri) is NOT registered here:
+	// routeMux is mounted under /api/, so a pattern for "/device" on it is
+	// unreachable. It's registered on the ROOT mux via RegisterDevicePage — see
+	// main.go — so relayium.com/device actually resolves to the approval page.
 	s.registerFileRoutes(mux)
 	return mux
 }
@@ -401,6 +400,7 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {
 			"subscriptionEnd":    u.SubscriptionEnd,
 			"hasBilling":         u.StripeCustomerID != "",
 			"scheduledPlanId":    u.ScheduledPlanID,
+			"scheduledCycle":     u.ScheduledCycle,
 			// '' when unknown (a subscription that predates the column). The UI
 			// must not assume monthly in that case — it would render "switch to
 			// yearly" as if it were a no-op for someone already billed yearly.
@@ -514,6 +514,7 @@ func (s *Service) handleMeUsage(w http.ResponseWriter, r *http.Request, u User) 
 			"billingCycle":       u.BillingCycle,
 			"scheduledPlanId":    u.ScheduledPlanID,
 			"scheduledPlanName":  scheduledName,
+			"scheduledCycle":     u.ScheduledCycle,
 		},
 	})
 }

@@ -217,6 +217,16 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 		Created int64  `json:"created"`
 		Data    struct {
 			Object struct {
+				// ID + Object discriminate the two event shapes: on a
+				// customer.subscription.* event data.object IS the subscription
+				// (object=="subscription", its id at data.object.id, and NO
+				// "subscription" key); on checkout.session.completed data.object
+				// is the session (object=="checkout.session") which references
+				// its subscription at data.object.subscription. Parsing only the
+				// latter left SubscriptionID empty for every real subscription
+				// event — see the resolution below.
+				ID                string `json:"id"`
+				Object            string `json:"object"`
 				Customer          string `json:"customer"`
 				Subscription      string `json:"subscription"`
 				ClientReferenceID string `json:"client_reference_id"`
@@ -248,6 +258,15 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 		Status:           envelope.Data.Object.Status,
 		ClientRefUserID:  envelope.Data.Object.ClientReferenceID,
 		CurrentPeriodEnd: envelope.Data.Object.CurrentPeriodEnd,
+	}
+	// On a customer.subscription.* event the object is the subscription itself,
+	// so its id lives at data.object.id (data.object.subscription is absent).
+	// Fall back to data.object.subscription for a checkout.session object, whose
+	// subscription is a reference field. Without this the double-checkout dedup
+	// and duplicate-deletion guard (which compare SubscriptionID to the canonical)
+	// were dead code in production — SubscriptionID was always "".
+	if envelope.Data.Object.Object == "subscription" && envelope.Data.Object.ID != "" {
+		ev.SubscriptionID = envelope.Data.Object.ID
 	}
 	if md := envelope.Data.Object.Metadata; md != nil {
 		ev.MetadataUserID = md.UserID

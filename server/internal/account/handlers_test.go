@@ -17,7 +17,14 @@ func newTestServer(t *testing.T) (*httptest.Server, *capturingMailer) {
 	store := newTestStore(t)
 	mail := &capturingMailer{}
 	svc := NewService(store, mail, Config{BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: 15 * time.Minute, EnableMagic: true})
-	ts := httptest.NewServer(svc.Routes())
+	// Mirror production's mount: /api/* is served by Routes(), while GET /device
+	// lives on the ROOT mux (RegisterDevicePage). Mounting only Routes() at root
+	// used to mask that /device is unreachable once Routes() is mounted under
+	// /api/ in main.go — the dead-route bug this harness now exercises for real.
+	mux := http.NewServeMux()
+	mux.Handle("/", svc.Routes())
+	svc.RegisterDevicePage(mux)
+	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
 	return ts, mail
 }

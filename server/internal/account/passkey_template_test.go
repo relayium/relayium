@@ -52,7 +52,7 @@ func TestLoginPageRendersWithoutStore(t *testing.T) {
 	s := NewService(nil, nil, Config{AdminUser: "admin", AdminPassword: "pw"})
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/admin", nil)
-	s.renderAdminLogin(w, http.StatusOK, "", s.adminPasskeyCount(r.Context()) > 0)
+	s.renderAdminLogin(w, r, http.StatusOK, "", s.adminPasskeyCount(r.Context()) > 0)
 
 	body := w.Body.String()
 	if !strings.Contains(body, `name="password"`) {

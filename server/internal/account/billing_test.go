@@ -507,7 +507,7 @@ func TestBillingCancelScheduledChange(t *testing.T) {
 	uid := mustUserID(t, store, email)
 	subscribeUser(t, store, uid, "cus_c", "pro")
 	// Simulate a pending downgrade to plus.
-	if err := store.SetScheduledPlan(context.Background(), uid, "plus"); err != nil {
+	if err := store.SetScheduledPlan(context.Background(), uid, "plus", "monthly"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -563,7 +563,7 @@ func TestBillingChangePlanReleasesPendingScheduleThenUpgrades(t *testing.T) {
 	uid := mustUserID(t, store, email)
 	subscribeUser(t, store, uid, "cus_r", "pro")
 	// A downgrade to plus is already pending.
-	if err := store.SetScheduledPlan(context.Background(), uid, "plus"); err != nil {
+	if err := store.SetScheduledPlan(context.Background(), uid, "plus", "monthly"); err != nil {
 		t.Fatal(err)
 	}
 

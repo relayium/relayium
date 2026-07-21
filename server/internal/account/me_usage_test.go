@@ -547,7 +547,7 @@ func TestMeUsageExposesCycleAndScheduledPlan(t *testing.T) {
 	if err := store.SetUserSubscription(t.Context(), u.ID, "plus", "active", 1789999999, "stripe", "yearly", svc.now().Unix(), 0); err != nil {
 		t.Fatalf("SetUserSubscription: %v", err)
 	}
-	if err := store.SetScheduledPlan(t.Context(), u.ID, "free"); err != nil {
+	if err := store.SetScheduledPlan(t.Context(), u.ID, "free", "monthly"); err != nil {
 		t.Fatalf("SetScheduledPlan: %v", err)
 	}
 
