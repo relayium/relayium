@@ -178,11 +178,18 @@ CDN 对"唯一密文 + burn"基本无效，排除为主方案；可作为多下�
 - **范围**：P0 先只做机队节点直连，验证"中央退出数据面"；BYO 直连留到 P2。
 - **burn/次数**：P0 先用乐观 claim + 预扣计量 + 代理保底；回执对账留到 P1。
 
-### P0 实现清单（进行中）
+### P0 实现清单
 
-1. `internal/dltoken`（或类似）：`Sign(nodeSecret, key, exp, nonce)` / `Verify` 纯函数，HMAC-SHA256，TDD。
-2. 节点二进制（`cmd/relayium-node`）：`GET /blob/{key}?t=…` 公开下载端点，验签 + `Range` + 只吐密文。
-3. 节点自报"公开下载 base URL"（机队子域名），随注册/心跳带上，中央存 `Node.PublicDownloadURL`（或按 nodeID 配置映射）。
-4. 中央 `handleFileBlob`（或新 `/api/files/{id}/dl`）：当文件在**机队且直连可用**的节点上 → `liveFile`→限速→`overTraffic`→（限量文件）`ClaimDownloadSlot`→`RecordMeter` 预扣→签令牌→`302`；否则回落现有代理。
-5. Feature flag / 节点标志：`direct_download_enabled`，可一键关掉回到全代理。
-6. 测试：令牌签验、节点端点验签+Range、中央 302 分支 vs 代理回落分支、限量文件预扣占坑、计量预扣。
+**服务端 + 节点端已完成（default-off，push origin/main）：**
+1. ✅ `internal/dltoken`：`Sign`/`Verify`（HMAC-SHA256，绑定 key/exp/nonce），全负例测试 + 守卫 mutation 验证。
+2. ✅ 节点二进制 `GET /dl/{key}?t=…`：令牌验签（不用 bearer 密钥）+ `Range` + CORS + 只吐密文。
+3. ✅ `Node.DownloadURL` 列（迁移/nodeCols/scan/UpsertNode 同步）；节点自报，中央**仅机队 + 仅 https**才采纳；节点二进制 `-download-url` / `RELAYIUM_NODE_DOWNLOAD_URL`。
+4. ✅ 中央 `handleFileBlob`：**无限次文件**（MaxDownloads==0）在机队直连节点上 → 限速 → 流量闸 → 按 size 预扣计量 → 签令牌 → `302`。限量/burn 文件继续走代理（语义不变，中央仍在服务后删除 blob）。
+5. ✅ Kill-switch：`-direct-download` / `RELAYIUM_DIRECT_DOWNLOAD`（默认 off）。
+6. ✅ 测试全绿。
+
+**尚未做（P0 收尾，让产品真正用起来）：**
+7. ⬜ **客户端跟随 302**：浏览器普通 fetch 自动跟随；但 SW 流式下载拦截 `/api/files/{id}/blob` 的路径、以及 CLI `down` 的 HTTP client，需要显式处理跨源 302 到节点（+ CORS）。要验证/适配。
+8. ⬜ **部署**（非代码）：DNS 加 `nodeN.relayium.com` A 记录；机队节点部署 `*.relayium.com` 泛域名证书；各节点设 `RELAYIUM_NODE_DOWNLOAD_URL`；中央开 `RELAYIUM_DIRECT_DOWNLOAD=true`。
+
+**后续阶段**：P1 回执对账（精确计量、限量/burn 也走直连）、P2 BYO 直连、P3 硬化（见 §6）。
