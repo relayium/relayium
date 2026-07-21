@@ -504,6 +504,12 @@ type Store interface {
 	AdminMetrics(ctx context.Context, period string, now int64) (AdminMetrics, error)
 	// stored files (zero-knowledge stored transfer)
 	CreateStoredFile(ctx context.Context, f StoredFile) error
+	// CreateStoredFileWithinStorageCaps atomically enforces the owner (userCap)
+	// and global (globalCap) live-storage caps and inserts the row in one writer
+	// transaction, so concurrent uploads cannot collectively bust a cap. A
+	// non-positive cap disables that check. ok=false + reason ("storage"|"global")
+	// names the cap hit; a real error is returned as err (caller fails closed).
+	CreateStoredFileWithinStorageCaps(ctx context.Context, f StoredFile, now, userCap, globalCap int64) (ok bool, reason string, err error)
 	GetStoredFile(ctx context.Context, id string) (StoredFile, error)
 	ListStoredFilesByUser(ctx context.Context, userID string) ([]StoredFile, error)
 	MarkDownloaded(ctx context.Context, id string, at int64) error

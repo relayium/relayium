@@ -1640,6 +1640,56 @@ func (s *SQLiteStore) CreateStoredFile(ctx context.Context, f StoredFile) error 
 	return err
 }
 
+// CreateStoredFileWithinStorageCaps inserts a stored file only if it keeps the
+// owner within userCap and the whole store within globalCap, summing live usage
+// and inserting in ONE writer transaction. Because the writer pool is capped to
+// a single connection, the sum-then-insert is serialized against every other
+// upload, closing the check-then-write race that a separate over*-check +
+// CreateStoredFile pair leaves open (N concurrent uploads each reading the same
+// pre-commit total and all committing). A non-positive cap disables that check.
+//
+// Returns ok=false with reason "storage" (owner cap) or "global" (disk cap) when
+// a cap would be exceeded; a real store error is returned as err so the caller
+// fails CLOSED. "Live" bytes are expires_at > now, matching CurrentStorage /
+// GlobalStorageUsed; the row being inserted is added explicitly since it is not
+// yet visible to the pre-insert sums.
+func (s *SQLiteStore) CreateStoredFileWithinStorageCaps(ctx context.Context, f StoredFile, now, userCap, globalCap int64) (ok bool, reason string, err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, "", err
+	}
+	defer tx.Rollback() // no-op after a successful Commit
+	if userCap > 0 {
+		var used sql.NullInt64
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COALESCE(SUM(size),0) FROM stored_files WHERE user_id = ? AND expires_at > ?`,
+			f.UserID, now).Scan(&used); err != nil {
+			return false, "", err
+		}
+		if used.Int64+f.Size > userCap {
+			return false, "storage", nil
+		}
+	}
+	if globalCap > 0 {
+		var used sql.NullInt64
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COALESCE(SUM(size),0) FROM stored_files WHERE expires_at > ?`, now).Scan(&used); err != nil {
+			return false, "", err
+		}
+		if used.Int64+f.Size > globalCap {
+			return false, "global", nil
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO stored_files (`+storedFileCols+`)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		f.ID, f.UserID, f.BlobKey, f.EncManifest, f.Size,
+		b2i(f.BurnAfterRead), f.CreatedAt, f.ExpiresAt, f.DownloadedAt, nullStr(f.NodeID), f.MaxDownloads); err != nil {
+		return false, "", err
+	}
+	return true, "", tx.Commit()
+}
+
 func (s *SQLiteStore) GetStoredFile(ctx context.Context, id string) (StoredFile, error) {
 	f, err := scanStoredFile(s.db.QueryRowContext(ctx,
 		`SELECT `+storedFileSelectCols+` FROM stored_files WHERE id = ?`, id))

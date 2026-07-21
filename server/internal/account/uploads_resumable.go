@@ -391,14 +391,9 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	size := sess.received
 	now := s.now().Unix()
 	if sess.billable {
-		// Authoritative per-plan gate on the real byte count now that the upload
-		// is complete (the init pre-check only saw the client-declared size).
-		if over, err := s.overStorage(r.Context(), u.ID, size); err == nil && over {
-			s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
-			s.resumable.del(id)
-			http.Error(w, "storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
-			return
-		}
+		// Authoritative per-plan traffic gate on the real byte count now that the
+		// upload is complete (the init pre-check only saw the client-declared
+		// size). Storage caps are enforced atomically at persist time below.
 		if over, err := s.overTraffic(r.Context(), u.ID, size); err == nil && over {
 			s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
 			s.resumable.del(id)
@@ -443,10 +438,22 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		Size: size, BurnAfterRead: sess.maxDL == 1, CreatedAt: now, ExpiresAt: now + sess.ttl,
 		NodeID: sess.nodeID, MaxDownloads: sess.maxDL,
 	}
-	if err := s.store.CreateStoredFile(r.Context(), sf); err != nil {
+	// Atomic, fail-closed storage-cap enforcement + insert (see persistStoredFile).
+	switch reason, err := s.persistStoredFile(r.Context(), sf, sess.billable); {
+	case err != nil:
 		s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
 		s.resumable.del(id)
 		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	case reason == "global":
+		s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
+		s.resumable.del(id)
+		http.Error(w, "server storage is full", http.StatusInsufficientStorage)
+		return
+	case reason == "storage":
+		s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
+		s.resumable.del(id)
+		http.Error(w, "storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
 		return
 	}
 	_ = s.store.AddUploadStat(r.Context(), u.ID, size)

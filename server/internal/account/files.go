@@ -205,14 +205,9 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	// above trusts client-declared Content-Length only to fail fast (a chunked
 	// request or an understated Content-Length yields declared<=0 and sails
 	// through it), so a dishonest/broken client could stream up to
-	// MaxFileSize past the pre-gate. This mirrors the resumable path's
-	// finalize-time authoritative check on real bytes written.
+	// MaxFileSize past the pre-gate. Storage caps are enforced atomically at
+	// persist time below (persistStoredFile); only traffic is rechecked here.
 	if billable {
-		if over, err := s.overStorage(r.Context(), u.ID, size); err == nil && over {
-			s.dropBlob(bs, blobKey, nodeID)
-			http.Error(w, "storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
-			return
-		}
 		if over, err := s.overTraffic(r.Context(), u.ID, size); err == nil && over {
 			s.dropBlob(bs, blobKey, nodeID)
 			http.Error(w, "monthly traffic limit reached — upgrade to continue", http.StatusTooManyRequests)
@@ -268,9 +263,21 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		Size: size, BurnAfterRead: maxDL == 1, CreatedAt: now, ExpiresAt: now + ttl, NodeID: nodeID,
 		MaxDownloads: maxDL,
 	}
-	if err := s.store.CreateStoredFile(r.Context(), sf); err != nil {
+	// Atomic, fail-closed storage-cap enforcement + insert. This is what actually
+	// stops N concurrent uploads from collectively busting the plan/global cap
+	// (the over* pre-checks race and fail open).
+	switch reason, err := s.persistStoredFile(r.Context(), sf, billable); {
+	case err != nil:
 		s.dropBlob(bs, blobKey, nodeID)
 		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	case reason == "global":
+		s.dropBlob(bs, blobKey, nodeID)
+		http.Error(w, "server storage is full", http.StatusInsufficientStorage)
+		return
+	case reason == "storage":
+		s.dropBlob(bs, blobKey, nodeID)
+		http.Error(w, "storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
 		return
 	}
 	// Lifetime stats are best-effort: a stats write failure must not fail the

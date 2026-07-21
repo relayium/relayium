@@ -209,6 +209,36 @@ func (s *Service) overGlobalStorage(ctx context.Context, add int64) (bool, error
 	return used+add > cap, nil
 }
 
+// persistStoredFile commits a stored file to the store. For billable
+// (central-stored) uploads it is the AUTHORITATIVE, fail-closed storage gate:
+// it resolves the owner's plan cap and the global disk cap and enforces both
+// atomically inside CreateStoredFileWithinStorageCaps, so concurrent uploads
+// cannot race past the caps the way the cheap pre-write over* checks (which
+// fail open) allow. Own-node uploads (enforceCaps=false) skip caps entirely —
+// they land on the user's own disk and are never metered against a plan.
+//
+// Returns reason "" on success, "storage" (owner cap) or "global" (disk cap)
+// when a cap is hit, or a non-nil err on a real store failure (caller 500s and
+// drops the blob — never admits an upload against an unknown cap).
+func (s *Service) persistStoredFile(ctx context.Context, f StoredFile, enforceCaps bool) (reason string, err error) {
+	if !enforceCaps {
+		return "", s.store.CreateStoredFile(ctx, f)
+	}
+	plan, err := s.planForUser(ctx, f.UserID)
+	if err != nil {
+		return "", err
+	}
+	globalCap := s.resolveSettings(ctx).StorageDiskCap
+	ok, reason, err := s.store.CreateStoredFileWithinStorageCaps(ctx, f, s.now().Unix(), plan.StorageBytes, globalCap)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return reason, nil
+	}
+	return "", nil
+}
+
 // planRetentionCap returns the user's plan retention ceiling in seconds (0 = no
 // plan cap; the global clampTTL still applies).
 func (s *Service) planRetentionCap(ctx context.Context, userID string) int64 {
