@@ -53,8 +53,14 @@ type RelayConfig struct {
 }
 
 type Config struct {
-	BaseURL        string
-	SessionTTL     time.Duration
+	// RateLimitDivisor lowers the per-instance abuse thresholds (login lockouts
+	// here; the signal rate limiters + GuessBreaker in main) for a round-robin
+	// multi-instance deployment. Default 0/1 = no change (single instance, or an
+	// IP-hash LB where the full threshold is already correct). See
+	// PerInstanceThreshold and docs/multi-instance-state-migration.md §7.5.
+	RateLimitDivisor int
+	BaseURL          string
+	SessionTTL       time.Duration
 	MagicTTL       time.Duration
 	VerifyTTL      time.Duration // email verification link lifetime (default 24h)
 	ResetTTL       time.Duration // password reset link lifetime (default 1h)
@@ -217,14 +223,17 @@ type guessBreaker interface {
 }
 
 func NewService(store Store, mailer Mailer, cfg Config) *Service {
+	// Per-instance lockout threshold: full for a single instance / IP-hash LB
+	// (divisor 1), lowered for a round-robin LB. See PerInstanceThreshold.
+	maxFails := PerInstanceThreshold(adminLoginMaxFails, cfg.RateLimitDivisor)
 	svc := &Service{store: store, mailer: mailer, cfg: cfg, now: time.Now,
-		adminLogins: newLoginThrottle(),
-		pwLogins: newLoginThrottle(), magicRequests: newLoginThrottle(),
-		verifyRequests: newLoginThrottle(), resetRequests: newLoginThrottle(),
-		deleteRequests: newLoginThrottle(),
+		adminLogins: newLoginThrottle(maxFails),
+		pwLogins: newLoginThrottle(maxFails), magicRequests: newLoginThrottle(maxFails),
+		verifyRequests: newLoginThrottle(maxFails), resetRequests: newLoginThrottle(maxFails),
+		deleteRequests: newLoginThrottle(maxFails),
 		resumable:      newResumableUploads(),
 		uploadSem:      newUploadSem(maxConcurrentUploadsPerUser)}
-	svc.adminPasskeyLogins = newLoginThrottle()
+	svc.adminPasskeyLogins = newLoginThrottle(maxFails)
 	svc.clientIP = clientIP
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
 	svc.exchangeAppleCode = svc.realExchangeAppleCode

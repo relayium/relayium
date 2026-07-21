@@ -13,21 +13,53 @@ const (
 	adminLoginLockWindow = 15 * time.Minute
 )
 
+// PerInstanceThreshold splits a global abuse threshold across `divisor`
+// round-robin instances (rounded to nearest, floored at 1). divisor <= 1 returns
+// n unchanged.
+//
+// It exists for the multi-instance interim (docs/multi-instance-state-migration.md
+// §7.5): the rate limiters and lockouts are per-process, so behind a load
+// balancer their effective global budget must be reconciled with instance count.
+// The PREFERRED reconciliation is not division at all but **IP-hash / sticky-by-IP
+// LB routing** — then every per-IP limiter and lockout sees all of a given IP's
+// traffic on one instance and enforces the full threshold correctly, so the
+// divisor stays 1. Set the divisor to N only for a ROUND-ROBIN LB (where an IP's
+// requests spread across instances), and note it does not fix the *global*
+// GuessBreaker or make a per-instance lockout follow an attacker across
+// instances — those genuinely want IP-hash routing or a shared store.
+func PerInstanceThreshold(n, divisor int) int {
+	if divisor <= 1 {
+		return n
+	}
+	v := (n + divisor/2) / divisor // round to nearest
+	if v < 1 {
+		v = 1
+	}
+	return v
+}
+
 type failEntry struct {
 	count     int
 	lockUntil time.Time
 	last      time.Time // time of the most recent failure, for decay + eviction
 }
 
-// loginThrottle is a per-key in-memory failed-login limiter. Process-scoped,
-// like admin sessions — no persistence needed.
+// loginThrottle is a per-key in-memory failed-login limiter. Per-IP and
+// process-scoped: correct across instances when the load balancer routes by
+// client IP (each IP pins to one instance, which then sees all of its failures
+// and enforces the full threshold). maxFails is the lockout threshold, lowered
+// by the rate-limit divisor for a round-robin LB (see PerInstanceThreshold).
 type loginThrottle struct {
-	mu      sync.Mutex
-	entries map[string]*failEntry
+	mu       sync.Mutex
+	maxFails int
+	entries  map[string]*failEntry
 }
 
-func newLoginThrottle() *loginThrottle {
-	return &loginThrottle{entries: map[string]*failEntry{}}
+func newLoginThrottle(maxFails int) *loginThrottle {
+	if maxFails < 1 {
+		maxFails = 1
+	}
+	return &loginThrottle{maxFails: maxFails, entries: map[string]*failEntry{}}
 }
 
 // locked reports whether key is currently within a lockout window.
@@ -68,7 +100,7 @@ func (t *loginThrottle) recordFail(key string, now time.Time) {
 	}
 	e.count++
 	e.last = now
-	if e.count >= adminLoginMaxFails {
+	if e.count >= t.maxFails {
 		e.lockUntil = now.Add(adminLoginLockWindow)
 	}
 }

@@ -102,6 +102,8 @@ func main() {
 	blobDir := flag.String("blob-dir", envStr("RELAYIUM_BLOB_DIR", "./blobs"), "directory for stored-transfer ciphertext blobs")
 	maxFileSize := flag.Int64("max-file-size", envInt64("RELAYIUM_MAX_FILE_SIZE", 1<<30), "stored-transfer max single-file size in bytes (default 1 GiB)")
 	nodeTrafficDefault := flag.Int64("node-traffic-default", envInt64("RELAYIUM_NODE_TRAFFIC_DEFAULT", 1<<40), "default monthly relay-traffic cap per official node in bytes, 0 = unlimited (default 1 TiB)")
+	rateLimitDivisor := flag.Int("rate-limit-divisor", int(envInt64("RELAYIUM_RATE_LIMIT_DIVISOR", 1)),
+		"split per-instance abuse thresholds (login lockout, /api/ice, register, /ws, pairing breaker) across N round-robin instances; leave 1 for a single instance or an IP-hash LB (see docs/multi-instance-state-migration.md §7.5)")
 	dailyQuota := flag.Int64("daily-quota", envInt64("RELAYIUM_DAILY_QUOTA", 200<<20), "stored-transfer per-account upload quota per 24h in bytes (default 200 MiB)")
 	fileTTL := flag.Int64("file-ttl", envInt64("RELAYIUM_FILE_TTL", 86400), "stored-transfer default link TTL in seconds (default 1 day)")
 	fileTTLMax := flag.Int64("file-ttl-max", envInt64("RELAYIUM_FILE_TTL_MAX", 604800), "stored-transfer max link TTL in seconds (default 7 days)")
@@ -217,20 +219,26 @@ func main() {
 	// realtime rendezvous. Pure in-memory — works even if the DB is unavailable.
 	pairReg := signal.NewPairRegistry(900, func() int64 { return time.Now().Unix() }) // 15 min
 	go pairReg.Run(context.Background(), time.Minute)
-	pairLimiter := signal.NewRateLimiter(10, time.Minute, func() int64 { return time.Now().Unix() })
+	// div lowers the per-instance thresholds below for a round-robin multi-instance
+	// deployment; 1 (the default, and correct for a single instance or an IP-hash
+	// LB) leaves them unchanged. See account.PerInstanceThreshold / spec §7.5.
+	div := *rateLimitDivisor
+	pairLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(10, div), time.Minute, func() int64 { return time.Now().Unix() })
 	go pairLimiter.Run(context.Background(), time.Minute)
 	// Separate limiter for /ws code-join attempts: 30/min/IP caps brute-force of
 	// the 10^6 code space while allowing a real recipient to reload a few times.
-	wsCodeLimiter := signal.NewRateLimiter(30, time.Minute, func() int64 { return time.Now().Unix() })
+	wsCodeLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(30, div), time.Minute, func() int64 { return time.Now().Unix() })
 	go wsCodeLimiter.Run(context.Background(), time.Minute)
 	// Global (non-per-IP) breaker on INVALID pairing-code join attempts: sheds
 	// brute-force load and signals attacks. It never affects valid-code joins.
-	guessBreaker := signal.NewGuessBreaker(200, time.Minute, 30*time.Second, func() int64 { return time.Now().Unix() })
+	// The breaker is global (not per-IP), so IP-hash routing can't consolidate it
+	// across instances — dividing its trip threshold is the main use of the divisor.
+	guessBreaker := signal.NewGuessBreaker(account.PerInstanceThreshold(200, div), time.Minute, 30*time.Second, func() int64 { return time.Now().Unix() })
 	// H1: /api/ice pairing-code → TURN-credential endpoint. 5/min/IP.
-	iceLimiter := signal.NewRateLimiter(5, time.Minute, func() int64 { return time.Now().Unix() })
+	iceLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(5, div), time.Minute, func() int64 { return time.Now().Unix() })
 	go iceLimiter.Run(context.Background(), time.Minute)
 	// H2a: register endpoint (email-bomb + Sybil surface). 5/min/IP.
-	registerLimiter := signal.NewRateLimiter(5, time.Minute, func() int64 { return time.Now().Unix() })
+	registerLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(5, div), time.Minute, func() int64 { return time.Now().Unix() })
 	go registerLimiter.Run(context.Background(), time.Minute)
 
 	store, dbErr := account.OpenSQLite(*dbPath)
@@ -290,6 +298,7 @@ func main() {
 			mailer = account.NewSMTPMailer(*smtpAddr, *smtpFrom, *smtpUser, *smtpPass)
 		}
 		acct := account.NewService(store, mailer, account.Config{
+			RateLimitDivisor:     div,
 			BaseURL:              *baseURL,
 			SessionTTL:           720 * time.Hour, // 30 days
 			MagicTTL:             15 * time.Minute,

@@ -7,7 +7,7 @@ import (
 )
 
 func TestLoginThrottleLocksAfterThreshold(t *testing.T) {
-	tr := newLoginThrottle()
+	tr := newLoginThrottle(adminLoginMaxFails)
 	now := time.Unix(1_700_000_000, 0)
 	for i := 0; i < adminLoginMaxFails; i++ {
 		if tr.locked("1.2.3.4", now) {
@@ -21,7 +21,7 @@ func TestLoginThrottleLocksAfterThreshold(t *testing.T) {
 }
 
 func TestLoginThrottleUnlocksAfterWindow(t *testing.T) {
-	tr := newLoginThrottle()
+	tr := newLoginThrottle(adminLoginMaxFails)
 	now := time.Unix(1_700_000_000, 0)
 	for i := 0; i < adminLoginMaxFails; i++ {
 		tr.recordFail("1.2.3.4", now)
@@ -33,7 +33,7 @@ func TestLoginThrottleUnlocksAfterWindow(t *testing.T) {
 }
 
 func TestLoginThrottleResetOnSuccess(t *testing.T) {
-	tr := newLoginThrottle()
+	tr := newLoginThrottle(adminLoginMaxFails)
 	now := time.Unix(1_700_000_000, 0)
 	for i := 0; i < adminLoginMaxFails-1; i++ {
 		tr.recordFail("1.2.3.4", now)
@@ -46,7 +46,7 @@ func TestLoginThrottleResetOnSuccess(t *testing.T) {
 }
 
 func TestLoginThrottlePerKey(t *testing.T) {
-	tr := newLoginThrottle()
+	tr := newLoginThrottle(adminLoginMaxFails)
 	now := time.Unix(1_700_000_000, 0)
 	for i := 0; i < adminLoginMaxFails; i++ {
 		tr.recordFail("1.1.1.1", now)
@@ -57,7 +57,7 @@ func TestLoginThrottlePerKey(t *testing.T) {
 }
 
 func TestLoginThrottleEvictsStaleEntries(t *testing.T) {
-	tr := newLoginThrottle()
+	tr := newLoginThrottle(adminLoginMaxFails)
 	now := time.Unix(1_700_000_000, 0)
 	// Key A accumulates sub-threshold failures (count 2, never locked).
 	tr.recordFail("1.1.1.1", now)
@@ -75,7 +75,7 @@ func TestLoginThrottleEvictsStaleEntries(t *testing.T) {
 }
 
 func TestLoginThrottleDecaysCountAfterWindow(t *testing.T) {
-	tr := newLoginThrottle()
+	tr := newLoginThrottle(adminLoginMaxFails)
 	now := time.Unix(1_700_000_000, 0)
 	// Four failures (one below threshold), never locked.
 	for i := 0; i < adminLoginMaxFails-1; i++ {
