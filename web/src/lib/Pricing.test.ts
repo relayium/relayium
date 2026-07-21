@@ -211,6 +211,29 @@ describe("Pricing", () => {
     expect(changeBody).toEqual({ planId: "pro", cycle: "monthly" });
   });
 
+  it("defaults the cycle toggle to the subscriber's current cycle", async () => {
+    const SUB_TIERS = [
+      { id: "free", name: "Free", storageBytes: 1e9, trafficBytes: 1e9, retentionSecs: 86400, priceMonthly: 0, priceYearly: 0, purchasableMonthly: false, purchasableYearly: false },
+      { id: "plus", name: "Plus", storageBytes: 5e9, trafficBytes: 3e11, retentionSecs: 30 * 86400, priceMonthly: 390, priceYearly: 2900, purchasableMonthly: true, purchasableYearly: true },
+    ];
+    const subUser = { id: "u1", email: "sub@example.com", displayName: "", hasPassword: true, planId: "plus", subscriptionStatus: "active", hasBilling: true, billingCycle: "yearly" };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/plans") return { ok: true, status: 200, json: async () => SUB_TIERS };
+      if (url === "/api/me") return { ok: true, status: 200, json: async () => ({ user: subUser }) };
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+    // Seed the session store as a live yearly Plus subscriber before mounting.
+    const { refreshSession } = await import("./auth.svelte");
+    await refreshSession();
+
+    await mountPricing();
+
+    const yearlyBtn = [...target.querySelectorAll(".toggle-btn")].find((b) => /year/i.test(b.textContent ?? ""));
+    expect(yearlyBtn?.classList.contains("active")).toBe(true);
+  });
+
   it("shows a pending-downgrade banner and cancels it via cancel-scheduled-change", async () => {
     const TIERS2 = [
       { id: "free", name: "Free", storageBytes: 1e9, trafficBytes: 1e9, retentionSecs: 86400, priceMonthly: 0, priceYearly: 0, purchasableMonthly: false, purchasableYearly: false },

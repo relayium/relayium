@@ -23,7 +23,9 @@
   const POPULAR_ID = "pro";
 
   let tiers = $state<Tier[]>([]);
-  let cycle = $state<"monthly" | "yearly">("monthly");
+  const initialCycle = (): "monthly" | "yearly" =>
+    session().user?.billingCycle === "yearly" ? "yearly" : "monthly";
+  let cycle = $state<"monthly" | "yearly">(initialCycle());
   let loadError = $state("");
   let checkoutError = $state("");
   let changeMsg = $state("");
