@@ -549,6 +549,72 @@ func TestScheduleDowngradeNoopWhenSamePrice(t *testing.T) {
 	}
 }
 
+func TestScheduleDowngradeFindsTrialingSubscription(t *testing.T) {
+	var listQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/subscriptions"):
+			listQuery = r.URL.RawQuery
+			// A trialing subscription on the OLD price — the old status=active
+			// query would miss it and 500 with "no live subscription".
+			w.Write([]byte(`{"data":[{"id":"sub_t","status":"trialing","schedule":"","items":{"data":[{"price":{"id":"price_pro"}}]}}]}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules":
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("ParseForm: %v", err)
+			}
+			if got := r.Form.Get("from_subscription"); got != "sub_t" {
+				t.Errorf("from_subscription = %q, want sub_t", got)
+			}
+			w.Write([]byte(`{"id":"sub_sched_1","phases":[{"start_date":1000,"end_date":2000,"items":[{"price":"price_pro"}]}]}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules/sub_sched_1":
+			w.Write([]byte(`{"id":"sub_sched_1"}`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	c := NewStripeClient("sk_test", "whsec", "")
+	c.base = srv.URL
+	if err := c.ScheduleDowngrade(context.Background(), "cus_1", "price_plus"); err != nil {
+		t.Fatalf("trialing subscription should be schedulable: %v", err)
+	}
+	if strings.Contains(listQuery, "status=active") || !strings.Contains(listQuery, "status=all") {
+		t.Fatalf("subscription list must query status=all, got %q", listQuery)
+	}
+}
+
+func TestReleaseScheduleFindsTrialingSubscription(t *testing.T) {
+	var listQuery string
+	var sawRelease bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/subscriptions"):
+			listQuery = r.URL.RawQuery
+			// A trialing subscription with a pending schedule — the old
+			// status=active query would miss it and treat it as "nothing to
+			// release" instead of actually releasing the schedule.
+			w.Write([]byte(`{"data":[{"id":"sub_t","status":"trialing","schedule":"sub_sched_1"}]}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules/sub_sched_1/release":
+			sawRelease = true
+			w.Write([]byte(`{"id":"sub_sched_1","status":"released"}`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	c := NewStripeClient("sk_test", "whsec", "")
+	c.base = srv.URL
+	if err := c.ReleaseSchedule(context.Background(), "cus_1"); err != nil {
+		t.Fatalf("trialing subscription's schedule should be releasable: %v", err)
+	}
+	if strings.Contains(listQuery, "status=active") || !strings.Contains(listQuery, "status=all") {
+		t.Fatalf("subscription list must query status=all, got %q", listQuery)
+	}
+	if !sawRelease {
+		t.Fatal("expected a release POST")
+	}
+}
+
 func TestReleaseScheduleRequestShape(t *testing.T) {
 	var sawRelease bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

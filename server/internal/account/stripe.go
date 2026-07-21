@@ -286,7 +286,13 @@ func (c *stripeClient) ChangeSubscriptionPlan(ctx context.Context, customerID, n
 	q := url.Values{}
 	q.Set("customer", customerID)
 	q.Set("status", "all")
-	q.Set("limit", "1")
+	// status=all can return several subscriptions (e.g. an older live one plus
+	// a newer canceled one); Stripe returns them newest-first, so a limit of 1
+	// could hand back a non-live subscription while the live one goes
+	// unseen. 100 is Stripe's max page size — a customer never has that many
+	// subscriptions, so no pagination is needed, and the loop below still
+	// scans for the first live one.
+	q.Set("limit", "100")
 	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions?"+q.Encode(), nil)
 	if err != nil {
 		return err
@@ -352,7 +358,9 @@ func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPri
 	q := url.Values{}
 	q.Set("customer", customerID)
 	q.Set("status", "all")
-	q.Set("limit", "1")
+	// See ChangeSubscriptionPlan's comment: limit must be wide enough to
+	// contain the live subscription even when a newer non-live one exists.
+	q.Set("limit", "100")
 	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions?"+q.Encode(), nil)
 	if err != nil {
 		return err
@@ -444,7 +452,9 @@ func (c *stripeClient) ReleaseSchedule(ctx context.Context, customerID string) e
 	q := url.Values{}
 	q.Set("customer", customerID)
 	q.Set("status", "all")
-	q.Set("limit", "1")
+	// See ChangeSubscriptionPlan's comment: limit must be wide enough to
+	// contain the live subscription even when a newer non-live one exists.
+	q.Set("limit", "100")
 	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions?"+q.Encode(), nil)
 	if err != nil {
 		return err
