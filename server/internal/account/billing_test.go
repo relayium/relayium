@@ -189,10 +189,10 @@ func TestBillingCheckoutHappyPath(t *testing.T) {
 	if fb.lastCheckout.ClientRefUserID == "" {
 		t.Fatal("want non-empty ClientRefUserID")
 	}
-	if fb.lastCheckout.SuccessURL != "http://example.test/?billing=success" {
+	if fb.lastCheckout.SuccessURL != "http://example.test/me?billing=success" {
 		t.Fatalf("unexpected success url %q", fb.lastCheckout.SuccessURL)
 	}
-	if fb.lastCheckout.CancelURL != "http://example.test/?billing=cancel" {
+	if fb.lastCheckout.CancelURL != "http://example.test/me?billing=cancel" {
 		t.Fatalf("unexpected cancel url %q", fb.lastCheckout.CancelURL)
 	}
 }
@@ -221,6 +221,39 @@ func TestBillingCheckoutYearlyCycle(t *testing.T) {
 	}
 	if fb.lastCheckout.PriceID != "price_yearly_pro" {
 		t.Fatalf("want yearly price id, got %q", fb.lastCheckout.PriceID)
+	}
+}
+
+// TestCheckoutSuccessURLReturnsToMe asserts Stripe Checkout sends the user
+// back to /me, not the home page, on both success and cancel — they came
+// from their account/plan state and expect to land back there.
+func TestCheckoutSuccessURLReturnsToMe(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	fb := &fakeBiller{checkoutURL: "https://checkout.stripe.com/x"}
+	svc.biller = fb
+	mustPlan(t, store, Plan{
+		ID: "pro", Name: "Pro", Active: true,
+		StripePriceMonthlyID: "price_monthly_pro",
+		StripePriceYearlyID:  "price_yearly_pro",
+	})
+	cookie := loginCookie(t, ts, mail, "checkout-returns-to-me@example.com")
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/billing/checkout",
+		strings.NewReader(`{"planId":"pro","cycle":"monthly"}`))
+	req.AddCookie(cookie)
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	if !strings.HasSuffix(fb.lastCheckout.SuccessURL, "/me?billing=success") {
+		t.Fatalf("success_url must land on /me, got %q", fb.lastCheckout.SuccessURL)
+	}
+	if !strings.HasSuffix(fb.lastCheckout.CancelURL, "/me?billing=cancel") {
+		t.Fatalf("cancel_url must land on /me, got %q", fb.lastCheckout.CancelURL)
 	}
 }
 

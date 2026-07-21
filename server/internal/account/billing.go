@@ -50,8 +50,8 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 		CustomerID:      u.StripeCustomerID,
 		CustomerEmail:   u.Email,
 		ClientRefUserID: u.ID,
-		SuccessURL:      s.cfg.BaseURL + "/?billing=success",
-		CancelURL:       s.cfg.BaseURL + "/?billing=cancel",
+		SuccessURL:      s.cfg.BaseURL + "/me?billing=success",
+		CancelURL:       s.cfg.BaseURL + "/me?billing=cancel",
 	})
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
