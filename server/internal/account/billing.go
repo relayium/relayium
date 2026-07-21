@@ -227,6 +227,83 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "effective": effective})
 }
 
+// handleBillingPreview reports what changing to {planId,cycle} would do
+// BEFORE the user commits, so the confirmation UI can show it: for an
+// upgrade, the immediate prorated charge (via Stripe's upcoming-invoice
+// preview) and the next full amount/cycle; for a downgrade, that it takes
+// effect at period end with no charge now. Same auth/preconditions as
+// change-plan (404 unconfigured, 409 no Stripe-sourced subscription); unlike
+// change-plan this performs no state change and never touches Stripe except
+// the read-only preview call. All amounts are cents.
+func (s *Service) handleBillingPreview(w http.ResponseWriter, r *http.Request, u User) {
+	if s.biller == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	var in struct {
+		PlanID string `json:"planId"`
+		Cycle  string `json:"cycle"` // "monthly" | "yearly"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if u.StripeCustomerID == "" || u.PlanSource != "stripe" {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "no_active_subscription"})
+		return
+	}
+	plan, ok, err := s.store.GetPlan(r.Context(), in.PlanID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	wantCycle := "monthly"
+	if in.Cycle == "yearly" {
+		wantCycle = "yearly"
+	}
+	priceID := plan.StripePriceMonthlyID
+	nextAmount := plan.PriceMonthly
+	if wantCycle == "yearly" {
+		priceID = plan.StripePriceYearlyID
+		nextAmount = plan.PriceYearly
+	}
+	if priceID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "plan not purchasable"})
+		return
+	}
+	// Upgrade vs downgrade decides both timing and whether we bother asking
+	// Stripe for a proration preview; see resolveChange for the rule. If the
+	// current plan can't be resolved, treat it as an upgrade (matches
+	// handleBillingChangePlan's fallback).
+	downgrade := false
+	if cur, ok, err := s.store.GetPlan(r.Context(), u.PlanID); err == nil && ok {
+		downgrade = resolveChange(cur, plan, wantCycle)
+	}
+	resp := map[string]any{
+		"effective":            "now",
+		"immediateChargeCents": int64(0),
+		"nextAmountCents":      nextAmount,
+		"nextCycle":            wantCycle,
+		"effectiveDate":        u.SubscriptionEnd,
+	}
+	if downgrade {
+		resp["effective"] = "period_end"
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+	cents, err := s.biller.PreviewChange(r.Context(), u.StripeCustomerID, priceID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	resp["immediateChargeCents"] = cents
+	writeJSON(w, http.StatusOK, resp)
+}
+
 // handleBillingCancelScheduledChange cancels a pending period-end downgrade,
 // releasing its Stripe schedule so the subscription stays on the current tier.
 // 404 unconfigured; 409 for a non-Stripe subscription; a no-op 200 when nothing

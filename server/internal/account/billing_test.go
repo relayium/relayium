@@ -546,6 +546,96 @@ func TestBillingChangePlanReleasesPendingScheduleThenUpgrades(t *testing.T) {
 	}
 }
 
+// previewPlan POSTs /api/billing/preview and returns the raw response.
+func previewPlan(t *testing.T, ts *httptest.Server, cookie *http.Cookie, body string) *http.Response {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/billing/preview", strings.NewReader(body))
+	req.AddCookie(cookie)
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp
+}
+
+// postJSONBody POSTs a JSON body to path and decodes the JSON response into a
+// map, mirroring getJSON's GET+decode pattern for POST endpoints.
+func postJSONBody(t *testing.T, ts *httptest.Server, cookie *http.Cookie, path, body string) map[string]any {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+path, strings.NewReader(body))
+	req.AddCookie(cookie)
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatalf("post %s: %v", path, err)
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	decodeJSON(t, resp, &out)
+	return out
+}
+
+func TestBillingPreviewUpgradeShowsImmediateCharge(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	fb := &fakeBiller{previewCents: 734}
+	svc.biller = fb
+	mustTwoPlans(t, store)
+	email := "preview-up@example.com"
+	cookie := loginCookie(t, ts, mail, email)
+	subscribeUser(t, store, mustUserID(t, store, email), "cus_1", "plus")
+
+	body := postJSONBody(t, ts, cookie, "/api/billing/preview", `{"planId":"pro","cycle":"yearly"}`)
+	if body["effective"] != "now" {
+		t.Fatalf("upgrade should be effective now, got %v", body["effective"])
+	}
+	if body["immediateChargeCents"].(float64) != 734 {
+		t.Fatalf("immediate charge: got %v", body["immediateChargeCents"])
+	}
+	if body["nextCycle"] != "yearly" {
+		t.Fatalf("nextCycle: got %v", body["nextCycle"])
+	}
+	if fb.previewCalls != 1 || fb.lastPreviewPrice != "price_pro_y" {
+		t.Fatalf("want PreviewChange(price_pro_y) once, got calls=%d price=%q", fb.previewCalls, fb.lastPreviewPrice)
+	}
+}
+
+func TestBillingPreviewDowngradeIsPeriodEndNoCharge(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	fb := &fakeBiller{previewCents: 999} // must be ignored on the downgrade path
+	svc.biller = fb
+	mustTwoPlans(t, store)
+	email := "preview-down@example.com"
+	cookie := loginCookie(t, ts, mail, email)
+	subscribeUser(t, store, mustUserID(t, store, email), "cus_1", "pro")
+
+	body := postJSONBody(t, ts, cookie, "/api/billing/preview", `{"planId":"plus","cycle":"monthly"}`)
+	if body["effective"] != "period_end" {
+		t.Fatalf("downgrade should be period_end, got %v", body["effective"])
+	}
+	if body["immediateChargeCents"].(float64) != 0 {
+		t.Fatalf("downgrade must not charge now, got %v", body["immediateChargeCents"])
+	}
+	// subscribeUser stamps the current period end at 1900000000.
+	if body["effectiveDate"].(float64) != 1900000000 {
+		t.Fatalf("effectiveDate should be the current period end, got %v", body["effectiveDate"])
+	}
+	if fb.previewCalls != 0 {
+		t.Fatalf("PreviewChange must not be called on the downgrade path, got %d calls", fb.previewCalls)
+	}
+}
+
+func TestBillingPreviewNoSubscription409(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	svc.biller = &fakeBiller{}
+	mustTwoPlans(t, store)
+	// A logged-in but un-subscribed (free) user has no customer id.
+	cookie := loginCookie(t, ts, mail, "preview-nosub@example.com")
+	resp := previewPlan(t, ts, cookie, `{"planId":"pro","cycle":"monthly"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("free user preview should 409, got %d", resp.StatusCode)
+	}
+}
+
 func TestBillingPortalUnconfigured404(t *testing.T) {
 	ts, _, _, mail := newBillingServer(t)
 	cookie := loginCookie(t, ts, mail, "portal-unconfigured@example.com")

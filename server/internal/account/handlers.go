@@ -160,6 +160,7 @@ func (s *Service) routeMux() *http.ServeMux {
 	// /api/files/{id}/meta) so the pricing UI can render signed out.
 	mux.HandleFunc("POST /api/billing/checkout", s.RequireSession(s.handleBillingCheckout))
 	mux.HandleFunc("POST /api/billing/change-plan", s.RequireSession(s.handleBillingChangePlan))
+	mux.HandleFunc("POST /api/billing/preview", s.RequireSession(s.handleBillingPreview))
 	mux.HandleFunc("POST /api/billing/cancel-scheduled-change", s.RequireSession(s.handleBillingCancelScheduledChange))
 	mux.HandleFunc("POST /api/billing/portal", s.RequireSession(s.handleBillingPortal))
 	mux.HandleFunc("GET /api/plans", s.handlePublicPlans)
