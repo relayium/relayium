@@ -392,11 +392,19 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	}
 	n, err := io.Copy(w, rc)
 	if err != nil || n != sf.Size-start {
-		// Incomplete delivery (client hung up / network hiccup). For a limited
-		// file, release the claim so the owner can retry rather than losing a
-		// download to a transient failure. Use a fresh context: r.Context() is
-		// likely already cancelled, which is what aborted the copy.
-		if limited {
+		// Incomplete delivery (client hung up / network hiccup). Refund the claim
+		// ONLY when nothing was delivered (n == 0): a genuine connect-then-drop
+		// that leaked no content shouldn't cost the owner a download. Once ANY
+		// bytes were sent, the slot is spent — otherwise a link/key holder could
+		// drain all-but-the-last frame and RST on every request, so the slot was
+		// always released, download_count never advanced, and a burn/limited file
+		// stayed alive to be pulled an unbounded number of times. The stored blob
+		// is chunk-AEAD, so partial bytes ARE usable plaintext; treating a
+		// near-complete read as "free" is exactly the bypass. A flaky mid-stream
+		// failure therefore spends the download — the download-once guarantee wins
+		// over a mid-transfer retry for limited files. Fresh context: r.Context()
+		// is likely already cancelled, which is what aborted the copy.
+		if limited && n == 0 {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			_ = s.store.ReleaseDownloadSlot(ctx, sf.ID)
 			cancel()
