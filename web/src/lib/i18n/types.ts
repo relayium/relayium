@@ -184,6 +184,15 @@ export interface Messages {
     portalError: string; // billing-portal open failure
     checkoutSuccess: string; // banner after Stripe Checkout success redirect
     checkoutCanceled: string; // banner after Stripe Checkout cancel redirect
+    // PlanCard info-card redesign (Task 4).
+    cycleMonthly: string; // 周期徽章：月付
+    cycleYearly: string; // 周期徽章：年付
+    changePlan: string; // 会员卡 CTA：更改套餐（可升可降可换周期）
+    renewsOn: (date: string) => string; // active：下次续费 {date}
+    trialEndsOn: (date: string) => string; // trialing：试用中 · {date} 到期
+    pastDueNotice: string; // past_due：扣款失败 · 请更新支付方式
+    canceledUntil: (date: string) => string; // canceled：已取消 · {date} 前有效
+    scheduledDowngradeRow: (name: string, date: string) => string; // 已排期：{date} 期末降到 {name}
   };
   // Standalone /pricing marketing page (PricingPage.svelte).
   pricingPage: {

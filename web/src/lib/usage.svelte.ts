@@ -25,6 +25,10 @@ export interface PlanInfo {
   trafficBytes: number; // 0 = 无限；这是标称月上限，不是折算后的实际额度
   retentionSecs: number; // 0 = 永久保留
   priceMonthly: number; // 美分
+  priceYearly: number; // 美分
+  billingCycle?: string; // 'monthly' | 'yearly' | ''（未知）
+  scheduledPlanId?: string; // 排期期末降级的目标档 id，'' 无
+  scheduledPlanName?: string; // 该目标档的展示名
   isTop: boolean; // 已在最高档：隐藏升级引导
   subscriptionStatus: string; // '' = 从未结账
   subscriptionEnd: number; // unix 秒；0 = 无订阅

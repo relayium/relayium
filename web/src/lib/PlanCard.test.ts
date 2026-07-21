@@ -15,7 +15,9 @@ function plan(over: Record<string, unknown> = {}) {
   return {
     id: "free", name: "Free", storageBytes: 100 * 1024 * 1024,
     trafficBytes: 1024 * 1024 * 1024, retentionSecs: 3 * 86400,
-    priceMonthly: 0, isTop: false, subscriptionStatus: "", subscriptionEnd: 0,
+    priceMonthly: 0, priceYearly: 0, billingCycle: "",
+    scheduledPlanId: "", scheduledPlanName: "",
+    isTop: false, subscriptionStatus: "", subscriptionEnd: 0,
     ...over,
   };
 }
@@ -69,21 +71,22 @@ describe("PlanCard", () => {
     expect(target.querySelector(".perks")?.textContent).toBe(
       "100 MB storage · 1.0 GB/mo traffic · Files kept 3 days",
     );
-    expect(html).toContain("Running out of room?"); // 引导句
     const btns = buttons();
     expect(btns).toContain("Upgrade");
     expect(btns).not.toContain("Manage billing");
   });
 
   it("付费档额外给出管理订阅入口", async () => {
+    // 免费档以外、已在付费的档位：CTA 从"Upgrade"换成"Change plan"（可升可降可
+    // 换周期，不再只是单向的"升级"）。
     await mountWith(plan({ id: "pro", name: "Pro", priceMonthly: 890, subscriptionStatus: "active" }));
     const btns = buttons();
-    expect(btns).toContain("Upgrade");
+    expect(btns).toContain("Change plan");
     expect(btns).toContain("Manage billing");
   });
 
   it("最高档不再引导升级", async () => {
-    await mountWith(plan({ id: "max", name: "Max", isTop: true, subscriptionStatus: "active" }));
+    await mountWith(plan({ id: "max", name: "Max", priceMonthly: 2900, isTop: true, subscriptionStatus: "active" }));
     const btns = buttons();
     // 已经买到顶了还催升级是负体验，也没有目标页可去。
     expect(btns).not.toContain("Upgrade");
@@ -116,6 +119,33 @@ describe("PlanCard", () => {
     expect(btns).not.toContain("Manage billing"); // usage 说没订阅
     expect(target.textContent).toContain("Free");
     expect(target.textContent).not.toContain("active");
+  });
+
+  it("yearly paid plan shows the yearly badge, price and renewal date", async () => {
+    await mountWith(plan({
+      id: "plus", name: "Plus", priceMonthly: 199, priceYearly: 1999,
+      billingCycle: "yearly", subscriptionStatus: "active", subscriptionEnd: 1789999999,
+    }));
+    const text = target.textContent ?? "";
+    expect(text).toContain("Yearly");
+    expect(text).toContain("$19.99");
+    expect(text).toMatch(/Renews/);
+    expect(buttons()).toContain("Change plan");
+  });
+
+  it("shows the scheduled-downgrade row when one is pending", async () => {
+    await mountWith(plan({
+      id: "plus", name: "Plus", billingCycle: "monthly",
+      subscriptionStatus: "active", subscriptionEnd: 1789999999,
+      scheduledPlanId: "free", scheduledPlanName: "Free",
+    }));
+    expect(target.textContent ?? "").toMatch(/downgrades to Free/);
+  });
+
+  it("free plan shows no cycle badge and only an upgrade CTA", async () => {
+    await mountWith(plan()); // free defaults
+    expect(target.textContent ?? "").not.toContain("Yearly");
+    expect(buttons()).not.toContain("Change plan");
   });
 
   it("取不到套餐时整块不渲染", async () => {

@@ -39,6 +39,33 @@
       : "",
   );
 
+  // 信息卡的四段派生态：是否付费档、周期徽章、价格行、状态行、排期降级行。
+  const isPaid = $derived(!!plan && plan.priceMonthly > 0);
+  const cycleLabel = $derived(
+    plan?.billingCycle === "yearly" ? t.billing.cycleYearly
+    : plan?.billingCycle === "monthly" ? t.billing.cycleMonthly : "",
+  );
+  const priceLine = $derived(() => {
+    if (!plan || !isPaid) return "";
+    const cents = plan.billingCycle === "yearly" ? plan.priceYearly : plan.priceMonthly;
+    const suffix = plan.billingCycle === "yearly" ? t.billing.perYear : t.billing.perMonth;
+    return `$${(cents / 100).toFixed(2)}${suffix}`;
+  });
+  const statusLine = $derived(() => {
+    if (!plan) return "";
+    switch (plan.subscriptionStatus) {
+      case "active": return t.billing.renewsOn(subEnd);
+      case "trialing": return t.billing.trialEndsOn(subEnd);
+      case "past_due": return t.billing.pastDueNotice;
+      case "canceled": return t.billing.canceledUntil(subEnd);
+      default: return "";
+    }
+  });
+  const scheduledLine = $derived(
+    plan?.scheduledPlanId && plan.scheduledPlanName
+      ? t.billing.scheduledDowngradeRow(plan.scheduledPlanName, subEnd) : "",
+  );
+
   // 照抄 Account.svelte 的 onManageBilling：跳 Stripe 客户门户。
   async function onManageBilling() {
     if (portalBusy) return;
@@ -64,26 +91,25 @@
   <section class="plan-card">
     <div class="head">
       <h3>{t.billing.currentPlan}</h3>
-      <span class="badge">{plan.name}</span>
+      <span class="badge">{plan.name}{#if cycleLabel} · {cycleLabel}{/if}</span>
     </div>
+
+    {#if priceLine()}<p class="price">{priceLine()}{#if statusLine()} · {statusLine()}{/if}</p>
+    {:else if statusLine()}<p class="sub">{statusLine()}</p>{/if}
 
     <p class="perks">{t.me.plan.perks(cap(plan.storageBytes), cap(plan.trafficBytes), retention)}</p>
 
-    {#if plan.subscriptionStatus}
-      <p class="sub">{plan.subscriptionStatus}{#if subEnd} · {subEnd}{/if}</p>
-    {/if}
-
-    {#if plan.isTop}
-      <p class="hint">{t.me.plan.topTier}</p>
-    {:else}
-      <p class="hint">{t.me.plan.hint}</p>
-    {/if}
+    {#if scheduledLine}<p class="sched">⏳ {scheduledLine}</p>{/if}
 
     <div class="actions">
-      {#if !plan.isTop}
-        <button class="btn btn-primary" onclick={() => navigate("pricing")}>{t.billing.upgrade}</button>
+      {#if plan.isTop}
+        <span class="hint">{t.me.plan.topTier}</span>
+      {:else}
+        <button class="btn btn-primary" onclick={() => navigate("pricing")}>
+          {isPaid ? t.billing.changePlan : t.billing.upgrade}
+        </button>
       {/if}
-      {#if plan.subscriptionStatus}
+      {#if isPaid}
         <button class="btn" disabled={portalBusy} onclick={onManageBilling}>{t.billing.manageBilling}</button>
       {/if}
     </div>
@@ -113,8 +139,10 @@
     color: var(--accent);
     font-size: var(--fs-xs);
   }
+  .price { margin: var(--space-2) 0 0; color: var(--text-h); font-weight: 600; }
   .perks { margin: var(--space-3) 0 0; color: var(--text-h); }
   .sub { margin: var(--space-2) 0 0; color: var(--text); font-size: var(--fs-xs); }
+  .sched { margin: var(--space-3) 0 0; color: var(--text); font-size: var(--fs-xs); }
   .hint { margin: var(--space-3) 0 0; color: var(--text); font-size: var(--fs-xs); }
   .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
   .err { margin: var(--space-2) 0 0; color: var(--danger); font-size: var(--fs-xs); }
