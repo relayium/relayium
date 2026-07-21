@@ -140,6 +140,13 @@ const pt: Messages = {
     changeError: "Não foi possível alterar seu plano. Tente novamente.",
     changeSuccess: "Plano atualizado — obrigado!",
     downgradeScheduled: "Downgrade agendado — a mudança ocorrerá no fim deste período de faturamento.",
+    previewLoading: "Calculando…",
+    upgradeSummary: (charge, next, cycle, date) =>
+      `Você será cobrado ${charge} agora, e depois ${next}/${cycle} a partir de ${date}.`,
+    downgradeSummary: (date) => `Entra em vigor em ${date}, no fim do período atual. Você mantém o plano atual até lá — sem reembolso.`,
+    confirmChange: "Confirmar alteração",
+    cancel: "Cancelar",
+    previewError: "Não foi possível carregar a prévia da alteração. Tente novamente.",
     scheduledNote: (plan) => `A mudança para ${plan} está agendada para o fim deste período de faturamento.`,
     scheduledBadge: "Agendado",
     keepCurrentPlan: "Manter o plano atual",

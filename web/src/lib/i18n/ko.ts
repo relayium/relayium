@@ -140,6 +140,13 @@ const ko: Messages = {
     changeError: "요금제를 변경하지 못했습니다. 다시 시도해 주세요.",
     changeSuccess: "요금제가 업데이트되었습니다. 감사합니다!",
     downgradeScheduled: "다운그레이드가 예약되었습니다 — 이번 청구 기간이 끝날 때 전환됩니다.",
+    previewLoading: "계산 중…",
+    upgradeSummary: (charge, next, cycle, date) =>
+      `지금 ${charge}가 청구되고, ${date}부터는 ${next}/${cycle}가 청구됩니다.`,
+    downgradeSummary: (date) => `${date} 청구 기간 종료 시 적용됩니다. 그때까지는 현재 요금제가 유지되며 환불은 없습니다.`,
+    confirmChange: "변경 확인",
+    cancel: "취소",
+    previewError: "변경 미리보기를 불러오지 못했습니다. 다시 시도해 주세요.",
     scheduledNote: (plan) => `이번 청구 기간이 끝날 때 ${plan}(으)로 전환되도록 예약되어 있습니다.`,
     scheduledBadge: "예약됨",
     keepCurrentPlan: "현재 요금제 유지",

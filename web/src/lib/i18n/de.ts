@@ -140,6 +140,13 @@ const de: Messages = {
     changeError: "Tarif konnte nicht geändert werden. Bitte versuchen Sie es erneut.",
     changeSuccess: "Tarif aktualisiert – danke!",
     downgradeScheduled: "Herabstufung geplant – der Wechsel erfolgt zum Ende dieses Abrechnungszeitraums.",
+    previewLoading: "Wird berechnet…",
+    upgradeSummary: (charge, next, cycle, date) =>
+      `Ihnen werden jetzt ${charge} berechnet, danach ${next}/${cycle} ab dem ${date}.`,
+    downgradeSummary: (date) => `Wird am ${date} zum Ende des Abrechnungszeitraums wirksam. Bis dahin behalten Sie Ihren aktuellen Tarif – ohne Erstattung.`,
+    confirmChange: "Änderung bestätigen",
+    cancel: "Abbrechen",
+    previewError: "Die Änderungsvorschau konnte nicht geladen werden. Bitte versuchen Sie es erneut.",
     scheduledNote: (plan) => `Der Wechsel zu ${plan} ist zum Ende dieses Abrechnungszeitraums geplant.`,
     scheduledBadge: "Geplant",
     keepCurrentPlan: "Aktuellen Tarif behalten",

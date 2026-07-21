@@ -140,6 +140,13 @@ const fr: Messages = {
     changeError: "Impossible de changer de forfait. Veuillez réessayer.",
     changeSuccess: "Forfait mis à jour — merci !",
     downgradeScheduled: "Rétrogradation programmée — le changement aura lieu à la fin de cette période de facturation.",
+    previewLoading: "Calcul en cours…",
+    upgradeSummary: (charge, next, cycle, date) =>
+      `Vous serez facturé ${charge} maintenant, puis ${next}/${cycle} à partir du ${date}.`,
+    downgradeSummary: (date) => `Prend effet le ${date}, à la fin de la période en cours. Vous conservez votre forfait actuel jusque-là — sans remboursement.`,
+    confirmChange: "Confirmer le changement",
+    cancel: "Annuler",
+    previewError: "Impossible de charger l'aperçu du changement. Veuillez réessayer.",
     scheduledNote: (plan) => `Le passage à ${plan} est programmé pour la fin de cette période de facturation.`,
     scheduledBadge: "Programmé",
     keepCurrentPlan: "Conserver le forfait actuel",

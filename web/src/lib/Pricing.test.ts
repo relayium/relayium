@@ -168,7 +168,7 @@ describe("Pricing", () => {
     expect(window.location.href).toBe("");
   });
 
-  it("a subscribed user upgrades via change-plan (not checkout) and sees their current tier", async () => {
+  it("a subscribed user upgrades via a previewed change-plan modal (not checkout) and sees their current tier", async () => {
     const SUB_TIERS = [
       { id: "free", name: "Free", storageBytes: 1e9, trafficBytes: 1e9, retentionSecs: 86400, priceMonthly: 0, priceYearly: 0, purchasableMonthly: false, purchasableYearly: false },
       { id: "plus", name: "Plus", storageBytes: 5e9, trafficBytes: 3e11, retentionSecs: 30 * 86400, priceMonthly: 390, priceYearly: 2900, purchasableMonthly: true, purchasableYearly: true },
@@ -179,11 +179,13 @@ describe("Pricing", () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (url === "/api/plans") return { ok: true, status: 200, json: async () => SUB_TIERS };
       if (url === "/api/me") return { ok: true, status: 200, json: async () => ({ user: subUser }) };
+      if (url === "/api/billing/preview") {
+        return { ok: true, status: 200, json: async () => ({ effective: "now", immediateChargeCents: 500, nextAmountCents: 890, nextCycle: "monthly", effectiveDate: 1789999999 }) };
+      }
       if (url === "/api/billing/change-plan") { changeBody = JSON.parse(init!.body as string); return { ok: true, status: 200, json: async () => ({ status: "ok" }) }; }
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
-    vi.stubGlobal("confirm", vi.fn(() => true));
 
     // Seed the session store as a live Plus subscriber before mounting.
     const { refreshSession } = await import("./auth.svelte");
@@ -199,10 +201,22 @@ describe("Pricing", () => {
     expect(plusCard.textContent).toContain("Current plan");
     expect(plusCard.querySelector("button.btn-primary")).toBeNull();
 
-    // The higher tier offers an Upgrade that hits change-plan (in-app), not checkout.
+    // The higher tier offers an Upgrade that opens the previewed change-plan
+    // modal (in-app), not a fresh checkout.
     const upBtn = proCard.querySelector("button.btn-primary") as HTMLButtonElement;
     expect(upBtn.textContent?.trim()).toBe("Upgrade");
     upBtn.click();
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/billing/preview", expect.objectContaining({ method: "POST" }));
+
+    // Confirming inside the modal is what actually hits change-plan.
+    const confirmBtn = Array.from(target.querySelectorAll(".modal button")).find((b) => b.textContent?.trim() === "Confirm change") as HTMLButtonElement;
+    expect(confirmBtn).toBeTruthy();
+    confirmBtn.click();
     await new Promise((r) => setTimeout(r, 0));
     flushSync();
 

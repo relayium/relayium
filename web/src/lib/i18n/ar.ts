@@ -140,6 +140,13 @@ const ar: Messages = {
     changeError: "تعذّر تغيير باقتك. يرجى المحاولة مرة أخرى.",
     changeSuccess: "تم تحديث الباقة — شكرًا لك!",
     downgradeScheduled: "تمت جدولة التخفيض — سيتم التبديل في نهاية دورة الفوترة الحالية.",
+    previewLoading: "جارٍ الحساب…",
+    upgradeSummary: (charge, next, cycle, date) =>
+      `سيُخصم منك ${charge} الآن، ثم ${next}/${cycle} ابتداءً من ${date}.`,
+    downgradeSummary: (date) => `يسري هذا في ${date} مع نهاية الدورة الحالية. تحتفظ بباقتك الحالية حتى ذلك الحين — دون أي استرداد.`,
+    confirmChange: "تأكيد التغيير",
+    cancel: "إلغاء",
+    previewError: "تعذّر تحميل معاينة التغيير. يرجى المحاولة مرة أخرى.",
     scheduledNote: (plan) => `من المقرر التبديل إلى ${plan} في نهاية دورة الفوترة الحالية.`,
     scheduledBadge: "مجدوَل",
     keepCurrentPlan: "الاحتفاظ بالباقة الحالية",

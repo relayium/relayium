@@ -140,6 +140,13 @@ const es: Messages = {
     changeError: "No se pudo cambiar tu plan. Inténtalo de nuevo.",
     changeSuccess: "Plan actualizado, ¡gracias!",
     downgradeScheduled: "Cambio a plan inferior programado: se aplicará al final de este período de facturación.",
+    previewLoading: "Calculando…",
+    upgradeSummary: (charge, next, cycle, date) =>
+      `Se te cobrará ${charge} ahora, y luego ${next}/${cycle} a partir del ${date}.`,
+    downgradeSummary: (date) => `Se aplica el ${date}, al final del período actual. Mantienes tu plan actual hasta entonces, sin reembolso.`,
+    confirmChange: "Confirmar cambio",
+    cancel: "Cancelar",
+    previewError: "No se pudo cargar la vista previa del cambio. Inténtalo de nuevo.",
     scheduledNote: (plan) => `Tienes programado el cambio a ${plan} al final de este período de facturación.`,
     scheduledBadge: "Programado",
     keepCurrentPlan: "Mantener el plan actual",

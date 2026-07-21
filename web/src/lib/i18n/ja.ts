@@ -140,6 +140,13 @@ const ja: Messages = {
     changeError: "プランを変更できませんでした。もう一度お試しください。",
     changeSuccess: "プランを更新しました。ありがとうございます！",
     downgradeScheduled: "ダウングレードを予約しました——今回の請求期間の終了時に切り替わります。",
+    previewLoading: "計算中…",
+    upgradeSummary: (charge, next, cycle, date) =>
+      `今すぐ${charge}が請求され、${date}以降は${next}/${cycle}になります。`,
+    downgradeSummary: (date) => `${date}の請求期間終了時に適用されます。それまでは現在のプランのままで、返金はありません。`,
+    confirmChange: "変更を確定",
+    cancel: "キャンセル",
+    previewError: "変更内容の確認を読み込めませんでした。もう一度お試しください。",
     scheduledNote: (plan) => `今回の請求期間の終了時に ${plan} へ切り替わる予約が入っています。`,
     scheduledBadge: "予約済み",
     keepCurrentPlan: "現在のプランを継続",

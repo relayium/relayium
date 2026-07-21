@@ -140,6 +140,13 @@ const zh: Messages = {
     changeError: "套餐切换失败，请重试。",
     changeSuccess: "套餐已更新，谢谢！",
     downgradeScheduled: "降级已安排——将在本计费周期结束时切换。",
+    previewLoading: "正在计算…",
+    upgradeSummary: (charge, next, cycle, date) =>
+      `现在扣款 ${charge}，之后自 ${date} 起 ${next}/${cycle}。`,
+    downgradeSummary: (date) => `将于 ${date} 期末生效。在那之前保持当前套餐，不退款。`,
+    confirmChange: "确认变更",
+    cancel: "取消",
+    previewError: "加载变更预览失败，请重试。",
     scheduledNote: (plan) => `已安排在本计费周期结束时切换到 ${plan}。`,
     scheduledBadge: "已安排",
     keepCurrentPlan: "保留当前套餐",

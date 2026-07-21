@@ -140,6 +140,13 @@ const en: Messages = {
     changeError: "Couldn't change your plan. Please try again.",
     changeSuccess: "Plan updated — thanks!",
     downgradeScheduled: "Downgrade scheduled — you'll switch at the end of this billing period.",
+    previewLoading: "Calculating…",
+    upgradeSummary: (charge, next, cycle, date) =>
+      `You'll be charged ${charge} now, then ${next}/${cycle} starting ${date}.`,
+    downgradeSummary: (date) => `Takes effect ${date} at period end. You keep your current plan until then — no refund.`,
+    confirmChange: "Confirm change",
+    cancel: "Cancel",
+    previewError: "Couldn't load the change preview. Please try again.",
     scheduledNote: (plan) => `You're scheduled to switch to ${plan} at the end of this billing period.`,
     scheduledBadge: "Scheduled",
     keepCurrentPlan: "Keep current plan",

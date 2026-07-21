@@ -4,6 +4,7 @@
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { session, refreshSession } from "./auth.svelte";
   import { planRelation } from "./plan-relation";
+  import ChangePlanModal from "./ChangePlanModal.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
 
@@ -30,6 +31,7 @@
   let checkoutError = $state("");
   let changeMsg = $state("");
   let busyPlanId = $state<string | null>(null);
+  let modalTier = $state<Tier | null>(null);
 
   // Current subscription context (drives per-tier CTA: current / upgrade / downgrade).
   const currentPlanId = $derived(session().user?.planId ?? "free");
@@ -129,49 +131,24 @@
     }
   }
 
-  // In-app upgrade/downgrade of an existing subscription (no second checkout).
-  // Upgrades apply immediately (prorated); downgrades are scheduled for the end
-  // of the current billing period, so the confirm + success copy differ.
-  async function changePlan(planId: string, tierName: string, isDowngrade: boolean) {
-    if (busyPlanId) return;
-    const prompt = isDowngrade ? t.billing.downgradeConfirm(tierName) : t.billing.changeConfirm(tierName);
-    if (!confirm(prompt)) return;
-    checkoutError = "";
-    changeMsg = "";
-    busyPlanId = planId;
-    try {
-      const res = await fetch("/api/billing/change-plan", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId, cycle }),
-      });
-      if (!res.ok) {
-        checkoutError = t.billing.changeError;
-        return;
-      }
-      if (isDowngrade) {
-        // Nothing flips now — the plan changes when the period ends.
-        changeMsg = t.billing.downgradeScheduled;
-        setTimeout(() => refreshSession(), 1500);
-      } else {
-        // The plan_id flips once Stripe delivers customer.subscription.updated
-        // to the webhook (async), so poll /api/me a couple of times to reflect it.
-        changeMsg = t.billing.changeSuccess;
-        setTimeout(() => refreshSession(), 1500);
-        setTimeout(() => refreshSession(), 4000);
-      }
-    } catch {
-      checkoutError = t.billing.changeError;
-    } finally {
-      busyPlanId = null;
-    }
+  // Primary action for a paid tier given the user's context. Existing
+  // subscribers get a previewed confirmation (real charge/effective-date from
+  // /api/billing/preview) instead of a blind confirm() before change-plan.
+  function act(tier: Tier) {
+    if (isSubscribed) modalTier = tier;
+    else checkout(tier.id);
   }
 
-  // Primary action for a paid tier given the user's context.
-  function act(tier: Tier) {
-    if (isSubscribed) changePlan(tier.id, tier.name, relation(tier) === "down");
-    else checkout(tier.id);
+  // The modal itself calls /api/billing/change-plan; here we just close it and,
+  // on success, surface the toast and poll /api/me for the webhook-applied
+  // change to land (same cadence the old inline flow used).
+  function onModalClose(changed: boolean) {
+    modalTier = null;
+    if (changed) {
+      changeMsg = t.billing.changeSuccess;
+      setTimeout(() => refreshSession(), 1500);
+      setTimeout(() => refreshSession(), 4000);
+    }
   }
 
   // Cancel a pending period-end downgrade (stay on the current tier).
@@ -264,6 +241,10 @@
     {/each}
   </div>
 </div>
+
+{#if modalTier}
+  <ChangePlanModal planId={modalTier.id} planName={modalTier.name} {cycle} onclose={onModalClose} />
+{/if}
 
 <style>
   .pricing { display: flex; flex-direction: column; gap: var(--space-4); }
