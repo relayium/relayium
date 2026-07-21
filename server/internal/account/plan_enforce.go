@@ -239,6 +239,35 @@ func (s *Service) persistStoredFile(ctx context.Context, f StoredFile, enforceCa
 	return "", nil
 }
 
+// uploadWriteCap bounds how many bytes a single-shot BILLABLE upload may stream
+// to disk before the authoritative post-write gates run. The cheap pre-gate only
+// trusts a client-declared Content-Length, so a chunked or understated length
+// sails through it and would otherwise let a client write a full MaxFileSize
+// (1 GiB) blob just to have it rejected and dropped — disk-churn DoS. Cap the
+// write at the tightest of maxFileSize, the remaining daily quota, and the
+// remaining storage, each with a minBillableBytes slack so an upload exactly at
+// a limit isn't truncated. A store-read error leaves that dimension uncapped
+// (fail open — the authoritative gates still reject over-limit uploads on the
+// real byte count); the floor keeps a quota-exhausted user from churning more
+// than one minimum object.
+func (s *Service) uploadWriteCap(ctx context.Context, userID string, maxFileSize int64) int64 {
+	cap := maxFileSize
+	if rem, err := s.remainingDailyQuota(ctx, userID); err == nil {
+		if c := rem + minBillableBytes; c < cap {
+			cap = c
+		}
+	}
+	if rem, unlimited, err := s.remainingStorage(ctx, userID); err == nil && !unlimited {
+		if c := rem + minBillableBytes; c < cap {
+			cap = c
+		}
+	}
+	if cap < minBillableBytes {
+		cap = minBillableBytes
+	}
+	return cap
+}
+
 // planRetentionCap returns the user's plan retention ceiling in seconds (0 = no
 // plan cap; the global clampTTL still applies).
 func (s *Service) planRetentionCap(ctx context.Context, userID string) int64 {

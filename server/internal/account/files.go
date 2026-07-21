@@ -187,7 +187,17 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	}
 
 	blobKey := randToken()
-	capped := &cappedReader{r: br, max: st.MaxFileSize}
+	// Bound the on-disk write. Own-node uploads use the user's own disk, so only
+	// MaxFileSize applies; a billable central upload is additionally capped to
+	// what the user could actually keep (uploadWriteCap) so a chunked/understated
+	// Content-Length can't stream a full MaxFileSize blob only to be dropped.
+	writeCap := st.MaxFileSize
+	if billable {
+		if c := s.uploadWriteCap(r.Context(), u.ID, st.MaxFileSize); c < writeCap {
+			writeCap = c
+		}
+	}
+	capped := &cappedReader{r: br, max: writeCap}
 	size, err := bs.Put(r.Context(), blobKey, capped)
 	if err != nil {
 		// Reclaim a committed-but-response-lost blob; if the node is unreachable

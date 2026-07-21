@@ -25,6 +25,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -90,6 +91,51 @@ func SameVersion(a, b string) bool {
 	return strings.TrimPrefix(a, "v") == strings.TrimPrefix(b, "v")
 }
 
+// parseVer parses a strict "vMAJOR.MINOR.PATCH" tag (optional leading 'v') into
+// its three numeric parts. ok=false for anything else — "dev", a pre-release or
+// build suffix, a non-numeric or wrong-arity string — so the caller treats the
+// version as incomparable rather than guessing.
+func parseVer(s string) ([3]int, bool) {
+	s = strings.TrimPrefix(strings.TrimSpace(s), "v")
+	if i := strings.IndexAny(s, "-+"); i >= 0 {
+		return [3]int{}, false // pre-release / build metadata — not a plain release
+	}
+	parts := strings.Split(s, ".")
+	if len(parts) != 3 {
+		return [3]int{}, false
+	}
+	var out [3]int
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 {
+			return [3]int{}, false
+		}
+		out[i] = n
+	}
+	return out, true
+}
+
+// compareVersions reports -1/0/1 for a<b / a==b / a>b over two release tags.
+// ok=false when either isn't a plain numeric semver, in which case the result
+// must not be trusted (a "dev" or unparseable current version never blocks an
+// update).
+func compareVersions(a, b string) (int, bool) {
+	pa, oka := parseVer(a)
+	pb, okb := parseVer(b)
+	if !oka || !okb {
+		return 0, false
+	}
+	for i := 0; i < 3; i++ {
+		if pa[i] != pb[i] {
+			if pa[i] < pb[i] {
+				return -1, true
+			}
+			return 1, true
+		}
+	}
+	return 0, true
+}
+
 // AssetName is the release archive for a Unix os/arch (goreleaser's naming).
 func AssetName(goos, goarch string) string {
 	return fmt.Sprintf("relayium_%s_%s.tar.gz", goos, goarch)
@@ -133,6 +179,19 @@ func Update(ctx context.Context, o Options, progress io.Writer) (from, to string
 	}
 	if SameVersion(tag, o.CurrentVersion) && !o.Force {
 		return o.CurrentVersion, tag, false, nil
+	}
+	// Downgrade protection: refuse to install a release older than the running
+	// version. Verification is checksum-only when cosign isn't present, so a
+	// compromised or rolled-back release host that served an OLD (pre-cosign or
+	// known-vulnerable) tag would otherwise pass — this bounds that to same-or-
+	// newer. --force overrides for a deliberate rollback; an unparseable current
+	// version ("dev") never blocks.
+	if !o.Force {
+		if cmp, ok := compareVersions(tag, o.CurrentVersion); ok && cmp < 0 {
+			return o.CurrentVersion, tag, false, fmt.Errorf(
+				"refusing to downgrade: latest release %s is older than the running %s (use --force to override)",
+				tag, o.CurrentVersion)
+		}
 	}
 
 	asset := AssetName(o.GOOS, o.GOARCH)
