@@ -21,6 +21,25 @@ import (
 // A var so tests can shorten it.
 var handshakeTimeout = 30 * time.Second
 
+// transferIdleTimeout bounds how long a receive may STALL (no bytes) before it's
+// aborted. It's an idle timeout, not a total one, so an arbitrarily large but
+// steadily-progressing transfer is fine, while a peer that connects, gets
+// approved, then goes silent can't pin a goroutine + concurrency slot forever
+// (maxConcurrentServe such stalls would otherwise starve new connections).
+var transferIdleTimeout = 2 * time.Minute
+
+// idleConn resets a read deadline before every Read, so a connection that stops
+// producing bytes for idle fails its next read instead of blocking indefinitely.
+type idleConn struct {
+	net.Conn
+	idle time.Duration
+}
+
+func (c *idleConn) Read(p []byte) (int, error) {
+	_ = c.Conn.SetReadDeadline(time.Now().Add(c.idle))
+	return c.Conn.Read(p)
+}
+
 type serveFlags struct {
 	dir         string
 	port        int
@@ -202,7 +221,10 @@ func (h *serveHandler) serve(conn net.Conn) (ok bool) {
 		return false
 	}
 
-	rep, err := xfer.Receive(tconn, h.dir, xfer.RecvOpts{NoResume: h.noResume, AllowDelete: h.allowDelete})
+	// Wrap in an idle-deadline conn: post-approval, a stalled peer must not hold a
+	// goroutine + concurrency slot forever (the handshake deadline was cleared
+	// above because large receives legitimately take long).
+	rep, err := xfer.Receive(&idleConn{Conn: tconn, idle: transferIdleTimeout}, h.dir, xfer.RecvOpts{NoResume: h.noResume, AllowDelete: h.allowDelete})
 	if err != nil {
 		fmt.Fprintf(h.stderr, "receive from %s (%s): %v\n", fp, remote, err)
 		return false

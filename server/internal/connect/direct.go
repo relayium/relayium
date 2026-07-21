@@ -11,6 +11,33 @@ import (
 	"time"
 )
 
+// FilterPeerCandidates drops candidates that a paired peer must never be able to
+// steer us into dialing: loopback (the victim's own localhost services),
+// link-local (incl. the cloud metadata endpoint 169.254.169.254), and the
+// unspecified address. peerCandidates arrive from the untrusted peer over the
+// crossnet handshake, so without this a malicious peer turns our dialer into a
+// limited SSRF / internal port-probe (pinned TLS then fails, so no data flows,
+// but the reachability probe is the issue). Private (RFC1918) addresses are
+// deliberately kept — LAN direct transfer legitimately dials them; a
+// non-IP-literal candidate (hostname) is kept too (it can't be classified here
+// without resolving, and is not the described attack vector). Apply at the trust
+// boundary; RaceDirect itself stays a general mechanism.
+func FilterPeerCandidates(cands []string) []string {
+	out := cands[:0:0]
+	for _, c := range cands {
+		host, _, err := net.SplitHostPort(c)
+		if err != nil {
+			continue // malformed candidate — drop it
+		}
+		if ip := net.ParseIP(host); ip != nil &&
+			(ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified()) {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
 // LocalCandidates lists publicly-plausible TCP endpoints for this host: every
 // non-loopback, non-private, non-link-local interface address at the given
 // port, plus an explicit advertise value (host:port) when provided.

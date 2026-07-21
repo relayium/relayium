@@ -83,7 +83,15 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 		}
 	}
 
-	if hello.Delete && opts.AllowDelete {
+	if hello.Delete && opts.AllowDelete && len(m.Files) == 0 {
+		// Refuse a mirror-delete driven by an EMPTY manifest — it would wipe the
+		// entire destination. The sync client already refuses --delete with an
+		// empty source, but a malicious/buggy peer can send Delete=true with a
+		// zero-file manifest straight to an --allow-delete listener, so enforce the
+		// same guard on the receiver. (A non-empty manifest deleting other files is
+		// ordinary mirror semantics the operator opted into with --allow-delete.)
+		rep.DeleteDenied = true
+	} else if hello.Delete && opts.AllowDelete {
 		// Best-effort mirror delete; a failure here doesn't undo the files that
 		// already landed, so it does not fail the transfer.
 		_, _ = deleteExtras(destDir, m)

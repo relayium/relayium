@@ -60,7 +60,10 @@ func crossnetConn(ctx context.Context, code, name string, f crossFlags, stderr i
 	// peers connect directly; if none can be raced, the transfer fails — the CLI
 	// never proxies file bytes through Relayium.
 	dctx, cancel := context.WithTimeout(ctx, 4*time.Second)
-	raw, err := connect.RaceDirect(dctx, ln, hs.PeerCandidates, 3*time.Second, hs.IsServer)
+	// hs.PeerCandidates come from the untrusted peer — filter out loopback /
+	// link-local / unspecified so a malicious peer can't steer our dialer at our
+	// own localhost or the cloud metadata endpoint (limited SSRF).
+	raw, err := connect.RaceDirect(dctx, ln, connect.FilterPeerCandidates(hs.PeerCandidates), 3*time.Second, hs.IsServer)
 	cancel()
 	if err != nil {
 		return nil, fmt.Errorf("no direct connection to the peer (both ends behind strict NAT?): %w", err)

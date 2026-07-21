@@ -181,3 +181,40 @@ func TestReceiveDeletesExtrasWhenAllowed(t *testing.T) {
 		t.Fatal("extra.txt should have been deleted")
 	}
 }
+
+// A mirror-delete driven by an EMPTY manifest must be refused by the RECEIVER
+// even with AllowDelete — otherwise a malicious peer sending Hello.Delete + a
+// zero-file manifest straight to an --allow-delete listener wipes the whole
+// destination. (The sync client guards this too, but only on the sender.)
+func TestReceiveRefusesEmptyManifestDelete(t *testing.T) {
+	dst := t.TempDir()
+	writeFileMtime(t, filepath.Join(dst, "keep.txt"), "important", 1000)
+
+	m, srcs, err := BuildManifest(nil) // empty source → zero-file manifest
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c1, c2 := net.Pipe()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	var recvErr error
+	var rep Report
+	go func() {
+		defer wg.Done()
+		rep, recvErr = Receive(c2, dst, RecvOpts{AllowDelete: true})
+		c2.Close()
+	}()
+	_, serr := Send(c1, m, srcs, SendOpts{Sync: true, Delete: true})
+	c1.Close()
+	wg.Wait()
+	if serr != nil || recvErr != nil {
+		t.Fatalf("send=%v recv=%v", serr, recvErr)
+	}
+	if !rep.DeleteDenied {
+		t.Fatal("an empty-manifest delete must be denied by the receiver")
+	}
+	if _, err := os.Stat(filepath.Join(dst, "keep.txt")); err != nil {
+		t.Fatalf("keep.txt must survive an empty-manifest mirror-delete: %v", err)
+	}
+}
