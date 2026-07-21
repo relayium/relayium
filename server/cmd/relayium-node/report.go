@@ -65,6 +65,14 @@ type heartbeatBody struct {
 	StorageFree  int64       `json:"storageFree"`
 }
 
+// receiptBody reports a served direct download so central can reconcile the
+// traffic it pre-metered when it issued the 302.
+type receiptBody struct {
+	BlobKey     string `json:"blobKey"`
+	Nonce       string `json:"nonce"`
+	ServedBytes int64  `json:"servedBytes"`
+}
+
 type reporter struct {
 	central string
 	token   string

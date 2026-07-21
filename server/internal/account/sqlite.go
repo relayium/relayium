@@ -401,6 +401,13 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
   ip TEXT NOT NULL, auth TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL,
   changes TEXT NOT NULL, step_up TEXT NOT NULL)`,
 		`CREATE INDEX IF NOT EXISTS idx_admin_audit_at ON admin_audit(at DESC)`,
+		// Direct-download receipt dedup (decentralized downloads P1): each 302's
+		// token nonce is recorded once when its node receipt lands, so a re-sent
+		// receipt can't double-refund the owner's pre-metered traffic. Rows are
+		// disposable (a GC sweep can prune old ones); the nonce is the idempotency key.
+		`CREATE TABLE IF NOT EXISTS download_receipts (
+  nonce TEXT PRIMARY KEY, at INTEGER NOT NULL)`,
+		`CREATE INDEX IF NOT EXISTS idx_download_receipts_at ON download_receipts(at)`,
 		// Admin TOTP replay guard (multi-instance): a single-row monotonic step
 		// counter, advanced atomically by ClaimTOTPStep. Persisting it makes admin
 		// 2FA "one code, one use" hold across instances and across restarts, instead
@@ -2279,6 +2286,31 @@ func (s *SQLiteStore) GetStoredFile(ctx context.Context, id string) (StoredFile,
 		return StoredFile{}, ErrNotFound
 	}
 	return f, err
+}
+
+// GetStoredFileByBlobKey resolves a blob key (all a node knows) back to its
+// stored-file row, so a direct-download receipt can find the owner + size to
+// reconcile. Blob keys are unique server-minted tokens.
+func (s *SQLiteStore) GetStoredFileByBlobKey(ctx context.Context, blobKey string) (StoredFile, error) {
+	f, err := scanStoredFile(s.reader().QueryRowContext(ctx,
+		`SELECT `+storedFileSelectCols+` FROM stored_files WHERE blob_key = ?`, blobKey))
+	if err == sql.ErrNoRows {
+		return StoredFile{}, ErrNotFound
+	}
+	return f, err
+}
+
+// ClaimDownloadReceipt records a direct-download receipt nonce, returning true
+// only the FIRST time (a duplicate receipt returns false), so reconciliation
+// applies its refund exactly once.
+func (s *SQLiteStore) ClaimDownloadReceipt(ctx context.Context, nonce string, at int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO download_receipts (nonce, at) VALUES (?, ?)`, nonce, at)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n == 1, nil
 }
 
 func (s *SQLiteStore) ListStoredFilesByUser(ctx context.Context, userID string) ([]StoredFile, error) {

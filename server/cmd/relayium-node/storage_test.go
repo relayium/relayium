@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -79,7 +80,7 @@ func TestPublicDownloadHandlerHidesBlobAPI(t *testing.T) {
 	if _, err := ds.Put(t.Context(), "pk", bytes.NewReader([]byte("cipher"))); err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(newDownloadHandler(ds, secret))
+	srv := httptest.NewServer(newDownloadHandler(ds, secret, nil))
 	defer srv.Close()
 
 	// /healthz is up.
@@ -101,6 +102,42 @@ func TestPublicDownloadHandlerHidesBlobAPI(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode == http.StatusOK {
 		t.Fatal("public download listener must NOT expose the /blob write API")
+	}
+}
+
+// TestDLReceiptFiresWithServedBytes: after a served download the node reports the
+// blob key, the token nonce, and the exact byte count, so central can reconcile.
+func TestDLReceiptFiresWithServedBytes(t *testing.T) {
+	ds, err := storage.NewDiskStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("diskstore: %v", err)
+	}
+	const secret = "nodesecret"
+	if _, err := ds.Put(t.Context(), "rk", bytes.NewReader([]byte("ciphertext!!"))); err != nil { // 12 bytes
+		t.Fatal(err)
+	}
+	got := make(chan [3]string, 1)
+	h := newDownloadHandler(ds, secret, func(blobKey, nonce string, served int64) {
+		got <- [3]string{blobKey, nonce, strconv.FormatInt(served, 10)}
+	})
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+
+	tok := dltoken.Sign(secret, "rk", time.Now().Unix()+60, "nonceX")
+	resp, err := http.Get(srv.URL + "/dl/rk?t=" + tok)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+
+	select {
+	case r := <-got:
+		if r[0] != "rk" || r[1] != "nonceX" || r[2] != "12" {
+			t.Fatalf("receipt = key=%q nonce=%q served=%q, want rk/nonceX/12", r[0], r[1], r[2])
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("receipt callback never fired")
 	}
 }
 

@@ -35,6 +35,17 @@ func Sign(secret, key string, exp int64, nonce string) string {
 	return strconv.FormatInt(exp, 10) + "." + nonce + "." + mac(secret, key, exp, nonce)
 }
 
+// Nonce returns the nonce embedded in a token (the middle field), or "" if the
+// token is malformed. The node uses it to correlate its download receipt back to
+// the 302 central issued. It does NOT verify the token — Verify does that.
+func Nonce(token string) string {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return ""
+	}
+	return parts[1]
+}
+
 // Verify reports whether token authorizes key under secret and has not expired
 // as of now (unix seconds). The MAC comparison is constant-time.
 func Verify(secret, key string, now int64, token string) bool {

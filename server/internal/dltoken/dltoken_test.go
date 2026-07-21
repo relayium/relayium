@@ -44,6 +44,16 @@ func TestTamperedTokenRejected(t *testing.T) {
 	}
 }
 
+func TestNonceExtractsTheNonce(t *testing.T) {
+	tok := Sign("s", "k", 1000, "abc123")
+	if got := Nonce(tok); got != "abc123" {
+		t.Fatalf("Nonce = %q, want abc123", got)
+	}
+	if got := Nonce("garbage"); got != "" {
+		t.Fatalf("Nonce of a malformed token must be empty, got %q", got)
+	}
+}
+
 func TestMalformedTokenRejected(t *testing.T) {
 	for _, bad := range []string{"", "onlyonepart", "a.b", "a.b.c.d", "notanumber.abc.mac"} {
 		if Verify("nodesecret", "blobkey123", 500, bad) {

@@ -612,6 +612,12 @@ type Store interface {
 	// names the cap hit; a real error is returned as err (caller fails closed).
 	CreateStoredFileWithinStorageCaps(ctx context.Context, f StoredFile, now, userCap, globalCap int64) (ok bool, reason string, err error)
 	GetStoredFile(ctx context.Context, id string) (StoredFile, error)
+	// GetStoredFileByBlobKey resolves a blob key back to its stored-file row (a
+	// direct-download receipt only carries the blob key). ErrNotFound if absent.
+	GetStoredFileByBlobKey(ctx context.Context, blobKey string) (StoredFile, error)
+	// ClaimDownloadReceipt records a direct-download receipt nonce, returning true
+	// only the first time so reconciliation refunds exactly once (idempotent).
+	ClaimDownloadReceipt(ctx context.Context, nonce string, at int64) (bool, error)
 	ListStoredFilesByUser(ctx context.Context, userID string) ([]StoredFile, error)
 	MarkDownloaded(ctx context.Context, id string, at int64) error
 	// ClaimBurnDownload atomically consumes a burn-after-read file's single

@@ -249,9 +249,20 @@ func run(c config, st nodeState) error {
 		// the origin cert here can stay self-signed under CF's "Full" SSL mode, so
 		// we reuse id.TLSCert. TLS 1.2 min for broad CF-origin compatibility.
 		if c.DownloadURL != "" && c.DownloadAddr != "" {
+			// After serving a download, report the bytes actually sent so central
+			// can refund any over-metering (async + best-effort — never block or
+			// fail the download on a receipt hiccup).
+			sendReceipt := func(blobKey, nonce string, served int64) {
+				go func() {
+					if err := rp.post("/api/nodes/download-receipt",
+						receiptBody{BlobKey: blobKey, Nonce: nonce, ServedBytes: served}, nil); err != nil {
+						log.Printf("relayium-node: download receipt for %s failed: %v", blobKey, err)
+					}
+				}()
+			}
 			dlSrv := &http.Server{
 				Addr:      c.DownloadAddr,
-				Handler:   newDownloadHandler(ds, storageSecret),
+				Handler:   newDownloadHandler(ds, storageSecret, sendReceipt),
 				TLSConfig: &tls.Config{Certificates: []tls.Certificate{id.TLSCert}, MinVersion: tls.VersionTLS12},
 			}
 			go func() {

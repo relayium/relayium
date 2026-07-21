@@ -128,6 +128,69 @@ func (s *Service) RegisterNodeRoutes(mux *http.ServeMux) {
 	}
 	mux.HandleFunc("POST /api/nodes/register", s.handleNodeRegister)
 	mux.HandleFunc("POST /api/nodes/heartbeat", s.handleNodeHeartbeat)
+	mux.HandleFunc("POST /api/nodes/download-receipt", s.handleDownloadReceipt)
+}
+
+// handleDownloadReceipt reconciles a direct-download's metering: central
+// pre-metered the whole file size when it issued the 302, so a fleet node
+// reports how many bytes it actually served and central refunds the owner the
+// over-metered difference (partial/aborted downloads). Idempotent per receipt
+// nonce so a re-sent receipt can't double-refund; servedBytes is clamped to the
+// file size so a receipt can only ever refund, never charge. Fleet-only (BYO
+// direct download and its receipts are a later phase).
+func (s *Service) handleDownloadReceipt(w http.ResponseWriter, r *http.Request) {
+	ownerType, _, ok := s.nodeOwner(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if ownerType != "fleet" {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	var req struct {
+		BlobKey     string `json:"blobKey"`
+		Nonce       string `json:"nonce"`
+		ServedBytes int64  `json:"servedBytes"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if req.Nonce == "" || req.BlobKey == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	now := s.now().Unix()
+	// Idempotency: only the first receipt for this nonce reconciles.
+	first, err := s.store.ClaimDownloadReceipt(r.Context(), req.Nonce, now)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !first {
+		w.WriteHeader(http.StatusOK) // duplicate — already reconciled
+		return
+	}
+	sf, err := s.store.GetStoredFileByBlobKey(r.Context(), req.BlobKey)
+	if err != nil {
+		// File gone (deleted/expired) or unknown key: nothing to reconcile. The
+		// pre-charge stands (safe over-charge). ACK so the node stops retrying.
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	served := req.ServedBytes
+	if served < 0 {
+		served = 0
+	}
+	if served > sf.Size {
+		served = sf.Size // clamp: a receipt can only refund, never charge
+	}
+	if refund := sf.Size - served; refund > 0 {
+		_ = s.store.RecordMeter(r.Context(), sf.UserID, MeterDownload, -refund, now)
+		_ = s.store.AddDownloadStat(r.Context(), sf.UserID, -refund)
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 // nodeOwner resolves the bearer token to a node owner: the shared fleet token,
