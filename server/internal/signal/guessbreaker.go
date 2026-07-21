@@ -32,6 +32,16 @@ func NewGuessBreaker(threshold int, window, cooldown time.Duration, now func() i
 	}
 }
 
+// IsOpen reports whether the breaker is currently latched open, WITHOUT
+// recording an attempt. Lets a caller (e.g. /api/ice on a valid or empty code,
+// which never feeds the breaker) shed credential issuance during an active
+// brute-force flood detected via other requests.
+func (b *GuessBreaker) IsOpen() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.now() < b.openUntil
+}
+
 // RecordInvalid records one invalid pairing-code attempt and reports whether the
 // breaker is currently OPEN and whether the caller should emit a WARN now (at
 // most once per cooldown while open). Uses absolute deadlines (openUntil /

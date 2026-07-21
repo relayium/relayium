@@ -181,6 +181,11 @@ type Service struct {
 	// iceLimiter caps /api/ice attempts per IP (H1: brute-forcing the 6-digit
 	// pairing code would steal a victim's TURN credentials). nil = unlimited.
 	iceLimiter rateLimiter
+	// iceBreaker is the process-wide pairing-code brute-force breaker shared with
+	// /ws. While it is open, /api/ice sheds credential issuance (STUN-only) so it
+	// cannot be used as a validity oracle or a victim-billed credential tap during
+	// a flood; invalid /api/ice codes also feed it. nil disables this layer.
+	iceBreaker guessBreaker
 	// registerLimiter caps POST /api/auth/register attempts per IP (H2a). nil = unlimited.
 	registerLimiter rateLimiter
 	// uploadSem caps concurrent in-flight POST /api/files per account (M1).
@@ -209,6 +214,14 @@ type Service struct {
 // rateLimiter is the minimal per-key limiter account needs; *signal.RateLimiter
 // satisfies it. Declared locally so the account package need not import signal.
 type rateLimiter interface{ Allow(key string) bool }
+
+// guessBreaker is the subset of *signal.GuessBreaker handleICE needs, declared
+// locally for the same reason: IsOpen to shed while a flood is active, and
+// RecordInvalid to feed an invalid /api/ice code into the shared breaker.
+type guessBreaker interface {
+	IsOpen() bool
+	RecordInvalid() (open, logNow bool)
+}
 
 func NewService(store Store, mailer Mailer, cfg Config) *Service {
 	svc := &Service{store: store, mailer: mailer, cfg: cfg, now: time.Now,
@@ -275,6 +288,11 @@ func (s *Service) SetClientIP(fn func(*http.Request) string) {
 
 // SetICELimiter caps /api/ice at N/window/IP (H1: 5/min). nil = unlimited.
 func (s *Service) SetICELimiter(rl rateLimiter) { s.iceLimiter = rl }
+
+// SetGuessBreaker wires the shared pairing-code brute-force breaker (the same
+// instance /ws feeds) so /api/ice sheds credential issuance while it is open and
+// feeds it invalid codes. nil disables this layer.
+func (s *Service) SetGuessBreaker(b guessBreaker) { s.iceBreaker = b }
 
 // SetRegisterLimiter caps POST /api/auth/register per IP (H2a: 5/min). nil = unlimited.
 func (s *Service) SetRegisterLimiter(rl rateLimiter) { s.registerLimiter = rl }

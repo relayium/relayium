@@ -60,6 +60,25 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 	if code != "" && s.pairCodeOwner != nil {
 		owner, validCode = s.pairCodeOwner(code)
 	}
+
+	// Global brute-force breaker (shared with /ws). A single successful /api/ice
+	// call both confirms a code is live AND returns a working TURN credential
+	// billed to the code's owner, so the per-IP 5/min cap alone still leaves a
+	// fan-out-across-IPs guessing attack that mines validity + victim-billed
+	// credentials. Feed every invalid non-empty code into the process-wide
+	// breaker, and while it is OPEN serve STUN-only for ALL requests (valid ones
+	// included): no TURN credential is issued and every response looks identical,
+	// removing both the oracle and the credential tap during a flood. Direct P2P
+	// still works; this mirrors the shedding /ws already does.
+	if code != "" && !validCode && s.iceBreaker != nil {
+		if open, logNow := s.iceBreaker.RecordInvalid(); open && logNow {
+			log.Printf("WARNING: pairing-code guess breaker OPEN — /api/ice serving STUN-only")
+		}
+	}
+	if s.iceBreaker != nil && s.iceBreaker.IsOpen() {
+		validCode = false
+	}
+
 	now := s.now()
 	expiry := now.Add(s.cfg.TURNCredTTL).Unix()
 	relayDenied := ""

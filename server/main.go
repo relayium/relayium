@@ -338,6 +338,7 @@ func main() {
 		acct.SetPairCodeOwner(pairReg.OwnerOf)
 		acct.SetClientIP(ipx.IP) // H3: trusted-proxy-aware rate-limit keys
 		acct.SetICELimiter(iceLimiter)
+		acct.SetGuessBreaker(guessBreaker) // shared /ws breaker: shed /api/ice during a flood
 		acct.SetRegisterLimiter(registerLimiter)
 		// /api/pair requires a logged-in owner: the receiver still joins the code
 		// room anonymously via /ws?code= and /api/ice?code=, but minting a
