@@ -51,7 +51,7 @@ func TestBillingCheckoutAllowsResubscribeAfterCancel(t *testing.T) {
 	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_resub"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetUserSubscription(context.Background(), uid, "free", "canceled", 1900000000, "stripe", "", time.Now().Unix()); err != nil {
+	if err := store.SetUserSubscription(context.Background(), uid, "free", "canceled", 1900000000, "stripe", "", time.Now().Unix(), 0); err != nil {
 		t.Fatal(err)
 	}
 

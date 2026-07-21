@@ -287,7 +287,7 @@ func subscribeUser(t *testing.T, store *SQLiteStore, uid, customer, planID strin
 	if err := store.SetUserStripeCustomer(ctx, uid, customer); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetUserSubscription(ctx, uid, planID, "active", 1900000000, "stripe", "", time.Now().Unix()); err != nil {
+	if err := store.SetUserSubscription(ctx, uid, planID, "active", 1900000000, "stripe", "", time.Now().Unix(), 0); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -301,7 +301,7 @@ func subscribeUserCycle(t *testing.T, store *SQLiteStore, uid, customer, planID,
 	if err := store.SetUserStripeCustomer(ctx, uid, customer); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetUserSubscription(ctx, uid, planID, "active", 1900000000, "stripe", cycle, time.Now().Unix()); err != nil {
+	if err := store.SetUserSubscription(ctx, uid, planID, "active", 1900000000, "stripe", cycle, time.Now().Unix(), 0); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -340,7 +340,7 @@ func TestBillingChangePlanAdminSourced409(t *testing.T) {
 	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_admin"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 1900000000, "admin", "", time.Now().Unix()); err != nil {
+	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 1900000000, "admin", "", time.Now().Unix(), 0); err != nil {
 		t.Fatal(err)
 	}
 	resp := changePlan(t, ts, cookie, `{"planId":"max","cycle":"monthly"}`)
@@ -826,7 +826,7 @@ func TestMeIncludesBillingFields(t *testing.T) {
 		t.Fatalf("GetUserByIdentity: ok=%v err=%v", ok, err)
 	}
 	uid := user.ID
-	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 1234567890, "stripe", "", time.Now().Unix()); err != nil {
+	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 1234567890, "stripe", "", time.Now().Unix(), 0); err != nil {
 		t.Fatalf("SetUserSubscription: %v", err)
 	}
 	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_me_123"); err != nil {

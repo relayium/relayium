@@ -72,6 +72,11 @@ type WebhookEvent struct {
 	// metadata is absent (e.g. checkout.session.completed itself).
 	MetadataUserID   string
 	CurrentPeriodEnd int64
+	// Created is the Stripe event's top-level `created` (unix secs) — the event
+	// emission time, used by the webhook's ordering guard to drop a stale
+	// (re)delivered event that would otherwise revert newer subscription state.
+	// Stripe does not guarantee delivery order and retries 500'd events for days.
+	Created int64
 }
 
 // stripeClient is the real Biller: a thin hand-rolled HTTP client making
@@ -198,8 +203,9 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 	}
 
 	var envelope struct {
-		Type string `json:"type"`
-		Data struct {
+		Type    string `json:"type"`
+		Created int64  `json:"created"`
+		Data    struct {
 			Object struct {
 				Customer          string `json:"customer"`
 				Subscription      string `json:"subscription"`
@@ -226,6 +232,7 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 
 	ev := WebhookEvent{
 		Type:             envelope.Type,
+		Created:          envelope.Created,
 		CustomerID:       envelope.Data.Object.Customer,
 		SubscriptionID:   envelope.Data.Object.Subscription,
 		Status:           envelope.Data.Object.Status,

@@ -428,8 +428,13 @@ type Store interface {
 	GetUserByStripeCustomer(ctx context.Context, customerID string) (User, bool, error)
 	// SetUserSubscription updates plan_id, subscription_status, subscription_end,
 	// and plan_source together (Stripe webhook path). now is the change timestamp,
-	// used to freeze the outgoing tier's earned quota segment.
-	SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source, cycle string, now int64) error
+	// used to freeze the outgoing tier's earned quota segment. subEventAt is the
+	// Stripe event.created (0 for non-webhook callers), stored monotonically for
+	// the ordering guard.
+	SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source, cycle string, now, subEventAt int64) error
+	// LastSubEventAt returns the event.created of the last subscription event
+	// applied to a user (0 if none), so the webhook can drop stale re-deliveries.
+	LastSubEventAt(ctx context.Context, userID string) (int64, error)
 	// SetScheduledPlan records (or clears, with planID="") the tier a pending
 	// period-end downgrade will switch to — a display hint for the pricing UI.
 	SetScheduledPlan(ctx context.Context, userID, planID string) error

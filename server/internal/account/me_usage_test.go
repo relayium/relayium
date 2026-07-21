@@ -412,7 +412,7 @@ func TestMeUsagePassesThroughSubscriptionFields(t *testing.T) {
 	// wantEnd 选 1234567891——见下面的碰撞自检。
 	const wantStatus = "past_due"
 	const wantEnd int64 = 1234567891
-	if err := store.SetUserSubscription(t.Context(), u.ID, "pro", wantStatus, wantEnd, "stripe", "", svc.now().Unix()); err != nil {
+	if err := store.SetUserSubscription(t.Context(), u.ID, "pro", wantStatus, wantEnd, "stripe", "", svc.now().Unix(), 0); err != nil {
 		t.Fatalf("SetUserSubscription: %v", err)
 	}
 
@@ -544,7 +544,7 @@ func TestMeUsageExposesCycleAndScheduledPlan(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("lookup user: %v ok=%v", err, ok)
 	}
-	if err := store.SetUserSubscription(t.Context(), u.ID, "plus", "active", 1789999999, "stripe", "yearly", svc.now().Unix()); err != nil {
+	if err := store.SetUserSubscription(t.Context(), u.ID, "plus", "active", 1789999999, "stripe", "yearly", svc.now().Unix(), 0); err != nil {
 		t.Fatalf("SetUserSubscription: %v", err)
 	}
 	if err := store.SetScheduledPlan(t.Context(), u.ID, "free"); err != nil {

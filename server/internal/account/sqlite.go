@@ -335,6 +335,14 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`ALTER TABLE users ADD COLUMN subscription_status TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE users ADD COLUMN subscription_end INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE users ADD COLUMN plan_source TEXT NOT NULL DEFAULT ''`,
+		// Webhook ordering guard (2026-07): the Stripe `event.created` (unix secs) of
+		// the last subscription event we applied. Stripe does not guarantee delivery
+		// order and retries any event we 500 on for up to 3 days, so a stale
+		// (re)delivered event could otherwise revert a newer state (e.g. restore a
+		// past_due/free user to paid). The webhook drops any event older than this.
+		// DEFAULT 0 backfills every existing row to "no event applied yet" with no
+		// separate UPDATE — so there is no ALTER-vs-backfill crash window here.
+		`ALTER TABLE users ADD COLUMN sub_event_at INTEGER NOT NULL DEFAULT 0`,
 		// In-app downgrade UX: the tier a pending period-end downgrade will switch
 		// to (via a Stripe subscription schedule); '' = no pending change. It's a
 		// display hint — set when the endpoint schedules a downgrade, cleared when
@@ -820,7 +828,11 @@ func (s *SQLiteStore) GetUserByStripeCustomer(ctx context.Context, customerID st
 // ALONE rather than blanking it: a subscription event that carries no
 // resolvable price (a cancellation, an unmapped price) must not erase a cycle
 // we already knew, or the next in-app change would misread the direction.
-func (s *SQLiteStore) SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source, cycle string, now int64) error {
+// subEventAt is the Stripe event.created (unix secs) of the event driving this
+// write; it is stored monotonically (only ever advanced, via MAX) so the webhook
+// ordering guard can drop a later-delivered older event. Pass 0 for non-webhook
+// callers (they never race Stripe ordering).
+func (s *SQLiteStore) SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source, cycle string, now, subEventAt int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -831,12 +843,25 @@ func (s *SQLiteStore) SetUserSubscription(ctx context.Context, userID, planID, s
 	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE users SET plan_id = ?, subscription_status = ?, subscription_end = ?, plan_source = ?,
-		        billing_cycle = CASE WHEN ? = '' THEN billing_cycle ELSE ? END
+		        billing_cycle = CASE WHEN ? = '' THEN billing_cycle ELSE ? END,
+		        sub_event_at = CASE WHEN ? > sub_event_at THEN ? ELSE sub_event_at END
 		  WHERE id = ?`,
-		planID, status, end, source, cycle, cycle, userID); err != nil {
+		planID, status, end, source, cycle, cycle, subEventAt, subEventAt, userID); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+// LastSubEventAt returns the Stripe event.created of the last subscription event
+// applied to this user (0 if none / user absent), for the webhook ordering guard.
+func (s *SQLiteStore) LastSubEventAt(ctx context.Context, userID string) (int64, error) {
+	var at int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT sub_event_at FROM users WHERE id = ?`, userID).Scan(&at)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return at, err
 }
 
 func (s *SQLiteStore) SetScheduledPlan(ctx context.Context, userID, planID string) error {

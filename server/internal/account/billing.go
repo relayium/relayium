@@ -1,6 +1,7 @@
 package account
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -389,6 +390,32 @@ func (s *Service) handlePublicPlans(w http.ResponseWriter, r *http.Request) {
 // headroom while still bounding memory against a malicious/broken sender.
 const maxWebhookBodyBytes = 1 << 20
 
+// subEventIsStale reports whether a subscription webhook event (identified by
+// its Stripe event.created) is older than the last one already applied to this
+// user, and if so ACKs it with 200 so Stripe stops retrying. Stripe does not
+// guarantee delivery order and retries any event we 500 on for up to 3 days, so
+// without this an out-of-order or re-delivered older event could revert newer
+// state (e.g. a late `past_due`/`deleted` dropping a since-recovered user off
+// paid, or a retried older `active` restoring a lapsed one). Returns true when
+// the caller must stop because a response was already written (stale → 200, or a
+// store error → 500, which lets Stripe retry). created<=0 disables the guard
+// (no usable timestamp) so the event applies as before.
+func (s *Service) subEventIsStale(ctx context.Context, w http.ResponseWriter, userID string, created int64) bool {
+	if created <= 0 {
+		return false
+	}
+	last, err := s.store.LastSubEventAt(ctx, userID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return true
+	}
+	if created < last {
+		w.WriteHeader(http.StatusOK)
+		return true
+	}
+	return false
+}
+
 // handleStripeWebhook is the SOLE authority that grants or revokes a paid
 // plan: it never trusts the client-side checkout redirect, only a verified
 // Stripe event. 404 when billing is unconfigured; 400 ONLY on a signature
@@ -466,10 +493,15 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		// Ordering guard: drop an out-of-order / re-delivered event older than the
+		// last one applied, so it cannot revert newer subscription state.
+		if s.subEventIsStale(ctx, w, u.ID, ev.Created) {
+			return
+		}
 		if u.PlanSource == "admin" {
 			// Admin comp wins: record status/end for visibility, but never
 			// let a webhook change plan_id out from under an admin grant.
-			if err := s.store.SetUserSubscription(ctx, u.ID, u.PlanID, ev.Status, ev.CurrentPeriodEnd, "admin", "", s.now().Unix()); err != nil {
+			if err := s.store.SetUserSubscription(ctx, u.ID, u.PlanID, ev.Status, ev.CurrentPeriodEnd, "admin", "", s.now().Unix(), ev.Created); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
@@ -487,7 +519,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 				cycle = cycleOfPrice(p, ev.PriceID)
 			}
 		}
-		if err := s.store.SetUserSubscription(ctx, u.ID, planID, ev.Status, ev.CurrentPeriodEnd, "stripe", cycle, s.now().Unix()); err != nil {
+		if err := s.store.SetUserSubscription(ctx, u.ID, planID, ev.Status, ev.CurrentPeriodEnd, "stripe", cycle, s.now().Unix(), ev.Created); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
@@ -510,11 +542,14 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+		if s.subEventIsStale(ctx, w, u.ID, ev.Created) {
+			return
+		}
 		planID, source := "free", "stripe"
 		if u.PlanSource == "admin" {
 			planID, source = u.PlanID, "admin"
 		}
-		if err := s.store.SetUserSubscription(ctx, u.ID, planID, "canceled", ev.CurrentPeriodEnd, source, "", s.now().Unix()); err != nil {
+		if err := s.store.SetUserSubscription(ctx, u.ID, planID, "canceled", ev.CurrentPeriodEnd, source, "", s.now().Unix(), ev.Created); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
