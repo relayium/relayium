@@ -494,6 +494,9 @@ type Store interface {
 	SetUserPlanAdmin(ctx context.Context, userID, planID string, now int64) error
 	// SetUserStripeCustomer binds a user to their Stripe customer id.
 	SetUserStripeCustomer(ctx context.Context, userID, customerID string) error
+	// SetUserStripeCustomerIfEmpty binds a customer id only if the user has none
+	// yet, returning the id now in force (the existing one if already bound).
+	SetUserStripeCustomerIfEmpty(ctx context.Context, userID, customerID string) (string, error)
 	// GetUserByStripeCustomer looks up a user by Stripe customer id (webhook
 	// dispatch). An empty customerID returns not-found.
 	GetUserByStripeCustomer(ctx context.Context, customerID string) (User, bool, error)

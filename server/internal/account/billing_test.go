@@ -36,6 +36,17 @@ type fakeBiller struct {
 	previewErr       error
 	lastPreviewPrice string
 	previewCalls     int
+
+	ensureCustomerID string // id EnsureCustomer returns; "" ⇒ derive from userID
+	ensureCalls      int
+}
+
+func (f *fakeBiller) EnsureCustomer(ctx context.Context, email, userID string) (string, error) {
+	f.ensureCalls++
+	if f.ensureCustomerID != "" {
+		return f.ensureCustomerID, nil
+	}
+	return "cus_" + userID, nil
 }
 
 func (f *fakeBiller) CreateCheckoutSession(ctx context.Context, in CheckoutInput) (string, error) {

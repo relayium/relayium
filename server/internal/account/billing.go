@@ -58,9 +58,28 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "plan not purchasable"})
 		return
 	}
+	// Bind a SINGLE Stripe customer to the user before checkout, then always pass
+	// it explicitly. Otherwise subscription-mode Checkout mints a fresh customer
+	// per session, so two concurrent first-time checkouts (double tab / retry
+	// before the first webhook binds one) produced TWO customers with TWO parallel
+	// subscriptions — the second invisible in the Billing Portal and uncancelable
+	// in-product. EnsureCustomer is idempotent (keyed on user id) and the CAS store
+	// write makes even a bypassed key converge on one customer.
+	customerID := u.StripeCustomerID
+	if customerID == "" {
+		created, err := s.biller.EnsureCustomer(r.Context(), u.Email, u.ID)
+		if err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if customerID, err = s.store.SetUserStripeCustomerIfEmpty(r.Context(), u.ID, created); err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+	}
 	url, err := s.biller.CreateCheckoutSession(r.Context(), CheckoutInput{
 		PriceID:         priceID,
-		CustomerID:      u.StripeCustomerID,
+		CustomerID:      customerID,
 		CustomerEmail:   u.Email,
 		ClientRefUserID: u.ID,
 		SuccessURL:      s.cfg.BaseURL + "/me?billing=success",

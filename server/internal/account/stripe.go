@@ -20,6 +20,10 @@ import (
 // A thin hand-rolled client (stripeClient) is the only implementation; nil
 // means billing is unconfigured (RELAYIUM_STRIPE_SECRET_KEY empty).
 type Biller interface {
+	// EnsureCustomer returns a Stripe customer id for the user, creating one
+	// idempotently (keyed on userID) so concurrent first-time checkouts collapse
+	// to a single customer instead of minting one each.
+	EnsureCustomer(ctx context.Context, email, userID string) (customerID string, err error)
 	CreateCheckoutSession(ctx context.Context, in CheckoutInput) (url string, err error)
 	CreatePortalSession(ctx context.Context, customerID, returnURL string) (url string, err error)
 	// ChangeSubscriptionPlan switches the customer's existing active subscription
@@ -276,6 +280,34 @@ func (c *stripeClient) CreateCheckoutSession(ctx context.Context, in CheckoutInp
 	return c.postForSessionURL(ctx, "/v1/checkout/sessions", form)
 }
 
+// EnsureCustomer returns a Stripe customer id for the user, creating one if
+// needed. The Idempotency-Key = "customer:<userID>" makes two concurrent
+// first-time checkouts (double tab / retry) resolve to the SAME customer instead
+// of each minting its own, which is what let a user end up with two customers and
+// two parallel subscriptions (the second invisible in the Billing Portal). The
+// user_id metadata ties the customer back to the account for reconciliation.
+func (c *stripeClient) EnsureCustomer(ctx context.Context, email, userID string) (string, error) {
+	form := url.Values{}
+	if email != "" {
+		form.Set("email", email)
+	}
+	form.Set("metadata[user_id]", userID)
+	body, err := c.requestKeyed(ctx, http.MethodPost, "/v1/customers", form, "customer:"+userID)
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return "", fmt.Errorf("stripe: create customer: parse response: %w", err)
+	}
+	if out.ID == "" {
+		return "", fmt.Errorf("stripe: create customer: empty id")
+	}
+	return out.ID, nil
+}
+
 // CreatePortalSession creates a Stripe Billing Portal Session for an existing
 // customer and returns its hosted URL.
 func (c *stripeClient) CreatePortalSession(ctx context.Context, customerID, returnURL string) (string, error) {
@@ -528,6 +560,13 @@ func (c *stripeClient) ReleaseSchedule(ctx context.Context, customerID string) e
 // request performs an authenticated Stripe REST call and returns the raw body,
 // erroring on any non-2xx. form==nil means a bodyless GET.
 func (c *stripeClient) request(ctx context.Context, method, path string, form url.Values) ([]byte, error) {
+	return c.requestKeyed(ctx, method, path, form, "")
+}
+
+// requestKeyed is request with an optional Stripe Idempotency-Key: retrying (or
+// racing) the same key returns the SAME result object instead of creating a
+// second one — the basis for one-customer-per-user under concurrent checkout.
+func (c *stripeClient) requestKeyed(ctx context.Context, method, path string, form url.Values, idemKey string) ([]byte, error) {
 	var bodyReader io.Reader
 	if form != nil {
 		bodyReader = strings.NewReader(form.Encode())
@@ -540,6 +579,9 @@ func (c *stripeClient) request(ctx context.Context, method, path string, form ur
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 	req.Header.Set("Authorization", "Bearer "+c.secretKey)
+	if idemKey != "" {
+		req.Header.Set("Idempotency-Key", idemKey)
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {

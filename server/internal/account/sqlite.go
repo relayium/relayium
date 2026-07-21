@@ -871,6 +871,30 @@ func (s *SQLiteStore) SetUserStripeCustomer(ctx context.Context, userID, custome
 	return err
 }
 
+// SetUserStripeCustomerIfEmpty binds a customer id only when the user has none
+// yet, returning the id now in force (whichever won). Two concurrent first-time
+// checkouts thus converge on a single customer even if the idempotency key were
+// bypassed: the first write wins, the loser reads and reuses it. current!="" ⇒
+// it was already bound and customerID is ignored.
+func (s *SQLiteStore) SetUserStripeCustomerIfEmpty(ctx context.Context, userID, customerID string) (string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	var current string
+	if err := tx.QueryRowContext(ctx, `SELECT stripe_customer_id FROM users WHERE id = ?`, userID).Scan(&current); err != nil {
+		return "", err
+	}
+	if current != "" {
+		return current, tx.Commit()
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET stripe_customer_id = ? WHERE id = ?`, customerID, userID); err != nil {
+		return "", err
+	}
+	return customerID, tx.Commit()
+}
+
 // GetUserByStripeCustomer looks up a user by Stripe customer id (webhook
 // dispatch). An empty customerID intentionally returns not-found: every
 // pre-Stripe row defaults stripe_customer_id to ”, so matching "" would
