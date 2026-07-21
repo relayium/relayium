@@ -349,11 +349,17 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 
 	capped := &cappedReader{r: r.Body, max: sess.maxSize - sess.received}
 	newSize, err := sess.bs.Append(r.Context(), sess.blobKey, sess.received, capped)
-	sess.received = newSize // Append reports bytes written even on error
 	if errors.Is(err, errTooLarge) {
+		// Oversize chunk. Do NOT trust/assign newSize here: on the remote-node
+		// path the request aborted mid-body, so Append returns 0 — assigning it
+		// would clobber the committed offset. Leave sess.received unchanged; the
+		// upload is rejected (413) and the client stops. (The node committed up to
+		// the cap; a client that ignores the 413 and retries resyncs via the
+		// offset-mismatch path below.)
 		http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
 		return
 	}
+	sess.received = newSize // Append reports bytes written even on a non-oversize error (offset mismatch)
 	if errors.Is(err, storage.ErrOffsetMismatch) {
 		// The blob and our counter disagree (e.g. a duplicated request lost the
 		// race); report the blob's truth so the client re-syncs.

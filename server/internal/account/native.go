@@ -118,6 +118,24 @@ func (s *Service) handleUnlinkIdentity(w http.ResponseWriter, r *http.Request, u
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	// The "would this orphan the account?" check and the delete must be atomic:
+	// two concurrent unlinks of different providers could each see a method still
+	// remaining and both delete, leaving zero login methods (lockout). The store
+	// does the count-and-delete in one transaction.
+	deleted, wouldOrphan, err := s.store.UnlinkIdentityIfSafe(r.Context(), provider, u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if wouldOrphan {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "last_login_method"})
+		return
+	}
+	if !deleted {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	// Return the fresh method set so the UI can update without a refetch.
 	hasPass, err := s.store.HasPassword(r.Context(), u.ID)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -128,30 +146,13 @@ func (s *Service) handleUnlinkIdentity(w http.ResponseWriter, r *http.Request, u
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	// Count the login methods that would remain after removing `provider`.
-	// "password" in the identities list is folded into hasPass (not double
-	// counted), and the target provider is excluded.
-	remaining := 0
-	if hasPass {
-		remaining++
-	}
 	after := make([]string, 0, len(linked))
 	for _, p := range linked {
-		if p == provider || p == "password" {
+		if p == "password" {
 			continue
 		}
-		remaining++
 		after = append(after, p)
 	}
-	if remaining == 0 {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "last_login_method"})
-		return
-	}
-	if err := s.store.UnlinkIdentity(r.Context(), provider, u.ID); err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-	// Return the fresh method set so the UI can update without a refetch.
 	writeJSON(w, http.StatusOK, map[string]any{"linkedMethods": loginMethods(hasPass, after)})
 }
 

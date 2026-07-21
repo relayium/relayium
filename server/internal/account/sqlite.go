@@ -475,12 +475,19 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 	// (err==nil) → backfill every existing row's canonical form once; duplicate
 	// column name → already migrated, skip.
 	if _, err := db.ExecContext(context.Background(),
-		`ALTER TABLE users ADD COLUMN canonical_email TEXT NOT NULL DEFAULT ''`); err != nil {
-		if !strings.Contains(err.Error(), "duplicate column name") {
-			db.Close()
-			return nil, err
-		}
-	} else if err := backfillCanonicalEmail(context.Background(), db); err != nil {
+		`ALTER TABLE users ADD COLUMN canonical_email TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column name") {
+		db.Close()
+		return nil, err
+	}
+	// Backfill runs UNCONDITIONALLY every boot, NOT gated on the ALTER succeeding.
+	// If the process died between a successful ALTER and this backfill, gating it
+	// on the ALTER would make every later boot see "duplicate column name", skip
+	// the backfill forever, and leave legacy rows with canonical_email='' so the
+	// H2b anti-Sybil dedup can never match them. It's scoped to the rows that
+	// still need it (canonical_email='') — new rows get it set at INSERT — so it's
+	// a no-op once migrated. Same crash-safe pattern as the max_downloads backfill.
+	if err := backfillCanonicalEmail(context.Background(), db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -525,10 +532,13 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 	return s, nil
 }
 
-// backfillCanonicalEmail populates canonical_email for pre-existing rows the
-// one time the column is created. Runs on a freshly-migrated legacy DB only.
+// backfillCanonicalEmail populates canonical_email for any row that still lacks
+// it (canonical_email=''). Scoped to those rows so it can run on every boot as a
+// crash-safe idempotent no-op once migrated: a new row already has its canonical
+// set at INSERT (InsertUserDedupedByCanonical), so only unmigrated legacy rows
+// match.
 func backfillCanonicalEmail(ctx context.Context, db *sql.DB) error {
-	rows, err := db.QueryContext(ctx, `SELECT id, email FROM users`)
+	rows, err := db.QueryContext(ctx, `SELECT id, email FROM users WHERE canonical_email = ''`)
 	if err != nil {
 		return err
 	}
@@ -1047,6 +1057,13 @@ func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string, no
 		{`DELETE FROM sessions WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM devices WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM usage_events WHERE user_id=?`, []any{userID}},
+		// usage_periods carries a user_id column (per-period relay deltas the
+		// billing hot paths read). It must be purged here too — the archive fold
+		// above anonymizes usage_monthly, so leaving usage_periods behind would
+		// retain user-attributed relay history indefinitely after the hard purge,
+		// contradicting the "no user_id retained" privacy model, and leak an
+		// unbounded orphan row per deleted account.
+		{`DELETE FROM usage_periods WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM stored_files WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM upload_events WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM user_stats WHERE user_id=?`, []any{userID}},
@@ -1131,6 +1148,53 @@ func (s *SQLiteStore) UnlinkIdentity(ctx context.Context, provider, userID strin
 		return ErrNotFound
 	}
 	return nil
+}
+
+// UnlinkIdentityIfSafe removes one provider link only if doing so leaves the
+// account with at least one login method (a password, or another linked
+// provider). The count-and-delete run in one writer transaction so two
+// concurrent unlinks of DIFFERENT providers can't each see "one method left" and
+// both delete, leaving the account with zero login methods (a lockout). Returns:
+// deleted (a link was removed), wouldOrphan (refused — it was the last method),
+// and err. deleted=false && !wouldOrphan means the provider wasn't linked.
+func (s *SQLiteStore) UnlinkIdentityIfSafe(ctx context.Context, provider, userID string) (deleted, wouldOrphan bool, err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, false, err
+	}
+	defer tx.Rollback()
+
+	var hash sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT password_hash FROM users WHERE id = ?`, userID).Scan(&hash); err != nil {
+		if err == sql.ErrNoRows {
+			return false, false, ErrNotFound
+		}
+		return false, false, err
+	}
+	// Methods that would remain after removing `provider`: password (if set) plus
+	// any linked identity other than `provider` and the "password" pseudo-provider
+	// (folded into the password_hash check, never double-counted).
+	remaining := 0
+	if hash.Valid && hash.String != "" {
+		remaining++
+	}
+	var others int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(DISTINCT provider) FROM identities WHERE user_id = ? AND provider NOT IN (?, 'password')`,
+		userID, provider).Scan(&others); err != nil {
+		return false, false, err
+	}
+	remaining += others
+	if remaining == 0 {
+		return false, true, nil // last method — refuse, nothing deleted
+	}
+	res, err := tx.ExecContext(ctx,
+		`DELETE FROM identities WHERE provider = ? AND user_id = ?`, provider, userID)
+	if err != nil {
+		return false, false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, false, tx.Commit()
 }
 
 func (s *SQLiteStore) CreateSession(ctx context.Context, sess Session) error {

@@ -395,6 +395,10 @@ type Store interface {
 	// UnlinkIdentity removes a user's link to one provider (owner-scoped).
 	// Returns ErrNotFound when no such link exists.
 	UnlinkIdentity(ctx context.Context, provider, userID string) error
+	// UnlinkIdentityIfSafe atomically removes a provider link only if the account
+	// keeps at least one login method afterward, closing the concurrent-unlink
+	// lockout race. Returns deleted, wouldOrphan (refused — last method), and err.
+	UnlinkIdentityIfSafe(ctx context.Context, provider, userID string) (deleted, wouldOrphan bool, err error)
 	SetPassword(ctx context.Context, userID, passwordHash string) error
 	// ClearPassword removes a user's password credential (NULLs password_hash),
 	// so GetCredentials/HasPassword no longer report a usable password. Used to

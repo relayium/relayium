@@ -191,13 +191,21 @@ func (r *RemoteBlobStore) GetRange(ctx context.Context, key string, start int64)
 // resumable uploads. The node replies {"size":N} on success, or 409 with the
 // node's current size on an offset mismatch (surfaced as ErrOffsetMismatch).
 func (r *RemoteBlobStore) Append(ctx context.Context, key string, offset int64, body io.Reader) (int64, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, r.url(key), body)
+	er := &errCapturingReader{r: body}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, r.url(key), er)
 	if err != nil {
 		return 0, err
 	}
 	req.Header.Set("Authorization", "Bearer "+r.secret)
 	req.Header.Set("X-Blob-Offset", strconv.FormatInt(offset, 10))
 	resp, err := r.hc.Do(req)
+	if rerr := er.readerErr(); rerr != nil {
+		// The source reader failed (e.g. cappedReader's errTooLarge on an oversize
+		// chunk). Surface it verbatim — without this the http.Client masks it as a
+		// generic transport error, so the caller returns 500 instead of 413 and
+		// clobbers its committed offset with the 0 returned below.
+		return 0, rerr
+	}
 	if err != nil {
 		return 0, err
 	}
