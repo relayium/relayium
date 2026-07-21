@@ -7,9 +7,64 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/relayium/relayium/internal/dltoken"
 	"github.com/relayium/relayium/internal/storage"
 )
+
+// TestDLEndpointTokenAuth pins the public direct-download endpoint: GET
+// /dl/{key}?t=<token> serves the blob to a client that presents a valid signed
+// token (no bearer secret — the client must never hold it), and refuses a
+// missing, wrong-key, or expired token.
+func TestDLEndpointTokenAuth(t *testing.T) {
+	ds, err := storage.NewDiskStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("diskstore: %v", err)
+	}
+	const secret = "nodesecret"
+	srv := httptest.NewServer(newBlobHandler(ds, secret, nil, nil, nil))
+	defer srv.Close()
+
+	// Seed a blob via the bearer-authed PUT.
+	putReq, _ := http.NewRequest("PUT", srv.URL+"/blob/dlkey1", bytes.NewReader([]byte("cipher")))
+	putReq.Header.Set("Authorization", "Bearer "+secret)
+	if resp, err := http.DefaultClient.Do(putReq); err != nil || resp.StatusCode != 200 {
+		t.Fatalf("seed put: err=%v code=%v", err, resp.StatusCode)
+	}
+
+	get := func(path string) (int, string) {
+		resp, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatalf("get %s: %v", path, err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b)
+	}
+
+	now := time.Now().Unix()
+	good := dltoken.Sign(secret, "dlkey1", now+60, "n1")
+
+	// Valid token → 200 + the ciphertext, WITHOUT any bearer header.
+	if code, body := get("/dl/dlkey1?t=" + good); code != 200 || body != "cipher" {
+		t.Fatalf("valid token: code=%d body=%q, want 200 \"cipher\"", code, body)
+	}
+	// No token → refused.
+	if code, _ := get("/dl/dlkey1"); code != http.StatusForbidden {
+		t.Fatalf("missing token: code=%d, want 403", code)
+	}
+	// Token minted for a different key → refused.
+	other := dltoken.Sign(secret, "otherkey", now+60, "n1")
+	if code, _ := get("/dl/dlkey1?t=" + other); code != http.StatusForbidden {
+		t.Fatalf("wrong-key token: code=%d, want 403", code)
+	}
+	// Expired token → refused.
+	expired := dltoken.Sign(secret, "dlkey1", now-1, "n1")
+	if code, _ := get("/dl/dlkey1?t=" + expired); code != http.StatusForbidden {
+		t.Fatalf("expired token: code=%d, want 403", code)
+	}
+}
 
 func TestBlobHandlerRoundTripAndAuth(t *testing.T) {
 	ds, err := storage.NewDiskStore(t.TempDir())

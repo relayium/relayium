@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/relayium/relayium/internal/dltoken"
 	"github.com/relayium/relayium/internal/storage"
 )
 
@@ -89,6 +90,37 @@ func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed 
 		}
 		_, _ = io.Copy(w, rc)
 	}))
+	// Public direct-download endpoint: a client fetches the ciphertext straight
+	// from this node (central out of the data path) by presenting a short-lived,
+	// per-key token central signed with this node's secret. No bearer secret — the
+	// client must never hold it. CORS-open because a browser on relayium.com
+	// initiates the cross-origin fetch; the token is the access control, and the
+	// payload is opaque AEAD ciphertext.
+	mux.HandleFunc("GET /dl/{key}", func(w http.ResponseWriter, r *http.Request) {
+		key := r.PathValue("key")
+		if !dltoken.Verify(secret, key, time.Now().Unix(), r.URL.Query().Get("t")) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		rc, err := ds.Get(r.Context(), key)
+		if errors.Is(err, storage.ErrNotFound) || errors.Is(err, storage.ErrInvalidKey) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			http.Error(w, "read failed", http.StatusInternalServerError)
+			return
+		}
+		defer rc.Close()
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Content-Type", "application/octet-stream")
+		// ServeContent gives Range/206/Accept-Ranges for free (resumable download).
+		if rs, ok := rc.(io.ReadSeeker); ok {
+			http.ServeContent(w, r, key, time.Time{}, rs)
+			return
+		}
+		_, _ = io.Copy(w, rc)
+	})
 	mux.HandleFunc("PATCH /blob/{key}", authed(func(w http.ResponseWriter, r *http.Request, key string) {
 		offset, oerr := strconv.ParseInt(r.Header.Get("X-Blob-Offset"), 10, 64)
 		if oerr != nil || offset < 0 {
