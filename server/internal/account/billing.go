@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 )
 
@@ -419,6 +420,74 @@ func (s *Service) handlePublicPlans(w http.ResponseWriter, r *http.Request) {
 // headroom while still bounding memory against a malicious/broken sender.
 const maxWebhookBodyBytes = 1 << 20
 
+// reconcileSubscriptions is the authoritative double-checkout dedup. It reads the
+// customer's LIVE active subscriptions from Stripe, keeps the EARLIEST one as
+// canonical (deterministic → always converges to the same winner regardless of
+// event order), cancels + FULLY REFUNDS every other active subscription, and
+// writes the user's plan/status FROM the canonical one. It is stateless
+// (recomputed from live state each call), so it needs no stored subscription id
+// and is robust to out-of-order / redelivered events. Caller must have already
+// excluded admin-comped users (plan_source=admin) — those never take a webhook.
+//
+// Returns:
+//   - (true, nil)  → reconciled; caller writes 200.
+//   - (false, nil) → the Stripe list call failed; caller falls back to the
+//     single-event path rather than dropping the webhook.
+//   - (false, err) → a store write failed; caller 500s so Stripe retries.
+func (s *Service) reconcileSubscriptions(ctx context.Context, u User, evCreated int64) (bool, error) {
+	subs, err := s.biller.ListActiveSubscriptions(ctx, u.StripeCustomerID)
+	if err != nil {
+		log.Printf("billing: reconcile list subs failed for user %s: %v (falling back to per-event)", u.ID, err)
+		return false, nil
+	}
+	if len(subs) == 0 {
+		// No live subscription remains → free (a cancellation, or all lapsed).
+		_ = s.store.SetUserStripeSubscription(ctx, u.ID, "")
+		if err := s.store.SetUserSubscription(ctx, u.ID, "free", "canceled", 0, "stripe", "", s.now().Unix(), evCreated); err != nil {
+			return false, err
+		}
+		if u.ScheduledPlanID != "" {
+			_ = s.store.SetScheduledPlan(ctx, u.ID, "")
+		}
+		return true, nil
+	}
+	// Canonical = earliest created (tie-break by id so the winner is deterministic).
+	canonical := subs[0]
+	for _, sub := range subs[1:] {
+		if sub.Created < canonical.Created || (sub.Created == canonical.Created && sub.ID < canonical.ID) {
+			canonical = sub
+		}
+	}
+	_ = s.store.SetUserStripeSubscription(ctx, u.ID, canonical.ID)
+	// Cancel + fully refund every OTHER active subscription — the duplicates a
+	// double-checkout opened. Best-effort per sub: a failure is logged and the next
+	// event (idempotently) re-runs this; the duplicate is at least visible in the
+	// single customer's Portal meanwhile.
+	for _, sub := range subs {
+		if sub.ID == canonical.ID {
+			continue
+		}
+		if cerr := s.biller.CancelSubscription(ctx, sub.ID, true); cerr != nil {
+			log.Printf("billing: cancel+refund duplicate sub %s for user %s failed: %v", sub.ID, u.ID, cerr)
+		} else {
+			log.Printf("billing: canceled+refunded duplicate subscription %s for user %s (kept earliest %s)", sub.ID, u.ID, canonical.ID)
+		}
+	}
+	// Drive plan/status from the canonical subscription (not this event's sub).
+	planID, cycle := "free", ""
+	if p, ok, perr := s.store.PlanByStripePrice(ctx, canonical.PriceID); perr == nil && ok {
+		planID = p.ID
+		cycle = cycleOfPrice(p, canonical.PriceID)
+	}
+	if err := s.store.SetUserSubscription(ctx, u.ID, planID, canonical.Status, canonical.CurrentPeriodEnd, "stripe", cycle, s.now().Unix(), evCreated); err != nil {
+		return false, err
+	}
+	if u.ScheduledPlanID != "" && planID == u.ScheduledPlanID {
+		_ = s.store.SetScheduledPlan(ctx, u.ID, "")
+	}
+	return true, nil
+}
+
 // subEventIsStale reports whether a subscription webhook event (identified by
 // its Stripe event.created) is older than the last one already applied to this
 // user, and if so ACKs it with 200 so Stripe stops retrying. Stripe does not
@@ -537,6 +606,25 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+		// Double-checkout dedup, done SURGICALLY so the common path makes no Stripe
+		// call: only when a DIFFERENT subscription id than the recorded canonical
+		// shows up (a second checkout opened a second subscription) do we reconcile
+		// from live Stripe state — keep the earliest, cancel+refund the rest. An
+		// event for the canonical (or the first-ever subscription) takes the normal
+		// per-event path below.
+		if u.StripeSubscriptionID != "" && ev.SubscriptionID != "" && ev.SubscriptionID != u.StripeSubscriptionID {
+			if done, err := s.reconcileSubscriptions(ctx, u, ev.Created); err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			} else if done {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			// Fall through to per-event logic if the Stripe list failed.
+		} else if u.StripeSubscriptionID == "" && ev.SubscriptionID != "" {
+			// First subscription seen → adopt it as canonical (no Stripe call).
+			_ = s.store.SetUserStripeSubscription(ctx, u.ID, ev.SubscriptionID)
+		}
 		planID := "free"
 		cycle := ""
 		if ev.Status == "active" || ev.Status == "trialing" {
@@ -574,15 +662,27 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		if s.subEventIsStale(ctx, w, u.ID, ev.Created) {
 			return
 		}
-		planID, source := "free", "stripe"
 		if u.PlanSource == "admin" {
-			planID, source = u.PlanID, "admin"
+			// Admin comp wins: record the cancellation for visibility but keep the plan.
+			if err := s.store.SetUserSubscription(ctx, u.ID, u.PlanID, "canceled", ev.CurrentPeriodEnd, "admin", "", s.now().Unix(), ev.Created); err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			return
 		}
-		if err := s.store.SetUserSubscription(ctx, u.ID, planID, "canceled", ev.CurrentPeriodEnd, source, "", s.now().Unix(), ev.Created); err != nil {
+		// A DUPLICATE's deletion (a subscription we reaped) must NOT drop the user:
+		// the canonical is still active. No Stripe call — just compare ids.
+		if u.StripeSubscriptionID != "" && ev.SubscriptionID != "" && ev.SubscriptionID != u.StripeSubscriptionID {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		// The canonical (or an unknown) subscription was canceled → free + clear it.
+		_ = s.store.SetUserStripeSubscription(ctx, u.ID, "")
+		if err := s.store.SetUserSubscription(ctx, u.ID, "free", "canceled", ev.CurrentPeriodEnd, "stripe", "", s.now().Unix(), ev.Created); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
-		// Subscription gone → any pending scheduled change is moot. Best-effort.
 		if u.ScheduledPlanID != "" {
 			_ = s.store.SetScheduledPlan(ctx, u.ID, "")
 		}

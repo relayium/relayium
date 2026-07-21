@@ -31,6 +31,12 @@ type User struct {
 	// StripeCustomerID is this user's Stripe customer id, set on first
 	// checkout; '' = no Stripe customer yet.
 	StripeCustomerID string
+	// StripeSubscriptionID is the CANONICAL subscription id (the earliest one the
+	// user holds). The webhook uses it to dedup a double-checkout: an event for a
+	// DIFFERENT id triggers a reconcile (keep earliest, cancel+refund the rest);
+	// an event matching it takes the normal per-event path with no Stripe call.
+	// '' = no subscription recorded yet.
+	StripeSubscriptionID string
 	// SubscriptionStatus mirrors the Stripe subscription status ('', 'active',
 	// 'canceled', 'past_due', ...); '' = no subscription on record.
 	SubscriptionStatus string
@@ -497,6 +503,8 @@ type Store interface {
 	// SetUserStripeCustomerIfEmpty binds a customer id only if the user has none
 	// yet, returning the id now in force (the existing one if already bound).
 	SetUserStripeCustomerIfEmpty(ctx context.Context, userID, customerID string) (string, error)
+	// SetUserStripeSubscription records the canonical subscription id ('' clears).
+	SetUserStripeSubscription(ctx context.Context, userID, subID string) error
 	// GetUserByStripeCustomer looks up a user by Stripe customer id (webhook
 	// dispatch). An empty customerID returns not-found.
 	GetUserByStripeCustomer(ctx context.Context, customerID string) (User, bool, error)

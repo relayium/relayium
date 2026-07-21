@@ -39,6 +39,12 @@ type fakeBiller struct {
 
 	ensureCustomerID string // id EnsureCustomer returns; "" ⇒ derive from userID
 	ensureCalls      int
+
+	activeSubs    []SubscriptionInfo // what ListActiveSubscriptions returns
+	listSubsErr   error
+	listSubsCalls int
+	canceledSubs  []string // ids passed to CancelSubscription
+	cancelRefund  []bool   // refund flag per cancel
 }
 
 func (f *fakeBiller) EnsureCustomer(ctx context.Context, email, userID string) (string, error) {
@@ -47,6 +53,28 @@ func (f *fakeBiller) EnsureCustomer(ctx context.Context, email, userID string) (
 		return f.ensureCustomerID, nil
 	}
 	return "cus_" + userID, nil
+}
+
+func (f *fakeBiller) ListActiveSubscriptions(ctx context.Context, customerID string) ([]SubscriptionInfo, error) {
+	f.listSubsCalls++
+	if f.listSubsErr != nil {
+		return nil, f.listSubsErr
+	}
+	return f.activeSubs, nil
+}
+
+func (f *fakeBiller) CancelSubscription(ctx context.Context, subID string, refund bool) error {
+	f.canceledSubs = append(f.canceledSubs, subID)
+	f.cancelRefund = append(f.cancelRefund, refund)
+	// Simulate the reaped sub leaving the active set (so a re-reconcile converges).
+	kept := f.activeSubs[:0]
+	for _, s := range f.activeSubs {
+		if s.ID != subID {
+			kept = append(kept, s)
+		}
+	}
+	f.activeSubs = kept
+	return nil
 }
 
 func (f *fakeBiller) CreateCheckoutSession(ctx context.Context, in CheckoutInput) (string, error) {

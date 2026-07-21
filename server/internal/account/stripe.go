@@ -24,6 +24,12 @@ type Biller interface {
 	// idempotently (keyed on userID) so concurrent first-time checkouts collapse
 	// to a single customer instead of minting one each.
 	EnsureCustomer(ctx context.Context, email, userID string) (customerID string, err error)
+	// ListActiveSubscriptions returns a customer's active/trialing subscriptions,
+	// so the webhook can detect a double-checkout (>1) and keep the earliest.
+	ListActiveSubscriptions(ctx context.Context, customerID string) ([]SubscriptionInfo, error)
+	// CancelSubscription cancels a subscription immediately; refund=true also fully
+	// refunds its latest invoice. Used to reap a duplicate subscription.
+	CancelSubscription(ctx context.Context, subID string, refund bool) error
 	CreateCheckoutSession(ctx context.Context, in CheckoutInput) (url string, err error)
 	CreatePortalSession(ctx context.Context, customerID, returnURL string) (url string, err error)
 	// ChangeSubscriptionPlan switches the customer's existing active subscription
@@ -278,6 +284,128 @@ func (c *stripeClient) CreateCheckoutSession(ctx context.Context, in CheckoutInp
 		form.Set("customer_email", in.CustomerEmail)
 	}
 	return c.postForSessionURL(ctx, "/v1/checkout/sessions", form)
+}
+
+// SubscriptionInfo is a live subscription's identity for the webhook dedup:
+// which subscriptions a customer has, so it can keep the earliest and cancel the
+// rest. Created is the Stripe subscription creation time (the "earliest" key).
+type SubscriptionInfo struct {
+	ID               string
+	Created          int64
+	PriceID          string
+	Status           string
+	CurrentPeriodEnd int64
+}
+
+// ListActiveSubscriptions returns the customer's active/trialing subscriptions
+// (oldest key = Created). The webhook uses it to detect a double-checkout: more
+// than one active subscription on one customer means keep the earliest, cancel
+// the rest.
+func (c *stripeClient) ListActiveSubscriptions(ctx context.Context, customerID string) ([]SubscriptionInfo, error) {
+	q := url.Values{}
+	q.Set("customer", customerID)
+	q.Set("status", "all")
+	q.Set("limit", "100")
+	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions?"+q.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	var list struct {
+		Data []struct {
+			ID               string `json:"id"`
+			Status           string `json:"status"`
+			Created          int64  `json:"created"`
+			CurrentPeriodEnd int64  `json:"current_period_end"`
+			Items            struct {
+				Data []struct {
+					Price struct {
+						ID string `json:"id"`
+					} `json:"price"`
+				} `json:"data"`
+			} `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &list); err != nil {
+		return nil, fmt.Errorf("stripe: list subscriptions: parse response: %w", err)
+	}
+	out := make([]SubscriptionInfo, 0, len(list.Data))
+	for _, s := range list.Data {
+		if !liveSubStatus(s.Status) {
+			continue
+		}
+		price := ""
+		if len(s.Items.Data) > 0 {
+			price = s.Items.Data[0].Price.ID
+		}
+		out = append(out, SubscriptionInfo{
+			ID: s.ID, Created: s.Created, PriceID: price,
+			Status: s.Status, CurrentPeriodEnd: s.CurrentPeriodEnd,
+		})
+	}
+	return out, nil
+}
+
+// CancelSubscription cancels a subscription immediately and, when refund is set,
+// fully refunds its latest invoice's payment. Cancellation is done first — the
+// critical outcome is that a duplicate stops billing; a refund failure surfaces
+// as an error (the caller logs it) but never leaves the subscription active.
+func (c *stripeClient) CancelSubscription(ctx context.Context, subID string, refund bool) error {
+	var invoiceID string
+	if refund {
+		invoiceID, _ = c.latestInvoiceID(ctx, subID) // best-effort read before cancel
+	}
+	if _, err := c.request(ctx, http.MethodDelete, "/v1/subscriptions/"+subID, nil); err != nil {
+		// Already canceled / gone ⇒ idempotent success; still try the refund.
+		if !strings.Contains(err.Error(), "No such subscription") &&
+			!strings.Contains(err.Error(), "canceled") {
+			return err
+		}
+	}
+	if refund && invoiceID != "" {
+		if err := c.refundInvoice(ctx, subID, invoiceID); err != nil {
+			return fmt.Errorf("stripe: canceled sub %s but refund failed: %w", subID, err)
+		}
+	}
+	return nil
+}
+
+// latestInvoiceID reads a subscription's latest_invoice id.
+func (c *stripeClient) latestInvoiceID(ctx context.Context, subID string) (string, error) {
+	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions/"+subID, nil)
+	if err != nil {
+		return "", err
+	}
+	var sub struct {
+		LatestInvoice string `json:"latest_invoice"`
+	}
+	if err := json.Unmarshal(body, &sub); err != nil {
+		return "", fmt.Errorf("stripe: read subscription %s: %w", subID, err)
+	}
+	return sub.LatestInvoice, nil
+}
+
+// refundInvoice issues a full refund of an invoice's payment, if it was paid.
+// Idempotency-Key = "refund:<subID>" so a re-run (or a racing reconcile) never
+// double-refunds.
+func (c *stripeClient) refundInvoice(ctx context.Context, subID, invoiceID string) error {
+	body, err := c.request(ctx, http.MethodGet, "/v1/invoices/"+invoiceID, nil)
+	if err != nil {
+		return err
+	}
+	var inv struct {
+		PaymentIntent string `json:"payment_intent"`
+		AmountPaid    int64  `json:"amount_paid"`
+	}
+	if err := json.Unmarshal(body, &inv); err != nil {
+		return fmt.Errorf("stripe: read invoice %s: %w", invoiceID, err)
+	}
+	if inv.PaymentIntent == "" || inv.AmountPaid <= 0 {
+		return nil // nothing was charged — nothing to refund
+	}
+	form := url.Values{}
+	form.Set("payment_intent", inv.PaymentIntent)
+	_, err = c.requestKeyed(ctx, http.MethodPost, "/v1/refunds", form, "refund:"+subID)
+	return err
 }
 
 // EnsureCustomer returns a Stripe customer id for the user, creating one if
