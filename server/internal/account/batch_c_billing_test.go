@@ -62,35 +62,3 @@ func TestBillingChangePlanCanceledSub409(t *testing.T) {
 		t.Fatalf("canceled subscriber change-plan: got %d, want 409", resp.StatusCode)
 	}
 }
-
-// Own-node files (on a relay node the owner runs) classify as exempt from plan
-// traffic accounting; central-local and fleet/other-owner files do not.
-func TestFileIsOwnNodeClassification(t *testing.T) {
-	store := newTestStore(t)
-	svc := NewService(store, nil, Config{})
-	ctx := context.Background()
-	u, _ := store.UpsertUserByEmail(ctx, "own@example.com", "O")
-
-	ownNode, _ := store.UpsertNode(ctx, Node{
-		OwnerType: "user", OwnerUserID: u.ID, URLs: []string{"turn:x:3478"}, TURNSecret: "s",
-		CreatedAt: 1, LastSeenAt: 1,
-	})
-	fleetNode, _ := store.UpsertNode(ctx, Node{
-		OwnerType: "fleet", URLs: []string{"turn:y:3478"}, TURNSecret: "s",
-		CreatedAt: 1, LastSeenAt: 1,
-	})
-
-	if !svc.fileIsOwnNode(ctx, StoredFile{UserID: u.ID, NodeID: ownNode.ID}) {
-		t.Fatal("a file on the user's own node must be own-node")
-	}
-	if svc.fileIsOwnNode(ctx, StoredFile{UserID: u.ID, NodeID: fleetNode.ID}) {
-		t.Fatal("a fleet node is not the user's own node")
-	}
-	if svc.fileIsOwnNode(ctx, StoredFile{UserID: u.ID, NodeID: ""}) {
-		t.Fatal("central-local (empty node) is billable, not own-node")
-	}
-	// Another user's node is not own-node for this user.
-	if svc.fileIsOwnNode(ctx, StoredFile{UserID: "someone-else", NodeID: ownNode.ID}) {
-		t.Fatal("a node owned by a different user is not own-node")
-	}
-}

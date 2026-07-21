@@ -246,6 +246,15 @@ func main() {
 	passkeyBeginLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(10, div), time.Minute, func() int64 { return time.Now().Unix() })
 	go passkeyBeginLimiter.Run(context.Background(), time.Minute)
 
+	// Blob downloads are proxied through central, so bound the per-IP request rate
+	// on the public /api/files/{id}/blob endpoint. 120/min/IP is generous for a
+	// human (or a resuming multi-GET download of one big file) yet blunts a single
+	// source hammering a public link to amplify central egress. Metering (charged
+	// to the file owner) is the primary cap; this is defence-in-depth against a
+	// burst before the eventually-consistent traffic gate reacts.
+	downloadLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(120, div), time.Minute, func() int64 { return time.Now().Unix() })
+	go downloadLimiter.Run(context.Background(), time.Minute)
+
 	store, dbErr := account.OpenSQLite(*dbPath)
 
 	mux := http.NewServeMux()
@@ -355,6 +364,7 @@ func main() {
 		acct.SetGuessBreaker(guessBreaker) // shared /ws breaker: shed /api/ice during a flood
 		acct.SetRegisterLimiter(registerLimiter)
 		acct.SetPasskeyBeginLimiter(passkeyBeginLimiter)
+		acct.SetDownloadLimiter(downloadLimiter)
 		// /api/pair requires a logged-in owner: the receiver still joins the code
 		// room anonymously via /ws?code= and /api/ice?code=, but minting a
 		// cross-network rendezvous code needs an account for attribution.

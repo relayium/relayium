@@ -191,6 +191,12 @@ type Service struct {
 	// records a throttle fail on FINISH, so without this a begin-flood fills the
 	// shared ceremony cap and starves legit passkey login/step-up. nil = unlimited.
 	passkeyBeginLimiter rateLimiter
+	// downloadLimiter caps GET /api/files/{id}/blob starts per IP. Every download
+	// is proxied through central, so an unbounded request rate against a public
+	// link amplifies central egress; this blunts a single source before the
+	// monthly traffic gate (which reads eventually-consistent usage) reacts.
+	// nil = unlimited.
+	downloadLimiter rateLimiter
 	// uploadSem caps concurrent in-flight POST /api/files per account (M1).
 	uploadSem *uploadSem
 	// diskUsage reads the blob volume's current usage; nil disables the global
@@ -302,6 +308,9 @@ func (s *Service) SetRegisterLimiter(rl rateLimiter) { s.registerLimiter = rl }
 
 // SetPasskeyBeginLimiter caps admin passkey */begin per IP. nil = unlimited.
 func (s *Service) SetPasskeyBeginLimiter(rl rateLimiter) { s.passkeyBeginLimiter = rl }
+
+// SetDownloadLimiter caps GET /api/files/{id}/blob starts per IP. nil = unlimited.
+func (s *Service) SetDownloadLimiter(rl rateLimiter) { s.downloadLimiter = rl }
 
 // passkeyBeginAllowed reports whether this IP may start another passkey ceremony,
 // writing a 429 and returning false when the per-IP begin budget is exhausted.

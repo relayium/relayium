@@ -342,21 +342,6 @@ func (s *Service) handleFileMeta(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// fileIsOwnNode reports whether a stored file lives on a relay node its own user
-// runs (own-node storage), which is exempt from per-plan traffic accounting.
-// Central-local ("") and fleet/other-owner nodes are billable. A lookup error or
-// missing node conservatively returns false — never grant free traffic on error.
-func (s *Service) fileIsOwnNode(ctx context.Context, sf StoredFile) bool {
-	if sf.NodeID == "" {
-		return false
-	}
-	n, ok, err := s.store.GetNode(ctx, sf.NodeID)
-	if err != nil || !ok {
-		return false
-	}
-	return n.OwnerType == "user" && n.OwnerUserID == sf.UserID
-}
-
 func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	if s.blobs == nil {
 		http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
@@ -367,16 +352,29 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	// Own-node files (stored on a relay node the owner runs) are exempt from the
-	// per-plan traffic accounting entirely — neither gated nor metered — matching
-	// the upload side and the relay side's billable=0 rule. Without this a user
-	// downloading their OWN files was blocked by their plan's traffic cap and had
-	// that traffic counted against them.
-	ownNode := s.fileIsOwnNode(r.Context(), sf)
+	// Per-file / per-IP download rate limit (defence-in-depth). EVERY blob
+	// download is proxied through central (node -> central -> client), so central
+	// bears egress on each request. This blunts a single source hammering a public
+	// link to amplify that egress faster than the (eventually-consistent) monthly
+	// traffic gate below can react. nil = unlimited (tests / self-host).
+	if s.downloadLimiter != nil && !s.downloadLimiter.Allow(s.clientIP(r)) {
+		http.Error(w, "too many download requests, slow down", http.StatusTooManyRequests)
+		return
+	}
 	// Per-plan traffic gate, charged to the file's OWNER (downloader identity is
 	// never read — zero-knowledge). Over quota → the owner's shares pause until
 	// the month rolls over or they upgrade. Fail-open on a read error.
-	if over, err := s.overTraffic(r.Context(), sf.UserID, sf.Size); err == nil && over && !ownNode {
+	//
+	// This applies to own-node files too. Storage on a user's own node is free
+	// (no disk cost to central), but the DOWNLOAD is not: it is proxied through
+	// central like every other blob, so central pays egress on each request. A
+	// public link to an own-node file would otherwise let anyone (including the
+	// owner) drive unbounded, unmetered central egress — an operator-cost
+	// amplifier. Metering the served bytes against the owner keeps that cost
+	// bounded and billable; the "free storage" perk does not extend to central
+	// bandwidth. (Truly free own-node downloads require serving them directly from
+	// the node so central leaves the data path — a separate architecture change.)
+	if over, err := s.overTraffic(r.Context(), sf.UserID, sf.Size); err == nil && over {
 		http.Error(w, "this file's account has reached its monthly traffic limit", http.StatusTooManyRequests)
 		return
 	}
@@ -468,10 +466,10 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	if n > 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_ = s.store.AddDownloadStat(ctx, sf.UserID, n)
-		// Own-node egress isn't metered against the plan (see the gate above).
-		if !ownNode {
-			_ = s.store.RecordMeter(ctx, sf.UserID, MeterDownload, n, s.now().Unix())
-		}
+		// Meter the central egress against the owner for every file — own-node
+		// included: the bytes are proxied through central regardless of where the
+		// blob is stored (see the gate above).
+		_ = s.store.RecordMeter(ctx, sf.UserID, MeterDownload, n, s.now().Unix())
 		cancel()
 	}
 
