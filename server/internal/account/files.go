@@ -344,6 +344,16 @@ func (s *Service) handleFileMeta(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// redirectToNode 302s the client to fetch a blob straight from the node holding
+// it, with a short-lived token signed by the node's secret (the node verifies it
+// with no round-trip to central). Central leaves the data path.
+func (s *Service) redirectToNode(w http.ResponseWriter, r *http.Request, node Node, blobKey string) {
+	exp := s.now().Add(2 * time.Minute).Unix()
+	tok := dltoken.Sign(node.StorageSecret, blobKey, exp, randToken())
+	loc := strings.TrimRight(node.DownloadURL, "/") + "/dl/" + blobKey + "?t=" + url.QueryEscape(tok)
+	http.Redirect(w, r, loc, http.StatusFound)
+}
+
 func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	if s.blobs == nil {
 		http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
@@ -363,45 +373,50 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "too many download requests, slow down", http.StatusTooManyRequests)
 		return
 	}
+	// Resolve whether this download can be served DIRECT from the node holding it
+	// (central leaves the data path). Only for UNLIMITED files (burn/limited stay
+	// proxied so central still deletes the blob after serving); the node must
+	// advertise a public https DownloadURL and hold the shared secret.
+	var directNode Node
+	directCapable := false
+	if s.directDownload && sf.MaxDownloads == 0 {
+		if n, ok, nerr := s.store.GetNode(r.Context(), sf.NodeID); nerr == nil && ok &&
+			n.DownloadURL != "" && n.StorageSecret != "" {
+			directNode, directCapable = n, true
+		}
+	}
+
+	// BYO own-node direct (P2): the file lives on the OWNER's own node and is
+	// served straight from it — central pays no egress and the node's disk is the
+	// user's own, so this download is FREE: no traffic gate, no metering. (Contrast
+	// a PROXIED own-node download below, which central does pay for and therefore
+	// meters.) The BYO user opted in by advertising a DownloadURL, exposing their
+	// node's address to downloaders.
+	if directCapable && directNode.OwnerType == "user" && directNode.OwnerUserID == sf.UserID {
+		s.redirectToNode(w, r, directNode, sf.BlobKey)
+		return
+	}
+
 	// Per-plan traffic gate, charged to the file's OWNER (downloader identity is
 	// never read — zero-knowledge). Over quota → the owner's shares pause until
-	// the month rolls over or they upgrade. Fail-open on a read error.
-	//
-	// This applies to own-node files too. Storage on a user's own node is free
-	// (no disk cost to central), but the DOWNLOAD is not: it is proxied through
-	// central like every other blob, so central pays egress on each request. A
-	// public link to an own-node file would otherwise let anyone (including the
-	// owner) drive unbounded, unmetered central egress — an operator-cost
-	// amplifier. Metering the served bytes against the owner keeps that cost
-	// bounded and billable; the "free storage" perk does not extend to central
-	// bandwidth. (Truly free own-node downloads require serving them directly from
-	// the node so central leaves the data path — a separate architecture change.)
+	// the month rolls over or they upgrade. Fail-open on a read error. Applies to
+	// proxied downloads (central pays egress) AND fleet-direct (a fleet node's
+	// bandwidth is still an operator cost) — but NOT to the BYO own-node case above.
 	if over, err := s.overTraffic(r.Context(), sf.UserID, sf.Size); err == nil && over {
 		http.Error(w, "this file's account has reached its monthly traffic limit", http.StatusTooManyRequests)
 		return
 	}
-	// Direct-from-node download (decentralized stored downloads P0): for an
-	// UNLIMITED file (no burn / max-downloads) stored on a fleet node that
-	// advertises a public DownloadURL, hand the client a short-lived signed URL to
-	// fetch the ciphertext straight from the node — central leaves the data path.
-	// Central won't see the actual egress, so pre-meter the file size against the
-	// owner here (over-metering on a retry is bounded by downloadLimiter and is the
-	// safe direction; receipt-based exact accounting is a later phase). Limited /
-	// burn files stay on the proxy path below, where central deletes the blob after
-	// serving — so their exact semantics are unchanged.
-	if s.directDownload && sf.MaxDownloads == 0 {
-		if node, ok, nerr := s.store.GetNode(r.Context(), sf.NodeID); nerr == nil && ok &&
-			node.OwnerType == "fleet" && node.DownloadURL != "" && node.StorageSecret != "" {
-			mctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			_ = s.store.AddDownloadStat(mctx, sf.UserID, sf.Size)
-			_ = s.store.RecordMeter(mctx, sf.UserID, MeterDownload, sf.Size, s.now().Unix())
-			cancel()
-			exp := s.now().Add(2 * time.Minute).Unix()
-			tok := dltoken.Sign(node.StorageSecret, sf.BlobKey, exp, randToken())
-			loc := strings.TrimRight(node.DownloadURL, "/") + "/dl/" + sf.BlobKey + "?t=" + url.QueryEscape(tok)
-			http.Redirect(w, r, loc, http.StatusFound)
-			return
-		}
+	// Fleet-direct (P0/P1): hand the client a signed URL to fetch straight from the
+	// fleet node — central leaves the data path but the fleet node's bandwidth is
+	// our cost, so pre-meter the file size against the owner (a node download
+	// receipt later refunds any over-metering; see handleDownloadReceipt).
+	if directCapable && directNode.OwnerType == "fleet" {
+		mctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = s.store.AddDownloadStat(mctx, sf.UserID, sf.Size)
+		_ = s.store.RecordMeter(mctx, sf.UserID, MeterDownload, sf.Size, s.now().Unix())
+		cancel()
+		s.redirectToNode(w, r, directNode, sf.BlobKey)
+		return
 	}
 	bs, err := s.blobFor(r.Context(), sf.NodeID)
 	if err != nil {

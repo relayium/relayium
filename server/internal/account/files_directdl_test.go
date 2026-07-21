@@ -68,6 +68,49 @@ func TestDirectDownloadRedirectsToNode(t *testing.T) {
 	}
 }
 
+// TestByoOwnNodeDirectDownloadIsFree: a file on the OWNER's own BYO node that
+// advertises a DownloadURL is served direct from that node — central pays no
+// egress and the disk is the user's own, so the download is FREE (302, no
+// metering, and not blocked even if the owner is over their traffic cap).
+func TestByoOwnNodeDirectDownloadIsFree(t *testing.T) {
+	ts, svc, store, _ := newFileServer(t)
+	svc.SetDirectDownload(true)
+	ctx := context.Background()
+	owner, _ := store.UpsertUserByEmail(ctx, "byo@example.com", "")
+	if _, err := store.UpsertNode(ctx, Node{
+		ID: "byonode", OwnerType: "user", OwnerUserID: owner.ID, StorageEnabled: true,
+		StorageURL: "https://internal.byo", StorageSecret: "bs",
+		DownloadURL: "https://mynode.example.com", CreatedAt: 1, LastSeenAt: time.Now().Unix(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CreateStoredFile(ctx, StoredFile{
+		ID: "bf", UserID: owner.ID, BlobKey: "bbk", EncManifest: []byte("m"), Size: 500,
+		NodeID: "byonode", CreatedAt: 1, ExpiresAt: time.Now().Add(time.Hour).Unix(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err := client.Get(ts.URL + "/api/files/bf/blob")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("BYO own-node download must redirect direct, got %d", resp.StatusCode)
+	}
+	loc, _ := url.Parse(resp.Header.Get("Location"))
+	if loc.Host != "mynode.example.com" {
+		t.Fatalf("must redirect to the BYO node, got host %q", loc.Host)
+	}
+	// FREE: central pays nothing, so the owner is NOT metered.
+	if _, d, _ := store.MonthlyUsage(ctx, owner.ID, periodOf(svc.now().Unix())); d != 0 {
+		t.Fatalf("BYO own-node direct download must NOT be metered, got download=%d want 0", d)
+	}
+}
+
 // seedDirectFile sets up an owner + a fleet node + one unlimited stored file on
 // it, returning the file id. downloadURL="" models a node without direct support;
 // maxDownloads>0 models a limited/burn file. Returns (ts, svc, store, fileID).

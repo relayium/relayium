@@ -302,12 +302,14 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 		fleetTok = &ft
 		label = ft.Name
 	}
-	// DownloadURL is honored only for fleet nodes (BYO direct download is a later
-	// phase) and only when it's a valid https URL — central 302s clients there, so
-	// a plaintext or malformed value must never become a redirect target. Anything
-	// else is dropped to "" so the node simply proxies.
+	// DownloadURL is honored for fleet AND user (BYO) nodes, but only when it's a
+	// valid https URL — central 302s clients there, so a plaintext or malformed
+	// value must never become a redirect target. A BYO node setting this is the
+	// user's opt-in to serving their own files directly (exposing their node's
+	// address to downloaders); the URL must carry a browser-trusted cert (their
+	// own domain), which is on them. Anything else is dropped to "" (central proxies).
 	downloadURL := ""
-	if ownerType == "fleet" && isHTTPSURL(req.DownloadURL) {
+	if (ownerType == "fleet" || ownerType == "user") && isHTTPSURL(req.DownloadURL) {
 		downloadURL = req.DownloadURL
 	}
 	now := s.now().Unix()
