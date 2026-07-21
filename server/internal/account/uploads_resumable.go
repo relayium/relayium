@@ -425,7 +425,11 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		return
 	}
 	_ = s.store.AddUploadStat(r.Context(), u.ID, size)
-	_ = s.store.RecordMeter(r.Context(), u.ID, MeterUpload, size, now)
+	// Own-node uploads (billable=false) are not metered against the plan (see the
+	// single-shot path); only billable central/fleet storage counts.
+	if sess.Billable {
+		_ = s.store.RecordMeter(r.Context(), u.ID, MeterUpload, size, now)
+	}
 	_ = s.store.DeleteUploadSession(r.Context(), sess.ID)
 	writeJSON(w, http.StatusOK, map[string]any{"id": fid, "expiresAt": sf.ExpiresAt})
 }

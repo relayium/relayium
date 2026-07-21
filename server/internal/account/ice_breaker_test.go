@@ -41,7 +41,10 @@ func TestICEBreakerOpenStillServesValidCodes(t *testing.T) {
 
 	// Invalid code while OPEN → STUN-only (no credential leaked to a guesser).
 	svc.SetPairCodeOwner(func(string) (string, bool) { return "", false })
-	resp2, _ := ts.Client().Get(ts.URL + "/api/ice?code=999999")
+	resp2, err := ts.Client().Get(ts.URL + "/api/ice?code=999999")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp2.Body.Close()
 	if hasTURN(iceServersFromBody(t, resp2)) {
 		t.Fatal("SECURITY: /api/ice handed a TURN credential to an INVALID code")

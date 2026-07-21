@@ -153,9 +153,12 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 		return
 	}
 	// Only a live Stripe-sourced subscription can be changed in place. Free users
-	// (no customer) and admin-comped accounts (plan_source=admin, which the
-	// webhook must never override) fall through to a clear 409.
-	if u.StripeCustomerID == "" || u.PlanSource != "stripe" {
+	// (no customer), admin-comped accounts (plan_source=admin, which the webhook
+	// must never override), AND already-canceled subscribers (plan_source stays
+	// "stripe" after cancellation, so liveSubStatus is the authority) fall through
+	// to a clear 409 that routes them back to checkout — not a 500 from Stripe's
+	// "no live subscription".
+	if u.StripeCustomerID == "" || u.PlanSource != "stripe" || !liveSubStatus(u.SubscriptionStatus) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "no_active_subscription"})
 		return
 	}
@@ -211,6 +214,11 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
+		// Clear the local hint the instant Stripe releases the schedule. If the
+		// change below then fails (500), the DB must not keep advertising a
+		// pending downgrade that no longer exists in Stripe and will never fire —
+		// a ghost the webhook's `planID == ScheduledPlanID` clear can't reach.
+		_ = s.store.SetScheduledPlan(r.Context(), u.ID, "")
 	}
 
 	// Upgrade vs downgrade decides timing; see resolveChange for the rule.
@@ -261,7 +269,9 @@ func (s *Service) handleBillingPreview(w http.ResponseWriter, r *http.Request, u
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	if u.StripeCustomerID == "" || u.PlanSource != "stripe" {
+	// Same guard as change-plan: a canceled subscriber (plan_source still "stripe")
+	// gets a clean 409, not a 500, when previewing a change with no live sub.
+	if u.StripeCustomerID == "" || u.PlanSource != "stripe" || !liveSubStatus(u.SubscriptionStatus) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "no_active_subscription"})
 		return
 	}

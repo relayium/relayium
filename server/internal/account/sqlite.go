@@ -924,6 +924,23 @@ func (s *SQLiteStore) SetUserSubscription(ctx context.Context, userID, planID, s
 		return err
 	}
 	defer tx.Rollback()
+	// Atomic out-of-order guard: read the last event clock under the SAME write
+	// lock as the write below, so an older event that slipped past the (non-atomic)
+	// subEventIsStale pre-check — a concurrent redelivery, two events the same
+	// second — cannot overwrite newer plan/status. Before, only sub_event_at was
+	// MAX-guarded while plan/status wrote unconditionally, so a stale event left
+	// the clock advanced but the plan reverted, permanently. This is the
+	// authoritative guard; subEventIsStale is just a fast-path ACK. subEventAt==0
+	// (no clock, e.g. an admin-sourced write) skips the guard and never accrues.
+	if subEventAt > 0 {
+		var cur int64
+		if err := tx.QueryRowContext(ctx, `SELECT sub_event_at FROM users WHERE id = ?`, userID).Scan(&cur); err != nil {
+			return err
+		}
+		if subEventAt < cur {
+			return tx.Commit() // stale: drop it — no accrual, no plan/status write
+		}
+	}
 	if err := accrueQuotaTx(ctx, tx, userID, planID, now); err != nil {
 		return err
 	}

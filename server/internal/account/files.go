@@ -293,7 +293,13 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	// Lifetime stats are best-effort: a stats write failure must not fail the
 	// upload the user already completed.
 	_ = s.store.AddUploadStat(r.Context(), u.ID, size)
-	_ = s.store.RecordMeter(r.Context(), u.ID, MeterUpload, size, now)
+	// Own-node uploads (billable=false) are not metered against the plan — the
+	// pre-checks already skip them, and the relay side likewise only counts
+	// billable traffic. Metering them here (as it used to) let a user's own-node
+	// traffic eat their plan's monthly cap, contradicting that contract.
+	if billable {
+		_ = s.store.RecordMeter(r.Context(), u.ID, MeterUpload, size, now)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"id": id, "expiresAt": sf.ExpiresAt})
 }
 
@@ -323,6 +329,21 @@ func (s *Service) handleFileMeta(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// fileIsOwnNode reports whether a stored file lives on a relay node its own user
+// runs (own-node storage), which is exempt from per-plan traffic accounting.
+// Central-local ("") and fleet/other-owner nodes are billable. A lookup error or
+// missing node conservatively returns false — never grant free traffic on error.
+func (s *Service) fileIsOwnNode(ctx context.Context, sf StoredFile) bool {
+	if sf.NodeID == "" {
+		return false
+	}
+	n, ok, err := s.store.GetNode(ctx, sf.NodeID)
+	if err != nil || !ok {
+		return false
+	}
+	return n.OwnerType == "user" && n.OwnerUserID == sf.UserID
+}
+
 func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	if s.blobs == nil {
 		http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
@@ -333,10 +354,16 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	// Own-node files (stored on a relay node the owner runs) are exempt from the
+	// per-plan traffic accounting entirely — neither gated nor metered — matching
+	// the upload side and the relay side's billable=0 rule. Without this a user
+	// downloading their OWN files was blocked by their plan's traffic cap and had
+	// that traffic counted against them.
+	ownNode := s.fileIsOwnNode(r.Context(), sf)
 	// Per-plan traffic gate, charged to the file's OWNER (downloader identity is
 	// never read — zero-knowledge). Over quota → the owner's shares pause until
 	// the month rolls over or they upgrade. Fail-open on a read error.
-	if over, err := s.overTraffic(r.Context(), sf.UserID, sf.Size); err == nil && over {
+	if over, err := s.overTraffic(r.Context(), sf.UserID, sf.Size); err == nil && over && !ownNode {
 		http.Error(w, "this file's account has reached its monthly traffic limit", http.StatusTooManyRequests)
 		return
 	}
@@ -423,7 +450,10 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	if n > 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_ = s.store.AddDownloadStat(ctx, sf.UserID, n)
-		_ = s.store.RecordMeter(ctx, sf.UserID, MeterDownload, n, s.now().Unix())
+		// Own-node egress isn't metered against the plan (see the gate above).
+		if !ownNode {
+			_ = s.store.RecordMeter(ctx, sf.UserID, MeterDownload, n, s.now().Unix())
+		}
 		cancel()
 	}
 
