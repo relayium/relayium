@@ -92,12 +92,13 @@ t = base64url(exp ‖ nonce ‖ HMAC-SHA256(nodeSecret, "dl" ‖ key ‖ exp ‖
 - 节点无需咱们的域名/证书，最省事。
 - 隐私提示：公开分享一个存在 BYO 节点上的文件时，下载链接的任何人都会看到该节点 IP（不只属主本人）。自用（多设备存取自己的文件）无所谓；对外分享要给用户一句明示。BYO 直连做成节点侧可选开关（默认关，不满足就回落代理）。
 
-**② 机队（fleet）节点 —— 每台一个子域名，套一张泛域名证书**
-- DNS：`node1.relayium.com → 节点1 IP`，`node2.relayium.com → 节点2 IP`，…（每台一条静态 A 记录）。
-- TLS：一张泛域名证书 `*.relayium.com` 部署到所有机队节点。
-- 中央查出文件在 node K，就 `302` 到 `https://nodeK.relayium.com/blob/{key}?t=…`。
-- **用户端全程只看到 `relayium.com` 体系的域名、咱们的 TLS 证书，原始 IP 不露、品牌统一**；但实际直连的是持有该文件的那台节点，中央不在数据面。这就是 CDN 的标准玩法（`cdn-nodeN.example.com`）。
-- 节点需要知道自己的公开下载 base URL（子域名），随注册/心跳上报，或由中央按 nodeID 映射配置。
+**② 机队（fleet）节点 —— Cloudflare 代理的子域名（已实现，改进版）**
+- DNS：`nodeK.relayium.com → 节点 K 公网 IP`，**橙云 proxied**。节点二进制启动时用 CF API token **自动 upsert** 这条记录（`internal/cfdns`），无需手动进 dashboard。
+- TLS：**Cloudflare 边缘自动出证书**（面向浏览器），节点源站用**自签**即可（CF「Full」SSL 模式接受）——节点复用它已有的自签证书，**不需要泛域名证书、不需要 autocert/Let's Encrypt**。
+- 中央查出文件在 node K，`302` 到 `https://nodeK.relayium.com/dl/{key}?t=…`。
+- **用户端全程只看到 `relayium.com` 域名 + CF 证书；节点真实 IP 藏在 CF 后面**（比裸子域名 A 记录更好），且 **CF 带宽免费**。数据面是 客户端→CF→节点，中央退出。
+- 节点起一个**只服务 `/dl`**的公开监听（默认 `:443`，CF 代理到此），绝不暴露 bearer 的 `/blob` 写接口。
+- 部署手册见 `docs/direct-download-deploy.md`。
 
 > 真要做到"任意节点服务任意文件"才需要"随便哪个 IP 都行"，那要把每个文件复制到所有节点（副本，存储成本翻数倍，现在不做也不建议为此做）。
 
@@ -188,8 +189,9 @@ CDN 对"唯一密文 + burn"基本无效，排除为主方案；可作为多下�
 5. ✅ Kill-switch：`-direct-download` / `RELAYIUM_DIRECT_DOWNLOAD`（默认 off）。
 6. ✅ 测试全绿。
 
-**尚未做（P0 收尾，让产品真正用起来）：**
-7. ⬜ **客户端跟随 302**：浏览器普通 fetch 自动跟随；但 SW 流式下载拦截 `/api/files/{id}/blob` 的路径、以及 CLI `down` 的 HTTP client，需要显式处理跨源 302 到节点（+ CORS）。要验证/适配。
-8. ⬜ **部署**（非代码）：DNS 加 `nodeN.relayium.com` A 记录；机队节点部署 `*.relayium.com` 泛域名证书；各节点设 `RELAYIUM_NODE_DOWNLOAD_URL`；中央开 `RELAYIUM_DIRECT_DOWNLOAD=true`。
+7. ✅ **客户端跟随 302**：Web `downloadBlob` 的 fetch 与 CLI 的 Go http.Client 都原生跟随 302（Range 跨主机转发），无需改动；配套改了 **CSP `connect-src` 加 `https://*.relayium.com`**（否则 SPA 被自己的 CSP 拦住连不到节点子域名）+ 节点 `/dl` 的 **CORS 预检 + expose headers**。
+8. ✅ **自动化**：`internal/cfdns` 自动建 A 记录（proxied）；节点公开 `/dl` 监听（复用自签证书，CF Full）；`install-node.sh` 升到 v0.8，透传 download/CF env + 按需授予 `CAP_NET_BIND_SERVICE`。部署手册 `docs/direct-download-deploy.md`。
+
+**仍需真机验证（给了 CF API token + 部署后）**：节点 `:443` TLS 监听 + CF 代理链路 + 自动 DNS upsert 的端到端；`RELAYIUM_DIRECT_DOWNLOAD=true` 开启后浏览器/CLI 实测。
 
 **后续阶段**：P1 回执对账（精确计量、限量/burn 也走直连）、P2 BYO 直连、P3 硬化（见 §6）。

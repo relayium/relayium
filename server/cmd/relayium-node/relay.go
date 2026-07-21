@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os/signal"
 	"strconv"
 	"strings"
@@ -18,9 +19,20 @@ import (
 	"time"
 
 	"github.com/pion/turn/v4"
+	"github.com/relayium/relayium/internal/cfdns"
 	"github.com/relayium/relayium/internal/secure"
 	"github.com/relayium/relayium/internal/storage"
 )
+
+// urlHost extracts the host (no port) from an https base URL like
+// https://node7.relayium.com, for the Cloudflare A-record name.
+func urlHost(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
+}
 
 // version is stamped by goreleaser via -ldflags; a dev build reports "dev".
 var version = "dev"
@@ -230,6 +242,39 @@ func run(c config, st nodeState) error {
 			storTotal, storFree = t, f
 		}
 		log.Printf("relayium-node: storage enabled, serving blobs on %s (TLS pinned %s)", storageURL, storageFP[:min(16, len(storageFP))])
+
+		// Public direct-download face: a separate listener serving ONLY the
+		// token-authed /dl routes (never the bearer /blob API), which Cloudflare
+		// proxies to. CF terminates the browser-facing TLS and hides the node IP;
+		// the origin cert here can stay self-signed under CF's "Full" SSL mode, so
+		// we reuse id.TLSCert. TLS 1.2 min for broad CF-origin compatibility.
+		if c.DownloadURL != "" && c.DownloadAddr != "" {
+			dlSrv := &http.Server{
+				Addr:      c.DownloadAddr,
+				Handler:   newDownloadHandler(ds, storageSecret),
+				TLSConfig: &tls.Config{Certificates: []tls.Certificate{id.TLSCert}, MinVersion: tls.VersionTLS12},
+			}
+			go func() {
+				if err := dlSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+					log.Printf("relayium-node: public download server exited: %v", err)
+				}
+			}()
+			defer dlSrv.Close()
+			log.Printf("relayium-node: public direct-download listener on %s → %s", c.DownloadAddr, c.DownloadURL)
+
+			// Auto-manage this node's Cloudflare A record (subdomain -> public IP,
+			// proxied) so bringing up a node needs no manual dashboard step.
+			if c.CFToken != "" && c.CFZoneID != "" {
+				if host := urlHost(c.DownloadURL); host != "" {
+					cf := &cfdns.Client{Token: c.CFToken, ZoneID: c.CFZoneID}
+					if err := cf.UpsertA(host, publicIP, true); err != nil {
+						log.Printf("relayium-node: cloudflare A-record upsert for %s failed: %v (set it manually)", host, err)
+					} else {
+						log.Printf("relayium-node: cloudflare A-record %s -> %s (proxied) ensured", host, publicIP)
+					}
+				}
+			}
+		}
 	}
 
 	capabilities := []string{"relay"}

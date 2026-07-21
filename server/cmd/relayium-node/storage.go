@@ -90,52 +90,7 @@ func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed 
 		}
 		_, _ = io.Copy(w, rc)
 	}))
-	// Public direct-download endpoint: a client fetches the ciphertext straight
-	// from this node (central out of the data path) by presenting a short-lived,
-	// per-key token central signed with this node's secret. No bearer secret — the
-	// client must never hold it. CORS-open because a browser on relayium.com
-	// initiates the cross-origin fetch; the token is the access control, and the
-	// payload is opaque AEAD ciphertext.
-	// CORS preflight for the cross-origin browser fetch (relayium.com ->
-	// nodeN.relayium.com). A Range header (resumable streaming) is not
-	// CORS-safelisted, so the browser preflights; answer it.
-	mux.HandleFunc("OPTIONS /dl/{key}", func(w http.ResponseWriter, r *http.Request) {
-		h := w.Header()
-		h.Set("Access-Control-Allow-Origin", "*")
-		h.Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-		h.Set("Access-Control-Allow-Headers", "Range")
-		h.Set("Access-Control-Max-Age", "86400")
-		w.WriteHeader(http.StatusNoContent)
-	})
-	mux.HandleFunc("GET /dl/{key}", func(w http.ResponseWriter, r *http.Request) {
-		key := r.PathValue("key")
-		if !dltoken.Verify(secret, key, time.Now().Unix(), r.URL.Query().Get("t")) {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
-		rc, err := ds.Get(r.Context(), key)
-		if errors.Is(err, storage.ErrNotFound) || errors.Is(err, storage.ErrInvalidKey) {
-			http.Error(w, "not found", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			http.Error(w, "read failed", http.StatusInternalServerError)
-			return
-		}
-		defer rc.Close()
-		h := w.Header()
-		h.Set("Access-Control-Allow-Origin", "*")
-		// Expose the length/range headers so streaming JS can read them across
-		// origins (they're not CORS-exposed by default).
-		h.Set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges")
-		h.Set("Content-Type", "application/octet-stream")
-		// ServeContent gives Range/206/Accept-Ranges for free (resumable download).
-		if rs, ok := rc.(io.ReadSeeker); ok {
-			http.ServeContent(w, r, key, time.Time{}, rs)
-			return
-		}
-		_, _ = io.Copy(w, rc)
-	})
+	registerDownloadRoutes(mux, ds, secret)
 	mux.HandleFunc("PATCH /blob/{key}", authed(func(w http.ResponseWriter, r *http.Request, key string) {
 		offset, oerr := strconv.ParseInt(r.Header.Get("X-Blob-Offset"), 10, 64)
 		if oerr != nil || offset < 0 {
@@ -171,5 +126,65 @@ func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed 
 		}
 		w.WriteHeader(http.StatusNoContent) // idempotent
 	}))
+	return mux
+}
+
+// registerDownloadRoutes adds the PUBLIC, token-authed direct-download routes to
+// mux: a client fetches the ciphertext straight from this node (central out of
+// the data path) by presenting a short-lived, per-key token central signed with
+// this node's secret. No bearer secret — the client must never hold it. Shared
+// by the internal blob server and the dedicated public download listener.
+func registerDownloadRoutes(mux *http.ServeMux, ds *storage.DiskStore, secret string) {
+	// CORS preflight: the browser fetches cross-origin (relayium.com ->
+	// nodeN.relayium.com); a Range header (resumable streaming) is not
+	// CORS-safelisted, so it preflights. Answer it.
+	mux.HandleFunc("OPTIONS /dl/{key}", func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Access-Control-Allow-Origin", "*")
+		h.Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		h.Set("Access-Control-Allow-Headers", "Range")
+		h.Set("Access-Control-Max-Age", "86400")
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("GET /dl/{key}", func(w http.ResponseWriter, r *http.Request) {
+		key := r.PathValue("key")
+		if !dltoken.Verify(secret, key, time.Now().Unix(), r.URL.Query().Get("t")) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		rc, err := ds.Get(r.Context(), key)
+		if errors.Is(err, storage.ErrNotFound) || errors.Is(err, storage.ErrInvalidKey) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			http.Error(w, "read failed", http.StatusInternalServerError)
+			return
+		}
+		defer rc.Close()
+		h := w.Header()
+		h.Set("Access-Control-Allow-Origin", "*")
+		// Expose the length/range headers so streaming JS can read them cross-origin.
+		h.Set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges")
+		h.Set("Content-Type", "application/octet-stream")
+		// ServeContent gives Range/206/Accept-Ranges for free (resumable download).
+		if rs, ok := rc.(io.ReadSeeker); ok {
+			http.ServeContent(w, r, key, time.Time{}, rs)
+			return
+		}
+		_, _ = io.Copy(w, rc)
+	})
+}
+
+// newDownloadHandler is a mux serving ONLY the public download routes plus a
+// health probe — for the node's public-facing listener, so the bearer-authed
+// /blob write API is never exposed there (Cloudflare proxies to this listener).
+func newDownloadHandler(ds *storage.DiskStore, secret string) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+	registerDownloadRoutes(mux, ds, secret)
 	return mux
 }

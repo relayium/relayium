@@ -1,8 +1,16 @@
 #!/bin/sh
-# Relayium relay-node installer.
+# Relayium relay-node installer (v0.8 — adds direct-download).
 #   curl -fsSL https://relayium.com/install-node.sh | sh
 # Required env: RELAYIUM_CENTRAL_URL, RELAYIUM_NODE_TOKEN.
-# Optional: RELAYIUM_NODE_REGION, RELAYIUM_NODE_STORAGE_DIR (set to also store blobs, not just relay).
+# Optional:
+#   RELAYIUM_NODE_REGION
+#   RELAYIUM_NODE_STORAGE_DIR   set to also store blobs (not just relay)
+# Direct download (fleet nodes serve stored downloads themselves, bypassing
+# central; needs RELAYIUM_NODE_STORAGE_DIR too):
+#   RELAYIUM_NODE_DOWNLOAD_URL  public https base, e.g. https://node7.relayium.com
+#   RELAYIUM_NODE_DOWNLOAD_ADDR public listener (default :443; Cloudflare proxies here)
+#   RELAYIUM_NODE_CF_TOKEN      Cloudflare API token (Zone:DNS:Edit) to auto-create the A record
+#   RELAYIUM_NODE_CF_ZONE       Cloudflare zone id for the download domain
 set -eu
 
 REPO="relayium/relayium"
@@ -89,8 +97,24 @@ RELAYIUM_CENTRAL_URL=${RELAYIUM_CENTRAL_URL}
 RELAYIUM_NODE_TOKEN=${RELAYIUM_NODE_TOKEN}
 RELAYIUM_NODE_REGION=${RELAYIUM_NODE_REGION:-}
 RELAYIUM_NODE_STORAGE_DIR=${RELAYIUM_NODE_STORAGE_DIR:-}
+RELAYIUM_NODE_DOWNLOAD_URL=${RELAYIUM_NODE_DOWNLOAD_URL:-}
+RELAYIUM_NODE_DOWNLOAD_ADDR=${RELAYIUM_NODE_DOWNLOAD_ADDR:-:443}
+RELAYIUM_NODE_CF_TOKEN=${RELAYIUM_NODE_CF_TOKEN:-}
+RELAYIUM_NODE_CF_ZONE=${RELAYIUM_NODE_CF_ZONE:-}
 EOF
   chmod 0600 /etc/relayium-node/env
+
+  # A public download listener on a privileged port (<1024, e.g. the default :443)
+  # needs CAP_NET_BIND_SERVICE — the only capability we ever grant this otherwise
+  # capability-less sandbox, and only when direct download is actually configured
+  # on a low port.
+  bind_caps=""
+  dl_addr="${RELAYIUM_NODE_DOWNLOAD_ADDR:-:443}"
+  dl_port="${dl_addr##*:}"
+  if [ -n "${RELAYIUM_NODE_DOWNLOAD_URL:-}" ] && [ -n "$dl_port" ] && [ "$dl_port" -lt 1024 ] 2>/dev/null; then
+    bind_caps="CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE"
+  fi
 
   # Hand the state dir to the node user (also migrates a prior root install).
   [ -d /var/lib/relayium-node ] && chown -R relayium-node:relayium-node /var/lib/relayium-node 2>/dev/null || true
@@ -134,8 +158,8 @@ ProtectKernelModules=yes
 ProtectControlGroups=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
-CapabilityBoundingSet=
-AmbientCapabilities=
+${bind_caps:-CapabilityBoundingSet=
+AmbientCapabilities=}
 ${storage_rw}
 
 [Install]

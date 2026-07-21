@@ -24,6 +24,13 @@ type config struct {
 	StorageDir  string
 	StoragePort int
 	DownloadURL string
+	// DownloadAddr is the PUBLIC listener (Cloudflare proxies to it) serving only
+	// the token-authed /dl routes. Empty disables the public listener.
+	DownloadAddr string
+	// Cloudflare auto-DNS: with both set, the node upserts its own A record
+	// (subdomain of DownloadURL -> PublicIP, proxied) at startup.
+	CFToken  string
+	CFZoneID string
 }
 
 func env(k, def string) string {
@@ -46,6 +53,9 @@ func parseConfig() (config, error) {
 	flag.IntVar(&c.MaxPort, "max-port", 65535, "relay UDP range high")
 	flag.StringVar(&c.StorageDir, "storage-dir", env("RELAYIUM_NODE_STORAGE_DIR", ""), "blob storage dir; empty disables node storage")
 	flag.StringVar(&c.DownloadURL, "download-url", env("RELAYIUM_NODE_DOWNLOAD_URL", ""), "public https base URL for direct client downloads (e.g. https://node7.relayium.com); empty = central proxies")
+	flag.StringVar(&c.DownloadAddr, "download-addr", env("RELAYIUM_NODE_DOWNLOAD_ADDR", ":443"), "public listener for /dl (Cloudflare proxies here); empty disables it")
+	flag.StringVar(&c.CFToken, "cloudflare-token", env("RELAYIUM_NODE_CF_TOKEN", ""), "Cloudflare API token (Zone:DNS:Edit) to auto-manage this node's A record; empty skips auto-DNS")
+	flag.StringVar(&c.CFZoneID, "cloudflare-zone", env("RELAYIUM_NODE_CF_ZONE", ""), "Cloudflare zone id for the download domain (used with -cloudflare-token)")
 	flag.IntVar(&c.StoragePort, "storage-port", 8081, "TCP port for the node blob HTTP server")
 	flag.Parse()
 

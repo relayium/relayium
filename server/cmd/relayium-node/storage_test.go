@@ -66,6 +66,44 @@ func TestDLEndpointTokenAuth(t *testing.T) {
 	}
 }
 
+// TestPublicDownloadHandlerHidesBlobAPI: the public listener (what Cloudflare
+// proxies to) must serve /dl and /healthz but NOT the bearer-authed /blob write
+// API — even a valid bearer must not reach a write there.
+func TestPublicDownloadHandlerHidesBlobAPI(t *testing.T) {
+	ds, err := storage.NewDiskStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("diskstore: %v", err)
+	}
+	const secret = "nodesecret"
+	// Seed a blob directly so /dl has something to serve.
+	if _, err := ds.Put(t.Context(), "pk", bytes.NewReader([]byte("cipher"))); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(newDownloadHandler(ds, secret))
+	defer srv.Close()
+
+	// /healthz is up.
+	if resp, _ := http.Get(srv.URL + "/healthz"); resp == nil || resp.StatusCode != 200 {
+		t.Fatal("public handler must serve /healthz")
+	}
+	// /dl with a valid token works.
+	tok := dltoken.Sign(secret, "pk", time.Now().Unix()+60, "n")
+	if resp, _ := http.Get(srv.URL + "/dl/pk?t=" + tok); resp == nil || resp.StatusCode != 200 {
+		t.Fatal("public handler must serve /dl")
+	}
+	// PUT /blob (even with the bearer) must NOT be reachable here.
+	req, _ := http.NewRequest("PUT", srv.URL+"/blob/pk", bytes.NewReader([]byte("x")))
+	req.Header.Set("Authorization", "Bearer "+secret)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		t.Fatal("public download listener must NOT expose the /blob write API")
+	}
+}
+
 // TestDLEndpointCORS: the browser fetches the ciphertext cross-origin (it's sent
 // from relayium.com to nodeN.relayium.com by a 302), and may use a Range header
 // for resumable streaming — which triggers a CORS preflight. The node must
