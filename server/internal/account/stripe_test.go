@@ -396,8 +396,8 @@ func TestChangeSubscriptionPlanRequestShape(t *testing.T) {
 			if got := r.Form.Get("items[0][price]"); got != "price_new" {
 				t.Errorf("items[0][price] = %q, want price_new", got)
 			}
-			if got := r.Form.Get("proration_behavior"); got != "create_prorations" {
-				t.Errorf("proration_behavior = %q, want create_prorations", got)
+			if got := r.Form.Get("proration_behavior"); got != "always_invoice" {
+				t.Errorf("proration_behavior = %q, want always_invoice", got)
 			}
 			w.Header().Set("Content-Type", "application/json")
 			fmt.Fprint(w, `{"id":"sub_1"}`)
@@ -658,5 +658,53 @@ func TestReleaseScheduleNoopWhenNoSchedule(t *testing.T) {
 	}
 	if posts != 0 {
 		t.Fatalf("want no POST when there is no schedule, got %d", posts)
+	}
+}
+
+func TestChangeSubscriptionPlanChargesProrationNow(t *testing.T) {
+	var prorationBehavior string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.Write([]byte(`{"data":[{"id":"sub_1","status":"active","items":{"data":[{"id":"si_1","price":{"id":"price_old"}}]}}]}`))
+			return
+		}
+		r.ParseForm()
+		prorationBehavior = r.FormValue("proration_behavior")
+		w.Write([]byte(`{"id":"sub_1"}`))
+	}))
+	defer srv.Close()
+	c := NewStripeClient("sk_test", "whsec", "")
+	c.base = srv.URL
+	if err := c.ChangeSubscriptionPlan(context.Background(), "cus_1", "price_new"); err != nil {
+		t.Fatal(err)
+	}
+	if prorationBehavior != "always_invoice" {
+		t.Fatalf("upgrade must invoice the proration now, got %q", prorationBehavior)
+	}
+}
+
+func TestPreviewChangeReturnsImmediateCharge(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/v1/subscriptions"):
+			w.Write([]byte(`{"data":[{"id":"sub_1","status":"active","items":{"data":[{"id":"si_1","price":{"id":"price_old"}}]}}]}`))
+		case strings.HasPrefix(r.URL.Path, "/v1/invoices/upcoming"):
+			if got := r.URL.Query().Get("subscription_proration_behavior"); got != "always_invoice" {
+				t.Errorf("preview must use always_invoice, got %q", got)
+			}
+			w.Write([]byte(`{"amount_due":734}`))
+		default:
+			t.Errorf("unexpected %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	c := NewStripeClient("sk_test", "whsec", "")
+	c.base = srv.URL
+	cents, err := c.PreviewChange(context.Background(), "cus_1", "price_new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cents != 734 {
+		t.Fatalf("want 734, got %d", cents)
 	}
 }

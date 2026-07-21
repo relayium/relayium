@@ -38,6 +38,11 @@ type Biller interface {
 	// No-op when the subscription has no schedule. Used to cancel a pending
 	// downgrade and to clear the way before another in-app plan change.
 	ReleaseSchedule(ctx context.Context, customerID string) error
+	// PreviewChange returns the amount (cents) that switching the customer's live
+	// subscription to newPriceID would charge immediately, via a Stripe upcoming-
+	// invoice preview with the same always_invoice proration the real change uses.
+	// Used by the confirmation modal so the operator sees the real number first.
+	PreviewChange(ctx context.Context, customerID, newPriceID string) (immediateChargeCents int64, err error)
 	VerifyWebhook(payload []byte, sigHeader string, now int64) (WebhookEvent, error)
 }
 
@@ -276,13 +281,12 @@ func (c *stripeClient) CreatePortalSession(ctx context.Context, customerID, retu
 	return c.postForSessionURL(ctx, "/v1/billing_portal/sessions", form)
 }
 
-// ChangeSubscriptionPlan switches the customer's active subscription to
-// newPriceID in place (prorated), for in-app upgrade/downgrade. It looks the
-// subscription up by customer (we don't persist subscription ids), then updates
-// its single item's price. Stripe emits customer.subscription.updated, which the
-// webhook turns into the plan reassignment — so this method never touches the DB.
-func (c *stripeClient) ChangeSubscriptionPlan(ctx context.Context, customerID, newPriceID string) error {
-	// 1. Find the customer's live subscription and its item id.
+// liveSubscription finds the customer's live subscription (the first one
+// whose status passes liveSubStatus, scanning newest-first) and returns its
+// id, the id of its single item, and that item's current price id. Shared by
+// ChangeSubscriptionPlan and PreviewChange so there is one copy of the
+// status=all + liveSubStatus scan.
+func (c *stripeClient) liveSubscription(ctx context.Context, customerID string) (subID, itemID, currentPriceID string, err error) {
 	q := url.Values{}
 	q.Set("customer", customerID)
 	q.Set("status", "all")
@@ -295,7 +299,7 @@ func (c *stripeClient) ChangeSubscriptionPlan(ctx context.Context, customerID, n
 	q.Set("limit", "100")
 	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions?"+q.Encode(), nil)
 	if err != nil {
-		return err
+		return "", "", "", err
 	}
 	var list struct {
 		Data []struct {
@@ -312,40 +316,72 @@ func (c *stripeClient) ChangeSubscriptionPlan(ctx context.Context, customerID, n
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &list); err != nil {
-		return fmt.Errorf("stripe: list subscriptions: parse response: %w", err)
+		return "", "", "", fmt.Errorf("stripe: list subscriptions: parse response: %w", err)
 	}
-	var subID string
-	var item struct {
-		ID    string `json:"id"`
-		Price struct {
-			ID string `json:"id"`
-		} `json:"price"`
-	}
-	found := false
 	for _, sub := range list.Data {
 		if liveSubStatus(sub.Status) && len(sub.Items.Data) > 0 {
-			subID = sub.ID
-			item = sub.Items.Data[0]
-			found = true
-			break
+			return sub.ID, sub.Items.Data[0].ID, sub.Items.Data[0].Price.ID, nil
 		}
 	}
-	if !found {
-		return fmt.Errorf("stripe: no live subscription for customer %s", customerID)
+	return "", "", "", fmt.Errorf("stripe: no live subscription for customer %s", customerID)
+}
+
+// ChangeSubscriptionPlan switches the customer's active subscription to
+// newPriceID in place, for in-app upgrade/downgrade. It looks the
+// subscription up by customer (we don't persist subscription ids), then updates
+// its single item's price with always_invoice proration so the customer is
+// charged the prorated difference immediately (rather than it silently
+// accruing as a credit/debit on the next regular invoice) — see PreviewChange,
+// which previews this same charge before the operator confirms. Stripe emits
+// customer.subscription.updated, which the webhook turns into the plan
+// reassignment — so this method never touches the DB.
+func (c *stripeClient) ChangeSubscriptionPlan(ctx context.Context, customerID, newPriceID string) error {
+	subID, itemID, currentPriceID, err := c.liveSubscription(ctx, customerID)
+	if err != nil {
+		return err
 	}
-	if item.Price.ID == newPriceID {
+	if currentPriceID == newPriceID {
 		return nil // already on this price — nothing to do (idempotent)
 	}
 
-	// 2. Point the item at the new price, prorating the difference.
+	// Point the item at the new price, invoicing the proration now.
 	form := url.Values{}
-	form.Set("items[0][id]", item.ID)
+	form.Set("items[0][id]", itemID)
 	form.Set("items[0][price]", newPriceID)
-	form.Set("proration_behavior", "create_prorations")
+	form.Set("proration_behavior", "always_invoice")
 	if _, err := c.request(ctx, http.MethodPost, "/v1/subscriptions/"+subID, form); err != nil {
 		return err
 	}
 	return nil
+}
+
+// PreviewChange previews an upcoming invoice for switching the customer's live
+// subscription to newPriceID with always_invoice proration — the same
+// proration ChangeSubscriptionPlan actually charges — and returns amount_due
+// in cents, so a confirmation UI can show the operator the real charge before
+// they commit to it.
+func (c *stripeClient) PreviewChange(ctx context.Context, customerID, newPriceID string) (int64, error) {
+	subID, itemID, _, err := c.liveSubscription(ctx, customerID)
+	if err != nil {
+		return 0, err
+	}
+	q := url.Values{}
+	q.Set("customer", customerID)
+	q.Set("subscription", subID)
+	q.Set("subscription_items[0][id]", itemID)
+	q.Set("subscription_items[0][price]", newPriceID)
+	q.Set("subscription_proration_behavior", "always_invoice")
+	body, err := c.request(ctx, http.MethodGet, "/v1/invoices/upcoming?"+q.Encode(), nil)
+	if err != nil {
+		return 0, err
+	}
+	var inv struct {
+		AmountDue int64 `json:"amount_due"`
+	}
+	if err := json.Unmarshal(body, &inv); err != nil {
+		return 0, fmt.Errorf("stripe: preview invoice: parse response: %w", err)
+	}
+	return inv.AmountDue, nil
 }
 
 // ScheduleDowngrade defers a plan change to the end of the current billing

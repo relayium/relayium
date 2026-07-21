@@ -31,6 +31,11 @@ type fakeBiller struct {
 	downgradeCalls        int
 
 	releaseCalls int
+
+	previewCents     int64
+	previewErr       error
+	lastPreviewPrice string
+	previewCalls     int
 }
 
 func (f *fakeBiller) CreateCheckoutSession(ctx context.Context, in CheckoutInput) (string, error) {
@@ -61,6 +66,12 @@ func (f *fakeBiller) ScheduleDowngrade(ctx context.Context, customerID, newPrice
 func (f *fakeBiller) ReleaseSchedule(ctx context.Context, customerID string) error {
 	f.releaseCalls++
 	return nil
+}
+
+func (f *fakeBiller) PreviewChange(ctx context.Context, customerID, newPriceID string) (int64, error) {
+	f.previewCalls++
+	f.lastPreviewPrice = newPriceID
+	return f.previewCents, f.previewErr
 }
 
 func (f *fakeBiller) VerifyWebhook(payload []byte, sigHeader string, now int64) (WebhookEvent, error) {
