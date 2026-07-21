@@ -469,6 +469,7 @@ export interface Messages {
     uploadingNow: string; // phase 2: ciphertext is being POSTed (bar sits full)
     burnLabel: string;
     ttlLabel: string;
+    notBackup: string; // gentle reminder: stored links are temporary delivery, not a backup
     ttl1h: string;
     ttl1d: string;
     ttl3d: string;

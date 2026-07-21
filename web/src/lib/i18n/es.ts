@@ -479,6 +479,7 @@ const es: Messages = {
     uploadingNow: "Subiendo…",
     burnLabel: "Destruir tras leer (eliminar en la primera descarga)",
     ttlLabel: "Caduca en",
+    notBackup: "Una entrega temporal, no una copia de seguridad — los enlaces caducan, así que guarda tu propia copia de lo importante.",
     ttl1h: "1 hora",
     ttl1d: "1 día",
     ttl3d: "3 días",

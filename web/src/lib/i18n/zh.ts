@@ -479,6 +479,7 @@ const zh: Messages = {
     uploadingNow: "上传中…",
     burnLabel: "阅后即焚（首次下载后删除）",
     ttlLabel: "有效期",
+    notBackup: "临时投递，并非备份——链接会过期，请自行保留重要文件的副本。",
     ttl1h: "1 小时",
     ttl1d: "1 天",
     ttl3d: "3 天",

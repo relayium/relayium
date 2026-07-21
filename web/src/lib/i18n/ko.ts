@@ -479,6 +479,7 @@ const ko: Messages = {
     uploadingNow: "업로드 중…",
     burnLabel: "열람 후 삭제 (첫 다운로드 시 삭제)",
     ttlLabel: "유효 기간",
+    notBackup: "임시 전달 수단일 뿐, 백업이 아닙니다 — 링크가 만료되니 중요한 파일은 직접 사본을 보관하세요.",
     ttl1h: "1시간",
     ttl1d: "1일",
     ttl3d: "3일",

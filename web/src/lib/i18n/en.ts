@@ -493,6 +493,7 @@ const en: Messages = {
     uploadingNow: "Uploading…",
     burnLabel: "Burn after reading (delete on first download)",
     ttlLabel: "Expires in",
+    notBackup: "Temporary delivery, not a backup — links expire, so keep your own copy of anything important.",
     ttl1h: "1 hour",
     ttl1d: "1 day",
     ttl3d: "3 days",

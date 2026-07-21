@@ -480,6 +480,7 @@ const fr: Messages = {
     uploadingNow: "Envoi en cours…",
     burnLabel: "Détruire après lecture (supprimé au premier téléchargement)",
     ttlLabel: "Expire dans",
+    notBackup: "Une livraison temporaire, pas une sauvegarde — les liens expirent, alors gardez votre propre copie de ce qui compte.",
     ttl1h: "1 heure",
     ttl1d: "1 jour",
     ttl3d: "3 jours",

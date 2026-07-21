@@ -480,6 +480,7 @@ const de: Messages = {
     uploadingNow: "Hochladen…",
     burnLabel: "Nach dem Lesen löschen (beim ersten Download)",
     ttlLabel: "Gültig für",
+    notBackup: "Temporäre Zustellung, kein Backup — Links laufen ab, bewahre also eine eigene Kopie von allem Wichtigen auf.",
     ttl1h: "1 Stunde",
     ttl1d: "1 Tag",
     ttl3d: "3 Tage",

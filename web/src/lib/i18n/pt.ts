@@ -479,6 +479,7 @@ const pt: Messages = {
     uploadingNow: "Enviando…",
     burnLabel: "Apagar após a leitura (excluir no primeiro download)",
     ttlLabel: "Expira em",
+    notBackup: "Uma entrega temporária, não um backup — os links expiram, então guarde sua própria cópia do que for importante.",
     ttl1h: "1 hora",
     ttl1d: "1 dia",
     ttl3d: "3 dias",

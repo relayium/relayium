@@ -200,6 +200,7 @@
       </select>
     </label>
   </div>
+  <p class="notbackup">{t.stored.notBackup}</p>
 
   <label
     class="pick"
@@ -263,6 +264,7 @@
   .pick input[type="file"] { display: none; }
   .pick .drophint { width: 100%; font-size: var(--fs-xs); color: var(--text); }
   .max-hint { display: block; margin-top: var(--space-2); font-size: var(--fs-xs); color: var(--text); }
+  .notbackup { margin: var(--space-2) 0 0; font-size: var(--fs-xs); color: var(--text); }
   .bignote {
     margin: var(--space-3) 0 0; padding: var(--space-3) var(--space-4);
     border-radius: var(--radius-sm); background: var(--code-bg); border: 1px solid var(--accent-border);
