@@ -94,6 +94,20 @@ func NewStripeClient(secretKey, webhookSecret, portalConfig string) *stripeClien
 	}
 }
 
+// liveSubStatus reports whether a Stripe subscription status is one we treat as
+// a changeable live subscription. It must include every status the webhook
+// grants a plan for (active, trialing — see handleStripeWebhook) plus past_due,
+// so that a user shown as subscribed can always reach the change/schedule/
+// release paths. A status=active-only query silently 500'd trialing users.
+func liveSubStatus(status string) bool {
+	switch status {
+	case "active", "trialing", "past_due":
+		return true
+	default:
+		return false
+	}
+}
+
 // replayWindowSecs bounds how stale a webhook timestamp may be, mirroring
 // Stripe's own default tolerance and mitigating replay of a captured payload.
 const replayWindowSecs = 300
@@ -268,10 +282,10 @@ func (c *stripeClient) CreatePortalSession(ctx context.Context, customerID, retu
 // its single item's price. Stripe emits customer.subscription.updated, which the
 // webhook turns into the plan reassignment — so this method never touches the DB.
 func (c *stripeClient) ChangeSubscriptionPlan(ctx context.Context, customerID, newPriceID string) error {
-	// 1. Find the customer's active subscription and its item id.
+	// 1. Find the customer's live subscription and its item id.
 	q := url.Values{}
 	q.Set("customer", customerID)
-	q.Set("status", "active")
+	q.Set("status", "all")
 	q.Set("limit", "1")
 	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions?"+q.Encode(), nil)
 	if err != nil {
@@ -279,8 +293,9 @@ func (c *stripeClient) ChangeSubscriptionPlan(ctx context.Context, customerID, n
 	}
 	var list struct {
 		Data []struct {
-			ID    string `json:"id"`
-			Items struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+			Items  struct {
 				Data []struct {
 					ID    string `json:"id"`
 					Price struct {
@@ -293,11 +308,25 @@ func (c *stripeClient) ChangeSubscriptionPlan(ctx context.Context, customerID, n
 	if err := json.Unmarshal(body, &list); err != nil {
 		return fmt.Errorf("stripe: list subscriptions: parse response: %w", err)
 	}
-	if len(list.Data) == 0 || len(list.Data[0].Items.Data) == 0 {
-		return fmt.Errorf("stripe: no active subscription for customer %s", customerID)
+	var subID string
+	var item struct {
+		ID    string `json:"id"`
+		Price struct {
+			ID string `json:"id"`
+		} `json:"price"`
 	}
-	subID := list.Data[0].ID
-	item := list.Data[0].Items.Data[0]
+	found := false
+	for _, sub := range list.Data {
+		if liveSubStatus(sub.Status) && len(sub.Items.Data) > 0 {
+			subID = sub.ID
+			item = sub.Items.Data[0]
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("stripe: no live subscription for customer %s", customerID)
+	}
 	if item.Price.ID == newPriceID {
 		return nil // already on this price — nothing to do (idempotent)
 	}
@@ -319,10 +348,10 @@ func (c *stripeClient) ChangeSubscriptionPlan(ctx context.Context, customerID, n
 // the subscription to continue on the new price. No proration, no credit — the
 // customer just keeps what they paid for until it lapses.
 func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPriceID string) error {
-	// 1. Find the active subscription (and whether it's already schedule-managed).
+	// 1. Find the live subscription (and whether it's already schedule-managed).
 	q := url.Values{}
 	q.Set("customer", customerID)
-	q.Set("status", "active")
+	q.Set("status", "all")
 	q.Set("limit", "1")
 	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions?"+q.Encode(), nil)
 	if err != nil {
@@ -331,6 +360,7 @@ func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPri
 	var subs struct {
 		Data []struct {
 			ID       string `json:"id"`
+			Status   string `json:"status"`
 			Schedule string `json:"schedule"`
 			Items    struct {
 				Data []struct {
@@ -344,10 +374,17 @@ func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPri
 	if err := json.Unmarshal(body, &subs); err != nil {
 		return fmt.Errorf("stripe: list subscriptions: parse response: %w", err)
 	}
-	if len(subs.Data) == 0 {
-		return fmt.Errorf("stripe: no active subscription for customer %s", customerID)
+	idx := -1
+	for i, s := range subs.Data {
+		if liveSubStatus(s.Status) {
+			idx = i
+			break
+		}
 	}
-	sub := subs.Data[0]
+	if idx == -1 {
+		return fmt.Errorf("stripe: no live subscription for customer %s", customerID)
+	}
+	sub := subs.Data[idx]
 	if len(sub.Items.Data) > 0 && sub.Items.Data[0].Price.ID == newPriceID {
 		return nil // already on the target price — nothing to schedule
 	}
@@ -400,13 +437,13 @@ func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPri
 	return nil
 }
 
-// ReleaseSchedule detaches any subscription schedule from the customer's active
+// ReleaseSchedule detaches any subscription schedule from the customer's live
 // subscription, so it continues on its current price (canceling a pending
-// downgrade). No-op if there is no active subscription or no schedule.
+// downgrade). No-op if there is no live subscription or no schedule.
 func (c *stripeClient) ReleaseSchedule(ctx context.Context, customerID string) error {
 	q := url.Values{}
 	q.Set("customer", customerID)
-	q.Set("status", "active")
+	q.Set("status", "all")
 	q.Set("limit", "1")
 	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions?"+q.Encode(), nil)
 	if err != nil {
@@ -414,16 +451,24 @@ func (c *stripeClient) ReleaseSchedule(ctx context.Context, customerID string) e
 	}
 	var subs struct {
 		Data []struct {
+			Status   string `json:"status"`
 			Schedule string `json:"schedule"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &subs); err != nil {
 		return fmt.Errorf("stripe: list subscriptions: parse response: %w", err)
 	}
-	if len(subs.Data) == 0 || subs.Data[0].Schedule == "" {
-		return nil // nothing scheduled — nothing to release
+	schedule := ""
+	for _, s := range subs.Data {
+		if liveSubStatus(s.Status) {
+			schedule = s.Schedule
+			break
+		}
 	}
-	_, err = c.request(ctx, http.MethodPost, "/v1/subscription_schedules/"+subs.Data[0].Schedule+"/release", url.Values{})
+	if schedule == "" {
+		return nil // no live subscription, or nothing scheduled — nothing to release
+	}
+	_, err = c.request(ctx, http.MethodPost, "/v1/subscription_schedules/"+schedule+"/release", url.Values{})
 	return err
 }
 

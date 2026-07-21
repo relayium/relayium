@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -378,12 +379,12 @@ func TestChangeSubscriptionPlanRequestShape(t *testing.T) {
 			if got := r.URL.Query().Get("customer"); got != "cus_x" {
 				t.Errorf("list customer = %q, want cus_x", got)
 			}
-			if got := r.URL.Query().Get("status"); got != "active" {
-				t.Errorf("list status = %q, want active", got)
+			if got := r.URL.Query().Get("status"); got != "all" {
+				t.Errorf("list status = %q, want all", got)
 			}
 			w.Header().Set("Content-Type", "application/json")
 			// One active subscription with one item on the OLD price.
-			fmt.Fprint(w, `{"data":[{"id":"sub_1","items":{"data":[{"id":"si_1","price":{"id":"price_old"}}]}}]}`)
+			fmt.Fprint(w, `{"data":[{"id":"sub_1","status":"active","items":{"data":[{"id":"si_1","price":{"id":"price_old"}}]}}]}`)
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscriptions/sub_1":
 			sawUpdate = true
 			if err := r.ParseForm(); err != nil {
@@ -424,7 +425,7 @@ func TestChangeSubscriptionPlanNoopWhenSamePrice(t *testing.T) {
 			updates++
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"data":[{"id":"sub_1","items":{"data":[{"id":"si_1","price":{"id":"price_same"}}]}}]}`)
+		fmt.Fprint(w, `{"data":[{"id":"sub_1","status":"active","items":{"data":[{"id":"si_1","price":{"id":"price_same"}}]}}]}`)
 	}))
 	defer srv.Close()
 
@@ -439,6 +440,32 @@ func TestChangeSubscriptionPlanNoopWhenSamePrice(t *testing.T) {
 	}
 }
 
+func TestChangeSubscriptionPlanFindsTrialingSubscription(t *testing.T) {
+	var listQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/subscriptions") {
+			listQuery = r.URL.RawQuery
+			// A trialing subscription — the old status=active query would miss it.
+			w.Write([]byte(`{"data":[{"id":"sub_t","status":"trialing","items":{"data":[{"id":"si_1","price":{"id":"price_old"}}]}}]}`))
+			return
+		}
+		if r.Method == http.MethodPost && r.URL.Path == "/v1/subscriptions/sub_t" {
+			w.Write([]byte(`{"id":"sub_t"}`))
+			return
+		}
+		t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+	}))
+	defer srv.Close()
+	c := NewStripeClient("sk_test", "whsec", "")
+	c.base = srv.URL
+	if err := c.ChangeSubscriptionPlan(context.Background(), "cus_1", "price_new"); err != nil {
+		t.Fatalf("trialing subscription should be changeable: %v", err)
+	}
+	if strings.Contains(listQuery, "status=active") || !strings.Contains(listQuery, "status=all") {
+		t.Fatalf("subscription list must query status=all, got %q", listQuery)
+	}
+}
+
 func TestScheduleDowngradeRequestShape(t *testing.T) {
 	var sawList, sawCreate, sawUpdate bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -447,7 +474,7 @@ func TestScheduleDowngradeRequestShape(t *testing.T) {
 			sawList = true
 			w.Header().Set("Content-Type", "application/json")
 			// Active sub on the OLD (higher) price, not schedule-managed yet.
-			fmt.Fprint(w, `{"data":[{"id":"sub_9","schedule":"","items":{"data":[{"price":{"id":"price_pro"}}]}}]}`)
+			fmt.Fprint(w, `{"data":[{"id":"sub_9","status":"active","schedule":"","items":{"data":[{"price":{"id":"price_pro"}}]}}]}`)
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules":
 			sawCreate = true
 			if err := r.ParseForm(); err != nil {
@@ -507,7 +534,7 @@ func TestScheduleDowngradeNoopWhenSamePrice(t *testing.T) {
 			creates++
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"data":[{"id":"sub_9","schedule":"","items":{"data":[{"price":{"id":"price_same"}}]}}]}`)
+		fmt.Fprint(w, `{"data":[{"id":"sub_9","status":"active","schedule":"","items":{"data":[{"price":{"id":"price_same"}}]}}]}`)
 	}))
 	defer srv.Close()
 
@@ -528,7 +555,7 @@ func TestReleaseScheduleRequestShape(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscriptions":
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprint(w, `{"data":[{"id":"sub_1","schedule":"sub_sched_7"}]}`)
+			fmt.Fprint(w, `{"data":[{"id":"sub_1","status":"active","schedule":"sub_sched_7"}]}`)
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules/sub_sched_7/release":
 			sawRelease = true
 			w.Header().Set("Content-Type", "application/json")
@@ -555,7 +582,7 @@ func TestReleaseScheduleNoopWhenNoSchedule(t *testing.T) {
 			posts++
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"data":[{"id":"sub_1","schedule":""}]}`)
+		fmt.Fprint(w, `{"data":[{"id":"sub_1","status":"active","schedule":""}]}`)
 	}))
 	defer srv.Close()
 	c := NewStripeClient("sk_test", "whsec_abc", "")
