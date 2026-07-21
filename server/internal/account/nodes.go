@@ -6,10 +6,18 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/relayium/relayium/internal/relayusage"
 )
+
+// isHTTPSURL reports whether s is a well-formed absolute https URL with a host —
+// the bar for a node's public DownloadURL, since central redirects clients to it.
+func isHTTPSURL(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && u.Scheme == "https" && u.Host != ""
+}
 
 // nodeHeartbeatInterval is the seconds a node waits between heartbeats. The
 // /api/ice online window is 3x this (see nodeOnlineWindow in turn.go).
@@ -27,6 +35,10 @@ type nodeRegisterReq struct {
 	StorageFP     string   `json:"storageFP"` // node blob-endpoint TLS cert fingerprint (hex SHA-256); "" for legacy http nodes
 	StorageTotal  int64    `json:"storageTotal"`
 	StorageFree   int64    `json:"storageFree"`
+	// DownloadURL is the node's PUBLIC https base URL for direct client downloads
+	// (e.g. https://node7.relayium.com). Honored only for fleet nodes and only when
+	// https; empty otherwise (central then proxies). See Node.DownloadURL.
+	DownloadURL string `json:"downloadURL"`
 }
 
 // nodeLimits carries a node's admin-set hard caps plus its current-month relayed
@@ -227,6 +239,14 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 		fleetTok = &ft
 		label = ft.Name
 	}
+	// DownloadURL is honored only for fleet nodes (BYO direct download is a later
+	// phase) and only when it's a valid https URL — central 302s clients there, so
+	// a plaintext or malformed value must never become a redirect target. Anything
+	// else is dropped to "" so the node simply proxies.
+	downloadURL := ""
+	if ownerType == "fleet" && isHTTPSURL(req.DownloadURL) {
+		downloadURL = req.DownloadURL
+	}
 	now := s.now().Unix()
 	n := Node{
 		ID: req.NodeID, OwnerType: ownerType, OwnerUserID: ownerUserID, Label: label,
@@ -235,6 +255,7 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 		StorageURL: storeURL, StorageSecret: storeSecret, StorageFP: storeFP,
 		StorageEnabled: containsCap(req.Capabilities, "storage"),
 		StorageTotal:   req.StorageTotal, StorageFree: req.StorageFree,
+		DownloadURL: downloadURL,
 	}
 	saved, err := s.store.UpsertNode(r.Context(), n)
 	if err != nil {

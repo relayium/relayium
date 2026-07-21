@@ -197,6 +197,11 @@ type Service struct {
 	// monthly traffic gate (which reads eventually-consistent usage) reacts.
 	// nil = unlimited.
 	downloadLimiter rateLimiter
+	// directDownload enables serving a fleet node's stored files by 302-redirecting
+	// the client straight to <node.DownloadURL>/dl/{key}?t=<token>, so the bytes
+	// bypass central (see docs/design-decentralized-stored-downloads.md). Opt-in
+	// (default off) — a new data path; a kill-switch to fall back to full proxy.
+	directDownload bool
 	// uploadSem caps concurrent in-flight POST /api/files per account (M1).
 	uploadSem *uploadSem
 	// diskUsage reads the blob volume's current usage; nil disables the global
@@ -311,6 +316,10 @@ func (s *Service) SetPasskeyBeginLimiter(rl rateLimiter) { s.passkeyBeginLimiter
 
 // SetDownloadLimiter caps GET /api/files/{id}/blob starts per IP. nil = unlimited.
 func (s *Service) SetDownloadLimiter(rl rateLimiter) { s.downloadLimiter = rl }
+
+// SetDirectDownload toggles direct-from-node downloads for fleet nodes that
+// advertise a DownloadURL (default off → central proxies every download).
+func (s *Service) SetDirectDownload(on bool) { s.directDownload = on }
 
 // passkeyBeginAllowed reports whether this IP may start another passkey ceremony,
 // writing a 429 and returning false when the per-IP begin budget is exhausted.

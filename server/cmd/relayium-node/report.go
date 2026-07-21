@@ -22,6 +22,10 @@ type registerBody struct {
 	StorageFP     string   `json:"storageFP"` // SHA-256 (hex) of the blob server's self-signed TLS cert, for central to pin
 	StorageTotal  int64    `json:"storageTotal"`
 	StorageFree   int64    `json:"storageFree"`
+	// DownloadURL is this node's PUBLIC https base URL for direct client downloads
+	// (e.g. https://node7.relayium.com), where GET /dl/{key}?t=<token> is served.
+	// Empty leaves central proxying. Central honors it only for fleet nodes.
+	DownloadURL string `json:"downloadURL"`
 }
 
 // nodeLimits mirrors central's response (internal/account/nodes.go): the node's

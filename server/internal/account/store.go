@@ -286,6 +286,12 @@ type Node struct {
 	// bytes and is enforced in StorageNodes placement.
 	TrafficLimitBytes int64
 	DiskLimitBytes    int64
+	// DownloadURL is the node's PUBLIC base URL for direct client downloads (e.g.
+	// https://node3.relayium.com), distinct from StorageURL (central's internal,
+	// bearer-authed blob API). When set, central can 302 a client straight to
+	// <DownloadURL>/dl/{key}?t=<token> so the bytes bypass central. '' = no direct
+	// download; central proxies as before. Reported by the node at registration.
+	DownloadURL string
 }
 
 // NodeToken is a per-user credential a BYO node presents as its bearer. The

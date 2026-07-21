@@ -23,6 +23,7 @@ type config struct {
 	MaxPort     int
 	StorageDir  string
 	StoragePort int
+	DownloadURL string
 }
 
 func env(k, def string) string {
@@ -44,6 +45,7 @@ func parseConfig() (config, error) {
 	flag.IntVar(&c.MinPort, "min-port", 49152, "relay UDP range low")
 	flag.IntVar(&c.MaxPort, "max-port", 65535, "relay UDP range high")
 	flag.StringVar(&c.StorageDir, "storage-dir", env("RELAYIUM_NODE_STORAGE_DIR", ""), "blob storage dir; empty disables node storage")
+	flag.StringVar(&c.DownloadURL, "download-url", env("RELAYIUM_NODE_DOWNLOAD_URL", ""), "public https base URL for direct client downloads (e.g. https://node7.relayium.com); empty = central proxies")
 	flag.IntVar(&c.StoragePort, "storage-port", 8081, "TCP port for the node blob HTTP server")
 	flag.Parse()
 

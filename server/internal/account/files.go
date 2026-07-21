@@ -10,10 +10,12 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/relayium/relayium/internal/dltoken"
 	"github.com/relayium/relayium/internal/storage"
 )
 
@@ -377,6 +379,29 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	if over, err := s.overTraffic(r.Context(), sf.UserID, sf.Size); err == nil && over {
 		http.Error(w, "this file's account has reached its monthly traffic limit", http.StatusTooManyRequests)
 		return
+	}
+	// Direct-from-node download (decentralized stored downloads P0): for an
+	// UNLIMITED file (no burn / max-downloads) stored on a fleet node that
+	// advertises a public DownloadURL, hand the client a short-lived signed URL to
+	// fetch the ciphertext straight from the node — central leaves the data path.
+	// Central won't see the actual egress, so pre-meter the file size against the
+	// owner here (over-metering on a retry is bounded by downloadLimiter and is the
+	// safe direction; receipt-based exact accounting is a later phase). Limited /
+	// burn files stay on the proxy path below, where central deletes the blob after
+	// serving — so their exact semantics are unchanged.
+	if s.directDownload && sf.MaxDownloads == 0 {
+		if node, ok, nerr := s.store.GetNode(r.Context(), sf.NodeID); nerr == nil && ok &&
+			node.OwnerType == "fleet" && node.DownloadURL != "" && node.StorageSecret != "" {
+			mctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			_ = s.store.AddDownloadStat(mctx, sf.UserID, sf.Size)
+			_ = s.store.RecordMeter(mctx, sf.UserID, MeterDownload, sf.Size, s.now().Unix())
+			cancel()
+			exp := s.now().Add(2 * time.Minute).Unix()
+			tok := dltoken.Sign(node.StorageSecret, sf.BlobKey, exp, randToken())
+			loc := strings.TrimRight(node.DownloadURL, "/") + "/dl/" + sf.BlobKey + "?t=" + url.QueryEscape(tok)
+			http.Redirect(w, r, loc, http.StatusFound)
+			return
+		}
 	}
 	bs, err := s.blobFor(r.Context(), sf.NodeID)
 	if err != nil {

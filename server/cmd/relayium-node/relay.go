@@ -236,11 +236,18 @@ func run(c config, st nodeState) error {
 	if storageURL != "" {
 		capabilities = append(capabilities, "storage")
 	}
+	// Only advertise a direct-download URL when this node actually serves storage;
+	// it's meaningless without a blob store to serve from.
+	downloadURL := ""
+	if storageURL != "" {
+		downloadURL = c.DownloadURL
+	}
 	rr, err := rp.register(registerBody{
 		NodeID: st.NodeID, TURNSecret: st.TURNSecret, URLs: urls,
 		Region: c.Region, Version: version, Capabilities: capabilities,
 		StorageURL: storageURL, StorageSecret: storageSecret, StorageFP: storageFP,
 		StorageTotal: storTotal, StorageFree: storFree,
+		DownloadURL: downloadURL,
 	})
 	if err != nil {
 		return fmt.Errorf("register with central: %w", err)

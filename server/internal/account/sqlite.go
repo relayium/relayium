@@ -300,6 +300,10 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 	for _, alter := range []string{
 		`ALTER TABLE nodes ADD COLUMN storage_url TEXT`,
 		`ALTER TABLE nodes ADD COLUMN storage_secret TEXT`,
+		// Node's public direct-download base URL (e.g. https://node3.relayium.com).
+		// When set, central 302s clients straight to the node so download bytes
+		// bypass central. '' = proxy as before. See Node.DownloadURL.
+		`ALTER TABLE nodes ADD COLUMN download_url TEXT NOT NULL DEFAULT ''`,
 		// Central↔node blob TLS pinning: the node's self-signed cert fingerprint
 		// (hex SHA-256), reported at registration. '' = legacy http node.
 		`ALTER TABLE nodes ADD COLUMN storage_fp TEXT NOT NULL DEFAULT ''`,
@@ -2748,7 +2752,7 @@ func nullStr(s string) any {
 const nodeCols = `id, owner_type, owner_user_id, region, urls, turn_secret, version,
   relayed_bytes, stored_bytes, created_at, last_seen_at,
   storage_url, storage_secret, storage_fp, storage_enabled, storage_total, storage_free,
-  traffic_limit_bytes, disk_limit_bytes, label`
+  traffic_limit_bytes, disk_limit_bytes, label, download_url`
 
 func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	if n.ID == "" {
@@ -2760,7 +2764,7 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO nodes (`+nodeCols+`)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   owner_type=excluded.owner_type, owner_user_id=excluded.owner_user_id,
 		   region=excluded.region, urls=excluded.urls, turn_secret=excluded.turn_secret,
@@ -2768,13 +2772,13 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 		   storage_url=excluded.storage_url, storage_secret=excluded.storage_secret,
 		   storage_fp=excluded.storage_fp,
 		   storage_enabled=excluded.storage_enabled, storage_total=excluded.storage_total,
-		   storage_free=excluded.storage_free`,
+		   storage_free=excluded.storage_free, download_url=excluded.download_url`,
 		// label is intentionally set only on INSERT (seeded from the token name) and
 		// preserved on re-register, so a user's rename survives the node's heartbeats.
 		n.ID, n.OwnerType, nullStr(n.OwnerUserID), n.Region, string(urls), n.TURNSecret,
 		n.Version, n.RelayedBytes, n.StoredBytes, n.CreatedAt, n.LastSeenAt,
 		nullStr(n.StorageURL), nullStr(n.StorageSecret), n.StorageFP, b2i(n.StorageEnabled), n.StorageTotal, n.StorageFree,
-		n.TrafficLimitBytes, n.DiskLimitBytes, n.Label)
+		n.TrafficLimitBytes, n.DiskLimitBytes, n.Label, n.DownloadURL)
 	if err != nil {
 		return Node{}, err
 	}
@@ -2998,7 +3002,7 @@ func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]
 		if err := rows.Scan(&n.ID, &n.OwnerType, &ownerUser, &n.Region, &urls, &n.TURNSecret,
 			&n.Version, &n.RelayedBytes, &n.StoredBytes, &n.CreatedAt, &n.LastSeenAt,
 			&storageURL, &storageSecret, &n.StorageFP, &storageEnabled, &n.StorageTotal, &n.StorageFree,
-			&n.TrafficLimitBytes, &n.DiskLimitBytes, &n.Label); err != nil {
+			&n.TrafficLimitBytes, &n.DiskLimitBytes, &n.Label, &n.DownloadURL); err != nil {
 			return nil, err
 		}
 		n.OwnerUserID = ownerUser.String
