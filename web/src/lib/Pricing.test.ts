@@ -225,6 +225,70 @@ describe("Pricing", () => {
     expect(changeBody).toEqual({ planId: "pro", cycle: "monthly" });
   });
 
+  it("a subscribed user downgrades via the previewed modal, sees the period-end summary (no immediate charge), and gets a success toast on confirm", async () => {
+    const SUB_TIERS = [
+      { id: "free", name: "Free", storageBytes: 1e9, trafficBytes: 1e9, retentionSecs: 86400, priceMonthly: 0, priceYearly: 0, purchasableMonthly: false, purchasableYearly: false },
+      { id: "plus", name: "Plus", storageBytes: 5e9, trafficBytes: 3e11, retentionSecs: 30 * 86400, priceMonthly: 390, priceYearly: 2900, purchasableMonthly: true, purchasableYearly: true },
+      { id: "pro", name: "Pro", storageBytes: 5e10, trafficBytes: 1e12, retentionSecs: 90 * 86400, priceMonthly: 890, priceYearly: 7900, purchasableMonthly: true, purchasableYearly: true },
+    ];
+    // On Pro, so Plus (a lower tier) is a downgrade.
+    const subUser = { id: "u1", email: "sub@example.com", displayName: "", hasPassword: true, planId: "pro", subscriptionStatus: "active", hasBilling: true };
+    let changeBody: unknown = null;
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/plans") return { ok: true, status: 200, json: async () => SUB_TIERS };
+      if (url === "/api/me") return { ok: true, status: 200, json: async () => ({ user: subUser }) };
+      if (url === "/api/billing/preview") {
+        return { ok: true, status: 200, json: async () => ({ effective: "period_end", immediateChargeCents: 0, nextAmountCents: 390, nextCycle: "monthly", effectiveDate: 1789999999 }) };
+      }
+      if (url === "/api/billing/change-plan") { changeBody = JSON.parse(init!.body as string); return { ok: true, status: 200, json: async () => ({ status: "ok" }) }; }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+    // Seed the session store as a live Pro subscriber before mounting.
+    const { refreshSession } = await import("./auth.svelte");
+    await refreshSession();
+
+    await mountPricing();
+
+    const cards = Array.from(target.querySelectorAll(".tier"));
+    const plusCard = cards.find((c) => c.textContent?.includes("Plus"))!;
+    const proCard = cards.find((c) => c.textContent?.includes("Pro"))!;
+
+    expect(proCard.textContent).toContain("Current plan");
+
+    // The lower tier offers a Downgrade that opens the previewed change-plan modal.
+    const downBtn = plusCard.querySelector("button.btn-primary") as HTMLButtonElement;
+    expect(downBtn.textContent?.trim()).toBe("Downgrade");
+    downBtn.click();
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/billing/preview", expect.objectContaining({ method: "POST" }));
+
+    // Downgrade preview: period-end summary text, no immediate-charge wording.
+    const modalText = target.querySelector(".modal")?.textContent ?? "";
+    expect(modalText).toContain("period end");
+    expect(modalText).not.toContain("charged");
+
+    // Confirming inside the modal is what actually hits change-plan.
+    const confirmBtn = Array.from(target.querySelectorAll(".modal button")).find((b) => b.textContent?.trim() === "Confirm change") as HTMLButtonElement;
+    expect(confirmBtn).toBeTruthy();
+    confirmBtn.click();
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/billing/change-plan", expect.objectContaining({ method: "POST" }));
+    expect(changeBody).toEqual({ planId: "plus", cycle: "monthly" });
+
+    // onModalClose(true) closes the modal and surfaces the success toast — the
+    // actual wiring point this test exists to cover.
+    expect(target.querySelector(".modal")).toBeNull();
+    expect(target.textContent).toContain("Plan updated — thanks!");
+  });
+
   it("defaults the cycle toggle to the subscriber's current cycle", async () => {
     const SUB_TIERS = [
       { id: "free", name: "Free", storageBytes: 1e9, trafficBytes: 1e9, retentionSecs: 86400, priceMonthly: 0, priceYearly: 0, purchasableMonthly: false, purchasableYearly: false },

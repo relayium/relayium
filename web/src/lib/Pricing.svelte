@@ -135,6 +135,7 @@
   // subscribers get a previewed confirmation (real charge/effective-date from
   // /api/billing/preview) instead of a blind confirm() before change-plan.
   function act(tier: Tier) {
+    checkoutError = "";
     if (isSubscribed) modalTier = tier;
     else checkout(tier.id);
   }
@@ -144,6 +145,7 @@
   // change to land (same cadence the old inline flow used).
   function onModalClose(changed: boolean) {
     modalTier = null;
+    checkoutError = "";
     if (changed) {
       changeMsg = t.billing.changeSuccess;
       setTimeout(() => refreshSession(), 1500);
