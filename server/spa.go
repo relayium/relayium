@@ -19,13 +19,18 @@ import (
 // (for the server-rendered admin/device pages) PLUS the SPA's inline-script
 // hashes (the static theme snippet, which cannot receive a per-request nonce
 // because index.html is served as a static file). A script is allowed if it
-// matches EITHER, so both surfaces work with no 'unsafe-inline'. connect-src is
-// 'self' only: every fetch/XHR and the signalling WebSocket are same-origin
-// (wsURL builds wss://<same host>/ws), so the previous 'https: wss:' wildcard —
-// which let any XSS foothold exfiltrate the zero-knowledge upload keys held in
-// localStorage to an arbitrary host — is gone. style-src keeps 'unsafe-inline'
-// for now (Svelte style attributes); the script/connect tightening is the
-// XSS-containment win. frame-ancestors 'none' is the clickjacking defense.
+// matches EITHER, so both surfaces work with no 'unsafe-inline'.
+//
+// connect-src is 'self' PLUS https://*.relayium.com: the SPA fetches from the
+// apex (API, signalling WebSocket via wsURL's wss://<same host>/ws) and, for
+// decentralized stored downloads, follows a 302 to a fleet node subdomain
+// (nodeN.relayium.com) to pull the ciphertext straight from the node. The
+// wildcard is scoped to our OWN domain, so it does NOT reopen the broad
+// exfiltration hole the previous 'https:' wildcard did — a foothold still can't
+// POST the zero-knowledge keys to an arbitrary host, only to relayium.com
+// subdomains we control (which accept no such data). style-src keeps
+// 'unsafe-inline' for now (Svelte style attributes). frame-ancestors 'none' is
+// the clickjacking defense.
 func buildCSP(nonce string, spaScriptHashes []string) string {
 	script := "script-src 'self' 'nonce-" + nonce + "'"
 	for _, h := range spaScriptHashes {
@@ -39,7 +44,7 @@ func buildCSP(nonce string, spaScriptHashes []string) string {
 		"img-src 'self' data: blob:; " +
 		"style-src 'self' 'unsafe-inline'; " +
 		script + "; " +
-		"connect-src 'self'; " +
+		"connect-src 'self' https://*.relayium.com; " +
 		"font-src 'self' data:; " +
 		"worker-src 'self'; " +
 		"manifest-src 'self'"

@@ -96,6 +96,17 @@ func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed 
 	// client must never hold it. CORS-open because a browser on relayium.com
 	// initiates the cross-origin fetch; the token is the access control, and the
 	// payload is opaque AEAD ciphertext.
+	// CORS preflight for the cross-origin browser fetch (relayium.com ->
+	// nodeN.relayium.com). A Range header (resumable streaming) is not
+	// CORS-safelisted, so the browser preflights; answer it.
+	mux.HandleFunc("OPTIONS /dl/{key}", func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Access-Control-Allow-Origin", "*")
+		h.Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		h.Set("Access-Control-Allow-Headers", "Range")
+		h.Set("Access-Control-Max-Age", "86400")
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("GET /dl/{key}", func(w http.ResponseWriter, r *http.Request) {
 		key := r.PathValue("key")
 		if !dltoken.Verify(secret, key, time.Now().Unix(), r.URL.Query().Get("t")) {
@@ -112,8 +123,12 @@ func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed 
 			return
 		}
 		defer rc.Close()
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Content-Type", "application/octet-stream")
+		h := w.Header()
+		h.Set("Access-Control-Allow-Origin", "*")
+		// Expose the length/range headers so streaming JS can read them across
+		// origins (they're not CORS-exposed by default).
+		h.Set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges")
+		h.Set("Content-Type", "application/octet-stream")
 		// ServeContent gives Range/206/Accept-Ranges for free (resumable download).
 		if rs, ok := rc.(io.ReadSeeker); ok {
 			http.ServeContent(w, r, key, time.Time{}, rs)

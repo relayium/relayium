@@ -66,6 +66,55 @@ func TestDLEndpointTokenAuth(t *testing.T) {
 	}
 }
 
+// TestDLEndpointCORS: the browser fetches the ciphertext cross-origin (it's sent
+// from relayium.com to nodeN.relayium.com by a 302), and may use a Range header
+// for resumable streaming — which triggers a CORS preflight. The node must
+// answer the preflight and expose the range headers to JS.
+func TestDLEndpointCORS(t *testing.T) {
+	ds, err := storage.NewDiskStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("diskstore: %v", err)
+	}
+	const secret = "nodesecret"
+	srv := httptest.NewServer(newBlobHandler(ds, secret, nil, nil, nil))
+	defer srv.Close()
+	putReq, _ := http.NewRequest("PUT", srv.URL+"/blob/ck", bytes.NewReader([]byte("cipher")))
+	putReq.Header.Set("Authorization", "Bearer "+secret)
+	http.DefaultClient.Do(putReq)
+
+	// Preflight for a Range GET.
+	preReq, _ := http.NewRequest(http.MethodOptions, srv.URL+"/dl/ck", nil)
+	preReq.Header.Set("Origin", "https://relayium.com")
+	preReq.Header.Set("Access-Control-Request-Method", "GET")
+	preReq.Header.Set("Access-Control-Request-Headers", "range")
+	pre, err := http.DefaultClient.Do(preReq)
+	if err != nil {
+		t.Fatalf("preflight: %v", err)
+	}
+	pre.Body.Close()
+	if pre.StatusCode != http.StatusNoContent && pre.StatusCode != http.StatusOK {
+		t.Fatalf("preflight status = %d, want 204/200", pre.StatusCode)
+	}
+	if pre.Header.Get("Access-Control-Allow-Origin") == "" {
+		t.Fatal("preflight must allow the origin")
+	}
+	if !strings.Contains(strings.ToLower(pre.Header.Get("Access-Control-Allow-Headers")), "range") {
+		t.Fatalf("preflight must allow the Range request header, got %q", pre.Header.Get("Access-Control-Allow-Headers"))
+	}
+
+	// Actual GET must expose the range/length headers so streaming JS can read them.
+	tok := dltoken.Sign(secret, "ck", time.Now().Unix()+60, "n")
+	resp, err := http.Get(srv.URL + "/dl/ck?t=" + tok)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	resp.Body.Close()
+	exp := strings.ToLower(resp.Header.Get("Access-Control-Expose-Headers"))
+	if !strings.Contains(exp, "content-length") || !strings.Contains(exp, "accept-ranges") {
+		t.Fatalf("GET must expose length/range headers to JS, got %q", resp.Header.Get("Access-Control-Expose-Headers"))
+	}
+}
+
 func TestBlobHandlerRoundTripAndAuth(t *testing.T) {
 	ds, err := storage.NewDiskStore(t.TempDir())
 	if err != nil {

@@ -41,21 +41,23 @@ func TestSecurityHeaders(t *testing.T) {
 	for _, must := range []string{
 		"frame-ancestors 'none'",
 		"object-src 'none'",
-		"connect-src 'self';", // tightened: no more 'https:'/'wss:' exfil wildcard
-		"'nonce-",             // per-request script nonce present
-		"'sha256-deadbeef'",   // SPA inline-script hash folded in
+		// Scoped to our own domain: apex + fleet node subdomains for direct
+		// downloads, but no broad 'https:'/'wss:' exfil wildcard.
+		"connect-src 'self' https://*.relayium.com;",
+		"'nonce-",           // per-request script nonce present
+		"'sha256-deadbeef'", // SPA inline-script hash folded in
 	} {
 		if !strings.Contains(csp, must) {
 			t.Errorf("CSP missing %q; got %q", must, csp)
 		}
 	}
-	// The XSS-containment win: script-src and connect-src must NOT allow inline
-	// scripts or arbitrary-host exfiltration anymore.
+	// The XSS-containment win: script-src must not allow inline scripts, and
+	// connect-src must not allow arbitrary-host exfiltration.
 	if strings.Contains(csp, "'unsafe-inline'; connect") || strings.Contains(csp, "script-src 'self' 'unsafe-inline'") {
 		t.Errorf("script-src must not allow 'unsafe-inline'; got %q", csp)
 	}
-	if strings.Contains(csp, "connect-src 'self' https:") || strings.Contains(csp, "connect-src 'self' wss:") {
-		t.Errorf("connect-src must be 'self' only (no exfil wildcard); got %q", csp)
+	if strings.Contains(csp, "connect-src 'self' https:;") || strings.Contains(csp, "connect-src 'self' https: ") || strings.Contains(csp, "wss:") {
+		t.Errorf("connect-src must not carry a broad https:/wss: exfil wildcard; got %q", csp)
 	}
 	// Each request must mint a distinct nonce.
 	rr2 := httptest.NewRecorder()
