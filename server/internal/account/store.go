@@ -664,6 +664,9 @@ type Store interface {
 	// so the daily quota isn't charged for a file that never landed.
 	RefundUpload(ctx context.Context, id string) error
 	PruneUploadEvents(ctx context.Context, before int64) error
+	// PruneDownloadReceipts deletes direct-download dedup rows older than `before`
+	// (a generous margin past any in-flight download) to keep the table bounded.
+	PruneDownloadReceipts(ctx context.Context, before int64) error
 	// settings (admin-editable limits)
 	GetSetting(ctx context.Context, key string) (int64, bool, error)
 	SetSetting(ctx context.Context, key string, value, at int64) error

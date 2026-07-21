@@ -2530,6 +2530,15 @@ func (s *SQLiteStore) PruneUploadEvents(ctx context.Context, before int64) error
 	return err
 }
 
+// PruneDownloadReceipts deletes direct-download receipt dedup rows older than
+// `before`. Called with a generous margin (well past any possible in-flight
+// download) so a duplicate receipt can never re-appear as "first" and
+// double-refund the owner. Keeps the append-only table bounded.
+func (s *SQLiteStore) PruneDownloadReceipts(ctx context.Context, before int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM download_receipts WHERE at < ?`, before)
+	return err
+}
+
 func (s *SQLiteStore) GetSetting(ctx context.Context, key string) (int64, bool, error) {
 	var v int64
 	err := s.db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, key).Scan(&v)

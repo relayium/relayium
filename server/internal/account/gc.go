@@ -12,6 +12,10 @@ import (
 // rolling-window sum never loses a row it still needs.
 const pruneMargin = int64(90000) // 25h
 
+// receiptRetention keeps direct-download receipt dedup rows for 24h — far longer
+// than any download runs, so pruning can never let a late duplicate re-refund.
+const receiptRetention = int64(86400) // 24h
+
 // pendingDeleteMaxAge bounds the orphan-retry queue: a permanently-dead node's
 // pending_node_deletes rows would otherwise retry forever and never self-clean.
 const pendingDeleteMaxAge = int64(7 * 24 * 3600) // 7 days
@@ -69,6 +73,11 @@ func (g *GC) sweep(ctx context.Context) {
 	}
 	if err := g.Store.PruneUploadEvents(ctx, now-pruneMargin); err != nil {
 		g.Log.Printf("gc: prune upload events: %v", err)
+	}
+	// Direct-download receipt dedup rows: prune well past any possible in-flight
+	// download (24h) so a duplicate receipt can never re-appear as "first".
+	if err := g.Store.PruneDownloadReceipts(ctx, now-receiptRetention); err != nil {
+		g.Log.Printf("gc: prune download receipts: %v", err)
 	}
 	// Auth tables are otherwise append-only: expired/revoked sessions and
 	// spent/expired magic tokens are never deleted on the request path, so GC
