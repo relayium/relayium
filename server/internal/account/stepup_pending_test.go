@@ -10,7 +10,7 @@ import (
 // 都能在自己的会话里兑现它 —— 步进认证被整个绕过。
 func TestTakePendingRejectsADifferentSession(t *testing.T) {
 	_, svc, _, _ := newAdminAuditServer(t)
-	tok, ok := svc.putPending("session-A", "settings.update", url.Values{"a": {"1"}})
+	tok, ok := svc.putPending("session-A", "settings.update", "", url.Values{"a": {"1"}})
 	if !ok {
 		t.Fatal("putPending failed")
 	}
@@ -21,7 +21,7 @@ func TestTakePendingRejectsADifferentSession(t *testing.T) {
 
 func TestTakePendingAcceptsTheOriginatingSession(t *testing.T) {
 	_, svc, _, _ := newAdminAuditServer(t)
-	tok, _ := svc.putPending("session-A", "settings.update", url.Values{"a": {"1"}})
+	tok, _ := svc.putPending("session-A", "settings.update", "", url.Values{"a": {"1"}})
 	got, ok := svc.takePending(tok, "session-A")
 	if !ok {
 		t.Fatal("the originating session must be able to redeem")
@@ -34,7 +34,7 @@ func TestTakePendingAcceptsTheOriginatingSession(t *testing.T) {
 // 一次性消费：重放同一个 token 必须失败，否则一次验证能执行任意多次操作。
 func TestTakePendingIsOneShot(t *testing.T) {
 	_, svc, _, _ := newAdminAuditServer(t)
-	tok, _ := svc.putPending("s", "settings.update", url.Values{})
+	tok, _ := svc.putPending("s", "settings.update", "", url.Values{})
 	if _, ok := svc.takePending(tok, "s"); !ok {
 		t.Fatal("first redeem should succeed")
 	}
@@ -46,7 +46,7 @@ func TestTakePendingIsOneShot(t *testing.T) {
 // 会话不匹配的尝试也必须烧掉 token —— 否则攻击者可以反复试探而不消耗它。
 func TestWrongSessionBurnsThePendingToken(t *testing.T) {
 	_, svc, _, _ := newAdminAuditServer(t)
-	tok, _ := svc.putPending("s", "settings.update", url.Values{})
+	tok, _ := svc.putPending("s", "settings.update", "", url.Values{})
 	_, _ = svc.takePending(tok, "attacker")
 	if _, ok := svc.takePending(tok, "s"); ok {
 		t.Fatal("a wrong-session attempt must burn the token, like takeCeremony does")
@@ -55,7 +55,7 @@ func TestWrongSessionBurnsThePendingToken(t *testing.T) {
 
 func TestTakePendingRejectsExpired(t *testing.T) {
 	_, svc, _, _ := newAdminAuditServer(t)
-	tok, _ := svc.putPending("s", "settings.update", url.Values{})
+	tok, _ := svc.putPending("s", "settings.update", "", url.Values{})
 	svc.pendingMu.Lock()
 	p := svc.pendingActions[tok]
 	p.expires = svc.now().Add(-time.Second)
@@ -70,11 +70,11 @@ func TestTakePendingRejectsExpired(t *testing.T) {
 func TestPutPendingRejectsAtCap(t *testing.T) {
 	_, svc, _, _ := newAdminAuditServer(t)
 	for i := 0; i < pendingActionCap; i++ {
-		if _, ok := svc.putPending("s", "settings.update", url.Values{}); !ok {
+		if _, ok := svc.putPending("s", "settings.update", "", url.Values{}); !ok {
 			t.Fatalf("unexpected rejection at i=%d", i)
 		}
 	}
-	if _, ok := svc.putPending("s", "settings.update", url.Values{}); ok {
+	if _, ok := svc.putPending("s", "settings.update", "", url.Values{}); ok {
 		t.Fatal("want rejection once the cap is reached")
 	}
 }

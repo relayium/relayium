@@ -49,7 +49,10 @@ func (s *Service) requireStepUp(action string, next http.HandlerFunc) http.Handl
 			return
 		}
 		c, _ := r.Cookie(adminCookie)
-		tok, ok := s.putPending(c.Value, action, r.PostForm)
+		// Carry the {id} path wildcard (empty for form-only actions) so the
+		// confirmation POST, which lands on the id-less /admin/confirm route, can
+		// re-apply it before forwarding to a path-scoped handler.
+		tok, ok := s.putPending(c.Value, action, r.PathValue("id"), r.PostForm)
 		if !ok {
 			http.Error(w, "too many pending confirmations", http.StatusTooManyRequests)
 			return
@@ -207,19 +210,63 @@ func (s *Service) handleAdminConfirm(w http.ResponseWriter, r *http.Request) {
 	// diff the new value against itself and record an empty change. target and
 	// changes are resolved here and audited after the apply.
 	before, after, target, diffErr := s.beforeImageFor(r.Context(), pending.action, form)
+	// A path-scoped action (node delete) has no target in the form — its id
+	// lives in the path wildcard we stashed. Give the audit a real target
+	// instead of "-", now that the id is recoverable here.
+	if pending.action == AuditNodeDelete && pending.pathID != "" {
+		target = "node:" + pending.pathID
+	}
 
 	r.PostForm = form
 	r.Form = form
 	next := r.WithContext(context.WithValue(r.Context(), stepUpDoneKey, true))
-	handler(w, next)
+	// Re-apply the original {id} wildcard: the confirm POST landed on the id-less
+	// /admin/confirm route, so a path-scoped handler (handleAdminDeleteNode reads
+	// r.PathValue("id")) would otherwise act on an empty id and no-op.
+	if pending.pathID != "" {
+		next.SetPathValue("id", pending.pathID)
+	}
+	rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+	handler(rec, next)
+	// Only treat the action as applied — refresh the grace window and record the
+	// audit entry — when the handler actually succeeded (2xx/3xx). A rejected
+	// write (validation 400, node-not-found 404, ...) has already written its own
+	// error response; marking step-up fresh or logging a change that never landed
+	// would corrupt the audit trail with actions that did not happen.
+	if rec.status >= 400 {
+		return
+	}
 	s.markStepUp(c.Value)
-	// Always record the action, even if the diff could not be computed: a
-	// high-risk write that applied must never be missing from the audit log. A
-	// beforeImageFor error (e.g. a transient store read) costs only the
-	// field-level changes, not the record that the action happened at all.
+	// Record even if the diff could not be computed: a high-risk write that
+	// applied must never be missing from the audit log. A beforeImageFor error
+	// (e.g. a transient store read) costs only the field-level changes, not the
+	// record that the action happened at all.
 	var changes []ChangeField
 	if diffErr == nil {
 		changes = diffFields(before, after)
 	}
 	s.writeAudit(r, pending.action, target, changes, factor)
+}
+
+// statusRecorder wraps a ResponseWriter to remember the first status code the
+// wrapped handler emitted, so handleAdminConfirm can tell an applied write from
+// a rejected one. Defaults to 200: a handler that Writes without an explicit
+// WriteHeader is a success.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+	wrote  bool
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	if !r.wrote {
+		r.status = code
+		r.wrote = true
+	}
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *statusRecorder) Write(b []byte) (int, error) {
+	r.wrote = true // implicit 200 already recorded by the struct default
+	return r.ResponseWriter.Write(b)
 }

@@ -24,12 +24,18 @@ type pendingAction struct {
 	// 上下文去花掉。
 	sessionTok string
 	form       url.Values
-	expires    time.Time
+	// pathID carries the {id} path wildcard of the original request. The
+	// confirmation POST lands on /admin/confirm, which has no {id} segment, so
+	// without stashing it here a path-scoped action (e.g. node delete, whose
+	// handler reads r.PathValue("id")) would forward with an empty id and
+	// silently no-op. handleAdminConfirm re-applies it via SetPathValue.
+	pathID  string
+	expires time.Time
 }
 
 // putPending 暂存一个待确认操作，返回其 token。容量已满时返回 false，
 // 调用方必须据此拒绝请求而不是继续往下走。
-func (s *Service) putPending(sessionTok, action string, form url.Values) (string, bool) {
+func (s *Service) putPending(sessionTok, action, pathID string, form url.Values) (string, bool) {
 	tok := randToken()
 	s.pendingMu.Lock()
 	defer s.pendingMu.Unlock()
@@ -44,7 +50,7 @@ func (s *Service) putPending(sessionTok, action string, form url.Values) (string
 		return "", false
 	}
 	s.pendingActions[tok] = pendingAction{
-		action: action, sessionTok: sessionTok, form: form,
+		action: action, sessionTok: sessionTok, form: form, pathID: pathID,
 		expires: now.Add(pendingActionTTL),
 	}
 	return tok, true

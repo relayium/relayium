@@ -88,6 +88,52 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 	return u, nil
 }
 
+// dropUnverifiedPassword removes any password credential on an account that is
+// about to be email-verified through an external identity provider (Google,
+// Apple, magic link) rather than through the password flow's own email
+// verification.
+//
+// This closes an account pre-hijacking hole. Register (above) lets anyone set a
+// password on an *unverified* email they do not own; login is blocked only by
+// the unverified flag. Without this, the first time the real owner signs in via
+// an IdP the account is flipped to verified while that planted password stays
+// live — so the attacker can then log in with the password they chose and take
+// the account over. A password set before the email was ever proven is
+// therefore untrusted: when a different channel proves ownership we drop it (and
+// the "password" identity), and the legitimate owner re-establishes one via
+// password reset. An already-verified account keeps its password — the owner
+// proved that email themselves, so the credential is trusted.
+//
+// Verification state is re-read from the store (not taken from a possibly-stale
+// User struct) so the decision is authoritative, and this MUST be called before
+// SetEmailVerified — once verified, it correctly becomes a no-op.
+func (s *Service) dropUnverifiedPassword(ctx context.Context, userID string) error {
+	verified, err := s.store.EmailVerified(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if verified {
+		return nil
+	}
+	has, err := s.store.HasPassword(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if !has {
+		return nil
+	}
+	if err := s.store.ClearPassword(ctx, userID); err != nil {
+		return err
+	}
+	// Also drop the "password" identity so ListIdentityProviders / the
+	// last-login-method guard stay consistent with HasPassword. The IdP that
+	// triggered this has already been linked, so the account keeps a login method.
+	if err := s.store.UnlinkIdentity(ctx, "password", userID); err != nil && !errors.Is(err, ErrNotFound) {
+		return err
+	}
+	return nil
+}
+
 // Login 校验邮箱+密码并签发会话。任何失败都返回 ErrBadCredentials。
 // authenticate validates email+password and the login preconditions — verified
 // email, not a frozen (pending-deletion) account — returning the user id. Shared

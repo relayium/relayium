@@ -93,6 +93,11 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	err = s.store.LinkIdentity(r.Context(), "google", sub, u.ID)
 	if err == nil {
+		// Pre-hijack defense: drop any password planted on this email while it
+		// was unverified, before we verify it via Google (see dropUnverifiedPassword).
+		err = s.dropUnverifiedPassword(r.Context(), u.ID)
+	}
+	if err == nil {
 		// Google only reaches this path with verified == true (checked above).
 		err = s.store.SetEmailVerified(r.Context(), u.ID)
 	}

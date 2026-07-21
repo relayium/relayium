@@ -152,6 +152,9 @@ func (s *Service) handleAppleWebCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if claims.EmailVerified {
+		// Pre-hijack defense: drop any password planted on this email while
+		// unverified, before Apple verifies it (see dropUnverifiedPassword).
+		_ = s.dropUnverifiedPassword(r.Context(), u.ID)
 		_ = s.store.SetEmailVerified(r.Context(), u.ID)
 	}
 	sess, err := s.IssueSession(r.Context(), u.ID)

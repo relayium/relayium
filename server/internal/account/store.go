@@ -390,6 +390,11 @@ type Store interface {
 	// Returns ErrNotFound when no such link exists.
 	UnlinkIdentity(ctx context.Context, provider, userID string) error
 	SetPassword(ctx context.Context, userID, passwordHash string) error
+	// ClearPassword removes a user's password credential (NULLs password_hash),
+	// so GetCredentials/HasPassword no longer report a usable password. Used to
+	// drop a password that was planted on an unverified account before an
+	// external identity provider proves ownership of the email.
+	ClearPassword(ctx context.Context, userID string) error
 	GetCredentials(ctx context.Context, email string) (userID, passwordHash string, ok bool, err error)
 	// UserByCanonicalEmail looks up an account by its folded canonical email form
 	// (H2b anti-Sybil register dedupe: strips +tag for all domains, dot-folds

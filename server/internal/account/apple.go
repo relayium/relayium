@@ -174,6 +174,9 @@ func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if claims.EmailVerified {
+			// Pre-hijack defense: drop any password planted on this email while
+			// unverified, before Apple verifies it (see dropUnverifiedPassword).
+			_ = s.dropUnverifiedPassword(r.Context(), u.ID)
 			_ = s.store.SetEmailVerified(r.Context(), u.ID)
 		}
 	} else if s.frozenBlocked(w, u) {

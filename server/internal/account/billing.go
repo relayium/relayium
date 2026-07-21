@@ -17,6 +17,18 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	// Guard against creating a SECOND concurrent subscription (double billing).
+	// Checkout is subscription-mode; Stripe will happily open another live
+	// subscription on a customer that already has one. A user who is already
+	// subscribed must change tiers via change-plan, not a fresh Checkout
+	// Session. A canceled/expired subscription (SubscriptionStatus not live)
+	// correctly falls through so the user can re-subscribe. liveSubStatus is the
+	// authoritative signal — PlanSource stays "stripe" after cancellation, so it
+	// alone cannot distinguish a live sub from a lapsed one.
+	if u.StripeCustomerID != "" && liveSubStatus(u.SubscriptionStatus) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "already_subscribed"})
+		return
+	}
 	var in struct {
 		PlanID string `json:"planId"`
 		Cycle  string `json:"cycle"` // "monthly" | "yearly"

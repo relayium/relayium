@@ -399,6 +399,11 @@ func (s *Service) VerifyMagicLink(ctx context.Context, rawToken string) (Session
 	if err := s.store.LinkIdentity(ctx, "email", tok.Email, u.ID); err != nil {
 		return Session{}, err
 	}
+	// Pre-hijack defense: a password planted on this email while it was
+	// unverified is untrusted once ownership is proven via the magic link.
+	if err := s.dropUnverifiedPassword(ctx, u.ID); err != nil {
+		return Session{}, err
+	}
 	if err := s.store.SetEmailVerified(ctx, u.ID); err != nil {
 		return Session{}, err
 	}

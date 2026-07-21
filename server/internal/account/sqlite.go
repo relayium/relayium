@@ -1411,6 +1411,14 @@ func (s *SQLiteStore) SetPassword(ctx context.Context, userID, passwordHash stri
 	return err
 }
 
+// ClearPassword NULLs the password hash so the account has no usable password
+// credential (GetCredentials/HasPassword then report none).
+func (s *SQLiteStore) ClearPassword(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET password_hash = NULL WHERE id = ?`, userID)
+	return err
+}
+
 // HasPassword reports whether the user has a usable password hash set.
 func (s *SQLiteStore) HasPassword(ctx context.Context, userID string) (bool, error) {
 	var hash sql.NullString
