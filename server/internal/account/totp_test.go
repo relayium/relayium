@@ -101,6 +101,38 @@ func TestClaimTOTPStepMonotonicAtomic(t *testing.T) {
 	}
 }
 
+// A transient forward clock jump can commit a far-future last_step; once the
+// clock is corrected every real code's step is < last_step and would be refused
+// forever. ClaimTOTPStep self-heals when the guard sits implausibly far ahead of
+// the presented step, while still refusing a genuine replay afterwards.
+func TestClaimTOTPStepHealsForwardClockPoison(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	// Simulate a poisoned guard: last_step a day (~2880 steps) in the future.
+	if _, err := st.db.ExecContext(ctx,
+		`UPDATE admin_totp_guard SET last_step = ? WHERE id = 1`, int64(2880)); err != nil {
+		t.Fatal(err)
+	}
+	// A normal, current code (step 100) would be refused by a naive `? > last_step`
+	// but must be accepted here, healing the guard down to the current step.
+	if ok, err := st.ClaimTOTPStep(ctx, 100); err != nil || !ok {
+		t.Fatalf("a normal step must heal a future-poisoned guard: ok=%v err=%v", ok, err)
+	}
+	// Replay protection is intact post-heal: the same code is now refused.
+	if ok, _ := st.ClaimTOTPStep(ctx, 100); ok {
+		t.Fatal("replay of the healed step must still be refused")
+	}
+	// And a value only just ahead (within the skew margin) is NOT treated as
+	// poison — normal monotonic rules apply.
+	if _, err := st.db.ExecContext(ctx,
+		`UPDATE admin_totp_guard SET last_step = ? WHERE id = 1`, int64(101)); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := st.ClaimTOTPStep(ctx, 100); ok {
+		t.Fatal("a step within the skew margin must not trigger the heal path")
+	}
+}
+
 // Concurrent claims of the SAME step (N instances racing one code) let exactly
 // one through — the writer serializes the compare-and-set.
 func TestClaimTOTPStepConcurrent(t *testing.T) {

@@ -58,23 +58,36 @@ func (s *Service) dropUploadBlob(ctx context.Context, nodeID, blobKey string) {
 }
 
 // ReapPendingUploads drops abandoned upload sessions and their partial blobs.
-// Wired into the GC tick (see main.go). now is unix seconds. It claims each
-// session's terminal `done` flag atomically before dropping, so it never races a
-// concurrent finalize that already committed the blob.
+// Wired into the GC tick (see main.go). now is unix seconds. It runs two passes,
+// both keyed on IDLE time (no chunk since) rather than absolute age, so a legit
+// long upload is never reaped mid-flight:
+//   - open sessions idle past the TTL: claim `done` atomically before dropping,
+//     so it never races a finalize that already committed the blob;
+//   - finalized (done=1) sessions idle past the TTL whose blob nothing
+//     references — a finalize that crashed before persisting the file — whose
+//     partial blob would otherwise leak forever.
 func (s *Service) ReapPendingUploads(now int64) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	rows, err := s.store.ListExpiredOpenUploadSessions(ctx, now-pendingUploadTTL)
-	if err != nil {
-		return
-	}
-	for _, r := range rows {
-		if _, ok, err := s.store.ClaimUploadDone(ctx, r.ID); err != nil || !ok {
-			continue // finalized (blob kept) or claimed by another reaper
+	before := now - pendingUploadTTL
+	if rows, err := s.store.ListExpiredOpenUploadSessions(ctx, before); err == nil {
+		for _, r := range rows {
+			if _, ok, err := s.store.ClaimUploadDone(ctx, r.ID, now); err != nil || !ok {
+				continue // finalized (blob kept) or claimed by another reaper
+			}
+			s.dropUploadBlob(ctx, r.NodeID, r.BlobKey)
+			_ = s.store.DeleteUploadSession(ctx, r.ID)
 		}
-		s.dropUploadBlob(ctx, r.NodeID, r.BlobKey)
-		_ = s.store.DeleteUploadSession(ctx, r.ID)
 	}
+	// Orphaned finalized rows: drop the unreferenced blob, then purge every stale
+	// done=1 row (referenced ones keep their now-live blob; this only clears the
+	// leftover session row, including any the open pass above failed to delete).
+	if orphans, err := s.store.ListOrphanDoneUploadSessions(ctx, before); err == nil {
+		for _, r := range orphans {
+			s.dropUploadBlob(ctx, r.NodeID, r.BlobKey)
+		}
+	}
+	_ = s.store.PurgeDoneUploadSessions(ctx, before)
 }
 
 // handleUploadInit (POST /api/files/uploads) starts a chunked upload. The body
@@ -307,8 +320,10 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 		return
 	}
 	// Mirror the blob's authoritative size into the DB (monotonic; a no-op if a
-	// concurrent request already advanced past it or the session was finalized).
-	if uerr := s.store.AdvanceUploadReceived(r.Context(), sess.ID, newSize); uerr != nil {
+	// concurrent request already advanced past it or the session was finalized;
+	// clamped to max_size so a lying node can't inflate the ledger). Stamps
+	// last_activity so the idle reaper knows this session is still progressing.
+	if uerr := s.store.AdvanceUploadReceived(r.Context(), sess.ID, newSize, s.now().Unix()); uerr != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
@@ -340,7 +355,7 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	}
 	// Claim the session terminally, getting the committed size at that instant. A
 	// racing finalize (or the reaper) that already claimed it loses here.
-	size, claimed, err := s.store.ClaimUploadDone(r.Context(), sess.ID)
+	size, claimed, err := s.store.ClaimUploadDone(r.Context(), sess.ID, s.now().Unix())
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/relayium/relayium/internal/cloud"
@@ -15,6 +16,13 @@ import (
 // login/logout/whoami (and, later, up/down) talk to unless --server
 // overrides it. Self-hosters point elsewhere with --server.
 const defaultCloudServer = "https://relayium.com"
+
+// sameServer reports whether two cloud-server URLs address the same host,
+// tolerating a trailing slash. A conservative mismatch just prompts a re-login,
+// the safe direction for a request that would otherwise carry an access token.
+func sameServer(a, b string) bool {
+	return strings.TrimRight(a, "/") == strings.TrimRight(b, "/")
+}
 
 // runLogin drives the CLI device-code login flow: it asks the server for a
 // user code + verification URL, prints them so the human can approve in a
@@ -193,6 +201,15 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
+	// Never send the access token to a server other than the one that issued it.
+	// The token authenticates you to creds.Server (e.g. relayium.com); attaching
+	// it to an arbitrary --server override would leak your account credential to
+	// that host — and it wouldn't authenticate there anyway. Require a matching
+	// login instead.
+	if server != "" && !sameServer(server, creds.Server) {
+		fmt.Fprintf(stderr, "you're logged in to %s — run `relayium login --server %s` before uploading there\n", creds.Server, server)
+		return 1
+	}
 	client := cloud.NewClient(creds.Server)
 	client.Token = creds.AccessToken
 	if server != "" {

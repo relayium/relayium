@@ -8,6 +8,13 @@ import (
 	"github.com/pquerna/otp/totp"
 )
 
+// totpForwardHealSteps is how many 30-second steps the persisted replay guard
+// may sit AHEAD of a presented code's step before ClaimTOTPStep treats it as a
+// clock-poisoned value and self-heals (resets to the current step). Legit skew
+// is at most ±1 step (matchAdminTOTPStep's window), so 2 leaves a safe margin;
+// any real forward clock jump that would lock out 2FA is far larger.
+const totpForwardHealSteps = 2
+
 // totpOpts are the fixed TOTP parameters (Google Authenticator / 1Password
 // compatible). Validation iterates steps manually for exact replay tracking,
 // so per-call Skew stays 0 here.

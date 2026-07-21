@@ -108,3 +108,28 @@ func TestBeforeImagePlanNewIsEmptyNotNil(t *testing.T) {
 		t.Fatalf("a brand-new plan has no before image, got %+v", before)
 	}
 }
+
+// The field-less high-risk actions must still NAME their target in the audit —
+// previously all three logged target="-", which can't tell you which user was
+// re-planned, which token was minted, or which passkey was deleted.
+func TestBeforeImageNamesTargetForFieldlessActions(t *testing.T) {
+	_, svc, _, _ := newAdminAuditServer(t)
+	ctx := context.Background()
+	cases := []struct {
+		action, wantTarget string
+		form               url.Values
+	}{
+		{AuditUserPlan, "user:u9", url.Values{"user_id": {"u9"}, "plan_id": {"max"}}},
+		{AuditTokenMint, "token:fleet-a", url.Values{"name": {"fleet-a"}}},
+		{AuditPasskeyDelete, "passkey:pk3", url.Values{"id": {"pk3"}}},
+	}
+	for _, c := range cases {
+		_, _, target, err := svc.beforeImageFor(ctx, c.action, c.form)
+		if err != nil {
+			t.Fatalf("%s: %v", c.action, err)
+		}
+		if target != c.wantTarget {
+			t.Fatalf("%s: target=%q, want %q", c.action, target, c.wantTarget)
+		}
+	}
+}

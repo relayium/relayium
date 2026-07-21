@@ -36,8 +36,24 @@ func (s *Service) beforeImageFor(ctx context.Context, action string, form url.Va
 		}
 		return before, planImage(p), "plan:" + id, nil
 
-	// 其余高危动作没有"字段级 diff"可言：用户改档只有一个目标值，节点删除
-	// 没有新值，铸 token 是纯新增。它们各自在 handler 里构造 ChangeField。
+	// These actions have no field-level "before" to diff, but the audit MUST still
+	// name WHAT was touched (target) and the operative value — a bare "user.plan"
+	// with target "-" can't tell you which user was moved to which plan, and a
+	// "passkey.delete" with no target defeats the very forensics that feature
+	// exists for. The id lives in the reconstructed form of the original request.
+	case AuditUserPlan:
+		return map[string]any{}, map[string]any{"plan": form.Get("plan_id")},
+			"user:" + form.Get("user_id"), nil
+
+	case AuditTokenMint:
+		return map[string]any{}, map[string]any{"name": form.Get("name")},
+			"token:" + form.Get("name"), nil
+
+	case AuditPasskeyDelete:
+		return map[string]any{}, map[string]any{}, "passkey:" + form.Get("id"), nil
+
+	// Node delete has its id in the path wildcard, not the form; handleAdminConfirm
+	// fills its target from the stashed pathID after this returns.
 	default:
 		return map[string]any{}, map[string]any{}, "-", nil
 	}

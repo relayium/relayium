@@ -429,6 +429,19 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 			return nil, err
 		}
 	}
+	// last_activity backs IDLE-based reaping of resumable uploads: a session is
+	// abandoned only after no chunk has landed for pendingUploadTTL, not once its
+	// absolute age crosses it — otherwise a legit large upload that simply takes
+	// longer than the TTL (a >1 h transfer) gets reaped mid-flight, 404ing the next
+	// chunk and forcing a restart-from-zero loop. Refreshed on each chunk advance
+	// and on the finalize claim; existing rows read 0 and fall back to created_at
+	// in the reaper query (max(last_activity, created_at)).
+	if _, err := db.ExecContext(context.Background(),
+		`ALTER TABLE upload_sessions ADD COLUMN last_activity INTEGER NOT NULL DEFAULT 0`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column name") {
+		db.Close()
+		return nil, err
+	}
 	// max_downloads generalizes burn_after_read into a download-count limit:
 	// 0 = unlimited until TTL, N = delete after the Nth download, 1 = burn.
 	if _, err := db.ExecContext(context.Background(),
@@ -1571,8 +1584,20 @@ func (s *SQLiteStore) SetPassword(ctx context.Context, userID, passwordHash stri
 // concurrent logins with the same code race here and exactly one gets
 // RowsAffected==1. ok=false ⇒ the step was already spent (replay / stale).
 func (s *SQLiteStore) ClaimTOTPStep(ctx context.Context, step int64) (bool, error) {
+	// Normal path: claim iff `step` is strictly newer than the last used step.
+	// Self-heal path (`last_step - step > totpForwardHealSteps`): the guard is
+	// implausibly far in the FUTURE relative to this code's step. `step` always
+	// tracks wall-clock (matchAdminTOTPStep only accepts codes within ±1 step of
+	// now), so a last_step many steps ahead can only come from a transient forward
+	// clock jump (e.g. an NTP glitch) that committed a future step; once the clock
+	// is corrected every real code would be rejected forever without this. Healing
+	// resets the guard to the current step, so replay protection is unchanged (a
+	// re-presented code is still `step == last_step`, not claimed). The margin is
+	// wide enough that legit ±1 skew never triggers it.
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE admin_totp_guard SET last_step = ? WHERE id = 1 AND ? > last_step`, step, step)
+		`UPDATE admin_totp_guard SET last_step = ?
+		 WHERE id = 1 AND (? > last_step OR last_step - ? > ?)`,
+		step, step, step, totpForwardHealSteps)
 	if err != nil {
 		return false, err
 	}
@@ -1787,17 +1812,27 @@ func (s *SQLiteStore) GetUploadSession(ctx context.Context, id, userID string) (
 // AdvanceUploadReceived moves the committed offset forward only (never back) and
 // only while the session is open, so a stale write can't lower it or resurrect a
 // finalized session.
-func (s *SQLiteStore) AdvanceUploadReceived(ctx context.Context, id string, to int64) error {
+func (s *SQLiteStore) AdvanceUploadReceived(ctx context.Context, id string, to, now int64) error {
+	// `? <= max_size` clamps the committed offset to the session's write cap: the
+	// new size is whatever the blob node reports, and a malicious BYO/fleet node
+	// could report a value far larger than we ever sent to inflate `received` and
+	// poison the owner's storage/quota accounting at finalize. Beyond max_size it
+	// is refused (no-op), so the ledger can't be pushed past what was authorized.
+	// last_activity is refreshed on every forward advance (idle-reaper input).
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE upload_sessions SET received = ? WHERE id = ? AND done = 0 AND ? > received`, to, id, to)
+		`UPDATE upload_sessions SET received = ?, last_activity = ?
+		 WHERE id = ? AND done = 0 AND ? > received AND ? <= max_size`, to, now, id, to, to)
 	return err
 }
 
 // ClaimUploadDone atomically marks the session terminal, returning the committed
 // offset at that instant. ok=false ⇒ already done (a racing finalize/reaper won).
-func (s *SQLiteStore) ClaimUploadDone(ctx context.Context, id string) (received int64, ok bool, err error) {
+func (s *SQLiteStore) ClaimUploadDone(ctx context.Context, id string, now int64) (received int64, ok bool, err error) {
+	// Refresh last_activity as we claim: a finalize on an idle-past-TTL upload
+	// would otherwise leave the just-claimed done=1 row "expired", letting the
+	// orphan reaper drop its blob in the window before persistStoredFile runs.
 	err = s.db.QueryRowContext(ctx,
-		`UPDATE upload_sessions SET done = 1 WHERE id = ? AND done = 0 RETURNING received`, id,
+		`UPDATE upload_sessions SET done = 1, last_activity = ? WHERE id = ? AND done = 0 RETURNING received`, now, id,
 	).Scan(&received)
 	if err == sql.ErrNoRows {
 		return 0, false, nil
@@ -1813,11 +1848,15 @@ func (s *SQLiteStore) DeleteUploadSession(ctx context.Context, id string) error 
 	return err
 }
 
-// ListExpiredOpenUploadSessions returns still-open sessions created at/before
-// `before`, for the reaper to claim and drop.
+// ListExpiredOpenUploadSessions returns still-open sessions IDLE since at/before
+// `before` (no chunk landed since), for the reaper to claim and drop. Idle time
+// is max(last_activity, created_at) so a legit long upload that keeps making
+// progress is never reaped mid-flight, and pre-migration rows (last_activity=0)
+// fall back to created_at.
 func (s *SQLiteStore) ListExpiredOpenUploadSessions(ctx context.Context, before int64) ([]UploadSessionRow, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+uploadSessionCols+` FROM upload_sessions WHERE done = 0 AND created_at <= ?`, before)
+		`SELECT `+uploadSessionCols+` FROM upload_sessions
+		 WHERE done = 0 AND max(last_activity, created_at) <= ?`, before)
 	if err != nil {
 		return nil, err
 	}
@@ -1831,6 +1870,41 @@ func (s *SQLiteStore) ListExpiredOpenUploadSessions(ctx context.Context, before 
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// ListOrphanDoneUploadSessions returns finalized (done=1) sessions idle since
+// at/before `before` whose blob is NOT referenced by any stored_files row — a
+// finalize that crashed (or whose DeleteUploadSession failed) after claiming
+// done but before persisting the file. Their partial blobs would otherwise leak
+// forever, since the open-session reaper only ever looks at done=0 rows.
+func (s *SQLiteStore) ListOrphanDoneUploadSessions(ctx context.Context, before int64) ([]UploadSessionRow, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+uploadSessionCols+` FROM upload_sessions
+		 WHERE done = 1 AND max(last_activity, created_at) <= ?
+		   AND blob_key NOT IN (SELECT blob_key FROM stored_files)`, before)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []UploadSessionRow
+	for rows.Next() {
+		r, err := scanUploadSession(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// PurgeDoneUploadSessions deletes finalized (done=1) rows idle since at/before
+// `before` — housekeeping for rows a finalize left behind. Their blob is either
+// a live stored_files entry (kept) or was already dropped by the orphan pass, so
+// this only reclaims the tiny session row.
+func (s *SQLiteStore) PurgeDoneUploadSessions(ctx context.Context, before int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM upload_sessions WHERE done = 1 AND max(last_activity, created_at) <= ?`, before)
+	return err
 }
 
 // ClearPassword NULLs the password hash so the account has no usable password

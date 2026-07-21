@@ -40,28 +40,28 @@ func TestUploadSessionStoreLifecycle(t *testing.T) {
 	}
 
 	// Monotonic advance.
-	_ = st.AdvanceUploadReceived(ctx, "up1", 100)
-	_ = st.AdvanceUploadReceived(ctx, "up1", 50) // stale — must not lower
+	_ = st.AdvanceUploadReceived(ctx, "up1", 100, 2000)
+	_ = st.AdvanceUploadReceived(ctx, "up1", 50, 2000) // stale — must not lower
 	got, _, _ = st.GetUploadSession(ctx, "up1", u.ID)
 	if got.Received != 100 {
 		t.Fatalf("received: want 100 (monotonic), got %d", got.Received)
 	}
-	_ = st.AdvanceUploadReceived(ctx, "up1", 200)
+	_ = st.AdvanceUploadReceived(ctx, "up1", 200, 2000)
 	got, _, _ = st.GetUploadSession(ctx, "up1", u.ID)
 	if got.Received != 200 {
 		t.Fatalf("received: want 200, got %d", got.Received)
 	}
 
 	// Claim done returns the offset at claim time, and is one-shot.
-	rec, ok, err := st.ClaimUploadDone(ctx, "up1")
+	rec, ok, err := st.ClaimUploadDone(ctx, "up1", 2000)
 	if err != nil || !ok || rec != 200 {
 		t.Fatalf("claim: rec=%d ok=%v err=%v", rec, ok, err)
 	}
-	if _, ok, _ := st.ClaimUploadDone(ctx, "up1"); ok {
+	if _, ok, _ := st.ClaimUploadDone(ctx, "up1", 2000); ok {
 		t.Fatal("a second finalize/reap must not re-claim the session")
 	}
 	// A finalized session no longer advances (append after finalize is a no-op).
-	_ = st.AdvanceUploadReceived(ctx, "up1", 999)
+	_ = st.AdvanceUploadReceived(ctx, "up1", 999, 2000)
 	got, _, _ = st.GetUploadSession(ctx, "up1", u.ID)
 	if got.Received != 200 {
 		t.Fatalf("a done session must not advance: got %d", got.Received)
@@ -83,7 +83,7 @@ func TestUploadSessionClaimDoneConcurrent(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if _, ok, err := st.ClaimUploadDone(ctx, "race1"); err == nil && ok {
+			if _, ok, err := st.ClaimUploadDone(ctx, "race1", 2000); err == nil && ok {
 				mu.Lock()
 				won++
 				mu.Unlock()
@@ -111,7 +111,7 @@ func TestUploadSessionCapAtStore(t *testing.T) {
 		t.Fatal("must reject once the per-user cap is reached")
 	}
 	// Finalize (claim + delete) one → a slot frees up.
-	_, _, _ = st.ClaimUploadDone(ctx, "s0")
+	_, _, _ = st.ClaimUploadDone(ctx, "s0", 2000)
 	_ = st.DeleteUploadSession(ctx, "s0")
 	if ok, err := st.CreateUploadSession(ctx, mkUploadRow("after", u.ID), maxSessionsPerUser); err != nil || !ok {
 		t.Fatalf("a freed slot must accept a new session: ok=%v err=%v", ok, err)
@@ -138,7 +138,7 @@ func TestListExpiredOpenUploadSessions(t *testing.T) {
 		t.Fatalf("want only the old open session, got %+v", rows)
 	}
 	// A done session is never reaped (it was finalized; its blob is kept).
-	_, _, _ = st.ClaimUploadDone(ctx, "old")
+	_, _, _ = st.ClaimUploadDone(ctx, "old", 2000)
 	rows, _ = st.ListExpiredOpenUploadSessions(ctx, 5000)
 	if len(rows) != 0 {
 		t.Fatalf("a done session must not be reaped, got %+v", rows)

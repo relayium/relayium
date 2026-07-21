@@ -466,13 +466,22 @@ type Store interface {
 	CreateUploadSession(ctx context.Context, row UploadSessionRow, maxPerUser int) (ok bool, err error)
 	GetUploadSession(ctx context.Context, id, userID string) (UploadSessionRow, bool, error)
 	// AdvanceUploadReceived monotonically advances the committed offset (only ever
-	// forward, only while the session is open), mirroring the authoritative blob size.
-	AdvanceUploadReceived(ctx context.Context, id string, to int64) error
+	// forward, only while the session is open, never past max_size), mirroring the
+	// authoritative blob size, and stamps last_activity=now (idle-reaper input).
+	AdvanceUploadReceived(ctx context.Context, id string, to, now int64) error
 	// ClaimUploadDone atomically marks the session terminal and returns the offset
-	// at that instant. ok=false ⇒ already claimed (a racing finalize/reaper won).
-	ClaimUploadDone(ctx context.Context, id string) (received int64, ok bool, err error)
+	// at that instant, stamping last_activity=now. ok=false ⇒ already claimed (a
+	// racing finalize/reaper won).
+	ClaimUploadDone(ctx context.Context, id string, now int64) (received int64, ok bool, err error)
 	DeleteUploadSession(ctx context.Context, id string) error
+	// ListExpiredOpenUploadSessions returns open sessions idle since ≤ before.
 	ListExpiredOpenUploadSessions(ctx context.Context, before int64) ([]UploadSessionRow, error)
+	// ListOrphanDoneUploadSessions returns finalized rows idle since ≤ before whose
+	// blob no stored_files row references (a finalize that crashed before persist).
+	ListOrphanDoneUploadSessions(ctx context.Context, before int64) ([]UploadSessionRow, error)
+	// PurgeDoneUploadSessions deletes finalized rows idle since ≤ before (their
+	// blob is either a live file or already dropped by the orphan pass).
+	PurgeDoneUploadSessions(ctx context.Context, before int64) error
 	EmailVerified(ctx context.Context, userID string) (bool, error)
 	SetEmailVerified(ctx context.Context, userID string) error
 	// SetOnlyOwnNodes toggles the BYO-nodes-only restriction (SP3) for a user.
