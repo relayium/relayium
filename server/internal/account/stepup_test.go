@@ -159,11 +159,12 @@ func TestGracePeriodStillShowsConfirmPage(t *testing.T) {
 	}
 }
 
-// 未做因子校验（Task 8 的活）之前，/admin/confirm 绝不能真的执行待确认操作 ——
-// 否则拿着会话 cookie 的人（比如 XSS 窃取）能跳过第二因子直接兑现高危写操作，
+// 提交确认页时不带任何第二因子，/admin/confirm 绝不能执行待确认操作 —— 否则
+// 拿着会话 cookie 的人（比如 XSS 窃取）能跳过第二因子直接兑现高危写操作，
 // confirm 页存在的意义就没了。这条直接盯住 handleAdminConfirm 本身，而不是
-// 只测 requireStepUp 拦下了原始 POST。
-func TestConfirmDoesNotApplyBeforeFactorVerificationExists(t *testing.T) {
+// 只测 requireStepUp 拦下了原始 POST。测试服务未配 TOTP/passkey，因子即密码，
+// 空密码必被拒。
+func TestConfirmWithoutFactorDoesNotApply(t *testing.T) {
 	ts, svc, _, _ := newAdminAuditServer(t)
 	cookie := adminLoginCookie(t, ts)
 	ctx := t.Context()

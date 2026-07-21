@@ -277,6 +277,11 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminPasskeyRegisterBegin))))
 	mux.Handle("POST /admin/passkey/register/finish",
 		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminPasskeyRegisterFinish))))
+	// Step-up passkey assertion challenge, issued to the confirmation page when
+	// passkey is the offered factor. fetch-only like the other passkey
+	// endpoints, so a missing Origin is a forgery signal.
+	mux.Handle("POST /admin/stepup/passkey/begin",
+		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminStepUpPasskeyBegin))))
 	// Delete is a plain form submission, not fetch, so it gets csrfGuard only.
 	// It is high-risk (see the reversed exemption note on
 	// handleAdminPasskeyDelete in passkey_register.go) so it also goes

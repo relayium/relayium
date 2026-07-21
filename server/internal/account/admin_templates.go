@@ -211,7 +211,7 @@ button:hover{filter:brightness(1.07)}
 // /admin/confirm. Values interpolated below (Field/Old/New, Action, Target)
 // include admin-supplied strings such as plan names, so this MUST stay
 // html/template (auto-escaping), never text/template or raw string building.
-var adminConfirmTmpl = template.Must(template.New("confirm").Parse(`<!doctype html>
+var adminConfirmTmpl = template.Must(withPasskeyJS(template.New("confirm")).Parse(`<!doctype html>
 <html><head><meta charset="utf-8"><title>Relayium Admin · 确认操作</title>
 <style>:root{--a:#7c3aad;--bg:#faf9fb;--fg:#1a1420;--bd:#e5e4e7;--card:#fff;--muted:#6b6375;--soft:#f4f3ec}
 @media(prefers-color-scheme:dark){:root{--a:#c084fc;--bg:#16171d;--fg:#f3f4f6;--bd:#2e303a;--card:#1c1d25;--muted:#9ca3af;--soft:#1f2028}}
@@ -250,18 +250,89 @@ button:hover{filter:brightness(1.07)}
 <p class="muted">该操作没有逐字段的差异可展示，请确认操作本身无误。</p>
 {{end}}
 
-<form method="post" action="/admin/confirm">
+<form method="post" action="/admin/confirm" id="confirm-form">
 <input type="hidden" name="confirm_token" value="{{.Token}}">
 {{if .NeedFactor}}
-<label>验证（{{.Factor}}）<input type="text" name="factor_code" autocomplete="off" placeholder="第二因子验证码/凭据"></label>
+{{if eq .Factor "passkey"}}
+<input type="hidden" name="factor_assertion" id="factor-assertion">
+<p class="muted">用你注册的 passkey 确认这项操作。</p>
+<p class="muted" id="passkey-error" hidden></p>
+{{else if eq .Factor "totp"}}
+<label>验证码（TOTP）<input type="text" name="factor_code" inputmode="numeric" autocomplete="off" placeholder="6 位动态验证码"></label>
+{{else}}
+<label>管理员密码<input type="password" name="factor_code" autocomplete="current-password" placeholder="再次输入密码以确认"></label>
+{{end}}
 {{else}}
 <p class="muted">刚验证过第二因子，此次操作仍在宽限期内，免再输入 —— 但请确认上面的改动无误。</p>
 {{end}}
 <div class="actions">
+{{if and .NeedFactor (eq .Factor "passkey")}}
+<button type="button" id="passkey-confirm">用 passkey 确认执行</button>
+{{else}}
 <button type="submit">确认执行</button>
+{{end}}
 <a href="/admin">取消</a>
 </div>
 </form>
+{{if and .NeedFactor (eq .Factor "passkey")}}
+<script>
+(function(){
+  var btn = document.getElementById('passkey-confirm');
+  var err = document.getElementById('passkey-error');
+  var field = document.getElementById('factor-assertion');
+  var form = document.getElementById('confirm-form');
+  // Passkey is the only offered factor here, so a device with no WebAuthn
+  // can't complete this action. Say so plainly instead of leaving a dead
+  // button; the operator can retry from a device that has the passkey.
+  if (!window.PublicKeyCredential || !navigator.credentials) {
+    btn.disabled = true;
+    err.textContent = '这台设备不支持 passkey，请在注册了 passkey 的设备上确认。';
+    err.hidden = false;
+    return;
+  }
+{{template "passkeyB64"}}
+  btn.addEventListener('click', function(){
+    err.hidden = true; btn.disabled = true;
+    fetch('/admin/stepup/passkey/begin', {method:'POST'})
+      .then(function(r){
+        if (r.ok) return r.json();
+        return r.json().then(function(j){ return j.error; }, function(){ return null; })
+          .then(function(m){ throw new Error(m || '服务器错误 ' + r.status); });
+      })
+      .then(function(o){
+        var pk = o.publicKey;
+        pk.challenge = dec(pk.challenge);
+        if (pk.allowCredentials) pk.allowCredentials.forEach(function(c){ c.id = dec(c.id); });
+        return navigator.credentials.get({publicKey: pk});
+      })
+      .then(function(c){
+        // The assertion rides the confirm form as a hidden field (not a
+        // separate fetch) so confirm_token and the factor are submitted
+        // together to /admin/confirm in one request.
+        field.value = JSON.stringify({
+          id: c.id, rawId: enc(c.rawId), type: c.type,
+          response: {
+            clientDataJSON: enc(c.response.clientDataJSON),
+            authenticatorData: enc(c.response.authenticatorData),
+            signature: enc(c.response.signature),
+            userHandle: c.response.userHandle ? enc(c.response.userHandle) : null
+          }
+        });
+        form.submit();
+      })
+      .catch(function(e){
+        btn.disabled = false;
+        if (e && e.name === 'NotAllowedError') {
+          err.textContent = '已取消，或这台设备上没有可用的 passkey。';
+        } else {
+          err.textContent = (e && e.message) || '验证失败，请重试。';
+        }
+        err.hidden = false;
+      });
+  });
+})();
+</script>
+{{end}}
 </body></html>`))
 
 var adminUsersTmpl = template.Must(withPasskeyJS(template.New("users").Funcs(template.FuncMap{

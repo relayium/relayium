@@ -119,41 +119,59 @@ func (s *Service) confirmHandlerFor(action string) (http.HandlerFunc, bool) {
 	return h, ok
 }
 
-// verifyStepUpFactor checks the second factor submitted alongside a pending
-// confirmation (passkey assertion / TOTP code / password, per
-// availableStepUpFactor — or, inside the grace window, nothing at all).
+// verifyStepUpFactor checks the second factor a confirmation POST presents and
+// returns which factor actually satisfied it — StepUpGrace/Passkey/TOTP/
+// Password — so the audit trail can record the truth, or ("", false) when
+// nothing valid was presented, in which case handleAdminConfirm must NOT apply
+// the pending action.
 //
-// STUB for Task 7: this is Task 8's job and, until that lands, MUST keep
-// returning false unconditionally. handleAdminConfirm treats false as "not
-// verified, do not apply" — that is what keeps the high-risk apply path
-// unreachable through this task. Do NOT turn this into `return true` as a
-// shortcut: doing so would let anyone who can reach POST /admin/confirm with
-// a stolen pending-action token (i.e. anyone already holding the admin
-// session cookie) execute the underlying high-risk write having presented no
-// factor at all, which defeats step-up entirely — the confirmation page
-// would still show the right diff, but nothing would stop it being submitted
-// by whoever has the cookie, factor or not.
-func (s *Service) verifyStepUpFactor(r *http.Request, pending pendingAction) bool {
-	_ = r
-	_ = pending
-	// TODO(Task 8): verify r.PostForm's factor material against
-	// s.availableStepUpFactor(r.Context()), and allow the grace window
-	// (s.stepUpFresh(sessionTok)) to skip that check — mirroring the
-	// NeedFactor computation requireStepUp already did when it rendered this
-	// same pending action's confirmation page.
-	return false
+// The grace window is checked first and mirrors exactly the NeedFactor
+// computation requireStepUp did when it rendered this pending action's page: a
+// recent successful step-up on this same session waves the factor. That path
+// returns StepUpGrace, never a real factor name — the audit must not claim a
+// factor was re-checked when it was let through (see StepUpGrace's doc comment).
+//
+// Which factor is demanded outside the grace window is availableStepUpFactor's
+// call, not the caller's: the client cannot pick a weaker factor than the one
+// the confirmation page offered by choosing which field to fill.
+func (s *Service) verifyStepUpFactor(r *http.Request, pending pendingAction) (string, bool) {
+	if s.stepUpFresh(pending.sessionTok) {
+		return StepUpGrace, true
+	}
+	switch s.availableStepUpFactor(r.Context()) {
+	case StepUpPasskey:
+		if s.verifyStepUpPasskey(r) {
+			return StepUpPasskey, true
+		}
+	case StepUpTOTP:
+		// matchAdminTOTPStep rejects a step at or before the last committed one,
+		// so a code already spent (at login or an earlier step-up) is refused;
+		// commitAdminTOTPStep then advances the guard past this one. The match
+		// and commit are separate critical sections (as on the login path), so
+		// this is a monotonic staleness guard, not an atomic single-use lock —
+		// but a stolen session already gets 60s of factor-free grace after any
+		// one success (see stepUpGraceSecs), so racing a live code buys nothing.
+		if step, ok := s.matchAdminTOTPStep(r.FormValue("factor_code")); ok {
+			s.commitAdminTOTPStep(step)
+			return StepUpTOTP, true
+		}
+	case StepUpPassword:
+		// Password re-entry is the factor only when neither passkey nor TOTP is
+		// configured, so TOTP is off and the code is irrelevant. The username is
+		// implied — the session is already the admin — so only the password is
+		// prompted; adminUser() feeds the constant-time compare its match half.
+		if _, ok := s.verifyAdminCreds(s.adminUser(), r.FormValue("factor_code"), ""); ok {
+			return StepUpPassword, true
+		}
+	}
+	return "", false
 }
 
 // handleAdminConfirm is the confirmation page's POST target. It takes the
-// pending action (burning its token), and — once verifyStepUpFactor is real,
-// in Task 8 — restores the original form onto the request, marks it as
-// step-up-done, and forwards to the mapped handler via confirmHandlerFor,
-// then records the audit entry and refreshes the grace window.
-//
-// In this task verifyStepUpFactor always returns false, so every request
-// here ends at "not implemented yet" and the apply/markStepUp/writeAudit
-// path below never runs. It's written now so Task 8 only has to replace the
-// stub, not build the plumbing around it.
+// pending action (burning its token), verifies the second factor, restores the
+// original form onto the request, marks it as step-up-done and forwards to the
+// mapped handler via confirmHandlerFor, then records the audit entry and
+// refreshes the grace window.
 func (s *Service) handleAdminConfirm(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
 		http.Redirect(w, r, "/admin", http.StatusFound)
@@ -177,18 +195,31 @@ func (s *Service) handleAdminConfirm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown pending action", http.StatusInternalServerError)
 		return
 	}
-	if !s.verifyStepUpFactor(r, pending) {
-		http.Error(w, "step-up factor verification is not implemented yet", http.StatusNotImplemented)
+	factor, ok := s.verifyStepUpFactor(r, pending)
+	if !ok {
+		http.Error(w, "second-factor verification failed", http.StatusUnauthorized)
 		return
 	}
 
 	form := pending.form
+	// Capture the diff BEFORE the handler applies it: beforeImageFor's "before"
+	// half reads the store's current row, so once the write lands it would
+	// diff the new value against itself and record an empty change. target and
+	// changes are resolved here and audited after the apply.
+	before, after, target, diffErr := s.beforeImageFor(r.Context(), pending.action, form)
+
 	r.PostForm = form
 	r.Form = form
 	next := r.WithContext(context.WithValue(r.Context(), stepUpDoneKey, true))
 	handler(w, next)
 	s.markStepUp(c.Value)
-	if before, after, target, err := s.beforeImageFor(r.Context(), pending.action, form); err == nil {
-		s.writeAudit(r, pending.action, target, diffFields(before, after), s.availableStepUpFactor(r.Context()))
+	// Always record the action, even if the diff could not be computed: a
+	// high-risk write that applied must never be missing from the audit log. A
+	// beforeImageFor error (e.g. a transient store read) costs only the
+	// field-level changes, not the record that the action happened at all.
+	var changes []ChangeField
+	if diffErr == nil {
+		changes = diffFields(before, after)
 	}
+	s.writeAudit(r, pending.action, target, changes, factor)
 }

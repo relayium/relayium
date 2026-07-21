@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-webauthn/webauthn/protocol"
@@ -43,6 +44,13 @@ type ceremonyKind string
 const (
 	ceremonyLogin    ceremonyKind = "login"
 	ceremonyRegister ceremonyKind = "register"
+	// ceremonyStepUp is minted by /admin/stepup/passkey/begin and spent by the
+	// passkey branch of verifyStepUpFactor. It carries the same asymmetric risk
+	// as ceremonyRegister: login/begin needs no authentication, so without this
+	// tag a stolen session could mint a ceremony there and spend it to satisfy a
+	// step-up passkey check, walking around the second factor that makes a
+	// session leak recoverable. verifyStepUpPasskey rejects any other kind.
+	ceremonyStepUp ceremonyKind = "stepup"
 )
 
 // passkeyCeremony is one in-flight WebAuthn ceremony. name carries the
@@ -137,6 +145,92 @@ func (s *Service) takeCeremony(r *http.Request) (passkeyCeremony, bool) {
 		return passkeyCeremony{}, false
 	}
 	return cer, true
+}
+
+// handleAdminStepUpPasskeyBegin issues a WebAuthn assertion challenge for a
+// step-up passkey confirmation. It requires an existing admin session — the
+// step-up sits on top of an already-authenticated operator — and mints a
+// ceremonyStepUp. verifyStepUpPasskey refuses any other kind, so a challenge
+// obtained here cannot be diverted, and one obtained at the unauthenticated
+// login/begin cannot be spent here.
+func (s *Service) handleAdminStepUpPasskeyBegin(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "未登录"})
+		return
+	}
+	rp, err := s.adminRP()
+	if err != nil {
+		log.Printf("passkey: building relying party failed: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "passkey 未正确配置"})
+		return
+	}
+	assertion, sess, err := rp.BeginDiscoverableLogin(
+		webauthn.WithUserVerification(protocol.VerificationRequired))
+	if err != nil {
+		log.Printf("passkey: step-up BeginDiscoverableLogin failed: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "无法发起验证"})
+		return
+	}
+	if !s.putCeremony(w, ceremonyStepUp, *sess, "") {
+		log.Printf("passkey: ceremony cap (%d) reached, rejecting stepup/begin", passkeyCeremonyCap)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "系统繁忙，请稍后再试"})
+		return
+	}
+	writeJSON(w, http.StatusOK, assertion)
+}
+
+// verifyStepUpPasskey validates the WebAuthn assertion a confirmation POST
+// carries in its factor_assertion field against a ceremonyStepUp challenge. It
+// is the passkey arm of verifyStepUpFactor and returns false on any failure —
+// wrong kind, absent/expired ceremony, malformed or invalid assertion, or a
+// clone-warning counter — so the pending action is left unapplied.
+func (s *Service) verifyStepUpPasskey(r *http.Request) bool {
+	// takeCeremony deletes unconditionally, so a wrong-kind or replayed attempt
+	// burns the challenge just like a valid one — it cannot be retried.
+	cer, ok := s.takeCeremony(r)
+	if !ok || cer.kind != ceremonyStepUp {
+		return false
+	}
+	rp, err := s.adminRP()
+	if err != nil {
+		log.Printf("passkey: building relying party failed: %v", err)
+		return false
+	}
+	user, err := s.loadAdminPasskeyUser(r.Context())
+	if err != nil || len(user.creds) == 0 {
+		if err != nil {
+			log.Printf("passkey: loading admin passkey user failed: %v", err)
+		}
+		return false
+	}
+	parsed, err := protocol.ParseCredentialRequestResponseBody(
+		strings.NewReader(r.FormValue("factor_assertion")))
+	if err != nil {
+		return false
+	}
+	handler := func(rawID, userHandle []byte) (webauthn.User, error) {
+		if !bytes.Equal(userHandle, user.handle) {
+			return nil, errors.New("unknown user handle")
+		}
+		return user, nil
+	}
+	cred, err := rp.ValidateDiscoverableLogin(handler, cer.session, parsed)
+	if err != nil {
+		return false
+	}
+	// A backwards-going sign counter (two copies of the key in use) is refused
+	// here exactly as it is at login.
+	if cred.Authenticator.CloneWarning {
+		return false
+	}
+	// Best effort: a failed sign-counter / last_used_at write-back must not fail
+	// an otherwise valid step-up.
+	if blob, err := json.Marshal(cred); err == nil {
+		if err := s.store.TouchAdminCredential(r.Context(), b64url(cred.ID), blob, s.now().Unix()); err != nil {
+			log.Printf("passkey: step-up TouchAdminCredential failed: %v", err)
+		}
+	}
+	return true
 }
 
 func (s *Service) handleAdminPasskeyLoginBegin(w http.ResponseWriter, r *http.Request) {
