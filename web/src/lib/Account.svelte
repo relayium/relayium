@@ -121,10 +121,12 @@
     } catch { /* non-fatal */ }
   }
 
-  // Stripe Checkout redirects back to `${BASE_URL}/?billing=success|cancel`
-  // (see server billing.go's SuccessURL/CancelURL). Show a one-shot banner
-  // and strip just that param — mirrors share-target.ts's clean-but-keep-
-  // other-params approach — so a page refresh doesn't re-show it.
+  // Stripe Checkout redirects back to `${BASE_URL}/me?billing=success|cancel`
+  // (see server billing.go's SuccessURL/CancelURL). This runs in Account,
+  // which the nav mounts on every route, so the banner shows wherever the
+  // return lands — the check is on location.search, not the path. Show a
+  // one-shot banner and strip just that param — mirrors share-target.ts's
+  // clean-but-keep-other-params approach — so a refresh doesn't re-show it.
   function consumeBillingReturn() {
     const params = new URLSearchParams(location.search);
     const val = params.get("billing");
