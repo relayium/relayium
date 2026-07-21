@@ -1,6 +1,7 @@
 package account
 
 import (
+	"context"
 	"crypto/subtle"
 	"log"
 	"math"
@@ -42,12 +43,6 @@ const (
 )
 
 // adminSession is the state kept for a logged-in admin session token.
-type adminSession struct {
-	expires      int64  // unix 秒
-	auth         string // "password" | "passkey"，建立会话时用的方式
-	lastStepUpAt int64  // 上次步进成功的 unix 秒；0 = 从未步进
-}
-
 // adminNodeView is a Node prepared for the admin template (online flag derived
 // from last_seen against nodeOnlineWindow).
 type adminNodeView struct {
@@ -311,58 +306,46 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 }
 
 // newAdminSession mints a session token and records how it was established
-// (auth: "password" | "passkey") so the audit trail can report it later.
-func (s *Service) newAdminSession(auth string) string {
+// (auth: "password" | "passkey") so the audit trail can report it later. The
+// session lives in the store (shared across instances); an insert failure is
+// returned so the caller aborts the login rather than handing out a cookie for a
+// session that isn't recorded.
+func (s *Service) newAdminSession(ctx context.Context, auth string) (string, error) {
 	tok := randToken()
-	s.adminMu.Lock()
-	s.adminSessions[tok] = adminSession{
-		expires: s.now().Add(adminSessionTTL).Unix(), auth: auth,
+	if err := s.store.CreateAdminSession(ctx, tok, auth, s.now().Add(adminSessionTTL).Unix()); err != nil {
+		return "", err
 	}
-	s.adminMu.Unlock()
-	return tok
+	return tok, nil
 }
 
-func (s *Service) validAdmin(tok string) bool {
+func (s *Service) validAdmin(ctx context.Context, tok string) bool {
 	if tok == "" {
 		return false
 	}
-	s.adminMu.Lock()
-	defer s.adminMu.Unlock()
-	sess, ok := s.adminSessions[tok]
-	if !ok {
-		return false
-	}
-	if s.now().Unix() >= sess.expires {
-		delete(s.adminSessions, tok)
-		return false
-	}
-	return true
+	// Fail closed on a store error: a DB blip must not admit an unverified admin.
+	_, _, ok, err := s.store.AdminSession(ctx, tok, s.now().Unix())
+	return err == nil && ok
 }
 
-// markStepUp 记下这次步进成功的时刻，开启宽限期。
-func (s *Service) markStepUp(tok string) {
-	s.adminMu.Lock()
-	defer s.adminMu.Unlock()
-	if sess, ok := s.adminSessions[tok]; ok {
-		sess.lastStepUpAt = s.now().Unix()
-		s.adminSessions[tok] = sess
-	}
+// markStepUp 记下这次步进成功的时刻，开启宽限期。Best-effort: a failed write just
+// means the operator re-enters the factor on the next high-risk action.
+func (s *Service) markStepUp(ctx context.Context, tok string) {
+	_ = s.store.MarkAdminStepUp(ctx, tok, s.now().Unix())
 }
 
-// stepUpFresh 报告该会话是否仍在宽限期内。
-func (s *Service) stepUpFresh(tok string) bool {
-	s.adminMu.Lock()
-	defer s.adminMu.Unlock()
-	sess, ok := s.adminSessions[tok]
-	if !ok || sess.lastStepUpAt == 0 {
+// stepUpFresh 报告该会话是否仍在宽限期内。Fail closed on a store error / missing
+// session (require the factor).
+func (s *Service) stepUpFresh(ctx context.Context, tok string) bool {
+	_, lastStepUpAt, ok, err := s.store.AdminSession(ctx, tok, s.now().Unix())
+	if err != nil || !ok || lastStepUpAt == 0 {
 		return false
 	}
-	return s.now().Unix()-sess.lastStepUpAt < stepUpGraceSecs
+	return s.now().Unix()-lastStepUpAt < stepUpGraceSecs
 }
 
 func (s *Service) isAdminReq(r *http.Request) bool {
 	c, err := r.Cookie(adminCookie)
-	return err == nil && s.validAdmin(c.Value)
+	return err == nil && s.validAdmin(r.Context(), c.Value)
 }
 
 // adminUsername 返回配置的管理员用户名，用于审计的 actor 列。管理员不是 users
@@ -377,12 +360,11 @@ func (s *Service) adminAuthMethod(r *http.Request) string {
 	if err != nil {
 		return ""
 	}
-	s.adminMu.Lock()
-	defer s.adminMu.Unlock()
-	if sess, ok := s.adminSessions[c.Value]; ok {
-		return sess.auth
+	auth, _, ok, err := s.store.AdminSession(r.Context(), c.Value, s.now().Unix())
+	if err != nil || !ok {
+		return ""
 	}
-	return ""
+	return auth
 }
 
 // verifyAdminCreds runs the constant-time username/password comparison plus the
@@ -434,7 +416,12 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.adminLogins.reset(ip)
-	tok := s.newAdminSession("password")
+	tok, err := s.newAdminSession(r.Context(), "password")
+	if err != nil {
+		s.renderAdminLogin(w, http.StatusInternalServerError, "服务器错误，请稍后再试",
+			s.adminPasskeyCount(r.Context()) > 0)
+		return
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name: adminCookie, Value: tok, Path: "/admin",
 		HttpOnly: true, Secure: s.cookieSecure(), SameSite: http.SameSiteLaxMode,
@@ -450,12 +437,10 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
 	// writeAudit 在删除会话之前调用：它经 adminAuthMethod 从 r 的 cookie 反查
-	// s.adminSessions 得到 auth，删除之后就查不到了，记出来的 auth 会永远是空。
+	// 会话拿到 auth，删除之后就查不到了，记出来的 auth 会永远是空。
 	s.writeAudit(r, AuditLogout, "-", nil, StepUpNone)
 	if c, err := r.Cookie(adminCookie); err == nil {
-		s.adminMu.Lock()
-		delete(s.adminSessions, c.Value)
-		s.adminMu.Unlock()
+		_ = s.store.DeleteAdminSession(r.Context(), c.Value)
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: adminCookie, Value: "", Path: "/admin", MaxAge: -1,

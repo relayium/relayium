@@ -85,6 +85,9 @@ func (g *GC) sweep(ctx context.Context) {
 	if err := g.Store.DeleteExpiredDeviceAuth(ctx, now); err != nil {
 		g.Log.Printf("gc: delete expired device-auth: %v", err)
 	}
+	if err := g.Store.PurgeExpiredAdminSessions(ctx, now); err != nil {
+		g.Log.Printf("gc: purge expired admin sessions: %v", err)
+	}
 	g.sweepAccountDeletions(ctx, now)
 }
 

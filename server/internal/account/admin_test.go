@@ -339,7 +339,7 @@ func TestAdminHomeDashboardAndPaging(t *testing.T) {
 	s.now = func() time.Time { return time.Unix(1_700_000_000, 0) }
 
 	get := func(query string) *httptest.ResponseRecorder {
-		tok := s.newAdminSession("password")
+		tok, _ := s.newAdminSession(context.Background(), "password")
 		r := httptest.NewRequest("GET", "/admin"+query, nil)
 		r.AddCookie(&http.Cookie{Name: adminCookie, Value: tok})
 		w := httptest.NewRecorder()

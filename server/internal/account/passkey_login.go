@@ -327,7 +327,11 @@ func (s *Service) handleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.R
 		log.Printf("passkey: marshaling credential for write-back failed: %v", err)
 	}
 	s.adminPasskeyLogins.reset(ip)
-	tok := s.newAdminSession("passkey")
+	tok, err := s.newAdminSession(r.Context(), "passkey")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "服务器错误"})
+		return
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name: adminCookie, Value: tok, Path: "/admin",
 		HttpOnly: true, Secure: s.cookieSecure(), SameSite: http.SameSiteLaxMode,

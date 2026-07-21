@@ -428,6 +428,13 @@ type Store interface {
 	// across instances and across process restarts. Call it after the credential
 	// check passes; a false result must fail the login / step-up.
 	ClaimTOTPStep(ctx context.Context, step int64) (ok bool, err error)
+	// Admin sessions live in the store (shared across instances), not a
+	// per-process map. See docs/multi-instance-state-migration.md item #4.
+	CreateAdminSession(ctx context.Context, token, auth string, expires int64) error
+	AdminSession(ctx context.Context, token string, now int64) (auth string, lastStepUpAt int64, ok bool, err error)
+	MarkAdminStepUp(ctx context.Context, token string, at int64) error
+	DeleteAdminSession(ctx context.Context, token string) error
+	PurgeExpiredAdminSessions(ctx context.Context, now int64) error
 	EmailVerified(ctx context.Context, userID string) (bool, error)
 	SetEmailVerified(ctx context.Context, userID string) error
 	// SetOnlyOwnNodes toggles the BYO-nodes-only restriction (SP3) for a user.

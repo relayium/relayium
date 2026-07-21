@@ -90,7 +90,7 @@ func pendingSettingsConfirm(t *testing.T, ts *httptest.Server, svc *Service, coo
 func TestConfirmWithinGraceNeedsNoFactor(t *testing.T) {
 	ts, svc, _, _ := newAdminAuditServer(t)
 	cookie := adminLoginCookie(t, ts)
-	svc.markStepUp(cookie.Value) // 开启宽限期
+	svc.markStepUp(context.Background(), cookie.Value) // 开启宽限期
 
 	tok := pendingSettingsConfirm(t, ts, svc, cookie, "999")
 	resp := postAdminForm(t, ts, cookie, "/admin/confirm", url.Values{"confirm_token": {tok}})
@@ -107,7 +107,7 @@ func TestConfirmWithinGraceNeedsNoFactor(t *testing.T) {
 func TestGraceConfirmIsAuditedAsGrace(t *testing.T) {
 	ts, svc, store, _ := newAdminAuditServer(t)
 	cookie := adminLoginCookie(t, ts)
-	svc.markStepUp(cookie.Value)
+	svc.markStepUp(context.Background(), cookie.Value)
 
 	tok := pendingSettingsConfirm(t, ts, svc, cookie, "777")
 	resp := postAdminForm(t, ts, cookie, "/admin/confirm", url.Values{"confirm_token": {tok}})
@@ -130,7 +130,7 @@ func TestGraceConfirmIsAuditedAsGrace(t *testing.T) {
 func TestConfirmAuditRecordsTheDiff(t *testing.T) {
 	ts, svc, store, _ := newAdminAuditServer(t)
 	cookie := adminLoginCookie(t, ts)
-	svc.markStepUp(cookie.Value)
+	svc.markStepUp(context.Background(), cookie.Value)
 
 	tok := pendingSettingsConfirm(t, ts, svc, cookie, "333")
 	resp := postAdminForm(t, ts, cookie, "/admin/confirm", url.Values{"confirm_token": {tok}})
@@ -307,7 +307,7 @@ func TestLoginCeremonyCannotSatisfyStepUp(t *testing.T) {
 func TestMintedTokenPlaintextNeverEntersAudit(t *testing.T) {
 	ts, svc, store, _ := newAdminAuditServer(t)
 	cookie := adminLoginCookie(t, ts)
-	svc.markStepUp(cookie.Value) // 用宽限期免因子，专注验证明文不入审计
+	svc.markStepUp(context.Background(), cookie.Value) // 用宽限期免因子，专注验证明文不入审计
 
 	// 高危：铸 token 先出确认页，取出 token。
 	resp := postAdminForm(t, ts, cookie, "/admin/nodes/token", url.Values{"name": {"n1"}})

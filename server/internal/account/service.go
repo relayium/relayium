@@ -145,12 +145,9 @@ type Service struct {
 	appleSecMu  sync.Mutex
 	appleSecTok string
 	appleSecExp time.Time
-	// adminSessions: token -> 会话状态。原先只存过期时间，加入步进认证后还需要
-	// 知道会话是怎么建立的（审计的 auth 列）以及上次步进是什么时候（宽限期）。
-	adminSessions map[string]adminSession
-	adminMu       sync.Mutex
-	// TOTP replay is enforced by the store's atomic ClaimTOTPStep (persistent,
-	// multi-instance safe) — no process-local counter here anymore.
+	// Admin sessions and the TOTP replay guard now live in the store (persistent,
+	// multi-instance safe) — no process-local session map or counter here anymore.
+	// See docs/multi-instance-state-migration.md.
 	adminLogins *loginThrottle
 	// adminPasskeyLogins is a SEPARATE bucket from adminLogins on purpose: if
 	// passkey failures counted against the password bucket, an attacker could
@@ -158,7 +155,9 @@ type Service struct {
 	// escape hatch when passkeys are unavailable.
 	adminPasskeyLogins *loginThrottle
 	// passkeyCeremonies holds in-flight WebAuthn challenges keyed by an opaque
-	// cookie value, mirroring how adminSessions works (process-local, short TTL).
+	// cookie value (process-local, short TTL). Still in-memory: migration items
+	// #2/#3 (docs/multi-instance-state-migration.md) will move these + pending
+	// actions into the store like admin sessions already are.
 	passkeyCeremonies map[string]passkeyCeremony
 	passkeyMu         sync.Mutex
 	// pendingActions: 步进 token -> 待执行的高危操作。与 passkeyCeremonies 同构
@@ -225,7 +224,7 @@ type guessBreaker interface {
 
 func NewService(store Store, mailer Mailer, cfg Config) *Service {
 	svc := &Service{store: store, mailer: mailer, cfg: cfg, now: time.Now,
-		adminSessions: map[string]adminSession{}, adminLogins: newLoginThrottle(),
+		adminLogins: newLoginThrottle(),
 		pwLogins: newLoginThrottle(), magicRequests: newLoginThrottle(),
 		verifyRequests: newLoginThrottle(), resetRequests: newLoginThrottle(),
 		deleteRequests: newLoginThrottle(),

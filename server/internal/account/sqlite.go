@@ -384,6 +384,12 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`CREATE TABLE IF NOT EXISTS admin_totp_guard (
   id INTEGER PRIMARY KEY CHECK (id = 1), last_step INTEGER NOT NULL DEFAULT 0)`,
 		`INSERT OR IGNORE INTO admin_totp_guard (id, last_step) VALUES (1, 0)`,
+		// Admin sessions (multi-instance): shared so any instance recognizes a
+		// login and the step-up grace window, instead of a per-process map.
+		// See docs/multi-instance-state-migration.md item #4.
+		`CREATE TABLE IF NOT EXISTS admin_sessions (
+  token TEXT PRIMARY KEY, auth TEXT NOT NULL,
+  expires INTEGER NOT NULL, last_step_up_at INTEGER NOT NULL DEFAULT 0)`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -1526,6 +1532,48 @@ func (s *SQLiteStore) ClaimTOTPStep(ctx context.Context, step int64) (bool, erro
 		return false, err
 	}
 	return n == 1, nil
+}
+
+// CreateAdminSession stores a new admin session (shared across instances).
+func (s *SQLiteStore) CreateAdminSession(ctx context.Context, token, auth string, expires int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO admin_sessions (token, auth, expires, last_step_up_at) VALUES (?, ?, ?, 0)`,
+		token, auth, expires)
+	return err
+}
+
+// AdminSession returns a live admin session (expires > now). ok=false for
+// missing/expired; err is only a real store failure (caller fails closed).
+func (s *SQLiteStore) AdminSession(ctx context.Context, token string, now int64) (auth string, lastStepUpAt int64, ok bool, err error) {
+	err = s.db.QueryRowContext(ctx,
+		`SELECT auth, last_step_up_at FROM admin_sessions WHERE token = ? AND expires > ?`,
+		token, now).Scan(&auth, &lastStepUpAt)
+	if err == sql.ErrNoRows {
+		return "", 0, false, nil
+	}
+	if err != nil {
+		return "", 0, false, err
+	}
+	return auth, lastStepUpAt, true, nil
+}
+
+// MarkAdminStepUp records the time of a successful step-up (opens the grace window).
+func (s *SQLiteStore) MarkAdminStepUp(ctx context.Context, token string, at int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE admin_sessions SET last_step_up_at = ? WHERE token = ?`, at, token)
+	return err
+}
+
+// DeleteAdminSession removes a session (logout).
+func (s *SQLiteStore) DeleteAdminSession(ctx context.Context, token string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM admin_sessions WHERE token = ?`, token)
+	return err
+}
+
+// PurgeExpiredAdminSessions drops sessions past their expiry (GC housekeeping).
+func (s *SQLiteStore) PurgeExpiredAdminSessions(ctx context.Context, now int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM admin_sessions WHERE expires <= ?`, now)
+	return err
 }
 
 // ClearPassword NULLs the password hash so the account has no usable password

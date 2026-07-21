@@ -102,7 +102,7 @@ func TestPasskeyLoginEndToEnd(t *testing.T) {
 			admin = c.Value
 		}
 	}
-	if admin == "" || !s.validAdmin(admin) {
+	if admin == "" || !s.validAdmin(context.Background(), admin) {
 		t.Fatalf("no valid admin session issued")
 	}
 

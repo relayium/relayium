@@ -69,7 +69,7 @@ func (s *Service) requireStepUp(action string, next http.HandlerFunc) http.Handl
 			Changes: diffFields(before, after),
 			// The grace window only ever affects NeedFactor, never whether
 			// this page renders at all — see the doc comment above.
-			NeedFactor: !s.stepUpFresh(c.Value),
+			NeedFactor: !s.stepUpFresh(r.Context(), c.Value),
 			Factor:     s.availableStepUpFactor(r.Context()),
 		})
 	}
@@ -138,7 +138,7 @@ func (s *Service) confirmHandlerFor(action string) (http.HandlerFunc, bool) {
 // call, not the caller's: the client cannot pick a weaker factor than the one
 // the confirmation page offered by choosing which field to fill.
 func (s *Service) verifyStepUpFactor(r *http.Request, pending pendingAction) (string, bool) {
-	if s.stepUpFresh(pending.sessionTok) {
+	if s.stepUpFresh(r.Context(), pending.sessionTok) {
 		return StepUpGrace, true
 	}
 	switch s.availableStepUpFactor(r.Context()) {
@@ -234,7 +234,7 @@ func (s *Service) handleAdminConfirm(w http.ResponseWriter, r *http.Request) {
 	if rec.status >= 400 {
 		return
 	}
-	s.markStepUp(c.Value)
+	s.markStepUp(r.Context(), c.Value)
 	// Record even if the diff could not be computed: a high-risk write that
 	// applied must never be missing from the audit log. A beforeImageFor error
 	// (e.g. a transient store read) costs only the field-level changes, not the

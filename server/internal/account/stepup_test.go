@@ -147,7 +147,7 @@ func TestLowRiskWriteAppliesDirectly(t *testing.T) {
 func TestGracePeriodStillShowsConfirmPage(t *testing.T) {
 	ts, svc, _, _ := newAdminAuditServer(t)
 	cookie := adminLoginCookie(t, ts)
-	svc.markStepUp(cookie.Value)
+	svc.markStepUp(context.Background(), cookie.Value)
 	_ = svc.SeedSettings(t.Context())
 	cur := svc.resolveSettings(t.Context())
 	form := settingsFormFrom(cur)
