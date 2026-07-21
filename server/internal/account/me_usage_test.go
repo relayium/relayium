@@ -524,3 +524,64 @@ func TestMeUsageNegativePlanCapsNormalizeToZero(t *testing.T) {
 		t.Fatalf("plan.storageBytes = %d, want 0 (negative means unlimited internally; the wire contract is 0)", body.Plan.StorageBytes)
 	}
 }
+
+// PlanCard 需要展示计费周期、年付价格，以及"已计划降级到哪个档"这三样信息——
+// 光有 planId/priceMonthly 不够回答"我现在是年付还是月付""降级后是什么价"。
+// 这条用例把用户放到 plus/yearly，并挂一个待生效的降级到 free，钉死这三个
+// 新字段的透传，以及 scheduledPlanName 的 best-effort 解析（能查到就给名字，
+// 查不到也不能让整个 handler 报错）。
+func TestMeUsageExposesCycleAndScheduledPlan(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	cookie := loginCookie(t, ts, mail, "cycle@b.c")
+	mustPlan(t, store, Plan{
+		ID: "plus", Name: "Plus", Active: true, SortOrder: 10,
+		StorageBytes: 500 << 20, TrafficBytes: 500 << 20, RetentionSecs: 30 * 86400,
+		PriceMonthly: 390, PriceYearly: 3900,
+	})
+	mustPlan(t, store, Plan{ID: "free", Name: "Free", Active: true, SortOrder: 0})
+
+	u, ok, err := store.UserByCanonicalEmail(t.Context(), "cycle@b.c")
+	if err != nil || !ok {
+		t.Fatalf("lookup user: %v ok=%v", err, ok)
+	}
+	if err := store.SetUserSubscription(t.Context(), u.ID, "plus", "active", 1789999999, "stripe", "yearly", svc.now().Unix()); err != nil {
+		t.Fatalf("SetUserSubscription: %v", err)
+	}
+	if err := store.SetScheduledPlan(t.Context(), u.ID, "free"); err != nil {
+		t.Fatalf("SetScheduledPlan: %v", err)
+	}
+
+	req, _ := http.NewRequest("GET", ts.URL+"/api/me/usage", nil)
+	req.AddCookie(cookie)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", res.StatusCode)
+	}
+	var body struct {
+		Plan struct {
+			BillingCycle      string `json:"billingCycle"`
+			PriceYearly       int64  `json:"priceYearly"`
+			ScheduledPlanID   string `json:"scheduledPlanId"`
+			ScheduledPlanName string `json:"scheduledPlanName"`
+		} `json:"plan"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Plan.BillingCycle != "yearly" {
+		t.Fatalf("plan.billingCycle = %q, want %q", body.Plan.BillingCycle, "yearly")
+	}
+	if body.Plan.PriceYearly != 3900 {
+		t.Fatalf("plan.priceYearly = %d, want 3900", body.Plan.PriceYearly)
+	}
+	if body.Plan.ScheduledPlanID != "free" {
+		t.Fatalf("plan.scheduledPlanId = %q, want %q", body.Plan.ScheduledPlanID, "free")
+	}
+	if body.Plan.ScheduledPlanName != "Free" {
+		t.Fatalf("plan.scheduledPlanName = %q, want %q (resolved via GetPlan)", body.Plan.ScheduledPlanName, "Free")
+	}
+}

@@ -481,6 +481,14 @@ func (s *Service) handleMeUsage(w http.ResponseWriter, r *http.Request, u User) 
 	if trafficCap < 0 {
 		trafficCap = 0
 	}
+	// 已计划降级目标的展示名——用于卡片上的"待生效降级"提示。best-effort：
+	// 查不到（档位下架/id 打错）就留空字符串，绝不能让整个 usage 接口报错。
+	scheduledName := ""
+	if u.ScheduledPlanID != "" {
+		if sp, ok, _ := s.store.GetPlan(ctx, u.ScheduledPlanID); ok {
+			scheduledName = sp.Name
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"period":   period,
 		"resetsAt": monthEnd,
@@ -496,9 +504,13 @@ func (s *Service) handleMeUsage(w http.ResponseWriter, r *http.Request, u User) 
 			"trafficBytes":       nonNegCap(plan.TrafficBytes),
 			"retentionSecs":      nonNegCap(plan.RetentionSecs),
 			"priceMonthly":       plan.PriceMonthly,
+			"priceYearly":        plan.PriceYearly,
 			"isTop":              isTop,
 			"subscriptionStatus": u.SubscriptionStatus,
 			"subscriptionEnd":    u.SubscriptionEnd,
+			"billingCycle":       u.BillingCycle,
+			"scheduledPlanId":    u.ScheduledPlanID,
+			"scheduledPlanName":  scheduledName,
 		},
 	})
 }
