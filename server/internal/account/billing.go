@@ -99,6 +99,25 @@ func cycleOfPrice(p Plan, priceID string) string {
 	}
 }
 
+// resolveChange decides whether moving the subscription from cur to target at
+// wantCycle is a downgrade (defer to period end) or an upgrade (apply now).
+// Tier direction outranks cycle: a lower-priced tier is always a downgrade even
+// when the new cycle costs more up front. On the same tier only the cycle moved,
+// and shortening the commitment (yearly->monthly) is the downgrade. Two distinct
+// tiers that happen to share a monthly price fall through as "not a downgrade"
+// (apply now) — the same choice the inline logic made. Kept in step with the
+// front-end's plan-relation.ts.
+func resolveChange(cur, target Plan, wantCycle string) (downgrade bool) {
+	switch {
+	case target.PriceMonthly != cur.PriceMonthly:
+		return target.PriceMonthly < cur.PriceMonthly
+	case target.ID == cur.ID:
+		return wantCycle == "monthly"
+	default:
+		return false
+	}
+}
+
 // handleBillingChangePlan switches an already-subscribed user's Stripe
 // subscription to a different tier in place (in-app upgrade/downgrade), so they
 // don't have to cancel + re-checkout. 404 when billing is unconfigured; 409 when
@@ -181,27 +200,11 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// Upgrade vs downgrade decides timing. TIER DIRECTION OUTRANKS CYCLE:
-	//
-	//   - higher tier            -> upgrade, apply now (prorated)
-	//   - lower tier             -> downgrade, defer to period end
-	//   - same tier, mo -> yr    -> upgrade, apply now (the point of switching
-	//                               to yearly is to pay it off in one charge)
-	//   - same tier, yr -> mo    -> downgrade, defer to period end
-	//
-	// Tier wins even when the cash flows the other way (pro/monthly ->
-	// plus/yearly costs more up front but is still a downgrade), because
-	// deferring never surprises anyone with a charge they did not expect.
+	// Upgrade vs downgrade decides timing; see resolveChange for the rule.
 	// If the current plan can't be resolved, treat it as an upgrade (apply now).
 	downgrade := false
 	if cur, ok, err := s.store.GetPlan(r.Context(), u.PlanID); err == nil && ok {
-		switch {
-		case plan.PriceMonthly != cur.PriceMonthly:
-			downgrade = plan.PriceMonthly < cur.PriceMonthly
-		case sameTier:
-			// Only the cycle changed. Shortening the commitment is the downgrade.
-			downgrade = wantCycle == "monthly"
-		}
+		downgrade = resolveChange(cur, plan, wantCycle)
 	}
 
 	var opErr error

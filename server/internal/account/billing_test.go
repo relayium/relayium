@@ -415,6 +415,27 @@ func TestBillingChangePlanDowngradeIsScheduled(t *testing.T) {
 	}
 }
 
+func TestResolveChangeDirection(t *testing.T) {
+	plus := Plan{ID: "plus", PriceMonthly: 199}
+	pro := Plan{ID: "pro", PriceMonthly: 999}
+	// higher tier -> upgrade
+	if resolveChange(plus, pro, "monthly") {
+		t.Fatal("plus->pro should be an upgrade")
+	}
+	// lower tier -> downgrade
+	if !resolveChange(pro, plus, "yearly") {
+		t.Fatal("pro->plus should be a downgrade even billed yearly")
+	}
+	// same tier, monthly->yearly -> upgrade
+	if resolveChange(plus, plus, "yearly") {
+		t.Fatal("plus/mo->plus/yr should be an upgrade")
+	}
+	// same tier, yearly->monthly -> downgrade
+	if !resolveChange(plus, plus, "monthly") {
+		t.Fatal("plus/yr->plus/mo should be a downgrade")
+	}
+}
+
 func cancelScheduled(t *testing.T, ts *httptest.Server, cookie *http.Cookie) *http.Response {
 	t.Helper()
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/billing/cancel-scheduled-change", nil)
