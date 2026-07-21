@@ -24,6 +24,7 @@ type nodeRegisterReq struct {
 	Capabilities  []string `json:"capabilities"`
 	StorageURL    string   `json:"storageURL"`
 	StorageSecret string   `json:"storageSecret"`
+	StorageFP     string   `json:"storageFP"` // node blob-endpoint TLS cert fingerprint (hex SHA-256); "" for legacy http nodes
 	StorageTotal  int64    `json:"storageTotal"`
 	StorageFree   int64    `json:"storageFree"`
 }
@@ -212,7 +213,7 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 		ID: req.NodeID, OwnerType: ownerType, OwnerUserID: ownerUserID, Label: label,
 		Region: req.Region, URLs: req.URLs, TURNSecret: req.TURNSecret, Version: req.Version,
 		CreatedAt: now, LastSeenAt: now,
-		StorageURL: req.StorageURL, StorageSecret: req.StorageSecret,
+		StorageURL: req.StorageURL, StorageSecret: req.StorageSecret, StorageFP: req.StorageFP,
 		StorageEnabled: containsCap(req.Capabilities, "storage"),
 		StorageTotal:   req.StorageTotal, StorageFree: req.StorageFree,
 	}

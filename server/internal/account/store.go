@@ -243,6 +243,12 @@ type Node struct {
 	LastSeenAt     int64
 	StorageURL     string
 	StorageSecret  string
+	// StorageFP is the SHA-256 fingerprint (hex) of the node's self-signed TLS
+	// cert for its blob endpoint, reported at registration. When set (and the
+	// StorageURL is https), central pins it on every blob call so the bearer
+	// secret and blob traffic can't be sniffed/tampered on-path. Empty for legacy
+	// http nodes not yet redeployed.
+	StorageFP      string
 	StorageEnabled bool
 	StorageTotal   int64
 	StorageFree    int64

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha1"
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/pion/turn/v4"
+	"github.com/relayium/relayium/internal/secure"
 	"github.com/relayium/relayium/internal/storage"
 )
 
@@ -177,7 +179,7 @@ func run(c config, st nodeState) error {
 	rp := newReporter(c.CentralURL, c.NodeToken)
 	urls := []string{fmt.Sprintf("turn:%s:%d", publicIP, c.TURNPort)}
 
-	var storageURL, storageSecret string
+	var storageURL, storageSecret, storageFP string
 	var storTotal, storFree int64
 	var blobGauge *blobUsage
 	if c.StorageDir != "" {
@@ -186,6 +188,16 @@ func run(c config, st nodeState) error {
 			return fmt.Errorf("open storage dir %s: %w", c.StorageDir, derr)
 		}
 		storageSecret = st.StorageSecret
+		// Serve the blob endpoint over TLS with a persistent self-signed cert;
+		// central pins its fingerprint, so the bearer secret and blob traffic are
+		// encrypted + tamper-evident on the wire (they used to be plain HTTP). The
+		// cert lives alongside state.json and its fingerprint is stable across
+		// restarts, so a re-register reports the same pin.
+		id, iderr := secure.LoadOrCreateIdentity(c.StateDir)
+		if iderr != nil {
+			return fmt.Errorf("load node TLS identity: %w", iderr)
+		}
+		storageFP = id.Fingerprint
 		// Seed the gauge before anything can read it, so the first PUT and the
 		// first heartbeat see a real number rather than 0.
 		blobGauge = &blobUsage{}
@@ -198,18 +210,26 @@ func run(c config, st nodeState) error {
 			}
 		}()
 		diskUsed, diskFull := blobGates(blobGauge, c.StorageDir)
-		blobSrv := &http.Server{Addr: fmt.Sprintf(":%d", c.StoragePort), Handler: newBlobHandler(ds, storageSecret, lim, diskUsed, diskFull)}
+		blobSrv := &http.Server{
+			Addr:    fmt.Sprintf(":%d", c.StoragePort),
+			Handler: newBlobHandler(ds, storageSecret, lim, diskUsed, diskFull),
+			TLSConfig: &tls.Config{
+				Certificates: []tls.Certificate{id.TLSCert},
+				MinVersion:   tls.VersionTLS13,
+			},
+		}
 		go func() {
-			if err := blobSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			// Certs come from TLSConfig, so the cert/key path args are empty.
+			if err := blobSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
 				log.Printf("relayium-node: blob server exited: %v", err)
 			}
 		}()
 		defer blobSrv.Close()
-		storageURL = fmt.Sprintf("http://%s:%d", publicIP, c.StoragePort)
+		storageURL = fmt.Sprintf("https://%s:%d", publicIP, c.StoragePort)
 		if t, f, uerr := storageReport(c.StorageDir); uerr == nil {
 			storTotal, storFree = t, f
 		}
-		log.Printf("relayium-node: storage enabled, serving blobs on %s", storageURL)
+		log.Printf("relayium-node: storage enabled, serving blobs on %s (TLS pinned %s)", storageURL, storageFP[:min(16, len(storageFP))])
 	}
 
 	capabilities := []string{"relay"}
@@ -219,7 +239,7 @@ func run(c config, st nodeState) error {
 	rr, err := rp.register(registerBody{
 		NodeID: st.NodeID, TURNSecret: st.TURNSecret, URLs: urls,
 		Region: c.Region, Version: version, Capabilities: capabilities,
-		StorageURL: storageURL, StorageSecret: storageSecret,
+		StorageURL: storageURL, StorageSecret: storageSecret, StorageFP: storageFP,
 		StorageTotal: storTotal, StorageFree: storFree,
 	})
 	if err != nil {

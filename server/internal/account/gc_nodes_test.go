@@ -34,7 +34,7 @@ func TestGCOrphanQueue(t *testing.T) {
 		if nodeID != n.ID {
 			t.Fatalf("unexpected nodeID %q", nodeID)
 		}
-		return storage.NewRemoteBlobStore(nodeURL, "ss", http.DefaultClient), nil
+		return storage.NewRemoteBlobStore(nodeURL, "ss", "", http.DefaultClient), nil
 	}
 
 	g := &GC{Store: store, Now: func() int64 { return 1000000 }, Log: log.New(io.Discard, "", 0), BlobFor: blobFor}

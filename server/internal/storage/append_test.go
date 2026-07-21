@@ -67,7 +67,7 @@ func TestRemoteAppend(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	rbs := NewRemoteBlobStore(srv.URL, "s", srv.Client())
+	rbs := NewRemoteBlobStore(srv.URL, "s", "", srv.Client())
 	ctx := context.Background()
 	if n, err := rbs.Append(ctx, "k", 0, strings.NewReader("hello")); err != nil || n != 5 {
 		t.Fatalf("append#1: n=%d err=%v", n, err)

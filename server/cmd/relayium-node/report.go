@@ -19,6 +19,7 @@ type registerBody struct {
 	Capabilities  []string `json:"capabilities"`
 	StorageURL    string   `json:"storageURL"`
 	StorageSecret string   `json:"storageSecret"`
+	StorageFP     string   `json:"storageFP"` // SHA-256 (hex) of the blob server's self-signed TLS cert, for central to pin
 	StorageTotal  int64    `json:"storageTotal"`
 	StorageFree   int64    `json:"storageFree"`
 }

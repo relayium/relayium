@@ -2,10 +2,32 @@ package account
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 )
+
+// nodePinVerify matches a node's leaf TLS cert SHA-256 (hex) against want, for
+// the reachability probe of an https+pinned node. Mirrors the storage package's
+// pin check (kept local so account need not export it from storage).
+func nodePinVerify(want string) func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+	return func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+		if len(rawCerts) == 0 {
+			return errors.New("node presented no TLS certificate")
+		}
+		sum := sha256.Sum256(rawCerts[0])
+		if subtle.ConstantTimeCompare([]byte(hex.EncodeToString(sum[:])), []byte(want)) != 1 {
+			return errors.New("node TLS fingerprint mismatch")
+		}
+		return nil
+	}
+}
 
 // nodeCheckResp is the result of an on-demand connectivity probe of one of the
 // caller's own nodes, distinct from the passive heartbeat-freshness "online"
@@ -47,11 +69,18 @@ func (s *Service) handleCheckNode(w http.ResponseWriter, r *http.Request, u User
 
 	// A short-timeout probe with the same SSRF-guarded dialer as blob traffic.
 	// Any HTTP response — even a 404 from an older node without /healthz — proves
-	// reachability; only a dial/timeout error means unreachable.
-	client := &http.Client{
-		Timeout:   6 * time.Second,
-		Transport: &http.Transport{DialContext: guardedDialContext(s.allowPrivateNodeURLs)},
+	// reachability; only a dial/timeout error means unreachable. When the node
+	// reported a TLS fingerprint (https endpoint), pin it so the probe speaks the
+	// same secured channel real blob traffic does.
+	tr := &http.Transport{DialContext: guardedDialContext(s.allowPrivateNodeURLs)}
+	if n.StorageFP != "" {
+		tr.TLSClientConfig = &tls.Config{
+			InsecureSkipVerify:    true,
+			MinVersion:            tls.VersionTLS13,
+			VerifyPeerCertificate: nodePinVerify(n.StorageFP),
+		}
 	}
+	client := &http.Client{Timeout: 6 * time.Second, Transport: tr}
 	url := strings.TrimRight(n.StorageURL, "/") + "/healthz"
 	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
 	defer cancel()

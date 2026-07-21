@@ -36,6 +36,37 @@ func TestUpsertAndListNodes(t *testing.T) {
 	}
 }
 
+// The node's blob-endpoint TLS fingerprint must round-trip through the store so
+// central can pin it on every blob call.
+func TestNodeStorageFPRoundTrips(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	const fp = "abc123def456"
+	n, err := st.UpsertNode(ctx, Node{
+		OwnerType: "fleet", URLs: []string{"turn:1.2.3.4:3478"}, TURNSecret: "s",
+		StorageURL: "https://1.2.3.4:8081", StorageSecret: "ss", StorageFP: fp,
+		StorageEnabled: true, CreatedAt: 1, LastSeenAt: 1,
+	})
+	if err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	got, ok, err := st.GetNode(ctx, n.ID)
+	if err != nil || !ok {
+		t.Fatalf("get: ok=%v err=%v", ok, err)
+	}
+	if got.StorageFP != fp {
+		t.Fatalf("StorageFP: want %q, got %q", fp, got.StorageFP)
+	}
+	// Re-register updates the fingerprint (a node that regenerated its cert).
+	n.StorageFP = "newfp999"
+	if _, err := st.UpsertNode(ctx, n); err != nil {
+		t.Fatal(err)
+	}
+	if got, _, _ := st.GetNode(ctx, n.ID); got.StorageFP != "newfp999" {
+		t.Fatalf("re-register fingerprint: want newfp999, got %q", got.StorageFP)
+	}
+}
+
 func TestTouchNodeKeepMaxAndOnline(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()

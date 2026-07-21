@@ -40,7 +40,7 @@ func TestRemotePutGetDelete(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	rbs := NewRemoteBlobStore(srv.URL, "sekret", srv.Client())
+	rbs := NewRemoteBlobStore(srv.URL, "sekret", "", srv.Client())
 	ctx := context.Background()
 
 	n, err := rbs.Put(ctx, "abc123", bytes.NewReader([]byte("ciphertext!")))
@@ -76,7 +76,7 @@ func TestRemotePutSurfacesReaderError(t *testing.T) {
 	}))
 	defer srv.Close()
 	sentinel := errors.New("boom")
-	rbs := NewRemoteBlobStore(srv.URL, "s", srv.Client())
+	rbs := NewRemoteBlobStore(srv.URL, "s", "", srv.Client())
 	_, err := rbs.Put(context.Background(), "k", &erroringReader{after: 3, err: sentinel})
 	if !errors.Is(err, sentinel) {
 		t.Fatalf("want sentinel, got %v", err)

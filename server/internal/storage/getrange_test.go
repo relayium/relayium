@@ -50,7 +50,7 @@ func TestRemoteGetRangeHonored(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	rbs := NewRemoteBlobStore(srv.URL, "s", srv.Client())
+	rbs := NewRemoteBlobStore(srv.URL, "s", "", srv.Client())
 	rc, err := rbs.GetRange(context.Background(), "k", 10)
 	if err != nil {
 		t.Fatal(err)
@@ -71,7 +71,7 @@ func TestRemoteGetRangeServerIgnoresRange(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	rbs := NewRemoteBlobStore(srv.URL, "s", srv.Client())
+	rbs := NewRemoteBlobStore(srv.URL, "s", "", srv.Client())
 	rc, err := rbs.GetRange(context.Background(), "k", 3)
 	if err != nil {
 		t.Fatal(err)

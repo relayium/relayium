@@ -35,7 +35,7 @@ func (s *Service) blobFor(ctx context.Context, nodeID string) (storage.BlobStore
 	if !ok || !n.StorageEnabled || n.StorageURL == "" {
 		return nil, fmt.Errorf("node %s has no storage endpoint", nodeID)
 	}
-	return storage.NewRemoteBlobStore(n.StorageURL, n.StorageSecret, s.nodeHTTP), nil
+	return storage.NewRemoteBlobStore(n.StorageURL, n.StorageSecret, n.StorageFP, s.nodeHTTP), nil
 }
 
 // BlobForNode is the exported resolver GC (wired from main) uses.
@@ -58,7 +58,7 @@ func (s *Service) placeUpload(ctx context.Context, userID string, size int64) (s
 	// Prefer the user's own online storage node (free).
 	if own, err := s.store.UserStorageNodes(ctx, userID, since, minFree); err == nil && len(own) > 0 {
 		n := own[s.pickN(len(own))]
-		return n.ID, storage.NewRemoteBlobStore(n.StorageURL, n.StorageSecret, s.nodeHTTP), false, nil
+		return n.ID, storage.NewRemoteBlobStore(n.StorageURL, n.StorageSecret, n.StorageFP, s.nodeHTTP), false, nil
 	}
 	// Strict users do not fall back to our infrastructure.
 	if u, err := s.store.GetUserByID(ctx, userID); err == nil && u.OnlyOwnNodes {
@@ -87,7 +87,7 @@ func (s *Service) placeUpload(ctx context.Context, userID string, size int64) (s
 		return "", s.blobs, true, nil
 	}
 	n := nodes[s.pickN(len(nodes))]
-	return n.ID, storage.NewRemoteBlobStore(n.StorageURL, n.StorageSecret, s.nodeHTTP), true, nil
+	return n.ID, storage.NewRemoteBlobStore(n.StorageURL, n.StorageSecret, n.StorageFP, s.nodeHTTP), true, nil
 }
 
 // placementMinFree 把"这台节点放得下吗"的门槛钉在**这一次上传**的声明大小上。

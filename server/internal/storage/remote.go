@@ -2,7 +2,13 @@ package storage
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,17 +17,59 @@ import (
 	"sync"
 )
 
-// RemoteBlobStore is a BlobStore that proxies to a relay node's HTTP blob
-// endpoint (central-proxy storage). The payload is E2E ciphertext, so plain HTTP
-// is acceptable; requests carry a bearer secret the node validates.
+// RemoteBlobStore is a BlobStore that proxies to a relay node's blob endpoint
+// (central-proxy storage). The payload is E2E ciphertext, but the request also
+// carries a bearer secret the node validates, so the channel is pinned-TLS when
+// the node reported a cert fingerprint (fingerprint != ""): standard CA checks
+// are disabled and the node's self-signed cert is matched by SHA-256, which
+// keeps the secret and blob traffic from being sniffed or tampered on-path.
+// Legacy nodes that reported no fingerprint fall back to plain HTTP unchanged.
 type RemoteBlobStore struct {
 	baseURL string
 	secret  string
 	hc      *http.Client
 }
 
-func NewRemoteBlobStore(baseURL, secret string, hc *http.Client) *RemoteBlobStore {
+func NewRemoteBlobStore(baseURL, secret, fingerprint string, hc *http.Client) *RemoteBlobStore {
+	if fingerprint != "" {
+		hc = pinnedClient(hc, fingerprint)
+	}
 	return &RemoteBlobStore{baseURL: strings.TrimRight(baseURL, "/"), secret: secret, hc: hc}
+}
+
+// pinnedClient returns a copy of hc whose TLS verification is replaced by a
+// fingerprint pin. It clones hc's *http.Transport so all other settings —
+// crucially the SSRF-guarded DialContext and the ResponseHeaderTimeout — are
+// preserved; only TLSClientConfig changes.
+func pinnedClient(hc *http.Client, fingerprint string) *http.Client {
+	var tr *http.Transport
+	if base, ok := hc.Transport.(*http.Transport); ok && base != nil {
+		tr = base.Clone()
+	} else {
+		tr = &http.Transport{}
+	}
+	tr.TLSClientConfig = &tls.Config{
+		InsecureSkipVerify:    true, // pinning (VerifyPeerCertificate) replaces CA + hostname verification
+		MinVersion:            tls.VersionTLS13,
+		VerifyPeerCertificate: pinVerify(fingerprint),
+	}
+	c := *hc
+	c.Transport = tr
+	return &c
+}
+
+// pinVerify matches the leaf cert's SHA-256 (hex) against want in constant time.
+func pinVerify(want string) func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+	return func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+		if len(rawCerts) == 0 {
+			return errors.New("remote blob: node presented no TLS certificate")
+		}
+		sum := sha256.Sum256(rawCerts[0])
+		if subtle.ConstantTimeCompare([]byte(hex.EncodeToString(sum[:])), []byte(want)) != 1 {
+			return errors.New("remote blob: node TLS fingerprint mismatch (pin failed)")
+		}
+		return nil
+	}
 }
 
 func (r *RemoteBlobStore) url(key string) string { return r.baseURL + "/blob/" + key }
