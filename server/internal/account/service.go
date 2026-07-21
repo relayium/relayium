@@ -186,6 +186,11 @@ type Service struct {
 	iceBreaker guessBreaker
 	// registerLimiter caps POST /api/auth/register attempts per IP (H2a). nil = unlimited.
 	registerLimiter rateLimiter
+	// passkeyBeginLimiter caps admin passkey */begin calls per IP. The
+	// (unauthenticated) login/begin creates a ceremony row each call and only
+	// records a throttle fail on FINISH, so without this a begin-flood fills the
+	// shared ceremony cap and starves legit passkey login/step-up. nil = unlimited.
+	passkeyBeginLimiter rateLimiter
 	// uploadSem caps concurrent in-flight POST /api/files per account (M1).
 	uploadSem *uploadSem
 	// diskUsage reads the blob volume's current usage; nil disables the global
@@ -294,6 +299,19 @@ func (s *Service) SetGuessBreaker(b guessBreaker) { s.iceBreaker = b }
 
 // SetRegisterLimiter caps POST /api/auth/register per IP (H2a: 5/min). nil = unlimited.
 func (s *Service) SetRegisterLimiter(rl rateLimiter) { s.registerLimiter = rl }
+
+// SetPasskeyBeginLimiter caps admin passkey */begin per IP. nil = unlimited.
+func (s *Service) SetPasskeyBeginLimiter(rl rateLimiter) { s.passkeyBeginLimiter = rl }
+
+// passkeyBeginAllowed reports whether this IP may start another passkey ceremony,
+// writing a 429 and returning false when the per-IP begin budget is exhausted.
+func (s *Service) passkeyBeginAllowed(w http.ResponseWriter, r *http.Request) bool {
+	if s.passkeyBeginLimiter != nil && !s.passkeyBeginLimiter.Allow(s.clientIP(r)) {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "尝试过于频繁，请稍后再试"})
+		return false
+	}
+	return true
+}
 
 func randToken() string {
 	b := make([]byte, 32)

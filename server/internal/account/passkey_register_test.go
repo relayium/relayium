@@ -135,6 +135,16 @@ func TestPasskeyRegisterStepUpHonorsTOTP(t *testing.T) {
 	srv, s := newAdminServer(t, "admin", "pw")
 	session := adminPasswordLogin(t, srv, s)
 	s.cfg.AdminTOTPSecret = testSecret
+	// A session is pinned to the credentials in force when it was minted (cred_fp),
+	// so enabling TOTP invalidates the pre-TOTP session — exactly as a real admin
+	// would set the secret at startup and log in after. Re-mint under the new
+	// credentials so this test exercises the register/begin TOTP check, not
+	// credential-rotation revocation (covered elsewhere).
+	tok, err := s.newAdminSession(context.Background(), "password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session = &http.Cookie{Name: adminCookie, Value: tok}
 
 	begin := func(form string) int {
 		t.Helper()

@@ -153,6 +153,9 @@ func (s *Service) handleAdminStepUpPasskeyBegin(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "未登录"})
 		return
 	}
+	if !s.passkeyBeginAllowed(w, r) {
+		return
+	}
 	rp, err := s.adminRP()
 	if err != nil {
 		log.Printf("passkey: building relying party failed: %v", err)
@@ -229,6 +232,9 @@ func (s *Service) verifyStepUpPasskey(r *http.Request) bool {
 }
 
 func (s *Service) handleAdminPasskeyLoginBegin(w http.ResponseWriter, r *http.Request) {
+	if !s.passkeyBeginAllowed(w, r) {
+		return
+	}
 	ip := s.clientIP(r)
 	if s.adminPasskeyLogins.locked(ip, s.now()) {
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "尝试过于频繁，请稍后再试"})

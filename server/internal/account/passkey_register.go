@@ -16,6 +16,9 @@ func (s *Service) handleAdminPasskeyRegisterBegin(w http.ResponseWriter, r *http
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "未登录"})
 		return
 	}
+	if !s.passkeyBeginAllowed(w, r) {
+		return
+	}
 	ip := s.clientIP(r)
 	// Step-up really is a password+TOTP check, so its failures belong in the
 	// adminLogins bucket rather than the passkey-login one.

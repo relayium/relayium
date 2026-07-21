@@ -241,6 +241,11 @@ func main() {
 	registerLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(5, div), time.Minute, func() int64 { return time.Now().Unix() })
 	go registerLimiter.Run(context.Background(), time.Minute)
 
+	// Admin passkey */begin: 10/min/IP is generous for a human (one begin per
+	// login) yet caps a begin-flood that would otherwise fill the ceremony table.
+	passkeyBeginLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(10, div), time.Minute, func() int64 { return time.Now().Unix() })
+	go passkeyBeginLimiter.Run(context.Background(), time.Minute)
+
 	store, dbErr := account.OpenSQLite(*dbPath)
 
 	mux := http.NewServeMux()
@@ -349,6 +354,7 @@ func main() {
 		acct.SetICELimiter(iceLimiter)
 		acct.SetGuessBreaker(guessBreaker) // shared /ws breaker: shed /api/ice during a flood
 		acct.SetRegisterLimiter(registerLimiter)
+		acct.SetPasskeyBeginLimiter(passkeyBeginLimiter)
 		// /api/pair requires a logged-in owner: the receiver still joins the code
 		// room anonymously via /ws?code= and /api/ice?code=, but minting a
 		// cross-network rendezvous code needs an account for attribution.

@@ -442,6 +442,21 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
+	// cred_fp binds an admin session to a fingerprint of the admin credentials
+	// (password + TOTP secret) in force when it was minted. Before the sessions
+	// were persisted, rotating the admin password and RESTARTING was the standard
+	// way to revoke a leaked cookie (the in-memory map was wiped); with sessions
+	// in the DB that no longer worked. validAdmin now also matches cred_fp against
+	// the current credentials, so a rotate+restart invalidates every prior session
+	// again. Existing rows read '' and won't match the (non-empty) live
+	// fingerprint, so they're invalidated on the deploy that adds this — admins
+	// simply re-login once.
+	if _, err := db.ExecContext(context.Background(),
+		`ALTER TABLE admin_sessions ADD COLUMN cred_fp TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column name") {
+		db.Close()
+		return nil, err
+	}
 	// max_downloads generalizes burn_after_read into a download-count limit:
 	// 0 = unlimited until TTL, N = delete after the Nth download, 1 = burn.
 	if _, err := db.ExecContext(context.Background(),
@@ -1616,20 +1631,22 @@ func (s *SQLiteStore) ClaimTOTPStep(ctx context.Context, step int64) (bool, erro
 // copy-pasteable live admin credential. Hashing is confined to the store so no
 // caller can accidentally persist a raw token.
 
-// CreateAdminSession stores a new admin session (shared across instances).
-func (s *SQLiteStore) CreateAdminSession(ctx context.Context, token, auth string, expires int64) error {
+// CreateAdminSession stores a new admin session (shared across instances). credFP
+// pins it to the admin credentials in force at mint time (see cred_fp migration).
+func (s *SQLiteStore) CreateAdminSession(ctx context.Context, token, auth, credFP string, expires int64) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO admin_sessions (token, auth, expires, last_step_up_at) VALUES (?, ?, ?, 0)`,
-		hashToken(token), auth, expires)
+		`INSERT INTO admin_sessions (token, auth, cred_fp, expires, last_step_up_at) VALUES (?, ?, ?, ?, 0)`,
+		hashToken(token), auth, credFP, expires)
 	return err
 }
 
-// AdminSession returns a live admin session (expires > now). ok=false for
-// missing/expired; err is only a real store failure (caller fails closed).
-func (s *SQLiteStore) AdminSession(ctx context.Context, token string, now int64) (auth string, lastStepUpAt int64, ok bool, err error) {
+// AdminSession returns a live admin session (expires > now) whose cred_fp still
+// matches the current credentials. ok=false for missing/expired/credential-
+// rotated; err is only a real store failure (caller fails closed).
+func (s *SQLiteStore) AdminSession(ctx context.Context, token, credFP string, now int64) (auth string, lastStepUpAt int64, ok bool, err error) {
 	err = s.db.QueryRowContext(ctx,
-		`SELECT auth, last_step_up_at FROM admin_sessions WHERE token = ? AND expires > ?`,
-		hashToken(token), now).Scan(&auth, &lastStepUpAt)
+		`SELECT auth, last_step_up_at FROM admin_sessions WHERE token = ? AND cred_fp = ? AND expires > ?`,
+		hashToken(token), credFP, now).Scan(&auth, &lastStepUpAt)
 	if err == sql.ErrNoRows {
 		return "", 0, false, nil
 	}

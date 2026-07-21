@@ -179,11 +179,16 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 	// Prevent node-ID takeover: a re-register of an existing node id must come from
 	// the SAME owner. A fleet token may only re-register a fleet node; a user token
 	// may only re-register its own user node. Unknown ids fall through as new nodes.
+	var existing Node
+	var existingFound bool
 	if req.NodeID != "" {
-		if existing, found, gerr := s.store.GetNode(r.Context(), req.NodeID); gerr != nil {
+		e, found, gerr := s.store.GetNode(r.Context(), req.NodeID)
+		if gerr != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 			return
-		} else if found {
+		}
+		if found {
+			existing, existingFound = e, true
 			mismatch := existing.OwnerType != ownerType ||
 				(ownerType == "user" && existing.OwnerUserID != ownerUserID)
 			if mismatch {
@@ -191,6 +196,20 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+	}
+	// Pin ratchet: once a node has reported a TLS fingerprint, a re-register must
+	// not silently drop the central↔node blob channel back to plaintext (empty FP
+	// or a non-https URL). A leaked fleet token or a rolled-back node binary would
+	// otherwise downgrade a pinned channel to a sniffable bearer with no trace.
+	// Retain the last-known-good storage config (URL/secret/FP) and log it; every
+	// other field still updates. A legit node keeps a stable identity fingerprint,
+	// so this never fires for it.
+	storeURL, storeSecret, storeFP := req.StorageURL, req.StorageSecret, req.StorageFP
+	if existingFound && existing.StorageFP != "" &&
+		(storeFP == "" || !strings.HasPrefix(strings.ToLower(storeURL), "https://")) {
+		log.Printf("node %s: refusing storage pin downgrade (fp %q→%q, url %q→%q); retaining prior pinned config",
+			req.NodeID, existing.StorageFP, storeFP, existing.StorageURL, storeURL)
+		storeURL, storeSecret, storeFP = existing.StorageURL, existing.StorageSecret, existing.StorageFP
 	}
 	// Resolve the presented token once: its name seeds the node's initial label
 	// (only used on first INSERT — UpsertNode preserves a later rename), and its
@@ -213,7 +232,7 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 		ID: req.NodeID, OwnerType: ownerType, OwnerUserID: ownerUserID, Label: label,
 		Region: req.Region, URLs: req.URLs, TURNSecret: req.TURNSecret, Version: req.Version,
 		CreatedAt: now, LastSeenAt: now,
-		StorageURL: req.StorageURL, StorageSecret: req.StorageSecret, StorageFP: req.StorageFP,
+		StorageURL: storeURL, StorageSecret: storeSecret, StorageFP: storeFP,
 		StorageEnabled: containsCap(req.Capabilities, "storage"),
 		StorageTotal:   req.StorageTotal, StorageFree: req.StorageFree,
 	}

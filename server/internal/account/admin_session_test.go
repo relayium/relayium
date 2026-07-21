@@ -12,7 +12,7 @@ func TestAdminSessionRecordsAuthMethod(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	auth, _, ok, err := store.AdminSession(ctx, tok, svc.now().Unix())
+	auth, _, ok, err := store.AdminSession(ctx, tok, svc.adminCredFP(), svc.now().Unix())
 	if err != nil || !ok {
 		t.Fatalf("session lookup: ok=%v err=%v", ok, err)
 	}
@@ -53,7 +53,7 @@ func TestStepUpGraceExpires(t *testing.T) {
 func TestAdminSessionStillExpires(t *testing.T) {
 	_, svc, store, _ := newAdminAuditServer(t)
 	ctx := context.Background()
-	if err := store.CreateAdminSession(ctx, "expired-tok", "password", svc.now().Unix()-1); err != nil {
+	if err := store.CreateAdminSession(ctx, "expired-tok", "password", svc.adminCredFP(), svc.now().Unix()-1); err != nil {
 		t.Fatal(err)
 	}
 	if svc.validAdmin(ctx, "expired-tok") {

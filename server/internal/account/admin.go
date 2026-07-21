@@ -310,9 +310,18 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 // session lives in the store (shared across instances); an insert failure is
 // returned so the caller aborts the login rather than handing out a cookie for a
 // session that isn't recorded.
+// adminCredFP fingerprints the admin credentials (password + TOTP secret). A
+// session carries the fingerprint in force when it was minted; validAdmin
+// rejects it once the live credentials differ, so rotating the password/secret
+// and restarting revokes every prior session — the classic incident response for
+// a leaked cookie, which persisting sessions had quietly broken.
+func (s *Service) adminCredFP() string {
+	return hashToken(s.cfg.AdminPassword + "\x00" + s.cfg.AdminTOTPSecret)
+}
+
 func (s *Service) newAdminSession(ctx context.Context, auth string) (string, error) {
 	tok := randToken()
-	if err := s.store.CreateAdminSession(ctx, tok, auth, s.now().Add(adminSessionTTL).Unix()); err != nil {
+	if err := s.store.CreateAdminSession(ctx, tok, auth, s.adminCredFP(), s.now().Add(adminSessionTTL).Unix()); err != nil {
 		return "", err
 	}
 	return tok, nil
@@ -323,7 +332,7 @@ func (s *Service) validAdmin(ctx context.Context, tok string) bool {
 		return false
 	}
 	// Fail closed on a store error: a DB blip must not admit an unverified admin.
-	_, _, ok, err := s.store.AdminSession(ctx, tok, s.now().Unix())
+	_, _, ok, err := s.store.AdminSession(ctx, tok, s.adminCredFP(), s.now().Unix())
 	return err == nil && ok
 }
 
@@ -336,7 +345,7 @@ func (s *Service) markStepUp(ctx context.Context, tok string) {
 // stepUpFresh 报告该会话是否仍在宽限期内。Fail closed on a store error / missing
 // session (require the factor).
 func (s *Service) stepUpFresh(ctx context.Context, tok string) bool {
-	_, lastStepUpAt, ok, err := s.store.AdminSession(ctx, tok, s.now().Unix())
+	_, lastStepUpAt, ok, err := s.store.AdminSession(ctx, tok, s.adminCredFP(), s.now().Unix())
 	if err != nil || !ok || lastStepUpAt == 0 {
 		return false
 	}
@@ -360,7 +369,7 @@ func (s *Service) adminAuthMethod(r *http.Request) string {
 	if err != nil {
 		return ""
 	}
-	auth, _, ok, err := s.store.AdminSession(r.Context(), c.Value, s.now().Unix())
+	auth, _, ok, err := s.store.AdminSession(r.Context(), c.Value, s.adminCredFP(), s.now().Unix())
 	if err != nil || !ok {
 		return ""
 	}

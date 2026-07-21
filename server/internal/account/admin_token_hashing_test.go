@@ -14,7 +14,7 @@ func TestAdminSessionTokenStoredHashed(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 	const raw = "raw-admin-session-token"
-	if err := store.CreateAdminSession(ctx, raw, "password", 1<<40); err != nil {
+	if err := store.CreateAdminSession(ctx, raw, "password", "", 1<<40); err != nil {
 		t.Fatal(err)
 	}
 
@@ -31,7 +31,7 @@ func TestAdminSessionTokenStoredHashed(t *testing.T) {
 	}
 
 	// Lookup by the raw token must still resolve the session.
-	auth, _, ok, err := store.AdminSession(ctx, raw, 0)
+	auth, _, ok, err := store.AdminSession(ctx, raw, "", 0)
 	if err != nil || !ok || auth != "password" {
 		t.Fatalf("AdminSession(raw) = %q/%v/%v, want password/true/nil", auth, ok, err)
 	}
@@ -39,7 +39,7 @@ func TestAdminSessionTokenStoredHashed(t *testing.T) {
 	if err := store.DeleteAdminSession(ctx, raw); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, ok, _ := store.AdminSession(ctx, raw, 0); ok {
+	if _, _, ok, _ := store.AdminSession(ctx, raw, "", 0); ok {
 		t.Fatal("session survived DeleteAdminSession(raw)")
 	}
 }
