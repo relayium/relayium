@@ -417,6 +417,11 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
+	// Defence in depth: the payload is opaque AEAD ciphertext (never sniffable as
+	// HTML), but a top-level navigation to this endpoint should still never be
+	// rendered or MIME-sniffed by the browser.
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Disposition", "attachment")
 	if !limited {
 		w.Header().Set("Accept-Ranges", "bytes")
 	}

@@ -294,10 +294,15 @@ func checksumFor(sumsPath, asset string) (string, error) {
 	return "", fmt.Errorf("no checksum listed for %s", asset)
 }
 
-// verifyCosign verifies the checksum file's Sigstore signature, but only when
-// cosign is installed and the .sig/.pem assets exist — mirroring install.sh's
-// behaviour, including its fallback to checksum-only when cosign is absent. A
-// present-but-failing verification is fatal (a tampered checksums.txt).
+// verifyCosign verifies the checksum file's Sigstore signature. When cosign is
+// absent it falls back to checksum-only (cosign is an optional external tool,
+// mirroring install.sh). But once cosign IS installed the caller has opted into
+// signature verification, so MISSING .sig/.pem assets are fatal, not silently
+// skipped: a release-host compromise could otherwise delete the signatures and
+// swap in a malicious archive + matching (attacker-controlled) checksums.txt to
+// bypass signing entirely. RELAYIUM_UPDATE_ALLOW_UNSIGNED=1 is an explicit escape
+// hatch for the rare genuinely-unsigned release. A present-but-failing
+// verification is always fatal (a tampered checksums.txt).
 func verifyCosign(ctx context.Context, o Options, base, tmp, sumsPath string, progress io.Writer) error {
 	cosign, err := exec.LookPath("cosign")
 	if err != nil {
@@ -308,8 +313,11 @@ func verifyCosign(ctx context.Context, o Options, base, tmp, sumsPath string, pr
 	pemPath := filepath.Join(tmp, "checksums.txt.pem")
 	if download(ctx, o, base+"/checksums.txt.sig", sigPath) != nil ||
 		download(ctx, o, base+"/checksums.txt.pem", pemPath) != nil {
-		fmt.Fprintln(progress, "Note: signature files not found; verifying checksum only.")
-		return nil
+		if os.Getenv("RELAYIUM_UPDATE_ALLOW_UNSIGNED") == "1" {
+			fmt.Fprintln(progress, "WARNING: signature files not found; verifying checksum only (RELAYIUM_UPDATE_ALLOW_UNSIGNED=1).")
+			return nil
+		}
+		return fmt.Errorf("release signature (.sig/.pem) not found but cosign is installed — refusing to install a possibly-unsigned build; set RELAYIUM_UPDATE_ALLOW_UNSIGNED=1 to override")
 	}
 	idRe := "^https://github.com/" + regexp.QuoteMeta(o.Repo) + "/\\.github/workflows/release\\.yml@"
 	cmd := exec.CommandContext(ctx, cosign, "verify-blob",

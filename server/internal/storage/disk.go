@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -27,15 +28,37 @@ var validKey = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 // tmpPrefix marks in-progress writes; CleanupTemp reaps stale ones.
 const tmpPrefix = ".tmp-"
 
+// diskLockShards is the number of stripes guarding same-key mutations. Sharded
+// (not one lock per key) so memory is bounded; false contention across unrelated
+// keys sharing a stripe is rare and cheap next to the disk I/O it guards.
+const diskLockShards = 64
+
 // DiskStore writes each object to <dir>/<key[:2]>/<key>. The two-char shard
 // keeps any single directory from accumulating too many files.
-type DiskStore struct{ dir string }
+type DiskStore struct {
+	dir string
+	// locks serialize mutating ops (Put/Append/Delete) on the SAME key within
+	// this process. Append is a check-then-write (Stat size == offset, then
+	// io.Copy); without this, two concurrent chunk PATCHes at the same offset
+	// could both pass the check and interleave their writes, corrupting the blob.
+	locks [diskLockShards]sync.Mutex
+}
 
 func NewDiskStore(dir string) (*DiskStore, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
 	return &DiskStore{dir: dir}, nil
+}
+
+// keyLock returns the stripe mutex guarding same-key mutations.
+func (d *DiskStore) keyLock(key string) *sync.Mutex {
+	var h uint32 = 2166136261
+	for i := 0; i < len(key); i++ { // FNV-1a
+		h ^= uint32(key[i])
+		h *= 16777619
+	}
+	return &d.locks[h%diskLockShards]
 }
 
 func (d *DiskStore) paths(key string) (shardDir, full string) {
@@ -86,6 +109,9 @@ func (d *DiskStore) Put(ctx context.Context, key string, r io.Reader) (int64, er
 	if !validKey.MatchString(key) {
 		return 0, ErrInvalidKey
 	}
+	l := d.keyLock(key)
+	l.Lock()
+	defer l.Unlock()
 	shardDir, full := d.paths(key)
 	if err := os.MkdirAll(shardDir, 0o700); err != nil {
 		return 0, err
@@ -149,6 +175,11 @@ func (d *DiskStore) Append(ctx context.Context, key string, offset int64, r io.R
 	if offset < 0 {
 		return 0, ErrOffsetMismatch
 	}
+	// Serialize same-key appends: the Stat-then-copy below is not atomic on its
+	// own, so two concurrent PATCHes at the same offset must not interleave.
+	l := d.keyLock(key)
+	l.Lock()
+	defer l.Unlock()
 	shardDir, full := d.paths(key)
 	if err := os.MkdirAll(shardDir, 0o700); err != nil {
 		return 0, err
@@ -182,6 +213,9 @@ func (d *DiskStore) Delete(ctx context.Context, key string) error {
 	if !validKey.MatchString(key) {
 		return ErrInvalidKey
 	}
+	l := d.keyLock(key)
+	l.Lock()
+	defer l.Unlock()
 	_, full := d.paths(key)
 	if err := os.Remove(full); err != nil && !os.IsNotExist(err) {
 		return err

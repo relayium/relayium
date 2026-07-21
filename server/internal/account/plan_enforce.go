@@ -271,6 +271,12 @@ func (s *Service) uploadWriteCap(ctx context.Context, userID string, maxFileSize
 // planRetentionCap returns the user's plan retention ceiling in seconds (0 = no
 // plan cap; the global clampTTL still applies).
 func (s *Service) planRetentionCap(ctx context.Context, userID string) int64 {
-	p, _ := s.planForUser(ctx, userID)
+	p, err := s.planForUser(ctx, userID)
+	if err != nil {
+		// Fail OPEN (no cap): a transient plan-read error must not silently clamp a
+		// paying user's file to the free-tier retention — it would expire early with
+		// no signal. Matches the over* gates' fail-open stance; 0 means "no cap".
+		return 0
+	}
 	return p.RetentionSecs
 }

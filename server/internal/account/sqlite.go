@@ -1832,7 +1832,11 @@ func (s *SQLiteStore) CreateUploadSession(ctx context.Context, r UploadSessionRo
 // GetUploadSession returns the session for id only if it belongs to userID
 // (ownership gate). ok=false for missing / wrong owner.
 func (s *SQLiteStore) GetUploadSession(ctx context.Context, id, userID string) (UploadSessionRow, bool, error) {
-	r, err := scanUploadSession(s.db.QueryRowContext(ctx,
+	// Read pool, not the single writer: this runs on every chunk PATCH and status
+	// poll; keeping it off s.db stops a busy upload from serializing behind (and
+	// blocking) unrelated writes. WAL gives read-your-writes for the prior
+	// committed AdvanceUploadReceived, so the offset is never stale.
+	r, err := scanUploadSession(s.reader().QueryRowContext(ctx,
 		`SELECT `+uploadSessionCols+` FROM upload_sessions WHERE id = ? AND user_id = ?`, id, userID))
 	if err == sql.ErrNoRows {
 		return UploadSessionRow{}, false, nil

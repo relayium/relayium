@@ -27,6 +27,13 @@ const (
 // requests spread across instances), and note it does not fix the *global*
 // GuessBreaker or make a per-instance lockout follow an attacker across
 // instances — those genuinely want IP-hash routing or a shared store.
+//
+// Caveat at high N: the floor-at-1 means the reconstructed global budget is
+// N × max(1, round(n/N)), which OVERSHOOTS the intended n once N > ~2n for a
+// small-n limiter (e.g. n=5, divisor=12 → 1/instance → 12 global, ~2.4×). This
+// is a known, bounded looseness of the interim divisor mechanism for realistic
+// N (2–4 → ≤20%); IP-hash routing (divisor=1) avoids it entirely and is the
+// recommended path once instance count grows.
 func PerInstanceThreshold(n, divisor int) int {
 	if divisor <= 1 {
 		return n
