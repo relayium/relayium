@@ -80,9 +80,13 @@ describe("buildArticlePages", () => {
 
 describe("buildSitemap homepage lastmod", () => {
   it("uses the newest date across legal docs, landing, and articles", () => {
-    // legal docs are older (2026-07-01) than the article (2026-07-03)
     const xml = buildSitemap([privacy, terms], { home: true, articles: [compareSnapdrop] });
     const home = xml.slice(xml.indexOf("<loc>https://relayium.com/</loc>"));
-    expect(home.slice(0, 200)).toContain(`<lastmod>${compareSnapdrop.updated}</lastmod>`);
+    // Compute the expected newest from the actual inputs (buildSitemap reads
+    // d.langs.en.updated for docs, a.updated for articles) so this stays correct
+    // as the legal docs / article dates change — not a hardcoded date that goes
+    // stale every time terms/privacy are re-dated.
+    const newest = [privacy.langs.en.updated, terms.langs.en.updated, compareSnapdrop.updated].sort().at(-1);
+    expect(home.slice(0, 200)).toContain(`<lastmod>${newest}</lastmod>`);
   });
 });
