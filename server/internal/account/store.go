@@ -175,6 +175,24 @@ type UsageEvent struct {
 	Billable     bool
 }
 
+// UploadSessionRow is the durable state of one in-progress chunked upload
+// (item #9). The live blob handle is NOT stored — it is reconstructed from
+// NodeID per request via blobFor; the DB replaces the per-session mutex.
+type UploadSessionRow struct {
+	ID          string
+	UserID      string
+	BlobKey     string
+	NodeID      string
+	Billable    bool
+	EncManifest []byte
+	TTL         int64
+	MaxDL       int64
+	MaxSize     int64 // write cap fixed at init (see sessionWriteCap)
+	Received    int64 // bytes committed to the blob so far
+	CreatedAt   int64
+	Done        bool
+}
+
 // StoredFile is one zero-knowledge stored-transfer object's lifecycle row. The
 // server holds only ciphertext: EncManifest (encrypted filenames/sizes) and the
 // blob it points at are opaque. It never sees plaintext content, names, or the key.
@@ -443,6 +461,18 @@ type Store interface {
 	// any instance). session is the json-encoded webauthn.SessionData. Item #3.
 	PutPasskeyCeremony(ctx context.Context, token, kind, session, name string, now, expires int64, cap int) (ok bool, err error)
 	TakePasskeyCeremony(ctx context.Context, token string) (kind, session, name string, expires int64, ok bool, err error)
+	// Resumable upload sessions live in the store (multi-instance + restart-safe).
+	// See docs/multi-instance-state-migration.md item #9.
+	CreateUploadSession(ctx context.Context, row UploadSessionRow, maxPerUser int) (ok bool, err error)
+	GetUploadSession(ctx context.Context, id, userID string) (UploadSessionRow, bool, error)
+	// AdvanceUploadReceived monotonically advances the committed offset (only ever
+	// forward, only while the session is open), mirroring the authoritative blob size.
+	AdvanceUploadReceived(ctx context.Context, id string, to int64) error
+	// ClaimUploadDone atomically marks the session terminal and returns the offset
+	// at that instant. ok=false ⇒ already claimed (a racing finalize/reaper won).
+	ClaimUploadDone(ctx context.Context, id string) (received int64, ok bool, err error)
+	DeleteUploadSession(ctx context.Context, id string) error
+	ListExpiredOpenUploadSessions(ctx context.Context, before int64) ([]UploadSessionRow, error)
 	EmailVerified(ctx context.Context, userID string) (bool, error)
 	SetEmailVerified(ctx context.Context, userID string) error
 	// SetOnlyOwnNodes toggles the BYO-nodes-only restriction (SP3) for a user.

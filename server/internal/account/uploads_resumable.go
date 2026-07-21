@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
+	"time"
 
 	"github.com/relayium/relayium/internal/storage"
 )
@@ -23,124 +23,42 @@ const uploadChunkSize = 8 << 20 // 8 MiB
 // partial blob) lives before the reaper drops it.
 const pendingUploadTTL = int64(3600) // 1 h
 
-// uploadSession is the server-side state of one in-progress chunked upload. It
-// lives only in memory (see resumableUploads): relayium is a single instance
-// and a session need only outlive one upload; a restart abandons it and the
-// reaper/GC reclaims the partial blob.
-type uploadSession struct {
-	mu          sync.Mutex // serialises chunks of THIS upload
-	userID      string
-	blobKey     string
-	nodeID      string
-	bs          storage.BlobStore
-	billable    bool
-	encManifest []byte
-	ttl         int64
-	maxDL       int64
-	maxSize     int64 // write cap fixed at init; see sessionWriteCap
-	received    int64 // bytes committed to the blob so far
-	createdAt   int64
-	// done is set (under mu) by the first terminal action — finalize, or the
-	// reaper's drop — so a racing second finalize can't double-bill/double-create
-	// and a chunk can't append to (or the reaper drop) a blob another goroutine
-	// has already committed or reclaimed.
-	done bool
-}
-
 // maxSessionsPerUser caps concurrent open chunked-upload sessions per account.
 // Without it, handleUploadInit — which reserves no quota until finalize — lets a
 // single account pin maxSessionsPerUser×MaxFileSize of partial blobs on disk (and
-// their manifests in RAM) indefinitely, unbilled. Shares the single-shot path's
+// their manifests) indefinitely, unbilled. Shares the single-shot path's
 // per-account concurrency budget (M1).
 const maxSessionsPerUser = maxConcurrentUploadsPerUser
 
-// resumableUploads is the in-memory registry of upload sessions, keyed by a
-// random uploadId. perUser tracks each account's open-session count so a single
-// account can't open unbounded sessions; entries are pruned at zero.
-type resumableUploads struct {
-	mu      sync.Mutex
-	m       map[string]*uploadSession
-	perUser map[string]int
-	maxUser int
-}
-
-func newResumableUploads() *resumableUploads {
-	return &resumableUploads{m: map[string]*uploadSession{}, perUser: map[string]int{}, maxUser: maxSessionsPerUser}
-}
-
-// tryPut registers a session, returning false if userID is already at its
-// open-session cap (caller should 429). The count is released by del/expired.
-func (ru *resumableUploads) tryPut(id string, s *uploadSession) bool {
-	ru.mu.Lock()
-	defer ru.mu.Unlock()
-	if ru.perUser[s.userID] >= ru.maxUser {
-		return false
-	}
-	ru.m[id] = s
-	ru.perUser[s.userID]++
-	return true
-}
-
-// get returns the session for id only if it belongs to userID (ownership gate).
-func (ru *resumableUploads) get(id, userID string) (*uploadSession, bool) {
-	ru.mu.Lock()
-	defer ru.mu.Unlock()
-	s, ok := ru.m[id]
-	if !ok || s.userID != userID {
-		return nil, false
-	}
-	return s, true
-}
-
-// release drops userID's open-session count by one, pruning the entry at zero.
-// Caller holds ru.mu.
-func (ru *resumableUploads) release(userID string) {
-	if ru.perUser[userID] <= 1 {
-		delete(ru.perUser, userID)
+// dropUploadBlob reclaims an abandoned upload's partial blob, resolving the blob
+// store from node_id first; if the node can't be resolved it queues the delete
+// for GC to retry rather than leaking it.
+func (s *Service) dropUploadBlob(ctx context.Context, nodeID, blobKey string) {
+	bs, err := s.blobFor(ctx, nodeID)
+	if err != nil {
+		_ = s.store.EnqueueNodeDelete(ctx, blobKey, nodeID, s.now().Unix())
 		return
 	}
-	ru.perUser[userID]--
-}
-
-func (ru *resumableUploads) del(id string) {
-	ru.mu.Lock()
-	defer ru.mu.Unlock()
-	if s, ok := ru.m[id]; ok {
-		ru.release(s.userID)
-		delete(ru.m, id)
-	}
-}
-
-// expired removes and returns every session older than ttl, for the reaper.
-func (ru *resumableUploads) expired(now, ttl int64) []*uploadSession {
-	ru.mu.Lock()
-	defer ru.mu.Unlock()
-	var out []*uploadSession
-	for id, s := range ru.m {
-		if now-s.createdAt >= ttl {
-			out = append(out, s)
-			ru.release(s.userID)
-			delete(ru.m, id)
-		}
-	}
-	return out
+	s.dropBlob(bs, blobKey, nodeID)
 }
 
 // ReapPendingUploads drops abandoned upload sessions and their partial blobs.
-// Wired into the GC tick (see main.go). now is unix seconds. It takes each
-// session's mutex and honours the done flag so it never drops a blob a
-// concurrent finalize has already committed, nor races an in-flight chunk append.
+// Wired into the GC tick (see main.go). now is unix seconds. It claims each
+// session's terminal `done` flag atomically before dropping, so it never races a
+// concurrent finalize that already committed the blob.
 func (s *Service) ReapPendingUploads(now int64) {
-	for _, sess := range s.resumable.expired(now, pendingUploadTTL) {
-		sess.mu.Lock()
-		if sess.done {
-			sess.mu.Unlock()
-			continue // already finalized (blob kept) or dropped
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	rows, err := s.store.ListExpiredOpenUploadSessions(ctx, now-pendingUploadTTL)
+	if err != nil {
+		return
+	}
+	for _, r := range rows {
+		if _, ok, err := s.store.ClaimUploadDone(ctx, r.ID); err != nil || !ok {
+			continue // finalized (blob kept) or claimed by another reaper
 		}
-		sess.done = true
-		bs, key, node := sess.bs, sess.blobKey, sess.nodeID
-		sess.mu.Unlock()
-		s.dropBlob(bs, key, node)
+		s.dropUploadBlob(ctx, r.NodeID, r.BlobKey)
+		_ = s.store.DeleteUploadSession(ctx, r.ID)
 	}
 }
 
@@ -148,7 +66,7 @@ func (s *Service) ReapPendingUploads(now int64) {
 // is the length-prefixed encrypted manifest (uint32BE(len)||encManifest), the
 // same header the single-shot upload leads with; retention comes from the query
 // and the declared ciphertext size from ?size=. It runs the same placement,
-// disk-cap and daily-quota pre-checks as the single-shot path, then mints a
+// disk-cap and daily-quota pre-checks as the single-shot path, then persists a
 // session and returns {uploadId, chunkSize}.
 func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u User) {
 	if s.blobs == nil {
@@ -161,7 +79,7 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 	// MaxFileSize one". A liar declaring 0 gets floored by placementMinFree and
 	// still cannot buy a bigger write budget — sessionWriteCap below ignores ?size=.
 	declared, _ := strconv.ParseInt(r.URL.Query().Get("size"), 10, 64)
-	nodeID, bs, billable, perr := s.placeUpload(r.Context(), u.ID, declared)
+	nodeID, _, billable, perr := s.placeUpload(r.Context(), u.ID, declared)
 	if errors.Is(perr, errStrictNodeFull) {
 		http.Error(w, "your storage node has no free space", http.StatusServiceUnavailable)
 		return
@@ -242,19 +160,23 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 		}
 	}
 
-	sess := &uploadSession{
-		userID: u.ID, blobKey: randToken(), nodeID: nodeID, bs: bs, billable: billable,
-		encManifest: encManifest, ttl: ttl, maxDL: maxDL,
-		maxSize:   s.sessionWriteCap(r.Context(), u.ID, st.MaxFileSize, billable),
-		createdAt: s.now().Unix(),
+	row := UploadSessionRow{
+		ID: newID(), UserID: u.ID, BlobKey: randToken(), NodeID: nodeID, Billable: billable,
+		EncManifest: encManifest, TTL: ttl, MaxDL: maxDL,
+		MaxSize:   s.sessionWriteCap(r.Context(), u.ID, st.MaxFileSize, billable),
+		CreatedAt: s.now().Unix(),
 	}
-	uploadID := newID()
-	if !s.resumable.tryPut(uploadID, sess) {
+	ok, err := s.store.CreateUploadSession(r.Context(), row, maxSessionsPerUser)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
 		w.Header().Set("Retry-After", "1")
 		http.Error(w, "too many concurrent uploads", http.StatusTooManyRequests)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"uploadId": uploadID, "chunkSize": uploadChunkSize})
+	writeJSON(w, http.StatusOK, map[string]any{"uploadId": row.ID, "chunkSize": uploadChunkSize})
 }
 
 // sessionWriteCap 给一个 chunked 上传会话定写入上限：单文件上限与用户三项剩余
@@ -265,15 +187,15 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 //
 // 读失败时 fail-OPEN：某项额度读不出来就让它不参与 min（而不是收紧到 0）。理由
 // 是这里定的只是一个**上界**，不是额度门本身——读挂了还有 MaxFileSize 兜底，而
-// 真正的权威闸门（finalize 按 sess.received 重跑全部额度检查）一道没少。反过来
-// 一次 DB 抖动就把 maxSize 压成 0，会让所有正常上传在 PATCH 阶段 413。注意这与
+// 真正的权威闸门（finalize 按 received 重跑全部额度检查）一道没少。反过来一次 DB
+// 抖动就把 maxSize 压成 0，会让所有正常上传在 PATCH 阶段 413。注意这与
 // handleUploadInit/handleUploadFinalize 里日额度读失败就 500 的 fail-CLOSED 并不
 // 矛盾：那两处是放不放行的判决点，这里只是给会话挑一个尺寸。
 //
 // billable=false（文件落在用户自己的存储节点上）整条豁免：这类上传本来就不计入
 // 任何套餐额度（init 和 finalize 的额度闸对它们全部跳过），拿"剩余额度"去卡它
-// 等于在执行一份根本没在花的预算，用户中心额度一见底自带节点就传不动了。它们
-// 占的是用户自己的盘，由节点自身的 StorageFree/磁盘上限管。
+// 等于在执行一份根本没在花的预算。它们占的是用户自己的盘，由节点自身的
+// StorageFree/磁盘上限管。
 func (s *Service) sessionWriteCap(ctx context.Context, userID string, maxFileSize int64, billable bool) int64 {
 	cap := maxFileSize
 	if !billable {
@@ -302,9 +224,16 @@ func (s *Service) sessionWriteCap(ctx context.Context, userID string, maxFileSiz
 // handleUploadChunk (PATCH /api/files/uploads/{uploadId}) appends one chunk. The
 // Content-Range's start must equal the bytes already committed; a stale start
 // (already received) is acked idempotently, a gap is 409 with the real offset.
+// The blob store's own offset check is the authority; the DB `received` mirrors
+// it (advanced monotonically), so any instance can serve the next chunk.
 func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u User) {
-	sess, ok := s.resumable.get(r.PathValue("uploadId"), u.ID)
-	if !ok {
+	sess, ok, err := s.store.GetUploadSession(r.Context(), r.PathValue("uploadId"), u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !ok || sess.Done {
+		// Missing, wrong owner, or finalized/reaped: no longer ours to append to.
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -313,25 +242,14 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 		http.Error(w, "bad Content-Range", http.StatusBadRequest)
 		return
 	}
-
-	sess.mu.Lock()
-	defer sess.mu.Unlock()
-
-	if sess.done {
-		// Finalized or reaped while this chunk was in flight; the blob is no longer
-		// ours to append to.
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-
-	if start < sess.received {
+	if start < sess.Received {
 		// Client re-sent bytes we already have (a resume overshoot) — ack the
 		// current offset so it advances without corrupting the blob.
-		writeJSON(w, http.StatusOK, map[string]any{"received": sess.received})
+		writeJSON(w, http.StatusOK, map[string]any{"received": sess.Received})
 		return
 	}
-	if start > sess.received {
-		writeJSON(w, http.StatusConflict, map[string]any{"received": sess.received})
+	if start > sess.Received {
+		writeJSON(w, http.StatusConflict, map[string]any{"received": sess.Received})
 		return
 	}
 
@@ -340,26 +258,35 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 	// while there was room can't keep appending past the high-water mark. Applies
 	// only to central-local placement; a usage-read error fails open, matching the
 	// single-shot path.
-	if sess.nodeID == "" && s.diskUsage != nil && s.blobDiskMax > 0 {
+	if sess.NodeID == "" && s.diskUsage != nil && s.blobDiskMax > 0 {
 		if used, _, err := s.diskUsage(); err == nil && used >= uint64(s.blobDiskMax) {
 			http.Error(w, "storage temporarily full", http.StatusServiceUnavailable)
 			return
 		}
 	}
 
-	capped := &cappedReader{r: r.Body, max: sess.maxSize - sess.received}
-	newSize, err := sess.bs.Append(r.Context(), sess.blobKey, sess.received, capped)
+	bs, err := s.blobFor(r.Context(), sess.NodeID)
+	if err != nil {
+		http.Error(w, "storage node unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	capped := &cappedReader{r: r.Body, max: sess.MaxSize - sess.Received}
+	newSize, err := bs.Append(r.Context(), sess.BlobKey, sess.Received, capped)
 	if errors.Is(err, errTooLarge) {
-		// Oversize chunk. Do NOT trust/assign newSize here: on the remote-node
-		// path the request aborted mid-body, so Append returns 0 — assigning it
-		// would clobber the committed offset. Leave sess.received unchanged; the
-		// upload is rejected (413) and the client stops. (The node committed up to
-		// the cap; a client that ignores the 413 and retries resyncs via the
-		// offset-mismatch path below.)
+		// Oversize chunk. Do NOT advance the offset here: on the remote-node path
+		// the request aborted mid-body, so Append returns 0 — advancing would
+		// clobber the committed offset. Leave it unchanged; the upload is rejected
+		// (413) and the client stops. (The node committed up to the cap; a client
+		// that ignores the 413 and retries resyncs via the offset-mismatch path.)
 		http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
 		return
 	}
-	sess.received = newSize // Append reports bytes written even on a non-oversize error (offset mismatch)
+	// Mirror the blob's authoritative size into the DB (monotonic; a no-op if a
+	// concurrent request already advanced past it or the session was finalized).
+	if uerr := s.store.AdvanceUploadReceived(r.Context(), sess.ID, newSize); uerr != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
 	if errors.Is(err, storage.ErrOffsetMismatch) {
 		// The blob and our counter disagree (e.g. a duplicated request lost the
 		// race); report the blob's truth so the client re-syncs.
@@ -377,37 +304,44 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 // upload: it reserves the daily quota against the real byte count, creates the
 // stored-file row, records stats/metering, and drops the session.
 func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u User) {
-	id := r.PathValue("uploadId")
-	sess, ok := s.resumable.get(id, u.ID)
+	sess, ok, err := s.store.GetUploadSession(r.Context(), r.PathValue("uploadId"), u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
 	if !ok {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	sess.mu.Lock()
-	defer sess.mu.Unlock()
-
-	if sess.done {
-		// A concurrent finalize already committed (or the reaper dropped) this
-		// session; don't bill or create a second file row for the same blob.
+	// Claim the session terminally, getting the committed size at that instant. A
+	// racing finalize (or the reaper) that already claimed it loses here.
+	size, claimed, err := s.store.ClaimUploadDone(r.Context(), sess.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !claimed {
 		http.Error(w, "already finalized", http.StatusConflict)
 		return
 	}
-	sess.done = true // claim the session so a racing finalize/reaper backs off
 
-	size := sess.received
+	// fail drops the partial blob + the (already done-claimed) session row and
+	// writes the given HTTP error.
+	fail := func(msg string, code int) {
+		s.dropUploadBlob(r.Context(), sess.NodeID, sess.BlobKey)
+		_ = s.store.DeleteUploadSession(r.Context(), sess.ID)
+		http.Error(w, msg, code)
+	}
+
 	now := s.now().Unix()
-	if sess.billable {
+	if sess.Billable {
 		// Authoritative per-plan traffic gate on the real byte count now that the
 		// upload is complete (the init pre-check only saw the client-declared
 		// size). Storage caps are enforced atomically at persist time below.
 		if over, err := s.overTraffic(r.Context(), u.ID, size); err == nil && over {
-			s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
-			s.resumable.del(id)
-			http.Error(w, "monthly traffic limit reached — upgrade to continue", http.StatusTooManyRequests)
+			fail("monthly traffic limit reached — upgrade to continue", http.StatusTooManyRequests)
 			return
 		}
-	}
-	if sess.billable {
 		billed := size
 		if billed < minBillableBytes {
 			billed = minBillableBytes
@@ -416,70 +350,59 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		// ReserveUpload error below — drop the blob, kill the session, 500.
 		quota, err := s.dailyQuotaFor(r.Context(), u.ID)
 		if err != nil {
-			s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
-			s.resumable.del(id)
-			http.Error(w, "server error", http.StatusInternalServerError)
+			fail("server error", http.StatusInternalServerError)
 			return
 		}
 		reserved, err := s.store.ReserveUpload(r.Context(),
 			UploadEvent{ID: newID(), UserID: u.ID, Bytes: billed, UploadedAt: now},
 			now-dayWindow, quota)
 		if err != nil {
-			s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
-			s.resumable.del(id)
-			http.Error(w, "server error", http.StatusInternalServerError)
+			fail("server error", http.StatusInternalServerError)
 			return
 		}
 		if !reserved {
-			s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
-			s.resumable.del(id)
-			http.Error(w, "daily quota exceeded", http.StatusTooManyRequests)
+			fail("daily quota exceeded", http.StatusTooManyRequests)
 			return
 		}
 	}
 
 	fid := newID()
 	sf := StoredFile{
-		ID: fid, UserID: u.ID, BlobKey: sess.blobKey, EncManifest: sess.encManifest,
-		Size: size, BurnAfterRead: sess.maxDL == 1, CreatedAt: now, ExpiresAt: now + sess.ttl,
-		NodeID: sess.nodeID, MaxDownloads: sess.maxDL,
+		ID: fid, UserID: u.ID, BlobKey: sess.BlobKey, EncManifest: sess.EncManifest,
+		Size: size, BurnAfterRead: sess.MaxDL == 1, CreatedAt: now, ExpiresAt: now + sess.TTL,
+		NodeID: sess.NodeID, MaxDownloads: sess.MaxDL,
 	}
 	// Atomic, fail-closed storage-cap enforcement + insert (see persistStoredFile).
-	switch reason, err := s.persistStoredFile(r.Context(), sf, sess.billable); {
+	switch reason, err := s.persistStoredFile(r.Context(), sf, sess.Billable); {
 	case err != nil:
-		s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
-		s.resumable.del(id)
-		http.Error(w, "server error", http.StatusInternalServerError)
+		fail("server error", http.StatusInternalServerError)
 		return
 	case reason == "global":
-		s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
-		s.resumable.del(id)
-		http.Error(w, "server storage is full", http.StatusInsufficientStorage)
+		fail("server storage is full", http.StatusInsufficientStorage)
 		return
 	case reason == "storage":
-		s.dropBlob(sess.bs, sess.blobKey, sess.nodeID)
-		s.resumable.del(id)
-		http.Error(w, "storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
+		fail("storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
 		return
 	}
 	_ = s.store.AddUploadStat(r.Context(), u.ID, size)
 	_ = s.store.RecordMeter(r.Context(), u.ID, MeterUpload, size, now)
-	s.resumable.del(id)
+	_ = s.store.DeleteUploadSession(r.Context(), sess.ID)
 	writeJSON(w, http.StatusOK, map[string]any{"id": fid, "expiresAt": sf.ExpiresAt})
 }
 
 // handleUploadStatus (GET /api/files/uploads/{uploadId}) reports the committed
 // offset so a client can resume after an interruption.
 func (s *Service) handleUploadStatus(w http.ResponseWriter, r *http.Request, u User) {
-	sess, ok := s.resumable.get(r.PathValue("uploadId"), u.ID)
+	sess, ok, err := s.store.GetUploadSession(r.Context(), r.PathValue("uploadId"), u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
 	if !ok {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	sess.mu.Lock()
-	received := sess.received
-	sess.mu.Unlock()
-	writeJSON(w, http.StatusOK, map[string]any{"received": received})
+	writeJSON(w, http.StatusOK, map[string]any{"received": sess.Received})
 }
 
 // parseContentRangeStart pulls N from "bytes N-M/total" (the standard request

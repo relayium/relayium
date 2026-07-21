@@ -170,7 +170,6 @@ type Service struct {
 	resetRequests  *loginThrottle              // per email+IP forgot-password limiter
 	deleteRequests *loginThrottle              // per user+IP account-deletion-request limiter
 	blobs          storage.BlobStore           // nil until SetBlobStore; stored-transfer disabled when nil
-	resumable      *resumableUploads           // in-memory chunked-upload sessions
 	pairCodeOwner  func(string) (string, bool) // resolves a live code to its owner userID; nil until wired
 	// clientIP resolves the request's rate-limit key IP. Defaults to the
 	// package clientIP (trusts XFF's left entry — legacy behavior kept so
@@ -231,7 +230,6 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 		pwLogins: newLoginThrottle(maxFails), magicRequests: newLoginThrottle(maxFails),
 		verifyRequests: newLoginThrottle(maxFails), resetRequests: newLoginThrottle(maxFails),
 		deleteRequests: newLoginThrottle(maxFails),
-		resumable:      newResumableUploads(),
 		uploadSem:      newUploadSem(maxConcurrentUploadsPerUser)}
 	svc.adminPasskeyLogins = newLoginThrottle(maxFails)
 	svc.clientIP = clientIP

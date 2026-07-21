@@ -400,6 +400,19 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`CREATE TABLE IF NOT EXISTS admin_passkey_ceremonies (
   token TEXT PRIMARY KEY, kind TEXT NOT NULL, session TEXT NOT NULL,
   name TEXT NOT NULL DEFAULT '', expires INTEGER NOT NULL)`,
+		// Resumable chunked-upload sessions (multi-instance): the durable state
+		// (committed offset, blob key/node, retention, caps) so any instance can
+		// serve the next chunk / finalize, and an instance restart no longer
+		// abandons an in-flight upload. The blob handle is reconstructed from
+		// node_id per request; the DB replaces the per-session mutex. Item #9.
+		`CREATE TABLE IF NOT EXISTS upload_sessions (
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, blob_key TEXT NOT NULL,
+  node_id TEXT NOT NULL DEFAULT '', billable INTEGER NOT NULL DEFAULT 0,
+  enc_manifest BLOB, ttl INTEGER NOT NULL DEFAULT 0, max_dl INTEGER NOT NULL DEFAULT 0,
+  max_size INTEGER NOT NULL DEFAULT 0, received INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL, done INTEGER NOT NULL DEFAULT 0)`,
+		`CREATE INDEX IF NOT EXISTS idx_upload_sessions_user ON upload_sessions(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_upload_sessions_created ON upload_sessions(created_at)`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -1675,6 +1688,112 @@ func (s *SQLiteStore) TakePasskeyCeremony(ctx context.Context, token string) (ki
 		return "", "", "", 0, false, err
 	}
 	return kind, session, name, expires, true, nil
+}
+
+const uploadSessionCols = `id, user_id, blob_key, node_id, billable, enc_manifest, ttl, max_dl, max_size, received, created_at, done`
+
+func scanUploadSession(sc rowScanner) (UploadSessionRow, error) {
+	var r UploadSessionRow
+	var billable, done int64
+	var manifest []byte
+	err := sc.Scan(&r.ID, &r.UserID, &r.BlobKey, &r.NodeID, &billable, &manifest,
+		&r.TTL, &r.MaxDL, &r.MaxSize, &r.Received, &r.CreatedAt, &done)
+	if err != nil {
+		return UploadSessionRow{}, err
+	}
+	r.Billable = billable != 0
+	r.Done = done != 0
+	r.EncManifest = manifest
+	return r, nil
+}
+
+// CreateUploadSession inserts a session, enforcing the per-user open-session cap
+// in one transaction. ok=false (nothing stored) when the user is at the cap.
+func (s *SQLiteStore) CreateUploadSession(ctx context.Context, r UploadSessionRow, maxPerUser int) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var open int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM upload_sessions WHERE user_id = ? AND done = 0`, r.UserID).Scan(&open); err != nil {
+		return false, err
+	}
+	if open >= maxPerUser {
+		return false, nil
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO upload_sessions (`+uploadSessionCols+`)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.ID, r.UserID, r.BlobKey, r.NodeID, b2i(r.Billable), r.EncManifest,
+		r.TTL, r.MaxDL, r.MaxSize, r.Received, r.CreatedAt, b2i(r.Done)); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
+}
+
+// GetUploadSession returns the session for id only if it belongs to userID
+// (ownership gate). ok=false for missing / wrong owner.
+func (s *SQLiteStore) GetUploadSession(ctx context.Context, id, userID string) (UploadSessionRow, bool, error) {
+	r, err := scanUploadSession(s.db.QueryRowContext(ctx,
+		`SELECT `+uploadSessionCols+` FROM upload_sessions WHERE id = ? AND user_id = ?`, id, userID))
+	if err == sql.ErrNoRows {
+		return UploadSessionRow{}, false, nil
+	}
+	if err != nil {
+		return UploadSessionRow{}, false, err
+	}
+	return r, true, nil
+}
+
+// AdvanceUploadReceived moves the committed offset forward only (never back) and
+// only while the session is open, so a stale write can't lower it or resurrect a
+// finalized session.
+func (s *SQLiteStore) AdvanceUploadReceived(ctx context.Context, id string, to int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE upload_sessions SET received = ? WHERE id = ? AND done = 0 AND ? > received`, to, id, to)
+	return err
+}
+
+// ClaimUploadDone atomically marks the session terminal, returning the committed
+// offset at that instant. ok=false ⇒ already done (a racing finalize/reaper won).
+func (s *SQLiteStore) ClaimUploadDone(ctx context.Context, id string) (received int64, ok bool, err error) {
+	err = s.db.QueryRowContext(ctx,
+		`UPDATE upload_sessions SET done = 1 WHERE id = ? AND done = 0 RETURNING received`, id,
+	).Scan(&received)
+	if err == sql.ErrNoRows {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return received, true, nil
+}
+
+func (s *SQLiteStore) DeleteUploadSession(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM upload_sessions WHERE id = ?`, id)
+	return err
+}
+
+// ListExpiredOpenUploadSessions returns still-open sessions created at/before
+// `before`, for the reaper to claim and drop.
+func (s *SQLiteStore) ListExpiredOpenUploadSessions(ctx context.Context, before int64) ([]UploadSessionRow, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+uploadSessionCols+` FROM upload_sessions WHERE done = 0 AND created_at <= ?`, before)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []UploadSessionRow
+	for rows.Next() {
+		r, err := scanUploadSession(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // ClearPassword NULLs the password hash so the account has no usable password
