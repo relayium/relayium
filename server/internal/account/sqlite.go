@@ -960,9 +960,26 @@ func (s *SQLiteStore) SetAccountDeletion(ctx context.Context, userID string, del
 // ClearAccountDeletion cancels a pending deletion, zeroing all three
 // lifecycle columns.
 func (s *SQLiteStore) ClearAccountDeletion(ctx context.Context, userID string) error {
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE users SET deleted_at = 0, purge_after = 0, purge_reminder_sent = 0 WHERE id = ?`, userID)
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE users SET deleted_at = 0, purge_after = 0, purge_reminder_sent = 0 WHERE id = ?`, userID); err != nil {
+		return err
+	}
+	// Revoke every still-unused reactivate token for this user in the same
+	// transaction. Each frozen-login attempt during the grace window minted its
+	// own reactivate token; once the account is recovered a leaked leftover would
+	// otherwise stay a passwordless login for the rest of the window. (handle-
+	// Reactivate's DeletedAt>0 guard already refuses them post-recovery — this
+	// removes them so none can linger or be probed at all.)
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM email_tokens WHERE user_id = ? AND purpose = 'reactivate' AND used_at = 0`, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // MarkPurgeReminderSent records when the pre-purge reminder email was sent.

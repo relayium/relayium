@@ -508,7 +508,9 @@ type Store interface {
 	// so a re-request re-arms the reminder.
 	SetAccountDeletion(ctx context.Context, userID string, deletedAt, purgeAfter int64) error
 	// ClearAccountDeletion cancels a pending deletion, zeroing all three
-	// lifecycle columns (deleted_at, purge_after, purge_reminder_sent).
+	// lifecycle columns (deleted_at, purge_after, purge_reminder_sent) and
+	// revoking the user's remaining unused "reactivate" tokens, in one
+	// transaction — so no leftover token stays a passwordless login post-recovery.
 	ClearAccountDeletion(ctx context.Context, userID string) error
 	// MarkPurgeReminderSent records when the pre-purge reminder email was sent,
 	// so GC sends it at most once per deletion request.

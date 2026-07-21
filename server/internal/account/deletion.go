@@ -163,9 +163,12 @@ func (s *Service) IssueReactivateLink(ctx context.Context, userID, email string)
 // with in the first place (every login path refuses to issue one). On
 // success it clears the pending-deletion state and immediately logs the user
 // in — "click the link, you're back in" — so the response carries a fresh
-// session cookie plus the user JSON, mirroring handleResetPassword. Calling
-// it again for an already-active account is a 400 (the single-use token is
-// already spent), not a crash or a second purge-clearing no-op.
+// session cookie plus the user JSON, mirroring handleResetPassword. It only
+// works while the account is actually pending deletion (DeletedAt>0): a token
+// presented against an already-active account is rejected (400) rather than
+// minting a session, so a leftover reactivate token can't serve as a
+// passwordless login after recovery. Reactivation also revokes the user's other
+// unused reactivate tokens (see ClearAccountDeletion).
 func (s *Service) handleReactivate(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Token string `json:"token"`
@@ -183,11 +186,28 @@ func (s *Service) handleReactivate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_token"})
 		return
 	}
+	u, err := s.store.GetUserByID(r.Context(), tok.UserID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	// A reactivate token authorizes UNDOING a pending deletion — not a general
+	// passwordless login. If the account is no longer pending (already recovered),
+	// a leftover token must NOT mint a session: otherwise any one of the several
+	// tokens minted across the grace window stays a 30-day backdoor login that
+	// survives recovery and a password change. The token is already burned above,
+	// so a leaked one is now spent. Same generic error as a bad token (no
+	// enumeration of account state).
+	if u.DeletedAt == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_token"})
+		return
+	}
 	if err := s.store.ClearAccountDeletion(r.Context(), tok.UserID); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	u, err := s.store.GetUserByID(r.Context(), tok.UserID)
+	// Re-read so the returned user JSON reflects the now-active (non-pending) state.
+	u, err = s.store.GetUserByID(r.Context(), tok.UserID)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return

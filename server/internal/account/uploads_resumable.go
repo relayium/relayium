@@ -19,6 +19,21 @@ import (
 // single request runs long enough to trip an edge timeout.
 const uploadChunkSize = 8 << 20 // 8 MiB
 
+// maxAppendBytes bounds how much ONE PATCH may write past the committed offset.
+// It caps the finalize-vs-in-flight-append race: a chunk that reads done=0, then
+// races a finalize that claims the session at `received`, can still commit bytes
+// to the blob after finalize billed `received` — under-billing physical vs
+// charged storage. Without a per-append bound a single slow-drip PATCH could
+// write the whole remaining budget (~MaxSize, up to ~1 GiB) past `received`,
+// making it an unbounded free-storage primitive. Bounding each append caps that
+// residual to one chunk's worth (concurrent same-offset appends clobber rather
+// than sum, per the blob's offset check). It sits comfortably above the client's
+// real chunk peak (chunkSize + one ~192 KiB frame ≈ 8.2 MiB), so conforming
+// clients never hit it. Fully closing the residual would need a blob-seal op the
+// node protocol doesn't have. (A var, not a const, only so a test can shrink it
+// to exercise the bound with tiny payloads — production never reassigns it.)
+var maxAppendBytes int64 = 2 * uploadChunkSize // 16 MiB
+
 // pendingUploadTTL bounds how long an abandoned chunked-upload session (and its
 // partial blob) lives before the reaper drops it.
 const pendingUploadTTL = int64(3600) // 1 h
@@ -270,7 +285,17 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 		http.Error(w, "storage node unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	capped := &cappedReader{r: r.Body, max: sess.MaxSize - sess.Received}
+	// Two independent bounds on what this one PATCH may write:
+	//   - io.LimitReader stops reading cleanly at maxAppendBytes, so a single
+	//     append can't drip more than one chunk's worth past the committed
+	//     offset (the finalize-race bound, see maxAppendBytes). Anything beyond
+	//     is simply not read; the client resumes from the returned offset.
+	//   - cappedReader still enforces the whole-file MaxSize: exceeding it errors
+	//     (errTooLarge → 413), which the LimitReader truncation must NOT mask, so
+	//     it wraps the limited reader (its max is the remaining file budget).
+	// When the remaining budget is the tighter of the two, cappedReader trips
+	// first and the file-too-large 413 is preserved.
+	capped := &cappedReader{r: io.LimitReader(r.Body, maxAppendBytes), max: sess.MaxSize - sess.Received}
 	newSize, err := bs.Append(r.Context(), sess.BlobKey, sess.Received, capped)
 	if errors.Is(err, errTooLarge) {
 		// Oversize chunk. Do NOT advance the offset here: on the remote-node path
