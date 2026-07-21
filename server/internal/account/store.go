@@ -421,6 +421,13 @@ type Store interface {
 	// the returned User is the zero value.
 	InsertUserDedupedByCanonical(ctx context.Context, email, displayName, canonical string) (u User, taken bool, err error)
 	HasPassword(ctx context.Context, userID string) (bool, error)
+	// ClaimTOTPStep atomically advances the admin TOTP replay guard to `step` iff
+	// step is strictly newer than the last committed one, in a single writer
+	// statement. ok=false means the step was already spent on ANY instance
+	// (replay / stale) — this is what makes admin 2FA "one code, one use" hold
+	// across instances and across process restarts. Call it after the credential
+	// check passes; a false result must fail the login / step-up.
+	ClaimTOTPStep(ctx context.Context, step int64) (ok bool, err error)
 	EmailVerified(ctx context.Context, userID string) (bool, error)
 	SetEmailVerified(ctx context.Context, userID string) error
 	// SetOnlyOwnNodes toggles the BYO-nodes-only restriction (SP3) for a user.

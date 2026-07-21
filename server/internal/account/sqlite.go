@@ -377,6 +377,13 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
   ip TEXT NOT NULL, auth TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL,
   changes TEXT NOT NULL, step_up TEXT NOT NULL)`,
 		`CREATE INDEX IF NOT EXISTS idx_admin_audit_at ON admin_audit(at DESC)`,
+		// Admin TOTP replay guard (multi-instance): a single-row monotonic step
+		// counter, advanced atomically by ClaimTOTPStep. Persisting it makes admin
+		// 2FA "one code, one use" hold across instances and across restarts, instead
+		// of a per-process in-memory counter. See docs/multi-instance-state-migration.md.
+		`CREATE TABLE IF NOT EXISTS admin_totp_guard (
+  id INTEGER PRIMARY KEY CHECK (id = 1), last_step INTEGER NOT NULL DEFAULT 0)`,
+		`INSERT OR IGNORE INTO admin_totp_guard (id, last_step) VALUES (1, 0)`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -1501,6 +1508,24 @@ func (s *SQLiteStore) SetPassword(ctx context.Context, userID, passwordHash stri
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE users SET password_hash = ? WHERE id = ?`, passwordHash, userID)
 	return err
+}
+
+// ClaimTOTPStep atomically advances the admin TOTP replay guard to `step` iff it
+// is strictly newer than the last committed step. Single UPDATE on the serialized
+// writer, so the decision is atomic across instances sharing the DB file: two
+// concurrent logins with the same code race here and exactly one gets
+// RowsAffected==1. ok=false ⇒ the step was already spent (replay / stale).
+func (s *SQLiteStore) ClaimTOTPStep(ctx context.Context, step int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE admin_totp_guard SET last_step = ? WHERE id = 1 AND ? > last_step`, step, step)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
 }
 
 // ClearPassword NULLs the password hash so the account has no usable password

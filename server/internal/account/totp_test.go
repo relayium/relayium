@@ -1,6 +1,8 @@
 package account
 
 import (
+	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -42,18 +44,13 @@ func TestMatchAdminTOTPStep(t *testing.T) {
 	s := newTOTPService(testSecret, base)
 
 	step, ok := s.matchAdminTOTPStep(codeAt(t, base))
-	if !ok {
-		t.Fatal("current-step code should match")
+	if !ok || step == 0 {
+		t.Fatalf("current-step code should match, got step=%d ok=%v", step, ok)
 	}
-	// Matching alone must not mutate replay state: the same code should
-	// still match on a second call, since it hasn't been committed.
+	// Crypto-only + side-effect-free: repeated matching still succeeds. Replay is
+	// enforced separately by the store's atomic ClaimTOTPStep, NOT here.
 	if _, ok := s.matchAdminTOTPStep(codeAt(t, base)); !ok {
-		t.Fatal("matching must be read-only: repeated match before commit should still succeed")
-	}
-
-	s.commitAdminTOTPStep(step)
-	if _, ok := s.matchAdminTOTPStep(codeAt(t, base)); ok {
-		t.Fatal("code must not match after its step is committed (replay)")
+		t.Fatal("matching must be side-effect-free: a repeated match should still succeed")
 	}
 }
 
@@ -85,18 +82,80 @@ func TestMatchAdminTOTPStepWrongCode(t *testing.T) {
 	}
 }
 
-func TestCommitAdminTOTPStepReplay(t *testing.T) {
+// ClaimTOTPStep is the atomic, persistent replay guard: a step is claimable
+// once; the same or an older step is refused; a newer step advances the guard.
+func TestClaimTOTPStepMonotonicAtomic(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	if ok, err := st.ClaimTOTPStep(ctx, 100); err != nil || !ok {
+		t.Fatalf("first claim of step 100: ok=%v err=%v", ok, err)
+	}
+	if ok, _ := st.ClaimTOTPStep(ctx, 100); ok {
+		t.Fatal("replay of the same step must be refused")
+	}
+	if ok, _ := st.ClaimTOTPStep(ctx, 99); ok {
+		t.Fatal("an older step must be refused")
+	}
+	if ok, err := st.ClaimTOTPStep(ctx, 101); err != nil || !ok {
+		t.Fatalf("a newer step must advance the guard: ok=%v err=%v", ok, err)
+	}
+}
+
+// Concurrent claims of the SAME step (N instances racing one code) let exactly
+// one through — the writer serializes the compare-and-set.
+func TestClaimTOTPStepConcurrent(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	won := 0
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if ok, err := st.ClaimTOTPStep(ctx, 500); err == nil && ok {
+				mu.Lock()
+				won++
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	if won != 1 {
+		t.Fatalf("exactly one concurrent claim of a step may win, got %d", won)
+	}
+}
+
+// Two Service values sharing ONE store (two processes on one DB file): a code
+// spent via instance A cannot be replayed via instance B — the guard is shared,
+// not per-process. This is the whole point of the migration.
+func TestTOTPReplayAcrossInstances(t *testing.T) {
+	st := newTestStore(t)
 	base := time.Unix(1_700_000_000, 0)
-	s := newTOTPService(testSecret, base)
+	mk := func() *Service {
+		s := NewService(st, nil, Config{AdminUser: "admin", AdminPassword: "pw", AdminTOTPSecret: testSecret})
+		s.now = func() time.Time { return base }
+		return s
+	}
+	svcA, svcB := mk(), mk()
+	ctx := context.Background()
 	code := codeAt(t, base)
 
-	step, ok := s.matchAdminTOTPStep(code)
+	stepA, ok := svcA.matchAdminTOTPStep(code)
 	if !ok {
-		t.Fatal("first match should pass")
+		t.Fatal("A: code should validate")
 	}
-	s.commitAdminTOTPStep(step)
-	if _, ok := s.matchAdminTOTPStep(code); ok {
-		t.Fatal("replay of same code/step must be rejected after commit")
+	if claimed, err := st.ClaimTOTPStep(ctx, stepA); err != nil || !claimed {
+		t.Fatalf("A: first claim should win: claimed=%v err=%v", claimed, err)
+	}
+	// B still sees the code as cryptographically valid in-window...
+	stepB, ok := svcB.matchAdminTOTPStep(code)
+	if !ok {
+		t.Fatal("B: code is still cryptographically valid in the window")
+	}
+	// ...but the SHARED guard refuses to spend it a second time.
+	if claimed, _ := st.ClaimTOTPStep(ctx, stepB); claimed {
+		t.Fatal("SECURITY: a TOTP code spent on instance A was replayable on instance B")
 	}
 }
 

@@ -147,11 +147,11 @@ type Service struct {
 	appleSecExp time.Time
 	// adminSessions: token -> 会话状态。原先只存过期时间，加入步进认证后还需要
 	// 知道会话是怎么建立的（审计的 auth 列）以及上次步进是什么时候（宽限期）。
-	adminSessions     map[string]adminSession
-	adminMu           sync.Mutex
-	adminTOTPMu       sync.Mutex
-	adminTOTPLastStep int64 // last TOTP time-step accepted for admin login (replay guard)
-	adminLogins       *loginThrottle
+	adminSessions map[string]adminSession
+	adminMu       sync.Mutex
+	// TOTP replay is enforced by the store's atomic ClaimTOTPStep (persistent,
+	// multi-instance safe) — no process-local counter here anymore.
+	adminLogins *loginThrottle
 	// adminPasskeyLogins is a SEPARATE bucket from adminLogins on purpose: if
 	// passkey failures counted against the password bucket, an attacker could
 	// spam failed passkey attempts to lock out the password fallback — the one

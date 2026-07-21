@@ -147,16 +147,14 @@ func (s *Service) verifyStepUpFactor(r *http.Request, pending pendingAction) (st
 			return StepUpPasskey, true
 		}
 	case StepUpTOTP:
-		// matchAdminTOTPStep rejects a step at or before the last committed one,
-		// so a code already spent (at login or an earlier step-up) is refused;
-		// commitAdminTOTPStep then advances the guard past this one. The match
-		// and commit are separate critical sections (as on the login path), so
-		// this is a monotonic staleness guard, not an atomic single-use lock —
-		// but a stolen session already gets 60s of factor-free grace after any
-		// one success (see stepUpGraceSecs), so racing a live code buys nothing.
+		// matchAdminTOTPStep is crypto-only; ClaimTOTPStep atomically spends the
+		// step so a code already used (at login or an earlier step-up, on ANY
+		// instance) is refused. The claim IS the single-use lock now — a false
+		// result (or a store error, failing closed) rejects the factor.
 		if step, ok := s.matchAdminTOTPStep(r.FormValue("factor_code")); ok {
-			s.commitAdminTOTPStep(step)
-			return StepUpTOTP, true
+			if claimed, err := s.store.ClaimTOTPStep(r.Context(), step); err == nil && claimed {
+				return StepUpTOTP, true
+			}
 		}
 	case StepUpPassword:
 		// Password re-entry is the factor only when neither passkey nor TOTP is

@@ -262,7 +262,7 @@ func TestAdminLoginGate(t *testing.T) {
 
 func TestAdminLoginTOTP(t *testing.T) {
 	base := time.Unix(1_700_000_000, 0)
-	s := NewService(nil, nil, Config{AdminUser: "admin", AdminPassword: "pw", AdminTOTPSecret: testSecret})
+	s := NewService(newTestStore(t), nil, Config{AdminUser: "admin", AdminPassword: "pw", AdminTOTPSecret: testSecret})
 	s.now = func() time.Time { return base }
 
 	post := func(user, pass, code string) *httptest.ResponseRecorder {
@@ -296,7 +296,7 @@ func TestAdminLoginTOTP(t *testing.T) {
 // able to use that same code with the CORRECT password afterward.
 func TestAdminLoginTOTPNotBurnedByWrongCreds(t *testing.T) {
 	base := time.Unix(1_700_000_000, 0)
-	s := NewService(nil, nil, Config{AdminUser: "admin", AdminPassword: "pw", AdminTOTPSecret: testSecret})
+	s := NewService(newTestStore(t), nil, Config{AdminUser: "admin", AdminPassword: "pw", AdminTOTPSecret: testSecret})
 	s.now = func() time.Time { return base }
 
 	post := func(user, pass, code string) *httptest.ResponseRecorder {

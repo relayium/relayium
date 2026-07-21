@@ -31,7 +31,13 @@ func (s *Service) handleAdminPasskeyRegisterBegin(w http.ResponseWriter, r *http
 		return
 	}
 	if s.AdminTOTPEnabled() {
-		s.commitAdminTOTPStep(step)
+		// Atomically spend the TOTP step; an already-used code fails the step-up
+		// like a bad credential (replay guard, multi-instance safe).
+		if claimed, cerr := s.store.ClaimTOTPStep(r.Context(), step); cerr != nil || !claimed {
+			s.adminLogins.recordFail(ip, s.now())
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "账号、密码或验证码错误"})
+			return
+		}
 	}
 	s.adminLogins.reset(ip)
 

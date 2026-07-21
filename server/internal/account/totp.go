@@ -26,42 +26,30 @@ func (s *Service) AdminTOTPEnabled() bool {
 
 // matchAdminTOTPStep checks a 6-digit code against the configured secret,
 // allowing ±1 time-step of clock skew, and returns the time-step it maps to.
-// It rejects replays: a step at or before the last committed one is stale.
-// It does NOT mutate replay state; call commitAdminTOTPStep after a fully
-// successful login to consume the step. ok is false for an empty/invalid/
-// already-consumed code.
+//
+// It is CRYPTO-ONLY and side-effect-free: it does NOT enforce replay. Replay is
+// the store's atomic ClaimTOTPStep(step) — called after the full credential
+// check passes — which is what makes "one code, one use" hold ACROSS instances
+// and across restarts (a process-local counter never could). Keeping this
+// function pure also preserves verifyAdminCreds' constant-time property: user,
+// password, and code-validity are checked together with no state mutation, so a
+// failed attempt leaks nothing via timing; the claim is a separate axis that
+// only matters once the creds are valid.
 func (s *Service) matchAdminTOTPStep(code string) (step int64, ok bool) {
 	secret := s.cfg.AdminTOTPSecret
 	if secret == "" || code == "" {
 		return 0, false
 	}
 	now := s.now()
-	s.adminTOTPMu.Lock()
-	last := s.adminTOTPLastStep
-	s.adminTOTPMu.Unlock()
 	for delta := int64(-1); delta <= 1; delta++ {
 		t := now.Add(time.Duration(delta) * 30 * time.Second)
 		okc, err := totp.ValidateCustom(code, secret, t, totpOpts)
 		if err != nil || !okc {
 			continue
 		}
-		st := t.Unix() / 30
-		if st <= last {
-			return 0, false // replayed / stale step
-		}
-		return st, true
+		return t.Unix() / 30, true
 	}
 	return 0, false
-}
-
-// commitAdminTOTPStep consumes a matched step after a fully successful login,
-// advancing the monotonic replay guard so that step and earlier can't be reused.
-func (s *Service) commitAdminTOTPStep(step int64) {
-	s.adminTOTPMu.Lock()
-	if step > s.adminTOTPLastStep {
-		s.adminTOTPLastStep = step
-	}
-	s.adminTOTPMu.Unlock()
 }
 
 // validateAdminTOTPSecret returns an error if secret is non-empty but not a

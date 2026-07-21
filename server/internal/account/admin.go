@@ -422,7 +422,16 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.AdminTOTPEnabled() {
-		s.commitAdminTOTPStep(totpStep)
+		// Atomically spend the TOTP step (replay guard). A false result means the
+		// code was already used — on this or any instance — so treat it exactly
+		// like a bad credential: record the failure and show the generic error.
+		if claimed, cerr := s.store.ClaimTOTPStep(r.Context(), totpStep); cerr != nil || !claimed {
+			s.adminLogins.recordFail(ip, s.now())
+			s.renderAdminLogin(w, http.StatusUnauthorized, "账号、密码或验证码错误",
+				s.adminPasskeyCount(r.Context()) > 0)
+			s.writeAudit(r, AuditLoginFail, "-", nil, StepUpNone)
+			return
+		}
 	}
 	s.adminLogins.reset(ip)
 	tok := s.newAdminSession("password")
