@@ -365,19 +365,35 @@ func (s *Service) redirectToNode(w http.ResponseWriter, r *http.Request, node No
 // byoUpdateExempt reports whether sf's proxied download should be exempt from
 // METERING (not the traffic gate — see the call site) because it is being
 // served through central only because WE are mid-restart of the owner's own
-// BYO node to update it. Both must hold:
-//  1. the file lives on the file owner's OWN node — same ownership shape as
+// BYO node to update it. The exemption is deliberately narrow: it only ever
+// applies to a download that would otherwise have taken the free BYO
+// own-node direct path (see directCapable above) — exempt only what the
+// update actually cost them. All of the following must hold:
+//  1. this file is even eligible for direct-download in the first place
+//     (s.directDownload && sf.MaxDownloads == 0 — the exact same predicate
+//     the direct-download branch above gates on): a burn/limited file is
+//     ALWAYS proxied by design regardless of node health, and a deployment
+//     with directDownload globally off ALWAYS proxies every file — in both
+//     cases the update caused nothing, so there is nothing to exempt.
+//  2. the file lives on the file owner's OWN node — same ownership shape as
 //     the free-direct path above (directNode.OwnerType == "user" &&
 //     directNode.OwnerUserID == sf.UserID); a fleet node's egress is an
 //     operator cost either way and is never exempt.
-//  2. that node has a genuine self-update in flight and still within
+//  3. that node has a genuine self-update in flight and still within
 //     byoUpdateExemptWindow of being commanded — bounded so a node that never
 //     came back (stuck/broken, not updating) resumes being metered rather
 //     than earning permanent free egress.
 func (s *Service) byoUpdateExempt(ctx context.Context, sf StoredFile) bool {
+	if !(s.directDownload && sf.MaxDownloads == 0) {
+		return false
+	}
 	if sf.NodeID == "" {
 		return false
 	}
+	// Fetched after io.Copy at the call site: an update that finishes
+	// mid-transfer loses the exemption for that request even though the
+	// update did cause the proxy fallback. Fails toward over-metering
+	// (the safe direction), so this skew is left as a known, deliberate one.
 	n, ok, err := s.store.GetNode(ctx, sf.NodeID)
 	if err != nil || !ok {
 		return false

@@ -15,8 +15,17 @@ import (
 // (ts, svc, store, ownerID, fileID).
 func seedByoOwnNodeOffline(t *testing.T, updateStartedAt int64) (ts *httptest.Server, svc *Service, store *SQLiteStore, ownerID, fileID string) {
 	t.Helper()
+	return seedByoOwnNode(t, updateStartedAt, 0, true)
+}
+
+// seedByoOwnNode generalizes seedByoOwnNodeOffline to also control MaxDownloads
+// (so a burn/limited file can be seeded) and whether s.directDownload is on at
+// all, since byoUpdateExempt now requires both to match the direct-download
+// branch's own eligibility gate. Returns (ts, svc, store, ownerID, fileID).
+func seedByoOwnNode(t *testing.T, updateStartedAt, maxDownloads int64, directDownload bool) (ts *httptest.Server, svc *Service, store *SQLiteStore, ownerID, fileID string) {
+	t.Helper()
 	ts, svc, store, _ = newFileServer(t)
-	svc.SetDirectDownload(true)
+	svc.SetDirectDownload(directDownload)
 	ctx := context.Background()
 	owner, _ := store.UpsertUserByEmail(ctx, "byoupdate@example.com", "")
 	nodeStore := map[string][]byte{}
@@ -42,6 +51,7 @@ func seedByoOwnNodeOffline(t *testing.T, updateStartedAt int64) (ts *httptest.Se
 	if err := store.CreateStoredFile(ctx, StoredFile{
 		ID: fid, UserID: owner.ID, BlobKey: "bbk", EncManifest: []byte("m"), Size: int64(len(byoBlob)),
 		NodeID: "byonode", CreatedAt: 1, ExpiresAt: svc.now().Add(time.Hour).Unix(),
+		MaxDownloads: maxDownloads,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -160,5 +170,99 @@ func TestFleetNodeDownloadIsStillMeteredDuringItsUpdateWindow(t *testing.T) {
 
 	if _, d, _ := store.MonthlyUsage(ctx, owner.ID, period); d != int64(len(fleetBlob)) {
 		t.Fatalf("fleet-node download must stay metered regardless of its update window, got download=%d want %d", d, len(fleetBlob))
+	}
+}
+
+// A burn/limited file (MaxDownloads != 0) is ALWAYS proxied by design, on the
+// owner's own node or anywhere else, regardless of node health — central must
+// enforce the download-count/burn semantics itself. So an update in flight on
+// that node caused nothing: absent the update this download would STILL have
+// been proxied (never eligible for the free direct path in the first place),
+// and it must stay metered.
+func TestByoOwnNodeLimitedFileStillMeteredDuringUpdateWindow(t *testing.T) {
+	ts, svc, store, ownerID, fid := seedByoOwnNode(t, time.Now().Unix(), 1, true)
+	ctx := context.Background()
+	period := periodOf(svc.now().Unix())
+
+	dl, err := ts.Client().Get(ts.URL + "/api/files/" + fid + "/blob")
+	if err != nil {
+		t.Fatalf("download: %v", err)
+	}
+	io.Copy(io.Discard, dl.Body)
+	dl.Body.Close()
+	if dl.StatusCode != 200 {
+		t.Fatalf("download status = %d, want 200", dl.StatusCode)
+	}
+
+	if _, d, _ := store.MonthlyUsage(ctx, ownerID, period); d != 29 {
+		t.Fatalf("a burn/limited own-node download during an update window must still be metered, got download=%d want 29", d)
+	}
+}
+
+// directDownload is a service-wide flag, not per-file. With it off, EVERY
+// download is always proxied regardless of node state, so an update in
+// flight on the owner's own node caused nothing here either — absent the
+// update this download would never have taken the direct path anyway.
+func TestByoOwnNodeStillMeteredWhenDirectDownloadOff(t *testing.T) {
+	ts, svc, store, ownerID, fid := seedByoOwnNode(t, time.Now().Unix(), 0, false)
+	ctx := context.Background()
+	period := periodOf(svc.now().Unix())
+
+	dl, err := ts.Client().Get(ts.URL + "/api/files/" + fid + "/blob")
+	if err != nil {
+		t.Fatalf("download: %v", err)
+	}
+	io.Copy(io.Discard, dl.Body)
+	dl.Body.Close()
+	if dl.StatusCode != 200 {
+		t.Fatalf("download status = %d, want 200", dl.StatusCode)
+	}
+
+	if _, d, _ := store.MonthlyUsage(ctx, ownerID, period); d != 29 {
+		t.Fatalf("with directDownload off, an own-node download during an update window must still be metered, got download=%d want 29", d)
+	}
+}
+
+// Boundary: exactly at byoUpdateExemptWindow the check ("<=") must still
+// treat the update as in flight, so the download stays exempt.
+func TestByoUpdateExemptionAtExactWindowBoundaryIsStillExempt(t *testing.T) {
+	ts, svc, store, ownerID, fid := seedByoOwnNodeOffline(t, time.Now().Add(-byoUpdateExemptWindow).Unix())
+	ctx := context.Background()
+	period := periodOf(svc.now().Unix())
+
+	dl, err := ts.Client().Get(ts.URL + "/api/files/" + fid + "/blob")
+	if err != nil {
+		t.Fatalf("download: %v", err)
+	}
+	io.Copy(io.Discard, dl.Body)
+	dl.Body.Close()
+	if dl.StatusCode != 200 {
+		t.Fatalf("download status = %d, want 200", dl.StatusCode)
+	}
+
+	if _, d, _ := store.MonthlyUsage(ctx, ownerID, period); d != 0 {
+		t.Fatalf("a download exactly at byoUpdateExemptWindow must still be exempt, got download=%d want 0", d)
+	}
+}
+
+// Boundary: one second past byoUpdateExemptWindow the update must be treated
+// as stuck/broken, not in flight, so the download is metered again.
+func TestByoUpdateExemptionOneSecondPastWindowIsMetered(t *testing.T) {
+	ts, svc, store, ownerID, fid := seedByoOwnNodeOffline(t, time.Now().Add(-byoUpdateExemptWindow-time.Second).Unix())
+	ctx := context.Background()
+	period := periodOf(svc.now().Unix())
+
+	dl, err := ts.Client().Get(ts.URL + "/api/files/" + fid + "/blob")
+	if err != nil {
+		t.Fatalf("download: %v", err)
+	}
+	io.Copy(io.Discard, dl.Body)
+	dl.Body.Close()
+	if dl.StatusCode != 200 {
+		t.Fatalf("download status = %d, want 200", dl.StatusCode)
+	}
+
+	if _, d, _ := store.MonthlyUsage(ctx, ownerID, period); d != 29 {
+		t.Fatalf("a download one second past byoUpdateExemptWindow must be metered, got download=%d want 29", d)
 	}
 }
