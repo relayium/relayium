@@ -966,22 +966,23 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusForbidden, map[string]string{"error": "node id belongs to another owner"})
 				return
 			}
-			// A deregistered node id must not quietly come back to life. Upsert
-			// preserves removed_at, so accepting this registration would produce a
-			// node that runs, heartbeats and logs nothing unusual while being
-			// invisible to placement, ICE and downloads forever — the worst kind of
-			// failure, because nothing anywhere says so. Two ways in: a restored
-			// state.json on a rebuilt machine, or a node deregistered by mistake
-			// (the shared fleet token does not bind to a node id). Refusing is
-			// loud at both ends — the node sees this error every heartbeat
-			// interval and central logs it — and an admin undoes it in one click
-			// with the "restore" control, which keeps the row's history intact.
+			// A deregistered node id coming back is worth shouting about. Upsert
+			// preserves removed_at, so the node will run and heartbeat while being
+			// invisible to placement, ICE and downloads — a silent failure unless
+			// something says so. Two ways in: a restored state.json on a rebuilt
+			// machine, or a node deregistered by mistake (the shared fleet token
+			// does not bind to a node id, so one bad call can name any node).
+			//
+			// We log and let the registration through rather than rejecting it.
+			// Register happens ONCE at startup, so a rejection is fatal to the
+			// node process, and systemd's Restart=always then crash-loops it — a
+			// fleet-wide accidental deregistration would take every node DOWN
+			// instead of merely making it invisible, which is strictly worse. A
+			// removed node is already excluded from every pool, so letting it run
+			// costs nothing, and an admin undoes the mistake in one click with the
+			// "restore" control, which keeps the row's history intact.
 			if existing.RemovedAt != 0 {
-				log.Printf("node %s: refusing registration — this node id was deregistered (uninstalled) at %d; restore it in the admin panel to let it rejoin", req.NodeID, existing.RemovedAt)
-				writeJSON(w, http.StatusConflict, map[string]string{
-					"error": "node was deregistered (uninstalled); an admin must restore it in the Relayium panel before it can rejoin",
-				})
-				return
+				log.Printf("node %s: WARNING — registering a node id that was deregistered (uninstalled) at %d; it will run but stays excluded from placement, ICE and downloads until an admin restores it in the Relayium panel", req.NodeID, existing.RemovedAt)
 			}
 		}
 	}

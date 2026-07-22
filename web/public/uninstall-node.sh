@@ -20,7 +20,15 @@
 # sudo itself:  curl -fsSL … | sudo env RELAYIUM_NODE_FORCE=1 sh):
 #   RELAYIUM_NODE_PURGE_STORAGE=1  also delete the blob storage directory
 #                                  (off by default: it holds other people's files)
-#   RELAYIUM_NODE_FORCE=1          uninstall even though the node still holds files
+#   RELAYIUM_NODE_FORCE=1          uninstall even though the node still holds files.
+#                                  FORCE does NOT delete the storage directory —
+#                                  only RELAYIUM_NODE_PURGE_STORAGE=1 does.
+#   RELAYIUM_NODE_ASSUME_NO_STORAGE=1
+#                                  "this node stores nothing" — the ONLY way past
+#                                  the refusal that fires when the blob directory
+#                                  cannot be located. Deliberately a different
+#                                  variable from FORCE: FORCE preserves storage,
+#                                  this one lets the state dir be deleted whole.
 #   RELAYIUM_NODE_STORAGE_DIR      where the blobs live, when this script cannot
 #                                  read it from /etc/relayium-node/env (set it to
 #                                  the empty string to declare "no storage here")
@@ -53,10 +61,24 @@ BIN="${PREFIX}${INSTALL_DIR}/relayium-node"
 # space after the path used to yield a value that failed every `-d` test, which
 # in the storage case read as "this node has no blobs" — the single most
 # dangerous way for this script to be wrong.
+#
+# Matched surrounding quotes are stripped too. systemd's EnvironmentFile accepts
+# them and REQUIRES them for a path containing a space, so a perfectly valid
+# `RELAYIUM_NODE_STORAGE_DIR="/var/lib/relayium-node/blobs"` used to yield a
+# literal `"…"` that failed every `-d` test — again reading as "no blobs here".
+unquote() {
+  v=$1
+  case $v in
+    '"'*'"') v=${v#\"} ; v=${v%\"} ;;
+    "'"*"'") v=${v#\'} ; v=${v%\'} ;;
+  esac
+  printf '%s' "$v"
+}
 envval() {
   [ -f "$ENV_FILE" ] || return 0
-  sed -n "s/^$1=//p" "$ENV_FILE" | head -n1 |
-    sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+  v=$(sed -n "s/^$1=//p" "$ENV_FILE" | head -n1 |
+    sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+  unquote "$v"
 }
 
 # envhas reports whether the env file mentions KEY at all — the difference
@@ -67,12 +89,42 @@ envhas() {
   grep -q "^$1=" "$ENV_FILE"
 }
 
-# Drop trailing slashes so /var/lib/x and /var/lib/x/ are the same path to every
-# comparison below. "/" stays "/".
+# Collapse duplicate slashes and drop trailing ones, so /var/lib/x, /var/lib/x/
+# and //var//lib//x are the same path to every comparison below. "/" stays "/".
+# Collapsing is not cosmetic: the reject list below matches literal spellings, and
+# `//var` is `/var` to the kernel but not to `case`.
 normpath() {
-  p=$(printf '%s' "$1" | sed -e 's,//*$,,')
+  p=$(printf '%s' "$1" | sed -e 's,//*,/,g' -e 's,\(.\)/*$,\1,')
   [ -n "$p" ] || p=/ # the input was nothing but slashes
   printf '%s' "$p"
+}
+
+# Resolve a directory to its real, symlink-free path. Prints nothing and returns
+# 1 when the argument does not resolve to a directory at all. Every nesting and
+# equality test below runs on resolved paths: a blob directory symlinked onto the
+# big disk is the standard layout, and comparing the link's spelling instead of
+# its target is how "storage lives inside the state dir" gets answered wrongly.
+realdir() {
+  (CDPATH='' cd -P -- "$1" 2>/dev/null && pwd -P) || return 1
+}
+
+# Every path this script hands to `rm -rf` goes through here first, before
+# anything at all has been removed: a typo'd RELAYIUM_NODE_STORAGE_DIR and a
+# hand-edited RELAYIUM_NODE_STATE_DIR both reach one. No blob or state directory
+# is ever a system root, so refusing costs a correct run nothing.
+#
+# A `.` or `..` segment is rejected rather than resolved: /var/lib/. is /var/lib
+# spelled differently, and the reject list only recognises one spelling.
+refuse_dangerous_path() {
+  case "/$1/" in
+    */./* | */../*) err "refusing to delete $1 ($2): the path contains a '.' or '..' segment" ;;
+  esac
+  case "$1" in
+    / | /bin | /boot | /dev | /etc | /home | /lib | /lib64 | /opt | /proc | /root | \
+      /run | /sbin | /srv | /sys | /tmp | /usr | /usr/local | /var | /var/lib | /var/log)
+      err "refusing to delete $1 ($2): that is a system directory"
+      ;;
+  esac
 }
 
 # STORAGE_DIR is the one value whose absence is dangerous, so unlike the rest it
@@ -99,17 +151,59 @@ STATE_DIR=$(envval RELAYIUM_NODE_STATE_DIR)
 STATE_DIR=$(normpath "$STATE_DIR")
 [ -z "$STORAGE_DIR" ] || STORAGE_DIR=$(normpath "$STORAGE_DIR")
 
-# A typo'd or half-written storage path can name a system root, and
-# RELAYIUM_NODE_PURGE_STORAGE=1 means `rm -rf` on it. No blob directory is ever
-# one of these, so refusing costs a correct run nothing. Checked here, before
+# RELAYIUM_NODE_PURGE_STORAGE=1 means `rm -rf "$STORAGE_DIR"`, and the state dir
+# is `rm -rf`'d unconditionally further down, so both are vetted here — before
 # anything at all has been removed.
 if [ "${RELAYIUM_NODE_PURGE_STORAGE:-}" = "1" ] && [ -n "$STORAGE_DIR" ]; then
-  case "$STORAGE_DIR" in
-    / | /bin | /boot | /dev | /etc | /home | /lib | /lib64 | /opt | /proc | /root | \
-      /run | /sbin | /srv | /sys | /tmp | /usr | /usr/local | /var | /var/lib | /var/log)
-      err "refusing to purge ${STORAGE_DIR}: that is a system directory, not a blob store"
-      ;;
-  esac
+  refuse_dangerous_path "$STORAGE_DIR" "storage directory"
+fi
+refuse_dangerous_path "$STATE_DIR" "state directory"
+
+# Resolve both paths once, here, and compare only the resolved forms from now on.
+# STATE_REAL falls back to the declared path when the directory is already gone —
+# there is then nothing to nest inside it, so no comparison can be wrong.
+STATE_REAL=$(realdir "$STATE_DIR") || STATE_REAL="$STATE_DIR"
+[ "$STATE_REAL" = "$STATE_DIR" ] || refuse_dangerous_path "$STATE_REAL" "state directory"
+
+# A declared storage directory that does not resolve is UNACCOUNTED FOR, not
+# empty. Treating it as safe is how a quoted env-file value or a one-character
+# typo used to end in `rm -rf "$STATE_DIR"` with the blobs inside it, exit 0 and
+# no message at all. It refuses instead, and only the explicit
+# RELAYIUM_NODE_ASSUME_NO_STORAGE=1 gets past it.
+STORAGE_REAL=""
+if [ -n "$STORAGE_DIR" ]; then
+  if STORAGE_REAL=$(realdir "$STORAGE_DIR"); then
+    if [ "${RELAYIUM_NODE_PURGE_STORAGE:-}" = "1" ] && [ "$STORAGE_REAL" != "$STORAGE_DIR" ]; then
+      refuse_dangerous_path "$STORAGE_REAL" "storage directory"
+    fi
+  elif [ "${RELAYIUM_NODE_ASSUME_NO_STORAGE:-}" = "1" ]; then
+    say "WARNING: declared storage directory ${STORAGE_DIR} does not exist and"
+    say "  RELAYIUM_NODE_ASSUME_NO_STORAGE=1 — continuing as a node with no storage."
+    STORAGE_DIR=""
+    STORAGE_REAL=""
+  else
+    {
+      echo "The storage directory this node declares does not exist, so nothing was removed."
+      echo ""
+      echo "Declared: ${STORAGE_DIR}"
+      echo ""
+      echo "That is not the same as 'this node stores nothing' — it usually means a"
+      echo "typo, a stale path, or quoting in ${ENV_FILE}. The blobs may still be"
+      echo "somewhere on this machine, and continuing could delete them: every stored"
+      echo "file binds to exactly one node and Relayium keeps no replicas."
+      echo ""
+      echo "Find where the blobs actually live on THIS machine and pass that path:"
+      echo "  curl -fsSL https://relayium.com/uninstall-node.sh |"
+      echo "    sudo env RELAYIUM_NODE_STORAGE_DIR=<your blob directory> sh"
+      echo ""
+      echo "Only if you are certain this node never stored anything:"
+      echo "  curl -fsSL https://relayium.com/uninstall-node.sh |"
+      echo "    sudo env RELAYIUM_NODE_ASSUME_NO_STORAGE=1 sh"
+      echo "(that is NOT RELAYIUM_NODE_FORCE, which preserves storage — this one"
+      echo " permits deleting ${STATE_DIR} whole.)"
+    } >&2
+    exit 1
+  fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -118,32 +212,41 @@ fi
 # the state directory with storage unaccounted for is exactly the accident this
 # script exists to prevent — and it would happen with no message at all.
 # ---------------------------------------------------------------------------
+#
+# The refusal deliberately does NOT suggest a path. It used to hand over a
+# copy-pasteable `RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs`, which
+# is a GUESS: an operator whose blobs live elsewhere pastes it, the guessed path
+# does not exist, and the refusal itself becomes the instruction that destroys
+# the files. Ask for their path; never propose one.
 if [ "$storage_known" = no ]; then
-  if [ "${RELAYIUM_NODE_FORCE:-}" != "1" ]; then
+  if [ "${RELAYIUM_NODE_ASSUME_NO_STORAGE:-}" != "1" ]; then
     {
       echo "Cannot tell whether this node stores files, so nothing was removed."
       echo ""
       echo "${ENV_FILE} does not exist or does not mention"
       echo "RELAYIUM_NODE_STORAGE_DIR, and stored blobs commonly live INSIDE the"
-      echo "state directory (${STATE_DIR}) — the install command"
-      echo "the panel hands out puts them in ${STATE_DIR}/blobs."
+      echo "state directory (${STATE_DIR})."
       echo "Deleting that blindly would destroy other people's files: every stored"
       echo "file binds to exactly one node and Relayium keeps no replicas."
       echo ""
-      echo "Tell this script where the blobs are, then run it again:"
+      echo "Find where the blobs actually live on THIS machine — the install"
+      echo "command you used names it — and pass that path, not one from this"
+      echo "message:"
       echo "  curl -fsSL https://relayium.com/uninstall-node.sh |"
-      echo "    sudo env RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh"
+      echo "    sudo env RELAYIUM_NODE_STORAGE_DIR=<your blob directory> sh"
       echo ""
       echo "If this node never stored anything (relay only), say so explicitly:"
       echo "  curl -fsSL https://relayium.com/uninstall-node.sh |"
-      echo "    sudo env RELAYIUM_NODE_STORAGE_DIR= sh"
+      echo "    sudo env RELAYIUM_NODE_ASSUME_NO_STORAGE=1 sh"
       echo ""
-      echo "To uninstall anyway, accepting that ${STATE_DIR} and"
-      echo "anything under it will be deleted: RELAYIUM_NODE_FORCE=1"
+      echo "That is NOT RELAYIUM_NODE_FORCE. FORCE means 'uninstall although this"
+      echo "node still holds files' and PRESERVES the storage directory;"
+      echo "RELAYIUM_NODE_ASSUME_NO_STORAGE means 'there are no blobs here' and"
+      echo "permits deleting ${STATE_DIR} whole."
     } >&2
     exit 1
   fi
-  say "WARNING: storage directory unknown and RELAYIUM_NODE_FORCE=1 —"
+  say "WARNING: storage directory unknown and RELAYIUM_NODE_ASSUME_NO_STORAGE=1 —"
   say "  ${STATE_DIR} and everything under it will be deleted."
 fi
 
@@ -157,17 +260,21 @@ fi
 # never be counted as a reason to refuse (nor reported as "left untouched").
 is_state_file() {
   case $1 in
-    "${STATE_DIR}/state.json" | "${STATE_DIR}/id.key" | "${STATE_DIR}/id.crt" | \
-      "${STATE_DIR}/last-heartbeat" | "${STATE_DIR}/pending-update-result" | \
-      "${STATE_DIR}/failed-versions") return 0 ;;
-    "${STATE_DIR}"/state.json.tmp* | "${STATE_DIR}"/last-heartbeat.tmp*) return 0 ;;
+    "${STATE_REAL}/state.json" | "${STATE_REAL}/id.key" | "${STATE_REAL}/id.crt" | \
+      "${STATE_REAL}/last-heartbeat" | "${STATE_REAL}/pending-update-result" | \
+      "${STATE_REAL}/failed-versions") return 0 ;;
+    "${STATE_REAL}"/state.json.tmp* | "${STATE_REAL}"/last-heartbeat.tmp*) return 0 ;;
   esac
   return 1
 }
 
+# `find -L`, and on the RESOLVED path. Without -L, find refuses to descend a
+# symlinked blob directory — the standard "point the blob store at the big disk"
+# layout — and reported zero files for a node holding thousands, which read as
+# "empty storage" and took the delete-everything branch.
 stored_files=0
-if [ -n "$STORAGE_DIR" ] && [ -d "$STORAGE_DIR" ]; then
-  stored_files=$(find "$STORAGE_DIR" -type f 2>/dev/null | {
+if [ -n "$STORAGE_REAL" ]; then
+  stored_files=$(find -L "$STORAGE_REAL" -type f 2>/dev/null | {
     n=0
     while IFS= read -r f; do
       is_state_file "$f" || n=$((n + 1))
@@ -198,6 +305,9 @@ if [ "$stored_files" -gt 0 ] && [ "${RELAYIUM_NODE_FORCE:-}" != "1" ]; then
     echo "variable set in front of curl does not survive the pipe into sudo):"
     echo "  curl -fsSL https://relayium.com/uninstall-node.sh |"
     echo "    sudo env RELAYIUM_NODE_FORCE=1 sh"
+    echo ""
+    echo "FORCE keeps the storage directory itself — the blobs stay on disk, just"
+    echo "unreachable. Add RELAYIUM_NODE_PURGE_STORAGE=1 to delete them as well."
   } >&2
   exit 1
 fi
@@ -259,9 +369,12 @@ rm -rf "$CONF_DIR"
 # ---------------------------------------------------------------------------
 # The storage directory is OTHER PEOPLE'S FILES. Deleting it is opt-in, always.
 # ---------------------------------------------------------------------------
-if [ -n "$STORAGE_DIR" ] && [ -d "$STORAGE_DIR" ]; then
+if [ -n "$STORAGE_REAL" ]; then
   if [ "${RELAYIUM_NODE_PURGE_STORAGE:-}" = "1" ]; then
-    rm -rf "$STORAGE_DIR"
+    # Purge the resolved directory: `rm -rf` on a symlink removes the link and
+    # leaves every blob behind, which is the opposite of what was asked for.
+    rm -rf "$STORAGE_REAL"
+    [ "$STORAGE_REAL" = "$STORAGE_DIR" ] || rm -f "$STORAGE_DIR"
     say "purged storage directory ${STORAGE_DIR}"
   elif [ "$stored_files" -gt 0 ]; then
     size=$(du -sh "$STORAGE_DIR" 2>/dev/null | awk '{print $1}')
@@ -286,13 +399,14 @@ fi
 # script exists to make impossible. So when the storage directory survived above
 # and sits inside the state dir — or IS the state dir, which an operator who
 # dropped the /blobs suffix gets — remove the state files by name and leave the
-# rest of the tree standing. Both paths were normalised, so a trailing slash
-# cannot change which branch a machine takes.
+# rest of the tree standing. Both paths were normalised AND resolved through
+# their symlinks, so neither a trailing slash nor a blob directory symlinked
+# onto another disk can change which branch a machine takes.
 # ---------------------------------------------------------------------------
 nested_storage=no
-if [ -n "$STORAGE_DIR" ] && [ -d "$STORAGE_DIR" ]; then
-  case "$STORAGE_DIR" in
-    "$STATE_DIR" | "$STATE_DIR"/*) nested_storage=yes ;;
+if [ -n "$STORAGE_REAL" ] && [ "${RELAYIUM_NODE_PURGE_STORAGE:-}" != "1" ]; then
+  case "$STORAGE_REAL" in
+    "$STATE_REAL" | "$STATE_REAL"/*) nested_storage=yes ;;
   esac
 fi
 if [ "$nested_storage" = yes ]; then
@@ -303,13 +417,16 @@ if [ "$nested_storage" = yes ]; then
     "${STATE_DIR}/last-heartbeat" "${STATE_DIR}/pending-update-result" \
     "${STATE_DIR}/failed-versions"
   rm -f "${STATE_DIR}"/state.json.tmp* "${STATE_DIR}"/last-heartbeat.tmp*
-  if [ "$STORAGE_DIR" = "$STATE_DIR" ]; then
+  if [ "$STORAGE_REAL" = "$STATE_REAL" ]; then
     say "kept ${STATE_DIR} — it IS the storage directory (removed only the node's own state files)"
   else
     say "kept ${STATE_DIR} — the storage directory lives inside it (removed only the node's own state files)"
   fi
 else
-  rm -rf "$STATE_DIR"
+  # Remove the resolved directory, then the symlink if the state dir was one:
+  # `rm -rf` on a symlink deletes only the link and leaves the state behind.
+  rm -rf "$STATE_REAL"
+  [ "$STATE_REAL" = "$STATE_DIR" ] || rm -f "$STATE_DIR"
 fi
 
 # The service account the installer created. Best effort: a userdel that fails

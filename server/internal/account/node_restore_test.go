@@ -5,7 +5,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 )
@@ -95,11 +94,13 @@ func TestAdminRestoreNodeRoute(t *testing.T) {
 	}
 }
 
-// A deregistered node that re-registers used to come back SILENTLY DEAD: upsert
-// preserves removed_at, so it ran, heartbeated and was invisible to placement,
-// ICE and downloads forever, with a 200 and nothing in the logs. Refusing makes
-// that state discoverable at both ends.
-func TestRegisterRefusesDeregisteredNode(t *testing.T) {
+// A deregistered node that re-registers stays removed, and central logs it
+// loudly. It must NOT be refused: register runs once at startup, so a refusal
+// kills the process and systemd's Restart=always crash-loops it — one bad
+// fleet-wide deregistration would take every node DOWN instead of merely making
+// it invisible. Registration succeeds; removed_at survives so the node stays out
+// of every pool until an admin restores it.
+func TestRegisterAcceptsButDoesNotReviveDeregisteredNode(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()
 	s := &Service{store: st, now: func() time.Time { return time.Unix(1000, 0) },
@@ -127,12 +128,12 @@ func TestRegisterRefusesDeregisteredNode(t *testing.T) {
 	if err := st.MarkNodeRemoved(ctx, n.ID, 5000); err != nil {
 		t.Fatal(err)
 	}
-	w := register(n.ID)
-	if w.Code != http.StatusConflict {
-		t.Fatalf("re-register of a deregistered node got %d, want 409", w.Code)
+	if w := register(n.ID); w.Code != http.StatusOK {
+		t.Fatalf("re-register of a deregistered node got %d, want 200 (a refusal crash-loops the node)", w.Code)
 	}
-	if !strings.Contains(strings.ToLower(w.Body.String()), "deregistered") {
-		t.Errorf("refusal body does not say why: %s", w.Body.String())
+	// Accepted, but still dead to the fleet: only an admin restore revives it.
+	if got, _, _ := st.GetNode(ctx, n.ID); got.RemovedAt != 5000 {
+		t.Fatalf("RemovedAt = %d after re-register, want it preserved at 5000", got.RemovedAt)
 	}
 	// And after an admin restore it registers normally again.
 	if err := st.ClearNodeRemoved(ctx, n.ID); err != nil {

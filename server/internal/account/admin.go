@@ -1046,13 +1046,20 @@ func (s *Service) handleAdminRestoreNode(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	id := r.PathValue("id")
-	before, _, err := s.store.GetNode(r.Context(), id)
+	before, found, err := s.store.GetNode(r.Context(), id)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	if err := s.store.ClearNodeRemoved(r.Context(), id); err != nil {
+	if !found {
 		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	// A store failure is not "no such node": reporting a DB outage as 404 would
+	// tell an admin the node is gone while it is still there, and the audit entry
+	// below would be skipped with no trace of why.
+	if err := s.store.ClearNodeRemoved(r.Context(), id); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
 	s.writeAudit(r, AuditNodeRestore, "node:"+id,
