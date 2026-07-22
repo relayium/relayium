@@ -368,8 +368,23 @@ type RolloutTrack struct {
 	// ByoBatch is the batch size in flight for the byo track (10 | 50 | 100
 	// nodes at once). Unused for fleet.
 	ByoBatch int
+	// FirstNodeID is the node that was picked FIRST in the current rollout —
+	// the canary that gets the long (6h) observation window. It is recorded
+	// positionally, when the rollout picks its first node (decideFleet reports
+	// this via RolloutDecision.IsFirst), and must NOT be re-derived from fleet
+	// version state: "no other node is on target" is false for a freshly
+	// provisioned node already shipping the new build, a hand-updated node, or
+	// a resumed rollout, and every one of those would silently cut the canary
+	// window to 30min. Cleared when a new rollout starts. Fleet track only.
+	FirstNodeID string
 	// StageStartedAt is when the current stage (this node / this batch) began
-	// (unix seconds), for the state machine's timeout check.
+	// (unix seconds), for the state machine's timeout check. It MUST be
+	// rewritten on EVERY stage transition (each time CurrentNodeID / ByoBatch
+	// changes): decideFleet measures the observation window from it, so a value
+	// left over from the previous stage would expire the next node's window
+	// early. decideFleet defends against that by taking the later of this and
+	// the node's own UpdateStartedAt, but that defence is a backstop, not a
+	// licence to leave the field stale.
 	StageStartedAt int64
 	Status         string // "rolling" | "halted" | "complete"
 	// HaltedReason is a human-readable note on why Status == "halted" (e.g. a

@@ -463,6 +463,14 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
   current_node_id TEXT NOT NULL DEFAULT '', byo_batch INTEGER NOT NULL DEFAULT 0,
   stage_started_at INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT '',
   halted_reason TEXT NOT NULL DEFAULT '')`,
+		// first_node_id records WHICH node was the canary of the current rollout,
+		// positionally. The state machine used to infer canary status from "no
+		// other node is on target", which silently downgraded the 6h canary
+		// window to 30min whenever a peer was already on the new build (a freshly
+		// provisioned node, a hand-updated node, a resumed rollout). Added by
+		// ALTER rather than folded into the CREATE above so live databases that
+		// already have node_rollout migrate instead of keeping the old shape.
+		`ALTER TABLE node_rollout ADD COLUMN first_node_id TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
