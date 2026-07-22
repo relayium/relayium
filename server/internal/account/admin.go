@@ -104,6 +104,10 @@ type adminNodeView struct {
 	// Shown so the list is not just a growing pile of nodes that read "offline"
 	// with no explanation; the delete button is how an operator retires the row.
 	Removed bool
+	// RemovedAt is the raw Node.RemovedAt timestamp (0 if not removed), used
+	// only to rank the BYO removed section by most-recently-removed first —
+	// see byoNodeViews. Not rendered directly.
+	RemovedAt int64
 }
 
 func nodeViews(nodes []Node, monthly map[string]int64, fileCounts map[string]NodeFileCount, now time.Time, st Settings) []adminNodeView {
@@ -130,43 +134,61 @@ func nodeViews(nodes []Node, monthly map[string]int64, fileCounts map[string]Nod
 			StoredFileCount:            fc.Count,
 			SafeToUninstallAt:          fc.MaxExpiresAt,
 			Removed:                    n.RemovedAt != 0,
+			RemovedAt:                  n.RemovedAt,
 		})
 	}
 	return out
 }
 
-// adminByoNodesShown 是自带节点表最多渲染多少行。
+// adminByoNodesShown 是自带节点表（在线/排空中的那些）最多渲染多少行。
 //
 // 机队节点是我们自己的机器，十几台，全列出来没问题；自带节点谁都能贡献一台，
 // 数量**没有上界**，全渲染意味着后台首页会随用户增长而无限膨胀（一页几千行，
 // 每行还带三个表单）。所以这里只给"最该被看到"的那些行，标题上写清总数。
 const adminByoNodesShown = 20
 
-// byoNodeViews 从全部节点里挑出自带节点，按"操作员最可能要处理"的顺序排好，
-// 并截到 adminByoNodesShown 行。返回值第二个是**截断前的总数**，标题要用它。
+// adminByoRemovedShown 是"已卸载的自带节点"这个独立小节最多渲染多少行。
 //
-// 排序口径（这是全部的取舍，别按"最近上线"一刀切）：
+// removed_at 一旦写上就再也不会自己清掉（只有管理员手动"恢复"才清），而自带
+// 节点的数量没有上界——卸载只会单调累积。曾经把已卸载节点和在线/排空中的节点
+// 混在同一张表、同一个 adminByoNodesShown 行数上限里排序，一旦累计卸载数超过
+// 上限，整张表就会被清一色的墓碑行占满：不仅看不到真正在线、正在闹脾气的节点，
+// "恢复"这个手动纠错入口也跟着从后台彻底消失——误卸载之后只能改数据库。现在
+// 已卸载节点单独成节、单独限行，"恢复"入口只要还有已卸载节点就一定在页面上。
+// 上限给得比 adminByoNodesShown 小很多：这里只是最近误操作的纠错入口，不是
+// 卸载历史的存档视图（那是审计日志的活）。
+const adminByoRemovedShown = 5
+
+// byoNodeViews 从全部节点里挑出自带节点，拆成两组：
+//
+//   - live：还在线/排空中的（未卸载），按"操作员最可能要处理"的顺序排好，截到
+//     adminByoNodesShown 行。
+//   - removed：已卸载的，按卸载时间倒序（最近卸载的排最前），截到
+//     adminByoRemovedShown 行——这是"恢复"这个手动纠错操作的唯一入口，必须
+//     独立于 live 表的容量，不能被大量在线节点挤没。
+//
+// 两个返回的 int 分别是各自截断前的总数，标题要用它们。
+//
+// live 组排序口径（这是全部的取舍，别按"最近上线"一刀切）：
 //  1. 已经在排空中的：说明有一次操作正在进行中，操作员多半就是回来看它的；
 //  2. 手上还压着未过期文件的：这台机器不能随便动，动了文件就没了；
 //  3. 其余按最后心跳倒序，再按 ID 兜底——sort.Slice 不稳定，没有这个兜底，同
 //     一批节点两次刷新可能给出不同的顺序，而"上次那行去哪了"是最难查的错觉。
-//  4. 已卸载的：永远垫底。removed_at 一旦写上就再也不会自己清掉（只有管理员
-//     手动"恢复"才清），而自带节点的数量没有上界——卸载只会单调累积。曾经把
-//     已卸载和排空中并列排第一档，等到累计卸载数超过 adminByoNodesShown（20），
-//     整张表就会被清一色的墓碑行占满，一个真正在线、正在闹脾气的节点反而一行
-//     都看不到，表也就没有存在的意义了。
-func byoNodeViews(all []adminNodeView) ([]adminNodeView, int) {
-	var byo []adminNodeView
+func byoNodeViews(all []adminNodeView) (live []adminNodeView, liveTotal int, removed []adminNodeView, removedTotal int) {
 	for _, nv := range all {
-		if nv.OwnerType == "user" {
-			byo = append(byo, nv)
+		if nv.OwnerType != "user" {
+			continue
+		}
+		if nv.Removed {
+			removed = append(removed, nv)
+		} else {
+			live = append(live, nv)
 		}
 	}
-	total := len(byo)
+	liveTotal, removedTotal = len(live), len(removed)
+
 	rank := func(nv adminNodeView) int {
 		switch {
-		case nv.Removed:
-			return 3
 		case nv.Draining:
 			return 0
 		case nv.StoredFileCount > 0:
@@ -175,19 +197,29 @@ func byoNodeViews(all []adminNodeView) ([]adminNodeView, int) {
 			return 2
 		}
 	}
-	sort.Slice(byo, func(i, j int) bool {
-		if ri, rj := rank(byo[i]), rank(byo[j]); ri != rj {
+	sort.Slice(live, func(i, j int) bool {
+		if ri, rj := rank(live[i]), rank(live[j]); ri != rj {
 			return ri < rj
 		}
-		if byo[i].LastSeenAt != byo[j].LastSeenAt {
-			return byo[i].LastSeenAt > byo[j].LastSeenAt
+		if live[i].LastSeenAt != live[j].LastSeenAt {
+			return live[i].LastSeenAt > live[j].LastSeenAt
 		}
-		return byo[i].ID < byo[j].ID
+		return live[i].ID < live[j].ID
 	})
-	if len(byo) > adminByoNodesShown {
-		byo = byo[:adminByoNodesShown]
+	if len(live) > adminByoNodesShown {
+		live = live[:adminByoNodesShown]
 	}
-	return byo, total
+
+	sort.Slice(removed, func(i, j int) bool {
+		if removed[i].RemovedAt != removed[j].RemovedAt {
+			return removed[i].RemovedAt > removed[j].RemovedAt
+		}
+		return removed[i].ID < removed[j].ID
+	})
+	if len(removed) > adminByoRemovedShown {
+		removed = removed[:adminByoRemovedShown]
+	}
+	return live, liveTotal, removed, removedTotal
 }
 
 // fillByoOwnerEmails resolves each row's OwnerUserID to an email via a single
@@ -712,11 +744,14 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		}
 	}
 	// The BYO rows come off the SAME nodeVs slice (one ListNodes read, one
-	// grouped NodeFileCounts read) — the BYO table adds no query at all, and
-	// must not: its row count is unbounded, so a per-row query here would be the
-	// worst possible place for an N+1.
-	byoNodeVs, byoNodeCount := byoNodeViews(nodeVs)
+	// grouped NodeFileCounts read) — the BYO tables add no query at all, and
+	// must not: their row count is unbounded, so a per-row query here would be
+	// the worst possible place for an N+1. Two batched email lookups (one per
+	// table, each bounded by that table's own display cap) is still O(1)
+	// queries per page load, not O(rows).
+	byoNodeVs, byoNodeCount, byoRemovedVs, byoRemovedCount := byoNodeViews(nodeVs)
 	byoNodeVs = fillByoOwnerEmails(r.Context(), byoNodeVs, s.store.AdminUserEmailsByIDs)
+	byoRemovedVs = fillByoOwnerEmails(r.Context(), byoRemovedVs, s.store.AdminUserEmailsByIDs)
 	var tokenVs []adminFleetTokenView
 	if fts, ferr := s.store.ListActiveFleetTokens(r.Context()); ferr != nil {
 		log.Printf("admin: ListActiveFleetTokens failed: %v", ferr)
@@ -769,6 +804,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		PrevHref: prev, NextHref: next, SortHref: sortHref,
 		Nodes: nodeVs, FleetNodeCount: fleetNodeCount, FleetTokens: tokenVs,
 		ByoNodes: byoNodeVs, ByoNodeCount: byoNodeCount,
+		ByoRemovedNodes: byoRemovedVs, ByoRemovedNodeCount: byoRemovedCount,
 		Plans: planVs, ActivePlans: activePlanVs,
 		CentralStoredBytes: centralStored,
 		Passkeys:           passkeys,

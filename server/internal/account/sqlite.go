@@ -498,6 +498,12 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// flight) and must not be confused with "did not say". canaryRank is
 		// where the two are told apart: an unreported node ranks AFTER every
 		// real count, not tied with a known-idle one. See Node.ActiveTransfers.
+		// NOTE: an earlier commit on this same branch shipped this ALTER with
+		// DEFAULT 0 before it was corrected to -1 here. Any database that ran
+		// migrations while that commit was live already has 0 stamped onto every
+		// row that existed at that moment — see migrateActiveTransfersUnknown
+		// below, which cleans that up regardless of which commit an environment
+		// happened to migrate through first.
 		`ALTER TABLE nodes ADD COLUMN active_transfers INTEGER NOT NULL DEFAULT -1`,
 		// node_rollout holds the rollout state machine's per-track bookkeeping: one
 		// row for "fleet", one for "byo", each with its own target version and
@@ -656,6 +662,13 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 	// column added but the backfill un-run, and the restart (ALTER now a dup)
 	// skipped the backfill forever — locking every legacy user out as "unverified".
 	if err := migrateEmailVerified(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	// See migrateActiveTransfersUnknown: corrects nodes.active_transfers for any
+	// database that migrated through this branch's now-superseded DEFAULT 0
+	// commit, regardless of migration order.
+	if err := migrateActiveTransfersUnknown(db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -850,6 +863,40 @@ func migrateEmailVerified(db *sql.DB) error {
 			return err
 		}
 		_, err = tx.ExecContext(context.Background(), `UPDATE users SET email_verified = 1`)
+		return err
+	})
+}
+
+// migrateActiveTransfersUnknown corrects nodes.active_transfers on any database
+// that ran the ADD COLUMN migration while it still read `DEFAULT 0` (an earlier
+// commit on this branch; see the comment on that ALTER above). On such a
+// database, every row that existed at the moment the ALTER ran was stamped
+// "known idle" (0) by SQLite's own default-fill, instead of the "unknown" (-1)
+// the tri-state exists to express — the exact bias canaryRank was built to
+// prevent, silently reinstated for every pre-existing node until its next
+// heartbeat (which, for a node that never upgrades or never reports again, may
+// be never).
+//
+// It cannot tell "defaulted to 0 by the old migration" apart from "genuinely
+// reported 0 via a heartbeat" after the fact — both look identical in the
+// column — so it picks the direction with the smaller downside: reclassify
+// every row currently at 0 to -1. A row that is genuinely idle self-heals on
+// its very next heartbeat (one heartbeat interval later), so a false positive
+// here costs at most that long a gap in canary-ranking precision. Leaving a
+// never-reported row at 0 costs nothing to notice and nothing to fix — it
+// silently wins every canary pick, forever, until it happens to heartbeat.
+// That asymmetry is why 0 always loses ties here, not 0 wins.
+//
+// Runs via migrateOnce, so it fires exactly once per database, ever, no matter
+// which commit an environment happened to run first. On a database that never
+// saw the old DEFAULT 0 (a fresh install, or one that only ever ran the -1
+// default), every existing row is already -1 unless a real heartbeat set it,
+// so the UPDATE below matches nothing and is a no-op — a fresh install and a
+// clean upgrade end up in the identical state.
+func migrateActiveTransfersUnknown(db *sql.DB) error {
+	return migrateOnce(db, "backfill_active_transfers_unknown", func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(context.Background(),
+			`UPDATE nodes SET active_transfers = -1 WHERE active_transfers = 0`)
 		return err
 	})
 }

@@ -196,3 +196,48 @@ func TestAdminDashboardByoTableSurvivesManyRemovedNodes(t *testing.T) {
 		t.Fatalf("a removed node still has a row: removed nodes must rank last, not tie with draining")
 	}
 }
+
+// The main BYO table ranks removed nodes last and caps at adminByoNodesShown
+// rows (TestAdminDashboardByoTableSurvivesManyRemovedNodes above), which is
+// correct for keeping live/draining nodes visible — but taken alone it means
+// once at least adminByoNodesShown NON-removed nodes exist, a removed node
+// never earns a row anywhere, and /admin/nodes/{id}/restore — the documented
+// manual recovery for a mistaken deregistration — has no entry point at all.
+// This is the fixture from the followup: more live nodes than the display
+// cap, plus one removed node, and both a live row and the removed node's
+// restore control must be present.
+func TestAdminDashboardByoRestoreReachableWithManyLiveNodes(t *testing.T) {
+	ts, _, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	ctx := context.Background()
+
+	// More LIVE (non-removed) BYO nodes than the main table's display cap.
+	liveTotal := adminByoNodesShown + 3
+	for i := 0; i < liveTotal; i++ {
+		store.UpsertNode(ctx, Node{ID: fmt.Sprintf("live-%02d", i), OwnerType: "user",
+			OwnerUserID: "u1", URLs: []string{"turn:8.8.8.8:3478"}, TURNSecret: "s",
+			CreatedAt: 1, LastSeenAt: int64(1000 + i)})
+	}
+	// One node that was mistakenly deregistered and needs restoring.
+	if _, err := store.UpsertNode(ctx, Node{ID: "oops-removed", OwnerType: "user",
+		OwnerUserID: "u1", URLs: []string{"turn:9.9.9.9:3478"}, TURNSecret: "s",
+		CreatedAt: 1, LastSeenAt: 500}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MarkNodeRemoved(ctx, "oops-removed", 600); err != nil {
+		t.Fatal(err)
+	}
+
+	html := getAdminHTML(t, ts, ts.URL, cookie)
+
+	// A live node still has a row (the main table's cap and ranking are unaffected).
+	newest := fmt.Sprintf("/admin/nodes/live-%02d/draining", liveTotal-1)
+	if !strings.Contains(html, newest) {
+		t.Fatalf("the most recently seen live BYO node has no row (%s missing)", newest)
+	}
+	// The removed node's restore control must be reachable somewhere on the page.
+	if !strings.Contains(html, "/admin/nodes/oops-removed/restore") {
+		t.Fatalf("a removed BYO node has no reachable /restore control when %d live nodes exist (display cap is %d)",
+			liveTotal, adminByoNodesShown)
+	}
+}

@@ -69,7 +69,9 @@ type heartbeatBody struct {
 	// skips allocations not yet joined to a username and carries ones that
 	// closed since the last heartbeat, so its length answers a different
 	// question. An older central ignores the field; a newer central reads its
-	// absence as 0.
+	// absence as -1 (unknown), never 0 — an un-upgraded node must rank AFTER
+	// every node that reports a real count, not tie with one that genuinely
+	// has nothing in flight (see Node.ActiveTransfers on the central side).
 	ActiveTransfers int `json:"activeTransfers"`
 }
 
