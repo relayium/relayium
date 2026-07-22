@@ -664,7 +664,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 {{range .ByoNodes}}
 <tr>
 <td>{{if .Label}}<b>{{.Label}}</b><br>{{end}}<span style="color:var(--muted);font-size:12px">{{.ID}}</span></td>
-<td><span style="color:var(--muted);font-size:12px">{{.OwnerUserID}}</span></td>
+<td><span style="color:var(--muted);font-size:12px">{{if .OwnerEmail}}{{.OwnerEmail}}{{else}}{{.OwnerUserID}}{{end}}</span></td>
 <td>{{if .Host}}{{.Host}}{{else}}—{{end}}</td>
 <td>{{if .Removed}}<span class="err">已卸载</span>
 <form method="post" action="/admin/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('恢复该用户节点？它会重新进入该用户的放置池/ICE/直连下载。')"><button type="submit" title="清除已卸载标记（不影响它的文件与历史）">恢复</button></form>

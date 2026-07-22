@@ -350,12 +350,15 @@ type Node struct {
 	// final time so their bytes flush), so it answers "seen since the last
 	// heartbeat", which is a different question.
 	//
-	// 0 means "no load signal", not "idle": a node running a binary older than
-	// the field sends nothing and reads 0 forever. That is safe — decideFleet
-	// falls back to its deterministic fleetHash order on ties — but it does mean
-	// an un-upgraded node looks maximally idle, so during a mixed-version window
-	// the canary can land on one. That is the same behaviour the whole fleet had
-	// before this field existed.
+	// TRI-STATE, not a plain count: -1 means "no load signal for this node" —
+	// either it has never heartbeated with this field (a binary older than the
+	// field omits it entirely; see nodeHeartbeatReq.ActiveTransfers), or it has
+	// never heartbeated at all. Any value >= 0 is a REAL reported count, 0
+	// included. The two used to be the same value (0), which let an unreported
+	// node tie with a genuinely idle one on canaryRank and win the fleetHash
+	// tie-break outright — a systematic pull toward the machine central knows
+	// least about during a mixed-version window, not merely a coin flip against
+	// the rest of the fleet. See canaryRank for how the distinction is used.
 	ActiveTransfers int
 }
 
@@ -755,6 +758,14 @@ type Store interface {
 	// admin (read-only)
 	AdminListUsers(ctx context.Context, q AdminUserQuery) (rows []AdminUserRow, total int64, err error)
 	AdminMetrics(ctx context.Context, period string, now int64) (AdminMetrics, error)
+	// AdminUserEmailsByIDs batch-resolves user ids to emails for the admin BYO
+	// nodes table, which shows Node.OwnerUserID: a raw generated id needs a
+	// separate lookup to answer "whose machine is this", the exact question an
+	// operator about to drain it needs answered first. One IN(...) query for
+	// however many distinct owners are in the (already row-capped) BYO table —
+	// never one query per row, since that population is unbounded. An id with
+	// no matching row (deleted user) is simply absent from the returned map.
+	AdminUserEmailsByIDs(ctx context.Context, ids []string) (map[string]string, error)
 	// stored files (zero-knowledge stored transfer)
 	CreateStoredFile(ctx context.Context, f StoredFile) error
 	// CreateStoredFileWithinStorageCaps atomically enforces the owner (userCap)

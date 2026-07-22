@@ -63,3 +63,41 @@ func TestUpdateCheckNeverCommandsRemovedNode(t *testing.T) {
 		})
 	}
 }
+
+// A refusal must mean NOTHING was written, not just "nothing was commanded".
+// The removed-node guard used to sit AFTER SetNodeUpdateResult, so a removed
+// node piggybacking Result:"failed" on its poll (a real shape: the updater
+// reports the outcome of whatever it was doing right up to the moment it was
+// told to deregister) got update_result="failed" persisted before being
+// refused.
+func TestUpdateCheckRemovedNodeResultNotPersisted(t *testing.T) {
+	ts, s, st := newUpdateCheckServer(t)
+	ctx := context.Background()
+	if err := st.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "fleet", TargetVersion: "v0.9.0", Status: "rolling", StageStartedAt: tNow,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertNode(ctx, Node{
+		ID: "n1", OwnerType: "fleet", URLs: []string{"turn:x:3478"}, TURNSecret: "s",
+		Version: "v0.8.0", CreatedAt: 1, LastSeenAt: tNow,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.MarkNodeRemoved(ctx, "n1", tNow); err != nil {
+		t.Fatal(err)
+	}
+
+	_, out := postUpdateCheck(t, ts, "fleet-secret", updateCheckReq{
+		NodeID: "n1", CurrentVersion: "v0.8.0", Result: "failed"})
+	if out.Eligible {
+		t.Fatalf("a deregistered node was told it may self-update (reason %q)", out.Reason)
+	}
+	n, _, err := s.store.GetNode(ctx, "n1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.UpdateResult != "" {
+		t.Fatalf("update_result = %q, want %q: a removed node's report must not be persisted, its refusal writes nothing", n.UpdateResult, "")
+	}
+}

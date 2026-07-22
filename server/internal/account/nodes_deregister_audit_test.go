@@ -80,6 +80,38 @@ func TestDeregisterUnknownNodeWritesNoAudit(t *testing.T) {
 	}
 }
 
+// Repeated deregister calls against an already-removed node are true no-ops
+// (MarkNodeRemoved is first-write-wins), so they must not keep writing audit
+// rows: there is no rate limit on this endpoint, and admin_audit has no prune
+// path, so an unbounded repeat-call would grow the table without bound and
+// dilute the very trail this audit entry exists to build.
+func TestDeregisterRepeatedCallsWriteAuditOnce(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	s := &Service{store: st, now: func() time.Time { return time.Unix(4242, 0) },
+		cfg: Config{NodeToken: "fleet-secret"}}
+
+	n, err := st.UpsertNode(ctx, Node{
+		OwnerType: "fleet", URLs: []string{"turn:x:3478"}, TURNSecret: "t",
+		CreatedAt: 1, LastSeenAt: 1000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 50; i++ {
+		if code := postDeregister(t, s, "fleet-secret", `{"nodeID":"`+n.ID+`"}`); code != http.StatusOK {
+			t.Fatalf("deregister call %d: got %d want 200", i, code)
+		}
+	}
+	entries, err := st.ListAudit(ctx, 100, 0, AuditNodeDeregister)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("got %d %q audit entries after 50 calls, want 1 (calls 2..50 are no-ops)", len(entries), AuditNodeDeregister)
+	}
+}
+
 // AuditNodeDeregister must be filterable on the audit page like every other
 // action, which is what auditActions feeds.
 func TestDeregisterActionIsFilterable(t *testing.T) {

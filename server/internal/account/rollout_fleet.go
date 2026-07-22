@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -59,13 +60,24 @@ type NodeSnapshot struct {
 	// and reports them on every heartbeat (heartbeatBody.activeTransfers),
 	// central stores them on nodes.active_transfers, and nodeSnapshot copies
 	// them here. All three links are needed — remove any one and the field is
-	// uniformly 0 again, which fails silently rather than loudly, because
+	// uniformly -1 again, which fails silently rather than loudly, because
 	// decideFleet's fleetHash tie-break then decides the whole branch.
 	//
-	// 0 means "no load signal" as well as "idle": a node whose binary predates
-	// the heartbeat field reports nothing and so looks maximally idle. That is
-	// safe (the tie-break is a legitimate ordering) but it does mean a
-	// mixed-version fleet can hand the canary slot to an un-upgraded node.
+	// TRI-STATE: >= 0 is a REAL reported count (0 included — a node that
+	// genuinely has nothing in flight); < 0 (see nodeSnapshot/TouchNode) means
+	// "this node did not report a count on its last heartbeat", which is not
+	// the same claim as "reports zero load" and must not be ranked as if it
+	// were. canaryRank is where that distinction is spent: an unreported node
+	// sorts AFTER every real count, not tied with a known-idle (0) one.
+	//
+	// It used to conflate the two by storing 0 for both. That was safe on
+	// average (the fleetHash tie-break is a legitimate order over a genuine
+	// tie) but not unbiased: in a PARTIALLY upgraded fleet, every un-upgraded
+	// node reads exactly like a known-idle one and can win the tie-break
+	// outright, so whichever un-upgraded node the hash favours is picked with
+	// probability 1 — a systematic pull toward the machine central has the
+	// LEAST information about, not merely a coin flip with the rest of the
+	// fleet.
 	ActiveTransfers int
 	UpdateStartedAt int64
 	// UpdateFromVersion mirrors nodes.update_from_version: the version the node
@@ -307,8 +319,9 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 	// first canary is: fewest active transfers, least to lose.
 	if firstPick || reassertFirst {
 		sort.Slice(candidates, func(i, j int) bool {
-			if candidates[i].ActiveTransfers != candidates[j].ActiveTransfers {
-				return candidates[i].ActiveTransfers < candidates[j].ActiveTransfers
+			ri, rj := canaryRank(candidates[i].ActiveTransfers), canaryRank(candidates[j].ActiveTransfers)
+			if ri != rj {
+				return ri < rj
 			}
 			return fleetHash(candidates[i].ID, tr.TargetVersion) < fleetHash(candidates[j].ID, tr.TargetVersion)
 		})
@@ -318,6 +331,27 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 		})
 	}
 	return RolloutDecision{Action: "update", NodeID: candidates[0].ID, IsFirst: firstPick || reassertFirst}
+}
+
+// canaryRank orders NodeSnapshot.ActiveTransfers for the canary sort: a real
+// reported count (>= 0) ranks by its own value, but a node that reported NO
+// count at all on its last heartbeat (< 0) ranks AFTER every real count —
+// including a known-idle (0) one — rather than tying with it.
+//
+// Tying an unreported node with a known-idle one is exactly the bias this
+// removes: an un-upgraded node in a mixed-version fleet always reads "no
+// signal", so tying it with 0 hands it the tie-break on equal footing with a
+// machine central actually KNOWS is idle, and the fleetHash order alone then
+// decides which un-upgraded node wins — deterministically, every rollout,
+// rather than as a fair coin flip against genuinely idle machines. Ranking it
+// last removes the preference entirely: an unreported node is never
+// preferred over any node central has real information about, however busy
+// that node is.
+func canaryRank(activeTransfers int) int {
+	if activeTransfers < 0 {
+		return math.MaxInt
+	}
+	return activeTransfers
 }
 
 // fleetHash deterministically orders a node for a given rollout target so

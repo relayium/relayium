@@ -491,12 +491,14 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// is deliberately NOT in UpsertNode's ON CONFLICT list — a re-register
 		// carries no load reading and must not stamp one.
 		//
-		// 0 on every existing row, and 0 for any node whose binary predates the
-		// heartbeat field, which is the honest reading of "we have no load signal
-		// for this machine": decideFleet's fleetHash tie-break then orders it, the
-		// same deterministic fallback that applied to the whole fleet before this
-		// column existed.
-		`ALTER TABLE nodes ADD COLUMN active_transfers INTEGER NOT NULL DEFAULT 0`,
+		// -1 on every existing row (and for any node whose binary predates the
+		// heartbeat field, or has yet to send its first one) is the honest
+		// reading of "we have no load signal for this machine" — deliberately
+		// NOT 0, which is a real report (this node genuinely has nothing in
+		// flight) and must not be confused with "did not say". canaryRank is
+		// where the two are told apart: an unreported node ranks AFTER every
+		// real count, not tied with a known-idle one. See Node.ActiveTransfers.
+		`ALTER TABLE nodes ADD COLUMN active_transfers INTEGER NOT NULL DEFAULT -1`,
 		// node_rollout holds the rollout state machine's per-track bookkeeping: one
 		// row for "fleet", one for "byo", each with its own target version and
 		// status, so a stalled/halted byo rollout can never block or bleed into the
@@ -2411,6 +2413,48 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context, q AdminUserQuery) ([]A
 	return out, total, nil
 }
 
+// AdminUserEmailsByIDs batch-resolves ids to emails in one IN(...) query, same
+// pattern as the provider fan-out above: dedupe first so a query against N
+// BYO rows sharing an owner still binds one placeholder per DISTINCT id, not
+// per row.
+func (s *SQLiteStore) AdminUserEmailsByIDs(ctx context.Context, ids []string) (map[string]string, error) {
+	out := map[string]string{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	seen := map[string]bool{}
+	var uniq []string
+	for _, id := range ids {
+		if id != "" && !seen[id] {
+			seen[id] = true
+			uniq = append(uniq, id)
+		}
+	}
+	if len(uniq) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(uniq))
+	ph := make([]string, len(uniq))
+	for i, id := range uniq {
+		args[i] = id
+		ph[i] = "?"
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, email FROM users WHERE id IN (`+strings.Join(ph, ",")+`)`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, email string
+		if err := rows.Scan(&id, &email); err != nil {
+			return nil, err
+		}
+		out[id] = email
+	}
+	return out, rows.Err()
+}
+
 func (s *SQLiteStore) AdminMetrics(ctx context.Context, period string, now int64) (AdminMetrics, error) {
 	var m AdminMetrics
 	err := s.reader().QueryRowContext(ctx, `
@@ -3090,8 +3134,10 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 // activeTransfers is the fourth live gauge and is SET for the same reason: it
 // is how many relay allocations the node is serving RIGHT NOW, not a total, so
 // a keep-max would pin every node at its all-time busiest and make decideFleet's
-// canary pick meaningless. The caller clamps it non-negative (see
-// handleNodeHeartbeat); this is the only writer of the column.
+// canary pick meaningless. -1 is a legitimate value here (see
+// Node.ActiveTransfers) meaning "this heartbeat carried no load signal"; every
+// other value is clamped non-negative by the caller (see handleNodeHeartbeat).
+// This is the only writer of the column.
 func (s *SQLiteStore) TouchNode(ctx context.Context, id string, relayedBytes, storedBytes, storageTotal, storageFree, at int64, activeTransfers int) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE nodes SET last_seen_at=?,

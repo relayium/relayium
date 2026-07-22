@@ -96,8 +96,9 @@ func TestHeartbeatFeedsCanaryPick(t *testing.T) {
 // WIRE COMPATIBILITY, old node -> new server: a node running the CURRENT
 // released binary sends no activeTransfers field at all. It must keep working
 // (the heartbeat is how it stays online, reports usage and learns its caps),
-// reading as 0 — "we have no load signal for this machine" — rather than
-// failing the request or corrupting the row.
+// reading as -1 — "we have no load signal for this machine", which is NOT the
+// same claim as "reports zero load" (canaryRank ranks the two differently) —
+// rather than failing the request or corrupting the row.
 func TestHeartbeatWithoutActiveTransfersStillWorks(t *testing.T) {
 	ts, s, st := newUpdateCheckServer(t)
 	ctx := context.Background()
@@ -117,8 +118,8 @@ func TestHeartbeatWithoutActiveTransfersStillWorks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n.ActiveTransfers != 0 {
-		t.Fatalf("active_transfers = %d, want 0 for a node that reports none", n.ActiveTransfers)
+	if n.ActiveTransfers != -1 {
+		t.Fatalf("active_transfers = %d, want -1 for a node that reports no count at all", n.ActiveTransfers)
 	}
 	if n.LastSeenAt != tNow {
 		t.Fatalf("last_seen_at = %d, want %d: the legacy heartbeat must still land", n.LastSeenAt, tNow)

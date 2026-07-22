@@ -50,9 +50,16 @@ type adminNodeView struct {
 	ID        string
 	OwnerType string
 	// OwnerUserID is the contributing user, for BYO (owner_type='user') rows —
-	// empty on fleet rows. Rendered so an operator draining or removing a
-	// user's machine can see WHOSE it is before acting.
-	OwnerUserID       string
+	// empty on fleet rows.
+	OwnerUserID string
+	// OwnerEmail is OwnerUserID resolved to an email, so an operator draining
+	// or removing a user's machine can see WHOSE it is (and act on it — search
+	// the user, message them) without a raw opaque id round-tripping through a
+	// separate lookup. Filled in by fillByoOwnerEmails, a single batched query
+	// against the (already row-capped) BYO rows; empty if the user row is gone
+	// (deleted account) or hasn't been resolved, in which case the template
+	// falls back to OwnerUserID.
+	OwnerEmail        string
 	Label             string
 	Host              string
 	Region            string
@@ -139,11 +146,15 @@ const adminByoNodesShown = 20
 // 并截到 adminByoNodesShown 行。返回值第二个是**截断前的总数**，标题要用它。
 //
 // 排序口径（这是全部的取舍，别按"最近上线"一刀切）：
-//  1. 已经在排空中、或已卸载的：说明有一次操作正在进行中，操作员多半就是回来
-//     看它的；
+//  1. 已经在排空中的：说明有一次操作正在进行中，操作员多半就是回来看它的；
 //  2. 手上还压着未过期文件的：这台机器不能随便动，动了文件就没了；
 //  3. 其余按最后心跳倒序，再按 ID 兜底——sort.Slice 不稳定，没有这个兜底，同
 //     一批节点两次刷新可能给出不同的顺序，而"上次那行去哪了"是最难查的错觉。
+//  4. 已卸载的：永远垫底。removed_at 一旦写上就再也不会自己清掉（只有管理员
+//     手动"恢复"才清），而自带节点的数量没有上界——卸载只会单调累积。曾经把
+//     已卸载和排空中并列排第一档，等到累计卸载数超过 adminByoNodesShown（20），
+//     整张表就会被清一色的墓碑行占满，一个真正在线、正在闹脾气的节点反而一行
+//     都看不到，表也就没有存在的意义了。
 func byoNodeViews(all []adminNodeView) ([]adminNodeView, int) {
 	var byo []adminNodeView
 	for _, nv := range all {
@@ -154,7 +165,9 @@ func byoNodeViews(all []adminNodeView) ([]adminNodeView, int) {
 	total := len(byo)
 	rank := func(nv adminNodeView) int {
 		switch {
-		case nv.Draining || nv.Removed:
+		case nv.Removed:
+			return 3
+		case nv.Draining:
 			return 0
 		case nv.StoredFileCount > 0:
 			return 1
@@ -175,6 +188,31 @@ func byoNodeViews(all []adminNodeView) ([]adminNodeView, int) {
 		byo = byo[:adminByoNodesShown]
 	}
 	return byo, total
+}
+
+// fillByoOwnerEmails resolves each row's OwnerUserID to an email via a single
+// batched lookup and returns the same slice with OwnerEmail populated.
+// Deliberately called AFTER byoNodeViews has already capped the rows: the
+// lookup set is bounded by the display cap, not by the unbounded BYO
+// population, so this can never become the per-row query the rest of this
+// file works hard to avoid.
+func fillByoOwnerEmails(ctx context.Context, byo []adminNodeView, emails func(ctx context.Context, ids []string) (map[string]string, error)) []adminNodeView {
+	if len(byo) == 0 {
+		return byo
+	}
+	ids := make([]string, len(byo))
+	for i, nv := range byo {
+		ids[i] = nv.OwnerUserID
+	}
+	m, err := emails(ctx, ids)
+	if err != nil {
+		log.Printf("admin: AdminUserEmailsByIDs failed: %v", err)
+		return byo
+	}
+	for i := range byo {
+		byo[i].OwnerEmail = m[byo[i].OwnerUserID]
+	}
+	return byo
 }
 
 // storableBytes 是这台节点的**容量**上还能接收多少字节——放置过滤的三道容量闸
@@ -678,6 +716,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 	// must not: its row count is unbounded, so a per-row query here would be the
 	// worst possible place for an N+1.
 	byoNodeVs, byoNodeCount := byoNodeViews(nodeVs)
+	byoNodeVs = fillByoOwnerEmails(r.Context(), byoNodeVs, s.store.AdminUserEmailsByIDs)
 	var tokenVs []adminFleetTokenView
 	if fts, ferr := s.store.ListActiveFleetTokens(r.Context()); ferr != nil {
 		log.Printf("admin: ListActiveFleetTokens failed: %v", ferr)

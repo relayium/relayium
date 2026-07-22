@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +16,21 @@ import (
 	"github.com/relayium/relayium/internal/relayusage"
 	"github.com/relayium/relayium/internal/selfupdate"
 )
+
+// nodeIDPattern is exactly what newID() produces: 16 random bytes, hex-encoded
+// (32 lowercase hex characters). Kept in lockstep with newID() by hand — there
+// is no shared constant, because the two live in different files for
+// different reasons (newID is store-side id generation; this is wire input
+// validation), but a future change to one must carry the other.
+var nodeIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
+// validNodeID reports whether id is a plausible central-generated node id —
+// the charset and length newID() itself produces. Used to reject a
+// client-supplied id for a BRAND-NEW registration (see handleNodeRegister);
+// an existing id is validated by ownership instead, not by this.
+func validNodeID(id string) bool {
+	return nodeIDPattern.MatchString(id)
+}
 
 // isHTTPSURL reports whether s is a well-formed absolute https URL with a host —
 // the bar for a node's public DownloadURL, since central redirects clients to it.
@@ -128,9 +144,16 @@ type nodeHeartbeatReq struct {
 	// the last heartbeat (reported once more so their bytes flush), so its
 	// length means "allocations seen since the last heartbeat", not "active".
 	//
-	// ABSENT on every node running a binary older than this field, which decodes
-	// as 0 — see Node.ActiveTransfers for why that is the safe reading.
-	ActiveTransfers int `json:"activeTransfers"`
+	// A POINTER on purpose, not a plain int: nil is how the WIRE tells apart "a
+	// binary older than this field, which omits the key entirely" from "a
+	// current binary genuinely reporting zero in-flight transfers" — the two
+	// are different claims (see Node.ActiveTransfers) and encoding/json can
+	// only preserve that distinction through a JSON key that is either present
+	// (even as `0`) or absent. WIRE COMPATIBILITY holds both ways: an old node
+	// omits the key and this decodes nil exactly as it decoded 0 before this
+	// was a pointer; a new node always sends it, so an old server (which
+	// doesn't know this field at all) is unaffected either way.
+	ActiveTransfers *int `json:"activeTransfers,omitempty"`
 }
 
 // RegisterNodeRoutes mounts the node register/heartbeat endpoints on mux, but
@@ -214,13 +237,21 @@ func (s *Service) handleNodeDeregister(w http.ResponseWriter, r *http.Request) {
 	//
 	// The actor is the NODE, not a person (writeNodeAudit), and the action is
 	// its own (node.deregister, never node.remove): nobody was in the room, and
-	// an entry that implies an admin was would be worse than none. Written only
-	// after MarkNodeRemoved succeeded and only for a node that existed, so the
-	// trail records what happened rather than what was attempted — an
-	// already-removed node keeps its FIRST removed_at (MarkNodeRemoved is
-	// first-write-wins) and the entry below honestly shows old == new.
-	s.writeNodeAudit(r, AuditNodeDeregister, req.NodeID,
-		[]ChangeField{{Field: "removed_at", Old: node.RemovedAt, New: at}})
+	// an entry that implies an admin was would be worse than none.
+	//
+	// Written only when this call ACTUALLY transitioned the node — node.RemovedAt
+	// (read BEFORE MarkNodeRemoved, which is first-write-wins) was still zero.
+	// Without this guard every repeat call on an already-removed node — and
+	// there is no rate limit on this endpoint, nor a prune path for admin_audit
+	// unlike PruneUploadEvents/PruneDownloadReceipts — would keep writing a row
+	// that changed nothing, which is exactly what "records what happened rather
+	// than what was attempted" rules out, and gives any node-token holder an
+	// unbounded way to grow the audit table and dilute the trail this exists to
+	// build.
+	if node.RemovedAt == 0 {
+		s.writeNodeAudit(r, AuditNodeDeregister, req.NodeID,
+			[]ChangeField{{Field: "removed_at", Old: node.RemovedAt, New: at}})
+	}
 	// Loud on purpose. Every file still on this node has just become unreachable
 	// for its owner, and no admin was necessarily in the room when it happened.
 	if live, _, cerr := s.store.CountFilesOnNode(r.Context(), req.NodeID, at); cerr == nil && live > 0 {
@@ -327,6 +358,40 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	now := s.now().Unix()
 
+	// A DEREGISTERED node is never commanded, on any path, and — since a "not
+	// eligible" refusal must mean nothing was written, not just nothing was
+	// commanded — it must never even have its reported Result persisted. The
+	// machine is on its way out (the uninstaller deregisters seconds BEFORE it
+	// stops the service, and a node whose row was marked removed by an admin
+	// is being retired deliberately), so telling it to download and install a
+	// new binary is at best wasted work on a dying host and at worst an
+	// install that never finishes on a machine nobody is watching.
+	//
+	// This sits AHEAD of the SetNodeUpdateResult write below on purpose: it
+	// used to sit after track resolution, which meant a removed node POSTing
+	// Result:"failed" got update_result="failed" persisted before being
+	// refused (update_started_at correctly stayed 0, since nothing downstream
+	// of the write ever re-commands a removed node — but "nothing is written
+	// when refused" was not literally true).
+	//
+	// The staged ladders already had the "never commanded" property, but only
+	// INDIRECTLY: their snapshot comes from NodesByOwnerType, which filters
+	// removed_at = 0, so a removed node is neither a candidate nor the picked
+	// NodeID, and the fleet path's `d.NodeID != node.ID` guard turns the rest
+	// away. The EMERGENCY path bypasses both — it reads this node with an
+	// unfiltered GetNode and commands it directly — which made it the one
+	// hole. The check sits HERE, in front of every other branch (including the
+	// result write), so it holds for every present and future path out of
+	// this handler.
+	//
+	// Answered as a plain "not eligible", not an error: the node's updater
+	// polls this every 30 seconds and a failing endpoint would just produce
+	// log noise on a machine that is about to disappear.
+	if node.RemovedAt != 0 {
+		writeJSON(w, http.StatusOK, updateCheckResp{Reason: "node is deregistered"})
+		return
+	}
+
 	// Land the reported result BEFORE any decision is taken, so a report is
 	// never lost to a subsequent decision error — and so the snapshot read
 	// below already contains it (that is what lets the state machine halt on
@@ -379,31 +444,6 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	if tr.Status != "rolling" {
 		resp.Reason = "rollout track is " + tr.Status
-		writeJSON(w, http.StatusOK, resp)
-		return
-	}
-
-	// A DEREGISTERED node is never commanded, on any path. The machine is on
-	// its way out (the uninstaller deregisters seconds BEFORE it stops the
-	// service, and a node whose row was marked removed by an admin is being
-	// retired deliberately), so telling it to download and install a new binary
-	// is at best wasted work on a dying host and at worst an install that never
-	// finishes on a machine nobody is watching.
-	//
-	// The staged ladders already had this property, but only INDIRECTLY: their
-	// snapshot comes from NodesByOwnerType, which filters removed_at = 0, so a
-	// removed node is neither a candidate nor the picked NodeID, and the fleet
-	// path's `d.NodeID != node.ID` guard turns the rest away. The EMERGENCY path
-	// bypasses both — it reads this node with an unfiltered GetNode and commands
-	// it directly — which made it the one hole. The check sits HERE, in front of
-	// the dispatch, rather than inside updateCheckEmergency, so it holds for
-	// every present and future path out of this handler.
-	//
-	// Answered as a plain "not eligible", not an error: the node's updater polls
-	// this every 30 seconds and a failing endpoint would just produce log noise
-	// on a machine that is about to disappear.
-	if node.RemovedAt != 0 {
-		resp.Reason = "node is deregistered"
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
@@ -1012,6 +1052,21 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 			return
 		}
+		if !found && !validNodeID(req.NodeID) {
+			// A BRAND-NEW id must match the charset/length central itself
+			// generates (newID(): 16 random bytes, lowercase hex). Nothing here
+			// lets an attacker impersonate an admin — the audit actor is always
+			// "node:<id>" with auth=node-token, and the audit page auto-escapes
+			// — but with no check at all, an arbitrary client-supplied id like
+			// "admin" becomes that actor string (nodeAuditActor), which is
+			// reachable for no good reason: central never generates an id like
+			// that, so nothing legitimate is lost by rejecting one. An EXISTING
+			// id is exempt (checked below by the ownership guard instead): every
+			// node id already in the store was either generated by newID() or
+			// has already passed this same check on some earlier registration.
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid node id"})
+			return
+		}
 		if found {
 			existing, existingFound = e, true
 			mismatch := existing.OwnerType != ownerType ||
@@ -1089,6 +1144,10 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 		StorageEnabled: containsCap(req.Capabilities, "storage"),
 		StorageTotal:   req.StorageTotal, StorageFree: req.StorageFree,
 		DownloadURL: downloadURL,
+		// -1: no load signal yet. Only takes effect on a first INSERT — UpsertNode's
+		// ON CONFLICT clause omits active_transfers, so a re-register never
+		// touches an existing row's real reading (see Node.ActiveTransfers).
+		ActiveTransfers: -1,
 	}
 	saved, err := s.store.UpsertNode(r.Context(), n)
 	if err != nil {
@@ -1146,14 +1205,20 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 	}
 	billable := node.OwnerType == "fleet"
 	now := s.now().Unix()
-	// Clamped: the count is self-reported, and a negative value would sort the
-	// reporting node ahead of a genuinely idle one in decideFleet's canary pick —
-	// i.e. a node could volunteer itself to receive every new build first.
-	// Clamping costs nothing and makes that impossible; an inflated positive
-	// value only ever moves a node further back in the queue.
-	active := req.ActiveTransfers
-	if active < 0 {
-		active = 0
+	// -1: "this heartbeat carried no load signal" — an old binary that omits
+	// the JSON key decodes req.ActiveTransfers as a nil pointer. Real reports
+	// are clamped non-negative: the count is self-reported, and a negative
+	// value would rank the node as MORE idle than a genuinely idle one in
+	// canaryRank — i.e. a node could volunteer itself to receive every new
+	// build first. Clamping costs nothing and makes that impossible; an
+	// inflated positive value only ever moves a node further back in the
+	// queue.
+	active := -1
+	if req.ActiveTransfers != nil {
+		active = *req.ActiveTransfers
+		if active < 0 {
+			active = 0
+		}
 	}
 	if err := s.store.TouchNode(r.Context(), req.NodeID, req.RelayedTotal, req.StoredBytes, req.StorageTotal, req.StorageFree, now, active); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})

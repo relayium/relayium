@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -257,8 +258,39 @@ func TestRegisterRejectsNodeIDTakeover(t *testing.T) {
 	if n, _, _ := st.GetNode(ctx, "fleet-1"); n.OwnerType != "fleet" || n.OwnerUserID != "" {
 		t.Fatalf("fleet node owner was mutated: %q/%q", n.OwnerType, n.OwnerUserID)
 	}
-	// A brand-new id from the attacker registers fine (owned by attacker).
-	if code := reg("brand-new-id"); code != http.StatusOK {
+	// A brand-new id matching central's own charset/length registers fine
+	// (owned by attacker).
+	validNew := strings.Repeat("ab", 16) // 32 lowercase hex chars, like newID()
+	if code := reg(validNew); code != http.StatusOK {
 		t.Fatalf("new-id register: want 200, got %d", code)
+	}
+}
+
+// A brand-new registration naming an id central would never generate itself
+// (wrong charset/length) must be rejected outright — otherwise a client can
+// pick an arbitrary string (e.g. "admin") that becomes this node's audited
+// actor string ("node:admin") for the rest of its life.
+func TestRegisterRejectsInvalidNewNodeID(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	attacker, _ := st.UpsertUserByEmail(ctx, "a2@x.com", "a2")
+	st.CreateNodeToken(ctx, NodeToken{ID: "at2", TokenHash: hashToken("atktok2"), UserID: attacker.ID, Name: "n", CreatedAt: 1})
+
+	s := &Service{store: st, cfg: Config{EnableUserNodes: true}, now: func() time.Time { return time.Unix(5, 0) }}
+	mux := http.NewServeMux()
+	s.RegisterNodeRoutes(mux)
+
+	for _, bad := range []string{"admin", "node:admin", strings.Repeat("A", 32), strings.Repeat("a", 31), strings.Repeat("a", 33)} {
+		body, _ := json.Marshal(nodeRegisterReq{NodeID: bad, TURNSecret: "x", URLs: []string{"turn:x:3478"}})
+		r := httptest.NewRequest("POST", "/api/nodes/register", bytes.NewReader(body))
+		r.Header.Set("Authorization", "Bearer atktok2")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("register with id %q: want 400, got %d", bad, w.Code)
+		}
+		if n, known, _ := st.GetNode(ctx, bad); known {
+			t.Fatalf("invalid id %q was still stored as a node: %+v", bad, n)
+		}
 	}
 }

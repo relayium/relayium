@@ -128,6 +128,17 @@ func blobGates(gauge *blobUsage, storageDir string) (diskUsed func() int64, disk
 // wired to reg, plus an auth handler that rejects expired credentials and — the
 // local cost cap (workstream B) — refuses new allocations once lim is over the
 // monthly relay cap.
+//
+// This is also where BOTH of allocRegistry.closeAlloc's unstated invariants are
+// actually true, not merely assumed: OnAllocationCreated below is wired
+// unconditionally into EventHandler (pion calls it right after every successful
+// AllocatePacketConn, no path skips it), and PacketConnConfigs carries exactly
+// ONE entry, so every allocation this node ever serves comes from this single
+// generator and srcAddr can't collide across two configs. Adding a second
+// PacketConnConfig, or moving to a pion version that can abandon an allocation
+// after AllocatePacketConn without firing OnAllocationDeleted, breaks
+// closeAlloc's bookkeeping silently (see its doc comment) — change either
+// deliberately, not as a side effect of something else here.
 func newTURNServer(udpConn net.PacketConn, publicIP string, minPort, maxPort int, realm, turnSecret string, reg *allocRegistry, lim *limits) (*turn.Server, error) {
 	gen := &countingGenerator{
 		reg: reg,
