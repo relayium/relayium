@@ -73,12 +73,13 @@ const (
 //     that node's previous command would otherwise be misread as a failure of
 //     the command being issued right now.
 //   - when an operator restarts a HALTED rollout targeting the SAME version,
-//     the caller MUST reset tr.ByoBatch to 0 first. The failing records that
-//     caused the halt are still sitting on those nodes; resuming with
-//     tr.ByoBatch left at its halted value re-evaluates the same batch against
-//     the same failures and halts again with a byte-identical reason, forever.
-//     Only bumping TargetVersion (i.e. starting a new rollout) escapes this,
-//     because it changes what "commanded" and "failed" are computed against.
+//     the caller MUST reset tr.ByoBatch to 0 AND restamp tr.StageStartedAt.
+//     The failing records that caused the halt are still sitting on those
+//     nodes, and the restamp is what puts them behind the current stage so
+//     they stop counting (see byoCommandedByThisStage); resuming without it
+//     re-evaluates the same batch against the same failures and halts again
+//     with a byte-identical reason, forever. ResumeRolloutTrack does both in
+//     one statement, and SetTargetVersion's whole-row replace does too.
 //
 // `eligible` is the subset of the open batch that is online AND not yet on the
 // target version, so it SHRINKS as nodes converge: calling decideByo again
@@ -109,19 +110,22 @@ const (
 //     COULD have been commanded, not who was: members offline when the batch
 //     opened are filtered out of `eligible` below and so never get
 //     nodes.update_from_version stamped. The denominator is the prefix
-//     narrowed to byoWasCommandedForTarget(n, tr.TargetVersion), the same
+//     narrowed to byoCommandedByThisStage(n, tr), the same
 //     predicate byoResultIsFailure's numerator uses, so a canary batch where
 //     only a handful of members were ever reachable is judged on those few,
 //     not diluted by the ones that were never touched (a 20-node batch with
 //     only 4 reachable and all 4 failing is 4/20 = 20%, unable to halt, vs.
 //     the true 4/4 = 100%). Because batches nest, a node that failed in an
-//     earlier, smaller batch is still inside the current prefix and still
-//     counts. Dividing by the WHOLE population instead of the batch prefix
+//     earlier, smaller batch is still inside the current prefix -- and since
+//     it is also still off target, the wider batch re-commands it, which is
+//     what brings its (fresh) failure back into this stage's count rather than
+//     carrying the old row forward. Dividing by the WHOLE population instead of the batch prefix
 //     would separately cap the observable rate at the open percentage (at
 //     the 10% stage, even 100% of the canary batch failing reads as
 //     10% < 20%), so the canary batch -- the one stage that exists precisely
-//     to catch a bad build -- could never halt. Only results belonging to
-//     THIS rollout count (see byoResultIsFailure). If both the rate exceeds
+//     to catch a bad build -- could never halt. Only records issued by the
+//     CURRENT stage count, on both sides of the fraction (see
+//     byoCommandedByThisStage). If both the rate exceeds
 //     byoFailureRate and the absolute count clears byoFailureFloor -> halt
 //     with a reason.
 //  6. ByoBatch == 0 means no batch has opened for this rollout yet: open the
@@ -192,20 +196,23 @@ func decideByo(tr RolloutTrack, nodes []NodeSnapshot, now int64) (action string,
 	// anyway dilutes the rate -- e.g. a 20-node canary batch where only 4
 	// members were ever reachable and all 4 failed is 4/20 = 20%, at the
 	// threshold and unable to halt, when the nodes actually exercised failed
-	// 100% of the time. byoWasCommandedForTarget is the same predicate
+	// 100% of the time. byoCommandedByThisStage is the same predicate
 	// byoResultIsFailure uses to decide a result belongs to THIS rollout, so
-	// numerator and denominator agree on what "commanded" means. With
+	// numerator and denominator agree on both what "commanded" means and on
+	// WHEN it was commanded -- without that second half, command records left
+	// on nodes by a rollout that is long over are counted against this one and
+	// two permanently-dead machines can wedge the track forever. With
 	// tr.ByoBatch == 0 the prefix is empty and there is nothing to judge.
 	batchPrefix := ordered[:pctCount(len(ordered), tr.ByoBatch)]
 	var commanded []NodeSnapshot
 	for _, n := range batchPrefix {
-		if byoWasCommandedForTarget(n, tr.TargetVersion) {
+		if byoCommandedByThisStage(n, tr) {
 			commanded = append(commanded, n)
 		}
 	}
 	failed := 0
 	for _, n := range commanded {
-		if byoResultIsFailure(n, tr.TargetVersion) {
+		if byoResultIsFailure(n, tr) {
 			failed++
 		}
 	}
@@ -296,47 +303,93 @@ func byoOpenBatchMembers(tr RolloutTrack, nodes []NodeSnapshot) map[string]bool 
 }
 
 // byoResultIsFailure reports whether n's last recorded update result is a
-// failure BELONGING TO THIS ROLLOUT.
+// failure BELONGING TO THE STAGE THIS TRACK IS CURRENTLY IN.
 //
 // nodes.update_result is deliberately preserved across re-register and
 // heartbeat (UpsertNode's ON CONFLICT excludes the update_* columns, so an
 // in-flight rollout's bookkeeping is not clobbered by a node simply calling
-// register again) and nothing ever clears it. Left unfiltered, every leftover
-// "failed" from the PREVIOUS rollout would be counted against the new one and
-// halt it at its very first evaluation -- a rollout that never commanded a
-// single node would report a failure rate. The state machine defends itself
-// here rather than trusting a caller to reset the column.
+// register again) and nothing ever clears it except CommandNodeUpdate. Left
+// unfiltered, every leftover "failed" from the PREVIOUS rollout would be
+// counted against the new one and halt it at its very first evaluation -- a
+// rollout that never commanded a single node would report a failure rate. The
+// state machine defends itself here rather than trusting a caller to reset the
+// column.
 //
-// update_from_version is the version the node was running when central
-// commanded the update, written together with update_started_at, so:
-//   - empty -> the node has never been commanded; a result with no command
-//     behind it cannot describe an attempt to reach this target.
-//   - equal to the target -> the recorded attempt STARTED from the version we
-//     are rolling to, so it cannot have been an attempt to reach it.
-//   - no longer the node's current version -> the node has moved on since
-//     (a later successful update, a manual fix, a reinstall); the row
-//     describes a rollout that is over. A failure that belongs to a live
-//     rollout leaves the node sitting on the version it was commanded from.
-func byoResultIsFailure(n NodeSnapshot, targetVersion string) bool {
+// The scoping is byoCommandedByThisStage; see there for why the wall-clock
+// term is the load-bearing half of it and the version terms alone are not.
+//
+// On top of that scoping, the node must still be sitting on the version it was
+// commanded FROM. A node that has moved on since (a later successful update, a
+// manual fix, a reinstall) is no longer describing a live failure, however
+// recent the row is; a failure that really is live leaves the node exactly
+// where the update found it.
+func byoResultIsFailure(n NodeSnapshot, tr RolloutTrack) bool {
 	if n.UpdateResult != "failed" && n.UpdateResult != "rolled_back" {
 		return false
 	}
-	if !byoWasCommandedForTarget(n, targetVersion) {
+	if !byoCommandedByThisStage(n, tr) {
 		return false
 	}
 	return selfupdate.SameVersion(n.Version, n.UpdateFromVersion)
 }
 
-// byoWasCommandedForTarget reports whether n carries a live command record
-// for a rollout to targetVersion: nodes.update_from_version is non-empty and
-// is not itself the target (a record whose from-version already equals the
-// target started AFTER reaching it, so it cannot describe an attempt to get
-// there). This is the SAME predicate decideByo uses to decide which batch
-// members were actually commanded, so its failure-rate denominator and
-// byoResultIsFailure's numerator agree on what "commanded" means -- see the
-// OUTPUT CONTRACT above: without the caller stamping update_from_version at
-// command time, this predicate is never true and the whole failure check is
-// inert.
+// byoCommandedByThisStage reports whether n carries a command record that THIS
+// track's CURRENT STAGE issued: it was commanded for this target
+// (byoWasCommandedForTarget) AND the command was issued at or after
+// tr.StageStartedAt. It is decideByo's failure-rate DENOMINATOR, and via
+// byoResultIsFailure its numerator too, so the two can never disagree about
+// which nodes this rollout is being judged on.
+//
+// The wall-clock term is the load-bearing half, and leaving it out was a real
+// bug rather than a theoretical one. byoWasCommandedForTarget alone excludes a
+// stale record only by its VERSIONS, and a genuinely FAILED update leaves the
+// node sitting on exactly the version it was commanded from with
+// update_from_version still pointing at it -- so it satisfied every version
+// term forever. Two BYO machines that failed a v1->v2 update and then died
+// (offline, so never re-commanded, so nothing ever rewrites their update_*
+// columns) therefore counted as 2 failures out of a denominator of 2 against
+// the NEXT rollout, halting it on its first evaluation. Neither restarting the
+// halted rollout nor picking a brand-new target escaped that: both reset
+// ByoBatch and re-walk the ladder into the same two dead rows. A track that
+// can be wedged permanently by two dead machines is the opposite of the
+// fix-forward behaviour the design promises.
+//
+// StageStartedAt is the right clock, and its being restamped on every batch
+// advance (AdvanceByoBatch) does NOT lose earlier-batch failures the way it
+// might appear to. A node that failed in the 10% batch is still off target, so
+// when the 50% batch opens it is inside the wider prefix, online, not on
+// target -- i.e. back in `eligible`, re-commanded with a fresh
+// update_started_at and a cleared update_result. Its failure is retried and
+// re-counted, not forgotten. The only member that drops out is one that has
+// gone offline, which decideByo already declines to hold a rollout on
+// anywhere else (see the completion rule). Every other path that (re)starts a
+// rollout stamps this field too: SetTargetVersion writes it with the row and
+// ResumeRolloutTrack resets it, which is exactly what makes 继续 escape a halt
+// instead of replaying it.
+//
+// A track whose StageStartedAt is 0 (a legacy row written before anything
+// stamped it) admits every command record, i.e. the pre-fix behaviour. That is
+// the fail-safe direction: it can only make the failure check MORE willing to
+// halt, never less.
+func byoCommandedByThisStage(n NodeSnapshot, tr RolloutTrack) bool {
+	return byoWasCommandedForTarget(n, tr.TargetVersion) && n.UpdateStartedAt >= tr.StageStartedAt
+}
+
+// byoWasCommandedForTarget reports whether n carries a command record for a
+// rollout to targetVersion: nodes.update_from_version is non-empty and is not
+// itself the target (a record whose from-version already equals the target
+// started AFTER reaching it, so it cannot describe an attempt to get there).
+//
+// This is a VERSION test only: it says nothing about WHICH rollout issued the
+// record, because a failed update leaves those versions unchanged forever. Any
+// caller deciding whether a node's row belongs to the rollout in flight wants
+// byoCommandedByThisStage (or emergencyRefusesNode), which adds the wall-clock
+// term. The exception is the "carry on with the batch you were given" check in
+// updateCheckByo, which is already scoped by open-batch membership.
+//
+// See the OUTPUT CONTRACT above: without the caller stamping
+// update_from_version at command time, this predicate is never true and the
+// whole failure check is inert.
 func byoWasCommandedForTarget(n NodeSnapshot, targetVersion string) bool {
 	return n.UpdateFromVersion != "" && !selfupdate.SameVersion(n.UpdateFromVersion, targetVersion)
 }

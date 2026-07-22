@@ -66,14 +66,24 @@ func (s *SQLiteStore) PutRolloutTrack(ctx context.Context, t RolloutTrack) error
 //     the skipped node's ID is still in the row.
 //   - AND status='rolling': a track another instance has just halted must not be
 //     resurrected by a claim computed from the pre-halt state.
+//   - AND target_version = expectTargetVersion: an admin RETARGET (the only way
+//     target_version ever changes) leaves status='rolling' and clears
+//     current_node_id, so without this term a decision computed from the OLD
+//     target still satisfies every other condition. The observed consequence is
+//     not merely a wasted poll: the node is handed the STALE target in its
+//     response and installs the old version, while the row records it as the NEW
+//     rollout's current node. decideFleet then sees a node that is alive, has
+//     update_started_at set, reported "ok", and is not on target — which is the
+//     plain "wait" branch, with no halt and no timeout. The fleet track wedges,
+//     showing 发布中 forever.
 //
 // firstNodeID is written unconditionally, so the caller passes the value it
 // wants persisted (the unchanged one when the pick is not the canary).
-func (s *SQLiteStore) ClaimRolloutNode(ctx context.Context, track, expectCurrentNodeID, nodeID, firstNodeID string, at int64) (bool, error) {
+func (s *SQLiteStore) ClaimRolloutNode(ctx context.Context, track, expectTargetVersion, expectCurrentNodeID, nodeID, firstNodeID string, at int64) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE node_rollout SET current_node_id = ?, first_node_id = ?, stage_started_at = ?
-		   WHERE track = ? AND current_node_id = ? AND status = 'rolling'`,
-		nodeID, firstNodeID, at, track, expectCurrentNodeID)
+		   WHERE track = ? AND current_node_id = ? AND status = 'rolling' AND target_version = ?`,
+		nodeID, firstNodeID, at, track, expectCurrentNodeID, expectTargetVersion)
 	if err != nil {
 		return false, err
 	}
@@ -228,15 +238,24 @@ func (s *SQLiteStore) CompleteRolloutTrack(ctx context.Context, track string, at
 // ByoBatch=10 concurrently from each independently advancing it (10->50, then
 // 50->100 from the second instance's stale read), which would let the 50%
 // batch's observation window be skipped entirely.
-// ok=false means the row already moved (halted, completed, or advanced by
-// another instance) since this decision was computed — the caller must not
-// command the batch it computed as if it were now open, and should answer
-// "not eligible" for this poll instead.
-func (s *SQLiteStore) AdvanceByoBatch(ctx context.Context, track string, fromBatch, toBatch int, at int64) (bool, error) {
+//
+// WHERE target_version = expectTargetVersion closes the same window against an
+// admin RETARGET rather than against another instance: a retarget leaves
+// status='rolling' and resets byo_batch to 0, so a stale 10->50 advance computed
+// from the previous target used to match (byo_batch was momentarily still 10 in
+// the losing instance's read) and land against the NEW rollout — skipping the
+// 10% canary's whole observation window, and commanding the nodes it computed
+// with the version that is no longer the target.
+//
+// ok=false means the row already moved (halted, completed, retargeted, or
+// advanced by another instance) since this decision was computed — the caller
+// must not command the batch it computed as if it were now open, and should
+// answer "not eligible" for this poll instead.
+func (s *SQLiteStore) AdvanceByoBatch(ctx context.Context, track, expectTargetVersion string, fromBatch, toBatch int, at int64) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE node_rollout SET byo_batch = ?, stage_started_at = ?
-		   WHERE track = ? AND status = 'rolling' AND byo_batch = ?`,
-		toBatch, at, track, fromBatch)
+		   WHERE track = ? AND status = 'rolling' AND byo_batch = ? AND target_version = ?`,
+		toBatch, at, track, fromBatch, expectTargetVersion)
 	if err != nil {
 		return false, err
 	}

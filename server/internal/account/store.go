@@ -800,10 +800,12 @@ type Store interface {
 	// byo rows are independent — see RolloutTrack's doc comment.
 	PutRolloutTrack(ctx context.Context, t RolloutTrack) error
 	// ClaimRolloutNode is the compare-and-swap that hands the fleet slot to one
-	// node: it only writes if the row still holds the current_node_id the caller
-	// read AND is still 'rolling'. ok=false means another instance moved the
-	// track first and the caller must NOT tell its node to update.
-	ClaimRolloutNode(ctx context.Context, track, expectCurrentNodeID, nodeID, firstNodeID string, at int64) (bool, error)
+	// node: it only writes if the row still holds the current_node_id AND the
+	// target_version the caller read, and is still 'rolling'. ok=false means the
+	// track moved first (another instance's claim or halt, or an admin retarget)
+	// and the caller must NOT tell its node to update — it would be installing
+	// the version the decision was computed from, not the one now targeted.
+	ClaimRolloutNode(ctx context.Context, track, expectTargetVersion, expectCurrentNodeID, nodeID, firstNodeID string, at int64) (bool, error)
 	// HaltRolloutTrack stops a track, conditional on it still being 'rolling',
 	// so a halt can never be clobbered by (nor clobber) a concurrent writer.
 	HaltRolloutTrack(ctx context.Context, track, reason string, at int64) (bool, error)
@@ -812,11 +814,12 @@ type Store interface {
 	// here could erase a concurrent halt and its reason.
 	CompleteRolloutTrack(ctx context.Context, track string, at int64) (bool, error)
 	// AdvanceByoBatch opens the next byo batch, conditional on the row still
-	// being 'rolling' AND still at the batch percentage (fromBatch) this
-	// decision was computed from — otherwise a stale write can resurrect a
-	// halted track AND jump the ladder forward in the same stroke. See its
-	// doc comment in rollout_store.go.
-	AdvanceByoBatch(ctx context.Context, track string, fromBatch, toBatch int, at int64) (bool, error)
+	// being 'rolling', still at the batch percentage (fromBatch) AND still on
+	// the target_version this decision was computed from — otherwise a stale
+	// write can resurrect a halted track, jump the ladder forward, or land
+	// against a rollout to a different version whose canary window it has just
+	// skipped. See its doc comment in rollout_store.go.
+	AdvanceByoBatch(ctx context.Context, track, expectTargetVersion string, fromBatch, toBatch int, at int64) (bool, error)
 	// ResumeRolloutTrack restarts a HALTED track on the version it already
 	// targets, resetting the staging fields (batch, in-flight/canary node,
 	// emergency) that would otherwise make it re-halt immediately. It touches

@@ -25,10 +25,28 @@ import (
 // client-side, so a count-based budget could be burned in seconds by a
 // crash-restart loop, or exceeded by a genuinely slow download on a healthy
 // rollout. Elapsed wall-clock time has neither problem.
+//
+// fleetInstallLimit is the wall-clock backstop for the OTHER shape of a wedged
+// node: commanded, still heartbeating, never converging. Neither of the two
+// checks above catches it -- it is not silent, and it did record an update
+// start -- and the 15-minute give-up that does catch it lives in
+// updateCheckFleet's resume branch, which only runs when the wedged node ITSELF
+// polls. A node whose updater has stopped running entirely (timer disabled,
+// unit masked, updater crashed at boot) keeps heartbeating and never polls
+// update-check again, so that branch never executes and the track waits
+// forever. This limit is evaluated by decideFleet against whoever happens to be
+// polling, so it does not depend on the wedged node's cooperation at all.
+//
+// It is deliberately four times updateSilenceLimit rather than a fresh magic
+// number, and must stay comfortably longer than a legitimate install: download,
+// the node's 60s drain, the restart, and the updater's 10-minute post-update
+// health watch. An hour leaves room for a slow link on top of all of that,
+// while still bounding the track to an hour rather than to nothing.
 const (
 	fleetFirstWindow   = 6 * 3600
 	fleetStepWindow    = 30 * 60
 	updateSilenceLimit = 15 * 60
+	fleetInstallLimit  = 4 * updateSilenceLimit
 )
 
 // NodeSnapshot is what the state machine needs to know about one node.
@@ -109,7 +127,9 @@ type RolloutDecision struct {
 //     since it was commanded to update -> halt (possible brick). If it
 //     never even recorded an update start, tr.StageStartedAt is the
 //     backstop -> halt as "never started".
-//     e. it hasn't reached the target version yet -> wait
+//     e. it hasn't reached the target version yet -> wait, unless it was
+//     commanded more than fleetInstallLimit ago, in which case it is wedged
+//     (heartbeating but never converging) -> halt
 //     f. it has reached the target version but hasn't cleared its
 //     observation window yet (fleetFirstWindow for the canary,
 //     fleetStepWindow for every node after) -> wait
@@ -229,6 +249,19 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 				if cur.UpdateStartedAt == 0 && now-tr.StageStartedAt > updateSilenceLimit {
 					return RolloutDecision{Action: "halt",
 						Reason: fmt.Sprintf("node %s never started the update it was commanded", cur.ID)}
+				}
+				// Commanded, heartbeating, update_started_at set -- and still not
+				// on target an hour later. Nothing else here catches this: the
+				// silence check needs it to stop heartbeating, the check above
+				// needs update_started_at to be missing, and the 15-minute resume
+				// give-up in updateCheckFleet only fires if this very node polls
+				// again, which a node whose updater has stopped running never
+				// does. Without this the whole fleet track waits forever on one
+				// machine, showing 发布中. See fleetInstallLimit.
+				if cur.UpdateStartedAt != 0 && now-cur.UpdateStartedAt > fleetInstallLimit {
+					return RolloutDecision{Action: "halt", Reason: fmt.Sprintf(
+						"node %s was commanded to update over %d seconds ago and is still not on %s",
+						cur.ID, fleetInstallLimit, tr.TargetVersion)}
 				}
 				return RolloutDecision{Action: "wait"}
 			}

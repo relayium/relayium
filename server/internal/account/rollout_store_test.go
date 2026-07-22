@@ -141,7 +141,7 @@ func TestClaimRolloutNodeIsConditional(t *testing.T) {
 	}
 
 	// A claim computed from the row as it actually is: lands.
-	ok, err := store.ClaimRolloutNode(ctx, "fleet", "", "node-a", "node-a", 2000)
+	ok, err := store.ClaimRolloutNode(ctx, "fleet", "v0.9.0", "", "node-a", "node-a", 2000)
 	if err != nil || !ok {
 		t.Fatalf("first claim: ok=%v err=%v, want ok=true", ok, err)
 	}
@@ -157,7 +157,7 @@ func TestClaimRolloutNodeIsConditional(t *testing.T) {
 	// (current_node_id == "") must lose, and must not clobber node-a's claim —
 	// which is exactly what a whole-row upsert would do, leaving two nodes both
 	// told to install and only one of them recorded.
-	ok, err = store.ClaimRolloutNode(ctx, "fleet", "", "node-b", "node-b", 3000)
+	ok, err = store.ClaimRolloutNode(ctx, "fleet", "v0.9.0", "", "node-b", "node-b", 3000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +176,7 @@ func TestClaimRolloutNodeIsConditional(t *testing.T) {
 	if ok, err := store.HaltRolloutTrack(ctx, "fleet", "boom", 4000); err != nil || !ok {
 		t.Fatalf("halt: ok=%v err=%v", ok, err)
 	}
-	ok, err = store.ClaimRolloutNode(ctx, "fleet", "node-a", "node-c", "node-a", 5000)
+	ok, err = store.ClaimRolloutNode(ctx, "fleet", "v0.9.0", "node-a", "node-c", "node-a", 5000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +274,7 @@ func TestAdvanceByoBatchIsConditional(t *testing.T) {
 
 	// The ordinary path: still rolling, still at the batch this decision was
 	// computed from -- advances cleanly.
-	ok, err := store.AdvanceByoBatch(ctx, "byo", 10, 50, 2000)
+	ok, err := store.AdvanceByoBatch(ctx, "byo", "v0.9.0", 10, 50, 2000)
 	if err != nil || !ok {
 		t.Fatalf("advance: ok=%v err=%v, want ok=true", ok, err)
 	}
@@ -288,7 +288,7 @@ func TestAdvanceByoBatchIsConditional(t *testing.T) {
 
 	// A second instance whose decision was computed from the STALE batch (10)
 	// must lose -- the row has already moved to 50.
-	ok, err = store.AdvanceByoBatch(ctx, "byo", 10, 50, 3000)
+	ok, err = store.AdvanceByoBatch(ctx, "byo", "v0.9.0", 10, 50, 3000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +309,7 @@ func TestAdvanceByoBatchIsConditional(t *testing.T) {
 	if ok, err := store.HaltRolloutTrack(ctx, "byo", "byo rollout: 4/17 nodes in the 50% batch failed", 4000); err != nil || !ok {
 		t.Fatalf("halt: ok=%v err=%v", ok, err)
 	}
-	ok, err = store.AdvanceByoBatch(ctx, "byo", 50, 100, 5000)
+	ok, err = store.AdvanceByoBatch(ctx, "byo", "v0.9.0", 50, 100, 5000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -368,5 +368,90 @@ func TestHaltRolloutTrackOnlyHaltsRollingTracks(t *testing.T) {
 	}
 	if got.HaltedReason != "too many failures" {
 		t.Fatalf("the original halt reason was overwritten: %+v", got)
+	}
+}
+
+// F3, fleet half: an admin RETARGET is the one row change that leaves
+// status='rolling' and an empty current_node_id — i.e. it satisfies every OTHER
+// condition of the claim CAS. Without the target_version term, a claim computed
+// from the old target still lands: the polling node is answered with the STALE
+// target (the response was built from the same read) and installs the old
+// version, while the row records it as the NEW rollout's current node. From
+// there decideFleet sees a node that is alive, has update_started_at set,
+// reported "ok", and is not on target — the plain "wait" branch, with no halt
+// and no timeout. The fleet track wedges at 发布中 forever.
+func TestClaimRolloutNodeIsScopedToTheTargetItWasComputedFrom(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "fleet", TargetVersion: "v0.9.0", Status: "rolling", StageStartedAt: 1000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// The admin retargets between the instance's read and its claim. Still
+	// rolling, still no node in flight — only the version moved.
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "fleet", TargetVersion: "v1.0.0", Status: "rolling", StageStartedAt: 1500,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	ok, err := store.ClaimRolloutNode(ctx, "fleet", "v0.9.0", "", "node-a", "node-a", 2000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("a claim computed from the previous target must not land on the new rollout")
+	}
+	got, _, err := store.GetRolloutTrack(ctx, "fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.CurrentNodeID != "" || got.TargetVersion != "v1.0.0" || got.StageStartedAt != 1500 {
+		t.Fatalf("stale claim touched the retargeted row: %+v", got)
+	}
+	// The same claim recomputed against the current target is fine — the guard
+	// is about staleness, not about forbidding claims after a retarget.
+	if ok, err := store.ClaimRolloutNode(ctx, "fleet", "v1.0.0", "", "node-a", "node-a", 2000); err != nil || !ok {
+		t.Fatalf("claim on the current target: ok=%v err=%v, want ok=true", ok, err)
+	}
+}
+
+// F3, byo half: the same retarget window, one stroke further along. A stale
+// 10->50 advance that lands against the new rollout skips the 10% canary's
+// entire observation window AND commands its batch with the version the
+// decision was computed from, not the one now targeted. byo_batch is held at 10
+// across the retarget here deliberately, so the ONLY thing that can reject the
+// write is the target_version term.
+func TestAdvanceByoBatchIsScopedToTheTargetItWasComputedFrom(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "byo", TargetVersion: "v0.9.0", Status: "rolling", ByoBatch: 10, StageStartedAt: 1000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "byo", TargetVersion: "v1.0.0", Status: "rolling", ByoBatch: 10, StageStartedAt: 1500,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	ok, err := store.AdvanceByoBatch(ctx, "byo", "v0.9.0", 10, 50, 2000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("an advance computed from the previous target must not open a batch on the new rollout")
+	}
+	got, _, err := store.GetRolloutTrack(ctx, "byo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ByoBatch != 10 || got.StageStartedAt != 1500 {
+		t.Fatalf("stale advance skipped the new rollout's canary window: %+v", got)
+	}
+	if ok, err := store.AdvanceByoBatch(ctx, "byo", "v1.0.0", 10, 50, 2000); err != nil || !ok {
+		t.Fatalf("advance on the current target: ok=%v err=%v, want ok=true", ok, err)
 	}
 }

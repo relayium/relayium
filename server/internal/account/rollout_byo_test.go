@@ -42,7 +42,13 @@ func byoBatchIDs(nodes []NodeSnapshot, target string, pct int) []string {
 // for every node it actually commands, per decideByo's OUTPUT CONTRACT --
 // since a batch member is only in the failure-rate denominator once it has
 // genuinely been commanded, not merely by sitting in the batch prefix.
-func markFailed(t *testing.T, nodes []NodeSnapshot, target string, pct, k int) {
+//
+// `at` is when the command was issued, and every batch member gets it:
+// CommandNodeUpdate writes update_started_at in the same statement as
+// update_from_version, and byoCommandedByThisStage reads it to tell a record
+// this rollout wrote from one a dead rollout left behind. Callers pass their
+// track's StageStartedAt, i.e. "commanded by the stage now open".
+func markFailed(t *testing.T, nodes []NodeSnapshot, target string, pct, k int, at int64) {
 	t.Helper()
 	ids := byoBatchIDs(nodes, target, pct)
 	if k > len(ids) {
@@ -61,6 +67,7 @@ func markFailed(t *testing.T, nodes []NodeSnapshot, target string, pct, k int) {
 			continue
 		}
 		nodes[i].UpdateFromVersion = nodes[i].Version // every batch member was commanded
+		nodes[i].UpdateStartedAt = at
 		if failing[nodes[i].ID] {
 			nodes[i].UpdateResult = "failed"
 		}
@@ -106,7 +113,7 @@ func TestDecideByoFirstBatchOpensImmediately(t *testing.T) {
 // what makes the floor load-bearing.
 func TestDecideByoToleratesASingleFailure(t *testing.T) {
 	nodes := byoNodes(2, "v0.8.0", tNow)
-	markFailed(t, nodes, "v0.9.0", 100, 1)
+	markFailed(t, nodes, "v0.9.0", 100, 1, tNow-7*tHour)
 	tr := RolloutTrack{
 		Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
 		ByoBatch: 100, StageStartedAt: tNow - 7*tHour,
@@ -125,7 +132,7 @@ func TestDecideByoToleratesASingleFailure(t *testing.T) {
 // so the canary stage could never halt — which is the only reason it exists.
 func TestDecideByoHaltsAboveFailureRate(t *testing.T) {
 	nodes := byoNodes(100, "v0.8.0", tNow)
-	markFailed(t, nodes, "v0.9.0", 10, 3) // 3/10 = 30% of the open batch; 3/100 = 3% of the population
+	markFailed(t, nodes, "v0.9.0", 10, 3, tNow-7*tHour) // 3/10 = 30% of the open batch; 3/100 = 3% of the population
 	tr := RolloutTrack{
 		Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
 		ByoBatch: 10, StageStartedAt: tNow - 7*tHour,
@@ -150,7 +157,7 @@ func TestDecideByoFailureRateThresholdIsExclusive(t *testing.T) {
 		{21, "halt"},   // 21% — above it
 	} {
 		nodes := byoNodes(100, "v0.8.0", tNow)
-		markFailed(t, nodes, "v0.9.0", 100, tc.failures)
+		markFailed(t, nodes, "v0.9.0", 100, tc.failures, tNow-7*tHour)
 		tr := RolloutTrack{
 			Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
 			ByoBatch: 100, StageStartedAt: tNow - 7*tHour,
@@ -180,6 +187,7 @@ func TestDecideByoHaltsWhenOnlyAFewOfTheBatchWereReachable(t *testing.T) {
 	for i := range nodes {
 		if reachable[nodes[i].ID] {
 			nodes[i].UpdateFromVersion = nodes[i].Version // actually commanded
+			nodes[i].UpdateStartedAt = tNow - 7*tHour     // ... by the stage now open
 			nodes[i].UpdateResult = "failed"
 		}
 		// The other 16 batch members are left with no UpdateFromVersion:
@@ -202,19 +210,92 @@ func TestDecideByoHaltsWhenOnlyAFewOfTheBatchWereReachable(t *testing.T) {
 // next one starts. Counting them would halt a rollout that has not commanded
 // a single node.
 func TestDecideByoIgnoresStaleResultsFromAPreviousRollout(t *testing.T) {
-	nodes := byoNodes(20, "v0.8.0", tNow)
-	for i := 0; i < 5; i++ { // 25% of the population — enough to trip the old check
-		nodes[i].UpdateResult = "failed"
-		nodes[i].UpdateFromVersion = "v0.7.0" // a v0.7.0 -> v0.8.0 rollout, long over
+	// The two shapes a leftover row can take, and the second one is the shape a
+	// GENUINE failure leaves behind: the update did not land, so the node is
+	// still sitting on exactly the version update_from_version names. Only the
+	// first shape (the node moved on afterwards) was ever excluded by the
+	// version terms alone, which is why this test used to pass while the
+	// failing shape wedged the track -- see byoCommandedByThisStage.
+	for _, shape := range []struct {
+		name       string
+		nodeVerNow string
+	}{
+		{"node moved on to another version after the failure", "v0.8.0"},
+		{"node never left the version it was commanded from (a real failure)", "v0.7.0"},
+	} {
+		// Both before the first batch opens and mid-ladder: the prefix is empty
+		// at ByoBatch 0, so only the second value actually exercises the
+		// failure-rate check.
+		for _, batch := range []int{0, 50} {
+			t.Run(fmt.Sprintf("%s/batch=%d", shape.name, batch), func(t *testing.T) {
+				nodes := byoNodes(20, "v0.8.0", tNow)
+				stale := byoBatchIDs(nodes, "v0.9.0", 50)[:5] // 5 of the open 10-node batch
+				staleSet := make(map[string]bool, len(stale))
+				for _, id := range stale {
+					staleSet[id] = true
+				}
+				for i := range nodes {
+					if !staleSet[nodes[i].ID] {
+						continue
+					}
+					nodes[i].Version = shape.nodeVerNow
+					nodes[i].UpdateResult = "failed"
+					nodes[i].UpdateFromVersion = "v0.7.0"         // a v0.7.0 -> v0.8.0 rollout, long over
+					nodes[i].UpdateStartedAt = tNow - 30*24*tHour // ...commanded a month ago
+				}
+				tr := RolloutTrack{
+					Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
+					ByoBatch: batch, StageStartedAt: tNow - tHour,
+				}
+
+				action, _, reason := decideByo(tr, nodes, tNow)
+				if action == "halt" {
+					t.Fatalf("action = halt (%q); this rollout has commanded nobody, so a previous one's records must not count", reason)
+				}
+			})
+		}
+	}
+}
+
+// Probed against the real decideByo: 10 BYO nodes, 2 of which genuinely failed
+// the previous rollout, are still sitting on the version they were commanded
+// from, and have been offline ever since. Because a failed update leaves
+// update_from_version pointing at the node's current version FOREVER, the
+// version-only predicates counted those two dead machines in both the
+// numerator and the denominator of the NEXT rollout's failure rate: 2/2, an
+// immediate halt on the first evaluation, with the reason naming a batch this
+// release had not commanded a single node in.
+//
+// Nothing escaped it. 继续 resets ByoBatch and re-walks the ladder into the same
+// two rows; a brand-new target does the same. Only those machines coming back
+// online and being re-commanded cleared it -- and they are dead. Two dead BYO
+// nodes could wedge the BYO track permanently, which is the exact opposite of
+// the fix-forward behaviour the design promises.
+func TestDecideByoDoesNotInheritAPreviousRolloutsRealFailures(t *testing.T) {
+	const target = "v1.0.0"
+	nodes := byoNodes(10, "v0.9.0", tNow)
+	// Put the two dead nodes INSIDE the open batch prefix, which is where they
+	// have to be to be counted at all.
+	dead := byoBatchIDs(nodes, target, 50)[:2]
+	deadSet := map[string]bool{dead[0]: true, dead[1]: true}
+	for i := range nodes {
+		if !deadSet[nodes[i].ID] {
+			continue
+		}
+		nodes[i].Version = "v0.8.0"                   // never made it off v0.8.0
+		nodes[i].UpdateFromVersion = "v0.8.0"         // ...which is what it was commanded from
+		nodes[i].UpdateResult = "failed"              // the v0.8.0 -> v0.9.0 rollout's failure
+		nodes[i].UpdateStartedAt = tNow - 30*24*tHour // a month ago
+		nodes[i].LastSeenAt = tNow - 30*24*tHour      // and offline since, so never re-commanded
 	}
 	tr := RolloutTrack{
-		Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
-		ByoBatch: 0, StageStartedAt: tNow,
+		Track: "byo", TargetVersion: target, Status: "rolling",
+		ByoBatch: 50, StageStartedAt: tNow - 7*tHour,
 	}
 
 	action, _, reason := decideByo(tr, nodes, tNow)
 	if action == "halt" {
-		t.Fatalf("action = halt (%q) before a single node was commanded; stale update_result must not count", reason)
+		t.Fatalf("action = halt (%q); two nodes that failed a PREVIOUS rollout and are still on the old version must not halt this one", reason)
 	}
 }
 

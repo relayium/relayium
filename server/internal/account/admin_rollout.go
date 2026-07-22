@@ -338,6 +338,11 @@ func (s *Service) handleAdminRolloutPause(w http.ResponseWriter, r *http.Request
 		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "暂停失败：该轨道当前不在发布中")
 		return
 	}
+	// Same greppable marker the state machines' halts use (see haltRollout), so
+	// a monitor watching for stopped rollouts sees every way a track can stop,
+	// not just the automatic ones. The target version is not read back here --
+	// this path holds no track row -- and is not worth a second query.
+	log.Printf("%s track=%s target=? reason=%q", rolloutHaltLogPrefix, track, "管理员手动暂停")
 	s.writeAudit(r, AuditRolloutPause, "rollout:"+track,
 		[]ChangeField{{Field: "status", Old: "rolling", New: "halted"}}, StepUpNone)
 	http.Redirect(w, r, "/admin", http.StatusFound)

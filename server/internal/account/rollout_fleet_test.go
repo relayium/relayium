@@ -314,6 +314,42 @@ func TestDecideFleet(t *testing.T) {
 			want: RolloutDecision{Action: "update", NodeID: "here", IsFirst: true},
 		},
 		{
+			// F4: commanded, heartbeating, update_started_at set -- and still not
+			// on target an hour later. The node is not SILENT, so the brick check
+			// can never fire; update_started_at is set, so the never-started check
+			// can never fire; and the 15-minute give-up in updateCheckFleet's
+			// resume branch only runs when this very node polls, which a node
+			// whose updater has stopped running (timer disabled, unit masked)
+			// never does again. Without the backstop the fleet track waits
+			// forever on it, showing 发布中 with nothing to show an operator.
+			name: "halts a node that keeps heartbeating but never converges",
+			track: RolloutTrack{
+				Track: "fleet", TargetVersion: "v0.9.0", Status: "rolling",
+				CurrentNodeID: "n1", FirstNodeID: "n1", StageStartedAt: tNow - 30*tHour,
+			},
+			nodes: []NodeSnapshot{
+				// Heartbeating right now, so never silent; commanded 30h ago.
+				{ID: "n1", Version: "v0.8.0", LastSeenAt: tNow, UpdateStartedAt: tNow - 30*tHour},
+				{ID: "n2", Version: "v0.8.0", LastSeenAt: tNow},
+			},
+			want: RolloutDecision{Action: "halt", Reason: "node n1 was commanded to update over ... ago"},
+		},
+		{
+			// ...and not one second before the limit: a slow download plus the
+			// 60s drain, a restart and the updater's 10-minute health watch are a
+			// legitimate install, not a wedge.
+			name: "waits on a slow but still plausible install",
+			track: RolloutTrack{
+				Track: "fleet", TargetVersion: "v0.9.0", Status: "rolling",
+				CurrentNodeID: "n1", FirstNodeID: "n1", StageStartedAt: tNow - fleetInstallLimit,
+			},
+			nodes: []NodeSnapshot{
+				{ID: "n1", Version: "v0.8.0", LastSeenAt: tNow, UpdateStartedAt: tNow - fleetInstallLimit},
+				{ID: "n2", Version: "v0.8.0", LastSeenAt: tNow},
+			},
+			want: RolloutDecision{Action: "wait"},
+		},
+		{
 			name:  "does nothing when halted",
 			track: RolloutTrack{Track: "fleet", TargetVersion: "v0.9.0", Status: "halted"},
 			nodes: []NodeSnapshot{{ID: "n1", Version: "v0.8.0", LastSeenAt: tNow}},

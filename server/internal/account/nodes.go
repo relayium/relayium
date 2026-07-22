@@ -402,6 +402,10 @@ func (s *Service) updateCheckEmergency(ctx context.Context, tr RolloutTrack, sna
 //   - UpdateStartedAt >= tr.StageStartedAt: the command it describes was issued
 //     by THIS rollout.
 //
+// The last two together are byoCommandedByThisStage, which the staged BYO
+// failure check now shares: both are asking "is this row this release's, or a
+// dead one's".
+//
 // Without the time scope the predicate says nothing about WHICH rollout failed,
 // and nothing ever clears nodes.update_result except CommandNodeUpdate — not
 // re-register, not heartbeat, and not SetTargetVersion, which does not touch
@@ -420,7 +424,34 @@ func emergencyRefusesNode(n NodeSnapshot, tr RolloutTrack) bool {
 	if n.UpdateResult != "failed" && n.UpdateResult != "rolled_back" {
 		return false
 	}
-	return byoWasCommandedForTarget(n, tr.TargetVersion) && n.UpdateStartedAt >= tr.StageStartedAt
+	return byoCommandedByThisStage(n, tr)
+}
+
+// rolloutHaltLogPrefix is the greppable marker every halt transition is logged
+// under. There is no notification system in this server, and a halted track is
+// otherwise visible only to somebody who happens to open /admin -- but the
+// fleet ladder runs for ~14h and each BYO batch window is 6h, so a halt can sit
+// unnoticed for a day while nothing ships. A single well-known token an
+// existing log monitor can alert on is the cheapest honest fix; do not rename
+// it without updating whatever greps for it.
+const rolloutHaltLogPrefix = "ROLLOUT-HALTED"
+
+// haltRollout stops a track and logs the transition, exactly once.
+//
+// The log line is emitted ONLY when the store reports the transition actually
+// landed (HaltRolloutTrack is conditional on the track still being 'rolling'),
+// so a track that several instances all decide to halt in the same second logs
+// one line, not one per instance per poll -- and a "halt" decision computed
+// against a row that has since completed logs nothing, because nothing halted.
+func (s *Service) haltRollout(ctx context.Context, tr RolloutTrack, reason string, at int64) error {
+	ok, err := s.store.HaltRolloutTrack(ctx, tr.Track, reason, at)
+	if err != nil {
+		return err
+	}
+	if ok {
+		log.Printf("%s track=%s target=%s reason=%q", rolloutHaltLogPrefix, tr.Track, tr.TargetVersion, reason)
+	}
+	return nil
 }
 
 // updateCheckFleet runs the fleet state machine and persists whatever it
@@ -433,7 +464,7 @@ func (s *Service) updateCheckFleet(ctx context.Context, tr RolloutTrack, snaps [
 		// three halt columns: CurrentNodeID/FirstNodeID are kept for diagnosis,
 		// and a whole-row rewrite here could clobber a concurrent instance's
 		// halt (or be clobbered by its claim).
-		if _, err := s.store.HaltRolloutTrack(ctx, tr.Track, d.Reason, now); err != nil {
+		if err := s.haltRollout(ctx, tr, d.Reason, now); err != nil {
 			return false, "", err
 		}
 		return false, d.Reason, nil
@@ -463,18 +494,21 @@ func (s *Service) updateCheckFleet(ctx context.Context, tr RolloutTrack, snaps [
 			return false, "another node is next in the rollout queue", nil
 		}
 		// CLAIM FIRST, ANSWER SECOND, and claim by COMPARE-AND-SWAP. The write
-		// only lands if the row still carries the current_node_id this decision
-		// was computed from and is still 'rolling'; a concurrent instance that
-		// got there first (with a different candidate set, or with a halt) makes
-		// this a no-op and the node is told to wait. A whole-row upsert here
-		// would silently overwrite that instance's claim or halt.
+		// only lands if the row still carries the current_node_id AND the
+		// target_version this decision was computed from, and is still
+		// 'rolling'; a concurrent instance that got there first (with a
+		// different candidate set, or with a halt) -- or an admin who retargeted
+		// the track in between -- makes this a no-op and the node is told to
+		// wait, rather than being commanded to install the version this response
+		// was about to name. A whole-row upsert here would silently overwrite
+		// that instance's claim or halt.
 		first := tr.FirstNodeID
 		if d.IsFirst {
 			// The canary is positional and cannot be re-derived later; losing
 			// it silently downgrades the 6h observation window to 30 minutes.
 			first = node.ID
 		}
-		claimed, err := s.store.ClaimRolloutNode(ctx, tr.Track, tr.CurrentNodeID, node.ID, first, now)
+		claimed, err := s.store.ClaimRolloutNode(ctx, tr.Track, tr.TargetVersion, tr.CurrentNodeID, node.ID, first, now)
 		if err != nil {
 			return false, "", err
 		}
@@ -527,7 +561,7 @@ func (s *Service) updateCheckFleet(ctx context.Context, tr RolloutTrack, snaps [
 			if now-node.UpdateStartedAt > updateSilenceLimit {
 				reason := fmt.Sprintf("node %s has been resuming its update for over %d seconds without ever reporting a result",
 					node.ID, updateSilenceLimit)
-				if _, err := s.store.HaltRolloutTrack(ctx, tr.Track, reason, now); err != nil {
+				if err := s.haltRollout(ctx, tr, reason, now); err != nil {
 					return false, "", err
 				}
 				return false, reason, nil
@@ -548,7 +582,7 @@ func (s *Service) updateCheckByo(ctx context.Context, tr RolloutTrack, snaps []N
 		// Conditional on the track still being 'rolling' — see the fleet path:
 		// a whole-row rewrite can lose another instance's halt, and a halt is
 		// the one write that must never be lost.
-		if _, err := s.store.HaltRolloutTrack(ctx, tr.Track, reason, now); err != nil {
+		if err := s.haltRollout(ctx, tr, reason, now); err != nil {
 			return false, "", err
 		}
 		// The detailed reason (e.g. "4/17 nodes in the 10% batch failed") is
@@ -576,15 +610,15 @@ func (s *Service) updateCheckByo(ctx context.Context, tr RolloutTrack, snaps []N
 		// BEFORE commanding anyone: StageStartedAt is what gates the next,
 		// wider batch, and a batch opened but not recorded would re-open (and
 		// re-command) on every single poll. This is a compare-and-swap, not a
-		// blind write: it only lands if the row is STILL 'rolling' and STILL
-		// at the batch percentage (tr.ByoBatch) this decision was computed
-		// from. Dropping either half of that condition reproduces the worst
-		// finding in this package -- a concurrent halt (computed from the same
+		// blind write: it only lands if the row is STILL 'rolling', STILL
+		// at the batch percentage (tr.ByoBatch) AND still on the target version
+		// this decision was computed from. Dropping any of those reproduces the
+		// worst finding in this package -- a concurrent halt (computed from the same
 		// pre-halt read) silently resurrected, AND the ladder jumped straight
 		// to the wider batch in the same write, reaching a release the failure
 		// check had already decided to stop. See AdvanceByoBatch's doc comment.
 		toBatch := nextByoBatch(tr.ByoBatch)
-		advanced, err := s.store.AdvanceByoBatch(ctx, tr.Track, tr.ByoBatch, toBatch, now)
+		advanced, err := s.store.AdvanceByoBatch(ctx, tr.Track, tr.TargetVersion, tr.ByoBatch, toBatch, now)
 		if err != nil {
 			return false, "", err
 		}
