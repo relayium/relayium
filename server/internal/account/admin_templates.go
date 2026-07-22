@@ -56,6 +56,16 @@ type adminHomeData struct {
 	// disk (node_id unset) — the default fallback store, shown so the operator can
 	// see how much rides on central and decide whether to disable it.
 	CentralStoredBytes int64
+	// RolloutFleet / RolloutByo are the two node-version rollout panels. They
+	// are two SEPARATE fields, built by two separate reads, precisely so a
+	// halted or unreadable byo track cannot take the fleet's controls with it —
+	// see rolloutPanelView. Do not merge them into one field with a selector.
+	RolloutFleet rolloutPanelView
+	RolloutByo   rolloutPanelView
+	// RolloutError is the banner shown when a rollout control was refused (bad
+	// version, unknown track, the byo-behind-fleet gate, pausing a track that
+	// is not rolling). Empty on a normal render.
+	RolloutError string
 	// Nonce is the per-request CSP script nonce, stamped on this page's inline
 	// <script> tags so they run under a script-src without 'unsafe-inline'.
 	Nonce string
@@ -117,6 +127,79 @@ const passkeyB64JS = `{{define "passkeyB64"}}
 // pages are parsed separately, so each has to be given its own association.
 func withPasskeyJS(t *template.Template) *template.Template {
 	return template.Must(t.Parse(passkeyB64JS))
+}
+
+// rolloutPanelTmpl renders ONE rollout track's panel (a rolloutPanelView) and
+// is instantiated twice, once per track, from separate data.
+//
+// It is a template over a single track's view — it has no access to the other
+// track and no way to name it — which is what keeps the two panels independent
+// at the rendering layer too: every control below posts to
+// /admin/rollout/{{.Track}}/..., so there is no shared form, no track selector,
+// and no way for one track's state to disable the other's buttons. Keep it
+// that way; collapsing the two panels into one form with a dropdown would
+// recreate exactly the coupling the two-track design exists to avoid.
+const rolloutPanelTmpl = `{{define "rolloutPanel"}}
+<div class="ro-panel">
+<h3>{{.Title}}（{{.Track}}）</h3>
+{{if .Err}}
+<p class="err">读取该轨道状态失败，控制按钮已隐藏（另一条轨道不受影响）。</p>
+{{else}}
+<p class="ro-state">
+目标版本：<b>{{if .TargetVersion}}{{.TargetVersion}}{{else}}—{{end}}</b> ·
+状态：<b>{{.StatusText}}</b>{{if .Emergency}} <span class="ro-emg">紧急发布中（已跳过分批）</span>{{end}} ·
+进度：{{.OnTarget}}/{{.Total}} 台已在目标版本 ·
+{{if eq .Track "fleet"}}正在更新：{{if .CurrentNodeID}}{{.CurrentNodeID}}{{else}}—{{end}}
+{{else}}当前批次：{{if .ByoBatch}}{{.ByoBatch}}%{{else}}未开批{{end}}{{end}}
+{{if .StageStartedAt}} · 本阶段开始：{{ts .StageStartedAt}}{{end}}
+</p>
+{{if .HaltedReason}}<p class="err">中止原因：{{.HaltedReason}}</p>{{end}}
+
+<div class="ro-ctl">
+<form method="post" action="/admin/rollout/{{.Track}}/target" class="lim">
+<input type="text" name="version" placeholder="v1.2.3" title="目标版本（vMAJOR.MINOR.PATCH）" style="width:110px">
+<button type="submit">设定目标版本</button>
+</form>
+<form method="post" action="/admin/rollout/{{.Track}}/pause" class="lim"
+  onsubmit="return confirm('暂停 {{.Track}} 轨的发布？')"><button type="submit">暂停</button></form>
+<form method="post" action="/admin/rollout/{{.Track}}/resume" class="lim"
+  onsubmit="return confirm('继续 {{.Track}} 轨的发布？将从头重新分批。')"><button type="submit">继续</button></form>
+<form method="post" action="/admin/rollout/{{.Track}}/rollback" class="lim"
+  onsubmit="return confirm('把 {{.Track}} 轨回滚到该版本？')">
+<input type="text" name="version" placeholder="v1.2.2" title="回滚到的版本" style="width:110px">
+<button type="submit">回滚</button>
+</form>
+<form method="post" action="/admin/rollout/{{.Track}}/emergency" class="lim"
+  onsubmit="return confirm('紧急发布：将跳过分批/金丝雀，对 {{.Track}} 整条轨道一次性放行。确定？')">
+<input type="text" name="version" placeholder="v1.2.4" title="紧急发布的版本" style="width:110px">
+<button type="submit" class="danger">紧急发布</button>
+</form>
+</div>
+
+<table>
+<thead><tr><th>节点</th><th>状态</th><th>当前版本</th><th>更新结果</th><th>从版本</th><th>下发时间(UTC)</th></tr></thead>
+<tbody>
+{{range .Nodes}}
+<tr>
+<td>{{if .Label}}<b>{{.Label}}</b> {{end}}<span style="color:var(--muted);font-size:12px">{{.ID}}</span>
+{{if .Current}}<span class="ro-tag">更新中</span>{{end}}{{if .InBatch}}<span class="ro-tag">本批次</span>{{end}}</td>
+<td>{{if .Online}}在线{{else}}离线{{end}}</td>
+<td>{{if .Version}}{{.Version}}{{else}}—{{end}}{{if .OnTarget}} ✓{{end}}</td>
+<td>{{if eq .Result "failed"}}<b class="never">{{.ResultText}}</b>{{else if eq .Result "rolled_back"}}<b class="never">{{.ResultText}}</b>{{else}}{{.ResultText}}{{end}}</td>
+<td>{{if .UpdateFromVersion}}{{.UpdateFromVersion}}{{else}}—{{end}}</td>
+<td>{{if .UpdateStartedAt}}{{ts .UpdateStartedAt}}{{else}}—{{end}}</td>
+</tr>
+{{else}}
+<tr><td colspan="6" style="color:var(--muted)">该轨道下暂无节点</td></tr>
+{{end}}
+</tbody></table>
+{{end}}
+</div>
+{{end}}`
+
+// withRolloutPanel associates the per-track rollout panel template with t.
+func withRolloutPanel(t *template.Template) *template.Template {
+	return template.Must(t.Parse(rolloutPanelTmpl))
 }
 
 var adminLoginTmpl = template.Must(withPasskeyJS(template.New("login")).Parse(`<!doctype html>
@@ -340,7 +423,7 @@ button:hover{filter:brightness(1.07)}
 {{end}}
 </body></html>`))
 
-var adminUsersTmpl = template.Must(withPasskeyJS(template.New("users").Funcs(template.FuncMap{
+var adminUsersTmpl = template.Must(withRolloutPanel(withPasskeyJS(template.New("users").Funcs(template.FuncMap{
 	"ts":    func(sec int64) string { return time.Unix(sec, 0).UTC().Format("2006-01-02 15:04") },
 	"bytes": humanBytes,
 	"gib":   func(b int64) int64 { return b / (1 << 30) },
@@ -350,7 +433,7 @@ var adminUsersTmpl = template.Must(withPasskeyJS(template.New("users").Funcs(tem
 		}
 		return p
 	},
-})).Parse(`<!doctype html>
+}))).Parse(`<!doctype html>
 <html><head><meta charset="utf-8"><title>Relayium Admin · 用户</title>
 <style>:root{--a:#7c3aad;--bg:#faf9fb;--fg:#1a1420;--muted:#6b6375;--bd:#e5e4e7;--card:#fff;--soft:#f4f3ec}
 @media(prefers-color-scheme:dark){:root{--a:#c084fc;--bg:#16171d;--fg:#f3f4f6;--muted:#9ca3af;--bd:#2e303a;--card:#1c1d25;--soft:#1f2028}}
@@ -397,6 +480,13 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 .passkeys .mint{flex-wrap:wrap;margin-top:12px}
 .never{color:#e5484d;font-weight:600}
 .err{color:#e5484d;margin:10px 0 0}
+.rollout{margin:0 0 28px}.rollout h2{margin-bottom:12px}
+.ro-panel{border:1px solid var(--bd);border-radius:12px;padding:14px 16px;margin:12px 0;background:var(--card)}
+.ro-panel h3{font-size:14px;margin:0 0 8px}
+.ro-state{margin:0 0 10px;color:var(--muted);font-size:13px}
+.ro-emg{color:#e5484d;font-weight:600}
+.ro-ctl{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px}
+.ro-tag{margin-left:6px;font-size:11px;padding:1px 6px;border-radius:6px;background:var(--soft);color:var(--muted)}
 /* [hidden] alone loses to .mint's display:flex, so state it outright. */
 [hidden]{display:none!important}</style></head>
 <body>
@@ -478,6 +568,13 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 {{end}}
 </tbody></table>
 {{end}}
+</section>
+
+<section class="rollout">
+<h2>节点版本发布</h2>
+{{if .RolloutError}}<p class="err">{{.RolloutError}}</p>{{end}}
+{{template "rolloutPanel" .RolloutFleet}}
+{{template "rolloutPanel" .RolloutByo}}
 </section>
 
 <section class="plans">

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/relayium/relayium/internal/relayusage"
 	"github.com/relayium/relayium/internal/selfupdate"
@@ -298,6 +299,22 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	snaps := nodeSnapshots(all)
 
+	// Emergency release short-circuits BOTH state machines: the operator has
+	// explicitly (and with a step-up confirmation) asked for the whole track at
+	// once, so there is no queue to wait in and no batch to be a member of.
+	// Placed before the per-track dispatch so the semantics are identical on
+	// fleet and byo — an emergency is not a different kind of thing on our own
+	// machines than on a user's.
+	if tr.Emergency {
+		resp.Eligible, resp.Reason, err = s.updateCheckEmergency(ctx, tr, snaps, node, now)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+			return
+		}
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+
 	if track == "fleet" {
 		resp.Eligible, resp.Reason, err = s.updateCheckFleet(ctx, tr, snaps, node, now)
 	} else {
@@ -308,6 +325,57 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// updateCheckEmergency answers a node while its track is in emergency mode:
+// everyone who is behind the target updates NOW, with no queue, no canary and
+// no batch ladder. It replaces decideFleet/decideByo rather than configuring
+// them, so neither state machine grows an "except when..." branch.
+//
+// Two things it still does, because dropping them would make the emergency
+// unusable rather than just fast:
+//
+//   - it does NOT re-command a node that already reported a failure for THIS
+//     target (byoWasCommandedForTarget + a failed/rolled_back result). Without
+//     that, a node whose update fails is handed the same command on every
+//     30-second poll forever — a reinstall loop, not a release. Its row keeps
+//     the failure for the admin panel to show.
+//   - it completes the track once nobody we can still reach is behind, exactly
+//     as the staged paths do, so an emergency release does not leave the track
+//     rolling forever and every node re-checking on every poll.
+//
+// What it deliberately does NOT do is halt on failures: an emergency release
+// has already reached everyone by the time a failure is reported, so there is
+// nothing left to stop. The admin's pause control is the kill switch.
+func (s *Service) updateCheckEmergency(ctx context.Context, tr RolloutTrack, snaps []NodeSnapshot, node Node, now int64) (bool, string, error) {
+	self := nodeSnapshot(node)
+	if !selfupdate.SameVersion(node.Version, tr.TargetVersion) {
+		if (node.UpdateResult == "failed" || node.UpdateResult == "rolled_back") &&
+			byoWasCommandedForTarget(self, tr.TargetVersion) {
+			return false, "emergency release: this node already reported " + node.UpdateResult, nil
+		}
+		if err := s.store.CommandNodeUpdate(ctx, node.ID, node.Version, now); err != nil {
+			return false, "", err
+		}
+		return true, "", nil
+	}
+	// This node is done. Complete the track only when no node we have heard
+	// from recently is still behind — same "landed, not just elapsed" rule
+	// decideByo's final batch uses, so a straggler is never declared shipped.
+	cutoff := now - int64(nodeOnlineWindow/time.Second)
+	for _, n := range snaps {
+		if n.LastSeenAt >= cutoff && !selfupdate.SameVersion(n.Version, tr.TargetVersion) {
+			return false, "emergency release in progress", nil
+		}
+	}
+	ok, err := s.store.CompleteRolloutTrack(ctx, tr.Track, now)
+	if err != nil {
+		return false, "", err
+	}
+	if !ok {
+		return false, "rollout state changed before this could be recorded as complete", nil
+	}
+	return false, "rollout complete", nil
 }
 
 // updateCheckFleet runs the fleet state machine and persists whatever it

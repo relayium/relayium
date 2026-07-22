@@ -399,6 +399,21 @@ type RolloutTrack struct {
 	// HaltedReason is a human-readable note on why Status == "halted" (e.g. a
 	// heartbeat timeout or an elevated post-update failure rate). '' otherwise.
 	HaltedReason string
+	// Emergency releases the WHOLE track at once: while it is set, the update
+	// check bypasses the staged ladder entirely (the fleet's one-node-at-a-time
+	// queue with its 6h canary window, and the byo 10/50/100 batches) and tells
+	// every node of the track that is behind the target to update on its next
+	// poll. It is set ONLY by the admin emergency-release action, which is
+	// step-up confirmed and audited, and it is cleared by every other way a
+	// track's state is written — SetTargetVersion's whole-row replace and
+	// ResumeRolloutTrack both put the track back on the staged ladder — so a
+	// track can never be left in emergency mode by accident.
+	//
+	// It deliberately gives up the failure gating that goes with staging: an
+	// emergency release ships to everyone at once, so there is no canary left
+	// whose failure could stop it. The admin's 暂停 (pause) control is the kill
+	// switch, since a track that is not 'rolling' is inert on every path.
+	Emergency bool
 }
 
 // Setting is one admin-editable integer config value (bytes or seconds).
@@ -802,6 +817,19 @@ type Store interface {
 	// halted track AND jump the ladder forward in the same stroke. See its
 	// doc comment in rollout_store.go.
 	AdvanceByoBatch(ctx context.Context, track string, fromBatch, toBatch int, at int64) (bool, error)
+	// ResumeRolloutTrack restarts a HALTED track on the version it already
+	// targets, resetting the staging fields (batch, in-flight/canary node,
+	// emergency) that would otherwise make it re-halt immediately. It touches
+	// one track's row and reads nothing else — resuming one track must never
+	// be able to fail because of the other. ok=false means the track was not
+	// halted (already rolling, or complete).
+	ResumeRolloutTrack(ctx context.Context, track string, at int64) (bool, error)
+	// SetRolloutEmergency arms emergency mode (release the whole track at
+	// once, skipping the staged ladder) on a track that is rolling to
+	// expectVersion — a compare-and-swap against exactly what the admin
+	// confirmed. ok=false means the track moved in between and nothing was
+	// released.
+	SetRolloutEmergency(ctx context.Context, track, expectVersion string, at int64) (bool, error)
 	// NodesByOwnerType returns every node of one ownership class ("fleet" |
 	// "user") INCLUDING offline ones. The rollout state machines require the
 	// offline rows (see the method's doc comment) — do not substitute

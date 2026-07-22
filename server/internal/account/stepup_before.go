@@ -49,6 +49,17 @@ func (s *Service) beforeImageFor(ctx context.Context, action string, form url.Va
 		return map[string]any{}, map[string]any{"name": form.Get("name")},
 			"token:" + form.Get("name"), nil
 
+	// The confirmation page for an emergency release must state, in the diff,
+	// the two things that make it different from a normal target change: the
+	// version it would push, and that it bypasses the staged ladder. The track
+	// itself is in the path wildcard, so handleAdminConfirm fills the target
+	// after this returns (same as node delete below).
+	case AuditRolloutEmergency:
+		return map[string]any{}, map[string]any{
+			"target_version": form.Get("version"),
+			"emergency":      true,
+		}, "-", nil
+
 	case AuditPasskeyDelete:
 		return map[string]any{}, map[string]any{}, "passkey:" + form.Get("id"), nil
 

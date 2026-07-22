@@ -20,6 +20,14 @@ const (
 	AuditTokenMint     = "token.mint"
 	AuditTokenRevoke   = "token.revoke"
 	AuditPasskeyDelete = "passkey.delete"
+	// 节点版本发布。四个常规动作各自独立记账，紧急发布单列一个 action ——
+	// 事后翻审计日志时，"这次是谁跳过了分批" 必须一眼可查，不能混在
+	// rollout.target 里靠 changes 字段去猜。
+	AuditRolloutTarget    = "rollout.target"
+	AuditRolloutPause     = "rollout.pause"
+	AuditRolloutResume    = "rollout.resume"
+	AuditRolloutRollback  = "rollout.rollback"
+	AuditRolloutEmergency = "rollout.emergency"
 )
 
 // auditActions lists every known action, in the same order as the const
@@ -31,6 +39,8 @@ var auditActions = []string{
 	AuditLoginOK, AuditLoginFail, AuditLogout, AuditSettings,
 	AuditPlanUpsert, AuditUserPlan, AuditNodeDelete, AuditNodeLimits,
 	AuditNodeLabel, AuditTokenMint, AuditTokenRevoke, AuditPasskeyDelete,
+	AuditRolloutTarget, AuditRolloutPause, AuditRolloutResume,
+	AuditRolloutRollback, AuditRolloutEmergency,
 }
 
 // 步进因子取值。"" = 该操作无需步进；grace = 落在宽限期内跳过了校验。

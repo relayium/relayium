@@ -489,6 +489,13 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// recorded canary == canary" for any row this misses.
 		`UPDATE node_rollout SET first_node_id = current_node_id
 		   WHERE status = 'rolling' AND first_node_id = '' AND current_node_id <> ''`,
+		// emergency = the admin pulled the "release the whole track at once"
+		// lever: the staged ladder (fleet canary/queue, byo 10/50/100 batches)
+		// is bypassed for as long as it is 1. Added by ALTER, like
+		// first_node_id above, so live databases migrate. 0 on every existing
+		// row = the staged behaviour that shipped before this column, which is
+		// the only safe default.
+		`ALTER TABLE node_rollout ADD COLUMN emergency INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {

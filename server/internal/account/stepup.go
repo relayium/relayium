@@ -118,6 +118,10 @@ func (s *Service) confirmHandlerFor(action string) (http.HandlerFunc, bool) {
 		AuditTokenMint:     s.handleAdminMintToken,
 		AuditNodeDelete:    s.handleAdminDeleteNode,
 		AuditPasskeyDelete: s.handleAdminPasskeyDelete,
+		// Emergency release is the only rollout control behind step-up: it is
+		// the one that ships a build to every node of a track at once, with no
+		// canary left to catch it.
+		AuditRolloutEmergency: s.handleAdminRolloutEmergency,
 	}
 	h, ok := m[action]
 	return h, ok
@@ -214,6 +218,11 @@ func (s *Service) handleAdminConfirm(w http.ResponseWriter, r *http.Request) {
 	// instead of "-", now that the id is recoverable here.
 	if pending.action == AuditNodeDelete && pending.pathID != "" {
 		target = "node:" + pending.pathID
+	}
+	// Same story for the emergency release: WHICH TRACK was released is the
+	// single most important fact about it, and it lives in the path wildcard.
+	if pending.action == AuditRolloutEmergency && pending.pathID != "" {
+		target = "rollout:" + pending.pathID
 	}
 
 	r.PostForm = form

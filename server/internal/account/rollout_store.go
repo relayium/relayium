@@ -7,16 +7,18 @@ import (
 
 // rolloutCols is the column list shared by GetRolloutTrack's SELECT and
 // PutRolloutTrack's upsert, so the two can never drift out of order.
-const rolloutCols = `track, target_version, current_node_id, first_node_id, byo_batch, stage_started_at, status, halted_reason`
+const rolloutCols = `track, target_version, current_node_id, first_node_id, byo_batch, stage_started_at, status, halted_reason, emergency`
 
 // GetRolloutTrack returns the persisted state of the given track ("fleet" |
 // "byo"). ok=false means no row has been written for that track yet (a fresh
 // DB, or a track whose rollout has never been started) — not an error.
 func (s *SQLiteStore) GetRolloutTrack(ctx context.Context, track string) (RolloutTrack, bool, error) {
 	var t RolloutTrack
+	var emergency int
 	err := s.reader().QueryRowContext(ctx,
 		`SELECT `+rolloutCols+` FROM node_rollout WHERE track = ?`, track).
-		Scan(&t.Track, &t.TargetVersion, &t.CurrentNodeID, &t.FirstNodeID, &t.ByoBatch, &t.StageStartedAt, &t.Status, &t.HaltedReason)
+		Scan(&t.Track, &t.TargetVersion, &t.CurrentNodeID, &t.FirstNodeID, &t.ByoBatch, &t.StageStartedAt, &t.Status, &t.HaltedReason, &emergency)
+	t.Emergency = emergency != 0
 	if err == sql.ErrNoRows {
 		return RolloutTrack{}, false, nil
 	}
@@ -32,13 +34,14 @@ func (s *SQLiteStore) GetRolloutTrack(ctx context.Context, track string) (Rollou
 // state, not a partial patch.
 func (s *SQLiteStore) PutRolloutTrack(ctx context.Context, t RolloutTrack) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO node_rollout (`+rolloutCols+`) VALUES (?,?,?,?,?,?,?,?)
+		`INSERT INTO node_rollout (`+rolloutCols+`) VALUES (?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(track) DO UPDATE SET
 		   target_version=excluded.target_version, current_node_id=excluded.current_node_id,
 		   first_node_id=excluded.first_node_id,
 		   byo_batch=excluded.byo_batch, stage_started_at=excluded.stage_started_at,
-		   status=excluded.status, halted_reason=excluded.halted_reason`,
-		t.Track, t.TargetVersion, t.CurrentNodeID, t.FirstNodeID, t.ByoBatch, t.StageStartedAt, t.Status, t.HaltedReason)
+		   status=excluded.status, halted_reason=excluded.halted_reason,
+		   emergency=excluded.emergency`,
+		t.Track, t.TargetVersion, t.CurrentNodeID, t.FirstNodeID, t.ByoBatch, t.StageStartedAt, t.Status, t.HaltedReason, b2i(t.Emergency))
 	return err
 }
 
@@ -95,6 +98,69 @@ func (s *SQLiteStore) HaltRolloutTrack(ctx context.Context, track, reason string
 		`UPDATE node_rollout SET status = 'halted', halted_reason = ?, stage_started_at = ?
 		   WHERE track = ? AND status = 'rolling'`,
 		reason, at, track)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
+}
+
+// ResumeRolloutTrack restarts a HALTED track on the version it already
+// targets, conditional on it still being 'halted' so a concurrent instance's
+// complete (or a fresh target) is never clobbered.
+//
+// It touches ONE track's row and reads nothing else — in particular it does
+// NOT go through SetTargetVersion. That is deliberate: SetTargetVersion's byo
+// branch consults the fleet track, so resuming a halted byo rollout through it
+// would fail the moment the fleet had moved on to a NEWER version (fleet is
+// then 'rolling', not 'complete' at the byo target), i.e. an unrelated fleet
+// release would silently make the byo track unresumable. The gate exists to
+// stop byo from being pointed at a version the fleet never completed; resuming
+// a target the fleet already certified is not that.
+//
+// The reset of the positional/staging fields is not optional:
+//   - byo_batch back to 0, because decideByo's doc records that resuming a
+//     halted rollout on the SAME target with a non-zero batch re-evaluates the
+//     same batch against the same failing nodes and re-halts immediately, with
+//     a byte-identical reason, forever.
+//   - current_node_id/first_node_id cleared, for the same reason on the fleet
+//     side: the node that failed is still recorded as in flight with its
+//     failure still on its row, so decideFleet would halt again on its very
+//     next evaluation. Clearing them starts a fresh canary pick.
+//   - emergency back to 0: resuming is the staged, careful path. An emergency
+//     release that was halted must be re-armed explicitly (and re-confirmed),
+//     never silently by pressing 继续.
+func (s *SQLiteStore) ResumeRolloutTrack(ctx context.Context, track string, at int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE node_rollout SET status = 'rolling', halted_reason = '', current_node_id = '',
+		   first_node_id = '', byo_batch = 0, emergency = 0, stage_started_at = ?
+		   WHERE track = ? AND status = 'halted'`,
+		at, track)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
+}
+
+// SetRolloutEmergency arms emergency mode on a track that is rolling to
+// expectVersion — the version the admin just confirmed on the confirmation
+// page. Both conditions are a compare-and-swap against what the operator
+// actually saw: if the track has since been halted, completed, or re-pointed
+// at a different version (by another admin, or by a state machine reacting to
+// a failure), this lands nowhere and ok=false, rather than blanket-releasing a
+// build nobody confirmed.
+func (s *SQLiteStore) SetRolloutEmergency(ctx context.Context, track, expectVersion string, at int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE node_rollout SET emergency = 1, stage_started_at = ?
+		   WHERE track = ? AND status = 'rolling' AND target_version = ?`,
+		at, track, expectVersion)
 	if err != nil {
 		return false, err
 	}
