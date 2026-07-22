@@ -496,6 +496,15 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// row = the staged behaviour that shipped before this column, which is
 		// the only safe default.
 		`ALTER TABLE node_rollout ADD COLUMN emergency INTEGER NOT NULL DEFAULT 0`,
+		// previous_version records the target this track held immediately
+		// before the current one, so the byo track can be rolled back to it
+		// without re-consulting the byo-behind-fleet gate (that version already
+		// passed the gate when it was set — see RolloutTrack.PreviousVersion
+		// and Service.RollbackByoToPreviousVersion). Added by ALTER, like the
+		// two columns above, so live databases migrate. '' on every existing
+		// row = "no history recorded", which the rollback action refuses
+		// rather than guessing.
+		`ALTER TABLE node_rollout ADD COLUMN previous_version TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {

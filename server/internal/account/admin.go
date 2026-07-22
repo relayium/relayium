@@ -313,6 +313,10 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// 也用同一个名字，免得同一组 handler 里两种读法。
 	mux.Handle("POST /admin/rollout/{id}/target", s.csrfGuard(http.HandlerFunc(s.handleAdminRolloutTarget)))
 	mux.Handle("POST /admin/rollout/{id}/rollback", s.csrfGuard(http.HandlerFunc(s.handleAdminRolloutRollback)))
+	// BYO-only, and deliberately NOT on the {id} wildcard: this is the one
+	// action that changes a target without consulting the byo-behind-fleet
+	// gate, and the fleet track has no business reaching it.
+	mux.Handle("POST /admin/rollout/byo/rollback-previous", s.csrfGuard(http.HandlerFunc(s.handleAdminRolloutByoRollbackPrevious)))
 	mux.Handle("POST /admin/rollout/{id}/pause", s.csrfGuard(http.HandlerFunc(s.handleAdminRolloutPause)))
 	mux.Handle("POST /admin/rollout/{id}/resume", s.csrfGuard(http.HandlerFunc(s.handleAdminRolloutResume)))
 	// 紧急发布跳过分批、对整条轨道一次性放行 —— 没有金丝雀能再兜住这次发布了，
@@ -614,7 +618,8 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 
 	return adminHomeData{
 		RolloutFleet: rolloutFleet, RolloutByo: rolloutByo,
-		Metrics: metrics, Users: rows, Total: total, Page: page, TotalPages: totalPages,
+		HaltedTracks: haltedRolloutTracks(rolloutFleet, rolloutByo),
+		Metrics:      metrics, Users: rows, Total: total, Page: page, TotalPages: totalPages,
 		Search: search, Sort: sortBy, Dir: dir, Period: period, Months: months,
 		PrevHref: prev, NextHref: next, SortHref: sortHref,
 		Nodes: nodeVs, FleetNodeCount: fleetNodeCount, FleetTokens: tokenVs,

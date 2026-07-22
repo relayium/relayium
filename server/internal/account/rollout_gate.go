@@ -125,10 +125,109 @@ func (s *Service) setTargetVersion(ctx context.Context, track, version string, e
 		// completed, so no transaction is needed.
 	}
 	return s.store.PutRolloutTrack(ctx, RolloutTrack{
-		Track:          track,
-		TargetVersion:  version,
-		Status:         "rolling",
-		StageStartedAt: s.now().Unix(),
-		Emergency:      emergency,
+		Track:           track,
+		TargetVersion:   version,
+		PreviousVersion: s.byoPreviousVersion(ctx, track, version),
+		Status:          "rolling",
+		StageStartedAt:  s.now().Unix(),
+		Emergency:       emergency,
+	})
+}
+
+// byoPreviousVersion returns the value to persist in previous_version when the
+// byo track is being repointed at newVersion: the target it is leaving. It is
+// what makes RollbackByoToPreviousVersion possible at all, and its invariant is
+// the whole safety argument — this only ever records a version that was the byo
+// track's target, and every byo target went through the gate above.
+//
+// It returns "" for the fleet track: the rollback path is BYO-only (the fleet
+// is the canary, so it has nothing above it to be gated against and no need for
+// a recorded escape hatch), and writing history we never read would only invite
+// someone to read it later.
+//
+// Repointing at the version the track already holds carries the existing
+// history forward rather than recording the target as its own predecessor — a
+// self-referential entry would turn the rollback button into a no-op that looks
+// like it worked. A read failure degrades to "no history": losing the ability
+// to roll back is the safe direction, and the retarget itself must not fail
+// because of bookkeeping.
+func (s *Service) byoPreviousVersion(ctx context.Context, track, newVersion string) string {
+	if track != "byo" {
+		return ""
+	}
+	cur, ok, err := s.store.GetRolloutTrack(ctx, "byo")
+	if err != nil || !ok {
+		return ""
+	}
+	if cur.TargetVersion == "" || selfupdate.SameVersion(cur.TargetVersion, newVersion) {
+		return cur.PreviousVersion
+	}
+	return cur.TargetVersion
+}
+
+// ErrNoPreviousByoVersion means the byo track has no recorded predecessor, so
+// there is nothing for RollbackByoToPreviousVersion to aim at. It is a refusal,
+// not a failure: the track is on its first target (or predates the column).
+var ErrNoPreviousByoVersion = errors.New("BYO track has no recorded previous target version to roll back to")
+
+// RollbackByoToPreviousVersion points the byo track back at
+// RolloutTrack.PreviousVersion — the target it held immediately before the
+// current one — and is the ONE path that changes a track's target without
+// consulting SetTargetVersion's byo-behind-fleet gate.
+//
+// WHY THAT BYPASS IS ALLOWED, precisely: previous_version is only ever written
+// by setTargetVersion, i.e. by a byo retarget that had ALREADY passed the gate,
+// which means the fleet had completed that exact version at the moment it was
+// set. "The fleet completed X" is a fact about the past that nothing later
+// un-does. So this cannot name a version our own fleet never ran — the property
+// the gate exists to guarantee — while re-running the gate here would refuse the
+// rollback for a reason that has nothing to do with that property: during a
+// ~14h fleet rollout the fleet row reads {rolling, some other version}, so every
+// byo retarget, INCLUDING getting user machines off a bad build, is refused
+// exactly when it is most needed.
+//
+// The bypass is narrow by construction and must stay that way: the destination
+// is read from the row, never from a caller, so there is no general
+// "skip the gate" path and no way for an operator to reach an arbitrary version
+// through it. Do not add a version parameter.
+//
+// It resets the same positional state SetTargetVersion's whole-row replace
+// resets, and for the same reasons documented there: ByoBatch to 0 (a surviving
+// batch re-evaluates the same nodes against the same failures and re-halts
+// forever), StageStartedAt to now (it is what puts the old failure records
+// behind the current stage, and what the observation window is measured from),
+// CurrentNodeID/FirstNodeID cleared, halt state cleared, and Emergency back to
+// off — a rollback is a staged rollout like any other, never an inherited
+// release-to-everyone.
+//
+// It returns the version the track was pointed at, for the audit entry.
+func (s *Service) RollbackByoToPreviousVersion(ctx context.Context) (string, error) {
+	cur, ok, err := s.store.GetRolloutTrack(ctx, "byo")
+	if err != nil {
+		return "", err
+	}
+	if !ok || cur.PreviousVersion == "" {
+		return "", ErrNoPreviousByoVersion
+	}
+	version := cur.PreviousVersion
+	// Defence in depth against a hand-edited or corrupt row: the same check
+	// setTargetVersion applies, for the same reason (an unparseable target
+	// wedges the state machine in "wait" forever instead of erroring).
+	if !selfupdate.IsPlainVersion(version) {
+		return "", fmt.Errorf("recorded previous byo version %q is not a plain vMAJOR.MINOR.PATCH release tag", version)
+	}
+	// The version we are leaving becomes the new predecessor: it too was set
+	// through the gate, so the invariant above still holds, and it lets an
+	// operator undo a rollback that turned out to be the wrong call.
+	previous := cur.TargetVersion
+	if selfupdate.SameVersion(previous, version) {
+		previous = ""
+	}
+	return version, s.store.PutRolloutTrack(ctx, RolloutTrack{
+		Track:           "byo",
+		TargetVersion:   version,
+		PreviousVersion: previous,
+		Status:          "rolling",
+		StageStartedAt:  s.now().Unix(),
 	})
 }

@@ -62,6 +62,15 @@ type adminHomeData struct {
 	// see rolloutPanelView. Do not merge them into one field with a selector.
 	RolloutFleet rolloutPanelView
 	RolloutByo   rolloutPanelView
+	// HaltedTracks is the top-of-page alert: one entry per track whose rollout
+	// has STOPPED and is waiting on a human. The panels themselves sit at the
+	// bottom of a long dashboard, and a halt that nobody scrolls to can sit
+	// unnoticed for a day (the fleet ladder runs ~14h, a byo batch window 6h).
+	// Empty on a healthy dashboard, and the template then renders nothing at
+	// all — an "all clear" box people learn to ignore is not visibility.
+	// Derived from the two panels, so it inherits their independence: an
+	// unreadable track contributes nothing here and cannot suppress the other.
+	HaltedTracks []rolloutHaltView
 	// RolloutError is the banner shown when a rollout control was refused (bad
 	// version, unknown track, the byo-behind-fleet gate, pausing a track that
 	// is not rolling). Empty on a normal render.
@@ -161,7 +170,7 @@ func withPasskeyJS(t *template.Template) *template.Template {
 // (see rolloutNodeRows): the BYO track is every user's machine, so an
 // uncapped one-row-per-node table is an unbounded page.
 const rolloutPanelTmpl = `{{define "rolloutPanel"}}
-<div class="ro-panel">
+<div class="ro-panel" id="rollout-{{.Track}}">
 <h3>{{.Title}}（{{.Track}}）</h3>
 {{if .Err}}
 <p class="err">读取该轨道状态失败，控制按钮已隐藏（另一条轨道不受影响）。</p>
@@ -190,6 +199,12 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 <input type="text" name="version" placeholder="v1.2.2" title="回滚到的版本" style="width:110px">
 <button type="submit">回滚</button>
 </form>
+{{if .PreviousVersion}}
+<form method="post" action="/admin/rollout/{{.Track}}/rollback-previous" class="lim"
+  onsubmit="return confirm('回滚到上一版本 {{.PreviousVersion}}？')">
+<button type="submit" title="回到该轨上一个目标版本；该版本当初已通过机队门槛，因此不受机队当前发布状态影响">回滚到上一版本（{{.PreviousVersion}}）</button>
+</form>
+{{end}}
 <form method="post" action="/admin/rollout/{{.Track}}/emergency" class="lim">
 <input type="text" name="version" placeholder="v1.2.4" title="紧急发布的版本" style="width:110px">
 <button type="submit" class="danger">紧急发布</button>
@@ -518,6 +533,11 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 .ro-panel h3{font-size:14px;margin:0 0 8px}
 .ro-state{margin:0 0 10px;color:var(--muted);font-size:13px}
 .ro-emg{color:#e5484d;font-weight:600}
+.halts{margin:0 0 20px}
+.halt{border:1px solid #e5484d;border-left-width:5px;border-radius:10px;padding:12px 14px;margin:0 0 10px;background:var(--card)}
+.halt b{color:#e5484d}
+.halt-why{margin:6px 0;color:var(--fg);font-size:13px;word-break:break-word}
+.halt a{color:var(--a);text-decoration:none;font-size:13px}.halt a:hover{text-decoration:underline}
 .ro-ctl{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px}
 .ro-tag{margin-left:6px;font-size:11px;padding:1px 6px;border-radius:6px;background:var(--soft);color:var(--muted)}
 /* [hidden] alone loses to .mint's display:flex, so state it outright. */
@@ -528,6 +548,18 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <a href="/admin/audit" style="color:var(--a);text-decoration:none">审计日志</a>
 <form method="post" action="/admin/logout"><button type="submit">退出</button></form>
 </div></div>
+
+{{if .HaltedTracks}}
+<section class="halts">
+{{range .HaltedTracks}}
+<div class="halt">
+<b>发布已中止：{{.Title}}（{{.Track}}）</b> · 目标版本 {{if .Version}}{{.Version}}{{else}}—{{end}}
+<div class="halt-why">{{if .Reason}}{{.Reason}}{{else}}未记录中止原因{{end}}</div>
+<a href="#{{.Anchor}}">前往该轨面板处理 ↓</a>
+</div>
+{{end}}
+</section>
+{{end}}
 
 <section class="cards">
 <div class="card"><div class="n">{{.Metrics.TotalUsers}}</div><div class="l">总用户数</div></div>

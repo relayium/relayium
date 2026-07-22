@@ -7,7 +7,7 @@ import (
 
 // rolloutCols is the column list shared by GetRolloutTrack's SELECT and
 // PutRolloutTrack's upsert, so the two can never drift out of order.
-const rolloutCols = `track, target_version, current_node_id, first_node_id, byo_batch, stage_started_at, status, halted_reason, emergency`
+const rolloutCols = `track, target_version, previous_version, current_node_id, first_node_id, byo_batch, stage_started_at, status, halted_reason, emergency`
 
 // GetRolloutTrack returns the persisted state of the given track ("fleet" |
 // "byo"). ok=false means no row has been written for that track yet (a fresh
@@ -17,7 +17,7 @@ func (s *SQLiteStore) GetRolloutTrack(ctx context.Context, track string) (Rollou
 	var emergency int
 	err := s.reader().QueryRowContext(ctx,
 		`SELECT `+rolloutCols+` FROM node_rollout WHERE track = ?`, track).
-		Scan(&t.Track, &t.TargetVersion, &t.CurrentNodeID, &t.FirstNodeID, &t.ByoBatch, &t.StageStartedAt, &t.Status, &t.HaltedReason, &emergency)
+		Scan(&t.Track, &t.TargetVersion, &t.PreviousVersion, &t.CurrentNodeID, &t.FirstNodeID, &t.ByoBatch, &t.StageStartedAt, &t.Status, &t.HaltedReason, &emergency)
 	t.Emergency = emergency != 0
 	if err == sql.ErrNoRows {
 		return RolloutTrack{}, false, nil
@@ -34,14 +34,15 @@ func (s *SQLiteStore) GetRolloutTrack(ctx context.Context, track string) (Rollou
 // state, not a partial patch.
 func (s *SQLiteStore) PutRolloutTrack(ctx context.Context, t RolloutTrack) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO node_rollout (`+rolloutCols+`) VALUES (?,?,?,?,?,?,?,?,?)
+		`INSERT INTO node_rollout (`+rolloutCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(track) DO UPDATE SET
-		   target_version=excluded.target_version, current_node_id=excluded.current_node_id,
+		   target_version=excluded.target_version, previous_version=excluded.previous_version,
+		   current_node_id=excluded.current_node_id,
 		   first_node_id=excluded.first_node_id,
 		   byo_batch=excluded.byo_batch, stage_started_at=excluded.stage_started_at,
 		   status=excluded.status, halted_reason=excluded.halted_reason,
 		   emergency=excluded.emergency`,
-		t.Track, t.TargetVersion, t.CurrentNodeID, t.FirstNodeID, t.ByoBatch, t.StageStartedAt, t.Status, t.HaltedReason, b2i(t.Emergency))
+		t.Track, t.TargetVersion, t.PreviousVersion, t.CurrentNodeID, t.FirstNodeID, t.ByoBatch, t.StageStartedAt, t.Status, t.HaltedReason, b2i(t.Emergency))
 	return err
 }
 
