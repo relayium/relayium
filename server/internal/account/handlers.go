@@ -12,6 +12,19 @@ import (
 
 const sessionCookie = "relayium_session"
 
+// maxJSONBody caps a JSON API request body. Every JSON endpoint here carries a
+// small payload (a few fields), so 1 MiB is generous; it exists only to stop an
+// unbounded body from being buffered/decoded. Streaming endpoints (blob/upload)
+// do NOT use decodeJSONBody — they enforce their own, much larger, size limits.
+const maxJSONBody = 1 << 20
+
+// decodeJSONBody caps r.Body at maxJSONBody, then decodes it into dst. Used in
+// place of a bare json.NewDecoder(r.Body).Decode so no JSON handler can be made
+// to buffer an arbitrarily large request body.
+func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
+	return json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBody)).Decode(dst)
+}
+
 // deleteTokenTTL bounds how long a self-serve-deletion confirm link stays
 // valid — short, since it's re-requestable and email delivery is normally
 // near-instant (mirrors resetTTL's role, kept separate so tuning one never
@@ -213,7 +226,7 @@ func (s *Service) handleUpsertDevice(w http.ResponseWriter, r *http.Request, u U
 		ID   string `json:"id"`
 		Name string `json:"name"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Name == "" {
+	if err := decodeJSONBody(w, r, &in); err != nil || in.Name == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -234,7 +247,7 @@ func (s *Service) handleRenameDevice(w http.ResponseWriter, r *http.Request, u U
 	var in struct {
 		Name string `json:"name"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Name == "" {
+	if err := decodeJSONBody(w, r, &in); err != nil || in.Name == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -532,7 +545,7 @@ func (s *Service) handleChangePassword(w http.ResponseWriter, r *http.Request, u
 		CurrentPassword string `json:"currentPassword"`
 		NewPassword     string `json:"newPassword"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+	if err := decodeJSONBody(w, r, &in); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -584,7 +597,7 @@ func (s *Service) handleRegister(w http.ResponseWriter, r *http.Request) {
 		Password    string `json:"password"`
 		DisplayName string `json:"displayName"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+	if err := decodeJSONBody(w, r, &in); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -617,7 +630,7 @@ func (s *Service) handlePasswordLogin(w http.ResponseWriter, r *http.Request) {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+	if err := decodeJSONBody(w, r, &in); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -670,7 +683,7 @@ func (s *Service) handleEmailVerify(w http.ResponseWriter, r *http.Request) {
 		Token    string `json:"token"`
 		Password string `json:"password"` // optional: confirms the registration password so it's kept
 	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Token == "" {
+	if err := decodeJSONBody(w, r, &in); err != nil || in.Token == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -708,7 +721,7 @@ func (s *Service) handleResendVerification(w http.ResponseWriter, r *http.Reques
 	var in struct {
 		Email string `json:"email"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&in)
+	_ = decodeJSONBody(w, r, &in)
 	email := normEmail(in.Email)
 	// Anti-enumeration + anti-bomb: throttle per email+IP; only resend when the
 	// account exists AND is still unverified; always respond 200.
@@ -732,7 +745,7 @@ func (s *Service) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Email string `json:"email"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&in)
+	_ = decodeJSONBody(w, r, &in)
 	email := normEmail(in.Email)
 	if email != "" {
 		key := email + "|" + s.clientIP(r)
@@ -749,7 +762,7 @@ func (s *Service) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 		Token       string `json:"token"`
 		NewPassword string `json:"newPassword"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Token == "" {
+	if err := decodeJSONBody(w, r, &in); err != nil || in.Token == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}

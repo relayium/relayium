@@ -67,6 +67,12 @@ func securityHeaders(spaHashes []string, next http.Handler) http.Handler {
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), interest-cohort=()")
+		// HSTS: pin HTTPS for a year across all relayium.com subdomains (the node
+		// download subdomains are HTTPS via Cloudflare too). Browsers ignore this
+		// header when it arrives over plain HTTP, so setting it unconditionally is
+		// safe behind the TLS-terminating proxy. No 'preload' — that's an
+		// irreversible commitment to the browser preload list.
+		h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		next.ServeHTTP(w, r)
 	})
 }

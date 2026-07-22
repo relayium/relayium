@@ -36,6 +36,12 @@
     ticker = setInterval(() => (now = Math.floor(Date.now() / 1000)), 30_000);
     if (!window.isSecureContext || !crypto.subtle) { pageState = "error"; errKey = "unsupported"; return; }
     const k = parseDownloadKey(location.hash);
+    // Scrub the key from the URL as soon as it's read: #k= is the zero-knowledge
+    // decryption secret and must not linger in the address bar, browser history,
+    // or any Referer header sent on a later navigation. It's already captured in k.
+    if (location.hash) {
+      history.replaceState(null, "", location.pathname + location.search);
+    }
     if (!k) { pageState = "error"; errKey = "noKey"; return; }
     try {
       const meta = await fetchMeta(id);

@@ -2,7 +2,6 @@ package account
 
 import (
 	"crypto/rand"
-	"encoding/json"
 	"net/http"
 	"time"
 )
@@ -127,7 +126,7 @@ func (s *Service) handleDevicePoll(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		DeviceCode string `json:"device_code"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.DeviceCode == "" {
+	if err := decodeJSONBody(w, r, &in); err != nil || in.DeviceCode == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -182,7 +181,7 @@ func (s *Service) handleDeviceApprove(w http.ResponseWriter, r *http.Request, u 
 	var in struct {
 		UserCode string `json:"user_code"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.UserCode == "" {
+	if err := decodeJSONBody(w, r, &in); err != nil || in.UserCode == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}

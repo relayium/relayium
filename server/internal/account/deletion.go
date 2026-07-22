@@ -2,7 +2,6 @@ package account
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -173,7 +172,7 @@ func (s *Service) handleReactivate(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Token string `json:"token"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Token == "" {
+	if err := decodeJSONBody(w, r, &in); err != nil || in.Token == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -243,7 +242,7 @@ func (s *Service) handleDeleteConfirm(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Token string `json:"token"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Token == "" {
+	if err := decodeJSONBody(w, r, &in); err != nil || in.Token == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}

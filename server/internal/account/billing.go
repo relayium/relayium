@@ -2,7 +2,6 @@ package account
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"log"
@@ -35,7 +34,7 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 		PlanID string `json:"planId"`
 		Cycle  string `json:"cycle"` // "monthly" | "yearly"
 	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+	if err := decodeJSONBody(w, r, &in); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -168,7 +167,7 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 		PlanID string `json:"planId"`
 		Cycle  string `json:"cycle"` // "monthly" | "yearly"
 	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+	if err := decodeJSONBody(w, r, &in); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -292,7 +291,7 @@ func (s *Service) handleBillingPreview(w http.ResponseWriter, r *http.Request, u
 		PlanID string `json:"planId"`
 		Cycle  string `json:"cycle"` // "monthly" | "yearly"
 	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+	if err := decodeJSONBody(w, r, &in); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}

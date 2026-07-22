@@ -15,7 +15,10 @@ services:
     image: relayium/relayium:local
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      # Bind to loopback by default so a public host doesn't expose the plaintext
+      # app port to the internet (put a TLS-terminating reverse proxy in front).
+      # For direct LAN access (device-to-device realtime), set RELAYIUM_BIND=0.0.0.0.
+      - "${RELAYIUM_BIND:-127.0.0.1}:8080:8080"
     env_file:
       - path: ./server/.env
         required: false
