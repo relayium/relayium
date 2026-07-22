@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"sort"
@@ -42,13 +43,61 @@ type rolloutPanelView struct {
 	// the template only renders the one that belongs to this panel.
 	CurrentNodeID string
 	ByoBatch      int
-	OnTarget      int // nodes already running TargetVersion
-	Total         int
+	// PreviousVersion is set on the BYO panel only, and only when a predecessor
+	// is actually recorded: it is both the label and the availability of the
+	// 回滚到上一版本 control. Empty means the control is not rendered at all —
+	// a button whose only possible outcome is a refusal is worse than no button.
+	PreviousVersion string
+	OnTarget        int // nodes already running TargetVersion
+	Total           int
 	// Nodes is at most rolloutPanelMaxRows rows, most relevant first; Hidden
 	// counts the rest. OnTarget/Total are always over the WHOLE track, never
 	// over the rendered slice.
 	Nodes  []rolloutNodeView
 	Hidden int
+}
+
+// rolloutHaltView is one halted track in the dashboard's top-of-page alert:
+// which track, what it was shipping, why it stopped, and the anchor of the
+// panel that can restart it. It carries no controls of its own — acting on a
+// halt is still done in that track's own panel, which is the only place that
+// knows the rest of its state.
+type rolloutHaltView struct {
+	Track   string // "fleet" | "byo"
+	Title   string // the panel's Chinese title, so the banner names the same thing
+	Version string // the target it halted on
+	Reason  string // HaltedReason, shown verbatim — it is the diagnosis
+	Anchor  string // fragment of the panel below, e.g. "rollout-byo"
+}
+
+// haltedRolloutTracks collects the halted tracks from the panels the dashboard
+// has already built, in fleet-then-byo order.
+//
+// It takes the built panels rather than re-reading the store: the panels are
+// the two independent reads, so this cannot introduce a coupling between the
+// tracks (nor a third query). It deliberately does NOT skip on p.Err: rolloutPanel
+// fills in Configured/Status/TargetVersion/HaltedReason from the track read
+// BEFORE it can fail later on the shared node listing, so those fields are
+// trustworthy even when Err ends up true for that reason. Gating this on Err
+// too would make the top-of-page halt banner — which exists precisely so a
+// halt is never missed — disappear because of an unrelated query, which is
+// exactly backwards. The case that still needs excluding (the track read
+// itself failed) is already handled by !p.Configured: rolloutPanel returns
+// with Configured left at its zero value (false) whenever GetRolloutTrack
+// itself errored, so a track whose status genuinely was never read never
+// reaches "halted" here.
+func haltedRolloutTracks(panels ...rolloutPanelView) []rolloutHaltView {
+	var out []rolloutHaltView
+	for _, p := range panels {
+		if !p.Configured || p.Status != "halted" {
+			continue
+		}
+		out = append(out, rolloutHaltView{
+			Track: p.Track, Title: p.Title, Version: p.TargetVersion,
+			Reason: p.HaltedReason, Anchor: "rollout-" + p.Track,
+		})
+	}
+	return out
 }
 
 // rolloutPanelMaxRows caps how many node rows one panel renders. The fleet is
@@ -164,7 +213,11 @@ func rolloutOwnerClass(track string) string {
 // on — and the batch ordering is unaffected because byoOrder re-sorts its input
 // deterministically by (fleetHash, ID). nodesErr means that shared listing
 // failed; both panels then hide their controls, which is a whole-database
-// failure, not one track leaking into the other.
+// failure, not one track leaking into the other. Note that the track-derived
+// fields (Configured, Status, TargetVersion, HaltedReason, ...) are set BEFORE
+// the nodesErr check below, not after: haltedRolloutTracks reads them off this
+// panel regardless of Err, so a halt must already be recorded by the time
+// nodesErr can bail out.
 func (s *Service) rolloutPanel(ctx context.Context, track, title string, now time.Time, allNodes []Node, nodesErr bool) rolloutPanelView {
 	p := rolloutPanelView{Track: track, Title: title}
 	tr, found, err := s.store.GetRolloutTrack(ctx, track)
@@ -172,6 +225,20 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 		log.Printf("admin: GetRolloutTrack(%s) failed: %v", track, err)
 		p.Err = true
 		return p
+	}
+	// Filled in from the track read BEFORE the node-listing bail-out below, so
+	// that a real halt is still visible — and still surfaces the top-of-page
+	// banner via haltedRolloutTracks — even when the shared ListNodes call is
+	// what failed. The track read succeeded; losing the one thing the banner
+	// exists to never miss because an unrelated query failed would be exactly
+	// backwards.
+	p.Configured = found
+	p.TargetVersion, p.Status = tr.TargetVersion, tr.Status
+	p.StatusText = rolloutStatusText(tr.Status, found)
+	p.HaltedReason, p.Emergency = tr.HaltedReason, tr.Emergency
+	p.StageStartedAt, p.CurrentNodeID, p.ByoBatch = tr.StageStartedAt, tr.CurrentNodeID, tr.ByoBatch
+	if track == "byo" {
+		p.PreviousVersion = tr.PreviousVersion
 	}
 	if nodesErr {
 		p.Err = true
@@ -184,12 +251,6 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 			nodes = append(nodes, n)
 		}
 	}
-
-	p.Configured = found
-	p.TargetVersion, p.Status = tr.TargetVersion, tr.Status
-	p.StatusText = rolloutStatusText(tr.Status, found)
-	p.HaltedReason, p.Emergency = tr.HaltedReason, tr.Emergency
-	p.StageStartedAt, p.CurrentNodeID, p.ByoBatch = tr.StageStartedAt, tr.CurrentNodeID, tr.ByoBatch
 
 	snaps := nodeSnapshots(nodes)
 	// Batch membership is derived, not stored per node; byoOpenBatchMembers is
@@ -308,6 +369,56 @@ func (s *Service) rolloutSetVersion(w http.ResponseWriter, r *http.Request, acti
 		return
 	}
 	s.writeAudit(r, action, "rollout:"+track, []ChangeField{
+		{Field: "target_version", Old: before.TargetVersion, New: version},
+		{Field: "status", Old: before.Status, New: "rolling"},
+	}, StepUpNone)
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// handleAdminRolloutByoRollbackPrevious rolls the BYO track back onto the
+// version it held immediately before the current one. It is registered on a
+// path with "byo" spelled out, not on the {id} wildcard, because it is
+// BYO-only: it is the escape hatch from the byo-behind-fleet gate and the fleet
+// track is not behind that gate in the first place.
+//
+// It reads no version from the request — the destination comes from the stored
+// previous_version and nothing else, so this cannot be turned into a general
+// "set any target, skip the gate" control. See
+// Service.RollbackByoToPreviousVersion for why the bypass is sound.
+//
+// The audit's before-image comes from the SAME read the mutation itself used
+// (RollbackByoToPreviousVersion's return value), not a separate GetRolloutTrack
+// call made from this handler: a second, separately-timed read can race a
+// concurrent retarget or simply fail, leaving the audit entry for the one
+// action that bypasses the gate — exactly what an incident review most needs
+// to trust — wrong or empty. And a genuine store failure is distinguished from
+// a refusal: only the two documented refusal sentinels render as 400 with
+// their message; anything else is a store problem, not the operator's
+// mistake, so it is a 500 with a generic message and the real error only in
+// the log.
+func (s *Service) handleAdminRolloutByoRollbackPrevious(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	before, version, err := s.RollbackByoToPreviousVersion(r.Context())
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrNoPreviousByoVersion):
+			s.renderAdminRolloutError(w, r, http.StatusBadRequest,
+				"回滚到上一版本失败：自带节点轨没有记录上一个目标版本（当前目标是它的第一个版本）")
+		case errors.Is(err, ErrCorruptPreviousByoVersion):
+			s.renderAdminRolloutError(w, r, http.StatusBadRequest, "回滚到上一版本失败："+err.Error())
+		default:
+			log.Printf("admin: RollbackByoToPreviousVersion failed: %v", err)
+			s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "回滚到上一版本失败：内部错误，请稍后重试")
+		}
+		return
+	}
+	// Audited as a rollback, the same action the version-box rollback writes:
+	// what an incident review needs is "byo was taken off X onto Y", and the
+	// diff below says exactly that.
+	s.writeAudit(r, AuditRolloutRollback, "rollout:byo", []ChangeField{
 		{Field: "target_version", Old: before.TargetVersion, New: version},
 		{Field: "status", Old: before.Status, New: "rolling"},
 	}, StepUpNone)

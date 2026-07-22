@@ -125,6 +125,56 @@ func TestPutRolloutTrackOverwritesPriorState(t *testing.T) {
 	}
 }
 
+// FINDING 2: PutRolloutTrack is a whole-row upsert, so a caller that forgets
+// to carry PreviousVersion forward would otherwise blank it — destroying the
+// only thing that makes the BYO self-rollback button work. An omitted
+// (empty-string) PreviousVersion on a later call must be a no-op, never a
+// wipe of history a previous call recorded.
+func TestPutRolloutTrackOmittingPreviousVersionPreservesIt(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "byo", TargetVersion: "v1.1.0", PreviousVersion: "v1.0.0",
+		Status: "rolling", StageStartedAt: 1000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A hypothetical future caller that patches unrelated fields (here:
+	// StageStartedAt) without threading PreviousVersion through at all.
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "byo", TargetVersion: "v1.1.0", Status: "rolling", StageStartedAt: 2000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := store.GetRolloutTrack(ctx, "byo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PreviousVersion != "v1.0.0" {
+		t.Fatalf("PreviousVersion = %q, want the preserved v1.0.0 (an omitted field wiped rollback history)", got.PreviousVersion)
+	}
+	if got.StageStartedAt != 2000 {
+		t.Fatalf("the unrelated field did not update: %+v", got)
+	}
+
+	// A caller that explicitly WANTS to set it still can: a non-empty value
+	// always wins.
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "byo", TargetVersion: "v1.2.0", PreviousVersion: "v1.1.0",
+		Status: "rolling", StageStartedAt: 3000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err = store.GetRolloutTrack(ctx, "byo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PreviousVersion != "v1.1.0" {
+		t.Fatalf("an explicit non-empty PreviousVersion was not applied: %+v", got)
+	}
+}
+
 // The claim is a COMPARE-AND-SWAP, and every part of its WHERE clause is
 // load-bearing. Strict "one fleet node at a time" does not follow from
 // decideFleet being deterministic: two app instances read the track a moment

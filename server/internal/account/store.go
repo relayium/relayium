@@ -371,6 +371,17 @@ type RolloutTrack struct {
 	Track string // "fleet" | "byo"
 	// TargetVersion is the version this track is currently rolling out to.
 	TargetVersion string
+	// PreviousVersion is the target this track held immediately BEFORE
+	// TargetVersion, and it is the only version Service.RollbackByoToPreviousVersion
+	// will point the byo track at. It is written on the byo track only, by the
+	// same chokepoint that changes a target, so its invariant is exact: every
+	// value that ever lands here passed the byo-behind-fleet gate at the moment
+	// it was set (or is a version this track was already rolled back onto,
+	// which passed it earlier for the same reason). That is what makes the
+	// rollback path safe to run without re-consulting the gate — it can never
+	// name a version the fleet has not vetted. '' means "no history": the
+	// track is on its first target and there is nothing to roll back to.
+	PreviousVersion string
 	// CurrentNodeID is the fleet node presently being updated (fleet track
 	// only; fleet nodes are updated one at a time). Unused for byo.
 	CurrentNodeID string
