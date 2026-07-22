@@ -190,6 +190,7 @@ EnvironmentFile=/etc/relayium-node/env
 ExecStart=${INSTALL_DIR}/relayium-node
 Restart=always
 RestartSec=5
+TimeoutStopSec=90
 StateDirectory=relayium-node
 StateDirectoryMode=0700
 

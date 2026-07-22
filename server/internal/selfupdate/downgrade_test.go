@@ -19,9 +19,9 @@ func TestCompareVersions(t *testing.T) {
 		{"v1.2.4", "v1.2.3", 1, true},
 		{"v1.2.3", "v1.3.0", -1, true},
 		{"v2.0.0", "v1.9.9", 1, true},
-		{"1.0.0", "v1.0.0", 0, true}, // leading v optional
-		{"dev", "v1.0.0", 0, false},  // unparseable → incomparable
-		{"v1.2", "v1.2.0", 0, false}, // wrong arity
+		{"1.0.0", "v1.0.0", 0, true},       // leading v optional
+		{"dev", "v1.0.0", 0, false},        // unparseable → incomparable
+		{"v1.2", "v1.2.0", 0, false},       // wrong arity
 		{"v1.2.3-rc1", "v1.2.3", 0, false}, // pre-release → incomparable
 	}
 	for _, c := range cases {

@@ -37,6 +37,10 @@ func urlHost(rawURL string) string {
 // version is stamped by goreleaser via -ldflags; a dev build reports "dev".
 var version = "dev"
 
+// shutdownGrace bounds how long we let in-flight downloads and relay sessions
+// finish on SIGTERM. systemd's TimeoutStopSec must exceed this.
+const shutdownGrace = 60 * time.Second
+
 // longTermPassword computes the TURN-REST password for a username exactly as the
 // central /api/ice does: base64(HMAC-SHA1(secret, username)).
 func longTermPassword(secret, username string) string {
@@ -194,6 +198,25 @@ func run(c config, st nodeState) error {
 	var storageURL, storageSecret, storageFP string
 	var storTotal, storFree int64
 	var blobGauge *blobUsage
+	// HTTP servers (blob + public download listeners) that must drain rather
+	// than be cut off when we shut down. The TURN server above is NOT drained:
+	// its `defer server.Close()` cuts live relay sessions immediately, and
+	// nothing stops it accepting new allocations while the HTTP side drains.
+	var httpSrvs []*http.Server
+	// Backstop: close whatever's left in httpSrvs on every return path out of
+	// run(). The ctx.Done() path below already calls gracefulShutdown, which
+	// Shutdown()s these servers properly (draining in-flight requests) before
+	// run() returns nil — a subsequent Close() here is then just a harmless
+	// no-op on an already-closed server. This defer exists for the *other*
+	// returns: if something after the servers start listening fails (e.g.
+	// register with central), nothing else would ever close these listeners.
+	defer func() {
+		for _, s := range httpSrvs {
+			if s != nil {
+				s.Close()
+			}
+		}
+	}()
 	if c.StorageDir != "" {
 		ds, derr := storage.NewDiskStore(c.StorageDir)
 		if derr != nil {
@@ -236,7 +259,7 @@ func run(c config, st nodeState) error {
 				log.Printf("relayium-node: blob server exited: %v", err)
 			}
 		}()
-		defer blobSrv.Close()
+		httpSrvs = append(httpSrvs, blobSrv)
 		storageURL = fmt.Sprintf("https://%s:%d", publicIP, c.StoragePort)
 		if t, f, uerr := storageReport(c.StorageDir); uerr == nil {
 			storTotal, storFree = t, f
@@ -270,7 +293,7 @@ func run(c config, st nodeState) error {
 					log.Printf("relayium-node: public download server exited: %v", err)
 				}
 			}()
-			defer dlSrv.Close()
+			httpSrvs = append(httpSrvs, dlSrv)
 			log.Printf("relayium-node: public direct-download listener on %s → %s", c.DownloadAddr, c.DownloadURL)
 
 			// Auto-manage this node's Cloudflare A record (subdomain -> public IP,
@@ -328,15 +351,19 @@ func run(c config, st nodeState) error {
 	for {
 		select {
 		case <-ctx.Done():
+			log.Printf("relayium-node: draining in-flight requests (up to %s)", shutdownGrace)
+			if err := gracefulShutdown(httpSrvs, shutdownGrace); err != nil {
+				log.Printf("relayium-node: shutdown deadline hit: %v", err)
+			}
 			log.Printf("relayium-node: shutting down")
 			return nil
 		case <-ticker.C:
-			sendHeartbeat(rp, nodeID, reg, c.StorageDir, blobGauge, lim)
+			sendHeartbeat(rp, nodeID, reg, c.StorageDir, c.StateDir, blobGauge, lim)
 		}
 	}
 }
 
-func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir string, blobGauge *blobUsage, lim *limits) {
+func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir, stateDir string, blobGauge *blobUsage, lim *limits) {
 	samples := reg.snapshot()
 	usage := make([]usageItem, 0, len(samples))
 	var total int64
@@ -370,6 +397,11 @@ func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir s
 	if lim != nil {
 		lim.sync(hr.RelayedThisMonth, hr.TrafficLimitBytes, hr.DiskLimitBytes)
 	}
+	// Record the success so the updater can tell a working new version from one
+	// that starts but can't reach central.
+	if err := markHealthy(stateDir, version); err != nil {
+		log.Printf("relayium-node: record heartbeat health: %v", err)
+	}
 }
 
 // detectPublicIP asks a couple of public echo services, mirroring coturn-setup.sh.
@@ -391,4 +423,29 @@ func httpGetTrim(u string) string {
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 64))
 	return strings.TrimSpace(string(b))
+}
+
+// gracefulShutdown stops the given HTTP servers, letting in-flight requests
+// finish within d. An update restarts the node, so without this every rollout
+// would cut live blob uploads and downloads on every node it touches. Returns
+// the deadline error if a request outlives d — the caller exits regardless,
+// since the updater is waiting on this process.
+//
+// Scope: HTTP only. TURN relay sessions are still cut abruptly when run()
+// returns and closes the TURN server, and no new-allocation cutoff exists, so a
+// rollout still interrupts in-progress WebRTC relaying. Clients re-ICE, which
+// is why draining TURN has not been worth its complexity so far.
+func gracefulShutdown(srvs []*http.Server, d time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	defer cancel()
+	var firstErr error
+	for _, s := range srvs {
+		if s == nil {
+			continue
+		}
+		if err := s.Shutdown(ctx); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
