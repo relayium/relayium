@@ -2,15 +2,58 @@ package account
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 	"testing"
 )
 
+// byoNodes builds n BYO node snapshots. IDs are zero-padded and distinct at
+// any size -- an earlier string(rune('a'+i)) scheme silently produced
+// non-letter and duplicate-looking IDs past ~26 nodes, i.e. exactly at the
+// population sizes where batching matters.
 func byoNodes(n int, ver string, seen int64) []NodeSnapshot {
 	out := make([]NodeSnapshot, 0, n)
 	for i := 0; i < n; i++ {
-		out = append(out, NodeSnapshot{ID: string(rune('a' + i)), Version: ver, LastSeenAt: seen})
+		out = append(out, NodeSnapshot{ID: fmt.Sprintf("byo-node-%04d", i), Version: ver, LastSeenAt: seen})
 	}
 	return out
+}
+
+// byoBatchIDs returns the IDs of the first pct% of nodes in the rollout's hash
+// ordering: the members decideByo considers commanded at that stage. Tests use
+// it to place failures INSIDE the open batch, which is the only way to
+// exercise the batch-scoped failure-rate denominator.
+func byoBatchIDs(nodes []NodeSnapshot, target string, pct int) []string {
+	ordered := append([]NodeSnapshot(nil), nodes...)
+	sort.Slice(ordered, func(i, j int) bool {
+		return fleetHash(ordered[i].ID, target) < fleetHash(ordered[j].ID, target)
+	})
+	var ids []string
+	for _, n := range ordered[:pctCount(len(ordered), pct)] {
+		ids = append(ids, n.ID)
+	}
+	return ids
+}
+
+// markFailed marks the first k members of the pct% batch as having failed an
+// update to target (rolled back onto the version they were commanded from, so
+// the result unambiguously belongs to THIS rollout).
+func markFailed(t *testing.T, nodes []NodeSnapshot, target string, pct, k int) {
+	t.Helper()
+	ids := byoBatchIDs(nodes, target, pct)
+	if k > len(ids) {
+		t.Fatalf("markFailed: want %d failures inside the %d%% batch, which holds only %d", k, pct, len(ids))
+	}
+	inBatch := make(map[string]bool, k)
+	for _, id := range ids[:k] {
+		inBatch[id] = true
+	}
+	for i := range nodes {
+		if inBatch[nodes[i].ID] {
+			nodes[i].UpdateResult = "failed"
+			nodes[i].UpdateFromVersion = nodes[i].Version
+		}
+	}
 }
 
 // BYO can be hundreds of machines; strict serial would take days and none of
@@ -28,57 +71,183 @@ func TestDecideByoFirstBatchIsTenPercent(t *testing.T) {
 	}
 }
 
+// A rollout whose StageStartedAt was stamped when the operator started it --
+// which RolloutTrack's doc requires on every stage transition, so it is the
+// natural thing for a caller to do -- must not sit idle for six hours before
+// commanding its first node. The window separates BATCHES; there is no earlier
+// batch to observe.
+func TestDecideByoFirstBatchOpensImmediately(t *testing.T) {
+	tr := RolloutTrack{
+		Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
+		ByoBatch: 0, StageStartedAt: tNow,
+	}
+	nodes := byoNodes(20, "v0.8.0", tNow)
+
+	action, eligible, _ := decideByo(tr, nodes, tNow)
+	if action != "update" || len(eligible) != 2 {
+		t.Fatalf("action=%q eligible=%d on a freshly-stamped track, want update with the 10%% batch", action, len(eligible))
+	}
+}
+
 // One flaky user machine is normal, not a signal — halting on it would leave
-// the BYO track permanently stuck.
+// the BYO track permanently stuck. 1 of 2 is a 50% "rate", far above the
+// threshold: only the absolute floor stops this from halting, so this test is
+// what makes the floor load-bearing.
 func TestDecideByoToleratesASingleFailure(t *testing.T) {
-	nodes := byoNodes(20, "v0.9.0", tNow)
-	nodes[0].UpdateResult = "rolled_back"
-	nodes[0].Version = "v0.8.0"
+	nodes := byoNodes(2, "v0.8.0", tNow)
+	markFailed(t, nodes, "v0.9.0", 100, 1)
+	tr := RolloutTrack{
+		Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
+		ByoBatch: 100, StageStartedAt: tNow - 7*tHour,
+	}
+
+	action, _, _ := decideByo(tr, nodes, tNow)
+	if action == "halt" {
+		t.Error("action = halt on a single BYO failure (1 of 2); want the rollout to continue")
+	}
+}
+
+// The failure rate must be measured over the nodes actually COMMANDED, not the
+// whole population: 3 of the 10-node canary batch is 30% and must halt, while
+// the same 3 over all 100 nodes is 3% and would sail on into the 50% batch.
+// The population denominator caps the observable rate at the open percentage,
+// so the canary stage could never halt — which is the only reason it exists.
+func TestDecideByoHaltsAboveFailureRate(t *testing.T) {
+	nodes := byoNodes(100, "v0.8.0", tNow)
+	markFailed(t, nodes, "v0.9.0", 10, 3) // 3/10 = 30% of the open batch; 3/100 = 3% of the population
 	tr := RolloutTrack{
 		Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
 		ByoBatch: 10, StageStartedAt: tNow - 7*tHour,
 	}
 
-	action, _, _ := decideByo(tr, nodes, tNow)
-	if action == "halt" {
-		t.Error("action = halt on a single BYO failure; want the rollout to continue")
-	}
-}
-
-func TestDecideByoHaltsAboveFailureRate(t *testing.T) {
-	nodes := byoNodes(20, "v0.9.0", tNow)
-	for i := 0; i < 5; i++ { // 25% > 20% threshold, and >= 2 absolute
-		nodes[i].UpdateResult = "failed"
-		nodes[i].Version = "v0.8.0"
-	}
-	tr := RolloutTrack{
-		Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
-		ByoBatch: 50, StageStartedAt: tNow - 7*tHour,
-	}
-
 	action, _, reason := decideByo(tr, nodes, tNow)
 	if action != "halt" {
-		t.Fatalf("action = %q with a 25%% failure rate, want halt", action)
+		t.Fatalf("action = %q with 3 of the 10-node canary batch failed, want halt", action)
 	}
 	if reason == "" {
 		t.Error("halt with no reason; admin needs to know why")
 	}
 }
 
+// The threshold is strictly-greater: exactly 20% is at the line, not over it.
+func TestDecideByoFailureRateThresholdIsExclusive(t *testing.T) {
+	for _, tc := range []struct {
+		failures int
+		want     string
+	}{
+		{20, "update"}, // exactly 20% — at the threshold, not above it
+		{21, "halt"},   // 21% — above it
+	} {
+		nodes := byoNodes(100, "v0.8.0", tNow)
+		markFailed(t, nodes, "v0.9.0", 100, tc.failures)
+		tr := RolloutTrack{
+			Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
+			ByoBatch: 100, StageStartedAt: tNow - 7*tHour,
+		}
+		if action, _, _ := decideByo(tr, nodes, tNow); action != tc.want {
+			t.Errorf("%d/100 failures: action = %q, want %q", tc.failures, action, tc.want)
+		}
+	}
+}
+
+// nodes.update_result survives re-register and heartbeat (UpsertNode's ON
+// CONFLICT deliberately excludes the update_* columns) and nothing clears it,
+// so leftovers from the LAST rollout are sitting in the table on the day the
+// next one starts. Counting them would halt a rollout that has not commanded
+// a single node.
+func TestDecideByoIgnoresStaleResultsFromAPreviousRollout(t *testing.T) {
+	nodes := byoNodes(20, "v0.8.0", tNow)
+	for i := 0; i < 5; i++ { // 25% of the population — enough to trip the old check
+		nodes[i].UpdateResult = "failed"
+		nodes[i].UpdateFromVersion = "v0.7.0" // a v0.7.0 -> v0.8.0 rollout, long over
+	}
+	tr := RolloutTrack{
+		Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
+		ByoBatch: 0, StageStartedAt: tNow,
+	}
+
+	action, _, reason := decideByo(tr, nodes, tNow)
+	if action == "halt" {
+		t.Fatalf("action = halt (%q) before a single node was commanded; stale update_result must not count", reason)
+	}
+}
+
+// Same defence mid-rollout: nodes that failed the previous rollout but have
+// since moved on to the version it targeted are not this rollout's failures.
+func TestDecideByoIgnoresStaleResultsMidRollout(t *testing.T) {
+	nodes := byoNodes(20, "v0.8.0", tNow)
+	stale := byoBatchIDs(nodes, "v0.9.0", 50)[:5] // 5 of the open 10-node batch
+	staleSet := make(map[string]bool, len(stale))
+	for _, id := range stale {
+		staleSet[id] = true
+	}
+	for i := range nodes {
+		if staleSet[nodes[i].ID] {
+			nodes[i].UpdateResult = "failed"
+			nodes[i].UpdateFromVersion = "v0.7.0" // failed v0.7.0 -> v0.8.0, then fixed by hand
+		}
+	}
+	tr := RolloutTrack{
+		Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
+		ByoBatch: 50, StageStartedAt: tNow - 7*tHour,
+	}
+
+	if action, _, reason := decideByo(tr, nodes, tNow); action == "halt" {
+		t.Fatalf("action = halt (%q); a failure whose from-version the node has left is a previous rollout's", reason)
+	}
+}
+
 func TestDecideByoAdvancesBatchesAfterWindow(t *testing.T) {
-	nodes := byoNodes(20, "v0.9.0", tNow)
+	nodes := byoNodes(20, "v0.8.0", tNow)
 	tr := RolloutTrack{
 		Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
 		ByoBatch: 10, StageStartedAt: tNow - 7*tHour,
 	}
 	action, eligible, _ := decideByo(tr, nodes, tNow)
-	if action != "update" || len(eligible) == 0 {
-		t.Fatalf("action=%q eligible=%d, want the 50%% batch to open", action, len(eligible))
+	if action != "update" || len(eligible) != pctCount(20, 50) {
+		t.Fatalf("action=%q eligible=%d, want update with the %d-node 50%% batch", action, len(eligible), pctCount(20, 50))
+	}
+}
+
+// eligible means "these nodes still need the update", not "a batch is open":
+// nodes already running the target must drop out, so re-calling decideByo with
+// the same track state does not re-command them (and does not re-stamp their
+// nodes.update_started_at), and so an empty list is a usable "converged"
+// signal.
+func TestDecideByoExcludesNodesAlreadyOnTarget(t *testing.T) {
+	nodes := byoNodes(20, "v0.8.0", tNow)
+	updated := byoBatchIDs(nodes, "v0.9.0", 50)[:8]
+	done := make(map[string]bool, len(updated))
+	for _, id := range updated {
+		done[id] = true
+	}
+	for i := range nodes {
+		if done[nodes[i].ID] {
+			nodes[i].Version = "0.9.0" // goreleaser stamps versions WITHOUT the leading v
+		}
+	}
+	tr := RolloutTrack{
+		Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
+		ByoBatch: 10, StageStartedAt: tNow - 7*tHour,
+	}
+
+	action, eligible, _ := decideByo(tr, nodes, tNow)
+	if action != "update" {
+		t.Fatalf("action = %q, want update", action)
+	}
+	want := pctCount(20, 50) - 8
+	if len(eligible) != want {
+		t.Fatalf("eligible = %d, want %d (the 50%% batch minus the 8 already on target)", len(eligible), want)
+	}
+	for _, id := range eligible {
+		if done[id] {
+			t.Errorf("node %s is already on the target version but was returned as eligible", id)
+		}
 	}
 }
 
 func TestDecideByoWaitsInsideWindow(t *testing.T) {
-	nodes := byoNodes(20, "v0.9.0", tNow)
+	nodes := byoNodes(20, "v0.8.0", tNow)
 	tr := RolloutTrack{
 		Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
 		ByoBatch: 10, StageStartedAt: tNow - tHour,
@@ -88,14 +257,146 @@ func TestDecideByoWaitsInsideWindow(t *testing.T) {
 	}
 }
 
-// byoNodesWithIDs builds nodes with longer, distinct IDs (unlike byoNodes'
-// single letters, which top out well before any realistic BYO fleet size).
-func byoNodesWithIDs(n int, ver string, seen int64) []NodeSnapshot {
-	out := make([]NodeSnapshot, 0, n)
-	for i := 0; i < n; i++ {
-		out = append(out, NodeSnapshot{ID: fmt.Sprintf("byo-node-%04d", i), Version: ver, LastSeenAt: seen})
+// complete is not "the last window elapsed", it is "the rollout landed". A
+// time-only completion strands every node that was offline when the 100% batch
+// opened: no wider batch is left to command them, and complete is the only
+// signal the admin console has.
+func TestDecideByoCompletesOnlyWhenNodesAreOnTarget(t *testing.T) {
+	tr := RolloutTrack{
+		Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
+		ByoBatch: 100, StageStartedAt: tNow - 7*tHour,
 	}
-	return out
+
+	t.Run("all on target", func(t *testing.T) {
+		nodes := byoNodes(20, "0.9.0", tNow)
+		if action, _, _ := decideByo(tr, nodes, tNow); action != "complete" {
+			t.Errorf("action = %q with every node on the target version, want complete", action)
+		}
+	})
+
+	t.Run("stragglers still behind", func(t *testing.T) {
+		nodes := byoNodes(20, "0.9.0", tNow)
+		nodes[3].Version = "v0.8.0"
+		action, eligible, _ := decideByo(tr, nodes, tNow)
+		if action != "complete" && action != "update" {
+			t.Fatalf("action = %q, want update", action)
+		}
+		if action == "complete" {
+			t.Fatal("action = complete with a node still on v0.8.0; the rollout has not landed")
+		}
+		if len(eligible) != 1 || eligible[0] != nodes[3].ID {
+			t.Errorf("eligible = %v, want just the straggler %s", eligible, nodes[3].ID)
+		}
+	})
+
+	t.Run("long-offline node does not block forever", func(t *testing.T) {
+		nodes := byoNodes(20, "0.9.0", tNow)
+		nodes[3].Version = "v0.8.0"
+		nodes[3].LastSeenAt = tNow - 7*24*3600 // dark for a week
+		if action, _, _ := decideByo(tr, nodes, tNow); action != "complete" {
+			t.Errorf("action = %q; a machine offline for a week must not hold a rollout open", action)
+		}
+	})
+}
+
+// Nobody is reachable: there is no node to command and none we can call
+// behind, so the stage is done rather than wedged.
+func TestDecideByoAllOffline(t *testing.T) {
+	nodes := byoNodes(20, "v0.8.0", tNow-7*24*3600)
+	tr := RolloutTrack{
+		Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
+		ByoBatch: 100, StageStartedAt: tNow - 7*tHour,
+	}
+	action, eligible, _ := decideByo(tr, nodes, tNow)
+	if action != "complete" || len(eligible) != 0 {
+		t.Errorf("action=%q eligible=%d with every node offline, want complete with none eligible", action, len(eligible))
+	}
+}
+
+// SameVersion("", "") is true, so an empty target would read blank-version
+// nodes as on-target and command everyone else to install nothing. A rolling
+// track with no target is a caller bug; the only safe answer is to do nothing.
+func TestDecideByoNeverUpdatesWithoutATarget(t *testing.T) {
+	nodes := byoNodes(20, "", tNow)
+	for _, batch := range []int{0, 10, 50, 100} {
+		tr := RolloutTrack{
+			Track: "byo", TargetVersion: "", Status: "rolling",
+			ByoBatch: batch, StageStartedAt: tNow - 7*tHour,
+		}
+		action, eligible, _ := decideByo(tr, nodes, tNow)
+		if action == "update" || len(eligible) != 0 {
+			t.Errorf("ByoBatch=%d: action=%q eligible=%v with an empty target, want no update", batch, action, eligible)
+		}
+	}
+}
+
+// A corrupt or legacy byo_batch must not fall back to "open the 10% batch":
+// that would REGRESS a rollout that had already reached 50% or 100%, and could
+// loop there.
+func TestDecideByoHaltsOnUnrecognisedBatch(t *testing.T) {
+	nodes := byoNodes(20, "v0.8.0", tNow)
+	for _, bad := range []int{5, 20, 51, 99, 1000, -1} {
+		tr := RolloutTrack{
+			Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
+			ByoBatch: bad, StageStartedAt: tNow - 7*tHour,
+		}
+		action, _, reason := decideByo(tr, nodes, tNow)
+		if action != "halt" {
+			t.Errorf("ByoBatch=%d: action = %q, want halt", bad, action)
+		}
+		if !strings.Contains(reason, fmt.Sprint(bad)) {
+			t.Errorf("ByoBatch=%d: reason %q does not name the offending value", bad, reason)
+		}
+	}
+}
+
+// No BYO nodes at all: there is nothing to roll, so walking the 10/50/100
+// ladder would report three stages of progress that never touched a machine.
+func TestDecideByoEmptyPopulationCompletes(t *testing.T) {
+	tr := RolloutTrack{Track: "byo", TargetVersion: "v0.9.0", Status: "rolling", ByoBatch: 0}
+	action, eligible, _ := decideByo(tr, nil, tNow)
+	if action != "complete" || len(eligible) != 0 {
+		t.Errorf("action=%q eligible=%d with no BYO nodes, want complete with none eligible", action, len(eligible))
+	}
+}
+
+func TestDecideByoNonRollingTracksAreInert(t *testing.T) {
+	nodes := byoNodes(20, "v0.8.0", tNow)
+	for _, status := range []string{"halted", "complete", ""} {
+		tr := RolloutTrack{Track: "byo", TargetVersion: "v0.9.0", Status: status, ByoBatch: 10}
+		if action, _, _ := decideByo(tr, nodes, tNow); action != "wait" {
+			t.Errorf("status %q: action = %q, want wait", status, action)
+		}
+	}
+}
+
+// Rounding is up, so no batch of a nonzero population can round to zero nodes
+// and stall the ladder — a 1-node BYO population must still get its canary.
+func TestPctCountRoundsUp(t *testing.T) {
+	for _, tc := range []struct{ total, pct, want int }{
+		{0, 10, 0}, {1, 10, 1}, {1, 50, 1}, {1, 100, 1},
+		{2, 10, 1}, {2, 50, 1}, {2, 100, 2},
+		{3, 10, 1}, {3, 50, 2}, {3, 100, 3},
+		{20, 10, 2}, {100, 10, 10}, {137, 10, 14}, {137, 50, 69},
+		{5, 0, 0}, {5, -1, 0},
+	} {
+		if got := pctCount(tc.total, tc.pct); got != tc.want {
+			t.Errorf("pctCount(%d, %d) = %d, want %d", tc.total, tc.pct, got, tc.want)
+		}
+	}
+}
+
+// Tiny populations must still walk the whole ladder rather than stalling on a
+// batch that rounds to nobody.
+func TestDecideByoTinyPopulations(t *testing.T) {
+	for _, total := range []int{1, 2, 3} {
+		nodes := byoNodes(total, "v0.8.0", tNow)
+		tr := RolloutTrack{Track: "byo", TargetVersion: "v0.9.0", Status: "rolling", ByoBatch: 0}
+		action, eligible, _ := decideByo(tr, nodes, tNow)
+		if action != "update" || len(eligible) == 0 {
+			t.Errorf("%d node(s): action=%q eligible=%d, want update with at least one node", total, action, len(eligible))
+		}
+	}
 }
 
 // The whole reason batches are computed off the FIRST N% of one hash
@@ -106,7 +407,7 @@ func byoNodesWithIDs(n int, ver string, seen int64) []NodeSnapshot {
 // accident of exact divisibility), not just the 20-node unit tests above.
 func TestDecideByoBatchesNest(t *testing.T) {
 	const n = 137
-	nodes := byoNodesWithIDs(n, "v0.8.0", tNow)
+	nodes := byoNodes(n, "v0.8.0", tNow)
 
 	batchSince := func(byoBatch int) map[string]bool {
 		tr := RolloutTrack{

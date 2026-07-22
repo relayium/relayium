@@ -30,7 +30,14 @@ type NodeSnapshot struct {
 	LastSeenAt      int64
 	ActiveTransfers int
 	UpdateStartedAt int64
-	UpdateResult    string // "" | "ok" | "failed" | "rolled_back" | "skipped"
+	// UpdateFromVersion mirrors nodes.update_from_version: the version the node
+	// was running when central last commanded it to update, written together
+	// with UpdateStartedAt. It is what lets a state machine tell a result that
+	// belongs to the current rollout from one left over from the previous
+	// one -- the update_* columns survive re-register and heartbeat and nothing
+	// clears them (see byoResultIsFailure).
+	UpdateFromVersion string
+	UpdateResult      string // "" | "ok" | "failed" | "rolled_back" | "skipped"
 }
 
 // RolloutDecision is what decideFleet says to do next.
