@@ -1540,6 +1540,17 @@ const (
 	// reported total (~one day at maxRelayBytesPerSec), so a forged huge value
 	// (e.g. 1<<50) can never blow a user's quota or the billing ledger.
 	maxAllocRelayBytes = int64(maxRelayBytesPerSec)*86400 + relayReportSlack
+	// firstReportWindowSecs bounds a brand-new allocation's very first report:
+	// with no prior report there is no elapsed-time budget (the exists branch
+	// below), so a fixed window of several heartbeat intervals (~30s cadence) at
+	// max rate stands in for it. Without this a first report was clamped only by
+	// the ~2TiB absolute ceiling, letting a malicious node attribute a huge total
+	// to a victim on a single fresh alloc_id.
+	firstReportWindowSecs = 120
+	// maxFirstReportBytes is that first-report budget: window×rate + slack. Large
+	// enough never to under-count a legitimate first heartbeat, far below the
+	// absolute ceiling.
+	maxFirstReportBytes = int64(maxRelayBytesPerSec)*firstReportWindowSecs + relayReportSlack
 )
 
 // RecordUsage records an allocation's relayed bytes. The reported cumulative is
@@ -1582,6 +1593,11 @@ func (s *SQLiteStore) RecordUsage(ctx context.Context, e UsageEvent) error {
 		if newCum < prev { // monotonic: never lower on a stale/backwards report
 			newCum = prev
 		}
+	} else if newCum > maxFirstReportBytes {
+		// First report: no prior timestamp to derive an elapsed-time budget from,
+		// so bound it to a few heartbeat windows at max rate + slack. Denies a
+		// malicious node a ~2TiB first-report attribution on a fresh alloc_id.
+		newCum = maxFirstReportBytes
 	}
 	delta := newCum - prev
 

@@ -176,8 +176,17 @@ func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
 		if claims.EmailVerified {
 			// Pre-hijack defense: drop any password planted on this email while
 			// unverified, before Apple verifies it (see dropUnverifiedPassword).
-			_ = s.dropUnverifiedPassword(r.Context(), u.ID)
-			_ = s.store.SetEmailVerified(r.Context(), u.ID)
+			// Gate verification on the drop succeeding — verifying while a planted
+			// password survives is exactly the takeover we're closing, so on error
+			// we must NOT flip the account to verified (mirrors oauth.go).
+			if err := s.dropUnverifiedPassword(r.Context(), u.ID); err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+			if err := s.store.SetEmailVerified(r.Context(), u.ID); err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
 		}
 	} else if s.frozenBlocked(w, u) {
 		return

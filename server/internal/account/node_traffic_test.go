@@ -99,8 +99,17 @@ func TestICEWithholdsFleetNodeAt90PercentOfInheritedDefault(t *testing.T) {
 	st.UpsertNode(ctx, Node{OwnerType: "fleet", ID: "over90", URLs: []string{"turn:1.1.1.1:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: now.Unix()})
 	st.UpsertNode(ctx, Node{OwnerType: "fleet", ID: "under90", URLs: []string{"turn:2.2.2.2:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: now.Unix()})
 
-	st.RecordUsage(ctx, UsageEvent{AllocID: "a", Token: "c", UserID: owner.ID, RelayedBytes: 950 * gib, RecordedAt: now.Unix(), NodeID: "over90", Billable: true})
-	st.RecordUsage(ctx, UsageEvent{AllocID: "b", Token: "c", UserID: owner.ID, RelayedBytes: 900 * gib, RecordedAt: now.Unix(), NodeID: "under90", Billable: true})
+	// A node accrues this traffic across many in-budget reports, never a single
+	// giant first report (which the metering first-report clamp now caps). Seed
+	// it realistically: a tiny first report to establish the alloc, then grow it
+	// to the target under the elapsed-time budget within the same month.
+	seedNodeTraffic := func(alloc, node string, target int64) {
+		early := now.Add(-50000 * time.Second).Unix() // ~13.9h earlier, same month
+		st.RecordUsage(ctx, UsageEvent{AllocID: alloc, Token: "c", UserID: owner.ID, RelayedBytes: 1 << 20, RecordedAt: early, NodeID: node, Billable: true})
+		st.RecordUsage(ctx, UsageEvent{AllocID: alloc, Token: "c", UserID: owner.ID, RelayedBytes: target, RecordedAt: now.Unix(), NodeID: node, Billable: true})
+	}
+	seedNodeTraffic("a", "over90", 950*gib)
+	seedNodeTraffic("b", "under90", 900*gib)
 
 	s := &Service{store: st, now: func() time.Time { return now },
 		cfg: Config{TURNCredTTL: time.Hour}}

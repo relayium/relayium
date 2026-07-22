@@ -182,6 +182,71 @@ func TestAppleWebCallback_HappyPath(t *testing.T) {
 	}
 }
 
+// clearPwFailStore wraps a Store and makes ClearPassword fail, to exercise the
+// error path of dropUnverifiedPassword during an IdP login.
+type clearPwFailStore struct {
+	Store
+}
+
+func (c *clearPwFailStore) ClearPassword(ctx context.Context, userID string) error {
+	return errors.New("injected ClearPassword failure")
+}
+
+// If dropUnverifiedPassword fails during an Apple web login, the account must NOT
+// be flipped to verified — flipping it while an attacker's planted password
+// survives is exactly the pre-hijack takeover. Verification is gated on the drop
+// succeeding (mirrors the Google/oauth.go path).
+func TestAppleWebCallback_VerifyGatedOnPasswordDrop(t *testing.T) {
+	ctx := context.Background()
+
+	// Seed a victim account with an attacker-planted, still-unverified password.
+	seed, _ := newTestService(t)
+	victim, err := seed.Register(ctx, "user@example.com", "attacker-planted-1", "V")
+	if err != nil {
+		t.Fatalf("seed register: %v", err)
+	}
+
+	// Service under test shares the seed's store but with ClearPassword failing.
+	svc := NewService(&clearPwFailStore{Store: seed.store}, &capturingMailer{}, Config{
+		BaseURL: "http://example.test", SessionTTL: time.Hour, MagicTTL: time.Minute,
+		EnableApple: true, AppleClientIDs: []string{"com.relayium.web"}, AppleServicesID: "com.relayium.web",
+	})
+	svc.now = func() time.Time { return time.Unix(1_700_000_000, 0) }
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims := validAppleClaims(svc.now())
+	claims["aud"] = "com.relayium.web"
+	claims["nonce"] = "NONCE1"
+	idToken := signAppleJWT(t, key, map[string]any{"alg": "RS256", "kid": "k1"}, claims)
+	svc.appleKey = func(_ context.Context, _ string) (*rsa.PublicKey, error) { return &key.PublicKey, nil }
+	svc.exchangeAppleCode = func(_ context.Context, _ string) (string, error) { return idToken, nil }
+
+	form := url.Values{"code": {"CODE1"}, "state": {"STATE1"}}
+	req := httptest.NewRequest("POST", "/api/auth/apple/web/callback", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: oauthStateCookie, Value: "STATE1"})
+	req.AddCookie(&http.Cookie{Name: oauthNonceCookie, Value: "NONCE1"})
+	rec := httptest.NewRecorder()
+
+	svc.handleAppleWebCallback(rec, req)
+
+	// The login must fail (no session) rather than verify-and-admit.
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/?login=error" {
+		t.Fatalf("want redirect to /?login=error, got %d → %q", rec.Code, rec.Header().Get("Location"))
+	}
+	if hasSessionCookie(rec.Result().Cookies()) {
+		t.Fatal("failed password drop must not create a session")
+	}
+	// Critically: the account must remain UNverified so the planted password
+	// cannot become a live login credential.
+	if v, _ := seed.store.EmailVerified(ctx, victim.ID); v {
+		t.Fatal("SECURITY: account marked verified despite failed password drop")
+	}
+}
+
 func TestAppleWebStart_CookiesSameSiteNone(t *testing.T) {
 	store := newTestStore(t)
 	svc := NewService(store, &capturingMailer{}, Config{

@@ -10,8 +10,10 @@ import (
 	"time"
 )
 
-// A forged huge single report is capped to the absolute per-allocation ceiling,
-// so a malicious node can't blow a user's quota / the billing ledger with 1<<50.
+// A forged huge FIRST report on a fresh alloc_id is capped to the first-report
+// budget (a few heartbeat windows at max rate + slack), NOT the ~2TiB absolute
+// ceiling — so a malicious node can't attribute a huge total to a victim on a
+// single brand-new alloc_id before any elapsed-time budget applies.
 func TestRecordUsageClampsForgedReport(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
@@ -20,8 +22,32 @@ func TestRecordUsageClampsForgedReport(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ := s.UserUsageTotal(ctx, u.ID)
-	if got != maxAllocRelayBytes {
-		t.Fatalf("forged report total = %d, want capped at %d", got, maxAllocRelayBytes)
+	if got != maxFirstReportBytes {
+		t.Fatalf("forged first report total = %d, want capped at %d", got, maxFirstReportBytes)
+	}
+	if maxFirstReportBytes >= maxAllocRelayBytes {
+		t.Fatalf("first-report cap %d must be far below the absolute ceiling %d", maxFirstReportBytes, maxAllocRelayBytes)
+	}
+}
+
+// The first-report clamp does not permanently cap an allocation: over subsequent
+// heartbeats the elapsed-time budget lets a genuinely long, fast transfer grow up
+// to the absolute per-allocation ceiling. Guards against over-clamping legit use.
+func TestRecordUsageGrowsPastFirstReportBudget(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u, _ := s.UpsertUserByEmail(ctx, "e@example.com", "E")
+	// First report lands at the first-report cap.
+	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a", Token: "t", UserID: u.ID, RelayedBytes: 1 << 50, RecordedAt: 1000})
+	// A later report, an hour on, may grow by bandwidth×elapsed + slack.
+	_ = s.RecordUsage(ctx, UsageEvent{AllocID: "a", Token: "t", UserID: u.ID, RelayedBytes: 1 << 50, RecordedAt: 1000 + 3600})
+	got, _ := s.UserUsageTotal(ctx, u.ID)
+	want := maxFirstReportBytes + int64(maxRelayBytesPerSec)*3600 + relayReportSlack
+	if got != want {
+		t.Fatalf("post-first-report growth = %d, want %d", got, want)
+	}
+	if got <= maxFirstReportBytes {
+		t.Fatal("second report must be allowed to grow past the first-report cap")
 	}
 }
 
