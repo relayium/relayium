@@ -596,7 +596,9 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <td>{{if .Label}}<b>{{.Label}}</b><br>{{end}}<span style="color:var(--muted);font-size:12px">{{.ID}}</span></td>
 <td>{{if .Host}}{{.Host}}{{else}}—{{end}}</td>
 <td>{{.Region}}</td>
-<td>{{if .Removed}}<span class="err">已卸载</span>{{else if .Online}}在线{{else}}离线{{end}}</td>
+<td>{{if .Removed}}<span class="err">已卸载</span>
+<form method="post" action="/admin/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('恢复该节点？它会重新进入放置/ICE/直连下载。')"><button type="submit" title="清除已卸载标记，让节点重新上线（不影响它的文件与历史）">恢复</button></form>
+{{else if .Online}}在线{{else}}离线{{end}}</td>
 <td>{{bytes .MonthRelayedBytes}} / {{bytes .RelayedBytes}} / {{if .EffectiveTrafficLimitBytes}}{{bytes .EffectiveTrafficLimitBytes}}{{else}}∞{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StoredBytes}}{{else}}—{{end}} / {{if .DiskLimitBytes}}{{bytes .DiskLimitBytes}}{{else}}∞{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StorageFree}} / {{bytes .StorageTotal}}{{else}}—{{end}}</td>
@@ -607,6 +609,11 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <input type="hidden" name="on" value="{{if .Draining}}0{{else}}1{{end}}">
 <button type="submit">{{if .Draining}}取消排空{{else}}开始排空{{end}}</button>
 </form>
+{{if and .Draining (not .StoredFileCount)}}
+<div style="color:var(--muted);font-size:12px">可以卸载了，在该机器上执行：<br><code>curl -fsSL https://relayium.com/uninstall-node.sh | sudo sh</code></div>
+{{else if .Draining}}
+<div style="color:var(--muted);font-size:12px">等最后一个文件过期后，在该机器上执行 <code>uninstall-node.sh</code> 卸载</div>
+{{end}}
 </td>
 <td>{{if .StoredFileCount}}{{.StoredFileCount}} 个 / {{ts .SafeToUninstallAt}}{{else}}0 个 · 可随时卸载{{end}}</td>
 <td>{{.Version}}</td>

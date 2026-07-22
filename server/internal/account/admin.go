@@ -326,6 +326,10 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	mux.Handle("POST /admin/nodes/{id}/limits", s.csrfGuard(http.HandlerFunc(s.handleAdminNodeLimits)))
 	mux.Handle("POST /admin/nodes/{id}/label", s.csrfGuard(http.HandlerFunc(s.handleAdminNodeLabel)))
 	mux.Handle("POST /admin/nodes/{id}/draining", s.csrfGuard(http.HandlerFunc(s.handleAdminNodeDraining)))
+	// Restore is the inverse of /api/nodes/deregister and the reason that endpoint
+	// is no longer a one-way door. Same CSRF guard as its neighbours; no step-up,
+	// because it returns a node to service rather than taking one out.
+	mux.Handle("POST /admin/nodes/{id}/restore", s.csrfGuard(http.HandlerFunc(s.handleAdminRestoreNode)))
 	// 节点版本发布控制。**每条轨道一套独立路由**（track 在 path 里），不是一个
 	// 带轨道下拉框的表单：机队轨和自带节点轨是两台各自独立的控制器，任何把它们
 	// 合并成一个入口的做法都会把一条轨道的故障传染给另一条 —— 而"BYO 卡住时机队
@@ -1020,6 +1024,39 @@ func (s *Service) handleAdminNodeDraining(w http.ResponseWriter, r *http.Request
 	}
 	s.writeAudit(r, AuditNodeDraining, "node:"+id,
 		[]ChangeField{{Field: "draining", Old: before.Draining, New: on}}, StepUpNone)
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// handleAdminRestoreNode undoes a deregistration: it clears removed_at and puts
+// the node back into placement, ICE and the direct-download path with its row,
+// its files and its history untouched.
+//
+// It exists because deregistration was a one-way door. /api/nodes/deregister is
+// authenticated by a token that does not bind to a node id, so anything holding
+// the fleet token can name any fleet node — N calls take the entire fleet out of
+// service at once — and the only way back was handleAdminDeleteNode, which
+// destroys the row. Restoring must therefore be at least as easy as the mistake.
+//
+// Low-risk by design (no step-up): it puts capacity BACK. The destructive
+// direction is delete, which keeps its step-up. Unscoped like the label and
+// drain controls — an admin can restore any node, not just fleet ones.
+func (s *Service) handleAdminRestoreNode(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	id := r.PathValue("id")
+	before, _, err := s.store.GetNode(r.Context(), id)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if err := s.store.ClearNodeRemoved(r.Context(), id); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	s.writeAudit(r, AuditNodeRestore, "node:"+id,
+		[]ChangeField{{Field: "removed_at", Old: before.RemovedAt, New: int64(0)}}, StepUpNone)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 

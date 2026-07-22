@@ -840,6 +840,15 @@ type Store interface {
 	// keeps the FIRST timestamp, so a retried deregistration cannot rewrite
 	// history. Returns ErrNotFound for an unknown id. See Node.RemovedAt.
 	MarkNodeRemoved(ctx context.Context, id string, at int64) error
+	// ClearNodeRemoved undoes MarkNodeRemoved (removed_at back to 0), putting
+	// the node back into placement, ICE and the direct-download path. It exists
+	// so deregistration is a door that opens both ways: the node token does not
+	// bind to a node id, so one mistaken (or malicious) POST can empty the whole
+	// pool, and the only other way back used to be deleting the row — which
+	// destroys its history and its file bookkeeping with it. Admin-only.
+	// Idempotent: clearing an already-live node is a no-op success. Returns
+	// ErrNotFound for an unknown id.
+	ClearNodeRemoved(ctx context.Context, id string) error
 	// CountFilesOnNode reports how many LIVE stored files (expires_at > now)
 	// still sit on nodeID, plus the largest ExpiresAt among them — the earliest
 	// moment the node is safe to uninstall, since a file binds to exactly one

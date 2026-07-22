@@ -18,6 +18,7 @@ const (
 	AuditNodeLimits    = "node.limits"
 	AuditNodeLabel     = "node.label"
 	AuditNodeDraining  = "node.draining"
+	AuditNodeRestore   = "node.restore"
 	AuditTokenMint     = "token.mint"
 	AuditTokenRevoke   = "token.revoke"
 	AuditPasskeyDelete = "passkey.delete"
@@ -39,7 +40,7 @@ const (
 var auditActions = []string{
 	AuditLoginOK, AuditLoginFail, AuditLogout, AuditSettings,
 	AuditPlanUpsert, AuditUserPlan, AuditNodeDelete, AuditNodeLimits,
-	AuditNodeLabel, AuditNodeDraining, AuditTokenMint, AuditTokenRevoke, AuditPasskeyDelete,
+	AuditNodeLabel, AuditNodeDraining, AuditNodeRestore, AuditTokenMint, AuditTokenRevoke, AuditPasskeyDelete,
 	AuditRolloutTarget, AuditRolloutPause, AuditRolloutResume,
 	AuditRolloutRollback, AuditRolloutEmergency,
 }

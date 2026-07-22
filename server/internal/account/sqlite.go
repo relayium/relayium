@@ -3274,6 +3274,23 @@ func (s *SQLiteStore) MarkNodeRemoved(ctx context.Context, id string, at int64) 
 	return nil
 }
 
+// ClearNodeRemoved puts a deregistered node back into service. Unconditional on
+// the current value (unlike MarkNodeRemoved, which is first-write-wins) so that
+// clearing an already-live node is a plain no-op success rather than an error
+// the admin panel would have to explain. Touches nothing else: the node's
+// files, limits, label and update history are exactly as it left them, which is
+// the whole point of this existing instead of "delete the row and reinstall".
+func (s *SQLiteStore) ClearNodeRemoved(ctx context.Context, id string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE nodes SET removed_at = 0 WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // CountFilesOnNode reports how many LIVE stored files (expires_at > now) sit
 // on nodeID, plus the largest expires_at among them. "Live" mirrors
 // CurrentStorage/GlobalStorageUsed: an expired-but-not-yet-collected row is
