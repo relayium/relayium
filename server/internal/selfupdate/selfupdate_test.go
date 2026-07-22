@@ -80,14 +80,17 @@ func sha256hex(b []byte) string {
 // per-tag download assets. checksumOverride, when non-empty, replaces the real
 // archive digest in checksums.txt so a mismatch can be exercised.
 type fakeRelease struct {
-	tag             string
-	asset           string
-	archive         []byte
+	tag              string
+	asset            string
+	archive          []byte
 	checksumOverride string
-	assetStatus     int // 0 → 200
+	assetStatus      int // 0 → 200
 	// signKey, when set, serves a valid checksums.txt.sig (ECDSA over the served
 	// checksums bytes), mirroring the release workflow's openssl signing step.
 	signKey *ecdsa.PrivateKey
+	// latestTag, when set, is what /releases/latest reports while the assets
+	// stay under tag. Lets a test prove TargetTag wins over "latest".
+	latestTag string
 }
 
 func (f *fakeRelease) server(t *testing.T) *httptest.Server {
@@ -99,7 +102,11 @@ func (f *fakeRelease) server(t *testing.T) *httptest.Server {
 	checksums := fmt.Sprintf("%s  %s\n", sum, f.asset)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/repos/relayium/relayium/releases/latest", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, `{"tag_name":%q}`, f.tag)
+		latest := f.latestTag
+		if latest == "" {
+			latest = f.tag
+		}
+		fmt.Fprintf(w, `{"tag_name":%q}`, latest)
 	})
 	base := "/relayium/relayium/releases/download/" + f.tag
 	mux.HandleFunc(base+"/"+f.asset, func(w http.ResponseWriter, r *http.Request) {

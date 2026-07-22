@@ -49,6 +49,15 @@ type Options struct {
 	APIBase        string
 	DownloadBase   string
 	Force          bool
+	// TargetTag pins the exact release to install. Empty means "latest" (the
+	// CLI's `relayium update` behaviour). Node rollouts always set it: central
+	// hands out an exact version so a release published mid-rollout can't
+	// scatter the fleet across two versions.
+	TargetTag string
+	// AllowDowngrade permits installing a version older than CurrentVersion.
+	// Off by default so nothing can walk a node back to a known-vulnerable
+	// build; only an explicit rollback sets it.
+	AllowDowngrade bool
 }
 
 func (o Options) apiBase() string {
@@ -170,13 +179,17 @@ func LatestTag(ctx context.Context, o Options) (string, error) {
 	return out.TagName, nil
 }
 
-// Update upgrades the binary at o.TargetPath to the latest release. It returns
-// the from/to versions and whether anything changed (false = already latest and
-// Force unset). On any failure the live binary is left untouched.
+// Update upgrades the binary at o.TargetPath to o.TargetTag, or to the latest
+// release when TargetTag is empty. It returns the from/to versions and whether
+// anything changed (false = already at the target and Force unset). On any
+// failure the live binary is left untouched.
 func Update(ctx context.Context, o Options, progress io.Writer) (from, to string, changed bool, err error) {
-	tag, err := LatestTag(ctx, o)
-	if err != nil {
-		return o.CurrentVersion, "", false, err
+	tag := o.TargetTag
+	if tag == "" {
+		var err error
+		if tag, err = LatestTag(ctx, o); err != nil {
+			return o.CurrentVersion, "", false, err
+		}
 	}
 	if SameVersion(tag, o.CurrentVersion) && !o.Force {
 		return o.CurrentVersion, tag, false, nil
@@ -185,9 +198,11 @@ func Update(ctx context.Context, o Options, progress io.Writer) (from, to string
 	// version. This defends against a compromised or rolled-back release host
 	// serving an OLD (known-vulnerable) but still validly-signed tag — signature
 	// verification alone can't catch that, so bound it to same-or-newer. --force
-	// overrides for a deliberate rollback; an unparseable current version ("dev")
-	// never blocks.
-	if !o.Force {
+	// overrides for a deliberate rollback (existing behaviour, unchanged);
+	// AllowDowngrade is the same escape hatch for a fleet rollback driven by
+	// central rather than a human running --force. An unparseable current
+	// version ("dev") never blocks.
+	if !o.Force && !o.AllowDowngrade {
 		if cmp, ok := compareVersions(tag, o.CurrentVersion); ok && cmp < 0 {
 			return o.CurrentVersion, tag, false, fmt.Errorf(
 				"refusing to downgrade: latest release %s is older than the running %s (use --force to override)",
