@@ -78,6 +78,14 @@ function widgetHtml(w) {
 // vars) without needing markup in the content files. Direction is inherited from
 // <html dir>; the cell alignment is `text-align:start`, a logical property, so
 // RTL pages need no separate rule.
+//
+// The code cell itself is pinned dir="ltr" regardless of page direction. A cell
+// holding two LTR runs joined by punctuation from the page's own script (e.g. an
+// Arabic comma between two systemd directives) is, to the bidi algorithm, a
+// right-to-left context containing two embedded LTR runs — which reorders the
+// runs themselves, not just the punctuation between them. `firstColCode` cells
+// are always literal config/env text meant to read left-to-right exactly as
+// written, in every language, so direction is fixed rather than inherited.
 function tableHtml(t) {
   const head = t.head?.length
     ? `<thead><tr>${t.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead>`
@@ -86,7 +94,7 @@ function tableHtml(t) {
     .map(
       (r) =>
         `<tr>${r
-          .map((c, i) => `<td>${i === 0 && t.firstColCode ? `<code>${esc(c)}</code>` : esc(c)}</td>`)
+          .map((c, i) => `<td>${i === 0 && t.firstColCode ? `<code dir="ltr">${esc(c)}</code>` : esc(c)}</td>`)
           .join("")}</tr>`
     )
     .join("");

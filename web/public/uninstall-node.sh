@@ -505,18 +505,38 @@ if [ -f "${STATE_DIR}/state.json" ]; then
   NODE_ID=$(sed -n 's/.*"nodeID"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "${STATE_DIR}/state.json" | head -n1)
 fi
 if [ -n "$CENTRAL_URL" ] && [ -n "$NODE_TOKEN" ] && [ -n "$NODE_ID" ] && command -v curl >/dev/null 2>&1; then
-  if curl -fsS --max-time 15 -X POST "${CENTRAL_URL}/api/nodes/deregister" \
-      -H "Authorization: Bearer ${NODE_TOKEN}" \
-      -H "Content-Type: application/json" \
-      -d "{\"nodeID\":\"${NODE_ID}\"}" >/dev/null 2>&1; then
-    say "deregistered ${NODE_ID} from ${CENTRAL_URL}"
+  # The token goes to curl through a header FILE, never argv: an argv token sits
+  # in `ps`/`/proc/<pid>/cmdline`, readable by any local user, for as long as
+  # this curl call runs. install-node.sh never puts the token in argv either —
+  # it only ever writes it into the 0600 env file — so this is the same rule
+  # applied to the one place this script talks to an HTTP server. `umask 077`
+  # in the subshell that runs mktemp means the file is 0600 from the instant it
+  # exists, and the EXIT trap removes it however this shell stops running,
+  # including a signal landing mid-curl.
+  hdrfile=$(umask 077 && mktemp 2>/dev/null) || hdrfile=""
+  if [ -n "$hdrfile" ]; then
+    trap 'rm -f "$hdrfile"' EXIT
+    printf 'Authorization: Bearer %s\n' "$NODE_TOKEN" >"$hdrfile"
+    if curl -fsS --max-time 15 -X POST "${CENTRAL_URL}/api/nodes/deregister" \
+        -H "@${hdrfile}" \
+        -H "Content-Type: application/json" \
+        -d "{\"nodeID\":\"${NODE_ID}\"}" >/dev/null 2>&1; then
+      say "deregistered ${NODE_ID} from ${CENTRAL_URL}"
+    else
+      echo "relayium-node-uninstall: could not reach central to deregister — continuing." >&2
+      echo "relayium-node-uninstall: node id was ${NODE_ID} — ask whoever runs" >&2
+      echo "relayium-node-uninstall:   ${CENTRAL_URL} to mark it removed by hand in the" >&2
+      echo "relayium-node-uninstall:   admin panel (admin-only; do NOT delete the row, which would erase its" >&2
+      echo "relayium-node-uninstall:   file history — the panel's node list has a 'mark removed' action" >&2
+      echo "relayium-node-uninstall:   alongside 'restore' for exactly this)." >&2
+    fi
+    rm -f "$hdrfile"
+    trap - EXIT
   else
-    echo "relayium-node-uninstall: could not reach central to deregister — continuing." >&2
-    echo "relayium-node-uninstall: node id was ${NODE_ID} — ask whoever runs" >&2
-    echo "relayium-node-uninstall:   ${CENTRAL_URL} to mark it removed by hand in the" >&2
-    echo "relayium-node-uninstall:   admin panel (admin-only; do NOT delete the row, which would erase its" >&2
-    echo "relayium-node-uninstall:   file history — the panel's node list has a 'mark removed' action" >&2
-    echo "relayium-node-uninstall:   alongside 'restore' for exactly this)." >&2
+    echo "relayium-node-uninstall: could not create a temp file for the deregister" >&2
+    echo "relayium-node-uninstall:   request — skipping deregistration. node id was" >&2
+    echo "relayium-node-uninstall:   ${NODE_ID} — ask whoever runs ${CENTRAL_URL} to mark" >&2
+    echo "relayium-node-uninstall:   it removed by hand in the admin panel." >&2
   fi
 else
   say "no central URL, token or node id on disk — skipping deregistration"

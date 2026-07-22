@@ -612,7 +612,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <button type="submit">{{if .Draining}}取消排空{{else}}开始排空{{end}}</button>
 </form>
 {{if and .Draining (not .StoredFileCount)}}
-<div style="color:var(--muted);font-size:12px">可以卸载了，在该机器上执行：<br><code>curl -fsSL https://relayium.com/uninstall-node.sh | sudo sh</code></div>
+<div style="color:var(--muted);font-size:12px">可以卸载了，在该机器上执行（先下载到文件、确认非空再运行——不要直接 <code>curl | sudo sh</code>，链接一旦暂时不可达，这种管道写法会让整条命令"看起来成功"、实际什么都没做）：<br><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh</code></div>
 {{else if .Draining}}
 <div style="color:var(--muted);font-size:12px">等最后一个文件过期后，在该机器上执行 <code>uninstall-node.sh</code> 卸载</div>
 {{end}}
