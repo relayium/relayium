@@ -96,6 +96,17 @@ func parseConfig() (config, error) {
 }
 
 func main() {
+	// Subcommand dispatch. The node proper runs sandboxed and unprivileged and
+	// can never modify binaries; `update` is a separate, root-run entry point.
+	if len(os.Args) > 1 && os.Args[1] == "update" {
+		uc, err := parseUpdateFlags(os.Args[2:], os.Stderr)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		os.Exit(runUpdate(uc, os.Stdout, os.Stderr))
+	}
+
 	c, err := parseConfig()
 	if err != nil {
 		log.Fatalf("relayium-node: %v", err)
