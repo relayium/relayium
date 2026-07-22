@@ -16,6 +16,13 @@
 #   RELAYIUM_NODE_TURN_PORT     TURN UDP port (default 3478)
 #   RELAYIUM_NODE_STORAGE_PORT  blob HTTP port, central-facing only (default 8081)
 #   RELAYIUM_NODE_MIN_PORT / RELAYIUM_NODE_MAX_PORT  relay UDP range (default 49152-65535)
+# Self-update (central-driven, root+systemd only):
+#   RELAYIUM_NODE_AUTO_UPDATE   on|off (default on). A timer polls central every
+#                               ~10min asking what version to run; central only ever
+#                               hands out a version NUMBER, the binary itself is
+#                               downloaded and signature-verified locally, same as
+#                               this installer does. Set to off (and re-run this
+#                               installer) to disable and remove the timer.
 set -eu
 
 REPO="relayium/relayium"
@@ -118,6 +125,8 @@ RELAYIUM_NODE_TURN_PORT=${RELAYIUM_NODE_TURN_PORT:-}
 RELAYIUM_NODE_STORAGE_PORT=${RELAYIUM_NODE_STORAGE_PORT:-}
 RELAYIUM_NODE_MIN_PORT=${RELAYIUM_NODE_MIN_PORT:-}
 RELAYIUM_NODE_MAX_PORT=${RELAYIUM_NODE_MAX_PORT:-}
+RELAYIUM_NODE_BIN=${INSTALL_DIR}/relayium-node
+RELAYIUM_NODE_AUTO_UPDATE=${RELAYIUM_NODE_AUTO_UPDATE:-on}
 EOF
   chmod 0600 /etc/relayium-node/env
 
@@ -215,6 +224,65 @@ EOF
   systemctl enable --now relayium-node
   echo "relayium-node.service enabled (locked-down, non-root) — check: systemctl status relayium-node"
   echo "it should appear online in ${RELAYIUM_CENTRAL_URL}/admin within ~30s"
+  echo "auto-update: central only ever hands out a version NUMBER; the binary is downloaded"
+  echo "and signature-verified on this machine, same as this installer just did — never trust-on-say-so."
+  echo "to disable auto-update: re-run this installer with RELAYIUM_NODE_AUTO_UPDATE=off"
+
+  # Self-update: a timer that asks central what version to run, plus the
+  # oneshot service it triggers. Deliberately a SEPARATE, unsandboxed unit from
+  # relayium-node.service above — replacing the live binary needs root and a
+  # writable /usr/local/bin (or wherever INSTALL_DIR points), which is exactly
+  # what the node's own sandbox (ProtectSystem=strict, empty capability set,
+  # ...) exists to deny it. Keeping that power in one small, single-purpose
+  # unit — rather than loosening the node's own hardening — is the point.
+  auto_update="${RELAYIUM_NODE_AUTO_UPDATE:-on}"
+  update_service=/etc/systemd/system/relayium-node-update.service
+  update_timer=/etc/systemd/system/relayium-node-update.timer
+  if [ "$auto_update" = "on" ]; then
+    cat > "$update_service" <<EOF
+[Unit]
+Description=Relayium node self-update (central-driven)
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/relayium-node/env
+ExecStart=${INSTALL_DIR}/relayium-node update
+# The watchdog waits up to 10 minutes for the new version to prove itself.
+# systemd's default TimeoutStartSec (90s) would SIGTERM the updater mid-watch,
+# leaving an unverified binary, a stale .prev and no rollback. Must exceed
+# healthWindow with room for the 60s drain plus the download.
+TimeoutStartSec=20min
+EOF
+
+    cat > "$update_timer" <<EOF
+[Unit]
+Description=Check for a Relayium node update
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=10min
+# Smear polls across the fleet so central isn't hit in lockstep. Central
+# enforces one-node-at-a-time regardless; this only spreads the questions.
+RandomizedDelaySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+    systemctl daemon-reload
+    systemctl enable --now relayium-node-update.timer
+    echo "relayium-node-update.timer enabled — polls central for a new version every ~10min (auto-update: on)"
+  else
+    if [ -f "$update_timer" ] || [ -f "$update_service" ]; then
+      systemctl disable --now relayium-node-update.timer 2>/dev/null || true
+      rm -f "$update_timer" "$update_service"
+      systemctl daemon-reload
+      echo "relayium-node-update.timer disabled and removed (RELAYIUM_NODE_AUTO_UPDATE=off)"
+    else
+      echo "auto-update: off (RELAYIUM_NODE_AUTO_UPDATE=off) — not installing the update timer"
+    fi
+  fi
 else
   echo "not root or no systemd — run it yourself (unsandboxed; see ${RELAYIUM_CENTRAL_URL}/guides/bring-your-own-node for hardening):"
   echo "  RELAYIUM_CENTRAL_URL=${RELAYIUM_CENTRAL_URL} RELAYIUM_NODE_TOKEN=*** RELAYIUM_NODE_STORAGE_DIR=${RELAYIUM_NODE_STORAGE_DIR:-} ${INSTALL_DIR}/relayium-node"
