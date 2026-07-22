@@ -326,6 +326,16 @@ type Node struct {
 	Draining bool
 }
 
+// NodeFileCount is a node's live-file footprint, as returned by
+// CountFilesOnNode / NodeFileCounts: how many stored files still sit on it,
+// and the furthest-out ExpiresAt among them — the earliest moment it is safe
+// to uninstall. The zero value (both fields 0) is exactly "holds nothing,
+// safe now", which is also what a node absent from NodeFileCounts' map means.
+type NodeFileCount struct {
+	Count        int
+	MaxExpiresAt int64
+}
+
 // NodeToken is a per-user credential a BYO node presents as its bearer. The
 // plaintext is shown once at mint; only its sha256 hash is stored. Binding to a
 // node_id links it for per-node revoke/delete.
@@ -811,6 +821,20 @@ type Store interface {
 	// draining node is excluded from new-upload placement but keeps serving its
 	// existing files. See Node.Draining.
 	SetNodeDraining(ctx context.Context, id string, on bool) error
+	// CountFilesOnNode reports how many LIVE stored files (expires_at > now)
+	// still sit on nodeID, plus the largest ExpiresAt among them — the earliest
+	// moment the node is safe to uninstall, since a file binds to exactly one
+	// node and there are no replicas. An expired-but-not-yet-GC'd row does not
+	// count and cannot push the safe-from time out further; a deleted file is
+	// never in the table at all (stored_files rows are hard-deleted, not
+	// soft-deleted), so it is excluded automatically. A node holding nothing
+	// live reports (0, 0, nil).
+	CountFilesOnNode(ctx context.Context, nodeID string, now int64) (count int, maxExpiresAt int64, err error)
+	// NodeFileCounts is CountFilesOnNode for every node at once, in a single
+	// grouped query — the admin nodes listing renders every row from one read
+	// instead of one query per node. Nodes with no live files are simply absent
+	// from the map (read as the zero NodeFileCount).
+	NodeFileCounts(ctx context.Context, now int64) (map[string]NodeFileCount, error)
 	// CentralStoredBytes sums the live sizes of files held on central-local
 	// storage (node_id unset) — the app server's own disk fallback.
 	CentralStoredBytes(ctx context.Context) (int64, error)

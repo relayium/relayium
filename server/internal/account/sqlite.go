@@ -3231,6 +3231,47 @@ func (s *SQLiteStore) SetNodeDraining(ctx context.Context, id string, on bool) e
 	return nil
 }
 
+// CountFilesOnNode reports how many LIVE stored files (expires_at > now) sit
+// on nodeID, plus the largest expires_at among them. "Live" mirrors
+// CurrentStorage/GlobalStorageUsed: an expired-but-not-yet-collected row is
+// excluded from both the count and the max (it would otherwise overstate how
+// long an operator must wait), and a deleted file is never a concern here
+// since stored_files rows are hard-deleted, not soft-deleted — DeleteStoredFile
+// and the expiry-GC sweep both remove the row outright, so "already deleted"
+// and "excluded by expires_at > now" cannot both apply to the same live row.
+// COALESCE(MAX(...), 0) makes a node with nothing live report (0, 0), not NULL.
+func (s *SQLiteStore) CountFilesOnNode(ctx context.Context, nodeID string, now int64) (count int, maxExpiresAt int64, err error) {
+	err = s.reader().QueryRowContext(ctx,
+		`SELECT COUNT(*), COALESCE(MAX(expires_at), 0) FROM stored_files
+		   WHERE node_id = ? AND expires_at > ?`, nodeID, now).Scan(&count, &maxExpiresAt)
+	return count, maxExpiresAt, err
+}
+
+// NodeFileCounts is CountFilesOnNode for every node in one grouped query, so
+// the admin nodes listing can render every row from a single read instead of
+// one query per node. Same "live" definition as CountFilesOnNode. Nodes with
+// no live files (or no files at all) are simply absent from the map.
+func (s *SQLiteStore) NodeFileCounts(ctx context.Context, now int64) (map[string]NodeFileCount, error) {
+	rows, err := s.reader().QueryContext(ctx,
+		`SELECT node_id, COUNT(*), MAX(expires_at) FROM stored_files
+		   WHERE expires_at > ? AND node_id IS NOT NULL AND node_id != ''
+		   GROUP BY node_id`, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]NodeFileCount)
+	for rows.Next() {
+		var id string
+		var c NodeFileCount
+		if err := rows.Scan(&id, &c.Count, &c.MaxExpiresAt); err != nil {
+			return nil, err
+		}
+		out[id] = c
+	}
+	return out, rows.Err()
+}
+
 // CentralStoredBytes sums live file sizes held on central-local storage — rows
 // whose node_id is unset (NULL or ”), i.e. the app server's own disk fallback.
 func (s *SQLiteStore) CentralStoredBytes(ctx context.Context) (int64, error) {
