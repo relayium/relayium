@@ -99,6 +99,14 @@ func TestRunUpdateWithRefusesAlreadyFailedVersionBeforeTouchingAnything(t *testi
 	if _, err := os.Stat(backupPath(bin)); err == nil {
 		t.Error("a .prev backup was created even though the update was refused before touching anything")
 	}
+	// The above assertions alone are satisfied even if the anti-retry guard is
+	// deleted entirely, because a subsequent selfupdate.Update failure (empty
+	// APIBase here) leaves the same observable state. Pin down that the guard
+	// itself is what fired, not just any failure path, by requiring its
+	// distinctive message on stderr.
+	if want := "refusing to retry " + "v1.2.3"; !bytes.Contains(errBuf.Bytes(), []byte(want)) {
+		t.Errorf("stderr = %q, want it to contain %q (the anti-retry guard message)", errBuf.String(), want)
+	}
 }
 
 // (b) When selfupdate.Update itself fails (here: unreachable download/API
