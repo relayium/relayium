@@ -364,6 +364,10 @@ func run(c config, st nodeState) error {
 }
 
 func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir, stateDir string, blobGauge *blobUsage, lim *limits) {
+	// Read the live count BEFORE snapshot(), which evicts closed allocations:
+	// either order gives the same answer (activeAllocs ignores closed entries),
+	// but taking it first keeps the two reads from being confused for one.
+	active := reg.activeAllocs()
 	samples := reg.snapshot()
 	usage := make([]usageItem, 0, len(samples))
 	var total int64
@@ -388,6 +392,7 @@ func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir, 
 	body := heartbeatBody{
 		NodeID: nodeID, Status: "ok", Usage: usage, RelayedTotal: total,
 		StoredBytes: storedBytes, StorageTotal: storTotal, StorageFree: storFree,
+		ActiveTransfers: active,
 	}
 	hr, err := rp.heartbeat(body)
 	if err != nil {

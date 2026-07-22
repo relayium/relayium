@@ -63,6 +63,14 @@ type heartbeatBody struct {
 	StoredBytes  int64       `json:"storedBytes"`
 	StorageTotal int64       `json:"storageTotal"`
 	StorageFree  int64       `json:"storageFree"`
+	// ActiveTransfers is how many relay allocations are live at this instant
+	// (allocRegistry.activeAllocs). Central uses it to pick the rollout canary —
+	// the least-busy node gets a new build first. NOT len(Usage): that array
+	// skips allocations not yet joined to a username and carries ones that
+	// closed since the last heartbeat, so its length answers a different
+	// question. An older central ignores the field; a newer central reads its
+	// absence as 0.
+	ActiveTransfers int `json:"activeTransfers"`
 }
 
 // receiptBody reports a served direct download so central can reconcile the

@@ -146,6 +146,30 @@ func (r *allocRegistry) closeAlloc(srcAddr net.Addr) {
 	r.mu.Unlock()
 }
 
+// activeAllocs is how many allocations this node is relaying RIGHT NOW, which
+// central stores as nodes.active_transfers and uses to pick the rollout canary:
+// the least-busy machine gets a new build first, because it has the least to
+// lose if the build is bad.
+//
+// It counts entries not yet marked closed, which is deliberately NOT the same
+// population as snapshot()'s: snapshot reports a closed allocation one final
+// time (so its last bytes flush) and sendHeartbeat drops samples with no
+// username yet, so len(usage) means "allocations seen since the last heartbeat"
+// and would over- and under-count live ones at the same time. A separate,
+// honest counter is cheaper than explaining that difference to every future
+// reader of the heartbeat.
+func (r *allocRegistry) activeAllocs() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for _, e := range r.entries {
+		if !e.closed {
+			n++
+		}
+	}
+	return n
+}
+
 type allocSample struct {
 	AllocID      string
 	Username     string

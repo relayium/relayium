@@ -480,6 +480,23 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// from UpsertNode's ON CONFLICT clause, like draining above.
 		// 0 on every existing row = still installed.
 		`ALTER TABLE nodes ADD COLUMN removed_at INTEGER NOT NULL DEFAULT 0`,
+		// active_transfers is the node's live load signal: how many relay
+		// allocations it is currently serving, as of its last heartbeat. It exists
+		// for exactly one consumer — decideFleet's canary pick, which sends the
+		// new build to the machine with the fewest in-flight transfers first,
+		// because that is the one with the least to lose if the build is bad.
+		//
+		// Written ONLY by TouchNode (the heartbeat), unlike every other column
+		// added above: this is a live gauge, so it is SET, never kept-max, and it
+		// is deliberately NOT in UpsertNode's ON CONFLICT list — a re-register
+		// carries no load reading and must not stamp one.
+		//
+		// 0 on every existing row, and 0 for any node whose binary predates the
+		// heartbeat field, which is the honest reading of "we have no load signal
+		// for this machine": decideFleet's fleetHash tie-break then orders it, the
+		// same deterministic fallback that applied to the whole fleet before this
+		// column existed.
+		`ALTER TABLE nodes ADD COLUMN active_transfers INTEGER NOT NULL DEFAULT 0`,
 		// node_rollout holds the rollout state machine's per-track bookkeeping: one
 		// row for "fleet", one for "byo", each with its own target version and
 		// status, so a stalled/halted byo rollout can never block or bleed into the
@@ -3013,7 +3030,8 @@ const nodeCols = `id, owner_type, owner_user_id, region, urls, turn_secret, vers
   relayed_bytes, stored_bytes, created_at, last_seen_at,
   storage_url, storage_secret, storage_fp, storage_enabled, storage_total, storage_free,
   traffic_limit_bytes, disk_limit_bytes, label, download_url,
-  update_started_at, update_from_version, update_result, update_attempts, draining, removed_at`
+  update_started_at, update_from_version, update_result, update_attempts, draining, removed_at,
+  active_transfers`
 
 func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	if n.ID == "" {
@@ -3025,7 +3043,7 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO nodes (`+nodeCols+`)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   owner_type=excluded.owner_type, owner_user_id=excluded.owner_user_id,
 		   region=excluded.region, urls=excluded.urls, turn_secret=excluded.turn_secret,
@@ -3034,18 +3052,21 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 		   storage_fp=excluded.storage_fp,
 		   storage_enabled=excluded.storage_enabled, storage_total=excluded.storage_total,
 		   storage_free=excluded.storage_free, download_url=excluded.download_url`,
-		// label, the update_* columns, draining and removed_at are intentionally set
-		// only on INSERT (label seeded from the token name; update_* owned by the
-		// rollout state machine; draining owned by the operator via SetNodeDraining;
-		// removed_at written once by MarkNodeRemoved) and preserved on
-		// re-register/heartbeat, so neither a user's rename, an in-flight rollout's
-		// bookkeeping, an operator's drain flag nor a completed deregistration is
-		// clobbered by a node simply calling register/heartbeat again.
+		// label, the update_* columns, draining, removed_at and active_transfers are
+		// intentionally set only on INSERT (label seeded from the token name;
+		// update_* owned by the rollout state machine; draining owned by the
+		// operator via SetNodeDraining; removed_at written once by MarkNodeRemoved;
+		// active_transfers owned by the heartbeat, which is the only call that
+		// carries a load reading) and preserved on re-register/heartbeat, so
+		// neither a user's rename, an in-flight rollout's bookkeeping, an
+		// operator's drain flag nor a completed deregistration is clobbered by a
+		// node simply calling register/heartbeat again.
 		n.ID, n.OwnerType, nullStr(n.OwnerUserID), n.Region, string(urls), n.TURNSecret,
 		n.Version, n.RelayedBytes, n.StoredBytes, n.CreatedAt, n.LastSeenAt,
 		nullStr(n.StorageURL), nullStr(n.StorageSecret), n.StorageFP, b2i(n.StorageEnabled), n.StorageTotal, n.StorageFree,
 		n.TrafficLimitBytes, n.DiskLimitBytes, n.Label, n.DownloadURL,
-		n.UpdateStartedAt, n.UpdateFromVersion, n.UpdateResult, n.UpdateAttempts, b2i(n.Draining), n.RemovedAt)
+		n.UpdateStartedAt, n.UpdateFromVersion, n.UpdateResult, n.UpdateAttempts, b2i(n.Draining), n.RemovedAt,
+		n.ActiveTransfers)
 	if err != nil {
 		return Node{}, err
 	}
@@ -3065,12 +3086,18 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 // dashboard and made the placement filter treat healthy nodes as out of quota.
 // storage_total/storage_free keep the whole-volume meaning; stored_bytes does
 // not. Do not "fix" stored_bytes back toward total - free.
-func (s *SQLiteStore) TouchNode(ctx context.Context, id string, relayedBytes, storedBytes, storageTotal, storageFree, at int64) error {
+//
+// activeTransfers is the fourth live gauge and is SET for the same reason: it
+// is how many relay allocations the node is serving RIGHT NOW, not a total, so
+// a keep-max would pin every node at its all-time busiest and make decideFleet's
+// canary pick meaningless. The caller clamps it non-negative (see
+// handleNodeHeartbeat); this is the only writer of the column.
+func (s *SQLiteStore) TouchNode(ctx context.Context, id string, relayedBytes, storedBytes, storageTotal, storageFree, at int64, activeTransfers int) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE nodes SET last_seen_at=?,
 		   relayed_bytes=MAX(relayed_bytes, ?), stored_bytes=?,
-		   storage_total=?, storage_free=? WHERE id=?`,
-		at, relayedBytes, storedBytes, storageTotal, storageFree, id)
+		   storage_total=?, storage_free=?, active_transfers=? WHERE id=?`,
+		at, relayedBytes, storedBytes, storageTotal, storageFree, activeTransfers, id)
 	return err
 }
 
@@ -3377,7 +3404,7 @@ func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]
 			&storageURL, &storageSecret, &n.StorageFP, &storageEnabled, &n.StorageTotal, &n.StorageFree,
 			&n.TrafficLimitBytes, &n.DiskLimitBytes, &n.Label, &n.DownloadURL,
 			&n.UpdateStartedAt, &n.UpdateFromVersion, &n.UpdateResult, &n.UpdateAttempts, &draining,
-			&n.RemovedAt); err != nil {
+			&n.RemovedAt, &n.ActiveTransfers); err != nil {
 			return nil, err
 		}
 		n.OwnerUserID = ownerUser.String

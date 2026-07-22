@@ -121,6 +121,16 @@ type nodeHeartbeatReq struct {
 	StoredBytes  int64       `json:"storedBytes"`
 	StorageTotal int64       `json:"storageTotal"`
 	StorageFree  int64       `json:"storageFree"`
+	// ActiveTransfers is how many relay allocations the node is serving RIGHT
+	// NOW. It is the load signal decideFleet's canary pick runs on, and it is a
+	// separate field on purpose rather than len(Usage): Usage skips allocations
+	// that have not joined a username yet and includes ones that closed since
+	// the last heartbeat (reported once more so their bytes flush), so its
+	// length means "allocations seen since the last heartbeat", not "active".
+	//
+	// ABSENT on every node running a binary older than this field, which decodes
+	// as 0 — see Node.ActiveTransfers for why that is the safe reading.
+	ActiveTransfers int `json:"activeTransfers"`
 }
 
 // RegisterNodeRoutes mounts the node register/heartbeat endpoints on mux, but
@@ -191,13 +201,29 @@ func (s *Service) handleNodeDeregister(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not a fleet node"})
 		return
 	}
-	if err := s.store.MarkNodeRemoved(r.Context(), req.NodeID, s.now().Unix()); err != nil {
+	at := s.now().Unix()
+	if err := s.store.MarkNodeRemoved(r.Context(), req.NodeID, at); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
+	// Audited, exactly like the two admin controls that reach the SAME store
+	// method (handleAdminMarkNodeRemoved / handleAdminRestoreNode) — and this is
+	// the path that matters most, because it is how nodes normally leave
+	// service. Without it, "when did node7 go away" had no answer at all: the
+	// admin actions were in the trail and the common case was not.
+	//
+	// The actor is the NODE, not a person (writeNodeAudit), and the action is
+	// its own (node.deregister, never node.remove): nobody was in the room, and
+	// an entry that implies an admin was would be worse than none. Written only
+	// after MarkNodeRemoved succeeded and only for a node that existed, so the
+	// trail records what happened rather than what was attempted — an
+	// already-removed node keeps its FIRST removed_at (MarkNodeRemoved is
+	// first-write-wins) and the entry below honestly shows old == new.
+	s.writeNodeAudit(r, AuditNodeDeregister, req.NodeID,
+		[]ChangeField{{Field: "removed_at", Old: node.RemovedAt, New: at}})
 	// Loud on purpose. Every file still on this node has just become unreachable
 	// for its owner, and no admin was necessarily in the room when it happened.
-	if live, _, cerr := s.store.CountFilesOnNode(r.Context(), req.NodeID, s.now().Unix()); cerr == nil && live > 0 {
+	if live, _, cerr := s.store.CountFilesOnNode(r.Context(), req.NodeID, at); cerr == nil && live > 0 {
 		log.Printf("node %s deregistered while still holding %d live file(s) — those files are now unreachable", req.NodeID, live)
 	} else {
 		log.Printf("node %s deregistered (uninstalled)", req.NodeID)
@@ -353,6 +379,31 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	if tr.Status != "rolling" {
 		resp.Reason = "rollout track is " + tr.Status
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+
+	// A DEREGISTERED node is never commanded, on any path. The machine is on
+	// its way out (the uninstaller deregisters seconds BEFORE it stops the
+	// service, and a node whose row was marked removed by an admin is being
+	// retired deliberately), so telling it to download and install a new binary
+	// is at best wasted work on a dying host and at worst an install that never
+	// finishes on a machine nobody is watching.
+	//
+	// The staged ladders already had this property, but only INDIRECTLY: their
+	// snapshot comes from NodesByOwnerType, which filters removed_at = 0, so a
+	// removed node is neither a candidate nor the picked NodeID, and the fleet
+	// path's `d.NodeID != node.ID` guard turns the rest away. The EMERGENCY path
+	// bypasses both — it reads this node with an unfiltered GetNode and commands
+	// it directly — which made it the one hole. The check sits HERE, in front of
+	// the dispatch, rather than inside updateCheckEmergency, so it holds for
+	// every present and future path out of this handler.
+	//
+	// Answered as a plain "not eligible", not an error: the node's updater polls
+	// this every 30 seconds and a failing endpoint would just produce log noise
+	// on a machine that is about to disappear.
+	if node.RemovedAt != 0 {
+		resp.Reason = "node is deregistered"
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
@@ -761,12 +812,15 @@ func nextByoBatch(cur int) int {
 }
 
 // nodeSnapshot projects a stored node onto what the rollout state machines
-// read. ActiveTransfers has no source in the nodes table yet, so it is 0 for
-// every node: decideFleet's canary pick then falls through to its stable hash
-// tie-break, which is deterministic and fair, just not load-aware.
+// read. ActiveTransfers comes straight from the nodes row, which the heartbeat
+// writes (see Node.ActiveTransfers): this line is the LAST link in the chain
+// that makes decideFleet's canary pick genuinely load-aware, so dropping it
+// silently returns the pick to the fleetHash order without breaking anything
+// that would show up as an error.
 func nodeSnapshot(n Node) NodeSnapshot {
 	return NodeSnapshot{
 		ID: n.ID, Version: n.Version, LastSeenAt: n.LastSeenAt,
+		ActiveTransfers: n.ActiveTransfers,
 		UpdateStartedAt: n.UpdateStartedAt, UpdateFromVersion: n.UpdateFromVersion,
 		UpdateResult: n.UpdateResult,
 	}
@@ -1092,7 +1146,16 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 	}
 	billable := node.OwnerType == "fleet"
 	now := s.now().Unix()
-	if err := s.store.TouchNode(r.Context(), req.NodeID, req.RelayedTotal, req.StoredBytes, req.StorageTotal, req.StorageFree, now); err != nil {
+	// Clamped: the count is self-reported, and a negative value would sort the
+	// reporting node ahead of a genuinely idle one in decideFleet's canary pick —
+	// i.e. a node could volunteer itself to receive every new build first.
+	// Clamping costs nothing and makes that impossible; an inflated positive
+	// value only ever moves a node further back in the queue.
+	active := req.ActiveTransfers
+	if active < 0 {
+		active = 0
+	}
+	if err := s.store.TouchNode(r.Context(), req.NodeID, req.RelayedTotal, req.StoredBytes, req.StorageTotal, req.StorageFree, now, active); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}

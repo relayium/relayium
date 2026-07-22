@@ -55,13 +55,17 @@ type NodeSnapshot struct {
 	Version    string
 	LastSeenAt int64
 	// ActiveTransfers is HOW BUSY the node is, used to prefer the least-loaded
-	// machine as canary. NOTHING POPULATES IT TODAY: there is no such column in
-	// the nodes table, the heartbeat does not report it, and nodeSnapshot leaves
-	// it at 0 for every node. It is therefore uniformly zero in production and
-	// the canary pick degrades to the deterministic fleetHash tie-break. The
-	// rule is kept because the intent is sound and the tie-break is a legitimate
-	// fallback, but do not describe the pick as load-aware until a producer
-	// exists (a heartbeat field and a column would be the way in).
+	// machine as canary. It is real: the node counts its live relay allocations
+	// and reports them on every heartbeat (heartbeatBody.activeTransfers),
+	// central stores them on nodes.active_transfers, and nodeSnapshot copies
+	// them here. All three links are needed — remove any one and the field is
+	// uniformly 0 again, which fails silently rather than loudly, because
+	// decideFleet's fleetHash tie-break then decides the whole branch.
+	//
+	// 0 means "no load signal" as well as "idle": a node whose binary predates
+	// the heartbeat field reports nothing and so looks maximally idle. That is
+	// safe (the tie-break is a legitimate ordering) but it does mean a
+	// mixed-version fleet can hand the canary slot to an un-upgraded node.
 	ActiveTransfers int
 	UpdateStartedAt int64
 	// UpdateFromVersion mirrors nodes.update_from_version: the version the node
@@ -139,11 +143,9 @@ type RolloutDecision struct {
 //     rollout (no CurrentNodeID and no usable FirstNodeID yet) is chosen by fewest
 //     ActiveTransfers -- least to lose if the new build is bad -- and
 //     reported with IsFirst so the caller can persist it as FirstNodeID.
-//     CAVEAT: ActiveTransfers has no producer yet (see NodeSnapshot), so it is
-//     0 for every node in production and this pick currently degrades to the
-//     same deterministic fleetHash order as every later pick. That is a
-//     legitimate fallback, not the load-aware behaviour described above --
-//     which only becomes true once something populates the field.
+//     ActiveTransfers is produced by the node's heartbeat and stored on its row
+//     (see NodeSnapshot), so this pick really does follow load; nodes with no
+//     load signal at all (an older binary) read 0 and fall to the tie-break.
 //     Every node after that is chosen by sha256(nodeID+targetVersion)
 //     ascending, so the order is deterministic and reproducible but
 //     reshuffles per release (the same node must not always end up the
@@ -299,10 +301,8 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 
 	// sort.Slice is NOT stable, so equal-comparing elements may come out in
 	// any order run to run -- hence the fleetHash tie-break, which makes the
-	// pick fully deterministic even when transfer counts are identical. Since
-	// ActiveTransfers currently has no producer and is 0 everywhere, that
-	// tie-break is in fact the ONLY thing deciding this branch today; the
-	// transfer comparison is dormant until a producer exists.
+	// pick fully deterministic even when transfer counts are identical (an
+	// entirely idle fleet, or one whose nodes report no load signal at all).
 	// A re-asserted canary (the recorded one skipped) is picked the same way a
 	// first canary is: fewest active transfers, least to lose.
 	if firstPick || reassertFirst {

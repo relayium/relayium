@@ -48,6 +48,15 @@ type adminHomeData struct {
 	Passkeys    []AdminCredential
 	PasskeysErr bool
 
+	// ByoNodes are USER-CONTRIBUTED nodes, in their own table with their own
+	// controls. Kept as a separate, PRE-FILTERED and PRE-CAPPED slice rather
+	// than a second {{if}} pass over Nodes, for two reasons: the population is
+	// unbounded (anyone can contribute a node, and the dashboard must not grow
+	// with the user base), and the two tables must never be able to render each
+	// other's rows — draining "our machine" and draining "a user's machine" are
+	// very different acts. ByoNodeCount is the count BEFORE the cap.
+	ByoNodes         []adminNodeView
+	ByoNodeCount     int
 	FleetTokens      []adminFleetTokenView
 	FleetNodeCount   int    // count of Nodes with OwnerType == "fleet" (matches table body's guard)
 	MintedToken      string // set once, right after minting; shown inline then gone
@@ -528,6 +537,11 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 .passkeys .mint{flex-wrap:wrap;margin-top:12px}
 .never{color:#e5484d;font-weight:600}
 .err{color:#e5484d;margin:10px 0 0}
+/* 自带节点表：整块靠一条琥珀色左边框和一句告警抬头与官方节点表区分开。视觉上
+   必须一眼分得清 —— 在错的那张表上点"标记已移除"，后果完全不是一回事。 */
+.byo-nodes{border-left:3px solid #d97706;padding-left:14px;margin:28px 0}
+.byo-nodes h2{margin-bottom:6px}
+.byo-warn{color:var(--muted);font-size:12px;margin:0 0 12px;max-width:760px}
 .rollout{margin:0 0 28px}.rollout h2{margin-bottom:12px}
 .ro-panel{border:1px solid var(--bd);border-radius:12px;padding:14px 16px;margin:12px 0;background:var(--card)}
 .ro-panel h3{font-size:14px;margin:0 0 8px}
@@ -635,6 +649,46 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 {{end}}{{end}}
 </tbody></table>
 
+</section>
+
+{{/* 自带节点表。与官方节点表**刻意长得不一样**（独立 section、byo-nodes 类、
+     黄色左边框、抬头一句话说明），因为把用户的机器当成自己的机器去排空/移除，
+     后果完全不同：那台机器上的文件是用户自己的，而且我们并不拥有那台机器。
+     没有"删除"按钮 —— 删行是官方节点的退役操作，用户的节点由用户自己删。 */}}
+<section class="nodes byo-nodes">
+<h2>自带节点（用户机器，共 {{.ByoNodeCount}} 台{{if gt .ByoNodeCount (len .ByoNodes)}}，下表只列最需要关注的 {{len .ByoNodes}} 台{{end}}）</h2>
+<p class="byo-warn">这些不是我们的机器，是用户贡献的。排空/标记已移除只影响<b>该用户自己的</b>放置池与直连下载，机器本身仍在用户手里运行；先看清"剩余文件"再动手，节点上的文件没有副本。</p>
+<table>
+<thead><tr><th>备注 / ID</th><th>所属用户</th><th>IP</th><th>状态</th><th>版本</th><th>最后心跳(UTC)</th><th>排空</th><th>剩余文件 / 最早可安全卸载</th></tr></thead>
+<tbody>
+{{range .ByoNodes}}
+<tr>
+<td>{{if .Label}}<b>{{.Label}}</b><br>{{end}}<span style="color:var(--muted);font-size:12px">{{.ID}}</span></td>
+<td><span style="color:var(--muted);font-size:12px">{{.OwnerUserID}}</span></td>
+<td>{{if .Host}}{{.Host}}{{else}}—{{end}}</td>
+<td>{{if .Removed}}<span class="err">已卸载</span>
+<form method="post" action="/admin/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('恢复该用户节点？它会重新进入该用户的放置池/ICE/直连下载。')"><button type="submit" title="清除已卸载标记（不影响它的文件与历史）">恢复</button></form>
+{{else}}{{if .Online}}在线{{else}}离线{{end}}
+<form method="post" action="/admin/nodes/{{.ID}}/remove" class="lim" onsubmit="return confirm('标记该用户节点已卸载？它会退出该用户的放置池/ICE/直连下载，文件与历史保留，可随时用&quot;恢复&quot;撤销。')"><button type="submit" title="把这台用户节点移出服务（可恢复）">标记已移除</button></form>
+{{end}}</td>
+<td>{{if .Version}}{{.Version}}{{else}}—{{end}}</td>
+<td>{{if .LastSeenAt}}{{ts .LastSeenAt}}{{else}}—{{end}}</td>
+<td>
+{{if .Draining}}<span class="err">排空中</span>{{else}}正常{{end}}
+<form method="post" action="/admin/nodes/{{.ID}}/draining" class="lim">
+<input type="hidden" name="on" value="{{if .Draining}}0{{else}}1{{end}}">
+<button type="submit">{{if .Draining}}取消排空{{else}}开始排空{{end}}</button>
+</form>
+</td>
+<td>{{if .StoredFileCount}}{{.StoredFileCount}} 个 / {{ts .SafeToUninstallAt}}{{else}}0 个 · 可随时移除{{end}}</td>
+</tr>
+{{else}}
+<tr><td colspan="8" style="color:var(--muted)">暂无用户自带节点</td></tr>
+{{end}}
+</tbody></table>
+</section>
+
+<section class="nodes">
 {{if .FleetTokens}}
 <h2>活跃节点 Token（{{len .FleetTokens}}）</h2>
 <table>

@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -46,8 +47,12 @@ const (
 // adminNodeView is a Node prepared for the admin template (online flag derived
 // from last_seen against nodeOnlineWindow).
 type adminNodeView struct {
-	ID                string
-	OwnerType         string
+	ID        string
+	OwnerType string
+	// OwnerUserID is the contributing user, for BYO (owner_type='user') rows —
+	// empty on fleet rows. Rendered so an operator draining or removing a
+	// user's machine can see WHOSE it is before acting.
+	OwnerUserID       string
 	Label             string
 	Host              string
 	Region            string
@@ -100,7 +105,7 @@ func nodeViews(nodes []Node, monthly map[string]int64, fileCounts map[string]Nod
 	for _, n := range nodes {
 		fc := fileCounts[n.ID]
 		out = append(out, adminNodeView{
-			ID: n.ID, OwnerType: n.OwnerType, Label: n.Label, Host: nodeHost(n.URLs),
+			ID: n.ID, OwnerType: n.OwnerType, OwnerUserID: n.OwnerUserID, Label: n.Label, Host: nodeHost(n.URLs),
 			Region: n.Region, Version: n.Version,
 			Online:                     n.LastSeenAt >= cutoff,
 			RelayedBytes:               n.RelayedBytes,
@@ -123,6 +128,55 @@ func nodeViews(nodes []Node, monthly map[string]int64, fileCounts map[string]Nod
 	return out
 }
 
+// adminByoNodesShown 是自带节点表最多渲染多少行。
+//
+// 机队节点是我们自己的机器，十几台，全列出来没问题；自带节点谁都能贡献一台，
+// 数量**没有上界**，全渲染意味着后台首页会随用户增长而无限膨胀（一页几千行，
+// 每行还带三个表单）。所以这里只给"最该被看到"的那些行，标题上写清总数。
+const adminByoNodesShown = 20
+
+// byoNodeViews 从全部节点里挑出自带节点，按"操作员最可能要处理"的顺序排好，
+// 并截到 adminByoNodesShown 行。返回值第二个是**截断前的总数**，标题要用它。
+//
+// 排序口径（这是全部的取舍，别按"最近上线"一刀切）：
+//  1. 已经在排空中、或已卸载的：说明有一次操作正在进行中，操作员多半就是回来
+//     看它的；
+//  2. 手上还压着未过期文件的：这台机器不能随便动，动了文件就没了；
+//  3. 其余按最后心跳倒序，再按 ID 兜底——sort.Slice 不稳定，没有这个兜底，同
+//     一批节点两次刷新可能给出不同的顺序，而"上次那行去哪了"是最难查的错觉。
+func byoNodeViews(all []adminNodeView) ([]adminNodeView, int) {
+	var byo []adminNodeView
+	for _, nv := range all {
+		if nv.OwnerType == "user" {
+			byo = append(byo, nv)
+		}
+	}
+	total := len(byo)
+	rank := func(nv adminNodeView) int {
+		switch {
+		case nv.Draining || nv.Removed:
+			return 0
+		case nv.StoredFileCount > 0:
+			return 1
+		default:
+			return 2
+		}
+	}
+	sort.Slice(byo, func(i, j int) bool {
+		if ri, rj := rank(byo[i]), rank(byo[j]); ri != rj {
+			return ri < rj
+		}
+		if byo[i].LastSeenAt != byo[j].LastSeenAt {
+			return byo[i].LastSeenAt > byo[j].LastSeenAt
+		}
+		return byo[i].ID < byo[j].ID
+	})
+	if len(byo) > adminByoNodesShown {
+		byo = byo[:adminByoNodesShown]
+	}
+	return byo, total
+}
+
 // storableBytes 是这台节点的**容量**上还能接收多少字节——放置过滤的三道容量闸
 // 取最小值，任一道把它整台排除时为 0。
 //
@@ -138,8 +192,10 @@ func nodeViews(nodes []Node, monthly map[string]int64, fileCounts map[string]Nod
 //
 // 镜像的是 StorageNodes（owner_type='fleet'），不是 UserStorageNodes——后者的闸
 // 不一样（没有 70% 余量、没有管理员限额，只有裸的 storage_free 和整卷保留）。
-// 后台节点表只渲染 fleet 行（模板里的 {{if eq .OwnerType "fleet"}}），所以现在
-// 对得上；哪天那张表开始显示用户自带节点，这个函数对它们就是错的。
+// 官方节点表只渲染 fleet 行（模板里的 {{if eq .OwnerType "fleet"}}），所以对得
+// 上；自带节点表是另一张表，它**故意不显示"可存储"这一列**，正是因为这个函数对
+// 用户自带节点是错的。要给那张表加容量列，就得先照 UserStorageNodes 的闸另写一
+// 个，别把这个直接套过去。
 func storableBytes(n Node) int64 {
 	// 闸 2（整卷保留）是全有全无的：过了线就整台退出放置池，不是把额度压小。
 	// storage_total = 0（节点从未上报盘信息）在 SQL 里是豁免的，这里照样豁免——
@@ -617,6 +673,11 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 			fleetNodeCount++
 		}
 	}
+	// The BYO rows come off the SAME nodeVs slice (one ListNodes read, one
+	// grouped NodeFileCounts read) — the BYO table adds no query at all, and
+	// must not: its row count is unbounded, so a per-row query here would be the
+	// worst possible place for an N+1.
+	byoNodeVs, byoNodeCount := byoNodeViews(nodeVs)
 	var tokenVs []adminFleetTokenView
 	if fts, ferr := s.store.ListActiveFleetTokens(r.Context()); ferr != nil {
 		log.Printf("admin: ListActiveFleetTokens failed: %v", ferr)
@@ -668,6 +729,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		Search: search, Sort: sortBy, Dir: dir, Period: period, Months: months,
 		PrevHref: prev, NextHref: next, SortHref: sortHref,
 		Nodes: nodeVs, FleetNodeCount: fleetNodeCount, FleetTokens: tokenVs,
+		ByoNodes: byoNodeVs, ByoNodeCount: byoNodeCount,
 		Plans: planVs, ActivePlans: activePlanVs,
 		CentralStoredBytes: centralStored,
 		Passkeys:           passkeys,
