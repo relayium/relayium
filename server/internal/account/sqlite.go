@@ -480,6 +480,31 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// from UpsertNode's ON CONFLICT clause, like draining above.
 		// 0 on every existing row = still installed.
 		`ALTER TABLE nodes ADD COLUMN removed_at INTEGER NOT NULL DEFAULT 0`,
+		// active_transfers is the node's live load signal: how many relay
+		// allocations it is currently serving, as of its last heartbeat. It exists
+		// for exactly one consumer — decideFleet's canary pick, which sends the
+		// new build to the machine with the fewest in-flight transfers first,
+		// because that is the one with the least to lose if the build is bad.
+		//
+		// Written ONLY by TouchNode (the heartbeat), unlike every other column
+		// added above: this is a live gauge, so it is SET, never kept-max, and it
+		// is deliberately NOT in UpsertNode's ON CONFLICT list — a re-register
+		// carries no load reading and must not stamp one.
+		//
+		// -1 on every existing row (and for any node whose binary predates the
+		// heartbeat field, or has yet to send its first one) is the honest
+		// reading of "we have no load signal for this machine" — deliberately
+		// NOT 0, which is a real report (this node genuinely has nothing in
+		// flight) and must not be confused with "did not say". canaryRank is
+		// where the two are told apart: an unreported node ranks AFTER every
+		// real count, not tied with a known-idle one. See Node.ActiveTransfers.
+		// NOTE: an earlier commit on this same branch shipped this ALTER with
+		// DEFAULT 0 before it was corrected to -1 here. Any database that ran
+		// migrations while that commit was live already has 0 stamped onto every
+		// row that existed at that moment — see migrateActiveTransfersUnknown
+		// below, which cleans that up regardless of which commit an environment
+		// happened to migrate through first.
+		`ALTER TABLE nodes ADD COLUMN active_transfers INTEGER NOT NULL DEFAULT -1`,
 		// node_rollout holds the rollout state machine's per-track bookkeeping: one
 		// row for "fleet", one for "byo", each with its own target version and
 		// status, so a stalled/halted byo rollout can never block or bleed into the
@@ -637,6 +662,13 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 	// column added but the backfill un-run, and the restart (ALTER now a dup)
 	// skipped the backfill forever — locking every legacy user out as "unverified".
 	if err := migrateEmailVerified(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	// See migrateActiveTransfersUnknown: corrects nodes.active_transfers for any
+	// database that migrated through this branch's now-superseded DEFAULT 0
+	// commit, regardless of migration order.
+	if err := migrateActiveTransfersUnknown(db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -831,6 +863,40 @@ func migrateEmailVerified(db *sql.DB) error {
 			return err
 		}
 		_, err = tx.ExecContext(context.Background(), `UPDATE users SET email_verified = 1`)
+		return err
+	})
+}
+
+// migrateActiveTransfersUnknown corrects nodes.active_transfers on any database
+// that ran the ADD COLUMN migration while it still read `DEFAULT 0` (an earlier
+// commit on this branch; see the comment on that ALTER above). On such a
+// database, every row that existed at the moment the ALTER ran was stamped
+// "known idle" (0) by SQLite's own default-fill, instead of the "unknown" (-1)
+// the tri-state exists to express — the exact bias canaryRank was built to
+// prevent, silently reinstated for every pre-existing node until its next
+// heartbeat (which, for a node that never upgrades or never reports again, may
+// be never).
+//
+// It cannot tell "defaulted to 0 by the old migration" apart from "genuinely
+// reported 0 via a heartbeat" after the fact — both look identical in the
+// column — so it picks the direction with the smaller downside: reclassify
+// every row currently at 0 to -1. A row that is genuinely idle self-heals on
+// its very next heartbeat (one heartbeat interval later), so a false positive
+// here costs at most that long a gap in canary-ranking precision. Leaving a
+// never-reported row at 0 costs nothing to notice and nothing to fix — it
+// silently wins every canary pick, forever, until it happens to heartbeat.
+// That asymmetry is why 0 always loses ties here, not 0 wins.
+//
+// Runs via migrateOnce, so it fires exactly once per database, ever, no matter
+// which commit an environment happened to run first. On a database that never
+// saw the old DEFAULT 0 (a fresh install, or one that only ever ran the -1
+// default), every existing row is already -1 unless a real heartbeat set it,
+// so the UPDATE below matches nothing and is a no-op — a fresh install and a
+// clean upgrade end up in the identical state.
+func migrateActiveTransfersUnknown(db *sql.DB) error {
+	return migrateOnce(db, "backfill_active_transfers_unknown", func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(context.Background(),
+			`UPDATE nodes SET active_transfers = -1 WHERE active_transfers = 0`)
 		return err
 	})
 }
@@ -2394,6 +2460,48 @@ func (s *SQLiteStore) AdminListUsers(ctx context.Context, q AdminUserQuery) ([]A
 	return out, total, nil
 }
 
+// AdminUserEmailsByIDs batch-resolves ids to emails in one IN(...) query, same
+// pattern as the provider fan-out above: dedupe first so a query against N
+// BYO rows sharing an owner still binds one placeholder per DISTINCT id, not
+// per row.
+func (s *SQLiteStore) AdminUserEmailsByIDs(ctx context.Context, ids []string) (map[string]string, error) {
+	out := map[string]string{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	seen := map[string]bool{}
+	var uniq []string
+	for _, id := range ids {
+		if id != "" && !seen[id] {
+			seen[id] = true
+			uniq = append(uniq, id)
+		}
+	}
+	if len(uniq) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(uniq))
+	ph := make([]string, len(uniq))
+	for i, id := range uniq {
+		args[i] = id
+		ph[i] = "?"
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, email FROM users WHERE id IN (`+strings.Join(ph, ",")+`)`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, email string
+		if err := rows.Scan(&id, &email); err != nil {
+			return nil, err
+		}
+		out[id] = email
+	}
+	return out, rows.Err()
+}
+
 func (s *SQLiteStore) AdminMetrics(ctx context.Context, period string, now int64) (AdminMetrics, error) {
 	var m AdminMetrics
 	err := s.reader().QueryRowContext(ctx, `
@@ -3013,7 +3121,8 @@ const nodeCols = `id, owner_type, owner_user_id, region, urls, turn_secret, vers
   relayed_bytes, stored_bytes, created_at, last_seen_at,
   storage_url, storage_secret, storage_fp, storage_enabled, storage_total, storage_free,
   traffic_limit_bytes, disk_limit_bytes, label, download_url,
-  update_started_at, update_from_version, update_result, update_attempts, draining, removed_at`
+  update_started_at, update_from_version, update_result, update_attempts, draining, removed_at,
+  active_transfers`
 
 func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	if n.ID == "" {
@@ -3025,7 +3134,7 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO nodes (`+nodeCols+`)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   owner_type=excluded.owner_type, owner_user_id=excluded.owner_user_id,
 		   region=excluded.region, urls=excluded.urls, turn_secret=excluded.turn_secret,
@@ -3034,18 +3143,21 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 		   storage_fp=excluded.storage_fp,
 		   storage_enabled=excluded.storage_enabled, storage_total=excluded.storage_total,
 		   storage_free=excluded.storage_free, download_url=excluded.download_url`,
-		// label, the update_* columns, draining and removed_at are intentionally set
-		// only on INSERT (label seeded from the token name; update_* owned by the
-		// rollout state machine; draining owned by the operator via SetNodeDraining;
-		// removed_at written once by MarkNodeRemoved) and preserved on
-		// re-register/heartbeat, so neither a user's rename, an in-flight rollout's
-		// bookkeeping, an operator's drain flag nor a completed deregistration is
-		// clobbered by a node simply calling register/heartbeat again.
+		// label, the update_* columns, draining, removed_at and active_transfers are
+		// intentionally set only on INSERT (label seeded from the token name;
+		// update_* owned by the rollout state machine; draining owned by the
+		// operator via SetNodeDraining; removed_at written once by MarkNodeRemoved;
+		// active_transfers owned by the heartbeat, which is the only call that
+		// carries a load reading) and preserved on re-register/heartbeat, so
+		// neither a user's rename, an in-flight rollout's bookkeeping, an
+		// operator's drain flag nor a completed deregistration is clobbered by a
+		// node simply calling register/heartbeat again.
 		n.ID, n.OwnerType, nullStr(n.OwnerUserID), n.Region, string(urls), n.TURNSecret,
 		n.Version, n.RelayedBytes, n.StoredBytes, n.CreatedAt, n.LastSeenAt,
 		nullStr(n.StorageURL), nullStr(n.StorageSecret), n.StorageFP, b2i(n.StorageEnabled), n.StorageTotal, n.StorageFree,
 		n.TrafficLimitBytes, n.DiskLimitBytes, n.Label, n.DownloadURL,
-		n.UpdateStartedAt, n.UpdateFromVersion, n.UpdateResult, n.UpdateAttempts, b2i(n.Draining), n.RemovedAt)
+		n.UpdateStartedAt, n.UpdateFromVersion, n.UpdateResult, n.UpdateAttempts, b2i(n.Draining), n.RemovedAt,
+		n.ActiveTransfers)
 	if err != nil {
 		return Node{}, err
 	}
@@ -3065,12 +3177,20 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 // dashboard and made the placement filter treat healthy nodes as out of quota.
 // storage_total/storage_free keep the whole-volume meaning; stored_bytes does
 // not. Do not "fix" stored_bytes back toward total - free.
-func (s *SQLiteStore) TouchNode(ctx context.Context, id string, relayedBytes, storedBytes, storageTotal, storageFree, at int64) error {
+//
+// activeTransfers is the fourth live gauge and is SET for the same reason: it
+// is how many relay allocations the node is serving RIGHT NOW, not a total, so
+// a keep-max would pin every node at its all-time busiest and make decideFleet's
+// canary pick meaningless. -1 is a legitimate value here (see
+// Node.ActiveTransfers) meaning "this heartbeat carried no load signal"; every
+// other value is clamped non-negative by the caller (see handleNodeHeartbeat).
+// This is the only writer of the column.
+func (s *SQLiteStore) TouchNode(ctx context.Context, id string, relayedBytes, storedBytes, storageTotal, storageFree, at int64, activeTransfers int) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE nodes SET last_seen_at=?,
 		   relayed_bytes=MAX(relayed_bytes, ?), stored_bytes=?,
-		   storage_total=?, storage_free=? WHERE id=?`,
-		at, relayedBytes, storedBytes, storageTotal, storageFree, id)
+		   storage_total=?, storage_free=?, active_transfers=? WHERE id=?`,
+		at, relayedBytes, storedBytes, storageTotal, storageFree, activeTransfers, id)
 	return err
 }
 
@@ -3377,7 +3497,7 @@ func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]
 			&storageURL, &storageSecret, &n.StorageFP, &storageEnabled, &n.StorageTotal, &n.StorageFree,
 			&n.TrafficLimitBytes, &n.DiskLimitBytes, &n.Label, &n.DownloadURL,
 			&n.UpdateStartedAt, &n.UpdateFromVersion, &n.UpdateResult, &n.UpdateAttempts, &draining,
-			&n.RemovedAt); err != nil {
+			&n.RemovedAt, &n.ActiveTransfers); err != nil {
 			return nil, err
 		}
 		n.OwnerUserID = ownerUser.String

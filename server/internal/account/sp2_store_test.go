@@ -22,7 +22,7 @@ func TestNodeStorageFieldsAndStorageNodes(t *testing.T) {
 		t.Fatalf("getnode: %+v ok=%v err=%v", got, ok, err)
 	}
 	// TouchNode updates free/total/stored_bytes (all live, not monotonic).
-	if err := st.TouchNode(ctx, n.ID, 0, 500, 20<<30, 8<<30, 2000); err != nil {
+	if err := st.TouchNode(ctx, n.ID, 0, 500, 20<<30, 8<<30, 2000, 0); err != nil {
 		t.Fatalf("touch: %v", err)
 	}
 	// Eligible: online since 1500, needs >= 4 GiB free (has 8).
@@ -66,8 +66,8 @@ func TestTouchNodeStoredBytesIsGauge(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()
 	n, _ := st.UpsertNode(ctx, Node{OwnerType: "fleet", URLs: []string{"turn:x:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1})
-	st.TouchNode(ctx, n.ID, 100, 900, 20<<30, 10<<30, 1000)
-	st.TouchNode(ctx, n.ID, 50, 300, 20<<30, 15<<30, 2000) // stored drops 900->300, relayed keep-max 100
+	st.TouchNode(ctx, n.ID, 100, 900, 20<<30, 10<<30, 1000, 0)
+	st.TouchNode(ctx, n.ID, 50, 300, 20<<30, 15<<30, 2000, 0) // stored drops 900->300, relayed keep-max 100
 	got, _, _ := st.GetNode(ctx, n.ID)
 	if got.StoredBytes != 300 {
 		t.Fatalf("stored_bytes should track live value (gauge), got %d want 300", got.StoredBytes)

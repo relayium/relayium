@@ -337,6 +337,29 @@ type Node struct {
 	// machine gets a fresh state.json (the uninstaller removes the state dir)
 	// and therefore a new node ID, so it never needs the flag cleared.
 	RemovedAt int64
+	// ActiveTransfers is how many relay allocations this node was serving as of
+	// its last heartbeat — a live gauge, not a total. It is the ONLY load signal
+	// central has about a node, and it exists for one consumer: decideFleet's
+	// canary pick, which gives the new build to the least-busy machine first
+	// because that machine has the least to lose if the build is bad.
+	//
+	// Reported by the node as heartbeatBody.activeTransfers and written only by
+	// TouchNode. It is a COUNT OF LIVE ALLOCATIONS, deliberately not len(usage):
+	// the usage array skips allocations that have not yet joined a username and
+	// includes ones that closed since the last heartbeat (they are reported one
+	// final time so their bytes flush), so it answers "seen since the last
+	// heartbeat", which is a different question.
+	//
+	// TRI-STATE, not a plain count: -1 means "no load signal for this node" —
+	// either it has never heartbeated with this field (a binary older than the
+	// field omits it entirely; see nodeHeartbeatReq.ActiveTransfers), or it has
+	// never heartbeated at all. Any value >= 0 is a REAL reported count, 0
+	// included. The two used to be the same value (0), which let an unreported
+	// node tie with a genuinely idle one on canaryRank and win the fleetHash
+	// tie-break outright — a systematic pull toward the machine central knows
+	// least about during a mixed-version window, not merely a coin flip against
+	// the rest of the fleet. See canaryRank for how the distinction is used.
+	ActiveTransfers int
 }
 
 // NodeFileCount is a node's live-file footprint, as returned by
@@ -735,6 +758,14 @@ type Store interface {
 	// admin (read-only)
 	AdminListUsers(ctx context.Context, q AdminUserQuery) (rows []AdminUserRow, total int64, err error)
 	AdminMetrics(ctx context.Context, period string, now int64) (AdminMetrics, error)
+	// AdminUserEmailsByIDs batch-resolves user ids to emails for the admin BYO
+	// nodes table, which shows Node.OwnerUserID: a raw generated id needs a
+	// separate lookup to answer "whose machine is this", the exact question an
+	// operator about to drain it needs answered first. One IN(...) query for
+	// however many distinct owners are in the (already row-capped) BYO table —
+	// never one query per row, since that population is unbounded. An id with
+	// no matching row (deleted user) is simply absent from the returned map.
+	AdminUserEmailsByIDs(ctx context.Context, ids []string) (map[string]string, error)
 	// stored files (zero-knowledge stored transfer)
 	CreateStoredFile(ctx context.Context, f StoredFile) error
 	// CreateStoredFileWithinStorageCaps atomically enforces the owner (userCap)
@@ -805,7 +836,10 @@ type Store interface {
 	ListSettings(ctx context.Context) ([]Setting, error)
 	// relay nodes (self-reporting fleet telemetry)
 	UpsertNode(ctx context.Context, n Node) (Node, error)
-	TouchNode(ctx context.Context, id string, relayedBytes, storedBytes, storageTotal, storageFree, at int64) error
+	// TouchNode records a heartbeat. activeTransfers is the node's live
+	// in-flight allocation count (see Node.ActiveTransfers) and, like the three
+	// storage gauges, is SET rather than kept-max.
+	TouchNode(ctx context.Context, id string, relayedBytes, storedBytes, storageTotal, storageFree, at int64, activeTransfers int) error
 	GetNode(ctx context.Context, id string) (Node, bool, error)
 	StorageNodes(ctx context.Context, since, minFree int64) ([]Node, error)
 	OnlineNodes(ctx context.Context, since int64) ([]Node, error)

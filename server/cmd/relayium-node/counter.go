@@ -135,6 +135,27 @@ func (r *allocRegistry) created(srcAddr, relayAddr net.Addr, username string) {
 // closeAlloc marks the allocation for srcAddr closed (via OnAllocationDeleted,
 // which carries srcAddr but not relayAddr). The entry survives one more snapshot
 // so its final bytes flush, then snapshot evicts it.
+//
+// This rests on two invariants that live in newTURNServer, not here, and
+// neither is enforced by this type — a violation of either just leaks entries
+// silently:
+//
+//  1. every wrap() is eventually followed by exactly one closeAlloc() call
+//     for the SAME allocation, because pion fires OnAllocationCreated
+//     unconditionally right after a successful AllocatePacketConn (populating
+//     bySrc) and OnAllocationDeleted when that allocation ends (this method).
+//     A pion version that could abort an allocation post-AllocatePacketConn
+//     without ever calling OnAllocationDeleted would leave that entry's
+//     closed permanently false.
+//  2. srcAddr is unique per LIVE allocation, which holds only because the
+//     server is built with exactly one turn.PacketConnConfig (see
+//     newTURNServer). A second listener reusing this same registry would let
+//     two different allocations collide on the same bySrc key.
+//
+// If either stops holding, entries stop being evicted and activeAllocs()
+// (nodes.active_transfers, decideFleet's canary signal) inflates
+// monotonically and never recovers — not a crash, just a node that silently
+// stops being picked as canary.
 func (r *allocRegistry) closeAlloc(srcAddr net.Addr) {
 	r.mu.Lock()
 	if id, ok := r.bySrc[srcAddr.String()]; ok {
@@ -144,6 +165,30 @@ func (r *allocRegistry) closeAlloc(srcAddr net.Addr) {
 		delete(r.bySrc, srcAddr.String())
 	}
 	r.mu.Unlock()
+}
+
+// activeAllocs is how many allocations this node is relaying RIGHT NOW, which
+// central stores as nodes.active_transfers and uses to pick the rollout canary:
+// the least-busy machine gets a new build first, because it has the least to
+// lose if the build is bad.
+//
+// It counts entries not yet marked closed, which is deliberately NOT the same
+// population as snapshot()'s: snapshot reports a closed allocation one final
+// time (so its last bytes flush) and sendHeartbeat drops samples with no
+// username yet, so len(usage) means "allocations seen since the last heartbeat"
+// and would over- and under-count live ones at the same time. A separate,
+// honest counter is cheaper than explaining that difference to every future
+// reader of the heartbeat.
+func (r *allocRegistry) activeAllocs() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for _, e := range r.entries {
+		if !e.closed {
+			n++
+		}
+	}
+	return n
 }
 
 type allocSample struct {

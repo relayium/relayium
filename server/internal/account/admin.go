@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -46,8 +47,19 @@ const (
 // adminNodeView is a Node prepared for the admin template (online flag derived
 // from last_seen against nodeOnlineWindow).
 type adminNodeView struct {
-	ID                string
-	OwnerType         string
+	ID        string
+	OwnerType string
+	// OwnerUserID is the contributing user, for BYO (owner_type='user') rows —
+	// empty on fleet rows.
+	OwnerUserID string
+	// OwnerEmail is OwnerUserID resolved to an email, so an operator draining
+	// or removing a user's machine can see WHOSE it is (and act on it — search
+	// the user, message them) without a raw opaque id round-tripping through a
+	// separate lookup. Filled in by fillByoOwnerEmails, a single batched query
+	// against the (already row-capped) BYO rows; empty if the user row is gone
+	// (deleted account) or hasn't been resolved, in which case the template
+	// falls back to OwnerUserID.
+	OwnerEmail        string
 	Label             string
 	Host              string
 	Region            string
@@ -92,6 +104,10 @@ type adminNodeView struct {
 	// Shown so the list is not just a growing pile of nodes that read "offline"
 	// with no explanation; the delete button is how an operator retires the row.
 	Removed bool
+	// RemovedAt is the raw Node.RemovedAt timestamp (0 if not removed), used
+	// only to rank the BYO removed section by most-recently-removed first —
+	// see byoNodeViews. Not rendered directly.
+	RemovedAt int64
 }
 
 func nodeViews(nodes []Node, monthly map[string]int64, fileCounts map[string]NodeFileCount, now time.Time, st Settings) []adminNodeView {
@@ -100,7 +116,7 @@ func nodeViews(nodes []Node, monthly map[string]int64, fileCounts map[string]Nod
 	for _, n := range nodes {
 		fc := fileCounts[n.ID]
 		out = append(out, adminNodeView{
-			ID: n.ID, OwnerType: n.OwnerType, Label: n.Label, Host: nodeHost(n.URLs),
+			ID: n.ID, OwnerType: n.OwnerType, OwnerUserID: n.OwnerUserID, Label: n.Label, Host: nodeHost(n.URLs),
 			Region: n.Region, Version: n.Version,
 			Online:                     n.LastSeenAt >= cutoff,
 			RelayedBytes:               n.RelayedBytes,
@@ -118,9 +134,117 @@ func nodeViews(nodes []Node, monthly map[string]int64, fileCounts map[string]Nod
 			StoredFileCount:            fc.Count,
 			SafeToUninstallAt:          fc.MaxExpiresAt,
 			Removed:                    n.RemovedAt != 0,
+			RemovedAt:                  n.RemovedAt,
 		})
 	}
 	return out
+}
+
+// adminByoNodesShown 是自带节点表（在线/排空中的那些）最多渲染多少行。
+//
+// 机队节点是我们自己的机器，十几台，全列出来没问题；自带节点谁都能贡献一台，
+// 数量**没有上界**，全渲染意味着后台首页会随用户增长而无限膨胀（一页几千行，
+// 每行还带三个表单）。所以这里只给"最该被看到"的那些行，标题上写清总数。
+const adminByoNodesShown = 20
+
+// adminByoRemovedShown 是"已卸载的自带节点"这个独立小节最多渲染多少行。
+//
+// removed_at 一旦写上就再也不会自己清掉（只有管理员手动"恢复"才清），而自带
+// 节点的数量没有上界——卸载只会单调累积。曾经把已卸载节点和在线/排空中的节点
+// 混在同一张表、同一个 adminByoNodesShown 行数上限里排序，一旦累计卸载数超过
+// 上限，整张表就会被清一色的墓碑行占满：不仅看不到真正在线、正在闹脾气的节点，
+// "恢复"这个手动纠错入口也跟着从后台彻底消失——误卸载之后只能改数据库。现在
+// 已卸载节点单独成节、单独限行，"恢复"入口只要还有已卸载节点就一定在页面上。
+// 上限给得比 adminByoNodesShown 小很多：这里只是最近误操作的纠错入口，不是
+// 卸载历史的存档视图（那是审计日志的活）。
+const adminByoRemovedShown = 5
+
+// byoNodeViews 从全部节点里挑出自带节点，拆成两组：
+//
+//   - live：还在线/排空中的（未卸载），按"操作员最可能要处理"的顺序排好，截到
+//     adminByoNodesShown 行。
+//   - removed：已卸载的，按卸载时间倒序（最近卸载的排最前），截到
+//     adminByoRemovedShown 行——这是"恢复"这个手动纠错操作的唯一入口，必须
+//     独立于 live 表的容量，不能被大量在线节点挤没。
+//
+// 两个返回的 int 分别是各自截断前的总数，标题要用它们。
+//
+// live 组排序口径（这是全部的取舍，别按"最近上线"一刀切）：
+//  1. 已经在排空中的：说明有一次操作正在进行中，操作员多半就是回来看它的；
+//  2. 手上还压着未过期文件的：这台机器不能随便动，动了文件就没了；
+//  3. 其余按最后心跳倒序，再按 ID 兜底——sort.Slice 不稳定，没有这个兜底，同
+//     一批节点两次刷新可能给出不同的顺序，而"上次那行去哪了"是最难查的错觉。
+func byoNodeViews(all []adminNodeView) (live []adminNodeView, liveTotal int, removed []adminNodeView, removedTotal int) {
+	for _, nv := range all {
+		if nv.OwnerType != "user" {
+			continue
+		}
+		if nv.Removed {
+			removed = append(removed, nv)
+		} else {
+			live = append(live, nv)
+		}
+	}
+	liveTotal, removedTotal = len(live), len(removed)
+
+	rank := func(nv adminNodeView) int {
+		switch {
+		case nv.Draining:
+			return 0
+		case nv.StoredFileCount > 0:
+			return 1
+		default:
+			return 2
+		}
+	}
+	sort.Slice(live, func(i, j int) bool {
+		if ri, rj := rank(live[i]), rank(live[j]); ri != rj {
+			return ri < rj
+		}
+		if live[i].LastSeenAt != live[j].LastSeenAt {
+			return live[i].LastSeenAt > live[j].LastSeenAt
+		}
+		return live[i].ID < live[j].ID
+	})
+	if len(live) > adminByoNodesShown {
+		live = live[:adminByoNodesShown]
+	}
+
+	sort.Slice(removed, func(i, j int) bool {
+		if removed[i].RemovedAt != removed[j].RemovedAt {
+			return removed[i].RemovedAt > removed[j].RemovedAt
+		}
+		return removed[i].ID < removed[j].ID
+	})
+	if len(removed) > adminByoRemovedShown {
+		removed = removed[:adminByoRemovedShown]
+	}
+	return live, liveTotal, removed, removedTotal
+}
+
+// fillByoOwnerEmails resolves each row's OwnerUserID to an email via a single
+// batched lookup and returns the same slice with OwnerEmail populated.
+// Deliberately called AFTER byoNodeViews has already capped the rows: the
+// lookup set is bounded by the display cap, not by the unbounded BYO
+// population, so this can never become the per-row query the rest of this
+// file works hard to avoid.
+func fillByoOwnerEmails(ctx context.Context, byo []adminNodeView, emails func(ctx context.Context, ids []string) (map[string]string, error)) []adminNodeView {
+	if len(byo) == 0 {
+		return byo
+	}
+	ids := make([]string, len(byo))
+	for i, nv := range byo {
+		ids[i] = nv.OwnerUserID
+	}
+	m, err := emails(ctx, ids)
+	if err != nil {
+		log.Printf("admin: AdminUserEmailsByIDs failed: %v", err)
+		return byo
+	}
+	for i := range byo {
+		byo[i].OwnerEmail = m[byo[i].OwnerUserID]
+	}
+	return byo
 }
 
 // storableBytes 是这台节点的**容量**上还能接收多少字节——放置过滤的三道容量闸
@@ -138,8 +262,10 @@ func nodeViews(nodes []Node, monthly map[string]int64, fileCounts map[string]Nod
 //
 // 镜像的是 StorageNodes（owner_type='fleet'），不是 UserStorageNodes——后者的闸
 // 不一样（没有 70% 余量、没有管理员限额，只有裸的 storage_free 和整卷保留）。
-// 后台节点表只渲染 fleet 行（模板里的 {{if eq .OwnerType "fleet"}}），所以现在
-// 对得上；哪天那张表开始显示用户自带节点，这个函数对它们就是错的。
+// 官方节点表只渲染 fleet 行（模板里的 {{if eq .OwnerType "fleet"}}），所以对得
+// 上；自带节点表是另一张表，它**故意不显示"可存储"这一列**，正是因为这个函数对
+// 用户自带节点是错的。要给那张表加容量列，就得先照 UserStorageNodes 的闸另写一
+// 个，别把这个直接套过去。
 func storableBytes(n Node) int64 {
 	// 闸 2（整卷保留）是全有全无的：过了线就整台退出放置池，不是把额度压小。
 	// storage_total = 0（节点从未上报盘信息）在 SQL 里是豁免的，这里照样豁免——
@@ -617,6 +743,15 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 			fleetNodeCount++
 		}
 	}
+	// The BYO rows come off the SAME nodeVs slice (one ListNodes read, one
+	// grouped NodeFileCounts read) — the BYO tables add no query at all, and
+	// must not: their row count is unbounded, so a per-row query here would be
+	// the worst possible place for an N+1. Two batched email lookups (one per
+	// table, each bounded by that table's own display cap) is still O(1)
+	// queries per page load, not O(rows).
+	byoNodeVs, byoNodeCount, byoRemovedVs, byoRemovedCount := byoNodeViews(nodeVs)
+	byoNodeVs = fillByoOwnerEmails(r.Context(), byoNodeVs, s.store.AdminUserEmailsByIDs)
+	byoRemovedVs = fillByoOwnerEmails(r.Context(), byoRemovedVs, s.store.AdminUserEmailsByIDs)
 	var tokenVs []adminFleetTokenView
 	if fts, ferr := s.store.ListActiveFleetTokens(r.Context()); ferr != nil {
 		log.Printf("admin: ListActiveFleetTokens failed: %v", ferr)
@@ -668,6 +803,8 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		Search: search, Sort: sortBy, Dir: dir, Period: period, Months: months,
 		PrevHref: prev, NextHref: next, SortHref: sortHref,
 		Nodes: nodeVs, FleetNodeCount: fleetNodeCount, FleetTokens: tokenVs,
+		ByoNodes: byoNodeVs, ByoNodeCount: byoNodeCount,
+		ByoRemovedNodes: byoRemovedVs, ByoRemovedNodeCount: byoRemovedCount,
 		Plans: planVs, ActivePlans: activePlanVs,
 		CentralStoredBytes: centralStored,
 		Passkeys:           passkeys,

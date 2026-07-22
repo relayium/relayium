@@ -128,6 +128,17 @@ func blobGates(gauge *blobUsage, storageDir string) (diskUsed func() int64, disk
 // wired to reg, plus an auth handler that rejects expired credentials and — the
 // local cost cap (workstream B) — refuses new allocations once lim is over the
 // monthly relay cap.
+//
+// This is also where BOTH of allocRegistry.closeAlloc's unstated invariants are
+// actually true, not merely assumed: OnAllocationCreated below is wired
+// unconditionally into EventHandler (pion calls it right after every successful
+// AllocatePacketConn, no path skips it), and PacketConnConfigs carries exactly
+// ONE entry, so every allocation this node ever serves comes from this single
+// generator and srcAddr can't collide across two configs. Adding a second
+// PacketConnConfig, or moving to a pion version that can abandon an allocation
+// after AllocatePacketConn without firing OnAllocationDeleted, breaks
+// closeAlloc's bookkeeping silently (see its doc comment) — change either
+// deliberately, not as a side effect of something else here.
 func newTURNServer(udpConn net.PacketConn, publicIP string, minPort, maxPort int, realm, turnSecret string, reg *allocRegistry, lim *limits) (*turn.Server, error) {
 	gen := &countingGenerator{
 		reg: reg,
@@ -364,6 +375,10 @@ func run(c config, st nodeState) error {
 }
 
 func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir, stateDir string, blobGauge *blobUsage, lim *limits) {
+	// Read the live count BEFORE snapshot(), which evicts closed allocations:
+	// either order gives the same answer (activeAllocs ignores closed entries),
+	// but taking it first keeps the two reads from being confused for one.
+	active := reg.activeAllocs()
 	samples := reg.snapshot()
 	usage := make([]usageItem, 0, len(samples))
 	var total int64
@@ -388,6 +403,7 @@ func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir, 
 	body := heartbeatBody{
 		NodeID: nodeID, Status: "ok", Usage: usage, RelayedTotal: total,
 		StoredBytes: storedBytes, StorageTotal: storTotal, StorageFree: storFree,
+		ActiveTransfers: active,
 	}
 	hr, err := rp.heartbeat(body)
 	if err != nil {

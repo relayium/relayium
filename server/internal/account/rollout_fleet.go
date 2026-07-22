@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -55,13 +56,28 @@ type NodeSnapshot struct {
 	Version    string
 	LastSeenAt int64
 	// ActiveTransfers is HOW BUSY the node is, used to prefer the least-loaded
-	// machine as canary. NOTHING POPULATES IT TODAY: there is no such column in
-	// the nodes table, the heartbeat does not report it, and nodeSnapshot leaves
-	// it at 0 for every node. It is therefore uniformly zero in production and
-	// the canary pick degrades to the deterministic fleetHash tie-break. The
-	// rule is kept because the intent is sound and the tie-break is a legitimate
-	// fallback, but do not describe the pick as load-aware until a producer
-	// exists (a heartbeat field and a column would be the way in).
+	// machine as canary. It is real: the node counts its live relay allocations
+	// and reports them on every heartbeat (heartbeatBody.activeTransfers),
+	// central stores them on nodes.active_transfers, and nodeSnapshot copies
+	// them here. All three links are needed — remove any one and the field is
+	// uniformly -1 again, which fails silently rather than loudly, because
+	// decideFleet's fleetHash tie-break then decides the whole branch.
+	//
+	// TRI-STATE: >= 0 is a REAL reported count (0 included — a node that
+	// genuinely has nothing in flight); < 0 (see nodeSnapshot/TouchNode) means
+	// "this node did not report a count on its last heartbeat", which is not
+	// the same claim as "reports zero load" and must not be ranked as if it
+	// were. canaryRank is where that distinction is spent: an unreported node
+	// sorts AFTER every real count, not tied with a known-idle (0) one.
+	//
+	// It used to conflate the two by storing 0 for both. That was safe on
+	// average (the fleetHash tie-break is a legitimate order over a genuine
+	// tie) but not unbiased: in a PARTIALLY upgraded fleet, every un-upgraded
+	// node reads exactly like a known-idle one and can win the tie-break
+	// outright, so whichever un-upgraded node the hash favours is picked with
+	// probability 1 — a systematic pull toward the machine central has the
+	// LEAST information about, not merely a coin flip with the rest of the
+	// fleet.
 	ActiveTransfers int
 	UpdateStartedAt int64
 	// UpdateFromVersion mirrors nodes.update_from_version: the version the node
@@ -139,11 +155,9 @@ type RolloutDecision struct {
 //     rollout (no CurrentNodeID and no usable FirstNodeID yet) is chosen by fewest
 //     ActiveTransfers -- least to lose if the new build is bad -- and
 //     reported with IsFirst so the caller can persist it as FirstNodeID.
-//     CAVEAT: ActiveTransfers has no producer yet (see NodeSnapshot), so it is
-//     0 for every node in production and this pick currently degrades to the
-//     same deterministic fleetHash order as every later pick. That is a
-//     legitimate fallback, not the load-aware behaviour described above --
-//     which only becomes true once something populates the field.
+//     ActiveTransfers is produced by the node's heartbeat and stored on its row
+//     (see NodeSnapshot), so this pick really does follow load; nodes with no
+//     load signal at all (an older binary) read 0 and fall to the tie-break.
 //     Every node after that is chosen by sha256(nodeID+targetVersion)
 //     ascending, so the order is deterministic and reproducible but
 //     reshuffles per release (the same node must not always end up the
@@ -299,16 +313,15 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 
 	// sort.Slice is NOT stable, so equal-comparing elements may come out in
 	// any order run to run -- hence the fleetHash tie-break, which makes the
-	// pick fully deterministic even when transfer counts are identical. Since
-	// ActiveTransfers currently has no producer and is 0 everywhere, that
-	// tie-break is in fact the ONLY thing deciding this branch today; the
-	// transfer comparison is dormant until a producer exists.
+	// pick fully deterministic even when transfer counts are identical (an
+	// entirely idle fleet, or one whose nodes report no load signal at all).
 	// A re-asserted canary (the recorded one skipped) is picked the same way a
 	// first canary is: fewest active transfers, least to lose.
 	if firstPick || reassertFirst {
 		sort.Slice(candidates, func(i, j int) bool {
-			if candidates[i].ActiveTransfers != candidates[j].ActiveTransfers {
-				return candidates[i].ActiveTransfers < candidates[j].ActiveTransfers
+			ri, rj := canaryRank(candidates[i].ActiveTransfers), canaryRank(candidates[j].ActiveTransfers)
+			if ri != rj {
+				return ri < rj
 			}
 			return fleetHash(candidates[i].ID, tr.TargetVersion) < fleetHash(candidates[j].ID, tr.TargetVersion)
 		})
@@ -318,6 +331,27 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 		})
 	}
 	return RolloutDecision{Action: "update", NodeID: candidates[0].ID, IsFirst: firstPick || reassertFirst}
+}
+
+// canaryRank orders NodeSnapshot.ActiveTransfers for the canary sort: a real
+// reported count (>= 0) ranks by its own value, but a node that reported NO
+// count at all on its last heartbeat (< 0) ranks AFTER every real count —
+// including a known-idle (0) one — rather than tying with it.
+//
+// Tying an unreported node with a known-idle one is exactly the bias this
+// removes: an un-upgraded node in a mixed-version fleet always reads "no
+// signal", so tying it with 0 hands it the tie-break on equal footing with a
+// machine central actually KNOWS is idle, and the fleetHash order alone then
+// decides which un-upgraded node wins — deterministically, every rollout,
+// rather than as a fair coin flip against genuinely idle machines. Ranking it
+// last removes the preference entirely: an unreported node is never
+// preferred over any node central has real information about, however busy
+// that node is.
+func canaryRank(activeTransfers int) int {
+	if activeTransfers < 0 {
+		return math.MaxInt
+	}
+	return activeTransfers
 }
 
 // fleetHash deterministically orders a node for a given rollout target so

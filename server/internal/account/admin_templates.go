@@ -48,10 +48,29 @@ type adminHomeData struct {
 	Passkeys    []AdminCredential
 	PasskeysErr bool
 
-	FleetTokens      []adminFleetTokenView
-	FleetNodeCount   int    // count of Nodes with OwnerType == "fleet" (matches table body's guard)
-	MintedToken      string // set once, right after minting; shown inline then gone
-	MintedInstallCmd string // install one-liner for the freshly minted token
+	// ByoNodes are USER-CONTRIBUTED nodes, in their own table with their own
+	// controls. Kept as a separate, PRE-FILTERED and PRE-CAPPED slice rather
+	// than a second {{if}} pass over Nodes, for two reasons: the population is
+	// unbounded (anyone can contribute a node, and the dashboard must not grow
+	// with the user base), and the two tables must never be able to render each
+	// other's rows — draining "our machine" and draining "a user's machine" are
+	// very different acts. ByoNodeCount is the count BEFORE the cap.
+	ByoNodes     []adminNodeView
+	ByoNodeCount int
+	// ByoRemovedNodes is a SEPARATE, small section rendered below the main BYO
+	// table for already-uninstalled BYO nodes, so /admin/nodes/{id}/restore —
+	// the documented manual recovery for a mistaken deregistration — always has
+	// a reachable row: the main table above ranks removed nodes last (see
+	// byoNodeViews), so once at least adminByoNodesShown non-removed nodes
+	// exist, a removed node would never earn a row there at all.
+	// ByoRemovedNodeCount is the count BEFORE that section's own (much smaller)
+	// cap, same convention as ByoNodeCount above.
+	ByoRemovedNodes     []adminNodeView
+	ByoRemovedNodeCount int
+	FleetTokens         []adminFleetTokenView
+	FleetNodeCount      int    // count of Nodes with OwnerType == "fleet" (matches table body's guard)
+	MintedToken         string // set once, right after minting; shown inline then gone
+	MintedInstallCmd    string // install one-liner for the freshly minted token
 	// CentralStoredBytes is the ciphertext currently held on the app server's own
 	// disk (node_id unset) — the default fallback store, shown so the operator can
 	// see how much rides on central and decide whether to disable it.
@@ -528,6 +547,13 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 .passkeys .mint{flex-wrap:wrap;margin-top:12px}
 .never{color:#e5484d;font-weight:600}
 .err{color:#e5484d;margin:10px 0 0}
+/* 自带节点表：整块靠一条琥珀色左边框和一句告警抬头与官方节点表区分开。视觉上
+   必须一眼分得清 —— 在错的那张表上点"标记已移除"，后果完全不是一回事。 */
+.byo-nodes{border-left:3px solid #d97706;padding-left:14px;margin:28px 0}
+.byo-nodes h2{margin-bottom:6px}
+.byo-warn{color:var(--muted);font-size:12px;margin:0 0 12px;max-width:760px}
+.byo-nodes-removed{border-left:3px solid var(--muted);padding-left:14px;margin:16px 0 28px;opacity:.85}
+.byo-nodes-removed h2{margin-bottom:6px}
 .rollout{margin:0 0 28px}.rollout h2{margin-bottom:12px}
 .ro-panel{border:1px solid var(--bd);border-radius:12px;padding:14px 16px;margin:12px 0;background:var(--card)}
 .ro-panel h3{font-size:14px;margin:0 0 8px}
@@ -635,6 +661,75 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 {{end}}{{end}}
 </tbody></table>
 
+</section>
+
+{{/* 自带节点表。与官方节点表**刻意长得不一样**（独立 section、byo-nodes 类、
+     黄色左边框、抬头一句话说明），因为把用户的机器当成自己的机器去排空/移除，
+     后果完全不同：那台机器上的文件是用户自己的，而且我们并不拥有那台机器。
+     没有"删除"按钮 —— 删行是官方节点的退役操作，用户的节点由用户自己删。
+     这张表只列未卸载的节点（byoNodeViews 已把已卸载的挑到下面独立小节），
+     所以这里不再需要"已卸载"分支——一台已卸载的节点永远不会出现在这张表里，
+     恢复入口在下面那个不受这张表行数上限影响的小节。 */}}
+<section class="nodes byo-nodes">
+<h2>自带节点（用户机器，共 {{.ByoNodeCount}} 台{{if gt .ByoNodeCount (len .ByoNodes)}}，下表只列最需要关注的 {{len .ByoNodes}} 台{{end}}）</h2>
+<p class="byo-warn">这些不是我们的机器，是用户贡献的。排空/标记已移除只影响<b>该用户自己的</b>放置池与直连下载，机器本身仍在用户手里运行；先看清"剩余文件"再动手，节点上的文件没有副本。</p>
+<table>
+<thead><tr><th>备注 / ID</th><th>所属用户</th><th>IP</th><th>状态</th><th>版本</th><th>最后心跳(UTC)</th><th>排空</th><th>剩余文件 / 最早可安全卸载</th></tr></thead>
+<tbody>
+{{range .ByoNodes}}
+<tr>
+<td>{{if .Label}}<b>{{.Label}}</b><br>{{end}}<span style="color:var(--muted);font-size:12px">{{.ID}}</span></td>
+<td><span style="color:var(--muted);font-size:12px">{{if .OwnerEmail}}{{.OwnerEmail}}{{else}}{{.OwnerUserID}}{{end}}</span></td>
+<td>{{if .Host}}{{.Host}}{{else}}—{{end}}</td>
+<td>{{if .Online}}在线{{else}}离线{{end}}
+<form method="post" action="/admin/nodes/{{.ID}}/remove" class="lim" onsubmit="return confirm('标记该用户节点已卸载？它会退出该用户的放置池/ICE/直连下载，文件与历史保留，可随时用&quot;恢复&quot;撤销。')"><button type="submit" title="把这台用户节点移出服务（可恢复）">标记已移除</button></form>
+</td>
+<td>{{if .Version}}{{.Version}}{{else}}—{{end}}</td>
+<td>{{if .LastSeenAt}}{{ts .LastSeenAt}}{{else}}—{{end}}</td>
+<td>
+{{if .Draining}}<span class="err">排空中</span>{{else}}正常{{end}}
+<form method="post" action="/admin/nodes/{{.ID}}/draining" class="lim">
+<input type="hidden" name="on" value="{{if .Draining}}0{{else}}1{{end}}">
+<button type="submit">{{if .Draining}}取消排空{{else}}开始排空{{end}}</button>
+</form>
+</td>
+<td>{{if .StoredFileCount}}{{.StoredFileCount}} 个 / {{ts .SafeToUninstallAt}}{{else}}0 个 · 可随时移除{{end}}</td>
+</tr>
+{{else}}
+<tr><td colspan="8" style="color:var(--muted)">暂无用户自带节点</td></tr>
+{{end}}
+</tbody></table>
+</section>
+
+{{/* 已卸载的自带节点：独立成节、单独限行（adminByoRemovedShown，远小于上面
+     那张表的上限），跟上面那张表用不同的样式（灰色左边框、略微淡化），操作员
+     一眼就能看出这是"卸载记录 + 手动纠错"区，不会跟当前在线的机器混着看、
+     误按到"恢复"。这是 /admin/nodes/{id}/restore 的唯一入口——上面那张表按
+     ranking 只显示未卸载节点，行数一旦被在线节点占满，已卸载节点在那张表里
+     永远排不到号，"恢复"就无处可按了。只在存在已卸载节点时渲染，免得健康的
+     部署也要看一个空表。 */}}
+{{if .ByoRemovedNodes}}
+<section class="nodes byo-nodes-removed">
+<h2>已卸载的自带节点（共 {{.ByoRemovedNodeCount}} 台{{if gt .ByoRemovedNodeCount (len .ByoRemovedNodes)}}，仅显示最近卸载的 {{len .ByoRemovedNodes}} 台{{end}}）</h2>
+<p class="byo-warn">这些用户节点已被标记卸载，已退出对应用户的放置池/ICE/直连下载。如果是误操作或卸载脚本没跑完整，用"恢复"撤销——不影响它的文件与历史。</p>
+<table>
+<thead><tr><th>备注 / ID</th><th>所属用户</th><th>IP</th><th>版本</th><th>最后心跳(UTC)</th><th></th></tr></thead>
+<tbody>
+{{range .ByoRemovedNodes}}
+<tr>
+<td>{{if .Label}}<b>{{.Label}}</b><br>{{end}}<span style="color:var(--muted);font-size:12px">{{.ID}}</span></td>
+<td><span style="color:var(--muted);font-size:12px">{{if .OwnerEmail}}{{.OwnerEmail}}{{else}}{{.OwnerUserID}}{{end}}</span></td>
+<td>{{if .Host}}{{.Host}}{{else}}—{{end}}</td>
+<td>{{if .Version}}{{.Version}}{{else}}—{{end}}</td>
+<td>{{if .LastSeenAt}}{{ts .LastSeenAt}}{{else}}—{{end}}</td>
+<td><form method="post" action="/admin/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('恢复该用户节点？它会重新进入该用户的放置池/ICE/直连下载。')"><button type="submit" title="清除已卸载标记（不影响它的文件与历史）">恢复</button></form></td>
+</tr>
+{{end}}
+</tbody></table>
+</section>
+{{end}}
+
+<section class="nodes">
 {{if .FleetTokens}}
 <h2>活跃节点 Token（{{len .FleetTokens}}）</h2>
 <table>

@@ -370,6 +370,32 @@ func TestDecideFleet(t *testing.T) {
 	}
 }
 
+// In a partially upgraded fleet, an un-upgraded node reports NO active-transfers
+// count at all (ActiveTransfers < 0 — see Node.ActiveTransfers), which is a
+// different claim from "reports zero load". Before canaryRank the two were
+// indistinguishable (both stored/read as 0), so an unreported node could tie
+// a genuinely idle one and win the canary pick on the fleetHash tie-break
+// alone — deterministically, not as a fair coin flip against the rest of the
+// fleet. The IDs below are chosen so the hash order favours the UNREPORTED
+// node, so this can only pass if the unreported node is genuinely ranked
+// after the known-idle one, not merely tied with it.
+func TestDecideFleetNeverPrefersAnUnreportedNodeOverAKnownIdleOne(t *testing.T) {
+	const target = "v0.9.0"
+	unknown, known := "node-x", "node-y"
+	if fleetHash(known, target) < fleetHash(unknown, target) {
+		unknown, known = known, unknown
+	}
+	track := RolloutTrack{Track: "fleet", TargetVersion: target, Status: "rolling"}
+	nodes := []NodeSnapshot{
+		{ID: unknown, Version: "v0.8.0", LastSeenAt: tNow, ActiveTransfers: -1},
+		{ID: known, Version: "v0.8.0", LastSeenAt: tNow, ActiveTransfers: 0},
+	}
+	got := decideFleet(track, nodes, tNow)
+	if got.NodeID != known {
+		t.Fatalf("canary = %q, want %q: a node reporting no load signal must never beat one central knows is idle", got.NodeID, known)
+	}
+}
+
 // FINDING 2, end to end: FirstNodeID is written when a node is PICKED, not when
 // it INSTALLS. A canary that answers "skipped" never runs the build, so if it
 // kept the canary slot the first node that ACTUALLY runs the new build would be
