@@ -86,7 +86,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>フォルダ同期と、セルフホスト可能なサーバー</h2>
       <p>magic-wormhole はファイルのバッチ（またはフォルダを圧縮したもの）を送って終了します——相手側を更新するには再度送るしかなく、何を削除すべきかという概念もありません。Relayium CLI は relayium sync を追加し、上記どちらの転送方式の上でも動く増分の一方向ミラーリングを行います。変化した分だけを送り、--delete はソース側から消えたファイルを宛先側からも削除します（daemon は --allow-delete 付きで起動している場合のみこれに従うため、受信側が自らオプトインする必要があります）。--watch はファイルの変化に応じてリアルタイムに再同期し続け、cron ジョブは不要です。</p>
       <p>relayium.com に頼らず自分ですべてを運用したい場合、Relayium のサーバーは単一の Docker コンテナとしてセルフホストできます。--server で CLI をそこに向けてください。</p>
-      <pre><code>relayium sync --delete --watch ./photos user@your-server:backups/photos</code></pre>
+      <pre><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
       <h2>機能の一覧比較</h2>
       <p>最も重要な違いを並べて示します。</p>
       <ul><li>直接経路がない場合：magic-wormhole の Transit Relay は暗号化ストリームを運ぶので転送は完了する；Relayium の send/receive は直接接続専用で、この場合は失敗します。</li><li>サーバーとの対話：Relayium は SSH アクセス（push/pull）またはピン留めされた TLS の daemon を再利用；magic-wormhole には SSH との統合がなく、両端にインストールしてコードを共有する必要があります。</li><li>フォルダ同期：relayium sync は --delete と --watch を伴う増分ミラーリングを行う；magic-wormhole はバッチ（または圧縮したフォルダ）を送って終了し、ミラーや削除の概念はありません。</li><li>検証：どちらもエンドツーエンドで暗号化される；Relayium の send/receive はさらに、転送開始前に双方が照合する短い SAS コードを表示します。</li><li>セルフホスト：Relayium のサーバーは自分で運用できる単一の Docker イメージで、CLI とブラウザ版の両方に対応します。CLI の send/receive も --server でそこを指定できます。</li><li>ライセンスと費用：どちらも無料でオープンソース、どちらもアカウント不要です。</li></ul>

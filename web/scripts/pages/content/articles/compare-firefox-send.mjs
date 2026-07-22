@@ -31,7 +31,7 @@ const en = {
     {
       heading: "Expiry, burn-after-read, and the honest limits",
       body: [
-        "Like Firefox Send, every Relayium link has a lifespan you choose: 1 hour, 1 day, 3 days, or up to 7 days depending on your plan, or you can set it to burn after the very first complete download so it is gone the moment your recipient has the file. Once a link expires or burns, the stored ciphertext is deleted and the link stops working.",
+        "Like Firefox Send, every Relayium link has a lifespan you choose: 1 hour, 1 day, 3 days, 7 days, or up to 14 days depending on your plan, or you can set it to burn after the very first complete download so it is gone the moment your recipient has the file. Once a link expires or burns, the stored ciphertext is deleted and the link stops working.",
         "To be precise about what's stored where: this is a stored-link mode, so the encrypted file bytes genuinely do sit on Relayium's server between upload and download — it is zero-knowledge ciphertext the server cannot decrypt, but it is not a \"the file never touches a server\" setup. Creating a link does require the sender to sign in (it's tied to your account's storage quota); the recipient never needs an account to open or download it.",
       ],
     },
@@ -56,7 +56,7 @@ const en = {
       },
       {
         q: "Do links expire?",
-        a: "Yes. Choose 1 hour, 1 day, 3 days, or up to 7 days depending on your plan, or set the link to burn after the first complete download. After that, the stored ciphertext is deleted and the link no longer works.",
+        a: "Yes. Choose 1 hour, 1 day, 3 days, 7 days, or up to 14 days depending on your plan, or set the link to burn after the first complete download. After that, the stored ciphertext is deleted and the link no longer works.",
       },
       {
         q: "Is Relayium free?",
@@ -98,7 +98,7 @@ const zh = {
     {
       heading: "到期、首次下载即焚，以及坦诚说明的限制",
       body: [
-        "和 Firefox Send 一样，Relayium 的每个链接都有你自己选择的有效期：1 小时、1 天、3 天或最长 7 天（上限取决于套餐），或者设置为「首次完整下载后即焚」，收件方一拿到文件链接就会失效。链接到期或焚毁后，存储的密文会被删除，链接随之失效。",
+        "和 Firefox Send 一样，Relayium 的每个链接都有你自己选择的有效期：1 小时、1 天、3 天、7 天或最长 14 天（上限取决于套餐），或者设置为「首次完整下载后即焚」，收件方一拿到文件链接就会失效。链接到期或焚毁后，存储的密文会被删除，链接随之失效。",
         "需要说清楚存储的具体情况：这是存储链接模式，加密后的文件字节确实会在上传与下载之间存放在 Relayium 服务器上——它是服务器无法解密的零知识密文，但并非「文件从不经过服务器」那种设置。生成链接需要发送方登录（这与你账号的存储配额挂钩）；收件方打开或下载时始终无需账号。",
       ],
     },
@@ -123,7 +123,7 @@ const zh = {
       },
       {
         q: "链接会过期吗？",
-        a: "会。可选择 1 小时、1 天、3 天或最长 7 天（上限取决于套餐），或设置为首次完整下载后即焚。之后，存储的密文会被删除，链接不再可用。",
+        a: "会。可选择 1 小时、1 天、3 天、7 天或最长 14 天（上限取决于套餐），或设置为首次完整下载后即焚。之后，存储的密文会被删除，链接不再可用。",
       },
       {
         q: "Relayium 免费吗？",
@@ -165,7 +165,7 @@ const ja = {
     {
       heading: "期限切れ、初回ダウンロードでの消去、そして正直な限界",
       body: [
-        "Firefox Send と同様に、Relayium のすべてのリンクには自分で選ぶ有効期間があります。1時間、1日、3日、最長7日（プランによる）、あるいは最初の完全なダウンロードの後に消去するよう設定することもでき、その瞬間に受信者が手にしたファイルとともにリンクが消えます。リンクが期限切れになるか消去されると、保存された暗号文は削除され、リンクは機能しなくなります。",
+        "Firefox Send と同様に、Relayium のすべてのリンクには自分で選ぶ有効期間があります。1時間、1日、3日、7日、最長14日（プランによる）、あるいは最初の完全なダウンロードの後に消去するよう設定することもでき、その瞬間に受信者が手にしたファイルとともにリンクが消えます。リンクが期限切れになるか消去されると、保存された暗号文は削除され、リンクは機能しなくなります。",
         "何がどこに保存されているかを正確に言うと、これは保存リンク方式であり、暗号化されたファイルのバイト列はアップロードとダウンロードの間、実際に Relayium のサーバー上に置かれます——サーバーが復号できないゼロ知識の暗号文ではありますが、「ファイルが決してサーバーに触れない」という構成ではありません。リンクの作成には送信側のサインインが必要です（アカウントの保存容量枠に紐づきます）。受信側はリンクを開いてダウンロードするのに、決してアカウントを必要としません。",
       ],
     },
@@ -190,7 +190,7 @@ const ja = {
       },
       {
         q: "リンクは期限切れになりますか？",
-        a: "はい。1時間、1日、3日、最長7日（プランによる）から選ぶか、最初の完全なダウンロード後に消去するよう設定できます。その後、保存された暗号文は削除され、リンクは使えなくなります。",
+        a: "はい。1時間、1日、3日、7日、最長14日（プランによる）から選ぶか、最初の完全なダウンロード後に消去するよう設定できます。その後、保存された暗号文は削除され、リンクは使えなくなります。",
       },
       {
         q: "Relayium は無料ですか？",
@@ -232,7 +232,7 @@ const ko = {
     {
       heading: "만료, 첫 다운로드 후 소각, 그리고 정직하게 밝히는 한계",
       body: [
-        "Firefox Send와 마찬가지로 Relayium의 모든 링크는 직접 고르는 수명을 가집니다: 1시간, 1일, 3일, 최대 7일(요금제에 따라 다름) 중 선택하거나, 첫 완전한 다운로드 후 소각되도록 설정할 수 있어 받는 쪽이 파일을 손에 넣는 순간 링크가 사라집니다. 링크가 만료되거나 소각되면 저장된 암호문이 삭제되고 링크는 더 이상 작동하지 않습니다.",
+        "Firefox Send와 마찬가지로 Relayium의 모든 링크는 직접 고르는 수명을 가집니다: 1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름) 중 선택하거나, 첫 완전한 다운로드 후 소각되도록 설정할 수 있어 받는 쪽이 파일을 손에 넣는 순간 링크가 사라집니다. 링크가 만료되거나 소각되면 저장된 암호문이 삭제되고 링크는 더 이상 작동하지 않습니다.",
         "무엇이 어디에 저장되는지 정확히 말하자면, 이는 저장 링크 방식이므로 암호화된 파일 바이트가 업로드와 다운로드 사이에 실제로 Relayium 서버에 놓입니다——서버가 복호화할 수 없는 영지식 암호문이긴 하지만, '파일이 서버에 전혀 닿지 않는' 구조는 아닙니다. 링크 생성에는 보내는 쪽의 로그인이 필요합니다(계정의 저장 용량 한도에 연결됩니다). 받는 쪽은 링크를 열거나 다운로드하는 데 계정이 전혀 필요하지 않습니다.",
       ],
     },
@@ -257,7 +257,7 @@ const ko = {
       },
       {
         q: "링크가 만료되나요?",
-        a: "네. 1시간, 1일, 3일, 최대 7일(요금제에 따라 다름) 중에서 고르거나 첫 완전한 다운로드 후 소각되도록 설정할 수 있습니다. 그 후에는 저장된 암호문이 삭제되고 링크가 더 이상 작동하지 않습니다.",
+        a: "네. 1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름) 중에서 고르거나 첫 완전한 다운로드 후 소각되도록 설정할 수 있습니다. 그 후에는 저장된 암호문이 삭제되고 링크가 더 이상 작동하지 않습니다.",
       },
       {
         q: "Relayium은 무료인가요?",
@@ -299,7 +299,7 @@ const de = {
     {
       heading: "Ablauf, Vernichtung nach dem Lesen, und die ehrlichen Grenzen",
       body: [
-        "Wie bei Firefox Send hat jeder Relayium-Link eine Lebensdauer, die du wählst: 1 Stunde, 1 Tag, 3 Tage oder bis zu 7 Tage je nach Tarif, oder du stellst ihn so ein, dass er nach dem allerersten vollständigen Download vernichtet wird, sodass er verschwindet, sobald dein Empfänger die Datei hat. Sobald ein Link abläuft oder vernichtet wird, wird der gespeicherte Chiffretext gelöscht und der Link funktioniert nicht mehr.",
+        "Wie bei Firefox Send hat jeder Relayium-Link eine Lebensdauer, die du wählst: 1 Stunde, 1 Tag, 3 Tage, 7 Tage oder bis zu 14 Tage je nach Tarif, oder du stellst ihn so ein, dass er nach dem allerersten vollständigen Download vernichtet wird, sodass er verschwindet, sobald dein Empfänger die Datei hat. Sobald ein Link abläuft oder vernichtet wird, wird der gespeicherte Chiffretext gelöscht und der Link funktioniert nicht mehr.",
         "Um genau zu sein, wo was gespeichert wird: Dies ist ein Speicherlink-Modus, die verschlüsselten Dateibytes liegen zwischen Upload und Download tatsächlich auf Relayiums Server — es ist Zero-Knowledge-Chiffretext, den der Server nicht entschlüsseln kann, aber es ist kein Setup, bei dem „die Datei nie einen Server berührt“. Das Erstellen eines Links erfordert die Anmeldung des Absenders (es ist an das Speicherkontingent deines Kontos gebunden); der Empfänger braucht zum Öffnen oder Herunterladen niemals ein Konto.",
       ],
     },
@@ -324,7 +324,7 @@ const de = {
       },
       {
         q: "Laufen Links ab?",
-        a: "Ja. Wähle 1 Stunde, 1 Tag, 3 Tage oder bis zu 7 Tage je nach Tarif, oder stelle den Link so ein, dass er nach dem ersten vollständigen Download vernichtet wird. Danach wird der gespeicherte Chiffretext gelöscht und der Link funktioniert nicht mehr.",
+        a: "Ja. Wähle 1 Stunde, 1 Tag, 3 Tage, 7 Tage oder bis zu 14 Tage je nach Tarif, oder stelle den Link so ein, dass er nach dem ersten vollständigen Download vernichtet wird. Danach wird der gespeicherte Chiffretext gelöscht und der Link funktioniert nicht mehr.",
       },
       {
         q: "Ist Relayium kostenlos?",
@@ -366,7 +366,7 @@ const fr = {
     {
       heading: "Expiration, destruction après lecture, et les limites honnêtes",
       body: [
-        "Comme Firefox Send, chaque lien Relayium a une durée de vie que vous choisissez : 1 heure, 1 jour, 3 jours ou jusqu'à 7 jours selon votre offre, ou vous pouvez le régler pour qu'il se détruise après le tout premier téléchargement complet, si bien qu'il disparaît dès que votre destinataire a le fichier. Une fois qu'un lien expire ou se détruit, le texte chiffré stocké est supprimé et le lien cesse de fonctionner.",
+        "Comme Firefox Send, chaque lien Relayium a une durée de vie que vous choisissez : 1 heure, 1 jour, 3 jours, 7 jours ou jusqu'à 14 jours selon votre offre, ou vous pouvez le régler pour qu'il se détruise après le tout premier téléchargement complet, si bien qu'il disparaît dès que votre destinataire a le fichier. Une fois qu'un lien expire ou se détruit, le texte chiffré stocké est supprimé et le lien cesse de fonctionner.",
         "Pour être précis sur ce qui est stocké où : c'est un mode à lien stocké, donc les octets du fichier chiffré résident bel et bien sur le serveur de Relayium entre le téléversement et le téléchargement — c'est du texte chiffré à divulgation nulle que le serveur ne peut pas déchiffrer, mais ce n'est pas un dispositif où « le fichier ne touche jamais un serveur ». Créer un lien exige que l'expéditeur se connecte (cela est lié au quota de stockage de votre compte) ; le destinataire n'a jamais besoin de compte pour ouvrir ou télécharger.",
       ],
     },
@@ -391,7 +391,7 @@ const fr = {
       },
       {
         q: "Les liens expirent-ils ?",
-        a: "Oui. Choisissez 1 heure, 1 jour, 3 jours ou jusqu'à 7 jours selon votre offre, ou réglez le lien pour qu'il se détruise après le premier téléchargement complet. Ensuite, le texte chiffré stocké est supprimé et le lien ne fonctionne plus.",
+        a: "Oui. Choisissez 1 heure, 1 jour, 3 jours, 7 jours ou jusqu'à 14 jours selon votre offre, ou réglez le lien pour qu'il se détruise après le premier téléchargement complet. Ensuite, le texte chiffré stocké est supprimé et le lien ne fonctionne plus.",
       },
       {
         q: "Relayium est-il gratuit ?",
@@ -433,7 +433,7 @@ const ar = {
     {
       heading: "الانتهاء، والحرق بعد القراءة، والحدود المذكورة بصدق",
       body: [
-        "مثل Firefox Send، لكل رابط في Relayium عمر تختاره أنت: ساعة واحدة أو يوم واحد أو 3 أيام أو حتى 7 أيام حسب خطتك، أو يمكنك ضبطه ليحترق بعد أول تنزيل كامل فيزول لحظة حصول المُستقبِل على الملف. بمجرد أن ينتهي الرابط أو يحترق، يُحذف النص المُشفَّر المُخزَّن ويتوقف الرابط عن العمل.",
+        "مثل Firefox Send، لكل رابط في Relayium عمر تختاره أنت: ساعة واحدة أو يوم واحد أو 3 أيام أو 7 أيام أو حتى 14 يومًا حسب خطتك، أو يمكنك ضبطه ليحترق بعد أول تنزيل كامل فيزول لحظة حصول المُستقبِل على الملف. بمجرد أن ينتهي الرابط أو يحترق، يُحذف النص المُشفَّر المُخزَّن ويتوقف الرابط عن العمل.",
         "لكي نكون دقيقين بشأن ما يُخزَّن وأين: هذا وضع رابط مُخزَّن، لذا فإن بايتات الملف المشفّرة تستقر فعلًا على خادم Relayium بين الرفع والتنزيل — إنه نص مُشفَّر بمعرفة صفرية لا يستطيع الخادم فكّ تشفيره، لكنه ليس إعدادًا من نوع \"الملف لا يلمس خادمًا أبدًا\". يتطلب إنشاء رابط تسجيل دخول المُرسِل (فهو مرتبط بحصة التخزين في حسابك)؛ أما المُستقبِل فلا يحتاج إلى حساب أبدًا لفتحه أو تنزيله.",
       ],
     },
@@ -458,7 +458,7 @@ const ar = {
       },
       {
         q: "هل تنتهي الروابط؟",
-        a: "نعم. اختر ساعة واحدة أو يومًا واحدًا أو 3 أيام أو حتى 7 أيام حسب خطتك، أو اضبط الرابط ليحترق بعد أول تنزيل كامل. بعد ذلك يُحذف النص المُشفَّر المُخزَّن ولا يعمل الرابط بعدها.",
+        a: "نعم. اختر ساعة واحدة أو يومًا واحدًا أو 3 أيام أو 7 أيام أو حتى 14 يومًا حسب خطتك، أو اضبط الرابط ليحترق بعد أول تنزيل كامل. بعد ذلك يُحذف النص المُشفَّر المُخزَّن ولا يعمل الرابط بعدها.",
       },
       {
         q: "هل Relayium مجاني؟",
@@ -500,7 +500,7 @@ const es = {
     {
       heading: "Caducidad, autodestrucción tras la lectura y los límites honestos",
       body: [
-        "Como en Firefox Send, cada enlace de Relayium tiene una vida útil que tú eliges: 1 hora, 1 día, 3 días o hasta 7 días según tu plan, o puedes configurarlo para que se consuma tras la primera descarga completa, de modo que desaparece en cuanto tu destinatario tiene el archivo. Una vez que un enlace caduca o se consume, el texto cifrado almacenado se elimina y el enlace deja de funcionar.",
+        "Como en Firefox Send, cada enlace de Relayium tiene una vida útil que tú eliges: 1 hora, 1 día, 3 días, 7 días o hasta 14 días según tu plan, o puedes configurarlo para que se consuma tras la primera descarga completa, de modo que desaparece en cuanto tu destinatario tiene el archivo. Una vez que un enlace caduca o se consume, el texto cifrado almacenado se elimina y el enlace deja de funcionar.",
         "Para ser precisos sobre qué se almacena y dónde: este es un modo de enlace almacenado, así que los bytes del archivo cifrado sí que residen en el servidor de Relayium entre la subida y la descarga; es texto cifrado de conocimiento cero que el servidor no puede descifrar, pero no es un montaje en el que \"el archivo nunca toca un servidor\". Crear un enlace exige que el remitente inicie sesión (está vinculado a la cuota de almacenamiento de tu cuenta); el destinatario nunca necesita cuenta para abrirlo o descargarlo.",
       ],
     },
@@ -525,7 +525,7 @@ const es = {
       },
       {
         q: "¿Caducan los enlaces?",
-        a: "Sí. Elige 1 hora, 1 día, 3 días o hasta 7 días según tu plan, o configura el enlace para que se consuma tras la primera descarga completa. Después de eso, el texto cifrado almacenado se elimina y el enlace ya no funciona.",
+        a: "Sí. Elige 1 hora, 1 día, 3 días, 7 días o hasta 14 días según tu plan, o configura el enlace para que se consuma tras la primera descarga completa. Después de eso, el texto cifrado almacenado se elimina y el enlace ya no funciona.",
       },
       {
         q: "¿Es Relayium gratis?",
@@ -567,7 +567,7 @@ const pt = {
     {
       heading: "Expiração, autodestruição após a leitura e os limites honestos",
       body: [
-        "Assim como no Firefox Send, cada link do Relayium tem um tempo de vida que você escolhe: 1 hora, 1 dia, 3 dias ou até 7 dias conforme o seu plano, ou você pode configurá-lo para se consumir após o primeiríssimo download completo, de modo que desaparece no momento em que seu destinatário tem o arquivo. Depois que um link expira ou se consome, o texto cifrado armazenado é excluído e o link para de funcionar.",
+        "Assim como no Firefox Send, cada link do Relayium tem um tempo de vida que você escolhe: 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano, ou você pode configurá-lo para se consumir após o primeiríssimo download completo, de modo que desaparece no momento em que seu destinatário tem o arquivo. Depois que um link expira ou se consome, o texto cifrado armazenado é excluído e o link para de funcionar.",
         "Para ser preciso sobre o que é armazenado e onde: este é um modo de link armazenado, então os bytes do arquivo criptografado realmente ficam no servidor do Relayium entre o envio e o download — é texto cifrado de conhecimento zero que o servidor não consegue descriptografar, mas não é uma configuração em que \"o arquivo nunca toca um servidor\". Criar um link exige que o remetente faça login (está ligado à cota de armazenamento da sua conta); o destinatário nunca precisa de conta para abri-lo ou baixá-lo.",
       ],
     },
@@ -592,7 +592,7 @@ const pt = {
       },
       {
         q: "Os links expiram?",
-        a: "Sim. Escolha 1 hora, 1 dia, 3 dias ou até 7 dias conforme o seu plano, ou configure o link para se consumir após o primeiro download completo. Depois disso, o texto cifrado armazenado é excluído e o link não funciona mais.",
+        a: "Sim. Escolha 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano, ou configure o link para se consumir após o primeiro download completo. Depois disso, o texto cifrado armazenado é excluído e o link não funciona mais.",
       },
       {
         q: "O Relayium é gratuito?",

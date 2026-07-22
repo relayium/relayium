@@ -92,9 +92,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <pre><code>relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…</code></pre>
       <pre><code># choose how long it lives (otherwise your account&#39;s default applies):
-relayium up --burn ./report.pdf              # deleted after one download
-relayium up --ttl 7d ./report.pdf            # kept up to 7 days (plan-dependent)
-relayium up --max-downloads 5 ./report.pdf   # allow 5 downloads, then gone</code></pre>
+relayium up ./report.pdf --burn              # deleted after one download
+relayium up ./report.pdf --ttl 7d            # kept 7 days (your plan sets the cap)
+relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone</code></pre>
       <ul><li>الرابط هو كامل التسليم — انسخه إلى حيث يستطيع الجهاز الآخر قراءته. أي شخص يملك الرابط يستطيع تنزيل الملف، فعامله كأنه كلمة مرور.</li><li>الاحتفاظ: --burn يزيل الملف بعد تنزيل واحد؛ و --ttl &lt;duration&gt; يبقيه مدة ثابتة (مثل 7d، 24h)؛ و --max-downloads &lt;n&gt; يسمح بعدد ثابت من التنزيلات. لا تعطِ شيئًا وينطبق الإعداد الافتراضي لحسابك.</li><li>يحتاج up إلى أن تكون مسجّل الدخول؛ إن لم تكن، يخبرك ولا يفعل شيئًا.</li></ul>
       <h2>نزّل على الحاسوب الثاني</h2>
       <p>على الجهاز الآخر، سلّم الرابط إلى down. بلا تسجيل دخول، بلا إعداد — المفتاح الذي يفكّ تشفير الملف داخل الرابط، فلا يحتاج down إلى شيء من حسابك:</p>

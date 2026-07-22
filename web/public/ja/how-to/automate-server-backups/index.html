@@ -93,7 +93,7 @@ relayium push ./data relayium://backup-server:9031</code></pre>
       <h2>削除のミラーリングとリアルタイム同期</h2>
       <p>デフォルトでは、sync は宛先側でファイルを追加または更新するだけです。--delete を付けると真のミラーになり、ソースにもう存在しないファイルも削除します——受信側は serve --allow-delete で明示的に待ち受けている必要があり、そうでなければ削除は黙って無視され、拒否されたと結果に報告されます。ソースディレクトリが1つもファイルを解決しない場合、sync は --delete の実行そのものを拒否するので、ソースパスの誤字で宛先が消えてしまうことはありません。</p>
       <p>cron の次の実行タイミングを待ちたくない場合は、--watch を使うと relayium sync が動き続け、ソース配下のファイルが変化するとすぐに自動で再同期します——スケジュールでポーリングする代わりの軽量な選択肢です。</p>
-      <ul><li>relayium sync --delete ./data user@backup-server:/srv/backups/ は削除もミラーします(受信側に serve --allow-delete が必要)。</li><li>relayium sync --watch ./data user@backup-server:/srv/backups/ は動き続けて変化のたびに同期します。cron による単発実行の代わりに使えます。</li></ul>
+      <ul><li>relayium sync ./data user@backup-server:/srv/backups/ --delete は削除もミラーします(受信側に serve --allow-delete が必要)。</li><li>relayium sync ./data user@backup-server:/srv/backups/ --watch は動き続けて変化のたびに同期します。cron による単発実行の代わりに使えます。</li></ul>
       <h2>よくある質問</h2>
       <h3>バックアップサーバーに relayium のインストールは必要ですか?</h3>
       <p>コマンドによります。push はどちらでも動作します。relayium がインストールされていればネイティブプロトコル(再開 + ファイルごとの SHA-256 検証)を使い、なければ push は SSH 上の tar ストリームにフォールバックするので、素のサーバーでも動作します。sync は常にリモート側で relayium のネイティブプロトコルが必要です——sync に tar フォールバックはないので、先にインストールしてください。</p>

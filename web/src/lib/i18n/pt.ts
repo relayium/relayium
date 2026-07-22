@@ -488,6 +488,7 @@ const pt: Messages = {
     ttl1d: "1 dia",
     ttl3d: "3 dias",
     ttl7d: "7 dias",
+    ttl14d: "14 dias",
     linkReady: "Link pronto — envie-o ao destinatário para ele baixar:",
     expiresOn: (w) => `Este link expira em ${w}`,
     copy: "Copiar link",
@@ -537,7 +538,7 @@ const pt: Messages = {
       { title: "Verificação contra intermediário", desc: "As duas telas mostram o mesmo código (SAS); confira-o para descartar um intermediário bisbilhotando." },
       { title: "Multiplataforma", desc: "Windows, macOS, Linux, Android, iOS — qualquer navegador moderno, nada para instalar." },
       { title: "Código aberto e auditável", desc: "O protocolo e todo o código são públicos no GitHub — qualquer pessoa pode revisar, hospedar por conta própria ou contribuir." },
-      { title: "Efêmero por design", desc: "Os links de download podem expirar em até 7 dias, dependendo do seu plano, ou se apagar após o primeiro download, sem deixar rastro duradouro." },
+      { title: "Efêmero por design", desc: "Os links de download podem expirar em até 14 dias, dependendo do seu plano, ou se apagar após o primeiro download, sem deixar rastro duradouro." },
     ],
   },
   howItWorks: {
@@ -555,7 +556,7 @@ const pt: Messages = {
       sub: "Envie mesmo quando o outro estiver offline: criptografe e armazene agora, ele busca pelo link depois.",
       ways: [
         { icon: "🔒", name: "Entre e escolha os arquivos", how: "Os arquivos são criptografados com AES-256-GCM no seu navegador antes do envio — o servidor só armazena texto cifrado que não consegue descriptografar.", tag: "Conhecimento zero" },
-        { icon: "🔗", name: "Crie o link de download", how: "Defina um prazo de validade de 1 hora até 7 dias, dependendo do seu plano, ou apagar após a leitura; a chave de descriptografia fica no fragmento # do link e nunca é enviada ao servidor.", tag: "Prazo que você controla" },
+        { icon: "🔗", name: "Crie o link de download", how: "Defina um prazo de validade de 1 hora até 14 dias, dependendo do seu plano, ou apagar após a leitura; a chave de descriptografia fica no fragmento # do link e nunca é enviada ao servidor.", tag: "Prazo que você controla" },
         { icon: "📥", name: "A pessoa baixa a qualquer hora", how: "Envie o link a ela; sem conta e sem esperar online — ela descriptografa e baixa direto no navegador.", tag: "Sem conta para destinatários" },
       ],
     },
@@ -570,7 +571,7 @@ const pt: Messages = {
       { label: "Precisa entrar", realtime: "Só para enviar entre redes", stored: "O remetente entra" },
       { label: "Destinatário online?", realtime: "Sim — ambos online ao mesmo tempo", stored: "Não — baixe de forma assíncrona" },
       { label: "Arquivos pelo servidor?", realtime: "Na mesma rede: não, de dispositivo para dispositivo. Entre redes: por um retransmissor criptografado que só vê texto cifrado", stored: "Sim, mas apenas texto cifrado de conhecimento zero" },
-      { label: "Duração", realtime: "Enviou e foi-se, nada armazenado", stored: "Até 7 dias (conforme o plano), ou apagar após a leitura" },
+      { label: "Duração", realtime: "Enviou e foi-se, nada armazenado", stored: "Até 14 dias (conforme o plano), ou apagar após a leitura" },
       { label: "Melhor para", realtime: "Transferência direta de arquivos grandes com ambos online", stored: "Destinatário offline, ou um link para muitos" },
     ],
   },
@@ -612,7 +613,7 @@ const pt: Messages = {
       { q: "O que determina a velocidade e como deixá-la mais rápida?", a: "Em um link direto, é a largura de banda de subida/descida e a latência das suas duas redes; via retransmissor, é também a largura de banda do nó de retransmissão. Implantar seu próprio nó pela página da conta pode acelerar bastante a retransmissão entre redes — e é grátis." },
     ],
     offline: [
-      { q: "Quanto tempo dura um link de download?", a: "O tempo do prazo que você definir — de 1 hora até 7 dias, dependendo do seu plano — após o qual é excluído automaticamente. Você também pode ativar o apagar após a leitura, que o exclui logo após um download bem-sucedido." },
+      { q: "Quanto tempo dura um link de download?", a: "O tempo do prazo que você definir — de 1 hora até 14 dias, dependendo do seu plano — após o qual é excluído automaticamente. Você também pode ativar o apagar após a leitura, que o exclui logo após um download bem-sucedido." },
       { q: "O destinatário precisa de conta para baixar?", a: "Não. Ele apenas abre o link e baixa — sem login, nada para instalar." },
       { q: "Posso enviar vários arquivos ou uma pasta inteira de uma vez?", a: "Sim. Escolha vários arquivos, ou apenas arraste arquivos e pastas para a área de envio — as pastas são expandidas, criptografadas e enviadas juntas." },
       { q: "Posso recuperar um link que fechei sem querer?", a: "Por causa da criptografia de conhecimento zero, a chave de um link fica apenas no navegador de onde você fez o envio. Você pode copiar o link de volta em 'Conta → Meus arquivos' nesse mesmo navegador — mas em outro dispositivo ou após limpar os dados do navegador ele não pode ser recuperado, então salve o link." },

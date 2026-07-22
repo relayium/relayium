@@ -15,7 +15,7 @@ func runID(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	var configDir string
 	fs.StringVar(&configDir, "config-dir", "", "identity/trust directory")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
 	cfgDir, err := resolveConfigDir(configDir)

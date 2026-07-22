@@ -107,7 +107,13 @@ func main() {
 		"split per-instance abuse thresholds (login lockout, /api/ice, register, /ws, pairing breaker) across N round-robin instances; leave 1 for a single instance or an IP-hash LB (see docs/multi-instance-state-migration.md §7.5)")
 	dailyQuota := flag.Int64("daily-quota", envInt64("RELAYIUM_DAILY_QUOTA", 200<<20), "stored-transfer per-account upload quota per 24h in bytes (default 200 MiB)")
 	fileTTL := flag.Int64("file-ttl", envInt64("RELAYIUM_FILE_TTL", 86400), "stored-transfer default link TTL in seconds (default 1 day)")
-	fileTTLMax := flag.Int64("file-ttl-max", envInt64("RELAYIUM_FILE_TTL_MAX", 604800), "stored-transfer max link TTL in seconds (default 7 days)")
+	// Must be >= the longest plan retention (Max = 14 days in defaultPlans), or
+	// this global clamp silently caps a paying user below what their plan — and
+	// the pricing page — promises. planRetentionCap narrows it per tier; this is
+	// only the outer bound. NOTE: SeedSettings writes this into the settings
+	// table on FIRST boot only, so on an existing deployment the admin backend's
+	// value wins and has to be raised there too.
+	fileTTLMax := flag.Int64("file-ttl-max", envInt64("RELAYIUM_FILE_TTL_MAX", 1209600), "stored-transfer max link TTL in seconds (default 14 days — the longest plan retention)")
 	defaultRetention := flag.Int64("default-retention", envInt64("RELAYIUM_DEFAULT_RETENTION", 0),
 		"stored-transfer default retention policy when an upload requests none: 0=burn, 1=ttl, 2=count")
 	defaultMaxDownloads := flag.Int64("default-max-downloads", envInt64("RELAYIUM_DEFAULT_MAX_DOWNLOADS", 5),

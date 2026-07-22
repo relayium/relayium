@@ -33,7 +33,7 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	var server string
 	fs.StringVar(&server, "server", defaultCloudServer, "cloud server base URL")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
 
@@ -168,7 +168,7 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&ttlArg, "ttl", "", "retention, as a duration (2h) or seconds")
 	fs.Int64Var(&maxDownloads, "max-downloads", 0, "max number of downloads allowed")
 	fs.StringVar(&server, "server", "", "override the cloud server (defaults to the logged-in server)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
 	paths := fs.Args()
@@ -250,7 +250,7 @@ func runDown(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	var server string
 	fs.StringVar(&server, "server", "", "override the cloud server (defaults to the one embedded in the link, else "+defaultCloudServer+")")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
 	rest := fs.Args()

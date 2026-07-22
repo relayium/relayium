@@ -72,7 +72,7 @@ Three transfer modes:
 Keep a folder mirrored with **`sync`** — incremental (only changed files transfer), optionally `--delete` to mirror and `--watch` to re-sync in real time:
 
 ```sh
-relayium sync --delete --watch ./site relayium://host
+relayium sync ./site relayium://host --delete --watch
 ```
 
 Full docs at [relayium.com/cli](https://relayium.com/cli); prebuilt binaries on the [releases page](https://github.com/relayium/relayium/releases).

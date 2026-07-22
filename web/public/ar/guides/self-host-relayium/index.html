@@ -84,7 +84,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>relayium.com/cli lists every install option — a Windows binary, the releases page, or go build if you have Go.</li><li>relayium --version confirms it. Without the CLI, the command below prints &#39;command not found&#39;.</li></ul>
       <h2>وجّه الـ CLI إلى خادمك</h2>
       <p>يستخدم Relayium CLI افتراضيًا خادم الالتقاء الخاص بـ relayium.com لعمليات send/receive عبر الشبكات. مرّر ‎--server‎ لاستخدام خادمك بدلًا منه:</p>
-      <pre><code>relayium send --server https://your-domain ./report.pdf</code></pre>
+      <pre><code>relayium send ./report.pdf --server https://your-domain</code></pre>
       <pre><code>relayium receive --server https://your-domain</code></pre>
       <ul><li>الـ CLI مجاني ولا يحتاج حسابًا في كلتا الحالتين — ‎--server‎ يغيّر فقط خادم الالتقاء الذي يتحدث إليه لمصافحة رمز الاقتران.</li><li>‏push/pull (عبر SSH الخاص بك) وserve + الدفع المباشر عبر الخدمة push relayium://host لا يلمسان relayium.com إطلاقًا، سواء بالاستضافة الذاتية أم لا — يتصلان مباشرةً بالجهاز البعيد الذي تحدده.</li></ul>
       <h2>الأسئلة الشائعة</h2>

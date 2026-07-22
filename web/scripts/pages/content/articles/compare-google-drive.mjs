@@ -38,7 +38,7 @@ const en = {
       heading: "Still want a link? Zero-knowledge stored links",
       body: [
         "Sometimes a link really is what you need — the recipient isn't online, or you want one URL you can paste anywhere. Relayium's stored-link mode covers that case without giving up the privacy of realtime mode.",
-        "You choose an expiry — 1 hour, 1 day, 3 days, or up to 7 days depending on your plan — or set the link to burn after the first completed download. Creating a link requires the sender to sign in (it counts against a storage quota on your account), but the recipient just opens the link and downloads, no account required. Because the decryption key never leaves the URL fragment, Google's model and Relayium's stored-link model differ on one core point: Google can technically decrypt Drive-hosted files; Relayium's server, for stored links, structurally cannot.",
+        "You choose an expiry — 1 hour, 1 day, 3 days, 7 days, or up to 14 days depending on your plan — or set the link to burn after the first completed download. Creating a link requires the sender to sign in (it counts against a storage quota on your account), but the recipient just opens the link and downloads, no account required. Because the decryption key never leaves the URL fragment, Google's model and Relayium's stored-link model differ on one core point: Google can technically decrypt Drive-hosted files; Relayium's server, for stored links, structurally cannot.",
       ],
     },
     {
@@ -117,7 +117,7 @@ const zh = {
       heading: "还是想要一个链接？零知识存储链接",
       body: [
         "有时候你确实需要一个链接——收件人不在线，或者你想要一个可以贴到任何地方的 URL。Relayium 的存储链接模式覆盖了这种场景，同时不牺牲实时模式的隐私性。",
-        "你可以选择有效期——1 小时、1 天、3 天或最长 7 天（取决于套餐）——或者设置为首次下载完成后即焚。创建链接需要发送方登录（会计入账号的存储配额），但收件人只需打开链接下载，无需账号。因为解密密钥从不离开 URL 片段，Google 的模式和 Relayium 存储链接的模式在一个核心点上不同：Google 在技术上可以解密 Drive 上托管的文件；而 Relayium 的服务器对存储链接来说，从结构上就做不到这一点。",
+        "你可以选择有效期——1 小时、1 天、3 天、7 天或最长 14 天（取决于套餐）——或者设置为首次下载完成后即焚。创建链接需要发送方登录（会计入账号的存储配额），但收件人只需打开链接下载，无需账号。因为解密密钥从不离开 URL 片段，Google 的模式和 Relayium 存储链接的模式在一个核心点上不同：Google 在技术上可以解密 Drive 上托管的文件；而 Relayium 的服务器对存储链接来说，从结构上就做不到这一点。",
       ],
     },
     {
@@ -196,7 +196,7 @@ const ja = {
       heading: "それでもリンクが欲しいときは：ゼロ知識の保存リンク",
       body: [
         "リンクが本当に必要な場面もあります——受信者がオンラインでない、あるいはどこにでも貼れる1つの URL が欲しいときです。Relayium の保存リンクモードは、リアルタイムモードのプライバシーを犠牲にせずこのケースをカバーします。",
-        "有効期限は1時間・1日・3日・最長7日（プランによる）から選ぶか、最初のダウンロード完了後に消去する設定にできます。リンクの作成には送信側のサインインが必要です（アカウントの保存容量枠に計上されます）が、受信側はリンクを開いてダウンロードするだけでアカウントは不要です。復号鍵が URL フラグメントから外に出ることは決してないため、Google のモデルと Relayium の保存リンクのモデルには核心的な違いがあります。Google は Drive にホストされたファイルを技術的に復号できますが、Relayium のサーバーは保存リンクについて構造的にそれができません。",
+        "有効期限は1時間・1日・3日・7日・最長14日（プランによる）から選ぶか、最初のダウンロード完了後に消去する設定にできます。リンクの作成には送信側のサインインが必要です（アカウントの保存容量枠に計上されます）が、受信側はリンクを開いてダウンロードするだけでアカウントは不要です。復号鍵が URL フラグメントから外に出ることは決してないため、Google のモデルと Relayium の保存リンクのモデルには核心的な違いがあります。Google は Drive にホストされたファイルを技術的に復号できますが、Relayium のサーバーは保存リンクについて構造的にそれができません。",
       ],
     },
     {
@@ -275,7 +275,7 @@ const ko = {
       heading: "그래도 링크가 필요하다면: 영지식 저장 링크",
       body: [
         "때로는 정말로 링크가 필요합니다——받는 사람이 온라인이 아니거나, 어디에든 붙여넣을 수 있는 URL 하나가 필요할 때입니다. Relayium의 저장 링크 모드는 실시간 모드의 프라이버시를 포기하지 않고 이 경우를 다룹니다.",
-        "만료 기간을 1시간, 1일, 3일, 최대 7일(요금제에 따라 다름) 중에서 고르거나, 첫 다운로드 완료 후 소각되도록 설정할 수 있습니다. 링크 생성에는 보내는 쪽의 로그인이 필요하지만(계정의 저장 용량 한도에 포함됩니다), 받는 쪽은 링크를 열어 다운로드하기만 하면 되고 계정은 필요 없습니다. 복호화 키가 URL 프래그먼트를 벗어나는 일이 없기 때문에, Google의 모델과 Relayium의 저장 링크 모델은 핵심적인 지점에서 다릅니다. Google은 기술적으로 Drive에 호스팅된 파일을 복호화할 수 있지만, Relayium의 서버는 저장 링크에 대해 구조적으로 그렇게 할 수 없습니다.",
+        "만료 기간을 1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름) 중에서 고르거나, 첫 다운로드 완료 후 소각되도록 설정할 수 있습니다. 링크 생성에는 보내는 쪽의 로그인이 필요하지만(계정의 저장 용량 한도에 포함됩니다), 받는 쪽은 링크를 열어 다운로드하기만 하면 되고 계정은 필요 없습니다. 복호화 키가 URL 프래그먼트를 벗어나는 일이 없기 때문에, Google의 모델과 Relayium의 저장 링크 모델은 핵심적인 지점에서 다릅니다. Google은 기술적으로 Drive에 호스팅된 파일을 복호화할 수 있지만, Relayium의 서버는 저장 링크에 대해 구조적으로 그렇게 할 수 없습니다.",
       ],
     },
     {
@@ -354,7 +354,7 @@ const de = {
       heading: "Doch einen Link gewünscht? Zero-Knowledge-Speicherlinks",
       body: [
         "Manchmal ist ein Link wirklich das, was du brauchst — der Empfänger ist nicht online, oder du willst eine URL, die du überall einfügen kannst. Relayiums Speicherlink-Modus deckt diesen Fall ab, ohne die Privatsphäre des Echtzeitmodus aufzugeben.",
-        "Du wählst eine Ablaufzeit — 1 Stunde, 1 Tag, 3 Tage oder bis zu 7 Tage je nach Tarif — oder stellst den Link so ein, dass er nach dem ersten vollständigen Download vernichtet wird. Das Erstellen eines Links erfordert die Anmeldung des Absenders (er zählt gegen ein Speicherkontingent deines Kontos), aber der Empfänger öffnet den Link einfach und lädt herunter, ohne Konto. Da der Entschlüsselungsschlüssel das URL-Fragment nie verlässt, unterscheiden sich Googles Modell und Relayiums Speicherlink-Modell in einem zentralen Punkt: Google kann Drive-gehostete Dateien technisch entschlüsseln; Relayiums Server kann das bei Speicherlinks strukturell nicht.",
+        "Du wählst eine Ablaufzeit — 1 Stunde, 1 Tag, 3 Tage, 7 Tage oder bis zu 14 Tage je nach Tarif — oder stellst den Link so ein, dass er nach dem ersten vollständigen Download vernichtet wird. Das Erstellen eines Links erfordert die Anmeldung des Absenders (er zählt gegen ein Speicherkontingent deines Kontos), aber der Empfänger öffnet den Link einfach und lädt herunter, ohne Konto. Da der Entschlüsselungsschlüssel das URL-Fragment nie verlässt, unterscheiden sich Googles Modell und Relayiums Speicherlink-Modell in einem zentralen Punkt: Google kann Drive-gehostete Dateien technisch entschlüsseln; Relayiums Server kann das bei Speicherlinks strukturell nicht.",
       ],
     },
     {
@@ -433,7 +433,7 @@ const fr = {
       heading: "Vous voulez quand même un lien ? Liens stockés à divulgation nulle",
       body: [
         "Parfois un lien est vraiment ce qu'il vous faut — le destinataire n'est pas en ligne, ou vous voulez une seule URL à coller n'importe où. Le mode lien stocké de Relayium couvre ce cas sans renoncer à la confidentialité du mode temps réel.",
-        "Vous choisissez une expiration — 1 heure, 1 jour, 3 jours ou jusqu'à 7 jours selon votre offre — ou réglez le lien pour qu'il se détruise après le premier téléchargement complet. Créer un lien exige que l'expéditeur se connecte (cela compte dans un quota de stockage lié à votre compte), mais le destinataire n'a qu'à ouvrir le lien et télécharger, sans compte requis. Comme la clé de déchiffrement ne quitte jamais le fragment de l'URL, le modèle de Google et celui des liens stockés de Relayium diffèrent sur un point essentiel : Google peut techniquement déchiffrer les fichiers hébergés sur Drive ; le serveur de Relayium, pour les liens stockés, ne le peut structurellement pas.",
+        "Vous choisissez une expiration — 1 heure, 1 jour, 3 jours, 7 jours ou jusqu'à 14 jours selon votre offre — ou réglez le lien pour qu'il se détruise après le premier téléchargement complet. Créer un lien exige que l'expéditeur se connecte (cela compte dans un quota de stockage lié à votre compte), mais le destinataire n'a qu'à ouvrir le lien et télécharger, sans compte requis. Comme la clé de déchiffrement ne quitte jamais le fragment de l'URL, le modèle de Google et celui des liens stockés de Relayium diffèrent sur un point essentiel : Google peut techniquement déchiffrer les fichiers hébergés sur Drive ; le serveur de Relayium, pour les liens stockés, ne le peut structurellement pas.",
       ],
     },
     {
@@ -512,7 +512,7 @@ const ar = {
       heading: "ما زلت تريد رابطًا؟ روابط مُخزَّنة بمعرفة صفرية",
       body: [
         "أحيانًا يكون الرابط فعلًا ما تحتاجه — المُستقبِل غير متصل، أو تريد عنوان URL واحدًا يمكنك لصقه في أي مكان. يغطّي وضع الرابط المُخزَّن في Relayium تلك الحالة دون التخلي عن خصوصية الوضع الفوري.",
-        "تختار مدة انتهاء — ساعة واحدة أو يوم واحد أو 3 أيام أو حتى 7 أيام حسب خطتك — أو تضبط الرابط ليحترق بعد أول تنزيل مكتمل. يتطلب إنشاء رابط تسجيل دخول المُرسِل (يُحتسب ضمن حصة تخزين في حسابك)، لكن المُستقبِل يفتح الرابط ويُنزّل فحسب، دون الحاجة إلى حساب. ولأن مفتاح فكّ التشفير لا يغادر جزء الـ URL أبدًا، يختلف نموذج Google ونموذج الرابط المُخزَّن في Relayium في نقطة جوهرية واحدة: تستطيع Google تقنيًا فكّ تشفير الملفات المستضافة على Drive؛ أما خادم Relayium فلا يمكنه ذلك بنيويًا بالنسبة إلى الروابط المُخزَّنة.",
+        "تختار مدة انتهاء — ساعة واحدة أو يوم واحد أو 3 أيام أو 7 أيام أو حتى 14 يومًا حسب خطتك — أو تضبط الرابط ليحترق بعد أول تنزيل مكتمل. يتطلب إنشاء رابط تسجيل دخول المُرسِل (يُحتسب ضمن حصة تخزين في حسابك)، لكن المُستقبِل يفتح الرابط ويُنزّل فحسب، دون الحاجة إلى حساب. ولأن مفتاح فكّ التشفير لا يغادر جزء الـ URL أبدًا، يختلف نموذج Google ونموذج الرابط المُخزَّن في Relayium في نقطة جوهرية واحدة: تستطيع Google تقنيًا فكّ تشفير الملفات المستضافة على Drive؛ أما خادم Relayium فلا يمكنه ذلك بنيويًا بالنسبة إلى الروابط المُخزَّنة.",
       ],
     },
     {
@@ -591,7 +591,7 @@ const es = {
       heading: "¿Aun así quieres un enlace? Enlaces almacenados de conocimiento cero",
       body: [
         "A veces un enlace es realmente lo que necesitas: el destinatario no está conectado, o quieres una única URL que puedas pegar en cualquier parte. El modo de enlace almacenado de Relayium cubre ese caso sin renunciar a la privacidad del modo en tiempo real.",
-        "Eliges una caducidad —1 hora, 1 día, 3 días o hasta 7 días según tu plan— o configuras el enlace para que se consuma tras la primera descarga completada. Crear un enlace requiere que el remitente inicie sesión (cuenta para una cuota de almacenamiento de tu cuenta), pero el destinatario solo abre el enlace y descarga, sin necesidad de cuenta. Como la clave de descifrado nunca sale del fragmento de la URL, el modelo de Google y el modelo de enlace almacenado de Relayium difieren en un punto central: Google puede técnicamente descifrar los archivos alojados en Drive; el servidor de Relayium, para los enlaces almacenados, estructuralmente no puede.",
+        "Eliges una caducidad —1 hora, 1 día, 3 días, 7 días o hasta 14 días según tu plan— o configuras el enlace para que se consuma tras la primera descarga completada. Crear un enlace requiere que el remitente inicie sesión (cuenta para una cuota de almacenamiento de tu cuenta), pero el destinatario solo abre el enlace y descarga, sin necesidad de cuenta. Como la clave de descifrado nunca sale del fragmento de la URL, el modelo de Google y el modelo de enlace almacenado de Relayium difieren en un punto central: Google puede técnicamente descifrar los archivos alojados en Drive; el servidor de Relayium, para los enlaces almacenados, estructuralmente no puede.",
       ],
     },
     {
@@ -670,7 +670,7 @@ const pt = {
       heading: "Ainda quer um link? Links armazenados de conhecimento zero",
       body: [
         "Às vezes um link é realmente o que você precisa — o destinatário não está on-line, ou você quer uma única URL que possa colar em qualquer lugar. O modo de link armazenado do Relayium cobre esse caso sem abrir mão da privacidade do modo em tempo real.",
-        "Você escolhe uma expiração — 1 hora, 1 dia, 3 dias ou até 7 dias conforme o seu plano — ou configura o link para se consumir após o primeiro download concluído. Criar um link exige que o remetente faça login (conta para uma cota de armazenamento da sua conta), mas o destinatário apenas abre o link e baixa, sem precisar de conta. Como a chave de descriptografia nunca sai do fragmento da URL, o modelo do Google e o modelo de link armazenado do Relayium diferem em um ponto central: o Google pode tecnicamente descriptografar os arquivos hospedados no Drive; o servidor do Relayium, para os links armazenados, estruturalmente não pode.",
+        "Você escolhe uma expiração — 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano — ou configura o link para se consumir após o primeiro download concluído. Criar um link exige que o remetente faça login (conta para uma cota de armazenamento da sua conta), mas o destinatário apenas abre o link e baixa, sem precisar de conta. Como a chave de descriptografia nunca sai do fragmento da URL, o modelo do Google e o modelo de link armazenado do Relayium diferem em um ponto central: o Google pode tecnicamente descriptografar os arquivos hospedados no Drive; o servidor do Relayium, para os links armazenados, estruturalmente não pode.",
       ],
     },
     {

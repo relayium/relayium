@@ -11,7 +11,7 @@ func parseCrossFlags(args []string) (crossFlags, []string, error) {
 	fs.StringVar(&f.server, "server", defaultServer, "Relayium server base URL (self-host)")
 	fs.StringVar(&f.advertise, "advertise", "", "host:port to advertise as a direct endpoint")
 	fs.BoolVar(&f.verify, "verify", false, "require SAS confirmation before transfer")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return f, nil, err
 	}
 	return f, fs.Args(), nil

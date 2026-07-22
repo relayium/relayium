@@ -39,7 +39,7 @@ const en = {
       heading: "When the recipient is offline: zero-knowledge stored links",
       body: [
         "Realtime transfer needs both people online at once, which is where Nextcloud's always-on server has a real edge. Relayium covers that case too, without giving up privacy: your browser generates a random AES-256-GCM key, encrypts the files with it before anything leaves your device, and the key lives only in the URL fragment — the part after the # that browsers never send to a server. The server stores ciphertext it cannot decrypt.",
-        "Creating a stored link requires the sender to sign in; the recipient needs no account to download. Each link can be set to expire after 1 hour, 1 day, 3 days, or up to 7 days depending on your plan, or to burn after the first complete download — it isn't meant to be a permanent home for the file like a Nextcloud share, it's meant to disappear.",
+        "Creating a stored link requires the sender to sign in; the recipient needs no account to download. Each link can be set to expire after 1 hour, 1 day, 3 days, 7 days, or up to 14 days depending on your plan, or to burn after the first complete download — it isn't meant to be a permanent home for the file like a Nextcloud share, it's meant to disappear.",
       ],
     },
     {
@@ -64,7 +64,7 @@ const en = {
       },
       {
         q: "Does Relayium store my files the way Nextcloud does?",
-        a: "No. In realtime mode nothing is stored anywhere — the file goes directly between devices. Stored links keep zero-knowledge ciphertext only until they expire (1 hour up to 7 days, depending on your plan) or are downloaded once with burn-after-read, not indefinitely like a Nextcloud share.",
+        a: "No. In realtime mode nothing is stored anywhere — the file goes directly between devices. Stored links keep zero-knowledge ciphertext only until they expire (1 hour up to 14 days, depending on your plan) or are downloaded once with burn-after-read, not indefinitely like a Nextcloud share.",
       },
       {
         q: "Do I need an account?",
@@ -123,7 +123,7 @@ const zh = {
       heading: "对方不在线时：零知识存储链接",
       body: [
         "实时传输需要双方同时在线，这正是 Nextcloud 那台常驻服务器真正占优的地方。Relayium 同样能应对这种情况，且不牺牲隐私：你的浏览器会生成一个随机的 AES-256-GCM 密钥，在任何数据离开你的设备之前就用它加密文件，密钥只存在于 URL 片段里——也就是 # 之后、浏览器从不发送给服务器的那部分。服务器只保存它无法解密的密文。",
-        "生成这样的存储链接需要发送方登录；收件方下载无需任何账号。每个链接都可设为 1 小时、1 天、3 天或最长 7 天后过期（上限取决于套餐），或者首次完整下载后即焚——它不是像 Nextcloud 分享那样的永久归宿，它本来就是为了消失而存在的。",
+        "生成这样的存储链接需要发送方登录；收件方下载无需任何账号。每个链接都可设为 1 小时、1 天、3 天、7 天或最长 14 天后过期（上限取决于套餐），或者首次完整下载后即焚——它不是像 Nextcloud 分享那样的永久归宿，它本来就是为了消失而存在的。",
       ],
     },
     {
@@ -148,7 +148,7 @@ const zh = {
       },
       {
         q: "Relayium 会像 Nextcloud 那样存储我的文件吗？",
-        a: "不会。实时模式下什么都不会被存储在任何地方——文件在设备之间直接传输。存储链接只会保留无法解读的零知识密文，直到它过期（1 小时到最长 7 天，取决于套餐）或被下载一次后即焚，而不是像 Nextcloud 分享那样无限期保存。",
+        a: "不会。实时模式下什么都不会被存储在任何地方——文件在设备之间直接传输。存储链接只会保留无法解读的零知识密文，直到它过期（1 小时到最长 14 天，取决于套餐）或被下载一次后即焚，而不是像 Nextcloud 分享那样无限期保存。",
       },
       {
         q: "我需要账号吗？",
@@ -207,7 +207,7 @@ const ja = {
       heading: "受信側がオフラインのとき：ゼロ知識の保存リンク",
       body: [
         "リアルタイム転送には双方が同時にオンラインである必要があり、ここは Nextcloud の常駐サーバーが本当に優れている点です。Relayium もこのケースをカバーします。プライバシーを犠牲にせずにです。ブラウザがランダムな AES-256-GCM 鍵を生成し、何も端末から出ていく前にそれでファイルを暗号化し、鍵は URL フラグメント——# の後の、ブラウザがサーバーに決して送らない部分——にだけ存在します。サーバーは復号できない暗号文だけを保存します。",
-        "こうした保存リンクの作成には送信側のサインインが必要です。受信側はダウンロードにアカウントが要りません。各リンクは1時間、1日、3日、最長7日（プランによる）で期限切れになるよう設定でき、あるいは最初の完全なダウンロード後に消去するよう設定できます——Nextcloud の共有のような恒久的な置き場所ではなく、消えることを前提としています。",
+        "こうした保存リンクの作成には送信側のサインインが必要です。受信側はダウンロードにアカウントが要りません。各リンクは1時間、1日、3日、7日、最長14日（プランによる）で期限切れになるよう設定でき、あるいは最初の完全なダウンロード後に消去するよう設定できます——Nextcloud の共有のような恒久的な置き場所ではなく、消えることを前提としています。",
       ],
     },
     {
@@ -232,7 +232,7 @@ const ja = {
       },
       {
         q: "Relayium は Nextcloud のようにファイルを保存しますか？",
-        a: "いいえ。リアルタイムモードでは何もどこにも保存されません——ファイルは端末間を直接移動します。保存リンクは、期限切れ（1時間から最長7日、プランによる）になるか、バーン・アフター・リードで1回ダウンロードされるまでの間だけゼロ知識の暗号文を保持し、Nextcloud の共有のように無期限には保存されません。",
+        a: "いいえ。リアルタイムモードでは何もどこにも保存されません——ファイルは端末間を直接移動します。保存リンクは、期限切れ（1時間から最長14日、プランによる）になるか、バーン・アフター・リードで1回ダウンロードされるまでの間だけゼロ知識の暗号文を保持し、Nextcloud の共有のように無期限には保存されません。",
       },
       {
         q: "アカウントは必要ですか？",
@@ -291,7 +291,7 @@ const ko = {
       heading: "받는 쪽이 오프라인일 때: 영지식 저장 링크",
       body: [
         "실시간 전송은 양쪽이 동시에 접속해 있어야 하는데, 이 지점에서는 Nextcloud의 상시 구동 서버가 실질적으로 유리합니다. Relayium도 프라이버시를 포기하지 않고 이 경우를 처리합니다. 브라우저가 무작위 AES-256-GCM 키를 생성해, 무엇이든 기기를 떠나기 전에 그 키로 파일을 암호화하고, 키는 URL 프래그먼트 — # 뒤의, 브라우저가 서버로 결코 보내지 않는 부분 — 에만 존재합니다. 서버는 복호화할 수 없는 암호문만 저장합니다.",
-        "이런 저장 링크 생성에는 보내는 쪽의 로그인이 필요합니다. 받는 쪽은 다운로드에 계정이 필요 없습니다. 각 링크는 1시간, 1일, 3일, 최대 7일(요금제에 따라 다름) 뒤 만료되도록 설정하거나, 첫 완전한 다운로드 후 소각되도록 설정할 수 있습니다 — Nextcloud 공유처럼 영구적인 보금자리가 아니라, 사라지는 것이 원래 목적입니다.",
+        "이런 저장 링크 생성에는 보내는 쪽의 로그인이 필요합니다. 받는 쪽은 다운로드에 계정이 필요 없습니다. 각 링크는 1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름) 뒤 만료되도록 설정하거나, 첫 완전한 다운로드 후 소각되도록 설정할 수 있습니다 — Nextcloud 공유처럼 영구적인 보금자리가 아니라, 사라지는 것이 원래 목적입니다.",
       ],
     },
     {
@@ -316,7 +316,7 @@ const ko = {
       },
       {
         q: "Relayium도 Nextcloud처럼 파일을 저장하나요?",
-        a: "아니요. 실시간 모드에서는 아무것도 어디에도 저장되지 않습니다 — 파일은 기기 사이를 직접 이동합니다. 저장 링크는 만료되거나(1시간~최대 7일, 요금제에 따라 다름) 소각형 다운로드로 한 번 받아질 때까지만 영지식 암호문을 보관하며, Nextcloud 공유처럼 무기한 보관되지 않습니다.",
+        a: "아니요. 실시간 모드에서는 아무것도 어디에도 저장되지 않습니다 — 파일은 기기 사이를 직접 이동합니다. 저장 링크는 만료되거나(1시간~최대 14일, 요금제에 따라 다름) 소각형 다운로드로 한 번 받아질 때까지만 영지식 암호문을 보관하며, Nextcloud 공유처럼 무기한 보관되지 않습니다.",
       },
       {
         q: "계정이 필요한가요?",
@@ -375,7 +375,7 @@ const de = {
       heading: "Wenn der Empfänger offline ist: Zero-Knowledge-Speicherlinks",
       body: [
         "Echtzeitübertragung setzt voraus, dass beide gleichzeitig online sind — hier hat Nextclouds ständig laufender Server einen echten Vorteil. Relayium deckt auch diesen Fall ab, ohne die Privatsphäre aufzugeben: Dein Browser erzeugt einen zufälligen AES-256-GCM-Schlüssel, verschlüsselt die Dateien damit, bevor irgendetwas dein Gerät verlässt, und der Schlüssel lebt nur im URL-Fragment — dem Teil nach dem #, den Browser nie an einen Server senden. Der Server speichert nur Chiffretext, den er nicht entschlüsseln kann.",
-        "Das Erstellen eines gespeicherten Links erfordert die Anmeldung des Absenders; der Empfänger braucht zum Herunterladen kein Konto. Jeder Link lässt sich so einstellen, dass er nach 1 Stunde, 1 Tag, 3 Tagen oder bis zu 7 Tagen je nach Tarif abläuft, oder dass er nach dem ersten vollständigen Download vernichtet wird — er ist nicht als dauerhaftes Zuhause für die Datei gedacht wie eine Nextcloud-Freigabe, sondern soll verschwinden.",
+        "Das Erstellen eines gespeicherten Links erfordert die Anmeldung des Absenders; der Empfänger braucht zum Herunterladen kein Konto. Jeder Link lässt sich so einstellen, dass er nach 1 Stunde, 1 Tag, 3 Tagen, 7 Tagen oder bis zu 14 Tagen je nach Tarif abläuft, oder dass er nach dem ersten vollständigen Download vernichtet wird — er ist nicht als dauerhaftes Zuhause für die Datei gedacht wie eine Nextcloud-Freigabe, sondern soll verschwinden.",
       ],
     },
     {
@@ -400,7 +400,7 @@ const de = {
       },
       {
         q: "Speichert Relayium meine Dateien wie Nextcloud?",
-        a: "Nein. Im Echtzeitmodus wird nirgendwo etwas gespeichert — die Datei wandert direkt zwischen den Geräten. Gespeicherte Links halten Zero-Knowledge-Chiffretext nur so lange, bis er abläuft (1 Stunde bis zu 7 Tage, je nach Tarif) oder mit Burn-after-Read einmal heruntergeladen wird, nicht dauerhaft wie eine Nextcloud-Freigabe.",
+        a: "Nein. Im Echtzeitmodus wird nirgendwo etwas gespeichert — die Datei wandert direkt zwischen den Geräten. Gespeicherte Links halten Zero-Knowledge-Chiffretext nur so lange, bis er abläuft (1 Stunde bis zu 14 Tage, je nach Tarif) oder mit Burn-after-Read einmal heruntergeladen wird, nicht dauerhaft wie eine Nextcloud-Freigabe.",
       },
       {
         q: "Brauche ich ein Konto?",
@@ -459,7 +459,7 @@ const fr = {
       heading: "Quand le destinataire est hors ligne : les liens stockés à divulgation nulle",
       body: [
         "Le transfert en temps réel exige que les deux soient en ligne en même temps, et c'est là que le serveur toujours actif de Nextcloud a un vrai avantage. Relayium couvre aussi ce cas, sans renoncer à la confidentialité : votre navigateur génère une clé AES-256-GCM aléatoire, chiffre les fichiers avec avant que quoi que ce soit ne quitte votre appareil, et la clé ne vit que dans le fragment de l'URL — la partie après le #, que les navigateurs n'envoient jamais à un serveur. Le serveur ne stocke qu'un texte chiffré qu'il ne peut pas déchiffrer.",
-        "Créer un lien stocké exige que l'expéditeur se connecte ; le destinataire n'a besoin d'aucun compte pour télécharger. Chaque lien peut être réglé pour expirer après 1 heure, 1 jour, 3 jours ou jusqu'à 7 jours selon votre offre, ou pour se détruire après le premier téléchargement complet — ce n'est pas un foyer permanent pour le fichier comme un partage Nextcloud, il est fait pour disparaître.",
+        "Créer un lien stocké exige que l'expéditeur se connecte ; le destinataire n'a besoin d'aucun compte pour télécharger. Chaque lien peut être réglé pour expirer après 1 heure, 1 jour, 3 jours, 7 jours ou jusqu'à 14 jours selon votre offre, ou pour se détruire après le premier téléchargement complet — ce n'est pas un foyer permanent pour le fichier comme un partage Nextcloud, il est fait pour disparaître.",
       ],
     },
     {
@@ -484,7 +484,7 @@ const fr = {
       },
       {
         q: "Relayium stocke-t-il mes fichiers comme Nextcloud ?",
-        a: "Non. En mode temps réel, rien n'est stocké nulle part — le fichier va directement d'un appareil à l'autre. Les liens stockés ne conservent un texte chiffré à divulgation nulle que jusqu'à leur expiration (1 heure à 7 jours maximum, selon votre offre) ou jusqu'à un unique téléchargement avec destruction après lecture, pas indéfiniment comme un partage Nextcloud.",
+        a: "Non. En mode temps réel, rien n'est stocké nulle part — le fichier va directement d'un appareil à l'autre. Les liens stockés ne conservent un texte chiffré à divulgation nulle que jusqu'à leur expiration (1 heure à 14 jours maximum, selon votre offre) ou jusqu'à un unique téléchargement avec destruction après lecture, pas indéfiniment comme un partage Nextcloud.",
       },
       {
         q: "Ai-je besoin d'un compte ?",
@@ -543,7 +543,7 @@ const ar = {
       heading: "حين يكون المُستقبِل غير متصل: روابط مُخزَّنة بمعرفة صفرية",
       body: [
         "يحتاج النقل الفوري إلى وجود الطرفين متصلين في آنٍ واحد، وهنا يتفوّق خادم Nextcloud الدائم التشغيل تفوّقاً حقيقياً. يغطّي Relayium هذه الحالة أيضاً، دون التخلّي عن الخصوصية: يولّد متصفحك مفتاح AES-256-GCM عشوائياً، ويشفّر به الملفات قبل أن يغادر أي شيء جهازك، ويعيش المفتاح في جزء الـ URL فقط — الجزء بعد # الذي لا ترسله المتصفحات أبداً إلى خادم. يخزّن الخادم نصاً مُشفَّراً لا يستطيع فكّه.",
-        "يتطلب إنشاء رابط مُخزَّن من المُرسِل تسجيل الدخول؛ ولا يحتاج المُستقبِل حساباً للتنزيل. يمكن ضبط كل رابط لينتهي بعد ساعة واحدة أو يوم واحد أو 3 أيام أو حتى 7 أيام حسب خطتك، أو ليُحرَق بعد أول تنزيل كامل — فهو ليس بيتاً دائماً للملف مثل مشاركة Nextcloud، بل قُصِد له أن يختفي.",
+        "يتطلب إنشاء رابط مُخزَّن من المُرسِل تسجيل الدخول؛ ولا يحتاج المُستقبِل حساباً للتنزيل. يمكن ضبط كل رابط لينتهي بعد ساعة واحدة أو يوم واحد أو 3 أيام أو 7 أيام أو حتى 14 يومًا حسب خطتك، أو ليُحرَق بعد أول تنزيل كامل — فهو ليس بيتاً دائماً للملف مثل مشاركة Nextcloud، بل قُصِد له أن يختفي.",
       ],
     },
     {
@@ -627,7 +627,7 @@ const es = {
       heading: "Cuando el destinatario está desconectado: enlaces almacenados de conocimiento cero",
       body: [
         "La transferencia en tiempo real necesita que ambas personas estén conectadas a la vez, y ahí es donde el servidor siempre activo de Nextcloud tiene una ventaja real. Relayium cubre ese caso también, sin renunciar a la privacidad: tu navegador genera una clave AES-256-GCM aleatoria, cifra los archivos con ella antes de que nada salga de tu dispositivo, y la clave vive solo en el fragmento de la URL — la parte después del # que los navegadores nunca envían a un servidor. El servidor almacena texto cifrado que no puede descifrar.",
-        "Crear un enlace almacenado requiere que el remitente inicie sesión; el destinatario no necesita cuenta para descargar. Cada enlace puede configurarse para expirar tras 1 hora, 1 día, 3 días o hasta 7 días según tu plan, o para destruirse tras la primera descarga completa — no pretende ser un hogar permanente para el archivo como un recurso compartido de Nextcloud, está pensado para desaparecer.",
+        "Crear un enlace almacenado requiere que el remitente inicie sesión; el destinatario no necesita cuenta para descargar. Cada enlace puede configurarse para expirar tras 1 hora, 1 día, 3 días, 7 días o hasta 14 días según tu plan, o para destruirse tras la primera descarga completa — no pretende ser un hogar permanente para el archivo como un recurso compartido de Nextcloud, está pensado para desaparecer.",
       ],
     },
     {
@@ -711,7 +711,7 @@ const pt = {
       heading: "Quando o destinatário está offline: links armazenados de conhecimento zero",
       body: [
         "A transferência em tempo real precisa que as duas pessoas estejam online ao mesmo tempo, e é aí que o servidor sempre ativo do Nextcloud tem uma vantagem real. O Relayium também cobre esse caso, sem abrir mão da privacidade: seu navegador gera uma chave AES-256-GCM aleatória, criptografa os arquivos com ela antes que qualquer coisa saia do seu dispositivo, e a chave vive apenas no fragmento da URL — a parte depois do # que os navegadores nunca enviam a um servidor. O servidor armazena texto cifrado que não consegue descriptografar.",
-        "Criar um link armazenado exige que o remetente faça login; o destinatário não precisa de conta para baixar. Cada link pode ser configurado para expirar após 1 hora, 1 dia, 3 dias ou até 7 dias conforme o seu plano, ou para se autodestruir após o primeiro download completo — ele não pretende ser um lar permanente para o arquivo como um compartilhamento do Nextcloud, ele foi feito para desaparecer.",
+        "Criar um link armazenado exige que o remetente faça login; o destinatário não precisa de conta para baixar. Cada link pode ser configurado para expirar após 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano, ou para se autodestruir após o primeiro download completo — ele não pretende ser um lar permanente para o arquivo como um compartilhamento do Nextcloud, ele foi feito para desaparecer.",
       ],
     },
     {
@@ -736,7 +736,7 @@ const pt = {
       },
       {
         q: "O Relayium armazena meus arquivos do jeito que o Nextcloud faz?",
-        a: "Não. No modo em tempo real nada é armazenado em lugar algum — o arquivo vai diretamente entre os dispositivos. Os links armazenados mantêm texto cifrado de conhecimento zero apenas até expirarem (de 1 hora a até 7 dias, conforme o seu plano) ou serem baixados uma vez com autodestruição após a leitura, não indefinidamente como um compartilhamento do Nextcloud.",
+        a: "Não. No modo em tempo real nada é armazenado em lugar algum — o arquivo vai diretamente entre os dispositivos. Os links armazenados mantêm texto cifrado de conhecimento zero apenas até expirarem (de 1 hora a até 14 dias, conforme o seu plano) ou serem baixados uma vez com autodestruição após a leitura, não indefinidamente como um compartilhamento do Nextcloud.",
       },
       {
         q: "Preciso de uma conta?",

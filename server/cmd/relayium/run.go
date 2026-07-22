@@ -16,7 +16,7 @@ const usage = `relayium — file transfer
 usage:
   relayium push <src...> [user@]host:dest    push files to a server you can ssh into
   relayium push <src...> relayium://host[:port]  push straight to a listening peer (daemon direct)
-  relayium sync [--delete] [--watch] <src...> <dest>   incremental one-way folder mirror
+  relayium sync <src...> <dest> [--delete] [--watch]   incremental one-way folder mirror
   relayium pull [user@]host:src <dest>       pull files from such a server
   relayium send <src...> <code>              send to a peer over a pairing code (cross-network)
   relayium receive <code> [destdir]          receive such a transfer
@@ -27,7 +27,7 @@ usage:
   relayium login [--server URL]             log in to the cloud (device code flow)
   relayium logout                           clear local cloud credentials
   relayium whoami                           show the logged-in cloud account
-  relayium up [--burn] [--ttl D] [--max-downloads N] <path...>
+  relayium up <path...> [--burn] [--ttl D] [--max-downloads N]
                                              encrypt client-side and upload to the cloud
   relayium down <link-or-code> [destDir]    fetch and decrypt a cloud claim (no login needed)
   relayium update [--check] [--force]       upgrade to the latest release in place
@@ -232,7 +232,7 @@ func runRecv(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	var noResume bool
 	fs.BoolVar(&noResume, "no-resume", false, "disable resuming partial files")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 1 {

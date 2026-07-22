@@ -7,7 +7,7 @@
 const en = {
   title: "Share a file with a secure, expiring download link",
   description:
-    "Encrypt a file in your browser and get a link the server can't decrypt. Choose 1 hour, 1 day, 3 days, or up to 7 days depending on your plan, or burn after the first download, then send it whenever you're ready.",
+    "Encrypt a file in your browser and get a link the server can't decrypt. Choose 1 hour, 1 day, 3 days, 7 days, or up to 14 days depending on your plan, or burn after the first download, then send it whenever you're ready.",
   updatedLabel: "Last updated",
   lead: [
     "Not every transfer has someone waiting on the other end. Maybe the recipient is asleep, on a flight, or you just want to drop a link in a message and move on with your day. For that, Relayium has a second mode: instead of streaming a file live to another open browser, it encrypts the file where you are, uploads only the ciphertext, and hands you a link you can send whenever — the download happens on the recipient's own schedule.",
@@ -43,7 +43,8 @@ const en = {
         "1 hour",
         "1 day (the default)",
         "3 days",
-        "7 days (the maximum, on the top plan)",
+        "7 days",
+        "14 days (the maximum, on the top plan)",
         "Or: burn after the first complete download, instead of a fixed time",
       ],
     },
@@ -68,7 +69,7 @@ const en = {
       },
       {
         q: "How long do links last?",
-        a: "You choose when you create the link: 1 hour, 1 day, 3 days, or up to 7 days depending on your plan, or you can set it to burn after the first complete download instead of a fixed expiry. After that point the link stops working.",
+        a: "You choose when you create the link: 1 hour, 1 day, 3 days, 7 days, or up to 14 days depending on your plan, or you can set it to burn after the first complete download instead of a fixed expiry. After that point the link stops working.",
       },
       {
         q: "Is the file really gone after burn-after-read?",
@@ -86,7 +87,7 @@ const en = {
 const zh = {
   title: "用会过期的安全链接分享文件",
   description:
-    "在浏览器里加密文件，生成一个连服务器都解不开的链接。可选 1 小时、1 天、3 天、最长 7 天有效期（上限取决于套餐）,或首次下载后即焚——你准备好了再发。",
+    "在浏览器里加密文件，生成一个连服务器都解不开的链接。可选 1 小时、1 天、3 天、7 天、最长 14 天有效期（上限取决于套餐）,或首次下载后即焚——你准备好了再发。",
   updatedLabel: "最近更新",
   lead: [
     "不是每次传输对面都刚好有人在等。收件人可能在睡觉、在飞机上,或者你只是想把链接丢进聊天窗口就去忙别的事了。为此 Relayium 准备了第二种模式:不是把文件实时流式传给另一个打开的浏览器,而是在你这边先加密,只上传密文,再给你一个随时可以发出去的链接——下载什么时候进行,由收件人自己的时间安排决定。",
@@ -118,7 +119,7 @@ const zh = {
         "每个链接都需要一个存续期限——让它永久有效违背了一次性传输的初衷。创建链接时你可以选择它要保持有效多久,也可以设置成用过一次就立刻消失。",
         "首次下载后即焚意味着链接会在收件人下载完成的那一刻立即失效——当文件比较敏感、你只想让一个人看一次、事后不留任何尾巴时很有用。无论选哪种,收件人在下载页都能看到实时倒计时,清楚还剩多少时间(或还能不能下载)。",
       ],
-      bullets: ["1 小时", "1 天(默认)", "3 天", "7 天（上限，需较高档套餐）", "或者:首次完整下载后即焚,而不是固定时长"],
+      bullets: ["1 小时", "1 天(默认)", "3 天", "7 天", "14 天（上限，需最高档套餐）", "或者:首次完整下载后即焚,而不是固定时长"],
     },
     {
       heading: "零知识保证,以及它的边界",
@@ -141,7 +142,7 @@ const zh = {
       },
       {
         q: "链接能保留多久?",
-        a: "由你在创建时选择:1 小时、1 天、3 天或最长 7 天（可选范围取决于套餐）,也可以设置为首次完整下载后即焚,而不是固定时长。到期之后链接就会失效。",
+        a: "由你在创建时选择:1 小时、1 天、3 天、7 天或最长 14 天（可选范围取决于套餐）,也可以设置为首次完整下载后即焚,而不是固定时长。到期之后链接就会失效。",
       },
       {
         q: "首次下载后即焚,文件真的会消失吗?",
@@ -159,7 +160,7 @@ const zh = {
 const ja = {
   title: "期限付きの安全なダウンロードリンクでファイルを共有する",
   description:
-    "ブラウザでファイルを暗号化し、サーバーが復号できないリンクを作成。有効期限は1時間・1日・3日・最長7日（プランによる）、または初回ダウンロード後に消去から選べます——準備ができたときに送れます。",
+    "ブラウザでファイルを暗号化し、サーバーが復号できないリンクを作成。有効期限は1時間・1日・3日・7日・最長14日（プランによる）、または初回ダウンロード後に消去から選べます——準備ができたときに送れます。",
   updatedLabel: "最終更新",
   lead: [
     "すべての転送で、相手が今すぐ待っているとは限りません。受信者が寝ていたり、飛行機の中だったり、あるいはただリンクをメッセージに貼って自分のことに戻りたいだけかもしれません。そのために Relayium にはもう一つのモードがあります。開いている別のブラウザへファイルをその場でストリーミングする代わりに、あなたの手元でファイルを暗号化し、暗号文だけをアップロードして、いつでも送れるリンクを渡します——ダウンロードのタイミングは受信者自身のスケジュール次第です。",
@@ -191,7 +192,7 @@ const ja = {
         "どのリンクにも寿命が必要です——永久に有効なままにしておくのは、一度きりの受け渡しの趣旨に反します。リンクを作成するとき、どれだけ有効にしておくかを選べますし、一度使われたら即座に消えるよう設定することもできます。",
         "初回ダウンロード後の消去とは、受信者がダウンロードを完了した瞬間にリンクが機能しなくなるということです。ファイルが機微な内容で、一人に一度だけ見せて、その後は何も残したくないときに便利です。どちらを選んでも、受信者はダウンロードページでリアルタイムのカウントダウンを見られるので、残り時間(またはダウンロード回数)がわかります。",
       ],
-      bullets: ["1時間", "1日(既定値)", "3日", "7日（最長。上位プランのみ）", "または: 固定の期限の代わりに、初回の完全なダウンロード後に消去"],
+      bullets: ["1時間", "1日(既定値)", "3日", "7日", "14日（最長。最上位プランのみ）", "または: 固定の期限の代わりに、初回の完全なダウンロード後に消去"],
     },
     {
       heading: "ゼロ知識保証と、その限界",
@@ -214,7 +215,7 @@ const ja = {
       },
       {
         q: "リンクはどのくらい持ちますか?",
-        a: "リンクを作成するときに選べます: 1時間、1日、3日、最長7日（プランによる）、あるいは固定の期限の代わりに初回の完全なダウンロード後に消去するよう設定できます。その時点を過ぎるとリンクは機能しなくなります。",
+        a: "リンクを作成するときに選べます: 1時間、1日、3日、7日、最長14日（プランによる）、あるいは固定の期限の代わりに初回の完全なダウンロード後に消去するよう設定できます。その時点を過ぎるとリンクは機能しなくなります。",
       },
       {
         q: "初回ダウンロード後の消去で、ファイルは本当になくなりますか?",
@@ -232,7 +233,7 @@ const ja = {
 const ko = {
   title: "만료되는 안전한 다운로드 링크로 파일 공유하기",
   description:
-    "브라우저에서 파일을 암호화하고 서버가 복호화할 수 없는 링크를 생성하세요. 1시간·1일·3일·최대 7일(요금제에 따라 다름) 만료 또는 첫 다운로드 후 소각 중 선택하고, 준비됐을 때 보내세요.",
+    "브라우저에서 파일을 암호화하고 서버가 복호화할 수 없는 링크를 생성하세요. 1시간·1일·3일·7일·최대 14일(요금제에 따라 다름) 만료 또는 첫 다운로드 후 소각 중 선택하고, 준비됐을 때 보내세요.",
   updatedLabel: "마지막 업데이트",
   lead: [
     "모든 전송에서 상대방이 지금 기다리고 있는 것은 아닙니다. 수신자가 자고 있거나 비행기 안이거나, 아니면 그냥 메시지에 링크를 남기고 하던 일로 돌아가고 싶을 수도 있습니다. 이를 위해 Relayium에는 두 번째 모드가 있습니다. 열려 있는 다른 브라우저로 파일을 실시간 스트리밍하는 대신, 당신 쪽에서 파일을 암호화하고 암호문만 업로드한 뒤, 언제든 보낼 수 있는 링크를 건네줍니다——다운로드는 수신자 자신의 일정에 맞춰 이루어집니다.",
@@ -264,7 +265,7 @@ const ko = {
         "모든 링크에는 수명이 필요합니다——영원히 살아있게 두는 것은 일회성 전송의 취지에 맞지 않습니다. 링크를 만들 때 얼마나 오래 유효할지 고를 수 있고, 한 번 쓰이면 즉시 사라지도록 설정할 수도 있습니다.",
         "첫 다운로드 후 소각은 수신자가 다운로드를 마치는 순간 링크가 작동을 멈춘다는 뜻입니다. 파일이 민감해서 딱 한 사람에게 한 번만 보여주고 이후로는 아무것도 남기고 싶지 않을 때 유용합니다. 어느 쪽을 선택하든 수신자는 다운로드 페이지에서 실시간 카운트다운을 볼 수 있어, 남은 시간(또는 다운로드 가능 여부)을 알 수 있습니다.",
       ],
-      bullets: ["1시간", "1일(기본값)", "3일", "7일(최대, 상위 요금제)", "또는: 고정된 시간 대신 첫 완전한 다운로드 후 소각"],
+      bullets: ["1시간", "1일(기본값)", "3일", "7일", "14일(최대, 최상위 요금제)", "또는: 고정된 시간 대신 첫 완전한 다운로드 후 소각"],
     },
     {
       heading: "영지식 보장, 그리고 그 한계",
@@ -287,7 +288,7 @@ const ko = {
       },
       {
         q: "링크는 얼마나 유지되나요?",
-        a: "링크를 만들 때 직접 선택합니다: 1시간, 1일, 3일, 최대 7일(요금제에 따라 다름), 또는 고정 기간 대신 첫 완전한 다운로드 후 소각으로 설정할 수 있습니다. 그 시점이 지나면 링크는 더 이상 작동하지 않습니다.",
+        a: "링크를 만들 때 직접 선택합니다: 1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름), 또는 고정 기간 대신 첫 완전한 다운로드 후 소각으로 설정할 수 있습니다. 그 시점이 지나면 링크는 더 이상 작동하지 않습니다.",
       },
       {
         q: "첫 다운로드 후 소각이면 파일이 정말로 사라지나요?",
@@ -305,7 +306,7 @@ const ko = {
 const de = {
   title: "Eine Datei mit einem sicheren, ablaufenden Link teilen",
   description:
-    "Verschlüssele eine Datei in deinem Browser und erhalte einen Link, den der Server nicht entschlüsseln kann. Wähle 1 Stunde, 1 Tag, 3 oder bis zu 7 Tage Gültigkeit, je nach Tarif, oder Löschung nach dem ersten Download — sende ihn, wenn du bereit bist.",
+    "Verschlüssele eine Datei in deinem Browser und erhalte einen Link, den der Server nicht entschlüsseln kann. Wähle 1 Stunde, 1 Tag, 3, 7 oder bis zu 14 Tage Gültigkeit, je nach Tarif, oder Löschung nach dem ersten Download — sende ihn, wenn du bereit bist.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "Nicht bei jeder Übertragung wartet jemand auf der anderen Seite. Vielleicht schläft die empfangende Person, sitzt im Flugzeug, oder du willst einfach einen Link in eine Nachricht fallen lassen und mit deinem Tag weitermachen. Dafür hat Relayium einen zweiten Modus: Statt eine Datei live an einen anderen geöffneten Browser zu streamen, verschlüsselt er die Datei bei dir, lädt nur den Chiffretext hoch und gibt dir einen Link, den du jederzeit versenden kannst — der Download findet nach dem Zeitplan der empfangenden Person statt.",
@@ -341,7 +342,8 @@ const de = {
         "1 Stunde",
         "1 Tag (Standard)",
         "3 Tage",
-        "7 Tage (Maximum, nur im höchsten Tarif)",
+        "7 Tage",
+        "14 Tage (Maximum, nur im höchsten Tarif)",
         "Oder: Löschung nach dem ersten vollständigen Download statt einer festen Frist",
       ],
     },
@@ -366,7 +368,7 @@ const de = {
       },
       {
         q: "Wie lange bleiben Links gültig?",
-        a: "Du entscheidest beim Erstellen: 1 Stunde, 1 Tag, 3 Tage oder bis zu 7 Tage, je nach Tarif, oder du stellst statt einer festen Frist Löschung nach dem ersten vollständigen Download ein. Danach funktioniert der Link nicht mehr.",
+        a: "Du entscheidest beim Erstellen: 1 Stunde, 1 Tag, 3 Tage, 7 Tage oder bis zu 14 Tage, je nach Tarif, oder du stellst statt einer festen Frist Löschung nach dem ersten vollständigen Download ein. Danach funktioniert der Link nicht mehr.",
       },
       {
         q: "Ist die Datei nach Löschung nach dem ersten Download wirklich weg?",
@@ -384,7 +386,7 @@ const de = {
 const fr = {
   title: "Partager un fichier avec un lien de téléchargement à expiration",
   description:
-    "Chiffrez un fichier dans votre navigateur et obtenez un lien que le serveur ne peut pas déchiffrer. Choisissez 1 heure, 1 jour, 3 ou jusqu'à 7 jours selon votre offre, ou l'autodestruction après le premier téléchargement, puis envoyez-le.",
+    "Chiffrez un fichier dans votre navigateur et obtenez un lien que le serveur ne peut pas déchiffrer. Choisissez 1 heure, 1 jour, 3, 7 ou jusqu'à 14 jours selon votre offre, ou l'autodestruction après le premier téléchargement, puis envoyez-le.",
   updatedLabel: "Dernière mise à jour",
   lead: [
     "Il n'y a pas toujours quelqu'un qui attend de l'autre côté d'un transfert. Le destinataire dort peut-être, est dans l'avion, ou vous voulez simplement déposer un lien dans un message et passer à autre chose. C'est pour cela que Relayium propose un second mode : au lieu de diffuser un fichier en direct vers un autre navigateur ouvert, il chiffre le fichier chez vous, ne téléverse que le texte chiffré, et vous remet un lien que vous pouvez envoyer quand vous voulez — le téléchargement se fait selon le calendrier du destinataire.",
@@ -420,7 +422,8 @@ const fr = {
         "1 heure",
         "1 jour (par défaut)",
         "3 jours",
-        "7 jours (le maximum, sur l'offre la plus élevée)",
+        "7 jours",
+        "14 jours (le maximum, sur l'offre la plus élevée)",
         "Ou : autodestruction après le premier téléchargement complet, au lieu d'une durée fixe",
       ],
     },
@@ -445,7 +448,7 @@ const fr = {
       },
       {
         q: "Combien de temps les liens durent-ils ?",
-        a: "Vous choisissez à la création : 1 heure, 1 jour, 3 jours ou jusqu'à 7 jours selon votre offre, ou réglez une autodestruction après le premier téléchargement complet au lieu d'une durée fixe. Passé ce délai, le lien cesse de fonctionner.",
+        a: "Vous choisissez à la création : 1 heure, 1 jour, 3 jours, 7 jours ou jusqu'à 14 jours selon votre offre, ou réglez une autodestruction après le premier téléchargement complet au lieu d'une durée fixe. Passé ce délai, le lien cesse de fonctionner.",
       },
       {
         q: "Le fichier disparaît-il vraiment après l'autodestruction ?",
@@ -463,7 +466,7 @@ const fr = {
 const ar = {
   title: "مشاركة ملف برابط تنزيل آمن ينتهي صلاحيته",
   description:
-    "شفّر ملفاً في متصفحك واحصل على رابط لا يستطيع الخادم فك تشفيره. اختر ساعة واحدة، أو يوماً واحداً، أو 3 أيام، أو حتى 7 أيام حسب خطتك، أو الحذف بعد أول تنزيل، ثم أرسله متى كنت مستعداً.",
+    "شفّر ملفاً في متصفحك واحصل على رابط لا يستطيع الخادم فك تشفيره. اختر ساعة واحدة، أو يوماً واحداً، أو 3 أيام، أو 7 أيام، أو حتى 14 يومًا حسب خطتك، أو الحذف بعد أول تنزيل، ثم أرسله متى كنت مستعداً.",
   updatedLabel: "آخر تحديث",
   lead: [
     "ليس في كل عملية نقل من ينتظر على الطرف الآخر. ربما يكون المُستقبِل نائماً، أو على متن طائرة، أو تريد ببساطة أن تترك رابطاً في رسالة وتمضي في يومك. لذلك لدى Relayium وضع ثانٍ: بدلاً من بثّ ملف مباشرةً إلى متصفح آخر مفتوح، يشفّر الملف حيث أنت، ويرفع النص المُشفَّر فقط، ويسلّمك رابطاً يمكنك إرساله متى شئت — ويحدث التنزيل وفق جدول المُستقبِل نفسه.",
@@ -499,7 +502,8 @@ const ar = {
         "ساعة واحدة",
         "يوم واحد (الافتراضي)",
         "3 أيام",
-        "7 أيام (الحد الأقصى، في الخطة الأعلى)",
+        "7 أيام",
+        "14 يومًا (الحد الأقصى، في الخطة الأعلى)",
         "أو: الحذف بعد أول تنزيل كامل، بدلاً من وقت ثابت",
       ],
     },
@@ -524,7 +528,7 @@ const ar = {
       },
       {
         q: "كم تدوم الروابط؟",
-        a: "تختار عند إنشاء الرابط: ساعة واحدة، أو يوماً واحداً، أو 3 أيام، أو حتى 7 أيام حسب خطتك، أو يمكنك ضبطه ليُحذف بعد أول تنزيل كامل بدلاً من انتهاء صلاحية ثابت. بعد تلك النقطة يتوقف الرابط عن العمل.",
+        a: "تختار عند إنشاء الرابط: ساعة واحدة، أو يوماً واحداً، أو 3 أيام، أو 7 أيام، أو حتى 14 يومًا حسب خطتك، أو يمكنك ضبطه ليُحذف بعد أول تنزيل كامل بدلاً من انتهاء صلاحية ثابت. بعد تلك النقطة يتوقف الرابط عن العمل.",
       },
       {
         q: "هل يختفي الملف حقاً بعد الحذف بعد القراءة؟",
@@ -542,7 +546,7 @@ const ar = {
 const es = {
   title: "Compartir un archivo con un enlace de descarga seguro y con caducidad",
   description:
-    "Cifra un archivo en tu navegador y obtén un enlace que el servidor no puede descifrar. Elige 1 hora, 1 día, 3 días o hasta 7 días según tu plan, o que se borre tras la primera descarga, y luego envíalo cuando estés listo.",
+    "Cifra un archivo en tu navegador y obtén un enlace que el servidor no puede descifrar. Elige 1 hora, 1 día, 3 días, 7 días o hasta 14 días según tu plan, o que se borre tras la primera descarga, y luego envíalo cuando estés listo.",
   updatedLabel: "Última actualización",
   lead: [
     "No en toda transferencia hay alguien esperando del otro lado. Quizás el destinatario está dormido, en un vuelo, o simplemente quieres dejar un enlace en un mensaje y seguir con tu día. Para eso Relayium tiene un segundo modo: en lugar de transmitir un archivo en vivo a otro navegador abierto, cifra el archivo donde estás, sube solo el texto cifrado y te entrega un enlace que puedes enviar cuando quieras — la descarga ocurre según el horario del propio destinatario.",
@@ -578,7 +582,8 @@ const es = {
         "1 hora",
         "1 día (el valor por defecto)",
         "3 días",
-        "7 días (el máximo, en el plan superior)",
+        "7 días",
+        "14 días (el máximo, en el plan superior)",
         "O: borrado tras la primera descarga completa, en lugar de un tiempo fijo",
       ],
     },
@@ -603,7 +608,7 @@ const es = {
       },
       {
         q: "¿Cuánto duran los enlaces?",
-        a: "Lo eliges al crear el enlace: 1 hora, 1 día, 3 días o hasta 7 días según tu plan, o puedes configurarlo para que se borre tras la primera descarga completa en lugar de una caducidad fija. Pasado ese punto, el enlace deja de funcionar.",
+        a: "Lo eliges al crear el enlace: 1 hora, 1 día, 3 días, 7 días o hasta 14 días según tu plan, o puedes configurarlo para que se borre tras la primera descarga completa en lugar de una caducidad fija. Pasado ese punto, el enlace deja de funcionar.",
       },
       {
         q: "¿El archivo realmente desaparece tras el borrado por lectura?",
@@ -621,7 +626,7 @@ const es = {
 const pt = {
   title: "Compartilhar um arquivo com um link de download seguro e com validade",
   description:
-    "Criptografe um arquivo no seu navegador e obtenha um link que o servidor não consegue descriptografar. Escolha 1 hora, 1 dia, 3 dias ou até 7 dias conforme o seu plano, ou que se apague após o primeiro download, e envie quando estiver pronto.",
+    "Criptografe um arquivo no seu navegador e obtenha um link que o servidor não consegue descriptografar. Escolha 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano, ou que se apague após o primeiro download, e envie quando estiver pronto.",
   updatedLabel: "Última atualização",
   lead: [
     "Nem toda transferência tem alguém esperando do outro lado. Talvez o destinatário esteja dormindo, em um voo, ou você só queira deixar um link em uma mensagem e seguir com o seu dia. Para isso o Relayium tem um segundo modo: em vez de transmitir um arquivo ao vivo para outro navegador aberto, ele criptografa o arquivo onde você está, envia apenas o texto cifrado e lhe entrega um link que você pode enviar quando quiser — o download acontece de acordo com a agenda do próprio destinatário.",
@@ -657,7 +662,8 @@ const pt = {
         "1 hora",
         "1 dia (o padrão)",
         "3 dias",
-        "7 dias (o máximo, no plano superior)",
+        "7 dias",
+        "14 dias (o máximo, no plano superior)",
         "Ou: apagar após o primeiro download completo, em vez de um tempo fixo",
       ],
     },
@@ -682,7 +688,7 @@ const pt = {
       },
       {
         q: "Quanto tempo os links duram?",
-        a: "Você escolhe ao criar o link: 1 hora, 1 dia, 3 dias ou até 7 dias conforme o seu plano, ou pode configurá-lo para apagar após o primeiro download completo em vez de uma validade fixa. Depois desse ponto, o link para de funcionar.",
+        a: "Você escolhe ao criar o link: 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano, ou pode configurá-lo para apagar após o primeiro download completo em vez de uma validade fixa. Depois desse ponto, o link para de funcionar.",
       },
       {
         q: "O arquivo realmente some depois de apagar após a leitura?",

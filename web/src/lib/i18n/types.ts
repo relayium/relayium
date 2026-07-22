@@ -478,6 +478,7 @@ export interface Messages {
     ttl1d: string;
     ttl3d: string;
     ttl7d: string;
+    ttl14d: string;
     linkReady: string;
     expiresOn: (when: string) => string; // echoes the link's expiry back to the sender
     copy: string;

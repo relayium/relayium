@@ -41,7 +41,7 @@ const en = {
       ],
       code: [
         `relayium serve --dir /backup --port 9031 --allow-delete`,
-        `relayium sync --delete --watch ./photos relayium://203.0.113.9:9031`,
+        `relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch`,
       ],
     },
     {
@@ -133,7 +133,7 @@ const zh = {
       ],
       code: [
         `relayium serve --dir /backup --port 9031 --allow-delete`,
-        `relayium sync --delete --watch ./photos relayium://203.0.113.9:9031`,
+        `relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch`,
       ],
     },
     {
@@ -225,7 +225,7 @@ const ja = {
       ],
       code: [
         `relayium serve --dir /backup --port 9031 --allow-delete`,
-        `relayium sync --delete --watch ./photos relayium://203.0.113.9:9031`,
+        `relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch`,
       ],
     },
     {
@@ -317,7 +317,7 @@ const ko = {
       ],
       code: [
         `relayium serve --dir /backup --port 9031 --allow-delete`,
-        `relayium sync --delete --watch ./photos relayium://203.0.113.9:9031`,
+        `relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch`,
       ],
     },
     {
@@ -409,7 +409,7 @@ const de = {
       ],
       code: [
         `relayium serve --dir /backup --port 9031 --allow-delete`,
-        `relayium sync --delete --watch ./photos relayium://203.0.113.9:9031`,
+        `relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch`,
       ],
     },
     {
@@ -501,7 +501,7 @@ const fr = {
       ],
       code: [
         `relayium serve --dir /backup --port 9031 --allow-delete`,
-        `relayium sync --delete --watch ./photos relayium://203.0.113.9:9031`,
+        `relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch`,
       ],
     },
     {
@@ -593,7 +593,7 @@ const ar = {
       ],
       code: [
         `relayium serve --dir /backup --port 9031 --allow-delete`,
-        `relayium sync --delete --watch ./photos relayium://203.0.113.9:9031`,
+        `relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch`,
       ],
     },
     {
@@ -685,7 +685,7 @@ const es = {
       ],
       code: [
         `relayium serve --dir /backup --port 9031 --allow-delete`,
-        `relayium sync --delete --watch ./photos relayium://203.0.113.9:9031`,
+        `relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch`,
       ],
     },
     {
@@ -777,7 +777,7 @@ const pt = {
       ],
       code: [
         `relayium serve --dir /backup --port 9031 --allow-delete`,
-        `relayium sync --delete --watch ./photos relayium://203.0.113.9:9031`,
+        `relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch`,
       ],
     },
     {

@@ -28,7 +28,7 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(&del, "delete", false, "delete files on the receiver that are gone from the source")
 	fs.BoolVar(&watch, "watch", false, "keep running and re-sync on change")
 	fs.StringVar(&configDir, "config-dir", "", "identity/trust directory (daemon)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
 	rest := fs.Args()

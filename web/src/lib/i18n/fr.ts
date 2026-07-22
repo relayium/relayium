@@ -489,6 +489,7 @@ const fr: Messages = {
     ttl1d: "1 jour",
     ttl3d: "3 jours",
     ttl7d: "7 jours",
+    ttl14d: "14 jours",
     linkReady: "Lien prêt — envoyez-le au destinataire pour télécharger :",
     expiresOn: (w) => `Ce lien expire le ${w}`,
     copy: "Copier le lien",
@@ -538,7 +539,7 @@ const fr: Messages = {
       { title: "Vérification anti-interception", desc: "Les deux écrans affichent le même code (SAS) ; comparez-le pour écarter une attaque de l'homme du milieu." },
       { title: "Multiplateforme", desc: "Windows, macOS, Linux, Android, iOS — n'importe quel navigateur moderne, rien à installer." },
       { title: "Open source et auditable", desc: "Le protocole et tout le code sont publics sur GitHub — chacun peut l'examiner, l'auto-héberger ou y contribuer." },
-      { title: "Éphémère par conception", desc: "Les liens de téléchargement peuvent expirer sous 7 jours au maximum, selon votre offre, ou se détruire après le premier téléchargement, sans laisser de trace durable." },
+      { title: "Éphémère par conception", desc: "Les liens de téléchargement peuvent expirer sous 14 jours au maximum, selon votre offre, ou se détruire après le premier téléchargement, sans laisser de trace durable." },
     ],
   },
   howItWorks: {
@@ -556,7 +557,7 @@ const fr: Messages = {
       sub: "Envoyez même hors ligne : chiffrez et stockez maintenant, récupération par lien plus tard.",
       ways: [
         { icon: "🔒", name: "Se connecter et choisir les fichiers", how: "Les fichiers sont chiffrés en AES-256-GCM dans votre navigateur avant l'envoi — le serveur ne stocke jamais que du chiffré indéchiffrable.", tag: "Zéro connaissance" },
-        { icon: "🔗", name: "Créer le lien de téléchargement", how: "Expiration de 1 heure à 7 jours maximum, selon votre offre, ou destruction après lecture ; la clé de déchiffrement vit dans le fragment # du lien et n'atteint jamais le serveur.", tag: "Expiration maîtrisée" },
+        { icon: "🔗", name: "Créer le lien de téléchargement", how: "Expiration de 1 heure à 14 jours maximum, selon votre offre, ou destruction après lecture ; la clé de déchiffrement vit dans le fragment # du lien et n'atteint jamais le serveur.", tag: "Expiration maîtrisée" },
         { icon: "📥", name: "Récupération à tout moment", how: "Envoyez le lien — ni compte ni attente en ligne : le déchiffrement et le téléchargement se font directement dans le navigateur.", tag: "Sans compte pour le destinataire" },
       ],
     },
@@ -571,7 +572,7 @@ const fr: Messages = {
       { label: "Connexion requise", realtime: "Seulement pour envoyer d'un réseau à l'autre", stored: "L'expéditeur se connecte" },
       { label: "Destinataire en ligne ?", realtime: "Oui — les deux en ligne en même temps", stored: "Non — téléchargement asynchrone" },
       { label: "Fichiers via le serveur ?", realtime: "Même réseau : non, d'appareil à appareil. Entre réseaux : via un relais chiffré qui ne voit que du chiffré", stored: "Oui, mais uniquement du chiffré à divulgation nulle" },
-      { label: "Durée de vie", realtime: "Envoyé puis disparu, rien de stocké", stored: "Jusqu'à 7 jours (selon l'offre), ou destruction après lecture" },
+      { label: "Durée de vie", realtime: "Envoyé puis disparu, rien de stocké", stored: "Jusqu'à 14 jours (selon l'offre), ou destruction après lecture" },
       { label: "Idéal pour", realtime: "Transfert direct de gros fichiers pendant que les deux sont en ligne", stored: "Destinataire hors ligne, ou un lien pour plusieurs" },
     ],
   },
@@ -613,7 +614,7 @@ const fr: Messages = {
       { q: "Qu'est-ce qui détermine la vitesse et comment l'améliorer ?", a: "En connexion directe, cela dépend de la bande passante montante/descendante et de la latence de vos deux réseaux ; via un relais, cela dépend aussi de la bande passante du nœud relais. Déployer votre propre nœud depuis la page de votre compte peut accélérer nettement le relais inter-réseaux — et c'est gratuit." },
     ],
     offline: [
-      { q: "Combien de temps un lien de téléchargement reste-t-il valide ?", a: "Aussi longtemps que la durée d'expiration que vous définissez — de 1 heure à 7 jours maximum, selon votre offre — après quoi il est supprimé automatiquement. Vous pouvez aussi activer la destruction après lecture, qui le supprime juste après un téléchargement réussi." },
+      { q: "Combien de temps un lien de téléchargement reste-t-il valide ?", a: "Aussi longtemps que la durée d'expiration que vous définissez — de 1 heure à 14 jours maximum, selon votre offre — après quoi il est supprimé automatiquement. Vous pouvez aussi activer la destruction après lecture, qui le supprime juste après un téléchargement réussi." },
       { q: "Le destinataire a-t-il besoin d'un compte pour télécharger ?", a: "Non. Il lui suffit d'ouvrir le lien et de télécharger — aucune connexion, rien à installer." },
       { q: "Puis-je envoyer plusieurs fichiers ou un dossier entier d'un coup ?", a: "Oui. Sélectionnez plusieurs fichiers, ou glissez simplement des fichiers et des dossiers sur la zone de téléversement — les dossiers sont développés, chiffrés et téléversés ensemble." },
       { q: "Puis-je récupérer un lien que j'ai fermé par accident ?", a: "En raison du chiffrement à connaissance nulle, la clé d'un lien n'est conservée que dans le navigateur depuis lequel vous l'avez téléversé. Vous pouvez recopier le lien depuis « Compte → Mes fichiers » dans ce même navigateur — mais sur un autre appareil ou après avoir effacé les données du navigateur, il est irrécupérable, alors conservez le lien." },

@@ -14,7 +14,7 @@ describe("allowedTtls", () => {
     expect(allowedTtls(86400)).toEqual([3600, 86400]);
     // plus = 3 天：7 天必须消失。
     expect(allowedTtls(3 * 86400)).toEqual([3600, 86400, 259200]);
-    // pro = 7 天：四个都留得住。
+    // pro = 7 天：14 天必须消失。
     expect(allowedTtls(7 * 86400)).toEqual([3600, 86400, 259200, 604800]);
   });
 
@@ -23,9 +23,14 @@ describe("allowedTtls", () => {
     expect(allowedTtls(259200)).toContain(259200);
   });
 
-  it("keeps a cap above the largest option from adding choices", () => {
-    // max = 14 天，但界面只有四挡；不该凭空多出选项。
+  it("offers the whole ladder to the top tier", () => {
+    // max = 14 天，正好等于最长一挡：五挡全部可选。
     expect(allowedTtls(14 * 86400)).toEqual([...TTL_CHOICES]);
+  });
+
+  it("keeps a cap above the largest option from adding choices", () => {
+    // 上限比最长选项还大时不该凭空多出选项。
+    expect(allowedTtls(30 * 86400)).toEqual([...TTL_CHOICES]);
   });
 
   it("never returns an empty list", () => {
@@ -45,6 +50,7 @@ describe("clampTtl", () => {
     // 才知道。若只过滤 <option> 而不动已选值，bind:value 会停在 604800——下拉框
     // 显示空白，提交的却仍是服务端会截断的那个值。
     expect(clampTtl(604800, [3600, 86400])).toBe(86400);
+    expect(clampTtl(1209600, [3600, 86400, 259200, 604800])).toBe(604800);
   });
 
   it("falls back to the only option when the plan allows just one", () => {

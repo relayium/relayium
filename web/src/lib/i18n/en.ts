@@ -502,6 +502,7 @@ const en: Messages = {
     ttl1d: "1 day",
     ttl3d: "3 days",
     ttl7d: "7 days",
+    ttl14d: "14 days",
     linkReady: "Link ready — send it to the recipient to download:",
     expiresOn: (w) => `This link expires on ${w}`,
     copy: "Copy link",
@@ -551,7 +552,7 @@ const en: Messages = {
       { title: "Man-in-the-middle check", desc: "Both screens show the same code (SAS); match it to rule out an eavesdropping MITM." },
       { title: "Cross-platform", desc: "Windows, macOS, Linux, Android, iOS — any modern browser, nothing to install." },
       { title: "Open source & auditable", desc: "The protocol and all the code are public on GitHub — anyone can review it, self-host, or contribute." },
-      { title: "Ephemeral by design", desc: "Download links can expire in up to 7 days, depending on your plan, or burn after the first download, leaving no lasting trace." },
+      { title: "Ephemeral by design", desc: "Download links can expire in up to 14 days, depending on your plan, or burn after the first download, leaving no lasting trace." },
     ],
   },
   howItWorks: {
@@ -569,7 +570,7 @@ const en: Messages = {
       sub: "Send even when they're offline: encrypt and store now, they fetch by link later.",
       ways: [
         { icon: "🔒", name: "Sign in and pick files", how: "Files are encrypted with AES-256-GCM in your browser before upload — the server only ever stores ciphertext it cannot decrypt.", tag: "Zero-knowledge" },
-        { icon: "🔗", name: "Create the download link", how: "Set an expiry from 1 hour up to 7 days, depending on your plan, or burn-after-reading; the decryption key lives in the link's # fragment and is never sent to the server.", tag: "Expiry you control" },
+        { icon: "🔗", name: "Create the download link", how: "Set an expiry from 1 hour up to 14 days, depending on your plan, or burn-after-reading; the decryption key lives in the link's # fragment and is never sent to the server.", tag: "Expiry you control" },
         { icon: "📥", name: "They download anytime", how: "Send them the link; no account and no waiting online — they decrypt and download right in the browser.", tag: "No account for recipients" },
       ],
     },
@@ -584,7 +585,7 @@ const en: Messages = {
       { label: "Sign-in needed", realtime: "Only to send across networks", stored: "Sender signs in" },
       { label: "Recipient online?", realtime: "Yes — both online at once", stored: "No — download asynchronously" },
       { label: "Files via server?", realtime: "Same network: no, device-to-device. Across networks: via an encrypted relay that sees only ciphertext", stored: "Yes, but zero-knowledge ciphertext only" },
-      { label: "Lifetime", realtime: "Send and gone, nothing stored", stored: "Up to 7 days (by plan), or burn after reading" },
+      { label: "Lifetime", realtime: "Send and gone, nothing stored", stored: "Up to 14 days (by plan), or burn after reading" },
       { label: "Best for", realtime: "Direct big-file transfer while both online", stored: "Recipient offline, or one link for many" },
     ],
   },
@@ -626,7 +627,7 @@ const en: Messages = {
       { q: "What determines speed, and how do I make it faster?", a: "On a direct link it's your two networks' up/down bandwidth and latency; via a relay it's also the relay node's bandwidth. Deploying your own node from the account page can noticeably speed up cross-network relaying — and it's free." },
     ],
     offline: [
-      { q: "How long does a download link last?", a: "As long as the expiry you set — from 1 hour up to 7 days, depending on your plan — after which it's deleted automatically. You can also enable burn-after-read, which deletes it right after one successful download." },
+      { q: "How long does a download link last?", a: "As long as the expiry you set — from 1 hour up to 14 days, depending on your plan — after which it's deleted automatically. You can also enable burn-after-read, which deletes it right after one successful download." },
       { q: "Does the recipient need an account to download?", a: "No. They just open the link and download — no sign-in, nothing to install." },
       { q: "Can I send multiple files or a whole folder at once?", a: "Yes. Pick multiple files, or just drag files and folders onto the upload area — folders are expanded and encrypted and uploaded together." },
       { q: "Can I recover a link I accidentally closed?", a: "Because of zero-knowledge encryption, a link's key is kept only in the browser you uploaded from. You can copy the link back from 'Account → My Files' in that same browser — but on another device or after clearing browser data it can't be recovered, so save the link." },

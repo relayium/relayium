@@ -488,6 +488,7 @@ const es: Messages = {
     ttl1d: "1 día",
     ttl3d: "3 días",
     ttl7d: "7 días",
+    ttl14d: "14 días",
     linkReady: "Enlace listo — envíaselo al destinatario para que descargue:",
     expiresOn: (w) => `Este enlace caduca el ${w}`,
     copy: "Copiar enlace",
@@ -537,7 +538,7 @@ const es: Messages = {
       { title: "Comprobación contra intermediarios", desc: "Ambas pantallas muestran el mismo código (SAS); coincídelo para descartar un intermediario que esté espiando." },
       { title: "Multiplataforma", desc: "Windows, macOS, Linux, Android, iOS — cualquier navegador moderno, nada que instalar." },
       { title: "Código abierto y auditable", desc: "El protocolo y todo el código son públicos en GitHub — cualquiera puede revisarlo, autoalojarlo o contribuir." },
-      { title: "Efímero por diseño", desc: "Los enlaces de descarga pueden caducar en hasta 7 días, según tu plan, o destruirse tras la primera descarga, sin dejar rastro duradero." },
+      { title: "Efímero por diseño", desc: "Los enlaces de descarga pueden caducar en hasta 14 días, según tu plan, o destruirse tras la primera descarga, sin dejar rastro duradero." },
     ],
   },
   howItWorks: {
@@ -555,7 +556,7 @@ const es: Messages = {
       sub: "Envía incluso cuando están sin conexión: cifra y almacena ahora, ellos lo recogen por enlace después.",
       ways: [
         { icon: "🔒", name: "Inicia sesión y elige archivos", how: "Los archivos se cifran con AES-256-GCM en tu navegador antes de subirlos — el servidor solo almacena texto cifrado que no puede descifrar.", tag: "Conocimiento cero" },
-        { icon: "🔗", name: "Crea el enlace de descarga", how: "Establece una caducidad de 1 hora hasta 7 días, según tu plan, o destruir tras leer; la clave de descifrado reside en el fragmento # del enlace y nunca se envía al servidor.", tag: "Caducidad que tú controlas" },
+        { icon: "🔗", name: "Crea el enlace de descarga", how: "Establece una caducidad de 1 hora hasta 14 días, según tu plan, o destruir tras leer; la clave de descifrado reside en el fragmento # del enlace y nunca se envía al servidor.", tag: "Caducidad que tú controlas" },
         { icon: "📥", name: "Ellos descargan en cualquier momento", how: "Envíales el enlace; sin cuenta y sin esperar en línea — descifran y descargan directamente en el navegador.", tag: "Sin cuenta para los destinatarios" },
       ],
     },
@@ -570,7 +571,7 @@ const es: Messages = {
       { label: "¿Necesita inicio de sesión?", realtime: "Solo para enviar entre redes", stored: "El remitente inicia sesión" },
       { label: "¿Destinatario en línea?", realtime: "Sí — ambos en línea a la vez", stored: "No — descarga de forma asíncrona" },
       { label: "¿Archivos vía servidor?", realtime: "En la misma red: no, de dispositivo a dispositivo. Entre redes: por un retransmisor cifrado que solo ve texto cifrado", stored: "Sí, pero solo texto cifrado de conocimiento cero" },
-      { label: "Duración", realtime: "Envía y desaparece, nada almacenado", stored: "Hasta 7 días (según el plan), o destruir tras leer" },
+      { label: "Duración", realtime: "Envía y desaparece, nada almacenado", stored: "Hasta 14 días (según el plan), o destruir tras leer" },
       { label: "Ideal para", realtime: "Transferencia directa de archivos grandes con ambos en línea", stored: "Destinatario sin conexión, o un enlace para muchos" },
     ],
   },
@@ -612,7 +613,7 @@ const es: Messages = {
       { q: "¿Qué determina la velocidad y cómo la hago más rápida?", a: "En un enlace directo son el ancho de banda de subida/bajada y la latencia de vuestras dos redes; vía retransmisor influye también el ancho de banda del nodo retransmisor. Desplegar tu propio nodo desde la página de cuenta puede acelerar notablemente la retransmisión entre redes — y es gratis." },
     ],
     offline: [
-      { q: "¿Cuánto dura un enlace de descarga?", a: "Tanto como la caducidad que establezcas — de 1 hora hasta 7 días, según tu plan — tras lo cual se elimina automáticamente. También puedes activar la destrucción tras leer, que lo elimina justo después de una descarga exitosa." },
+      { q: "¿Cuánto dura un enlace de descarga?", a: "Tanto como la caducidad que establezcas — de 1 hora hasta 14 días, según tu plan — tras lo cual se elimina automáticamente. También puedes activar la destrucción tras leer, que lo elimina justo después de una descarga exitosa." },
       { q: "¿El destinatario necesita una cuenta para descargar?", a: "No. Solo abre el enlace y descarga — sin inicio de sesión, nada que instalar." },
       { q: "¿Puedo enviar varios archivos o una carpeta entera de una vez?", a: "Sí. Elige varios archivos, o simplemente arrastra archivos y carpetas al área de subida — las carpetas se expanden, se cifran y se suben juntas." },
       { q: "¿Puedo recuperar un enlace que cerré por accidente?", a: "Debido al cifrado de conocimiento cero, la clave de un enlace se guarda solo en el navegador desde el que lo subiste. Puedes volver a copiar el enlace desde «Cuenta → Mis archivos» en ese mismo navegador — pero en otro dispositivo o tras borrar los datos del navegador no se puede recuperar, así que guarda el enlace." },

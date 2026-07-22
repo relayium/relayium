@@ -83,7 +83,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>폴더 동기화, 그리고 두 번 대조하는 검증 코드</h2>
       <p>croc은 파일 묶음을 보내고 종료합니다 — 상대 쪽을 갱신하려면 다시 보내야 하고, 무엇을 삭제해야 하는지에 대한 개념이 없습니다. Relayium CLI는 relayium sync를 더해, 위의 두 전송 방식 위에서 증분 단방향 미러링을 합니다. 변경된 것만 옮기고, --delete는 소스에서 사라진 파일을 대상에서도 삭제합니다(데몬은 --allow-delete로 시작된 경우에만 이를 따르므로, 수신 측이 직접 선택해야 합니다). --watch는 파일이 바뀔 때마다 실시간으로 계속 재동기화하며, cron 작업이 필요 없습니다.</p>
       <p>일회성 네트워크 간 전송에서는 relayium send / receive가 croc의 코드 문구와 같은 역할을 하며, 짧은 코드로 두 컴퓨터를 페어링합니다. 직접 P2P 방식이며, 바이트가 움직이기 전에 양쪽 모두에 짧은 검증 코드(Short Authentication String)를 표시해 중간에 아무도 없는지 눈으로 확인할 수 있게 합니다 — 솔직히 짚어야 할 점은, 이 모드는 직접 연결 전용이라 두 끝이 직접 경로를 찾지 못하면 릴레이로 대체되지 않고 그대로 실패한다는 것입니다.</p>
-      <pre><code>relayium sync --delete --watch ./photos user@your-server:backups/photos</code></pre>
+      <pre><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
       <h2>croc이 더 단순한 선택인 경우</h2>
       <p>croc이 실제로 그 일에 더 나은 도구인 경우도 있으며, 솔직히 말할 가치가 있습니다.</p>
       <ul><li>지금 당장 친구에게 파일 하나만 넘기고 싶고, 신경 쓸 것이 가장 적었으면 할 때 — 도달할 서버도 없고, 양쪽 어디에서도 설정할 것이 없습니다.</li><li>엄격한 NAT 뒤에 있어 직접 경로를 열 방법이 없을 때: croc의 릴레이는 어쨌든 암호화된 스트림을 실어 나르므로 전송이 완료됩니다. Relayium의 send / receive는 직접 연결 전용이라 이런 상황에서 실패할 수 있습니다(push/pull이나 도달 가능한 서버로의 daemon-direct는 직접 P2P 홉에 의존하지 않으므로 여전히 작동합니다).</li><li>폴더 미러링도, SSH 통합도, 계속 실행되는 리스너도 필요 없을 때 — croc은 각 쪽에서 즉석 명령어 하나면 충분하고 더 생각할 것이 없습니다.</li><li>이미 croc의 크고 자리잡은 커뮤니티와 오랜 실사용 경험을 신뢰하고 있을 때.</li></ul>

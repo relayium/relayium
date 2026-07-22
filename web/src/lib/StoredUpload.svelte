@@ -55,6 +55,7 @@
     86400: t.stored.ttl1d,
     259200: t.stored.ttl3d,
     604800: t.stored.ttl7d,
+    1209600: t.stored.ttl14d,
   });
   let busy = $state(false);
   let progress = $state(0); // 0..100 — progress of whichever phase the API reports

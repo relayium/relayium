@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>만료되는 안전한 다운로드 링크로 파일 공유하기 · Relayium</title>
-    <meta name="description" content="브라우저에서 파일을 암호화하고 서버가 복호화할 수 없는 링크를 생성하세요. 1시간·1일·3일·최대 7일(요금제에 따라 다름) 만료 또는 첫 다운로드 후 소각 중 선택하고, 준비됐을 때 보내세요." />
+    <meta name="description" content="브라우저에서 파일을 암호화하고 서버가 복호화할 수 없는 링크를 생성하세요. 1시간·1일·3일·7일·최대 14일(요금제에 따라 다름) 만료 또는 첫 다운로드 후 소각 중 선택하고, 준비됐을 때 보내세요." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ko/how-to/share-a-file-with-an-expiring-link/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/share-a-file-with-an-expiring-link/" />
@@ -22,15 +22,15 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:title" content="만료되는 안전한 다운로드 링크로 파일 공유하기" />
-    <meta property="og:description" content="브라우저에서 파일을 암호화하고 서버가 복호화할 수 없는 링크를 생성하세요. 1시간·1일·3일·최대 7일(요금제에 따라 다름) 만료 또는 첫 다운로드 후 소각 중 선택하고, 준비됐을 때 보내세요." />
+    <meta property="og:description" content="브라우저에서 파일을 암호화하고 서버가 복호화할 수 없는 링크를 생성하세요. 1시간·1일·3일·7일·최대 14일(요금제에 따라 다름) 만료 또는 첫 다운로드 후 소각 중 선택하고, 준비됐을 때 보내세요." />
     <meta property="og:url" content="https://relayium.com/ko/how-to/share-a-file-with-an-expiring-link/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:locale" content="ko_KR" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="만료되는 안전한 다운로드 링크로 파일 공유하기" />
-    <meta name="twitter:description" content="브라우저에서 파일을 암호화하고 서버가 복호화할 수 없는 링크를 생성하세요. 1시간·1일·3일·최대 7일(요금제에 따라 다름) 만료 또는 첫 다운로드 후 소각 중 선택하고, 준비됐을 때 보내세요." />
+    <meta name="twitter:description" content="브라우저에서 파일을 암호화하고 서버가 복호화할 수 없는 링크를 생성하세요. 1시간·1일·3일·7일·최대 14일(요금제에 따라 다름) 만료 또는 첫 다운로드 후 소각 중 선택하고, 준비됐을 때 보내세요." />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"만료되는 안전한 다운로드 링크로 파일 공유하기","description":"브라우저에서 파일을 암호화하고 서버가 복호화할 수 없는 링크를 생성하세요. 1시간·1일·3일·최대 7일(요금제에 따라 다름) 만료 또는 첫 다운로드 후 소각 중 선택하고, 준비됐을 때 보내세요.","inLanguage":"ko","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/ko/how-to/share-a-file-with-an-expiring-link/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"링크를 보낼 상대방도 계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"아니요. `#` 뒤의 부분을 포함한 전체 링크를 가진 사람이라면 누구나 열어서 파일을 다운로드할 수 있습니다. 링크를 만들 때 로그인이 필요한 쪽은 보내는 사람뿐입니다."}},{"@type":"Question","name":"Relayium이 제 파일을 읽을 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 브라우저는 업로드하기 전에 무작위로 생성한 AES-256-GCM 키로 파일을 암호화하며, 그 키는 URL 프래그먼트에만 존재하고 서버에는 절대 도달하지 않습니다. 서버가 저장하는 것은 복호화할 방법이 없는 암호문뿐입니다——영지식 설계입니다."}},{"@type":"Question","name":"링크는 얼마나 유지되나요?","acceptedAnswer":{"@type":"Answer","text":"링크를 만들 때 직접 선택합니다: 1시간, 1일, 3일, 최대 7일(요금제에 따라 다름), 또는 고정 기간 대신 첫 완전한 다운로드 후 소각으로 설정할 수 있습니다. 그 시점이 지나면 링크는 더 이상 작동하지 않습니다."}},{"@type":"Question","name":"첫 다운로드 후 소각이면 파일이 정말로 사라지나요?","acceptedAnswer":{"@type":"Answer","text":"첫 다운로드 후 소각은 정확히 한 번의 다운로드를 위해 설계되었습니다. 수신자가 파일 다운로드를 마치면, 그 이후 링크를 여는 누구에게도 작동하지 않으므로 몰래 두 번째로 볼 수 없습니다."}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"만료되는 안전한 다운로드 링크로 파일 공유하기","description":"브라우저에서 파일을 암호화하고 서버가 복호화할 수 없는 링크를 생성하세요. 1시간·1일·3일·7일·최대 14일(요금제에 따라 다름) 만료 또는 첫 다운로드 후 소각 중 선택하고, 준비됐을 때 보내세요.","inLanguage":"ko","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/ko/how-to/share-a-file-with-an-expiring-link/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"링크를 보낼 상대방도 계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"아니요. `#` 뒤의 부분을 포함한 전체 링크를 가진 사람이라면 누구나 열어서 파일을 다운로드할 수 있습니다. 링크를 만들 때 로그인이 필요한 쪽은 보내는 사람뿐입니다."}},{"@type":"Question","name":"Relayium이 제 파일을 읽을 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 브라우저는 업로드하기 전에 무작위로 생성한 AES-256-GCM 키로 파일을 암호화하며, 그 키는 URL 프래그먼트에만 존재하고 서버에는 절대 도달하지 않습니다. 서버가 저장하는 것은 복호화할 방법이 없는 암호문뿐입니다——영지식 설계입니다."}},{"@type":"Question","name":"링크는 얼마나 유지되나요?","acceptedAnswer":{"@type":"Answer","text":"링크를 만들 때 직접 선택합니다: 1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름), 또는 고정 기간 대신 첫 완전한 다운로드 후 소각으로 설정할 수 있습니다. 그 시점이 지나면 링크는 더 이상 작동하지 않습니다."}},{"@type":"Question","name":"첫 다운로드 후 소각이면 파일이 정말로 사라지나요?","acceptedAnswer":{"@type":"Answer","text":"첫 다운로드 후 소각은 정확히 한 번의 다운로드를 위해 설계되었습니다. 수신자가 파일 다운로드를 마치면, 그 이후 링크를 여는 누구에게도 작동하지 않으므로 몰래 두 번째로 볼 수 없습니다."}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -75,7 +75,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>만료와 첫 다운로드 후 소각</h2>
       <p>모든 링크에는 수명이 필요합니다——영원히 살아있게 두는 것은 일회성 전송의 취지에 맞지 않습니다. 링크를 만들 때 얼마나 오래 유효할지 고를 수 있고, 한 번 쓰이면 즉시 사라지도록 설정할 수도 있습니다.</p>
       <p>첫 다운로드 후 소각은 수신자가 다운로드를 마치는 순간 링크가 작동을 멈춘다는 뜻입니다. 파일이 민감해서 딱 한 사람에게 한 번만 보여주고 이후로는 아무것도 남기고 싶지 않을 때 유용합니다. 어느 쪽을 선택하든 수신자는 다운로드 페이지에서 실시간 카운트다운을 볼 수 있어, 남은 시간(또는 다운로드 가능 여부)을 알 수 있습니다.</p>
-      <ul><li>1시간</li><li>1일(기본값)</li><li>3일</li><li>7일(최대, 상위 요금제)</li><li>또는: 고정된 시간 대신 첫 완전한 다운로드 후 소각</li></ul>
+      <ul><li>1시간</li><li>1일(기본값)</li><li>3일</li><li>7일</li><li>14일(최대, 최상위 요금제)</li><li>또는: 고정된 시간 대신 첫 완전한 다운로드 후 소각</li></ul>
       <h2>영지식 보장, 그리고 그 한계</h2>
       <p>링크를 만들 때 실제로 일어나는 일은 이렇습니다. 브라우저가 무작위 AES-256-GCM 키를 생성합니다——이는 Relayium의 실시간 모드와는 다른 방식으로, 실시간 모드는 X25519로 두 기기 사이에 키를 협상합니다. 저장 링크의 키는 로컬에서 생성되며 협상할 상대가 없습니다. 이 키는 무언가가 기기를 떠나기 전에 파일 본문과 파일명 목록을 암호화하고, 다운로드 링크의 `#` 뒤에 붙습니다——브라우저가 어떤 서버로도 절대 보내지 않는 URL 부분입니다. 서버는 전달받은 암호문을, 오직 암호문만 저장합니다. 키를 전혀 받지 않으므로 복호화할 방법이 없습니다.</p>
       <p>이 설계에는 알아둘 만한 현실적인 절충점이 있습니다. 링크 자체가 키의 유일한 사본이므로, 이를 잃어버리면 비밀번호 재설정 같은 것은 없습니다——서버에 있는 데이터는 영구히 읽을 수 없게 됩니다. 링크 생성에는 보내는 쪽이 로그인 상태여야 하고, 삭제되거나 만료될 때까지 각 링크는 계정의 스토리지 할당량을 차지합니다. 그리고 여기서 &#39;영지식&#39;이 정확히 무엇을 뜻하는지 분명히 해둘 가치가 있습니다——암호문은 생성부터 다운로드까지 실제로 Relayium 서버에 저장되어 있습니다. 다만 당신의 브라우저를 한 번도 떠난 적 없는 키가 없으면 읽을 수 없을 뿐입니다.</p>
@@ -85,7 +85,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>Relayium이 제 파일을 읽을 수 있나요?</h3>
       <p>아니요. 브라우저는 업로드하기 전에 무작위로 생성한 AES-256-GCM 키로 파일을 암호화하며, 그 키는 URL 프래그먼트에만 존재하고 서버에는 절대 도달하지 않습니다. 서버가 저장하는 것은 복호화할 방법이 없는 암호문뿐입니다——영지식 설계입니다.</p>
       <h3>링크는 얼마나 유지되나요?</h3>
-      <p>링크를 만들 때 직접 선택합니다: 1시간, 1일, 3일, 최대 7일(요금제에 따라 다름), 또는 고정 기간 대신 첫 완전한 다운로드 후 소각으로 설정할 수 있습니다. 그 시점이 지나면 링크는 더 이상 작동하지 않습니다.</p>
+      <p>링크를 만들 때 직접 선택합니다: 1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름), 또는 고정 기간 대신 첫 완전한 다운로드 후 소각으로 설정할 수 있습니다. 그 시점이 지나면 링크는 더 이상 작동하지 않습니다.</p>
       <h3>첫 다운로드 후 소각이면 파일이 정말로 사라지나요?</h3>
       <p>첫 다운로드 후 소각은 정확히 한 번의 다운로드를 위해 설계되었습니다. 수신자가 파일 다운로드를 마치면, 그 이후 링크를 여는 누구에게도 작동하지 않으므로 몰래 두 번째로 볼 수 없습니다.</p>
       <div class="ctacard">

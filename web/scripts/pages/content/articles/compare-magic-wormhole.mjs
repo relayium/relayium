@@ -53,7 +53,7 @@ const en = {
         "magic-wormhole sends a batch of files (or a folder, zipped) and exits — send it again to update the other side, with no notion of what should be removed. Relayium's CLI adds relayium sync, an incremental one-way mirror over either transport above: it only moves what changed, --delete removes files on the destination that disappeared from the source (a daemon only honors it if it was started with --allow-delete, so a receiver has to opt in), and --watch keeps re-syncing in real time as files change, with no cron job needed.",
         "Relayium's server is also self-hostable as a single Docker container if you want to run the whole thing yourself rather than rely on relayium.com; point the CLI at it with --server.",
       ],
-      code: ["relayium sync --delete --watch ./photos user@your-server:backups/photos"],
+      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
     },
     {
       heading: "Feature comparison at a glance",
@@ -149,7 +149,7 @@ const zh = {
         "magic-wormhole 发送一批文件（或打包成一个压缩包的文件夹）后就退出——要更新对方就得再发一次，也没有“该删除什么”的概念。Relayium CLI 增加了 relayium sync，在上面两种传输方式之上做增量单向镜像：只传发生变化的内容；--delete 会删除目标端上源端已经消失的文件（daemon 只有在以 --allow-delete 启动时才会执行，接收方必须自己选择开启）；--watch 会在文件变化时实时持续重新同步，不需要额外的定时任务。",
         "如果你不想依赖 relayium.com，Relayium 的服务器也可以以单个 Docker 容器的形式自行托管；用 --server 让 CLI 指向它。",
       ],
-      code: ["relayium sync --delete --watch ./photos user@your-server:backups/photos"],
+      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
     },
     {
       heading: "功能一览对比",
@@ -245,7 +245,7 @@ const ja = {
         "magic-wormhole はファイルのバッチ（またはフォルダを圧縮したもの）を送って終了します——相手側を更新するには再度送るしかなく、何を削除すべきかという概念もありません。Relayium CLI は relayium sync を追加し、上記どちらの転送方式の上でも動く増分の一方向ミラーリングを行います。変化した分だけを送り、--delete はソース側から消えたファイルを宛先側からも削除します（daemon は --allow-delete 付きで起動している場合のみこれに従うため、受信側が自らオプトインする必要があります）。--watch はファイルの変化に応じてリアルタイムに再同期し続け、cron ジョブは不要です。",
         "relayium.com に頼らず自分ですべてを運用したい場合、Relayium のサーバーは単一の Docker コンテナとしてセルフホストできます。--server で CLI をそこに向けてください。",
       ],
-      code: ["relayium sync --delete --watch ./photos user@your-server:backups/photos"],
+      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
     },
     {
       heading: "機能の一覧比較",
@@ -341,7 +341,7 @@ const ko = {
         "magic-wormhole은 파일 묶음(또는 압축된 폴더)을 보내고 종료합니다 — 상대 쪽을 갱신하려면 다시 보내야 하고, 무엇을 삭제해야 하는지에 대한 개념도 없습니다. Relayium CLI는 relayium sync를 더해, 위의 두 전송 방식 위에서 증분 단방향 미러링을 합니다. 변경된 것만 옮기고, --delete는 소스에서 사라진 파일을 대상에서도 삭제합니다(데몬은 --allow-delete로 시작된 경우에만 이를 따르므로, 수신 측이 직접 선택해야 합니다). --watch는 파일이 바뀔 때마다 실시간으로 계속 재동기화하며, cron 작업이 필요 없습니다.",
         "relayium.com에 의존하지 않고 직접 모든 것을 운영하고 싶다면, Relayium의 서버는 단일 Docker 컨테이너로 자체 호스팅할 수도 있습니다. --server로 CLI가 그곳을 가리키게 하세요.",
       ],
-      code: ["relayium sync --delete --watch ./photos user@your-server:backups/photos"],
+      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
     },
     {
       heading: "기능 한눈에 비교",
@@ -437,7 +437,7 @@ const de = {
         "magic-wormhole sendet eine Reihe von Dateien (oder einen gezippten Ordner) und beendet sich dann — um die Gegenseite zu aktualisieren, musst du erneut senden, ein Konzept, was gelöscht werden soll, gibt es nicht. Die Relayium CLI fügt relayium sync hinzu, einen inkrementellen Einweg-Spiegel über einen der beiden obigen Transportwege: Es bewegt nur, was sich geändert hat; --delete entfernt Dateien am Ziel, die auf der Quelle verschwunden sind (ein Daemon befolgt das nur, wenn er mit --allow-delete gestartet wurde, der Empfänger muss also selbst zustimmen); --watch synchronisiert bei Dateiänderungen laufend in Echtzeit neu, kein Cron-Job nötig.",
         "Wenn du dich nicht auf relayium.com verlassen, sondern alles selbst betreiben willst, lässt sich Relayiums Server auch als einzelner Docker-Container selbst hosten; richte die CLI mit --server darauf aus.",
       ],
-      code: ["relayium sync --delete --watch ./photos user@your-server:backups/photos"],
+      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
     },
     {
       heading: "Funktionsvergleich auf einen Blick",
@@ -533,7 +533,7 @@ const fr = {
         "magic-wormhole envoie un lot de fichiers (ou un dossier compressé) puis se termine — pour mettre à jour l'autre côté, il faut renvoyer, sans aucune notion de ce qui devrait être supprimé. La CLI Relayium ajoute relayium sync, un miroir incrémental à sens unique sur l'un ou l'autre des transports ci-dessus : il ne déplace que ce qui a changé ; --delete supprime sur la destination les fichiers disparus de la source (un daemon ne le respecte que s'il a été lancé avec --allow-delete, le destinataire doit donc explicitement l'accepter) ; --watch continue de resynchroniser en temps réel à chaque changement, sans tâche cron nécessaire.",
         "Si vous ne voulez pas dépendre de relayium.com et préférez tout exploiter vous-même, le serveur de Relayium peut aussi être auto-hébergé sous la forme d'un seul conteneur Docker ; pointez la CLI dessus avec --server.",
       ],
-      code: ["relayium sync --delete --watch ./photos user@your-server:backups/photos"],
+      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
     },
     {
       heading: "Comparatif des fonctions en un coup d'œil",
@@ -629,7 +629,7 @@ const ar = {
         "يرسل magic-wormhole دفعة من الملفات (أو مجلداً مضغوطاً) ثم يخرج — أرسِلها مجدداً لتحديث الطرف الآخر، بلا أي مفهوم لما ينبغي حذفه. يضيف CLI الخاص بـ Relayium الأمر relayium sync، وهو مرآة تزايدية أحادية الاتجاه فوق أيٍّ من النقلين أعلاه: ينقل فقط ما تغيّر، ويحذف --delete الملفات على الوجهة التي اختفت من المصدر (لا يحترم ذلك daemon إلا إن بُدئ بـ --allow-delete، فعلى المستقبِل أن يوافق صراحةً)، ويبقي --watch على إعادة المزامنة فوراً كلما تغيّرت الملفات، بلا حاجة إلى مهمة cron.",
         "خادم Relayium قابل أيضاً للاستضافة الذاتية كحاوية Docker واحدة إن أردت تشغيل كل شيء بنفسك بدل الاعتماد على relayium.com؛ وجّه إليه CLI باستخدام --server.",
       ],
-      code: ["relayium sync --delete --watch ./photos user@your-server:backups/photos"],
+      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
     },
     {
       heading: "مقارنة الميزات في لمحة",
@@ -725,7 +725,7 @@ const es = {
         "magic-wormhole envía un lote de archivos (o una carpeta, comprimida) y termina — envíalo de nuevo para actualizar el otro lado, sin ninguna noción de qué debería eliminarse. La CLI de Relayium añade relayium sync, un espejo incremental de un solo sentido sobre cualquiera de los dos transportes anteriores: solo mueve lo que cambió, --delete elimina en el destino los archivos que desaparecieron del origen (un daemon solo lo respeta si se inició con --allow-delete, así que el receptor tiene que optar por ello), y --watch sigue resincronizando en tiempo real a medida que los archivos cambian, sin necesidad de ninguna tarea cron.",
         "El servidor de Relayium también es autoalojable como un único contenedor Docker si quieres ejecutar todo tú mismo en lugar de depender de relayium.com; apunta la CLI hacia él con --server.",
       ],
-      code: ["relayium sync --delete --watch ./photos user@your-server:backups/photos"],
+      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
     },
     {
       heading: "Comparativa de funciones de un vistazo",
@@ -821,7 +821,7 @@ const pt = {
         "O magic-wormhole envia um lote de arquivos (ou uma pasta, compactada) e encerra — envie de novo para atualizar o outro lado, sem nenhuma noção do que deveria ser removido. A CLI do Relayium acrescenta o relayium sync, um espelho incremental de sentido único sobre qualquer um dos dois transportes acima: ele só move o que mudou, o --delete remove no destino os arquivos que desapareceram da origem (um daemon só respeita isso se tiver sido iniciado com --allow-delete, então o receptor precisa optar por isso) e o --watch continua ressincronizando em tempo real conforme os arquivos mudam, sem necessidade de nenhuma tarefa cron.",
         "O servidor do Relayium também é auto-hospedável como um único contêiner Docker, caso você queira rodar tudo por conta própria em vez de depender do relayium.com; aponte a CLI para ele com --server.",
       ],
-      code: ["relayium sync --delete --watch ./photos user@your-server:backups/photos"],
+      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
     },
     {
       heading: "Comparação de recursos num relance",

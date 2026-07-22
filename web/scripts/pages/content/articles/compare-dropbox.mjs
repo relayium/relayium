@@ -40,7 +40,7 @@ const en = {
       heading: "When you need a link instead: zero-knowledge, self-expiring",
       body: [
         "Sometimes a link genuinely is the right tool — the recipient is asleep in another time zone, or you want one URL to paste into an email instead of coordinating a live session. Relayium's stored-link mode is built for exactly that, without giving up the privacy of realtime mode.",
-        "You pick how long it lives — 1 hour, 1 day, 3 days, or up to 7 days depending on your plan — or set it to burn after the first completed download, so there's no lingering copy to remember to clean up. Creating the link requires the sender to sign in (it counts against a storage quota on the account), but the recipient just opens it and downloads — no Dropbox-style account required on their end. Because the decryption key never leaves the URL fragment, Relayium's server for a stored link is structurally unable to read what's inside it, which is a different guarantee than a Dropbox share link, where Dropbox's own infrastructure can technically decrypt the file it's hosting.",
+        "You pick how long it lives — 1 hour, 1 day, 3 days, 7 days, or up to 14 days depending on your plan — or set it to burn after the first completed download, so there's no lingering copy to remember to clean up. Creating the link requires the sender to sign in (it counts against a storage quota on the account), but the recipient just opens it and downloads — no Dropbox-style account required on their end. Because the decryption key never leaves the URL fragment, Relayium's server for a stored link is structurally unable to read what's inside it, which is a different guarantee than a Dropbox share link, where Dropbox's own infrastructure can technically decrypt the file it's hosting.",
       ],
     },
     {
@@ -119,7 +119,7 @@ const zh = {
       heading: "需要一条链接时：零知识、自动到期",
       body: [
         "有时候链接确实是更合适的方式——收件人在另一个时区正在睡觉，或者你想要一条可以直接贴进邮件的 URL，而不是协调一次实时会话。Relayium 的存储链接模式正是为此而生，同时不牺牲实时模式的隐私性。",
-        "你可以选择链接的存活时间——1 小时、1 天、3 天或最长 7 天（取决于套餐）——或设置为首次下载完成后即焚，这样就不用惦记着回去清理留下的副本。创建链接需要发送方登录（会计入账号的存储配额），但收件人只需打开链接下载，不需要像 Dropbox 那样注册账号。因为解密密钥从不离开 URL 片段，Relayium 存储链接的服务器在结构上就无法读取其中内容，这和 Dropbox 分享链接不同——Dropbox 自己的基础设施在技术上是可以解密它托管的文件的。",
+        "你可以选择链接的存活时间——1 小时、1 天、3 天、7 天或最长 14 天（取决于套餐）——或设置为首次下载完成后即焚，这样就不用惦记着回去清理留下的副本。创建链接需要发送方登录（会计入账号的存储配额），但收件人只需打开链接下载，不需要像 Dropbox 那样注册账号。因为解密密钥从不离开 URL 片段，Relayium 存储链接的服务器在结构上就无法读取其中内容，这和 Dropbox 分享链接不同——Dropbox 自己的基础设施在技术上是可以解密它托管的文件的。",
       ],
     },
     {
@@ -198,7 +198,7 @@ const ja = {
       heading: "リンクが必要なとき：ゼロ知識で自動失効",
       body: [
         "受信者が別のタイムゾーンで眠っている、あるいはリアルタイムセッションを調整する代わりにメールに貼り付けられる1つの URL が欲しい——そんなときはリンクこそが正しい道具です。Relayium の保存リンクモードは、リアルタイムモードのプライバシーを犠牲にせずまさにその場面のために作られています。",
-        "有効期限は1時間・1日・3日・最長7日（プランによる）から選ぶか、最初のダウンロード完了後に消去する設定にでき、後で片付けを覚えておく必要のあるコピーが残りません。リンクの作成には送信側のサインインが必要です（アカウントの保存容量枠に計上されます）が、受信側はリンクを開いてダウンロードするだけで、Dropbox のようなアカウント登録は不要です。復号鍵が URL フラグメントから外に出ることは決してないため、Relayium の保存リンクのサーバーは構造的に中身を読み取れません。これは Dropbox の共有リンクとは異なる保証です。Dropbox 自身のインフラは、ホストしているファイルを技術的には復号できます。",
+        "有効期限は1時間・1日・3日・7日・最長14日（プランによる）から選ぶか、最初のダウンロード完了後に消去する設定にでき、後で片付けを覚えておく必要のあるコピーが残りません。リンクの作成には送信側のサインインが必要です（アカウントの保存容量枠に計上されます）が、受信側はリンクを開いてダウンロードするだけで、Dropbox のようなアカウント登録は不要です。復号鍵が URL フラグメントから外に出ることは決してないため、Relayium の保存リンクのサーバーは構造的に中身を読み取れません。これは Dropbox の共有リンクとは異なる保証です。Dropbox 自身のインフラは、ホストしているファイルを技術的には復号できます。",
       ],
     },
     {
@@ -277,7 +277,7 @@ const ko = {
       heading: "링크가 필요할 때: 영지식이며 자동 만료",
       body: [
         "받는 사람이 다른 시간대에서 자고 있거나, 실시간 세션을 조율하는 대신 이메일에 붙여넣을 URL 하나가 필요할 때——그럴 때는 링크가 정말로 맞는 도구입니다. Relayium의 저장 링크 모드는 실시간 모드의 프라이버시를 포기하지 않고 바로 그 경우를 위해 만들어졌습니다.",
-        "링크가 얼마나 유지될지——1시간, 1일, 3일, 최대 7일(요금제에 따라 다름) 중——선택하거나, 첫 다운로드 완료 후 소각되도록 설정할 수 있어 나중에 정리해야 할 사본이 남지 않습니다. 링크 생성에는 보내는 쪽의 로그인이 필요하지만(계정의 저장 용량 한도에 포함됩니다), 받는 쪽은 링크를 열어 다운로드하기만 하면 되고 Dropbox 같은 계정 가입은 필요 없습니다. 복호화 키가 URL 프래그먼트를 벗어나는 일이 없기 때문에, Relayium 저장 링크의 서버는 구조적으로 내용을 읽을 수 없습니다. 이는 Dropbox 공유 링크와는 다른 보장입니다. Dropbox 자체 인프라는 호스팅하는 파일을 기술적으로 복호화할 수 있습니다.",
+        "링크가 얼마나 유지될지——1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름) 중——선택하거나, 첫 다운로드 완료 후 소각되도록 설정할 수 있어 나중에 정리해야 할 사본이 남지 않습니다. 링크 생성에는 보내는 쪽의 로그인이 필요하지만(계정의 저장 용량 한도에 포함됩니다), 받는 쪽은 링크를 열어 다운로드하기만 하면 되고 Dropbox 같은 계정 가입은 필요 없습니다. 복호화 키가 URL 프래그먼트를 벗어나는 일이 없기 때문에, Relayium 저장 링크의 서버는 구조적으로 내용을 읽을 수 없습니다. 이는 Dropbox 공유 링크와는 다른 보장입니다. Dropbox 자체 인프라는 호스팅하는 파일을 기술적으로 복호화할 수 있습니다.",
       ],
     },
     {
@@ -356,7 +356,7 @@ const de = {
       heading: "Wenn du stattdessen einen Link brauchst: Zero-Knowledge, automatisch ablaufend",
       body: [
         "Manchmal ist ein Link wirklich das richtige Werkzeug — der Empfänger schläft in einer anderen Zeitzone, oder du willst eine einzige URL, die du in eine E-Mail einfügst, statt eine Live-Sitzung zu koordinieren. Relayiums Speicherlink-Modus ist genau dafür gebaut, ohne die Privatsphäre des Echtzeitmodus aufzugeben.",
-        "Du wählst, wie lange er lebt — 1 Stunde, 1 Tag, 3 Tage oder bis zu 7 Tage je nach Tarif — oder stellst ihn so ein, dass er nach dem ersten vollständigen Download vernichtet wird, sodass keine verbleibende Kopie zum Aufräumen übrig bleibt. Das Erstellen des Links erfordert die Anmeldung des Absenders (er zählt gegen ein Speicherkontingent des Kontos), aber der Empfänger öffnet ihn einfach und lädt herunter — kein Dropbox-artiges Konto auf seiner Seite nötig. Da der Entschlüsselungsschlüssel das URL-Fragment nie verlässt, ist Relayiums Server bei einem Speicherlink strukturell unfähig, dessen Inhalt zu lesen — eine andere Garantie als bei einem Dropbox-Freigabelink, wo Dropboxs eigene Infrastruktur die gehostete Datei technisch entschlüsseln kann.",
+        "Du wählst, wie lange er lebt — 1 Stunde, 1 Tag, 3 Tage, 7 Tage oder bis zu 14 Tage je nach Tarif — oder stellst ihn so ein, dass er nach dem ersten vollständigen Download vernichtet wird, sodass keine verbleibende Kopie zum Aufräumen übrig bleibt. Das Erstellen des Links erfordert die Anmeldung des Absenders (er zählt gegen ein Speicherkontingent des Kontos), aber der Empfänger öffnet ihn einfach und lädt herunter — kein Dropbox-artiges Konto auf seiner Seite nötig. Da der Entschlüsselungsschlüssel das URL-Fragment nie verlässt, ist Relayiums Server bei einem Speicherlink strukturell unfähig, dessen Inhalt zu lesen — eine andere Garantie als bei einem Dropbox-Freigabelink, wo Dropboxs eigene Infrastruktur die gehostete Datei technisch entschlüsseln kann.",
       ],
     },
     {
@@ -435,7 +435,7 @@ const fr = {
       heading: "Quand un lien s'impose : à divulgation nulle, expiration automatique",
       body: [
         "Parfois un lien est vraiment le bon outil — le destinataire dort dans un autre fuseau horaire, ou vous voulez une seule URL à coller dans un e-mail plutôt que de coordonner une session en direct. Le mode lien stocké de Relayium est conçu exactement pour ce cas, sans renoncer à la confidentialité du mode temps réel.",
-        "Vous choisissez combien de temps il vit — 1 heure, 1 jour, 3 jours ou jusqu'à 7 jours selon votre offre — ou le réglez pour qu'il se détruise après le premier téléchargement complet, si bien qu'aucune copie persistante ne traîne à nettoyer. Créer le lien exige que l'expéditeur se connecte (cela compte dans un quota de stockage du compte), mais le destinataire n'a qu'à l'ouvrir et télécharger — aucun compte façon Dropbox requis de son côté. Comme la clé de déchiffrement ne quitte jamais le fragment de l'URL, le serveur de Relayium pour un lien stocké est structurellement incapable de lire ce qu'il contient, une garantie différente de celle d'un lien de partage Dropbox, où l'infrastructure propre de Dropbox peut techniquement déchiffrer le fichier qu'elle héberge.",
+        "Vous choisissez combien de temps il vit — 1 heure, 1 jour, 3 jours, 7 jours ou jusqu'à 14 jours selon votre offre — ou le réglez pour qu'il se détruise après le premier téléchargement complet, si bien qu'aucune copie persistante ne traîne à nettoyer. Créer le lien exige que l'expéditeur se connecte (cela compte dans un quota de stockage du compte), mais le destinataire n'a qu'à l'ouvrir et télécharger — aucun compte façon Dropbox requis de son côté. Comme la clé de déchiffrement ne quitte jamais le fragment de l'URL, le serveur de Relayium pour un lien stocké est structurellement incapable de lire ce qu'il contient, une garantie différente de celle d'un lien de partage Dropbox, où l'infrastructure propre de Dropbox peut techniquement déchiffrer le fichier qu'elle héberge.",
       ],
     },
     {
@@ -514,7 +514,7 @@ const ar = {
       heading: "حين تحتاج إلى رابط بدلاً من ذلك: معرفة صفرية، وانتهاء ذاتي",
       body: [
         "أحيانًا يكون الرابط حقًّا الأداة الصحيحة — فالمُستقبِل نائم في منطقة زمنية أخرى، أو تريد رابط URL واحدًا تلصقه في بريد إلكتروني بدلاً من تنسيق جلسة مباشرة. ووضع الرابط المُخزَّن في Relayium مبني لهذا تمامًا، دون التخلّي عن خصوصية الوضع الفوري.",
-        "تختار كم يعيش — ساعة واحدة، أو يومًا واحدًا، أو 3 أيام، أو حتى 7 أيام حسب خطتك — أو تضبطه ليُحرَق بعد أول تنزيل مكتمل، فلا تبقى نسخة عالقة تتذكّر تنظيفها. ويتطلّب إنشاء الرابط أن يسجّل المُرسِل الدخول (فهو يُحتسب ضمن حصّة تخزين على الحساب)، لكنّ المُستقبِل يفتحه ببساطة ويُنزّل — دون حساب على طريقة Dropbox من جهته. ولأنّ مفتاح فكّ التشفير لا يغادر مقطع الـ URL أبدًا، فإنّ خادم Relayium بالنسبة إلى رابط مُخزَّن عاجز بنيويًّا عن قراءة ما بداخله، وهو ضمان مختلف عن رابط مشاركة Dropbox، حيث تستطيع بنية Dropbox التحتية الخاصة أن تفكّ تشفير الملف الذي تستضيفه تقنيًّا.",
+        "تختار كم يعيش — ساعة واحدة، أو يومًا واحدًا، أو 3 أيام، أو 7 أيام، أو حتى 14 يومًا حسب خطتك — أو تضبطه ليُحرَق بعد أول تنزيل مكتمل، فلا تبقى نسخة عالقة تتذكّر تنظيفها. ويتطلّب إنشاء الرابط أن يسجّل المُرسِل الدخول (فهو يُحتسب ضمن حصّة تخزين على الحساب)، لكنّ المُستقبِل يفتحه ببساطة ويُنزّل — دون حساب على طريقة Dropbox من جهته. ولأنّ مفتاح فكّ التشفير لا يغادر مقطع الـ URL أبدًا، فإنّ خادم Relayium بالنسبة إلى رابط مُخزَّن عاجز بنيويًّا عن قراءة ما بداخله، وهو ضمان مختلف عن رابط مشاركة Dropbox، حيث تستطيع بنية Dropbox التحتية الخاصة أن تفكّ تشفير الملف الذي تستضيفه تقنيًّا.",
       ],
     },
     {
@@ -593,7 +593,7 @@ const es = {
       heading: "Cuando en cambio necesitas un enlace: conocimiento cero, autocaducante",
       body: [
         "A veces un enlace es genuinamente la herramienta correcta — el destinatario duerme en otra zona horaria, o quieres una sola URL para pegar en un correo en lugar de coordinar una sesión en vivo. El modo de enlace almacenado de Relayium está hecho exactamente para eso, sin renunciar a la privacidad del modo en tiempo real.",
-        "Eliges cuánto vive — 1 hora, 1 día, 3 días o hasta 7 días según tu plan — o lo configuras para que se destruya tras la primera descarga completada, así no queda ninguna copia persistente que recordar limpiar. Crear el enlace requiere que el remitente inicie sesión (cuenta contra una cuota de almacenamiento de la cuenta), pero el destinatario simplemente lo abre y descarga — sin cuenta al estilo Dropbox requerida por su parte. Como la clave de descifrado nunca abandona el fragmento de la URL, el servidor de Relayium para un enlace almacenado es estructuralmente incapaz de leer lo que hay dentro, lo cual es una garantía distinta de un enlace para compartir de Dropbox, donde la propia infraestructura de Dropbox puede técnicamente descifrar el archivo que aloja.",
+        "Eliges cuánto vive — 1 hora, 1 día, 3 días, 7 días o hasta 14 días según tu plan — o lo configuras para que se destruya tras la primera descarga completada, así no queda ninguna copia persistente que recordar limpiar. Crear el enlace requiere que el remitente inicie sesión (cuenta contra una cuota de almacenamiento de la cuenta), pero el destinatario simplemente lo abre y descarga — sin cuenta al estilo Dropbox requerida por su parte. Como la clave de descifrado nunca abandona el fragmento de la URL, el servidor de Relayium para un enlace almacenado es estructuralmente incapaz de leer lo que hay dentro, lo cual es una garantía distinta de un enlace para compartir de Dropbox, donde la propia infraestructura de Dropbox puede técnicamente descifrar el archivo que aloja.",
       ],
     },
     {
@@ -672,7 +672,7 @@ const pt = {
       heading: "Quando você precisa de um link: conhecimento zero, com expiração automática",
       body: [
         "Às vezes um link é genuinamente a ferramenta certa — o destinatário está dormindo em outro fuso horário, ou você quer uma única URL para colar em um e-mail em vez de coordenar uma sessão ao vivo. O modo de link armazenado do Relayium é feito exatamente para isso, sem abrir mão da privacidade do modo em tempo real.",
-        "Você escolhe quanto tempo ele vive — 1 hora, 1 dia, 3 dias ou até 7 dias conforme o seu plano — ou o configura para se autodestruir após o primeiro download concluído, então não sobra nenhuma cópia persistente para você lembrar de limpar. Criar o link exige que o remetente faça login (ele conta contra uma cota de armazenamento da conta), mas o destinatário apenas o abre e baixa — sem conta ao estilo Dropbox exigida do lado dele. Como a chave de descriptografia nunca deixa o fragmento da URL, o servidor do Relayium para um link armazenado é estruturalmente incapaz de ler o que há dentro dele, o que é uma garantia diferente de um link de compartilhamento do Dropbox, onde a própria infraestrutura do Dropbox pode tecnicamente descriptografar o arquivo que ela hospeda.",
+        "Você escolhe quanto tempo ele vive — 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano — ou o configura para se autodestruir após o primeiro download concluído, então não sobra nenhuma cópia persistente para você lembrar de limpar. Criar o link exige que o remetente faça login (ele conta contra uma cota de armazenamento da conta), mas o destinatário apenas o abre e baixa — sem conta ao estilo Dropbox exigida do lado dele. Como a chave de descriptografia nunca deixa o fragmento da URL, o servidor do Relayium para um link armazenado é estruturalmente incapaz de ler o que há dentro dele, o que é uma garantia diferente de um link de compartilhamento do Dropbox, onde a própria infraestrutura do Dropbox pode tecnicamente descriptografar o arquivo que ela hospeda.",
       ],
     },
     {

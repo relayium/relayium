@@ -82,7 +82,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>By default sync only adds and updates — it never deletes anything on its own. Pass --delete to mirror deletions too, but the receiver has to opt in: it must be running relayium serve --allow-delete. If it isn&#39;t, the delete request is refused and reported back to the sender rather than silently ignored.</p>
       <p>For a folder that changes continuously, --watch keeps sync running after the first pass and re-mirrors whenever a file changes under the source — rsync has nothing built in for this; you&#39;d normally reach for a cron job or a wrapper like lsyncd.</p>
       <pre><code>relayium serve --dir /backup --port 9031 --allow-delete</code></pre>
-      <pre><code>relayium sync --delete --watch ./photos relayium://203.0.113.9:9031</code></pre>
+      <pre><code>relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch</code></pre>
       <h2>Integrity, resume, and the honest limits</h2>
       <p>Every file is verified end to end with a SHA-256 hash, and a transfer that gets cut off mid-file resumes from the byte offset already on disk instead of restarting — useful for the same reasons it is in rsync.</p>
       <p>Be clear about what resume is not: it isn&#39;t rsync&#39;s delta algorithm. If a file is already fully present but has a different size or timestamp, sync retransmits it whole rather than diffing changed blocks inside it. For one huge file that changes slightly and often, rsync&#39;s delta transfer will move less data. sync also only handles regular files — symlinks and special files are skipped, so anything relying on those needs handling separately.</p>

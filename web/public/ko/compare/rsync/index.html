@@ -82,7 +82,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>기본적으로 sync는 추가와 갱신만 합니다——스스로 무언가를 삭제하는 일은 없습니다. 삭제까지 미러링하려면 --delete를 넘기되, 받는 쪽이 명시적으로 동의해야 합니다. relayium serve --allow-delete로 실행 중이어야 합니다. 그렇지 않으면 삭제 요청은 조용히 무시되는 대신 거부되고 보내는 쪽에 보고됩니다.</p>
       <p>계속 바뀌는 폴더라면 --watch를 붙이세요. 첫 동기화 이후에도 sync가 계속 실행되며, 소스 아래 파일이 바뀔 때마다 다시 미러링합니다——이에 해당하는 기능이 rsync에는 내장되어 있지 않아, 보통 cron 작업이나 lsyncd 같은 래퍼를 써야 합니다.</p>
       <pre><code>relayium serve --dir /backup --port 9031 --allow-delete</code></pre>
-      <pre><code>relayium sync --delete --watch ./photos relayium://203.0.113.9:9031</code></pre>
+      <pre><code>relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch</code></pre>
       <h2>무결성, 재개, 그리고 정직한 한계</h2>
       <p>모든 파일은 SHA-256 해시로 끝에서 끝까지 검증되며, 파일 전송 도중 끊긴 전송은 디스크에 이미 있는 바이트 오프셋부터 재개합니다——처음부터 다시 하지 않습니다. rsync의 재개와 같은 이유로 유용합니다.</p>
       <p>다만 재개가 무엇이 아닌지는 분명히 해 둘 필요가 있습니다. rsync의 델타 알고리즘이 아닙니다. 파일이 이미 완전히 존재하더라도 크기나 타임스탬프가 다르면, sync는 내부의 바뀐 블록을 비교하는 대신 파일 전체를 다시 보냅니다. 자주 조금씩 바뀌는 거대한 파일 하나에 대해서는, rsync의 델타 전송이 실제로 더 적은 데이터를 옮깁니다. sync는 일반 파일만 다룹니다——심링크와 특수 파일은 건너뛰므로, 이를 필요로 하는 경우 별도로 처리해야 합니다.</p>

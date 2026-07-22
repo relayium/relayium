@@ -51,7 +51,7 @@ const en = {
       ],
       bullets: [
         "Creating a stored link requires the sender to sign in; opening one to download never does.",
-        "Links can be set to expire after 1 hour, 1 day, 3 days, or up to 7 days depending on your plan, or to burn after the first completed download.",
+        "Links can be set to expire after 1 hour, 1 day, 3 days, 7 days, or up to 14 days depending on your plan, or to burn after the first completed download.",
         "Treat the full link like the file itself — anyone who has it can decrypt it, so share it the way you'd share the file.",
       ],
     },
@@ -142,7 +142,7 @@ const zh = {
       ],
       bullets: [
         "创建存储链接需要发送方登录；打开链接下载则从不需要账号。",
-        "链接可设置 1 小时、1 天、3 天或最长 7 天后过期（上限取决于套餐），也可以设为首次下载完成后即焚。",
+        "链接可设置 1 小时、1 天、3 天、7 天或最长 14 天后过期（上限取决于套餐），也可以设为首次下载完成后即焚。",
         "把完整链接当作文件本身对待——任何拿到它的人都能解密，因此请像分享文件一样谨慎分享它。",
       ],
     },
@@ -233,7 +233,7 @@ const ja = {
       ],
       bullets: [
         "保存リンクの作成には送信者のサインインが必要ですが、ダウンロードのためにリンクを開くのに必要になることはありません。",
-        "リンクは1時間、1日、3日、最長7日（プランによる）で失効するよう設定するか、最初のダウンロード完了後に消えるよう設定できます。",
+        "リンクは1時間、1日、3日、7日、最長14日（プランによる）で失効するよう設定するか、最初のダウンロード完了後に消えるよう設定できます。",
         "完全なリンクはファイルそのものとして扱ってください——それを持つ人は誰でも復号できるため、ファイルを共有するのと同じ慎重さで共有してください。",
       ],
     },
@@ -324,7 +324,7 @@ const ko = {
       ],
       bullets: [
         "저장 링크를 만들려면 발신자가 로그인해야 하지만, 다운로드를 위해 링크를 여는 데는 계정이 전혀 필요하지 않습니다.",
-        "링크는 1시간, 1일, 3일, 최대 7일(요금제에 따라 다름) 후 만료되도록 설정하거나, 첫 다운로드가 완료된 후 소멸하도록 설정할 수 있습니다.",
+        "링크는 1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름) 후 만료되도록 설정하거나, 첫 다운로드가 완료된 후 소멸하도록 설정할 수 있습니다.",
         "완전한 링크를 파일 자체처럼 다루세요——그것을 가진 사람은 누구나 복호화할 수 있으므로, 파일을 공유할 때처럼 신중하게 공유하세요.",
       ],
     },
@@ -415,7 +415,7 @@ const de = {
       ],
       bullets: [
         "Das Erstellen eines gespeicherten Links erfordert die Anmeldung des Absenders; das Öffnen zum Herunterladen erfordert nie ein Konto.",
-        "Links können so eingestellt werden, dass sie nach 1 Stunde, 1, 3 oder bis zu 7 Tagen je nach Tarif ablaufen, oder dass sie nach dem ersten vollständigen Download verfallen.",
+        "Links können so eingestellt werden, dass sie nach 1 Stunde, 1, 3, 7 oder bis zu 14 Tagen je nach Tarif ablaufen, oder dass sie nach dem ersten vollständigen Download verfallen.",
         "Behandeln Sie den vollständigen Link wie die Datei selbst — jeder, der ihn besitzt, kann ihn entschlüsseln, teilen Sie ihn also so, wie Sie die Datei teilen würden.",
       ],
     },
@@ -506,7 +506,7 @@ const fr = {
       ],
       bullets: [
         "Créer un lien stocké exige que l'expéditeur se connecte ; ouvrir un lien pour le télécharger ne l'exige jamais.",
-        "Les liens peuvent être réglés pour expirer après 1 heure, 1, 3 ou jusqu'à 7 jours selon votre offre, ou pour s'effacer après le premier téléchargement complet.",
+        "Les liens peuvent être réglés pour expirer après 1 heure, 1, 3, 7 ou jusqu'à 14 jours selon votre offre, ou pour s'effacer après le premier téléchargement complet.",
         "Traitez le lien complet comme le fichier lui-même — quiconque le possède peut le déchiffrer, alors partagez-le comme vous partageriez le fichier.",
       ],
     },
@@ -597,7 +597,7 @@ const ar = {
       ],
       bullets: [
         "يتطلّب إنشاء رابط مُخزَّن تسجيل دخول المُرسِل؛ أما فتحه للتنزيل فلا يتطلّب ذلك أبداً.",
-        "يمكن ضبط الروابط لتنتهي صلاحيتها بعد ساعة واحدة أو يوم واحد أو 3 أيام أو حتى 7 أيام حسب خطتك، أو لتتلاشى بعد أول تنزيل مكتمل.",
+        "يمكن ضبط الروابط لتنتهي صلاحيتها بعد ساعة واحدة أو يوم واحد أو 3 أيام أو 7 أيام أو حتى 14 يومًا حسب خطتك، أو لتتلاشى بعد أول تنزيل مكتمل.",
         "تعامل مع الرابط الكامل كأنه الملف نفسه — فأي شخص يملكه يستطيع فك تشفيره، لذا شاركه كما تشارك الملف.",
       ],
     },
@@ -688,7 +688,7 @@ const es = {
       ],
       bullets: [
         "Crear un enlace almacenado requiere que el remitente inicie sesión; abrir uno para descargar no lo requiere nunca.",
-        "Los enlaces pueden configurarse para caducar tras 1 hora, 1 día, 3 días o hasta 7 días según tu plan, o para destruirse tras la primera descarga completada.",
+        "Los enlaces pueden configurarse para caducar tras 1 hora, 1 día, 3 días, 7 días o hasta 14 días según tu plan, o para destruirse tras la primera descarga completada.",
         "Trata el enlace completo como el propio archivo — cualquiera que lo tenga puede descifrarlo, así que compártelo como compartirías el archivo.",
       ],
     },
@@ -779,7 +779,7 @@ const pt = {
       ],
       bullets: [
         "Criar um link armazenado exige que o remetente faça login; abrir um para baixar nunca exige.",
-        "Os links podem ser configurados para expirar após 1 hora, 1 dia, 3 dias ou até 7 dias conforme o seu plano, ou para se autodestruir após o primeiro download concluído.",
+        "Os links podem ser configurados para expirar após 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano, ou para se autodestruir após o primeiro download concluído.",
         "Trate o link completo como o próprio arquivo — qualquer pessoa que o tenha pode descriptografá-lo, então compartilhe-o do jeito que compartilharia o arquivo.",
       ],
     },

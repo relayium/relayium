@@ -59,7 +59,7 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(&f.noResume, "no-resume", false, "disable resuming partial files")
 	fs.BoolVar(&f.allowDelete, "allow-delete", false, "honor a sender's --delete (mirror) request")
 	fs.StringVar(&f.configDir, "config-dir", "", "identity/trust directory")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
 
@@ -267,7 +267,7 @@ func runAuthorize(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	var configDir string
 	fs.StringVar(&configDir, "config-dir", "", "identity/trust directory")
-	if err := fs.Parse(args); err != nil {
+	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 1 {

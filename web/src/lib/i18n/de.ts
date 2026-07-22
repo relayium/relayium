@@ -489,6 +489,7 @@ const de: Messages = {
     ttl1d: "1 Tag",
     ttl3d: "3 Tage",
     ttl7d: "7 Tage",
+    ttl14d: "14 Tage",
     linkReady: "Link bereit — senden Sie ihn dem Empfänger zum Herunterladen:",
     expiresOn: (w) => `Dieser Link läuft am ${w} ab`,
     copy: "Link kopieren",
@@ -538,7 +539,7 @@ const de: Messages = {
       { title: "Prüfung auf Man-in-the-Middle", desc: "Beide Bildschirme zeigen denselben Code (SAS); vergleiche ihn, um einen mithörenden MITM auszuschließen." },
       { title: "Plattformübergreifend", desc: "Windows, macOS, Linux, Android, iOS — jeder moderne Browser, nichts zu installieren." },
       { title: "Open Source & prüfbar", desc: "Das Protokoll und der gesamte Code liegen offen auf GitHub — jeder kann sie prüfen, selbst hosten oder mitwirken." },
-      { title: "Von Grund auf flüchtig", desc: "Download-Links können je nach Tarif nach bis zu 7 Tagen ablaufen oder nach dem ersten Download verbrennen — ohne bleibende Spur." },
+      { title: "Von Grund auf flüchtig", desc: "Download-Links können je nach Tarif nach bis zu 14 Tagen ablaufen oder nach dem ersten Download verbrennen — ohne bleibende Spur." },
     ],
   },
   howItWorks: {
@@ -556,7 +557,7 @@ const de: Messages = {
       sub: "Senden, auch wenn die Gegenseite offline ist: jetzt verschlüsselt ablegen, später per Link abholen.",
       ways: [
         { icon: "🔒", name: "Anmelden und Dateien wählen", how: "Dateien werden vor dem Upload im Browser mit AES-256-GCM verschlüsselt — der Server speichert durchgehend nur Chiffretext, den er nicht entschlüsseln kann.", tag: "Zero-Knowledge" },
-        { icon: "🔗", name: "Download-Link erzeugen", how: "Ablauf von 1 Stunde bis zu 7 Tagen, je nach Tarif oder Löschen nach dem Lesen; der Schlüssel steckt im #-Fragment des Links und erreicht den Server nie.", tag: "Ablauf selbst bestimmen" },
+        { icon: "🔗", name: "Download-Link erzeugen", how: "Ablauf von 1 Stunde bis zu 14 Tagen, je nach Tarif oder Löschen nach dem Lesen; der Schlüssel steckt im #-Fragment des Links und erreicht den Server nie.", tag: "Ablauf selbst bestimmen" },
         { icon: "📥", name: "Abholen, wann es passt", how: "Schick den Link — kein Konto, kein Online-Warten: entschlüsselt und heruntergeladen wird direkt im Browser.", tag: "Empfänger ohne Konto" },
       ],
     },
@@ -571,7 +572,7 @@ const de: Messages = {
       { label: "Anmeldung nötig", realtime: "Nur zum netzwerkübergreifenden Senden", stored: "Sender meldet sich an" },
       { label: "Empfänger online?", realtime: "Ja — beide gleichzeitig online", stored: "Nein — asynchron herunterladen" },
       { label: "Dateien über Server?", realtime: "Im selben Netz: nein, direkt von Gerät zu Gerät. Netzübergreifend: über ein verschlüsseltes Relay, das nur Chiffretext sieht", stored: "Ja, aber nur Zero-Knowledge-Chiffretext" },
-      { label: "Lebensdauer", realtime: "Senden und weg, nichts gespeichert", stored: "Bis zu 7 Tage (je nach Tarif) oder Löschen nach dem Lesen" },
+      { label: "Lebensdauer", realtime: "Senden und weg, nichts gespeichert", stored: "Bis zu 14 Tage (je nach Tarif) oder Löschen nach dem Lesen" },
       { label: "Am besten für", realtime: "Direkte Übertragung großer Dateien, solange beide online sind", stored: "Empfänger offline, oder ein Link für viele" },
     ],
   },
@@ -613,7 +614,7 @@ const de: Messages = {
       { q: "Was bestimmt die Geschwindigkeit, und wie mache ich sie schneller?", a: "Bei einer direkten Verbindung sind es die Up-/Download-Bandbreite und Latenz eurer beiden Netzwerke; über ein Relay kommt zusätzlich die Bandbreite des Relay-Knotens hinzu. Einen eigenen Knoten über die Kontoseite zu betreiben, kann das netzübergreifende Relaying spürbar beschleunigen — und es ist kostenlos." },
     ],
     offline: [
-      { q: "Wie lange hält ein Download-Link?", a: "So lange wie die von dir gesetzte Ablaufzeit — von 1 Stunde bis zu 7 Tagen, je nach Tarif — danach wird er automatisch gelöscht. Du kannst auch „Nach dem Lesen löschen“ aktivieren, was den Link direkt nach einem erfolgreichen Download entfernt." },
+      { q: "Wie lange hält ein Download-Link?", a: "So lange wie die von dir gesetzte Ablaufzeit — von 1 Stunde bis zu 14 Tagen, je nach Tarif — danach wird er automatisch gelöscht. Du kannst auch „Nach dem Lesen löschen“ aktivieren, was den Link direkt nach einem erfolgreichen Download entfernt." },
       { q: "Braucht der Empfänger ein Konto zum Herunterladen?", a: "Nein. Er öffnet einfach den Link und lädt herunter — keine Anmeldung, nichts zu installieren." },
       { q: "Kann ich mehrere Dateien oder einen ganzen Ordner auf einmal senden?", a: "Ja. Wähle mehrere Dateien aus oder zieh Dateien und Ordner einfach auf den Upload-Bereich — Ordner werden aufgeklappt, verschlüsselt und gemeinsam hochgeladen." },
       { q: "Kann ich einen versehentlich geschlossenen Link wiederherstellen?", a: "Wegen der Zero-Knowledge-Verschlüsselung wird der Schlüssel eines Links nur in dem Browser aufbewahrt, aus dem du hochgeladen hast. Im selben Browser kannst du den Link über „Konto → Meine Dateien“ zurückkopieren — auf einem anderen Gerät oder nach dem Löschen der Browserdaten ist er aber nicht wiederherstellbar, also speichere den Link." },

@@ -87,7 +87,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <pre><code>relayium send ./report.pdf ABCD-1234</code></pre>
       <h2>文件夹镜像：sync 对比反复运行 scp -r</h2>
       <p>反复用 scp -r 拷贝整个目录，意味着每次都要重传所有内容，也没有“发生了什么变化”或“该删除什么”的概念。relayium sync 在 push/pull 或 daemon-direct 之上构建增量单向镜像：只传发生变化的文件；--delete 会删除目标端上源端已经消失的文件；--watch 会在本地文件变化时实时持续重新同步——不需要额外的定时任务。</p>
-      <pre><code>relayium sync --delete --watch ./photos user@your-server:backups/photos</code></pre>
+      <pre><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
       <h2>功能一览对比</h2>
       <p>把最关键的差别并排列出：</p>
       <ul><li>可用性：scp 几乎预装在所有服务器上；Relayium 的 CLI 是单一二进制，一条命令安装一次即可。</li><li>断点续传：scp 中断的传输要从头开始；push/pull 会从中断处继续。</li><li>完整性：scp 事后不会校验内容；Relayium 的每次传输都会做逐文件的 SHA-256 校验。</li><li>裸机服务器：scp 不需要任何额外东西；远程未装 relayium 时，push 通过 tar 兜底同样能用（pull 需要远程装有 relayium，没有兜底）。</li><li>超越 SSH：scp 只能走 SSH；Relayium 还提供 daemon-direct（锁定 TLS，无需 SSH）以及完全不需要 SSH 访问权限的跨网络配对码传输（send/receive）。</li><li>文件夹镜像：scp -r 每次都重传所有内容；relayium sync 支持 --delete 与 --watch 的增量镜像。</li><li>费用与许可：两者都免费；scp 随 OpenSSH 一起提供，Relayium 的 CLI 采用 MIT 许可并开源。</li></ul>
