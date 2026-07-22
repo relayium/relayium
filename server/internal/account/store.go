@@ -292,6 +292,20 @@ type Node struct {
 	// <DownloadURL>/dl/{key}?t=<token> so the bytes bypass central. '' = no direct
 	// download; central proxies as before. Reported by the node at registration.
 	DownloadURL string
+	// UpdateStartedAt is when central last commanded this node to self-update
+	// (unix seconds); 0 = no update in flight. The Part 2 rollout state machine
+	// uses it to notice a node that never came back (timeout past its expected
+	// self-update duration signals a stuck/failed update). Set by the rollout
+	// state machine, NOT by node register/heartbeat — UpsertNode must never
+	// overwrite it on a routine re-register (see the ON CONFLICT clause).
+	UpdateStartedAt int64
+	// UpdateFromVersion is the version this node was running when the update was
+	// commanded, kept so a rollback target is known even after Version has
+	// already changed (or the update failed partway through).
+	UpdateFromVersion string
+	// UpdateResult is the outcome the node last reported for a commanded
+	// self-update: "" (none in flight / never asked), "ok", or "failed".
+	UpdateResult string
 }
 
 // NodeToken is a per-user credential a BYO node presents as its bearer. The
@@ -329,6 +343,38 @@ type PendingNodeDelete struct {
 	BlobKey    string
 	NodeID     string
 	EnqueuedAt int64
+}
+
+// RolloutTrack is the persisted state of one automatic node-update rollout
+// track ("fleet" or "byo"). This is the ONLY thing Part 1's per-node
+// `relayium-node update -to` subcommand doesn't decide for itself: which node
+// updates to which version, when.
+//
+// There are always exactly two independent rows, keyed by Track, and this is
+// deliberate: the fleet (our ~16 official nodes) and byo (unbounded
+// user-owned nodes) tracks must be able to hold DIFFERENT TargetVersions and
+// DIFFERENT Statuses at the same time. A stalled or halted BYO rollout (users'
+// nodes are out of our control — one could be offline, pinned to an old
+// binary, whatever) must never block shipping the next release to our own
+// fleet. Collapsing this into a single row would silently destroy that
+// property, so don't "simplify" it that way.
+type RolloutTrack struct {
+	Track string // "fleet" | "byo"
+	// TargetVersion is the version this track is currently rolling out to.
+	TargetVersion string
+	// CurrentNodeID is the fleet node presently being updated (fleet track
+	// only; fleet nodes are updated one at a time). Unused for byo.
+	CurrentNodeID string
+	// ByoBatch is the batch size in flight for the byo track (10 | 50 | 100
+	// nodes at once). Unused for fleet.
+	ByoBatch int
+	// StageStartedAt is when the current stage (this node / this batch) began
+	// (unix seconds), for the state machine's timeout check.
+	StageStartedAt int64
+	Status         string // "rolling" | "halted" | "complete"
+	// HaltedReason is a human-readable note on why Status == "halted" (e.g. a
+	// heartbeat timeout or an elevated post-update failure rate). '' otherwise.
+	HaltedReason string
 }
 
 // Setting is one admin-editable integer config value (bytes or seconds).
@@ -707,6 +753,13 @@ type Store interface {
 	CentralStoredBytes(ctx context.Context) (int64, error)
 	// DeleteFleetNode removes an official (fleet) node, scoped to owner_type='fleet'.
 	DeleteFleetNode(ctx context.Context, id string) error
+	// node_rollout (Part 2: automatic node update rollout state machine).
+	// GetRolloutTrack returns ok=false if the track has no persisted state yet
+	// (a fresh DB, or a track that has never had a rollout started).
+	GetRolloutTrack(ctx context.Context, track string) (RolloutTrack, bool, error)
+	// PutRolloutTrack upserts a track's full state in one row. The fleet and
+	// byo rows are independent — see RolloutTrack's doc comment.
+	PutRolloutTrack(ctx context.Context, t RolloutTrack) error
 	// pending_node_deletes (orphan-retry queue for GC when a node's DELETE fails)
 	EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error
 	ListPendingNodeDeletes(ctx context.Context) ([]PendingNodeDelete, error)

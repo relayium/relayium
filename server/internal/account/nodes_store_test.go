@@ -67,6 +67,40 @@ func TestNodeStorageFPRoundTrips(t *testing.T) {
 	}
 }
 
+// The per-node self-update bookkeeping columns (Part 2: automatic rollout)
+// must round-trip through UpsertNode/GetNode, and must NOT be clobbered by a
+// later re-register (heartbeat/register calls never populate them — only the
+// rollout state machine does — so they must survive like `label` does).
+func TestNodeUpdateColumnsRoundTripAndSurviveReregister(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	n, err := st.UpsertNode(ctx, Node{
+		OwnerType: "fleet", URLs: []string{"turn:1.2.3.4:3478"}, TURNSecret: "s",
+		CreatedAt: 1, LastSeenAt: 1,
+		UpdateStartedAt: 1000, UpdateFromVersion: "v0.8.0", UpdateResult: "ok",
+	})
+	if err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	got, ok, err := st.GetNode(ctx, n.ID)
+	if err != nil || !ok {
+		t.Fatalf("get: ok=%v err=%v", ok, err)
+	}
+	if got.UpdateStartedAt != 1000 || got.UpdateFromVersion != "v0.8.0" || got.UpdateResult != "ok" {
+		t.Fatalf("update columns: got %+v", got)
+	}
+	// A re-register (e.g. from handleNodeRegister, which never sets these
+	// fields) must not reset them to zero.
+	n.LastSeenAt = 2
+	n.UpdateStartedAt, n.UpdateFromVersion, n.UpdateResult = 0, "", ""
+	if _, err := st.UpsertNode(ctx, n); err != nil {
+		t.Fatalf("re-register: %v", err)
+	}
+	if got, _, _ := st.GetNode(ctx, n.ID); got.UpdateStartedAt != 1000 || got.UpdateFromVersion != "v0.8.0" || got.UpdateResult != "ok" {
+		t.Fatalf("update columns clobbered by re-register: got %+v", got)
+	}
+}
+
 func TestTouchNodeKeepMaxAndOnline(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()

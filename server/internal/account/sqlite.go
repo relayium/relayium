@@ -444,6 +444,25 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
   created_at INTEGER NOT NULL, done INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE INDEX IF NOT EXISTS idx_upload_sessions_user ON upload_sessions(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_upload_sessions_created ON upload_sessions(created_at)`,
+		// Automatic node update rollout (Part 2): per-node bookkeeping of central's
+		// last commanded self-update, so the rollout state machine can notice a node
+		// that never came back (timeout) and see what it last reported. Set only by
+		// the state machine, never by register/heartbeat — UpsertNode's ON CONFLICT
+		// clause deliberately omits these three so a routine re-register can't
+		// clobber them. 0/''/'' on every existing and new row = "no update in flight".
+		`ALTER TABLE nodes ADD COLUMN update_started_at INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE nodes ADD COLUMN update_from_version TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE nodes ADD COLUMN update_result TEXT NOT NULL DEFAULT ''`,
+		// node_rollout holds the rollout state machine's per-track bookkeeping: one
+		// row for "fleet", one for "byo", each with its own target version and
+		// status, so a stalled/halted byo rollout can never block or bleed into the
+		// fleet track. See RolloutTrack's doc comment in store.go for why this is
+		// deliberately two rows and must stay that way.
+		`CREATE TABLE IF NOT EXISTS node_rollout (
+  track TEXT PRIMARY KEY, target_version TEXT NOT NULL DEFAULT '',
+  current_node_id TEXT NOT NULL DEFAULT '', byo_batch INTEGER NOT NULL DEFAULT 0,
+  stage_started_at INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT '',
+  halted_reason TEXT NOT NULL DEFAULT '')`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -2933,7 +2952,8 @@ func nullStr(s string) any {
 const nodeCols = `id, owner_type, owner_user_id, region, urls, turn_secret, version,
   relayed_bytes, stored_bytes, created_at, last_seen_at,
   storage_url, storage_secret, storage_fp, storage_enabled, storage_total, storage_free,
-  traffic_limit_bytes, disk_limit_bytes, label, download_url`
+  traffic_limit_bytes, disk_limit_bytes, label, download_url,
+  update_started_at, update_from_version, update_result`
 
 func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	if n.ID == "" {
@@ -2945,7 +2965,7 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO nodes (`+nodeCols+`)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   owner_type=excluded.owner_type, owner_user_id=excluded.owner_user_id,
 		   region=excluded.region, urls=excluded.urls, turn_secret=excluded.turn_secret,
@@ -2954,12 +2974,16 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 		   storage_fp=excluded.storage_fp,
 		   storage_enabled=excluded.storage_enabled, storage_total=excluded.storage_total,
 		   storage_free=excluded.storage_free, download_url=excluded.download_url`,
-		// label is intentionally set only on INSERT (seeded from the token name) and
-		// preserved on re-register, so a user's rename survives the node's heartbeats.
+		// label and the update_* columns are intentionally set only on INSERT
+		// (label seeded from the token name; update_* owned by the rollout state
+		// machine) and preserved on re-register/heartbeat, so neither a user's
+		// rename nor an in-flight rollout's bookkeeping is clobbered by a node
+		// simply calling register/heartbeat again.
 		n.ID, n.OwnerType, nullStr(n.OwnerUserID), n.Region, string(urls), n.TURNSecret,
 		n.Version, n.RelayedBytes, n.StoredBytes, n.CreatedAt, n.LastSeenAt,
 		nullStr(n.StorageURL), nullStr(n.StorageSecret), n.StorageFP, b2i(n.StorageEnabled), n.StorageTotal, n.StorageFree,
-		n.TrafficLimitBytes, n.DiskLimitBytes, n.Label, n.DownloadURL)
+		n.TrafficLimitBytes, n.DiskLimitBytes, n.Label, n.DownloadURL,
+		n.UpdateStartedAt, n.UpdateFromVersion, n.UpdateResult)
 	if err != nil {
 		return Node{}, err
 	}
@@ -3183,7 +3207,8 @@ func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]
 		if err := rows.Scan(&n.ID, &n.OwnerType, &ownerUser, &n.Region, &urls, &n.TURNSecret,
 			&n.Version, &n.RelayedBytes, &n.StoredBytes, &n.CreatedAt, &n.LastSeenAt,
 			&storageURL, &storageSecret, &n.StorageFP, &storageEnabled, &n.StorageTotal, &n.StorageFree,
-			&n.TrafficLimitBytes, &n.DiskLimitBytes, &n.Label, &n.DownloadURL); err != nil {
+			&n.TrafficLimitBytes, &n.DiskLimitBytes, &n.Label, &n.DownloadURL,
+			&n.UpdateStartedAt, &n.UpdateFromVersion, &n.UpdateResult); err != nil {
 			return nil, err
 		}
 		n.OwnerUserID = ownerUser.String
