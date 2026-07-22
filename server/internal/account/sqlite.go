@@ -471,6 +471,15 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// ALTER rather than folded into the CREATE above so live databases that
 		// already have node_rollout migrate instead of keeping the old shape.
 		`ALTER TABLE node_rollout ADD COLUMN first_node_id TEXT NOT NULL DEFAULT ''`,
+		// Backfill: a rollout already IN FLIGHT when this column ships would read
+		// first_node_id='' for a node that really is the canary, and its 6h
+		// observation window would collapse to 30min exactly once, on the first
+		// deploy carrying the field. Point it at the node in flight. Idempotent —
+		// it only touches rolling rows that still have no canary recorded — so it
+		// is safe on every startup. decideFleet also assumes "in flight with no
+		// recorded canary == canary" for any row this misses.
+		`UPDATE node_rollout SET first_node_id = current_node_id
+		   WHERE status = 'rolling' AND first_node_id = '' AND current_node_id <> ''`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {

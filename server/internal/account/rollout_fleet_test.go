@@ -124,7 +124,9 @@ func TestDecideFleet(t *testing.T) {
 		},
 		{
 			// "skipped" is terminal for that node: it will never report the target
-			// version, so waiting for it would wedge the track forever.
+			// version, so waiting for it would wedge the track forever. The canary
+			// slot moves with it: n1 never ran the build, so n2 is the first node
+			// that actually does and must be reported IsFirst.
 			name: "advances past a node that reported skipped",
 			track: RolloutTrack{
 				Track: "fleet", TargetVersion: "v0.9.0", Status: "rolling",
@@ -134,7 +136,81 @@ func TestDecideFleet(t *testing.T) {
 				{ID: "n1", Version: "v0.8.0", LastSeenAt: tNow, UpdateResult: "skipped", UpdateStartedAt: tNow - 60},
 				{ID: "n2", Version: "v0.8.0", LastSeenAt: tNow},
 			},
-			want: RolloutDecision{Action: "update", NodeID: "n2"},
+			want: RolloutDecision{Action: "update", NodeID: "n2", IsFirst: true},
+		},
+		{
+			// FINDING 1: a track that was already rolling when first_node_id
+			// shipped reads '' for a node that really is the canary. Guessing
+			// "not the canary" would release the second node after 30min. At
+			// 40min the canary's 6h window is still open.
+			name: "a legacy in-flight track with no recorded canary keeps the 6h window",
+			track: RolloutTrack{
+				Track: "fleet", TargetVersion: "v0.9.0", Status: "rolling",
+				CurrentNodeID: "n1", FirstNodeID: "", StageStartedAt: tNow - 40*60,
+			},
+			nodes: []NodeSnapshot{
+				{ID: "n1", Version: "v0.9.0", LastSeenAt: tNow, UpdateResult: "ok", UpdateStartedAt: tNow - 40*60},
+				{ID: "n2", Version: "v0.8.0", LastSeenAt: tNow},
+			},
+			want: RolloutDecision{Action: "wait"},
+		},
+		{
+			// FINDING 3: commanded, alive, heartbeating, but update_started_at is
+			// still 0 — the caller's two writes split. Gating the silence check on
+			// UpdateStartedAt alone leaves this waiting forever (probed at 30h).
+			name: "halts when a commanded node never started the update",
+			track: RolloutTrack{
+				Track: "fleet", TargetVersion: "v0.9.0", Status: "rolling",
+				CurrentNodeID: "n1", FirstNodeID: "n1", StageStartedAt: tNow - 30*tHour,
+			},
+			nodes: []NodeSnapshot{
+				{ID: "n1", Version: "v0.8.0", LastSeenAt: tNow, UpdateStartedAt: 0},
+				{ID: "n2", Version: "v0.8.0", LastSeenAt: tNow},
+			},
+			want: RolloutDecision{Action: "halt", Reason: "node n1 never started the update it was commanded"},
+		},
+		{
+			// ...but only past the silence limit: a node commanded seconds ago has
+			// not had time to report update_started_at yet.
+			name: "waits when a commanded node has not started yet but is within the silence limit",
+			track: RolloutTrack{
+				Track: "fleet", TargetVersion: "v0.9.0", Status: "rolling",
+				CurrentNodeID: "n1", FirstNodeID: "n1", StageStartedAt: tNow - 60,
+			},
+			nodes: []NodeSnapshot{
+				{ID: "n1", Version: "v0.8.0", LastSeenAt: tNow, UpdateStartedAt: 0},
+				{ID: "n2", Version: "v0.8.0", LastSeenAt: tNow},
+			},
+			want: RolloutDecision{Action: "wait"},
+		},
+		{
+			// MINOR 4: FirstNodeID left over from the PREVIOUS rollout. Nothing is
+			// in flight and n1 is not on the new target, so no node has been picked
+			// for this target yet: the canary must still be chosen by fewest active
+			// transfers and reported IsFirst, not picked by hash with a 30min
+			// window. busy-a/idle-b hash the other way round (see the first case).
+			name: "a FirstNodeID left over from a previous rollout is ignored",
+			track: RolloutTrack{
+				Track: "fleet", TargetVersion: "v0.9.0", Status: "rolling",
+				CurrentNodeID: "", FirstNodeID: "busy-a", StageStartedAt: tNow - 40*tHour,
+			},
+			nodes: []NodeSnapshot{
+				{ID: "busy-a", Version: "v0.8.0", LastSeenAt: tNow, ActiveTransfers: 99},
+				{ID: "idle-b", Version: "v0.8.0", LastSeenAt: tNow, ActiveTransfers: 0},
+			},
+			want: RolloutDecision{Action: "update", NodeID: "idle-b", IsFirst: true},
+		},
+		{
+			// MINOR 6: SameVersion("","") is true, so an empty target would read
+			// blank-version nodes as on-target and command everyone else to install
+			// "". Never update on a target-less track.
+			name:  "a rolling track with no target version waits",
+			track: RolloutTrack{Track: "fleet", TargetVersion: "", Status: "rolling"},
+			nodes: []NodeSnapshot{
+				{ID: "n1", Version: "v0.8.0", LastSeenAt: tNow},
+				{ID: "n2", Version: "", LastSeenAt: tNow},
+			},
+			want: RolloutDecision{Action: "wait", Reason: "rolling track has no target version"},
 		},
 		{
 			// Canary status is positional. A peer that is already on the target
@@ -209,10 +285,14 @@ func TestDecideFleet(t *testing.T) {
 			want: RolloutDecision{Action: "wait"},
 		},
 		{
+			// n1 was the canary and cleared its window; n2 is the last node and
+			// only needs the 30min step window. (FirstNodeID must be set: an
+			// in-flight node with NO recorded canary is assumed to BE the canary
+			// and would still be inside its 6h window an hour in.)
 			name: "completes when every fleet node is on target",
 			track: RolloutTrack{
 				Track: "fleet", TargetVersion: "v0.9.0", Status: "rolling",
-				CurrentNodeID: "n2", StageStartedAt: tNow - tHour,
+				CurrentNodeID: "n2", FirstNodeID: "n1", StageStartedAt: tNow - tHour,
 			},
 			nodes: []NodeSnapshot{
 				{ID: "n1", Version: "v0.9.0", LastSeenAt: tNow, UpdateResult: "ok"},
@@ -251,5 +331,54 @@ func TestDecideFleet(t *testing.T) {
 				t.Errorf("decideFleet gave no halt reason; want one describing %q", tc.want.Reason)
 			}
 		})
+	}
+}
+
+// FINDING 2, end to end: FirstNodeID is written when a node is PICKED, not when
+// it INSTALLS. A canary that answers "skipped" never runs the build, so if it
+// kept the canary slot the first node that ACTUALLY runs the new build would be
+// released after 30 minutes with nobody having observed it for 6 hours — a bad
+// release reaching a second live node with zero real observation. The slot must
+// follow the build.
+func TestSkippedCanaryHandsTheSixHourWindowToTheNextNode(t *testing.T) {
+	const target = "v0.9.0"
+	nodes := []NodeSnapshot{
+		{ID: "n1", Version: "v0.8.0", LastSeenAt: tNow, UpdateResult: "skipped", UpdateStartedAt: tNow - 60},
+		{ID: "n2", Version: "v0.8.0", LastSeenAt: tNow},
+		{ID: "n3", Version: "v0.8.0", LastSeenAt: tNow},
+	}
+	// Step 1: the recorded canary skipped. The queue advances, and the pick is
+	// flagged IsFirst so the caller re-points FirstNodeID at it.
+	tr := RolloutTrack{
+		Track: "fleet", TargetVersion: target, Status: "rolling",
+		CurrentNodeID: "n1", FirstNodeID: "n1", StageStartedAt: tNow - 60,
+	}
+	got := decideFleet(tr, nodes, tNow)
+	if got.Action != "update" || got.NodeID == "n1" {
+		t.Fatalf("after a skipped canary: got %+v, want an update of some node other than n1", got)
+	}
+	if !got.IsFirst {
+		t.Fatalf("after a skipped canary, the next node got IsFirst=false: the 6h canary slot is stuck on a node that never ran the build")
+	}
+	next := got.NodeID
+
+	// Step 2: the caller persists that. 40 minutes later the new canary is
+	// healthy and on target — past the 30min step window, well inside 6h. It
+	// must still be under observation.
+	later := tNow + 40*60
+	tr = RolloutTrack{
+		Track: "fleet", TargetVersion: target, Status: "rolling",
+		CurrentNodeID: next, FirstNodeID: next, StageStartedAt: tNow,
+	}
+	for i := range nodes {
+		if nodes[i].ID == next {
+			nodes[i].Version = target
+			nodes[i].UpdateResult = "ok"
+			nodes[i].UpdateStartedAt = tNow
+		}
+		nodes[i].LastSeenAt = later
+	}
+	if got := decideFleet(tr, nodes, later); got.Action != "wait" {
+		t.Fatalf("40min into the re-asserted canary's window: got %+v, want wait (6h observation)", got)
 	}
 }

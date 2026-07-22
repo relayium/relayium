@@ -67,6 +67,10 @@ type RolloutDecision struct {
 //
 //  1. Status != "rolling" -> wait. Halted/complete tracks are inert; a fresh
 //     rollout is started by an operator flipping Status back to "rolling".
+//     A "rolling" track with an EMPTY TargetVersion is malformed, not a
+//     rollout to the empty version: SameVersion("","") is true, so it would
+//     classify blank-version nodes as on-target and command every other node
+//     to install "". It waits instead.
 //  2. If a node is currently being updated (CurrentNodeID set):
 //     a. it is missing from the snapshot entirely -> it is SILENT, not gone:
 //     wait until updateSilenceLimit, then halt. Never fall through to
@@ -74,9 +78,14 @@ type RolloutDecision struct {
 //     b. its last reported UpdateResult is "failed" or "rolled_back" -> halt
 //     c. its last reported UpdateResult is "skipped" -> its turn is over and
 //     it will never reach the target: fall through to step 3/4 so the
-//     queue advances, leaving the node behind for a human.
+//     queue advances, leaving the node behind for a human. If the SKIPPED
+//     node was the recorded canary, IsFirst is re-asserted on whoever is
+//     picked next, because a node that never installed the build cannot
+//     have observed it (see reassertFirst).
 //     d. it has gone silent (no heartbeat) for longer than updateSilenceLimit
-//     since it was commanded to update -> halt (possible brick)
+//     since it was commanded to update -> halt (possible brick). If it
+//     never even recorded an update start, tr.StageStartedAt is the
+//     backstop -> halt as "never started".
 //     e. it hasn't reached the target version yet -> wait
 //     f. it has reached the target version but hasn't cleared its
 //     observation window yet (fleetFirstWindow for the canary,
@@ -84,7 +93,7 @@ type RolloutDecision struct {
 //  3. Every fleet node currently online is already on the target version ->
 //     complete.
 //  4. Otherwise pick the next node to update: the very first node of the
-//     rollout (no CurrentNodeID and no FirstNodeID yet) is chosen by fewest
+//     rollout (no CurrentNodeID and no usable FirstNodeID yet) is chosen by fewest
 //     ActiveTransfers -- least to lose if the new build is bad -- and
 //     reported with IsFirst so the caller can persist it as FirstNodeID.
 //     Every node after that is chosen by sha256(nodeID+targetVersion)
@@ -94,6 +103,13 @@ type RolloutDecision struct {
 func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecision {
 	if tr.Status != "rolling" {
 		return RolloutDecision{Action: "wait"}
+	}
+	// SameVersion("", "") is true, so an empty target would read every
+	// blank-version node as "on target" and command everybody else to install
+	// the empty version. A rolling track with no target is a caller bug; the
+	// only safe answer is to do nothing.
+	if tr.TargetVersion == "" {
+		return RolloutDecision{Action: "wait", Reason: "rolling track has no target version"}
 	}
 
 	byID := make(map[string]NodeSnapshot, len(nodes))
@@ -109,12 +125,28 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 	// all: no node in flight AND none recorded. Canary status is positional
 	// (FirstNodeID), never inferred from who happens to be on the target
 	// version -- see RolloutTrack.FirstNodeID for why inference is unsafe.
-	firstPick := tr.CurrentNodeID == "" && tr.FirstNodeID == ""
+	//
+	// The one exception is a FirstNodeID left over from a PREVIOUS rollout: if
+	// nothing is in flight and the recorded canary is not on the current
+	// target, no node has been picked for THIS target yet, so the recorded ID
+	// is stale. Trusting it would pick the canary by hash instead of by fewest
+	// active transfers, hand it the 30min window, and never report IsFirst --
+	// i.e. the whole rollout would run with no canary at all. Defend here
+	// rather than trusting the caller to clear the field.
+	firstPick := tr.CurrentNodeID == "" &&
+		(tr.FirstNodeID == "" || !selfupdate.SameVersion(byID[tr.FirstNodeID].Version, tr.TargetVersion))
 
 	// skipped is the current node's ID when it reported "skipped": it stays
 	// behind the target version forever, so it must be kept out of the
 	// candidate set below or the queue would just re-pick it in a loop.
 	var skipped string
+	// reassertFirst re-points the canary at whoever is picked next, because the
+	// node currently recorded as canary is ending its turn WITHOUT ever having
+	// run the build (it reported "skipped"). FirstNodeID is written when a node
+	// is PICKED, not when it INSTALLS, so leaving it in place would burn the 6h
+	// slot on a node that observed nothing and give the first node to actually
+	// run the new build only 30 minutes.
+	var reassertFirst bool
 
 	if tr.CurrentNodeID != "" {
 		cur, present := byID[tr.CurrentNodeID]
@@ -143,17 +175,37 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 		// is not a failure, so we must not halt -- but waiting for a version
 		// it will never report would wedge the whole track forever. Its stage
 		// is over: fall through so the queue advances without it.
+		//
+		// canary is whether the node in flight holds this rollout's 6h slot.
+		// FirstNodeID == "" while a node IS in flight is a track written before
+		// the field existed (it migrates in as '' and only the backfill or a
+		// fresh pick fills it): assume the node in flight is the canary, since
+		// guessing "not the canary" would silently cut a live rollout's 6h
+		// observation to 30 minutes. Every defence here must fail LONG.
+		canary := cur.ID == tr.FirstNodeID || tr.FirstNodeID == ""
 		if cur.UpdateResult == "skipped" {
 			skipped = cur.ID
+			reassertFirst = canary
 		} else {
 			if cur.UpdateStartedAt != 0 && now-cur.LastSeenAt > updateSilenceLimit {
 				return RolloutDecision{Action: "halt", Reason: fmt.Sprintf("node %s silent since update started", cur.ID)}
 			}
 			if !onTarget(cur) {
+				// Commanded, alive, but update_started_at is still 0: the
+				// caller's two writes (the track's CurrentNodeID/StageStartedAt
+				// and the node's update_started_at) split — a crash between
+				// them, or the nodes row being replaced. Without a backstop this
+				// waits forever, because the silence check above is gated on
+				// UpdateStartedAt. tr.StageStartedAt is that backstop, exactly
+				// as on the vanished-node path.
+				if cur.UpdateStartedAt == 0 && now-tr.StageStartedAt > updateSilenceLimit {
+					return RolloutDecision{Action: "halt",
+						Reason: fmt.Sprintf("node %s never started the update it was commanded", cur.ID)}
+				}
 				return RolloutDecision{Action: "wait"}
 			}
 			window := int64(fleetStepWindow)
-			if cur.ID == tr.FirstNodeID {
+			if canary {
 				window = fleetFirstWindow
 			}
 			// Measure the window from the LATER of the track's stage start and
@@ -187,7 +239,9 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 	// sort.Slice is NOT stable, so equal-comparing elements may come out in
 	// any order run to run -- hence the fleetHash tie-break, which makes the
 	// pick fully deterministic even when transfer counts are identical.
-	if firstPick {
+	// A re-asserted canary (the recorded one skipped) is picked the same way a
+	// first canary is: fewest active transfers, least to lose.
+	if firstPick || reassertFirst {
 		sort.Slice(candidates, func(i, j int) bool {
 			if candidates[i].ActiveTransfers != candidates[j].ActiveTransfers {
 				return candidates[i].ActiveTransfers < candidates[j].ActiveTransfers
@@ -199,7 +253,7 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 			return fleetHash(candidates[i].ID, tr.TargetVersion) < fleetHash(candidates[j].ID, tr.TargetVersion)
 		})
 	}
-	return RolloutDecision{Action: "update", NodeID: candidates[0].ID, IsFirst: firstPick}
+	return RolloutDecision{Action: "update", NodeID: candidates[0].ID, IsFirst: firstPick || reassertFirst}
 }
 
 // fleetHash deterministically orders a node for a given rollout target so

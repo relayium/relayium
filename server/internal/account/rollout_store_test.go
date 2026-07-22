@@ -29,6 +29,41 @@ func TestRolloutTrackRoundTrips(t *testing.T) {
 	}
 }
 
+// FirstNodeID is the canary marker the 6h observation window hangs off, and it
+// arrives by ALTER on live databases. rolloutCols is positional, so a drift
+// between the SELECT and the upsert would silently swap it with a neighbouring
+// column instead of erroring — round-trip it explicitly, alone and alongside
+// the other string fields.
+func TestRolloutTrackFirstNodeIDRoundTrips(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	want := RolloutTrack{
+		Track: "fleet", TargetVersion: "v0.9.0", CurrentNodeID: "node7",
+		FirstNodeID: "canary-node", ByoBatch: 0, StageStartedAt: 1000, Status: "rolling",
+	}
+	if err := store.PutRolloutTrack(ctx, want); err != nil {
+		t.Fatalf("PutRolloutTrack: %v", err)
+	}
+	got, ok, err := store.GetRolloutTrack(ctx, "fleet")
+	if err != nil || !ok {
+		t.Fatalf("GetRolloutTrack: ok=%v err=%v", ok, err)
+	}
+	if got != want {
+		t.Fatalf("round trip = %+v, want %+v", got, want)
+	}
+
+	// And it must be clearable: a new rollout resets the canary.
+	want.FirstNodeID = ""
+	want.TargetVersion = "v1.0.0"
+	if err := store.PutRolloutTrack(ctx, want); err != nil {
+		t.Fatal(err)
+	}
+	if got, _, _ := store.GetRolloutTrack(ctx, "fleet"); got.FirstNodeID != "" {
+		t.Errorf("FirstNodeID = %q after being cleared, want empty", got.FirstNodeID)
+	}
+}
+
 // The two tracks are independent state: a halted BYO track must never be
 // readable as, or writable through, the fleet track.
 func TestRolloutTracksAreIndependent(t *testing.T) {
