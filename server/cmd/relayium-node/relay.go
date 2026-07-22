@@ -200,6 +200,20 @@ func run(c config, st nodeState) error {
 	var blobGauge *blobUsage
 	// Servers that must drain rather than be cut off when we shut down.
 	var httpSrvs []*http.Server
+	// Backstop: close whatever's left in httpSrvs on every return path out of
+	// run(). The ctx.Done() path below already calls gracefulShutdown, which
+	// Shutdown()s these servers properly (draining in-flight requests) before
+	// run() returns nil — a subsequent Close() here is then just a harmless
+	// no-op on an already-closed server. This defer exists for the *other*
+	// returns: if something after the servers start listening fails (e.g.
+	// register with central), nothing else would ever close these listeners.
+	defer func() {
+		for _, s := range httpSrvs {
+			if s != nil {
+				s.Close()
+			}
+		}
+	}()
 	if c.StorageDir != "" {
 		ds, derr := storage.NewDiskStore(c.StorageDir)
 		if derr != nil {
