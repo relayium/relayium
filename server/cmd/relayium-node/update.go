@@ -78,13 +78,30 @@ func backupBinary(binPath string) error {
 		os.Remove(tmp)
 		return err
 	}
+	// OpenFile's perm argument is ANDed with the process umask at creation
+	// time, so under a restrictive umask (e.g. 0077) the temp file can end up
+	// with narrower permissions than the source binary (0755 -> 0700). Chmod
+	// is not subject to umask, so set the mode explicitly here to guarantee
+	// the backup - and therefore the binary restoreBinary later renames back
+	// into place - keeps the source's exact permission bits. Without this,
+	// a rollback can silently produce a non-executable live binary, which is
+	// strictly worse than the broken update it was meant to undo.
+	if err := dst.Chmod(fi.Mode().Perm()); err != nil {
+		dst.Close()
+		os.Remove(tmp)
+		return err
+	}
 	if err := dst.Close(); err != nil {
 		os.Remove(tmp)
 		return err
 	}
 	// Rename last so a crash mid-copy never leaves a truncated "backup" that
 	// would be restored over a working binary.
-	return os.Rename(tmp, backupPath(binPath))
+	if err := os.Rename(tmp, backupPath(binPath)); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 // restoreBinary puts the backed-up binary back. Rename is atomic, so a crash
