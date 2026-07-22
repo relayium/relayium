@@ -57,16 +57,26 @@ func (s *Service) requireStepUp(action string, next http.HandlerFunc) http.Handl
 			http.Error(w, "too many pending confirmations", http.StatusTooManyRequests)
 			return
 		}
-		before, after, target, err := s.beforeImageFor(r.Context(), action, r.PostForm)
+		pathID := r.PathValue("id")
+		before, after, target, err := s.beforeImageFor(r.Context(), action, pathID, r.PostForm)
 		if err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
+		// Emergency release is the one action whose blast radius is decided by
+		// the path wildcard rather than the form, so the page states the track
+		// in its own banner on top of the diff row. See rolloutTrackLabel.
+		track, trackLabel := "", ""
+		if action == AuditRolloutEmergency {
+			track, trackLabel = pathID, rolloutTrackLabel(pathID)
+		}
 		s.renderConfirmPage(w, confirmPageData{
-			Token:   tok,
-			Action:  action,
-			Target:  target,
-			Changes: diffFields(before, after),
+			Token:      tok,
+			Action:     action,
+			Target:     target,
+			Track:      track,
+			TrackLabel: trackLabel,
+			Changes:    diffFields(before, after),
 			// The grace window only ever affects NeedFactor, never whether
 			// this page renders at all — see the doc comment above.
 			NeedFactor: !s.stepUpFresh(r.Context(), c.Value),
@@ -212,17 +222,18 @@ func (s *Service) handleAdminConfirm(w http.ResponseWriter, r *http.Request) {
 	// half reads the store's current row, so once the write lands it would
 	// diff the new value against itself and record an empty change. target and
 	// changes are resolved here and audited after the apply.
-	before, after, target, diffErr := s.beforeImageFor(r.Context(), pending.action, form)
+	before, after, target, diffErr := s.beforeImageFor(r.Context(), pending.action, pending.pathID, form)
 	// A path-scoped action (node delete) has no target in the form — its id
 	// lives in the path wildcard we stashed. Give the audit a real target
 	// instead of "-", now that the id is recoverable here.
+	//
+	// The emergency release used to be patched in here the same way, which was
+	// exactly the problem: the track reached the AUDIT but never the operator,
+	// because the confirmation page is rendered from beforeImageFor's return
+	// value long before this runs. It now comes from beforeImageFor itself, so
+	// the page and the log necessarily name the same track.
 	if pending.action == AuditNodeDelete && pending.pathID != "" {
 		target = "node:" + pending.pathID
-	}
-	// Same story for the emergency release: WHICH TRACK was released is the
-	// single most important fact about it, and it lives in the path wildcard.
-	if pending.action == AuditRolloutEmergency && pending.pathID != "" {
-		target = "rollout:" + pending.pathID
 	}
 
 	r.PostForm = form

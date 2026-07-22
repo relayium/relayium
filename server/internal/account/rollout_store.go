@@ -150,12 +150,16 @@ func (s *SQLiteStore) ResumeRolloutTrack(ctx context.Context, track string, at i
 }
 
 // SetRolloutEmergency arms emergency mode on a track that is rolling to
-// expectVersion — the version the admin just confirmed on the confirmation
-// page. Both conditions are a compare-and-swap against what the operator
-// actually saw: if the track has since been halted, completed, or re-pointed
-// at a different version (by another admin, or by a state machine reacting to
-// a failure), this lands nowhere and ok=false, rather than blanket-releasing a
-// build nobody confirmed.
+// expectVersion, as a compare-and-swap against what the operator saw.
+//
+// NO LONGER ON THE ADMIN PATH, and it must not be put back there. Arming used
+// to be this second statement after SetTargetVersion had already repointed the
+// track, and the gap between the two was a real bug: when this returned
+// ok=false (or an error) the operator was told 紧急发布失败 while the track was
+// already rolling to that version on the STAGED ladder, unaudited. Repointing
+// and arming are now one row write — see Service.SetEmergencyTargetVersion.
+// Kept (unused) per this package's policy of not dropping store methods a live
+// deployment might still be calling mid-rollout.
 func (s *SQLiteStore) SetRolloutEmergency(ctx context.Context, track, expectVersion string, at int64) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE node_rollout SET emergency = 1, stage_started_at = ?
@@ -182,13 +186,20 @@ func (s *SQLiteStore) SetRolloutEmergency(ctx context.Context, track, expectVers
 // it also clears current_node_id (there is no node in flight once a track is
 // complete); on byo the column is already always empty, so clearing it there
 // is a no-op, not a behaviour change.
+//
+// It also clears `emergency`: a finished track is not "紧急发布中", and leaving
+// the column at 1 left the red 紧急发布中（已跳过分批） badge sitting next to
+// 已完成 on the dashboard forever. Nothing reads emergency once status is no
+// longer 'rolling' (handleUpdateCheck returns before the emergency branch), so
+// this is a display fix, not a behaviour change — and every path back into
+// 'rolling' (SetTargetVersion, ResumeRolloutTrack) already sets it explicitly.
 // ok=false means the track was no longer rolling when this landed (already
 // halted, already completed, or advanced past the state this decision was
 // computed from) — the caller must not treat the transition as having
 // happened.
 func (s *SQLiteStore) CompleteRolloutTrack(ctx context.Context, track string, at int64) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE node_rollout SET status = 'complete', current_node_id = '', stage_started_at = ?
+		`UPDATE node_rollout SET status = 'complete', current_node_id = '', emergency = 0, stage_started_at = ?
 		   WHERE track = ? AND status = 'rolling'`,
 		at, track)
 	if err != nil {

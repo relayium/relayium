@@ -336,13 +336,21 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 // unusable rather than just fast:
 //
 //   - it does NOT re-command a node that already reported a failure for THIS
-//     target (byoWasCommandedForTarget + a failed/rolled_back result). Without
-//     that, a node whose update fails is handed the same command on every
-//     30-second poll forever — a reinstall loop, not a release. Its row keeps
-//     the failure for the admin panel to show.
-//   - it completes the track once nobody we can still reach is behind, exactly
-//     as the staged paths do, so an emergency release does not leave the track
-//     rolling forever and every node re-checking on every poll.
+//     rollout (emergencyRefusesNode). Without that, a node whose update fails
+//     is handed the same command on every 30-second poll forever — a reinstall
+//     loop, not a release. Its row keeps the failure for the admin panel to
+//     show.
+//   - it completes the track once nobody we can still reach is behind AND
+//     still commandable, exactly as the staged paths do, so an emergency
+//     release does not leave the track rolling forever and every node
+//     re-checking on every poll.
+//
+// The two bullets use the SAME predicate, and that is load-bearing rather than
+// tidiness: a node the first bullet will never command cannot be allowed to
+// count as "still in progress" in the second, or one permanently-refused node
+// pins the track in rolling+emergency forever — and a track stuck like that
+// keeps blanket-commanding every node that comes back online or registers
+// afterwards.
 //
 // What it deliberately does NOT do is halt on failures: an emergency release
 // has already reached everyone by the time a failure is reported, so there is
@@ -350,8 +358,7 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 func (s *Service) updateCheckEmergency(ctx context.Context, tr RolloutTrack, snaps []NodeSnapshot, node Node, now int64) (bool, string, error) {
 	self := nodeSnapshot(node)
 	if !selfupdate.SameVersion(node.Version, tr.TargetVersion) {
-		if (node.UpdateResult == "failed" || node.UpdateResult == "rolled_back") &&
-			byoWasCommandedForTarget(self, tr.TargetVersion) {
+		if emergencyRefusesNode(self, tr) {
 			return false, "emergency release: this node already reported " + node.UpdateResult, nil
 		}
 		if err := s.store.CommandNodeUpdate(ctx, node.ID, node.Version, now); err != nil {
@@ -360,11 +367,15 @@ func (s *Service) updateCheckEmergency(ctx context.Context, tr RolloutTrack, sna
 		return true, "", nil
 	}
 	// This node is done. Complete the track only when no node we have heard
-	// from recently is still behind — same "landed, not just elapsed" rule
-	// decideByo's final batch uses, so a straggler is never declared shipped.
+	// from recently is still behind AND still commandable — same "landed, not
+	// just elapsed" rule decideByo's final batch uses, so a straggler is never
+	// declared shipped. Nodes this release has given up on (emergencyRefusesNode)
+	// are excluded: they are never going to be commanded again, so counting them
+	// as in-progress would only keep the track armed forever.
 	cutoff := now - int64(nodeOnlineWindow/time.Second)
 	for _, n := range snaps {
-		if n.LastSeenAt >= cutoff && !selfupdate.SameVersion(n.Version, tr.TargetVersion) {
+		if n.LastSeenAt >= cutoff && !selfupdate.SameVersion(n.Version, tr.TargetVersion) &&
+			!emergencyRefusesNode(n, tr) {
 			return false, "emergency release in progress", nil
 		}
 	}
@@ -376,6 +387,40 @@ func (s *Service) updateCheckEmergency(ctx context.Context, tr RolloutTrack, sna
 		return false, "rollout state changed before this could be recorded as complete", nil
 	}
 	return false, "rollout complete", nil
+}
+
+// emergencyRefusesNode reports whether the emergency path has given up on n:
+// it reported a failure that BELONGS TO THIS RELEASE, so re-commanding it would
+// just be a reinstall loop.
+//
+// All three conditions are needed, and the third is the one that is easy to
+// leave out:
+//
+//   - a failed/rolled_back result at all;
+//   - byoWasCommandedForTarget: there is a command record behind that result,
+//     and it did not start from the target itself;
+//   - UpdateStartedAt >= tr.StageStartedAt: the command it describes was issued
+//     by THIS rollout.
+//
+// Without the time scope the predicate says nothing about WHICH rollout failed,
+// and nothing ever clears nodes.update_result except CommandNodeUpdate — not
+// re-register, not heartbeat, and not SetTargetVersion, which does not touch
+// node rows at all. So a node carrying a leftover "failed" from an update
+// attempt two releases ago was permanently excluded from every future emergency
+// release: the operator hit 紧急发布 and that machine silently sat it out, even
+// though the STAGED ladder would have re-commanded it (decideFleet/decideByo
+// use failures for the halt rate only, never to exclude candidates). Emergency
+// was stricter than staging in exactly the place it is supposed to be looser.
+//
+// StageStartedAt is the right clock because every path that (re)arms emergency
+// mode stamps it: SetEmergencyTargetVersion writes it with the row, and
+// ResumeRolloutTrack resets it. A command issued before that instant cannot
+// have come from the release now in flight.
+func emergencyRefusesNode(n NodeSnapshot, tr RolloutTrack) bool {
+	if n.UpdateResult != "failed" && n.UpdateResult != "rolled_back" {
+		return false
+	}
+	return byoWasCommandedForTarget(n, tr.TargetVersion) && n.UpdateStartedAt >= tr.StageStartedAt
 }
 
 // updateCheckFleet runs the fleet state machine and persists whatever it

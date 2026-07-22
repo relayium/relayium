@@ -93,6 +93,14 @@ type confirmPageData struct {
 	Token  string // pending-action token; echoed back as the confirm_token field
 	Action string // audit action name (AuditSettings etc.), shown for context
 	Target string // "-" for global actions, "plan:x" / "node:x" for scoped ones
+	// Track / TrackLabel are set for the emergency release only, and the page
+	// renders them as a banner above the diff. They exist because that action's
+	// blast radius is decided by the path wildcard ("fleet" = our own machines,
+	// "byo" = every user's machine) rather than by any form field, and a
+	// confirmation page that does not say which one is not a confirmation.
+	// Empty for every other action.
+	Track      string
+	TrackLabel string
 	// Changes is the field-level diff (diffFields' output) — the actual
 	// anti-misclick mechanism: naming exactly what would change, not just
 	// that "something" would.
@@ -139,6 +147,19 @@ func withPasskeyJS(t *template.Template) *template.Template {
 // and no way for one track's state to disable the other's buttons. Keep it
 // that way; collapsing the two panels into one form with a dropdown would
 // recreate exactly the coupling the two-track design exists to avoid.
+//
+// The onsubmit="return confirm(...)" attributes below are DEAD CODE and must
+// never be treated as a confirmation step: buildCSP emits
+// script-src 'self' 'nonce-…' with no 'unsafe-inline' / 'unsafe-hashes', so the
+// browser blocks inline event handlers and the form posts with no dialog. The
+// only real 二次确认 is requireStepUp's server-rendered confirmation page,
+// which is why the emergency form (the one where it actually mattered) carries
+// no onsubmit at all — it is behind step-up, and adminConfirmTmpl names the
+// track in a banner.
+//
+// Node rows are capped at rolloutPanelMaxRows and ordered most-relevant-first
+// (see rolloutNodeRows): the BYO track is every user's machine, so an
+// uncapped one-row-per-node table is an unbounded page.
 const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 <div class="ro-panel">
 <h3>{{.Title}}（{{.Track}}）</h3>
@@ -169,8 +190,7 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 <input type="text" name="version" placeholder="v1.2.2" title="回滚到的版本" style="width:110px">
 <button type="submit">回滚</button>
 </form>
-<form method="post" action="/admin/rollout/{{.Track}}/emergency" class="lim"
-  onsubmit="return confirm('紧急发布：将跳过分批/金丝雀，对 {{.Track}} 整条轨道一次性放行。确定？')">
+<form method="post" action="/admin/rollout/{{.Track}}/emergency" class="lim">
 <input type="text" name="version" placeholder="v1.2.4" title="紧急发布的版本" style="width:110px">
 <button type="submit" class="danger">紧急发布</button>
 </form>
@@ -193,6 +213,7 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 <tr><td colspan="6" style="color:var(--muted)">该轨道下暂无节点</td></tr>
 {{end}}
 </tbody></table>
+{{if .Hidden}}<p style="color:var(--muted);font-size:12px">共 {{.Total}} 台，仅列出最需要关注的 {{len .Nodes}} 台（失败 / 更新中 / 落后版本优先），其余 {{.Hidden}} 台未显示。</p>{{end}}
 {{end}}
 </div>
 {{end}}`
@@ -322,10 +343,22 @@ button:hover{filter:brightness(1.07)}
 .actions{display:flex;gap:12px;align-items:center;margin-top:10px}
 .actions a{color:var(--muted);text-decoration:none;font-size:13px}
 .actions a:hover{text-decoration:underline}
-.muted{color:var(--muted);font-size:13px;margin:0 0 10px}</style></head>
+.muted{color:var(--muted);font-size:13px;margin:0 0 10px}
+.blast{border:2px solid #dc2626;border-radius:12px;padding:14px 16px;margin:0 0 18px;background:var(--card)}
+.blast .t{color:#dc2626;font-weight:700;font-size:15px;margin:0 0 6px}
+.blast .track{font-size:22px;font-weight:700;letter-spacing:.5px;margin:0 0 4px}
+.blast .who{font-size:14px}</style></head>
 <body>
 <h1>请确认这项操作</h1>
 <p class="sub">动作：<code>{{.Action}}</code>{{if ne .Target "-"}} · 目标：<code>{{.Target}}</code>{{end}}</p>
+
+{{if .Track}}
+<div class="blast">
+<p class="t">⚠ 紧急发布：跳过金丝雀与分批，整条轨道一次性放行</p>
+<p class="track">轨道：{{.Track}}</p>
+<p class="who">{{.TrackLabel}}</p>
+</div>
+{{end}}
 
 {{if .Changes}}
 <table>

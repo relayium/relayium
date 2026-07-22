@@ -551,9 +551,15 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		log.Printf("admin: NodeRelayedSince failed: %v", mErr)
 	}
 	var nodeVs []adminNodeView
+	// allNodes is loaded ONCE and fed to both the nodes section and the two
+	// rollout panels; the panels used to re-query the same rows per track.
+	var allNodes []Node
+	nodesErr := false
 	if ns, nerr := s.store.ListNodes(r.Context()); nerr != nil {
 		log.Printf("admin: ListNodes failed: %v", nerr)
+		nodesErr = true
 	} else {
+		allNodes = ns
 		nodeVs = nodeViews(ns, monthly, s.now(), st)
 	}
 	fleetNodeCount := 0
@@ -603,8 +609,8 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 	// nodes, and a failure in one sets Err on that panel only — the other
 	// panel, and its controls, are unaffected. That independence is the point
 	// of the two-track design, so keep these two calls separate.
-	rolloutFleet := s.rolloutPanel(r.Context(), "fleet", "机队轨", s.now())
-	rolloutByo := s.rolloutPanel(r.Context(), "byo", "自带节点轨", s.now())
+	rolloutFleet := s.rolloutPanel(r.Context(), "fleet", "机队轨", s.now(), allNodes, nodesErr)
+	rolloutByo := s.rolloutPanel(r.Context(), "byo", "自带节点轨", s.now(), allNodes, nodesErr)
 
 	return adminHomeData{
 		RolloutFleet: rolloutFleet, RolloutByo: rolloutByo,

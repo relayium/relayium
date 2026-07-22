@@ -16,7 +16,10 @@ import (
 // 关键约束：这里的转换必须复用 handleAdminSettings / handleAdminUpsertPlan
 // 写库时实际用的那份解析（parseSettingsForm / parsePlanForm）。绝不能另写
 // 一份平行解析——两份迟早漂移，确认页显示的就不再是即将写入的值。
-func (s *Service) beforeImageFor(ctx context.Context, action string, form url.Values) (before, after map[string]any, target string, err error) {
+// pathID 是原始请求的 {id} 路径通配符（表单里没有的那半个身份）。requireStepUp
+// 从 r.PathValue("id") 拿，handleAdminConfirm 从 pendingAction 里拿——两边必须
+// 传同一个值，否则确认页显示的目标和真正执行的目标就会不是一回事。
+func (s *Service) beforeImageFor(ctx context.Context, action, pathID string, form url.Values) (before, after map[string]any, target string, err error) {
 	switch action {
 	case AuditSettings:
 		cur := s.resolveSettings(ctx)
@@ -49,16 +52,30 @@ func (s *Service) beforeImageFor(ctx context.Context, action string, form url.Va
 		return map[string]any{}, map[string]any{"name": form.Get("name")},
 			"token:" + form.Get("name"), nil
 
-	// The confirmation page for an emergency release must state, in the diff,
-	// the two things that make it different from a normal target change: the
-	// version it would push, and that it bypasses the staged ladder. The track
-	// itself is in the path wildcard, so handleAdminConfirm fills the target
-	// after this returns (same as node delete below).
+	// The confirmation page for an emergency release must state the three
+	// things that make it different from a normal target change: the version it
+	// would push, that it bypasses the staged ladder, and WHICH TRACK it hits.
+	//
+	// The track is the single most consequential fact of the three — "fleet"
+	// means our own machines, "byo" means every user's machine — and it used to
+	// be the one thing the page never said: the track lives in the path
+	// wildcard, this returned target "-", and the template only renders a
+	// target when it is not "-". The operator confirmed
+	// "rollout.emergency / v2.0.0 / emergency: true" with no idea whose
+	// machines were about to be swapped. (The inline onsubmit="confirm(...)" in
+	// the panel that does name the track never runs — buildCSP emits
+	// script-src 'self' 'nonce-…' with no 'unsafe-inline'/'unsafe-hashes', so
+	// inline handlers are blocked. Treat it as dead; it cannot be the 二次确认.)
+	//
+	// So name it here, twice over: as the audit/page target, and as a diff row
+	// the operator has to read past.
 	case AuditRolloutEmergency:
 		return map[string]any{}, map[string]any{
-			"target_version": form.Get("version"),
-			"emergency":      true,
-		}, "-", nil
+				"track":          pathID,
+				"target_version": form.Get("version"),
+				"emergency":      true,
+			},
+			rolloutAuditTarget(pathID), nil
 
 	case AuditPasskeyDelete:
 		return map[string]any{}, map[string]any{}, "passkey:" + form.Get("id"), nil

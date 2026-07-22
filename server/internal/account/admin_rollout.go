@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -43,8 +44,19 @@ type rolloutPanelView struct {
 	ByoBatch      int
 	OnTarget      int // nodes already running TargetVersion
 	Total         int
-	Nodes         []rolloutNodeView
+	// Nodes is at most rolloutPanelMaxRows rows, most relevant first; Hidden
+	// counts the rest. OnTarget/Total are always over the WHOLE track, never
+	// over the rendered slice.
+	Nodes  []rolloutNodeView
+	Hidden int
 }
+
+// rolloutPanelMaxRows caps how many node rows one panel renders. The fleet is
+// ~16 machines, but the BYO track is one row per user machine and grows without
+// limit — an uncapped table turns the admin home page into an unbounded
+// document. The cap is on RENDERING only: every count on the panel, and every
+// rollout decision, is still computed over the full population.
+const rolloutPanelMaxRows = 50
 
 // rolloutNodeView is one machine's row inside a panel: enough to diagnose a
 // halt without opening the database — what it runs, what it was told to
@@ -104,6 +116,31 @@ func rolloutResultText(result string) string {
 // unknown track name would silently no-op an UPDATE and report success.
 func validRolloutTrack(track string) bool { return track == "fleet" || track == "byo" }
 
+// rolloutAuditTarget renders a track name as the audit/confirmation-page
+// target. "-" (the package's "no scoped target" marker) only for the
+// impossible empty case, so the emergency confirmation page always has a
+// target to show.
+func rolloutAuditTarget(track string) string {
+	if track == "" {
+		return "-"
+	}
+	return "rollout:" + track
+}
+
+// rolloutTrackLabel spells out, in the operator's language, WHOSE machines a
+// track owns. The bare track name is too easy to skim past on a confirmation
+// page whose whole job is to stop a misclick, and the difference between the
+// two tracks is the difference between our own machines and every user's.
+func rolloutTrackLabel(track string) string {
+	switch track {
+	case "fleet":
+		return "机队轨：我们自己运营的全部节点"
+	case "byo":
+		return "自带节点轨：所有用户自己运行的节点，全部一次性放行"
+	}
+	return track
+}
+
 // rolloutOwnerClass maps a track to the nodes.owner_type it governs. The owner
 // type IS the track (see handleUpdateCheck): our machines roll on "fleet",
 // users' machines on "byo", and neither is ever read across.
@@ -114,11 +151,21 @@ func rolloutOwnerClass(track string) string {
 	return "fleet"
 }
 
-// rolloutPanel builds one track's panel. It reads that track's row and that
-// track's nodes and NOTHING ELSE — in particular it never touches the other
-// track, so neither the data nor the failure modes of the two panels are
-// shared. Any read failure degrades to Err on this panel alone.
-func (s *Service) rolloutPanel(ctx context.Context, track, title string, now time.Time) rolloutPanelView {
+// rolloutPanel builds one track's panel. It reads THAT track's row and nothing
+// else — in particular it never touches the other track's row, so a halted,
+// wedged or unreadable BYO track cannot affect the fleet panel or its controls.
+// A track read failure degrades to Err on this panel alone.
+//
+// allNodes is the node listing the dashboard has ALREADY loaded (ListNodes),
+// filtered here to this track's ownership class. It is passed in rather than
+// re-queried per panel: the panels used to issue two extra full-table scans on
+// every admin home render for rows the caller was holding all along. Filtering
+// in Go is exact — rolloutOwnerClass is the same owner_type the endpoint keys
+// on — and the batch ordering is unaffected because byoOrder re-sorts its input
+// deterministically by (fleetHash, ID). nodesErr means that shared listing
+// failed; both panels then hide their controls, which is a whole-database
+// failure, not one track leaking into the other.
+func (s *Service) rolloutPanel(ctx context.Context, track, title string, now time.Time, allNodes []Node, nodesErr bool) rolloutPanelView {
 	p := rolloutPanelView{Track: track, Title: title}
 	tr, found, err := s.store.GetRolloutTrack(ctx, track)
 	if err != nil {
@@ -126,11 +173,16 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 		p.Err = true
 		return p
 	}
-	nodes, nerr := s.store.NodesByOwnerType(ctx, rolloutOwnerClass(track))
-	if nerr != nil {
-		log.Printf("admin: NodesByOwnerType(%s) failed: %v", rolloutOwnerClass(track), nerr)
+	if nodesErr {
 		p.Err = true
 		return p
+	}
+	ownerClass := rolloutOwnerClass(track)
+	var nodes []Node
+	for _, n := range allNodes {
+		if n.OwnerType == ownerClass {
+			nodes = append(nodes, n)
+		}
 	}
 
 	p.Configured = found
@@ -149,12 +201,13 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 	}
 	cutoff := now.Add(-nodeOnlineWindow).Unix()
 	p.Total = len(nodes)
+	rows := make([]rolloutNodeView, 0, len(nodes))
 	for _, n := range nodes {
 		onTarget := tr.TargetVersion != "" && selfupdate.SameVersion(n.Version, tr.TargetVersion)
 		if onTarget {
 			p.OnTarget++
 		}
-		p.Nodes = append(p.Nodes, rolloutNodeView{
+		rows = append(rows, rolloutNodeView{
 			ID: n.ID, Label: n.Label, Version: n.Version,
 			Online: n.LastSeenAt >= cutoff, OnTarget: onTarget,
 			UpdateFromVersion: n.UpdateFromVersion, UpdateStartedAt: n.UpdateStartedAt,
@@ -163,7 +216,39 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 			InBatch: inBatch[n.ID],
 		})
 	}
+	p.Nodes, p.Hidden = rolloutNodeRows(rows)
 	return p
+}
+
+// rolloutNodeRows orders a panel's rows most-relevant-first and cuts them to
+// rolloutPanelMaxRows, returning the visible slice and how many were dropped.
+//
+// "Relevant" is what an operator opens this panel to find, in order: nodes that
+// reported a FAILURE (the reason a track halts), then the node in flight or in
+// the open batch, then everything still behind the target, then the machines
+// already done. Truncating an unordered list would hide exactly the failures
+// the panel exists to surface, so the ordering is part of the cap, not a
+// nicety. Ties keep the caller's order (sort.SliceStable) so the list does not
+// reshuffle between refreshes.
+func rolloutNodeRows(rows []rolloutNodeView) ([]rolloutNodeView, int) {
+	rank := func(v rolloutNodeView) int {
+		switch {
+		case v.Result == "failed" || v.Result == "rolled_back":
+			return 0
+		case v.Current || v.InBatch:
+			return 1
+		case !v.OnTarget:
+			return 2
+		default:
+			return 3
+		}
+	}
+	out := append([]rolloutNodeView(nil), rows...)
+	sort.SliceStable(out, func(i, j int) bool { return rank(out[i]) < rank(out[j]) })
+	if len(out) > rolloutPanelMaxRows {
+		return out[:rolloutPanelMaxRows], len(out) - rolloutPanelMaxRows
+	}
+	return out, 0
 }
 
 // renderAdminRolloutError re-renders the dashboard with msg in a banner and the
@@ -287,9 +372,9 @@ func (s *Service) handleAdminRolloutResume(w http.ResponseWriter, r *http.Reques
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 
-// handleAdminRolloutEmergency releases the whole track at once: it sets the
-// target the normal way and then arms emergency mode, which makes the update
-// check bypass the staged ladder for every node of this track (see
+// handleAdminRolloutEmergency releases the whole track at once: a single write
+// points the track at the target AND arms emergency mode, which makes the
+// update check bypass the staged ladder for every node of this track (see
 // RolloutTrack.Emergency and updateCheckEmergency).
 //
 // It is registered behind requireStepUp, so by the time this runs the operator
@@ -301,7 +386,7 @@ func (s *Service) handleAdminRolloutResume(w http.ResponseWriter, r *http.Reques
 // log it without the factor.
 //
 // The one thing an emergency does NOT skip is the byo-behind-fleet gate: it
-// still goes through SetTargetVersion. Skipping the ladder is a decision about
+// still goes through setTargetVersion. Skipping the ladder is a decision about
 // speed on OUR machines; pushing users' machines a build our own fleet has
 // never run is a different promise, and an emergency is not a reason to break
 // it. Emergency-release the fleet first, then byo.
@@ -312,20 +397,16 @@ func (s *Service) handleAdminRolloutEmergency(w http.ResponseWriter, r *http.Req
 	}
 	track := r.PathValue("id")
 	version := strings.TrimSpace(r.FormValue("version"))
-	if err := s.SetTargetVersion(r.Context(), track, version); err != nil {
+	// ONE write, not two. Repointing the track and arming emergency mode used
+	// to be separate statements, which left a window where a failure of the
+	// second reported 紧急发布失败 to the operator while the track was already
+	// repointed and rolling to that version by the STAGED path — a release
+	// nobody asked for, and (because handleAdminConfirm skips the audit on any
+	// >=400) with no record that anything had been written at all. There is no
+	// half-applied outcome to report or audit now: this either lands whole or
+	// leaves the row exactly as it was.
+	if err := s.SetEmergencyTargetVersion(r.Context(), track, version); err != nil {
 		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "紧急发布失败："+err.Error())
-		return
-	}
-	// Compare-and-swap against the version just written: if anything moved the
-	// track in between, nothing is released.
-	ok, err := s.store.SetRolloutEmergency(r.Context(), track, version, s.now().Unix())
-	if err != nil {
-		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "紧急发布失败："+err.Error())
-		return
-	}
-	if !ok {
-		s.renderAdminRolloutError(w, r, http.StatusConflict,
-			"紧急发布失败：轨道状态在确认期间发生了变化，请重新确认")
 		return
 	}
 	http.Redirect(w, r, "/admin", http.StatusFound)

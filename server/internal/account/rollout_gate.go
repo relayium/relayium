@@ -41,7 +41,42 @@ var ErrByoAheadOfFleet = errors.New("BYO track cannot target a version the fleet
 //   - CurrentNodeID/FirstNodeID: fleet-track positional state (which node is
 //     current, which was the first/canary) belongs to the rollout that is
 //     being replaced; a new target starts a fresh canary pick.
+//   - Emergency: back to off. Setting a target the ordinary way is the STAGED
+//     path by definition; an emergency release is a separately confirmed
+//     action (see SetEmergencyTargetVersion) and must never be inherited by
+//     the next target somebody types into the normal box.
 func (s *Service) SetTargetVersion(ctx context.Context, track, version string) error {
+	return s.setTargetVersion(ctx, track, version, false)
+}
+
+// SetEmergencyTargetVersion points a track at version AND arms emergency mode
+// in the SAME write, so the operation is atomic from the operator's point of
+// view: either the track is repointed and released whole, or nothing happened
+// at all.
+//
+// That atomicity is the whole reason this exists rather than "SetTargetVersion
+// then flip a flag". The two-step form had a state in between where the track
+// was already repointed to {target: v, status: rolling} but NOT armed: if the
+// second step then failed, the operator was told 紧急发布失败 while a STAGED
+// rollout to that very version was already underway — and, because
+// handleAdminConfirm skips the audit on any >=400, with no record of it
+// anywhere. There is no such intermediate state now: PutRolloutTrack is a
+// single INSERT ... ON CONFLICT statement.
+//
+// It routes through the same setTargetVersion chokepoint as the staged path,
+// so it cannot skip the track-name check, the version check, or the one-way
+// byo-behind-fleet gate. Emergency means "skip the staged ladder on machines
+// this track owns", never "skip the gate that stops users' machines getting a
+// build our own fleet never ran".
+func (s *Service) SetEmergencyTargetVersion(ctx context.Context, track, version string) error {
+	return s.setTargetVersion(ctx, track, version, true)
+}
+
+// setTargetVersion is the single implementation behind both exported entry
+// points, and therefore still the ONLY place a track's target_version changes.
+// emergency only decides which value the emergency column is written with in
+// that same row write; everything else is identical on both paths.
+func (s *Service) setTargetVersion(ctx context.Context, track, version string, emergency bool) error {
 	// Reject anything but the exact two track names. Callers (an admin form
 	// handler, in particular) are expected to pass raw user input straight
 	// through; without this check an unknown or differently-cased track
@@ -94,5 +129,6 @@ func (s *Service) SetTargetVersion(ctx context.Context, track, version string) e
 		TargetVersion:  version,
 		Status:         "rolling",
 		StageStartedAt: s.now().Unix(),
+		Emergency:      emergency,
 	})
 }
