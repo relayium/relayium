@@ -25,19 +25,57 @@ func TestWaitHealthyReturnsTrueWhenHeartbeatArrives(t *testing.T) {
 	}
 }
 
+// stopWriter starts done closed (so the writer's own select stops looping) and
+// blocks the caller until the writer goroutine has actually returned (via
+// stopped). Just closing a "please stop" channel is not enough on its own: the
+// writer can still be mid-way through a markHealthy call — CreateTemp+Rename —
+// when the signal arrives, and t.TempDir's cleanup (RemoveAll) runs the instant
+// the test function returns, so anything short of "wait for the goroutine to
+// actually exit" leaves the same race, just narrower. Waiting on `stopped`
+// closes it completely: by the time this function returns, no more filesystem
+// writes from the goroutine are possible.
+func stopWriter(done, stopped chan struct{}) {
+	close(done)
+	<-stopped
+}
+
 // A heartbeat that is genuinely fresh but came from the OLD version must not
 // count: that is what happens when the unit still executes a binary the updater
 // did not replace (a -bin/RELAYIUM_NODE_BIN mismatch). Without the version
 // check this is indistinguishable from success.
+//
+// The writer goroutine's natural run length — 10ms + 50*5ms = ~260ms — outlives
+// waitHealthy's 150ms timeout, so without stopWriter above it keeps calling
+// markHealthy well after the test function would otherwise return and
+// t.TempDir's cleanup starts, which made this test fail intermittently with
+// "directory not empty". Lengthening the timeout would only narrow that
+// window, not close it.
 func TestWaitHealthyRejectsFreshHeartbeatFromOldVersion(t *testing.T) {
 	dir := t.TempDir()
 	since := time.Now()
 
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	defer stopWriter(done, stopped)
 	go func() {
-		time.Sleep(10 * time.Millisecond)
+		defer close(stopped)
+		select {
+		case <-time.After(10 * time.Millisecond):
+		case <-done:
+			return
+		}
 		for i := 0; i < 50; i++ {
+			select {
+			case <-done:
+				return
+			default:
+			}
 			_ = markHealthy(dir, "0.8.0") // the old process, still alive and healthy
-			time.Sleep(5 * time.Millisecond)
+			select {
+			case <-time.After(5 * time.Millisecond):
+			case <-done:
+				return
+			}
 		}
 	}()
 
@@ -49,19 +87,39 @@ func TestWaitHealthyRejectsFreshHeartbeatFromOldVersion(t *testing.T) {
 // A marker written by a node older than the versioned format has no version in
 // it. Unknown must not count as a match: a spurious rollback is recoverable, a
 // false success recorded as `ok` by central is not.
+//
+// Same shape (and same t.TempDir cleanup race) as
+// TestWaitHealthyRejectsFreshHeartbeatFromOldVersion above — see stopWriter.
 func TestWaitHealthyRejectsLegacyMarkerWithoutVersion(t *testing.T) {
 	dir := t.TempDir()
 	since := time.Now()
 
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	defer stopWriter(done, stopped)
 	go func() {
-		time.Sleep(10 * time.Millisecond)
+		defer close(stopped)
+		select {
+		case <-time.After(10 * time.Millisecond):
+		case <-done:
+			return
+		}
 		for i := 0; i < 50; i++ {
+			select {
+			case <-done:
+				return
+			default:
+			}
 			// Exactly what the pre-version markHealthy left behind: an empty
 			// file whose mtime is the heartbeat time.
 			_ = os.WriteFile(healthFilePath(dir), nil, 0o600)
 			now := time.Now()
 			_ = os.Chtimes(healthFilePath(dir), now, now)
-			time.Sleep(5 * time.Millisecond)
+			select {
+			case <-time.After(5 * time.Millisecond):
+			case <-done:
+				return
+			}
 		}
 	}()
 

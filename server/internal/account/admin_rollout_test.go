@@ -713,6 +713,47 @@ func TestPauseStopsAnEmergencyReleaseFromCommandingNodes(t *testing.T) {
 	}
 }
 
+// FINDING 1: the top-of-page halt banner must survive the SHARED node listing
+// failing. GetRolloutTrack succeeded and the halt is genuinely known — losing
+// the one thing the banner exists to never miss because an unrelated query
+// (ListNodes) failed would be exactly backwards. The panel itself still
+// reports Err (its node table and controls are rightly hidden — the node
+// listing really did fail), but haltedRolloutTracks must not be fooled by
+// that into treating the halt as unknown.
+func TestHaltBannerSurvivesANodeListingFailure(t *testing.T) {
+	svc, store := newRolloutService(t)
+	ctx := context.Background()
+
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "byo", TargetVersion: "v1.0.0", Status: "halted",
+		HaltedReason: "byo rollout: 4/5 nodes failed", StageStartedAt: 1000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// nodesErr=true simulates the dashboard's shared ListNodes call failing;
+	// allNodes is empty/nil exactly as it would be in that case.
+	panel := svc.rolloutPanel(ctx, "byo", "自带节点轨", svc.now(), nil, true)
+	if !panel.Err {
+		t.Fatalf("panel should still report Err when the node listing failed: %+v", panel)
+	}
+	if !panel.Configured || panel.Status != "halted" {
+		t.Fatalf("the track's halted status was lost to the node-listing failure: %+v", panel)
+	}
+
+	halts := haltedRolloutTracks(panel)
+	if len(halts) != 1 || halts[0].Track != "byo" {
+		t.Fatalf("halt banner missing despite a known halt: %+v", halts)
+	}
+
+	// Contrast: a track whose OWN read genuinely failed must still be excluded
+	// — Configured stays false in that case, never reaching "halted" here.
+	unread := rolloutPanelView{Track: "fleet", Title: "机队轨", Err: true}
+	if got := haltedRolloutTracks(unread); len(got) != 0 {
+		t.Fatalf("a track whose own read failed must not appear in the banner: %+v", got)
+	}
+}
+
 // The BYO track is one row per USER machine, so an uncapped panel is an
 // unbounded page. Truncating an unordered list would hide exactly the failures
 // the panel exists to surface, so the ordering is part of the cap.

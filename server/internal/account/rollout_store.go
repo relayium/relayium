@@ -32,11 +32,26 @@ func (s *SQLiteStore) GetRolloutTrack(ctx context.Context, track string) (Rollou
 // Every field is overwritten on conflict — this is whole-row state, not
 // incremental counters — so the caller must always pass the complete desired
 // state, not a partial patch.
+//
+// previous_version is the one deliberate exception: an incoming empty value is
+// a no-op (CASE below), not a wipe. It is the only thing that makes the BYO
+// self-rollback button possible at all (see RollbackByoToPreviousVersion), and
+// a future caller of this whole-row upsert that simply forgets to carry
+// PreviousVersion forward would otherwise silently erase that history on its
+// very next write. Both current writers of an intentionally-empty
+// PreviousVersion are safe under this: setTargetVersion's non-byo branch
+// (byoPreviousVersion returns "" for the fleet track, which never has — and
+// never reads — rollback history) and RollbackByoToPreviousVersion's
+// self-reference guard (it writes "" only when the destination equals the
+// track's own current target, i.e. there is genuinely nothing to preserve).
+// Neither ever needs an empty write to actually CLEAR a previously-recorded
+// version.
 func (s *SQLiteStore) PutRolloutTrack(ctx context.Context, t RolloutTrack) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO node_rollout (`+rolloutCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(track) DO UPDATE SET
-		   target_version=excluded.target_version, previous_version=excluded.previous_version,
+		   target_version=excluded.target_version,
+		   previous_version=CASE WHEN excluded.previous_version = '' THEN previous_version ELSE excluded.previous_version END,
 		   current_node_id=excluded.current_node_id,
 		   first_node_id=excluded.first_node_id,
 		   byo_batch=excluded.byo_batch, stage_started_at=excluded.stage_started_at,

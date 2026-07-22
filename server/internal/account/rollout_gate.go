@@ -170,6 +170,12 @@ func (s *Service) byoPreviousVersion(ctx context.Context, track, newVersion stri
 // not a failure: the track is on its first target (or predates the column).
 var ErrNoPreviousByoVersion = errors.New("BYO track has no recorded previous target version to roll back to")
 
+// ErrCorruptPreviousByoVersion means the recorded previous_version exists but
+// is not a parseable release tag — a hand-edited or otherwise corrupt row.
+// Also a refusal, not a store failure: the handler must render it as a 400,
+// same as ErrNoPreviousByoVersion, never as a 500.
+var ErrCorruptPreviousByoVersion = errors.New("recorded previous byo version is not a plain vMAJOR.MINOR.PATCH release tag")
+
 // RollbackByoToPreviousVersion points the byo track back at
 // RolloutTrack.PreviousVersion — the target it held immediately before the
 // current one — and is the ONE path that changes a track's target without
@@ -200,21 +206,32 @@ var ErrNoPreviousByoVersion = errors.New("BYO track has no recorded previous tar
 // off — a rollback is a staged rollout like any other, never an inherited
 // release-to-everyone.
 //
-// It returns the version the track was pointed at, for the audit entry.
-func (s *Service) RollbackByoToPreviousVersion(ctx context.Context) (string, error) {
+// It returns the byo track exactly as it stood immediately before this
+// rollback (what the audit trail's "Old" values must come from — this is the
+// same read the write below was computed from, not a second, separately-timed
+// query the caller might run before or after this one) and the version the
+// track was pointed at.
+//
+// The returned error distinguishes a REFUSAL (ErrNoPreviousByoVersion,
+// ErrCorruptPreviousByoVersion — the operator's request cannot be honoured,
+// legibly a 400) from a genuine STORE failure (the two store calls below,
+// which is not the operator's fault and must never be rendered as one). Callers
+// must use errors.Is against those two sentinels to tell the difference,
+// never treat "err != nil" as one bucket.
+func (s *Service) RollbackByoToPreviousVersion(ctx context.Context) (RolloutTrack, string, error) {
 	cur, ok, err := s.store.GetRolloutTrack(ctx, "byo")
 	if err != nil {
-		return "", err
+		return RolloutTrack{}, "", err
 	}
 	if !ok || cur.PreviousVersion == "" {
-		return "", ErrNoPreviousByoVersion
+		return RolloutTrack{}, "", ErrNoPreviousByoVersion
 	}
 	version := cur.PreviousVersion
 	// Defence in depth against a hand-edited or corrupt row: the same check
 	// setTargetVersion applies, for the same reason (an unparseable target
 	// wedges the state machine in "wait" forever instead of erroring).
 	if !selfupdate.IsPlainVersion(version) {
-		return "", fmt.Errorf("recorded previous byo version %q is not a plain vMAJOR.MINOR.PATCH release tag", version)
+		return RolloutTrack{}, "", fmt.Errorf("%w: %q", ErrCorruptPreviousByoVersion, version)
 	}
 	// The version we are leaving becomes the new predecessor: it too was set
 	// through the gate, so the invariant above still holds, and it lets an
@@ -223,11 +240,14 @@ func (s *Service) RollbackByoToPreviousVersion(ctx context.Context) (string, err
 	if selfupdate.SameVersion(previous, version) {
 		previous = ""
 	}
-	return version, s.store.PutRolloutTrack(ctx, RolloutTrack{
+	if err := s.store.PutRolloutTrack(ctx, RolloutTrack{
 		Track:           "byo",
 		TargetVersion:   version,
 		PreviousVersion: previous,
 		Status:          "rolling",
 		StageStartedAt:  s.now().Unix(),
-	})
+	}); err != nil {
+		return RolloutTrack{}, "", err
+	}
+	return cur, version, nil
 }

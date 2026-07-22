@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -49,12 +50,18 @@ func TestByoRollbackToPreviousVersionWhileFleetIsMidRollout(t *testing.T) {
 	}
 
 	// ...but the rollback to the RECORDED previous version must succeed.
-	got, err := svc.RollbackByoToPreviousVersion(ctx)
+	before, got, err := svc.RollbackByoToPreviousVersion(ctx)
 	if err != nil {
 		t.Fatalf("RollbackByoToPreviousVersion while the fleet is mid-rollout: %v", err)
 	}
 	if got != "v1.0.0" {
 		t.Fatalf("rolled back to %q, want v1.0.0", got)
+	}
+	// The returned before-image is what the audit trail's "Old" values come
+	// from: it must be the row as it stood before this rollback, not the
+	// post-rollback row.
+	if before.TargetVersion != "v1.1.0" || before.Status != "rolling" {
+		t.Fatalf("before-image = %+v, want the pre-rollback row (target v1.1.0, rolling)", before)
 	}
 	byo, ok, err := store.GetRolloutTrack(ctx, "byo")
 	if err != nil || !ok {
@@ -76,7 +83,7 @@ func TestByoRollbackRefusedWithoutARecordedPreviousVersion(t *testing.T) {
 	ctx := context.Background()
 
 	// Track has never been started at all.
-	if _, err := svc.RollbackByoToPreviousVersion(ctx); !errors.Is(err, ErrNoPreviousByoVersion) {
+	if _, _, err := svc.RollbackByoToPreviousVersion(ctx); !errors.Is(err, ErrNoPreviousByoVersion) {
 		t.Fatalf("err = %v, want ErrNoPreviousByoVersion", err)
 	}
 
@@ -89,7 +96,7 @@ func TestByoRollbackRefusedWithoutARecordedPreviousVersion(t *testing.T) {
 	if err := svc.SetTargetVersion(ctx, "byo", "v1.0.0"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.RollbackByoToPreviousVersion(ctx); !errors.Is(err, ErrNoPreviousByoVersion) {
+	if _, _, err := svc.RollbackByoToPreviousVersion(ctx); !errors.Is(err, ErrNoPreviousByoVersion) {
 		t.Fatalf("err = %v, want ErrNoPreviousByoVersion", err)
 	}
 	byo, _, _ := store.GetRolloutTrack(ctx, "byo")
@@ -116,7 +123,7 @@ func TestByoRollbackResetsEveryFieldARetargetResets(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.RollbackByoToPreviousVersion(ctx); err != nil {
+	if _, _, err := svc.RollbackByoToPreviousVersion(ctx); err != nil {
 		t.Fatal(err)
 	}
 	got, _, _ := store.GetRolloutTrack(ctx, "byo")
@@ -132,7 +139,7 @@ func TestByoRollbackResetsEveryFieldARetargetResets(t *testing.T) {
 // The rollback action must be a fixed destination, never an operator-supplied
 // one: a version box on it would be a general gate bypass.
 func TestByoRollbackCannotReachAnArbitraryVersion(t *testing.T) {
-	ts, svc, store := newAdminSettingsServer(t)
+	ts, _, store := newAdminSettingsServer(t)
 	cookie := adminLogin(t, ts)
 	ctx := context.Background()
 
@@ -142,7 +149,6 @@ func TestByoRollbackCannotReachAnArbitraryVersion(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_ = svc
 
 	// A version field on the request is ignored; the recorded previous wins.
 	resp := postAdminForm(t, ts, cookie, "/admin/rollout/byo/rollback-previous",
@@ -204,5 +210,102 @@ func TestByoRollbackButtonAndRefusalInAdminUI(t *testing.T) {
 	}
 	if !strings.Contains(body, "回滚到上一版本（v1.0.0）") {
 		t.Fatal("the rollback button does not name the version it would go to")
+	}
+}
+
+// FINDING 3: the audit entry for a rollback must come from the SAME read the
+// mutation itself used, driven through the real HTTP route end to end — not a
+// separate GetRolloutTrack call in the handler that could race a concurrent
+// retarget (or simply be dropped on error, as it used to be with `before, _, _`).
+func TestByoRollbackAuditReflectsTheActualBeforeState(t *testing.T) {
+	ts, _, store, _ := newAdminAuditServer(t)
+	cookie := adminLoginCookie(t, ts)
+	ctx := context.Background()
+
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "byo", TargetVersion: "v1.1.0", PreviousVersion: "v1.0.0",
+		Status: "rolling", StageStartedAt: 1000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := postAdminForm(t, ts, cookie, "/admin/rollout/byo/rollback-previous", url.Values{})
+	body := readAll(t, resp)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("rollback: want 302, got %d\n%s", resp.StatusCode, body)
+	}
+
+	entries, err := store.ListAudit(ctx, 10, 0, AuditRolloutRollback)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("want exactly 1 %s audit entry, got %d: %+v", AuditRolloutRollback, len(entries), entries)
+	}
+	// The pre-rollback row really was {v1.1.0, rolling} and the rollback lands
+	// on v1.0.0 — the audit diff must say exactly that, not an empty/zero
+	// before-image from a dropped or racing separate read.
+	changes := entries[0].Changes
+	for _, want := range []string{`"old":"v1.1.0"`, `"new":"v1.0.0"`, `"old":"rolling"`} {
+		if !strings.Contains(changes, want) {
+			t.Fatalf("audit changes missing %q, got: %s", want, changes)
+		}
+	}
+}
+
+// FINDING 4: a genuine STORE failure inside RollbackByoToPreviousVersion must
+// render as 500 with a generic message, never as a 400 and never with the raw
+// driver error visible on the operator-facing page (it belongs in the log).
+// Only the two documented refusals (ErrNoPreviousByoVersion,
+// ErrCorruptPreviousByoVersion — covered by TestByoRollbackButtonAndRefusalInAdminUI)
+// are the operator's own mistake and get a 400.
+type rollbackFailStore struct {
+	*SQLiteStore
+	failByoRead bool
+}
+
+func (s *rollbackFailStore) GetRolloutTrack(ctx context.Context, track string) (RolloutTrack, bool, error) {
+	if s.failByoRead && track == "byo" {
+		return RolloutTrack{}, false, errors.New("boom: read-only filesystem, disk quota exceeded")
+	}
+	return s.SQLiteStore.GetRolloutTrack(ctx, track)
+}
+
+func TestByoRollbackStoreFailureIs500AndDoesNotLeakRawError(t *testing.T) {
+	base := newTestStore(t)
+	ctx := context.Background()
+	if err := base.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "byo", TargetVersion: "v1.1.0", PreviousVersion: "v1.0.0",
+		Status: "rolling", StageStartedAt: 1000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	fs := &rollbackFailStore{SQLiteStore: base}
+	svc := NewService(fs, &capturingMailer{}, Config{
+		BaseURL: "http://example.test", AdminUser: "boss", AdminPassword: "s3cret",
+	})
+	mux := http.NewServeMux()
+	svc.RegisterAdmin(mux)
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	cookie := adminLogin(t, ts)
+
+	fs.failByoRead = true
+	resp := postAdminForm(t, ts, cookie, "/admin/rollout/byo/rollback-previous", url.Values{})
+	body := readAll(t, resp)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("store failure: want 500, got %d\n%s", resp.StatusCode, body)
+	}
+	if strings.Contains(body, "boom") || strings.Contains(body, "read-only filesystem") {
+		t.Fatalf("raw driver error leaked to the operator-facing page:\n%s", body)
+	}
+
+	// And the track itself must be untouched by the failed attempt.
+	fs.failByoRead = false
+	byo, _, _ := base.GetRolloutTrack(ctx, "byo")
+	if byo.TargetVersion != "v1.1.0" || byo.Status != "rolling" {
+		t.Fatalf("a failed rollback mutated the track: %+v", byo)
 	}
 }
