@@ -192,6 +192,142 @@ func TestClaimRolloutNodeIsConditional(t *testing.T) {
 	}
 }
 
+// CompleteRolloutTrack must not resurrect a track a concurrent instance just
+// halted: PutRolloutTrack (the whole-row upsert this replaced) would silently
+// write {Status:complete, HaltedReason:""} over the halted row, erasing the
+// halt and reporting a stopped-bad release as a success.
+func TestCompleteRolloutTrackIsConditional(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "fleet", TargetVersion: "v0.9.0", CurrentNodeID: "node-a",
+		FirstNodeID: "node-a", Status: "rolling", StageStartedAt: 1000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The ordinary path: still rolling, completes cleanly and clears
+	// current_node_id (nothing is in flight once a track is complete).
+	ok, err := store.CompleteRolloutTrack(ctx, "fleet", 2000)
+	if err != nil || !ok {
+		t.Fatalf("complete: ok=%v err=%v, want ok=true", ok, err)
+	}
+	got, _, err := store.GetRolloutTrack(ctx, "fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "complete" || got.CurrentNodeID != "" || got.StageStartedAt != 2000 {
+		t.Fatalf("after complete: %+v", got)
+	}
+	if got.FirstNodeID != "node-a" {
+		t.Fatalf("complete must not touch FirstNodeID (diagnosis state): %+v", got)
+	}
+
+	// A second instance racing a "complete" decision against a track that has
+	// ALREADY moved on (here: already complete) must not report success again
+	// or otherwise touch the row.
+	ok, err = store.CompleteRolloutTrack(ctx, "fleet", 3000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("completing an already-complete track must report ok=false")
+	}
+
+	// The dangerous case: a decision computed while rolling, raced against a
+	// concurrent halt. The complete write must lose, not resurrect the track.
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "byo", TargetVersion: "v0.8.0", Status: "rolling", StageStartedAt: 1000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := store.HaltRolloutTrack(ctx, "byo", "too many failures", 2000); err != nil || !ok {
+		t.Fatalf("halt: ok=%v err=%v", ok, err)
+	}
+	ok, err = store.CompleteRolloutTrack(ctx, "byo", 3000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("complete must not land on a track another instance already halted")
+	}
+	got, _, err = store.GetRolloutTrack(ctx, "byo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "halted" || got.HaltedReason != "too many failures" {
+		t.Fatalf("a halted track was resurrected as complete, or its reason was lost: %+v", got)
+	}
+}
+
+// AdvanceByoBatch is the CAS that closes the worst finding in this package: a
+// decision computed from a pre-halt read must not both resurrect a halted
+// track AND move the batch ladder forward in the same write.
+func TestAdvanceByoBatchIsConditional(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "byo", TargetVersion: "v0.9.0", Status: "rolling", ByoBatch: 10, StageStartedAt: 1000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The ordinary path: still rolling, still at the batch this decision was
+	// computed from -- advances cleanly.
+	ok, err := store.AdvanceByoBatch(ctx, "byo", 10, 50, 2000)
+	if err != nil || !ok {
+		t.Fatalf("advance: ok=%v err=%v, want ok=true", ok, err)
+	}
+	got, _, err := store.GetRolloutTrack(ctx, "byo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ByoBatch != 50 || got.StageStartedAt != 2000 {
+		t.Fatalf("after advance: %+v", got)
+	}
+
+	// A second instance whose decision was computed from the STALE batch (10)
+	// must lose -- the row has already moved to 50.
+	ok, err = store.AdvanceByoBatch(ctx, "byo", 10, 50, 3000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("an advance computed from a stale batch must not land")
+	}
+	got, _, err = store.GetRolloutTrack(ctx, "byo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ByoBatch != 50 {
+		t.Fatalf("the stale advance clobbered the real one: %+v", got)
+	}
+
+	// THE reproduction from the review: a batch-advance decision computed
+	// while rolling at ByoBatch=50, raced against a concurrent halt, must not
+	// resurrect the track NOR move the ladder from 50 to 100.
+	if ok, err := store.HaltRolloutTrack(ctx, "byo", "byo rollout: 4/17 nodes in the 50% batch failed", 4000); err != nil || !ok {
+		t.Fatalf("halt: ok=%v err=%v", ok, err)
+	}
+	ok, err = store.AdvanceByoBatch(ctx, "byo", 50, 100, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("an advance must not land on a track another instance already halted")
+	}
+	got, _, err = store.GetRolloutTrack(ctx, "byo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "halted" || got.ByoBatch != 50 {
+		t.Fatalf("a halted track was resurrected AND its ladder advanced: %+v", got)
+	}
+	if got.HaltedReason == "" {
+		t.Fatalf("the halt reason was lost: %+v", got)
+	}
+}
+
 // A halt is the one write that must never be lost, so it is conditional too:
 // it only fires on a rolling track, and it touches nothing else on the row.
 func TestHaltRolloutTrackOnlyHaltsRollingTracks(t *testing.T) {

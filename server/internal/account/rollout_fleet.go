@@ -16,23 +16,20 @@ import (
 // traffic gets caught before it reaches a second node. fleetStepWindow is
 // the shorter window used for every node after the canary has already
 // proven the release safe. updateSilenceLimit is how long a node commanded
-// to update may go without a heartbeat before it is treated as bricked.
+// to update may go without a heartbeat before it is treated as bricked --
+// and it also bounds the RESUME path in handleUpdateCheck (a node that keeps
+// heartbeating but never reports a result is not silent, so this same limit
+// is applied to elapsed time since the command was issued instead; see the
+// "wait" branch's resume logic there). That reuse deliberately replaced an
+// earlier per-poll attempt counter: the poll interval is entirely
+// client-side, so a count-based budget could be burned in seconds by a
+// crash-restart loop, or exceeded by a genuinely slow download on a healthy
+// rollout. Elapsed wall-clock time has neither problem.
 const (
 	fleetFirstWindow   = 6 * 3600
 	fleetStepWindow    = 30 * 60
 	updateSilenceLimit = 15 * 60
 )
-
-// fleetResumeAttemptLimit bounds how many times the update-check endpoint will
-// tell a node that already holds the rollout claim to CARRY ON with an update
-// it has not finished. That path exists so an updater which restarted
-// mid-update is not stranded, but nothing else stops it: a node that fails to
-// install, reports no result and keeps heartbeating is not SILENT, so
-// updateSilenceLimit never fires against it, and it would be handed the same
-// build to re-download every poll forever. At the node's 30s poll interval this
-// is roughly the same wall-clock budget as updateSilenceLimit, after which the
-// track halts for a human instead of looping.
-const fleetResumeAttemptLimit = 30
 
 // NodeSnapshot is what the state machine needs to know about one node.
 type NodeSnapshot struct {

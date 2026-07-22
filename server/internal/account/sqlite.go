@@ -143,6 +143,7 @@ CREATE TABLE IF NOT EXISTS nodes (
   last_seen_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_nodes_last_seen ON nodes(last_seen_at);
+CREATE INDEX IF NOT EXISTS idx_nodes_owner_type ON nodes(owner_type);
 CREATE TABLE IF NOT EXISTS pending_node_deletes (
   blob_key    TEXT NOT NULL,
   node_id     TEXT NOT NULL,

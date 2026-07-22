@@ -271,6 +271,14 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		// would let a node claim "v9.9.9" and be handed AllowDowngrade for any
 		// target it likes. req.CurrentVersion is only a fallback for a row that
 		// has no version recorded yet.
+		//
+		// This is NOT authoritative in an absolute sense: node.Version is itself
+		// written by the node via register/heartbeat, so a node can still walk
+		// its OWN recorded version up over successive calls to obtain
+		// AllowDowngrade for itself. What it closes is cross-node spoofing (one
+		// node claiming another's or an arbitrary version at request time) — the
+		// trust model documented on handleUpdateCheck accepts self-spoofing as
+		// the node's own problem, same as register/heartbeat already do.
 		AllowDowngrade: isVersionDowngrade(firstNonEmpty(node.Version, req.CurrentVersion), tr.TargetVersion),
 	}
 	if tr.Status != "rolling" {
@@ -317,9 +325,21 @@ func (s *Service) updateCheckFleet(ctx context.Context, tr RolloutTrack, snaps [
 		}
 		return false, d.Reason, nil
 	case "complete":
-		tr.Status, tr.CurrentNodeID, tr.StageStartedAt = "complete", "", now
-		if err := s.store.PutRolloutTrack(ctx, tr); err != nil {
+		// Conditional on the track still being 'rolling', same as the halt
+		// above: a whole-row rewrite here could report "complete" over a row a
+		// concurrent instance just halted (erasing the halt and its reason,
+		// and reporting a stopped-bad release as a success), or clobber a
+		// concurrent claim, leaving a node commanded while the track says
+		// complete so that node's eventual failure is never attributable.
+		ok, err := s.store.CompleteRolloutTrack(ctx, tr.Track, now)
+		if err != nil {
 			return false, "", err
+		}
+		if !ok {
+			// Another instance changed the row since this decision was
+			// computed (halted it, claimed it, or completed it already). Do
+			// NOT report "complete" as if our decision still held.
+			return false, "rollout state changed before this could be recorded as complete", nil
 		}
 		return false, "rollout complete", nil
 	case "update":
@@ -367,33 +387,37 @@ func (s *Service) updateCheckFleet(ctx context.Context, tr RolloutTrack, snaps [
 		if tr.CurrentNodeID == node.ID && node.UpdateResult == "" &&
 			tr.TargetVersion != "" &&
 			!selfupdate.SameVersion(node.Version, tr.TargetVersion) {
-			// Bound the resume. A node that fails to install, reports nothing
-			// and keeps heartbeating is never SILENT, so decideFleet's brick
-			// check can never fire, and this branch would answer "carry on" on
-			// every 30s poll forever — a permanent re-download/reinstall loop
-			// that also wedges the track behind it. After
-			// fleetResumeAttemptLimit resumes (roughly the silence budget's
-			// worth of polling) stop guessing and halt with a reason a human
-			// can act on.
-			if node.UpdateAttempts >= fleetResumeAttemptLimit {
-				reason := fmt.Sprintf("node %s was told to resume its update %d times without ever reporting a result",
-					node.ID, node.UpdateAttempts)
+			if node.UpdateStartedAt == 0 {
+				// The claim was persisted but the node's own stamp was not
+				// (a crash between the two writes). Repair it, starting the
+				// timeout clock below fresh; never re-stamp an ALREADY-set
+				// one, which would reset that clock on every poll and make a
+				// wedged node undetectable.
+				if err := s.store.CommandNodeUpdate(ctx, node.ID, node.Version, now); err != nil {
+					return false, "", err
+				}
+				return true, "", nil
+			}
+			// Bound the resume by ELAPSED WALL CLOCK time since the update was
+			// commanded, not by how many times this node has polled. A
+			// poll-count budget is cadence-dependent -- the poll interval is
+			// entirely client-side -- so it can be burned in seconds by a
+			// crash-restart loop (or by replaying the in-flight node's ID
+			// against the shared fleet token), while a genuinely slow download
+			// on a thin link can exceed it on an otherwise healthy rollout.
+			// now-node.UpdateStartedAt has neither problem, and reuses
+			// updateSilenceLimit: a node that fails to install, reports
+			// nothing and keeps heartbeating is never SILENT (so decideFleet's
+			// own brick check can never fire against it), but it gets exactly
+			// the same wall-clock budget a silent node does before the track
+			// gives up and halts for a human.
+			if now-node.UpdateStartedAt > updateSilenceLimit {
+				reason := fmt.Sprintf("node %s has been resuming its update for over %d seconds without ever reporting a result",
+					node.ID, updateSilenceLimit)
 				if _, err := s.store.HaltRolloutTrack(ctx, tr.Track, reason, now); err != nil {
 					return false, "", err
 				}
 				return false, reason, nil
-			}
-			if err := s.store.BumpNodeUpdateAttempts(ctx, node.ID); err != nil {
-				return false, "", err
-			}
-			if node.UpdateStartedAt == 0 {
-				// The claim was persisted but the node's own stamp was not
-				// (a crash between the two writes). Repair it; never re-stamp
-				// an existing one, which would reset the brick timer on every
-				// poll and make a wedged node undetectable.
-				if err := s.store.CommandNodeUpdate(ctx, node.ID, node.Version, now); err != nil {
-					return false, "", err
-				}
 			}
 			return true, "", nil
 		}
@@ -414,21 +438,48 @@ func (s *Service) updateCheckByo(ctx context.Context, tr RolloutTrack, snaps []N
 		if _, err := s.store.HaltRolloutTrack(ctx, tr.Track, reason, now); err != nil {
 			return false, "", err
 		}
-		return false, reason, nil
+		// The detailed reason (e.g. "4/17 nodes in the 10% batch failed") is
+		// stored in HaltedReason for the admin, but is never handed back to the
+		// polling node here: unlike the fleet path — fleet-token-only, and
+		// naming fleet node IDs an operator already controls — this is reached
+		// by any authenticated BYO node, and the detailed message discloses how
+		// many BYO nodes exist globally and how many of them are failing.
+		return false, "rollout paused", nil
 	case "complete":
-		tr.Status, tr.StageStartedAt = "complete", now
-		if err := s.store.PutRolloutTrack(ctx, tr); err != nil {
+		// Conditional on the track still being 'rolling', same rationale as the
+		// fleet path's "complete" case: a whole-row rewrite could report
+		// "complete" over a row a concurrent instance just halted, erasing the
+		// halt and its reason.
+		ok, err := s.store.CompleteRolloutTrack(ctx, tr.Track, now)
+		if err != nil {
 			return false, "", err
+		}
+		if !ok {
+			return false, "rollout state changed before this could be recorded as complete", nil
 		}
 		return false, "rollout complete", nil
 	case "update":
 		// Persist the newly-opened batch and restart the observation window
 		// BEFORE commanding anyone: StageStartedAt is what gates the next,
 		// wider batch, and a batch opened but not recorded would re-open (and
-		// re-command) on every single poll.
-		tr.ByoBatch, tr.StageStartedAt = nextByoBatch(tr.ByoBatch), now
-		if err := s.store.PutRolloutTrack(ctx, tr); err != nil {
+		// re-command) on every single poll. This is a compare-and-swap, not a
+		// blind write: it only lands if the row is STILL 'rolling' and STILL
+		// at the batch percentage (tr.ByoBatch) this decision was computed
+		// from. Dropping either half of that condition reproduces the worst
+		// finding in this package -- a concurrent halt (computed from the same
+		// pre-halt read) silently resurrected, AND the ladder jumped straight
+		// to the wider batch in the same write, reaching a release the failure
+		// check had already decided to stop. See AdvanceByoBatch's doc comment.
+		toBatch := nextByoBatch(tr.ByoBatch)
+		advanced, err := s.store.AdvanceByoBatch(ctx, tr.Track, tr.ByoBatch, toBatch, now)
+		if err != nil {
 			return false, "", err
+		}
+		if !advanced {
+			// Another instance already halted, completed, or advanced the
+			// track since this decision was computed. Do NOT command anyone
+			// off a decision that no longer matches persisted state.
+			return false, "rollout state changed before this batch could be opened", nil
 		}
 		byID := make(map[string]NodeSnapshot, len(snaps))
 		for _, n := range snaps {

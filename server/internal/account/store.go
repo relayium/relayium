@@ -306,12 +306,14 @@ type Node struct {
 	// UpdateResult is the outcome the node last reported for a commanded
 	// self-update: "" (none in flight / never asked), "ok", or "failed".
 	UpdateResult string
-	// UpdateAttempts counts how many times central has told this node to RESUME
-	// the update it already holds the claim for (see the fleet resume path in
-	// handleUpdateCheck). Reset to 0 by every fresh command. It exists to bound
-	// that path: a node that installs nothing, reports nothing and keeps
-	// heartbeating is never silent, so the brick check can never fire, and
-	// without a counter it would be re-commanded every 30s forever.
+	// UpdateAttempts used to count how many times central had told this node to
+	// RESUME the update it already holds the claim for, bounding the fleet
+	// resume path in handleUpdateCheck by POLL COUNT. That bound was
+	// cadence-dependent (the poll interval is entirely client-side) so it has
+	// been replaced by an elapsed-wall-clock check against UpdateStartedAt
+	// (see updateSilenceLimit). Nothing writes this column anymore; it is kept
+	// rather than dropped, per the package's schema-migration policy, and
+	// simply reads 0 forever on both existing and new rows.
 	UpdateAttempts int
 }
 
@@ -790,6 +792,16 @@ type Store interface {
 	// HaltRolloutTrack stops a track, conditional on it still being 'rolling',
 	// so a halt can never be clobbered by (nor clobber) a concurrent writer.
 	HaltRolloutTrack(ctx context.Context, track, reason string, at int64) (bool, error)
+	// CompleteRolloutTrack marks a track finished, conditional on it still
+	// being 'rolling' — same rationale as HaltRolloutTrack: a whole-row write
+	// here could erase a concurrent halt and its reason.
+	CompleteRolloutTrack(ctx context.Context, track string, at int64) (bool, error)
+	// AdvanceByoBatch opens the next byo batch, conditional on the row still
+	// being 'rolling' AND still at the batch percentage (fromBatch) this
+	// decision was computed from — otherwise a stale write can resurrect a
+	// halted track AND jump the ladder forward in the same stroke. See its
+	// doc comment in rollout_store.go.
+	AdvanceByoBatch(ctx context.Context, track string, fromBatch, toBatch int, at int64) (bool, error)
 	// NodesByOwnerType returns every node of one ownership class ("fleet" |
 	// "user") INCLUDING offline ones. The rollout state machines require the
 	// offline rows (see the method's doc comment) — do not substitute
@@ -801,8 +813,9 @@ type Store interface {
 	// SetNodeUpdateResult records the outcome a node reported for the update it
 	// was last commanded.
 	SetNodeUpdateResult(ctx context.Context, nodeID, result string) error
-	// BumpNodeUpdateAttempts increments nodes.update_attempts, bounding the
-	// fleet resume path (see Node.UpdateAttempts).
+	// BumpNodeUpdateAttempts increments nodes.update_attempts. No longer called
+	// by the rollout path (see Node.UpdateAttempts) — kept on the interface and
+	// the schema rather than removed, in case a future caller needs it.
 	BumpNodeUpdateAttempts(ctx context.Context, nodeID string) error
 	// pending_node_deletes (orphan-retry queue for GC when a node's DELETE fails)
 	EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error

@@ -105,6 +105,71 @@ func (s *SQLiteStore) HaltRolloutTrack(ctx context.Context, track, reason string
 	return n == 1, nil
 }
 
+// CompleteRolloutTrack marks a track finished, conditional on it still being
+// 'rolling'. Used by both the fleet and byo "complete" decisions.
+//
+// Same clobber risk as HaltRolloutTrack, just with the roles reversed: a
+// whole-row PutRolloutTrack writing {Status:complete, HaltedReason:""}
+// unconditionally over a row a concurrent instance just halted would erase
+// the halt and its reason, and would report to operators that a release the
+// failure check had already stopped shipped successfully. On the fleet track
+// it also clears current_node_id (there is no node in flight once a track is
+// complete); on byo the column is already always empty, so clearing it there
+// is a no-op, not a behaviour change.
+// ok=false means the track was no longer rolling when this landed (already
+// halted, already completed, or advanced past the state this decision was
+// computed from) — the caller must not treat the transition as having
+// happened.
+func (s *SQLiteStore) CompleteRolloutTrack(ctx context.Context, track string, at int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE node_rollout SET status = 'complete', current_node_id = '', stage_started_at = ?
+		   WHERE track = ? AND status = 'rolling'`,
+		at, track)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
+}
+
+// AdvanceByoBatch opens the next, wider byo batch, but ONLY if the row is
+// still 'rolling' AND still at fromBatch — the percentage this decision was
+// computed from.
+//
+// Both conditions are load-bearing, and dropping either reproduces the worst
+// finding in this package: an instance that read ByoBatch=10 while rolling,
+// then (after a concurrent instance halted the track for too many failures)
+// blindly wrote {Status:rolling, ByoBatch:50, HaltedReason:""} via
+// PutRolloutTrack, would silently undo the halt AND move the ladder from a
+// 10% canary straight to a 50% batch — shipping a release the failure check
+// had explicitly decided to stop to five times as many nodes, with no record
+// that it was ever halted. WHERE status='rolling' stops that. WHERE
+// byo_batch=fromBatch additionally stops two instances that both read
+// ByoBatch=10 concurrently from each independently advancing it (10->50, then
+// 50->100 from the second instance's stale read), which would let the 50%
+// batch's observation window be skipped entirely.
+// ok=false means the row already moved (halted, completed, or advanced by
+// another instance) since this decision was computed — the caller must not
+// command the batch it computed as if it were now open, and should answer
+// "not eligible" for this poll instead.
+func (s *SQLiteStore) AdvanceByoBatch(ctx context.Context, track string, fromBatch, toBatch int, at int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE node_rollout SET byo_batch = ?, stage_started_at = ?
+		   WHERE track = ? AND status = 'rolling' AND byo_batch = ?`,
+		toBatch, at, track, fromBatch)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
+}
+
 // NodesByOwnerType returns EVERY node of one ownership class ("fleet" | "user"),
 // INCLUDING offline ones — deliberately unfiltered by last_seen_at.
 //
@@ -131,9 +196,11 @@ func (s *SQLiteStore) NodesByOwnerType(ctx context.Context, ownerType string) ([
 //     and heartbeat and nothing else ever resets it: a stale "failed" from the
 //     node's previous command would otherwise be read as a failure of the
 //     command being issued right now.
-//   - update_attempts is reset, because the resume budget it bounds belongs to
-//     ONE command; carrying the previous command's exhausted count forward
-//     would halt the track on the new command's first resume.
+//   - update_attempts is reset to 0 for hygiene. Nothing reads it as a bound
+//     anymore (the fleet resume path now bounds itself by elapsed time since
+//     update_started_at, not by this counter — see Node.UpdateAttempts), but
+//     resetting it here costs nothing and avoids a stale nonzero value
+//     lingering from a version of this code that did.
 func (s *SQLiteStore) CommandNodeUpdate(ctx context.Context, nodeID, fromVersion string, at int64) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE nodes SET update_started_at = ?, update_from_version = ?, update_result = '', update_attempts = 0 WHERE id = ?`,
@@ -142,9 +209,10 @@ func (s *SQLiteStore) CommandNodeUpdate(ctx context.Context, nodeID, fromVersion
 }
 
 // BumpNodeUpdateAttempts counts one more "carry on with the update you already
-// hold" answer for this node. See Node.UpdateAttempts: it is the only bound on
-// the fleet resume path, which the silence check cannot cover because a node
-// looping on a failed install is heartbeating perfectly.
+// hold" answer for this node. No longer called by the fleet resume path (see
+// Node.UpdateAttempts) — kept, unused, per the package's schema-migration
+// policy of not dropping columns/methods that a live deployment might still
+// reference.
 func (s *SQLiteStore) BumpNodeUpdateAttempts(ctx context.Context, nodeID string) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE nodes SET update_attempts = update_attempts + 1 WHERE id = ?`, nodeID)

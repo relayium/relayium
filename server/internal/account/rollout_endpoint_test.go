@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -390,14 +391,10 @@ func TestUpdateCheckResumesTheNodeHoldingTheClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Never re-stamped: that would reset the brick timer on every poll and make
-	// a wedged node undetectable.
+	// Never re-stamped: that would reset the timeout clock on every poll and
+	// make a wedged node undetectable.
 	if n.UpdateStartedAt != tNow-60 {
 		t.Fatalf("update_started_at = %d, resume must not re-stamp it (was %d)", n.UpdateStartedAt, tNow-60)
-	}
-	// But the resume IS counted, because nothing else bounds this path.
-	if n.UpdateAttempts != 1 {
-		t.Fatalf("update_attempts = %d, want 1: an uncounted resume is an unbounded reinstall loop", n.UpdateAttempts)
 	}
 }
 
@@ -436,10 +433,13 @@ func TestUpdateCheckResumeRepairsAMissingUpdateStamp(t *testing.T) {
 	}
 }
 
-// The resume path is bounded. A node that never installs, never reports and
-// keeps heartbeating is not SILENT, so decideFleet's brick check can never fire
-// against it; without a bound it would be handed the same build to re-download
-// every 30s forever, with the whole track wedged behind it.
+// The resume path is bounded by ELAPSED WALL CLOCK TIME since the update was
+// commanded, not by how many times the node has polled (see updateSilenceLimit's
+// doc comment for why a poll-count budget is the wrong bound: the poll interval
+// is entirely client-side). A node that never installs, never reports and keeps
+// heartbeating is not SILENT, so decideFleet's own brick check can never fire
+// against it; without SOME bound it would be handed the same build to
+// re-download forever, with the whole track wedged behind it.
 func TestUpdateCheckHaltsAfterTooManyResumes(t *testing.T) {
 	ts, _, st := newUpdateCheckServer(t)
 	ctx := context.Background()
@@ -452,22 +452,65 @@ func TestUpdateCheckHaltsAfterTooManyResumes(t *testing.T) {
 	if _, err := st.UpsertNode(ctx, Node{
 		ID: "n1", OwnerType: "fleet", URLs: []string{"turn:x:3478"}, TURNSecret: "s",
 		Version: "v0.8.0", CreatedAt: 1, LastSeenAt: tNow,
-		UpdateStartedAt: tNow - 60, UpdateFromVersion: "v0.8.0",
-		UpdateAttempts: fleetResumeAttemptLimit,
+		// The command was issued more than updateSilenceLimit ago -- exactly
+		// what a node stuck resuming forever looks like on the wire, no matter
+		// how many (or how few) times it has polled since. LastSeenAt stays at
+		// tNow (still heartbeating), so decideFleet's OWN silence check (which
+		// runs on LastSeenAt, not UpdateStartedAt) does not fire here -- this
+		// test is isolating the update-check resume path's own bound.
+		UpdateStartedAt: tNow - updateSilenceLimit - 1, UpdateFromVersion: "v0.8.0",
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	_, out := postUpdateCheck(t, ts, "fleet-secret", updateCheckReq{NodeID: "n1", CurrentVersion: "v0.8.0"})
 	if out.Eligible {
-		t.Fatal("a node that has exhausted its resume budget must not be told to reinstall again")
+		t.Fatal("a node whose update has been in flight past the silence limit must not be told to reinstall again")
 	}
 	got, _, err := st.GetRolloutTrack(ctx, "fleet")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Status != "halted" || got.HaltedReason == "" {
-		t.Fatalf("an exhausted resume budget must halt the track with a reason, got %+v", got)
+		t.Fatalf("an update stuck past the silence limit must halt the track with a reason, got %+v", got)
+	}
+}
+
+// The flip side of the same fix: a poll-COUNT budget would have halted this
+// after a fixed number of calls no matter how little wall-clock time had
+// passed -- burnable in seconds by a crash-restart loop, or by anyone replaying
+// the in-flight node's ID against the shared fleet token. With the clock
+// FROZEN and the update commanded recently, even many resumes in a row must
+// leave the track rolling.
+func TestUpdateCheckManyResumesWithFrozenClockDoNotHalt(t *testing.T) {
+	ts, _, st := newUpdateCheckServer(t)
+	ctx := context.Background()
+	if err := st.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "fleet", TargetVersion: "v0.9.0", Status: "rolling",
+		CurrentNodeID: "n1", FirstNodeID: "n1", StageStartedAt: tNow - 60,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertNode(ctx, Node{
+		ID: "n1", OwnerType: "fleet", URLs: []string{"turn:x:3478"}, TURNSecret: "s",
+		Version: "v0.8.0", CreatedAt: 1, LastSeenAt: tNow,
+		UpdateStartedAt: tNow - 60, UpdateFromVersion: "v0.8.0",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 40; i++ {
+		_, out := postUpdateCheck(t, ts, "fleet-secret", updateCheckReq{NodeID: "n1", CurrentVersion: "v0.8.0"})
+		if !out.Eligible {
+			t.Fatalf("poll %d: resume was refused before the elapsed silence limit passed, got %+v", i, out)
+		}
+	}
+	got, _, err := st.GetRolloutTrack(ctx, "fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "rolling" {
+		t.Fatalf("track status = %q after 40 resumes with a frozen clock, want still rolling", got.Status)
 	}
 }
 
@@ -666,5 +709,59 @@ func TestUpdateCheckIgnoresASelfReportedVersionForDowngrade(t *testing.T) {
 	_, out := postUpdateCheck(t, ts, "fleet-secret", updateCheckReq{NodeID: "n1", CurrentVersion: "v9.9.9"})
 	if out.AllowDowngrade {
 		t.Fatal("a node claiming v9.9.9 must not be handed AllowDowngrade; the stored version is v0.8.0")
+	}
+}
+
+// The BYO halt reason must not disclose the global BYO population or failure
+// counts to the polling node: any authenticated BYO node reaches this path
+// (unlike the fleet path, fleet-token-only and naming fleet node IDs an
+// operator already controls). The detailed reason must still reach the admin
+// via HaltedReason.
+func TestUpdateCheckByoHaltReasonIsGenericToTheNode(t *testing.T) {
+	ts, _, st := newUpdateCheckServer(t)
+	ctx := context.Background()
+	if err := st.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
+		ByoBatch: 100, StageStartedAt: tNow - 100000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	snaps := newByoFleet(t, st, 5, "v0.8.0")
+	// Command every node for this rollout, then report two of them failed --
+	// 2/5 = 40%, clearing both the rate (20%) and count (2) thresholds.
+	for _, n := range snaps {
+		if err := st.CommandNodeUpdate(ctx, n.ID, "v0.8.0", tNow-100000); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.SetNodeUpdateResult(ctx, snaps[0].ID, "failed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetNodeUpdateResult(ctx, snaps[1].ID, "failed"); err != nil {
+		t.Fatal(err)
+	}
+
+	resp, out := postUpdateCheck(t, ts, "user-token", updateCheckReq{NodeID: snaps[2].ID, CurrentVersion: "v0.8.0"})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("got %d want 200 (body %+v)", resp.StatusCode, out)
+	}
+	if out.Eligible {
+		t.Fatal("a halted track must not command anyone")
+	}
+	if out.Reason == "" {
+		t.Fatal("the node should still be told the track is paused")
+	}
+	if strings.ContainsAny(out.Reason, "%/") {
+		t.Fatalf("the node-facing reason leaks population/failure detail: %q", out.Reason)
+	}
+	got, _, err := st.GetRolloutTrack(ctx, "byo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "halted" {
+		t.Fatalf("track status = %q, want halted", got.Status)
+	}
+	if !strings.ContainsAny(got.HaltedReason, "%/") {
+		t.Fatalf("the detailed reason must still be recorded for the admin, got %q", got.HaltedReason)
 	}
 }
