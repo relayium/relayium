@@ -449,6 +449,22 @@ func main() {
 		mux.Handle("/api/", acct.Routes())
 		acct.RegisterAdmin(mux)
 		acct.RegisterDevicePage(mux) // GET /device on the root mux (see RegisterDevicePage)
+
+		if *stripeSecretKey != "" {
+			// Periodic safety net for a MISSED customer.subscription.deleted webhook:
+			// Stripe stops retrying an undeliverable event after ~3 days, which would
+			// leave a canceled user on a paid plan forever. This sweep downgrades any
+			// Stripe-paid user whose subscription no longer exists on Stripe. Webhooks
+			// remain the primary, immediate path; this is the eventual-consistency net.
+			go func() {
+				t := time.NewTicker(6 * time.Hour)
+				defer t.Stop()
+				acct.ReconcileStripeSubscriptions(context.Background())
+				for range t.C {
+					acct.ReconcileStripeSubscriptions(context.Background())
+				}
+			}()
+		}
 	}
 
 	// Universal Links / Sign in with Apple domain association. A more specific

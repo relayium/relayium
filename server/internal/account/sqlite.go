@@ -776,6 +776,36 @@ func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (User, error) 
 	return u, err
 }
 
+// ListStripePaidUsers returns active users on a Stripe-sourced paid plan that
+// have a customer id — the reconcile sweep's candidate set. plan_source='admin'
+// (comped) and free/unbound accounts are excluded: they never take a webhook and
+// have no Stripe subscription to reconcile against.
+func (s *SQLiteStore) ListStripePaidUsers(ctx context.Context) ([]User, error) {
+	rows, err := s.reader().QueryContext(ctx,
+		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes, deleted_at, purge_after, plan_id,
+		        stripe_customer_id, stripe_subscription_id, subscription_status, subscription_end, plan_source, scheduled_plan_id, scheduled_cycle, billing_cycle,
+		        plan_started_at, quota_accrued_bytes, quota_accrued_period
+		   FROM users
+		  WHERE plan_source = 'stripe' AND plan_id != 'free' AND stripe_customer_id != '' AND deleted_at = 0`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []User
+	for rows.Next() {
+		var u User
+		var strict int
+		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.EmailVerified, &strict, &u.DeletedAt, &u.PurgeAfter, &u.PlanID,
+			&u.StripeCustomerID, &u.StripeSubscriptionID, &u.SubscriptionStatus, &u.SubscriptionEnd, &u.PlanSource, &u.ScheduledPlanID, &u.ScheduledCycle, &u.BillingCycle,
+			&u.PlanStartedAt, &u.QuotaAccruedBytes, &u.QuotaAccruedPeriod); err != nil {
+			return nil, err
+		}
+		u.OnlyOwnNodes = strict != 0
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
 func (s *SQLiteStore) SetOnlyOwnNodes(ctx context.Context, userID string, on bool) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE users SET only_own_nodes = ? WHERE id = ?`, b2i(on), userID)
 	return err

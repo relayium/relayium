@@ -496,6 +496,49 @@ func (s *Service) reconcileSubscriptions(ctx context.Context, u User, evCreated 
 	return true, nil
 }
 
+// ReconcileStripeSubscriptions is the periodic safety net for a MISSED
+// customer.subscription.deleted webhook. Webhooks are the primary path, but
+// Stripe gives up retrying a 500'd/undeliverable event after ~3 days; a lost
+// cancellation would then leave a canceled user on a paid plan forever. This
+// sweep lists each Stripe-paid user's active subscriptions and, when none
+// remain, downgrades them to free — the same transition the deleted webhook
+// makes. The live Stripe query is authoritative, so a user who re-subscribed
+// between cancellation and this sweep still shows an active sub and is left
+// alone. Best-effort: a per-user Stripe/store error is logged and retried next
+// sweep. Wired to a ticker in main.go.
+func (s *Service) ReconcileStripeSubscriptions(ctx context.Context) {
+	if s.biller == nil {
+		return
+	}
+	users, err := s.store.ListStripePaidUsers(ctx)
+	if err != nil {
+		log.Printf("billing: reconcile sweep list users: %v", err)
+		return
+	}
+	for _, u := range users {
+		subs, err := s.biller.ListActiveSubscriptions(ctx, u.StripeCustomerID)
+		if err != nil {
+			log.Printf("billing: reconcile sweep list subs for %s: %v", u.ID, err)
+			continue // transient — leave the plan untouched, retry next sweep
+		}
+		if len(subs) > 0 {
+			continue // still has a live subscription
+		}
+		// Paid plan but no live subscription → a cancellation whose webhook we
+		// never received. Downgrade to free, mirroring customer.subscription.deleted.
+		now := s.now().Unix()
+		_ = s.store.SetUserStripeSubscription(ctx, u.ID, "")
+		if err := s.store.SetUserSubscription(ctx, u.ID, "free", "canceled", 0, "stripe", "", now, now); err != nil {
+			log.Printf("billing: reconcile sweep downgrade %s: %v", u.ID, err)
+			continue
+		}
+		if u.ScheduledPlanID != "" {
+			_ = s.store.SetScheduledPlan(ctx, u.ID, "", "")
+		}
+		log.Printf("billing: reconcile sweep downgraded user %s to free (no active Stripe subscription, missed deletion webhook)", u.ID)
+	}
+}
+
 // subEventIsStale reports whether a subscription webhook event (identified by
 // its Stripe event.created) is older than the last one already applied to this
 // user, and if so ACKs it with 200 so Stripe stops retrying. Stripe does not
@@ -547,6 +590,12 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	ev, err := s.biller.VerifyWebhook(body, r.Header.Get("Stripe-Signature"), s.now().Unix())
 	if err != nil {
+		if errors.Is(err, ErrWebhookWrongMode) {
+			// Correctly signed but wrong mode (test event on a live deployment or
+			// vice versa): ACK so Stripe stops retrying, but take no action.
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		// Bad signature: reject without acting, without leaking why.
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
@@ -559,7 +608,11 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		// customer.subscription.* event Stripe always sends alongside this
 		// one; here we only bind the newly-created (or reused) customer id.
 		if ev.ClientRefUserID != "" {
-			if err := s.store.SetUserStripeCustomer(ctx, ev.ClientRefUserID, ev.CustomerID); err != nil {
+			// CAS bind, not an unconditional overwrite: if the user already has a
+			// customer, keep it. An unconditional write would let a second
+			// customer's event flip the binding (duplicate-customer takeover of the
+			// column); the reconcile path reaps duplicate subscriptions instead.
+			if _, err := s.store.SetUserStripeCustomerIfEmpty(ctx, ev.ClientRefUserID, ev.CustomerID); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
@@ -583,7 +636,9 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				return
 			}
-			if err := s.store.SetUserStripeCustomer(ctx, ev.MetadataUserID, ev.CustomerID); err != nil {
+			// CAS bind (see checkout.session.completed above): never flip an
+			// existing customer binding under a second customer's event.
+			if _, err := s.store.SetUserStripeCustomerIfEmpty(ctx, ev.MetadataUserID, ev.CustomerID); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}

@@ -519,6 +519,10 @@ type Store interface {
 	// GetUserByStripeCustomer looks up a user by Stripe customer id (webhook
 	// dispatch). An empty customerID returns not-found.
 	GetUserByStripeCustomer(ctx context.Context, customerID string) (User, bool, error)
+	// ListStripePaidUsers returns active users on a Stripe-sourced paid plan with
+	// a customer id — candidates for the periodic reconcile sweep that downgrades
+	// anyone whose subscription was canceled but whose deletion webhook was missed.
+	ListStripePaidUsers(ctx context.Context) ([]User, error)
 	// SetUserSubscription updates plan_id, subscription_status, subscription_end,
 	// and plan_source together (Stripe webhook path). now is the change timestamp,
 	// used to freeze the outgoing tier's earned quota segment. subEventAt is the

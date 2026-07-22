@@ -87,7 +87,16 @@ type WebhookEvent struct {
 	// (re)delivered event that would otherwise revert newer subscription state.
 	// Stripe does not guarantee delivery order and retries 500'd events for days.
 	Created int64
+	// LiveMode is the event's top-level `livemode`. The webhook rejects any event
+	// whose mode doesn't match the configured key (see wantLive), so a test-mode
+	// event can never assign a real plan on a live deployment and vice versa.
+	LiveMode bool
 }
+
+// ErrWebhookWrongMode is returned by VerifyWebhook for a correctly-signed event
+// whose livemode does not match the configured Stripe key (test vs live). The
+// handler ACKs it (200) so Stripe stops retrying, but takes no action.
+var ErrWebhookWrongMode = errors.New("stripe webhook: livemode does not match configured key")
 
 // stripeClient is the real Biller: a thin hand-rolled HTTP client making
 // form-POSTs to api.stripe.com (no SDK dependency — see spec rationale).
@@ -97,6 +106,10 @@ type stripeClient struct {
 	portalConfig  string
 	http          *http.Client
 	base          string
+	// wantLive is the mode the configured secret key implies (sk_live_* => true).
+	// VerifyWebhook rejects any event whose livemode differs, so a stray test-mode
+	// event can't be processed by a live deployment (or vice versa).
+	wantLive bool
 }
 
 // NewStripeClient builds the real Biller. secretKey/webhookSecret/portalConfig
@@ -107,6 +120,7 @@ func NewStripeClient(secretKey, webhookSecret, portalConfig string) *stripeClien
 		secretKey:     secretKey,
 		webhookSecret: webhookSecret,
 		portalConfig:  portalConfig,
+		wantLive:      strings.HasPrefix(secretKey, "sk_live_"),
 		// These are quick, non-streaming REST calls (unlike blob transfers
 		// elsewhere in this package), so a total timeout is safe and desirable.
 		http: &http.Client{Timeout: 20 * time.Second},
@@ -213,9 +227,10 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 	}
 
 	var envelope struct {
-		Type    string `json:"type"`
-		Created int64  `json:"created"`
-		Data    struct {
+		Type     string `json:"type"`
+		Created  int64  `json:"created"`
+		Livemode bool   `json:"livemode"`
+		Data     struct {
 			Object struct {
 				// ID + Object discriminate the two event shapes: on a
 				// customer.subscription.* event data.object IS the subscription
@@ -250,9 +265,18 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 		return WebhookEvent{}, fmt.Errorf("stripe webhook: parse payload: %w", err)
 	}
 
+	// Reject a correctly-signed event whose mode doesn't match the configured key
+	// (test vs live). Different modes use different signing secrets, so this is
+	// defense-in-depth against a misconfiguration that shares a secret across
+	// modes — a test-mode event must never grant a real plan and vice versa.
+	if envelope.Livemode != c.wantLive {
+		return WebhookEvent{}, ErrWebhookWrongMode
+	}
+
 	ev := WebhookEvent{
 		Type:             envelope.Type,
 		Created:          envelope.Created,
+		LiveMode:         envelope.Livemode,
 		CustomerID:       envelope.Data.Object.Customer,
 		SubscriptionID:   envelope.Data.Object.Subscription,
 		Status:           envelope.Data.Object.Status,
