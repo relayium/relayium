@@ -306,6 +306,13 @@ type Node struct {
 	// UpdateResult is the outcome the node last reported for a commanded
 	// self-update: "" (none in flight / never asked), "ok", or "failed".
 	UpdateResult string
+	// UpdateAttempts counts how many times central has told this node to RESUME
+	// the update it already holds the claim for (see the fleet resume path in
+	// handleUpdateCheck). Reset to 0 by every fresh command. It exists to bound
+	// that path: a node that installs nothing, reports nothing and keeps
+	// heartbeating is never silent, so the brick check can never fire, and
+	// without a counter it would be re-commanded every 30s forever.
+	UpdateAttempts int
 }
 
 // NodeToken is a per-user credential a BYO node presents as its bearer. The
@@ -775,6 +782,14 @@ type Store interface {
 	// PutRolloutTrack upserts a track's full state in one row. The fleet and
 	// byo rows are independent — see RolloutTrack's doc comment.
 	PutRolloutTrack(ctx context.Context, t RolloutTrack) error
+	// ClaimRolloutNode is the compare-and-swap that hands the fleet slot to one
+	// node: it only writes if the row still holds the current_node_id the caller
+	// read AND is still 'rolling'. ok=false means another instance moved the
+	// track first and the caller must NOT tell its node to update.
+	ClaimRolloutNode(ctx context.Context, track, expectCurrentNodeID, nodeID, firstNodeID string, at int64) (bool, error)
+	// HaltRolloutTrack stops a track, conditional on it still being 'rolling',
+	// so a halt can never be clobbered by (nor clobber) a concurrent writer.
+	HaltRolloutTrack(ctx context.Context, track, reason string, at int64) (bool, error)
 	// NodesByOwnerType returns every node of one ownership class ("fleet" |
 	// "user") INCLUDING offline ones. The rollout state machines require the
 	// offline rows (see the method's doc comment) — do not substitute
@@ -786,6 +801,9 @@ type Store interface {
 	// SetNodeUpdateResult records the outcome a node reported for the update it
 	// was last commanded.
 	SetNodeUpdateResult(ctx context.Context, nodeID, result string) error
+	// BumpNodeUpdateAttempts increments nodes.update_attempts, bounding the
+	// fleet resume path (see Node.UpdateAttempts).
+	BumpNodeUpdateAttempts(ctx context.Context, nodeID string) error
 	// pending_node_deletes (orphan-retry queue for GC when a node's DELETE fails)
 	EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error
 	ListPendingNodeDeletes(ctx context.Context) ([]PendingNodeDelete, error)

@@ -178,22 +178,7 @@ func decideByo(tr RolloutTrack, nodes []NodeSnapshot, now int64) (action string,
 		}
 	}
 
-	// Ordering is fixed by (nodeID, targetVersion) alone -- NOT filtered to
-	// online nodes here -- so the prefix taken for a given percentage never
-	// shifts between calls just because who's online changed. That is what
-	// guarantees the 10% batch stays a subset of the 50% batch.
-	ordered := append([]NodeSnapshot(nil), nodes...)
-	sort.Slice(ordered, func(i, j int) bool {
-		hi, hj := fleetHash(ordered[i].ID, tr.TargetVersion), fleetHash(ordered[j].ID, tr.TargetVersion)
-		if hi != hj {
-			return hi < hj
-		}
-		// sort.Slice is NOT stable, so on a fleetHash collision the two
-		// candidates could come out in either order on different calls over
-		// the identical input -- exactly the nondeterminism the 10%/50%/100%
-		// nesting cannot tolerate. Break the tie on node ID, which is fixed.
-		return ordered[i].ID < ordered[j].ID
-	})
+	ordered := byoOrder(nodes, tr.TargetVersion)
 
 	onlineCutoff := now - int64(nodeOnlineWindow/time.Second)
 	online := func(n NodeSnapshot) bool { return n.LastSeenAt >= onlineCutoff }
@@ -263,6 +248,51 @@ func decideByo(tr RolloutTrack, nodes []NodeSnapshot, now int64) (action string,
 		return "complete", nil, ""
 	}
 	return "update", ids, ""
+}
+
+// byoOrder returns nodes in the stable rollout order the batch percentages are
+// taken as a prefix of. Ordering is fixed by (nodeID, targetVersion) alone --
+// NOT filtered to online nodes -- so the prefix taken for a given percentage
+// never shifts between calls just because who's online changed. That is what
+// guarantees the 10% batch stays a subset of the 50% batch, which stays a
+// subset of 100%.
+func byoOrder(nodes []NodeSnapshot, targetVersion string) []NodeSnapshot {
+	ordered := append([]NodeSnapshot(nil), nodes...)
+	sort.Slice(ordered, func(i, j int) bool {
+		hi, hj := fleetHash(ordered[i].ID, targetVersion), fleetHash(ordered[j].ID, targetVersion)
+		if hi != hj {
+			return hi < hj
+		}
+		// sort.Slice is NOT stable, so on a fleetHash collision the two
+		// candidates could come out in either order on different calls over
+		// the identical input -- exactly the nondeterminism the 10%/50%/100%
+		// nesting cannot tolerate. Break the tie on node ID, which is fixed.
+		return ordered[i].ID < ordered[j].ID
+	})
+	return ordered
+}
+
+// byoOpenBatchMembers reports which nodes are inside the batch tr currently has
+// OPEN -- the first tr.ByoBatch percent of byoOrder. It computes nothing
+// decideByo does not already compute internally (same ordering, same prefix);
+// it only EXPOSES that membership so a caller can answer "is this node allowed
+// to move right now" without re-deriving it, and without changing any decision.
+//
+// This exists because the alternative the endpoint used to rely on --
+// "nodes.update_from_version says it was commanded at some point" -- has no
+// notion of WHICH rollout. Starting a new rollout resets the track's ByoBatch
+// but never clears the per-node update_* columns, so on rollout N+1 every node
+// still carrying rollout N's command record would be told it may update on its
+// very first poll, batch ladder and all, i.e. 100% of BYO machines in one poll
+// cycle. Membership of the currently-open batch is the only honest test.
+// tr.ByoBatch == 0 means no batch is open yet and the set is empty.
+func byoOpenBatchMembers(tr RolloutTrack, nodes []NodeSnapshot) map[string]bool {
+	ordered := byoOrder(nodes, tr.TargetVersion)
+	members := make(map[string]bool)
+	for _, n := range ordered[:pctCount(len(ordered), tr.ByoBatch)] {
+		members[n.ID] = true
+	}
+	return members
 }
 
 // byoResultIsFailure reports whether n's last recorded update result is a

@@ -42,6 +42,69 @@ func (s *SQLiteStore) PutRolloutTrack(ctx context.Context, t RolloutTrack) error
 	return err
 }
 
+// ClaimRolloutNode hands the fleet track's single slot to nodeID, but ONLY if
+// the row still looks the way the caller read it. It is a compare-and-swap, not
+// a blind write, and it is the sole thing that makes "one fleet node at a time"
+// hold across multiple app instances:
+//
+//   - WHERE current_node_id = expectCurrentNodeID: two instances that both read
+//     the pre-claim row race, and exactly one UPDATE matches; the loser gets
+//     ok=false and must answer "not eligible". Without it the later write simply
+//     overwrites the earlier claim (PutRolloutTrack is a whole-row upsert with
+//     no WHERE) and BOTH nodes are told to install, with the track recording
+//     only one of them — so the other's failure is never attributed to the
+//     rollout. Determinism of decideFleet is NOT sufficient on its own: two
+//     instances reading a moment apart see different candidate sets (online() is
+//     last_seen_at >= now-90s and update-check does not refresh last_seen_at), so
+//     they can legitimately pick different nodes.
+//   - The expected value is what was READ, not the empty string, because a claim
+//     is also taken over a non-empty current_node_id: when the node in flight
+//     reports "skipped", decideFleet falls through and picks the next one while
+//     the skipped node's ID is still in the row.
+//   - AND status='rolling': a track another instance has just halted must not be
+//     resurrected by a claim computed from the pre-halt state.
+//
+// firstNodeID is written unconditionally, so the caller passes the value it
+// wants persisted (the unchanged one when the pick is not the canary).
+func (s *SQLiteStore) ClaimRolloutNode(ctx context.Context, track, expectCurrentNodeID, nodeID, firstNodeID string, at int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE node_rollout SET current_node_id = ?, first_node_id = ?, stage_started_at = ?
+		   WHERE track = ? AND current_node_id = ? AND status = 'rolling'`,
+		nodeID, firstNodeID, at, track, expectCurrentNodeID)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
+}
+
+// HaltRolloutTrack stops a track, conditional on it still being 'rolling'.
+//
+// The condition is what stops a halt from being LOST: PutRolloutTrack rewrites
+// the whole row, so an instance that read the track as rolling and then wrote
+// anything (a claim, a batch advance) would silently overwrite a 'halted' status
+// another instance wrote in between — resurrecting a rollout that had already
+// decided to stop, which is precisely the failure the halt exists to prevent.
+// ok=false means the track was no longer rolling (already halted, or completed);
+// the caller should still answer its node "not eligible".
+func (s *SQLiteStore) HaltRolloutTrack(ctx context.Context, track, reason string, at int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE node_rollout SET status = 'halted', halted_reason = ?, stage_started_at = ?
+		   WHERE track = ? AND status = 'rolling'`,
+		reason, at, track)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
+}
+
 // NodesByOwnerType returns EVERY node of one ownership class ("fleet" | "user"),
 // INCLUDING offline ones — deliberately unfiltered by last_seen_at.
 //
@@ -68,10 +131,23 @@ func (s *SQLiteStore) NodesByOwnerType(ctx context.Context, ownerType string) ([
 //     and heartbeat and nothing else ever resets it: a stale "failed" from the
 //     node's previous command would otherwise be read as a failure of the
 //     command being issued right now.
+//   - update_attempts is reset, because the resume budget it bounds belongs to
+//     ONE command; carrying the previous command's exhausted count forward
+//     would halt the track on the new command's first resume.
 func (s *SQLiteStore) CommandNodeUpdate(ctx context.Context, nodeID, fromVersion string, at int64) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE nodes SET update_started_at = ?, update_from_version = ?, update_result = '' WHERE id = ?`,
+		`UPDATE nodes SET update_started_at = ?, update_from_version = ?, update_result = '', update_attempts = 0 WHERE id = ?`,
 		at, fromVersion, nodeID)
+	return err
+}
+
+// BumpNodeUpdateAttempts counts one more "carry on with the update you already
+// hold" answer for this node. See Node.UpdateAttempts: it is the only bound on
+// the fleet resume path, which the silence check cannot cover because a node
+// looping on a failed install is heartbeating perfectly.
+func (s *SQLiteStore) BumpNodeUpdateAttempts(ctx context.Context, nodeID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE nodes SET update_attempts = update_attempts + 1 WHERE id = ?`, nodeID)
 	return err
 }
 

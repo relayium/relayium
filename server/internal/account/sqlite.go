@@ -453,6 +453,14 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`ALTER TABLE nodes ADD COLUMN update_started_at INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE nodes ADD COLUMN update_from_version TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE nodes ADD COLUMN update_result TEXT NOT NULL DEFAULT ''`,
+		// update_attempts bounds the fleet RESUME path. A node that holds the
+		// rollout claim, keeps heartbeating and never reports a result is told
+		// "carry on" on every 30s poll, which without a bound is a permanent
+		// re-download/reinstall loop that the silence check can never catch
+		// (the node is not silent). Counted from 0 on every fresh command and
+		// incremented once per resume; past fleetResumeAttemptLimit the track
+		// halts instead. 0 on every existing row = "no resumes yet".
+		`ALTER TABLE nodes ADD COLUMN update_attempts INTEGER NOT NULL DEFAULT 0`,
 		// node_rollout holds the rollout state machine's per-track bookkeeping: one
 		// row for "fleet", one for "byo", each with its own target version and
 		// status, so a stalled/halted byo rollout can never block or bleed into the
@@ -2970,7 +2978,7 @@ const nodeCols = `id, owner_type, owner_user_id, region, urls, turn_secret, vers
   relayed_bytes, stored_bytes, created_at, last_seen_at,
   storage_url, storage_secret, storage_fp, storage_enabled, storage_total, storage_free,
   traffic_limit_bytes, disk_limit_bytes, label, download_url,
-  update_started_at, update_from_version, update_result`
+  update_started_at, update_from_version, update_result, update_attempts`
 
 func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	if n.ID == "" {
@@ -2982,7 +2990,7 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO nodes (`+nodeCols+`)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   owner_type=excluded.owner_type, owner_user_id=excluded.owner_user_id,
 		   region=excluded.region, urls=excluded.urls, turn_secret=excluded.turn_secret,
@@ -3000,7 +3008,7 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 		n.Version, n.RelayedBytes, n.StoredBytes, n.CreatedAt, n.LastSeenAt,
 		nullStr(n.StorageURL), nullStr(n.StorageSecret), n.StorageFP, b2i(n.StorageEnabled), n.StorageTotal, n.StorageFree,
 		n.TrafficLimitBytes, n.DiskLimitBytes, n.Label, n.DownloadURL,
-		n.UpdateStartedAt, n.UpdateFromVersion, n.UpdateResult)
+		n.UpdateStartedAt, n.UpdateFromVersion, n.UpdateResult, n.UpdateAttempts)
 	if err != nil {
 		return Node{}, err
 	}
@@ -3225,7 +3233,7 @@ func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]
 			&n.Version, &n.RelayedBytes, &n.StoredBytes, &n.CreatedAt, &n.LastSeenAt,
 			&storageURL, &storageSecret, &n.StorageFP, &storageEnabled, &n.StorageTotal, &n.StorageFree,
 			&n.TrafficLimitBytes, &n.DiskLimitBytes, &n.Label, &n.DownloadURL,
-			&n.UpdateStartedAt, &n.UpdateFromVersion, &n.UpdateResult); err != nil {
+			&n.UpdateStartedAt, &n.UpdateFromVersion, &n.UpdateResult, &n.UpdateAttempts); err != nil {
 			return nil, err
 		}
 		n.OwnerUserID = ownerUser.String

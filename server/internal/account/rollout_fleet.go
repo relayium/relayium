@@ -23,11 +23,30 @@ const (
 	updateSilenceLimit = 15 * 60
 )
 
+// fleetResumeAttemptLimit bounds how many times the update-check endpoint will
+// tell a node that already holds the rollout claim to CARRY ON with an update
+// it has not finished. That path exists so an updater which restarted
+// mid-update is not stranded, but nothing else stops it: a node that fails to
+// install, reports no result and keeps heartbeating is not SILENT, so
+// updateSilenceLimit never fires against it, and it would be handed the same
+// build to re-download every poll forever. At the node's 30s poll interval this
+// is roughly the same wall-clock budget as updateSilenceLimit, after which the
+// track halts for a human instead of looping.
+const fleetResumeAttemptLimit = 30
+
 // NodeSnapshot is what the state machine needs to know about one node.
 type NodeSnapshot struct {
-	ID              string
-	Version         string
-	LastSeenAt      int64
+	ID         string
+	Version    string
+	LastSeenAt int64
+	// ActiveTransfers is HOW BUSY the node is, used to prefer the least-loaded
+	// machine as canary. NOTHING POPULATES IT TODAY: there is no such column in
+	// the nodes table, the heartbeat does not report it, and nodeSnapshot leaves
+	// it at 0 for every node. It is therefore uniformly zero in production and
+	// the canary pick degrades to the deterministic fleetHash tie-break. The
+	// rule is kept because the intent is sound and the tie-break is a legitimate
+	// fallback, but do not describe the pick as load-aware until a producer
+	// exists (a heartbeat field and a column would be the way in).
 	ActiveTransfers int
 	UpdateStartedAt int64
 	// UpdateFromVersion mirrors nodes.update_from_version: the version the node
@@ -103,6 +122,11 @@ type RolloutDecision struct {
 //     rollout (no CurrentNodeID and no usable FirstNodeID yet) is chosen by fewest
 //     ActiveTransfers -- least to lose if the new build is bad -- and
 //     reported with IsFirst so the caller can persist it as FirstNodeID.
+//     CAVEAT: ActiveTransfers has no producer yet (see NodeSnapshot), so it is
+//     0 for every node in production and this pick currently degrades to the
+//     same deterministic fleetHash order as every later pick. That is a
+//     legitimate fallback, not the load-aware behaviour described above --
+//     which only becomes true once something populates the field.
 //     Every node after that is chosen by sha256(nodeID+targetVersion)
 //     ascending, so the order is deterministic and reproducible but
 //     reshuffles per release (the same node must not always end up the
@@ -245,7 +269,10 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 
 	// sort.Slice is NOT stable, so equal-comparing elements may come out in
 	// any order run to run -- hence the fleetHash tie-break, which makes the
-	// pick fully deterministic even when transfer counts are identical.
+	// pick fully deterministic even when transfer counts are identical. Since
+	// ActiveTransfers currently has no producer and is 0 everywhere, that
+	// tie-break is in fact the ONLY thing deciding this branch today; the
+	// transfer comparison is dormant until a producer exists.
 	// A re-asserted canary (the recorded one skipped) is picked the same way a
 	// first canary is: fewest active transfers, least to lose.
 	if firstPick || reassertFirst {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -168,8 +169,22 @@ var updateResults = map[string]bool{"ok": true, "failed": true, "rolled_back": t
 // shared across the whole fleet and does not bind to a nodeID, so a fleet node
 // could in principle report results for, or claim the slot of, another fleet
 // node. nodeID is therefore NOT authenticated on the fleet path — do not build
-// anything on the assumption that it is. User (BYO) tokens DO bind to an owner,
-// so those are ownership-checked below, exactly as the heartbeat does.
+// anything on the assumption that it is. That licence stops at the OWNERSHIP
+// BOUNDARY, and both directions are checked below: a user token may only speak
+// for that user's own nodes, and a fleet token may only speak for fleet nodes.
+// A fleet token naming a user's node would otherwise be able to write
+// update_result onto a stranger's machine and poison the BYO track's failure
+// accounting — a track it has no business touching at all.
+//
+// CONCURRENCY: with several app instances behind the load balancer, the fleet
+// track's "one node at a time" property rests on ClaimRolloutNode's
+// compare-and-swap, NOT on decideFleet being deterministic. Two instances
+// reading a moment apart genuinely see different candidate sets (online() is
+// last_seen_at >= now-90s, and update-check does not refresh last_seen_at), so
+// they can pick different nodes; the CAS is what makes exactly one of those
+// picks win. What is guaranteed is therefore: a node is told "eligible" only
+// after its claim has been durably recorded against the state the decision was
+// made from — never that two nodes cannot both be picked.
 func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	ownerType, ownerUserID, ok := s.nodeOwner(r)
 	if !ok {
@@ -203,6 +218,15 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	if ownerType == "user" && (node.OwnerType != "user" || node.OwnerUserID != ownerUserID) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not your node"})
+		return
+	}
+	// The other direction of the same boundary. The shared fleet token stands in
+	// for ANY fleet node by design, but never for a user's node: without this a
+	// fleet-token holder could POST a stranger's nodeID with Result:"failed" and
+	// have it written to that node's row (SetNodeUpdateResult runs before the
+	// track is even resolved), corrupting decideByo's failure numerator.
+	if ownerType == "fleet" && node.OwnerType != "fleet" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not a fleet node"})
 		return
 	}
 	now := s.now().Unix()
@@ -241,7 +265,13 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		// than what this node runs, i.e. an operator deliberately rolled the
 		// target back. Compared numerically, never as strings ("v0.10.0" sorts
 		// before "v0.9.0").
-		AllowDowngrade: isVersionDowngrade(firstNonEmpty(req.CurrentVersion, node.Version), tr.TargetVersion),
+		//
+		// The STORED version wins over the one in the request body: the body is
+		// self-reported and unauthenticated on the fleet path, so preferring it
+		// would let a node claim "v9.9.9" and be handed AllowDowngrade for any
+		// target it likes. req.CurrentVersion is only a fallback for a row that
+		// has no version recorded yet.
+		AllowDowngrade: isVersionDowngrade(firstNonEmpty(node.Version, req.CurrentVersion), tr.TargetVersion),
 	}
 	if tr.Status != "rolling" {
 		resp.Reason = "rollout track is " + tr.Status
@@ -278,11 +308,11 @@ func (s *Service) updateCheckFleet(ctx context.Context, tr RolloutTrack, snaps [
 	d := decideFleet(tr, snaps, now)
 	switch d.Action {
 	case "halt":
-		// PutRolloutTrack is a WHOLE-ROW upsert, so mutate the row we read
-		// rather than constructing one — CurrentNodeID/FirstNodeID are kept for
-		// diagnosis and everything else must survive untouched.
-		tr.Status, tr.HaltedReason, tr.StageStartedAt = "halted", d.Reason, now
-		if err := s.store.PutRolloutTrack(ctx, tr); err != nil {
+		// Conditional on the track still being 'rolling', and touching only the
+		// three halt columns: CurrentNodeID/FirstNodeID are kept for diagnosis,
+		// and a whole-row rewrite here could clobber a concurrent instance's
+		// halt (or be clobbered by its claim).
+		if _, err := s.store.HaltRolloutTrack(ctx, tr.Track, d.Reason, now); err != nil {
 			return false, "", err
 		}
 		return false, d.Reason, nil
@@ -299,17 +329,24 @@ func (s *Service) updateCheckFleet(ctx context.Context, tr RolloutTrack, snaps [
 			// track strictly serial without a lock.
 			return false, "another node is next in the rollout queue", nil
 		}
-		// CLAIM FIRST, ANSWER SECOND. If we told the node to move before
-		// persisting this, two nodes polling in the same window would both be
-		// told it was their turn.
-		tr.CurrentNodeID, tr.StageStartedAt = node.ID, now
+		// CLAIM FIRST, ANSWER SECOND, and claim by COMPARE-AND-SWAP. The write
+		// only lands if the row still carries the current_node_id this decision
+		// was computed from and is still 'rolling'; a concurrent instance that
+		// got there first (with a different candidate set, or with a halt) makes
+		// this a no-op and the node is told to wait. A whole-row upsert here
+		// would silently overwrite that instance's claim or halt.
+		first := tr.FirstNodeID
 		if d.IsFirst {
 			// The canary is positional and cannot be re-derived later; losing
 			// it silently downgrades the 6h observation window to 30 minutes.
-			tr.FirstNodeID = node.ID
+			first = node.ID
 		}
-		if err := s.store.PutRolloutTrack(ctx, tr); err != nil {
+		claimed, err := s.store.ClaimRolloutNode(ctx, tr.Track, tr.CurrentNodeID, node.ID, first, now)
+		if err != nil {
 			return false, "", err
+		}
+		if !claimed {
+			return false, "another node claimed the rollout slot first", nil
 		}
 		// update_from_version is what makes a later result attributable to this
 		// rollout, and update_result is cleared so the previous rollout's
@@ -322,8 +359,33 @@ func (s *Service) updateCheckFleet(ctx context.Context, tr RolloutTrack, snaps [
 		// The machine says wait, but this node may already HOLD the claim — an
 		// updater that restarted mid-update must be told to carry on, or the
 		// track sits until the silence check halts it.
+		//
+		// tr.TargetVersion != "" repeats decideFleet's own guard: it answers
+		// "wait" for a rolling track with no target precisely so nobody is told
+		// to install the empty version, and resuming past that would route
+		// straight around the defence (Eligible with an empty TargetVersion).
 		if tr.CurrentNodeID == node.ID && node.UpdateResult == "" &&
+			tr.TargetVersion != "" &&
 			!selfupdate.SameVersion(node.Version, tr.TargetVersion) {
+			// Bound the resume. A node that fails to install, reports nothing
+			// and keeps heartbeating is never SILENT, so decideFleet's brick
+			// check can never fire, and this branch would answer "carry on" on
+			// every 30s poll forever — a permanent re-download/reinstall loop
+			// that also wedges the track behind it. After
+			// fleetResumeAttemptLimit resumes (roughly the silence budget's
+			// worth of polling) stop guessing and halt with a reason a human
+			// can act on.
+			if node.UpdateAttempts >= fleetResumeAttemptLimit {
+				reason := fmt.Sprintf("node %s was told to resume its update %d times without ever reporting a result",
+					node.ID, node.UpdateAttempts)
+				if _, err := s.store.HaltRolloutTrack(ctx, tr.Track, reason, now); err != nil {
+					return false, "", err
+				}
+				return false, reason, nil
+			}
+			if err := s.store.BumpNodeUpdateAttempts(ctx, node.ID); err != nil {
+				return false, "", err
+			}
 			if node.UpdateStartedAt == 0 {
 				// The claim was persisted but the node's own stamp was not
 				// (a crash between the two writes). Repair it; never re-stamp
@@ -346,8 +408,10 @@ func (s *Service) updateCheckByo(ctx context.Context, tr RolloutTrack, snaps []N
 	action, eligible, reason := decideByo(tr, snaps, now)
 	switch action {
 	case "halt":
-		tr.Status, tr.HaltedReason, tr.StageStartedAt = "halted", reason, now
-		if err := s.store.PutRolloutTrack(ctx, tr); err != nil {
+		// Conditional on the track still being 'rolling' — see the fleet path:
+		// a whole-row rewrite can lose another instance's halt, and a halt is
+		// the one write that must never be lost.
+		if _, err := s.store.HaltRolloutTrack(ctx, tr.Track, reason, now); err != nil {
 			return false, "", err
 		}
 		return false, reason, nil
@@ -388,10 +452,22 @@ func (s *Service) updateCheckByo(ctx context.Context, tr RolloutTrack, snaps []N
 		return false, "not in the batch currently open", nil
 	default: // "wait"
 		// A batch opens once per window but nodes poll every 30s, so almost
-		// every poll from a node that IS in the open batch lands here. Its own
-		// row is the record of having been commanded: answer from that rather
-		// than re-deriving batch membership.
-		if node.UpdateResult == "" &&
+		// every poll from a node that IS in the open batch lands here and must
+		// still be told to carry on.
+		//
+		// Membership of the CURRENTLY-OPEN batch is the gate, and it is not
+		// optional. The node's own update_from_version is NOT a substitute:
+		// byoWasCommandedForTarget only asks "was this node ever commanded away
+		// from some other version", with no notion of which rollout. Starting a
+		// new rollout resets the track's ByoBatch but never clears the per-node
+		// update_* columns, and update_result == "" is the NORMAL state (nothing
+		// on the node side reports results yet) — so answering from those two
+		// alone told EVERY node still carrying the previous rollout's command
+		// record that it could update on its first poll, batch ladder skipped
+		// and 100% of BYO machines moving in one poll cycle. That is the exact
+		// property the 10/50/100 ladder exists to provide.
+		if byoOpenBatchMembers(tr, snaps)[node.ID] &&
+			node.UpdateResult == "" &&
 			byoWasCommandedForTarget(nodeSnapshot(node), tr.TargetVersion) &&
 			!selfupdate.SameVersion(node.Version, tr.TargetVersion) {
 			return true, "", nil
