@@ -60,25 +60,31 @@ echo "Downloading ${asset}..."
 dl "${BASE_URL}/${asset}" "${tmp}/${asset}" || err "download failed (has a release been published yet?)"
 dl "${BASE_URL}/checksums.txt" "${tmp}/checksums.txt" || err "checksum list download failed"
 
-# Verify the checksum file's Sigstore (keyless) signature when cosign is present,
-# so a tampered checksums.txt is rejected — not just a corrupted download. The
-# signing identity is this repo's release workflow (GitHub OIDC). Without cosign
-# we fall back to checksum-only integrity.
-if command -v cosign >/dev/null 2>&1; then
-  if dl "${BASE_URL}/checksums.txt.sig" "${tmp}/checksums.txt.sig" &&
-     dl "${BASE_URL}/checksums.txt.pem" "${tmp}/checksums.txt.pem"; then
-    cosign verify-blob \
-      --certificate "${tmp}/checksums.txt.pem" \
-      --signature "${tmp}/checksums.txt.sig" \
-      --certificate-identity-regexp "^https://github.com/${REPO}/\.github/workflows/release\.yml@" \
-      --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-      "${tmp}/checksums.txt" >/dev/null 2>&1 || err "signature verification failed — refusing to install"
-    echo "Verified release signature (cosign)."
+# Release public key (ECDSA P-256, PKIX PEM). Empty until release signing is
+# configured (see docs/release-signing.md); then we verify checksums.txt's
+# signature with openssl — no cosign needed. Its private half is the
+# RELAYIUM_RELEASE_KEY GitHub secret. This is the PUBLIC key, safe to publish.
+RELEASE_PUBKEY=''
+
+# Verify the checksum file's ECDSA signature so a tampered checksums.txt (e.g. a
+# compromised release host) is rejected, not just a corrupted download. Skipped
+# only when no key is embedded yet (checksum-only, unchanged behavior).
+if [ -n "$RELEASE_PUBKEY" ]; then
+  if command -v openssl >/dev/null 2>&1; then
+    if dl "${BASE_URL}/checksums.txt.sig" "${tmp}/checksums.txt.sig"; then
+      printf '%s\n' "$RELEASE_PUBKEY" > "${tmp}/relayium-release.pub"
+      openssl dgst -sha256 -verify "${tmp}/relayium-release.pub" \
+        -signature "${tmp}/checksums.txt.sig" "${tmp}/checksums.txt" >/dev/null 2>&1 \
+        || err "signature verification failed — refusing to install"
+      echo "Verified release signature."
+    elif [ "${RELAYIUM_ALLOW_UNSIGNED:-}" = "1" ]; then
+      echo "WARNING: release signature not found; verifying checksum only (RELAYIUM_ALLOW_UNSIGNED=1)." >&2
+    else
+      err "release signature not found — refusing to install (set RELAYIUM_ALLOW_UNSIGNED=1 to override)"
+    fi
   else
-    echo "Note: signature files not found; falling back to checksum-only verification." >&2
+    echo "Note: openssl not found; verifying checksum only." >&2
   fi
-else
-  echo "Note: cosign not found; verifying checksum only. Install cosign for signature verification." >&2
 fi
 
 want=$(grep " ${asset}$" "${tmp}/checksums.txt" | awk '{print $1}')

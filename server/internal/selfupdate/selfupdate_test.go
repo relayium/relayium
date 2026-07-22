@@ -5,8 +5,13 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +22,15 @@ import (
 	"strings"
 	"testing"
 )
+
+// TestMain forces the embedded release key empty by default so the download /
+// replace-path tests exercise the checksum-only path deterministically,
+// independent of whatever production key release_pubkey.go carries. Signature
+// tests set releaseSigningPubKeyPEM themselves (and restore it).
+func TestMain(m *testing.M) {
+	releaseSigningPubKeyPEM = ""
+	os.Exit(m.Run())
+}
 
 // tarGzWith builds a gzip+tar archive containing a single regular file named
 // "relayium" with the given content — the shape goreleaser produces for the
@@ -56,6 +70,9 @@ type fakeRelease struct {
 	archive         []byte
 	checksumOverride string
 	assetStatus     int // 0 → 200
+	// signKey, when set, serves a valid checksums.txt.sig (ECDSA over the served
+	// checksums bytes), mirroring the release workflow's openssl signing step.
+	signKey *ecdsa.PrivateKey
 }
 
 func (f *fakeRelease) server(t *testing.T) *httptest.Server {
@@ -80,8 +97,18 @@ func (f *fakeRelease) server(t *testing.T) *httptest.Server {
 	mux.HandleFunc(base+"/checksums.txt", func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, checksums)
 	})
-	// sig/pem intentionally 404 (default mux) — cosign is absent in tests, so
-	// Update takes the checksum-only path.
+	if f.signKey != nil {
+		h := sha256.Sum256([]byte(checksums))
+		sig, err := ecdsa.SignASN1(rand.Reader, f.signKey, h[:])
+		if err != nil {
+			t.Fatal(err)
+		}
+		mux.HandleFunc(base+"/checksums.txt.sig", func(w http.ResponseWriter, r *http.Request) {
+			w.Write(sig)
+		})
+	}
+	// When signKey is nil, checksums.txt.sig 404s (default mux): with no embedded
+	// key that's the checksum-only path; with a key embedded it's fail-closed.
 	return httptest.NewServer(mux)
 }
 
@@ -132,6 +159,85 @@ func TestUpdateHappyPath(t *testing.T) {
 	}
 	if info, _ := os.Stat(target); info.Mode().Perm()&0o100 == 0 {
 		t.Fatalf("replaced binary is not executable: %v", info.Mode())
+	}
+}
+
+// pubPEM returns k's public half as a PKIX PEM block (the format openssl emits
+// and parseECDSAPublicKey/release_pubkey.go expect).
+func pubPEM(t *testing.T, k *ecdsa.PrivateKey) string {
+	t.Helper()
+	der, err := x509.MarshalPKIXPublicKey(&k.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}))
+}
+
+// withEmbeddedKey sets the package release verification key for one test.
+func withEmbeddedKey(t *testing.T, pemStr string) {
+	t.Helper()
+	prev := releaseSigningPubKeyPEM
+	releaseSigningPubKeyPEM = pemStr
+	t.Cleanup(func() { releaseSigningPubKeyPEM = prev })
+}
+
+// With a key embedded and a valid signature served, the update verifies the
+// signature (not just the checksum) and installs.
+func TestUpdateVerifiesReleaseSignature(t *testing.T) {
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	withEmbeddedKey(t, pubPEM(t, key))
+	newBin := "SIGNED-v9.9.9"
+	fr := &fakeRelease{tag: "v9.9.9", asset: AssetName(runtime.GOOS, runtime.GOARCH), archive: tarGzWith(t, newBin), signKey: key}
+	srv := fr.server(t)
+	defer srv.Close()
+
+	var out bytes.Buffer
+	_, _, changed, err := Update(context.Background(), baseOpts(srv, writeTarget(t, "OLD")), &out)
+	if err != nil || !changed {
+		t.Fatalf("signed update should succeed: changed=%v err=%v", changed, err)
+	}
+	if !strings.Contains(out.String(), "Verified release signature") {
+		t.Fatalf("expected a signature-verified message, got %q", out.String())
+	}
+}
+
+// With a key embedded but NO signature served, the update fails closed — and the
+// target binary is left untouched. RELAYIUM_UPDATE_ALLOW_UNSIGNED=1 overrides.
+func TestUpdateFailsClosedWhenSignatureMissing(t *testing.T) {
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	withEmbeddedKey(t, pubPEM(t, key))
+	fr := &fakeRelease{tag: "v9.9.9", asset: AssetName(runtime.GOOS, runtime.GOARCH), archive: tarGzWith(t, "NEW")} // signKey nil → no .sig
+	srv := fr.server(t)
+	defer srv.Close()
+
+	target := writeTarget(t, "OLD")
+	if _, _, changed, err := Update(context.Background(), baseOpts(srv, target), io.Discard); err == nil || changed {
+		t.Fatal("must fail closed when a key is embedded but the signature is missing")
+	}
+	if got, _ := os.ReadFile(target); string(got) != "OLD" {
+		t.Fatalf("target must be untouched on failed verification, got %q", got)
+	}
+	t.Setenv("RELAYIUM_UPDATE_ALLOW_UNSIGNED", "1")
+	if _, _, changed, err := Update(context.Background(), baseOpts(srv, target), io.Discard); err != nil || !changed {
+		t.Fatalf("RELAYIUM_UPDATE_ALLOW_UNSIGNED=1 should permit install: changed=%v err=%v", changed, err)
+	}
+}
+
+// A signature made by a DIFFERENT key than the embedded one is rejected.
+func TestUpdateRejectsWrongSignature(t *testing.T) {
+	signer, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	other, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	withEmbeddedKey(t, pubPEM(t, other)) // embed other, but sign with signer
+	fr := &fakeRelease{tag: "v9.9.9", asset: AssetName(runtime.GOOS, runtime.GOARCH), archive: tarGzWith(t, "NEW"), signKey: signer}
+	srv := fr.server(t)
+	defer srv.Close()
+
+	target := writeTarget(t, "OLD")
+	if _, _, changed, err := Update(context.Background(), baseOpts(srv, target), io.Discard); err == nil || changed {
+		t.Fatal("must reject a signature that doesn't match the embedded key")
+	}
+	if got, _ := os.ReadFile(target); string(got) != "OLD" {
+		t.Fatalf("target must be untouched on a bad signature, got %q", got)
 	}
 }
 

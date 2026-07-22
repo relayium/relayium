@@ -1,9 +1,10 @@
 // Package selfupdate upgrades the running relayium binary to the latest
 // GitHub release — the native equivalent of re-running install.sh. It resolves
-// the newest release tag, downloads the platform archive, verifies it
-// (sha256 always, cosign signature when cosign is on PATH), and atomically
-// replaces the target binary. The live binary is touched only after the
-// download verifies, so any earlier failure leaves it intact.
+// the newest release tag, downloads the platform archive, verifies it (sha256
+// against checksums.txt, plus an ECDSA signature over checksums.txt using a
+// release public key embedded in this binary — Go stdlib only, no external
+// tool), and atomically replaces the target binary. The live binary is touched
+// only after the download verifies, so any earlier failure leaves it intact.
 //
 // Windows is out of scope here (a running .exe can't be overwritten); the CLI
 // command handles that case before calling in.
@@ -13,18 +14,19 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/ecdsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -33,7 +35,6 @@ import (
 const (
 	defaultAPIBase      = "https://api.github.com"
 	defaultDownloadBase = "https://github.com"
-	oidcIssuer          = "https://token.actions.githubusercontent.com"
 )
 
 // Options configures an update run. Repo/CurrentVersion/GOOS/GOARCH/TargetPath
@@ -181,11 +182,11 @@ func Update(ctx context.Context, o Options, progress io.Writer) (from, to string
 		return o.CurrentVersion, tag, false, nil
 	}
 	// Downgrade protection: refuse to install a release older than the running
-	// version. Verification is checksum-only when cosign isn't present, so a
-	// compromised or rolled-back release host that served an OLD (pre-cosign or
-	// known-vulnerable) tag would otherwise pass — this bounds that to same-or-
-	// newer. --force overrides for a deliberate rollback; an unparseable current
-	// version ("dev") never blocks.
+	// version. This defends against a compromised or rolled-back release host
+	// serving an OLD (known-vulnerable) but still validly-signed tag — signature
+	// verification alone can't catch that, so bound it to same-or-newer. --force
+	// overrides for a deliberate rollback; an unparseable current version ("dev")
+	// never blocks.
 	if !o.Force {
 		if cmp, ok := compareVersions(tag, o.CurrentVersion); ok && cmp < 0 {
 			return o.CurrentVersion, tag, false, fmt.Errorf(
@@ -216,7 +217,7 @@ func Update(ctx context.Context, o Options, progress io.Writer) (from, to string
 	if err := verifyChecksum(archivePath, asset, sumsPath); err != nil {
 		return o.CurrentVersion, tag, false, err
 	}
-	if err := verifyCosign(ctx, o, base, tmp, sumsPath, progress); err != nil {
+	if err := verifyReleaseSignature(ctx, o, base, tmp, sumsPath, progress); err != nil {
 		return o.CurrentVersion, tag, false, err
 	}
 
@@ -294,42 +295,78 @@ func checksumFor(sumsPath, asset string) (string, error) {
 	return "", fmt.Errorf("no checksum listed for %s", asset)
 }
 
-// verifyCosign verifies the checksum file's Sigstore signature. When cosign is
-// absent it falls back to checksum-only (cosign is an optional external tool,
-// mirroring install.sh). But once cosign IS installed the caller has opted into
-// signature verification, so MISSING .sig/.pem assets are fatal, not silently
-// skipped: a release-host compromise could otherwise delete the signatures and
-// swap in a malicious archive + matching (attacker-controlled) checksums.txt to
-// bypass signing entirely. RELAYIUM_UPDATE_ALLOW_UNSIGNED=1 is an explicit escape
-// hatch for the rare genuinely-unsigned release. A present-but-failing
-// verification is always fatal (a tampered checksums.txt).
-func verifyCosign(ctx context.Context, o Options, base, tmp, sumsPath string, progress io.Writer) error {
-	cosign, err := exec.LookPath("cosign")
-	if err != nil {
-		fmt.Fprintln(progress, "Note: cosign not found; verifying checksum only.")
+// verifyReleaseSignature verifies checksums.txt's ECDSA-P256 signature against
+// the release public key embedded in THIS binary (releaseSigningPubKeyPEM),
+// using only the Go standard library — no external cosign/openssl needed, so
+// EVERY `relayium update` is signature-checked, not just runs on a machine that
+// happens to have a verification tool installed. checksums.txt binds every
+// artifact's sha256, so a valid signature over it (combined with the earlier
+// per-artifact sha256 check) proves the archive is exactly what the signed
+// release published — the defense against a compromised release host swapping in
+// a malicious archive + matching (attacker-controlled) checksums.txt.
+//
+// Fail-closed: a missing or invalid signature aborts the update. The only escape
+// is RELAYIUM_UPDATE_ALLOW_UNSIGNED=1, for a deliberately-unsigned build. When no
+// key is embedded yet (releaseSigningPubKeyPEM empty — signing not configured),
+// it falls back to checksum-only with a clear note so nothing breaks pre-rollout.
+func verifyReleaseSignature(ctx context.Context, o Options, base, tmp, sumsPath string, progress io.Writer) error {
+	if strings.TrimSpace(releaseSigningPubKeyPEM) == "" {
+		fmt.Fprintln(progress, "Note: no release signing key embedded; verifying checksum only.")
 		return nil
 	}
+	pub, err := parseECDSAPublicKey(releaseSigningPubKeyPEM)
+	if err != nil {
+		return fmt.Errorf("embedded release public key is invalid: %w", err)
+	}
 	sigPath := filepath.Join(tmp, "checksums.txt.sig")
-	pemPath := filepath.Join(tmp, "checksums.txt.pem")
-	if download(ctx, o, base+"/checksums.txt.sig", sigPath) != nil ||
-		download(ctx, o, base+"/checksums.txt.pem", pemPath) != nil {
+	if err := download(ctx, o, base+"/checksums.txt.sig", sigPath); err != nil {
 		if os.Getenv("RELAYIUM_UPDATE_ALLOW_UNSIGNED") == "1" {
-			fmt.Fprintln(progress, "WARNING: signature files not found; verifying checksum only (RELAYIUM_UPDATE_ALLOW_UNSIGNED=1).")
+			fmt.Fprintln(progress, "WARNING: release signature not found; verifying checksum only (RELAYIUM_UPDATE_ALLOW_UNSIGNED=1).")
 			return nil
 		}
-		return fmt.Errorf("release signature (.sig/.pem) not found but cosign is installed — refusing to install a possibly-unsigned build; set RELAYIUM_UPDATE_ALLOW_UNSIGNED=1 to override")
+		return fmt.Errorf("release signature (checksums.txt.sig) not found — refusing to install a possibly-unsigned build; set RELAYIUM_UPDATE_ALLOW_UNSIGNED=1 to override: %w", err)
 	}
-	idRe := "^https://github.com/" + regexp.QuoteMeta(o.Repo) + "/\\.github/workflows/release\\.yml@"
-	cmd := exec.CommandContext(ctx, cosign, "verify-blob",
-		"--certificate", pemPath,
-		"--signature", sigPath,
-		"--certificate-identity-regexp", idRe,
-		"--certificate-oidc-issuer", oidcIssuer,
-		sumsPath)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("cosign signature verification failed — refusing to install: %v\n%s", err, out)
+	sums, err := os.ReadFile(sumsPath)
+	if err != nil {
+		return err
 	}
-	fmt.Fprintln(progress, "Verified release signature (cosign).")
+	sig, err := os.ReadFile(sigPath)
+	if err != nil {
+		return err
+	}
+	if err := verifyECDSASignature(pub, sums, sig); err != nil {
+		return fmt.Errorf("release signature verification failed — refusing to install: %w", err)
+	}
+	fmt.Fprintln(progress, "Verified release signature.")
+	return nil
+}
+
+// parseECDSAPublicKey decodes a PKIX/PEM ("BEGIN PUBLIC KEY") ECDSA public key,
+// the format `openssl ec -pubout` emits.
+func parseECDSAPublicKey(pemStr string) (*ecdsa.PublicKey, error) {
+	blk, _ := pem.Decode([]byte(pemStr))
+	if blk == nil {
+		return nil, errors.New("no PEM block found")
+	}
+	key, err := x509.ParsePKIXPublicKey(blk.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	pub, ok := key.(*ecdsa.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("not an ECDSA public key (%T)", key)
+	}
+	return pub, nil
+}
+
+// verifyECDSASignature checks an ASN.1/DER ECDSA signature over sha256(data) —
+// exactly what `openssl dgst -sha256 -sign` produces (validated by a golden
+// vector in signing_test.go), so the CI signing step needs only stock openssl.
+func verifyECDSASignature(pub *ecdsa.PublicKey, data, derSig []byte) error {
+	h := sha256.Sum256(data)
+	if !ecdsa.VerifyASN1(pub, h[:], derSig) {
+		return errors.New("signature does not match the embedded release key")
+	}
 	return nil
 }
 

@@ -6,7 +6,7 @@ on:
 
 permissions:
   contents: write
-  id-token: write       # OIDC token for keyless cosign signing + provenance attestation
+  id-token: write       # OIDC token for the SLSA build-provenance attestation
   attestations: write   # write SLSA build-provenance attestations for the release artifacts
 
 jobs:
@@ -22,13 +22,30 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: server/go.mod
-      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+      # Materialize the release signing key (RELAYIUM_RELEASE_KEY secret, a PEM
+      # EC private key) to a 0600 temp file. goreleaser's `signs` block signs
+      # checksums.txt with it via openssl. Fails loudly if the secret is unset so
+      # a release is never silently published unsigned once signing is expected.
+      - name: Materialize release signing key
+        env:
+          RELAYIUM_RELEASE_KEY: ${{ secrets.RELAYIUM_RELEASE_KEY }}
+        run: |
+          if [ -z "$RELAYIUM_RELEASE_KEY" ]; then
+            echo "::error::RELAYIUM_RELEASE_KEY secret is not set — add it before tagging a release (see docs/release-signing.md)"
+            exit 1
+          fi
+          keyfile="$RUNNER_TEMP/relayium-release.key"
+          ( umask 077; printf '%s\n' "$RELAYIUM_RELEASE_KEY" > "$keyfile" )
+          echo "RELAYIUM_RELEASE_KEY_FILE=$keyfile" >> "$GITHUB_ENV"
       - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:
           version: '~> v2'
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Remove release signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/relayium-release.key"
       # SLSA build provenance for every distributable archive goreleaser produced.
       # Verifiable with: gh attestation verify <archive> --repo relayium/relayium
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0

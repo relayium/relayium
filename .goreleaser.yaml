@@ -40,19 +40,25 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
-# Keyless (Sigstore) signing of the checksum file: no private key to manage —
-# the signing identity is the GitHub Actions workflow (OIDC). Produces
-# checksums.txt.sig + checksums.txt.pem as release assets, which install.sh
-# verifies with cosign when present.
+# ECDSA (P-256) signature over the checksum file with a release key. Its PUBLIC
+# half is embedded in the relayium binary (internal/selfupdate/release_pubkey.go)
+# and in install.sh, so `relayium update` and install.sh verify the signature
+# with the Go standard library / stock openssl — NO cosign needed on the user's
+# machine (the old keyless flow only verified when cosign happened to be present,
+# i.e. almost never). The private key is the RELAYIUM_RELEASE_KEY secret,
+# materialized to RELAYIUM_RELEASE_KEY_FILE by the release workflow before this runs.
 signs:
-  - cmd: cosign
-    certificate: "${artifact}.pem"
+  - id: checksums-ecdsa
+    signature: "${artifact}.sig"
+    cmd: openssl
     args:
-      - sign-blob
-      - "--output-certificate=${certificate}"
-      - "--output-signature=${signature}"
+      - dgst
+      - -sha256
+      - -sign
+      - "{{ .Env.RELAYIUM_RELEASE_KEY_FILE }}"
+      - -out
+      - "${signature}"
       - "${artifact}"
-      - "--yes"
     artifacts: checksum
     output: true
 
