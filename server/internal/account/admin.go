@@ -303,6 +303,23 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	mux.Handle("POST /admin/nodes/token/{id}/revoke", s.csrfGuard(http.HandlerFunc(s.handleAdminRevokeToken)))
 	mux.Handle("POST /admin/nodes/{id}/limits", s.csrfGuard(http.HandlerFunc(s.handleAdminNodeLimits)))
 	mux.Handle("POST /admin/nodes/{id}/label", s.csrfGuard(http.HandlerFunc(s.handleAdminNodeLabel)))
+	// 节点版本发布控制。**每条轨道一套独立路由**（track 在 path 里），不是一个
+	// 带轨道下拉框的表单：机队轨和自带节点轨是两台各自独立的控制器，任何把它们
+	// 合并成一个入口的做法都会把一条轨道的故障传染给另一条 —— 而"BYO 卡住时机队
+	// 仍能照常发布"正是这套双轨设计存在的理由。
+	//
+	// 通配符叫 {id} 而不是 {track}：requireStepUp / putPending 只搬运名为 "id"
+	// 的通配符，紧急发布要经过确认页往返，所以它必须叫 id；四个直接生效的动作
+	// 也用同一个名字，免得同一组 handler 里两种读法。
+	mux.Handle("POST /admin/rollout/{id}/target", s.csrfGuard(http.HandlerFunc(s.handleAdminRolloutTarget)))
+	mux.Handle("POST /admin/rollout/{id}/rollback", s.csrfGuard(http.HandlerFunc(s.handleAdminRolloutRollback)))
+	mux.Handle("POST /admin/rollout/{id}/pause", s.csrfGuard(http.HandlerFunc(s.handleAdminRolloutPause)))
+	mux.Handle("POST /admin/rollout/{id}/resume", s.csrfGuard(http.HandlerFunc(s.handleAdminRolloutResume)))
+	// 紧急发布跳过分批、对整条轨道一次性放行 —— 没有金丝雀能再兜住这次发布了，
+	// 所以它和删除节点一样走 requireStepUp：确认页展示 diff、校验第二因子、
+	// 由 handleAdminConfirm 落审计。
+	mux.Handle("POST /admin/rollout/{id}/emergency",
+		s.csrfGuard(s.requireStepUp(AuditRolloutEmergency, s.handleAdminRolloutEmergency)))
 }
 
 // newAdminSession mints a session token and records how it was established
@@ -534,9 +551,15 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		log.Printf("admin: NodeRelayedSince failed: %v", mErr)
 	}
 	var nodeVs []adminNodeView
+	// allNodes is loaded ONCE and fed to both the nodes section and the two
+	// rollout panels; the panels used to re-query the same rows per track.
+	var allNodes []Node
+	nodesErr := false
 	if ns, nerr := s.store.ListNodes(r.Context()); nerr != nil {
 		log.Printf("admin: ListNodes failed: %v", nerr)
+		nodesErr = true
 	} else {
+		allNodes = ns
 		nodeVs = nodeViews(ns, monthly, s.now(), st)
 	}
 	fleetNodeCount := 0
@@ -582,7 +605,15 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		log.Printf("passkey: ListAdminCredentials failed: %v", pkerr)
 		passkeys = nil
 	}
+	// Two independent builds, one per track. Neither reads the other's row or
+	// nodes, and a failure in one sets Err on that panel only — the other
+	// panel, and its controls, are unaffected. That independence is the point
+	// of the two-track design, so keep these two calls separate.
+	rolloutFleet := s.rolloutPanel(r.Context(), "fleet", "机队轨", s.now(), allNodes, nodesErr)
+	rolloutByo := s.rolloutPanel(r.Context(), "byo", "自带节点轨", s.now(), allNodes, nodesErr)
+
 	return adminHomeData{
+		RolloutFleet: rolloutFleet, RolloutByo: rolloutByo,
 		Metrics: metrics, Users: rows, Total: total, Page: page, TotalPages: totalPages,
 		Search: search, Sort: sortBy, Dir: dir, Period: period, Months: months,
 		PrevHref: prev, NextHref: next, SortHref: sortHref,

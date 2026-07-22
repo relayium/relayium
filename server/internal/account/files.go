@@ -29,6 +29,14 @@ const (
 // per day) without a separate hard row limit; actual stored size is unaffected.
 const minBillableBytes = 64 << 10
 
+// byoUpdateExemptWindow bounds how long a BYO owner's downloads stay free while
+// we restart their node to update it. It must cover a real update (download +
+// the node's 60s drain + restart + the updater's 10-minute health watch) but
+// must expire: a node commanded hours ago and never seen again is broken, not
+// updating, and a permanently "updating" node would otherwise earn permanent
+// free egress. Deliberately a little longer than the updater's health window.
+const byoUpdateExemptWindow = 20 * time.Minute
+
 // errTooLarge is returned by cappedReader once the upload exceeds the live
 // max_file_size; it propagates out of BlobStore.Put so no oversize blob commits.
 var errTooLarge = errors.New("account: upload exceeds max file size")
@@ -354,6 +362,51 @@ func (s *Service) redirectToNode(w http.ResponseWriter, r *http.Request, node No
 	http.Redirect(w, r, loc, http.StatusFound)
 }
 
+// byoUpdateExempt reports whether sf's proxied download should be exempt from
+// METERING (not the traffic gate — see the call site) because it is being
+// served through central only because WE are mid-restart of the owner's own
+// BYO node to update it. The exemption is deliberately narrow: it only ever
+// applies to a download that would otherwise have taken the free BYO
+// own-node direct path (see directCapable above) — exempt only what the
+// update actually cost them. All of the following must hold:
+//  1. this file is even eligible for direct-download in the first place
+//     (s.directDownload && sf.MaxDownloads == 0 — the exact same predicate
+//     the direct-download branch above gates on): a burn/limited file is
+//     ALWAYS proxied by design regardless of node health, and a deployment
+//     with directDownload globally off ALWAYS proxies every file — in both
+//     cases the update caused nothing, so there is nothing to exempt.
+//  2. the file lives on the file owner's OWN node — same ownership shape as
+//     the free-direct path above (directNode.OwnerType == "user" &&
+//     directNode.OwnerUserID == sf.UserID); a fleet node's egress is an
+//     operator cost either way and is never exempt.
+//  3. that node has a genuine self-update in flight and still within
+//     byoUpdateExemptWindow of being commanded — bounded so a node that never
+//     came back (stuck/broken, not updating) resumes being metered rather
+//     than earning permanent free egress.
+func (s *Service) byoUpdateExempt(ctx context.Context, sf StoredFile) bool {
+	if !(s.directDownload && sf.MaxDownloads == 0) {
+		return false
+	}
+	if sf.NodeID == "" {
+		return false
+	}
+	// Fetched after io.Copy at the call site: an update that finishes
+	// mid-transfer loses the exemption for that request even though the
+	// update did cause the proxy fallback. Fails toward over-metering
+	// (the safe direction), so this skew is left as a known, deliberate one.
+	n, ok, err := s.store.GetNode(ctx, sf.NodeID)
+	if err != nil || !ok {
+		return false
+	}
+	if !(n.OwnerType == "user" && n.OwnerUserID == sf.UserID) {
+		return false
+	}
+	if n.UpdateStartedAt == 0 {
+		return false
+	}
+	return s.now().Unix()-n.UpdateStartedAt <= int64(byoUpdateExemptWindow/time.Second)
+}
+
 func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	if s.blobs == nil {
 		http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
@@ -512,8 +565,16 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		_ = s.store.AddDownloadStat(ctx, sf.UserID, n)
 		// Meter the central egress against the owner for every file — own-node
 		// included: the bytes are proxied through central regardless of where the
-		// blob is stored (see the gate above).
-		_ = s.store.RecordMeter(ctx, sf.UserID, MeterDownload, n, s.now().Unix())
+		// blob is stored (see the gate above) — UNLESS this proxy trip only
+		// happened because we are mid-restart of the owner's own BYO node to
+		// update it (byoUpdateExempt): that bill would exist solely because WE
+		// chose to update their machine, so we eat it instead of the owner. This
+		// exempts METERING only, never the overTraffic gate above — a genuinely
+		// over-quota owner is still refused service during their own update
+		// window, the same as any other time.
+		if !s.byoUpdateExempt(ctx, sf) {
+			_ = s.store.RecordMeter(ctx, sf.UserID, MeterDownload, n, s.now().Unix())
+		}
 		cancel()
 	}
 

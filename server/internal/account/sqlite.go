@@ -143,6 +143,7 @@ CREATE TABLE IF NOT EXISTS nodes (
   last_seen_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_nodes_last_seen ON nodes(last_seen_at);
+CREATE INDEX IF NOT EXISTS idx_nodes_owner_type ON nodes(owner_type);
 CREATE TABLE IF NOT EXISTS pending_node_deletes (
   blob_key    TEXT NOT NULL,
   node_id     TEXT NOT NULL,
@@ -444,6 +445,57 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
   created_at INTEGER NOT NULL, done INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE INDEX IF NOT EXISTS idx_upload_sessions_user ON upload_sessions(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_upload_sessions_created ON upload_sessions(created_at)`,
+		// Automatic node update rollout (Part 2): per-node bookkeeping of central's
+		// last commanded self-update, so the rollout state machine can notice a node
+		// that never came back (timeout) and see what it last reported. Set only by
+		// the state machine, never by register/heartbeat — UpsertNode's ON CONFLICT
+		// clause deliberately omits these three so a routine re-register can't
+		// clobber them. 0/''/'' on every existing and new row = "no update in flight".
+		`ALTER TABLE nodes ADD COLUMN update_started_at INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE nodes ADD COLUMN update_from_version TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE nodes ADD COLUMN update_result TEXT NOT NULL DEFAULT ''`,
+		// update_attempts bounds the fleet RESUME path. A node that holds the
+		// rollout claim, keeps heartbeating and never reports a result is told
+		// "carry on" on every 30s poll, which without a bound is a permanent
+		// re-download/reinstall loop that the silence check can never catch
+		// (the node is not silent). Counted from 0 on every fresh command and
+		// incremented once per resume; past fleetResumeAttemptLimit the track
+		// halts instead. 0 on every existing row = "no resumes yet".
+		`ALTER TABLE nodes ADD COLUMN update_attempts INTEGER NOT NULL DEFAULT 0`,
+		// node_rollout holds the rollout state machine's per-track bookkeeping: one
+		// row for "fleet", one for "byo", each with its own target version and
+		// status, so a stalled/halted byo rollout can never block or bleed into the
+		// fleet track. See RolloutTrack's doc comment in store.go for why this is
+		// deliberately two rows and must stay that way.
+		`CREATE TABLE IF NOT EXISTS node_rollout (
+  track TEXT PRIMARY KEY, target_version TEXT NOT NULL DEFAULT '',
+  current_node_id TEXT NOT NULL DEFAULT '', byo_batch INTEGER NOT NULL DEFAULT 0,
+  stage_started_at INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT '',
+  halted_reason TEXT NOT NULL DEFAULT '')`,
+		// first_node_id records WHICH node was the canary of the current rollout,
+		// positionally. The state machine used to infer canary status from "no
+		// other node is on target", which silently downgraded the 6h canary
+		// window to 30min whenever a peer was already on the new build (a freshly
+		// provisioned node, a hand-updated node, a resumed rollout). Added by
+		// ALTER rather than folded into the CREATE above so live databases that
+		// already have node_rollout migrate instead of keeping the old shape.
+		`ALTER TABLE node_rollout ADD COLUMN first_node_id TEXT NOT NULL DEFAULT ''`,
+		// Backfill: a rollout already IN FLIGHT when this column ships would read
+		// first_node_id='' for a node that really is the canary, and its 6h
+		// observation window would collapse to 30min exactly once, on the first
+		// deploy carrying the field. Point it at the node in flight. Idempotent —
+		// it only touches rolling rows that still have no canary recorded — so it
+		// is safe on every startup. decideFleet also assumes "in flight with no
+		// recorded canary == canary" for any row this misses.
+		`UPDATE node_rollout SET first_node_id = current_node_id
+		   WHERE status = 'rolling' AND first_node_id = '' AND current_node_id <> ''`,
+		// emergency = the admin pulled the "release the whole track at once"
+		// lever: the staged ladder (fleet canary/queue, byo 10/50/100 batches)
+		// is bypassed for as long as it is 1. Added by ALTER, like
+		// first_node_id above, so live databases migrate. 0 on every existing
+		// row = the staged behaviour that shipped before this column, which is
+		// the only safe default.
+		`ALTER TABLE node_rollout ADD COLUMN emergency INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -2933,7 +2985,8 @@ func nullStr(s string) any {
 const nodeCols = `id, owner_type, owner_user_id, region, urls, turn_secret, version,
   relayed_bytes, stored_bytes, created_at, last_seen_at,
   storage_url, storage_secret, storage_fp, storage_enabled, storage_total, storage_free,
-  traffic_limit_bytes, disk_limit_bytes, label, download_url`
+  traffic_limit_bytes, disk_limit_bytes, label, download_url,
+  update_started_at, update_from_version, update_result, update_attempts`
 
 func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	if n.ID == "" {
@@ -2945,7 +2998,7 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO nodes (`+nodeCols+`)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   owner_type=excluded.owner_type, owner_user_id=excluded.owner_user_id,
 		   region=excluded.region, urls=excluded.urls, turn_secret=excluded.turn_secret,
@@ -2954,12 +3007,16 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 		   storage_fp=excluded.storage_fp,
 		   storage_enabled=excluded.storage_enabled, storage_total=excluded.storage_total,
 		   storage_free=excluded.storage_free, download_url=excluded.download_url`,
-		// label is intentionally set only on INSERT (seeded from the token name) and
-		// preserved on re-register, so a user's rename survives the node's heartbeats.
+		// label and the update_* columns are intentionally set only on INSERT
+		// (label seeded from the token name; update_* owned by the rollout state
+		// machine) and preserved on re-register/heartbeat, so neither a user's
+		// rename nor an in-flight rollout's bookkeeping is clobbered by a node
+		// simply calling register/heartbeat again.
 		n.ID, n.OwnerType, nullStr(n.OwnerUserID), n.Region, string(urls), n.TURNSecret,
 		n.Version, n.RelayedBytes, n.StoredBytes, n.CreatedAt, n.LastSeenAt,
 		nullStr(n.StorageURL), nullStr(n.StorageSecret), n.StorageFP, b2i(n.StorageEnabled), n.StorageTotal, n.StorageFree,
-		n.TrafficLimitBytes, n.DiskLimitBytes, n.Label, n.DownloadURL)
+		n.TrafficLimitBytes, n.DiskLimitBytes, n.Label, n.DownloadURL,
+		n.UpdateStartedAt, n.UpdateFromVersion, n.UpdateResult, n.UpdateAttempts)
 	if err != nil {
 		return Node{}, err
 	}
@@ -3183,7 +3240,8 @@ func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]
 		if err := rows.Scan(&n.ID, &n.OwnerType, &ownerUser, &n.Region, &urls, &n.TURNSecret,
 			&n.Version, &n.RelayedBytes, &n.StoredBytes, &n.CreatedAt, &n.LastSeenAt,
 			&storageURL, &storageSecret, &n.StorageFP, &storageEnabled, &n.StorageTotal, &n.StorageFree,
-			&n.TrafficLimitBytes, &n.DiskLimitBytes, &n.Label, &n.DownloadURL); err != nil {
+			&n.TrafficLimitBytes, &n.DiskLimitBytes, &n.Label, &n.DownloadURL,
+			&n.UpdateStartedAt, &n.UpdateFromVersion, &n.UpdateResult, &n.UpdateAttempts); err != nil {
 			return nil, err
 		}
 		n.OwnerUserID = ownerUser.String

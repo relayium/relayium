@@ -43,7 +43,7 @@ func TestBeforeImageSettingsDiffsOnlyChanged(t *testing.T) {
 	cur := svc.resolveSettings(ctx)
 	form := settingsFormFrom(cur)
 	form.Set("daily_quota_mb", "400") // 只动这一项
-	before, after, target, err := svc.beforeImageFor(ctx, AuditSettings, form)
+	before, after, target, err := svc.beforeImageFor(ctx, AuditSettings, "", form)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestBeforeImagePlanCapturesPriorRow(t *testing.T) {
 		"price_monthly_cents": {"199"}, "price_yearly_cents": {"1999"},
 		"sort_order": {"1"}, "active": {"1"}, "daily_quota_mb": {"7168"},
 	}
-	before, after, target, err := svc.beforeImageFor(ctx, AuditPlanUpsert, form)
+	before, after, target, err := svc.beforeImageFor(ctx, AuditPlanUpsert, "", form)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestBeforeImagePlanNewIsEmptyNotNil(t *testing.T) {
 		"traffic_gb": {"1"}, "retention_days": {"1"}, "price_monthly_cents": {"0"},
 		"price_yearly_cents": {"0"}, "sort_order": {"9"}, "daily_quota_mb": {"0"},
 	}
-	before, _, _, err := svc.beforeImageFor(context.Background(), AuditPlanUpsert, form)
+	before, _, _, err := svc.beforeImageFor(context.Background(), AuditPlanUpsert, "", form)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestBeforeImageNamesTargetForFieldlessActions(t *testing.T) {
 		{AuditPasskeyDelete, "passkey:pk3", url.Values{"id": {"pk3"}}},
 	}
 	for _, c := range cases {
-		_, _, target, err := svc.beforeImageFor(ctx, c.action, c.form)
+		_, _, target, err := svc.beforeImageFor(ctx, c.action, "", c.form)
 		if err != nil {
 			t.Fatalf("%s: %v", c.action, err)
 		}

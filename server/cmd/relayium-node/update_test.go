@@ -88,9 +88,11 @@ func TestParseUpdateFlagsFallsBackWhenEnvFileMissing(t *testing.T) {
 
 // Finding 5: compareVersions treats a non-semver tag as incomparable, so
 // "latest"/"dev" would slip past the downgrade check entirely (and no such
-// asset exists to download). Reject it at parse time.
+// asset exists to download). Reject it at parse time. Empty is deliberately
+// NOT in this list any more (task 6): an omitted -to means "ask central",
+// not "reject".
 func TestParseUpdateFlagsRejectsNonSemverTarget(t *testing.T) {
-	for _, bad := range []string{"latest", "dev", "v1.2", "1.2.3.4", "v1.2.3-rc1", "vX.Y.Z", ""} {
+	for _, bad := range []string{"latest", "dev", "v1.2", "1.2.3.4", "v1.2.3-rc1", "vX.Y.Z"} {
 		var errBuf bytes.Buffer
 		if _, err := parseUpdateFlags([]string{"-to", bad}, &errBuf); err == nil {
 			t.Errorf("parseUpdateFlags -to %q returned nil error, want a rejection", bad)
@@ -107,13 +109,24 @@ func TestParseUpdateFlagsAcceptsPlainSemverTargets(t *testing.T) {
 	}
 }
 
-func TestParseUpdateFlagsRequiresTargetTag(t *testing.T) {
+// Task 6: -to is now OPTIONAL. Part 1 drove updates by hand with an explicit
+// -to; from task 6 on, an update with no -to asks central which version to
+// run (fetchTarget), instead of failing outright. "just take latest" is still
+// never the behaviour — the target always comes from an explicit source
+// (a human's flag, or central's rollout queue), never resolved locally.
+func TestParseUpdateFlagsAllowsMissingTargetTag(t *testing.T) {
 	var errBuf bytes.Buffer
-	// Part 1 drives updates by hand; part 2 supplies -to from central. Either
-	// way an update without an explicit target is a bug, never "just take
-	// latest" — that is how a fleet scatters across versions.
-	if _, err := parseUpdateFlags(nil, &errBuf); err == nil {
-		t.Error("parseUpdateFlags with no -to returned nil error, want a failure")
+	// -env-file must point somewhere absent: parseUpdateFlags(nil, ...) would
+	// otherwise fall through to defaultEnvFile and read the real
+	// /etc/relayium-node/env if the test happens to run on a host that has
+	// one — CentralURL/NodeToken now come from that file too (task 6), so a
+	// non-hermetic run here could pick up a real token.
+	uc, err := parseUpdateFlags([]string{"-env-file", filepath.Join(t.TempDir(), "absent")}, &errBuf)
+	if err != nil {
+		t.Fatalf("parseUpdateFlags with no -to: %v (stderr=%s)", err, errBuf.String())
+	}
+	if uc.TargetTag != "" {
+		t.Errorf("TargetTag = %q, want empty when -to is omitted", uc.TargetTag)
 	}
 }
 
@@ -128,6 +141,18 @@ func TestParseUpdateFlagsReadsTargetAndDowngrade(t *testing.T) {
 	}
 	if !uc.AllowDowngrade {
 		t.Error("AllowDowngrade = false, want true")
+	}
+}
+
+// Minor 6: selfupdate.DefaultHTTPClient deliberately sets no blanket
+// Client.Timeout, because one would kill a large in-flight download
+// mid-stream. That only holds if updateOptions leaves HTTP unset (selfupdate
+// falls back to DefaultHTTPClient); this pins that down so a future "let's
+// just add a sane timeout" edit here doesn't quietly regress it.
+func TestUpdateOptionsLeavesHTTPClientUnset(t *testing.T) {
+	uc := updateConfig{Repo: updateRepo, BinPath: "/x", TargetTag: "v1.2.3"}
+	if opts := updateOptions(uc); opts.HTTP != nil {
+		t.Errorf("Options.HTTP = %#v, want nil so selfupdate.DefaultHTTPClient (no blanket Timeout) is used for the download", opts.HTTP)
 	}
 }
 

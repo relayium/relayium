@@ -707,11 +707,12 @@ completed version clears the halt so it can fix forward past the bad release."
 ### Task 5: `/api/nodes/update-check` 端点
 
 **Files:**
-- Modify: `server/internal/account/nodes.go`（照现有 `/api/nodes/*` 处理器的鉴权模式加）
-- Test: `server/internal/account/rollout_endpoint_test.go`
+- Modify: `server/internal/account/nodes.go`
+- Test: `server/internal/account/rollout_endpoint_test.go`（新建）
 
 **Interfaces:**
-- 请求：`POST /api/nodes/update-check`，node token 鉴权
+- Consumes: `s.nodeOwner(r)`（已有，见下）、`decideFleet`/`decideByo`（Task 2/3）、`GetRolloutTrack`/`PutRolloutTrack`（Task 1）
+- Produces:
   ```go
   type updateCheckReq struct {
       NodeID         string `json:"nodeID"`
@@ -726,46 +727,145 @@ completed version clears the halt so it can fix forward past the bad release."
   }
   ```
 
-- [ ] **Step 1: 读现有节点端点的鉴权写法**
+**已确认的既有事实（照抄，别自己发明）：**
 
+鉴权用 `s.nodeOwner(r) (ownerType, ownerUserID string, ok bool)`，`ownerType` 为
+`"fleet"` 或 `"user"` —— 这正好就是节点属于哪条轨道。路由注册在 `nodes.go` 里，形如
+`mux.HandleFunc("POST /api/nodes/download-receipt", s.handleDownloadReceipt)`。
+请求体解码一律走 `json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))`。
+
+> **信任模型提示**：机队 token 是**全机队共用**的，不绑定具体 nodeID。所以一台机队节点
+> 理论上可以谎报 `nodeID`、替别的节点上报结果。这与既有的 register/heartbeat 是同一套
+> 信任模型，本任务**沿用即可，不要额外设计**；但请在处理器的注释里写明这一点，别让后人
+> 误以为 nodeID 是被鉴权绑定的。
+
+- [ ] **Step 1: 写失败的测试**
+
+新建 `server/internal/account/rollout_endpoint_test.go`。用 `newFileServer(t)`
+（`files_test.go:22`，返回 `(*httptest.Server, *Service, *SQLiteStore, *capturingMailer)`）
+起服务，用 `store.UpsertNode` 造节点。**注意**：这些测试要控制时间，`Service` 有 `now` 字段可赋值。
+
+```go
+package account
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"net/http"
+	"testing"
+	"time"
+)
+
+func postUpdateCheck(t *testing.T, ts *httptest.Server, token string, body updateCheckReq) (*http.Response, updateCheckResp) {
+	t.Helper()
+	b, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest("POST", ts.URL+"/api/nodes/update-check", bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out updateCheckResp
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	return resp, out
+}
+
+// An unauthenticated caller must learn nothing — not even which version the
+// fleet is being moved to, which would tell an attacker exactly which release
+// to look for known vulnerabilities in.
+func TestUpdateCheckRejectsMissingToken(t *testing.T) {
+	// Arrange: a rolling fleet track with target v0.9.0.
+	// Act: POST with no Authorization header.
+	// Assert: 401, and the decoded body's TargetVersion is empty.
+}
+
+// The node the state machine picked is the ONLY one told to move.
+func TestUpdateCheckMarksTheChosenNodeEligible(t *testing.T) {
+	// Arrange: fleet track rolling at v0.9.0, two online fleet nodes on v0.8.0,
+	//   nothing in flight (CurrentNodeID empty).
+	// Act: the node decideFleet would pick asks.
+	// Assert: Eligible true, TargetVersion "v0.9.0"; and the track row now
+	//   records CurrentNodeID == that node and a non-zero StageStartedAt
+	//   (claiming the slot is what makes "strictly serial" hold).
+}
+
+// Strict serial: everyone else waits, and is told so without being told to move.
+func TestUpdateCheckMarksOtherNodesIneligible(t *testing.T) {
+	// Arrange: same, but the track already has CurrentNodeID = some OTHER node.
+	// Act: a different node asks.
+	// Assert: Eligible false. TargetVersion may be returned; Reason non-empty.
+}
+
+// A node reporting that it rolled back must stop the queue dead.
+func TestUpdateCheckHaltsTheTrackOnRolledBack(t *testing.T) {
+	// Arrange: fleet track rolling, CurrentNodeID = n1, n1 mid-update.
+	// Act: n1 posts Result "rolled_back".
+	// Assert: the node row's update_result == "rolled_back" AND the track's
+	//   Status == "halted" with a non-empty HaltedReason.
+}
+
+// A BYO node must be answered from the BYO track, never the fleet one —
+// otherwise user machines would follow our fleet's rollout in lockstep.
+func TestUpdateCheckRoutesUserNodesToTheByoTrack(t *testing.T) {
+	// Arrange: fleet track complete at v0.9.0; BYO track rolling at v0.8.0.
+	// Act: a node whose token resolves to ownerType "user" asks.
+	// Assert: TargetVersion is the BYO track's v0.8.0, not v0.9.0.
+}
 ```
-cd server && grep -n "download-receipt\|func (s \*Service) handleNode" internal/account/nodes.go | head
-```
-照 `/api/nodes/download-receipt` 的鉴权与错误处理**完全一致**地写新端点。不要另发明一套。
 
-- [ ] **Step 2: 写失败的测试**
+**实现者注意**：上面五个用例的 Arrange/Act/Assert 是规格。Step 1 的产出必须是**填实后能跑**
+的测试——先读 `files_directdl_test.go` 和 `nodes_test.go` 看清 `UpsertNode` / 机队 token /
+用户 token 的真实造法，再动手。不得提交空函数体或 `t.Skip`。
 
-新建 `server/internal/account/rollout_endpoint_test.go`，覆盖四条：
-
-1. 无 token / 错 token → 401，且响应体里不含 `targetVersion`
-2. 轨道 `rolling` 且该节点正是 `decideFleet` 选中的那台 → `eligible: true`，`targetVersion` 正确
-3. 同轨道但该节点不是当前该动的那台 → `eligible: false`
-4. 带 `result: "rolled_back"` 上报 → 落库到该节点的 `update_result`，且轨道变 `halted`
-
-（每条都要写成完整可跑的测试，用 Task 1/2 的 store 与状态机。）
-
-- [ ] **Step 3: 跑测试确认失败**
+- [ ] **Step 2: 跑测试确认失败**
 
 ```
 cd server && go test ./internal/account/ -run UpdateCheck -v
 ```
+预期：编译失败（`undefined: updateCheckReq`）
 
-- [ ] **Step 4: 实现**
+- [ ] **Step 3: 实现**
 
-处理器逻辑：鉴权 → 若带 `Result` 则先落库并按需 halt → 读轨道（按节点 `OwnerType` 选
-`fleet`/`byo`）→ 调对应状态机 → 若决策是 `update` 且指向本节点则 `eligible: true`，并把
-`CurrentNodeID`/`StageStartedAt`/`update_started_at` 写回 → 否则 `eligible: false`。
+在 `nodes.go` 注册路由，紧邻既有的 node 端点：
 
-`AllowDowngrade` 仅当目标版本低于该节点当前版本**且**该轨道的目标是管理员显式设定的回滚
-时为 true。
-
-- [ ] **Step 5: 跑测试确认通过 + 全量**
-
-```
-cd server && go test ./internal/account/
+```go
+	mux.HandleFunc("POST /api/nodes/update-check", s.handleUpdateCheck)
 ```
 
-- [ ] **Step 6: 提交**
+处理器逻辑，**顺序即规格**：
+
+1. `ownerType, _, ok := s.nodeOwner(r)`；`!ok` → 401。
+2. 解码请求体（`MaxBytesReader` 4KiB）；`NodeID` 为空 → 400。
+3. 若 `req.Result != ""`：先把结果落到该节点行（`update_result`），再按轨道规则判断是否
+   要 `halted`（机队：`failed`/`rolled_back` 即停；BYO：按失败率）。**先落库再决策**，
+   这样即使随后的决策出错，上报也不会丢。
+4. `track := "fleet"`；`ownerType == "user"` 时为 `"byo"`。读该轨道；不存在或
+   `Status != "rolling"` → 返回 `Eligible: false`。
+5. 取该轨道的节点快照，调 `decideFleet` / `decideByo`。
+6. 决策指向本节点 → 把 `CurrentNodeID`/`StageStartedAt`（BYO 为批次）与该节点的
+   `update_started_at` 写回，返回 `Eligible: true`。**认领动作必须落库**，否则两台节点
+   在同一轮里都会认为轮到自己，严格串行就破了。
+7. 否则 `Eligible: false` + `Reason`。
+
+`AllowDowngrade` 仅在**目标版本低于该节点当前版本**时为 true——即管理员显式把轨道回退到
+旧版本。用 `selfupdate.IsPlainVersion` + 版本比较判断，不要用字符串大小比较。
+
+- [ ] **Step 4: 跑测试确认通过 + 全量**
+
+```
+cd server && go test ./internal/account/ -run UpdateCheck -v && go test ./internal/account/
+```
+
+- [ ] **Step 5: 提交**
 
 ```bash
 git add server/internal/account/
@@ -773,27 +873,154 @@ git commit -m "feat(rollout): add POST /api/nodes/update-check
 
 The root updater asks central what to run rather than the sandboxed node being
 told — the node proper stays entirely out of the update path, so a compromised
-node has no channel through which to request a binary swap."
+node has no channel through which to request a binary swap. Claiming the slot
+is persisted before the node is told to move, so two nodes can never both
+believe it is their turn."
 ```
 
 ---
 
 ### Task 6: 更新器接上中央
 
-把第 1 部分的 `-to` 从必填人手输入，改为「未指定时问中央」。
+把第 1 部分里人手输入的 `-to`，改为「未指定时问中央」。
 
 **Files:**
 - Modify: `server/cmd/relayium-node/update.go`
-- Test: `server/cmd/relayium-node/update_central_test.go`
+- Test: `server/cmd/relayium-node/update_central_test.go`（新建）
 
 **Interfaces:**
-- Produces: `func fetchTarget(centralURL, token, nodeID, currentVersion, prevResult string, hc *http.Client) (tag string, eligible, allowDowngrade bool, err error)`
+- Produces:
+  ```go
+  // fetchTarget asks central what this node should be running.
+  func fetchTarget(centralURL, token, nodeID, currentVersion, prevResult string, hc *http.Client) (
+      tag string, eligible, allowDowngrade bool, err error)
+  ```
+- `updateConfig` 加 `CentralURL`、`NodeToken` 两个字段，来源同 `StateDir`：flag > 进程 env > `/etc/relayium-node/env` > 默认。
 
-- [ ] **Step 1: 写失败的测试**（httptest 假中央，覆盖 eligible=true/false、401、网络错误不炸）
+**第 1 部分已落地、本任务必须沿用的事实：**
+- `parseUpdateFlags` 已实现 flag > env > env 文件 > 默认的优先级链，并有 `-env-file` 覆盖。
+  照它加 `RELAYIUM_CENTRAL_URL` / `RELAYIUM_NODE_TOKEN` 两个键。
+- `-to` 目前是**必填**；本任务改为选填，缺省则问中央。但**非 semver 的 `-to` 仍必须被拒**
+  （`selfupdate.IsPlainVersion`），中央返回的版本同样要过这一关——中央也可能出 bug。
+- 退出码常量已在第 1 部分定义（0 成功 / 2 skipped / 3 failed / …）。「中央说不该我动」要复用
+  **skipped** 那个码，不要新增。
+
+- [ ] **Step 1: 写失败的测试**
+
+新建 `server/cmd/relayium-node/update_central_test.go`，用 `httptest` 假中央：
+
+```go
+package main
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func fakeCentral(t *testing.T, status int, body map[string]any) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer tok" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(body)
+	}))
+}
+
+func TestFetchTargetReturnsEligibleTarget(t *testing.T) {
+	srv := fakeCentral(t, 200, map[string]any{
+		"targetVersion": "v0.9.0", "eligible": true, "allowDowngrade": false,
+	})
+	defer srv.Close()
+
+	tag, eligible, allowDown, err := fetchTarget(srv.URL, "tok", "n1", "0.8.0", "", srv.Client())
+	if err != nil {
+		t.Fatalf("fetchTarget: %v", err)
+	}
+	if tag != "v0.9.0" || !eligible || allowDown {
+		t.Errorf("got tag=%q eligible=%v allowDowngrade=%v, want v0.9.0/true/false", tag, eligible, allowDown)
+	}
+}
+
+// The overwhelmingly common answer is "not your turn" — it must be a cheap,
+// quiet, non-error path, because every node asks every few minutes forever.
+func TestFetchTargetHandlesIneligible(t *testing.T) {
+	srv := fakeCentral(t, 200, map[string]any{"targetVersion": "v0.9.0", "eligible": false})
+	defer srv.Close()
+
+	_, eligible, _, err := fetchTarget(srv.URL, "tok", "n1", "0.8.0", "", srv.Client())
+	if err != nil {
+		t.Errorf("fetchTarget returned an error for the normal not-my-turn answer: %v", err)
+	}
+	if eligible {
+		t.Error("eligible = true, want false")
+	}
+}
+
+// A bad token must be a loud error, not silently read as "not my turn" —
+// otherwise a node would sit un-updated forever and look healthy doing it.
+func TestFetchTargetErrorsOnUnauthorized(t *testing.T) {
+	srv := fakeCentral(t, 200, nil)
+	defer srv.Close()
+
+	if _, _, _, err := fetchTarget(srv.URL, "wrong-token", "n1", "0.8.0", "", srv.Client()); err == nil {
+		t.Error("fetchTarget err = nil on 401, want an error")
+	}
+}
+
+// Central being down must not touch the binary. The node keeps running the
+// version it has; that is always the safe outcome.
+func TestFetchTargetErrorsWhenCentralUnreachable(t *testing.T) {
+	if _, _, _, err := fetchTarget("http://127.0.0.1:1", "tok", "n1", "0.8.0", "", http.DefaultClient); err == nil {
+		t.Error("fetchTarget err = nil against an unreachable central, want an error")
+	}
+}
+```
+
 - [ ] **Step 2: 跑测试确认失败**
-- [ ] **Step 3: 实现 `fetchTarget`；`parseUpdateFlags` 的 `-to` 改为选填，缺省则走中央**
-- [ ] **Step 4: 跑测试确认通过**
-- [ ] **Step 5: 提交**
+
+```
+cd server && go test ./cmd/relayium-node/ -run FetchTarget -v
+```
+预期：编译失败，`undefined: fetchTarget`
+
+- [ ] **Step 3: 实现 `fetchTarget`**
+
+POST `<centralURL>/api/nodes/update-check`，`Authorization: Bearer <token>`，请求体
+`{nodeID, currentVersion, result}`。非 200 一律返回 error。**给 HTTP client 设一个短超时**
+（连接+响应头各几秒即可，这是个小 JSON 请求，不是下载）——但**不要**给下载阶段的 client 设
+`Timeout`，第 1 部分的 `selfupdate.DefaultHTTPClient` 已经解释过为什么。
+
+- [ ] **Step 4: `-to` 改为选填**
+
+`parseUpdateFlags`：`-to` 为空时不再报错。`runUpdate` 在 `-to` 为空时调 `fetchTarget`：
+- `err != nil` → 打印错误，退出码 = failed，**不碰二进制**。
+- `!eligible` → 打印「不该我动」，退出码 = skipped。
+- 拿到 tag → 校验 `IsPlainVersion`，然后走原有的更新流程。
+- 上一次的结果（成功/失败/回滚）通过 `prevResult` 带给中央：把它落在状态目录一个小文件里，
+  下次启动时读出来上报，上报成功后清掉。
+
+- [ ] **Step 5: 跑测试确认通过 + 全量**
+
+```
+cd server && go test ./cmd/relayium-node/ -count=1 && go build ./...
+```
+
+- [ ] **Step 6: 提交**
+
+```bash
+git add server/cmd/relayium-node/
+git commit -m "feat(node): ask central which version to run
+
+Replaces the hand-typed -to with a query to the rollout queue. Central being
+unreachable leaves the binary untouched — the node keeps running what it has,
+which is always the safe outcome. A non-semver version is refused even when
+central is the one that sent it."
+```
 
 ---
 
@@ -803,9 +1030,9 @@ node has no channel through which to request a binary swap."
 - Modify: `web/public/install-node.sh`
 - Modify: `docs/node-hardening.md`、`docs/direct-download-deploy.md`
 
-- [ ] **Step 1: 安装脚本写入 timer**
+- [ ] **Step 1: 安装脚本写入两个 unit**
 
-`RELAYIUM_NODE_AUTO_UPDATE`（默认 `on`）为 `on` 时才装以下两个 unit：
+`RELAYIUM_NODE_AUTO_UPDATE`（默认 `on`）为 `on` 时才装。
 
 `/etc/systemd/system/relayium-node-update.service`：
 ```ini
@@ -817,6 +1044,11 @@ After=network-online.target
 Type=oneshot
 EnvironmentFile=/etc/relayium-node/env
 ExecStart=/usr/local/bin/relayium-node update
+# The watchdog waits up to 10 minutes for the new version to prove itself.
+# systemd's default TimeoutStartSec (90s) would SIGTERM the updater mid-watch,
+# leaving an unverified binary, a stale .prev and no rollback. Must exceed
+# healthWindow with room for the 60s drain plus the download.
+TimeoutStartSec=20min
 ```
 
 `/etc/systemd/system/relayium-node-update.timer`：
@@ -836,14 +1068,32 @@ Persistent=true
 WantedBy=timers.target
 ```
 
-**注意**：这个 service **不加**节点本体的沙箱指令——它需要 root 才能替换二进制。这是
-刻意的，它是全系统里唯一有此权限的东西，且只做这一件事。
+**注意**：这个 service **不加**节点本体的沙箱指令——它需要 root 才能替换二进制。这是刻意的：
+它是全系统唯一有此权限的东西，且只做这一件事。
 
-- [ ] **Step 2: env 里加开关**，`uninstall` 时一并清理（第 3 部分负责）
-- [ ] **Step 3: 安装输出打印自动更新状态与关闭方法**
-- [ ] **Step 4: 容器里实测装→timer 生效→`systemctl list-timers` 可见**
-- [ ] **Step 5: 更新文档**
-- [ ] **Step 6: 提交**
+- [ ] **Step 2: env 文件加开关键**
+
+`/etc/relayium-node/env` 增加 `RELAYIUM_NODE_AUTO_UPDATE=${RELAYIUM_NODE_AUTO_UPDATE:-on}`。
+同时补上第 1 部分发现缺失的 `RELAYIUM_NODE_BIN=${INSTALL_DIR}/relayium-node` —— 否则装到
+非默认目录时，更新器会去动 `/usr/local/bin` 下的错文件。
+
+- [ ] **Step 3: 卸载 timer 的幂等处理**
+
+重跑安装脚本且 `AUTO_UPDATE=off` 时，必须 `disable --now` 并删掉这两个 unit，否则关不掉。
+
+- [ ] **Step 4: 安装输出打印自动更新状态**
+
+在结尾摘要里写明：自动更新是开还是关、怎么关、以及「中央只下发版本号，二进制由本机验签」。
+
+- [ ] **Step 5: `sh -n` + `shellcheck` + 容器实测**
+
+```
+sh -n web/public/install-node.sh && shellcheck -s sh web/public/install-node.sh
+```
+容器里至少验证：`AUTO_UPDATE=on` 装出两个 unit 文件且内容含 `TimeoutStartSec=20min`；
+`AUTO_UPDATE=off` 不装（或已存在则删除）。
+
+- [ ] **Step 6: 更新两份文档 + 提交**
 
 ---
 
@@ -851,13 +1101,173 @@ WantedBy=timers.target
 
 **Files:**
 - Modify: `server/internal/account/admin.go`、`server/internal/account/admin_templates.go`
-- Test: `server/internal/account/admin_rollout_test.go`
+- Test: `server/internal/account/admin_rollout_test.go`（新建）
 
-- [ ] **Step 1: 写失败的测试**——两条轨道各自渲染出目标版本/状态/进度；BYO `halted` 时机队面板仍可提交新目标；提交越过门禁的 BYO 目标返回可读错误
+**已确认的既有事实：** admin 是 Go 服务端模板（`admin_templates.go`），节点区在
+`<section class="nodes">`（约 419 行），既有表单形如
+`<form method="post" action="/admin/nodes/{{.ID}}/limits">`。照这个模式加，不要引入前端框架。
+
+- [ ] **Step 1: 写失败的测试**
+
+新建 `server/internal/account/admin_rollout_test.go`，覆盖四条（照 `admin_nodes_test.go`
+的既有 admin 会话构造法写实，不得留空函数体）：
+
+1. 页面渲染出两块面板，各自显示自己的目标版本、状态、进度
+2. **BYO 轨 `halted` 时，提交机队轨的新目标版本仍然成功**（这是两轨分离的核心保证）
+3. 提交一个机队轨尚未 `complete` 的版本给 BYO 轨 → 返回可读错误，且 BYO 轨状态不变
+4. 紧急发布按钮走独立 action，且会写审计日志
+
 - [ ] **Step 2: 跑测试确认失败**
-- [ ] **Step 3: 实现**——两块独立面板，各带「设定目标版本 / 暂停 / 继续 / 回滚」；**紧急发布**按钮走单独路径，跳过分批直接对全轨放行，需二次确认，并写审计日志（照 `docs/admin-2fa.md` 的 step-up 模式）
+
+- [ ] **Step 3: 实现**
+
+两块**独立**面板，各带「设定目标版本 / 暂停 / 继续 / 回滚」。每台节点显示版本、更新结果、
+失败原因。**紧急发布**是单独的 action（跳过分批，对整条轨道放行），需二次确认，并按
+`docs/admin-2fa.md` 的 step-up 模式写审计日志。
+
 - [ ] **Step 4: 跑测试确认通过**
+
 - [ ] **Step 5: 提交**
+
+---
+
+### Task 9: BYO 节点更新窗口内豁免计费
+
+**用户决策（2026-07-22）**：自动更新会让 BYO 节点例行重启，重启窗口内其所有者本该免费的下载会
+跌落到计量的中央代理路径而被静默计费。用户裁定：**这个窗口内豁免计费。**
+
+**为什么现在才能精确实现**：Part 1 只知道"节点离线"，无法区分「用户自己把机器关了」和「我们正在
+更新它」。前者继续计费是对的（中央确实在掏带宽，且不是我们造成的）；后者是我们造成的，不该让用户
+买单。Task 1 加的 `update_started_at` 列让这个区分成为可能，所以豁免可以**只覆盖真正的更新窗口**，
+而不是笼统地给所有离线情况免单。
+
+**Files:**
+- Modify: `server/internal/account/files.go`（计量分支，约 509-517 行「Meter the central egress
+  against the owner for every file — own-node included」那段）
+- Test: `server/internal/account/files_byo_update_exempt_test.go`（新建）
+
+**Interfaces:**
+- Consumes: `Node.UpdateStartedAt`（Task 1）、`nodeOnlineWindow`
+- Produces: 无新导出符号
+
+- [ ] **Step 1: 读清现有计量分支**
+
+```
+cd server && sed -n '495,525p' internal/account/files.go
+```
+看清楚 BYO 自有节点直连（免费）与中央代理（计量）两条路径的分叉点，以及计量实际发生在哪一行。
+**不要**动直连那条路径——它本来就免费。
+
+- [ ] **Step 2: 写失败的测试**
+
+新建 `server/internal/account/files_byo_update_exempt_test.go`。fixture 沿用
+`files_directdl_test.go` 的 `newFileServer` / `UpsertNode` / `CreateStoredFile`：
+
+```go
+package account
+
+import (
+	"context"
+	"testing"
+	"time"
+)
+
+// A BYO owner's downloads from their OWN node are free — that is the whole
+// deal: it is their disk and their bandwidth. When we restart that node to
+// update it, central proxies instead and would normally meter the owner. That
+// bill exists only because WE chose to update their machine, so we eat it.
+func TestByoOwnNodeDownloadIsNotMeteredDuringItsUpdateWindow(t *testing.T) {
+	// Arrange: direct download on; owner has a BYO node holding one of their
+	//   files; the node is offline (LastSeenAt older than nodeOnlineWindow) AND
+	//   UpdateStartedAt is recent (within the update window).
+	// Act: GET the blob (falls back to central proxy).
+	// Assert: the owner's metered usage is UNCHANGED.
+}
+
+// The exemption must be narrow. A user who simply powered their node off is not
+// our doing, and central really is paying that egress — keep metering it.
+func TestByoOwnNodeDownloadIsStillMeteredWhenOfflineForOtherReasons(t *testing.T) {
+	// Arrange: same, but UpdateStartedAt is zero (no update in flight).
+	// Act: GET the blob.
+	// Assert: the owner IS metered the served bytes.
+}
+
+// The window must expire. A node that was commanded to update hours ago and
+// never came back is a broken node, not an update in progress — metering
+// resumes, otherwise a single stuck update would grant permanent free egress.
+func TestByoUpdateExemptionExpires(t *testing.T) {
+	// Arrange: same, but UpdateStartedAt is far older than the exemption window.
+	// Act: GET the blob.
+	// Assert: the owner IS metered.
+}
+
+// Fleet nodes are ours; their egress is an operator cost either way. The
+// exemption must not silently widen to fleet-hosted files.
+func TestFleetNodeDownloadIsStillMeteredDuringItsUpdateWindow(t *testing.T) {
+	// Arrange: the file lives on a FLEET node with a recent UpdateStartedAt.
+	// Act: GET the blob.
+	// Assert: the owner IS metered exactly as before.
+}
+
+var _ = context.Background
+var _ = time.Now
+```
+
+**实现者注意**：以上四个用例的 Arrange/Act/Assert 是规格。产出必须是照 `files_directdl_test.go`
+的真实 fixture 填实后**能跑**的测试（那个文件里有现成的 `MonthlyUsage` 断言写法可抄），
+不得提交空函数体或 `t.Skip`。
+
+- [ ] **Step 3: 跑测试确认失败**
+
+```
+cd server && go test ./internal/account/ -run ByoUpdate -v
+```
+预期：豁免用例 FAIL（当前仍在计费）
+
+- [ ] **Step 4: 实现**
+
+在计量分支前加一道豁免判断，条件**全部**满足才免：
+
+1. 文件在该文件所有者**自己的** BYO 节点上（`OwnerType == "user" && OwnerUserID == sf.UserID`
+   —— 与 `files.go:395` 判断 BYO 直连免费用的是同一个条件，抄它）
+2. 该节点有更新在途：`UpdateStartedAt != 0` 且 `now - UpdateStartedAt <= byoUpdateExemptWindow`
+
+新增常量：
+
+```go
+// byoUpdateExemptWindow bounds how long a BYO owner's downloads stay free while
+// we restart their node to update it. It must cover a real update (download +
+// the node's 60s drain + restart + the updater's 10-minute health watch) but
+// must expire: a node commanded hours ago and never seen again is broken, not
+// updating, and a permanently "updating" node would otherwise earn permanent
+// free egress. Deliberately a little longer than the updater's health window.
+const byoUpdateExemptWindow = 20 * time.Minute
+```
+
+**只豁免计量，不要豁免流量闸**——两者是不同的东西，别顺手把配额检查也关了。若两者在同一段代码里，
+在报告中明确说明你动了哪一个、没动哪一个。
+
+- [ ] **Step 5: 跑测试确认通过 + 全量**
+
+```
+cd server && go test ./internal/account/ -run ByoUpdate -v && go test ./internal/account/ -count=1
+```
+
+- [ ] **Step 6: 提交**
+
+```bash
+git add server/internal/account/
+git commit -m "feat(billing): don't meter a BYO owner while we restart their node
+
+Downloads from a user's own node are free — their disk, their bandwidth. When
+the rollout restarts that node, central proxies instead and would bill the
+owner for egress they only incurred because we chose to update their machine.
+Exempt exactly that window: their own node, an update genuinely in flight, and
+bounded so a node stuck mid-update can't earn permanent free egress. Nodes
+offline for any other reason stay metered, and fleet nodes are unaffected."
+```
+
+---
 
 ## 本计划的交付物
 

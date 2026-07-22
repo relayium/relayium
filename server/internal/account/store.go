@@ -292,6 +292,29 @@ type Node struct {
 	// <DownloadURL>/dl/{key}?t=<token> so the bytes bypass central. '' = no direct
 	// download; central proxies as before. Reported by the node at registration.
 	DownloadURL string
+	// UpdateStartedAt is when central last commanded this node to self-update
+	// (unix seconds); 0 = no update in flight. The Part 2 rollout state machine
+	// uses it to notice a node that never came back (timeout past its expected
+	// self-update duration signals a stuck/failed update). Set by the rollout
+	// state machine, NOT by node register/heartbeat — UpsertNode must never
+	// overwrite it on a routine re-register (see the ON CONFLICT clause).
+	UpdateStartedAt int64
+	// UpdateFromVersion is the version this node was running when the update was
+	// commanded, kept so a rollback target is known even after Version has
+	// already changed (or the update failed partway through).
+	UpdateFromVersion string
+	// UpdateResult is the outcome the node last reported for a commanded
+	// self-update: "" (none in flight / never asked), "ok", or "failed".
+	UpdateResult string
+	// UpdateAttempts used to count how many times central had told this node to
+	// RESUME the update it already holds the claim for, bounding the fleet
+	// resume path in handleUpdateCheck by POLL COUNT. That bound was
+	// cadence-dependent (the poll interval is entirely client-side) so it has
+	// been replaced by an elapsed-wall-clock check against UpdateStartedAt
+	// (see updateSilenceLimit). Nothing writes this column anymore; it is kept
+	// rather than dropped, per the package's schema-migration policy, and
+	// simply reads 0 forever on both existing and new rows.
+	UpdateAttempts int
 }
 
 // NodeToken is a per-user credential a BYO node presents as its bearer. The
@@ -329,6 +352,68 @@ type PendingNodeDelete struct {
 	BlobKey    string
 	NodeID     string
 	EnqueuedAt int64
+}
+
+// RolloutTrack is the persisted state of one automatic node-update rollout
+// track ("fleet" or "byo"). This is the ONLY thing Part 1's per-node
+// `relayium-node update -to` subcommand doesn't decide for itself: which node
+// updates to which version, when.
+//
+// There are always exactly two independent rows, keyed by Track, and this is
+// deliberate: the fleet (our ~16 official nodes) and byo (unbounded
+// user-owned nodes) tracks must be able to hold DIFFERENT TargetVersions and
+// DIFFERENT Statuses at the same time. A stalled or halted BYO rollout (users'
+// nodes are out of our control — one could be offline, pinned to an old
+// binary, whatever) must never block shipping the next release to our own
+// fleet. Collapsing this into a single row would silently destroy that
+// property, so don't "simplify" it that way.
+type RolloutTrack struct {
+	Track string // "fleet" | "byo"
+	// TargetVersion is the version this track is currently rolling out to.
+	TargetVersion string
+	// CurrentNodeID is the fleet node presently being updated (fleet track
+	// only; fleet nodes are updated one at a time). Unused for byo.
+	CurrentNodeID string
+	// ByoBatch is the batch size in flight for the byo track (10 | 50 | 100
+	// nodes at once). Unused for fleet.
+	ByoBatch int
+	// FirstNodeID is the node that was picked FIRST in the current rollout —
+	// the canary that gets the long (6h) observation window. It is recorded
+	// positionally, when the rollout picks its first node (decideFleet reports
+	// this via RolloutDecision.IsFirst), and must NOT be re-derived from fleet
+	// version state: "no other node is on target" is false for a freshly
+	// provisioned node already shipping the new build, a hand-updated node, or
+	// a resumed rollout, and every one of those would silently cut the canary
+	// window to 30min. Cleared when a new rollout starts. Fleet track only.
+	FirstNodeID string
+	// StageStartedAt is when the current stage (this node / this batch) began
+	// (unix seconds), for the state machine's timeout check. It MUST be
+	// rewritten on EVERY stage transition (each time CurrentNodeID / ByoBatch
+	// changes): decideFleet measures the observation window from it, so a value
+	// left over from the previous stage would expire the next node's window
+	// early. decideFleet defends against that by taking the later of this and
+	// the node's own UpdateStartedAt, but that defence is a backstop, not a
+	// licence to leave the field stale.
+	StageStartedAt int64
+	Status         string // "rolling" | "halted" | "complete"
+	// HaltedReason is a human-readable note on why Status == "halted" (e.g. a
+	// heartbeat timeout or an elevated post-update failure rate). '' otherwise.
+	HaltedReason string
+	// Emergency releases the WHOLE track at once: while it is set, the update
+	// check bypasses the staged ladder entirely (the fleet's one-node-at-a-time
+	// queue with its 6h canary window, and the byo 10/50/100 batches) and tells
+	// every node of the track that is behind the target to update on its next
+	// poll. It is set ONLY by the admin emergency-release action, which is
+	// step-up confirmed and audited, and it is cleared by every other way a
+	// track's state is written — SetTargetVersion's whole-row replace and
+	// ResumeRolloutTrack both put the track back on the staged ladder — so a
+	// track can never be left in emergency mode by accident.
+	//
+	// It deliberately gives up the failure gating that goes with staging: an
+	// emergency release ships to everyone at once, so there is no canary left
+	// whose failure could stop it. The admin's 暂停 (pause) control is the kill
+	// switch, since a track that is not 'rolling' is inert on every path.
+	Emergency bool
 }
 
 // Setting is one admin-editable integer config value (bytes or seconds).
@@ -707,6 +792,62 @@ type Store interface {
 	CentralStoredBytes(ctx context.Context) (int64, error)
 	// DeleteFleetNode removes an official (fleet) node, scoped to owner_type='fleet'.
 	DeleteFleetNode(ctx context.Context, id string) error
+	// node_rollout (Part 2: automatic node update rollout state machine).
+	// GetRolloutTrack returns ok=false if the track has no persisted state yet
+	// (a fresh DB, or a track that has never had a rollout started).
+	GetRolloutTrack(ctx context.Context, track string) (RolloutTrack, bool, error)
+	// PutRolloutTrack upserts a track's full state in one row. The fleet and
+	// byo rows are independent — see RolloutTrack's doc comment.
+	PutRolloutTrack(ctx context.Context, t RolloutTrack) error
+	// ClaimRolloutNode is the compare-and-swap that hands the fleet slot to one
+	// node: it only writes if the row still holds the current_node_id AND the
+	// target_version the caller read, and is still 'rolling'. ok=false means the
+	// track moved first (another instance's claim or halt, or an admin retarget)
+	// and the caller must NOT tell its node to update — it would be installing
+	// the version the decision was computed from, not the one now targeted.
+	ClaimRolloutNode(ctx context.Context, track, expectTargetVersion, expectCurrentNodeID, nodeID, firstNodeID string, at int64) (bool, error)
+	// HaltRolloutTrack stops a track, conditional on it still being 'rolling',
+	// so a halt can never be clobbered by (nor clobber) a concurrent writer.
+	HaltRolloutTrack(ctx context.Context, track, reason string, at int64) (bool, error)
+	// CompleteRolloutTrack marks a track finished, conditional on it still
+	// being 'rolling' — same rationale as HaltRolloutTrack: a whole-row write
+	// here could erase a concurrent halt and its reason.
+	CompleteRolloutTrack(ctx context.Context, track string, at int64) (bool, error)
+	// AdvanceByoBatch opens the next byo batch, conditional on the row still
+	// being 'rolling', still at the batch percentage (fromBatch) AND still on
+	// the target_version this decision was computed from — otherwise a stale
+	// write can resurrect a halted track, jump the ladder forward, or land
+	// against a rollout to a different version whose canary window it has just
+	// skipped. See its doc comment in rollout_store.go.
+	AdvanceByoBatch(ctx context.Context, track, expectTargetVersion string, fromBatch, toBatch int, at int64) (bool, error)
+	// ResumeRolloutTrack restarts a HALTED track on the version it already
+	// targets, resetting the staging fields (batch, in-flight/canary node,
+	// emergency) that would otherwise make it re-halt immediately. It touches
+	// one track's row and reads nothing else — resuming one track must never
+	// be able to fail because of the other. ok=false means the track was not
+	// halted (already rolling, or complete).
+	ResumeRolloutTrack(ctx context.Context, track string, at int64) (bool, error)
+	// SetRolloutEmergency arms emergency mode (release the whole track at
+	// once, skipping the staged ladder) on a track that is rolling to
+	// expectVersion — a compare-and-swap against exactly what the admin
+	// confirmed. ok=false means the track moved in between and nothing was
+	// released.
+	SetRolloutEmergency(ctx context.Context, track, expectVersion string, at int64) (bool, error)
+	// NodesByOwnerType returns every node of one ownership class ("fleet" |
+	// "user") INCLUDING offline ones. The rollout state machines require the
+	// offline rows (see the method's doc comment) — do not substitute
+	// OnlineNodes here.
+	NodesByOwnerType(ctx context.Context, ownerType string) ([]Node, error)
+	// CommandNodeUpdate stamps update_started_at/update_from_version and clears
+	// update_result when central commands a node to self-update.
+	CommandNodeUpdate(ctx context.Context, nodeID, fromVersion string, at int64) error
+	// SetNodeUpdateResult records the outcome a node reported for the update it
+	// was last commanded.
+	SetNodeUpdateResult(ctx context.Context, nodeID, result string) error
+	// BumpNodeUpdateAttempts increments nodes.update_attempts. No longer called
+	// by the rollout path (see Node.UpdateAttempts) — kept on the interface and
+	// the schema rather than removed, in case a future caller needs it.
+	BumpNodeUpdateAttempts(ctx context.Context, nodeID string) error
 	// pending_node_deletes (orphan-retry queue for GC when a node's DELETE fails)
 	EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error
 	ListPendingNodeDeletes(ctx context.Context) ([]PendingNodeDelete, error)
