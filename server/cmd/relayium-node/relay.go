@@ -355,12 +355,12 @@ func run(c config, st nodeState) error {
 			log.Printf("relayium-node: shutting down")
 			return nil
 		case <-ticker.C:
-			sendHeartbeat(rp, nodeID, reg, c.StorageDir, blobGauge, lim)
+			sendHeartbeat(rp, nodeID, reg, c.StorageDir, c.StateDir, blobGauge, lim)
 		}
 	}
 }
 
-func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir string, blobGauge *blobUsage, lim *limits) {
+func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir, stateDir string, blobGauge *blobUsage, lim *limits) {
 	samples := reg.snapshot()
 	usage := make([]usageItem, 0, len(samples))
 	var total int64
@@ -393,6 +393,11 @@ func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir s
 	}
 	if lim != nil {
 		lim.sync(hr.RelayedThisMonth, hr.TrafficLimitBytes, hr.DiskLimitBytes)
+	}
+	// Record the success so the updater can tell a working new version from one
+	// that starts but can't reach central.
+	if err := markHealthy(stateDir); err != nil {
+		log.Printf("relayium-node: record heartbeat health: %v", err)
 	}
 }
 
