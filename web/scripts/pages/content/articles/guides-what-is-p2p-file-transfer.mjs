@@ -45,7 +45,7 @@ const en = {
         "That's what TURN (Traversal Using Relays around NAT) is: a fallback relay server that both devices connect to when a direct path fails. It's not a workaround or a compromise on privacy so much as a necessity of how some networks are built — but it's worth being precise about what it does and doesn't see. In Relayium, the file is already encrypted end-to-end before it reaches the relay, so the relay only ever forwards ciphertext — sealed data it has no key to open. It moves bytes; it cannot read them.",
       ],
       bullets: [
-        "TURN is only used when a direct path genuinely can't be found — it's a fallback, not the default.",
+        "On the same network Relayium connects devices directly; across networks it uses the TURN relay by default, because a direct path so often can't be found there.",
         "The relay forwards ciphertext only; it never has the decryption key and can't read file contents, filenames, or anything else about what's inside.",
         "Whether a given transfer went direct or through a relay is visible in Relayium's connection diagnostics, for anyone curious to check.",
       ],
@@ -60,7 +60,7 @@ const en = {
     {
       heading: "How Relayium puts this together",
       body: [
-        "Open relayium.com on two devices on the same network and they typically find each other automatically — no account, no code, nothing to install; that's the LAN case where STUN often isn't even needed. Sending across the internet to someone on a different network uses a pairing code: the sender signs in, generates a code (or shares a link, with an optional QR code to scan), and once the other person joins, the same STUN-then-TURN-if-needed process runs to open a direct or relayed connection — the receiver never needs an account either way.",
+        "Open relayium.com on two devices on the same network and they typically find each other automatically — no account, no code, nothing to install; that's the LAN case where STUN often isn't even needed. Sending across the internet to someone on a different network uses a pairing code: the sender signs in, generates a code (or shares a link, with an optional QR code to scan), and once the other person joins, the transfer runs over an encrypted TURN relay — the reliable path across unpredictable NATs, and it only ever carries ciphertext — while the receiver never needs an account.",
         "Either way, once the connection is open, up to 1,000 files in a batch stream directly across it, each independently verified with a SHA-256 hash so you know what arrived matches exactly what was sent. If real-time isn't possible — say, the other person is offline — that's a genuinely different mode (a zero-knowledge stored link), not peer-to-peer, and worth understanding separately.",
       ],
     },
@@ -138,7 +138,7 @@ const zh = {
         "这正是 TURN（借助中继穿越 NAT）的作用：当直连路径失败时，双方设备都会连接到一个兜底的中继服务器。这与其说是一种权宜之计或对隐私的妥协，不如说是某些网络结构本身决定的必然情况——但值得说清楚它到底能看到什么、看不到什么。在 Relayium 中，文件在到达中继之前就已经端到端加密完毕，因此中继始终只转发密文——一段它没有钥匙打开的封装数据。它只负责搬运字节，无法读懂内容。",
       ],
       bullets: [
-        "只有在真正找不到直连路径时才会用到 TURN——它是兜底方案，不是默认选项。",
+        "同一网络下 Relayium 让设备直连；跨网络时默认走 TURN 中继，因为那种场景下直连路径往往根本找不到。",
         "中继只转发密文；它从不掌握解密密钥，无法读取文件内容、文件名或其中的任何其他信息。",
         "一次传输走的是直连还是中继，都能在 Relayium 的连接诊断信息里看到，供好奇的人自行核实。",
       ],
@@ -153,7 +153,7 @@ const zh = {
     {
       heading: "Relayium 是如何把这些拼起来的",
       body: [
-        "在同一网络下的两台设备上打开 relayium.com，它们通常会自动找到彼此——不需要账号，不需要配对码，也无需安装任何东西；这就是局域网场景，很多时候甚至用不上 STUN。要跨网络发给不同网络上的人，则用配对码：发送方登录、生成一个配对码（或分享链接，也可选择扫描二维码），对方加入之后，同样是先 STUN、必要时再 TURN 的流程来建立直连或中继连接——无论走哪条路径，接收方都不需要账号。",
+        "在同一网络下的两台设备上打开 relayium.com，它们通常会自动找到彼此——不需要账号，不需要配对码，也无需安装任何东西；这就是局域网场景，很多时候甚至用不上 STUN。要跨网络发给不同网络上的人，则用配对码：发送方登录、生成一个配对码（或分享链接，也可选择扫描二维码），对方加入之后，传输经加密 TURN 中继完成——这是穿透难以预测的 NAT 最可靠的一条路，中继也只经手密文；接收方始终不需要账号。",
         "无论哪种方式，一旦连接建立，一批最多 1,000 个文件就会直接经这条连接流动，每个文件都独立用 SHA-256 哈希校验，确保到手的和发出的分毫不差。如果实时传输做不到——比如对方不在线——那就是一种确实不同的模式（零知识存储链接），不属于点对点，值得单独理解。",
       ],
     },
@@ -231,7 +231,7 @@ const ja = {
         "それが TURN（NAT 越えのための中継利用）です。直接経路が失敗したときに両デバイスが接続するフォールバック用の中継サーバーです。これは回避策やプライバシーの妥協というより、一部のネットワークの構造そのものが要求する必然と言えます——ただし、それが何を見て何を見ないのかは正確に説明する価値があります。Relayium では、ファイルは中継に届く前にすでにエンドツーエンドで暗号化されているため、中継が転送するのは常に暗号文だけです——開ける鍵を持たない封印されたデータです。バイトを運ぶだけで、読むことはできません。",
       ],
       bullets: [
-        "TURN が使われるのは、本当に直接経路が見つからない場合だけです——既定ではなく、あくまでフォールバックです。",
+        "同一ネットワークでは Relayium はデバイス同士を直接つなぎます。ネットワークをまたぐ場合は、直接経路が見つからないことが多いため、既定で TURN 中継を使います。",
         "中継は暗号文だけを転送します。復号鍵を持つことは決してなく、ファイルの中身もファイル名も、中に含まれる他の情報も読めません。",
         "ある転送が直接だったか中継経由だったかは、確認したい人であれば Relayium の接続診断情報から見ることができます。",
       ],
@@ -246,7 +246,7 @@ const ja = {
     {
       heading: "Relayium はこれをどう組み合わせているか",
       body: [
-        "同じネットワーク上の2台で relayium.com を開くと、たいていは自動的に見つけ合います——アカウントもコードも不要、インストールするものも何もありません。これがローカルネットワークのケースで、多くの場合 STUN すら不要です。異なるネットワーク上の相手にインターネット越しに送る場合はペアリングコードを使います。送信者がサインインしてコードを生成する（または QR コードのオプション付きでリンクを共有する）と、相手が参加した時点で、同じく STUN、必要なら TURN という流れで直接または中継接続が開きます——どちらの経路でも受信者はアカウント不要です。",
+        "同じネットワーク上の2台で relayium.com を開くと、たいていは自動的に見つけ合います——アカウントもコードも不要、インストールするものも何もありません。これがローカルネットワークのケースで、多くの場合 STUN すら不要です。異なるネットワーク上の相手にインターネット越しに送る場合はペアリングコードを使います。送信者がサインインしてコードを生成する（または QR コードのオプション付きでリンクを共有する）と、相手が参加した時点で、転送は暗号化 TURN リレー経由で行われます——予測しづらい NAT を越える最も確実な経路で、リレーが扱うのは暗号文だけです。受信者はアカウント不要のままです。",
         "いずれの場合も、接続が開けば最大1,000ファイルのバッチがその接続を直接流れ、それぞれが SHA-256 ハッシュで個別に検証されるので、届いたものが送られたものと正確に一致しているか分かります。リアルタイムが不可能な場合——たとえば相手がオフラインの場合——は、それは本当に別のモード（ゼロ知識の保存リンク）であり、ピアツーピアではないので、別に理解しておく価値があります。",
       ],
     },
@@ -324,7 +324,7 @@ const ko = {
         "그것이 TURN(NAT 우회를 위한 중계 사용)입니다. 직접 경로가 실패했을 때 두 기기가 모두 연결하는 대체 중계 서버입니다. 이는 우회책이나 프라이버시 타협이라기보다, 일부 네트워크가 구축된 방식이 요구하는 필연에 가깝습니다——다만 그것이 무엇을 보고 무엇을 보지 못하는지는 정확히 짚어볼 가치가 있습니다. Relayium에서는 파일이 중계에 도달하기 전에 이미 종단간 암호화되어 있으므로, 중계는 항상 암호문만 전달합니다——열 수 있는 키가 없는 봉인된 데이터입니다. 바이트를 옮길 뿐, 읽을 수는 없습니다.",
       ],
       bullets: [
-        "TURN은 직접 경로를 정말로 찾을 수 없을 때만 사용됩니다——기본값이 아니라 대체 수단입니다.",
+        "같은 네트워크에서는 Relayium이 기기를 직접 연결합니다. 네트워크를 넘을 때는 직접 경로를 찾지 못하는 경우가 워낙 많아 기본적으로 TURN 중계를 사용합니다.",
         "중계는 암호문만 전달합니다. 복호화 키를 절대 갖지 않으며, 파일 내용도 파일 이름도 그 안의 다른 어떤 정보도 읽을 수 없습니다.",
         "특정 전송이 직접 연결이었는지 중계를 거쳤는지는 궁금한 사람이라면 Relayium의 연결 진단 정보에서 확인할 수 있습니다.",
       ],
@@ -339,7 +339,7 @@ const ko = {
     {
       heading: "Relayium이 이를 어떻게 조합하는가",
       body: [
-        "같은 네트워크에 있는 두 기기에서 relayium.com을 열면 보통 자동으로 서로를 찾습니다——계정도, 코드도 필요 없고, 설치할 것도 없습니다. 이것이 LAN 상황이며, 많은 경우 STUN조차 필요하지 않습니다. 다른 네트워크에 있는 사람에게 인터넷 너머로 보낼 때는 페어링 코드를 사용합니다. 발신자가 로그인해서 코드를 생성하면(또는 스캔할 수 있는 QR 코드 옵션과 함께 링크를 공유하면), 상대방이 참여하는 순간 마찬가지로 STUN 후 필요 시 TURN이라는 과정을 거쳐 직접 또는 중계 연결이 열립니다——어느 경로든 수신자는 계정이 필요 없습니다.",
+        "같은 네트워크에 있는 두 기기에서 relayium.com을 열면 보통 자동으로 서로를 찾습니다——계정도, 코드도 필요 없고, 설치할 것도 없습니다. 이것이 LAN 상황이며, 많은 경우 STUN조차 필요하지 않습니다. 다른 네트워크에 있는 사람에게 인터넷 너머로 보낼 때는 페어링 코드를 사용합니다. 발신자가 로그인해서 코드를 생성하면(또는 스캔할 수 있는 QR 코드 옵션과 함께 링크를 공유하면), 상대방이 참여하는 순간 전송은 암호화된 TURN 중계를 통해 이뤄집니다——예측하기 어려운 NAT를 넘는 가장 확실한 경로이며, 중계는 암호문만 나릅니다. 수신자는 여전히 계정이 필요 없습니다.",
         "어느 경우든 연결이 열리면 최대 1,000개 파일이 그 연결을 통해 직접 스트리밍되며, 각 파일은 개별적으로 SHA-256 해시로 검증되어 도착한 것이 보낸 것과 정확히 일치하는지 확인합니다. 실시간이 불가능한 경우——예를 들어 상대방이 오프라인인 경우——는 정말로 다른 모드(영지식 저장 링크)이지 피어투피어가 아니며, 별도로 이해할 가치가 있습니다.",
       ],
     },
@@ -417,7 +417,7 @@ const de = {
         "Dafür gibt es TURN (Traversal Using Relays around NAT): einen Ausweich-Relay-Server, mit dem sich beide Geräte verbinden, wenn ein direkter Pfad scheitert. Das ist weniger ein Workaround oder ein Kompromiss bei der Privatsphäre als vielmehr eine Notwendigkeit, die sich daraus ergibt, wie manche Netzwerke aufgebaut sind — es lohnt sich aber, genau zu sagen, was es sieht und was nicht. Bei Relayium ist die Datei bereits Ende-zu-Ende verschlüsselt, bevor sie das Relay erreicht, sodass das Relay stets nur Chiffretext weiterleitet — versiegelte Daten, für die es keinen Schlüssel besitzt. Es transportiert Bytes; lesen kann es sie nicht.",
       ],
       bullets: [
-        "TURN wird nur eingesetzt, wenn wirklich kein direkter Pfad gefunden werden kann — es ist ein Fallback, nicht der Standard.",
+        "Im selben Netz verbindet Relayium die Geräte direkt; netzübergreifend nutzt es standardmäßig das TURN-Relay, weil sich dort so oft kein direkter Pfad finden lässt.",
         "Das Relay leitet ausschließlich Chiffretext weiter; es besitzt nie den Entschlüsselungsschlüssel und kann weder Dateiinhalte noch Dateinamen noch sonst etwas über den Inhalt lesen.",
         "Ob eine bestimmte Übertragung direkt oder über ein Relay lief, ist in Relayiums Verbindungsdiagnose sichtbar, für alle, die es nachprüfen möchten.",
       ],
@@ -432,7 +432,7 @@ const de = {
     {
       heading: "Wie Relayium das zusammenfügt",
       body: [
-        "Öffnen zwei Geräte im selben Netzwerk relayium.com, finden sie sich meist automatisch — kein Konto, kein Code, nichts zu installieren; das ist der LAN-Fall, in dem STUN oft nicht einmal gebraucht wird. Für den Versand über das Internet an jemanden in einem anderen Netzwerk kommt ein Pairing-Code zum Einsatz: Der Absender meldet sich an, erzeugt einen Code (oder teilt einen Link, wahlweise mit QR-Code zum Scannen), und sobald die andere Person beitritt, läuft derselbe Ablauf — erst STUN, bei Bedarf TURN — um eine direkte oder über ein Relay geführte Verbindung zu öffnen. Der Empfänger braucht in beiden Fällen kein Konto.",
+        "Öffnen zwei Geräte im selben Netzwerk relayium.com, finden sie sich meist automatisch — kein Konto, kein Code, nichts zu installieren; das ist der LAN-Fall, in dem STUN oft nicht einmal gebraucht wird. Für den Versand über das Internet an jemanden in einem anderen Netzwerk kommt ein Pairing-Code zum Einsatz: Der Absender meldet sich an, erzeugt einen Code (oder teilt einen Link, wahlweise mit QR-Code zum Scannen), und sobald die andere Person beitritt, läuft die Übertragung über ein verschlüsseltes TURN-Relay — der zuverlässige Weg durch unvorhersehbare NATs, und es trägt ausschließlich Chiffretext. Der Empfänger braucht weiterhin kein Konto.",
         "So oder so: Sobald die Verbindung steht, streamen bis zu 1.000 Dateien in einem Stapel direkt darüber, jede einzeln mit einem SHA-256-Hash geprüft, sodass Sie wissen, dass das Angekommene exakt dem Gesendeten entspricht. Ist Echtzeit nicht möglich — etwa weil die andere Person offline ist —, handelt es sich um einen wirklich anderen Modus (einen Zero-Knowledge-Speicherlink), nicht um Peer-to-Peer, und das ist es wert, separat verstanden zu werden.",
       ],
     },
@@ -510,7 +510,7 @@ const fr = {
         "C'est le rôle de TURN (Traversal Using Relays around NAT) : un serveur relais de secours auquel les deux appareils se connectent lorsqu'un chemin direct échoue. Ce n'est pas tant un contournement ou un compromis sur la vie privée qu'une nécessité liée à la façon dont certains réseaux sont construits — mais il vaut la peine d'être précis sur ce qu'il voit et ne voit pas. Chez Relayium, le fichier est déjà chiffré de bout en bout avant d'atteindre le relais, si bien que celui-ci ne transmet toujours que du chiffré — des données scellées dont il n'a pas la clé. Il déplace des octets ; il ne peut pas les lire.",
       ],
       bullets: [
-        "TURN n'est utilisé que lorsqu'aucun chemin direct ne peut réellement être trouvé — c'est un repli, pas le comportement par défaut.",
+        "Sur le même réseau, Relayium relie les appareils directement ; entre réseaux, il utilise le relais TURN par défaut, car un chemin direct y est si souvent introuvable.",
         "Le relais ne transmet que du chiffré ; il ne possède jamais la clé de déchiffrement et ne peut lire ni le contenu des fichiers, ni leurs noms, ni rien d'autre à leur sujet.",
         "Le fait qu'un transfert donné soit passé en direct ou via un relais est visible dans les diagnostics de connexion de Relayium, pour qui souhaite vérifier.",
       ],
@@ -525,7 +525,7 @@ const fr = {
     {
       heading: "Comment Relayium assemble tout cela",
       body: [
-        "Ouvrez relayium.com sur deux appareils du même réseau et ils se trouvent généralement automatiquement — pas de compte, pas de code, rien à installer ; c'est le cas du réseau local, où STUN n'est souvent même pas nécessaire. Pour envoyer sur Internet vers quelqu'un sur un autre réseau, on utilise un code de jumelage : l'expéditeur se connecte, génère un code (ou partage un lien, avec en option un QR code à scanner), et dès que l'autre personne rejoint, le même processus — STUN puis TURN si nécessaire — s'exécute pour ouvrir une connexion directe ou relayée ; le destinataire n'a besoin d'aucun compte, quel que soit le chemin emprunté.",
+        "Ouvrez relayium.com sur deux appareils du même réseau et ils se trouvent généralement automatiquement — pas de compte, pas de code, rien à installer ; c'est le cas du réseau local, où STUN n'est souvent même pas nécessaire. Pour envoyer sur Internet vers quelqu'un sur un autre réseau, on utilise un code de jumelage : l'expéditeur se connecte, génère un code (ou partage un lien, avec en option un QR code à scanner), et dès que l'autre personne rejoint, le transfert passe par un relais TURN chiffré — la voie fiable à travers des NAT imprévisibles, et il ne transporte que du chiffré ; le destinataire n'a toujours besoin d'aucun compte.",
         "Dans tous les cas, une fois la connexion ouverte, jusqu'à 1 000 fichiers d'un même lot circulent directement dessus, chacun vérifié indépendamment par un hachage SHA-256, afin que vous sachiez que ce qui est arrivé correspond exactement à ce qui a été envoyé. Si le temps réel n'est pas possible — par exemple si l'autre personne est hors ligne —, il s'agit d'un mode réellement différent (un lien stocké à connaissance nulle), pas de pair à pair, et cela vaut la peine d'être compris séparément.",
       ],
     },
@@ -603,7 +603,7 @@ const ar = {
         "هذا هو TURN (الاجتياز باستخدام المُرحِّلات حول NAT): خادم مُرحِّل احتياطي يتصل به الجهازان حين يفشل المسار المباشر. وهو ليس حيلة التفافية أو تنازلًا عن الخصوصية بقدر ما هو ضرورة تفرضها طريقة بناء بعض الشبكات — لكن من الجدير التدقيق في ما يراه وما لا يراه. في Relayium، يكون الملف مُشفَّرًا من الطرف إلى الطرف مسبقًا قبل أن يصل إلى المُرحِّل، فلا يُمرِّر المُرحِّل سوى نص مُشفَّر — بيانات مختومة لا يملك مفتاحًا لفتحها. إنه ينقل البايتات؛ ولا يستطيع قراءتها.",
       ],
       bullets: [
-        "لا يُستخدم TURN إلا حين يتعذّر فعلًا العثور على مسار مباشر — فهو احتياطي، لا الخيار الافتراضي.",
+        "على الشبكة نفسها يصل Relayium بين الأجهزة مباشرةً؛ أمّا عبر الشبكات فيستخدم مُرحِّل TURN افتراضيًّا، لأن المسار المباشر كثيرًا ما يتعذّر إيجاده هناك.",
         "يمرّر المُرحِّل نصًا مُشفَّرًا فقط؛ ولا يملك قط مفتاح فك التشفير ولا يستطيع قراءة محتويات الملفات أو أسمائها أو أي شيء آخر عمّا بداخلها.",
         "أما إن كان نقل معيّن قد جرى مباشرةً أم عبر مُرحِّل فيمكن رؤيته في تشخيصات الاتصال في Relayium، لكل من يرغب في التحقق.",
       ],
@@ -618,7 +618,7 @@ const ar = {
     {
       heading: "كيف يجمع Relayium هذا كله",
       body: [
-        "افتح relayium.com على جهازين على نفس الشبكة فيعثر كل منهما على الآخر تلقائيًا في العادة — دون حساب ودون رمز ودون أي شيء يُثبَّت؛ تلك هي حالة الشبكة المحلية التي لا يكون STUN فيها ضروريًا غالبًا. أما الإرسال عبر الإنترنت إلى شخص على شبكة مختلفة فيستخدم رمز اقتران: يسجّل المُرسِل الدخول، ويولّد رمزًا (أو يشارك رابطًا، مع رمز QR اختياري للمسح)، وما إن ينضم الشخص الآخر حتى تعمل العملية نفسها — STUN ثم TURN عند الحاجة — لفتح اتصال مباشر أو عبر مُرحِّل — ولا يحتاج المُستقبِل إلى حساب في كلتا الحالتين.",
+        "افتح relayium.com على جهازين على نفس الشبكة فيعثر كل منهما على الآخر تلقائيًا في العادة — دون حساب ودون رمز ودون أي شيء يُثبَّت؛ تلك هي حالة الشبكة المحلية التي لا يكون STUN فيها ضروريًا غالبًا. أما الإرسال عبر الإنترنت إلى شخص على شبكة مختلفة فيستخدم رمز اقتران: يسجّل المُرسِل الدخول، ويولّد رمزًا (أو يشارك رابطًا، مع رمز QR اختياري للمسح)، وما إن ينضم الشخص الآخر حتى يجري النقل عبر مُرحِّل TURN مشفَّر — وهو المسار الموثوق عبر شبكات NAT التي يصعب التنبؤ بها، ولا يحمل إلا نصًا مُشفَّرًا — ويبقى المُستقبِل بلا حاجة إلى حساب.",
         "في كلتا الحالتين، ما إن يُفتح الاتصال حتى يُبَثّ ما يصل إلى 1000 ملف في دفعة واحدة مباشرةً عبره، ويُتحقَّق من كل منها على حدة بتجزئة SHA-256 كي تعرف أن ما وصل يطابق تمامًا ما أُرسل. وإذا تعذّر الوضع الفوري — كأن يكون الشخص الآخر غير متصل — فذلك وضع مختلف حقًا (رابط مُخزَّن بمعرفة صفرية)، لا نقل من الند للند، ويستحق أن يُفهَم على حدة.",
       ],
     },
@@ -696,7 +696,7 @@ const es = {
         "Para eso está TURN (Traversal Using Relays around NAT): un servidor de retransmisión de reserva al que ambos dispositivos se conectan cuando falla un camino directo. No es tanto un truco o un compromiso con la privacidad como una necesidad derivada de cómo están construidas algunas redes — pero conviene ser precisos sobre qué ve y qué no. En Relayium, el archivo ya está cifrado de extremo a extremo antes de llegar al retransmisor, así que el retransmisor solo reenvía texto cifrado — datos sellados que no tiene ninguna clave para abrir. Mueve bytes; no puede leerlos.",
       ],
       bullets: [
-        "TURN solo se usa cuando realmente no puede encontrarse un camino directo — es un recurso de reserva, no la opción por defecto.",
+        "En la misma red, Relayium conecta los dispositivos directamente; entre redes usa el retransmisor TURN por defecto, porque allí muy a menudo no hay ninguna ruta directa.",
         "El retransmisor solo reenvía texto cifrado; nunca tiene la clave de descifrado y no puede leer el contenido de los archivos, sus nombres ni ninguna otra cosa sobre lo que hay dentro.",
         "Si una transferencia concreta fue directa o pasó por un retransmisor puede verse en los diagnósticos de conexión de Relayium, para quien tenga la curiosidad de comprobarlo.",
       ],
@@ -711,7 +711,7 @@ const es = {
     {
       heading: "Cómo lo junta todo Relayium",
       body: [
-        "Abre relayium.com en dos dispositivos de la misma red y normalmente se encuentran automáticamente — sin cuenta, sin código, nada que instalar; ese es el caso de la red local, donde a menudo ni siquiera hace falta STUN. Para enviar a través de internet a alguien en una red distinta se usa un código de emparejamiento: el remitente inicia sesión, genera un código (o comparte un enlace, con un código QR opcional para escanear) y, en cuanto la otra persona se une, se ejecuta el mismo proceso — STUN y luego TURN si hace falta — para abrir una conexión directa o retransmitida; el destinatario nunca necesita cuenta, sea cual sea el camino.",
+        "Abre relayium.com en dos dispositivos de la misma red y normalmente se encuentran automáticamente — sin cuenta, sin código, nada que instalar; ese es el caso de la red local, donde a menudo ni siquiera hace falta STUN. Para enviar a través de internet a alguien en una red distinta se usa un código de emparejamiento: el remitente inicia sesión, genera un código (o comparte un enlace, con un código QR opcional para escanear) y, en cuanto la otra persona se une, la transferencia va por un retransmisor TURN cifrado: la vía fiable a través de NAT impredecibles, y solo transporta texto cifrado; el destinatario sigue sin necesitar cuenta.",
         "Sea como sea, una vez abierta la conexión, hasta 1.000 archivos por lote se transmiten directamente por ella, cada uno verificado de forma independiente con un hash SHA-256 para que sepas que lo que llega coincide exactamente con lo que se envió. Si el tiempo real no es posible — por ejemplo, si la otra persona está desconectada —, eso es un modo genuinamente distinto (un enlace almacenado de conocimiento cero), no de igual a igual, y vale la pena entenderlo por separado.",
       ],
     },
@@ -789,7 +789,7 @@ const pt = {
         "É para isso que existe o TURN (Traversal Using Relays around NAT): um servidor de retransmissão de reserva ao qual ambos os dispositivos se conectam quando um caminho direto falha. Não é tanto um truque ou uma concessão de privacidade quanto uma necessidade decorrente de como algumas redes são construídas — mas vale ser preciso sobre o que ele vê e o que não vê. No Relayium, o arquivo já está criptografado de ponta a ponta antes de chegar ao retransmissor, então o retransmissor só encaminha texto cifrado — dados selados dos quais ele não tem chave para abrir. Ele move bytes; não pode lê-los.",
       ],
       bullets: [
-        "O TURN só é usado quando um caminho direto realmente não pode ser encontrado — é um recurso de reserva, não o padrão.",
+        "Na mesma rede, o Relayium conecta os dispositivos diretamente; entre redes ele usa o retransmissor TURN por padrão, porque ali muitas vezes não há caminho direto.",
         "O retransmissor só encaminha texto cifrado; ele nunca tem a chave de descriptografia e não pode ler o conteúdo dos arquivos, seus nomes nem qualquer outra coisa sobre o que há dentro.",
         "Se uma transferência específica foi direta ou passou por um retransmissor pode ser visto nos diagnósticos de conexão do Relayium, para quem tiver curiosidade de conferir.",
       ],
@@ -804,7 +804,7 @@ const pt = {
     {
       heading: "Como o Relayium junta tudo isso",
       body: [
-        "Abra relayium.com em dois dispositivos na mesma rede e normalmente eles se encontram automaticamente — sem conta, sem código, nada para instalar; esse é o caso da rede local, em que muitas vezes o STUN nem é necessário. Para enviar pela internet a alguém em outra rede, usa-se um código de emparelhamento: o remetente entra, gera um código (ou compartilha um link, com um código QR opcional para escanear) e, assim que a outra pessoa entra, o mesmo processo — STUN e depois TURN se necessário — roda para abrir uma conexão direta ou retransmitida; o destinatário nunca precisa de conta, seja qual for o caminho.",
+        "Abra relayium.com em dois dispositivos na mesma rede e normalmente eles se encontram automaticamente — sem conta, sem código, nada para instalar; esse é o caso da rede local, em que muitas vezes o STUN nem é necessário. Para enviar pela internet a alguém em outra rede, usa-se um código de emparelhamento: o remetente entra, gera um código (ou compartilha um link, com um código QR opcional para escanear) e, assim que a outra pessoa entra, a transferência corre por um retransmissor TURN criptografado: o caminho confiável através de NATs imprevisíveis, e ele só carrega texto cifrado; o destinatário continua sem precisar de conta.",
         "De todo modo, uma vez aberta a conexão, até 1.000 arquivos por lote são transmitidos diretamente por ela, cada um verificado de forma independente com um hash SHA-256 para que você saiba que o que chega corresponde exatamente ao que foi enviado. Se o tempo real não for possível — digamos, a outra pessoa está offline —, isso é um modo genuinamente diferente (um link armazenado de conhecimento zero), não ponto a ponto, e vale entender à parte.",
       ],
     },

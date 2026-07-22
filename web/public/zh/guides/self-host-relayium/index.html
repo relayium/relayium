@@ -84,7 +84,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>relayium.com/cli 列出了所有安装方式——Windows 二进制、发布页，或装了 Go 用 go build。</li><li>relayium --version 可确认。没装 CLI，下面的命令只会报 “command not found”。</li></ul>
       <h2>让 CLI 指向你的服务器</h2>
       <p>Relayium CLI 默认使用 relayium.com 的会合服务器来完成跨网络的 send/receive。传入 --server 即可改用你自己的服务器：</p>
-      <pre><code>relayium send ./report.pdf --server https://your-domain</code></pre>
+      <pre><code>relayium send --server https://your-domain ./report.pdf</code></pre>
       <pre><code>relayium receive --server https://your-domain</code></pre>
       <ul><li>无论用哪个服务器，CLI 都是免费的，也都不需要账号——--server 只是改变了配对码握手所连接的会合服务器。</li><li>push/pull（走你自己的 SSH）以及 serve + daemon-direct 的 push relayium://host，无论是否自托管都完全不会接触 relayium.com——它们直接连到你指定的远程地址。</li></ul>
       <h2>常见问题</h2>

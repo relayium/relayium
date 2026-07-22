@@ -84,7 +84,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>relayium.com/cli lists every install option — a Windows binary, the releases page, or go build if you have Go.</li><li>relayium --version confirms it. Without the CLI, the command below prints &#39;command not found&#39;.</li></ul>
       <h2>Point the CLI at your server</h2>
       <p>The Relayium CLI defaults to relayium.com&#39;s rendezvous server for cross-network send/receive. Pass --server to use your own instead:</p>
-      <pre><code>relayium send ./report.pdf --server https://your-domain</code></pre>
+      <pre><code>relayium send --server https://your-domain ./report.pdf</code></pre>
       <pre><code>relayium receive --server https://your-domain</code></pre>
       <ul><li>The CLI is free and needs no account either way — --server just changes which rendezvous server it talks to for the pairing-code handshake.</li><li>push/pull (over your own SSH) and serve + daemon-direct push relayium://host don&#39;t touch relayium.com at all, self-hosted or not — they connect straight to the remote you specify.</li></ul>
       <h2>Frequently asked questions</h2>

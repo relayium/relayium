@@ -92,9 +92,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <pre><code>relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…</code></pre>
       <pre><code># 选择它能存活多久（不给则用你账号的默认策略）：
-relayium up ./report.pdf --burn              # 下载一次后即删除
-relayium up ./report.pdf --ttl 7d            # 最长保留 7 天（取决于套餐）
-relayium up ./report.pdf --max-downloads 5   # 允许下载 5 次，之后删除</code></pre>
+relayium up --burn ./report.pdf              # 下载一次后即删除
+relayium up --ttl 7d ./report.pdf            # 最长保留 7 天（取决于套餐）
+relayium up --max-downloads 5 ./report.pdf   # 允许下载 5 次，之后删除</code></pre>
       <ul><li>链接就是全部交接物——把它复制到另一台机器能读到的地方。任何拿到链接的人都能下载该文件，所以要像对待密码一样对待它。</li><li>保留策略：--burn 下载一次后即删；--ttl &lt;时长&gt; 保留固定时间（如 7d、24h）；--max-downloads &lt;n&gt; 允许固定下载次数。都不给则用你账号的默认。</li><li>up 需要你已登录；若未登录，它会提示你且不做任何事。</li></ul>
       <h2>在第二台电脑下载</h2>
       <p>在另一台机器上，把链接交给 down。无需登录、无需配置——解密文件的密钥就在链接里，所以 down 完全不需要你的账号：</p>

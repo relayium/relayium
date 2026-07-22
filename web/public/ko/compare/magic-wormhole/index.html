@@ -86,7 +86,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>폴더 동기화, 그리고 자체 호스팅 가능한 서버</h2>
       <p>magic-wormhole은 파일 묶음(또는 압축된 폴더)을 보내고 종료합니다 — 상대 쪽을 갱신하려면 다시 보내야 하고, 무엇을 삭제해야 하는지에 대한 개념도 없습니다. Relayium CLI는 relayium sync를 더해, 위의 두 전송 방식 위에서 증분 단방향 미러링을 합니다. 변경된 것만 옮기고, --delete는 소스에서 사라진 파일을 대상에서도 삭제합니다(데몬은 --allow-delete로 시작된 경우에만 이를 따르므로, 수신 측이 직접 선택해야 합니다). --watch는 파일이 바뀔 때마다 실시간으로 계속 재동기화하며, cron 작업이 필요 없습니다.</p>
       <p>relayium.com에 의존하지 않고 직접 모든 것을 운영하고 싶다면, Relayium의 서버는 단일 Docker 컨테이너로 자체 호스팅할 수도 있습니다. --server로 CLI가 그곳을 가리키게 하세요.</p>
-      <pre><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
+      <pre><code>relayium sync --delete --watch ./photos user@your-server:backups/photos</code></pre>
       <h2>기능 한눈에 비교</h2>
       <p>가장 중요한 차이를 나란히 정리하면:</p>
       <ul><li>직접 경로가 없을 때: magic-wormhole의 Transit Relay는 암호화된 스트림을 실어 날라 전송이 완료됨; Relayium의 send/receive는 직접 연결 전용이라 이 경우 실패함.</li><li>서버와의 대화: Relayium은 SSH 접근(push/pull) 또는 고정 TLS 데몬을 재사용; magic-wormhole은 SSH 통합이 없어 양쪽에 설치하고 코드를 공유해야 함.</li><li>폴더 동기화: relayium sync는 --delete와 --watch로 증분 미러링; magic-wormhole은 묶음(또는 압축된 폴더)을 보내고 종료하며 미러나 삭제 개념이 없음.</li><li>검증: 둘 다 종단간 암호화됨; Relayium의 send/receive는 추가로 전송 시작 전 양쪽이 대조하는 짧은 SAS 코드를 표시함.</li><li>자체 호스팅: Relayium의 서버는 직접 운영할 수 있는 단일 Docker 이미지로, CLI와 브라우저 앱 둘 다에 사용됨; CLI의 send/receive도 --server로 그곳을 가리킬 수 있음.</li><li>라이선스와 비용: 둘 다 무료 오픈소스, 둘 다 계정 불필요.</li></ul>

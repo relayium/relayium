@@ -86,7 +86,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>文件夹同步，以及可自托管的服务器</h2>
       <p>magic-wormhole 发送一批文件（或打包成一个压缩包的文件夹）后就退出——要更新对方就得再发一次，也没有“该删除什么”的概念。Relayium CLI 增加了 relayium sync，在上面两种传输方式之上做增量单向镜像：只传发生变化的内容；--delete 会删除目标端上源端已经消失的文件（daemon 只有在以 --allow-delete 启动时才会执行，接收方必须自己选择开启）；--watch 会在文件变化时实时持续重新同步，不需要额外的定时任务。</p>
       <p>如果你不想依赖 relayium.com，Relayium 的服务器也可以以单个 Docker 容器的形式自行托管；用 --server 让 CLI 指向它。</p>
-      <pre><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
+      <pre><code>relayium sync --delete --watch ./photos user@your-server:backups/photos</code></pre>
       <h2>功能一览对比</h2>
       <p>把最关键的差别并排列出：</p>
       <ul><li>无法直连时：magic-wormhole 的 Transit Relay 会承载加密数据流，传输依然能完成；Relayium 的 send/receive 是纯直连的，在这种情况下会失败。</li><li>对接服务器：Relayium 复用你的 SSH 权限（push/pull）或锁定 TLS 的 daemon；magic-wormhole 没有 SSH 集成——需要两端都装好并共享一段代码。</li><li>文件夹同步：relayium sync 支持 --delete 与 --watch 的增量镜像；magic-wormhole 发送一批（或打包的文件夹）后就退出，没有镜像或删除语义。</li><li>验证：两者都端到端加密；Relayium 的 send/receive 额外会在传输开始前展示一段供双方核对的简短 SAS 验证码。</li><li>自托管：Relayium 的服务器是一个可以自己运行的单一 Docker 镜像，同时服务 CLI 和浏览器版；CLI 的 send/receive 可以用 --server 指向它。</li><li>许可证与费用：两者都免费开源，都不需要账号。</li></ul>

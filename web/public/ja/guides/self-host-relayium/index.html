@@ -84,7 +84,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>relayium.com/cli にすべてのインストール方法があります——Windows バイナリ、リリースページ、または Go があれば go build。</li><li>relayium --version で確認できます。CLI がないと下のコマンドは「command not found」と出るだけです。</li></ul>
       <h2>CLI を自分のサーバーに向ける</h2>
       <p>Relayium CLI は、ネットワークをまたぐ send/receive で既定では relayium.com のランデブーサーバーを使います。--server を渡せば、代わりに自分のサーバーを使えます:</p>
-      <pre><code>relayium send ./report.pdf --server https://your-domain</code></pre>
+      <pre><code>relayium send --server https://your-domain ./report.pdf</code></pre>
       <pre><code>relayium receive --server https://your-domain</code></pre>
       <ul><li>どちらのサーバーを使っても CLI は無料で、アカウントも不要です——--server はペアリングコードのハンドシェイクで話すランデブーサーバーを変更するだけです。</li><li>push/pull（自分の SSH 経由）や、serve と daemon-direct の push relayium://host は、セルフホストかどうかにかかわらず relayium.com に一切触れません——指定したリモートに直接接続します。</li></ul>
       <h2>よくある質問</h2>

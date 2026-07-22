@@ -93,7 +93,7 @@ relayium push ./data relayium://backup-server:9031</code></pre>
       <h2>镜像删除与实时同步</h2>
       <p>默认情况下,sync 只会在目标端新增或更新文件。加上 --delete 就会变成真正的镜像,把源目录中已经不存在的文件也从目标端删除——接收端必须显式以 serve --allow-delete 方式监听,否则这些删除操作会被静默跳过,并在结果里报告为被拒绝。如果源目录解析不到任何文件,sync 也会直接拒绝执行 --delete,这样源路径写错也不会清空目标目录。</p>
       <p>如果不想等 cron 的下一个执行时间点,--watch 会让 relayium sync 持续运行,一旦源目录下有文件变化,就会在片刻之后自动重新同步——是按计划轮询之外的一种轻量替代方案。</p>
-      <ul><li>relayium sync ./data user@backup-server:/srv/backups/ --delete 会镜像删除操作(接收端需要 serve --allow-delete)。</li><li>relayium sync ./data user@backup-server:/srv/backups/ --watch 会持续运行,有变化就同步,而不是靠 cron 单次触发。</li></ul>
+      <ul><li>relayium sync --delete ./data user@backup-server:/srv/backups/ 会镜像删除操作(接收端需要 serve --allow-delete)。</li><li>relayium sync --watch ./data user@backup-server:/srv/backups/ 会持续运行,有变化就同步,而不是靠 cron 单次触发。</li></ul>
       <h2>常见问题</h2>
       <h3>备份服务器需要装 relayium 吗?</h3>
       <p>要看命令。push 不管远端有没有装都能用:装了 relayium 就用原生协议(断点续传 + 每个文件 SHA-256 校验);没装的话,push 会退回到通过 SSH 传输 tar 流,一台裸服务器也能用。sync 则始终需要远端有 relayium 的原生协议——sync 没有 tar 兜底方案,请先在远端装好它。</p>

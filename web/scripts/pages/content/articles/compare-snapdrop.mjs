@@ -41,8 +41,8 @@ const en = {
     {
       heading: "Beyond the LAN",
       body: [
-        "Relayium is designed to work across networks, not only on the same Wi-Fi. You can connect two devices with a pairing code (or the join link it generates), and the transfer still goes directly peer-to-peer whenever possible.",
-        "When a direct connection is impossible, the encrypted stream falls back to a TURN relay — but the relay only ever sees ciphertext, so the transfer stays end-to-end encrypted. There is also an optional stored download-link mode: your browser encrypts the files with AES-256-GCM and the decryption key lives only in the URL fragment, so the server stores zero-knowledge ciphertext it cannot read. On the same network, no account is needed; sending across networks with a pairing code requires the sender to sign in — the person receiving never needs an account, and the same is true for stored download links. Transfers that drop mid-way can resume instead of restarting.",
+        "Relayium is designed to work across networks, not only on the same Wi-Fi. You can connect two devices with a pairing code (or the join link it generates), and the transfer still runs end-to-end encrypted from browser to browser.",
+        "Across networks the encrypted stream travels over a TURN relay — but the relay only ever sees ciphertext, so the transfer stays end-to-end encrypted. There is also an optional stored download-link mode: your browser encrypts the files with AES-256-GCM and the decryption key lives only in the URL fragment, so the server stores zero-knowledge ciphertext it cannot read. On the same network, no account is needed; sending across networks with a pairing code requires the sender to sign in — the person receiving never needs an account, and the same is true for stored download links. Transfers that drop mid-way can resume instead of restarting.",
       ],
     },
     {
@@ -53,7 +53,7 @@ const en = {
       bullets: [
         "Encryption layer: plain WebRTC relies on DTLS alone; Relayium adds application-layer X25519 + AES-256-GCM on top.",
         "MITM defense: Relayium shows a 6-digit SAS code both sides verify; plain WebRTC has no equivalent check against a malicious signaling server.",
-        "Across networks: Relayium connects by pairing code (or the join link it generates) with an encrypted TURN fallback; LAN discovery is the primary path for Snapdrop.",
+        "Across networks: Relayium connects by pairing code (or the join link it generates) over an encrypted TURN relay; LAN discovery is the primary path for Snapdrop.",
         "Storage mode: Relayium offers optional zero-knowledge stored download links; the others are realtime-only.",
         "Resume: Relayium can resume an interrupted transfer instead of starting over.",
         "Batch: Relayium sends up to 1,000 files per batch with a per-file SHA-256 integrity check.",
@@ -123,7 +123,7 @@ const zh = {
       heading: "走出局域网",
       body: [
         "Relayium 从设计上就支持跨网络工作，而不只是同一个 Wi-Fi。你可以用配对码（或它生成的加入链接）连接两台设备，只要条件允许，传输依然点对点直连。",
-        "当无法直连时，加密数据流会退回到 TURN 中继——但中继只能看到密文，因此传输始终保持端到端加密。此外还有可选的存储下载链接模式：浏览器先用 AES-256-GCM 加密文件，解密密钥只存在于 URL 片段里，服务器只保存无法解读的零知识密文。同一网络下无需账号；跨网络用配对码传输则需要发送方登录——接收方无论哪种方式都无需账号，存储下载链接也同样需要发送方登录。中途断开的传输可以断点续传，而不必从头再来。",
+        "跨网络时加密数据流经 TURN 中继转发——但中继只能看到密文，因此传输始终保持端到端加密。此外还有可选的存储下载链接模式：浏览器先用 AES-256-GCM 加密文件，解密密钥只存在于 URL 片段里，服务器只保存无法解读的零知识密文。同一网络下无需账号；跨网络用配对码传输则需要发送方登录——接收方无论哪种方式都无需账号，存储下载链接也同样需要发送方登录。中途断开的传输可以断点续传，而不必从头再来。",
       ],
     },
     {
@@ -134,7 +134,7 @@ const zh = {
       bullets: [
         "加密层级：原生 WebRTC 只依赖 DTLS；Relayium 在其之上再加应用层 X25519 + AES-256-GCM。",
         "防中间人：Relayium 显示两边核对的 6 位 SAS 校验码；原生 WebRTC 对恶意信令服务器没有对应的核验手段。",
-        "跨网络：Relayium 可用配对码（或它生成的加入链接）连接，并有加密的 TURN 兜底；Snapdrop 主要依赖局域网发现。",
+        "跨网络：Relayium 可用配对码（或它生成的加入链接）连接，数据经加密 TURN 中继转发；Snapdrop 主要依赖局域网发现。",
         "存储模式：Relayium 提供可选的零知识存储下载链接；另两者只有实时模式。",
         "断点续传：Relayium 可在传输中断后续传，而非重来。",
         "批量：Relayium 每批最多发送 1,000 个文件，并对每个文件做 SHA-256 完整性校验。",
@@ -204,7 +204,7 @@ const ja = {
       heading: "LAN を越えて",
       body: [
         "Relayium は同じ Wi-Fi だけでなく、ネットワークをまたいで動くよう設計されています。ペアリングコード（またはそれが生成する参加リンク）で2台の端末を接続でき、可能な限り転送は P2P で直接行われます。",
-        "直接接続が不可能なときは、暗号化ストリームが TURN リレーにフォールバックしますが、リレーが見るのは暗号文だけなので、転送はエンドツーエンド暗号化のままです。任意の保存型ダウンロードリンクもあります。ブラウザが AES-256-GCM でファイルを暗号化し、復号鍵は URL フラグメントにだけ存在するため、サーバーは読めないゼロ知識の暗号文を保存します。同じネットワークならアカウントは不要です。ネットワークをまたいでペアリングコードで送る場合は送信側のサインインが必要です——受信側はどちらの場合もアカウント不要で、保存型ダウンロードリンクの作成にも送信側のサインインが必要です。途中で切れた転送は最初からではなく再開できます。",
+        "ネットワークをまたぐときは暗号化ストリームが TURN リレーを経由しますが、リレーが見るのは暗号文だけなので、転送はエンドツーエンド暗号化のままです。任意の保存型ダウンロードリンクもあります。ブラウザが AES-256-GCM でファイルを暗号化し、復号鍵は URL フラグメントにだけ存在するため、サーバーは読めないゼロ知識の暗号文を保存します。同じネットワークならアカウントは不要です。ネットワークをまたいでペアリングコードで送る場合は送信側のサインインが必要です——受信側はどちらの場合もアカウント不要で、保存型ダウンロードリンクの作成にも送信側のサインインが必要です。途中で切れた転送は最初からではなく再開できます。",
       ],
     },
     {
@@ -215,7 +215,7 @@ const ja = {
       bullets: [
         "暗号化層：素の WebRTC は DTLS だけに依存。Relayium はその上にアプリケーション層の X25519 + AES-256-GCM を加える。",
         "中間者対策：Relayium は双方で照合する6桁の SAS コードを表示。素の WebRTC には悪意あるシグナリングサーバーへの相当する確認手段がない。",
-        "ネットワーク越え：Relayium はペアリングコード（またはその参加リンク）で接続し、暗号化された TURN フォールバックを持つ。Snapdrop は主に LAN 発見に依存。",
+        "ネットワーク越え：Relayium はペアリングコード（またはその参加リンク）で接続し、暗号化された TURN リレーを経由する。Snapdrop は主に LAN 発見に依存。",
         "保存モード：Relayium は任意のゼロ知識保存ダウンロードリンクを提供。他はリアルタイムのみ。",
         "再開：Relayium は中断した転送を最初からやり直さずに再開できる。",
         "バッチ：Relayium は1バッチ最大1,000ファイルを送り、ファイルごとに SHA-256 整合性チェックを行う。",
@@ -285,7 +285,7 @@ const ko = {
       heading: "LAN을 넘어서",
       body: [
         "Relayium은 같은 Wi-Fi뿐 아니라 네트워크를 넘나들며 작동하도록 설계되었습니다. 페어링 코드(또는 그것이 생성하는 참여 링크)로 두 기기를 연결할 수 있고, 가능한 경우 전송은 여전히 P2P로 직접 이루어집니다.",
-        "직접 연결이 불가능할 때는 암호화된 스트림이 TURN 릴레이로 폴백하지만, 릴레이는 암호문만 볼 수 있어 전송은 종단간 암호화를 유지합니다. 선택적인 저장형 다운로드 링크 모드도 있습니다. 브라우저가 AES-256-GCM으로 파일을 암호화하고 복호화 키는 URL 프래그먼트에만 존재하므로, 서버는 읽을 수 없는 영지식 암호문을 저장합니다. 같은 네트워크에서는 계정이 필요 없습니다. 페어링 코드로 네트워크를 넘어 보낼 때는 보내는 쪽의 로그인이 필요합니다 — 받는 쪽은 어느 경우든 계정이 필요 없고, 저장형 다운로드 링크 생성에도 보내는 쪽의 로그인이 필요합니다. 도중에 끊긴 전송은 처음부터가 아니라 이어서 재개할 수 있습니다.",
+        "네트워크를 넘을 때는 암호화된 스트림이 TURN 릴레이를 거치지만, 릴레이는 암호문만 볼 수 있어 전송은 종단간 암호화를 유지합니다. 선택적인 저장형 다운로드 링크 모드도 있습니다. 브라우저가 AES-256-GCM으로 파일을 암호화하고 복호화 키는 URL 프래그먼트에만 존재하므로, 서버는 읽을 수 없는 영지식 암호문을 저장합니다. 같은 네트워크에서는 계정이 필요 없습니다. 페어링 코드로 네트워크를 넘어 보낼 때는 보내는 쪽의 로그인이 필요합니다 — 받는 쪽은 어느 경우든 계정이 필요 없고, 저장형 다운로드 링크 생성에도 보내는 쪽의 로그인이 필요합니다. 도중에 끊긴 전송은 처음부터가 아니라 이어서 재개할 수 있습니다.",
       ],
     },
     {
@@ -296,7 +296,7 @@ const ko = {
       bullets: [
         "암호화 계층: 순수 WebRTC는 DTLS에만 의존; Relayium은 그 위에 애플리케이션 계층 X25519 + AES-256-GCM을 더함.",
         "중간자 방어: Relayium은 양쪽이 대조하는 6자리 SAS 코드를 표시; 순수 WebRTC는 악의적 시그널링 서버에 대한 상응하는 확인 수단이 없음.",
-        "네트워크 넘기: Relayium은 페어링 코드(또는 그 참여 링크)로 연결하고 암호화된 TURN 폴백을 가짐; Snapdrop은 주로 LAN 탐색에 의존.",
+        "네트워크 넘기: Relayium은 페어링 코드(또는 그 참여 링크)로 연결하며 암호화된 TURN 중계를 거침; Snapdrop은 주로 LAN 탐색에 의존.",
         "저장 모드: Relayium은 선택적 영지식 저장 다운로드 링크를 제공; 나머지는 실시간 전용.",
         "재개: Relayium은 중단된 전송을 처음부터 다시 하지 않고 이어받을 수 있음.",
         "일괄: Relayium은 배치당 최대 1,000개 파일을 보내며 파일별 SHA-256 무결성 검사를 함.",
@@ -366,7 +366,7 @@ const de = {
       heading: "Über das LAN hinaus",
       body: [
         "Relayium ist darauf ausgelegt, netzwerkübergreifend zu funktionieren, nicht nur im selben WLAN. Du kannst zwei Geräte per Pairing-Code (oder den erzeugten Beitrittslink) verbinden, und die Übertragung läuft nach Möglichkeit weiterhin direkt Peer-to-Peer.",
-        "Ist eine Direktverbindung unmöglich, weicht der verschlüsselte Datenstrom auf ein TURN-Relay aus — doch das Relay sieht nur Chiffretext, sodass die Übertragung Ende-zu-Ende-verschlüsselt bleibt. Es gibt außerdem einen optionalen Modus mit gespeichertem Download-Link: Der Browser verschlüsselt die Dateien mit AES-256-GCM, und der Entschlüsselungsschlüssel liegt nur im URL-Fragment, sodass der Server nur Zero-Knowledge-Chiffretext speichert, den er nicht lesen kann. Im selben Netz ist kein Konto nötig; beim Senden über Netzwerke hinweg per Pairing-Code muss sich der Absender anmelden — der Empfänger braucht in beiden Fällen kein Konto, ebenso wenig wie bei gespeicherten Download-Links, die ebenfalls die Anmeldung des Absenders erfordern. Abgebrochene Übertragungen können fortgesetzt statt neu gestartet werden.",
+        "Netzübergreifend läuft der verschlüsselte Datenstrom über ein TURN-Relay — doch das Relay sieht nur Chiffretext, sodass die Übertragung Ende-zu-Ende-verschlüsselt bleibt. Es gibt außerdem einen optionalen Modus mit gespeichertem Download-Link: Der Browser verschlüsselt die Dateien mit AES-256-GCM, und der Entschlüsselungsschlüssel liegt nur im URL-Fragment, sodass der Server nur Zero-Knowledge-Chiffretext speichert, den er nicht lesen kann. Im selben Netz ist kein Konto nötig; beim Senden über Netzwerke hinweg per Pairing-Code muss sich der Absender anmelden — der Empfänger braucht in beiden Fällen kein Konto, ebenso wenig wie bei gespeicherten Download-Links, die ebenfalls die Anmeldung des Absenders erfordern. Abgebrochene Übertragungen können fortgesetzt statt neu gestartet werden.",
       ],
     },
     {
@@ -377,7 +377,7 @@ const de = {
       bullets: [
         "Verschlüsselungsschicht: Reines WebRTC verlässt sich allein auf DTLS; Relayium legt X25519 + AES-256-GCM auf Anwendungsebene darüber.",
         "MITM-Schutz: Relayium zeigt einen sechsstelligen SAS-Code, den beide Seiten prüfen; reines WebRTC hat keine entsprechende Kontrolle gegen einen bösartigen Signalisierungsserver.",
-        "Netzwerkübergreifend: Relayium verbindet per Pairing-Code (oder dessen Beitrittslink) mit verschlüsseltem TURN-Fallback; bei Snapdrop ist die LAN-Erkennung der Hauptweg.",
+        "Netzwerkübergreifend: Relayium verbindet per Pairing-Code (oder dessen Beitrittslink) über ein verschlüsseltes TURN-Relay; bei Snapdrop ist die LAN-Erkennung der Hauptweg.",
         "Speichermodus: Relayium bietet optionale Zero-Knowledge-Download-Links; die anderen sind nur Echtzeit.",
         "Fortsetzen: Relayium kann eine unterbrochene Übertragung fortsetzen, statt neu zu beginnen.",
         "Stapel: Relayium sendet bis zu 1.000 Dateien pro Stapel mit einer SHA-256-Integritätsprüfung je Datei.",
@@ -447,7 +447,7 @@ const fr = {
       heading: "Au-delà du réseau local",
       body: [
         "Relayium est conçu pour fonctionner entre réseaux, pas seulement sur le même Wi-Fi. Vous pouvez connecter deux appareils par code d'appairage (ou le lien de participation qu'il génère), et le transfert reste en pair-à-pair direct chaque fois que possible.",
-        "Quand une connexion directe est impossible, le flux chiffré bascule vers un relais TURN — mais le relais ne voit que du texte chiffré, donc le transfert reste chiffré de bout en bout. Il existe aussi un mode optionnel de lien de téléchargement stocké : le navigateur chiffre les fichiers en AES-256-GCM et la clé de déchiffrement ne vit que dans le fragment de l'URL, si bien que le serveur ne stocke qu'un texte chiffré à divulgation nulle qu'il ne peut pas lire. Sur le même réseau, aucun compte n'est nécessaire ; envoyer entre réseaux différents avec un code d'appairage exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte, et il en va de même pour les liens de téléchargement stockés. Les transferts interrompus en cours de route peuvent reprendre au lieu de tout recommencer.",
+        "Entre réseaux, le flux chiffré passe par un relais TURN — mais le relais ne voit que du texte chiffré, donc le transfert reste chiffré de bout en bout. Il existe aussi un mode optionnel de lien de téléchargement stocké : le navigateur chiffre les fichiers en AES-256-GCM et la clé de déchiffrement ne vit que dans le fragment de l'URL, si bien que le serveur ne stocke qu'un texte chiffré à divulgation nulle qu'il ne peut pas lire. Sur le même réseau, aucun compte n'est nécessaire ; envoyer entre réseaux différents avec un code d'appairage exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte, et il en va de même pour les liens de téléchargement stockés. Les transferts interrompus en cours de route peuvent reprendre au lieu de tout recommencer.",
       ],
     },
     {
@@ -458,7 +458,7 @@ const fr = {
       bullets: [
         "Couche de chiffrement : le WebRTC brut ne repose que sur DTLS ; Relayium ajoute par-dessus X25519 + AES-256-GCM au niveau applicatif.",
         "Défense MITM : Relayium affiche un code SAS à 6 chiffres que les deux parties vérifient ; le WebRTC brut n'a aucun contrôle équivalent contre un serveur de signalisation malveillant.",
-        "Entre réseaux : Relayium se connecte par code d'appairage (ou son lien de participation) avec un repli TURN chiffré ; pour Snapdrop, la découverte sur le réseau local est la voie principale.",
+        "Entre réseaux : Relayium se connecte par code d'appairage (ou son lien de participation) via un relais TURN chiffré ; pour Snapdrop, la découverte sur le réseau local est la voie principale.",
         "Mode de stockage : Relayium propose des liens de téléchargement stockés à divulgation nulle en option ; les autres sont uniquement en temps réel.",
         "Reprise : Relayium peut reprendre un transfert interrompu au lieu de recommencer.",
         "Lot : Relayium envoie jusqu'à 1 000 fichiers par lot avec une vérification d'intégrité SHA-256 par fichier.",
@@ -528,7 +528,7 @@ const ar = {
       heading: "ما وراء الشبكة المحلية",
       body: [
         "صُمّم Relayium للعمل عبر الشبكات، لا على نفس Wi-Fi فقط. يمكنك ربط جهازين برمز اقتران (أو برابط الانضمام الذي يولّده)، ويظل النقل يجري من الند للند مباشرةً كلما أمكن.",
-        "عندما يتعذّر الاتصال المباشر، يتراجع التدفق المُشفَّر إلى مُرحِّل TURN — لكن المُرحِّل لا يرى سوى نص مُشفَّر، فيظل النقل مُشفَّرًا من الطرف إلى الطرف. وهناك أيضًا وضع رابط التنزيل المُخزَّن الاختياري: يشفّر متصفحك الملفات بـ AES-256-GCM ويعيش مفتاح فك التشفير في جزء الـ URL فقط، فيخزّن الخادم نصًا مُشفَّرًا بمعرفة صفرية لا يستطيع قراءته. على نفس الشبكة، لا حاجة إلى حساب؛ والإرسال عبر الشبكات برمز اقتران يتطلب من المُرسِل تسجيل الدخول — أما من يستقبل فلا يحتاج أبدًا إلى حساب، وينطبق الأمر نفسه على روابط التنزيل المُخزَّنة. النقلات التي تنقطع في منتصفها يمكنها الاستئناف بدلًا من إعادة البدء.",
+        "وعبر الشبكات يمرّ التدفق المُشفَّر على مُرحِّل TURN — لكن المُرحِّل لا يرى سوى نص مُشفَّر، فيظل النقل مُشفَّرًا من الطرف إلى الطرف. وهناك أيضًا وضع رابط التنزيل المُخزَّن الاختياري: يشفّر متصفحك الملفات بـ AES-256-GCM ويعيش مفتاح فك التشفير في جزء الـ URL فقط، فيخزّن الخادم نصًا مُشفَّرًا بمعرفة صفرية لا يستطيع قراءته. على نفس الشبكة، لا حاجة إلى حساب؛ والإرسال عبر الشبكات برمز اقتران يتطلب من المُرسِل تسجيل الدخول — أما من يستقبل فلا يحتاج أبدًا إلى حساب، وينطبق الأمر نفسه على روابط التنزيل المُخزَّنة. النقلات التي تنقطع في منتصفها يمكنها الاستئناف بدلًا من إعادة البدء.",
       ],
     },
     {
@@ -539,7 +539,7 @@ const ar = {
       bullets: [
         "طبقة التشفير: WebRTC العادي يعتمد على DTLS وحده؛ بينما يضيف Relayium فوقه X25519 + AES-256-GCM على طبقة التطبيق.",
         "الدفاع ضد الوسيط: يعرض Relayium رمز SAS من 6 أرقام يتحقق منه الطرفان؛ بينما لا يملك WebRTC العادي فحصًا مكافئًا ضد خادم إشارة خبيث.",
-        "عبر الشبكات: يتصل Relayium برمز اقتران (أو برابط الانضمام الذي يولّده) مع حل احتياطي مُشفَّر بـ TURN؛ بينما اكتشاف الشبكة المحلية هو المسار الأساسي لـ Snapdrop.",
+        "عبر الشبكات: يتصل Relayium برمز اقتران (أو برابط الانضمام الذي يولّده) عبر مُرحِّل TURN مُشفَّر؛ بينما اكتشاف الشبكة المحلية هو المسار الأساسي لـ Snapdrop.",
         "وضع التخزين: يقدّم Relayium روابط تنزيل مُخزَّنة بمعرفة صفرية اختيارية؛ بينما الأخريان فوريتان فقط.",
         "الاستئناف: يستطيع Relayium استئناف نقل منقطع بدلًا من البدء من جديد.",
         "الدُّفعات: يرسل Relayium حتى 1,000 ملف لكل دفعة مع فحص سلامة SHA-256 لكل ملف.",
@@ -609,7 +609,7 @@ const es = {
       heading: "Más allá de la red local",
       body: [
         "Relayium está diseñado para funcionar entre redes, no solo en el mismo Wi-Fi. Puedes conectar dos dispositivos con un código de emparejamiento (o el enlace de unión que genera), y la transferencia sigue yendo directamente de igual a igual siempre que sea posible.",
-        "Cuando una conexión directa es imposible, el flujo cifrado recurre a un retransmisor TURN, pero el retransmisor solo ve texto cifrado, así que la transferencia sigue cifrada de extremo a extremo. También hay un modo opcional de enlace de descarga almacenado: tu navegador cifra los archivos con AES-256-GCM y la clave de descifrado vive solo en el fragmento de la URL, así que el servidor almacena texto cifrado de conocimiento cero que no puede leer. En la misma red no hace falta cuenta; enviar entre redes con un código de emparejamiento exige que el remitente inicie sesión; quien recibe nunca necesita cuenta, y lo mismo vale para los enlaces de descarga almacenados. Las transferencias que se cortan a mitad pueden reanudarse en lugar de empezar de nuevo.",
+        "Entre redes, el flujo cifrado viaja por un retransmisor TURN, pero el retransmisor solo ve texto cifrado, así que la transferencia sigue cifrada de extremo a extremo. También hay un modo opcional de enlace de descarga almacenado: tu navegador cifra los archivos con AES-256-GCM y la clave de descifrado vive solo en el fragmento de la URL, así que el servidor almacena texto cifrado de conocimiento cero que no puede leer. En la misma red no hace falta cuenta; enviar entre redes con un código de emparejamiento exige que el remitente inicie sesión; quien recibe nunca necesita cuenta, y lo mismo vale para los enlaces de descarga almacenados. Las transferencias que se cortan a mitad pueden reanudarse en lugar de empezar de nuevo.",
       ],
     },
     {
@@ -620,7 +620,7 @@ const es = {
       bullets: [
         "Capa de cifrado: el WebRTC simple depende solo de DTLS; Relayium añade encima X25519 + AES-256-GCM en la capa de aplicación.",
         "Defensa contra intermediarios: Relayium muestra un código SAS de 6 dígitos que ambos lados verifican; el WebRTC simple no tiene comprobación equivalente frente a un servidor de señalización malicioso.",
-        "Entre redes: Relayium conecta por código de emparejamiento (o el enlace de unión que genera) con una reserva TURN cifrada; el descubrimiento en la red local es la vía principal de Snapdrop.",
+        "Entre redes: Relayium conecta por código de emparejamiento (o el enlace de unión que genera) a través de un retransmisor TURN cifrado; el descubrimiento en la red local es la vía principal de Snapdrop.",
         "Modo de almacenamiento: Relayium ofrece enlaces de descarga almacenados de conocimiento cero opcionales; los otros son solo en tiempo real.",
         "Reanudación: Relayium puede reanudar una transferencia interrumpida en lugar de empezar de nuevo.",
         "Lote: Relayium envía hasta 1.000 archivos por lote con una comprobación de integridad SHA-256 por archivo.",
@@ -690,7 +690,7 @@ const pt = {
       heading: "Além da rede local",
       body: [
         "O Relayium foi projetado para funcionar entre redes, não só no mesmo Wi-Fi. Você pode conectar dois dispositivos com um código de emparelhamento (ou o link de entrada que ele gera), e a transferência continua indo diretamente ponto a ponto sempre que possível.",
-        "Quando uma conexão direta é impossível, o fluxo criptografado recorre a um retransmissor TURN — mas o retransmissor só vê texto cifrado, então a transferência permanece criptografada de ponta a ponta. Há também um modo opcional de link de download armazenado: seu navegador criptografa os arquivos com AES-256-GCM e a chave de descriptografia vive só no fragmento da URL, então o servidor armazena texto cifrado de conhecimento zero que não consegue ler. Na mesma rede não é preciso conta; enviar entre redes com um código de emparelhamento exige que o remetente entre; quem recebe nunca precisa de conta, e o mesmo vale para os links de download armazenados. Transferências que caem no meio podem retomar em vez de começar de novo.",
+        "Entre redes, o fluxo criptografado viaja por um retransmissor TURN — mas o retransmissor só vê texto cifrado, então a transferência permanece criptografada de ponta a ponta. Há também um modo opcional de link de download armazenado: seu navegador criptografa os arquivos com AES-256-GCM e a chave de descriptografia vive só no fragmento da URL, então o servidor armazena texto cifrado de conhecimento zero que não consegue ler. Na mesma rede não é preciso conta; enviar entre redes com um código de emparelhamento exige que o remetente entre; quem recebe nunca precisa de conta, e o mesmo vale para os links de download armazenados. Transferências que caem no meio podem retomar em vez de começar de novo.",
       ],
     },
     {
@@ -701,7 +701,7 @@ const pt = {
       bullets: [
         "Camada de criptografia: o WebRTC puro depende só do DTLS; o Relayium adiciona por cima X25519 + AES-256-GCM na camada de aplicação.",
         "Defesa contra intermediário: o Relayium mostra um código SAS de 6 dígitos que os dois lados verificam; o WebRTC puro não tem verificação equivalente contra um servidor de sinalização malicioso.",
-        "Entre redes: o Relayium conecta por código de emparelhamento (ou o link de entrada que gera) com uma reserva TURN criptografada; a descoberta na rede local é o caminho principal do Snapdrop.",
+        "Entre redes: o Relayium conecta por código de emparelhamento (ou o link de entrada que gera) através de um retransmissor TURN criptografado; a descoberta na rede local é o caminho principal do Snapdrop.",
         "Modo de armazenamento: o Relayium oferece links de download armazenados de conhecimento zero opcionais; os outros são apenas em tempo real.",
         "Retomada: o Relayium pode retomar uma transferência interrompida em vez de começar de novo.",
         "Lote: o Relayium envia até 1.000 arquivos por lote com uma verificação de integridade SHA-256 por arquivo.",

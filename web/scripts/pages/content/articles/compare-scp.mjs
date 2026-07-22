@@ -53,7 +53,7 @@ const en = {
       body: [
         "Copying a whole directory again and again with scp -r means re-sending everything every time, with no notion of what changed or what should be removed. relayium sync builds an incremental one-way mirror on top of push/pull or daemon-direct: only changed files move, --delete removes files on the destination that disappeared from the source, and --watch keeps re-syncing in real time as files change locally — no cron job needed.",
       ],
-      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
+      code: ["relayium sync --delete --watch ./photos user@your-server:backups/photos"],
     },
     {
       heading: "Feature comparison at a glance",
@@ -148,7 +148,7 @@ const zh = {
       body: [
         "反复用 scp -r 拷贝整个目录，意味着每次都要重传所有内容，也没有“发生了什么变化”或“该删除什么”的概念。relayium sync 在 push/pull 或 daemon-direct 之上构建增量单向镜像：只传发生变化的文件；--delete 会删除目标端上源端已经消失的文件；--watch 会在本地文件变化时实时持续重新同步——不需要额外的定时任务。",
       ],
-      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
+      code: ["relayium sync --delete --watch ./photos user@your-server:backups/photos"],
     },
     {
       heading: "功能一览对比",
@@ -243,7 +243,7 @@ const ja = {
       body: [
         "scp -r でディレクトリ全体を繰り返しコピーすると、毎回すべてを送り直すことになり、何が変わったか、何を削除すべきかという概念がありません。relayium sync は push/pull または daemon-direct の上に増分の一方向ミラーを構築します。変化したファイルだけを移動し、--delete はソース側から消えたファイルを宛先側からも削除し、--watch はローカルのファイルが変化するたびにリアルタイムで再同期し続けます——cron ジョブは不要です。",
       ],
-      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
+      code: ["relayium sync --delete --watch ./photos user@your-server:backups/photos"],
     },
     {
       heading: "機能の一覧比較",
@@ -338,7 +338,7 @@ const ko = {
       body: [
         "scp -r로 디렉터리 전체를 반복해서 복사하면 매번 모든 것을 다시 보내야 하고, 무엇이 바뀌었는지, 무엇을 삭제해야 하는지에 대한 개념이 없습니다. relayium sync는 push/pull이나 daemon-direct 위에 증분 단방향 미러를 구축합니다. 변경된 파일만 이동하고, --delete는 소스에서 사라진 파일을 대상에서도 삭제하며, --watch는 로컬 파일이 바뀔 때마다 실시간으로 계속 재동기화합니다 — cron 작업이 필요 없습니다.",
       ],
-      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
+      code: ["relayium sync --delete --watch ./photos user@your-server:backups/photos"],
     },
     {
       heading: "기능 한눈에 비교",
@@ -433,7 +433,7 @@ const de = {
       body: [
         "Ein ganzes Verzeichnis immer wieder mit scp -r zu kopieren bedeutet, jedes Mal alles neu zu senden, ohne ein Konzept dafür, was sich geändert hat oder gelöscht werden sollte. relayium sync baut auf push/pull oder daemon-direct einen inkrementellen Einweg-Spiegel auf: Nur geänderte Dateien werden bewegt, --delete entfernt Dateien am Ziel, die auf der Quelle verschwunden sind, und --watch synchronisiert laufend in Echtzeit neu, sobald sich lokale Dateien ändern — kein Cron-Job nötig.",
       ],
-      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
+      code: ["relayium sync --delete --watch ./photos user@your-server:backups/photos"],
     },
     {
       heading: "Funktionsvergleich auf einen Blick",
@@ -528,7 +528,7 @@ const fr = {
       body: [
         "Copier un dossier entier encore et encore avec scp -r signifie tout renvoyer à chaque fois, sans aucune notion de ce qui a changé ou de ce qui devrait être supprimé. relayium sync construit un miroir incrémental à sens unique par-dessus push/pull ou daemon-direct : seuls les fichiers modifiés se déplacent, --delete supprime sur la destination les fichiers disparus de la source, et --watch continue de resynchroniser en temps réel dès qu'un fichier change localement — aucune tâche cron nécessaire.",
       ],
-      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
+      code: ["relayium sync --delete --watch ./photos user@your-server:backups/photos"],
     },
     {
       heading: "Comparatif des fonctions en un coup d'œil",
@@ -625,7 +625,7 @@ const ar = {
       body: [
         "نسخ مجلد كامل مرارًا وتكرارًا بـ scp -r يعني إعادة إرسال كل شيء في كل مرة، دون أي مفهوم لما تغيّر أو لما ينبغي إزالته. يبني relayium sync مرآة تزايدية أحادية الاتجاه فوق push/pull أو daemon-direct: تُنقل الملفات المتغيرة فقط، و--delete يزيل من الوجهة الملفات التي اختفت من المصدر، و--watch يواصل إعادة المزامنة في الوقت الفعلي كلما تغيّرت الملفات محليًا — دون الحاجة إلى مهمة cron.",
       ],
-      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
+      code: ["relayium sync --delete --watch ./photos user@your-server:backups/photos"],
     },
     {
       heading: "مقارنة الميزات في لمحة",
@@ -722,7 +722,7 @@ const es = {
       body: [
         "Copiar una carpeta entera una y otra vez con scp -r significa reenviarlo todo cada vez, sin ninguna noción de qué cambió o qué debería eliminarse. relayium sync construye una réplica incremental unidireccional sobre push/pull o daemon-direct: solo se mueven los archivos modificados, --delete elimina en el destino los archivos que desaparecieron del origen, y --watch sigue resincronizando en tiempo real cada vez que un archivo cambia localmente, sin necesidad de una tarea cron.",
       ],
-      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
+      code: ["relayium sync --delete --watch ./photos user@your-server:backups/photos"],
     },
     {
       heading: "Comparativa de funciones de un vistazo",
@@ -819,7 +819,7 @@ const pt = {
       body: [
         "Copiar uma pasta inteira repetidamente com scp -r significa reenviar tudo toda vez, sem nenhuma noção do que mudou ou do que deveria ser removido. relayium sync constrói um espelho incremental unidirecional sobre push/pull ou daemon-direct: só os arquivos alterados se movem, --delete remove no destino os arquivos que sumiram da origem, e --watch continua ressincronizando em tempo real sempre que um arquivo muda localmente — sem precisar de tarefa cron.",
       ],
-      code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
+      code: ["relayium sync --delete --watch ./photos user@your-server:backups/photos"],
     },
     {
       heading: "Comparativo de recursos num relance",

@@ -83,7 +83,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>文件夹同步，以及一段你要核对两遍的验证码</h2>
       <p>croc 发送一批文件后就退出——要更新对方就得再发一次，而且没有“该删除什么”的概念。Relayium CLI 增加了 relayium sync，在上面两种传输方式之上做增量单向镜像：只传发生变化的内容；--delete 会删除目标端上源端已经消失的文件（daemon 只有在以 --allow-delete 启动时才会执行，接收方必须自己选择开启）；--watch 会在文件变化时实时持续重新同步，不需要额外的定时任务。</p>
       <p>对于一次性的跨网络传输，relayium send / receive 扮演的角色和 croc 的暗号短语一样，用一个简短的代码配对两台电脑。它是直连点对点的，并且会在两端都打印一段简短的验证码（Short Authentication String），你可以在传输开始前肉眼核对两边是否一致，确认没有人插在中间——需要老实说明的是：这个模式是纯直连的，如果两端找不到直连路径，传输会直接失败，而不会退回到中继。</p>
-      <pre><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
+      <pre><code>relayium sync --delete --watch ./photos user@your-server:backups/photos</code></pre>
       <h2>croc 更简单的场景</h2>
       <p>确实存在 croc 更适合的场景，值得坦白说出来。</p>
       <ul><li>你现在就想把一个文件发给朋友，环节越少越好——不需要能连到任何服务器，两端也不用配置任何东西。</li><li>你处在严格的 NAT 后面，无法打通直连路径：croc 的中继无论如何都会承载加密数据流，传输依然能完成。Relayium 的 send / receive 是纯直连的，在这种情况下可能失败（push/pull 或对可达服务器的 daemon-direct 依然可用，因为它们不依赖点对点直连这一跳）。</li><li>你不需要文件夹镜像、SSH 集成，也不想跑一个长期监听的进程——croc 每端只是一条临时命令，不必多想。</li><li>你已经信任 croc 庞大成熟的社区以及它多年的实战积累。</li></ul>

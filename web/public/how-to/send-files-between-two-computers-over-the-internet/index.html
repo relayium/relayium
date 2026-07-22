@@ -75,8 +75,8 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>Step by step: send a file across the internet</h2>
       <p>Here is the full flow for two computers on different networks:</p>
       <ul><li>On the sending computer, open relayium.com and sign in.</li><li>Pick the files or the folder to send — up to 1,000 files per batch. Relayium mints a 6-digit pairing code (and a matching join link/QR).</li><li>Share that code or link with the other person however is convenient — read it out, text it, paste it in chat.</li><li>On the receiving computer, open the link, or open relayium.com and type in the 6-digit code. No sign-in required on this side.</li><li>Both screens now show the same short verification code (SAS). Check that they match — this confirms the connection is genuinely between the two of you, with no one in between — then the transfer starts automatically.</li></ul>
-      <h2>Behind a firewall or strict NAT? The relay fallback</h2>
-      <p>Most home and office networks let two browsers connect directly once they know about each other. Some corporate firewalls or strict NATs block that, though — in which case Relayium falls back to a TURN relay to carry the encrypted stream instead of failing outright.</p>
+      <h2>Across networks: the encrypted relay</h2>
+      <p>Two browsers on the same network connect directly to each other. Across networks — where corporate firewalls and strict NATs routinely block a direct path — Relayium carries the encrypted stream over a TURN relay instead, so the transfer connects reliably.</p>
       <p>The relay only ever sees ciphertext: the file is encrypted end-to-end (X25519 key exchange plus AES-256-GCM) before it ever leaves the sending browser, so the relay cannot read it any more than a random computer on the internet could. If the connection drops partway through, the transfer resumes instead of starting over.</p>
       <h2>How many files, and how large</h2>
       <p>You can send up to 1,000 files in one batch, folder structure included. There is no server-side size cap — the practical ceiling is set by the receiving browser.</p>

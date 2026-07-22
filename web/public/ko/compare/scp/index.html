@@ -87,7 +87,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <pre><code>relayium send ./report.pdf ABCD-1234</code></pre>
       <h2>폴더 미러링: sync 대 scp -r 반복 실행</h2>
       <p>scp -r로 디렉터리 전체를 반복해서 복사하면 매번 모든 것을 다시 보내야 하고, 무엇이 바뀌었는지, 무엇을 삭제해야 하는지에 대한 개념이 없습니다. relayium sync는 push/pull이나 daemon-direct 위에 증분 단방향 미러를 구축합니다. 변경된 파일만 이동하고, --delete는 소스에서 사라진 파일을 대상에서도 삭제하며, --watch는 로컬 파일이 바뀔 때마다 실시간으로 계속 재동기화합니다 — cron 작업이 필요 없습니다.</p>
-      <pre><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
+      <pre><code>relayium sync --delete --watch ./photos user@your-server:backups/photos</code></pre>
       <h2>기능 한눈에 비교</h2>
       <p>가장 중요한 차이를 나란히 정리하면:</p>
       <ul><li>가용성: scp는 거의 모든 서버에 사전 설치되어 있음; Relayium의 CLI는 한 번 설치하면 되는 단일 바이너리.</li><li>재개: scp는 중단된 전송을 처음부터 다시 시작함; push/pull은 멈춘 지점에서 재개함.</li><li>무결성: scp는 사후에 내용을 검증하지 않음; Relayium의 모든 전송은 파일별 SHA-256 해시로 검사됨.</li><li>아무것도 없는 서버: scp는 추가로 필요한 것이 없음; 원격지에 relayium이 없어도 push는 tar 대체 방식으로 동일하게 동작함(pull은 원격지에 relayium이 필요하며 대체 방식 없음).</li><li>SSH를 넘어서: scp는 SSH로만 동작함; Relayium은 daemon-direct(고정 TLS, SSH 불필요)와 SSH 접근이 전혀 필요 없는 네트워크 간 페어링 코드 전송(send/receive)도 제공함.</li><li>폴더 미러링: scp -r은 매번 모든 것을 다시 보냄; relayium sync는 --delete와 --watch로 증분 미러링을 함.</li><li>비용과 라이선스: 둘 다 무료; scp는 OpenSSH와 함께 제공되고, Relayium의 CLI는 MIT 라이선스로 오픈소스임.</li></ul>

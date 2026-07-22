@@ -36,7 +36,7 @@ const en = {
       heading: "Resume instead of restarting",
       body: [
         "Big transfers take time, and time is when Wi-Fi drops, laptops sleep, and phones switch networks. Relayium is built for that: if the connection breaks partway through, the transfer resumes from where it left off instead of starting the whole file over.",
-        "Connectivity is handled the same way. The transfer goes directly peer-to-peer whenever possible; when two networks cannot reach each other directly, the encrypted stream falls back to a TURN relay. The relay only ever sees ciphertext, so even the fallback path stays end-to-end encrypted.",
+        "Connectivity is handled the same way. On one network the transfer goes directly device-to-device; across networks the encrypted stream travels over a TURN relay. The relay only ever sees ciphertext, so that path stays end-to-end encrypted too.",
       ],
     },
     {
@@ -104,7 +104,7 @@ const zh = {
       heading: "断点续传，而非重来",
       body: [
         "大文件传输耗时，而耗时正是 Wi-Fi 断线、笔记本休眠、手机切换网络最容易发生的时候。Relayium 就是为此而生：如果连接中途断开，传输会从中断处续传，而不是把整个文件从头再来。",
-        "连通性也以同样的方式处理。只要条件允许，传输就点对点直连；当两个网络无法直接互达时，加密数据流会退回到 TURN 中继。中继只能看到密文，因此即便是兜底路径也保持端到端加密。",
+        "连通性也以同样的方式处理。同一网络内传输在设备之间直连；跨网络时加密数据流经 TURN 中继转发。中继只能看到密文，因此这条路径同样保持端到端加密。",
       ],
     },
     {
@@ -172,7 +172,7 @@ const ja = {
       heading: "最初からではなく再開する",
       body: [
         "大きな転送には時間がかかり、その時間こそ Wi-Fi が切れ、ノートPCがスリープし、スマホがネットワークを切り替える瞬間です。Relayium はそれに備えて作られています。途中で接続が切れても、転送はファイル全体をやり直すのではなく、止まった所から再開します。",
-        "接続性も同じように扱われます。可能な限り転送は P2P で直接行われ、2つのネットワークが直接到達できないときは、暗号化ストリームが TURN リレーにフォールバックします。リレーが見るのは暗号文だけなので、フォールバックの経路でもエンドツーエンド暗号化のままです。",
+        "接続性も同じように扱われます。同一ネットワーク内では転送はデバイス間で直接行われ、ネットワークをまたぐ場合は暗号化ストリームが TURN リレーを経由します。リレーが見るのは暗号文だけなので、この経路でもエンドツーエンド暗号化のままです。",
       ],
     },
     {
@@ -240,7 +240,7 @@ const ko = {
       heading: "처음부터가 아니라 이어서 재개",
       body: [
         "대용량 전송에는 시간이 걸리고, 그 시간이 바로 Wi-Fi가 끊기고 노트북이 절전에 들고 휴대폰이 네트워크를 바꾸는 때입니다. Relayium은 그에 대비해 만들어졌습니다. 도중에 연결이 끊겨도 전송은 파일 전체를 다시 시작하지 않고 멈춘 지점에서 이어집니다.",
-        "연결성도 같은 방식으로 처리됩니다. 가능한 경우 전송은 P2P로 직접 이루어지고, 두 네트워크가 직접 도달하지 못할 때는 암호화된 스트림이 TURN 릴레이로 폴백합니다. 릴레이는 암호문만 볼 수 있으므로 폴백 경로에서도 종단간 암호화를 유지합니다.",
+        "연결성도 같은 방식으로 처리됩니다. 같은 네트워크 안에서는 전송이 기기 간에 직접 이루어지고, 네트워크를 넘을 때는 암호화된 스트림이 TURN 릴레이를 거칩니다. 릴레이는 암호문만 볼 수 있으므로 그 경로에서도 종단간 암호화를 유지합니다.",
       ],
     },
     {
@@ -308,7 +308,7 @@ const de = {
       heading: "Fortsetzen statt neu beginnen",
       body: [
         "Große Übertragungen brauchen Zeit, und in dieser Zeit bricht WLAN ab, gehen Laptops in den Ruhezustand und wechseln Handys das Netz. Relayium ist dafür gebaut: Bricht die Verbindung mittendrin ab, wird die Übertragung dort fortgesetzt, wo sie aufgehört hat, statt die ganze Datei neu zu beginnen.",
-        "Die Konnektivität wird ebenso gehandhabt. Die Übertragung läuft nach Möglichkeit direkt Peer-to-Peer; können sich zwei Netze nicht direkt erreichen, weicht der verschlüsselte Datenstrom auf ein TURN-Relay aus. Das Relay sieht nur Chiffretext, sodass auch der Ausweichpfad Ende-zu-Ende-verschlüsselt bleibt.",
+        "Die Konnektivität wird ebenso gehandhabt. Im selben Netz läuft die Übertragung direkt von Gerät zu Gerät; netzübergreifend läuft der verschlüsselte Datenstrom über ein TURN-Relay. Das Relay sieht nur Chiffretext, sodass auch dieser Pfad Ende-zu-Ende-verschlüsselt bleibt.",
       ],
     },
     {
@@ -376,7 +376,7 @@ const fr = {
       heading: "Reprendre plutôt que recommencer",
       body: [
         "Les gros transferts prennent du temps, et c'est pendant ce temps que le Wi-Fi lâche, que les ordinateurs se mettent en veille et que les téléphones changent de réseau. Relayium est conçu pour cela : si la connexion se rompt en cours de route, le transfert reprend là où il s'était arrêté au lieu de recommencer tout le fichier.",
-        "La connectivité est gérée de la même façon. Le transfert se fait en pair-à-pair direct chaque fois que possible ; quand deux réseaux ne peuvent pas s'atteindre directement, le flux chiffré bascule vers un relais TURN. Le relais ne voit que du texte chiffré, si bien que même la voie de secours reste chiffrée de bout en bout.",
+        "La connectivité est gérée de la même façon. Sur un même réseau, le transfert se fait directement d'appareil à appareil ; entre réseaux, le flux chiffré passe par un relais TURN. Le relais ne voit que du texte chiffré, si bien que cette voie reste elle aussi chiffrée de bout en bout.",
       ],
     },
     {
@@ -444,7 +444,7 @@ const ar = {
       heading: "الاستئناف بدلًا من البدء من جديد",
       body: [
         "النقلات الكبيرة تستغرق وقتًا، والوقت هو حين ينقطع Wi-Fi، وتخلد الحواسيب المحمولة إلى السكون، وتبدّل الهواتف الشبكات. صُمِّم Relayium لذلك: إذا انقطع الاتصال في منتصف الطريق، يستأنف النقل من حيث توقف بدلًا من إعادة الملف كاملًا من البداية.",
-        "تُعالَج الاتصالية بالطريقة نفسها. يجري النقل مباشرةً من الند للند كلما أمكن؛ وحين لا تستطيع شبكتان الوصول إلى بعضهما مباشرةً، يتراجع التدفق المشفَّر إلى مُرحِّل TURN. لا يرى المُرحِّل سوى نص مُشفَّر، فيبقى حتى المسار البديل مشفَّرًا من الطرف إلى الطرف.",
+        "تُعالَج الاتصالية بالطريقة نفسها. داخل الشبكة الواحدة يجري النقل من جهاز إلى جهاز مباشرةً؛ وعبر الشبكات يمرّ التدفق المشفَّر على مُرحِّل TURN. لا يرى المُرحِّل سوى نص مُشفَّر، فيبقى هذا المسار أيضًا مشفَّرًا من الطرف إلى الطرف.",
       ],
     },
     {
@@ -512,7 +512,7 @@ const es = {
       heading: "Reanudar en lugar de empezar de nuevo",
       body: [
         "Las transferencias grandes llevan tiempo, y el tiempo es cuando se cae el Wi-Fi, los portátiles se suspenden y los teléfonos cambian de red. Relayium está hecho para eso: si la conexión se rompe a mitad de camino, la transferencia se reanuda desde donde quedó en lugar de empezar el archivo entero de nuevo.",
-        "La conectividad se maneja de la misma forma. La transferencia va directamente de igual a igual siempre que es posible; cuando dos redes no pueden alcanzarse directamente, el flujo cifrado recurre a un retransmisor TURN. El retransmisor solo ve texto cifrado, así que incluso la vía alternativa sigue cifrada de extremo a extremo.",
+        "La conectividad se maneja de la misma forma. Dentro de una misma red la transferencia va directamente de dispositivo a dispositivo; entre redes, el flujo cifrado viaja por un retransmisor TURN. El retransmisor solo ve texto cifrado, así que esa vía también sigue cifrada de extremo a extremo.",
       ],
     },
     {
@@ -580,7 +580,7 @@ const pt = {
       heading: "Retomar em vez de recomeçar",
       body: [
         "Transferências grandes levam tempo, e o tempo é quando o Wi-Fi cai, os notebooks entram em suspensão e os celulares trocam de rede. O Relayium foi feito para isso: se a conexão se romper no meio do caminho, a transferência retoma de onde parou em vez de recomeçar o arquivo inteiro.",
-        "A conectividade é tratada da mesma forma. A transferência vai direto ponto a ponto sempre que possível; quando duas redes não conseguem se alcançar diretamente, o fluxo criptografado recorre a um retransmissor TURN. O retransmissor só vê texto cifrado, então até o caminho alternativo permanece criptografado de ponta a ponta.",
+        "A conectividade é tratada da mesma forma. Dentro de uma mesma rede a transferência vai direto de dispositivo para dispositivo; entre redes, o fluxo criptografado viaja por um retransmissor TURN. O retransmissor só vê texto cifrado, então esse caminho também permanece criptografado de ponta a ponta.",
       ],
     },
     {

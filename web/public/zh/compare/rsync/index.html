@@ -82,7 +82,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>默认情况下 sync 只新增和更新——绝不会自作主张删除任何东西。加上 --delete 才会镜像删除，但接收方必须主动开启：它必须以 relayium serve --allow-delete 运行。如果没有，删除请求会被拒绝并回报给发送方，而不是悄悄被忽略。</p>
       <p>对于持续变化的文件夹，--watch 会让 sync 在第一次同步之后继续运行，只要源目录下有文件变化就重新镜像——这一点 rsync 并没有内置支持，通常你得借助 cron 任务或 lsyncd 这类封装工具。</p>
       <pre><code>relayium serve --dir /backup --port 9031 --allow-delete</code></pre>
-      <pre><code>relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch</code></pre>
+      <pre><code>relayium sync --delete --watch ./photos relayium://203.0.113.9:9031</code></pre>
       <h2>完整性、续传，以及诚实的局限</h2>
       <p>每个文件都会用 SHA-256 做端到端校验，传到一半被打断的传输会从磁盘上已有的字节偏移续传，而不是重新开始——这一点和 rsync 的续传出于同样的道理。</p>
       <p>但要说清楚续传不是什么：它不是 rsync 的增量算法。如果一个文件已经完整存在，只是大小或时间戳不同，sync 会把它整个重传，而不是去比对内部变化的数据块。对于一个经常发生小改动的巨大文件，rsync 的增量传输会传更少的数据。sync 也只处理常规文件——符号链接和特殊文件会被跳过，依赖它们的场景需要另外处理。</p>

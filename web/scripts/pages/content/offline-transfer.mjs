@@ -54,7 +54,7 @@
 //   - "vs WeTransfer/Dropbox links" / "Those can read your files server-side;
 //     Relayium's server only holds ciphertext it can't decrypt — the key
 //     stays in the link."
-//   - "vs realtime mode" / "Realtime is peer-to-peer and needs both sides
+//   - "vs realtime mode" / "Realtime needs both sides online at the same time
 //     online; this stores encrypted so the recipient can fetch later."
 // faq.items:
 //   - "Can the server read my file?" / "No — it's encrypted in your browser;
@@ -127,7 +127,7 @@ const zh = {
       },
       {
         title: "对比实时模式",
-        body: "实时模式点对点直连，需要双方同时在线；这种模式则加密存储，方便接收方之后再取。",
+        body: "实时模式需要双方同时在线；这种模式则加密存储，方便接收方之后再取。",
       },
     ],
   },
@@ -214,7 +214,7 @@ const ja = {
       },
       {
         title: "リアルタイムモードとの比較",
-        body: "リアルタイムモードはピアツーピアで双方のオンラインが必要です。こちらは暗号化して保存するため、受信者は後から取得できます。",
+        body: "リアルタイムモードは双方が同時にオンラインである必要があります。こちらは暗号化して保存するため、受信者は後から取得できます。",
       },
     ],
   },
@@ -301,7 +301,7 @@ const ko = {
       },
       {
         title: "실시간 모드와 비교",
-        body: "실시간 모드는 P2P 방식이라 양쪽이 모두 온라인이어야 합니다. 이 모드는 암호화해 저장하므로 받는 사람이 나중에 가져갈 수 있습니다.",
+        body: "실시간 모드는 양쪽이 동시에 온라인이어야 합니다. 이 모드는 암호화해 저장하므로 받는 사람이 나중에 가져갈 수 있습니다.",
       },
     ],
   },
@@ -388,7 +388,7 @@ const de = {
       },
       {
         title: "Gegenüber dem Echtzeitmodus",
-        body: "Echtzeit ist Peer-to-Peer und braucht beide Seiten online; dieser Modus speichert verschlüsselt, damit die empfangende Person später abrufen kann.",
+        body: "Echtzeit braucht beide Seiten gleichzeitig online; dieser Modus speichert verschlüsselt, damit die empfangende Person später abrufen kann.",
       },
     ],
   },
@@ -475,7 +475,7 @@ const fr = {
       },
       {
         title: "Face au mode temps réel",
-        body: "Le temps réel est pair-à-pair et exige que les deux parties soient en ligne ; ce mode stocke le fichier chiffré pour que le destinataire puisse le récupérer plus tard.",
+        body: "Le temps réel exige que les deux parties soient en ligne en même temps ; ce mode stocke le fichier chiffré pour que le destinataire puisse le récupérer plus tard.",
       },
     ],
   },
@@ -562,7 +562,7 @@ const ar = {
       },
       {
         title: "مقابل الوضع الفوري",
-        body: "الوضع الفوري من الند للند ويتطلب أن يكون الطرفان متصلين؛ أما هذا الوضع فيخزّن الملف مُشفَّرًا كي يتمكّن المُستقبِل من جلبه لاحقًا.",
+        body: "يتطلب الوضع الفوري أن يكون الطرفان متصلين في الوقت نفسه؛ أما هذا الوضع فيخزّن الملف مُشفَّرًا كي يتمكّن المُستقبِل من جلبه لاحقًا.",
       },
     ],
   },
@@ -649,7 +649,7 @@ const es = {
       },
       {
         title: "Frente al modo en tiempo real",
-        body: "El tiempo real es de igual a igual y exige que ambas partes estén en línea; este modo almacena el archivo cifrado para que el destinatario pueda recuperarlo después.",
+        body: "El tiempo real exige que ambas partes estén en línea a la vez; este modo almacena el archivo cifrado para que el destinatario pueda recuperarlo después.",
       },
     ],
   },
@@ -736,7 +736,7 @@ const pt = {
       },
       {
         title: "Comparado ao modo em tempo real",
-        body: "O tempo real é ponto a ponto e exige que as duas partes estejam on-line; este modo armazena o arquivo criptografado para que o destinatário possa recuperá-lo depois.",
+        body: "O tempo real exige que as duas partes estejam on-line ao mesmo tempo; este modo armazena o arquivo criptografado para que o destinatário possa recuperá-lo depois.",
       },
     ],
   },

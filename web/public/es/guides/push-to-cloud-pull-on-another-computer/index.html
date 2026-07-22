@@ -92,9 +92,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <pre><code>relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…</code></pre>
       <pre><code># choose how long it lives (otherwise your account&#39;s default applies):
-relayium up ./report.pdf --burn              # deleted after one download
-relayium up ./report.pdf --ttl 7d            # kept up to 7 days (plan-dependent)
-relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone</code></pre>
+relayium up --burn ./report.pdf              # deleted after one download
+relayium up --ttl 7d ./report.pdf            # kept up to 7 days (plan-dependent)
+relayium up --max-downloads 5 ./report.pdf   # allow 5 downloads, then gone</code></pre>
       <ul><li>El enlace es toda la entrega — cópialo a donde la otra máquina pueda leerlo. Cualquiera con el enlace puede descargar el archivo, así que trátalo como una contraseña.</li><li>Retención: --burn elimina el archivo tras una sola descarga; --ttl &lt;duración&gt; lo conserva un tiempo fijo (p. ej. 7d, 24h); --max-downloads &lt;n&gt; permite un número fijo de descargas. Si no das ninguno, se aplica el valor por defecto de tu cuenta.</li><li>up necesita que hayas iniciado sesión; si no lo has hecho, te lo dice y no hace nada.</li></ul>
       <h2>Descarga en el segundo ordenador</h2>
       <p>En la otra máquina, pasa el enlace a down. Sin iniciar sesión, sin configuración — la clave que descifra el archivo está dentro del enlace, así que down no necesita nada de tu cuenta:</p>

@@ -53,9 +53,9 @@ const en = {
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
         `# choose how long it lives (otherwise your account's default applies):
-relayium up ./report.pdf --burn              # deleted after one download
-relayium up ./report.pdf --ttl 7d            # kept up to 7 days (plan-dependent)
-relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
+relayium up --burn ./report.pdf              # deleted after one download
+relayium up --ttl 7d ./report.pdf            # kept up to 7 days (plan-dependent)
+relayium up --max-downloads 5 ./report.pdf   # allow 5 downloads, then gone`,
       ],
       bullets: [
         "The link is the whole handoff — copy it to wherever the other machine can read it. Anyone with the link can download the file, so treat it like a password.",
@@ -186,9 +186,9 @@ const zh = {
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
         `# 选择它能存活多久（不给则用你账号的默认策略）：
-relayium up ./report.pdf --burn              # 下载一次后即删除
-relayium up ./report.pdf --ttl 7d            # 最长保留 7 天（取决于套餐）
-relayium up ./report.pdf --max-downloads 5   # 允许下载 5 次，之后删除`,
+relayium up --burn ./report.pdf              # 下载一次后即删除
+relayium up --ttl 7d ./report.pdf            # 最长保留 7 天（取决于套餐）
+relayium up --max-downloads 5 ./report.pdf   # 允许下载 5 次，之后删除`,
       ],
       bullets: [
         "链接就是全部交接物——把它复制到另一台机器能读到的地方。任何拿到链接的人都能下载该文件，所以要像对待密码一样对待它。",
@@ -319,9 +319,9 @@ const ja = {
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
         `# 保持期間を選ぶ（指定しなければアカウントの既定が適用）：
-relayium up ./report.pdf --burn              # 一度ダウンロードすると削除
-relayium up ./report.pdf --ttl 7d            # 最長7日間保持（プランによる）
-relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除`,
+relayium up --burn ./report.pdf              # 一度ダウンロードすると削除
+relayium up --ttl 7d ./report.pdf            # 最長7日間保持（プランによる）
+relayium up --max-downloads 5 ./report.pdf   # 5回まで、その後削除`,
       ],
       bullets: [
         "リンクが受け渡しのすべてです——相手のマシンが読める場所にコピーしてください。リンクを持つ誰もがダウンロードできるので、パスワードのように扱ってください。",
@@ -452,9 +452,9 @@ const ko = {
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
         `# 얼마나 살려둘지 고르기(없으면 계정 기본값 적용):
-relayium up ./report.pdf --burn              # 한 번 다운로드 후 삭제
-relayium up ./report.pdf --ttl 7d            # 최대 7일간 보관(요금제에 따라 다름)
-relayium up ./report.pdf --max-downloads 5   # 5회까지 허용 후 삭제`,
+relayium up --burn ./report.pdf              # 한 번 다운로드 후 삭제
+relayium up --ttl 7d ./report.pdf            # 최대 7일간 보관(요금제에 따라 다름)
+relayium up --max-downloads 5 ./report.pdf   # 5회까지 허용 후 삭제`,
       ],
       bullets: [
         "링크가 전달의 전부입니다 — 다른 기기가 읽을 수 있는 곳에 복사하세요. 링크를 가진 누구나 파일을 다운로드할 수 있으니 비밀번호처럼 다루세요.",
@@ -585,9 +585,9 @@ const de = {
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
         `# wähle, wie lange sie lebt (sonst gilt die Vorgabe deines Kontos):
-relayium up ./report.pdf --burn              # nach einem Download gelöscht
-relayium up ./report.pdf --ttl 7d            # bis zu 7 Tage aufbewahrt (je nach Tarif)
-relayium up ./report.pdf --max-downloads 5   # 5 Downloads erlaubt, dann weg`,
+relayium up --burn ./report.pdf              # nach einem Download gelöscht
+relayium up --ttl 7d ./report.pdf            # bis zu 7 Tage aufbewahrt (je nach Tarif)
+relayium up --max-downloads 5 ./report.pdf   # 5 Downloads erlaubt, dann weg`,
       ],
       bullets: [
         "Der Link ist die ganze Übergabe — kopiere ihn dorthin, wo der andere Rechner ihn lesen kann. Jeder mit dem Link kann die Datei herunterladen, behandle ihn also wie ein Passwort.",
@@ -718,9 +718,9 @@ const fr = {
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
         `# choisissez sa durée de vie (sinon la valeur par défaut de votre compte s'applique) :
-relayium up ./report.pdf --burn              # supprimé après un téléchargement
-relayium up ./report.pdf --ttl 7d            # conservé jusqu'à 7 jours (selon l'offre)
-relayium up ./report.pdf --max-downloads 5   # 5 téléchargements autorisés, puis supprimé`,
+relayium up --burn ./report.pdf              # supprimé après un téléchargement
+relayium up --ttl 7d ./report.pdf            # conservé jusqu'à 7 jours (selon l'offre)
+relayium up --max-downloads 5 ./report.pdf   # 5 téléchargements autorisés, puis supprimé`,
       ],
       bullets: [
         "Le lien est toute la remise — copiez-le là où l'autre machine peut le lire. Quiconque a le lien peut télécharger le fichier, traitez-le donc comme un mot de passe.",
@@ -851,9 +851,9 @@ const ar = {
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
         `# choose how long it lives (otherwise your account's default applies):
-relayium up ./report.pdf --burn              # deleted after one download
-relayium up ./report.pdf --ttl 7d            # kept up to 7 days (plan-dependent)
-relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
+relayium up --burn ./report.pdf              # deleted after one download
+relayium up --ttl 7d ./report.pdf            # kept up to 7 days (plan-dependent)
+relayium up --max-downloads 5 ./report.pdf   # allow 5 downloads, then gone`,
       ],
       bullets: [
         "الرابط هو كامل التسليم — انسخه إلى حيث يستطيع الجهاز الآخر قراءته. أي شخص يملك الرابط يستطيع تنزيل الملف، فعامله كأنه كلمة مرور.",
@@ -984,9 +984,9 @@ const es = {
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
         `# choose how long it lives (otherwise your account's default applies):
-relayium up ./report.pdf --burn              # deleted after one download
-relayium up ./report.pdf --ttl 7d            # kept up to 7 days (plan-dependent)
-relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
+relayium up --burn ./report.pdf              # deleted after one download
+relayium up --ttl 7d ./report.pdf            # kept up to 7 days (plan-dependent)
+relayium up --max-downloads 5 ./report.pdf   # allow 5 downloads, then gone`,
       ],
       bullets: [
         "El enlace es toda la entrega — cópialo a donde la otra máquina pueda leerlo. Cualquiera con el enlace puede descargar el archivo, así que trátalo como una contraseña.",
@@ -1117,9 +1117,9 @@ const pt = {
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
         `# choose how long it lives (otherwise your account's default applies):
-relayium up ./report.pdf --burn              # deleted after one download
-relayium up ./report.pdf --ttl 7d            # kept up to 7 days (plan-dependent)
-relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
+relayium up --burn ./report.pdf              # deleted after one download
+relayium up --ttl 7d ./report.pdf            # kept up to 7 days (plan-dependent)
+relayium up --max-downloads 5 ./report.pdf   # allow 5 downloads, then gone`,
       ],
       bullets: [
         "O link é toda a entrega — copie-o para onde a outra máquina possa lê-lo. Qualquer pessoa com o link pode baixar o arquivo, então trate-o como uma senha.",

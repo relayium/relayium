@@ -62,15 +62,15 @@ relayium authorize 74318e3b…`;
     { flag: "--max-downloads <n>", who: "up" },
     { flag: "--server <url>", who: "login / up / down" },
   ];
-  const syncCmd = "relayium sync ./site relayium://receiver.example.com --delete --watch";
+  const syncCmd = "relayium sync --delete --watch ./site relayium://receiver.example.com";
   const loginCmd = "relayium login   # opens relayium.com/device — enter the code to bind this machine";
   const upCmd = `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…
 
 # retention (otherwise your account's default applies)
-relayium up ./report.pdf --burn              # one download, then gone
-relayium up ./report.pdf --ttl 7d            # kept up to 7 days (plan-dependent)
-relayium up ./report.pdf --max-downloads 5   # allow 5 downloads`;
+relayium up --burn ./report.pdf              # one download, then gone
+relayium up --ttl 7d ./report.pdf            # kept up to 7 days (plan-dependent)
+relayium up --max-downloads 5 ./report.pdf   # allow 5 downloads`;
   const downCmd = `# on another machine — no login needed
 relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
   const fileNames = ["id.key / id.crt", "known_hosts", "authorized_fingerprints"];

@@ -43,9 +43,9 @@ const en = {
       ],
     },
     {
-      heading: "Behind a firewall or strict NAT? The relay fallback",
+      heading: "Across networks: the encrypted relay",
       body: [
-        "Most home and office networks let two browsers connect directly once they know about each other. Some corporate firewalls or strict NATs block that, though — in which case Relayium falls back to a TURN relay to carry the encrypted stream instead of failing outright.",
+        "Two browsers on the same network connect directly to each other. Across networks — where corporate firewalls and strict NATs routinely block a direct path — Relayium carries the encrypted stream over a TURN relay instead, so the transfer connects reliably.",
         "The relay only ever sees ciphertext: the file is encrypted end-to-end (X25519 key exchange plus AES-256-GCM) before it ever leaves the sending browser, so the relay cannot read it any more than a random computer on the internet could. If the connection drops partway through, the transfer resumes instead of starting over.",
       ],
     },
@@ -123,9 +123,9 @@ const zh = {
       ],
     },
     {
-      heading: "被防火墙或严格 NAT 挡住？中继兜底",
+      heading: "跨网络：加密中继",
       body: [
-        "大多数家庭和办公网络在两个浏览器互相知道对方之后就能直连。但有些企业防火墙或严格 NAT 会挡住直连，这时 Relayium 会退回到 TURN 中继来承载加密数据流，而不是直接失败。",
+        "同一网络下的两个浏览器彼此直连。跨网络时——企业防火墙和严格 NAT 经常挡住直连路径——Relayium 改用 TURN 中继来承载加密数据流，因此连接更可靠。",
         "中继只能看到密文：文件在离开发送方浏览器之前就已端到端加密（X25519 密钥交换加 AES-256-GCM），所以中继读不到内容，就跟互联网上随便一台电脑一样看不到。如果中途断线，传输会续传而不是从头再来。",
       ],
     },
@@ -203,9 +203,9 @@ const ja = {
       ],
     },
     {
-      heading: "ファイアウォールや厳格な NAT の裏側にいる場合:リレーへのフォールバック",
+      heading: "ネットワークをまたぐ場合:暗号化リレー",
       body: [
-        "多くの家庭やオフィスのネットワークでは、2つのブラウザが互いを認識すれば直接接続できます。ただし、企業のファイアウォールや厳格な NAT がそれを阻む場合もあります。その場合 Relayium は失敗する代わりに TURN リレーにフォールバックし、暗号化されたストリームを運びます。",
+        "同じネットワーク上の2つのブラウザは互いに直接接続します。ネットワークをまたぐ場合は——企業のファイアウォールや厳格な NAT が直接経路を日常的に阻むため——Relayium が暗号化されたストリームを TURN リレー経由で運び、確実につながるようにします。",
         "リレーが見るのは常に暗号文だけです。ファイルは送信側ブラウザを離れる前にすでにエンドツーエンドで暗号化されており（X25519 鍵交換と AES-256-GCM）、リレーはインターネット上の見知らぬパソコンと同様、中身を読み取ることはできません。途中で接続が切れても、転送は最初からではなく再開されます。",
       ],
     },
@@ -283,9 +283,9 @@ const ko = {
       ],
     },
     {
-      heading: "방화벽이나 엄격한 NAT 뒤에 있다면: 릴레이 폴백",
+      heading: "네트워크를 넘을 때: 암호화된 중계",
       body: [
-        "대부분의 가정·사무실 네트워크는 두 브라우저가 서로를 알게 되면 직접 연결할 수 있습니다. 하지만 일부 회사 방화벽이나 엄격한 NAT는 이를 막기도 합니다 — 이때 Relayium은 그냥 실패하는 대신 TURN 릴레이로 폴백해 암호화된 스트림을 대신 전달합니다.",
+        "같은 네트워크에 있는 두 브라우저는 서로 직접 연결됩니다. 네트워크를 넘을 때는 — 회사 방화벽이나 엄격한 NAT가 직접 경로를 흔히 막기 때문에 — Relayium이 암호화된 스트림을 TURN 릴레이로 전달해 안정적으로 연결합니다.",
         "릴레이는 항상 암호문만 봅니다. 파일은 보내는 쪽 브라우저를 떠나기 전에 이미 종단간 암호화되어 있으므로(X25519 키 교환과 AES-256-GCM), 릴레이는 인터넷의 아무 컴퓨터나 마찬가지로 내용을 읽을 수 없습니다. 도중에 연결이 끊겨도 전송은 처음부터가 아니라 이어서 재개됩니다.",
       ],
     },
@@ -363,9 +363,9 @@ const de = {
       ],
     },
     {
-      heading: "Hinter einer Firewall oder strengem NAT? Das Relay-Fallback",
+      heading: "Netzübergreifend: das verschlüsselte Relay",
       body: [
-        "Die meisten Heim- und Büronetzwerke erlauben zwei Browsern, sich direkt zu verbinden, sobald sie voneinander wissen. Manche Firmen-Firewalls oder strenge NATs blockieren das jedoch — in diesem Fall weicht Relayium auf ein TURN-Relay aus, um den verschlüsselten Datenstrom zu übertragen, statt schlicht zu scheitern.",
+        "Zwei Browser im selben Netzwerk verbinden sich direkt miteinander. Netzübergreifend — wo Firmen-Firewalls und strenge NATs einen direkten Pfad regelmäßig blockieren — überträgt Relayium den verschlüsselten Datenstrom stattdessen über ein TURN-Relay, damit die Verbindung zuverlässig zustande kommt.",
         "Das Relay sieht dabei stets nur Chiffretext: Die Datei ist bereits Ende-zu-Ende verschlüsselt (X25519-Schlüsselaustausch plus AES-256-GCM), bevor sie den sendenden Browser überhaupt verlässt, sodass das Relay sie ebenso wenig lesen kann wie ein beliebiger anderer Rechner im Internet. Bricht die Verbindung mittendrin ab, wird die Übertragung fortgesetzt statt neu gestartet.",
       ],
     },
@@ -443,9 +443,9 @@ const fr = {
       ],
     },
     {
-      heading: "Derrière un pare-feu ou un NAT strict ? Le relais de secours",
+      heading: "Entre réseaux : le relais chiffré",
       body: [
-        "La plupart des réseaux domestiques et de bureau permettent à deux navigateurs de se connecter directement une fois qu'ils se connaissent. Certains pare-feux d'entreprise ou NAT stricts bloquent toutefois cela — dans ce cas, Relayium bascule vers un relais TURN pour acheminer le flux chiffré plutôt que d'échouer purement et simplement.",
+        "Deux navigateurs sur le même réseau se connectent directement l'un à l'autre. Entre réseaux — où les pare-feux d'entreprise et les NAT stricts bloquent régulièrement tout chemin direct —, Relayium achemine le flux chiffré via un relais TURN, pour que la connexion aboutisse de façon fiable.",
         "Le relais ne voit jamais que du texte chiffré : le fichier est déjà chiffré de bout en bout (échange de clés X25519 plus AES-256-GCM) avant même de quitter le navigateur expéditeur, si bien que le relais ne peut pas le lire, pas plus qu'un ordinateur quelconque sur Internet. Si la connexion se coupe en cours de route, le transfert reprend au lieu de tout recommencer.",
       ],
     },
@@ -523,9 +523,9 @@ const ar = {
       ],
     },
     {
-      heading: "خلف جدار حماية أو NAT صارم؟ الرجوع إلى المُرحِّل",
+      heading: "عبر الشبكات: المُرحِّل المشفَّر",
       body: [
-        "تسمح معظم الشبكات المنزلية والمكتبية لمتصفحين بالاتصال مباشرةً بمجرد أن يعرف كل منهما بالآخر. لكن بعض جدران الحماية المؤسسية أو أنواع NAT الصارمة تحجب ذلك — وفي هذه الحالة يرجع Relayium إلى مُرحِّل TURN لحمل التدفق المشفَّر بدلاً من الفشل تماماً.",
+        "يتصل متصفحان على الشبكة نفسها ببعضهما مباشرةً. أمّا عبر الشبكات — حيث تحجب جدران الحماية المؤسسية وأنواع NAT الصارمة المسار المباشر عادةً — فيحمل Relayium التدفق المشفَّر عبر مُرحِّل TURN، فيتم الاتصال بموثوقية.",
         "لا يرى المُرحِّل سوى النص المُشفَّر أبداً: فالملف مشفَّر من الطرف إلى الطرف (تبادل مفاتيح X25519 إضافةً إلى AES-256-GCM) قبل أن يغادر متصفح الإرسال أصلاً، لذا لا يمكن للمُرحِّل قراءته أكثر مما يستطيع أي جهاز كمبيوتر عشوائي على الإنترنت. وإذا انقطع الاتصال في منتصف الطريق، يُستأنف النقل بدلاً من البدء من جديد.",
       ],
     },
@@ -605,7 +605,7 @@ const es = {
     {
       heading: "¿Detrás de un cortafuegos o un NAT estricto? El retransmisor de reserva",
       body: [
-        "La mayoría de las redes domésticas y de oficina permiten que dos navegadores se conecten directamente una vez que se conocen entre sí. Algunos cortafuegos corporativos o NAT estrictos lo bloquean, sin embargo — en cuyo caso Relayium recurre a un retransmisor TURN para transportar el flujo cifrado en lugar de fallar por completo.",
+        "Dos navegadores en la misma red se conectan directamente entre sí. Entre redes —donde los cortafuegos corporativos y los NAT estrictos bloquean habitualmente cualquier ruta directa— Relayium transporta el flujo cifrado por un retransmisor TURN, de modo que la conexión se establece de forma fiable.",
         "El retransmisor solo ve texto cifrado: el archivo se cifra de extremo a extremo (intercambio de claves X25519 más AES-256-GCM) antes de salir siquiera del navegador que envía, así que el retransmisor no puede leerlo más de lo que podría cualquier computadora al azar en Internet. Si la conexión se corta a mitad de camino, la transferencia se reanuda en lugar de empezar de nuevo.",
       ],
     },
@@ -685,7 +685,7 @@ const pt = {
     {
       heading: "Atrás de um firewall ou NAT restrito? O retransmissor de reserva",
       body: [
-        "A maioria das redes domésticas e de escritório permite que dois navegadores se conectem diretamente assim que sabem um do outro. Alguns firewalls corporativos ou NATs restritos bloqueiam isso, porém — nesse caso o Relayium recorre a um retransmissor TURN para carregar o fluxo criptografado em vez de simplesmente falhar.",
+        "Dois navegadores na mesma rede se conectam diretamente um ao outro. Entre redes — onde firewalls corporativos e NATs restritos bloqueiam rotineiramente qualquer caminho direto — o Relayium carrega o fluxo criptografado por um retransmissor TURN, para que a conexão se estabeleça de forma confiável.",
         "O retransmissor só vê texto cifrado: o arquivo é criptografado de ponta a ponta (troca de chaves X25519 mais AES-256-GCM) antes mesmo de sair do navegador que envia, então o retransmissor não consegue lê-lo, assim como qualquer computador aleatório na Internet também não conseguiria. Se a conexão cair no meio do caminho, a transferência é retomada em vez de recomeçar.",
       ],
     },

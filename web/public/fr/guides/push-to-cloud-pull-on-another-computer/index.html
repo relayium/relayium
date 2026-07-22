@@ -92,9 +92,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <pre><code>relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…</code></pre>
       <pre><code># choisissez sa durée de vie (sinon la valeur par défaut de votre compte s&#39;applique) :
-relayium up ./report.pdf --burn              # supprimé après un téléchargement
-relayium up ./report.pdf --ttl 7d            # conservé jusqu&#39;à 7 jours (selon l&#39;offre)
-relayium up ./report.pdf --max-downloads 5   # 5 téléchargements autorisés, puis supprimé</code></pre>
+relayium up --burn ./report.pdf              # supprimé après un téléchargement
+relayium up --ttl 7d ./report.pdf            # conservé jusqu&#39;à 7 jours (selon l&#39;offre)
+relayium up --max-downloads 5 ./report.pdf   # 5 téléchargements autorisés, puis supprimé</code></pre>
       <ul><li>Le lien est toute la remise — copiez-le là où l&#39;autre machine peut le lire. Quiconque a le lien peut télécharger le fichier, traitez-le donc comme un mot de passe.</li><li>Rétention : --burn supprime le fichier après un seul téléchargement ; --ttl &lt;durée&gt; le conserve un temps fixe (p. ex. 7d, 24h) ; --max-downloads &lt;n&gt; autorise un nombre fixe. Sans rien préciser, la valeur par défaut de votre compte s&#39;applique.</li><li>up exige que vous soyez connecté ; sinon il vous le dit et ne fait rien.</li></ul>
       <h2>Télécharger sur le deuxième ordinateur</h2>
       <p>Sur l&#39;autre machine, passez le lien à down. Pas de connexion, pas de configuration — la clé qui déchiffre le fichier est dans le lien, donc down n&#39;a besoin de rien de votre compte :</p>

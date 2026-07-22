@@ -54,7 +54,7 @@ const en = {
         "The Relayium CLI defaults to relayium.com's rendezvous server for cross-network send/receive. Pass --server to use your own instead:",
       ],
       code: [
-        "relayium send ./report.pdf --server https://your-domain",
+        "relayium send --server https://your-domain ./report.pdf",
         "relayium receive --server https://your-domain",
       ],
       bullets: [
@@ -141,7 +141,7 @@ const zh = {
         "Relayium CLI 默认使用 relayium.com 的会合服务器来完成跨网络的 send/receive。传入 --server 即可改用你自己的服务器：",
       ],
       code: [
-        "relayium send ./report.pdf --server https://your-domain",
+        "relayium send --server https://your-domain ./report.pdf",
         "relayium receive --server https://your-domain",
       ],
       bullets: [
@@ -228,7 +228,7 @@ const ja = {
         "Relayium CLI は、ネットワークをまたぐ send/receive で既定では relayium.com のランデブーサーバーを使います。--server を渡せば、代わりに自分のサーバーを使えます:",
       ],
       code: [
-        "relayium send ./report.pdf --server https://your-domain",
+        "relayium send --server https://your-domain ./report.pdf",
         "relayium receive --server https://your-domain",
       ],
       bullets: [
@@ -315,7 +315,7 @@ const ko = {
         "Relayium CLI는 네트워크 간 send/receive에서 기본적으로 relayium.com의 랑데부 서버를 사용합니다. --server를 전달하면 대신 자신의 서버를 사용할 수 있습니다:",
       ],
       code: [
-        "relayium send ./report.pdf --server https://your-domain",
+        "relayium send --server https://your-domain ./report.pdf",
         "relayium receive --server https://your-domain",
       ],
       bullets: [
@@ -402,7 +402,7 @@ const de = {
         "Die Relayium CLI verwendet für netzwerkübergreifendes send/receive standardmäßig den Rendezvous-Server auf relayium.com. Übergib --server, um stattdessen deinen eigenen zu nutzen:",
       ],
       code: [
-        "relayium send ./report.pdf --server https://your-domain",
+        "relayium send --server https://your-domain ./report.pdf",
         "relayium receive --server https://your-domain",
       ],
       bullets: [
@@ -489,7 +489,7 @@ const fr = {
         "Par défaut, la CLI Relayium utilise le serveur de rendez-vous de relayium.com pour le send/receive entre réseaux différents. Passez --server pour utiliser le vôtre à la place :",
       ],
       code: [
-        "relayium send ./report.pdf --server https://your-domain",
+        "relayium send --server https://your-domain ./report.pdf",
         "relayium receive --server https://your-domain",
       ],
       bullets: [
@@ -576,7 +576,7 @@ const ar = {
         "يستخدم Relayium CLI افتراضيًا خادم الالتقاء الخاص بـ relayium.com لعمليات send/receive عبر الشبكات. مرّر ‎--server‎ لاستخدام خادمك بدلًا منه:",
       ],
       code: [
-        "relayium send ./report.pdf --server https://your-domain",
+        "relayium send --server https://your-domain ./report.pdf",
         "relayium receive --server https://your-domain",
       ],
       bullets: [
@@ -663,7 +663,7 @@ const es = {
         "La CLI de Relayium usa por defecto el servidor de encuentro de relayium.com para el send/receive entre redes. Pasa --server para usar el tuyo en su lugar:",
       ],
       code: [
-        "relayium send ./report.pdf --server https://your-domain",
+        "relayium send --server https://your-domain ./report.pdf",
         "relayium receive --server https://your-domain",
       ],
       bullets: [
@@ -750,7 +750,7 @@ const pt = {
         "A CLI do Relayium usa por padrão o servidor de encontro do relayium.com para o send/receive entre redes. Passe --server para usar o seu em vez dele:",
       ],
       code: [
-        "relayium send ./report.pdf --server https://your-domain",
+        "relayium send --server https://your-domain ./report.pdf",
         "relayium receive --server https://your-domain",
       ],
       bullets: [

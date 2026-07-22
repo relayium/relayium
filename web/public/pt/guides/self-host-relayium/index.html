@@ -84,7 +84,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>relayium.com/cli lists every install option — a Windows binary, the releases page, or go build if you have Go.</li><li>relayium --version confirms it. Without the CLI, the command below prints &#39;command not found&#39;.</li></ul>
       <h2>Aponte a CLI para o seu servidor</h2>
       <p>A CLI do Relayium usa por padrão o servidor de encontro do relayium.com para o send/receive entre redes. Passe --server para usar o seu em vez dele:</p>
-      <pre><code>relayium send ./report.pdf --server https://your-domain</code></pre>
+      <pre><code>relayium send --server https://your-domain ./report.pdf</code></pre>
       <pre><code>relayium receive --server https://your-domain</code></pre>
       <ul><li>A CLI é gratuita e não precisa de conta em nenhum dos casos — --server apenas muda com qual servidor de encontro ela fala para o handshake do código de emparelhamento.</li><li>push/pull (pelo seu próprio SSH) e serve + o push daemon-direct relayium://host não tocam o relayium.com em nada, com ou sem auto-hospedagem — eles se conectam diretamente ao remoto que você especificar.</li></ul>
       <h2>Perguntas frequentes</h2>
