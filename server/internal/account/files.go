@@ -380,8 +380,12 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	var directNode Node
 	directCapable := false
 	if s.directDownload && sf.MaxDownloads == 0 {
+		// A node that has stopped heartbeating may be restarting (an update) or
+		// gone; redirecting there just hands the downloader a dead origin. Fall
+		// back to central proxying, which is always correct if slower.
+		online := s.now().Add(-nodeOnlineWindow).Unix()
 		if n, ok, nerr := s.store.GetNode(r.Context(), sf.NodeID); nerr == nil && ok &&
-			n.DownloadURL != "" && n.StorageSecret != "" {
+			n.DownloadURL != "" && n.StorageSecret != "" && n.LastSeenAt >= online {
 			directNode, directCapable = n, true
 		}
 	}
