@@ -27,9 +27,24 @@ import (
 // replace-path tests exercise the checksum-only path deterministically,
 // independent of whatever production key release_pubkey.go carries. Signature
 // tests set releaseSigningPubKeyPEM themselves (and restore it).
+var embeddedKeyAtStartup string
+
 func TestMain(m *testing.M) {
+	embeddedKeyAtStartup = releaseSigningPubKeyPEM
 	releaseSigningPubKeyPEM = ""
 	os.Exit(m.Run())
+}
+
+// The committed release public key must parse as an ECDSA key (or be empty). A
+// malformed embed would fail-close every real `relayium update`, so a bad paste
+// fails CI here instead of shipping to users.
+func TestEmbeddedReleaseKeyValid(t *testing.T) {
+	if strings.TrimSpace(embeddedKeyAtStartup) == "" {
+		t.Skip("no release signing key embedded yet")
+	}
+	if _, err := parseECDSAPublicKey(embeddedKeyAtStartup); err != nil {
+		t.Fatalf("embedded release public key does not parse: %v", err)
+	}
 }
 
 // tarGzWith builds a gzip+tar archive containing a single regular file named

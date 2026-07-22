@@ -18,4 +18,7 @@ package selfupdate
 //
 // A var (not const) so tests can substitute their own key; production sets it
 // here once and never mutates it at runtime.
-var releaseSigningPubKeyPEM = ``
+var releaseSigningPubKeyPEM = `-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAErOLLZclLFkpUWt8w4KIZ4SYB4JZf
+bDRZOmWOdGsmHGKTU2GNeZZpJYPCL22ylULbxvQJEkdveZqkFIyYcGKNoA==
+-----END PUBLIC KEY-----`

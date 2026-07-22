@@ -64,7 +64,10 @@ dl "${BASE_URL}/checksums.txt" "${tmp}/checksums.txt" || err "checksum list down
 # configured (see docs/release-signing.md); then we verify checksums.txt's
 # signature with openssl — no cosign needed. Its private half is the
 # RELAYIUM_RELEASE_KEY GitHub secret. This is the PUBLIC key, safe to publish.
-RELEASE_PUBKEY=''
+RELEASE_PUBKEY='-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAErOLLZclLFkpUWt8w4KIZ4SYB4JZf
+bDRZOmWOdGsmHGKTU2GNeZZpJYPCL22ylULbxvQJEkdveZqkFIyYcGKNoA==
+-----END PUBLIC KEY-----'
 
 # Verify the checksum file's ECDSA signature so a tampered checksums.txt (e.g. a
 # compromised release host) is rejected, not just a corrupted download. Skipped

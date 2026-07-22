@@ -55,7 +55,10 @@ curl -fsSL "${BASE_URL}/checksums.txt" -o "$tmp/checksums.txt" || err "checksum 
 # Release public key (ECDSA P-256, PKIX PEM). Empty until release signing is
 # configured (see docs/release-signing.md); then verify checksums.txt's signature
 # with openssl — no cosign needed. Private half = RELAYIUM_RELEASE_KEY secret.
-RELEASE_PUBKEY=''
+RELEASE_PUBKEY='-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAErOLLZclLFkpUWt8w4KIZ4SYB4JZf
+bDRZOmWOdGsmHGKTU2GNeZZpJYPCL22ylULbxvQJEkdveZqkFIyYcGKNoA==
+-----END PUBLIC KEY-----'
 
 # Verify the checksum file's ECDSA signature so a tampered checksums.txt (e.g. a
 # compromised release host) is rejected, not just a corrupted download.
