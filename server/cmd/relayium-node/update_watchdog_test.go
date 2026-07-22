@@ -55,10 +55,19 @@ func TestWaitHealthyIgnoresHeartbeatFromBeforeRestart(t *testing.T) {
 type fakeSvc struct {
 	restarts    int
 	failRestart bool
+	// heartbeatOnRestart, when non-empty, is a stateDir to stamp with a
+	// heartbeat as part of Restart() itself — simulating the OLD binary's
+	// in-flight heartbeat HTTP round trip completing while `systemctl restart`
+	// is still running. Used to prove runUpdateWith takes its `restartedAt`
+	// timestamp AFTER Restart() returns, not before.
+	heartbeatOnRestart string
 }
 
 func (f *fakeSvc) Restart() error {
 	f.restarts++
+	if f.heartbeatOnRestart != "" {
+		_ = markHealthy(f.heartbeatOnRestart)
+	}
 	if f.failRestart {
 		return errTestRestart
 	}

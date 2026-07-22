@@ -30,6 +30,15 @@ type updateConfig struct {
 	TargetTag      string
 	AllowDowngrade bool
 	Repo           string
+
+	// APIBase and DownloadBase override the GitHub hosts selfupdate.Update talks
+	// to. Always empty in production — parseUpdateFlags never sets them, so
+	// selfupdate falls back to the real GitHub API/download hosts — and exist
+	// only so tests can point runUpdateWith at an httptest server and drive the
+	// full orchestration (backup, restart, health check, rollback) without a
+	// network dependency.
+	APIBase      string
+	DownloadBase string
 }
 
 // parseUpdateFlags parses `relayium-node update` arguments. The target version
@@ -69,7 +78,12 @@ func (s systemctlCtl) Restart() error {
 // waitHealthy reports whether the node produced a successful heartbeat AFTER
 // `since` within timeout. Comparing against `since` (the restart moment) is the
 // whole point: a heartbeat left behind by the previous version must never be
-// read as the new one working.
+// read as the new one working. Note on granularity: lastHealthy's timestamp is
+// a file mtime, and on a filesystem that truncates mtimes downward (e.g. to
+// whole seconds), the comparison here can only err toward treating a genuinely
+// healthy heartbeat as too-early and rolling back a working node — it can never
+// make a heartbeat that didn't happen appear to be after `since`, so a broken
+// node is never mistaken for a healthy one by this effect.
 func waitHealthy(stateDir string, since time.Time, timeout, poll time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for {
@@ -114,23 +128,39 @@ func runUpdateWith(uc updateConfig, svc serviceCtl, window, poll time.Duration, 
 		TargetPath:     uc.BinPath,
 		TargetTag:      uc.TargetTag,
 		AllowDowngrade: uc.AllowDowngrade,
+		APIBase:        uc.APIBase,
+		DownloadBase:   uc.DownloadBase,
 	}, stdout)
 	if err != nil {
 		// Verification or download failed — the live binary was never touched.
 		fmt.Fprintf(stderr, "update to %s failed, binary untouched: %v\n", uc.TargetTag, err)
+		os.Remove(backupPath(uc.BinPath)) // nothing to roll back to; don't leave a stray .prev
 		return 1
 	}
 	if !changed {
 		fmt.Fprintf(stdout, "already on %s, nothing to do\n", to)
+		os.Remove(backupPath(uc.BinPath)) // no-op update; don't leave a stray .prev
 		return 0
 	}
 
-	restartedAt := time.Now()
 	if err := svc.Restart(); err != nil {
 		fmt.Fprintf(stderr, "restart failed: %v — rolling back\n", err)
 		rollback(uc, svc, stderr)
 		return 1
 	}
+	// restartedAt is captured AFTER svc.Restart() returns, not before. Do not
+	// "simplify" this back — it is load-bearing: sendHeartbeat (relay.go) only
+	// calls markHealthy AFTER its HTTP round trip completes, and the reporter's
+	// client timeout is 15s. If the OLD binary was mid-heartbeat when
+	// `systemctl restart` was issued, that in-flight call can complete and stamp
+	// the health file with a time that is after a `restartedAt` taken too early
+	// — which would make waitHealthy report the NEW binary healthy when it
+	// never even started. Capturing restartedAt here is safe: `systemctl
+	// restart` is synchronous (Restart() already returned, so the start job
+	// finished), and the restarted node's first genuine heartbeat fires a full
+	// ticker interval (>= 30s) later, so no real heartbeat can be missed by
+	// taking the timestamp this late.
+	restartedAt := time.Now()
 
 	if !waitHealthy(uc.StateDir, restartedAt, window, poll) {
 		fmt.Fprintf(stderr, "%s did not heartbeat within %s — rolling back to %s\n", to, window, from)
