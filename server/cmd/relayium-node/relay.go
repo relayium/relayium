@@ -37,6 +37,10 @@ func urlHost(rawURL string) string {
 // version is stamped by goreleaser via -ldflags; a dev build reports "dev".
 var version = "dev"
 
+// shutdownGrace bounds how long we let in-flight downloads and relay sessions
+// finish on SIGTERM. systemd's TimeoutStopSec must exceed this.
+const shutdownGrace = 60 * time.Second
+
 // longTermPassword computes the TURN-REST password for a username exactly as the
 // central /api/ice does: base64(HMAC-SHA1(secret, username)).
 func longTermPassword(secret, username string) string {
@@ -194,6 +198,8 @@ func run(c config, st nodeState) error {
 	var storageURL, storageSecret, storageFP string
 	var storTotal, storFree int64
 	var blobGauge *blobUsage
+	// Servers that must drain rather than be cut off when we shut down.
+	var httpSrvs []*http.Server
 	if c.StorageDir != "" {
 		ds, derr := storage.NewDiskStore(c.StorageDir)
 		if derr != nil {
@@ -236,7 +242,7 @@ func run(c config, st nodeState) error {
 				log.Printf("relayium-node: blob server exited: %v", err)
 			}
 		}()
-		defer blobSrv.Close()
+		httpSrvs = append(httpSrvs, blobSrv)
 		storageURL = fmt.Sprintf("https://%s:%d", publicIP, c.StoragePort)
 		if t, f, uerr := storageReport(c.StorageDir); uerr == nil {
 			storTotal, storFree = t, f
@@ -270,7 +276,7 @@ func run(c config, st nodeState) error {
 					log.Printf("relayium-node: public download server exited: %v", err)
 				}
 			}()
-			defer dlSrv.Close()
+			httpSrvs = append(httpSrvs, dlSrv)
 			log.Printf("relayium-node: public direct-download listener on %s → %s", c.DownloadAddr, c.DownloadURL)
 
 			// Auto-manage this node's Cloudflare A record (subdomain -> public IP,
@@ -328,6 +334,10 @@ func run(c config, st nodeState) error {
 	for {
 		select {
 		case <-ctx.Done():
+			log.Printf("relayium-node: draining in-flight requests (up to %s)", shutdownGrace)
+			if err := gracefulShutdown(httpSrvs, shutdownGrace); err != nil {
+				log.Printf("relayium-node: shutdown deadline hit: %v", err)
+			}
 			log.Printf("relayium-node: shutting down")
 			return nil
 		case <-ticker.C:
@@ -391,4 +401,24 @@ func httpGetTrim(u string) string {
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 64))
 	return strings.TrimSpace(string(b))
+}
+
+// gracefulShutdown stops the given servers, letting in-flight requests finish
+// within d. An update restarts the node, so without this every rollout would
+// cut live downloads and relay sessions on every node it touches. Returns the
+// deadline error if a request outlives d — the caller exits regardless, since
+// the updater is waiting on this process.
+func gracefulShutdown(srvs []*http.Server, d time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	defer cancel()
+	var firstErr error
+	for _, s := range srvs {
+		if s == nil {
+			continue
+		}
+		if err := s.Shutdown(ctx); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
