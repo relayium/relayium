@@ -58,6 +58,42 @@ type Options struct {
 	// Off by default so nothing can walk a node back to a known-vulnerable
 	// build; only an explicit rollback sets it.
 	AllowDowngrade bool
+	// AssetPrefix and BinaryName select WHICH artifact of a release to install:
+	// the archive is "<AssetPrefix>_<goos>_<goarch>.tar.gz" and BinaryName is
+	// the file extracted from it. Both default to the CLI's ("relayium"), so
+	// `relayium update` is unaffected; relayium-node sets them to
+	// "relayium-node" because the node ships in its own archive
+	// (.goreleaser.yaml, install-node.sh).
+	//
+	// This picks the artifact, never the trust level: whatever it names is
+	// still sha256-checked against checksums.txt and covered by the signature
+	// over that file. checksums.txt lists EVERY artifact of the release, so a
+	// wrong name here verifies perfectly and installs the wrong program — which
+	// is precisely why it must be set deliberately per command.
+	AssetPrefix string
+	BinaryName  string
+}
+
+// DefaultAssetPrefix / DefaultBinaryName are the CLI's names, used when Options
+// leaves AssetPrefix / BinaryName empty.
+const (
+	DefaultAssetPrefix = "relayium"
+	DefaultBinaryName  = "relayium"
+)
+
+func (o Options) assetName() string {
+	prefix := o.AssetPrefix
+	if prefix == "" {
+		prefix = DefaultAssetPrefix
+	}
+	return AssetNameFor(prefix, o.GOOS, o.GOARCH)
+}
+
+func (o Options) binaryName() string {
+	if o.BinaryName == "" {
+		return DefaultBinaryName
+	}
+	return o.BinaryName
 }
 
 func (o Options) apiBase() string {
@@ -146,9 +182,26 @@ func compareVersions(a, b string) (int, bool) {
 	return 0, true
 }
 
-// AssetName is the release archive for a Unix os/arch (goreleaser's naming).
+// AssetName is the CLI's release archive for a Unix os/arch (goreleaser's
+// naming). Other artifacts of the same release use AssetNameFor.
 func AssetName(goos, goarch string) string {
-	return fmt.Sprintf("relayium_%s_%s.tar.gz", goos, goarch)
+	return AssetNameFor(DefaultAssetPrefix, goos, goarch)
+}
+
+// AssetNameFor is goreleaser's archive name for an artifact prefix, e.g.
+// AssetNameFor("relayium-node", "linux", "amd64").
+func AssetNameFor(prefix, goos, goarch string) string {
+	return fmt.Sprintf("%s_%s_%s.tar.gz", prefix, goos, goarch)
+}
+
+// IsPlainVersion reports whether s is a plain "vMAJOR.MINOR.PATCH" release tag
+// (leading "v" optional) — the only form Update can compare, and therefore the
+// only form for which the downgrade check is meaningful. Exported so callers
+// that pin an exact TargetTag can reject "latest"/"dev" up front instead of
+// silently skipping that check.
+func IsPlainVersion(s string) bool {
+	_, ok := parseVer(s)
+	return ok
 }
 
 // LatestTag returns the newest release tag (tag_name from releases/latest).
@@ -210,7 +263,7 @@ func Update(ctx context.Context, o Options, progress io.Writer) (from, to string
 		}
 	}
 
-	asset := AssetName(o.GOOS, o.GOARCH)
+	asset := o.assetName()
 	base := o.downloadBase() + "/" + o.Repo + "/releases/download/" + tag
 
 	tmp, err := os.MkdirTemp("", "relayium-update-")
@@ -236,7 +289,7 @@ func Update(ctx context.Context, o Options, progress io.Writer) (from, to string
 		return o.CurrentVersion, tag, false, err
 	}
 
-	if err := replaceFromArchive(archivePath, "relayium", o.TargetPath); err != nil {
+	if err := replaceFromArchive(archivePath, o.binaryName(), o.TargetPath); err != nil {
 		return o.CurrentVersion, tag, false, err
 	}
 	return o.CurrentVersion, tag, true, nil

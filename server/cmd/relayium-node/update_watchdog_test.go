@@ -61,12 +61,42 @@ type fakeSvc struct {
 	// is still running. Used to prove runUpdateWith takes its `restartedAt`
 	// timestamp AFTER Restart() returns, not before.
 	heartbeatOnRestart string
+	// healthyAfterRestart, when non-empty, is a stateDir that gets GENUINE
+	// post-restart heartbeats: Restart() starts a goroutine that keeps stamping
+	// the health file, the way a working new version would. Stamping repeatedly
+	// rather than once keeps it robust on filesystems that truncate mtimes to
+	// whole seconds (see waitHealthy's note). Build one with newHealthySvc so
+	// the goroutine is stopped at test end.
+	healthyAfterRestart string
+	stopHeartbeat       chan struct{}
+}
+
+// newHealthySvc returns a fakeSvc whose restarts bring the node back healthy.
+func newHealthySvc(t *testing.T, stateDir string) *fakeSvc {
+	t.Helper()
+	stop := make(chan struct{})
+	t.Cleanup(func() { close(stop) })
+	return &fakeSvc{healthyAfterRestart: stateDir, stopHeartbeat: stop}
 }
 
 func (f *fakeSvc) Restart() error {
 	f.restarts++
 	if f.heartbeatOnRestart != "" {
 		_ = markHealthy(f.heartbeatOnRestart)
+	}
+	if f.healthyAfterRestart != "" {
+		dir, stop := f.healthyAfterRestart, f.stopHeartbeat
+		go func() {
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				_ = markHealthy(dir)
+				time.Sleep(10 * time.Millisecond)
+			}
+		}()
 	}
 	if f.failRestart {
 		return errTestRestart

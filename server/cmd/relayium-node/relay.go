@@ -198,7 +198,10 @@ func run(c config, st nodeState) error {
 	var storageURL, storageSecret, storageFP string
 	var storTotal, storFree int64
 	var blobGauge *blobUsage
-	// Servers that must drain rather than be cut off when we shut down.
+	// HTTP servers (blob + public download listeners) that must drain rather
+	// than be cut off when we shut down. The TURN server above is NOT drained:
+	// its `defer server.Close()` cuts live relay sessions immediately, and
+	// nothing stops it accepting new allocations while the HTTP side drains.
 	var httpSrvs []*http.Server
 	// Backstop: close whatever's left in httpSrvs on every return path out of
 	// run(). The ctx.Done() path below already calls gracefulShutdown, which
@@ -422,11 +425,16 @@ func httpGetTrim(u string) string {
 	return strings.TrimSpace(string(b))
 }
 
-// gracefulShutdown stops the given servers, letting in-flight requests finish
-// within d. An update restarts the node, so without this every rollout would
-// cut live downloads and relay sessions on every node it touches. Returns the
-// deadline error if a request outlives d — the caller exits regardless, since
-// the updater is waiting on this process.
+// gracefulShutdown stops the given HTTP servers, letting in-flight requests
+// finish within d. An update restarts the node, so without this every rollout
+// would cut live blob uploads and downloads on every node it touches. Returns
+// the deadline error if a request outlives d — the caller exits regardless,
+// since the updater is waiting on this process.
+//
+// Scope: HTTP only. TURN relay sessions are still cut abruptly when run()
+// returns and closes the TURN server, and no new-allocation cutoff exists, so a
+// rollout still interrupts in-progress WebRTC relaying. Clients re-ICE, which
+// is why draining TURN has not been worth its complexity so far.
 func gracefulShutdown(srvs []*http.Server, d time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), d)
 	defer cancel()

@@ -102,7 +102,7 @@ func main() {
 		uc, err := parseUpdateFlags(os.Args[2:], os.Stderr)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(2)
+			os.Exit(exitUsage)
 		}
 		os.Exit(runUpdate(uc, os.Stdout, os.Stderr))
 	}

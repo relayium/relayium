@@ -18,15 +18,30 @@ import (
 	"github.com/relayium/relayium/internal/selfupdate"
 )
 
+// nodeAssetName is the release archive the NODE ships in, spelled out here
+// rather than derived from selfupdate: this test's whole job is to pin the
+// contract that `relayium-node update` installs the node's artifact
+// ("relayium-node_<os>_<arch>.tar.gz", entry "relayium-node" — see
+// .goreleaser.yaml and install-node.sh) and not the CLI's. Deriving it from
+// selfupdate.AssetName would make the test agree with whatever the updater
+// happens to fetch, which is exactly how the CLI-installed-over-the-node bug
+// stayed invisible.
+func nodeAssetName(goos, goarch string) string {
+	return "relayium-node_" + goos + "_" + goarch + ".tar.gz"
+}
+
+// nodeBinaryEntry is the file name inside that archive.
+const nodeBinaryEntry = "relayium-node"
+
 // tarGzSingleFile builds a gzip+tar archive containing one regular file named
-// "relayium" — the shape goreleaser produces and replaceFromArchive expects.
-func tarGzSingleFile(t *testing.T, content string) []byte {
+// entryName — the shape goreleaser produces and replaceFromArchive expects.
+func tarGzSingleFile(t *testing.T, entryName, content string) []byte {
 	t.Helper()
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
 	body := []byte(content)
-	if err := tw.WriteHeader(&tar.Header{Name: "relayium", Mode: 0o755, Size: int64(len(body)), Typeflag: tar.TypeReg}); err != nil {
+	if err := tw.WriteHeader(&tar.Header{Name: entryName, Mode: 0o755, Size: int64(len(body)), Typeflag: tar.TypeReg}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tw.Write(body); err != nil {
@@ -41,23 +56,40 @@ func tarGzSingleFile(t *testing.T, content string) []byte {
 	return buf.Bytes()
 }
 
+// cliArchiveContent is what the CLI archive of the fake release contains. A
+// real release publishes both archives under one checksums.txt, so fetching the
+// wrong one verifies perfectly — tests assert on the installed bytes to tell
+// them apart.
+const cliArchiveContent = "CLI-BINARY-WRONG-ARTIFACT"
+
 // fakeGithubRelease serves just enough of a GitHub-shaped release for
-// selfupdate.Update to succeed against a fixed TargetTag: the per-tag archive
-// and checksums.txt. It deliberately serves no checksums.txt.sig — tests using
+// selfupdate.Update to succeed against a fixed TargetTag. Like a real release
+// it publishes BOTH archives — the CLI's "relayium_<os>_<arch>.tar.gz" and the
+// node's "relayium-node_<os>_<arch>.tar.gz" — under a single checksums.txt that
+// covers both. That matters: an updater that fetches the CLI archive by mistake
+// still passes checksum and signature verification, so only the installed bytes
+// reveal the error. It deliberately serves no checksums.txt.sig — tests using
 // it must set RELAYIUM_UPDATE_ALLOW_UNSIGNED=1, since a real release signing
 // key is embedded in this binary (release_pubkey.go) and would otherwise fail
 // the update closed.
-func fakeGithubRelease(t *testing.T, tag, archiveContent string) *httptest.Server {
+func fakeGithubRelease(t *testing.T, tag, nodeArchiveContent string) *httptest.Server {
 	t.Helper()
-	asset := selfupdate.AssetName(runtime.GOOS, runtime.GOARCH)
-	archive := tarGzSingleFile(t, archiveContent)
-	sum := sha256.Sum256(archive)
-	checksums := fmt.Sprintf("%x  %s\n", sum, asset)
+	nodeAsset := nodeAssetName(runtime.GOOS, runtime.GOARCH)
+	nodeArchive := tarGzSingleFile(t, nodeBinaryEntry, nodeArchiveContent)
+	cliAsset := selfupdate.AssetName(runtime.GOOS, runtime.GOARCH)
+	cliArchive := tarGzSingleFile(t, "relayium", cliArchiveContent)
+
+	nodeSum := sha256.Sum256(nodeArchive)
+	cliSum := sha256.Sum256(cliArchive)
+	checksums := fmt.Sprintf("%x  %s\n%x  %s\n", nodeSum, nodeAsset, cliSum, cliAsset)
 
 	mux := http.NewServeMux()
 	base := "/relayium/relayium/releases/download/" + tag
-	mux.HandleFunc(base+"/"+asset, func(w http.ResponseWriter, r *http.Request) {
-		w.Write(archive)
+	mux.HandleFunc(base+"/"+nodeAsset, func(w http.ResponseWriter, r *http.Request) {
+		w.Write(nodeArchive)
+	})
+	mux.HandleFunc(base+"/"+cliAsset, func(w http.ResponseWriter, r *http.Request) {
+		w.Write(cliArchive)
 	})
 	mux.HandleFunc(base+"/checksums.txt", func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, checksums)
@@ -65,6 +97,46 @@ func fakeGithubRelease(t *testing.T, tag, archiveContent string) *httptest.Serve
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+// The node updater must install the NODE's artifact. Both archives are signed
+// and checksummed in the same release, so fetching the CLI's verifies fine and
+// then installs a binary that prints usage and exits 2 at /usr/local/bin/
+// relayium-node — Restart=always crash-loops it, the watchdog rolls back after
+// the full health window, and the good version lands in failed-versions
+// forever. Assert on the installed bytes.
+func TestRunUpdateWithInstallsTheNodeArtifactNotTheCLI(t *testing.T) {
+	t.Setenv("RELAYIUM_UPDATE_ALLOW_UNSIGNED", "1")
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "relayium-node")
+	if err := os.WriteFile(bin, []byte("OLD"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := fakeGithubRelease(t, "v9.9.9", "NEW-NODE-BINARY")
+	uc := updateConfig{
+		StateDir: dir, BinPath: bin, TargetTag: "v9.9.9", Repo: "relayium/relayium",
+		APIBase: srv.URL, DownloadBase: srv.URL,
+	}
+	// The fake service brings the node back healthy, so the run reaches the
+	// success path and the installed binary is the one left on disk.
+	svc := newHealthySvc(t, dir)
+	var out, errBuf bytes.Buffer
+	code := runUpdateWith(uc, svc, 10*time.Second, 5*time.Millisecond, &out, &errBuf)
+
+	if code != exitOK {
+		t.Fatalf("code = %d, want %d (stderr=%s)", code, exitOK, errBuf.String())
+	}
+	got, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) == cliArchiveContent {
+		t.Fatalf("installed the CLI archive at %s — the node updater must fetch relayium-node_<os>_<arch>.tar.gz and extract %q", bin, nodeBinaryEntry)
+	}
+	if string(got) != "NEW-NODE-BINARY" {
+		t.Fatalf("installed binary = %q, want the node archive's %q", got, "NEW-NODE-BINARY")
+	}
 }
 
 // (a) A target version already recorded as failed must be refused before
