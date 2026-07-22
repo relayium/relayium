@@ -575,6 +575,36 @@ func (c *stripeClient) PreviewChange(ctx context.Context, customerID, newPriceID
 	if err != nil {
 		return 0, err
 	}
+	// Stripe's Basil API versions (2025+) removed GET /v1/invoices/upcoming in
+	// favour of POST /v1/invoices/create_preview. We pin no API version, so the
+	// account's default decides which one exists — try the current endpoint first,
+	// then fall back to the legacy one, so the preview works on either version.
+	if cents, cpErr := c.previewCreatePreview(ctx, subID, itemID, newPriceID); cpErr == nil {
+		return cents, nil
+	} else if cents, upErr := c.previewUpcoming(ctx, customerID, subID, itemID, newPriceID); upErr == nil {
+		return cents, nil
+	} else {
+		return 0, fmt.Errorf("stripe: preview change: create_preview failed (%v) and upcoming fallback failed (%v)", cpErr, upErr)
+	}
+}
+
+// previewCreatePreview uses the current POST /v1/invoices/create_preview endpoint.
+func (c *stripeClient) previewCreatePreview(ctx context.Context, subID, itemID, newPriceID string) (int64, error) {
+	form := url.Values{}
+	form.Set("subscription", subID)
+	form.Set("subscription_details[items][0][id]", itemID)
+	form.Set("subscription_details[items][0][price]", newPriceID)
+	form.Set("subscription_details[proration_behavior]", "always_invoice")
+	body, err := c.request(ctx, http.MethodPost, "/v1/invoices/create_preview", form)
+	if err != nil {
+		return 0, err
+	}
+	return parseInvoiceAmountDue(body)
+}
+
+// previewUpcoming uses the legacy GET /v1/invoices/upcoming endpoint (older API
+// versions where create_preview does not yet exist).
+func (c *stripeClient) previewUpcoming(ctx context.Context, customerID, subID, itemID, newPriceID string) (int64, error) {
 	q := url.Values{}
 	q.Set("customer", customerID)
 	q.Set("subscription", subID)
@@ -585,6 +615,10 @@ func (c *stripeClient) PreviewChange(ctx context.Context, customerID, newPriceID
 	if err != nil {
 		return 0, err
 	}
+	return parseInvoiceAmountDue(body)
+}
+
+func parseInvoiceAmountDue(body []byte) (int64, error) {
 	var inv struct {
 		AmountDue int64 `json:"amount_due"`
 	}

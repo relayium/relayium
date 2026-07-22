@@ -688,9 +688,13 @@ func TestPreviewChangeReturnsImmediateCharge(t *testing.T) {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/v1/subscriptions"):
 			w.Write([]byte(`{"data":[{"id":"sub_1","status":"active","items":{"data":[{"id":"si_1","price":{"id":"price_old"}}]}}]}`))
-		case strings.HasPrefix(r.URL.Path, "/v1/invoices/upcoming"):
-			if got := r.URL.Query().Get("subscription_proration_behavior"); got != "always_invoice" {
+		case r.URL.Path == "/v1/invoices/create_preview":
+			_ = r.ParseForm()
+			if got := r.PostForm.Get("subscription_details[proration_behavior]"); got != "always_invoice" {
 				t.Errorf("preview must use always_invoice, got %q", got)
+			}
+			if got := r.PostForm.Get("subscription_details[items][0][price]"); got != "price_new" {
+				t.Errorf("preview must target the new price, got %q", got)
 			}
 			w.Write([]byte(`{"amount_due":734}`))
 		default:
@@ -706,5 +710,37 @@ func TestPreviewChangeReturnsImmediateCharge(t *testing.T) {
 	}
 	if cents != 734 {
 		t.Fatalf("want 734, got %d", cents)
+	}
+}
+
+// On an older API version where create_preview does not exist (404), PreviewChange
+// falls back to the legacy /v1/invoices/upcoming endpoint. This is the exact bug
+// that broke the change-plan preview: Basil API versions removed `upcoming`, so we
+// try create_preview first, but older accounts must keep working too.
+func TestPreviewChangeFallsBackToUpcoming(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/v1/subscriptions"):
+			w.Write([]byte(`{"data":[{"id":"sub_1","status":"active","items":{"data":[{"id":"si_1","price":{"id":"price_old"}}]}}]}`))
+		case r.URL.Path == "/v1/invoices/create_preview":
+			http.Error(w, `{"error":{"message":"Unrecognized request URL"}}`, http.StatusNotFound)
+		case strings.HasPrefix(r.URL.Path, "/v1/invoices/upcoming"):
+			if got := r.URL.Query().Get("subscription_proration_behavior"); got != "always_invoice" {
+				t.Errorf("upcoming fallback must use always_invoice, got %q", got)
+			}
+			w.Write([]byte(`{"amount_due":521}`))
+		default:
+			t.Errorf("unexpected %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	c := NewStripeClient("sk_test", "whsec", "")
+	c.base = srv.URL
+	cents, err := c.PreviewChange(context.Background(), "cus_1", "price_new")
+	if err != nil {
+		t.Fatalf("fallback should succeed: %v", err)
+	}
+	if cents != 521 {
+		t.Fatalf("want 521 from upcoming fallback, got %d", cents)
 	}
 }

@@ -346,6 +346,9 @@ func (s *Service) handleBillingPreview(w http.ResponseWriter, r *http.Request, u
 	}
 	cents, err := s.biller.PreviewChange(r.Context(), u.StripeCustomerID, priceID)
 	if err != nil {
+		// Log the underlying Stripe error — the handler otherwise collapses it to a
+		// bare 500 ("Couldn't load the change preview"), leaving no diagnostic trail.
+		log.Printf("billing: preview change for user %s (customer %s, price %s): %v", u.ID, u.StripeCustomerID, priceID, err)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
