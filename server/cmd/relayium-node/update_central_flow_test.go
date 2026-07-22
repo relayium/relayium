@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -86,8 +88,11 @@ func TestResolveTargetFromCentralRejectsNonSemverTarget(t *testing.T) {
 	}
 }
 
-// "Not eligible" must reuse the existing SKIPPED exit code (exitUsage), not a
-// new one, and must not be reported as an error.
+// "Not eligible" is the answer on essentially every poll of every node,
+// forever (critical 1): it must exit 0 (exitOK), not a non-zero code. Exiting
+// non-zero here would mark the systemd unit `failed` on every steady-state
+// poll, permanently red across the whole fleet, and the one time an update
+// genuinely fails would look identical to that noise.
 func TestResolveTargetFromCentralNotEligible(t *testing.T) {
 	h := &centralHandler{status: 200, token: "tok",
 		resp: map[string]any{"targetVersion": "v0.9.0", "eligible": false, "reason": "waiting"}}
@@ -103,8 +108,27 @@ func TestResolveTargetFromCentralNotEligible(t *testing.T) {
 	if ok {
 		t.Fatal("resolveTargetFromCentral ok = true when central says not eligible")
 	}
-	if code != exitUsage {
-		t.Errorf("code = %d, want the reused SKIPPED code exitUsage (%d)", code, exitUsage)
+	if code != exitOK {
+		t.Errorf("code = %d, want exitOK (%d): not-my-turn must never mark the systemd unit failed", code, exitOK)
+	}
+}
+
+// End-to-end teeth test for critical 1: the full `relayium-node update`
+// invocation (runUpdate, not just the resolve helper) must exit 0 when
+// central says it isn't this node's turn.
+func TestRunUpdateNotEligibleExitsZero(t *testing.T) {
+	h := &centralHandler{status: 200, token: "tok",
+		resp: map[string]any{"targetVersion": "", "eligible": false}}
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+
+	dir := t.TempDir()
+	writeState(t, dir, "node-1")
+	uc := updateConfig{StateDir: dir, BinPath: filepath.Join(dir, "relayium-node"), CentralURL: srv.URL, NodeToken: "tok"}
+
+	var out, errBuf bytes.Buffer
+	if code := runUpdate(uc, &out, &errBuf); code != exitOK {
+		t.Errorf("runUpdate code = %d, want exitOK (%d) (stderr=%s)", code, exitOK, errBuf.String())
 	}
 }
 
@@ -172,9 +196,14 @@ func TestPendingResultSurvivesFailedPoll(t *testing.T) {
 	}
 }
 
-// resultForExitCode: only outcomes of an actually-attempted update are worth
-// reporting; a purely local refusal (bad flags, already-failed, precondition)
-// has nothing to tell central and must not overwrite an older pending result.
+// resultForExitCode must match the exit-code table exactly. exitAlreadyFailed
+// and exitPrecondition map to "skipped" (important 3, not ""): decideFleet's
+// graceful-skip branch exists specifically to advance the rollout queue past
+// a node that will never reach the target, without halting it — a node that
+// refuses locally and reports nothing just keeps heartbeating happily until
+// the 15-minute silence check halts the ENTIRE fleet rollout for a human.
+// Only exitUsage (bad flags; nothing was even attempted) has nothing to tell
+// central and maps to "".
 func TestResultForExitCode(t *testing.T) {
 	cases := map[int]string{
 		exitOK:            "ok",
@@ -182,8 +211,8 @@ func TestResultForExitCode(t *testing.T) {
 		exitRestartFailed: "rolled_back",
 		exitNotHealthy:    "rolled_back",
 		exitUsage:         "",
-		exitAlreadyFailed: "",
-		exitPrecondition:  "",
+		exitAlreadyFailed: "skipped",
+		exitPrecondition:  "skipped",
 	}
 	for code, want := range cases {
 		if got := resultForExitCode(code); got != want {
@@ -195,7 +224,7 @@ func TestResultForExitCode(t *testing.T) {
 func TestRecordPendingResultIgnoresNonReportableCodes(t *testing.T) {
 	dir := t.TempDir()
 	recordPendingResult(dir, exitRestartFailed, &bytes.Buffer{})
-	recordPendingResult(dir, exitAlreadyFailed, &bytes.Buffer{}) // must not clobber the above
+	recordPendingResult(dir, exitUsage, &bytes.Buffer{}) // must not clobber the above
 	if got := loadPendingResult(dir); got != "rolled_back" {
 		t.Errorf("loadPendingResult = %q, want the earlier %q preserved", got, "rolled_back")
 	}
@@ -250,5 +279,107 @@ func TestFetchTargetPostsToUpdateCheckPath(t *testing.T) {
 	}
 	if gotPath != "/api/nodes/update-check" {
 		t.Errorf("path = %q, want /api/nodes/update-check", gotPath)
+	}
+}
+
+// Teeth test for important 2: a hand-run -to must never record a pending
+// result, no matter its outcome — central's queue can't distinguish an
+// uncommanded success from a genuine advance to the target, and on the node
+// that currently holds the fleet slot, reporting one anyway would make
+// decideFleet return `wait` forever with no halt to explain it. This test
+// forces the already-failed refusal so no real network/systemd is needed.
+func TestRunUpdateManualToDoesNotRecordPendingResult(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "relayium-node")
+	if err := os.WriteFile(bin, []byte("OLD"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var w bytes.Buffer
+	recordFailed(dir, "v1.2.3", &w)
+
+	// TargetTag set directly (as a hand-typed -to would), TargetFromCentral
+	// left false. The already-failed guard returns before any systemctl call,
+	// so runUpdate's real systemctlCtl is safe to exercise here.
+	uc := updateConfig{StateDir: dir, BinPath: bin, TargetTag: "v1.2.3", Repo: updateRepo}
+
+	var out, errBuf bytes.Buffer
+	code := runUpdate(uc, &out, &errBuf)
+	if code != exitAlreadyFailed {
+		t.Fatalf("code = %d, want exitAlreadyFailed (%d) (stderr=%s)", code, exitAlreadyFailed, errBuf.String())
+	}
+	if got := loadPendingResult(dir); got != "" {
+		t.Errorf("loadPendingResult after a manual -to = %q, want none recorded", got)
+	}
+}
+
+// Companion positive case: the same outcome reached via central DOES get
+// recorded, now that resultForExitCode reports "skipped" for it (important
+// 3) — proving TargetFromCentral, not the exit code, is what gates reporting.
+func TestRunUpdateCentralDrivenAlreadyFailedRecordsSkipped(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "relayium-node")
+	if err := os.WriteFile(bin, []byte("OLD"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var w bytes.Buffer
+	recordFailed(dir, "v1.2.3", &w)
+
+	uc := updateConfig{StateDir: dir, BinPath: bin, TargetTag: "v1.2.3", Repo: updateRepo, TargetFromCentral: true}
+	var out, errBuf bytes.Buffer
+	code := runUpdate(uc, &out, &errBuf)
+	if code != exitAlreadyFailed {
+		t.Fatalf("code = %d, want exitAlreadyFailed (%d) (stderr=%s)", code, exitAlreadyFailed, errBuf.String())
+	}
+	if got := loadPendingResult(dir); got != "skipped" {
+		t.Errorf("loadPendingResult = %q, want %q", got, "skipped")
+	}
+}
+
+// Teeth test for important 4: the root-run updater must never create
+// state.json (or the state directory) on a node that isn't registered yet —
+// doing so as root leaves a root-owned file the unprivileged node service can
+// never read, turning a benign polling gap into a bricked node.
+func TestResolveTargetFromCentralDoesNotCreateStateFile(t *testing.T) {
+	base := t.TempDir()
+	dir := filepath.Join(base, "not-yet-created")
+	uc := updateConfig{StateDir: dir, CentralURL: "http://127.0.0.1:1", NodeToken: "tok"}
+
+	var out, errBuf bytes.Buffer
+	if _, ok := resolveTargetFromCentral(&uc, &out, &errBuf); ok {
+		t.Fatal("resolveTargetFromCentral ok = true with no state.json, want refused")
+	}
+	if _, err := os.Stat(dir); err == nil {
+		t.Error("resolveTargetFromCentral created the state directory — the root-run updater must never do this")
+	}
+}
+
+func TestRecordPendingResultDoesNotCreateStateDir(t *testing.T) {
+	base := t.TempDir()
+	dir := filepath.Join(base, "not-yet-created")
+	var w bytes.Buffer
+	recordPendingResult(dir, exitUpdateFailed, &w)
+	if _, err := os.Stat(dir); err == nil {
+		t.Error("recordPendingResult created the state directory — it must only ever write into an existing one")
+	}
+}
+
+// Minor 5: an unconfigured central URL must be a clear, distinct failure —
+// not a mysterious http.NewRequest error on a scheme-less URL re-reported as
+// an "update failed" every 10 minutes.
+func TestResolveTargetFromCentralRequiresCentralURL(t *testing.T) {
+	dir := t.TempDir()
+	writeState(t, dir, "node-1")
+	uc := updateConfig{StateDir: dir, CentralURL: "", NodeToken: "tok"}
+
+	var out, errBuf bytes.Buffer
+	code, ok := resolveTargetFromCentral(&uc, &out, &errBuf)
+	if ok {
+		t.Fatal("resolveTargetFromCentral ok = true with no CentralURL configured")
+	}
+	if code != exitPrecondition {
+		t.Errorf("code = %d, want exitPrecondition (%d)", code, exitPrecondition)
+	}
+	if !bytes.Contains(errBuf.Bytes(), []byte("RELAYIUM_CENTRAL_URL")) {
+		t.Errorf("stderr = %q, want it to name RELAYIUM_CENTRAL_URL so an operator knows what to set", errBuf.String())
 	}
 }

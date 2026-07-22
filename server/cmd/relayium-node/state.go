@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -44,6 +45,32 @@ func loadState(dir string) (nodeState, error) {
 	st.StorageSecret = hex.EncodeToString(sk)
 	if serr := saveState(dir, st); serr != nil {
 		return nodeState{}, serr
+	}
+	return st, nil
+}
+
+// loadStateReadOnly reads <dir>/state.json without ever creating anything.
+// Unlike loadState (used by the node process itself, which legitimately
+// bootstraps a fresh identity on first run), the root-run `update` subcommand
+// must never conjure state.json into existence: the node runs as an
+// unprivileged service user while `update` runs as root, so persisting a
+// missing file here would leave a root-owned state.json (and possibly a
+// root-owned state dir, via saveState's MkdirAll) that the node itself can
+// never read — silently turning a benign polling failure (no state yet, or a
+// mistyped -state-dir) into a bricked node. A missing file is reported as a
+// distinct, loud error instead: "this node is not registered yet", not an
+// update failure.
+func loadStateReadOnly(dir string) (nodeState, error) {
+	b, err := os.ReadFile(statePath(dir))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nodeState{}, fmt.Errorf("no state.json in %s: this node is not registered yet", dir)
+		}
+		return nodeState{}, err
+	}
+	var st nodeState
+	if err := json.Unmarshal(b, &st); err != nil {
+		return nodeState{}, err
 	}
 	return st, nil
 }

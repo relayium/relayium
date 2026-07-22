@@ -116,7 +116,12 @@ func TestParseUpdateFlagsAcceptsPlainSemverTargets(t *testing.T) {
 // (a human's flag, or central's rollout queue), never resolved locally.
 func TestParseUpdateFlagsAllowsMissingTargetTag(t *testing.T) {
 	var errBuf bytes.Buffer
-	uc, err := parseUpdateFlags(nil, &errBuf)
+	// -env-file must point somewhere absent: parseUpdateFlags(nil, ...) would
+	// otherwise fall through to defaultEnvFile and read the real
+	// /etc/relayium-node/env if the test happens to run on a host that has
+	// one — CentralURL/NodeToken now come from that file too (task 6), so a
+	// non-hermetic run here could pick up a real token.
+	uc, err := parseUpdateFlags([]string{"-env-file", filepath.Join(t.TempDir(), "absent")}, &errBuf)
 	if err != nil {
 		t.Fatalf("parseUpdateFlags with no -to: %v (stderr=%s)", err, errBuf.String())
 	}
@@ -136,6 +141,18 @@ func TestParseUpdateFlagsReadsTargetAndDowngrade(t *testing.T) {
 	}
 	if !uc.AllowDowngrade {
 		t.Error("AllowDowngrade = false, want true")
+	}
+}
+
+// Minor 6: selfupdate.DefaultHTTPClient deliberately sets no blanket
+// Client.Timeout, because one would kill a large in-flight download
+// mid-stream. That only holds if updateOptions leaves HTTP unset (selfupdate
+// falls back to DefaultHTTPClient); this pins that down so a future "let's
+// just add a sane timeout" edit here doesn't quietly regress it.
+func TestUpdateOptionsLeavesHTTPClientUnset(t *testing.T) {
+	uc := updateConfig{Repo: updateRepo, BinPath: "/x", TargetTag: "v1.2.3"}
+	if opts := updateOptions(uc); opts.HTTP != nil {
+		t.Errorf("Options.HTTP = %#v, want nil so selfupdate.DefaultHTTPClient (no blanket Timeout) is used for the download", opts.HTTP)
 	}
 }
 

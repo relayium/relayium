@@ -30,12 +30,16 @@ const defaultBinPath = "/usr/local/bin/relayium-node"
 // code and they map to the queue's result states as follows:
 //
 //	0 exitOK              -> ok           new version installed and confirmed healthy
-//	                                      (also "already on that version", a no-op)
+//	                                      (also "already on that version", a no-op;
+//	                                      and, task 6, when -to is omitted and central
+//	                                      answers "not this node's turn yet" — that is
+//	                                      the overwhelmingly common answer on every
+//	                                      poll of every node, forever, so it must never
+//	                                      mark the systemd unit failed. It is not
+//	                                      reported to central: this path returns
+//	                                      before any result is recorded, so systemd and
+//	                                      the operator are the only consumers)
 //	2 exitUsage           -> skipped      bad or missing flags; nothing was attempted
-//	                                      (also reused, task 6, when -to is omitted and
-//	                                      central answers "not this node's turn yet" —
-//	                                      that is the same "nothing attempted, quiet,
-//	                                      not-an-error" state, not a new one)
 //	3 exitAlreadyFailed   -> skipped      this version already failed here; refused
 //	                                      (clear with -clear-failed once fixed)
 //	4 exitPrecondition    -> skipped      the host needs a human first (stray .prev,
@@ -91,6 +95,15 @@ type updateConfig struct {
 	// call with a clear error, same as a hand-typed -to being required used to).
 	CentralURL string
 	NodeToken  string
+
+	// TargetFromCentral is true only when TargetTag was resolved by
+	// resolveTargetFromCentral, never for a hand-typed -to. runUpdate uses it
+	// to gate recordPendingResult (finding 2): a node that currently holds the
+	// fleet slot has none of central's defences against an uncommanded
+	// result, so reporting the outcome of a human-run -to can wedge the track
+	// (a manual success looks like "still not on target, not failed, not
+	// skipped" forever) or halt it for an action central never commanded.
+	TargetFromCentral bool
 
 	// APIBase and DownloadBase override the GitHub hosts selfupdate.Update talks
 	// to. Always empty in production — parseUpdateFlags never sets them, so
@@ -275,10 +288,15 @@ func runUpdate(uc updateConfig, stdout, stderr io.Writer) int {
 	}
 	code := runUpdateWith(uc, systemctlCtl{Unit: nodeUnit}, healthWindow, 2*time.Second, stdout, stderr)
 	// Record this attempt's outcome so the NEXT poll can report it to central.
-	// Skipped for -clear-failed: its exitOK means "forgot some failed
-	// versions", not "installed and confirmed healthy", and must never be
-	// reported to central as a successful update.
-	if !uc.ClearFailed {
+	// Gated on TargetFromCentral (finding 2): a hand-run -to is a local action
+	// central never commanded, and reporting its result anyway can wedge or
+	// halt the fleet track for a change the rollout queue knows nothing about
+	// (see updateConfig.TargetFromCentral). -clear-failed is excluded for a
+	// different reason: its exitOK means "forgot some failed versions", not
+	// "installed and confirmed healthy", and must never be reported to central
+	// as a successful update — though in practice -clear-failed and a central
+	// target are mutually exclusive anyway.
+	if uc.TargetFromCentral && !uc.ClearFailed {
 		recordPendingResult(uc.StateDir, code, stderr)
 	}
 	return code
@@ -295,15 +313,26 @@ const centralRequestTimeout = 10 * time.Second
 // polling central (task 6), and piggybacks the previous update's pending
 // result on the same call. Returns ok=false with the exit code the caller
 // must return immediately: central unreachable/erroring or a bad answer
-// (exitUpdateFailed, binary untouched), or central saying it isn't this
-// node's turn (exitUsage, the reused SKIPPED code — see the exit-code table
+// (exitUpdateFailed, binary untouched), central not configured or this node
+// not yet registered (exitPrecondition/exitUpdateFailed, nothing touched), or
+// central saying it isn't this node's turn (exitOK — see the exit-code table
 // above; not an error, and this is the overwhelmingly common answer since
 // every node asks every few minutes forever). Returns ok=true once uc carries
-// a validated target and the ordinary update flow should proceed.
+// a validated target, uc.TargetFromCentral is set, and the ordinary update
+// flow should proceed.
 func resolveTargetFromCentral(uc *updateConfig, stdout, stderr io.Writer) (int, bool) {
-	st, err := loadState(uc.StateDir)
+	if uc.CentralURL == "" {
+		fmt.Fprintln(stderr, "update-check: central URL is not configured; set -central-url or RELAYIUM_CENTRAL_URL (directly or via "+defaultEnvFile+")")
+		return exitPrecondition, false
+	}
+	// Read-only: unlike the node process itself, the root-run updater must
+	// never conjure state.json into existence (finding 4). loadState does
+	// exactly that on a missing file, which would leave a root-owned
+	// state.json/dir that the unprivileged node service can't read, turning a
+	// benign polling failure into a bricked node.
+	st, err := loadStateReadOnly(uc.StateDir)
 	if err != nil {
-		fmt.Fprintf(stderr, "update-check: could not load node state: %v\n", err)
+		fmt.Fprintf(stderr, "update-check: %v\n", err)
 		return exitUpdateFailed, false
 	}
 	prev := loadPendingResult(uc.StateDir)
@@ -321,10 +350,17 @@ func resolveTargetFromCentral(uc *updateConfig, stdout, stderr io.Writer) (int, 
 	// previous result we carried has now been delivered — clear it so it is
 	// not sent again on every future poll. This must happen regardless of
 	// `eligible`: delivery, not action, is what retires the pending marker.
-	clearPendingResult(uc.StateDir)
+	clearPendingResult(uc.StateDir, stderr)
 	if !eligible {
-		fmt.Fprintf(stdout, "central: not this node's turn yet (target %s)\n", tag)
-		return exitUsage, false
+		// The overwhelmingly common answer, forever. exitOK (not an error):
+		// see the exit-code table's 0 entry above for why this must never mark
+		// the systemd unit failed.
+		if tag != "" {
+			fmt.Fprintf(stdout, "central: not this node's turn yet (target %s)\n", tag)
+		} else {
+			fmt.Fprintln(stdout, "central: no rollout target for this node right now")
+		}
+		return exitOK, false
 	}
 	// Central can have bugs too: validate exactly like a hand-typed -to.
 	if !selfupdate.IsPlainVersion(tag) {
@@ -338,6 +374,10 @@ func resolveTargetFromCentral(uc *updateConfig, stdout, stderr io.Writer) (int, 
 	// selfupdate.Options.Force is never set — Force implies AllowDowngrade in
 	// that package, which would defeat downgrade protection on every node.
 	uc.AllowDowngrade = allowDowngrade
+	// Marks this result as reportable to central (finding 2): a hand-run -to
+	// never sets this, so recordPendingResult in runUpdate stays a no-op for
+	// it — see updateConfig.TargetFromCentral.
+	uc.TargetFromCentral = true
 	return 0, true
 }
 
@@ -390,9 +430,15 @@ const pendingResultFile = "pending-update-result"
 
 // resultForExitCode maps a run's exit code onto the closed set of result
 // strings central accepts (updateResults in nodes.go: ok/failed/rolled_back/
-// skipped). Only outcomes of an ACTUALLY-ATTEMPTED update are reportable;
-// purely local refusals (bad flags, an already-failed refusal, a precondition
-// guard) have nothing to tell central and map to "".
+// skipped), matching the exit-code table above exactly. exitAlreadyFailed and
+// exitPrecondition map to "skipped": decideFleet has a dedicated branch whose
+// whole purpose is advancing the rollout queue past a node that will never
+// reach the target, WITHOUT halting — central needs that signal, or a node
+// refusing locally (a version already in failed-versions, a stray .prev) just
+// keeps heartbeating happily until the 15-minute silence check halts the
+// entire fleet rollout for a human, instead of skipping one node. Only
+// exitUsage (bad flags; nothing was even parsed enough to attempt anything)
+// has genuinely nothing to tell central and maps to "".
 func resultForExitCode(code int) string {
 	switch code {
 	case exitOK:
@@ -401,6 +447,8 @@ func resultForExitCode(code int) string {
 		return "failed"
 	case exitRestartFailed, exitNotHealthy:
 		return "rolled_back"
+	case exitAlreadyFailed, exitPrecondition:
+		return "skipped"
 	default:
 		return ""
 	}
@@ -410,13 +458,14 @@ func resultForExitCode(code int) string {
 // code with nothing reportable (resultForExitCode returns "") is a no-op that
 // leaves any existing pending file untouched — a local no-op run must never
 // erase an earlier real failure that hasn't been delivered yet.
+//
+// Deliberately does NOT os.MkdirAll the state dir (finding 4, same hazard as
+// loadState): this runs as root, the node runs as an unprivileged service
+// user, and a missing/mistyped state dir must surface as a loud write error
+// here, not conjure a root-owned directory the node can never read.
 func recordPendingResult(stateDir string, code int, w io.Writer) {
 	result := resultForExitCode(code)
 	if result == "" {
-		return
-	}
-	if err := os.MkdirAll(stateDir, 0o700); err != nil {
-		fmt.Fprintf(w, "could not record pending result %s: %v\n", result, err)
 		return
 	}
 	if err := os.WriteFile(pendingResultPath(stateDir), []byte(result), 0o600); err != nil {
@@ -436,12 +485,39 @@ func loadPendingResult(stateDir string) string {
 
 // clearPendingResult removes the pending-result marker once central has
 // acknowledged it (a successful update-check round trip). A missing file is
-// success.
-func clearPendingResult(stateDir string) {
-	_ = os.Remove(pendingResultPath(stateDir))
+// success. A failed remove is logged, not swallowed: otherwise the same stale
+// result would be re-POSTed on every future poll forever, eventually
+// overwriting a later, different outcome.
+func clearPendingResult(stateDir string, w io.Writer) {
+	if err := os.Remove(pendingResultPath(stateDir)); err != nil && !os.IsNotExist(err) {
+		fmt.Fprintf(w, "could not clear delivered pending result: %v\n", err)
+	}
 }
 
 func pendingResultPath(stateDir string) string { return filepath.Join(stateDir, pendingResultFile) }
+
+// updateOptions builds the selfupdate.Options for uc. Pulled out of
+// runUpdateWith so it can be unit-tested directly (minor 6): in particular,
+// HTTP is deliberately left unset, so selfupdate.Update falls back to
+// selfupdate.DefaultHTTPClient — which sets no blanket Client.Timeout, since
+// one would kill a large in-flight download mid-stream. Force is likewise
+// never set here: in that package it already implies AllowDowngrade, which
+// would defeat downgrade protection on every node.
+func updateOptions(uc updateConfig) selfupdate.Options {
+	return selfupdate.Options{
+		Repo:           uc.Repo,
+		CurrentVersion: version,
+		GOOS:           runtime.GOOS,
+		GOARCH:         runtime.GOARCH,
+		TargetPath:     uc.BinPath,
+		TargetTag:      uc.TargetTag,
+		AllowDowngrade: uc.AllowDowngrade,
+		APIBase:        uc.APIBase,
+		DownloadBase:   uc.DownloadBase,
+		AssetPrefix:    nodeAssetPrefix,
+		BinaryName:     nodeBinaryName,
+	}
+}
 
 // runUpdateWith is runUpdate with its side-effecting dependencies injected so
 // the rollback path can be tested without systemd.
@@ -475,19 +551,7 @@ func runUpdateWith(uc updateConfig, svc serviceCtl, window, poll time.Duration, 
 		return exitPrecondition
 	}
 
-	from, to, changed, err := selfupdate.Update(context.Background(), selfupdate.Options{
-		Repo:           uc.Repo,
-		CurrentVersion: version,
-		GOOS:           runtime.GOOS,
-		GOARCH:         runtime.GOARCH,
-		TargetPath:     uc.BinPath,
-		TargetTag:      uc.TargetTag,
-		AllowDowngrade: uc.AllowDowngrade,
-		APIBase:        uc.APIBase,
-		DownloadBase:   uc.DownloadBase,
-		AssetPrefix:    nodeAssetPrefix,
-		BinaryName:     nodeBinaryName,
-	}, stdout)
+	from, to, changed, err := selfupdate.Update(context.Background(), updateOptions(uc), stdout)
 	if err != nil {
 		// Verification or download failed — the live binary was never touched.
 		fmt.Fprintf(stderr, "update to %s failed, binary untouched: %v\n", uc.TargetTag, err)
