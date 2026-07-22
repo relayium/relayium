@@ -22,6 +22,15 @@ const (
 	writeTimeout = 10 * time.Second
 )
 
+// joinTimeout bounds how long a connection may sit BEFORE it joins a room. A
+// legitimate client sends Join immediately on open, so 30s is generous; an
+// un-joined connection otherwise just holds a per-IP slot (kept alive by the
+// ping goroutine) — a cheap slow-hold. We deliberately do NOT bound idle AFTER
+// join: a minted code waits for its peer, and the signaling socket sits idle for
+// the whole transfer (the data flows peer-to-peer over WebRTC, not here). A var
+// so tests can shrink it.
+var joinTimeout = 30 * time.Second
+
 type wsConn struct {
 	ctx          context.Context
 	c            *websocket.Conn
@@ -102,8 +111,18 @@ func ServeWS(h *Hub, idgen func() string) func(ctx context.Context, c *websocket
 			}
 		}()
 
+		// Until the client joins, reads run under a join deadline so an un-joined
+		// connection can't hold a slot indefinitely. Once joined, reads use the
+		// plain connection context (unbounded idle is legitimate — see joinTimeout).
+		joinCtx, cancelJoin := context.WithTimeout(ctx, joinTimeout)
+		defer cancelJoin()
+
 		for {
-			_, data, err := c.Read(ctx)
+			readCtx := ctx
+			if !joined {
+				readCtx = joinCtx
+			}
+			_, data, err := c.Read(readCtx)
 			if err != nil {
 				return
 			}
@@ -116,6 +135,7 @@ func ServeWS(h *Hub, idgen func() string) func(ctx context.Context, c *websocket
 				if !joined {
 					if h.JoinLimited(room, id, e.Name, conn, maxPeers, clientIP) {
 						joined = true
+						cancelJoin() // joined in time — stop the join deadline
 					} else {
 						return // room full — close the connection
 					}
