@@ -1131,6 +1131,144 @@ sh -n web/public/install-node.sh && shellcheck -s sh web/public/install-node.sh
 
 ---
 
+### Task 9: BYO 节点更新窗口内豁免计费
+
+**用户决策（2026-07-22）**：自动更新会让 BYO 节点例行重启，重启窗口内其所有者本该免费的下载会
+跌落到计量的中央代理路径而被静默计费。用户裁定：**这个窗口内豁免计费。**
+
+**为什么现在才能精确实现**：Part 1 只知道"节点离线"，无法区分「用户自己把机器关了」和「我们正在
+更新它」。前者继续计费是对的（中央确实在掏带宽，且不是我们造成的）；后者是我们造成的，不该让用户
+买单。Task 1 加的 `update_started_at` 列让这个区分成为可能，所以豁免可以**只覆盖真正的更新窗口**，
+而不是笼统地给所有离线情况免单。
+
+**Files:**
+- Modify: `server/internal/account/files.go`（计量分支，约 509-517 行「Meter the central egress
+  against the owner for every file — own-node included」那段）
+- Test: `server/internal/account/files_byo_update_exempt_test.go`（新建）
+
+**Interfaces:**
+- Consumes: `Node.UpdateStartedAt`（Task 1）、`nodeOnlineWindow`
+- Produces: 无新导出符号
+
+- [ ] **Step 1: 读清现有计量分支**
+
+```
+cd server && sed -n '495,525p' internal/account/files.go
+```
+看清楚 BYO 自有节点直连（免费）与中央代理（计量）两条路径的分叉点，以及计量实际发生在哪一行。
+**不要**动直连那条路径——它本来就免费。
+
+- [ ] **Step 2: 写失败的测试**
+
+新建 `server/internal/account/files_byo_update_exempt_test.go`。fixture 沿用
+`files_directdl_test.go` 的 `newFileServer` / `UpsertNode` / `CreateStoredFile`：
+
+```go
+package account
+
+import (
+	"context"
+	"testing"
+	"time"
+)
+
+// A BYO owner's downloads from their OWN node are free — that is the whole
+// deal: it is their disk and their bandwidth. When we restart that node to
+// update it, central proxies instead and would normally meter the owner. That
+// bill exists only because WE chose to update their machine, so we eat it.
+func TestByoOwnNodeDownloadIsNotMeteredDuringItsUpdateWindow(t *testing.T) {
+	// Arrange: direct download on; owner has a BYO node holding one of their
+	//   files; the node is offline (LastSeenAt older than nodeOnlineWindow) AND
+	//   UpdateStartedAt is recent (within the update window).
+	// Act: GET the blob (falls back to central proxy).
+	// Assert: the owner's metered usage is UNCHANGED.
+}
+
+// The exemption must be narrow. A user who simply powered their node off is not
+// our doing, and central really is paying that egress — keep metering it.
+func TestByoOwnNodeDownloadIsStillMeteredWhenOfflineForOtherReasons(t *testing.T) {
+	// Arrange: same, but UpdateStartedAt is zero (no update in flight).
+	// Act: GET the blob.
+	// Assert: the owner IS metered the served bytes.
+}
+
+// The window must expire. A node that was commanded to update hours ago and
+// never came back is a broken node, not an update in progress — metering
+// resumes, otherwise a single stuck update would grant permanent free egress.
+func TestByoUpdateExemptionExpires(t *testing.T) {
+	// Arrange: same, but UpdateStartedAt is far older than the exemption window.
+	// Act: GET the blob.
+	// Assert: the owner IS metered.
+}
+
+// Fleet nodes are ours; their egress is an operator cost either way. The
+// exemption must not silently widen to fleet-hosted files.
+func TestFleetNodeDownloadIsStillMeteredDuringItsUpdateWindow(t *testing.T) {
+	// Arrange: the file lives on a FLEET node with a recent UpdateStartedAt.
+	// Act: GET the blob.
+	// Assert: the owner IS metered exactly as before.
+}
+
+var _ = context.Background
+var _ = time.Now
+```
+
+**实现者注意**：以上四个用例的 Arrange/Act/Assert 是规格。产出必须是照 `files_directdl_test.go`
+的真实 fixture 填实后**能跑**的测试（那个文件里有现成的 `MonthlyUsage` 断言写法可抄），
+不得提交空函数体或 `t.Skip`。
+
+- [ ] **Step 3: 跑测试确认失败**
+
+```
+cd server && go test ./internal/account/ -run ByoUpdate -v
+```
+预期：豁免用例 FAIL（当前仍在计费）
+
+- [ ] **Step 4: 实现**
+
+在计量分支前加一道豁免判断，条件**全部**满足才免：
+
+1. 文件在该文件所有者**自己的** BYO 节点上（`OwnerType == "user" && OwnerUserID == sf.UserID`
+   —— 与 `files.go:395` 判断 BYO 直连免费用的是同一个条件，抄它）
+2. 该节点有更新在途：`UpdateStartedAt != 0` 且 `now - UpdateStartedAt <= byoUpdateExemptWindow`
+
+新增常量：
+
+```go
+// byoUpdateExemptWindow bounds how long a BYO owner's downloads stay free while
+// we restart their node to update it. It must cover a real update (download +
+// the node's 60s drain + restart + the updater's 10-minute health watch) but
+// must expire: a node commanded hours ago and never seen again is broken, not
+// updating, and a permanently "updating" node would otherwise earn permanent
+// free egress. Deliberately a little longer than the updater's health window.
+const byoUpdateExemptWindow = 20 * time.Minute
+```
+
+**只豁免计量，不要豁免流量闸**——两者是不同的东西，别顺手把配额检查也关了。若两者在同一段代码里，
+在报告中明确说明你动了哪一个、没动哪一个。
+
+- [ ] **Step 5: 跑测试确认通过 + 全量**
+
+```
+cd server && go test ./internal/account/ -run ByoUpdate -v && go test ./internal/account/ -count=1
+```
+
+- [ ] **Step 6: 提交**
+
+```bash
+git add server/internal/account/
+git commit -m "feat(billing): don't meter a BYO owner while we restart their node
+
+Downloads from a user's own node are free — their disk, their bandwidth. When
+the rollout restarts that node, central proxies instead and would bill the
+owner for egress they only incurred because we chose to update their machine.
+Exempt exactly that window: their own node, an update genuinely in flight, and
+bounded so a node stuck mid-update can't earn permanent free egress. Nodes
+offline for any other reason stay metered, and fleet nodes are unaffected."
+```
+
+---
+
 ## 本计划的交付物
 
 在 admin 里设一个目标版本，机队自己一台台滚完（约 14 小时），确认无误后把 BYO 轨也指
