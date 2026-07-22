@@ -37,21 +37,32 @@ func byoBatchIDs(nodes []NodeSnapshot, target string, pct int) []string {
 
 // markFailed marks the first k members of the pct% batch as having failed an
 // update to target (rolled back onto the version they were commanded from, so
-// the result unambiguously belongs to THIS rollout).
+// the result unambiguously belongs to THIS rollout). It also stamps
+// UpdateFromVersion on the REST of the pct% batch -- as a real caller would
+// for every node it actually commands, per decideByo's OUTPUT CONTRACT --
+// since a batch member is only in the failure-rate denominator once it has
+// genuinely been commanded, not merely by sitting in the batch prefix.
 func markFailed(t *testing.T, nodes []NodeSnapshot, target string, pct, k int) {
 	t.Helper()
 	ids := byoBatchIDs(nodes, target, pct)
 	if k > len(ids) {
 		t.Fatalf("markFailed: want %d failures inside the %d%% batch, which holds only %d", k, pct, len(ids))
 	}
-	inBatch := make(map[string]bool, k)
+	failing := make(map[string]bool, k)
 	for _, id := range ids[:k] {
+		failing[id] = true
+	}
+	inBatch := make(map[string]bool, len(ids))
+	for _, id := range ids {
 		inBatch[id] = true
 	}
 	for i := range nodes {
-		if inBatch[nodes[i].ID] {
+		if !inBatch[nodes[i].ID] {
+			continue
+		}
+		nodes[i].UpdateFromVersion = nodes[i].Version // every batch member was commanded
+		if failing[nodes[i].ID] {
 			nodes[i].UpdateResult = "failed"
-			nodes[i].UpdateFromVersion = nodes[i].Version
 		}
 	}
 }
@@ -147,6 +158,41 @@ func TestDecideByoFailureRateThresholdIsExclusive(t *testing.T) {
 		if action, _, _ := decideByo(tr, nodes, tNow); action != tc.want {
 			t.Errorf("%d/100 failures: action = %q, want %q", tc.failures, action, tc.want)
 		}
+	}
+}
+
+// Probed: 200 BYO nodes, a 20-node canary batch (10%), but only 4 of those 20
+// were online and actually commanded (nodes.update_from_version stamped) when
+// the batch opened -- the other 16 were offline and untouched. All 4 commanded
+// nodes failed. The denominator MUST be the 4 actually-commanded nodes, not
+// the 20-node batch prefix: 4/20 = 20%, at the threshold and can never halt,
+// while the true rate over who was actually exercised is 4/4 = 100%.
+func TestDecideByoHaltsWhenOnlyAFewOfTheBatchWereReachable(t *testing.T) {
+	nodes := byoNodes(200, "v0.8.0", tNow)
+	batch := byoBatchIDs(nodes, "v0.9.0", 10)
+	if len(batch) != 20 {
+		t.Fatalf("canary batch = %d nodes, want 20 (10%% of 200)", len(batch))
+	}
+	reachable := make(map[string]bool, 4)
+	for _, id := range batch[:4] {
+		reachable[id] = true
+	}
+	for i := range nodes {
+		if reachable[nodes[i].ID] {
+			nodes[i].UpdateFromVersion = nodes[i].Version // actually commanded
+			nodes[i].UpdateResult = "failed"
+		}
+		// The other 16 batch members are left with no UpdateFromVersion:
+		// offline when the batch opened, never commanded.
+	}
+	tr := RolloutTrack{
+		Track: "byo", TargetVersion: "v0.9.0", Status: "rolling",
+		ByoBatch: 10, StageStartedAt: tNow - 7*tHour,
+	}
+
+	action, _, reason := decideByo(tr, nodes, tNow)
+	if action != "halt" {
+		t.Fatalf("action = %q with all 4 actually-commanded canary nodes failed (16/20 never reachable), want halt (reason=%q)", action, reason)
 	}
 }
 

@@ -27,6 +27,13 @@ import (
 // must clear the floor. One flaky user machine is normal, not a signal --
 // halting on a single failure (e.g. 1 of 2 nodes, a 50% "rate") would wedge
 // the BYO track permanently.
+//
+// Corollary: a population at or below the floor can never halt, so a tiny BYO
+// population (in the limit, a single node) whose one commanded member fails
+// gets re-commanded on every call forever -- decideByo never returns complete
+// or halt for it. That is the deliberate price of the floor, not a bug; it
+// just means an admin console can show a tiny BYO population stuck at
+// "rolling" indefinitely, and that is expected.
 var byoBatches = []int{10, 50, 100}
 
 const (
@@ -53,6 +60,26 @@ const (
 // OUTPUT CONTRACT: on "update" the caller MUST persist the newly-opened batch
 // percentage into tr.ByoBatch and rewrite tr.StageStartedAt to `now` (that is
 // what starts the observation window), then command exactly the returned IDs.
+// Commanding a node carries three further hard requirements, each load-bearing:
+//
+//   - the caller MUST write nodes.update_from_version (to the node's current
+//     version) at command time. Without it byoResultIsFailure has nothing to
+//     compare against and stays permanently inert, and the failure-rate
+//     denominator -- built from that same predicate -- is always empty: the
+//     BYO track can never halt at all, no matter how bad the build is.
+//   - the caller MUST clear nodes.update_result when it commands a node.
+//     nodes.update_result deliberately survives re-register and heartbeat (see
+//     byoResultIsFailure), so a stale "failed"/"rolled_back" left over from
+//     that node's previous command would otherwise be misread as a failure of
+//     the command being issued right now.
+//   - when an operator restarts a HALTED rollout targeting the SAME version,
+//     the caller MUST reset tr.ByoBatch to 0 first. The failing records that
+//     caused the halt are still sitting on those nodes; resuming with
+//     tr.ByoBatch left at its halted value re-evaluates the same batch against
+//     the same failures and halts again with a byte-identical reason, forever.
+//     Only bumping TargetVersion (i.e. starting a new rollout) escapes this,
+//     because it changes what "commanded" and "failed" are computed against.
+//
 // `eligible` is the subset of the open batch that is online AND not yet on the
 // target version, so it SHRINKS as nodes converge: calling decideByo again
 // with the same track state is idempotent (already-updated nodes are not
@@ -76,18 +103,27 @@ const (
 //     (a corrupt row, a legacy value, a hand-edited DB) would otherwise fall
 //     back to "open the 10% batch", i.e. silently REGRESS a rollout that had
 //     already reached 50% or 100% and potentially loop there.
-//  5. Failure check over the nodes this rollout has ACTUALLY COMMANDED --
-//     the current batch prefix, ordered[:pctCount(n, tr.ByoBatch)] -- for
-//     both numerator and denominator. Because batches nest, a node that
-//     failed in an earlier, smaller batch is still inside the current
-//     prefix and still counts; only never-commanded nodes are excluded.
-//     Dividing by the WHOLE population instead would cap the observable rate
-//     at the open percentage (at the 10% stage, even 100% of the canary
-//     batch failing reads as 10% < 20%), so the canary batch -- the one
-//     stage that exists precisely to catch a bad build -- could never halt.
-//     Only results belonging to THIS rollout count (see byoResultIsFailure).
-//     If both the rate exceeds byoFailureRate and the absolute count clears
-//     byoFailureFloor -> halt with a reason.
+//  5. Failure check over the nodes this rollout has ACTUALLY COMMANDED, for
+//     both numerator and denominator. This is NOT the current batch prefix,
+//     ordered[:pctCount(n, tr.ByoBatch)] -- that prefix is a ceiling on who
+//     COULD have been commanded, not who was: members offline when the batch
+//     opened are filtered out of `eligible` below and so never get
+//     nodes.update_from_version stamped. The denominator is the prefix
+//     narrowed to byoWasCommandedForTarget(n, tr.TargetVersion), the same
+//     predicate byoResultIsFailure's numerator uses, so a canary batch where
+//     only a handful of members were ever reachable is judged on those few,
+//     not diluted by the ones that were never touched (a 20-node batch with
+//     only 4 reachable and all 4 failing is 4/20 = 20%, unable to halt, vs.
+//     the true 4/4 = 100%). Because batches nest, a node that failed in an
+//     earlier, smaller batch is still inside the current prefix and still
+//     counts. Dividing by the WHOLE population instead of the batch prefix
+//     would separately cap the observable rate at the open percentage (at
+//     the 10% stage, even 100% of the canary batch failing reads as
+//     10% < 20%), so the canary batch -- the one stage that exists precisely
+//     to catch a bad build -- could never halt. Only results belonging to
+//     THIS rollout count (see byoResultIsFailure). If both the rate exceeds
+//     byoFailureRate and the absolute count clears byoFailureFloor -> halt
+//     with a reason.
 //  6. ByoBatch == 0 means no batch has opened for this rollout yet: open the
 //     first one IMMEDIATELY, without waiting out a window. The window gates
 //     transitions BETWEEN batches; making a fresh track sit through 6h of
@@ -99,14 +135,18 @@ const (
 //     and return its online, not-yet-updated members.
 //  9. At the last batch (100%) there is nothing wider left to open, so the
 //     rollout ends there -- but only once it has actually LANDED: complete
-//     requires that no recently-seen (nodeOnlineWindow) member is still off
+//     requires that no member seen within nodeOnlineWindow (90s) is still off
 //     target. A purely time-based complete would strand every node that was
 //     offline when the 100% batch opened, with no stage left to command them
-//     and an admin console reporting success. Machines that have been dark
-//     for days do not block completion; they are picked up by the next
-//     rollout. If stragglers remain online and off-target, they are returned
-//     for another sweep (one per byoBatchWindow, since the caller restamps
-//     StageStartedAt) rather than being retried in a hot loop.
+//     and an admin console reporting success. This window is 90 SECONDS, not
+//     days: a node need only fall silent for that long to stop blocking
+//     completion. That includes a node that failed, is off-target, and then
+//     goes quiet -- plausibly bricked by this very update -- which is counted
+//     as "not blocking" the moment it crosses the window; if its failure
+//     count is below byoFailureFloor, the rollout can report complete over a
+//     broken machine. If stragglers remain online and off-target, they are
+//     returned for another sweep (one per byoBatchWindow, since the caller
+//     restamps StageStartedAt) rather than being retried in a hot loop.
 func decideByo(tr RolloutTrack, nodes []NodeSnapshot, now int64) (action string, eligible []string, reason string) {
 	if tr.Status != "rolling" {
 		return "wait", nil, ""
@@ -144,18 +184,40 @@ func decideByo(tr RolloutTrack, nodes []NodeSnapshot, now int64) (action string,
 	// guarantees the 10% batch stays a subset of the 50% batch.
 	ordered := append([]NodeSnapshot(nil), nodes...)
 	sort.Slice(ordered, func(i, j int) bool {
-		return fleetHash(ordered[i].ID, tr.TargetVersion) < fleetHash(ordered[j].ID, tr.TargetVersion)
+		hi, hj := fleetHash(ordered[i].ID, tr.TargetVersion), fleetHash(ordered[j].ID, tr.TargetVersion)
+		if hi != hj {
+			return hi < hj
+		}
+		// sort.Slice is NOT stable, so on a fleetHash collision the two
+		// candidates could come out in either order on different calls over
+		// the identical input -- exactly the nondeterminism the 10%/50%/100%
+		// nesting cannot tolerate. Break the tie on node ID, which is fixed.
+		return ordered[i].ID < ordered[j].ID
 	})
 
 	onlineCutoff := now - int64(nodeOnlineWindow/time.Second)
 	online := func(n NodeSnapshot) bool { return n.LastSeenAt >= onlineCutoff }
 	onTarget := func(n NodeSnapshot) bool { return selfupdate.SameVersion(n.Version, tr.TargetVersion) }
 
-	// Failure rate is measured over the nodes this rollout has commanded so
-	// far -- the currently open batch prefix -- not the whole population. With
-	// tr.ByoBatch == 0 nothing has been commanded yet, so there is nothing to
-	// judge and the prefix is empty.
-	commanded := ordered[:pctCount(len(ordered), tr.ByoBatch)]
+	// Failure rate is measured over the nodes this rollout has ACTUALLY
+	// COMMANDED, not the whole batch prefix. The batch prefix is a ceiling on
+	// who could have been commanded, not a record of who was: a member that
+	// was offline when its batch opened is filtered out of `eligible` below
+	// and so never gets nodes.update_from_version stamped. Counting it here
+	// anyway dilutes the rate -- e.g. a 20-node canary batch where only 4
+	// members were ever reachable and all 4 failed is 4/20 = 20%, at the
+	// threshold and unable to halt, when the nodes actually exercised failed
+	// 100% of the time. byoWasCommandedForTarget is the same predicate
+	// byoResultIsFailure uses to decide a result belongs to THIS rollout, so
+	// numerator and denominator agree on what "commanded" means. With
+	// tr.ByoBatch == 0 the prefix is empty and there is nothing to judge.
+	batchPrefix := ordered[:pctCount(len(ordered), tr.ByoBatch)]
+	var commanded []NodeSnapshot
+	for _, n := range batchPrefix {
+		if byoWasCommandedForTarget(n, tr.TargetVersion) {
+			commanded = append(commanded, n)
+		}
+	}
 	failed := 0
 	for _, n := range commanded {
 		if byoResultIsFailure(n, tr.TargetVersion) {
@@ -229,10 +291,24 @@ func byoResultIsFailure(n NodeSnapshot, targetVersion string) bool {
 	if n.UpdateResult != "failed" && n.UpdateResult != "rolled_back" {
 		return false
 	}
-	if n.UpdateFromVersion == "" || selfupdate.SameVersion(n.UpdateFromVersion, targetVersion) {
+	if !byoWasCommandedForTarget(n, targetVersion) {
 		return false
 	}
 	return selfupdate.SameVersion(n.Version, n.UpdateFromVersion)
+}
+
+// byoWasCommandedForTarget reports whether n carries a live command record
+// for a rollout to targetVersion: nodes.update_from_version is non-empty and
+// is not itself the target (a record whose from-version already equals the
+// target started AFTER reaching it, so it cannot describe an attempt to get
+// there). This is the SAME predicate decideByo uses to decide which batch
+// members were actually commanded, so its failure-rate denominator and
+// byoResultIsFailure's numerator agree on what "commanded" means -- see the
+// OUTPUT CONTRACT above: without the caller stamping update_from_version at
+// command time, this predicate is never true and the whole failure check is
+// inert.
+func byoWasCommandedForTarget(n NodeSnapshot, targetVersion string) bool {
+	return n.UpdateFromVersion != "" && !selfupdate.SameVersion(n.UpdateFromVersion, targetVersion)
 }
 
 // pctCount returns how many of total elements make up the first pct percent,
