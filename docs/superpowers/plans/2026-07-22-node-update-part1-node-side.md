@@ -15,7 +15,7 @@
 - 更新的二进制**必须**通过 `internal/selfupdate` 的 ECDSA 签名 + sha256 校验。不新增任何绕过校验的路径。
 - 降级**默认拒绝**，只在显式传入允许降级时执行。
 - Go 代码注释用英语；commit message 用英语；文档用中文。
-- 测试不允许 `time.Sleep` 等待状态变化——用注入的时钟或轮询超时。
+- **状态机推进一律注入时钟，不得靠 `time.Sleep`**（第 2 部分的滚动队列尤其如此）。真实 I/O 时序（HTTP drain、文件 mtime）**可以**用 `time.Sleep`，但必须毫秒级，且断言要带超时上限——测的是真行为，不是等出来的巧合。
 
 ---
 
@@ -1329,105 +1329,52 @@ func rollback(uc updateConfig, svc serviceCtl, stderr io.Writer) {
 }
 ```
 
-import 补 `"context"`、`"runtime"`，以及 `"github.com/relayium/relayium/internal/selfupdate"`。
+import 补 `"context"`、`"runtime"`、`"path/filepath"`、`"strings"`，以及
+`"github.com/relayium/relayium/internal/selfupdate"`。
 
-`failedBefore` / `recordFailed` 在 Task 8 实现——**本步骤先加两个临时定义**放在 `update.go` 末尾，Task 8 会替换掉：
+- [ ] **Step 6: 实现防撞墙（`failedBefore` / `recordFailed`）**
 
-```go
-func failedBefore(stateDir, tag string) bool          { return false }
-func recordFailed(stateDir, tag string, w io.Writer)  {}
-```
+上一步的 `runUpdate` 用到了这两个函数。它们是自救回滚的另一半：回滚之后，下一次触发不能
+再去装同一个坏版本，否则节点会陷入「装→炸→回滚→装」的死循环。
 
-- [ ] **Step 6: 写回滚路径的测试**
-
-在 `update_watchdog_test.go` 追加：
+在 `server/cmd/relayium-node/update.go` 追加：
 
 ```go
-type fakeSvc struct{ restarts int; failRestart bool }
+// failedVersionsFile lists releases that already broke this node. Without it a
+// node that rolls back would be told to install the same bad version on the
+// next tick, forever.
+const failedVersionsFile = "failed-versions"
 
-func (f *fakeSvc) Restart() error {
-	f.restarts++
-	if f.failRestart {
-		return errTestRestart
-	}
-	return nil
-}
-
-var errTestRestart = errors.New("restart refused")
-
-// The whole point of the local self-rescue: a version that installs fine but
-// never heartbeats gets undone without central's involvement.
-func TestRunUpdateRollsBackWhenNewVersionNeverHeartbeats(t *testing.T) {
-	dir := t.TempDir()
-	bin := filepath.Join(dir, "relayium-node")
-	if err := os.WriteFile(bin, []byte("OLD"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	// Pre-create the backup and a "new" binary to stand in for a completed
-	// selfupdate, then drive only the watchdog half via rollback().
-	if err := backupBinary(bin); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(bin, []byte("NEW-BROKEN"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	svc := &fakeSvc{}
-	var errBuf bytes.Buffer
-	rollback(updateConfig{BinPath: bin, StateDir: dir}, svc, &errBuf)
-
-	got, err := os.ReadFile(bin)
+func recordFailed(stateDir, tag string, w io.Writer) {
+	p := filepath.Join(stateDir, failedVersionsFile)
+	f, err := os.OpenFile(p, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
-		t.Fatal(err)
+		fmt.Fprintf(w, "could not record failed version %s: %v\n", tag, err)
+		return
 	}
-	if string(got) != "OLD" {
-		t.Errorf("after rollback, binary = %q, want the previous %q", got, "OLD")
+	defer f.Close()
+	if _, err := fmt.Fprintln(f, tag); err != nil {
+		fmt.Fprintf(w, "could not record failed version %s: %v\n", tag, err)
 	}
-	if svc.restarts != 1 {
-		t.Errorf("restarts = %d, want 1 (the node must be restarted onto the old binary)", svc.restarts)
+}
+
+// failedBefore reports whether tag already failed on this node. Matching is
+// whole-line so v0.9.0 failing never blocks v0.9.01.
+func failedBefore(stateDir, tag string) bool {
+	b, err := os.ReadFile(filepath.Join(stateDir, failedVersionsFile))
+	if err != nil {
+		return false // no record (or unreadable) means nothing is known to have failed
 	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if strings.TrimSpace(line) == tag {
+			return true
+		}
+	}
+	return false
 }
 ```
 
-import 补 `"bytes"`、`"errors"`、`"os"`、`"path/filepath"`。
-
-- [ ] **Step 7: 跑测试确认通过**
-
-```
-cd server && go test ./cmd/relayium-node/ -v -run "WaitHealthy|RunUpdate"
-```
-预期：全 PASS
-
-- [ ] **Step 8: 提交**
-
-```bash
-git add server/cmd/relayium-node/update.go server/cmd/relayium-node/update_watchdog_test.go
-git commit -m "feat(node): roll back locally when a new version never heartbeats
-
-Central-driven rollback has a blind spot: a node that won't start never
-receives the rollback order, because it never asks. So the updater closes the
-loop locally — restart, wait for one heartbeat newer than the restart, and
-restore the previous binary if none arrives. Comparing against the restart
-moment matters: a heartbeat left by the old version must not read as success."
-```
-
----
-
-### Task 8: 防撞墙（failed-version）
-
-自救回滚之后，下一次触发不能再去装同一个坏版本，否则节点会陷入「装→炸→回滚→装」的循环。
-
-**Files:**
-- Modify: `server/cmd/relayium-node/update.go`（替换 Task 7 的两个临时定义）
-- Test: `server/cmd/relayium-node/update_failed_test.go`
-
-**Interfaces:**
-- Consumes: `updateConfig.StateDir`
-- Produces:
-  - `func recordFailed(stateDir, tag string, w io.Writer)` — 把 tag 追加进 `<stateDir>/failed-versions`
-  - `func failedBefore(stateDir, tag string) bool` — 该 tag 是否已被记为失败
-
-- [ ] **Step 1: 写失败的测试**
+- [ ] **Step 7: 写防撞墙的测试**
 
 新建 `server/cmd/relayium-node/update_failed_test.go`：
 
@@ -1482,78 +1429,87 @@ func TestFailedBeforeMatchesWholeVersionsOnly(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
-
-```
-cd server && go test ./cmd/relayium-node/ -run "Failed" -v
-```
-预期：`TestRecordFailedStopsARetry...` FAIL（Task 7 的临时实现永远返回 false）
-
-- [ ] **Step 3: 实现**
-
-在 `server/cmd/relayium-node/update.go` 里删掉 Task 7 的两个临时定义，换成：
-
-```go
-// failedVersionsFile lists releases that already broke this node. Without it a
-// node that rolls back would be told to install the same bad version on the
-// next tick, forever.
-const failedVersionsFile = "failed-versions"
-
-func recordFailed(stateDir, tag string, w io.Writer) {
-	p := filepath.Join(stateDir, failedVersionsFile)
-	f, err := os.OpenFile(p, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		fmt.Fprintf(w, "could not record failed version %s: %v\n", tag, err)
-		return
-	}
-	defer f.Close()
-	if _, err := fmt.Fprintln(f, tag); err != nil {
-		fmt.Fprintf(w, "could not record failed version %s: %v\n", tag, err)
-	}
-}
-
-// failedBefore reports whether tag already failed on this node. Matching is
-// whole-line so v0.9.0 failing never blocks v0.9.01.
-func failedBefore(stateDir, tag string) bool {
-	b, err := os.ReadFile(filepath.Join(stateDir, failedVersionsFile))
-	if err != nil {
-		return false // no record (or unreadable) means nothing is known to have failed
-	}
-	for _, line := range strings.Split(string(b), "\n") {
-		if strings.TrimSpace(line) == tag {
-			return true
-		}
-	}
-	return false
-}
-```
-
-import 补 `"path/filepath"`、`"strings"`。
-
-- [ ] **Step 4: 跑测试确认通过**
+- [ ] **Step 8: 跑防撞墙测试确认通过**
 
 ```
 cd server && go test ./cmd/relayium-node/ -run "Failed" -v
 ```
 预期：四个 PASS
 
-- [ ] **Step 5: 跑全量**
+- [ ] **Step 9: 写回滚路径的测试**
+
+在 `update_watchdog_test.go` 追加：
+
+```go
+type fakeSvc struct{ restarts int; failRestart bool }
+
+func (f *fakeSvc) Restart() error {
+	f.restarts++
+	if f.failRestart {
+		return errTestRestart
+	}
+	return nil
+}
+
+var errTestRestart = errors.New("restart refused")
+
+// The whole point of the local self-rescue: a version that installs fine but
+// never heartbeats gets undone without central's involvement.
+func TestRunUpdateRollsBackWhenNewVersionNeverHeartbeats(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "relayium-node")
+	if err := os.WriteFile(bin, []byte("OLD"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Pre-create the backup and a "new" binary to stand in for a completed
+	// selfupdate, then drive only the watchdog half via rollback().
+	if err := backupBinary(bin); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bin, []byte("NEW-BROKEN"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := &fakeSvc{}
+	var errBuf bytes.Buffer
+	rollback(updateConfig{BinPath: bin, StateDir: dir}, svc, &errBuf)
+
+	got, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "OLD" {
+		t.Errorf("after rollback, binary = %q, want the previous %q", got, "OLD")
+	}
+	if svc.restarts != 1 {
+		t.Errorf("restarts = %d, want 1 (the node must be restarted onto the old binary)", svc.restarts)
+	}
+}
+```
+
+import 补 `"bytes"`、`"errors"`、`"os"`、`"path/filepath"`。
+
+- [ ] **Step 10: 跑全量确认通过**
 
 ```
-cd server && go build ./... && go vet ./cmd/relayium-node/ && go test ./...
+cd server && go build ./... && go vet ./cmd/relayium-node/ && gofmt -l ./cmd/relayium-node/ && go test ./...
 ```
-预期：全 ok
+预期：全 ok，`gofmt -l` 无输出
 
-- [ ] **Step 6: 提交**
+- [ ] **Step 11: 提交**
 
 ```bash
-git add server/cmd/relayium-node/update.go server/cmd/relayium-node/update_failed_test.go
-git commit -m "feat(node): never retry a release that already broke this node
+git add server/cmd/relayium-node/
+git commit -m "feat(node): roll back locally when a new version never heartbeats
 
-After a self-rescue rollback the next tick would be handed the same bad version
-again, looping install -> crash -> roll back forever. Record failures per
-version in the state dir and refuse to reinstall them; matching is whole-line
-so v0.9.0 failing doesn't block v0.9.01."
+Central-driven rollback has a blind spot: a node that won't start never
+receives the rollback order, because it never asks. So the updater closes the
+loop locally — restart, wait for one heartbeat newer than the restart, and
+restore the previous binary if none arrives. Comparing against the restart
+moment matters: a heartbeat left by the old version must not read as success.
+
+Record each failed version so the next tick can't hand back the same bad
+release, which would loop install -> crash -> roll back forever."
 ```
 
 ---
