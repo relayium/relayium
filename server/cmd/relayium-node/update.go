@@ -1,11 +1,20 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
+
+	"github.com/relayium/relayium/internal/selfupdate"
 )
 
 // updateRepo is the GitHub repo node updates are pulled from. Same repo as the
@@ -43,10 +52,141 @@ func parseUpdateFlags(args []string, stderr io.Writer) (updateConfig, error) {
 	return uc, nil
 }
 
-// runUpdate is the entry point for the update subcommand. Implemented across
-// tasks 6-8; this task only wires the command up.
+// serviceCtl restarts the node service. An interface so tests don't shell out.
+type serviceCtl interface{ Restart() error }
+
+type systemctlCtl struct{ Unit string }
+
+func (s systemctlCtl) Restart() error {
+	cmd := exec.Command("systemctl", "restart", s.Unit)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("systemctl restart %s: %w (%s)", s.Unit, err, bytes.TrimSpace(out))
+	}
+	return nil
+}
+
+// waitHealthy reports whether the node produced a successful heartbeat AFTER
+// `since` within timeout. Comparing against `since` (the restart moment) is the
+// whole point: a heartbeat left behind by the previous version must never be
+// read as the new one working.
+func waitHealthy(stateDir string, since time.Time, timeout, poll time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if ts, err := lastHealthy(stateDir); err == nil && ts.After(since) {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(poll)
+	}
+}
+
+// healthWindow is how long the updater waits for the new version to prove
+// itself by completing one heartbeat.
+const healthWindow = 10 * time.Minute
+
+// nodeUnit is the systemd unit install-node.sh creates.
+const nodeUnit = "relayium-node"
+
 func runUpdate(uc updateConfig, stdout, stderr io.Writer) int {
+	return runUpdateWith(uc, systemctlCtl{Unit: nodeUnit}, healthWindow, 2*time.Second, stdout, stderr)
+}
+
+// runUpdateWith is runUpdate with its side-effecting dependencies injected so
+// the rollback path can be tested without systemd.
+func runUpdateWith(uc updateConfig, svc serviceCtl, window, poll time.Duration, stdout, stderr io.Writer) int {
+	if failedBefore(uc.StateDir, uc.TargetTag) {
+		fmt.Fprintf(stderr, "refusing to retry %s: it already failed on this node\n", uc.TargetTag)
+		return 1
+	}
+	if err := backupBinary(uc.BinPath); err != nil {
+		fmt.Fprintf(stderr, "backup failed, not touching the binary: %v\n", err)
+		return 1
+	}
+
+	from, to, changed, err := selfupdate.Update(context.Background(), selfupdate.Options{
+		Repo:           uc.Repo,
+		CurrentVersion: version,
+		GOOS:           runtime.GOOS,
+		GOARCH:         runtime.GOARCH,
+		TargetPath:     uc.BinPath,
+		TargetTag:      uc.TargetTag,
+		AllowDowngrade: uc.AllowDowngrade,
+	}, stdout)
+	if err != nil {
+		// Verification or download failed — the live binary was never touched.
+		fmt.Fprintf(stderr, "update to %s failed, binary untouched: %v\n", uc.TargetTag, err)
+		return 1
+	}
+	if !changed {
+		fmt.Fprintf(stdout, "already on %s, nothing to do\n", to)
+		return 0
+	}
+
+	restartedAt := time.Now()
+	if err := svc.Restart(); err != nil {
+		fmt.Fprintf(stderr, "restart failed: %v — rolling back\n", err)
+		rollback(uc, svc, stderr)
+		return 1
+	}
+
+	if !waitHealthy(uc.StateDir, restartedAt, window, poll) {
+		fmt.Fprintf(stderr, "%s did not heartbeat within %s — rolling back to %s\n", to, window, from)
+		rollback(uc, svc, stderr)
+		recordFailed(uc.StateDir, uc.TargetTag, stderr)
+		return 1
+	}
+
+	fmt.Fprintf(stdout, "updated %s -> %s and confirmed healthy\n", from, to)
+	os.Remove(backupPath(uc.BinPath))
 	return 0
+}
+
+// rollback restores the previous binary and restarts. Best-effort and loud:
+// if this fails the node is down and needs a human.
+func rollback(uc updateConfig, svc serviceCtl, stderr io.Writer) {
+	if err := restoreBinary(uc.BinPath); err != nil {
+		fmt.Fprintf(stderr, "CRITICAL: rollback failed, node is likely down: %v\n", err)
+		return
+	}
+	if err := svc.Restart(); err != nil {
+		fmt.Fprintf(stderr, "CRITICAL: restart after rollback failed: %v\n", err)
+	}
+}
+
+// failedVersionsFile lists releases that already broke this node. Without it a
+// node that rolls back would be told to install the same bad version on the
+// next tick, forever.
+const failedVersionsFile = "failed-versions"
+
+func recordFailed(stateDir, tag string, w io.Writer) {
+	p := filepath.Join(stateDir, failedVersionsFile)
+	f, err := os.OpenFile(p, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		fmt.Fprintf(w, "could not record failed version %s: %v\n", tag, err)
+		return
+	}
+	defer f.Close()
+	if _, err := fmt.Fprintln(f, tag); err != nil {
+		fmt.Fprintf(w, "could not record failed version %s: %v\n", tag, err)
+	}
+}
+
+// failedBefore reports whether tag already failed on this node. Matching is
+// whole-line so v0.9.0 failing never blocks v0.9.01.
+func failedBefore(stateDir, tag string) bool {
+	b, err := os.ReadFile(filepath.Join(stateDir, failedVersionsFile))
+	if err != nil {
+		return false // no record (or unreadable) means nothing is known to have failed
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if strings.TrimSpace(line) == tag {
+			return true
+		}
+	}
+	return false
 }
 
 // backupPath is where the pre-update binary is kept so a broken new version can
