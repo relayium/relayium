@@ -1,5 +1,18 @@
 import type { Envelope, Peer } from "./protocol";
 
+/** Parse an inbound frame defensively: a malformed or non-object payload (or
+ *  non-JSON entirely) yields null rather than throwing out of onmessage or
+ *  letting `e.type` blow up on `null`. The server is trusted for rendezvous, but
+ *  a hostile/buggy frame must not crash the client's message loop. */
+function safeParseEnvelope(data: string): Envelope | null {
+  try {
+    const v = JSON.parse(data);
+    return v && typeof v === "object" ? (v as Envelope) : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface WebSocketLike {
   send(d: string): void;
   close(): void;
@@ -28,7 +41,7 @@ export class SignalingClient {
   private open(url: string): WebSocketLike {
     const sock = this.wsFactory(url);
     sock.onopen = () => this.send({ type: "join", name: this.name });
-    sock.onmessage = (ev) => this.handle(JSON.parse(ev.data) as Envelope);
+    sock.onmessage = (ev) => this.handle(safeParseEnvelope(ev.data));
     sock.onclose = () => this.closeCb?.();
     return sock;
   }
@@ -62,9 +75,15 @@ export class SignalingClient {
 
   private send(e: Envelope) { this.sock.send(JSON.stringify(e)); }
 
-  private handle(e: Envelope) {
-    if (e.type === "welcome" && e.name) this.selfCb?.(e.name, e.ip ?? "");
-    else if (e.type === "peers" && e.peers) this.peersCb?.(e.peers);
-    else if (e.type === "signal" && e.from) { const from = e.from; this.signalCbs.forEach((cb) => cb(from, e.data)); }
+  private handle(e: Envelope | null) {
+    // Validate the envelope shape at runtime before dispatch: an inbound frame
+    // is untrusted input, so each branch requires its type discriminant plus a
+    // correctly-typed payload field. `data` on a signal stays opaque here — it's
+    // validated downstream by the browser's SDP/ICE APIs and the commit-reveal
+    // SAS crypto, the authoritative checks for peer-authored content.
+    if (!e || typeof e.type !== "string") return;
+    if (e.type === "welcome" && typeof e.name === "string") this.selfCb?.(e.name, typeof e.ip === "string" ? e.ip : "");
+    else if (e.type === "peers" && Array.isArray(e.peers)) this.peersCb?.(e.peers);
+    else if (e.type === "signal" && typeof e.from === "string") { const from = e.from; this.signalCbs.forEach((cb) => cb(from, e.data)); }
   }
 }

@@ -11,6 +11,7 @@ class FakeSocket implements WebSocketLike {
   send(d: string) { this.sent.push(d); }
   close() { this.closed = true; }
   emit(obj: unknown) { this.onmessage?.({ data: JSON.stringify(obj) }); }
+  raw(data: string) { this.onmessage?.({ data }); }
 }
 
 describe("SignalingClient", () => {
@@ -34,6 +35,36 @@ describe("SignalingClient", () => {
     expect(selfId).toBe("abc123");
     expect(peers).toBe(2);
     expect(signalFrom).toBe("def");
+  });
+
+  it("ignores malformed frames without throwing or firing callbacks", () => {
+    const sock = new FakeSocket();
+    const c = new SignalingClient("ws://x", "Alice", () => sock);
+    let selfId = "", peers = -1, signalFrom = "";
+    c.onSelfId((id) => (selfId = id));
+    c.onPeers((p) => (peers = p.length));
+    c.onSignal((from) => (signalFrom = from));
+    sock.onopen?.();
+
+    // Non-JSON, JSON null, non-object, missing/typeless discriminant, and
+    // wrong-typed payload fields must all be dropped silently.
+    expect(() => {
+      sock.raw("}{ not json");
+      sock.raw("null");
+      sock.raw("42");
+      sock.emit({ no: "type" });
+      sock.emit({ type: 123 });
+      sock.emit({ type: "welcome" }); // name missing
+      sock.emit({ type: "peers", peers: "not-an-array" });
+      sock.emit({ type: "signal" }); // from missing
+    }).not.toThrow();
+    expect(selfId).toBe("");
+    expect(peers).toBe(-1);
+    expect(signalFrom).toBe("");
+
+    // A well-formed frame after the bad ones still routes.
+    sock.emit({ type: "welcome", name: "ok1" });
+    expect(selfId).toBe("ok1");
   });
 
   it("surfaces the server-observed public IP from the welcome", () => {
