@@ -60,6 +60,47 @@ const en = {
       ],
     },
     {
+      heading: "Is it safe to run this installer as root?",
+      body: [
+        "Before anything else: BYO nodes run the same code and the same hardening as our own fleet nodes — the same binary from the same signed release, installed by the same script, under the same systemd unit. The only difference is whose machine it is. Everything below describes both.",
+        "It is a fair question about a command that pipes a script off the internet into a root shell, and it deserves a specific answer rather than a reassurance. Root is used for the install and for nothing the node does afterwards. The installer creates a system account called relayium-node with no login shell and no home directory, writes the systemd units, starts the service, and exits. The node itself never runs as root: its unit sets User=relayium-node, so from the moment it comes online it is an unprivileged account that owns nothing else on your machine. (Auto-update, which is on by default, does add a second unit that runs as root — the next section is entirely about what that one can and cannot do.)",
+        "Around that account the unit puts a systemd sandbox. Every line is aimed at something an attacker would reach for if they ever took over the node process. Nothing here is hidden from you: after installing, read the whole unit with `cat /etc/systemd/system/relayium-node.service`.",
+      ],
+      table: {
+        head: ["In the unit", "What it blocks if the node is ever compromised"],
+        firstColCode: true,
+        rows: [
+          ["User=relayium-node", "The attacker is a user who owns nothing, not root."],
+          ["ProtectHome=yes", "/home and /root are invisible — no SSH private keys, no other projects' data."],
+          ["ProtectSystem=strict", "The whole filesystem is read-only; no system file can be modified."],
+          ["ReadWritePaths=", "The only writable places are the node's own state directory and, if you configured one, the storage directory. Writes anywhere else fail."],
+          ["NoExecPaths=", "Nothing in the storage directory can be executed — an uploaded file cannot be run."],
+          ["NoNewPrivileges=yes", "No route back up to root; the usual escalation tricks are closed off."],
+          ["CapabilityBoundingSet=", "Empty — no Linux capabilities at all."],
+          ["ProtectKernelTunables=yes, ProtectKernelModules=yes", "The kernel is out of reach: no sysctl changes, no module loading, no rootkit."],
+        ],
+      },
+      bullets: [
+        "ReadWritePaths and NoExecPaths name the storage directory only on a node that actually stores. A relay-only node gets neither line and can write nowhere but its own state directory.",
+        "The capability set is empty in the normal case. The single exception is a direct-download listener on a port below 1024, which needs CAP_NET_BIND_SERVICE to bind at all; the default download port is 2053, above 1024, so nothing is granted.",
+        "The node holds no keys. Files are encrypted by the sender before they are uploaded, so what lands on a storage node is ciphertext it cannot read — that includes your own node, and it includes you.",
+      ],
+    },
+    {
+      heading: "What the auto-updater can and cannot do",
+      body: [
+        "The installer also sets up a self-update timer, on by default: relayium-node-update.timer asks relayium.com roughly every ten minutes what version this node should be running. That is a second unit, and it runs as root, so it owes you its own account of itself.",
+        "Central never sends a binary. Its entire answer is a version number, two flags (may this node move now, and is this a deliberate downgrade) and a short reason string — no bytes, no URL, no command. The node then fetches that release itself, checks the archive's SHA-256 against the release's checksums.txt, and verifies an ECDSA P-256 signature over checksums.txt using a public key compiled into the very binary doing the checking. The private half of that key is not on the server answering those polls. So a compromised central could name a version; it could not mint a binary that passes.",
+        "The updater and the node are two separate processes with opposite powers. relayium-node.service is the sandbox above — under ProtectSystem=strict it cannot write to /usr/local/bin at all, so the node can never modify a binary, its own included. relayium-node-update.service is a small oneshot unit that runs as root and deliberately carries no sandbox, because replacing a file in /usr/local/bin needs exactly the privilege the node's sandbox exists to deny it. Keeping that power in one single-purpose unit, instead of loosening the node's own hardening, is the whole point of the split: the process with root only ever swaps binaries, and the process in the cage can never touch one.",
+        "An update that goes wrong undoes itself. The updater keeps the previous binary beside the new one, restarts the service, then watches for a heartbeat for up to ten minutes; if the new version does not report healthy in that window it puts the old binary back, restarts again, and records the bad version so it is not retried. Stored files are never read, moved or deleted by any of this.",
+      ],
+      bullets: [
+        "Don't want it: re-run the installer with RELAYIUM_NODE_AUTO_UPDATE=off. The timer and its service are disabled and deleted; the node keeps running and you update it when you choose.",
+        "Done with it entirely: `curl -fsSL https://relayium.com/uninstall-node.sh | sudo sh` removes the units, the binary, the config and the service account, and tells relayium.com the node is gone.",
+        "On a node that stores, that uninstall refuses while live files are still on it rather than stranding them — every stored file lives on exactly one node and there are no replicas. Let them expire (at most 14 days) and run it again, or pass RELAYIUM_NODE_FORCE=1 to accept that they become unreachable. The storage directory itself is never deleted unless you also pass RELAYIUM_NODE_PURGE_STORAGE=1.",
+      ],
+    },
+    {
       heading: "Step 3 — open the inbound ports",
       body: [
         "Being online (a heartbeat to relayium.com) only needs outbound access, which you already have. But for peers to actually relay through and store on your node, its inbound ports must be reachable. If the host runs a firewall, open them — with ufw that's:",
@@ -151,6 +192,47 @@ const zh = {
         "确认已启动：`systemctl status relayium-node`（应为 active/running）。",
         "确认开机自启：`systemctl is-enabled relayium-node`（应为 enabled）。",
         "实时看日志：`journalctl -u relayium-node -f`。",
+      ],
+    },
+    {
+      heading: "用 root 跑这个安装脚本安全吗？",
+      body: [
+        "先把最重要的一句说在前面：自建节点和我们自己机队的节点跑的是同一套代码、同一套加固——同一个签名发布里的同一个二进制、同一个安装脚本、同一份 systemd unit。唯一的差别是这台机器归谁。下面讲的东西对两者都成立。",
+        "把一个从网上拉下来的脚本管道给 root shell，值得警惕，也值得一个具体的回答，而不是一句「放心」。root 只用在安装这一步，节点后续运行完全用不到它。安装脚本会建一个叫 relayium-node 的系统账户（没有登录 shell、没有家目录），写好 systemd unit，启动服务，然后退出。节点本身从不以 root 运行：unit 里写死了 User=relayium-node，所以它一上线就是一个在你机器上什么都不拥有的低权限账户。（默认开启的自动更新确实会多装一个以 root 运行的 unit——下一节整节都在讲它能做什么、不能做什么。）",
+        "在这个账户外面，unit 还套了一层 systemd 沙箱。每一行都对着「节点进程万一被攻破，攻击者接下来会伸手去够什么」。这里没有任何东西对你隐藏：装完之后 `cat /etc/systemd/system/relayium-node.service` 就能看到完整的 unit。",
+      ],
+      table: {
+        head: ["unit 里的配置", "万一节点被攻破，它挡住了什么"],
+        firstColCode: true,
+        rows: [
+          ["User=relayium-node", "攻击者只是一个什么都没有的用户，不是 root。"],
+          ["ProtectHome=yes", "/home、/root 完全隐身——偷不到 SSH 私钥，也拿不到别的项目的数据。"],
+          ["ProtectSystem=strict", "整个文件系统只读，改不了任何系统文件。"],
+          ["ReadWritePaths=", "唯一可写的只有节点自己的状态目录，以及你配置了存储时的那个存储目录。写别处一律失败。"],
+          ["NoExecPaths=", "存储目录里的东西跑不起来——上传的文件无法被执行。"],
+          ["NoNewPrivileges=yes", "没有回到 root 的路，常见的提权套路全被堵死。"],
+          ["CapabilityBoundingSet=", "留空——不给任何 Linux capability。"],
+          ["ProtectKernelTunables=yes、ProtectKernelModules=yes", "碰不到内核：改不了 sysctl，加载不了模块，种不了 rootkit。"],
+        ],
+      },
+      bullets: [
+        "只有真正开了存储的节点，ReadWritePaths 和 NoExecPaths 才会指向存储目录。纯中继节点这两行都没有，除了自己的状态目录哪儿都写不了。",
+        "正常情况下 capability 集合是空的。唯一的例外是把直连下载监听放在 1024 以下的端口时需要 CAP_NET_BIND_SERVICE 才能绑定；默认下载端口是 2053，在 1024 以上，所以什么都不会授予。",
+        "节点手里没有密钥。文件在上传之前就已由发送方加密，落到存储节点上的只是它读不了的密文——包括你自己的节点，也包括你自己。",
+      ],
+    },
+    {
+      heading: "自动更新能做什么、不能做什么",
+      body: [
+        "安装脚本还会装一个自动更新的 timer，默认开启：relayium-node-update.timer 大约每十分钟问一次 relayium.com「这台节点该跑哪个版本」。这是第二个 unit，而且以 root 运行，所以它也该向你交代清楚自己。",
+        "中央从不下发二进制。它的全部回答就是一个版本号、两个开关（这台节点现在能不能动、这是不是一次刻意的降级）和一句简短的理由——没有字节流，没有 URL，没有命令。之后是节点自己去取那个发布版本，把压缩包的 SHA-256 与该版本的 checksums.txt 比对，再用编译进「正在做这次校验的那个二进制」里的公钥，验证 checksums.txt 上的 ECDSA P-256 签名。这把钥匙的私钥半边并不在回答这些轮询的服务器上。所以中央即使被攻破，也只能报一个版本号，变不出一个能通过验签的二进制。",
+        "更新器和节点是两个权限恰好相反的进程。relayium-node.service 就是上面那个沙箱——在 ProtectSystem=strict 之下它根本无法写 /usr/local/bin，所以节点永远改不了任何二进制，包括它自己的。relayium-node-update.service 则是一个只做一件事的 oneshot unit，以 root 运行，并且刻意不套沙箱：因为替换 /usr/local/bin 里的文件，需要的正是节点沙箱存在的意义所要拒绝的那份权限。把「能改二进制」这件事收进这一个单一用途的 unit，而不是去松动节点本体的加固，正是这个拆分的全部意义：拿着 root 的那个进程只负责换二进制，笼子里的那个永远碰不到二进制。",
+        "更新出了问题会自己撤销。更新器会把旧二进制留在新二进制旁边，重启服务，然后最多盯十分钟等心跳；如果新版本在这个窗口里没能报健康，它就把旧二进制换回去、再重启一次，并记下这个坏版本不再重试。整个过程从头到尾都不会读、移动或删除存储的文件。",
+      ],
+      bullets: [
+        "不想要它：带 RELAYIUM_NODE_AUTO_UPDATE=off 重跑一遍安装脚本。timer 和它的 service 会被停用并删除；节点照常运行，什么时候升级由你决定。",
+        "彻底不用了：`curl -fsSL https://relayium.com/uninstall-node.sh | sudo sh` 会删掉 unit、二进制、配置和那个服务账户，并告知 relayium.com 这台节点已下线。",
+        "如果这台节点存了东西，只要上面还有活着的文件，卸载脚本会拒绝执行，而不是把它们扔在那儿——每个存储的文件只存在于唯一一台节点上，没有副本。等它们自然过期（最长 14 天）再跑一次，或者加 RELAYIUM_NODE_FORCE=1 表示你接受这些文件从此不可达。存储目录本身除非你另外加上 RELAYIUM_NODE_PURGE_STORAGE=1，否则永远不会被删除。",
       ],
     },
     {
@@ -248,6 +330,47 @@ const ja = {
       ],
     },
     {
+      heading: "このインストーラーを root で実行しても安全ですか？",
+      body: [
+        "まず最初に。BYO ノードは当社自身のフリートノードとまったく同じコード、まったく同じ堅牢化で動きます — 同じ署名済みリリースの同じバイナリを、同じスクリプトで、同じ systemd ユニットの下にインストールします。違いは「そのマシンが誰のものか」だけです。以下の説明は両方に当てはまります。",
+        "インターネットから取ってきたスクリプトを root シェルにパイプするコマンドについて当然の疑問であり、「大丈夫です」ではなく具体的な答えに値します。root はインストールのためだけに使われ、その後のノードの動作には一切使われません。インストーラーは、ログインシェルもホームディレクトリも持たない relayium-node というシステムアカウントを作成し、systemd ユニットを書き、サービスを起動して終了します。ノード自体が root で動くことはありません。ユニットに User=relayium-node が書かれているため、オンラインになった瞬間から、マシン上で何も所有しない非特権アカウントです。（既定で有効な自動更新は、root で動くもう1つのユニットを追加します — 次の節はまるごと、そのユニットに何ができて何ができないかの話です。）",
+        "そのアカウントの周囲に、ユニットは systemd サンドボックスを張ります。どの行も「ノードプロセスが乗っ取られたとき、攻撃者が次に手を伸ばすもの」を狙って書かれています。隠しているものは何もありません。インストール後に `cat /etc/systemd/system/relayium-node.service` でユニット全体を読めます。",
+      ],
+      table: {
+        head: ["ユニット内の設定", "ノードが侵害された場合に何を防ぐか"],
+        firstColCode: true,
+        rows: [
+          ["User=relayium-node", "攻撃者は何も所有しない一般ユーザーであり、root ではありません。"],
+          ["ProtectHome=yes", "/home と /root が見えない — SSH 秘密鍵も、他のプロジェクトのデータも盗めません。"],
+          ["ProtectSystem=strict", "ファイルシステム全体が読み取り専用。システムファイルは一切変更できません。"],
+          ["ReadWritePaths=", "書き込めるのはノード自身の状態ディレクトリと、ストレージを設定した場合のそのディレクトリだけ。他の場所への書き込みはすべて失敗します。"],
+          ["NoExecPaths=", "ストレージディレクトリ内のものは実行できません — アップロードされたファイルは走りません。"],
+          ["NoNewPrivileges=yes", "root へ戻る道がなく、よくある権限昇格の手口が塞がれます。"],
+          ["CapabilityBoundingSet=", "空 — Linux ケーパビリティを一切与えません。"],
+          ["ProtectKernelTunables=yes、ProtectKernelModules=yes", "カーネルに手が届きません。sysctl の変更もモジュールの読み込みもできず、rootkit を仕込めません。"],
+        ],
+      },
+      bullets: [
+        "ReadWritePaths と NoExecPaths がストレージディレクトリを指すのは、実際に保存を行うノードだけです。リレー専用のノードにはどちらの行も付かず、自分の状態ディレクトリ以外どこにも書けません。",
+        "通常の構成ではケーパビリティ集合は空です。唯一の例外は、直接ダウンロードのリスナーを 1024 未満のポートに置く場合で、バインドに CAP_NET_BIND_SERVICE が必要になります。既定のダウンロードポートは 1024 より上の 2053 なので、何も付与されません。",
+        "ノードは鍵を持ちません。ファイルはアップロード前に送信側で暗号化されるため、ストレージノードに届くのはそれ自身が読めない暗号文です — あなた自身のノードでも、あなた自身でも読めません。",
+      ],
+    },
+    {
+      heading: "自動更新にできること、できないこと",
+      body: [
+        "インストーラーは自己更新タイマーも設定します（既定で有効）。relayium-node-update.timer が、およそ10分ごとに relayium.com へ「このノードはどのバージョンを動かすべきか」を尋ねます。これは2つ目のユニットであり、root で動きます。ですからこれ自身についても説明する義務があります。",
+        "中央がバイナリを送ることは決してありません。返ってくるのはバージョン番号と2つのフラグ（このノードは今動いてよいか、これは意図的なダウングレードか）、そして短い理由の文字列だけです — バイト列もURLもコマンドもありません。そのうえでノードが自分でそのリリースを取得し、アーカイブの SHA-256 をリリースの checksums.txt と照合し、さらに checksums.txt に対する ECDSA P-256 署名を、まさにその検証を行っているバイナリ自身に埋め込まれた公開鍵で検証します。その鍵の秘密鍵側は、これらのポーリングに答えるサーバー上にはありません。したがって中央が侵害されても、名乗れるのはバージョン番号までで、検証を通るバイナリを作り出すことはできません。",
+        "更新器とノードは、権限が正反対の2つの別プロセスです。relayium-node.service は上記のサンドボックスそのもので、ProtectSystem=strict の下では /usr/local/bin に書き込むことすらできません。つまりノードは自分のものを含め、いかなるバイナリも変更できません。relayium-node-update.service は root で動く小さな oneshot ユニットで、意図的にサンドボックスを付けていません。/usr/local/bin のファイルを置き換えるには、まさにノードのサンドボックスが与えまいとしているその権限が必要だからです。その力を、ノード本体の堅牢化を緩めるのではなく、単一目的のユニット1つに閉じ込めること — それがこの分割の要点です。root を持つプロセスはバイナリを差し替えるだけ、檻の中のプロセスはバイナリに触れられません。",
+        "更新に失敗すれば自分で元に戻します。更新器は旧バイナリを新バイナリの隣に残し、サービスを再起動し、最大10分間ハートビートを待ちます。その間に新バージョンが健全と報告しなければ、旧バイナリを戻して再起動し、その不良バージョンを記録して再試行しません。この一連の処理で保存済みファイルが読まれたり、移動されたり、削除されたりすることは一度もありません。",
+      ],
+      bullets: [
+        "不要な場合: RELAYIUM_NODE_AUTO_UPDATE=off を付けてインストーラーを再実行します。タイマーとそのサービスは無効化され削除されます。ノードはそのまま動き続け、更新の時期はあなたが決めます。",
+        "完全にやめる場合: `curl -fsSL https://relayium.com/uninstall-node.sh | sudo sh` が、ユニット、バイナリ、設定、サービスアカウントを削除し、relayium.com にこのノードの離脱を伝えます。",
+        "保存を行うノードでは、生きているファイルがまだ残っている間、アンインストーラーはそれらを置き去りにせず実行を拒否します — 保存された各ファイルはただ1つのノード上にのみ存在し、複製はありません。期限切れ（最長14日）を待って再実行するか、それらが到達不能になることを受け入れて RELAYIUM_NODE_FORCE=1 を渡してください。ストレージディレクトリ自体は、別途 RELAYIUM_NODE_PURGE_STORAGE=1 を渡さない限り削除されません。",
+      ],
+    },
+    {
       heading: "ステップ3 — 受信ポートを開く",
       body: [
         "オンライン状態（relayium.com へのハートビート）には送信アクセスだけが必要で、これはすでに備わっています。しかしピアが実際にあなたのノードを経由してリレーし、保存するには、その受信ポートが到達可能でなければなりません。ホストでファイアウォールが動いている場合は開放してください。ufw では次のようにします。",
@@ -339,6 +462,47 @@ const ko = {
         "시작되었는지 확인: `systemctl status relayium-node`(active/running으로 표시되어야 함).",
         "부팅 지속성 확인: `systemctl is-enabled relayium-node`(enabled로 표시되어야 함).",
         "로그 실시간 확인: `journalctl -u relayium-node -f`.",
+      ],
+    },
+    {
+      heading: "이 설치 프로그램을 root로 실행해도 안전한가요?",
+      body: [
+        "무엇보다 먼저: BYO 노드는 당사 자체 플릿 노드와 완전히 같은 코드, 완전히 같은 강화 설정으로 동작합니다 — 같은 서명된 릴리스의 같은 바이너리를, 같은 스크립트로, 같은 systemd 유닛 아래에 설치합니다. 유일한 차이는 그 머신이 누구의 것이냐뿐입니다. 아래 설명은 양쪽 모두에 해당합니다.",
+        "인터넷에서 받아온 스크립트를 root 셸로 파이프하는 명령에 대해 나올 만한 질문이며, \"괜찮습니다\"라는 안심 대신 구체적인 답을 받을 자격이 있습니다. root는 설치에만 쓰이고, 그 이후 노드가 하는 일에는 전혀 쓰이지 않습니다. 설치 프로그램은 로그인 셸도 홈 디렉터리도 없는 relayium-node 시스템 계정을 만들고, systemd 유닛을 작성하고, 서비스를 시작한 뒤 종료합니다. 노드 자체는 결코 root로 실행되지 않습니다. 유닛에 User=relayium-node가 지정되어 있어, 온라인이 되는 순간부터 여러분의 머신에서 아무것도 소유하지 않은 비특권 계정입니다. (기본으로 켜져 있는 자동 업데이트는 root로 실행되는 두 번째 유닛을 추가합니다 — 다음 절 전체가 그 유닛이 무엇을 할 수 있고 무엇을 할 수 없는지에 대한 이야기입니다.)",
+        "그 계정 주위로 유닛은 systemd 샌드박스를 두릅니다. 모든 줄이 \"노드 프로세스가 장악당했을 때 공격자가 다음으로 손을 뻗을 대상\"을 겨냥합니다. 감춰 둔 것은 없습니다. 설치 후 `cat /etc/systemd/system/relayium-node.service`로 유닛 전체를 읽어 보세요.",
+      ],
+      table: {
+        head: ["유닛의 설정", "노드가 침해되었을 때 무엇을 막는가"],
+        firstColCode: true,
+        rows: [
+          ["User=relayium-node", "공격자는 아무것도 가지지 않은 사용자일 뿐이며 root가 아닙니다."],
+          ["ProtectHome=yes", "/home과 /root가 보이지 않습니다 — SSH 개인키도, 다른 프로젝트의 데이터도 훔칠 수 없습니다."],
+          ["ProtectSystem=strict", "파일 시스템 전체가 읽기 전용이라 어떤 시스템 파일도 수정할 수 없습니다."],
+          ["ReadWritePaths=", "쓸 수 있는 곳은 노드 자신의 상태 디렉터리와, 스토리지를 설정한 경우 그 디렉터리뿐입니다. 다른 곳에 대한 쓰기는 모두 실패합니다."],
+          ["NoExecPaths=", "스토리지 디렉터리 안의 것은 실행할 수 없습니다 — 업로드된 파일이 실행될 수 없습니다."],
+          ["NoNewPrivileges=yes", "root로 돌아갈 경로가 없어 흔한 권한 상승 수법이 막힙니다."],
+          ["CapabilityBoundingSet=", "비어 있음 — Linux 케이퍼빌리티를 전혀 부여하지 않습니다."],
+          ["ProtectKernelTunables=yes, ProtectKernelModules=yes", "커널에 손이 닿지 않습니다: sysctl 변경도, 모듈 로드도 불가능하고 루트킷을 심을 수 없습니다."],
+        ],
+      },
+      bullets: [
+        "ReadWritePaths와 NoExecPaths가 스토리지 디렉터리를 가리키는 것은 실제로 저장을 하는 노드뿐입니다. 릴레이 전용 노드에는 두 줄 모두 없으며, 자신의 상태 디렉터리 외에는 어디에도 쓸 수 없습니다.",
+        "일반적인 구성에서 케이퍼빌리티 집합은 비어 있습니다. 유일한 예외는 직접 다운로드 리스너를 1024 미만 포트에 두는 경우로, 바인딩에 CAP_NET_BIND_SERVICE가 필요합니다. 기본 다운로드 포트는 1024보다 큰 2053이므로 아무것도 부여되지 않습니다.",
+        "노드는 키를 갖고 있지 않습니다. 파일은 업로드되기 전에 보내는 쪽에서 암호화되므로, 스토리지 노드에 도달하는 것은 그 노드가 읽을 수 없는 암호문입니다 — 여러분 자신의 노드도, 여러분 자신도 읽을 수 없습니다.",
+      ],
+    },
+    {
+      heading: "자동 업데이터가 할 수 있는 일과 할 수 없는 일",
+      body: [
+        "설치 프로그램은 자동 업데이트 타이머도 설정하며, 기본값은 켜짐입니다. relayium-node-update.timer가 약 10분마다 relayium.com에 \"이 노드는 어떤 버전을 실행해야 하는지\"를 묻습니다. 이것은 두 번째 유닛이고 root로 실행되므로, 그 자신에 대한 설명도 마땅히 필요합니다.",
+        "중앙은 결코 바이너리를 보내지 않습니다. 응답의 전부는 버전 번호, 두 개의 플래그(이 노드가 지금 움직여도 되는지, 이것이 의도적인 다운그레이드인지), 그리고 짧은 사유 문자열입니다 — 바이트도, URL도, 명령도 없습니다. 그다음 노드가 스스로 그 릴리스를 받아 아카이브의 SHA-256을 릴리스의 checksums.txt와 대조하고, checksums.txt에 대한 ECDSA P-256 서명을 바로 그 검증을 수행하는 바이너리 자체에 컴파일되어 들어 있는 공개키로 검증합니다. 그 키의 개인키 쪽은 이 폴링에 답하는 서버에 있지 않습니다. 따라서 중앙이 침해되더라도 버전을 지목할 수는 있어도, 검증을 통과하는 바이너리를 만들어 낼 수는 없습니다.",
+        "업데이터와 노드는 권한이 정반대인 두 개의 별도 프로세스입니다. relayium-node.service는 위의 샌드박스 그 자체로, ProtectSystem=strict 아래에서는 /usr/local/bin에 쓰는 것 자체가 불가능합니다. 즉 노드는 자기 것을 포함해 어떤 바이너리도 수정할 수 없습니다. relayium-node-update.service는 root로 실행되는 작은 oneshot 유닛이며 의도적으로 샌드박스를 두르지 않습니다. /usr/local/bin의 파일을 교체하려면, 바로 노드의 샌드박스가 막으려는 그 권한이 필요하기 때문입니다. 그 권한을 노드 본체의 강화를 느슨하게 푸는 대신 단일 목적 유닛 하나에 가둬 두는 것 — 그것이 이 분리의 핵심입니다. root를 가진 프로세스는 바이너리를 교체만 하고, 우리 안의 프로세스는 결코 바이너리에 손댈 수 없습니다.",
+        "업데이트가 잘못되면 스스로 되돌립니다. 업데이터는 이전 바이너리를 새 바이너리 옆에 남겨 두고 서비스를 재시작한 뒤 최대 10분간 하트비트를 지켜봅니다. 그 시간 안에 새 버전이 정상이라고 보고하지 않으면 이전 바이너리를 되돌려 놓고 다시 재시작하며, 그 불량 버전을 기록해 다시 시도하지 않습니다. 이 과정에서 저장된 파일이 읽히거나 옮겨지거나 삭제되는 일은 전혀 없습니다.",
+      ],
+      bullets: [
+        "원하지 않는다면: RELAYIUM_NODE_AUTO_UPDATE=off를 주고 설치 프로그램을 다시 실행하세요. 타이머와 그 서비스는 비활성화되고 삭제됩니다. 노드는 계속 동작하며, 업데이트 시점은 여러분이 정합니다.",
+        "완전히 그만두려면: `curl -fsSL https://relayium.com/uninstall-node.sh | sudo sh`가 유닛, 바이너리, 설정, 서비스 계정을 제거하고 relayium.com에 이 노드가 사라졌음을 알립니다.",
+        "저장을 하는 노드에서는, 살아 있는 파일이 아직 남아 있는 동안 제거 스크립트가 그것들을 방치하는 대신 실행을 거부합니다 — 저장된 각 파일은 오직 한 노드에만 존재하며 복제본이 없습니다. 만료될 때까지(최대 14일) 기다렸다가 다시 실행하거나, 그 파일들이 도달 불가능해지는 것을 감수하고 RELAYIUM_NODE_FORCE=1을 넘기세요. 스토리지 디렉터리 자체는 RELAYIUM_NODE_PURGE_STORAGE=1을 따로 넘기지 않는 한 삭제되지 않습니다.",
       ],
     },
     {
@@ -436,6 +600,47 @@ const de = {
       ],
     },
     {
+      heading: "Ist es sicher, diesen Installer als root auszuführen?",
+      body: [
+        "Zuerst das Wichtigste: BYO-Nodes laufen mit demselben Code und derselben Härtung wie unsere eigenen Flotten-Nodes — dieselbe Binärdatei aus demselben signierten Release, installiert vom selben Skript, unter derselben systemd-Unit. Der einzige Unterschied ist, wem die Maschine gehört. Alles Folgende beschreibt beide.",
+        "Das ist eine berechtigte Frage zu einem Befehl, der ein Skript aus dem Internet in eine root-Shell leitet, und sie verdient eine konkrete Antwort statt einer Beruhigung. root wird für die Installation gebraucht und für nichts, was der Node danach tut. Der Installer legt ein Systemkonto namens relayium-node ohne Login-Shell und ohne Home-Verzeichnis an, schreibt die systemd-Units, startet den Dienst und beendet sich. Der Node selbst läuft nie als root: Seine Unit setzt User=relayium-node, er ist also ab der Sekunde, in der er online geht, ein unprivilegiertes Konto, dem auf Ihrer Maschine nichts gehört. (Die standardmäßig aktive Auto-Aktualisierung fügt allerdings eine zweite Unit hinzu, die als root läuft — der nächste Abschnitt handelt ausschließlich davon, was diese kann und was nicht.)",
+        "Um dieses Konto legt die Unit eine systemd-Sandbox. Jede Zeile zielt auf etwas, wonach ein Angreifer greifen würde, der den Node-Prozess je übernimmt. Nichts davon ist vor Ihnen verborgen: Lesen Sie nach der Installation die ganze Unit mit `cat /etc/systemd/system/relayium-node.service`.",
+      ],
+      table: {
+        head: ["In der Unit", "Was es verhindert, falls der Node je kompromittiert wird"],
+        firstColCode: true,
+        rows: [
+          ["User=relayium-node", "Der Angreifer ist ein Benutzer, dem nichts gehört — nicht root."],
+          ["ProtectHome=yes", "/home und /root sind unsichtbar — keine privaten SSH-Schlüssel, keine Daten anderer Projekte."],
+          ["ProtectSystem=strict", "Das gesamte Dateisystem ist schreibgeschützt; keine Systemdatei lässt sich ändern."],
+          ["ReadWritePaths=", "Beschreibbar sind nur das eigene Statusverzeichnis des Nodes und, falls konfiguriert, das Speicherverzeichnis. Schreibzugriffe woanders schlagen fehl."],
+          ["NoExecPaths=", "Nichts im Speicherverzeichnis ist ausführbar — eine hochgeladene Datei kann nicht gestartet werden."],
+          ["NoNewPrivileges=yes", "Kein Weg zurück zu root; die üblichen Eskalationstricks sind versperrt."],
+          ["CapabilityBoundingSet=", "Leer — überhaupt keine Linux-Capabilities."],
+          ["ProtectKernelTunables=yes, ProtectKernelModules=yes", "Der Kernel ist außer Reichweite: keine sysctl-Änderungen, kein Laden von Modulen, kein Rootkit."],
+        ],
+      },
+      bullets: [
+        "ReadWritePaths und NoExecPaths nennen das Speicherverzeichnis nur auf einem Node, der tatsächlich speichert. Ein reiner Relais-Node bekommt keine der beiden Zeilen und kann nirgends außer in sein eigenes Statusverzeichnis schreiben.",
+        "Im Normalfall ist die Capability-Menge leer. Die einzige Ausnahme ist ein Direkt-Download-Listener auf einem Port unter 1024, der zum Binden CAP_NET_BIND_SERVICE braucht; der voreingestellte Download-Port ist 2053, also über 1024, sodass gar nichts gewährt wird.",
+        "Der Node besitzt keine Schlüssel. Dateien werden vom Absender vor dem Hochladen verschlüsselt, auf einem Speicher-Node landet also Chiffretext, den er nicht lesen kann — das gilt auch für Ihren eigenen Node und auch für Sie.",
+      ],
+    },
+    {
+      heading: "Was die Auto-Aktualisierung kann und was nicht",
+      body: [
+        "Der Installer richtet außerdem einen Selbstaktualisierungs-Timer ein, standardmäßig aktiv: relayium-node-update.timer fragt relayium.com etwa alle zehn Minuten, welche Version dieser Node laufen lassen soll. Das ist eine zweite Unit, und sie läuft als root — sie schuldet Ihnen also eine eigene Erklärung.",
+        "Die Zentrale schickt nie eine Binärdatei. Ihre gesamte Antwort besteht aus einer Versionsnummer, zwei Flags (darf dieser Node jetzt wechseln, und ist das ein bewusstes Downgrade) und einer kurzen Begründung — keine Bytes, keine URL, kein Befehl. Der Node holt sich dieses Release anschließend selbst, prüft den SHA-256 des Archivs gegen die checksums.txt des Releases und verifiziert eine ECDSA-P-256-Signatur über die checksums.txt mit einem öffentlichen Schlüssel, der in genau die Binärdatei einkompiliert ist, die diese Prüfung durchführt. Die private Hälfte dieses Schlüssels liegt nicht auf dem Server, der diese Abfragen beantwortet. Eine kompromittierte Zentrale könnte also eine Version benennen; eine Binärdatei, die die Prüfung besteht, könnte sie nicht herstellen.",
+        "Aktualisierer und Node sind zwei getrennte Prozesse mit entgegengesetzten Rechten. relayium-node.service ist die obige Sandbox — unter ProtectSystem=strict kann er überhaupt nicht nach /usr/local/bin schreiben, der Node kann also nie eine Binärdatei verändern, auch nicht seine eigene. relayium-node-update.service ist eine kleine oneshot-Unit, die als root läuft und bewusst keine Sandbox trägt, denn eine Datei in /usr/local/bin zu ersetzen erfordert genau das Privileg, das die Sandbox des Nodes ihm verwehren soll. Diese Macht in einer einzigen Unit mit einem einzigen Zweck zu bündeln, statt die Härtung des Nodes aufzuweichen, ist der ganze Sinn der Trennung: Der Prozess mit root tauscht nur Binärdateien aus, und der Prozess im Käfig kommt an keine heran.",
+        "Eine misslungene Aktualisierung macht sich selbst rückgängig. Der Aktualisierer legt die alte Binärdatei neben die neue, startet den Dienst neu und wartet bis zu zehn Minuten auf einen Heartbeat; meldet sich die neue Version in diesem Fenster nicht gesund, stellt er die alte Binärdatei zurück, startet erneut neu und vermerkt die fehlerhafte Version, damit sie nicht wieder versucht wird. Gespeicherte Dateien werden dabei nie gelesen, verschoben oder gelöscht.",
+      ],
+      bullets: [
+        "Nicht erwünscht: Führen Sie den Installer erneut mit RELAYIUM_NODE_AUTO_UPDATE=off aus. Der Timer und sein Dienst werden deaktiviert und gelöscht; der Node läuft weiter, und Sie aktualisieren ihn, wann Sie wollen.",
+        "Ganz Schluss damit: `curl -fsSL https://relayium.com/uninstall-node.sh | sudo sh` entfernt die Units, die Binärdatei, die Konfiguration und das Dienstkonto und meldet relayium.com, dass der Node weg ist.",
+        "Auf einem speichernden Node verweigert diese Deinstallation den Dienst, solange noch lebende Dateien darauf liegen, statt sie stranden zu lassen — jede gespeicherte Datei liegt auf genau einem Node, Replikate gibt es nicht. Lassen Sie sie ablaufen (höchstens 14 Tage) und führen Sie das Kommando erneut aus, oder übergeben Sie RELAYIUM_NODE_FORCE=1 und nehmen Sie in Kauf, dass sie unerreichbar werden. Das Speicherverzeichnis selbst wird nur gelöscht, wenn Sie zusätzlich RELAYIUM_NODE_PURGE_STORAGE=1 übergeben.",
+      ],
+    },
+    {
       heading: "Schritt 3 — die eingehenden Ports öffnen",
       body: [
         "Online zu sein (ein Heartbeat an relayium.com) erfordert nur ausgehenden Zugriff, den Sie bereits haben. Damit Peers aber tatsächlich über Ihren Node weiterleiten und darauf speichern können, müssen dessen eingehende Ports erreichbar sein. Wenn auf dem Host eine Firewall läuft, öffnen Sie sie — mit ufw geht das so:",
@@ -527,6 +732,47 @@ const fr = {
         "Vérifiez qu'il a démarré : `systemctl status relayium-node` (devrait indiquer active/running).",
         "Confirmez la persistance au démarrage : `systemctl is-enabled relayium-node` (devrait indiquer enabled).",
         "Suivez les journaux en direct : `journalctl -u relayium-node -f`.",
+      ],
+    },
+    {
+      heading: "Est-il prudent d'exécuter cet installateur en root ?",
+      body: [
+        "Avant tout : les nœuds que vous apportez tournent avec le même code et le même durcissement que les nœuds de notre propre flotte — le même binaire issu de la même version signée, installé par le même script, sous la même unité systemd. La seule différence est de savoir à qui appartient la machine. Tout ce qui suit décrit les deux.",
+        "La question est légitime pour une commande qui achemine un script pris sur Internet vers un shell root, et elle mérite une réponse précise plutôt qu'une formule rassurante. root sert à l'installation et à rien de ce que le nœud fait ensuite. L'installateur crée un compte système nommé relayium-node, sans shell de connexion ni répertoire personnel, écrit les unités systemd, démarre le service et se termine. Le nœud lui-même ne tourne jamais en root : son unité fixe User=relayium-node, si bien que dès la seconde où il est en ligne, c'est un compte non privilégié qui ne possède rien d'autre sur votre machine. (La mise à jour automatique, active par défaut, ajoute bien une seconde unité qui, elle, tourne en root — la section suivante lui est entièrement consacrée.)",
+        "Autour de ce compte, l'unité dresse un bac à sable systemd. Chaque ligne vise quelque chose qu'un attaquant chercherait à atteindre s'il prenait un jour le contrôle du processus du nœud. Rien ne vous est caché : après l'installation, lisez l'unité entière avec `cat /etc/systemd/system/relayium-node.service`.",
+      ],
+      table: {
+        head: ["Dans l'unité", "Ce que cela bloque si le nœud est un jour compromis"],
+        firstColCode: true,
+        rows: [
+          ["User=relayium-node", "L'attaquant n'est qu'un utilisateur qui ne possède rien, pas root."],
+          ["ProtectHome=yes", "/home et /root sont invisibles — ni clés SSH privées, ni données d'autres projets."],
+          ["ProtectSystem=strict", "Tout le système de fichiers est en lecture seule ; aucun fichier système ne peut être modifié."],
+          ["ReadWritePaths=", "Les seuls emplacements accessibles en écriture sont le répertoire d'état du nœud et, si vous en avez configuré un, le répertoire de stockage. Toute écriture ailleurs échoue."],
+          ["NoExecPaths=", "Rien dans le répertoire de stockage ne peut être exécuté — un fichier téléversé ne peut pas être lancé."],
+          ["NoNewPrivileges=yes", "Aucun chemin de retour vers root ; les astuces d'élévation habituelles sont fermées."],
+          ["CapabilityBoundingSet=", "Vide — aucune capability Linux, pas une seule."],
+          ["ProtectKernelTunables=yes, ProtectKernelModules=yes", "Le noyau est hors de portée : pas de modification de sysctl, pas de chargement de module, pas de rootkit."],
+        ],
+      },
+      bullets: [
+        "ReadWritePaths et NoExecPaths ne désignent le répertoire de stockage que sur un nœud qui stocke réellement. Un nœud purement relais n'a ni l'une ni l'autre de ces lignes et ne peut écrire nulle part sauf dans son propre répertoire d'état.",
+        "Dans le cas normal, l'ensemble des capabilities est vide. La seule exception est un écouteur de téléchargement direct sur un port inférieur à 1024, qui a besoin de CAP_NET_BIND_SERVICE pour s'y attacher ; le port de téléchargement par défaut est 2053, au-dessus de 1024, donc rien n'est accordé.",
+        "Le nœud ne détient aucune clé. Les fichiers sont chiffrés par l'expéditeur avant d'être téléversés : ce qui arrive sur un nœud de stockage est du texte chiffré qu'il ne peut pas lire — y compris sur votre propre nœud, et y compris pour vous.",
+      ],
+    },
+    {
+      heading: "Ce que la mise à jour automatique peut et ne peut pas faire",
+      body: [
+        "L'installateur met aussi en place un minuteur de mise à jour automatique, actif par défaut : relayium-node-update.timer demande à relayium.com, environ toutes les dix minutes, quelle version ce nœud devrait exécuter. C'est une seconde unité, et elle tourne en root : elle vous doit donc ses propres explications.",
+        "Le serveur central n'envoie jamais de binaire. Toute sa réponse tient en un numéro de version, deux drapeaux (ce nœud peut-il bouger maintenant, et s'agit-il d'un retour en arrière délibéré) et une brève justification — pas d'octets, pas d'URL, pas de commande. C'est ensuite le nœud qui récupère lui-même cette version, compare le SHA-256 de l'archive au checksums.txt de la version, puis vérifie une signature ECDSA P-256 sur ce checksums.txt à l'aide d'une clé publique compilée dans le binaire même qui effectue la vérification. La moitié privée de cette clé ne se trouve pas sur le serveur qui répond à ces sondages. Un serveur central compromis pourrait donc nommer une version ; il ne pourrait pas fabriquer un binaire qui passe la vérification.",
+        "Le programme de mise à jour et le nœud sont deux processus distincts aux pouvoirs opposés. relayium-node.service, c'est le bac à sable ci-dessus — sous ProtectSystem=strict, il ne peut pas écrire du tout dans /usr/local/bin, donc le nœud ne peut jamais modifier un binaire, pas même le sien. relayium-node-update.service est une petite unité oneshot qui tourne en root et ne porte délibérément aucun bac à sable, car remplacer un fichier dans /usr/local/bin exige précisément le privilège que le bac à sable du nœud existe pour lui refuser. Enfermer ce pouvoir dans une seule unité à usage unique, plutôt que d'assouplir le durcissement du nœud lui-même, est tout l'intérêt de cette séparation : le processus qui détient root ne fait que remplacer des binaires, et celui qui est en cage ne peut jamais en toucher un.",
+        "Une mise à jour qui tourne mal se défait d'elle-même. Le programme conserve l'ancien binaire à côté du nouveau, redémarre le service, puis guette un signal de présence pendant dix minutes au plus ; si la nouvelle version ne se déclare pas saine dans cette fenêtre, il remet l'ancien binaire, redémarre à nouveau et note la version fautive pour ne pas la réessayer. Les fichiers stockés ne sont jamais lus, déplacés ni supprimés par tout cela.",
+      ],
+      bullets: [
+        "Vous n'en voulez pas : relancez l'installateur avec RELAYIUM_NODE_AUTO_UPDATE=off. Le minuteur et son service sont désactivés puis supprimés ; le nœud continue de tourner et vous le mettez à jour quand vous le décidez.",
+        "Vous arrêtez tout : `curl -fsSL https://relayium.com/uninstall-node.sh | sudo sh` retire les unités, le binaire, la configuration et le compte de service, et signale à relayium.com que le nœud a disparu.",
+        "Sur un nœud qui stocke, cette désinstallation refuse de s'exécuter tant que des fichiers vivants s'y trouvent, plutôt que de les abandonner — chaque fichier stocké réside sur un seul nœud et il n'existe aucun réplica. Laissez-les expirer (14 jours au maximum) et relancez la commande, ou passez RELAYIUM_NODE_FORCE=1 en acceptant qu'ils deviennent inaccessibles. Le répertoire de stockage lui-même n'est jamais supprimé, sauf si vous passez également RELAYIUM_NODE_PURGE_STORAGE=1.",
       ],
     },
     {
@@ -624,6 +870,47 @@ const ar = {
       ],
     },
     {
+      heading: "هل تشغيل هذا المثبّت بصلاحية root آمن؟",
+      body: [
+        "قبل كل شيء: العقد التي تشغّلها بنفسك تعمل بالشيفرة ذاتها والتحصين ذاته الذي تعمل به عقد أسطولنا نحن — الثنائي نفسه من الإصدار المُوقَّع نفسه، يثبّته السكربت نفسه، تحت وحدة systemd نفسها. الفارق الوحيد هو لمن يعود الجهاز. وكل ما يلي ينطبق على الاثنين معًا.",
+        "سؤال في محله عن أمرٍ يمرّر سكربتًا من الإنترنت إلى صدفة root، وهو يستحق جوابًا محددًا لا مجرد طمأنة. صلاحية root تُستخدم للتثبيت فقط، ولا تُستخدم في أي شيء تفعله العقدة بعد ذلك. يُنشئ المثبّت حسابًا نظاميًا اسمه relayium-node بلا صدفة دخول وبلا مجلد منزل، ويكتب وحدات systemd، ويشغّل الخدمة، ثم ينتهي. أما العقدة نفسها فلا تعمل بصلاحية root أبدًا: وحدتها تضبط User=relayium-node، فمنذ اللحظة التي تتصل فيها هي حساب غير مُمتاز لا يملك شيئًا آخر على جهازك. (التحديث التلقائي، وهو مفعّل افتراضيًا، يضيف بالفعل وحدة ثانية تعمل بصلاحية root — والقسم التالي مخصص بالكامل لما تستطيع تلك الوحدة فعله وما لا تستطيعه.)",
+        "وحول هذا الحساب تضع الوحدة صندوق عزل من systemd. كل سطر فيه موجَّه إلى شيء قد يمدّ إليه مهاجمٌ يده لو استولى يومًا على عملية العقدة. ولا شيء هنا مخفيّ عنك: بعد التثبيت اقرأ الوحدة كاملة بـ `cat /etc/systemd/system/relayium-node.service`.",
+      ],
+      table: {
+        head: ["في الوحدة", "ما الذي يمنعه إن اختُرقت العقدة يومًا"],
+        firstColCode: true,
+        rows: [
+          ["User=relayium-node", "المهاجم مجرد مستخدم لا يملك شيئًا، وليس root."],
+          ["ProtectHome=yes", "‏/home و /root غير مرئيين — لا مفاتيح SSH خاصة ولا بيانات مشاريع أخرى."],
+          ["ProtectSystem=strict", "نظام الملفات كله للقراءة فقط؛ لا يمكن تعديل أي ملف نظام."],
+          ["ReadWritePaths=", "المواضع الوحيدة القابلة للكتابة هي مجلد حالة العقدة نفسها، ومجلد التخزين إن أعددت واحدًا. وأي كتابة في مكان آخر تفشل."],
+          ["NoExecPaths=", "لا شيء في مجلد التخزين قابل للتنفيذ — الملف المرفوع لا يمكن تشغيله."],
+          ["NoNewPrivileges=yes", "لا طريق للعودة إلى root؛ حيل تصعيد الصلاحيات المعتادة مغلقة."],
+          ["CapabilityBoundingSet=", "فارغة — لا قدرات Linux على الإطلاق."],
+          ["ProtectKernelTunables=yes، ProtectKernelModules=yes", "النواة بعيدة المنال: لا تغيير لـ sysctl، ولا تحميل وحدات، ولا زرع rootkit."],
+        ],
+      },
+      bullets: [
+        "لا يشير ReadWritePaths و NoExecPaths إلى مجلد التخزين إلا على عقدة تخزّن فعلًا. أما العقدة المخصصة للترحيل فقط فلا يظهر لديها أيٌّ من السطرين، ولا تستطيع الكتابة في أي مكان سوى مجلد حالتها.",
+        "مجموعة القدرات فارغة في الحالة المعتادة. والاستثناء الوحيد هو مستمع التنزيل المباشر على منفذ أقل من 1024، إذ يحتاج CAP_NET_BIND_SERVICE للارتباط به؛ ومنفذ التنزيل الافتراضي هو 2053، أي فوق 1024، فلا يُمنح شيء.",
+        "العقدة لا تحمل أي مفاتيح. تُشفَّر الملفات لدى المرسِل قبل رفعها، فما يصل إلى عقدة التخزين نصٌّ مُشفَّر لا تستطيع قراءته — بما في ذلك عقدتك أنت، وبما في ذلك أنت شخصيًا.",
+      ],
+    },
+    {
+      heading: "ما الذي يستطيع المحدِّث التلقائي فعله وما لا يستطيعه",
+      body: [
+        "يُعِدّ المثبّت أيضًا مؤقّت تحديث ذاتي، مفعّلًا افتراضيًا: يسأل relayium-node-update.timer موقع relayium.com كل عشر دقائق تقريبًا عن الإصدار الذي ينبغي أن تشغّله هذه العقدة. هذه وحدة ثانية، وهي تعمل بصلاحية root، لذا فهي مدينة لك بشرحٍ خاص بها.",
+        "المركز لا يرسل ثنائيًا أبدًا. جوابه كله رقم إصدار، وعلَمان (هل يجوز لهذه العقدة أن تنتقل الآن، وهل هذا تخفيضٌ متعمَّد للإصدار) وسطر قصير يوضّح السبب — لا بايتات ولا رابط ولا أمر. بعدها تجلب العقدة ذلك الإصدار بنفسها، وتقارن SHA-256 للأرشيف بملف checksums.txt الخاص بالإصدار، ثم تتحقق من توقيع ECDSA P-256 على ذلك الملف باستخدام مفتاح عام مُضمَّن داخل الثنائي نفسه الذي يجري التحقق. والنصف الخاص من هذا المفتاح ليس على الخادم الذي يجيب عن هذه الاستعلامات. فحتى لو اختُرق المركز، فأقصى ما يستطيعه هو تسمية إصدار؛ ولا يستطيع صناعة ثنائي يجتاز التحقق.",
+        "المحدِّث والعقدة عمليتان منفصلتان بصلاحيتين متعاكستين. فـ relayium-node.service هو صندوق العزل الموصوف أعلاه — وتحت ProtectSystem=strict لا يستطيع الكتابة في /usr/local/bin إطلاقًا، أي أن العقدة لا تستطيع أبدًا تعديل أي ثنائي، بما فيه ثنائيها هي. أما relayium-node-update.service فهو وحدة oneshot صغيرة تعمل بصلاحية root ولا تحمل صندوق عزل عن قصد، لأن استبدال ملف في /usr/local/bin يتطلب بالضبط تلك الصلاحية التي وُجد صندوق عزل العقدة كي يمنعها عنها. وحصر هذه القدرة في وحدة واحدة أحادية الغرض، بدل إرخاء تحصين العقدة نفسها، هو مغزى هذا الفصل كله: العملية التي تملك root لا تفعل شيئًا سوى تبديل الثنائيات، والعملية الحبيسة لا تستطيع أن تمسّ ثنائيًا أبدًا.",
+        "والتحديث الذي يسوء يتراجع عن نفسه. يبقي المحدِّث الثنائي القديم بجوار الجديد، ويعيد تشغيل الخدمة، ثم يترقّب نبضة لعشر دقائق كحد أقصى؛ فإن لم يبلّغ الإصدار الجديد عن سلامته خلال هذه المهلة أعاد الثنائي القديم إلى مكانه، وأعاد التشغيل من جديد، وسجّل الإصدار المعطوب حتى لا تُعاد المحاولة به. ولا يُقرأ أي ملف مخزَّن ولا يُنقل ولا يُحذف في أيٍّ من هذا.",
+      ],
+      bullets: [
+        "إن لم ترده: أعد تشغيل المثبّت مع RELAYIUM_NODE_AUTO_UPDATE=off. عندها يُعطَّل المؤقّت وخدمته ويُحذفان؛ وتستمر العقدة في العمل، وتحدّثها أنت متى شئت.",
+        "إن انتهيت منه تمامًا: يزيل `curl -fsSL https://relayium.com/uninstall-node.sh | sudo sh` الوحدات والثنائي والإعدادات وحساب الخدمة، ويبلّغ relayium.com بأن العقدة لم تعد موجودة.",
+        "على عقدة تخزّن، يرفض هذا الإلغاء العمل ما دامت عليها ملفات حيّة، بدل أن يتركها معلّقة — فكل ملف مخزَّن يوجد على عقدة واحدة فقط ولا توجد نسخ مطابقة. اترك تلك الملفات تنتهي صلاحيتها (14 يومًا كحد أقصى) ثم أعد تشغيل الأمر، أو مرّر RELAYIUM_NODE_FORCE=1 قابلًا بأنها ستصبح غير قابلة للوصول. أما مجلد التخزين نفسه فلا يُحذف أبدًا ما لم تمرّر أيضًا RELAYIUM_NODE_PURGE_STORAGE=1.",
+      ],
+    },
+    {
       heading: "الخطوة 3 — افتح المنافذ الواردة",
       body: [
         "البقاء متصلًا (نبضة إلى relayium.com) يحتاج وصولًا صادرًا فقط، وهو متوفر لديك بالفعل. لكن لكي يرحّل الأقران فعلًا عبر عقدتك ويخزّنوا عليها، يجب أن تكون منافذها الواردة قابلة للوصول. إن كان المضيف يشغّل جدار حماية، فافتحها — مع ufw يكون ذلك:",
@@ -715,6 +1002,47 @@ const es = {
         "Comprueba que arrancó: `systemctl status relayium-node` (debería indicar active/running).",
         "Confirma la persistencia al arranque: `systemctl is-enabled relayium-node` (debería indicar enabled).",
         "Observa los registros en vivo: `journalctl -u relayium-node -f`.",
+      ],
+    },
+    {
+      heading: "¿Es seguro ejecutar este instalador como root?",
+      body: [
+        "Antes que nada: los nodos que aportas tú ejecutan el mismo código y el mismo endurecimiento que los nodos de nuestra propia flota — el mismo binario de la misma versión firmada, instalado por el mismo script, bajo la misma unidad de systemd. La única diferencia es de quién es la máquina. Todo lo que sigue describe a ambos.",
+        "Es una pregunta justa ante un comando que canaliza un script de internet hacia una shell de root, y merece una respuesta concreta en lugar de una frase tranquilizadora. root se usa para la instalación y para nada de lo que el nodo hace después. El instalador crea una cuenta de sistema llamada relayium-node, sin shell de acceso y sin directorio personal, escribe las unidades de systemd, arranca el servicio y termina. El nodo en sí nunca se ejecuta como root: su unidad fija User=relayium-node, así que desde el segundo en que se pone en línea es una cuenta sin privilegios que no posee nada más en tu máquina. (La actualización automática, activada por omisión, sí añade una segunda unidad que se ejecuta como root — la sección siguiente trata por entero de lo que esa unidad puede y no puede hacer.)",
+        "Alrededor de esa cuenta, la unidad levanta un espacio aislado de systemd. Cada línea apunta a algo que un atacante intentaría alcanzar si alguna vez se hiciera con el proceso del nodo. Nada de esto se te oculta: tras instalar, lee la unidad completa con `cat /etc/systemd/system/relayium-node.service`.",
+      ],
+      table: {
+        head: ["En la unidad", "Qué bloquea si el nodo llega a verse comprometido"],
+        firstColCode: true,
+        rows: [
+          ["User=relayium-node", "El atacante es un usuario que no posee nada, no root."],
+          ["ProtectHome=yes", "/home y /root son invisibles — ni claves SSH privadas, ni datos de otros proyectos."],
+          ["ProtectSystem=strict", "Todo el sistema de archivos es de solo lectura; no se puede modificar ningún archivo del sistema."],
+          ["ReadWritePaths=", "Los únicos lugares escribibles son el directorio de estado del propio nodo y, si configuraste uno, el directorio de almacenamiento. Escribir en cualquier otro sitio falla."],
+          ["NoExecPaths=", "Nada del directorio de almacenamiento se puede ejecutar — un archivo subido no puede echarse a andar."],
+          ["NoNewPrivileges=yes", "No hay camino de vuelta a root; los trucos habituales de escalada quedan cerrados."],
+          ["CapabilityBoundingSet=", "Vacío — ninguna capability de Linux, ni una."],
+          ["ProtectKernelTunables=yes, ProtectKernelModules=yes", "El núcleo queda fuera de alcance: ni cambios de sysctl, ni carga de módulos, ni rootkits."],
+        ],
+      },
+      bullets: [
+        "ReadWritePaths y NoExecPaths solo nombran el directorio de almacenamiento en un nodo que realmente almacena. Un nodo de solo retransmisión no lleva ninguna de las dos líneas y no puede escribir en ningún sitio salvo en su propio directorio de estado.",
+        "En el caso normal el conjunto de capabilities está vacío. La única excepción es un escuchador de descarga directa en un puerto por debajo de 1024, que necesita CAP_NET_BIND_SERVICE para poder asociarse; el puerto de descarga por omisión es 2053, por encima de 1024, así que no se concede nada.",
+        "El nodo no guarda ninguna clave. Los archivos los cifra el remitente antes de subirlos, así que lo que llega a un nodo de almacenamiento es texto cifrado que no puede leer — eso incluye tu propio nodo, y te incluye a ti.",
+      ],
+    },
+    {
+      heading: "Qué puede y qué no puede hacer la actualización automática",
+      body: [
+        "El instalador también configura un temporizador de actualización automática, activado por omisión: relayium-node-update.timer pregunta a relayium.com, más o menos cada diez minutos, qué versión debería estar ejecutando este nodo. Es una segunda unidad, y se ejecuta como root, así que te debe su propia explicación.",
+        "El servidor central nunca envía un binario. Toda su respuesta es un número de versión, dos indicadores (si a este nodo le toca moverse ahora y si se trata de una vuelta atrás deliberada) y un breve motivo — ni bytes, ni URL, ni comando. Después es el nodo quien descarga esa versión por su cuenta, coteja el SHA-256 del archivo con el checksums.txt de la versión y verifica una firma ECDSA P-256 sobre ese checksums.txt con una clave pública compilada dentro del mismísimo binario que hace la comprobación. La mitad privada de esa clave no está en el servidor que responde a esos sondeos. Un servidor central comprometido podría, pues, nombrar una versión; lo que no podría es fabricar un binario que pase la verificación.",
+        "El actualizador y el nodo son dos procesos distintos con poderes opuestos. relayium-node.service es el espacio aislado de arriba — bajo ProtectSystem=strict no puede escribir en /usr/local/bin en absoluto, así que el nodo nunca puede modificar un binario, ni siquiera el suyo. relayium-node-update.service es una pequeña unidad oneshot que se ejecuta como root y que deliberadamente no lleva aislamiento, porque reemplazar un archivo en /usr/local/bin exige exactamente el privilegio que el aislamiento del nodo existe para negarle. Encerrar ese poder en una única unidad de un solo propósito, en vez de aflojar el endurecimiento del propio nodo, es todo el sentido de la separación: el proceso que tiene root solo intercambia binarios, y el proceso enjaulado nunca puede tocar uno.",
+        "Una actualización que sale mal se deshace sola. El actualizador conserva el binario anterior junto al nuevo, reinicia el servicio y luego vigila el latido durante diez minutos como máximo; si la nueva versión no se declara sana en esa ventana, repone el binario anterior, reinicia de nuevo y anota la versión defectuosa para no reintentarla. Nada de esto lee, mueve ni borra jamás los archivos almacenados.",
+      ],
+      bullets: [
+        "Si no la quieres: vuelve a ejecutar el instalador con RELAYIUM_NODE_AUTO_UPDATE=off. El temporizador y su servicio se desactivan y se eliminan; el nodo sigue funcionando y lo actualizas cuando tú decidas.",
+        "Si has terminado del todo: `curl -fsSL https://relayium.com/uninstall-node.sh | sudo sh` elimina las unidades, el binario, la configuración y la cuenta de servicio, y avisa a relayium.com de que el nodo ya no está.",
+        "En un nodo que almacena, esa desinstalación se niega a ejecutarse mientras aún tenga archivos vivos, en vez de dejarlos abandonados — cada archivo almacenado vive en un único nodo y no hay réplicas. Deja que expiren (14 días como mucho) y vuelve a ejecutarla, o pasa RELAYIUM_NODE_FORCE=1 asumiendo que quedarán inaccesibles. El directorio de almacenamiento en sí nunca se borra salvo que pases además RELAYIUM_NODE_PURGE_STORAGE=1.",
       ],
     },
     {
@@ -812,6 +1140,47 @@ const pt = {
       ],
     },
     {
+      heading: "É seguro executar este instalador como root?",
+      body: [
+        "Antes de tudo: os nós que você traz rodam o mesmo código e o mesmo endurecimento dos nós da nossa própria frota — o mesmo binário da mesma versão assinada, instalado pelo mesmo script, sob a mesma unidade do systemd. A única diferença é de quem é a máquina. Tudo o que vem a seguir descreve os dois.",
+        "É uma pergunta justa diante de um comando que canaliza um script da internet para um shell root, e ela merece uma resposta específica em vez de um \"pode confiar\". O root é usado para a instalação e para nada do que o nó faz depois. O instalador cria uma conta de sistema chamada relayium-node, sem shell de login e sem diretório pessoal, escreve as unidades do systemd, inicia o serviço e termina. O nó em si nunca roda como root: sua unidade define User=relayium-node, então, desde o segundo em que fica on-line, ele é uma conta sem privilégios que não possui mais nada na sua máquina. (A atualização automática, ligada por padrão, de fato acrescenta uma segunda unidade que roda como root — a próxima seção trata inteiramente do que essa unidade pode e não pode fazer.)",
+        "Em volta dessa conta, a unidade monta um sandbox do systemd. Cada linha mira algo que um atacante tentaria alcançar se um dia tomasse o processo do nó. Nada disso é escondido de você: depois de instalar, leia a unidade inteira com `cat /etc/systemd/system/relayium-node.service`.",
+      ],
+      table: {
+        head: ["Na unidade", "O que isso bloqueia se o nó algum dia for comprometido"],
+        firstColCode: true,
+        rows: [
+          ["User=relayium-node", "O atacante é um usuário que não possui nada, não o root."],
+          ["ProtectHome=yes", "/home e /root ficam invisíveis — nada de chaves SSH privadas nem de dados de outros projetos."],
+          ["ProtectSystem=strict", "Todo o sistema de arquivos fica somente leitura; nenhum arquivo de sistema pode ser alterado."],
+          ["ReadWritePaths=", "Os únicos lugares graváveis são o diretório de estado do próprio nó e, se você configurou um, o diretório de armazenamento. Gravar em qualquer outro lugar falha."],
+          ["NoExecPaths=", "Nada no diretório de armazenamento pode ser executado — um arquivo enviado não consegue rodar."],
+          ["NoNewPrivileges=yes", "Não há caminho de volta ao root; os truques usuais de escalada ficam fechados."],
+          ["CapabilityBoundingSet=", "Vazio — nenhuma capability do Linux, nenhuma mesmo."],
+          ["ProtectKernelTunables=yes, ProtectKernelModules=yes", "O kernel fica fora de alcance: sem mudar sysctl, sem carregar módulos, sem rootkit."],
+        ],
+      },
+      bullets: [
+        "ReadWritePaths e NoExecPaths só apontam para o diretório de armazenamento em um nó que de fato armazena. Um nó só de retransmissão não recebe nenhuma das duas linhas e não consegue gravar em lugar algum além do seu próprio diretório de estado.",
+        "No caso normal, o conjunto de capabilities é vazio. A única exceção é um ouvinte de download direto em um porto abaixo de 1024, que precisa de CAP_NET_BIND_SERVICE para se associar; o porto de download padrão é 2053, acima de 1024, então nada é concedido.",
+        "O nó não guarda chave nenhuma. Os arquivos são cifrados pelo remetente antes do envio, então o que chega a um nó de armazenamento é texto cifrado que ele não consegue ler — isso inclui o seu próprio nó, e inclui você.",
+      ],
+    },
+    {
+      heading: "O que a atualização automática pode e não pode fazer",
+      body: [
+        "O instalador também configura um temporizador de autoatualização, ligado por padrão: o relayium-node-update.timer pergunta ao relayium.com, mais ou menos a cada dez minutos, qual versão este nó deveria estar executando. É uma segunda unidade, e ela roda como root, então deve a você uma explicação própria.",
+        "O servidor central nunca envia um binário. Toda a resposta dele é um número de versão, dois sinalizadores (se é a vez deste nó de se mover agora e se isso é um retrocesso deliberado) e um breve motivo — sem bytes, sem URL, sem comando. Em seguida é o próprio nó que busca aquela versão, confere o SHA-256 do arquivo contra o checksums.txt da versão e verifica uma assinatura ECDSA P-256 sobre esse checksums.txt usando uma chave pública compilada dentro do próprio binário que está fazendo a verificação. A metade privada dessa chave não fica no servidor que responde a essas consultas. Um central comprometido poderia, portanto, apontar uma versão; o que ele não poderia é forjar um binário que passe na verificação.",
+        "O atualizador e o nó são dois processos separados com poderes opostos. O relayium-node.service é o sandbox descrito acima — sob ProtectSystem=strict ele não consegue nem gravar em /usr/local/bin, ou seja, o nó jamais pode modificar um binário, inclusive o dele mesmo. O relayium-node-update.service é uma pequena unidade oneshot que roda como root e que deliberadamente não leva sandbox algum, porque substituir um arquivo em /usr/local/bin exige exatamente o privilégio que o sandbox do nó existe para lhe negar. Trancar esse poder em uma única unidade de propósito único, em vez de afrouxar o endurecimento do próprio nó, é todo o sentido dessa separação: o processo que tem root só troca binários, e o processo enjaulado nunca consegue tocar em um.",
+        "Uma atualização que dá errado se desfaz sozinha. O atualizador mantém o binário antigo ao lado do novo, reinicia o serviço e então fica de olho no heartbeat por até dez minutos; se a nova versão não se declarar saudável nessa janela, ele repõe o binário antigo, reinicia de novo e registra a versão ruim para não tentá-la outra vez. Nada disso lê, move ou apaga os arquivos armazenados.",
+      ],
+      bullets: [
+        "Se você não quiser: execute o instalador de novo com RELAYIUM_NODE_AUTO_UPDATE=off. O temporizador e o serviço dele são desativados e removidos; o nó continua rodando e você o atualiza quando decidir.",
+        "Se terminou de vez: `curl -fsSL https://relayium.com/uninstall-node.sh | sudo sh` remove as unidades, o binário, a configuração e a conta de serviço, e avisa ao relayium.com que o nó se foi.",
+        "Em um nó que armazena, essa desinstalação se recusa a rodar enquanto ainda houver arquivos vivos nele, em vez de abandoná-los — cada arquivo armazenado vive em exatamente um nó e não há réplicas. Deixe-os expirar (no máximo 14 dias) e execute de novo, ou passe RELAYIUM_NODE_FORCE=1 aceitando que eles ficarão inacessíveis. O diretório de armazenamento em si nunca é apagado, a menos que você passe também RELAYIUM_NODE_PURGE_STORAGE=1.",
+      ],
+    },
+    {
       heading: "Passo 3 — abra os portos de entrada",
       body: [
         "Estar on-line (um heartbeat para relayium.com) só precisa de acesso de saída, que você já tem. Mas para que os pares realmente retransmitam através do seu nó e armazenem nele, seus portos de entrada precisam estar acessíveis. Se o host executa um firewall, abra-os — com ufw é assim:",
@@ -861,6 +1230,6 @@ const pt = {
 
 export default {
   slug: "guides/bring-your-own-node",
-  updated: "2026-07-10",
+  updated: "2026-07-22",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };
