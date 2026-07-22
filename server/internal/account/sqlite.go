@@ -552,17 +552,12 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 			return nil, err
 		}
 	}
-	// email_verified 是本次新增列。首次成功 ALTER（err==nil）说明刚建列，
-	// 此刻把所有存量老用户一次性兜底为已验证（避免现网用户被"必须验证才能登录"锁死）。
-	// 之后新注册的行按 DEFAULT 0 走验证流程；列已存在时幂等跳过。
-	if _, err := db.ExecContext(context.Background(),
-		`ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0`); err != nil {
-		if !strings.Contains(err.Error(), "duplicate column name") {
-			db.Close()
-			return nil, err
-		}
-	} else if _, err := db.ExecContext(context.Background(),
-		`UPDATE users SET email_verified = 1`); err != nil {
+	// email_verified column + one-time grandfather backfill, run crash-safely
+	// exactly once via schema_migrations (see migrateEmailVerified). The old
+	// ALTER-then-UPDATE form had a crash window: a death between the two left the
+	// column added but the backfill un-run, and the restart (ALTER now a dup)
+	// skipped the backfill forever — locking every legacy user out as "unverified".
+	if err := migrateEmailVerified(db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -660,6 +655,105 @@ func backfillCanonicalEmail(ctx context.Context, db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+// ensureSchemaMigrations creates the ledger that records which one-shot data
+// migrations have been applied, so they run exactly once and survive a crash
+// mid-migration. Idempotent.
+func ensureSchemaMigrations(db *sql.DB) error {
+	_, err := db.ExecContext(context.Background(),
+		`CREATE TABLE IF NOT EXISTS schema_migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)`)
+	return err
+}
+
+// migrateOnce runs fn exactly once across all boots and instances, keyed by id.
+// The marker check, fn, and marker insert all happen in ONE write transaction, so
+// a crash before commit rolls everything back (the migration re-runs cleanly next
+// boot) and a completed migration never re-runs. The write transaction takes an
+// IMMEDIATE lock (DSN _txlock=immediate), so two instances starting together
+// serialize and the loser re-reads the marker inside its own tx and skips.
+func migrateOnce(db *sql.DB, id string, fn func(*sql.Tx) error) error {
+	if err := ensureSchemaMigrations(db); err != nil {
+		return err
+	}
+	tx, err := db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var n int
+	if err := tx.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM schema_migrations WHERE id = ?`, id).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return tx.Commit() // already applied (possibly by a concurrent instance)
+	}
+	if err := fn(tx); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(context.Background(),
+		`INSERT INTO schema_migrations (id, applied_at) VALUES (?, ?)`, id, time.Now().Unix()); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// columnExistsTx reports whether table has a column named col. table is always a
+// trusted literal here (not user input), so interpolating it into PRAGMA — which
+// cannot bind identifiers — is safe.
+func columnExistsTx(tx *sql.Tx, table, col string) (bool, error) {
+	rows, err := tx.QueryContext(context.Background(), `PRAGMA table_info(`+table+`)`)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			cid, notnull, pk int
+			name, typ        string
+			dflt             sql.NullString
+		)
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			return false, err
+		}
+		if name == col {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
+// migrateEmailVerified adds the users.email_verified column and, the first time
+// the column ever appears, grandfathers every pre-existing user to verified (so a
+// pre-email-verification deployment's users aren't locked out). It runs exactly
+// once via schema_migrations, crash-safely:
+//
+//   - Column absent (fresh DB, or a very old DB predating email verification):
+//     ALTER + grandfather backfill happen in one transaction. SQLite DDL is
+//     transactional, so a crash rolls back the ALTER too — the restart re-runs
+//     cleanly instead of leaving legacy users stranded as unverified.
+//   - Column already present but no marker (a DB migrated under the OLD pre-ledger
+//     code — i.e. production): ADOPT it. Recording the marker without re-running
+//     the backfill is critical — a blanket `SET email_verified = 1` here would
+//     wrongly verify every currently-UNVERIFIED account, undoing the verification
+//     gate for them.
+func migrateEmailVerified(db *sql.DB) error {
+	return migrateOnce(db, "grandfather_email_verified", func(tx *sql.Tx) error {
+		exists, err := columnExistsTx(tx, "users", "email_verified")
+		if err != nil {
+			return err
+		}
+		if exists {
+			return nil // adopt: do NOT re-backfill (would verify unverified accounts)
+		}
+		if _, err := tx.ExecContext(context.Background(),
+			`ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(context.Background(), `UPDATE users SET email_verified = 1`)
+		return err
+	})
 }
 
 func (s *SQLiteStore) Close() error {
