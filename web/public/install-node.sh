@@ -283,6 +283,62 @@ EOF
       echo "auto-update: off (RELAYIUM_NODE_AUTO_UPDATE=off) — not installing the update timer"
     fi
   fi
+
+  # ── Closing summary: a truthful, specific account of what root was just
+  # used for. Every clause below is conditioned on what was ACTUALLY done
+  # above (auto-update on/off, storage configured or not, the capability
+  # actually granted) rather than describing a fixed installation — a
+  # relay-only node and a storage node were just set up differently, so the
+  # summary must say different things about them.
+  if [ "$auto_update" = "on" ]; then
+    update_units=", relayium-node-update.service, relayium-node-update.timer"
+    update_state="enabled — central hands out only a version NUMBER; the binary itself is downloaded and signature-verified on this machine by a key compiled into the updater, the same check this installer just did (RELAYIUM_NODE_AUTO_UPDATE=off to disable)"
+  else
+    update_units=""
+    update_state="disabled (RELAYIUM_NODE_AUTO_UPDATE=off) — re-run this installer with RELAYIUM_NODE_AUTO_UPDATE=on to enable"
+  fi
+
+  if [ -n "$bind_caps" ]; then
+    cap_note="one capability: CAP_NET_BIND_SERVICE, so the download listener can bind port ${dl_port} (<1024)"
+  else
+    cap_note="no Linux capabilities"
+  fi
+
+  # The relay UDP range binds on every node, storage or not, so it appears in
+  # both branches below — only the storage/blob-port clause is conditional.
+  relay_ports_note="relay ${RELAYIUM_NODE_MIN_PORT:-49152}-${RELAYIUM_NODE_MAX_PORT:-65535}/udp"
+  if [ -n "${RELAYIUM_NODE_STORAGE_DIR:-}" ]; then
+    write_note="the state dir and ${RELAYIUM_NODE_STORAGE_DIR} (also noexec) — nothing else on disk"
+    ports_note="TURN ${RELAYIUM_NODE_TURN_PORT:-3478}/udp, ${relay_ports_note}, storage ${RELAYIUM_NODE_STORAGE_PORT:-8081}/tcp (central-facing only)"
+  else
+    write_note="the state dir only — nothing else on disk (no storage configured on this node)"
+    ports_note="TURN ${RELAYIUM_NODE_TURN_PORT:-3478}/udp, ${relay_ports_note} (relay only — no storage dir, so the blob port never opens)"
+  fi
+  if [ -n "${RELAYIUM_NODE_DOWNLOAD_URL:-}" ]; then
+    ports_note="${ports_note}, download ${dl_port}/tcp (${RELAYIUM_NODE_DOWNLOAD_URL})"
+  fi
+
+  cat <<SUMMARY
+
+  ── what this installer just did with your root ──────────────
+   user      created system user 'relayium-node' (no login shell, no home);
+             the node runs as this user, never as root
+   sandbox   ProtectSystem=strict, ProtectHome=yes, NoNewPrivileges=yes,
+             ${cap_note}; writable: ${write_note}
+   units     relayium-node.service${update_units}
+   ports     ${ports_note}
+   updates   ${update_state}
+   data      files stored here are encrypted by the sender before upload;
+             this node holds no keys and cannot read what it stores
+   remove    curl -fsSL ${RELAYIUM_CENTRAL_URL}/uninstall-node.sh -o uninstall-node.sh &&
+             [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh
+             (never pipe straight into sh here: a 404 makes "curl | sh" print
+             nothing and exit 0, which reads as a successful uninstall)
+
+  Full details: ${RELAYIUM_CENTRAL_URL}/guides/bring-your-own-node
+  ─────────────────────────────────────────────────────────────
+
+SUMMARY
 else
   echo "not root or no systemd — run it yourself (unsandboxed; see ${RELAYIUM_CENTRAL_URL}/guides/bring-your-own-node for hardening):"
   echo "  RELAYIUM_CENTRAL_URL=${RELAYIUM_CENTRAL_URL} RELAYIUM_NODE_TOKEN=*** RELAYIUM_NODE_STORAGE_DIR=${RELAYIUM_NODE_STORAGE_DIR:-} ${INSTALL_DIR}/relayium-node"

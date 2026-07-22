@@ -75,12 +75,30 @@ type adminNodeView struct {
 	EffectiveTrafficLimitBytes int64
 	DiskLimitBytes             int64
 	LastSeenAt                 int64
+	// Draining mirrors Node.Draining: out of new-upload placement, still
+	// serving what it already holds.
+	Draining bool
+	// StoredFileCount is how many LIVE stored files (CountFilesOnNode's "live":
+	// expires_at > now) still sit on this node.
+	StoredFileCount int
+	// SafeToUninstallAt is the largest ExpiresAt among this node's live files —
+	// the earliest moment every file on it will have expired, and so the
+	// earliest moment it is actually safe to remove. 0 means the node holds
+	// nothing live: safe now, no wait.
+	SafeToUninstallAt int64
+	// Removed is set once the node has told central it was being uninstalled
+	// (Node.RemovedAt). The row is kept for audit, but the machine is gone: it
+	// is out of placement, out of ICE and never receives a download redirect.
+	// Shown so the list is not just a growing pile of nodes that read "offline"
+	// with no explanation; the delete button is how an operator retires the row.
+	Removed bool
 }
 
-func nodeViews(nodes []Node, monthly map[string]int64, now time.Time, st Settings) []adminNodeView {
+func nodeViews(nodes []Node, monthly map[string]int64, fileCounts map[string]NodeFileCount, now time.Time, st Settings) []adminNodeView {
 	cutoff := now.Add(-nodeOnlineWindow).Unix()
 	out := make([]adminNodeView, 0, len(nodes))
 	for _, n := range nodes {
+		fc := fileCounts[n.ID]
 		out = append(out, adminNodeView{
 			ID: n.ID, OwnerType: n.OwnerType, Label: n.Label, Host: nodeHost(n.URLs),
 			Region: n.Region, Version: n.Version,
@@ -96,6 +114,10 @@ func nodeViews(nodes []Node, monthly map[string]int64, now time.Time, st Setting
 			EffectiveTrafficLimitBytes: resolveNodeTrafficLimit(n, st),
 			DiskLimitBytes:             n.DiskLimitBytes,
 			LastSeenAt:                 n.LastSeenAt,
+			Draining:                   n.Draining,
+			StoredFileCount:            fc.Count,
+			SafeToUninstallAt:          fc.MaxExpiresAt,
+			Removed:                    n.RemovedAt != 0,
 		})
 	}
 	return out
@@ -303,6 +325,22 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	mux.Handle("POST /admin/nodes/token/{id}/revoke", s.csrfGuard(http.HandlerFunc(s.handleAdminRevokeToken)))
 	mux.Handle("POST /admin/nodes/{id}/limits", s.csrfGuard(http.HandlerFunc(s.handleAdminNodeLimits)))
 	mux.Handle("POST /admin/nodes/{id}/label", s.csrfGuard(http.HandlerFunc(s.handleAdminNodeLabel)))
+	mux.Handle("POST /admin/nodes/{id}/draining", s.csrfGuard(http.HandlerFunc(s.handleAdminNodeDraining)))
+	// Restore is the inverse of /api/nodes/deregister and the reason that endpoint
+	// is no longer a one-way door. Same CSRF guard as its neighbours; no step-up,
+	// because it returns a node to service rather than taking one out.
+	mux.Handle("POST /admin/nodes/{id}/restore", s.csrfGuard(http.HandlerFunc(s.handleAdminRestoreNode)))
+	// The other half of the same door: for when deregistration never happened at
+	// all (central was unreachable when the uninstaller ran best-effort, and by
+	// the time anyone notices state.json — and with it the token and node id —
+	// is already gone, so there is nothing left to retry the API call with).
+	// Reuses MarkNodeRemoved, the exact store method /api/nodes/deregister calls,
+	// so a manually-marked node is indistinguishable from one that deregistered
+	// itself: same placement/ICE/direct-download exclusion, same restore path.
+	// Same CSRF guard as restore, no step-up: it is the admin-console mirror of
+	// an action a node can already take on itself with nothing but a bearer
+	// token, not a new capability.
+	mux.Handle("POST /admin/nodes/{id}/remove", s.csrfGuard(http.HandlerFunc(s.handleAdminMarkNodeRemoved)))
 	// 节点版本发布控制。**每条轨道一套独立路由**（track 在 path 里），不是一个
 	// 带轨道下拉框的表单：机队轨和自带节点轨是两台各自独立的控制器，任何把它们
 	// 合并成一个入口的做法都会把一条轨道的故障传染给另一条 —— 而"BYO 卡住时机队
@@ -554,6 +592,13 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 	if mErr != nil {
 		log.Printf("admin: NodeRelayedSince failed: %v", mErr)
 	}
+	// One grouped query for every node's live file count / safe-to-uninstall
+	// time, same reasoning as monthly above: the nodes table renders every row
+	// from a single read, never one query per node.
+	fileCounts, fcErr := s.store.NodeFileCounts(r.Context(), now)
+	if fcErr != nil {
+		log.Printf("admin: NodeFileCounts failed: %v", fcErr)
+	}
 	var nodeVs []adminNodeView
 	// allNodes is loaded ONCE and fed to both the nodes section and the two
 	// rollout panels; the panels used to re-query the same rows per track.
@@ -564,7 +609,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		nodesErr = true
 	} else {
 		allNodes = ns
-		nodeVs = nodeViews(ns, monthly, s.now(), st)
+		nodeVs = nodeViews(ns, monthly, fileCounts, s.now(), st)
 	}
 	fleetNodeCount := 0
 	for _, nv := range nodeVs {
@@ -964,6 +1009,112 @@ func (s *Service) handleAdminNodeLabel(w http.ResponseWriter, r *http.Request) {
 	}
 	s.writeAudit(r, AuditNodeLabel, "node:"+id,
 		[]ChangeField{{Field: "label", Old: before.Label, New: label}}, StepUpNone)
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// handleAdminNodeDraining is the operator toggle for the first half of a safe
+// node uninstall: on=true takes the node OUT of new-upload placement while it
+// keeps serving what it already holds (see Service.SetNodeDraining). Unscoped
+// like handleAdminNodeLabel — an admin can drain any node, not just fleet
+// ones, even though only fleet rows render this control today.
+func (s *Service) handleAdminNodeDraining(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	id := r.PathValue("id")
+	on := r.FormValue("on") == "1"
+	before, _, err := s.store.GetNode(r.Context(), id)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if err := s.store.SetNodeDraining(r.Context(), id, on); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	s.writeAudit(r, AuditNodeDraining, "node:"+id,
+		[]ChangeField{{Field: "draining", Old: before.Draining, New: on}}, StepUpNone)
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// handleAdminRestoreNode undoes a deregistration: it clears removed_at and puts
+// the node back into placement, ICE and the direct-download path with its row,
+// its files and its history untouched.
+//
+// It exists because deregistration was a one-way door. /api/nodes/deregister is
+// authenticated by a token that does not bind to a node id, so anything holding
+// the fleet token can name any fleet node — N calls take the entire fleet out of
+// service at once — and the only way back was handleAdminDeleteNode, which
+// destroys the row. Restoring must therefore be at least as easy as the mistake.
+//
+// Low-risk by design (no step-up): it puts capacity BACK. The destructive
+// direction is delete, which keeps its step-up. Unscoped like the label and
+// drain controls — an admin can restore any node, not just fleet ones.
+func (s *Service) handleAdminRestoreNode(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	id := r.PathValue("id")
+	before, found, err := s.store.GetNode(r.Context(), id)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	// A store failure is not "no such node": reporting a DB outage as 404 would
+	// tell an admin the node is gone while it is still there, and the audit entry
+	// below would be skipped with no trace of why.
+	if err := s.store.ClearNodeRemoved(r.Context(), id); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	s.writeAudit(r, AuditNodeRestore, "node:"+id,
+		[]ChangeField{{Field: "removed_at", Old: before.RemovedAt, New: int64(0)}}, StepUpNone)
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// handleAdminMarkNodeRemoved is the manual recovery for a lost deregistration:
+// the uninstaller's POST to /api/nodes/deregister is best-effort, and if
+// central was unreachable at that moment the node is never marked removed —
+// by the time anyone notices, state.json (and with it the token and node id)
+// is already gone, so there is no way to retry the API call by hand. This is
+// the admin-console equivalent, calling the SAME store method
+// (Service.store.MarkNodeRemoved) that the deregister endpoint itself calls,
+// so the outcome is identical: the node leaves the placement pool, the ICE
+// candidate list and the direct-download path, its row and file history
+// untouched, and /restore reverses it exactly as it would a self-reported
+// deregistration.
+//
+// Unscoped like restore, label and drain — an admin can mark any node removed,
+// not just fleet ones — and idempotent: marking an already-removed node keeps
+// the first timestamp (see MarkNodeRemoved), so a double click changes nothing.
+func (s *Service) handleAdminMarkNodeRemoved(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	id := r.PathValue("id")
+	before, found, err := s.store.GetNode(r.Context(), id)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	at := s.now().Unix()
+	if err := s.store.MarkNodeRemoved(r.Context(), id, at); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	s.writeAudit(r, AuditNodeRemove, "node:"+id,
+		[]ChangeField{{Field: "removed_at", Old: before.RemovedAt, New: at}}, StepUpNone)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 

@@ -462,6 +462,24 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// incremented once per resume; past fleetResumeAttemptLimit the track
 		// halts instead. 0 on every existing row = "no resumes yet".
 		`ALTER TABLE nodes ADD COLUMN update_attempts INTEGER NOT NULL DEFAULT 0`,
+		// draining is the first half of a safe node uninstall: an operator sets it
+		// to stop new uploads being placed on the node (StorageNodes and
+		// UserStorageNodes exclude it) while it keeps serving downloads for the
+		// files it already holds, letting them age out before the machine is
+		// removed. Set only via SetNodeDraining, never by register/heartbeat —
+		// UpsertNode's ON CONFLICT clause deliberately omits it, same as label and
+		// the update_* columns above, so a routine re-register can't clear it.
+		// 0 on every existing row = not draining, the only safe default.
+		`ALTER TABLE nodes ADD COLUMN draining INTEGER NOT NULL DEFAULT 0`,
+		// removed_at is the second half: the uninstaller POSTs /api/nodes/deregister
+		// on its way out and central stamps the node here. The row is kept (the
+		// admin panel and the audit trail still have to explain where a node went)
+		// but it is filtered out of StorageNodes/UserStorageNodes/OnlineNodes/
+		// UserNodes and never receives a download 302 — the machine is gone, so
+		// every one of those would only hand somebody a dead origin. Also omitted
+		// from UpsertNode's ON CONFLICT clause, like draining above.
+		// 0 on every existing row = still installed.
+		`ALTER TABLE nodes ADD COLUMN removed_at INTEGER NOT NULL DEFAULT 0`,
 		// node_rollout holds the rollout state machine's per-track bookkeeping: one
 		// row for "fleet", one for "byo", each with its own target version and
 		// status, so a stalled/halted byo rollout can never block or bleed into the
@@ -2995,7 +3013,7 @@ const nodeCols = `id, owner_type, owner_user_id, region, urls, turn_secret, vers
   relayed_bytes, stored_bytes, created_at, last_seen_at,
   storage_url, storage_secret, storage_fp, storage_enabled, storage_total, storage_free,
   traffic_limit_bytes, disk_limit_bytes, label, download_url,
-  update_started_at, update_from_version, update_result, update_attempts`
+  update_started_at, update_from_version, update_result, update_attempts, draining, removed_at`
 
 func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	if n.ID == "" {
@@ -3007,7 +3025,7 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO nodes (`+nodeCols+`)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   owner_type=excluded.owner_type, owner_user_id=excluded.owner_user_id,
 		   region=excluded.region, urls=excluded.urls, turn_secret=excluded.turn_secret,
@@ -3016,16 +3034,18 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 		   storage_fp=excluded.storage_fp,
 		   storage_enabled=excluded.storage_enabled, storage_total=excluded.storage_total,
 		   storage_free=excluded.storage_free, download_url=excluded.download_url`,
-		// label and the update_* columns are intentionally set only on INSERT
-		// (label seeded from the token name; update_* owned by the rollout state
-		// machine) and preserved on re-register/heartbeat, so neither a user's
-		// rename nor an in-flight rollout's bookkeeping is clobbered by a node
-		// simply calling register/heartbeat again.
+		// label, the update_* columns, draining and removed_at are intentionally set
+		// only on INSERT (label seeded from the token name; update_* owned by the
+		// rollout state machine; draining owned by the operator via SetNodeDraining;
+		// removed_at written once by MarkNodeRemoved) and preserved on
+		// re-register/heartbeat, so neither a user's rename, an in-flight rollout's
+		// bookkeeping, an operator's drain flag nor a completed deregistration is
+		// clobbered by a node simply calling register/heartbeat again.
 		n.ID, n.OwnerType, nullStr(n.OwnerUserID), n.Region, string(urls), n.TURNSecret,
 		n.Version, n.RelayedBytes, n.StoredBytes, n.CreatedAt, n.LastSeenAt,
 		nullStr(n.StorageURL), nullStr(n.StorageSecret), n.StorageFP, b2i(n.StorageEnabled), n.StorageTotal, n.StorageFree,
 		n.TrafficLimitBytes, n.DiskLimitBytes, n.Label, n.DownloadURL,
-		n.UpdateStartedAt, n.UpdateFromVersion, n.UpdateResult, n.UpdateAttempts)
+		n.UpdateStartedAt, n.UpdateFromVersion, n.UpdateResult, n.UpdateAttempts, b2i(n.Draining), n.RemovedAt)
 	if err != nil {
 		return Node{}, err
 	}
@@ -3110,26 +3130,36 @@ func (s *SQLiteStore) StorageNodes(ctx context.Context, since, minFree int64) ([
 	// so this SQL, usableBytes and storableBytes can never fall out of sync.
 	query := fmt.Sprintf(
 		`SELECT `+nodeCols+` FROM nodes
-		   WHERE owner_type='fleet' AND storage_enabled=1 AND last_seen_at >= ? AND storage_free * %d / %d >= ?
+		   WHERE owner_type='fleet' AND storage_enabled=1 AND draining=0 AND removed_at=0 AND last_seen_at >= ? AND storage_free * %d / %d >= ?
 		     AND (disk_limit_bytes = 0 OR disk_limit_bytes - stored_bytes >= ?)
 		     AND (storage_total = 0 OR storage_free * %d >= storage_total)
 		   ORDER BY last_seen_at DESC`, storageHeadroomNum, storageHeadroomDen, volumeReserveDen)
 	return s.queryNodes(ctx, query, since, minFree, minFree)
 }
 
+// OnlineNodes returns the fleet nodes central is currently willing to hand out
+// (relay/ICE candidates). Uninstalled nodes (removed_at != 0) are excluded even
+// if their last heartbeat is still inside the window: the deregistration
+// arrives seconds before the service stops, so for that short overlap the row
+// still looks online while the machine is on its way out.
 func (s *SQLiteStore) OnlineNodes(ctx context.Context, since int64) ([]Node, error) {
 	return s.queryNodes(ctx,
-		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='fleet' AND last_seen_at >= ? ORDER BY last_seen_at DESC`, since)
+		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='fleet' AND removed_at=0 AND last_seen_at >= ? ORDER BY last_seen_at DESC`, since)
 }
 
 func (s *SQLiteStore) ListNodes(ctx context.Context) ([]Node, error) {
 	return s.queryNodes(ctx, `SELECT `+nodeCols+` FROM nodes ORDER BY last_seen_at DESC`)
 }
 
-// UserNodes returns a user's own (owner_type='user') nodes online since `since`.
+// UserNodes returns a user's own (owner_type='user') nodes online since
+// `since`. Uninstalled nodes are excluded, same as OnlineNodes — this feeds ICE
+// and the strict-mode "do you have a node at all" check, and neither should
+// ever answer with a machine that has been removed. UserNodesAll below is
+// deliberately NOT filtered: the dashboard list still shows it (offline), which
+// is how a user sees what became of their node.
 func (s *SQLiteStore) UserNodes(ctx context.Context, userID string, since int64) ([]Node, error) {
 	return s.queryNodes(ctx,
-		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? AND last_seen_at >= ? ORDER BY last_seen_at DESC`,
+		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? AND removed_at=0 AND last_seen_at >= ? ORDER BY last_seen_at DESC`,
 		userID, since)
 }
 
@@ -3149,7 +3179,7 @@ func (s *SQLiteStore) UserStorageNodes(ctx context.Context, userID string, since
 	// Spliced from volumeReserveDen (not a literal) so the two SQL sites and
 	// storableBytes stay one definition; the request input stays on `?`.
 	query := fmt.Sprintf(
-		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? AND last_seen_at >= ? AND storage_enabled=1 AND storage_free >= ?
+		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? AND last_seen_at >= ? AND storage_enabled=1 AND draining=0 AND removed_at=0 AND storage_free >= ?
 		   AND (storage_total = 0 OR storage_free * %d >= storage_total) ORDER BY last_seen_at DESC`, volumeReserveDen)
 	return s.queryNodes(ctx, query, userID, since, minFree)
 }
@@ -3206,6 +3236,102 @@ func (s *SQLiteStore) SetNodeLabel(ctx context.Context, id, label string) error 
 	return nil
 }
 
+// SetNodeDraining sets/clears a node's drain flag, unscoped like SetNodeLabel
+// (an admin action, works on any node regardless of owner type). Does not touch
+// any other column: it takes the node out of (or back into) placement without
+// affecting its existing files or download path.
+func (s *SQLiteStore) SetNodeDraining(ctx context.Context, id string, on bool) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE nodes SET draining = ? WHERE id = ?`, b2i(on), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// MarkNodeRemoved stamps a node as uninstalled. Conditional on removed_at=0 so
+// the FIRST deregistration wins: the uninstaller retries nothing, but a
+// re-issued curl (or a second uninstall attempt after a failed one) must not
+// move the timestamp and rewrite when the machine actually went away. Nothing
+// else on the row is touched — its files, limits and history stay readable for
+// the admin panel.
+func (s *SQLiteStore) MarkNodeRemoved(ctx context.Context, id string, at int64) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE nodes SET removed_at = ? WHERE id = ? AND removed_at = 0`, at, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		// Either unknown, or already removed. Already-removed is a success (the
+		// caller's goal is met), so distinguish the two with a read.
+		if _, found, gerr := s.GetNode(ctx, id); gerr != nil {
+			return gerr
+		} else if !found {
+			return ErrNotFound
+		}
+	}
+	return nil
+}
+
+// ClearNodeRemoved puts a deregistered node back into service. Unconditional on
+// the current value (unlike MarkNodeRemoved, which is first-write-wins) so that
+// clearing an already-live node is a plain no-op success rather than an error
+// the admin panel would have to explain. Touches nothing else: the node's
+// files, limits, label and update history are exactly as it left them, which is
+// the whole point of this existing instead of "delete the row and reinstall".
+func (s *SQLiteStore) ClearNodeRemoved(ctx context.Context, id string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE nodes SET removed_at = 0 WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// CountFilesOnNode reports how many LIVE stored files (expires_at > now) sit
+// on nodeID, plus the largest expires_at among them. "Live" mirrors
+// CurrentStorage/GlobalStorageUsed: an expired-but-not-yet-collected row is
+// excluded from both the count and the max (it would otherwise overstate how
+// long an operator must wait), and a deleted file is never a concern here
+// since stored_files rows are hard-deleted, not soft-deleted — DeleteStoredFile
+// and the expiry-GC sweep both remove the row outright, so "already deleted"
+// and "excluded by expires_at > now" cannot both apply to the same live row.
+// COALESCE(MAX(...), 0) makes a node with nothing live report (0, 0), not NULL.
+func (s *SQLiteStore) CountFilesOnNode(ctx context.Context, nodeID string, now int64) (count int, maxExpiresAt int64, err error) {
+	err = s.reader().QueryRowContext(ctx,
+		`SELECT COUNT(*), COALESCE(MAX(expires_at), 0) FROM stored_files
+		   WHERE node_id = ? AND expires_at > ?`, nodeID, now).Scan(&count, &maxExpiresAt)
+	return count, maxExpiresAt, err
+}
+
+// NodeFileCounts is CountFilesOnNode for every node in one grouped query, so
+// the admin nodes listing can render every row from a single read instead of
+// one query per node. Same "live" definition as CountFilesOnNode. Nodes with
+// no live files (or no files at all) are simply absent from the map.
+func (s *SQLiteStore) NodeFileCounts(ctx context.Context, now int64) (map[string]NodeFileCount, error) {
+	rows, err := s.reader().QueryContext(ctx,
+		`SELECT node_id, COUNT(*), MAX(expires_at) FROM stored_files
+		   WHERE expires_at > ? AND node_id IS NOT NULL AND node_id != ''
+		   GROUP BY node_id`, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]NodeFileCount)
+	for rows.Next() {
+		var id string
+		var c NodeFileCount
+		if err := rows.Scan(&id, &c.Count, &c.MaxExpiresAt); err != nil {
+			return nil, err
+		}
+		out[id] = c
+	}
+	return out, rows.Err()
+}
+
 // CentralStoredBytes sums live file sizes held on central-local storage — rows
 // whose node_id is unset (NULL or ”), i.e. the app server's own disk fallback.
 func (s *SQLiteStore) CentralStoredBytes(ctx context.Context) (int64, error) {
@@ -3245,18 +3371,20 @@ func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]
 		var ownerUser sql.NullString
 		var urls string
 		var storageURL, storageSecret sql.NullString
-		var storageEnabled int
+		var storageEnabled, draining int
 		if err := rows.Scan(&n.ID, &n.OwnerType, &ownerUser, &n.Region, &urls, &n.TURNSecret,
 			&n.Version, &n.RelayedBytes, &n.StoredBytes, &n.CreatedAt, &n.LastSeenAt,
 			&storageURL, &storageSecret, &n.StorageFP, &storageEnabled, &n.StorageTotal, &n.StorageFree,
 			&n.TrafficLimitBytes, &n.DiskLimitBytes, &n.Label, &n.DownloadURL,
-			&n.UpdateStartedAt, &n.UpdateFromVersion, &n.UpdateResult, &n.UpdateAttempts); err != nil {
+			&n.UpdateStartedAt, &n.UpdateFromVersion, &n.UpdateResult, &n.UpdateAttempts, &draining,
+			&n.RemovedAt); err != nil {
 			return nil, err
 		}
 		n.OwnerUserID = ownerUser.String
 		n.StorageURL = storageURL.String
 		n.StorageSecret = storageSecret.String
 		n.StorageEnabled = storageEnabled != 0
+		n.Draining = draining != 0
 		if err := json.Unmarshal([]byte(urls), &n.URLs); err != nil {
 			return nil, err
 		}

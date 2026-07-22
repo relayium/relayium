@@ -315,6 +315,38 @@ type Node struct {
 	// rather than dropped, per the package's schema-migration policy, and
 	// simply reads 0 forever on both existing and new rows.
 	UpdateAttempts int
+	// Draining marks a node as being wound down for safe removal: it stays OUT
+	// of the placement pool (StorageNodes/UserStorageNodes exclude it) so no new
+	// file lands on it, but it keeps serving the files it already holds — those
+	// still need to reach their TTL, since a file binds to exactly one node and
+	// there are no replicas. Set only by an operator (SetNodeDraining), never by
+	// register/heartbeat: UpsertNode's ON CONFLICT clause deliberately omits
+	// this column so a node re-registering can't silently clear the flag out
+	// from under an operator mid-drain.
+	Draining bool
+	// RemovedAt is when the node told central it was being uninstalled (unix
+	// seconds); 0 = still installed. The row is KEPT rather than deleted so the
+	// admin panel and audit trail still explain where a file's node went, but a
+	// removed node is out of the placement pool, out of the ICE candidate list
+	// and never receives a download redirect — the machine is gone, so pointing
+	// anyone at it only produces a dead origin.
+	//
+	// Deliberately sticky: nothing clears it, not even a later re-register. The
+	// uninstaller deregisters BEFORE it stops the service, so a dying node could
+	// otherwise race a register and resurrect itself. A genuinely reinstalled
+	// machine gets a fresh state.json (the uninstaller removes the state dir)
+	// and therefore a new node ID, so it never needs the flag cleared.
+	RemovedAt int64
+}
+
+// NodeFileCount is a node's live-file footprint, as returned by
+// CountFilesOnNode / NodeFileCounts: how many stored files still sit on it,
+// and the furthest-out ExpiresAt among them — the earliest moment it is safe
+// to uninstall. The zero value (both fields 0) is exactly "holds nothing,
+// safe now", which is also what a node absent from NodeFileCounts' map means.
+type NodeFileCount struct {
+	Count        int
+	MaxExpiresAt int64
 }
 
 // NodeToken is a per-user credential a BYO node presents as its bearer. The
@@ -798,6 +830,39 @@ type Store interface {
 	SetUserNodeLabel(ctx context.Context, id, ownerUserID, label string) error
 	// SetNodeLabel renames any node (admin, unscoped) — used for fleet nodes.
 	SetNodeLabel(ctx context.Context, id, label string) error
+	// SetNodeDraining sets/clears a node's drain flag (admin, unscoped): a
+	// draining node is excluded from new-upload placement but keeps serving its
+	// existing files. See Node.Draining.
+	SetNodeDraining(ctx context.Context, id string, on bool) error
+	// MarkNodeRemoved records that a node has been uninstalled: the row stays for
+	// audit, but the node leaves the placement pool, the ICE candidate list and
+	// the direct-download path. Idempotent — re-marking an already-removed node
+	// keeps the FIRST timestamp, so a retried deregistration cannot rewrite
+	// history. Returns ErrNotFound for an unknown id. See Node.RemovedAt.
+	MarkNodeRemoved(ctx context.Context, id string, at int64) error
+	// ClearNodeRemoved undoes MarkNodeRemoved (removed_at back to 0), putting
+	// the node back into placement, ICE and the direct-download path. It exists
+	// so deregistration is a door that opens both ways: the node token does not
+	// bind to a node id, so one mistaken (or malicious) POST can empty the whole
+	// pool, and the only other way back used to be deleting the row — which
+	// destroys its history and its file bookkeeping with it. Admin-only.
+	// Idempotent: clearing an already-live node is a no-op success. Returns
+	// ErrNotFound for an unknown id.
+	ClearNodeRemoved(ctx context.Context, id string) error
+	// CountFilesOnNode reports how many LIVE stored files (expires_at > now)
+	// still sit on nodeID, plus the largest ExpiresAt among them — the earliest
+	// moment the node is safe to uninstall, since a file binds to exactly one
+	// node and there are no replicas. An expired-but-not-yet-GC'd row does not
+	// count and cannot push the safe-from time out further; a deleted file is
+	// never in the table at all (stored_files rows are hard-deleted, not
+	// soft-deleted), so it is excluded automatically. A node holding nothing
+	// live reports (0, 0, nil).
+	CountFilesOnNode(ctx context.Context, nodeID string, now int64) (count int, maxExpiresAt int64, err error)
+	// NodeFileCounts is CountFilesOnNode for every node at once, in a single
+	// grouped query — the admin nodes listing renders every row from one read
+	// instead of one query per node. Nodes with no live files are simply absent
+	// from the map (read as the zero NodeFileCount).
+	NodeFileCounts(ctx context.Context, now int64) (map[string]NodeFileCount, error)
 	// CentralStoredBytes sums the live sizes of files held on central-local
 	// storage (node_id unset) — the app server's own disk fallback.
 	CentralStoredBytes(ctx context.Context) (int64, error)

@@ -103,7 +103,7 @@ func TestNodeViewDerivesStorableBytes(t *testing.T) {
 	views := nodeViews([]Node{{
 		ID: "n1", OwnerType: "fleet", StorageEnabled: true,
 		StorageFree: free, StorageTotal: total,
-	}}, map[string]int64{}, time.Unix(10000, 0), Settings{})
+	}}, map[string]int64{}, nil, time.Unix(10000, 0), Settings{})
 
 	if len(views) != 1 {
 		t.Fatalf("nodeViews returned %d views, want 1", len(views))
@@ -122,7 +122,7 @@ func TestNodeViewsEffectiveTrafficLimitInheritsGlobalDefault(t *testing.T) {
 	now := time.Unix(10000, 0)
 	st := Settings{NodeTrafficDefault: 1024 * gib} // 1 TiB
 
-	views := nodeViews([]Node{{ID: "n1", TrafficLimitBytes: 0}}, map[string]int64{}, now, st)
+	views := nodeViews([]Node{{ID: "n1", TrafficLimitBytes: 0}}, map[string]int64{}, nil, now, st)
 	if len(views) != 1 {
 		t.Fatalf("nodeViews returned %d views, want 1", len(views))
 	}
@@ -139,7 +139,7 @@ func TestNodeViewsEffectiveTrafficLimitUsesNodeOverride(t *testing.T) {
 	st := Settings{NodeTrafficDefault: 1024 * gib} // 1 TiB
 	override := 500 * gib
 
-	views := nodeViews([]Node{{ID: "n1", TrafficLimitBytes: override}}, map[string]int64{}, now, st)
+	views := nodeViews([]Node{{ID: "n1", TrafficLimitBytes: override}}, map[string]int64{}, nil, now, st)
 	if len(views) != 1 {
 		t.Fatalf("nodeViews returned %d views, want 1", len(views))
 	}

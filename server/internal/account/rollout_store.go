@@ -292,9 +292,17 @@ func (s *SQLiteStore) AdvanceByoBatch(ctx context.Context, track, expectTargetVe
 // node vanish from the snapshot instead of halting the track, and decideByo's
 // batch ordering is computed over the whole population so membership does not
 // shift as nodes flap. Do not "optimise" this into a last_seen_at filter.
+//
+// Uninstalled nodes (removed_at != 0) ARE filtered out, and that is a different
+// question from being offline: a deregistered machine is not coming back, so it
+// must never be picked for an update. It still looks online for the ~90 seconds
+// its last heartbeat stays fresh, and decideFleet's candidate filter is just
+// "online and not on target" — so without this the fleet track could command an
+// update to a machine that is being uninstalled right now, then halt the whole
+// track on "silent since update started" and wait for an operator.
 func (s *SQLiteStore) NodesByOwnerType(ctx context.Context, ownerType string) ([]Node, error) {
 	return s.queryNodes(ctx,
-		`SELECT `+nodeCols+` FROM nodes WHERE owner_type = ? ORDER BY id`, ownerType)
+		`SELECT `+nodeCols+` FROM nodes WHERE owner_type = ? AND removed_at = 0 ORDER BY id`, ownerType)
 }
 
 // CommandNodeUpdate records that central has just told a node to self-update.

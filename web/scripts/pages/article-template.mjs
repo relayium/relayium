@@ -72,14 +72,57 @@ function widgetHtml(w) {
   );
 }
 
+// tableHtml renders a two-or-more column table. Wrapped in .tw so a wide table
+// scrolls inside its own box instead of making the whole page scroll sideways.
+// firstColCode monospaces the first cell of every row (config directives, env
+// vars) without needing markup in the content files. Direction is inherited from
+// <html dir>; the cell alignment is `text-align:start`, a logical property, so
+// RTL pages need no separate rule.
+//
+// The code cell itself is pinned dir="ltr" regardless of page direction. A cell
+// holding two LTR runs joined by punctuation from the page's own script (e.g. an
+// Arabic comma between two systemd directives) is, to the bidi algorithm, a
+// right-to-left context containing two embedded LTR runs — which reorders the
+// runs themselves, not just the punctuation between them. `firstColCode` cells
+// are always literal config/env text meant to read left-to-right exactly as
+// written, in every language, so direction is fixed rather than inherited.
+function tableHtml(t) {
+  const head = t.head?.length
+    ? `<thead><tr>${t.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead>`
+    : "";
+  const body = (t.rows || [])
+    .map(
+      (r) =>
+        `<tr>${r
+          .map((c, i) => `<td>${i === 0 && t.firstColCode ? `<code dir="ltr">${esc(c)}</code>` : esc(c)}</td>`)
+          .join("")}</tr>`
+    )
+    .join("");
+  return `\n      <div class="tw"><table>${head}<tbody>${body}</tbody></table></div>`;
+}
+
 function sectionHtml(s) {
   let out = `<h2>${esc(s.heading)}</h2>`;
   for (const p of s.body || []) out += `\n      <p>${esc(p)}</p>`;
+  if (s.table) out += tableHtml(s.table);
   for (const block of s.code || []) out += `\n      <pre><code>${esc(block)}</code></pre>`;
   if (s.widget) out += widgetHtml(s.widget);
   if (s.bullets?.length) out += `\n      <ul>${s.bullets.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>`;
   return out;
 }
+
+// Styles for tableHtml, emitted only on pages that actually contain a table —
+// same gating as BUILDER_STYLE, so the other 390-odd articles stay byte-for-byte
+// free of it. `text-align:start` is deliberate (not `left`): it is a logical
+// property, so an RTL page picks up right alignment from <html dir="rtl"> with
+// no direction-specific rule anywhere.
+const TABLE_STYLE = `<style>
+.tw{overflow-x:auto;margin:16px 0}
+.tw table{border-collapse:collapse;width:100%;font-size:15px}
+.tw th,.tw td{border:1px solid var(--border);padding:8px 11px;text-align:start;vertical-align:top}
+.tw th{color:var(--text-h);background:var(--card);font-weight:600}
+.tw code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px;color:var(--text-h)}
+</style>`;
 
 // Styles for widgetHtml, emitted only on pages that use a builder so every
 // other article stays byte-for-byte free of it (mirrors BUILDER_SCRIPT gating).
@@ -129,6 +172,10 @@ const BUILDER_SCRIPT = `<script>
 // only ships BUILDER_SCRIPT when it's needed (every other article stays JS-free).
 function hasWidget(doc) {
   return (doc.sections || []).some((s) => s.widget);
+}
+
+function hasTable(doc) {
+  return (doc.sections || []).some((s) => s.table);
 }
 
 export function renderArticlePage({ slug, lang, doc, updated, related = [] }) {
@@ -200,7 +247,7 @@ export function renderArticlePage({ slug, lang, doc, updated, related = [] }) {
     <meta name="twitter:description" content="${esc(doc.description)}" />
     <meta name="twitter:image" content="${ogImage}" />
     <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
-    <style>${STYLE}</style>${hasWidget(doc) ? "\n    " + BUILDER_STYLE : ""}
+    <style>${STYLE}</style>${hasTable(doc) ? "\n    " + TABLE_STYLE : ""}${hasWidget(doc) ? "\n    " + BUILDER_STYLE : ""}
   </head>
   <body>
     <div class="wrap">

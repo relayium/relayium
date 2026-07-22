@@ -436,9 +436,13 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 		// A node that has stopped heartbeating may be restarting (an update) or
 		// gone; redirecting there just hands the downloader a dead origin. Fall
 		// back to central proxying, which is always correct if slower.
+		// A node that has been uninstalled (RemovedAt != 0) is likewise never a
+		// redirect target: its last heartbeat can still be inside the window for a
+		// minute after the uninstaller deregistered it, and 302ing there sends the
+		// downloader to a host that is in the middle of being torn down.
 		online := s.now().Add(-nodeOnlineWindow).Unix()
 		if n, ok, nerr := s.store.GetNode(r.Context(), sf.NodeID); nerr == nil && ok &&
-			n.DownloadURL != "" && n.StorageSecret != "" && n.LastSeenAt >= online {
+			n.RemovedAt == 0 && n.DownloadURL != "" && n.StorageSecret != "" && n.LastSeenAt >= online {
 			directNode, directCapable = n, true
 		}
 	}

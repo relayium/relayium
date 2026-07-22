@@ -589,18 +589,35 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 </form>
 
 <table>
-<thead><tr><th>备注 / ID</th><th>IP</th><th>区域</th><th>状态</th><th>中继(本月/累计) / 上限</th><th>存储 / 硬盘上限</th><th>盘 剩余/总量</th><th>可存储</th><th>版本</th><th>备注名 · 限额(GB)</th><th></th></tr></thead>
+<thead><tr><th>备注 / ID</th><th>IP</th><th>区域</th><th>状态</th><th>中继(本月/累计) / 上限</th><th>存储 / 硬盘上限</th><th>盘 剩余/总量</th><th>可存储</th><th>排空</th><th>剩余文件 / 最早可安全卸载</th><th>版本</th><th>备注名 · 限额(GB)</th><th></th></tr></thead>
 <tbody>
 {{range .Nodes}}{{if eq .OwnerType "fleet"}}
 <tr>
 <td>{{if .Label}}<b>{{.Label}}</b><br>{{end}}<span style="color:var(--muted);font-size:12px">{{.ID}}</span></td>
 <td>{{if .Host}}{{.Host}}{{else}}—{{end}}</td>
 <td>{{.Region}}</td>
-<td>{{if .Online}}在线{{else}}离线{{end}}</td>
+<td>{{if .Removed}}<span class="err">已卸载</span>
+<form method="post" action="/admin/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('恢复该节点？它会重新进入放置/ICE/直连下载。')"><button type="submit" title="清除已卸载标记，让节点重新上线（不影响它的文件与历史）">恢复</button></form>
+{{else}}{{if .Online}}在线{{else}}离线{{end}}
+<form method="post" action="/admin/nodes/{{.ID}}/remove" class="lim" onsubmit="return confirm('手动标记该节点已卸载？用于卸载脚本联系不到中央、来不及自动登记的情况；节点会退出放置/ICE/直连下载，文件与历史保留，可随时用&quot;恢复&quot;撤销。')"><button type="submit" title="卸载脚本未能联系中央时的人工补救：标记为已移除">标记已移除</button></form>
+{{end}}</td>
 <td>{{bytes .MonthRelayedBytes}} / {{bytes .RelayedBytes}} / {{if .EffectiveTrafficLimitBytes}}{{bytes .EffectiveTrafficLimitBytes}}{{else}}∞{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StoredBytes}}{{else}}—{{end}} / {{if .DiskLimitBytes}}{{bytes .DiskLimitBytes}}{{else}}∞{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StorageFree}} / {{bytes .StorageTotal}}{{else}}—{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StorableBytes}}{{else}}—{{end}}</td>
+<td>
+{{if .Draining}}<span class="err">排空中</span>{{else}}正常{{end}}
+<form method="post" action="/admin/nodes/{{.ID}}/draining" class="lim">
+<input type="hidden" name="on" value="{{if .Draining}}0{{else}}1{{end}}">
+<button type="submit">{{if .Draining}}取消排空{{else}}开始排空{{end}}</button>
+</form>
+{{if and .Draining (not .StoredFileCount)}}
+<div style="color:var(--muted);font-size:12px">可以卸载了，在该机器上执行（先下载到文件、确认非空再运行——不要直接 <code>curl | sudo sh</code>，链接一旦暂时不可达，这种管道写法会让整条命令"看起来成功"、实际什么都没做）：<br><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh</code></div>
+{{else if .Draining}}
+<div style="color:var(--muted);font-size:12px">等最后一个文件过期后，在该机器上执行 <code>uninstall-node.sh</code> 卸载</div>
+{{end}}
+</td>
+<td>{{if .StoredFileCount}}{{.StoredFileCount}} 个 / {{ts .SafeToUninstallAt}}{{else}}0 个 · 可随时卸载{{end}}</td>
 <td>{{.Version}}</td>
 <td>
 <form method="post" action="/admin/nodes/{{.ID}}/label" class="lim">

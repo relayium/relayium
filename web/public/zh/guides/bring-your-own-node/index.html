@@ -30,7 +30,7 @@
     <meta name="twitter:title" content="自建节点：免费使用 Relayium 的中转与存储" />
     <meta name="twitter:description" content="用一条命令把你自己的中转/存储节点绑定到 Relayium 账号。之后你的传输全部走你自己的节点、不经过我们的计量服务器——因此免费，数据也留在你自己掌控的硬件上。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"自建节点：免费使用 Relayium 的中转与存储","description":"用一条命令把你自己的中转/存储节点绑定到 Relayium 账号。之后你的传输全部走你自己的节点、不经过我们的计量服务器——因此免费，数据也留在你自己掌控的硬件上。","inLanguage":"zh-Hans","dateModified":"2026-07-10","mainEntityOfPage":"https://relayium.com/zh/guides/bring-your-own-node/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"我遇到「relayium-node: command not found」，哪里错了？","acceptedAnswer":{"@type":"Answer","text":"你在安装之前就运行了 relayium-node 二进制。请用账户页给的那条一行安装命令（curl … | sudo … sh 形式）：它会下载二进制、放到 PATH 上，并作为服务启动。你从不需要单独安装 relayium-node。"}},{"@type":"Question","name":"重启之后节点还会在线吗？","acceptedAnswer":{"@type":"Answer","text":"会。安装脚本注册了一个 systemd 服务，开机自启且设为 Restart=always，所以重启后会自动回来，崩溃也会自愈。无需额外操作。"}},{"@type":"Question","name":"这跟自托管 Relayium 有什么区别？","acceptedAnswer":{"@type":"Answer","text":"自建节点保留你平常的 relayium.com 账号和客户端，只是多接一个你自己的节点来承载流量。自托管则是在你自己的域名上运行整套服务端（账号、Web 应用、信令）——那个见「自托管 Relayium」指南。"}},{"@type":"Question","name":"别人能用我的节点或看到我的数据吗？","acceptedAnswer":{"@type":"Answer","text":"不能。节点通过令牌绑定到你的账号，只承载你账号的流量。实时传输端到端加密，存储的数据块是你的节点也读不了的密文。你的数据和节点配置只为你自己所用。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"自建节点：免费使用 Relayium 的中转与存储","description":"用一条命令把你自己的中转/存储节点绑定到 Relayium 账号。之后你的传输全部走你自己的节点、不经过我们的计量服务器——因此免费，数据也留在你自己掌控的硬件上。","inLanguage":"zh-Hans","dateModified":"2026-07-22","mainEntityOfPage":"https://relayium.com/zh/guides/bring-your-own-node/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"我遇到「relayium-node: command not found」，哪里错了？","acceptedAnswer":{"@type":"Answer","text":"你在安装之前就运行了 relayium-node 二进制。请用账户页给的那条一行安装命令（curl … | sudo … sh 形式）：它会下载二进制、放到 PATH 上，并作为服务启动。你从不需要单独安装 relayium-node。"}},{"@type":"Question","name":"重启之后节点还会在线吗？","acceptedAnswer":{"@type":"Answer","text":"会。安装脚本注册了一个 systemd 服务，开机自启且设为 Restart=always，所以重启后会自动回来，崩溃也会自愈。无需额外操作。"}},{"@type":"Question","name":"这跟自托管 Relayium 有什么区别？","acceptedAnswer":{"@type":"Answer","text":"自建节点保留你平常的 relayium.com 账号和客户端，只是多接一个你自己的节点来承载流量。自托管则是在你自己的域名上运行整套服务端（账号、Web 应用、信令）——那个见「自托管 Relayium」指南。"}},{"@type":"Question","name":"别人能用我的节点或看到我的数据吗？","acceptedAnswer":{"@type":"Answer","text":"不能。节点通过令牌绑定到你的账号，只承载你账号的流量。实时传输端到端加密，存储的数据块是你的节点也读不了的密文。你的数据和节点配置只为你自己所用。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -57,12 +57,19 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.tw{overflow-x:auto;margin:16px 0}
+.tw table{border-collapse:collapse;width:100%;font-size:15px}
+.tw th,.tw td{border:1px solid var(--border);padding:8px 11px;text-align:start;vertical-align:top}
+.tw th{color:var(--text-h);background:var(--card);font-weight:600}
+.tw code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px;color:var(--text-h)}
+</style>
   </head>
   <body>
     <div class="wrap">
       <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <h1>自建节点：免费使用 Relayium 的中转与存储</h1>
-      <p class="updated">最近更新: 2026-07-10</p>
+      <p class="updated">最近更新: 2026-07-22</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/bring-your-own-node/">English</a><a href="/zh/guides/bring-your-own-node/" aria-current="true">中文</a><a href="/ja/guides/bring-your-own-node/">日本語</a><a href="/ko/guides/bring-your-own-node/">한국어</a><a href="/de/guides/bring-your-own-node/">Deutsch</a><a href="/fr/guides/bring-your-own-node/">Français</a><a href="/ar/guides/bring-your-own-node/">العربية</a><a href="/es/guides/bring-your-own-node/">Español</a><a href="/pt/guides/bring-your-own-node/">Português</a></nav>
       <p class="lead">跨网络传输和存储型链接会消耗中继带宽和磁盘，这对我们是有成本的，所以它们按免费额度提供、超出后收费。但有个绕过办法：自己搭一个中转/存储节点，绑定到你的账号，之后你的传输就走你自己的节点而不是我们的——不计量、不收费。</p>
       <p class="lead">这跟「自托管整套 Relayium 服务端」不是一回事。你依然用你平常的 relayium.com 账号、同样的客户端；只是多接了一个你自己名下的节点来承载你的流量。本指南带你从一台全新的 Linux 服务器，到节点上线，大约五分钟。</p>
@@ -79,6 +86,18 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>把命令粘到你的服务器上。它会把我们的安装脚本管道给 sh：脚本下载并校验 relayium-node 二进制、装到 /usr/local/bin、写好 systemd 服务并启动它。开头的 sudo 就是它能安装服务的原因；如果你本来就是 root，sudo 是无副作用的空操作。</p>
       <p>因为它是 systemd 服务，节点会开机自启，崩溃后也会自动重启——无需额外操作就能一直在线。如果你看到 `relayium-node: command not found`，说明你直接运行了二进制、而不是上面的安装命令——正是那条一行命令把二进制装好的。</p>
       <ul><li>确认已启动：`systemctl status relayium-node`（应为 active/running）。</li><li>确认开机自启：`systemctl is-enabled relayium-node`（应为 enabled）。</li><li>实时看日志：`journalctl -u relayium-node -f`。</li></ul>
+      <h2>用 root 跑这个安装脚本安全吗？</h2>
+      <p>先把最重要的一句说在前面：自建节点和我们自己机队的节点跑的是同一套代码、同一套加固——同一个签名发布里的同一个二进制、同一个安装脚本、同一份 systemd unit。唯一的差别是这台机器归谁。下面讲的东西对两者都成立。</p>
+      <p>把一个从网上拉下来的脚本管道给 root shell，值得警惕，也值得一个具体的回答，而不是一句「放心」。root 只用在安装这一步，节点后续运行完全用不到它。安装脚本会建一个叫 relayium-node 的系统账户（没有登录 shell、没有家目录），写好 systemd unit，启动服务，然后退出。节点本身从不以 root 运行：unit 里写死了 User=relayium-node，所以它一上线就是一个在你机器上什么都不拥有的低权限账户。（默认开启的自动更新确实会多装一个以 root 运行的 unit——下一节整节都在讲它能做什么、不能做什么。）</p>
+      <p>在这个账户外面，unit 还套了一层 systemd 沙箱。每一行都对着「节点进程万一被攻破，攻击者接下来会伸手去够什么」。这里没有任何东西对你隐藏：装完之后 `cat /etc/systemd/system/relayium-node.service` 就能看到完整的 unit。</p>
+      <div class="tw"><table><thead><tr><th>unit 里的配置</th><th>万一节点被攻破，它挡住了什么</th></tr></thead><tbody><tr><td><code dir="ltr">User=relayium-node</code></td><td>攻击者只是一个什么都没有的用户，不是 root。</td></tr><tr><td><code dir="ltr">ProtectHome=yes</code></td><td>/home、/root 完全隐身——偷不到 SSH 私钥，也拿不到别的项目的数据。</td></tr><tr><td><code dir="ltr">ProtectSystem=strict</code></td><td>整个文件系统只读，改不了任何系统文件。</td></tr><tr><td><code dir="ltr">ReadWritePaths=</code></td><td>唯一可写的只有节点自己的状态目录，以及你配置了存储时的那个存储目录。写别处一律失败。</td></tr><tr><td><code dir="ltr">NoExecPaths=</code></td><td>存储目录里的东西跑不起来——上传的文件无法被执行。</td></tr><tr><td><code dir="ltr">NoNewPrivileges=yes</code></td><td>没有回到 root 的路，常见的提权套路全被堵死。</td></tr><tr><td><code dir="ltr">CapabilityBoundingSet=</code></td><td>留空——不给任何 Linux capability。</td></tr><tr><td><code dir="ltr">ProtectKernelTunables=yes、ProtectKernelModules=yes</code></td><td>碰不到内核：改不了 sysctl，加载不了模块，种不了 rootkit。</td></tr></tbody></table></div>
+      <ul><li>只有真正开了存储的节点，ReadWritePaths 和 NoExecPaths 才会指向存储目录。纯中继节点这两行都没有，除了自己的状态目录哪儿都写不了。</li><li>正常情况下 capability 集合是空的。唯一的例外是把直连下载监听放在 1024 以下的端口时需要 CAP_NET_BIND_SERVICE 才能绑定；默认下载端口是 2053，在 1024 以上，所以什么都不会授予。</li><li>节点手里没有密钥。文件在上传之前就已由发送方加密，落到存储节点上的只是它读不了的密文——包括你自己的节点，也包括你自己。</li></ul>
+      <h2>自动更新能做什么、不能做什么</h2>
+      <p>安装脚本还会装一个自动更新的 timer，默认开启：relayium-node-update.timer 大约每十分钟问一次 relayium.com「这台节点该跑哪个版本」。这是第二个 unit，而且以 root 运行，所以它也该向你交代清楚自己。</p>
+      <p>中央从不下发二进制。它的全部回答就是一个版本号、两个开关（这台节点现在能不能动、这是不是一次刻意的降级）和一句简短的理由——没有字节流，没有 URL，没有命令。之后是节点自己去取那个发布版本，把压缩包的 SHA-256 与该版本的 checksums.txt 比对，再用编译进「正在做这次校验的那个二进制」里的公钥，验证 checksums.txt 上的 ECDSA P-256 签名。这把钥匙的私钥半边并不在回答这些轮询的服务器上。所以中央即使被攻破，也只能报一个版本号，变不出一个能通过验签的二进制。</p>
+      <p>更新器和节点是两个权限恰好相反的进程。relayium-node.service 就是上面那个沙箱——在 ProtectSystem=strict 之下它根本无法写 /usr/local/bin，所以节点永远改不了任何二进制，包括它自己的。relayium-node-update.service 则是一个只做一件事的 oneshot unit，以 root 运行，并且刻意不套沙箱：因为替换 /usr/local/bin 里的文件，需要的正是节点沙箱存在的意义所要拒绝的那份权限。把「能改二进制」这件事收进这一个单一用途的 unit，而不是去松动节点本体的加固，正是这个拆分的全部意义：拿着 root 的那个进程只负责换二进制，笼子里的那个永远碰不到二进制。</p>
+      <p>更新出了问题会自己撤销。更新器会把旧二进制留在新二进制旁边，重启服务，然后最多盯十分钟等心跳；如果新版本在这个窗口里没能报健康，它就把旧二进制换回去、再重启一次，并记下这个坏版本不再重试。整个过程从头到尾都不会读、移动或删除存储的文件。</p>
+      <ul><li>不想要它：带 RELAYIUM_NODE_AUTO_UPDATE=off 重跑一遍安装脚本。timer 和它的 service 会被停用并删除；节点照常运行，什么时候升级由你决定。</li><li>彻底不用了：先下载、检查，再执行——直接管道给 `sh` 的话，一旦链接暂时 404 或网络抖动，整条命令会什么都不打印、退出码却是 0，看起来就像卸载成功了。`curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; [ -s uninstall-node.sh ] &amp;&amp; sudo sh uninstall-node.sh` 会删掉 unit、二进制、配置和那个服务账户，并尽力（best-effort）告知 relayium.com 这台节点已下线——如果这次调用失败，终端上只会多一行提示（不是卸载出了问题），并会打印这台节点的 ID，方便管理员手动标记为已移除。</li><li>如果这台节点存了东西，只要存储目录里还有它不认识的文件——不只是活着的文件，一个已经过期、只是清理还没轮到的 blob 也算——卸载脚本就会拒绝执行，而不是把它们扔在那儿：每个存储的文件只存在于唯一一台节点上，没有副本。等这个数字归零再跑一次，或者加 RELAYIUM_NODE_FORCE=1 表示你接受这些文件从此不可达。存储目录本身除非你另外加上 RELAYIUM_NODE_PURGE_STORAGE=1，否则永远不会被删除。</li></ul>
       <h2>第三步 —— 放通入站端口</h2>
       <p>「在线」（向 relayium.com 发心跳）只需要出站访问，你已经有了。但要让别人真正通过你的节点中转、往上存储，它的入站端口必须可达。如果这台主机开了防火墙，就放通它们——用 ufw 就是：</p>
       <pre><code>sudo ufw allow 3478/udp        # TURN
