@@ -11,3 +11,4 @@ web/dist/
 /web/dist
 /web/releases/
 /.deployed-sha
+server/relayium-node
