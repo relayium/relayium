@@ -596,7 +596,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <td>{{if .Label}}<b>{{.Label}}</b><br>{{end}}<span style="color:var(--muted);font-size:12px">{{.ID}}</span></td>
 <td>{{if .Host}}{{.Host}}{{else}}—{{end}}</td>
 <td>{{.Region}}</td>
-<td>{{if .Online}}在线{{else}}离线{{end}}</td>
+<td>{{if .Removed}}<span class="err">已卸载</span>{{else if .Online}}在线{{else}}离线{{end}}</td>
 <td>{{bytes .MonthRelayedBytes}} / {{bytes .RelayedBytes}} / {{if .EffectiveTrafficLimitBytes}}{{bytes .EffectiveTrafficLimitBytes}}{{else}}∞{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StoredBytes}}{{else}}—{{end}} / {{if .DiskLimitBytes}}{{bytes .DiskLimitBytes}}{{else}}∞{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StorageFree}} / {{bytes .StorageTotal}}{{else}}—{{end}}</td>

@@ -324,6 +324,19 @@ type Node struct {
 	// this column so a node re-registering can't silently clear the flag out
 	// from under an operator mid-drain.
 	Draining bool
+	// RemovedAt is when the node told central it was being uninstalled (unix
+	// seconds); 0 = still installed. The row is KEPT rather than deleted so the
+	// admin panel and audit trail still explain where a file's node went, but a
+	// removed node is out of the placement pool, out of the ICE candidate list
+	// and never receives a download redirect — the machine is gone, so pointing
+	// anyone at it only produces a dead origin.
+	//
+	// Deliberately sticky: nothing clears it, not even a later re-register. The
+	// uninstaller deregisters BEFORE it stops the service, so a dying node could
+	// otherwise race a register and resurrect itself. A genuinely reinstalled
+	// machine gets a fresh state.json (the uninstaller removes the state dir)
+	// and therefore a new node ID, so it never needs the flag cleared.
+	RemovedAt int64
 }
 
 // NodeFileCount is a node's live-file footprint, as returned by
@@ -821,6 +834,12 @@ type Store interface {
 	// draining node is excluded from new-upload placement but keeps serving its
 	// existing files. See Node.Draining.
 	SetNodeDraining(ctx context.Context, id string, on bool) error
+	// MarkNodeRemoved records that a node has been uninstalled: the row stays for
+	// audit, but the node leaves the placement pool, the ICE candidate list and
+	// the direct-download path. Idempotent — re-marking an already-removed node
+	// keeps the FIRST timestamp, so a retried deregistration cannot rewrite
+	// history. Returns ErrNotFound for an unknown id. See Node.RemovedAt.
+	MarkNodeRemoved(ctx context.Context, id string, at int64) error
 	// CountFilesOnNode reports how many LIVE stored files (expires_at > now)
 	// still sit on nodeID, plus the largest ExpiresAt among them — the earliest
 	// moment the node is safe to uninstall, since a file binds to exactly one

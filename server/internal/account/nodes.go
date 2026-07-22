@@ -134,6 +134,75 @@ func (s *Service) RegisterNodeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/nodes/heartbeat", s.handleNodeHeartbeat)
 	mux.HandleFunc("POST /api/nodes/download-receipt", s.handleDownloadReceipt)
 	mux.HandleFunc("POST /api/nodes/update-check", s.handleUpdateCheck)
+	mux.HandleFunc("POST /api/nodes/deregister", s.handleNodeDeregister)
+}
+
+// handleNodeDeregister is what the uninstaller calls on its way out: this
+// machine is being removed, stop handing it out. Central marks the row removed
+// (never deletes it — the admin panel and the audit trail still have to be able
+// to explain where a file's node went) which takes it out of the placement
+// pool, out of the ICE candidate list and out of the direct-download redirect
+// path in one write.
+//
+// The node is expected to be gone moments later, so this must be cheap and
+// forgiving: the caller treats every failure as non-fatal and uninstalls
+// anyway. An already-removed node is a 200, not an error.
+//
+// AUTHENTICATION is exactly handleUpdateCheck's, including BOTH directions of
+// the ownership boundary, and here they matter more than anywhere else in this
+// file: this is the one node endpoint that takes a node out of service. Without
+// the fleet→user check, a holder of the shared fleet token could name a
+// stranger's BYO node and silently strand every file on it behind central's
+// proxy path; without the user→user check, any user with a node token could do
+// the same to anyone else's.
+func (s *Service) handleNodeDeregister(w http.ResponseWriter, r *http.Request) {
+	ownerType, ownerUserID, ok := s.nodeOwner(r)
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	var req struct {
+		NodeID string `json:"nodeID"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		return
+	}
+	if req.NodeID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "nodeID required"})
+		return
+	}
+	node, known, err := s.store.GetNode(r.Context(), req.NodeID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+		return
+	}
+	if !known {
+		// Nothing to remove. The uninstall is still correct, so this is not an
+		// error the script should shout about.
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "removed": false})
+		return
+	}
+	if ownerType == "user" && (node.OwnerType != "user" || node.OwnerUserID != ownerUserID) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not your node"})
+		return
+	}
+	if ownerType == "fleet" && node.OwnerType != "fleet" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not a fleet node"})
+		return
+	}
+	if err := s.store.MarkNodeRemoved(r.Context(), req.NodeID, s.now().Unix()); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+		return
+	}
+	// Loud on purpose. Every file still on this node has just become unreachable
+	// for its owner, and no admin was necessarily in the room when it happened.
+	if live, _, cerr := s.store.CountFilesOnNode(r.Context(), req.NodeID, s.now().Unix()); cerr == nil && live > 0 {
+		log.Printf("node %s deregistered while still holding %d live file(s) — those files are now unreachable", req.NodeID, live)
+	} else {
+		log.Printf("node %s deregistered (uninstalled)", req.NodeID)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "removed": true})
 }
 
 // updateCheckReq is what a node's ROOT UPDATER asks central: "what should I be

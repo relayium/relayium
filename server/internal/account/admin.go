@@ -86,6 +86,12 @@ type adminNodeView struct {
 	// earliest moment it is actually safe to remove. 0 means the node holds
 	// nothing live: safe now, no wait.
 	SafeToUninstallAt int64
+	// Removed is set once the node has told central it was being uninstalled
+	// (Node.RemovedAt). The row is kept for audit, but the machine is gone: it
+	// is out of placement, out of ICE and never receives a download redirect.
+	// Shown so the list is not just a growing pile of nodes that read "offline"
+	// with no explanation; the delete button is how an operator retires the row.
+	Removed bool
 }
 
 func nodeViews(nodes []Node, monthly map[string]int64, fileCounts map[string]NodeFileCount, now time.Time, st Settings) []adminNodeView {
@@ -111,6 +117,7 @@ func nodeViews(nodes []Node, monthly map[string]int64, fileCounts map[string]Nod
 			Draining:                   n.Draining,
 			StoredFileCount:            fc.Count,
 			SafeToUninstallAt:          fc.MaxExpiresAt,
+			Removed:                    n.RemovedAt != 0,
 		})
 	}
 	return out
