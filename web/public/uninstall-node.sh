@@ -13,11 +13,15 @@
 #
 # Uninstalling a STORAGE node destroys the files on it. Every stored file binds
 # to exactly one node and there are no replicas, so this script refuses to run
-# while the node still holds live files. The safe sequence is:
-#   1. mark the node "draining" in the admin panel — no new files land on it;
+# while the node still holds live files. The safe sequence, if you run the
+# Relayium instance this node reports to:
+#   1. mark the node "draining" in its admin panel — no new files land on it;
 #   2. wait until the panel says it is safe to uninstall (its last file has
 #      expired — up to 14 days);
 #   3. run this script.
+# If you contributed this node yourself (BYO): that admin panel is not yours to
+# reach, and you do not need it — just leave the node running until its stored
+# file count reaches zero (same 14-day outside bound) and run this script then.
 #
 # THE SAFETY MODEL IS AN ALLOWLIST. This script deletes, by name, only the files
 # it knows the installer and the node create. Directories are then removed with
@@ -400,22 +404,38 @@ if [ "$storage_counted" = yes ] && [ "$stored_files" -gt 0 ] &&
     echo ""
     echo "Those files exist ONLY here — every stored file binds to exactly one node"
     echo "and Relayium keeps no replicas. Uninstalling now makes them PERMANENTLY"
-    echo "unreachable for the people who uploaded them. Nothing can bring them back."
+    echo "unreachable for whoever shared them. Nothing can bring them back."
     echo ""
-    echo "Drain first, then wait:"
-    echo "  1. mark this node 'draining' in the admin panel — new uploads stop"
+    echo "This machine cannot tell from here whether it is one of the official"
+    echo "fleet's nodes or one a user contributed (BYO), so both ways forward are"
+    echo "below — use the one that matches how this node was set up."
+    echo ""
+    echo "Either way, the files themselves need nothing from you: each one keeps"
+    echo "downloading normally, right up to its own expiry (14 days at the"
+    echo "outside), whether this node is draining, running untouched, or you"
+    echo "never come back to this machine again until then."
+    echo ""
+    echo "If you run the Relayium instance this node reports to:"
+    echo "  1. mark this node 'draining' in its admin panel — new uploads stop"
     echo "     landing on it immediately, and the files it already holds keep"
     echo "     downloading normally;"
     echo "  2. wait until the panel shows it is safe to uninstall (the last file"
     echo "     on it has expired — up to 14 days);"
     echo "  3. run this script again."
     echo ""
+    echo "If you contributed this node yourself (BYO) — there is no admin panel"
+    echo "control reachable to you, and none is needed:"
+    echo "  1. just leave the node running; draining only changes how soon the"
+    echo "     count above reaches zero, it does not let files go faster;"
+    echo "  2. once it reaches zero, run this script again."
+    echo ""
     echo "If you are here because an update broke: do NOT uninstall. Re-run the"
     echo "installer with the same options you first used — upgrades never touch"
     echo "stored data."
     echo ""
-    echo "To destroy those files and uninstall anyway (note the 'sudo env' — a"
-    echo "variable set in front of curl does not survive the pipe into sudo):"
+    echo "To make those files permanently unreachable for whoever shared them and"
+    echo "uninstall anyway (note the 'sudo env' — a variable set in front of curl"
+    echo "does not survive the pipe into sudo):"
     echo "  curl -fsSL https://relayium.com/uninstall-node.sh |"
     echo "    sudo env RELAYIUM_NODE_FORCE=1 sh"
     echo ""
@@ -492,7 +512,11 @@ if [ -n "$CENTRAL_URL" ] && [ -n "$NODE_TOKEN" ] && [ -n "$NODE_ID" ] && command
     say "deregistered ${NODE_ID} from ${CENTRAL_URL}"
   else
     echo "relayium-node-uninstall: could not reach central to deregister — continuing." >&2
-    echo "relayium-node-uninstall: delete node ${NODE_ID} from the admin panel by hand." >&2
+    echo "relayium-node-uninstall: node id was ${NODE_ID} — ask whoever runs" >&2
+    echo "relayium-node-uninstall:   ${CENTRAL_URL} to mark it removed by hand in the" >&2
+    echo "relayium-node-uninstall:   admin panel (admin-only; do NOT delete the row, which would erase its" >&2
+    echo "relayium-node-uninstall:   file history — the panel's node list has a 'mark removed' action" >&2
+    echo "relayium-node-uninstall:   alongside 'restore' for exactly this)." >&2
   fi
 else
   say "no central URL, token or node id on disk — skipping deregistration"

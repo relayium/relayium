@@ -598,7 +598,9 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <td>{{.Region}}</td>
 <td>{{if .Removed}}<span class="err">已卸载</span>
 <form method="post" action="/admin/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('恢复该节点？它会重新进入放置/ICE/直连下载。')"><button type="submit" title="清除已卸载标记，让节点重新上线（不影响它的文件与历史）">恢复</button></form>
-{{else if .Online}}在线{{else}}离线{{end}}</td>
+{{else}}{{if .Online}}在线{{else}}离线{{end}}
+<form method="post" action="/admin/nodes/{{.ID}}/remove" class="lim" onsubmit="return confirm('手动标记该节点已卸载？用于卸载脚本联系不到中央、来不及自动登记的情况；节点会退出放置/ICE/直连下载，文件与历史保留，可随时用&quot;恢复&quot;撤销。')"><button type="submit" title="卸载脚本未能联系中央时的人工补救：标记为已移除">标记已移除</button></form>
+{{end}}</td>
 <td>{{bytes .MonthRelayedBytes}} / {{bytes .RelayedBytes}} / {{if .EffectiveTrafficLimitBytes}}{{bytes .EffectiveTrafficLimitBytes}}{{else}}∞{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StoredBytes}}{{else}}—{{end}} / {{if .DiskLimitBytes}}{{bytes .DiskLimitBytes}}{{else}}∞{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StorageFree}} / {{bytes .StorageTotal}}{{else}}—{{end}}</td>

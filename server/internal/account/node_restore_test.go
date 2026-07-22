@@ -169,6 +169,90 @@ func TestNodesByOwnerTypeExcludesRemoved(t *testing.T) {
 	}
 }
 
+// The manual recovery for a lost deregistration: the uninstaller's
+// /api/nodes/deregister call is best-effort, and once state.json is gone there
+// is nothing left on the machine to retry it with. The admin route reuses
+// MarkNodeRemoved — the exact store method the deregister endpoint calls — so
+// the outcome must be indistinguishable from a self-reported deregistration:
+// the node leaves the storage placement pool, and /restore still reverses it.
+func TestAdminMarkNodeRemovedRoute(t *testing.T) {
+	ts, _, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	ctx := context.Background()
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	n, err := store.UpsertNode(ctx, Node{
+		OwnerType: "fleet", URLs: []string{"turn:1.1.1.1:3478"}, TURNSecret: "s",
+		StorageEnabled: true, StorageURL: "https://x", StorageSecret: "ss",
+		StorageFree: 100 << 30, StorageTotal: 100 << 30, CreatedAt: 1, LastSeenAt: 1000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Sanity: before marking removed, the node is a placement candidate.
+	if nodes, err := store.StorageNodes(ctx, 0, 1); err != nil || len(nodes) != 1 {
+		t.Fatalf("sanity StorageNodes before remove = %d node(s), err %v, want 1", len(nodes), err)
+	}
+
+	// Unauthenticated: rejected, and the node stays exactly as it was.
+	noAuth, _ := http.NewRequest("POST", ts.URL+"/admin/nodes/"+n.ID+"/remove", nil)
+	respNo, err := client.Do(noAuth)
+	if err != nil {
+		t.Fatal(err)
+	}
+	respNo.Body.Close()
+	if respNo.StatusCode == http.StatusFound {
+		t.Fatalf("unauthenticated remove was accepted (%d)", respNo.StatusCode)
+	}
+	if got, _, _ := store.GetNode(ctx, n.ID); got.RemovedAt != 0 {
+		t.Fatal("unauthenticated remove actually marked the node removed")
+	}
+
+	// Authenticated: marks the node removed.
+	req, _ := http.NewRequest("POST", ts.URL+"/admin/nodes/"+n.ID+"/remove", nil)
+	req.AddCookie(cookie)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("remove: want 302, got %d", resp.StatusCode)
+	}
+	got, _, err := store.GetNode(ctx, n.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RemovedAt == 0 {
+		t.Fatal("RemovedAt still 0 after admin remove")
+	}
+
+	// It then leaves the placement pool.
+	if nodes, err := store.StorageNodes(ctx, 0, 1); err != nil || len(nodes) != 0 {
+		t.Fatalf("StorageNodes after remove = %d node(s), err %v, want 0", len(nodes), err)
+	}
+
+	// Restore still reverses it.
+	restoreReq, _ := http.NewRequest("POST", ts.URL+"/admin/nodes/"+n.ID+"/restore", nil)
+	restoreReq.AddCookie(cookie)
+	restoreResp, err := client.Do(restoreReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restoreResp.Body.Close()
+	if restoreResp.StatusCode != http.StatusFound {
+		t.Fatalf("restore: want 302, got %d", restoreResp.StatusCode)
+	}
+	if got, _, _ := store.GetNode(ctx, n.ID); got.RemovedAt != 0 {
+		t.Errorf("RemovedAt = %d after restore, want 0", got.RemovedAt)
+	}
+	if nodes, err := store.StorageNodes(ctx, 0, 1); err != nil || len(nodes) != 1 {
+		t.Fatalf("StorageNodes after restore = %d node(s), err %v, want 1", len(nodes), err)
+	}
+}
+
 func nodeIDsOf(nodes []Node) []string {
 	ids := make([]string, 0, len(nodes))
 	for _, n := range nodes {

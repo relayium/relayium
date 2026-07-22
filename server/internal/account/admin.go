@@ -330,6 +330,17 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// is no longer a one-way door. Same CSRF guard as its neighbours; no step-up,
 	// because it returns a node to service rather than taking one out.
 	mux.Handle("POST /admin/nodes/{id}/restore", s.csrfGuard(http.HandlerFunc(s.handleAdminRestoreNode)))
+	// The other half of the same door: for when deregistration never happened at
+	// all (central was unreachable when the uninstaller ran best-effort, and by
+	// the time anyone notices state.json — and with it the token and node id —
+	// is already gone, so there is nothing left to retry the API call with).
+	// Reuses MarkNodeRemoved, the exact store method /api/nodes/deregister calls,
+	// so a manually-marked node is indistinguishable from one that deregistered
+	// itself: same placement/ICE/direct-download exclusion, same restore path.
+	// Same CSRF guard as restore, no step-up: it is the admin-console mirror of
+	// an action a node can already take on itself with nothing but a bearer
+	// token, not a new capability.
+	mux.Handle("POST /admin/nodes/{id}/remove", s.csrfGuard(http.HandlerFunc(s.handleAdminMarkNodeRemoved)))
 	// 节点版本发布控制。**每条轨道一套独立路由**（track 在 path 里），不是一个
 	// 带轨道下拉框的表单：机队轨和自带节点轨是两台各自独立的控制器，任何把它们
 	// 合并成一个入口的做法都会把一条轨道的故障传染给另一条 —— 而"BYO 卡住时机队
@@ -1064,6 +1075,46 @@ func (s *Service) handleAdminRestoreNode(w http.ResponseWriter, r *http.Request)
 	}
 	s.writeAudit(r, AuditNodeRestore, "node:"+id,
 		[]ChangeField{{Field: "removed_at", Old: before.RemovedAt, New: int64(0)}}, StepUpNone)
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// handleAdminMarkNodeRemoved is the manual recovery for a lost deregistration:
+// the uninstaller's POST to /api/nodes/deregister is best-effort, and if
+// central was unreachable at that moment the node is never marked removed —
+// by the time anyone notices, state.json (and with it the token and node id)
+// is already gone, so there is no way to retry the API call by hand. This is
+// the admin-console equivalent, calling the SAME store method
+// (Service.store.MarkNodeRemoved) that the deregister endpoint itself calls,
+// so the outcome is identical: the node leaves the placement pool, the ICE
+// candidate list and the direct-download path, its row and file history
+// untouched, and /restore reverses it exactly as it would a self-reported
+// deregistration.
+//
+// Unscoped like restore, label and drain — an admin can mark any node removed,
+// not just fleet ones — and idempotent: marking an already-removed node keeps
+// the first timestamp (see MarkNodeRemoved), so a double click changes nothing.
+func (s *Service) handleAdminMarkNodeRemoved(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	id := r.PathValue("id")
+	before, found, err := s.store.GetNode(r.Context(), id)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	at := s.now().Unix()
+	if err := s.store.MarkNodeRemoved(r.Context(), id, at); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	s.writeAudit(r, AuditNodeRemove, "node:"+id,
+		[]ChangeField{{Field: "removed_at", Old: before.RemovedAt, New: at}}, StepUpNone)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 
