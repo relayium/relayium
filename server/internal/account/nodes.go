@@ -1050,3 +1050,13 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		nodeLimits: s.nodeLimitsFor(r.Context(), node),
 	})
 }
+
+// SetNodeDraining is the operator-facing entry point for the first half of a
+// safe node uninstall: it takes a node OUT of new-upload placement (see
+// StorageNodes/UserStorageNodes) while leaving everything else — including its
+// existing files' download path — untouched, so they can reach their full TTL
+// before the machine is removed. on=false reverses it, putting the node back
+// in the placement pool.
+func (s *Service) SetNodeDraining(ctx context.Context, nodeID string, on bool) error {
+	return s.store.SetNodeDraining(ctx, nodeID, on)
+}

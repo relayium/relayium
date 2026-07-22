@@ -315,6 +315,15 @@ type Node struct {
 	// rather than dropped, per the package's schema-migration policy, and
 	// simply reads 0 forever on both existing and new rows.
 	UpdateAttempts int
+	// Draining marks a node as being wound down for safe removal: it stays OUT
+	// of the placement pool (StorageNodes/UserStorageNodes exclude it) so no new
+	// file lands on it, but it keeps serving the files it already holds — those
+	// still need to reach their TTL, since a file binds to exactly one node and
+	// there are no replicas. Set only by an operator (SetNodeDraining), never by
+	// register/heartbeat: UpsertNode's ON CONFLICT clause deliberately omits
+	// this column so a node re-registering can't silently clear the flag out
+	// from under an operator mid-drain.
+	Draining bool
 }
 
 // NodeToken is a per-user credential a BYO node presents as its bearer. The
@@ -798,6 +807,10 @@ type Store interface {
 	SetUserNodeLabel(ctx context.Context, id, ownerUserID, label string) error
 	// SetNodeLabel renames any node (admin, unscoped) — used for fleet nodes.
 	SetNodeLabel(ctx context.Context, id, label string) error
+	// SetNodeDraining sets/clears a node's drain flag (admin, unscoped): a
+	// draining node is excluded from new-upload placement but keeps serving its
+	// existing files. See Node.Draining.
+	SetNodeDraining(ctx context.Context, id string, on bool) error
 	// CentralStoredBytes sums the live sizes of files held on central-local
 	// storage (node_id unset) — the app server's own disk fallback.
 	CentralStoredBytes(ctx context.Context) (int64, error)
