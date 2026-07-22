@@ -3,7 +3,9 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"io"
+	"os"
 )
 
 // updateRepo is the GitHub repo node updates are pulled from. Same repo as the
@@ -45,4 +47,52 @@ func parseUpdateFlags(args []string, stderr io.Writer) (updateConfig, error) {
 // tasks 6-8; this task only wires the command up.
 func runUpdate(uc updateConfig, stdout, stderr io.Writer) int {
 	return 0
+}
+
+// backupPath is where the pre-update binary is kept so a broken new version can
+// be undone locally. It lives next to the binary, owned by root and outside the
+// node sandbox's writable paths — a compromised node cannot touch it.
+func backupPath(binPath string) string { return binPath + ".prev" }
+
+// backupBinary copies the current binary aside, preserving its mode. This is
+// the precondition for the local self-rescue in task 7: central cannot roll
+// back a node that never comes up, because such a node never asks central
+// anything.
+func backupBinary(binPath string) error {
+	src, err := os.Open(binPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	fi, err := src.Stat()
+	if err != nil {
+		return err
+	}
+	tmp := backupPath(binPath) + ".tmp"
+	dst, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, fi.Mode().Perm())
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(dst, src); err != nil {
+		dst.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := dst.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	// Rename last so a crash mid-copy never leaves a truncated "backup" that
+	// would be restored over a working binary.
+	return os.Rename(tmp, backupPath(binPath))
+}
+
+// restoreBinary puts the backed-up binary back. Rename is atomic, so a crash
+// here leaves either the new or the old binary in place — never a partial one.
+func restoreBinary(binPath string) error {
+	prev := backupPath(binPath)
+	if _, err := os.Stat(prev); err != nil {
+		return fmt.Errorf("no backup to restore at %s: %w", prev, err)
+	}
+	return os.Rename(prev, binPath)
 }
