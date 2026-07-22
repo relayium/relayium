@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -26,6 +27,13 @@ type config struct {
 	DownloadURL string
 	// DownloadAddr is the PUBLIC listener (Cloudflare proxies to it) serving only
 	// the token-authed /dl routes. Empty disables the public listener.
+	//
+	// Only Cloudflare's proxied HTTPS ports work here — 443, 2053, 2083, 2087,
+	// 2096, 8443; anything else the orange cloud simply won't forward. We default
+	// to 2053 rather than 443 for two reasons: 443 is usually already taken on a
+	// host that runs anything else web-facing, and staying above 1024 means the
+	// sandbox needs no CAP_NET_BIND_SERVICE at all. Downloaders are unaffected —
+	// they always talk to CF on 443; this is only the CF→origin hop.
 	DownloadAddr string
 	// Cloudflare auto-DNS: with both set, the node upserts its own A record
 	// (subdomain of DownloadURL -> PublicIP, proxied) at startup.
@@ -40,6 +48,20 @@ func env(k, def string) string {
 	return def
 }
 
+// envInt is env for the port knobs. A node often shares a host with other
+// services (a web server, coturn, another panel), so every listening port must
+// be movable from the installer — which only writes env vars, never flags.
+// An unparseable value falls back to the default rather than failing the node.
+func envInt(k string, def int) int {
+	if v := os.Getenv(k); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+		log.Printf("relayium-node: %s=%q is not a number, using %d", k, v, def)
+	}
+	return def
+}
+
 func parseConfig() (config, error) {
 	var c config
 	flag.StringVar(&c.CentralURL, "central-url", env("RELAYIUM_CENTRAL_URL", ""), "central relayium server base URL, e.g. https://relayium.com")
@@ -48,15 +70,15 @@ func parseConfig() (config, error) {
 	flag.StringVar(&c.PublicIP, "public-ip", env("RELAYIUM_NODE_PUBLIC_IP", ""), "public IP for the TURN URL; auto-detected if empty")
 	flag.StringVar(&c.Realm, "realm", env("RELAYIUM_NODE_REALM", "relayium.app"), "TURN realm advertised to clients")
 	flag.StringVar(&c.StateDir, "state-dir", env("RELAYIUM_NODE_STATE_DIR", "/var/lib/relayium-node"), "directory for state.json")
-	flag.IntVar(&c.TURNPort, "turn-port", 3478, "TURN listening UDP port")
-	flag.IntVar(&c.MinPort, "min-port", 49152, "relay UDP range low")
-	flag.IntVar(&c.MaxPort, "max-port", 65535, "relay UDP range high")
+	flag.IntVar(&c.TURNPort, "turn-port", envInt("RELAYIUM_NODE_TURN_PORT", 3478), "TURN listening UDP port")
+	flag.IntVar(&c.MinPort, "min-port", envInt("RELAYIUM_NODE_MIN_PORT", 49152), "relay UDP range low")
+	flag.IntVar(&c.MaxPort, "max-port", envInt("RELAYIUM_NODE_MAX_PORT", 65535), "relay UDP range high")
 	flag.StringVar(&c.StorageDir, "storage-dir", env("RELAYIUM_NODE_STORAGE_DIR", ""), "blob storage dir; empty disables node storage")
 	flag.StringVar(&c.DownloadURL, "download-url", env("RELAYIUM_NODE_DOWNLOAD_URL", ""), "public https base URL for direct client downloads (e.g. https://node7.relayium.com); empty = central proxies")
-	flag.StringVar(&c.DownloadAddr, "download-addr", env("RELAYIUM_NODE_DOWNLOAD_ADDR", ":443"), "public listener for /dl (Cloudflare proxies here); empty disables it")
+	flag.StringVar(&c.DownloadAddr, "download-addr", env("RELAYIUM_NODE_DOWNLOAD_ADDR", ":2053"), "public listener for /dl (Cloudflare proxies here; must be one of CF's HTTPS ports 443/2053/2083/2087/2096/8443); empty disables it")
 	flag.StringVar(&c.CFToken, "cloudflare-token", env("RELAYIUM_NODE_CF_TOKEN", ""), "Cloudflare API token (Zone:DNS:Edit) to auto-manage this node's A record; empty skips auto-DNS")
 	flag.StringVar(&c.CFZoneID, "cloudflare-zone", env("RELAYIUM_NODE_CF_ZONE", ""), "Cloudflare zone id for the download domain (used with -cloudflare-token)")
-	flag.IntVar(&c.StoragePort, "storage-port", 8081, "TCP port for the node blob HTTP server")
+	flag.IntVar(&c.StoragePort, "storage-port", envInt("RELAYIUM_NODE_STORAGE_PORT", 8081), "TCP port for the node blob HTTP server")
 	flag.Parse()
 
 	var missing []string

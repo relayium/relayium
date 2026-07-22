@@ -1,5 +1,5 @@
 #!/bin/sh
-# Relayium relay-node installer (v0.8 — adds direct-download).
+# Relayium relay-node installer (v0.9 — movable ports; direct-download defaults to :2053).
 #   curl -fsSL https://relayium.com/install-node.sh | sh
 # Required env: RELAYIUM_CENTRAL_URL, RELAYIUM_NODE_TOKEN.
 # Optional:
@@ -8,9 +8,14 @@
 # Direct download (fleet nodes serve stored downloads themselves, bypassing
 # central; needs RELAYIUM_NODE_STORAGE_DIR too):
 #   RELAYIUM_NODE_DOWNLOAD_URL  public https base, e.g. https://node7.relayium.com
-#   RELAYIUM_NODE_DOWNLOAD_ADDR public listener (default :443; Cloudflare proxies here)
+#   RELAYIUM_NODE_DOWNLOAD_ADDR public listener (default :2053). Cloudflare's orange cloud
+#                               only proxies to 443/2053/2083/2087/2096/8443 — pick one of those.
 #   RELAYIUM_NODE_CF_TOKEN      Cloudflare API token (Zone:DNS:Edit) to auto-create the A record
 #   RELAYIUM_NODE_CF_ZONE       Cloudflare zone id for the download domain
+# Port conflicts (a node often shares a host with other services):
+#   RELAYIUM_NODE_TURN_PORT     TURN UDP port (default 3478)
+#   RELAYIUM_NODE_STORAGE_PORT  blob HTTP port, central-facing only (default 8081)
+#   RELAYIUM_NODE_MIN_PORT / RELAYIUM_NODE_MAX_PORT  relay UDP range (default 49152-65535)
 set -eu
 
 REPO="relayium/relayium"
@@ -106,23 +111,55 @@ RELAYIUM_NODE_TOKEN=${RELAYIUM_NODE_TOKEN}
 RELAYIUM_NODE_REGION=${RELAYIUM_NODE_REGION:-}
 RELAYIUM_NODE_STORAGE_DIR=${RELAYIUM_NODE_STORAGE_DIR:-}
 RELAYIUM_NODE_DOWNLOAD_URL=${RELAYIUM_NODE_DOWNLOAD_URL:-}
-RELAYIUM_NODE_DOWNLOAD_ADDR=${RELAYIUM_NODE_DOWNLOAD_ADDR:-:443}
+RELAYIUM_NODE_DOWNLOAD_ADDR=${RELAYIUM_NODE_DOWNLOAD_ADDR:-:2053}
 RELAYIUM_NODE_CF_TOKEN=${RELAYIUM_NODE_CF_TOKEN:-}
 RELAYIUM_NODE_CF_ZONE=${RELAYIUM_NODE_CF_ZONE:-}
+RELAYIUM_NODE_TURN_PORT=${RELAYIUM_NODE_TURN_PORT:-}
+RELAYIUM_NODE_STORAGE_PORT=${RELAYIUM_NODE_STORAGE_PORT:-}
+RELAYIUM_NODE_MIN_PORT=${RELAYIUM_NODE_MIN_PORT:-}
+RELAYIUM_NODE_MAX_PORT=${RELAYIUM_NODE_MAX_PORT:-}
 EOF
   chmod 0600 /etc/relayium-node/env
 
-  # A public download listener on a privileged port (<1024, e.g. the default :443)
-  # needs CAP_NET_BIND_SERVICE — the only capability we ever grant this otherwise
+  # A public download listener on a privileged port (<1024, e.g. :443) needs
+  # CAP_NET_BIND_SERVICE — the only capability we ever grant this otherwise
   # capability-less sandbox, and only when direct download is actually configured
-  # on a low port.
+  # on a low port. The default :2053 stays above 1024, so the common case grants
+  # nothing at all.
   bind_caps=""
-  dl_addr="${RELAYIUM_NODE_DOWNLOAD_ADDR:-:443}"
+  dl_addr="${RELAYIUM_NODE_DOWNLOAD_ADDR:-:2053}"
   dl_port="${dl_addr##*:}"
   if [ -n "${RELAYIUM_NODE_DOWNLOAD_URL:-}" ] && [ -n "$dl_port" ] && [ "$dl_port" -lt 1024 ] 2>/dev/null; then
     bind_caps="CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_BIND_SERVICE"
   fi
+
+  # Two ways the download listener silently fails to serve anyone; both are far
+  # cheaper to catch here than from a 522 an hour later.
+  if [ -n "${RELAYIUM_NODE_DOWNLOAD_URL:-}" ]; then
+    case "$dl_port" in
+      443|2053|2083|2087|2096|8443) ;;
+      *) err "download port '${dl_port}' is not one Cloudflare's proxy forwards to — use 443, 2053, 2083, 2087, 2096 or 8443" ;;
+    esac
+  fi
+  # Warn (don't fail) on ports already taken: the node would otherwise just
+  # crash-loop on bind, which reads as "the install broke". Only sees what is
+  # listening right now, so a stopped-but-installed service still slips through.
+  port_busy() { # $1=t|u (tcp/udp), $2=port
+    command -v ss >/dev/null 2>&1 || return 1
+    ss -ln"$1" 2>/dev/null | grep -qE "[:.]$2[[:space:]]"
+  }
+  warn_busy() { # $1=t|u, $2=port, $3=label, $4=env var to change
+    if port_busy "$1" "$2"; then
+      echo "WARNING: $3 port $2 is already in use — the node may fail to bind." >&2
+      echo "         Re-run with $4 set to a free port." >&2
+    fi
+  }
+  if [ -n "${RELAYIUM_NODE_DOWNLOAD_URL:-}" ]; then
+    warn_busy t "$dl_port" "download" "RELAYIUM_NODE_DOWNLOAD_ADDR=:2083"
+  fi
+  warn_busy t "${RELAYIUM_NODE_STORAGE_PORT:-8081}" "storage" "RELAYIUM_NODE_STORAGE_PORT"
+  warn_busy u "${RELAYIUM_NODE_TURN_PORT:-3478}" "TURN" "RELAYIUM_NODE_TURN_PORT"
 
   # Hand the state dir to the node user (also migrates a prior root install).
   [ -d /var/lib/relayium-node ] && chown -R relayium-node:relayium-node /var/lib/relayium-node 2>/dev/null || true
