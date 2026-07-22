@@ -7,9 +7,11 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/relayium/relayium/internal/relayusage"
+	"github.com/relayium/relayium/internal/selfupdate"
 )
 
 // isHTTPSURL reports whether s is a well-formed absolute https URL with a host —
@@ -129,6 +131,357 @@ func (s *Service) RegisterNodeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/nodes/register", s.handleNodeRegister)
 	mux.HandleFunc("POST /api/nodes/heartbeat", s.handleNodeHeartbeat)
 	mux.HandleFunc("POST /api/nodes/download-receipt", s.handleDownloadReceipt)
+	mux.HandleFunc("POST /api/nodes/update-check", s.handleUpdateCheck)
+}
+
+// updateCheckReq is what a node's ROOT UPDATER asks central: "what should I be
+// running, and is it my turn?". Result carries the outcome of the PREVIOUS
+// update this node was commanded to perform, piggybacked on the next poll.
+type updateCheckReq struct {
+	NodeID         string `json:"nodeID"`
+	CurrentVersion string `json:"currentVersion"`
+	Result         string `json:"result,omitempty"` // outcome of the PREVIOUS update
+}
+
+// updateCheckResp is central's answer. Eligible is the only field that
+// authorises a binary swap; TargetVersion alone means nothing but "this is
+// where the track is headed".
+type updateCheckResp struct {
+	TargetVersion  string `json:"targetVersion"`
+	Eligible       bool   `json:"eligible"`
+	AllowDowngrade bool   `json:"allowDowngrade"`
+	Reason         string `json:"reason,omitempty"`
+}
+
+// updateResults is the closed set of outcomes a node may report. Anything else
+// is rejected rather than stored: the rollout state machines branch on these
+// exact strings, so an unrecognised value would silently read as "no result
+// yet" and a real failure could go uncounted.
+var updateResults = map[string]bool{"ok": true, "failed": true, "rolled_back": true, "skipped": true}
+
+// handleUpdateCheck is the rollout state machines' only mouth: the node's root
+// updater polls it, and central answers with the target version and whether
+// this node may move now. The node proper never asks for a binary — a
+// compromised node therefore has no channel through which to request a swap.
+//
+// TRUST MODEL (deliberate, matches register/heartbeat): the FLEET token is
+// shared across the whole fleet and does not bind to a nodeID, so a fleet node
+// could in principle report results for, or claim the slot of, another fleet
+// node. nodeID is therefore NOT authenticated on the fleet path — do not build
+// anything on the assumption that it is. User (BYO) tokens DO bind to an owner,
+// so those are ownership-checked below, exactly as the heartbeat does.
+func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
+	ownerType, ownerUserID, ok := s.nodeOwner(r)
+	if !ok {
+		// An unauthenticated caller learns nothing — not even the target
+		// version, which would name the exact release to hunt for CVEs in.
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	var req updateCheckReq
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		return
+	}
+	if req.NodeID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "nodeID required"})
+		return
+	}
+	if req.Result != "" && !updateResults[req.Result] {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown result"})
+		return
+	}
+	ctx := r.Context()
+	node, known, err := s.store.GetNode(ctx, req.NodeID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+		return
+	}
+	if !known {
+		writeJSON(w, http.StatusGone, map[string]string{"error": "unknown node, re-register"})
+		return
+	}
+	if ownerType == "user" && (node.OwnerType != "user" || node.OwnerUserID != ownerUserID) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not your node"})
+		return
+	}
+	now := s.now().Unix()
+
+	// Land the reported result BEFORE any decision is taken, so a report is
+	// never lost to a subsequent decision error — and so the snapshot read
+	// below already contains it (that is what lets the state machine halt on
+	// this very poll).
+	if req.Result != "" {
+		if err := s.store.SetNodeUpdateResult(ctx, req.NodeID, req.Result); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+			return
+		}
+		node.UpdateResult = req.Result
+	}
+
+	// The owner type IS the track: our own machines roll on "fleet", user
+	// machines on "byo", and the two are never read across (a BYO node must
+	// never follow the fleet's rollout).
+	track, ownerClass := "fleet", "fleet"
+	if ownerType == "user" {
+		track, ownerClass = "byo", "user"
+	}
+	tr, found, err := s.store.GetRolloutTrack(ctx, track)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+		return
+	}
+	if !found {
+		writeJSON(w, http.StatusOK, updateCheckResp{Reason: "no rollout configured for this track"})
+		return
+	}
+	resp := updateCheckResp{
+		TargetVersion: tr.TargetVersion,
+		// AllowDowngrade is true ONLY when the track points at a version older
+		// than what this node runs, i.e. an operator deliberately rolled the
+		// target back. Compared numerically, never as strings ("v0.10.0" sorts
+		// before "v0.9.0").
+		AllowDowngrade: isVersionDowngrade(firstNonEmpty(req.CurrentVersion, node.Version), tr.TargetVersion),
+	}
+	if tr.Status != "rolling" {
+		resp.Reason = "rollout track is " + tr.Status
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+
+	// EVERY node of the track, INCLUDING OFFLINE ONES. decideFleet does its own
+	// online filtering and detects a bricked node by its row still being
+	// present but stale; a listing pre-filtered on last_seen_at (OnlineNodes)
+	// would make that node vanish instead of halting the track.
+	all, err := s.store.NodesByOwnerType(ctx, ownerClass)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+		return
+	}
+	snaps := nodeSnapshots(all)
+
+	if track == "fleet" {
+		resp.Eligible, resp.Reason, err = s.updateCheckFleet(ctx, tr, snaps, node, now)
+	} else {
+		resp.Eligible, resp.Reason, err = s.updateCheckByo(ctx, tr, snaps, node, now)
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// updateCheckFleet runs the fleet state machine and persists whatever it
+// decided, then answers the asking node.
+func (s *Service) updateCheckFleet(ctx context.Context, tr RolloutTrack, snaps []NodeSnapshot, node Node, now int64) (bool, string, error) {
+	d := decideFleet(tr, snaps, now)
+	switch d.Action {
+	case "halt":
+		// PutRolloutTrack is a WHOLE-ROW upsert, so mutate the row we read
+		// rather than constructing one — CurrentNodeID/FirstNodeID are kept for
+		// diagnosis and everything else must survive untouched.
+		tr.Status, tr.HaltedReason, tr.StageStartedAt = "halted", d.Reason, now
+		if err := s.store.PutRolloutTrack(ctx, tr); err != nil {
+			return false, "", err
+		}
+		return false, d.Reason, nil
+	case "complete":
+		tr.Status, tr.CurrentNodeID, tr.StageStartedAt = "complete", "", now
+		if err := s.store.PutRolloutTrack(ctx, tr); err != nil {
+			return false, "", err
+		}
+		return false, "rollout complete", nil
+	case "update":
+		if d.NodeID != node.ID {
+			// Somebody else is next. We do NOT claim on their behalf: the slot
+			// is claimed by whoever actually polls, which is what keeps the
+			// track strictly serial without a lock.
+			return false, "another node is next in the rollout queue", nil
+		}
+		// CLAIM FIRST, ANSWER SECOND. If we told the node to move before
+		// persisting this, two nodes polling in the same window would both be
+		// told it was their turn.
+		tr.CurrentNodeID, tr.StageStartedAt = node.ID, now
+		if d.IsFirst {
+			// The canary is positional and cannot be re-derived later; losing
+			// it silently downgrades the 6h observation window to 30 minutes.
+			tr.FirstNodeID = node.ID
+		}
+		if err := s.store.PutRolloutTrack(ctx, tr); err != nil {
+			return false, "", err
+		}
+		// update_from_version is what makes a later result attributable to this
+		// rollout, and update_result is cleared so the previous rollout's
+		// outcome cannot poison this one.
+		if err := s.store.CommandNodeUpdate(ctx, node.ID, node.Version, now); err != nil {
+			return false, "", err
+		}
+		return true, "", nil
+	default: // "wait"
+		// The machine says wait, but this node may already HOLD the claim — an
+		// updater that restarted mid-update must be told to carry on, or the
+		// track sits until the silence check halts it.
+		if tr.CurrentNodeID == node.ID && node.UpdateResult == "" &&
+			!selfupdate.SameVersion(node.Version, tr.TargetVersion) {
+			if node.UpdateStartedAt == 0 {
+				// The claim was persisted but the node's own stamp was not
+				// (a crash between the two writes). Repair it; never re-stamp
+				// an existing one, which would reset the brick timer on every
+				// poll and make a wedged node undetectable.
+				if err := s.store.CommandNodeUpdate(ctx, node.ID, node.Version, now); err != nil {
+					return false, "", err
+				}
+			}
+			return true, "", nil
+		}
+		return false, "waiting for the current stage to finish", nil
+	}
+}
+
+// updateCheckByo runs the byo state machine and persists whatever it decided.
+// Unlike the fleet track it commands a whole batch at once, so the answer to
+// the asking node is "were you in that batch".
+func (s *Service) updateCheckByo(ctx context.Context, tr RolloutTrack, snaps []NodeSnapshot, node Node, now int64) (bool, string, error) {
+	action, eligible, reason := decideByo(tr, snaps, now)
+	switch action {
+	case "halt":
+		tr.Status, tr.HaltedReason, tr.StageStartedAt = "halted", reason, now
+		if err := s.store.PutRolloutTrack(ctx, tr); err != nil {
+			return false, "", err
+		}
+		return false, reason, nil
+	case "complete":
+		tr.Status, tr.StageStartedAt = "complete", now
+		if err := s.store.PutRolloutTrack(ctx, tr); err != nil {
+			return false, "", err
+		}
+		return false, "rollout complete", nil
+	case "update":
+		// Persist the newly-opened batch and restart the observation window
+		// BEFORE commanding anyone: StageStartedAt is what gates the next,
+		// wider batch, and a batch opened but not recorded would re-open (and
+		// re-command) on every single poll.
+		tr.ByoBatch, tr.StageStartedAt = nextByoBatch(tr.ByoBatch), now
+		if err := s.store.PutRolloutTrack(ctx, tr); err != nil {
+			return false, "", err
+		}
+		byID := make(map[string]NodeSnapshot, len(snaps))
+		for _, n := range snaps {
+			byID[n.ID] = n
+		}
+		mine := false
+		for _, id := range eligible {
+			if err := s.store.CommandNodeUpdate(ctx, id, byID[id].Version, now); err != nil {
+				// One unwritable row must not abort the whole batch; it simply
+				// never counts as commanded (and so never as a failure).
+				log.Printf("rollout byo: commanding node %s failed: %v", id, err)
+				continue
+			}
+			if id == node.ID {
+				mine = true
+			}
+		}
+		if mine {
+			return true, "", nil
+		}
+		return false, "not in the batch currently open", nil
+	default: // "wait"
+		// A batch opens once per window but nodes poll every 30s, so almost
+		// every poll from a node that IS in the open batch lands here. Its own
+		// row is the record of having been commanded: answer from that rather
+		// than re-deriving batch membership.
+		if node.UpdateResult == "" &&
+			byoWasCommandedForTarget(nodeSnapshot(node), tr.TargetVersion) &&
+			!selfupdate.SameVersion(node.Version, tr.TargetVersion) {
+			return true, "", nil
+		}
+		return false, "waiting for the next batch", nil
+	}
+}
+
+// nextByoBatch is the percentage decideByo just opened, mirroring its own
+// "next entry after tr.ByoBatch" walk: 0 means nothing has opened yet, and a
+// value past the end stays at the widest batch. decideByo halts on an
+// unrecognised percentage before ever returning "update", so the fallback here
+// is only ever reached for the final batch.
+func nextByoBatch(cur int) int {
+	if cur == 0 {
+		return byoBatches[0]
+	}
+	for i, pct := range byoBatches {
+		if pct == cur && i+1 < len(byoBatches) {
+			return byoBatches[i+1]
+		}
+	}
+	return byoBatches[len(byoBatches)-1]
+}
+
+// nodeSnapshot projects a stored node onto what the rollout state machines
+// read. ActiveTransfers has no source in the nodes table yet, so it is 0 for
+// every node: decideFleet's canary pick then falls through to its stable hash
+// tie-break, which is deterministic and fair, just not load-aware.
+func nodeSnapshot(n Node) NodeSnapshot {
+	return NodeSnapshot{
+		ID: n.ID, Version: n.Version, LastSeenAt: n.LastSeenAt,
+		UpdateStartedAt: n.UpdateStartedAt, UpdateFromVersion: n.UpdateFromVersion,
+		UpdateResult: n.UpdateResult,
+	}
+}
+
+func nodeSnapshots(nodes []Node) []NodeSnapshot {
+	out := make([]NodeSnapshot, 0, len(nodes))
+	for _, n := range nodes {
+		out = append(out, nodeSnapshot(n))
+	}
+	return out
+}
+
+// isVersionDowngrade reports whether target is strictly OLDER than current.
+// Both must be plain release tags; anything else (a "dev" build, a pre-release)
+// is incomparable and answers false, so a downgrade is never authorised on a
+// guess.
+func isVersionDowngrade(current, target string) bool {
+	if !selfupdate.IsPlainVersion(current) || !selfupdate.IsPlainVersion(target) {
+		return false
+	}
+	c, cok := plainVersionParts(current)
+	tv, tok := plainVersionParts(target)
+	if !cok || !tok {
+		return false
+	}
+	for i := 0; i < 3; i++ {
+		if tv[i] != c[i] {
+			return tv[i] < c[i]
+		}
+	}
+	return false
+}
+
+// plainVersionParts splits a "vMAJOR.MINOR.PATCH" tag into its numeric parts.
+// Only ever called behind selfupdate.IsPlainVersion, which has already accepted
+// the string; ok=false is defence in depth, not an expected path.
+func plainVersionParts(s string) ([3]int, bool) {
+	parts := strings.Split(strings.TrimPrefix(strings.TrimSpace(s), "v"), ".")
+	if len(parts) != 3 {
+		return [3]int{}, false
+	}
+	var out [3]int
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 {
+			return [3]int{}, false
+		}
+		out[i] = n
+	}
+	return out, true
+}
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 // handleDownloadReceipt reconciles a direct-download's metering: central

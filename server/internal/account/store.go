@@ -775,6 +775,17 @@ type Store interface {
 	// PutRolloutTrack upserts a track's full state in one row. The fleet and
 	// byo rows are independent — see RolloutTrack's doc comment.
 	PutRolloutTrack(ctx context.Context, t RolloutTrack) error
+	// NodesByOwnerType returns every node of one ownership class ("fleet" |
+	// "user") INCLUDING offline ones. The rollout state machines require the
+	// offline rows (see the method's doc comment) — do not substitute
+	// OnlineNodes here.
+	NodesByOwnerType(ctx context.Context, ownerType string) ([]Node, error)
+	// CommandNodeUpdate stamps update_started_at/update_from_version and clears
+	// update_result when central commands a node to self-update.
+	CommandNodeUpdate(ctx context.Context, nodeID, fromVersion string, at int64) error
+	// SetNodeUpdateResult records the outcome a node reported for the update it
+	// was last commanded.
+	SetNodeUpdateResult(ctx context.Context, nodeID, result string) error
 	// pending_node_deletes (orphan-retry queue for GC when a node's DELETE fails)
 	EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error
 	ListPendingNodeDeletes(ctx context.Context) ([]PendingNodeDelete, error)
