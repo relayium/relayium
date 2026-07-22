@@ -193,18 +193,35 @@ func (s systemctlCtl) Restart() error {
 }
 
 // waitHealthy reports whether the node produced a successful heartbeat AFTER
-// `since` within timeout. Comparing against `since` (the restart moment) is the
-// whole point: a heartbeat left behind by the previous version must never be
-// read as the new one working. Note on granularity: lastHealthy's timestamp is
-// a file mtime, and on a filesystem that truncates mtimes downward (e.g. to
-// whole seconds), the comparison here can only err toward treating a genuinely
-// healthy heartbeat as too-early and rolling back a working node — it can never
-// make a heartbeat that didn't happen appear to be after `since`, so a broken
-// node is never mistaken for a healthy one by this effect.
-func waitHealthy(stateDir string, since time.Time, timeout, poll time.Duration) bool {
+// `since` AND from version `target`, within timeout. Both halves are required:
+//
+//   - Comparing against `since` (the restart moment) rejects a heartbeat left
+//     behind by the previous version before it was replaced.
+//   - Comparing the recorded version against `target` rejects a heartbeat that
+//     is genuinely fresh but came from a process still running the OLD binary.
+//     That happens whenever the unit executes a path other than the one this
+//     command replaced — `-bin`/RELAYIUM_NODE_BIN make that path configurable,
+//     and a host whose unit runs e.g. /opt/relayium/relayium-node while the
+//     updater defaults to /usr/local/bin/relayium-node would otherwise report a
+//     confident false success.
+//
+// The comparison goes through selfupdate.SameVersion because the binary's
+// version is goreleaser-stamped without the leading "v" ("0.9.0") while the
+// target tag carries it ("v0.9.0"). An empty recorded version means "unknown"
+// (a marker written by a node older than this format) and deliberately does NOT
+// match — see lastHealthy for why rolling back is the safe direction.
+//
+// Note on granularity: lastHealthy's timestamp is a file mtime, and on a
+// filesystem that truncates mtimes downward (e.g. to whole seconds), the
+// comparison here can only err toward treating a genuinely healthy heartbeat as
+// too-early and rolling back a working node — it can never make a heartbeat
+// that didn't happen appear to be after `since`, so a broken node is never
+// mistaken for a healthy one by this effect.
+func waitHealthy(stateDir string, since time.Time, target string, timeout, poll time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for {
-		if ts, err := lastHealthy(stateDir); err == nil && ts.After(since) {
+		if ts, ver, err := lastHealthy(stateDir); err == nil && ts.After(since) &&
+			ver != "" && selfupdate.SameVersion(ver, target) {
 			return true
 		}
 		if time.Now().After(deadline) {
@@ -301,7 +318,7 @@ func runUpdateWith(uc updateConfig, svc serviceCtl, window, poll time.Duration, 
 	// taking the timestamp this late.
 	restartedAt := time.Now()
 
-	if !waitHealthy(uc.StateDir, restartedAt, window, poll) {
+	if !waitHealthy(uc.StateDir, restartedAt, uc.TargetTag, window, poll) {
 		fmt.Fprintf(stderr, "%s did not heartbeat within %s — rolling back to %s\n", to, window, from)
 		rollback(uc, svc, stderr)
 		recordFailed(uc.StateDir, uc.TargetTag, stderr)

@@ -399,7 +399,7 @@ func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir, 
 	}
 	// Record the success so the updater can tell a working new version from one
 	// that starts but can't reach central.
-	if err := markHealthy(stateDir); err != nil {
+	if err := markHealthy(stateDir, version); err != nil {
 		log.Printf("relayium-node: record heartbeat health: %v", err)
 	}
 }

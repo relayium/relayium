@@ -120,7 +120,7 @@ func TestRunUpdateWithInstallsTheNodeArtifactNotTheCLI(t *testing.T) {
 	}
 	// The fake service brings the node back healthy, so the run reaches the
 	// success path and the installed binary is the one left on disk.
-	svc := newHealthySvc(t, dir)
+	svc := newHealthySvc(t, dir, "9.9.9")
 	var out, errBuf bytes.Buffer
 	code := runUpdateWith(uc, svc, 10*time.Second, 5*time.Millisecond, &out, &errBuf)
 
@@ -270,6 +270,44 @@ func TestRunUpdateWithRollsBackWhenRestartFails(t *testing.T) {
 // even though the new (broken) binary never heartbeats again. The correct
 // ordering (restartedAt captured AFTER Restart() returns) must see this
 // heartbeat as no-later-than the restart and time out instead.
+// The updater replaced a binary the unit does not actually execute — the case
+// `-bin`/RELAYIUM_NODE_BIN makes reachable, e.g. docs/node-hardening.md's unit
+// running /opt/relayium/relayium-node while the updater defaults to
+// /usr/local/bin/relayium-node. The old process keeps heartbeating happily, and
+// every one of those heartbeats is genuine and stamped after the restart. Only
+// the recorded VERSION distinguishes this from success, so the run must roll
+// back rather than report a false `ok` to central's rollout queue.
+func TestRunUpdateWithRejectsFreshHeartbeatFromTheOldVersion(t *testing.T) {
+	t.Setenv("RELAYIUM_UPDATE_ALLOW_UNSIGNED", "1")
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "relayium-node")
+	if err := os.WriteFile(bin, []byte("OLD"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := fakeGithubRelease(t, "v9.9.9", "NEW-NODE-BINARY")
+	uc := updateConfig{
+		StateDir: dir, BinPath: bin, TargetTag: "v9.9.9", Repo: "relayium/relayium",
+		APIBase: srv.URL, DownloadBase: srv.URL,
+	}
+	// Healthy, continuous, post-restart heartbeats — from 9.9.8, the version
+	// still running.
+	svc := newHealthySvc(t, dir, "9.9.8")
+	var out, errBuf bytes.Buffer
+	code := runUpdateWith(uc, svc, 100*time.Millisecond, 5*time.Millisecond, &out, &errBuf)
+
+	if code != exitNotHealthy {
+		t.Fatalf("code = %d, want %d: heartbeats from 9.9.8 must not confirm an update to v9.9.9 (stdout=%s)", code, exitNotHealthy, out.String())
+	}
+	got, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "OLD" {
+		t.Errorf("binary = %q, want rollback to %q", got, "OLD")
+	}
+}
+
 func TestRunUpdateWithRejectsHeartbeatStampedDuringRestart(t *testing.T) {
 	t.Setenv("RELAYIUM_UPDATE_ALLOW_UNSIGNED", "1")
 	dir := t.TempDir()
@@ -283,7 +321,10 @@ func TestRunUpdateWithRejectsHeartbeatStampedDuringRestart(t *testing.T) {
 		StateDir: dir, BinPath: bin, TargetTag: "v9.9.9", Repo: "relayium/relayium",
 		APIBase: srv.URL, DownloadBase: srv.URL,
 	}
-	svc := &fakeSvc{heartbeatOnRestart: dir}
+	// Stamped with the TARGET version, so the only thing that can reject this
+	// heartbeat is when it was written — which is exactly what this test is
+	// about.
+	svc := &fakeSvc{heartbeatOnRestart: dir, heartbeatVersion: "9.9.9"}
 	var out, errBuf bytes.Buffer
 	// The new binary never heartbeats again after the one fakeSvc.Restart
 	// stamps, so a correct implementation must time out here, not succeed.
