@@ -1240,6 +1240,9 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
+	// 单次心跳给单个用户记了多少（只用于下面的异常告警，不参与计费）。
+	attributed := map[string]int64{}
+
 	// Attribute per-allocation relayed bytes through the existing keep-max path.
 	for _, u := range req.Usage {
 		token := relayusage.TokenFromUsername(u.Username)
@@ -1275,7 +1278,11 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 			// Log-and-continue: one bad alloc must not drop the rest.
 			log.Printf("node %s heartbeat: record alloc %s failed: %v", req.NodeID, u.AllocID, err)
 		}
+		if u.RelayedBytes > 0 {
+			attributed[userID] += u.RelayedBytes
+		}
 	}
+	warnImplausibleAttribution(req.NodeID, len(req.Usage), attributed)
 	writeJSON(w, http.StatusOK, nodeHeartbeatResp{
 		OK: true, HeartbeatInterval: nodeHeartbeatInterval,
 		nodeLimits: s.nodeLimitsFor(r.Context(), node),
@@ -1290,4 +1297,36 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 // in the placement pool.
 func (s *Service) SetNodeDraining(ctx context.Context, nodeID string, on bool) error {
 	return s.store.SetNodeDraining(ctx, nodeID, on)
+}
+
+// implausiblePerHeartbeat 是"一次心跳给一个用户记的量"的可信上限。
+//
+// 心跳周期是 30 秒。一个 10 Gbps 满速跑满 30 秒的节点也只有约 37 GiB，而且那还是
+// 它**所有**用户加起来的量。128 GiB 因此远高于任何真实的单用户单周期数字，同时又
+// 远低于伪造能达到的量级：一个 1 MiB 的心跳体能塞进约 7000 条 usage，每条各带一个
+// 新的 allocID 绕过单条钳制，一次就能给受害者记上约 20 TB。
+const implausiblePerHeartbeat = 128 << 30
+
+// implausibleUsageCount 是单次心跳里 usage 条数的可信上限。真实节点在 30 秒里不会
+// 有几千个并发中继分配；条数本身就是一个比字节数更早暴露的信号。
+const implausibleUsageCount = 512
+
+// warnImplausibleAttribution 在归因量级不像真的时喊一声。
+//
+// **不改计费**：跨用户伪造的既有防线（pairCodeOwner 比对）对**过期/未知**的码是
+// "无法反驳即接受"，所以持有节点凭据的人仍然可以给别人记账。真正的修复是让中心
+// 在签发凭据时嵌一个不可伪造的归因标签（报告 M1），那要动计费链路。在那之前，
+// 至少别让这件事发生得**完全无声**——一条日志就是"被记了 20 TB"和"有人在记 20 TB"
+// 的区别。
+func warnImplausibleAttribution(nodeID string, entries int, attributed map[string]int64) {
+	if entries > implausibleUsageCount {
+		log.Printf("WARNING: node %s reported %d usage entries in one heartbeat (>%d) — possible forged attribution",
+			nodeID, entries, implausibleUsageCount)
+	}
+	for userID, bytes := range attributed {
+		if bytes > implausiblePerHeartbeat {
+			log.Printf("WARNING: node %s attributed %d bytes to user %s in one heartbeat (>%d) — implausible for a %ds window, possible forged attribution",
+				nodeID, bytes, userID, int64(implausiblePerHeartbeat), nodeHeartbeatInterval)
+		}
+	}
 }

@@ -531,6 +531,7 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
+	warnInsecureCookieConfig(*baseURL, *addr)
 	log.Printf("relayium signaling server listening on %s", *addr)
 	log.Fatal(srv.ListenAndServe())
 }
