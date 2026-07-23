@@ -1203,6 +1203,22 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not your node"})
 		return
 	}
+	// ...and the mirror check, which deregister/update-check already had and this
+	// endpoint did not. A fleet token is not bound to a node id, so without this a
+	// fleet credential could heartbeat someone else's BYO node: forge LastSeenAt
+	// (keep a dead node "online"), StorageFree (steer where uploads land) and
+	// ActiveTransfers (steer which node gets canary builds first). Every one of
+	// those is a user-visible lie about hardware the caller does not own.
+	// ...and the mirror check, which deregister/update-check already had and this
+	// endpoint did not. A fleet token is not bound to a node id, so without this a
+	// fleet credential could heartbeat someone else's BYO node: forge LastSeenAt
+	// (keep a dead node "online"), StorageFree (steer where uploads land) and
+	// ActiveTransfers (steer which node gets canary builds first). Every one of
+	// those is a user-visible lie about hardware the caller does not own.
+	if ownerType == "fleet" && node.OwnerType != "fleet" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not a fleet node"})
+		return
+	}
 	billable := node.OwnerType == "fleet"
 	now := s.now().Unix()
 	// -1: "this heartbeat carried no load signal" — an old binary that omits

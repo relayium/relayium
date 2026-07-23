@@ -32,12 +32,17 @@ func NewPairRegistry(ttlSeconds int64, now func() int64) *PairRegistry {
 }
 
 // MintFor returns a fresh code not colliding with a live one, bound to owner,
-// plus its unix expiry.
+// plus its unix expiry. Returns ("", 0) if it could not find a free code — see
+// maxMintAttempts; callers must treat that as a failure, not as a valid code.
 func (p *PairRegistry) MintFor(owner string) (string, int64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := p.now()
-	for {
+	// 有界重试。24^6 的空间里活码撞车的概率微乎其微，但这个循环是**持锁**跑的：
+	// 一旦（因为字母表被改小、TTL 被改大、或者纯粹的 bug）空间真的被占满，无界循环
+	// 会把整个注册表锁死，所有人都铸不出码也验不了码——服务不是变慢而是停摆。
+	// 撞满 maxMintAttempts 次就放弃并返回失败，让调用方回一个 5xx。
+	for i := 0; i < maxMintAttempts; i++ {
 		code := randCode()
 		if e, ok := p.codes[code]; ok && e.exp > now {
 			continue // collide with a still-live code; try again
@@ -46,7 +51,12 @@ func (p *PairRegistry) MintFor(owner string) (string, int64) {
 		p.codes[code] = codeEntry{exp: exp, owner: owner}
 		return code, exp
 	}
+	return "", 0
 }
+
+// 铸码时容忍的碰撞次数。10 次全撞意味着码空间已被活码填满到 ~100%，那是配置事故
+// 而不是运气问题，继续重试没有意义。
+const maxMintAttempts = 10
 
 // OwnerOf returns the owning userID of a live code, or ("", false) if the code
 // is unknown or expired.

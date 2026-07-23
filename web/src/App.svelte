@@ -102,7 +102,9 @@
   let socketRoomKey = ""; // which room the current socket is bound to; guards the reconnect effect
   let roomEpoch = 0; // bumped per room switch; discards a stale fetchIceServers response
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined; // pending auto-reconnect after a WS drop
-  let iceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+  // /api/ice 返回前的初始值。空列表：默认值放第三方 STUN 等于每次加载都可能先向它
+  // 报到一次（公网 IP + 会话时序）。理由同 ice.ts 的 FALLBACK。
+  let iceServers: RTCIceServer[] = [];
   // Multi-relay pool + the two peers' measured RTTs to it. Both sides run pickRelay
   // over the same (mine, theirs) data and converge on the same relay id — see the
   // relay-measurement block below.

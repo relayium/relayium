@@ -344,6 +344,9 @@ func (s *Service) handleFileMeta(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	// 同 handleBlob：加密的 manifest（文件名、大小）不该在任何中间缓存里留副本，
+	// 尤其是 burn-after-read 的那些——元数据滞留同样泄漏"这里曾经有过什么"。
+	w.Header().Set("Cache-Control", "private, no-store")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"encManifest":   base64.StdEncoding.EncodeToString(sf.EncManifest),
 		"size":          sf.Size,
@@ -534,6 +537,10 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	// rendered or MIME-sniffed by the browser.
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Disposition", "attachment")
+	// 密文本身是零知识的（没有 URL fragment 里的密钥就解不开），但缓存仍然会
+	// 破坏 burn-after-read 的语义：中间缓存留一份，"读后即焚"的文件就还能被再取
+	// 一次。存储层的对象本来就是一次性的，一律不缓存。
+	w.Header().Set("Cache-Control", "private, no-store")
 	if !limited {
 		w.Header().Set("Accept-Ranges", "bytes")
 	}

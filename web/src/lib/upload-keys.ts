@@ -69,3 +69,19 @@ export function pruneUploadKeys(liveIds: Iterable<string>): void {
   }
   if (changed) writeAll(m);
 }
+
+/**
+ * 清空本浏览器保存的全部上传密钥。登出时调用。
+ *
+ * 每条 id→key 都是一份**完整的能力凭证**：`/d/<id>#k=<key>` 不需要任何会话就能下载。
+ * 登出却把它们留在 localStorage 里，等于"退出登录"只退了 UI，实际的文件访问权仍然
+ * 躺在这台机器上——共用电脑、二手设备、借人一用的场景下，下一个用户拿到的是你所有
+ * 未过期上传的完整链接。
+ */
+export function forgetAllUploadKeys(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* storage disabled — nothing was persisted either */
+  }
+}

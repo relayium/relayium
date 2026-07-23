@@ -98,6 +98,12 @@ func PairHandler(reg *PairRegistry, rl *RateLimiter, ipx *IPExtractor, currentUs
 			return
 		}
 		code, exp := reg.MintFor(userID)
+		if code == "" {
+			// 码空间被活码占满（配置事故，见 maxMintAttempts）。宁可明确报错，
+			// 也不要把空串当成码发出去——那会让前端显示一个谁也加入不了的"码"。
+			http.Error(w, "could not mint a pairing code, try again", http.StatusServiceUnavailable)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"code": code, "expiresAt": exp})
 	}

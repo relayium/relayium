@@ -1680,25 +1680,38 @@ func (s *SQLiteStore) UnlinkIdentityIfSafe(ctx context.Context, provider, userID
 	return n > 0, false, tx.Commit()
 }
 
+// 会话行以 **sha256(令牌)** 为主键，而不是令牌本身。
+//
+// 令牌就是 cookie 的值：明文存库意味着任何一次只读的库泄露（备份、快照、卷、一条
+// SELECT 的 SQL 注入）都等于把所有在线用户的会话直接交出去，而且 TTL 是 30 天。
+// 本项目其余每一种令牌（magic / reset / CLI / node / fleet / admin 会话）本来就都是
+// hashToken() 存的，唯独用户会话是例外——这里把它补齐。
+//
+// 升级不做数据迁移，也不需要：切换之后查询用的是 hashToken(cookie)，旧行里存的是
+// 原始令牌，要让它再次命中得对 sha256 求原像。所以旧行既失效又不可利用，
+// DeleteExpiredSessions 会在它们到期时收走。代价是所有人被登出一次。
 func (s *SQLiteStore) CreateSession(ctx context.Context, sess Session) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions (id, user_id, created_at, expires_at, revoked) VALUES (?, ?, ?, ?, 0)`,
-		sess.ID, sess.UserID, sess.CreatedAt, sess.ExpiresAt)
+		hashToken(sess.ID), sess.UserID, sess.CreatedAt, sess.ExpiresAt)
 	return err
 }
 
 func (s *SQLiteStore) GetSession(ctx context.Context, id string) (Session, bool, error) {
 	var sess Session
 	var revoked int
+	// 不 SELECT id：库里存的是哈希，回填给调用方会让它有机会被当成 cookie 值发出去。
+	// 直接把调用方传进来的原始令牌放回 sess.ID。
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, user_id, created_at, expires_at, revoked FROM sessions WHERE id = ?`, id,
-	).Scan(&sess.ID, &sess.UserID, &sess.CreatedAt, &sess.ExpiresAt, &revoked)
+		`SELECT user_id, created_at, expires_at, revoked FROM sessions WHERE id = ?`, hashToken(id),
+	).Scan(&sess.UserID, &sess.CreatedAt, &sess.ExpiresAt, &revoked)
 	if err == sql.ErrNoRows {
 		return Session{}, false, nil
 	}
 	if err != nil {
 		return Session{}, false, err
 	}
+	sess.ID = id
 	if revoked != 0 {
 		return sess, false, nil
 	}
@@ -1707,14 +1720,17 @@ func (s *SQLiteStore) GetSession(ctx context.Context, id string) (Session, bool,
 }
 
 func (s *SQLiteStore) RevokeSession(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE sessions SET revoked = 1 WHERE id = ?`, id)
+	_, err := s.db.ExecContext(ctx, `UPDATE sessions SET revoked = 1 WHERE id = ?`, hashToken(id))
 	return err
 }
 
-// RevokeUserSessions revokes every session of userID except exceptID.
+// RevokeUserSessions revokes every session of userID except exceptID (a raw
+// token; "" revokes all of them).
 func (s *SQLiteStore) RevokeUserSessions(ctx context.Context, userID, exceptID string) error {
+	// exceptID 也要哈希后再比，否则"保留当前会话"会退化成"一个都不保留"——
+	// 改密码之后连自己都被登出，而这条路径恰恰是改密码在走。
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE sessions SET revoked = 1 WHERE user_id = ? AND id <> ?`, userID, exceptID)
+		`UPDATE sessions SET revoked = 1 WHERE user_id = ? AND id <> ?`, userID, hashToken(exceptID))
 	return err
 }
 

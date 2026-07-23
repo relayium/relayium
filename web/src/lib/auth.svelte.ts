@@ -1,3 +1,5 @@
+import { forgetAllUploadKeys } from "./upload-keys";
+import { clearHistory } from "./history";
 // Session + account state for Relayium, driven by Svelte 5 runes. The LAN transfer
 // flow does not depend on this; login only gates future cross-network features.
 
@@ -103,6 +105,13 @@ export async function logout(): Promise<void> {
   } catch {
     /* storage may be unavailable */
   }
+  // 本机留下的东西也要一起清，否则「退出登录」只退了 UI：
+  //  - 上传密钥：每条 id→key 都是一份完整能力凭证，/d/<id>#k=<key> 无需会话即可下载；
+  //  - 传输历史：文件名 + 对端设备名，是一份相当直白的活动记录。
+  // 两者都是**本机便利**功能，不是账号数据——所以登出时清掉不会丢任何服务端的东西，
+  // 而留着的话，下一个用这台机器的人就继承了它们。
+  forgetAllUploadKeys();
+  clearHistory();
 }
 
 export function googleLoginUrl(): string {

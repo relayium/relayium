@@ -2,12 +2,19 @@
 // room — an anonymous pairing code (?code=) — the server returns STUN + an
 // ephemeral TURN credential; for LAN (no code) it returns STUN only. Passing the
 // pairing code is what lets code transfers relay through TURN across strict NATs
-// instead of failing STUN-only. On ANY failure — a non-ok status, a network
-// error, or a body that isn't JSON (e.g. a misconfigured nginx serving
-// index.html for /api/*) — we fall back to a public STUN server so a direct-only
-// connection can still be attempted and the app never gets stuck before
-// signaling starts.
-const FALLBACK: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+// instead of failing STUN-only.
+//
+// On ANY failure — a non-ok status, a network error, or a body that isn't JSON
+// (e.g. a misconfigured nginx serving index.html for /api/*) — the fallback is an
+// EMPTY list, not a public STUN server.
+//
+// 这里以前是 stun.l.google.com。STUN 的用途是问「我的公网地址是什么」，所以那个回落
+// 意味着：只要 /api/ice 出一点问题，用户的浏览器就会去向 Google 报到一次，带着公网 IP
+// 和会话时序。对一个主打「服务器看不到你的文件」的产品，这是最容易被指出来的自相矛盾。
+//
+// 空列表不是故障：局域网靠 host 候选就能直连（这恰恰是 /api/ice 挂掉时唯一还能成的
+// 场景），而跨网络本来就需要服务器下发 TURN 才成立，回落到公共 STUN 也救不了。
+const FALLBACK: RTCIceServer[] = [];
 
 /** Whether the list carries a usable TURN relay (a turn:/turns: URL). Only then is
  *  it safe to force relay-only ICE — otherwise there would be no candidates at all. */

@@ -4,6 +4,8 @@ import {
   passwordLogin, requestMagicLink, logout,
   appleLoginUrl, fetchAuthMethods,
 } from "./auth.svelte";
+import { rememberUploadKey, uploadKey } from "./upload-keys";
+import { recordTransfer, loadHistory } from "./history";
 
 test("appleLoginUrl points at the web start route", () => {
   expect(appleLoginUrl()).toBe("/api/auth/apple/web/start");
@@ -197,5 +199,28 @@ describe("logout", () => {
     await logout();
     expect(session().user).toBeNull();
     expect(sessionStorage.getItem("relayium_pair_exp")).toBeNull();
+  });
+});
+
+describe("logout 清本机凭证", () => {
+  it("清掉上传密钥和传输历史 —— 否则「退出登录」只退了 UI", async () => {
+    // 每条 id→key 都是完整能力凭证：/d/<id>#k=<key> 不需要任何会话就能下载。
+    rememberUploadKey("file-1", "k1");
+    recordTransfer({ name: "salary.pdf", size: 10, direction: "send", peer: "Mac-1" });
+    expect(uploadKey("file-1")).toBe("k1");
+    expect(loadHistory().length).toBe(1);
+
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
+    await logout();
+
+    expect(uploadKey("file-1"), "登出后上传密钥仍在 —— 共用设备上等于把文件访问权留给下一个人").toBeUndefined();
+    expect(loadHistory(), "登出后传输历史仍在").toEqual([]);
+  });
+
+  it("服务端登出请求失败也照样清本机 —— 本机状态不该由网络决定", async () => {
+    rememberUploadKey("file-2", "k2");
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("offline"); }));
+    await logout();
+    expect(uploadKey("file-2")).toBeUndefined();
   });
 });

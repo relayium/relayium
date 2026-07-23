@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { fetchIceConfig, fetchIceServers, hasTurnServer, pickRelay } from "./ice";
 
-const STUN = [{ urls: "stun:stun.l.google.com:19302" }];
-const FALLBACK_STUN = [{ urls: "stun:stun.l.google.com:19302" }];
+// 服务端下发什么就是什么的夹具。故意不写成公共 STUN 的地址——那会让人以为
+// 代码里还有一个第三方默认值。
+const STUN = [{ urls: "stun:relay.example:3478" }];
+// /api/ice 挂掉时回落到**空列表**，不是公共 STUN —— 见 ice.ts 的注释。
+const FALLBACK_STUN: never[] = [];
 
 describe("fetchIceServers", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -34,13 +37,13 @@ describe("fetchIceServers", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/ice", { credentials: "include" });
   });
 
-  it("falls back to a STUN entry on a non-ok response", async () => {
+  it("falls back to an empty list (never a third-party STUN) on a non-ok response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
     const out = await fetchIceServers("424242");
-    expect(out).toEqual(STUN);
+    expect(out).toEqual(FALLBACK_STUN);
   });
 
-  it("falls back to STUN when a 200 body isn't JSON (e.g. nginx serves index.html)", async () => {
+  it("falls back to an empty list when a 200 body isn't JSON (e.g. nginx serves index.html)", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -51,13 +54,13 @@ describe("fetchIceServers", () => {
       }),
     );
     const out = await fetchIceServers("424242");
-    expect(out).toEqual(STUN);
+    expect(out).toEqual(FALLBACK_STUN);
   });
 
-  it("falls back to STUN when the fetch itself rejects (network error)", async () => {
+  it("falls back to an empty list when the fetch itself rejects (network error)", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
     const out = await fetchIceServers("424242");
-    expect(out).toEqual(STUN);
+    expect(out).toEqual(FALLBACK_STUN);
   });
 });
 

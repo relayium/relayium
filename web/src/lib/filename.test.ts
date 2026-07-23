@@ -35,3 +35,22 @@ describe("sanitizeNames", () => {
     expect(sanitizeNames([{ name: `a${RLO}b`, size: 7 }])).toEqual([{ name: "ab", size: 7 }]);
   });
 });
+
+describe("sanitizeNames 的 path", () => {
+  it("逐段清洗 path —— 落盘名走的是它，不洗等于绕开整道防线", () => {
+    expect(sanitizeNames([{ name: "a.png", path: `photos/evil${RLO}gnp.exe` }])).toEqual([
+      { name: "a.png", path: "photos/evilgnp.exe" },
+    ]);
+  });
+  it("保留 / 分隔符（整串洗会把目录结构压平）", () => {
+    expect(sanitizeNames([{ name: "x", path: "a/b/c.txt" }])[0].path).toBe("a/b/c.txt");
+  });
+  it("每一段都洗，不只是最后一段", () => {
+    expect(sanitizeNames([{ name: "x", path: `d${RLO}ir/sub${LRM}dir/f.txt` }])[0].path).toBe("dir/subdir/f.txt");
+  });
+  it("没有 path 的扁平文件保持不变", () => {
+    const out = sanitizeNames([{ name: "flat.bin", size: 3 }]);
+    expect(out).toEqual([{ name: "flat.bin", size: 3 }]);
+    expect("path" in out[0]).toBe(false);
+  });
+});

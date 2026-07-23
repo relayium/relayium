@@ -16,9 +16,15 @@ export interface RtcConfig {
   iceTransportPolicy?: RTCIceTransportPolicy;
 }
 
-export const DEFAULT_ICE: RtcConfig = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-};
+/**
+ * 调用方没给 config 时的兜底。**空列表，不是公共 STUN**。
+ *
+ * 真实路径上 App 永远会传 rtcConfig()（服务端 /api/ice 下发的那份），所以这里只在
+ * 测试和误用时生效。默认值放一个第三方 STUN 的代价是：任何一次忘记传 config，都会
+ * 变成一次静默的对外报到（公网 IP + 会话时序）。空列表下局域网靠 host 候选照样能连，
+ * 而跨网络本来就必须有服务端下发的 TURN。理由同 ice.ts 的 FALLBACK。
+ */
+export const DEFAULT_ICE: RtcConfig = { iceServers: [] };
 
 /** A public key + nonce revealed only after both commitments were exchanged. */
 export interface Reveal {

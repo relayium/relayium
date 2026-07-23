@@ -80,7 +80,8 @@ func main() {
 	smtpPass := flag.String("smtp-pass", envStr("RELAYIUM_SMTP_PASS", ""), "SMTP password (used with -smtp-user)")
 	turnSecret := flag.String("turn-secret", envStr("RELAYIUM_TURN_SECRET", ""), "coturn static-auth-secret (empty disables TURN)")
 	turnURLs := flag.String("turn-urls", envStr("RELAYIUM_TURN_URLS", ""), "comma-separated TURN URLs (e.g. turn:host:3478,turns:host:5349)")
-	stunURLs := flag.String("stun-urls", envStr("RELAYIUM_STUN_URLS", "stun:stun.l.google.com:19302"), "comma-separated STUN URLs")
+	// 默认留空：见下面 defaultSTUNFrom 的注释——默认值不再是第三方 STUN。
+	stunURLs := flag.String("stun-urls", envStr("RELAYIUM_STUN_URLS", ""), "comma-separated STUN URLs (empty: derived from -turn-urls, since coturn answers STUN on the same host:port)")
 	turnRelays := flag.String("turn-relays", envStr("RELAYIUM_TURN_RELAYS", ""), `JSON array of TURN relays for the multi-relay pool, e.g. [{"id":"asia-tok","region":"asia","urls":["turn:tok:3478"],"secret":"..."}]; empty uses -turn-urls only (see docs/coturn.md)`)
 	redisAddr := flag.String("redis-addr", envStr("RELAYIUM_REDIS_ADDR", ""), "Redis host:port for coturn relay-byte metering (empty disables)")
 	nodeToken := flag.String("node-token", envStr("RELAYIUM_NODE_TOKEN", ""), "fleet bootstrap bearer token for relay-node /api/nodes/* (empty disables the node API)")
@@ -348,7 +349,7 @@ func main() {
 			GoogleClientID:       *googleID,
 			GoogleSecret:         *googleSecret,
 			GoogleRedirect:       *baseURL + "/api/auth/google/callback",
-			STUNURLs:             splitURLs(*stunURLs),
+			STUNURLs:             defaultSTUNFrom(splitURLs(*stunURLs), splitURLs(*turnURLs)),
 			TURNURLs:             splitURLs(*turnURLs),
 			TURNSecret:           *turnSecret,
 			TURNRelays:           parseTURNRelays(*turnRelays),

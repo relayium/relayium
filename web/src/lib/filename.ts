@@ -52,7 +52,21 @@ const CONTROL_RE = new RegExp(
   "g",
 );
 
-/** 就地清洗一批 `{ name }` 记录，保留其余字段。 */
-export function sanitizeNames<T extends { name: string }>(items: T[]): T[] {
-  return items.map((f) => ({ ...f, name: safeDisplayName(f.name) }));
+/**
+ * 清洗一批 `{ name, path? }` 记录，保留其余字段。
+ *
+ * **path 必须一起洗**，而且要逐段洗：文件夹传输时落盘用的是 `path`（filesink 的
+ * safeSegments 会按 "/" 切开建目录），只洗 `name` 的话，确认卡片上显示的是干净名字、
+ * 真正写到磁盘上的却是带 RLO 的伪装名——正好绕开这道防线本身。
+ *
+ * 按段洗而不是整串洗：分隔符 "/" 要留着，否则目录结构会被压平。
+ */
+export function sanitizeNames<T extends { name: string; path?: string }>(items: T[]): T[] {
+  return items.map((f) => {
+    const out = { ...f, name: safeDisplayName(f.name) };
+    if (typeof f.path === "string") {
+      out.path = f.path.split("/").map(safeDisplayName).join("/");
+    }
+    return out;
+  });
 }
