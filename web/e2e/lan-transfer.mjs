@@ -88,13 +88,23 @@ async function newTab(browser, url, initScript) {
   if (initScript) await send("Page.addScriptToEvaluateOnNewDocument", { source: initScript });
   await send("Page.navigate", { url });
 
+  // 每一次 evaluate 都带独立超时。**这是必须的**：页面主线程一旦被卡死（正是这套
+  // 用例想抓的那类故障），CDP 的 evaluate 永远不返回，于是下面 waitFor 的超时判断
+  // 根本轮不到执行——整个测试挂死，而挂死看起来和"还在跑"一模一样。宁可报一条
+  // "页面没响应"，也不要一个永远不结束的 CI 任务。
+  const EVAL_TIMEOUT_MS = 30_000;
   const evaluate = async (expression) => {
-    const r = await send("Runtime.evaluate", {
-      expression,
-      returnByValue: true,
-      awaitPromise: true,
-      userGesture: true, // 收方的"接受"必须带用户手势，保存对话框才允许打开
-    });
+    const r = await Promise.race([
+      send("Runtime.evaluate", {
+        expression,
+        returnByValue: true,
+        awaitPromise: true,
+        userGesture: true, // 收方的"接受"必须带用户手势，保存对话框才允许打开
+      }),
+      sleep(EVAL_TIMEOUT_MS).then(() => {
+        throw new Error(`page stopped responding (evaluate exceeded ${EVAL_TIMEOUT_MS}ms) — its main thread is blocked`);
+      }),
+    ]);
     if (r.exceptionDetails) throw new Error(`evaluate failed: ${r.exceptionDetails.text} — ${expression}`);
     return r.result?.value;
   };
@@ -128,6 +138,136 @@ const SAVE_STUB = `
   // 目录选择器也桩掉：万一批量分支被走到，别弹出真对话框把测试挂住。
   window.showDirectoryPicker = async () => { throw new Error("e2e: directory picker not stubbed"); };
 `;
+
+/**
+ * 记录页面创建过的每一个 RTCPeerConnection，并给出一个"把此刻活着的那些判死"的开关。
+ *
+ * 为什么不是直接 pc.close()：按规范 close() **不会**触发 connectionstatechange，
+ * 应用因此什么都察觉不到，也就不会进入续传流程——那样测的就不是掉线了。这里把
+ * connectionState 改成 "failed" 再手动触发回调（应用在真掉线时收到的正是这一条），
+ * 然后才真的 close 掉底层传输，让后续的字节确实发不出去。
+ *
+ * "只判死调用那一刻已存在的连接"是关键：续传会新建一个 pc，不排除掉它就会被这同一个
+ * 开关顺手打死，永远续不上。
+ */
+const PC_TRACKER = `
+  window.__pcs = [];
+  (() => {
+    const Real = window.RTCPeerConnection;
+    window.RTCPeerConnection = function (...a) {
+      const pc = new Real(...a);
+      window.__pcs.push(pc);
+      return pc;
+    };
+    window.RTCPeerConnection.prototype = Real.prototype;
+  })();
+  window.__dropLive = () => {
+    const victims = window.__pcs.slice(); // 只打此刻已存在的
+    for (const pc of victims) {
+      try {
+        Object.defineProperty(pc, "connectionState", { get: () => "failed", configurable: true });
+        pc.onconnectionstatechange?.();
+        pc.close();
+      } catch { /* 已经没了 */ }
+    }
+    return victims.length;
+  };
+`;
+
+/**
+ * 传输中途把连接打断，看它能不能**续上并且字节完全正确**。
+ *
+ * 这条路径（connectResume + checkpoint + chain hash 恢复 + pausedRecv 状态机）是
+ * 整个传输里最复杂的一段，而在这个用例之前它一行覆盖都没有：单测碰不到，happy path
+ * 的 E2E 也碰不到。断线续传恰恰是手机上最常发生的事（切网、锁屏、电梯）。
+ *
+ * 断言三件事，缺一条这个用例就可能是假绿：
+ *  1. 收到的字节和发出的**逐字节一致**（按 SHA-256 比，不看进度条）；
+ *  2. 收方确实**新建过至少两个 pc** —— 证明真的走了续传，而不是在掉线落地前就传完了；
+ *  3. 收方写入的总字节等于文件大小 —— 续传如果从 0 重来，这里会超。
+ */
+async function resumeScenario(browser) {
+  const NAME = "e2e-resume.bin";
+  // 24MB：在本机上够慢，掉线注入落得进传输中段；PRNG 现生成，省得把几十兆
+  // base64 从 CDP 灌进页面。
+  const GEN = `
+    window.__makePayload = (bytes) => {
+      const out = new Uint8Array(bytes);
+      let x = 0x9e3779b9; // 固定种子：失败可复现
+      for (let i = 0; i < bytes; i++) {
+        x ^= x << 13; x >>>= 0; x ^= x >> 17; x ^= x << 5; x >>>= 0;
+        out[i] = x & 0xff;
+      }
+      return out;
+    };
+    window.__sha256 = async (u8) => {
+      const h = await crypto.subtle.digest("SHA-256", u8);
+      return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, "0")).join("");
+    };
+  `;
+  const PAYLOAD_BYTES = 24 * 1024 * 1024 + 4321;
+
+  const sender = await newTab(browser, BASE + "/", PC_TRACKER + GEN);
+  const receiver = await newTab(browser, BASE + "/", PC_TRACKER + GEN + SAVE_STUB);
+  const peersSeen = "document.querySelectorAll('.pname').length > 0";
+  await sender.waitFor(peersSeen, "peers (resume scenario)");
+  await receiver.waitFor(peersSeen, "peers (resume scenario)");
+
+  const sentHash = await sender.evaluate(`(async () => {
+    const bytes = window.__makePayload(${PAYLOAD_BYTES});
+    window.__file = new File([bytes], ${JSON.stringify(NAME)}, { type: 'application/octet-stream' });
+    const input = document.querySelector('.file-pick-input');
+    const dt = new DataTransfer();
+    dt.items.add(window.__file);
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return window.__sha256(bytes);
+  })()`);
+
+  const acceptBtn = `[...document.querySelectorAll('button')].find(b => /接受|Accept|受け取|수락|Annehmen|Accepter|قبول|Aceptar/i.test(b.textContent))`;
+  await receiver.waitFor(`!!(${acceptBtn})`, "the confirmation card (resume scenario)");
+  await receiver.evaluate(`(() => { (${acceptBtn}).click(); return true; })()`);
+
+  // 等它真的写下去一些字节：`resumable` 要为真，续传才有意义（一个字节都没落盘时
+  // 掉线按设计就是直接失败，那是另一条分支）。
+  await receiver.waitFor("window.__e2e.bytes > 1024 * 1024", "the receiver to durably write the first MB");
+  const midway = await receiver.evaluate("window.__e2e.bytes");
+
+  // 两边同时判死：模拟"这条链路两头都没了"（掉 Wi-Fi）。只打一边的话，另一边要等
+  // ICE consent 超时（约 30s）才察觉，测试会慢且更飘。
+  await sender.evaluate("window.__dropLive()");
+  await receiver.evaluate("window.__dropLive()");
+  ok(`dropped the connection mid-transfer (${(midway / 1024 / 1024).toFixed(1)} MiB in)`);
+
+  // 续上并跑完。窗口给足：发送端每次重连之间有退避。
+  await receiver.waitFor("window.__e2e.closed === true", "the resumed transfer to finish", 180_000);
+
+  const got = await receiver.evaluate(`(async () => {
+    const buf = new Uint8Array(await new Blob(window.__e2e.chunks).arrayBuffer());
+    return { bytes: buf.length, sha256: await window.__sha256(buf), pcs: window.__pcs.length };
+  })()`);
+
+  if (got.pcs < 2) {
+    throw new Error(`no resume happened (receiver built ${got.pcs} peer connection(s)) — the drop landed after the transfer finished, so this run proved nothing`);
+  }
+  if (got.bytes !== PAYLOAD_BYTES) {
+    throw new Error(`resumed file is ${got.bytes} bytes, want ${PAYLOAD_BYTES} (a resume restarting from 0 would overshoot)`);
+  }
+  if (got.sha256 !== sentHash) {
+    throw new Error(`resumed file does not match what was sent: ${got.sha256} != ${sentHash}`);
+  }
+  ok(`resumed and delivered ${got.bytes} bytes byte-identical (receiver used ${got.pcs} connections)`);
+
+  const errs = [...sender.errors, ...receiver.errors].filter((e) => !/401|Failed to load resource/.test(e));
+  // 掉线本身会在控制台留下预期内的噪音（"connection lost"/"resume ..."），只筛真正
+  // 不该出现的：类型错误、断言、未捕获的 Reference/Type 错误。
+  const bad = errs.filter((e) => /ReferenceError|TypeError|is not a function|undefined is not/.test(e));
+  if (bad.length) throw new Error(`resume path raised real errors:\n    ${bad.join("\n    ")}`);
+  ok("the resume path raised no ReferenceError/TypeError");
+
+  await browser.send("Target.closeTarget", { targetId: sender.targetId });
+  await browser.send("Target.closeTarget", { targetId: receiver.targetId });
+}
 
 const ok = (label) => console.log(`  \x1b[32m✓\x1b[0m ${label}`);
 const fail = (label, err) => {
@@ -195,7 +335,20 @@ async function earlyFailureScenario(browser) {
   const tdz = [...receiver.errors, ...sender.errors].filter((e) => /ReferenceError/.test(e));
   if (tdz.length) throw new Error(`early failure raised a ReferenceError instead of failing cleanly:\n    ${tdz.join("\n    ")}`);
   ok("a connection that fails during setup is reported cleanly (no ReferenceError)");
+
+  await browser.send("Target.closeTarget", { targetId: sender.targetId });
+  await browser.send("Target.closeTarget", { targetId: receiver.targetId });
 }
+
+/**
+ * 全局看门狗。
+ *
+ * 单看 evaluate 的超时不够：卡住的可能是 CDP 的任意一次往返（建标签页、关标签页、
+ * 附加会话），任何一处永不返回都会让整个套件静默挂死——而"挂死"在 CI 里和"还在跑"
+ * 长得一模一样，比一条红色失败糟得多。实测踩过：破坏版让收方主线程卡死之后，套件
+ * 跑了 9 分钟还没有任何输出。
+ */
+const GLOBAL_TIMEOUT_MS = 15 * 60_000;
 
 async function main() {
   // 前置检查：服务器在不在，dist 是不是新的（旧 dist 会测出一个假绿）。
@@ -370,6 +523,9 @@ async function main() {
     await browser.send("Target.closeTarget", { targetId: receiver.targetId });
     await sleep(1000);
     await earlyFailureScenario(browser);
+    await sleep(1000);
+    await resumeScenario(browser);
+
 
     console.log("\n\x1b[32mLAN transfer E2E passed\x1b[0m\n");
   } catch (err) {
@@ -385,4 +541,12 @@ async function main() {
   }
 }
 
-await main();
+await Promise.race([
+  main(),
+  sleep(GLOBAL_TIMEOUT_MS).then(() => {
+    console.error(`  \x1b[31m✗\x1b[0m LAN transfer E2E\n    hard timeout after ${GLOBAL_TIMEOUT_MS / 60000} min — something hung; see the notes on the global watchdog`);
+    process.exit(1);
+  }),
+]);
+// 收尾：main 的 finally 已经收过浏览器，这里只是确保进程不被 CDP 的 socket 挂住。
+process.exit(process.exitCode ?? 0);
