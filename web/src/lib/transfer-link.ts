@@ -1,3 +1,5 @@
+import { isValidCode } from "./pair-code";
+
 // Cross-network realtime rendezvous: a short pairing code minted by a
 // logged-in owner via POST /api/pair (401 without a session — the initiator
 // owns the transfer and its relay usage). The join link carries the code in
@@ -14,10 +16,12 @@ export class HttpError extends Error {
   }
 }
 
-/** Extract a 6-digit pairing code from a hash like "#c=424242". "" if none. */
+/** Extract a pairing code from a hash like "#c=K7M3X9". "" if none.
+ *  形状不合法的一律当没有——链接里的码是不可信输入，宽松解析只会把垃圾一路带到
+ *  信令层。字母表见 pair-code.ts。 */
 export function parseCodeParam(hash: string): string {
-  const m = /^#c=(\d{6})$/.exec(hash);
-  return m ? m[1] : "";
+  const m = /^#c=(.+)$/.exec(hash);
+  return m && isValidCode(m[1]) ? m[1] : "";
 }
 
 /** Path of the cross-network page; join links and the originator both target it. */

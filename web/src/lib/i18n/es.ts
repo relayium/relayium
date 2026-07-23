@@ -56,7 +56,7 @@ const es: Messages = {
     "Transferencia de archivos de código abierto y cifrada de extremo a extremo en tu navegador. En el modo en tiempo real, los archivos se transmiten directamente de dispositivo a dispositivo mediante WebRTC en tu red local, o entre redes a través de un retransmisor cifrado que solo ve texto cifrado; el modo opcional de enlace de descarga almacenado los conserva como texto cifrado de conocimiento cero que solo tú puedes descifrar.",
   titleCross: "Transferencia de archivos entre redes — en tiempo real, cifrada de extremo a extremo | Relayium",
   titleOffline: "Enlace de archivo cifrado — sube ahora, descarga después | Relayium",
-  descCross: "Envía archivos entre redes con un código de 6 dígitos — transferencia en tiempo real, cifrada de extremo a extremo; el retransmisor solo ve texto cifrado, nunca tus archivos.",
+  descCross: "Envía archivos entre redes con un código de 6 caracteres — transferencia en tiempo real, cifrada de extremo a extremo; el retransmisor solo ve texto cifrado, nunca tus archivos.",
   descOffline: "Sube un archivo cifrado en el navegador y comparte un enlace de descarga de conocimiento cero; el servidor almacena únicamente texto cifrado.",
   reconnecting: "Conexión perdida — reconectando…",
   confirmLeave: "Hay una transferencia en curso. Cambiar la interrumpirá. ¿Continuar?",
@@ -454,13 +454,13 @@ const es: Messages = {
     offline: { lead: "¿El destinatario no está en línea? Usa la transferencia asíncrona — cifra, sube y deja un enlace de descarga que podrá recoger durante días.", cta: "Ir a la transferencia asíncrona →" },
   },
   methods: {
-    realtime: { name: "⚡ Directo en tiempo real", sub: "Elige tus archivos y obtén un código de 6 dígitos — léelo en voz alta, envía el enlace o muestra el QR; en cuanto el otro lado se une, la transferencia comienza automáticamente.", badge: "Destinatario: sin cuenta" },
+    realtime: { name: "⚡ Directo en tiempo real", sub: "Elige tus archivos y obtén un código de 6 caracteres — léelo en voz alta, envía el enlace o muestra el QR; en cuanto el otro lado se une, la transferencia comienza automáticamente.", badge: "Destinatario: sin cuenta" },
     stored: { name: "📦 Enlace de descarga", sub: "Tu navegador cifra y luego almacena; el destinatario descarga en cualquier momento, sin sesión en vivo ni cuenta.", badge: "Sin conexión, sin problema" },
   },
   pair: {
     sendCode: "Crear un código de emparejamiento",
     enterCode: "Introduce un código de emparejamiento",
-    enterHint: "Pídele al remitente su código de 6 dígitos",
+    enterHint: "Pídele al remitente su código de 6 caracteres",
     joinBtn: "Conectar",
     yourCode: "Tu código de emparejamiento — léeselo a la otra persona",
   scanHint: "o pídeles que escaneen / abran el enlace para unirse",
@@ -547,7 +547,7 @@ const es: Messages = {
       title: "Directo en tiempo real, en tres pasos",
       sub: "Cuando ambos lados están en línea, transfiere en tiempo real entre redes — el destinatario no necesita cuenta.",
       ways: [
-        { icon: "📄", name: "Elige archivos, obtén un código", how: "Toca «Enviar archivos» y elige qué enviar — se acuña automáticamente un código de emparejamiento de 6 dígitos, junto con un enlace para unirse y un QR.", tag: "Inicia sesión para enviar" },
+        { icon: "📄", name: "Elige archivos, obtén un código", how: "Toca «Enviar archivos» y elige qué enviar — se acuña automáticamente un código de emparejamiento de 6 caracteres, junto con un enlace para unirse y un QR.", tag: "Inicia sesión para enviar" },
         { icon: "🔢", name: "Dale el código al otro lado", how: "Léelo en voz alta, envía el enlace o muestra el QR — cualquiera de los tres; lo escriben o lo abren en cualquier navegador moderno.", tag: "Los códigos viven 15 minutos" },
         { icon: "⚡", name: "La transferencia empieza al unirse", how: "En cuanto se unen, la transferencia comienza automáticamente — cifrada de extremo a extremo todo el camino; entre redes, el flujo pasa por un retransmisor TURN cifrado que solo transporta texto cifrado y no puede descifrar nada.", tag: "El servidor nunca ve tus archivos" },
       ],

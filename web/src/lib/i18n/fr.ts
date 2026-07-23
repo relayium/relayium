@@ -56,7 +56,7 @@ const fr: Messages = {
     "Relayium est un outil open source de transfert de fichiers chiffré de bout en bout. Lors d'un transfert en temps réel dans le navigateur, sur le même réseau deux appareils se connectent directement et les fichiers ne passent jamais par le serveur ; entre réseaux différents, cela passe par un relais chiffré qui ne voit que du chiffré. Sans installation ; sur le même réseau aucun compte n'est nécessaire, et pour s'appairer entre réseaux différents, seul l'expéditeur se connecte.",
   titleCross: "Transfert de fichiers inter-réseaux — temps réel, chiffré de bout en bout | Relayium",
   titleOffline: "Lien de fichier chiffré — téléversez maintenant, téléchargez plus tard | Relayium",
-  descCross: "Envoyez des fichiers entre réseaux avec un code à 6 chiffres — transfert en temps réel, chiffré de bout en bout ; le relais ne voit que du texte chiffré, jamais le contenu des fichiers.",
+  descCross: "Envoyez des fichiers entre réseaux avec un code à 6 caractères — transfert en temps réel, chiffré de bout en bout ; le relais ne voit que du texte chiffré, jamais le contenu des fichiers.",
   descOffline: "Téléversez un fichier chiffré dans votre navigateur et partagez un lien de téléchargement zero-knowledge ; le serveur ne stocke que du texte chiffré.",
   reconnecting: "Connexion perdue — reconnexion…",
   confirmLeave: "Un transfert est en cours. Changer l'interrompra. Continuer ?",
@@ -455,13 +455,13 @@ const fr: Messages = {
     offline: { lead: "Destinataire hors ligne ? Utilisez le transfert asynchrone — chiffrez, téléversez et laissez un lien de téléchargement, récupérable pendant plusieurs jours.", cta: "Vers le transfert asynchrone →" },
   },
   methods: {
-    realtime: { name: "⚡ Transfert direct en temps réel", sub: "Choisissez vos fichiers et obtenez un code à 6 chiffres — dictez-le, envoyez le lien ou montrez le QR ; dès que l'autre appareil rejoint, le transfert démarre automatiquement.", badge: "Destinataire sans compte" },
+    realtime: { name: "⚡ Transfert direct en temps réel", sub: "Choisissez vos fichiers et obtenez un code à 6 caractères — dictez-le, envoyez le lien ou montrez le QR ; dès que l'autre appareil rejoint, le transfert démarre automatiquement.", badge: "Destinataire sans compte" },
     stored: { name: "📦 Lien de téléchargement", sub: "Votre navigateur chiffre puis stocke temporairement ; le destinataire télécharge quand il veut, sans session ni compte.", badge: "Même hors ligne" },
   },
   pair: {
     sendCode: "Créer un code d'appairage",
     enterCode: "Saisir un code d'appairage",
-    enterHint: "Demandez à l'expéditeur son code à 6 chiffres",
+    enterHint: "Demandez à l'expéditeur son code à 6 caractères",
     joinBtn: "Connecter",
     yourCode: "Votre code d'appairage — communiquez-le à l'autre personne",
   scanHint: "ou faites scanner le QR / ouvrir le lien à l'autre personne",
@@ -548,7 +548,7 @@ const fr: Messages = {
       title: "Direct en temps réel, en trois étapes",
       sub: "Quand les deux côtés sont en ligne, transfert en temps réel d'un réseau à l'autre — le destinataire n'a pas besoin de compte.",
       ways: [
-        { icon: "📄", name: "Choisir les fichiers, obtenir un code", how: "Touchez « Envoyer des fichiers » et choisissez quoi envoyer — un code d'appairage à 6 chiffres est créé automatiquement, avec lien d'accès et QR.", tag: "Connexion pour envoyer" },
+        { icon: "📄", name: "Choisir les fichiers, obtenir un code", how: "Touchez « Envoyer des fichiers » et choisissez quoi envoyer — un code d'appairage à 6 caractères est créé automatiquement, avec lien d'accès et QR.", tag: "Connexion pour envoyer" },
         { icon: "🔢", name: "Transmettre le code", how: "Dictez-le, envoyez le lien ou montrez le QR — au choix ; l'autre personne le saisit ou l'ouvre dans n'importe quel navigateur moderne.", tag: "Codes valables 15 minutes" },
         { icon: "⚡", name: "Le transfert démarre à l'arrivée", how: "Dès que l'autre appareil rejoint, le transfert démarre automatiquement — chiffré de bout en bout sur tout le trajet ; entre réseaux, le flux passe par un relais TURN chiffré qui ne transporte que du chiffré, sans rien pouvoir déchiffrer.", tag: "Le serveur ne voit jamais vos fichiers" },
       ],

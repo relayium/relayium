@@ -1,5 +1,6 @@
 <!-- web/src/lib/CodePairing.svelte -->
 <script lang="ts">
+  import { CODE_LEN, isValidCode, normalizeCode } from "./pair-code";
   import { copyFeedback } from "./clipboard.svelte";
   import { createPair, CROSS_PATH, HttpError } from "./transfer-link";
   import { canShare, share } from "./share";
@@ -105,7 +106,7 @@
   }
 
   function join() {
-    if (!/^\d{6}$/.test(entry)) return;
+    if (!isValidCode(entry)) return;
     // A joiner is never the minter — drop any stale mint marker from an earlier
     // "create code" this session so isMinter resolves correctly after start-over.
     sessionStorage.removeItem(EXP_KEY);
@@ -148,18 +149,24 @@
     <p class="lead">{t.pair.enterHint}</p>
     <div class="row">
       <input
-        inputmode="numeric"
-        maxlength="6"
-        placeholder="000000"
+        inputmode="text"
+        autocapitalize="characters"
+        autocomplete="off"
+        autocorrect="off"
+        spellcheck="false"
+        maxlength={CODE_LEN}
+        placeholder="K7M3X9"
         aria-label={t.pair.enterHint}
         bind:value={entry}
         oninput={() => {
-          entry = entry.replace(/\D/g, "").slice(0, 6);
-          if (entry.length === 6) join(); // full code — join without a second click
+          // 归一化收在一处（大写 + 丢掉字母表外的字符），粘贴一段带空格或连字符的
+          // 码也能直接用。
+          entry = normalizeCode(entry);
+          if (entry.length === CODE_LEN) join(); // 输满即加入，不用再点一次
         }}
         onkeydown={(e) => { if (e.key === "Enter") join(); }}
       />
-      <button class="btn btn-primary" disabled={entry.length !== 6} onclick={join}>{t.pair.joinBtn}</button>
+      <button class="btn btn-primary" disabled={entry.length !== CODE_LEN} onclick={join}>{t.pair.joinBtn}</button>
     </div>
     <button class="btn-link" onclick={() => { mode = "choose"; entry = ""; err = ""; }}>{t.pair.back}</button>
   {:else if session().user}

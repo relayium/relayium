@@ -13,14 +13,16 @@ describe("wsURL", () => {
 });
 
 describe("parseCodeParam", () => {
-  it("extracts a 6-digit code, leading zeros allowed", () => {
-    expect(parseCodeParam("#c=424242")).toBe("424242");
-    expect(parseCodeParam("#c=042424")).toBe("042424");
+  it("extracts a well-formed pairing code", () => {
+    expect(parseCodeParam("#c=K7M3X9")).toBe("K7M3X9");
+    expect(parseCodeParam("#c=424242")).toBe("424242"); // all-digit codes are still legal
   });
-  it("rejects non-6-digit or malformed fragments", () => {
-    expect(parseCodeParam("#c=12345")).toBe("");
-    expect(parseCodeParam("#c=1234567")).toBe("");
-    expect(parseCodeParam("#c=abcdef")).toBe("");
+  it("rejects anything that is not a valid code — the link is untrusted input", () => {
+    expect(parseCodeParam("#c=K7M3X")).toBe("");     // 短一位
+    expect(parseCodeParam("#c=K7M3X92")).toBe("");   // 长一位
+    expect(parseCodeParam("#c=042424")).toBe("");    // 0/1 不在字母表里
+    expect(parseCodeParam("#c=k7m3x9")).toBe("");    // 小写
+    expect(parseCodeParam("#c=K7M3XB")).toBe("");    // B 被剔（和 8 混）
     expect(parseCodeParam("#t=abc")).toBe("");
     expect(parseCodeParam("")).toBe("");
   });

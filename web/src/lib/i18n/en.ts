@@ -56,7 +56,7 @@ const en: Messages = {
     "Open-source, end-to-end encrypted file transfer in your browser. In realtime mode, files stream directly device-to-device over WebRTC on your local network, or across networks through an encrypted relay that only ever sees ciphertext; the optional stored download-link mode keeps them as zero-knowledge ciphertext only you can decrypt.",
   titleCross: "Cross-network file transfer — realtime, end-to-end encrypted | Relayium",
   titleOffline: "Encrypted file link — upload now, download later | Relayium",
-  descCross: "Send files across networks with a 6-digit code — realtime transfer, end-to-end encrypted; the relay only ever sees ciphertext, never your files.",
+  descCross: "Send files across networks with a 6-character code — realtime transfer, end-to-end encrypted; the relay only ever sees ciphertext, never your files.",
   descOffline: "Upload a browser-encrypted file and share a zero-knowledge download link; the server stores only ciphertext.",
   reconnecting: "Connection lost — reconnecting…",
   confirmLeave: "A transfer is in progress. Switching will interrupt it. Continue?",
@@ -468,13 +468,13 @@ const en: Messages = {
     offline: { lead: "Recipient not online? Use async transfer — encrypt, upload, and leave a download link they can fetch for days.", cta: "Go to async transfer →" },
   },
   methods: {
-    realtime: { name: "⚡ Realtime direct", sub: "Pick your files and get a 6-digit code — read it out, send the link, or show the QR; the moment the other side joins, the transfer starts automatically.", badge: "Recipient: no account" },
+    realtime: { name: "⚡ Realtime direct", sub: "Pick your files and get a 6-character code — read it out, send the link, or show the QR; the moment the other side joins, the transfer starts automatically.", badge: "Recipient: no account" },
     stored: { name: "📦 Download link", sub: "Your browser encrypts then stores; the recipient downloads anytime, no live session and no account needed.", badge: "Offline OK" },
   },
   pair: {
     sendCode: "Create a pairing code",
     enterCode: "Enter a pairing code",
-    enterHint: "Ask the sender for their 6-digit code",
+    enterHint: "Ask the sender for their 6-character code",
     joinBtn: "Connect",
     yourCode: "Your pairing code — read it to the other person",
   scanHint: "or have them scan / open the link to join",
@@ -561,7 +561,7 @@ const en: Messages = {
       title: "Realtime direct, in three steps",
       sub: "When both sides are online, transfer across networks in real time — the recipient needs no account.",
       ways: [
-        { icon: "📄", name: "Pick files, get a code", how: "Tap “Send files” and choose what to send — a 6-digit pairing code is minted automatically, along with a join link and QR.", tag: "Sign in to send" },
+        { icon: "📄", name: "Pick files, get a code", how: "Tap “Send files” and choose what to send — a 6-character pairing code is minted automatically, along with a join link and QR.", tag: "Sign in to send" },
         { icon: "🔢", name: "Give the code to the other side", how: "Read it out, send the link, or show the QR — any of the three; they type it in or open it in any modern browser.", tag: "Codes live 15 minutes" },
         { icon: "⚡", name: "Transfer starts on join", how: "The moment they join, the transfer starts automatically — end-to-end encrypted the whole way; across networks the stream travels through an encrypted TURN relay that only ever carries ciphertext it can't decrypt.", tag: "The server never sees your files" },
       ],

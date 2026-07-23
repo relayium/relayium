@@ -234,7 +234,10 @@ func main() {
 
 	// Anonymous, login-free pairing: short numeric codes for cross-network
 	// realtime rendezvous. Pure in-memory — works even if the DB is unavailable.
-	pairReg := signal.NewPairRegistry(900, func() int64 { return time.Now().Unix() }) // 15 min
+	// 5 分钟：配对码是跨网传输的唯一准入凭证，有效期直接决定爆破窗口有多大。
+	// 真正扛住爆破的是码的熵（24^6，见 signal.CodeAlphabet），TTL 只是再乘 1/3；
+	// 但两者都便宜，就都拿上。用户来不及的话界面本来就有重新生成的流程。
+	pairReg := signal.NewPairRegistry(300, func() int64 { return time.Now().Unix() }) // 5 min
 	go pairReg.Run(context.Background(), time.Minute)
 	// div lowers the per-instance thresholds below for a round-robin multi-instance
 	// deployment; 1 (the default, and correct for a single instance or an IP-hash
@@ -283,6 +286,13 @@ func main() {
 		code := r.URL.Query().Get("code")
 		if code != "" && !wsCodeLimiter.Allow(ipx.IP(r)) {
 			http.Error(w, "too many pairing attempts", http.StatusTooManyRequests)
+			return
+		}
+		// 形状不对的直接拒，不进注册表：爆破流量里绝大多数是随便拼的串，没必要
+		// 让它们变成 map 查询和日志里的攻击者自选内容。注意仍然走上面的限流，
+		// 否则这条快速路径反而成了免费的试探通道。
+		if code != "" && !signal.ValidCodeFormat(code) {
+			http.Error(w, "invalid or expired pairing code", http.StatusForbidden)
 			return
 		}
 		room, maxPeers, lan, ok := signal.RoomFor(code, pairReg.Validate)

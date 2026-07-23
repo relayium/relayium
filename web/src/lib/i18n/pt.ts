@@ -56,7 +56,7 @@ const pt: Messages = {
     "Transferência de arquivos com criptografia de ponta a ponta, de código aberto, no seu navegador. No modo em tempo real, os arquivos fluem diretamente de dispositivo para dispositivo via WebRTC na sua rede local, ou entre redes por um retransmissor criptografado que só vê texto cifrado; o modo opcional de link de download armazenado os mantém como texto cifrado de conhecimento zero que só você pode descriptografar.",
   titleCross: "Transferência de arquivos entre redes — em tempo real, com criptografia de ponta a ponta | Relayium",
   titleOffline: "Link de arquivo criptografado — envie agora, baixe depois | Relayium",
-  descCross: "Envie arquivos entre redes com um código de 6 dígitos — transferência em tempo real, com criptografia de ponta a ponta; o retransmissor só vê texto cifrado, nunca seus arquivos.",
+  descCross: "Envie arquivos entre redes com um código de 6 caracteres — transferência em tempo real, com criptografia de ponta a ponta; o retransmissor só vê texto cifrado, nunca seus arquivos.",
   descOffline: "Envie um arquivo criptografado no navegador e compartilhe um link de download de conhecimento zero; o servidor armazena apenas texto cifrado.",
   reconnecting: "Conexão perdida — reconectando…",
   confirmLeave: "Há uma transferência em andamento. Mudar vai interrompê-la. Continuar?",
@@ -454,13 +454,13 @@ const pt: Messages = {
     offline: { lead: "O destinatário não está online? Use a transferência assíncrona — criptografe, envie e deixe um link de download que ele pode buscar por dias.", cta: "Ir para a transferência assíncrona →" },
   },
   methods: {
-    realtime: { name: "⚡ Direto em tempo real", sub: "Escolha seus arquivos e receba um código de 6 dígitos — diga-o em voz alta, envie o link ou mostre o QR; assim que o outro lado entra, a transferência começa automaticamente.", badge: "Destinatário: sem conta" },
+    realtime: { name: "⚡ Direto em tempo real", sub: "Escolha seus arquivos e receba um código de 6 caracteres — diga-o em voz alta, envie o link ou mostre o QR; assim que o outro lado entra, a transferência começa automaticamente.", badge: "Destinatário: sem conta" },
     stored: { name: "📦 Link de download", sub: "Seu navegador criptografa e então armazena; o destinatário baixa a qualquer momento, sem sessão ao vivo e sem conta.", badge: "Funciona offline" },
   },
   pair: {
     sendCode: "Criar um código de emparelhamento",
     enterCode: "Inserir um código de emparelhamento",
-    enterHint: "Peça ao remetente o código de 6 dígitos dele",
+    enterHint: "Peça ao remetente o código de 6 caracteres dele",
     joinBtn: "Conectar",
     yourCode: "Seu código de emparelhamento — leia-o para a outra pessoa",
   scanHint: "ou peça que escaneie / abra o link para entrar",
@@ -547,7 +547,7 @@ const pt: Messages = {
       title: "Direto em tempo real, em três passos",
       sub: "Quando os dois lados estão online, transfiram em tempo real entre redes — o destinatário não precisa de conta.",
       ways: [
-        { icon: "📄", name: "Escolha os arquivos, receba um código", how: "Toque em “Enviar arquivos” e escolha o que enviar — um código de emparelhamento de 6 dígitos é criado automaticamente, junto com um link de entrada e um QR.", tag: "Entre para enviar" },
+        { icon: "📄", name: "Escolha os arquivos, receba um código", how: "Toque em “Enviar arquivos” e escolha o que enviar — um código de emparelhamento de 6 caracteres é criado automaticamente, junto com um link de entrada e um QR.", tag: "Entre para enviar" },
         { icon: "🔢", name: "Dê o código para o outro lado", how: "Diga-o em voz alta, envie o link ou mostre o QR — qualquer um dos três; a pessoa o digita ou o abre em qualquer navegador moderno.", tag: "Os códigos duram 15 minutos" },
         { icon: "⚡", name: "A transferência começa ao entrar", how: "No momento em que a pessoa entra, a transferência começa automaticamente — com criptografia de ponta a ponta o tempo todo; entre redes, o fluxo passa por um retransmissor TURN criptografado que só carrega texto cifrado e não consegue descriptografar nada.", tag: "O servidor nunca vê seus arquivos" },
       ],
