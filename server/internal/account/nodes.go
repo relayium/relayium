@@ -1209,12 +1209,6 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 	// (keep a dead node "online"), StorageFree (steer where uploads land) and
 	// ActiveTransfers (steer which node gets canary builds first). Every one of
 	// those is a user-visible lie about hardware the caller does not own.
-	// ...and the mirror check, which deregister/update-check already had and this
-	// endpoint did not. A fleet token is not bound to a node id, so without this a
-	// fleet credential could heartbeat someone else's BYO node: forge LastSeenAt
-	// (keep a dead node "online"), StorageFree (steer where uploads land) and
-	// ActiveTransfers (steer which node gets canary builds first). Every one of
-	// those is a user-visible lie about hardware the caller does not own.
 	if ownerType == "fleet" && node.OwnerType != "fleet" {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not a fleet node"})
 		return
@@ -1240,8 +1234,11 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
-	// 单次心跳给单个用户记了多少（只用于下面的异常告警，不参与计费）。
+	// 单次心跳给单个用户记了多少（用于下面的异常告警）。
 	attributed := map[string]int64{}
+	// 单次心跳给单个用户记了多少**条**。这是限幅真正的刀口，见 maxAllocsPerUser。
+	entries := map[string]int{}
+	clamped := map[string]bool{}
 
 	// Attribute per-allocation relayed bytes through the existing keep-max path.
 	for _, u := range req.Usage {
@@ -1271,6 +1268,30 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 		}
+		// 限幅（报告 M1，方案 C）。跨用户伪造的既有防线对"过期/未知的码"是
+		// "无法反驳即接受"，所以持车队凭据的人仍然能给别人记账。真正的封堵要在
+		// 签发凭据时嵌不可伪造的归因标签，那要动计费链路；在那之前先把**单次爆发**
+		// 压下去。
+		//
+		// 卡的是条数而不是字节数，因为：
+		//   · 每条 usage 的字节已经被 RecordUsage 钳在约 3.25 GiB，攻击者要凑出
+		//     20 TB 靠的是**换 7000 个新 allocID**——条数才是杠杆；
+		//   · RecordUsage 是按 allocID keep-max 的，所以一次心跳里的字节和是**累计值**
+		//     不是增量。按字节做"每秒多少"的折算会把一个跑了很久的长传输当成异常，
+		//     那是最典型的误伤。
+		//
+		// 代价是明确的：一个用户在单个窗口里通过同一个节点真的有超过 64 条分配时
+		// （比如脚本化地连开几十个传输，或节点掉线一小时后补报），超出的部分**不计入
+		// 他的配额**。方向是偏向用户的（少计而不是多计），并且会打日志。
+		if entries[userID] >= maxAllocsPerUser {
+			if !clamped[userID] {
+				clamped[userID] = true
+				log.Printf("WARNING: node %s reported >%d allocations for user %s in one heartbeat — attribution clamped (possible forgery; see M1)",
+					req.NodeID, maxAllocsPerUser, userID)
+			}
+			continue
+		}
+		entries[userID]++
 		if err := s.store.RecordUsage(r.Context(), UsageEvent{
 			AllocID: u.AllocID, Token: code, UserID: userID, RelayedBytes: u.RelayedBytes,
 			RecordedAt: now, NodeID: req.NodeID, Billable: billable,
@@ -1298,6 +1319,13 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 func (s *Service) SetNodeDraining(ctx context.Context, nodeID string, on bool) error {
 	return s.store.SetNodeDraining(ctx, nodeID, on)
 }
+
+// maxAllocsPerUser 是单次心跳里、单个节点能为**同一个用户**记账的分配条数上限。
+//
+// 真实数字是个位数：一次传输对应一到两个中继分配，而心跳周期只有 30 秒。64 给
+// 长时间掉线后补报留了足够余量，同时把伪造的天花板从约 20 TB（7000 条 × 3.25 GiB）
+// 压到约 208 GiB——两个数量级，而且每次触顶都会在日志里叫。
+const maxAllocsPerUser = 64
 
 // implausiblePerHeartbeat 是"一次心跳给一个用户记的量"的可信上限。
 //
