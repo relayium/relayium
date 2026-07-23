@@ -8,7 +8,7 @@ import (
 )
 
 // 会话令牌就是 cookie 的值。明文入库意味着任何一次**只读**的库泄露——备份、快照、
-// 卷、一条 SELECT 的注入——都直接等于所有在线用户的会话，而 TTL 是 30 天。
+// 卷、一条 SELECT 的注入——都直接等于所有在线用户的会话，而 TTL 是 14 天。
 // 本项目其余每一种令牌本来就都是哈希存的，这几条用例把用户会话也钉在同一条线上。
 func TestSessionTokenNotStoredInPlaintext(t *testing.T) {
 	store := newTestStore(t)

@@ -338,10 +338,10 @@ func (s *Service) handleMagicRequest(w http.ResponseWriter, r *http.Request) {
 
 // handleMagicVerifyRedirect 只把邮件里的链接转成 SPA 路由，**不碰令牌**。
 //
-// 以前这里是一个 GET：读 token → 消费掉 → 下发 30 天会话 cookie → 302。企业邮件网关
+// 以前这里是一个 GET：读 token → 消费掉 → 下发一枚长效会话 cookie → 302。企业邮件网关
 // （Proofpoint / Mimecast / Defender Safe Links）会在投递前预取邮件里的每个链接，于是：
 //  1. 一次性令牌被扫描器烧掉，用户真的点开时看到"链接已过期"；
-//  2. 更糟的是，`Set-Cookie: <30 天会话>` 被交给了**扫描器的 HTTP 客户端**——一个活
+//  2. 更糟的是，`Set-Cookie: <多周有效的会话>` 被交给了**扫描器的 HTTP 客户端**——一个活
 //     着的登录态被投递进第三方的扫描基础设施。
 //
 // 现在 GET 只做重定向（对扫描器而言无副作用），真正的消费在 POST /api/auth/magic/verify

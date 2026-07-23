@@ -27,6 +27,14 @@ import (
 
 const lanMaxPeers = 50 // LAN room peer cap (H4); tunable.
 
+// sessionTTL 是登录会话的**绝对**有效期。没有空闲超时也没有滑动续期，所以这个数字
+// 就是"一枚泄漏的 cookie 还能用多久"的上限，同时也是共用设备上"忘了登出"的窗口。
+// 原来是 30 天，砍到 14 天：仍然覆盖正常使用节奏（两周内至少开一次），泄漏窗口减半。
+//
+// 只影响**新签发**的会话——已有的行在签发时就写死了 expires_at，按原值走完；
+// cookie 的 Expires 取自同一个值，两边不会脱节。
+const sessionTTL = 14 * 24 * time.Hour
+
 func newID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
@@ -342,7 +350,7 @@ func main() {
 		acct := account.NewService(store, mailer, account.Config{
 			RateLimitDivisor:     div,
 			BaseURL:              *baseURL,
-			SessionTTL:           720 * time.Hour, // 30 days
+			SessionTTL:           sessionTTL,
 			MagicTTL:             15 * time.Minute,
 			VerifyTTL:            24 * time.Hour,
 			ResetTTL:             time.Hour,

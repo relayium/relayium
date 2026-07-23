@@ -1683,7 +1683,7 @@ func (s *SQLiteStore) UnlinkIdentityIfSafe(ctx context.Context, provider, userID
 // 会话行以 **sha256(令牌)** 为主键，而不是令牌本身。
 //
 // 令牌就是 cookie 的值：明文存库意味着任何一次只读的库泄露（备份、快照、卷、一条
-// SELECT 的 SQL 注入）都等于把所有在线用户的会话直接交出去，而且 TTL 是 30 天。
+// SELECT 的 SQL 注入）都等于把所有在线用户的会话直接交出去，而且 TTL 是 14 天。
 // 本项目其余每一种令牌（magic / reset / CLI / node / fleet / admin 会话）本来就都是
 // hashToken() 存的，唯独用户会话是例外——这里把它补齐。
 //
