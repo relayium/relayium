@@ -294,6 +294,8 @@ func downloadStatusError(what string, status int) error {
 		return fmt.Errorf("cloud: %s: not found (expired, burned, or wrong id)", what)
 	case http.StatusServiceUnavailable:
 		return fmt.Errorf("cloud: %s: storage temporarily unavailable, try again later", what)
+	case http.StatusForbidden:
+		return fmt.Errorf("cloud: %s: the storage node rejected the download link as already used", what)
 	default:
 		return fmt.Errorf("cloud: %s: unexpected status %d", what, status)
 	}
@@ -691,6 +693,12 @@ func (c *Client) streamBlob(ctx context.Context, httpc *http.Client, idPath stri
 		return err // transport error — retryable
 	}
 	defer resp.Body.Close()
+	// 403 comes from a storage node whose one-shot download token was already
+	// spent (a duplicated request somewhere below us). Retryable, not fatal: the
+	// next attempt goes back through central and is handed a fresh token.
+	if resp.StatusCode == http.StatusForbidden {
+		return downloadStatusError("fetch blob", resp.StatusCode)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return &fatalError{downloadStatusError("fetch blob", resp.StatusCode)}
 	}

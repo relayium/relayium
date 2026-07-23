@@ -180,3 +180,54 @@ func TestDownloadRecoversFromStalledBody(t *testing.T) {
 		t.Fatalf("recovered content mismatch: a=%q b=%q", got1, got2)
 	}
 }
+
+// TestDownloadRetriesNodeTokenReuse: storage nodes now spend a download token on
+// first use, so a duplicated request lands on a 403. That must be retried (the
+// retry re-enters central and gets a fresh token), not reported as a fatal
+// download failure the way every other 4xx is.
+func TestDownloadRetriesNodeTokenReuse(t *testing.T) {
+	raw, err := storecrypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := strings.Repeat("A", 100)
+	encManifest, blob := blobStreamFromFiles(t, raw, []struct {
+		name    string
+		content string
+	}{{"a.txt", content}})
+
+	firstBlob := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/meta"):
+			writeJSONTest(w, map[string]any{
+				"encManifest": base64.StdEncoding.EncodeToString(encManifest),
+				"size":        len(blob),
+			})
+		case strings.HasSuffix(r.URL.Path, "/blob"):
+			if firstBlob {
+				firstBlob = false
+				http.Error(w, "this download link was already used", http.StatusForbidden)
+				return
+			}
+			http.ServeContent(w, r, "blob", time.Time{}, bytes.NewReader(blob))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	dest := t.TempDir()
+	c := NewClient(srv.URL)
+	c.sleep = func(time.Duration) {}
+	paths, err := c.Download(context.Background(), "abc", storecrypto.EncodeKey(raw), dest)
+	if err != nil {
+		t.Fatalf("a 403 on the first blob fetch must be retried, got: %v", err)
+	}
+	if len(paths) != 1 {
+		t.Fatalf("paths = %v", paths)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dest, "a.txt")); string(got) != content {
+		t.Fatalf("content mismatch after retry: %q", got)
+	}
+}

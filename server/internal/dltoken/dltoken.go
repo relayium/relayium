@@ -46,6 +46,22 @@ func Nonce(token string) string {
 	return parts[1]
 }
 
+// Exp returns the expiry embedded in a token (the first field), or false if the
+// token is malformed. The node uses it to know how long a spent token has to be
+// remembered for (see replayGuard). Like Nonce, it does NOT verify the token —
+// only call it on a token Verify already accepted.
+func Exp(token string) (int64, bool) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return 0, false
+	}
+	exp, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return exp, true
+}
+
 // Verify reports whether token authorizes key under secret and has not expired
 // as of now (unix seconds). The MAC comparison is constant-time.
 func Verify(secret, key string, now int64, token string) bool {

@@ -23,7 +23,7 @@ import (
 // the volume is past ~80% used, so relayium can never fill the disk and wedge the
 // host. It also serves an unauthenticated GET /healthz for central's reachability
 // probe.
-func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed func() int64, diskFull func() bool) http.Handler {
+func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed func() int64, diskFull func() bool, guard *replayGuard) http.Handler {
 	// full reports whether a write must be refused: over the admin disk cap, or
 	// past the built-in 80%-full safety reserve.
 	full := func() bool {
@@ -90,7 +90,7 @@ func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed 
 		}
 		_, _ = io.Copy(w, rc)
 	}))
-	registerDownloadRoutes(mux, ds, secret, nil)
+	registerDownloadRoutes(mux, ds, secret, guard, nil)
 	mux.HandleFunc("PATCH /blob/{key}", authed(func(w http.ResponseWriter, r *http.Request, key string) {
 		offset, oerr := strconv.ParseInt(r.Header.Get("X-Blob-Offset"), 10, 64)
 		if oerr != nil || offset < 0 {
@@ -151,7 +151,15 @@ func (c *countingWriter) Write(p []byte) (int, error) {
 // receipt (may be nil) is fired after a served download with the blob key, the
 // token nonce, and the byte count, so central can reconcile the metering it
 // pre-charged when it issued the 302.
-func registerDownloadRoutes(mux *http.ServeMux, ds *storage.DiskStore, secret string, receipt func(blobKey, nonce string, served int64)) {
+//
+// guard makes each token single-use (see replayGuard). It may be nil, which
+// gives this mux a private guard — enforcement is never off, but a process
+// serving these routes on more than one listener must pass ONE shared guard, or
+// a token spent on one listener could still be replayed on the other.
+func registerDownloadRoutes(mux *http.ServeMux, ds *storage.DiskStore, secret string, guard *replayGuard, receipt func(blobKey, nonce string, served int64)) {
+	if guard == nil {
+		guard = newReplayGuard()
+	}
 	// CORS preflight: the browser fetches cross-origin (relayium.com ->
 	// nodeN.relayium.com); a Range header (resumable streaming) is not
 	// CORS-safelisted, so it preflights. Answer it.
@@ -166,8 +174,17 @@ func registerDownloadRoutes(mux *http.ServeMux, ds *storage.DiskStore, secret st
 	mux.HandleFunc("GET /dl/{key}", func(w http.ResponseWriter, r *http.Request) {
 		key := r.PathValue("key")
 		tok := r.URL.Query().Get("t")
-		if !dltoken.Verify(secret, key, time.Now().Unix(), tok) {
+		now := time.Now().Unix()
+		if !dltoken.Verify(secret, key, now, tok) {
 			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		// One token, one fetch. Spend it before serving: a token burned by a
+		// download that then failed costs the client nothing, because every
+		// retry re-enters central and is handed a fresh one.
+		exp, _ := dltoken.Exp(tok) // ok: Verify already parsed it
+		if !guard.claim(key+"\x00"+dltoken.Nonce(tok), exp, now) {
+			http.Error(w, "this download link was already used — request a fresh one", http.StatusForbidden)
 			return
 		}
 		rc, err := ds.Get(r.Context(), key)
@@ -203,12 +220,12 @@ func registerDownloadRoutes(mux *http.ServeMux, ds *storage.DiskStore, secret st
 // health probe — for the node's public-facing listener, so the bearer-authed
 // /blob write API is never exposed there (Cloudflare proxies to this listener).
 // receipt (may be nil) is fired after each served download for central to reconcile.
-func newDownloadHandler(ds *storage.DiskStore, secret string, receipt func(blobKey, nonce string, served int64)) http.Handler {
+func newDownloadHandler(ds *storage.DiskStore, secret string, guard *replayGuard, receipt func(blobKey, nonce string, served int64)) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
-	registerDownloadRoutes(mux, ds, secret, receipt)
+	registerDownloadRoutes(mux, ds, secret, guard, receipt)
 	return mux
 }

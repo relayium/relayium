@@ -24,7 +24,7 @@ func TestDLEndpointTokenAuth(t *testing.T) {
 		t.Fatalf("diskstore: %v", err)
 	}
 	const secret = "nodesecret"
-	srv := httptest.NewServer(newBlobHandler(ds, secret, nil, nil, nil))
+	srv := httptest.NewServer(newBlobHandler(ds, secret, nil, nil, nil, nil))
 	defer srv.Close()
 
 	// Seed a blob via the bearer-authed PUT.
@@ -80,7 +80,7 @@ func TestPublicDownloadHandlerHidesBlobAPI(t *testing.T) {
 	if _, err := ds.Put(t.Context(), "pk", bytes.NewReader([]byte("cipher"))); err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(newDownloadHandler(ds, secret, nil))
+	srv := httptest.NewServer(newDownloadHandler(ds, secret, nil, nil))
 	defer srv.Close()
 
 	// /healthz is up.
@@ -117,7 +117,7 @@ func TestDLReceiptFiresWithServedBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := make(chan [3]string, 1)
-	h := newDownloadHandler(ds, secret, func(blobKey, nonce string, served int64) {
+	h := newDownloadHandler(ds, secret, nil, func(blobKey, nonce string, served int64) {
 		got <- [3]string{blobKey, nonce, strconv.FormatInt(served, 10)}
 	})
 	srv := httptest.NewServer(h)
@@ -151,7 +151,7 @@ func TestDLEndpointCORS(t *testing.T) {
 		t.Fatalf("diskstore: %v", err)
 	}
 	const secret = "nodesecret"
-	srv := httptest.NewServer(newBlobHandler(ds, secret, nil, nil, nil))
+	srv := httptest.NewServer(newBlobHandler(ds, secret, nil, nil, nil, nil))
 	defer srv.Close()
 	putReq, _ := http.NewRequest("PUT", srv.URL+"/blob/ck", bytes.NewReader([]byte("cipher")))
 	putReq.Header.Set("Authorization", "Bearer "+secret)
@@ -195,7 +195,7 @@ func TestBlobHandlerRoundTripAndAuth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("diskstore: %v", err)
 	}
-	h := newBlobHandler(ds, "nodesecret", nil, nil, nil)
+	h := newBlobHandler(ds, "nodesecret", nil, nil, nil, nil)
 	srv := httptest.NewServer(h)
 	defer srv.Close()
 
@@ -263,7 +263,7 @@ func TestBlobHandlerAppend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(newBlobHandler(ds, "s", nil, nil, nil))
+	srv := httptest.NewServer(newBlobHandler(ds, "s", nil, nil, nil, nil))
 	defer srv.Close()
 
 	patch := func(offset int64, data string) (int, string) {
@@ -331,7 +331,7 @@ func TestBlobHandlerRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := newBlobHandler(ds, "s", nil, nil, nil)
+	h := newBlobHandler(ds, "s", nil, nil, nil, nil)
 	srv := httptest.NewServer(h)
 	defer srv.Close()
 
@@ -357,5 +357,84 @@ func TestBlobHandlerRange(t *testing.T) {
 	}
 	if ar := resp.Header.Get("Accept-Ranges"); ar != "bytes" {
 		t.Fatalf("Accept-Ranges = %q, want bytes", ar)
+	}
+}
+
+// TestDLTokenIsSingleUse: central pre-meters the file size when it signs the
+// 302, so a token that can be replayed for its whole lifetime turns ONE metered
+// request into unbounded unmetered egress from the node. A token must buy
+// exactly one fetch; a freshly signed one for the same blob still works, because
+// that is what every real retry does (both clients re-enter central).
+func TestDLTokenIsSingleUse(t *testing.T) {
+	ds, err := storage.NewDiskStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("diskstore: %v", err)
+	}
+	const secret = "nodesecret"
+	if _, err := ds.Put(t.Context(), "sk", bytes.NewReader([]byte("cipher"))); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(newDownloadHandler(ds, secret, newReplayGuard(), nil))
+	defer srv.Close()
+
+	get := func(tok string) int {
+		resp, err := http.Get(srv.URL + "/dl/sk?t=" + tok)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	exp := time.Now().Unix() + 60
+	tok := dltoken.Sign(secret, "sk", exp, "once")
+	if code := get(tok); code != 200 {
+		t.Fatalf("first use = %d, want 200", code)
+	}
+	if code := get(tok); code != http.StatusForbidden {
+		t.Fatalf("replayed token = %d, want 403", code)
+	}
+	// A retry gets a brand-new token from central — that must still work.
+	if code := get(dltoken.Sign(secret, "sk", exp, "twice")); code != 200 {
+		t.Fatalf("fresh token = %d, want 200", code)
+	}
+}
+
+// TestDLGuardIsSharedAcrossListeners: /dl is served on BOTH the blob listener and
+// the public download listener. A token spent on one must be dead on the other —
+// otherwise single-use just means twice.
+func TestDLGuardIsSharedAcrossListeners(t *testing.T) {
+	ds, err := storage.NewDiskStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("diskstore: %v", err)
+	}
+	const secret = "nodesecret"
+	if _, err := ds.Put(t.Context(), "gk", bytes.NewReader([]byte("cipher"))); err != nil {
+		t.Fatal(err)
+	}
+	guard := newReplayGuard()
+	blobSrv := httptest.NewServer(newBlobHandler(ds, secret, nil, nil, nil, guard))
+	defer blobSrv.Close()
+	dlSrv := httptest.NewServer(newDownloadHandler(ds, secret, guard, nil))
+	defer dlSrv.Close()
+
+	tok := dltoken.Sign(secret, "gk", time.Now().Unix()+60, "shared")
+	resp, err := http.Get(blobSrv.URL + "/dl/gk?t=" + tok)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("first use = %d, want 200", resp.StatusCode)
+	}
+	resp2, err := http.Get(dlSrv.URL + "/dl/gk?t=" + tok)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	resp2.Body.Close()
+	if resp2.StatusCode != http.StatusForbidden {
+		t.Fatalf("same token on the other listener = %d, want 403", resp2.StatusCode)
 	}
 }

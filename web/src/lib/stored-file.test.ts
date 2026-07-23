@@ -591,6 +591,57 @@ describe("fetchMeta", () => {
     expect(meta.size).toBe(10);
     expect(fetchMock).toHaveBeenCalledWith("/api/files/abc/meta");
   });
+  it("retries once when a storage node rejects an already-spent download token", async () => {
+    // Direct-download tokens are one-shot, so a request the browser replayed on
+    // its own comes back 403. Nothing has streamed yet, so downloadBlob asks
+    // central again and gets a fresh token.
+    const sk = await generateStoreKey();
+    const original = new Uint8Array(64);
+    for (let i = 0; i < original.length; i++) original[i] = i & 0xff;
+    const frames: Uint8Array[] = [];
+    for await (const fr of encryptFiles([new File([original], "d.bin")], sk.key))
+      frames.push(fr);
+    const body = concat(frames);
+    const okRes = {
+      ok: true,
+      status: 200,
+      body: new ReadableStream<Uint8Array>({
+        start(c) {
+          c.enqueue(body);
+          c.close();
+        },
+      }),
+    };
+    const f = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 403 })
+      .mockResolvedValueOnce(okRes);
+    vi.stubGlobal("fetch", f);
+
+    const chunks: Uint8Array[] = [];
+    await downloadBlob(
+      "test-id",
+      sk.key,
+      async (pt) => {
+        chunks.push(pt);
+      },
+      undefined,
+      original.length,
+    );
+    expect(concat(chunks)).toEqual(original);
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up on a second 403 rather than retrying forever", async () => {
+    const sk = await generateStoreKey();
+    const f = vi.fn().mockResolvedValue({ ok: false, status: 403 });
+    vi.stubGlobal("fetch", f);
+    await expect(
+      downloadBlob("gone", sk.key, async () => {}, undefined, 0),
+    ).rejects.toThrow("403");
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+
   it("throws on a non-ok response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
     await expect(fetchMeta("gone")).rejects.toThrow("404");

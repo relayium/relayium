@@ -406,10 +406,18 @@ export async function downloadBlob(
 ): Promise<void> {
   const expected = expectedBytes ?? (await expectedPlaintextBytes(id, key));
   let res: Response;
-  try {
-    res = await fetch(`/api/files/${encodeURIComponent(id)}/blob`);
-  } catch (e) {
-    throw new DownloadNetworkError(e); // fetch rejected — offline / DNS / connection refused
+  // A direct-download 302 hands us a one-shot token, so a request the browser
+  // itself replayed (a retried idle connection, say) comes back 403 from the
+  // storage node. Nothing has been streamed at that point, so just ask central
+  // again — it mints a fresh token. Bounded to one extra attempt: a persistent
+  // 403 is a real failure, not something to spin on.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = await fetch(`/api/files/${encodeURIComponent(id)}/blob`);
+    } catch (e) {
+      throw new DownloadNetworkError(e); // fetch rejected — offline / DNS / connection refused
+    }
+    if (res.status !== 403 || attempt > 0) break;
   }
   if (!res.ok) throw new Error(`blob failed: ${res.status}`);
   if (!res.body) throw new Error("streaming not supported");

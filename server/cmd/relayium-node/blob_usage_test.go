@@ -116,7 +116,7 @@ func TestBlobHandlerEnforcesDiskCapFromRealGauge(t *testing.T) {
 	lim := &limits{}
 	lim.sync(0, 0, 1000) // disk cap 1000 bytes
 	// diskFull is nil: this test isolates the admin cap from the 80% reserve.
-	h := newBlobHandler(ds, "s", lim, gauge.get, nil)
+	h := newBlobHandler(ds, "s", lim, gauge.get, nil, nil)
 
 	put := func(key string, n int) int {
 		r := httptest.NewRequest("PUT", "/blob/"+key, bytes.NewReader(bytes.Repeat([]byte("z"), n)))

@@ -256,9 +256,13 @@ func run(c config, st nodeState) error {
 			}
 		}()
 		diskUsed, diskFull := blobGates(blobGauge, c.StorageDir)
+		// One guard for the whole process: the /dl routes are served on BOTH the
+		// blob listener and the public download listener, and a token spent on one
+		// must not still be spendable on the other.
+		dlGuard := newReplayGuard()
 		blobSrv := &http.Server{
 			Addr:    fmt.Sprintf(":%d", c.StoragePort),
-			Handler: newBlobHandler(ds, storageSecret, lim, diskUsed, diskFull),
+			Handler: newBlobHandler(ds, storageSecret, lim, diskUsed, diskFull, dlGuard),
 			TLSConfig: &tls.Config{
 				Certificates: []tls.Certificate{id.TLSCert},
 				MinVersion:   tls.VersionTLS13,
@@ -296,7 +300,7 @@ func run(c config, st nodeState) error {
 			}
 			dlSrv := &http.Server{
 				Addr:      c.DownloadAddr,
-				Handler:   newDownloadHandler(ds, storageSecret, sendReceipt),
+				Handler:   newDownloadHandler(ds, storageSecret, dlGuard, sendReceipt),
 				TLSConfig: &tls.Config{Certificates: []tls.Certificate{id.TLSCert}, MinVersion: tls.VersionTLS12},
 			}
 			go func() {
