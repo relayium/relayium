@@ -106,11 +106,13 @@ type updateConfig struct {
 	TargetFromCentral bool
 
 	// APIBase and DownloadBase override the GitHub hosts selfupdate.Update talks
-	// to. Always empty in production — parseUpdateFlags never sets them, so
-	// selfupdate falls back to the real GitHub API/download hosts — and exist
-	// only so tests can point runUpdateWith at an httptest server and drive the
-	// full orchestration (backup, restart, health check, rollback) without a
-	// network dependency.
+	// to: tests point them at an httptest server to drive the full orchestration
+	// (backup, restart, health check, rollback) without a network dependency,
+	// and DownloadBase additionally carries RELAYIUM_NODE_UPDATE_BASE — the
+	// escape hatch for a host that cannot reach github.com (China, mainly).
+	// Pointing it at central's mirror is NOT a weakening: the archive is still
+	// checksummed and signature-verified here, against a key compiled into this
+	// binary, so a mirror that served something else fails before install.
 	APIBase      string
 	DownloadBase string
 }
@@ -157,6 +159,11 @@ func parseUpdateFlags(args []string, stderr io.Writer) (updateConfig, error) {
 	}
 	if uc.NodeToken == "" {
 		uc.NodeToken = fileEnv["RELAYIUM_NODE_TOKEN"]
+	}
+	if uc.DownloadBase == "" {
+		// e.g. https://relayium.com/gh — the asset path under it is GitHub's own
+		// shape, so this is a pure prefix swap.
+		uc.DownloadBase = valueOr(env("RELAYIUM_NODE_UPDATE_BASE", ""), fileEnv["RELAYIUM_NODE_UPDATE_BASE"])
 	}
 
 	if uc.ClearFailed {

@@ -506,6 +506,8 @@ func main() {
 	// Universal Links / Sign in with Apple domain association. A more specific
 	// pattern than "/", so it wins over the SPA fallback. Dormant (404) until
 	// RELAYIUM_APPLE_APP_IDS is set.
+	// Release mirror for hosts that cannot reach github.com (see release_mirror.go).
+	mux.HandleFunc("GET "+mirrorPrefix, handleReleaseMirror)
 	mux.HandleFunc("GET /.well-known/apple-app-site-association", appleAppSiteAssociation(splitURLs(*appleAppIDs)))
 	mux.HandleFunc("GET /.well-known/apple-developer-domain-association.txt", appleDomainAssociation(*appleDomainAssoc))
 

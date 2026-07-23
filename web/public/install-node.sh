@@ -17,6 +17,12 @@
 #   RELAYIUM_NODE_STORAGE_PORT  blob HTTP port, central-facing only (default 8081)
 #   RELAYIUM_NODE_MIN_PORT / RELAYIUM_NODE_MAX_PORT  relay UDP range (default 49152-65535)
 # Self-update (central-driven, root+systemd only):
+#   RELAYIUM_NODE_UPDATE_BASE   mirror to download release artifacts from when
+#                               github.com is unreachable (China), e.g.
+#                               https://relayium.com/gh — central re-serves the
+#                               same assets. NOT a weakening: the archive is
+#                               still checksummed and signature-verified on this
+#                               machine against a compiled-in key.
 #   RELAYIUM_NODE_AUTO_UPDATE   on|off (default on). A timer polls central every
 #                               ~10min asking what version to run; central only ever
 #                               hands out a version NUMBER, the binary itself is
@@ -126,6 +132,7 @@ RELAYIUM_NODE_STORAGE_PORT=${RELAYIUM_NODE_STORAGE_PORT:-}
 RELAYIUM_NODE_MIN_PORT=${RELAYIUM_NODE_MIN_PORT:-}
 RELAYIUM_NODE_MAX_PORT=${RELAYIUM_NODE_MAX_PORT:-}
 RELAYIUM_NODE_BIN=${INSTALL_DIR}/relayium-node
+RELAYIUM_NODE_UPDATE_BASE=${RELAYIUM_NODE_UPDATE_BASE:-}
 RELAYIUM_NODE_AUTO_UPDATE=${RELAYIUM_NODE_AUTO_UPDATE:-on}
 EOF
   chmod 0600 /etc/relayium-node/env
