@@ -276,6 +276,13 @@ const fr: Messages = {
     confirmDelNode: "Retirer ce nœud ? Il ne relaiera ni ne stockera plus pour votre compte.",
     copyLink: "Copier le lien",
     linkHint: "La clé d'un lien de partage n'est conservée que dans le navigateur depuis lequel vous avez envoyé — elle est irrécupérable sur un autre appareil, alors enregistrez le lien.",
+    cliTitle: "Appareils CLI connectés",
+    cliIntro: "Machines où vous avez exécuté relayium login. Chacune détient un jeton capable de transférer et d'envoyer en votre nom — révoquez celles que vous n'utilisez plus.",
+    cliEmpty: "Aucun appareil CLI connecté.",
+    cliLastUsed: (when) => `Dernière utilisation ${when}`,
+    cliNeverUsed: "jamais utilisé",
+    cliRevoke: "Révoquer",
+    cliConfirmRevoke: "Révoquer cet appareil ? Son jeton CLI cesse immédiatement de fonctionner et cette machine devra se reconnecter.",
     actionFailed: "Une erreur s'est produite. Vérifiez votre connexion et réessayez.",
   },
   why: {

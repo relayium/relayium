@@ -276,6 +276,13 @@ const ko: Messages = {
     confirmDelNode: "이 노드를 제거할까요? 이후 이 계정의 중계·저장에 사용되지 않습니다.",
     copyLink: "링크 복사",
     linkHint: "공유 링크의 키는 업로드한 브라우저에만 로컬로 저장됩니다. 다른 기기에서는 복구할 수 없으니 링크를 저장하세요.",
+    cliTitle: "로그인된 CLI 기기",
+    cliIntro: "relayium login을 실행한 기기입니다. 각각 사용자 본인으로 전송·업로드할 수 있는 토큰을 가지고 있습니다 — 쓰지 않는 기기는 해지하세요.",
+    cliEmpty: "로그인된 CLI 기기가 없습니다.",
+    cliLastUsed: (when) => `마지막 사용 ${when}`,
+    cliNeverUsed: "사용 기록 없음",
+    cliRevoke: "해지",
+    cliConfirmRevoke: "이 기기를 해지할까요? CLI 토큰이 즉시 무효화되며 해당 기기는 다시 로그인해야 합니다.",
     actionFailed: "작업에 실패했습니다. 연결 상태를 확인한 뒤 다시 시도하세요.",
   },
   why: {

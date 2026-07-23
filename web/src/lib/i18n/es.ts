@@ -276,6 +276,13 @@ const es: Messages = {
     confirmDelNode: "¿Quitar este nodo? Dejará de retransmitir o almacenar para tu cuenta.",
     copyLink: "Copiar enlace",
     linkHint: "La clave de un enlace para compartir se guarda solo en el navegador desde el que lo subiste — no se puede recuperar en otro dispositivo, así que guarda el enlace.",
+    cliTitle: "Dispositivos CLI con sesión",
+    cliIntro: "Equipos donde ejecutaste relayium login. Cada uno guarda un token que puede transferir y subir en tu nombre: revoca los que ya no uses.",
+    cliEmpty: "No hay dispositivos CLI con sesión.",
+    cliLastUsed: (when) => `Último uso ${when}`,
+    cliNeverUsed: "nunca usado",
+    cliRevoke: "Revocar",
+    cliConfirmRevoke: "¿Revocar este dispositivo? Su token CLI deja de funcionar de inmediato y esa máquina tendrá que iniciar sesión otra vez.",
     actionFailed: "Algo salió mal. Comprueba tu conexión e inténtalo de nuevo.",
   },
   why: {

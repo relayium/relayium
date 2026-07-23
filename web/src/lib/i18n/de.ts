@@ -276,6 +276,13 @@ const de: Messages = {
     confirmDelNode: "Diesen Knoten entfernen? Er wird dann nicht mehr für dein Konto relayen oder speichern.",
     copyLink: "Link kopieren",
     linkHint: "Der Schlüssel eines Freigabelinks liegt nur im Browser, aus dem du hochgeladen hast — auf einem anderen Gerät ist er nicht wiederherstellbar; speichere daher den Link.",
+    cliTitle: "Angemeldete CLI-Geräte",
+    cliIntro: "Rechner, auf denen du relayium login ausgeführt hast. Jeder hält ein Token, das in deinem Namen übertragen und hochladen kann — widerrufe, was du nicht mehr nutzt.",
+    cliEmpty: "Keine angemeldeten CLI-Geräte.",
+    cliLastUsed: (when) => `Zuletzt verwendet ${when}`,
+    cliNeverUsed: "nie verwendet",
+    cliRevoke: "Widerrufen",
+    cliConfirmRevoke: "Dieses Gerät widerrufen? Sein CLI-Token wird sofort ungültig und der Rechner muss sich neu anmelden.",
     actionFailed: "Etwas ist schiefgelaufen. Prüfe deine Verbindung und versuche es erneut.",
   },
   why: {

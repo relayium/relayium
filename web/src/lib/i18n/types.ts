@@ -311,6 +311,16 @@ export interface Messages {
     confirmDelNode: string; // confirm() before removing a node
     copyLink: string; // copy the rebuilt share link for a stored file (key held locally)
     linkHint: string; // note: links are recoverable only on the browser that uploaded
+    // 已登录的 CLI 设备。后端一直有列出/吊销的能力（GET /api/devices +
+    // DELETE /api/devices/{id}，删设备会级联删掉它的 CLI 令牌），但界面上一直没有
+    // 入口——用户既看不到哪几台机器持有全权令牌，也无法吊销其中任何一台。
+    cliTitle: string;
+    cliIntro: string;
+    cliEmpty: string;
+    cliLastUsed: (when: string) => string;
+    cliNeverUsed: string;
+    cliRevoke: string;
+    cliConfirmRevoke: string;
     actionFailed: string; // generic "the request failed" notice for the write actions on this page
   };
   // Shared "why an account?" explainer shown on the two login-gated feature pages

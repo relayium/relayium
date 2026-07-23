@@ -276,6 +276,13 @@ const pt: Messages = {
     confirmDelNode: "Remover este nó? Ele deixará de retransmitir ou armazenar para sua conta.",
     copyLink: "Copiar link",
     linkHint: "A chave de um link de compartilhamento fica apenas no navegador de onde você fez o envio — ela não pode ser recuperada em outro dispositivo, então salve o link.",
+    cliTitle: "Dispositivos CLI conectados",
+    cliIntro: "Máquinas onde você executou relayium login. Cada uma guarda um token que pode transferir e enviar em seu nome — revogue as que não usa mais.",
+    cliEmpty: "Nenhum dispositivo CLI conectado.",
+    cliLastUsed: (when) => `Último uso ${when}`,
+    cliNeverUsed: "nunca usado",
+    cliRevoke: "Revogar",
+    cliConfirmRevoke: "Revogar este dispositivo? O token CLI dele para de funcionar imediatamente e essa máquina precisará entrar novamente.",
     actionFailed: "Algo deu errado. Verifique sua conexão e tente novamente.",
   },
   why: {

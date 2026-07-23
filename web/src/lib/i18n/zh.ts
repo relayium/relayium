@@ -276,6 +276,13 @@ const zh: Messages = {
     confirmDelNode: "确定移除这个节点？移除后它将不再参与中转与存储。",
     copyLink: "复制链接",
     linkHint: "分享链接的密钥只保存在你上传时用的这台浏览器本地——换设备无法找回，请及时保存链接。",
+    cliTitle: "已登录的 CLI 设备",
+    cliIntro: "这些机器上运行过 relayium login。每台都持有一枚可以代表你传输和上传的令牌——不再使用的请吊销。",
+    cliEmpty: "没有已登录的 CLI 设备。",
+    cliLastUsed: (when) => `最后使用 ${when}`,
+    cliNeverUsed: "从未使用",
+    cliRevoke: "吊销",
+    cliConfirmRevoke: "吊销这台设备？它的 CLI 令牌会立即失效，那台机器需要重新登录。",
     actionFailed: "操作失败，请检查网络后重试。",
   },
   why: {

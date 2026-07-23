@@ -63,6 +63,45 @@
   let nowSec = $state(Math.floor(Date.now() / 1000));
   let loadedFor = ""; // user id we last loaded data for; guards against refetch loops
 
+  // 已登录的 CLI 设备。后端一直有这两个接口（列出 + 删除，删设备会级联删掉它的
+  // CLI 令牌），但界面上一直没有入口——于是用户既看不到哪几台机器持有能代表自己
+  // 传输/上传的令牌，也没法吊销其中任何一台。丢了笔记本时这是唯一能自救的地方。
+  interface DeviceRow { ID: string; Name: string; CreatedAt: number; LastSeenAt: number; Kind: string }
+  let cliDevices = $state<DeviceRow[]>([]);
+
+  async function loadCliDevices() {
+    try {
+      const res = await fetch("/api/devices", { credentials: "include" });
+      const all: DeviceRow[] = res.ok ? ((await res.json()).devices ?? []) : [];
+      // 只列 CLI 设备：浏览器那一类是本机自动登记的，列出来只会是噪音（而且它们
+      // 持有的是会话 cookie，不是可以拷走的令牌）。
+      cliDevices = all
+        .filter((d) => d.Kind === "cli")
+        .sort((a, b) => b.LastSeenAt - a.LastSeenAt || b.CreatedAt - a.CreatedAt);
+    } catch {
+      cliDevices = [];
+    }
+  }
+
+  async function revokeCliDevice(d: DeviceRow) {
+    if (!(await confirmDialog(t.me.cliConfirmRevoke))) return;
+    try {
+      const res = await fetch(`/api/devices/${encodeURIComponent(d.ID)}`, {
+        method: "DELETE", credentials: "include",
+      });
+      if (!res.ok) { failed(); return; }
+      cliDevices = cliDevices.filter((x) => x.ID !== d.ID);
+    } catch {
+      failed();
+    }
+  }
+
+  /** 最后使用时间。0 = 登录后一次都没用过——那种设备最值得吊销，所以单独说清楚。 */
+  function lastUsedText(d: DeviceRow): string {
+    if (!d.LastSeenAt) return t.me.cliNeverUsed;
+    return t.me.cliLastUsed(new Date(d.LastSeenAt * 1000).toLocaleString());
+  }
+
   // "My Nodes" — BYO relay node section.
   let nodes = $state<NodeRow[]>([]);
   let strict = $state(false);
@@ -148,6 +187,7 @@
       loading = false;
     }
     await loadNodes();
+    await loadCliDevices();
   }
 
   async function copyLink(id: string) {
@@ -412,10 +452,39 @@
         </ul>
       {/if}
     </section>
+
+    <section class="clidevices">
+      <h2>{t.me.cliTitle}</h2>
+      <p class="muted">{t.me.cliIntro}</p>
+      {#if cliDevices.length === 0}
+        <p class="muted">{t.me.cliEmpty}</p>
+      {:else}
+        <ul class="clilist">
+          {#each cliDevices as d (d.ID)}
+            <li>
+              <span class="cliname">{d.Name}</span>
+              <span class="cliseen" class:never={!d.LastSeenAt}>{lastUsedText(d)}</span>
+              <button class="del" onclick={() => revokeCliDevice(d)}>{t.me.cliRevoke}</button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
   {/if}
 </section>
 
 <style>
+  .clidevices { margin-top: var(--section-gap); }
+  .clilist { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  .clilist li {
+    display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+    padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  .cliname { flex: 1 1 auto; min-width: 0; color: var(--text-h); font-weight: 500; word-break: break-word; }
+  .cliseen { font-size: var(--fs-xs); color: var(--text); }
+  /* 从未使用过的设备最值得吊销——给它一点视觉重量，别和其他行糊在一起。 */
+  .cliseen.never { color: var(--danger); }
+
   .action-err {
     margin: 0 0 1rem;
     padding: 0.6rem 0.9rem;

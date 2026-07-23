@@ -276,6 +276,13 @@ const en: Messages = {
     confirmDelNode: "Remove this node? It will stop relaying or storing for your account.",
     copyLink: "Copy link",
     linkHint: "A share link's key is kept only in the browser you uploaded from — it can't be recovered on another device, so save the link.",
+    cliTitle: "Signed-in CLI devices",
+    cliIntro: "Machines where you ran relayium login. Each holds a token that can transfer and upload as you — revoke any you no longer use.",
+    cliEmpty: "No CLI devices signed in.",
+    cliLastUsed: (when) => `Last used ${when}`,
+    cliNeverUsed: "never used",
+    cliRevoke: "Revoke",
+    cliConfirmRevoke: "Revoke this device? Its CLI token stops working immediately and that machine has to sign in again.",
     actionFailed: "Something went wrong. Check your connection and try again.",
   },
   why: {
