@@ -49,24 +49,38 @@ type adminHomeData struct {
 	PasskeysErr bool
 
 	// ByoNodes are USER-CONTRIBUTED nodes, in their own table with their own
-	// controls. Kept as a separate, PRE-FILTERED and PRE-CAPPED slice rather
-	// than a second {{if}} pass over Nodes, for two reasons: the population is
-	// unbounded (anyone can contribute a node, and the dashboard must not grow
-	// with the user base), and the two tables must never be able to render each
-	// other's rows — draining "our machine" and draining "a user's machine" are
-	// very different acts. ByoNodeCount is the count BEFORE the cap.
+	// controls. It is ONE PAGE, filtered/ranked/paged in SQL (ListByoNodes),
+	// never a second {{if}} pass over Nodes: the population is unbounded
+	// (anyone can contribute a node, and the dashboard must neither grow with
+	// the user base nor read the whole table to draw a page), and the two
+	// tables must never be able to render each other's rows — draining "our
+	// machine" and draining "a user's machine" are very different acts.
+	// ByoNodeCount is the total number of MATCHES, not the page length.
 	ByoNodes     []adminNodeView
-	ByoNodeCount int
+	ByoNodeCount int64
+	// BYO table search + pagination state. ByoSearch is the live filter (node
+	// id / owner email / label / region); the pager links carry it, and the
+	// user list's own q/sort/dir/page params, through unchanged.
+	ByoSearch     string
+	ByoPage       int
+	ByoTotalPages int
+	ByoPrevHref   string // empty = no previous page
+	ByoNextHref   string // empty = no next page
+	ByoPages      []adminPageLink
+	// ByoClearHref drops the BYO search while keeping the user list's own
+	// params — "clear" must not double as "reset the rest of the page".
+	ByoClearHref string
 	// ByoRemovedNodes is a SEPARATE, small section rendered below the main BYO
 	// table for already-uninstalled BYO nodes, so /admin/nodes/{id}/restore —
 	// the documented manual recovery for a mistaken deregistration — always has
-	// a reachable row: the main table above ranks removed nodes last (see
-	// byoNodeViews), so once at least adminByoNodesShown non-removed nodes
-	// exist, a removed node would never earn a row there at all.
-	// ByoRemovedNodeCount is the count BEFORE that section's own (much smaller)
-	// cap, same convention as ByoNodeCount above.
+	// a reachable row: the main table above lists only NON-removed nodes (see
+	// SQLiteStore.ListByoNodes), so a removed node would never earn a row
+	// there at all. It is searched with the same term as the main table, so a
+	// specific removed node stays findable however old the uninstall is.
+	// ByoRemovedNodeCount is the total number of removed nodes MATCHING the
+	// current search, before that section's own (much smaller) cap.
 	ByoRemovedNodes     []adminNodeView
-	ByoRemovedNodeCount int
+	ByoRemovedNodeCount int64
 	FleetTokens         []adminFleetTokenView
 	FleetNodeCount      int    // count of Nodes with OwnerType == "fleet" (matches table body's guard)
 	MintedToken         string // set once, right after minting; shown inline then gone
@@ -552,6 +566,9 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 .byo-nodes{border-left:3px solid #d97706;padding-left:14px;margin:28px 0}
 .byo-nodes h2{margin-bottom:6px}
 .byo-warn{color:var(--muted);font-size:12px;margin:0 0 12px;max-width:760px}
+.byo-search{display:flex;gap:8px;align-items:center;margin:0 0 12px}
+.byo-search input[type=search]{font:inherit;padding:7px 9px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg)}
+.byo-search a{color:var(--a);text-decoration:none;font-size:13px}.byo-search a:hover{text-decoration:underline}
 .byo-nodes-removed{border-left:3px solid var(--muted);padding-left:14px;margin:16px 0 28px;opacity:.85}
 .byo-nodes-removed h2{margin-bottom:6px}
 .rollout{margin:0 0 28px}.rollout h2{margin-bottom:12px}
@@ -667,12 +684,25 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
      黄色左边框、抬头一句话说明），因为把用户的机器当成自己的机器去排空/移除，
      后果完全不同：那台机器上的文件是用户自己的，而且我们并不拥有那台机器。
      没有"删除"按钮 —— 删行是官方节点的退役操作，用户的节点由用户自己删。
-     这张表只列未卸载的节点（byoNodeViews 已把已卸载的挑到下面独立小节），
-     所以这里不再需要"已卸载"分支——一台已卸载的节点永远不会出现在这张表里，
-     恢复入口在下面那个不受这张表行数上限影响的小节。 */}}
+     这张表只列未卸载的节点（ListByoNodes 的 removed_at=0 过滤；已卸载的在下面
+     独立小节），所以这里不需要"已卸载"分支——一台已卸载的节点永远不会出现在
+     这张表里，恢复入口在下面那个不受本表分页影响的小节。 */}}
 <section class="nodes byo-nodes">
-<h2>自带节点（用户机器，共 {{.ByoNodeCount}} 台{{if gt .ByoNodeCount (len .ByoNodes)}}，下表只列最需要关注的 {{len .ByoNodes}} 台{{end}}）</h2>
+<h2>自带节点（用户机器{{if .ByoSearch}}，匹配"{{.ByoSearch}}"的共 {{.ByoNodeCount}} 台{{else}}，共 {{.ByoNodeCount}} 台{{end}}，第 {{.ByoPage}}/{{.ByoTotalPages}} 页）</h2>
 <p class="byo-warn">这些不是我们的机器，是用户贡献的。排空/标记已移除只影响<b>该用户自己的</b>放置池与直连下载，机器本身仍在用户手里运行；先看清"剩余文件"再动手，节点上的文件没有副本。</p>
+{{/* 搜索是 GET（安全方法，不带 CSRF token，和用户列表的搜索一致）。隐藏字段把
+     用户列表自己的 q/sort/dir/period 原样带过去：两张表各自分页，翻节点表绝不
+     能把用户列表的搜索和页码清掉。搜索/分页参数用 bq/bp，与用户列表的 q/page
+     刻意分开。 */}}
+<form method="get" action="/admin" class="byo-search">
+<input type="hidden" name="q" value="{{.Search}}">
+<input type="hidden" name="sort" value="{{.Sort}}">
+<input type="hidden" name="dir" value="{{.Dir}}">
+<input type="hidden" name="period" value="{{.Period}}">
+<input type="search" name="bq" value="{{.ByoSearch}}" placeholder="搜索：节点 ID / 用户邮箱 / 备注名 / 区域" style="width:300px">
+<button type="submit">搜索</button>
+{{if .ByoSearch}}<a href="{{.ByoClearHref}}">清除</a>{{end}}
+</form>
 <table>
 <thead><tr><th>备注 / ID</th><th>所属用户</th><th>IP</th><th>状态</th><th>版本</th><th>最后心跳(UTC)</th><th>排空</th><th>剩余文件 / 最早可安全卸载</th></tr></thead>
 <tbody>
@@ -696,9 +726,18 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <td>{{if .StoredFileCount}}{{.StoredFileCount}} 个 / {{ts .SafeToUninstallAt}}{{else}}0 个 · 可随时移除{{end}}</td>
 </tr>
 {{else}}
-<tr><td colspan="8" style="color:var(--muted)">暂无用户自带节点</td></tr>
+<tr><td colspan="8" style="color:var(--muted)">{{if .ByoSearch}}没有匹配的自带节点{{else}}暂无用户自带节点{{end}}</td></tr>
 {{end}}
 </tbody></table>
+{{/* 分页导航是 GET 链接，不是表单：翻页不改任何状态。带页码的链接（不只是
+     上一页/下一页）是为了让"跳回第 1 页"这种最常见的动作只要一次点击。 */}}
+{{if gt .ByoTotalPages 1}}
+<div class="pager">
+{{if .ByoPrevHref}}<a href="{{.ByoPrevHref}}">← 上一页</a>{{else}}<span class="off">← 上一页</span>{{end}}
+{{range .ByoPages}}{{if .Current}}<b>{{.Num}}</b>{{else}}<a href="{{.Href}}">{{.Num}}</a>{{end}}{{end}}
+{{if .ByoNextHref}}<a href="{{.ByoNextHref}}">下一页 →</a>{{else}}<span class="off">下一页 →</span>{{end}}
+</div>
+{{end}}
 </section>
 
 {{/* 已卸载的自带节点：独立成节、单独限行（adminByoRemovedShown，远小于上面

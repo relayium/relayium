@@ -612,6 +612,18 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 	for _, idx := range []string{
 		`DROP INDEX IF EXISTS idx_usage_user_recorded`,
 		`DROP INDEX IF EXISTS idx_usage_node_recorded`,
+		// stored_files.node_id was never indexed, so "does this node still hold
+		// live files" was a full table scan. NodeFileCounts pays it once per
+		// dashboard render; ListByoNodes's ranking would pay it per candidate
+		// row. Composite with expires_at so the "live" predicate is answered
+		// from the index alone. Created here (not in the base schema) because
+		// node_id itself arrives via the SP2 ALTER block above.
+		`CREATE INDEX IF NOT EXISTS idx_stored_files_node ON stored_files(node_id, expires_at)`,
+		// The BYO admin table filters on owner_type and splits on removed_at;
+		// last_seen_at is its ranking tiebreak. One composite index answers the
+		// live/removed split and the ordering without touching the fleet
+		// table's own reads.
+		`CREATE INDEX IF NOT EXISTS idx_nodes_byo ON nodes(owner_type, removed_at, last_seen_at)`,
 	} {
 		if _, err := db.ExecContext(context.Background(), idx); err != nil {
 			db.Close()
@@ -3271,6 +3283,64 @@ func (s *SQLiteStore) ListNodes(ctx context.Context) ([]Node, error) {
 	return s.queryNodes(ctx, `SELECT `+nodeCols+` FROM nodes ORDER BY last_seen_at DESC`)
 }
 
+// ListByoNodes returns one page of user-contributed nodes plus the total number
+// of matches. See AdminByoNodeQuery for what Search matches and why.
+//
+// Everything the admin BYO table needs — the owner_type filter, the
+// live/removed split, the text search, the ranking and the page window — is
+// expressed here in SQL. It used to be ListNodes (every row, fleet and BYO)
+// followed by a Go filter + sort.Slice + truncate, which meant the dashboard
+// read and sorted the entire unbounded BYO population on every render just to
+// draw twenty rows, and gave an operator no way to reach node #21 at all.
+//
+// The ranking is the same one the old in-memory sort applied, and for the same
+// reasons: a draining node means an operation is already in progress and the
+// operator probably came back to watch it; a node still holding unexpired
+// files cannot be touched without destroying them; the id tiebreak keeps the
+// order stable across refreshes (SQLite, like sort.Slice, gives no ordering
+// guarantee for ties, and "where did that row go" is the worst kind of
+// phantom). Removed rows rank by removed_at instead: that section is a
+// most-recent-mistake-first recovery list, not a history archive.
+func (s *SQLiteStore) ListByoNodes(ctx context.Context, q AdminByoNodeQuery) ([]Node, int64, error) {
+	where := ` WHERE owner_type='user' AND removed_at` + map[bool]string{false: `=0`, true: `!=0`}[q.Removed]
+	var whereArgs []any
+	if q.Search != "" {
+		// The owner's email lives on users, reached with EXISTS rather than a
+		// JOIN so a node whose owner row is gone (deleted account) still lists
+		// and still matches on its own columns.
+		where += ` AND (id LIKE ? ESCAPE '\' OR label LIKE ? ESCAPE '\' OR region LIKE ? ESCAPE '\'
+		   OR EXISTS (SELECT 1 FROM users u WHERE u.id = nodes.owner_user_id AND u.email LIKE ? ESCAPE '\'))`
+		like := "%" + escapeLike(q.Search) + "%"
+		whereArgs = append(whereArgs, like, like, like, like)
+	}
+
+	var total int64
+	if err := s.reader().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM nodes`+where, whereArgs...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	order := ` ORDER BY removed_at DESC, id ASC`
+	listArgs := append([]any{}, whereArgs...)
+	if !q.Removed {
+		order = ` ORDER BY draining DESC,
+		    (EXISTS (SELECT 1 FROM stored_files sf WHERE sf.node_id = nodes.id AND sf.expires_at > ?)) DESC,
+		    last_seen_at DESC, id ASC`
+		listArgs = append(listArgs, q.Now)
+	}
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 1
+	}
+	listArgs = append(listArgs, limit, q.Offset)
+	nodes, err := s.queryNodes(ctx,
+		`SELECT `+nodeCols+` FROM nodes`+where+order+` LIMIT ? OFFSET ?`, listArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	return nodes, total, nil
+}
+
 // UserNodes returns a user's own (owner_type='user') nodes online since
 // `since`. Uninstalled nodes are excluded, same as OnlineNodes — this feeds ICE
 // and the strict-mode "do you have a node at all" check, and neither should
@@ -3925,4 +3995,46 @@ func (s *SQLiteStore) ListAudit(ctx context.Context, limit, offset int, action s
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// PruneAudit deletes audit rows older than `before`. Age-based, exactly like
+// PruneUploadEvents / PruneDownloadReceipts; the retention window itself lives
+// in gc.go (auditRetentionDefault) because that is where every other retention
+// knob is defined.
+func (s *SQLiteStore) PruneAudit(ctx context.Context, before int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM admin_audit WHERE at < ?`, before)
+	return err
+}
+
+// PruneNodeAudit keeps only the newest `keep` MACHINE-written audit rows
+// (actor 'node:<id>', written by writeNodeAudit) and deletes the rest.
+//
+// This is the burst bound that an age-based prune cannot provide: a node-token
+// holder looping register→deregister writes one node.deregister row per
+// iteration — each one a genuine state transition, so the "only audit a real
+// change" guard in handleNodeDeregister does not stop it — and
+// /api/nodes/register has no rate limit. Age retention alone therefore leaves
+// the table unbounded WITHIN the window.
+//
+// Scoped to machine rows on purpose. Evicting rows is destroying evidence, so
+// the ceiling is applied only to the one writer that an attacker can drive at
+// will, and never to admin/human rows: no flood of machine traffic can push a
+// single "who changed this setting" entry out of the trail. The cost of the
+// bound is that under a real flood the OLDEST machine rows are lost while the
+// flood's own rows are kept — accepted because the alternative (keep oldest)
+// would silently stop recording legitimate deregistrations forever once the
+// ceiling was reached.
+//
+// keep <= 0 is treated as "no cap" rather than "delete everything": a
+// misconfigured knob must not wipe the audit trail.
+func (s *SQLiteStore) PruneNodeAudit(ctx context.Context, keep int) error {
+	if keep <= 0 {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM admin_audit
+		   WHERE actor LIKE 'node:%'
+		     AND id NOT IN (SELECT id FROM admin_audit WHERE actor LIKE 'node:%'
+		                     ORDER BY at DESC, id DESC LIMIT ?)`, keep)
+	return err
 }

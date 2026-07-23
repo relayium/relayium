@@ -844,6 +844,12 @@ type Store interface {
 	StorageNodes(ctx context.Context, since, minFree int64) ([]Node, error)
 	OnlineNodes(ctx context.Context, since int64) ([]Node, error)
 	ListNodes(ctx context.Context) ([]Node, error)
+	// ListByoNodes returns ONE PAGE of user-contributed (owner_type='user')
+	// nodes matching q, plus the total number of matches. Filtering, ranking
+	// and paging all happen in SQL: the BYO population is unbounded, so the
+	// admin dashboard must never read the whole table just to render 20 rows
+	// (which is exactly what ListNodes + an in-memory filter/sort/truncate did).
+	ListByoNodes(ctx context.Context, q AdminByoNodeQuery) ([]Node, int64, error)
 	// UserNodes returns a user's own (owner_type='user') nodes seen since `since`.
 	UserNodes(ctx context.Context, userID string, since int64) ([]Node, error)
 	// UserNodesAll returns all of a user's own nodes regardless of last_seen,
@@ -1029,4 +1035,34 @@ type Store interface {
 	InsertAudit(ctx context.Context, e AuditEntry) error
 	// ListAudit 按时间倒序返回审计记录。action 非空时按动作过滤。
 	ListAudit(ctx context.Context, limit, offset int, action string) ([]AuditEntry, error)
+	// PruneAudit deletes audit rows written strictly before `before`, the
+	// age-based half of keeping admin_audit bounded (see auditRetentionDefault
+	// for why the window is deliberately long).
+	PruneAudit(ctx context.Context, before int64) error
+	// PruneNodeAudit keeps only the newest `keep` MACHINE-written audit rows
+	// (actor 'node:<id>'), the burst-based half. Admin/human rows are never
+	// touched by it — see auditNodeRowsMax.
+	PruneNodeAudit(ctx context.Context, keep int) error
+}
+
+// AdminByoNodeQuery is one page of the admin dashboard's BYO node table.
+//
+// Search matches the three things an operator actually has in hand when
+// hunting one node out of an unbounded population: the node id (from a log
+// line), the owner's email (from a support ticket), and the label/region the
+// owner set on the machine. Empty = no filter.
+//
+// Removed selects WHICH half of the population is being listed: false = live
+// and draining nodes (the main table), true = already-uninstalled ones (the
+// separate small section that is the only entry point to /restore). They are
+// two queries rather than one flag-less list precisely so a pile of tombstones
+// can never crowd the live rows out of the page — and so a search can still
+// reach a removed node.
+type AdminByoNodeQuery struct {
+	Search  string
+	Removed bool
+	// Now is the "live file" cutoff used for ranking (a node still holding
+	// unexpired files outranks an idle one); same definition as NodeFileCounts.
+	Now           int64
+	Limit, Offset int
 }

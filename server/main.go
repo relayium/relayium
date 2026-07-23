@@ -124,6 +124,10 @@ func main() {
 		"grace period in days between a self-deletion request and GC's hard purge of the account (default 30)")
 	accountReminderDays := flag.Int64("account-purge-reminder-days", envInt64("RELAYIUM_ACCOUNT_PURGE_REMINDER_DAYS", 3),
 		"days before purge the one-time pre-purge reminder email is sent (default 3)")
+	// Deliberately long by default: the audit trail is read AFTER an incident,
+	// and incidents surface late. See account.auditRetentionDefault.
+	auditRetentionDays := flag.Int64("audit-retention-days", envInt64("RELAYIUM_AUDIT_RETENTION_DAYS", 730),
+		"how long admin audit-log rows are kept, in days (default 730 = 2 years; 0 uses the built-in default)")
 	trustedProxies := flag.String("trusted-proxies", envStr("RELAYIUM_TRUSTED_PROXIES", ""), "comma-separated CIDRs (or IPs) of reverse proxies whose X-Forwarded-For is trusted; empty (default) ignores XFF and uses the direct peer IP")
 	blobDiskMax := flag.Int64("blob-disk-max", envInt64("RELAYIUM_BLOB_DISK_MAX", 0),
 		"global blob-volume high-water mark in bytes; new uploads 503 once used >= this (0 disables the global soft cap)")
@@ -422,6 +426,7 @@ func main() {
 				ReminderWindow: acct.ReminderWindowSeconds,
 				ReactivateLink: acct.IssueReactivateLink,
 				ReapSessions:   acct.ReapPendingUploads,
+				AuditRetention: *auditRetentionDays * 86400,
 			}
 			go gc.Run(context.Background(), 10*time.Minute)
 			log.Printf("stored transfers enabled: blobs in %s", *blobDir)
