@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/ecdsa"
+	"crypto/tls"
 	"crypto/x509"
 	"strconv"
 	"testing"
@@ -90,5 +91,29 @@ func TestDownloadCertDiffersFromIdentity(t *testing.T) {
 	}
 	if bytes.Equal(a.Certificate[0], b.Certificate[0]) {
 		t.Fatal("two calls produced the same certificate — it should be per-process, not a stored key")
+	}
+}
+
+// TestDownloadServerServesECDSA holds the WIRING, not just the helper: the
+// listener that actually gets started must carry a non-Ed25519 certificate.
+// The first attempt at this fix tested only the helper and shipped a node that
+// still served the identity cert.
+func TestDownloadServerServesECDSA(t *testing.T) {
+	srv, err := downloadServer(":2053", "n5.relayium.com", nil)
+	if err != nil {
+		t.Fatalf("downloadServer: %v", err)
+	}
+	if srv.TLSConfig == nil || len(srv.TLSConfig.Certificates) != 1 {
+		t.Fatal("download server has no certificate configured")
+	}
+	leaf, err := x509.ParseCertificate(srv.TLSConfig.Certificates[0].Certificate[0])
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if leaf.PublicKeyAlgorithm != x509.ECDSA {
+		t.Fatalf("listener cert = %v, want ECDSA (Cloudflare cannot handshake with Ed25519)", leaf.PublicKeyAlgorithm)
+	}
+	if srv.TLSConfig.MinVersion != tls.VersionTLS12 {
+		t.Fatalf("MinVersion = %x, want TLS 1.2 for CF-origin compatibility", srv.TLSConfig.MinVersion)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"math/big"
 	"net"
+	"net/http"
 	"time"
 )
 
@@ -32,6 +33,27 @@ import (
 // SAN when it is a name or an IP, purely so the cert reads sensibly in a
 // debugger — nothing validates it.
 func downloadTLSCert(host string) (tls.Certificate, error) {
+	return newDownloadCert(host)
+}
+
+// downloadServer builds the public download listener. It exists so the cert
+// choice and the server that serves it are wired together in ONE place that a
+// test can hold: the first attempt at this fix shipped downloadTLSCert without
+// actually connecting it to the listener, the unit test passed (it called the
+// helper directly), and the live node kept serving the Ed25519 identity cert.
+func downloadServer(addr, host string, h http.Handler) (*http.Server, error) {
+	cert, err := downloadTLSCert(host)
+	if err != nil {
+		return nil, err
+	}
+	return &http.Server{
+		Addr:      addr,
+		Handler:   h,
+		TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12},
+	}, nil
+}
+
+func newDownloadCert(host string) (tls.Certificate, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return tls.Certificate{}, err

@@ -284,8 +284,10 @@ func run(c config, st nodeState) error {
 		// Public direct-download face: a separate listener serving ONLY the
 		// token-authed /dl routes (never the bearer /blob API), which Cloudflare
 		// proxies to. CF terminates the browser-facing TLS and hides the node IP;
-		// the origin cert here can stay self-signed under CF's "Full" SSL mode, so
-		// we reuse id.TLSCert. TLS 1.2 min for broad CF-origin compatibility.
+		// the origin cert stays self-signed under CF's "Full" SSL mode, but it is
+		// its OWN ECDSA cert, not the node identity — CF cannot handshake with an
+		// Ed25519 origin cert, and the identity cert is fingerprint-pinned by
+		// central besides (see downloadServer).
 		if c.DownloadURL != "" && c.DownloadAddr != "" {
 			// After serving a download, report the bytes actually sent so central
 			// can refund any over-metering (async + best-effort — never block or
@@ -298,10 +300,10 @@ func run(c config, st nodeState) error {
 					}
 				}()
 			}
-			dlSrv := &http.Server{
-				Addr:      c.DownloadAddr,
-				Handler:   newDownloadHandler(ds, storageSecret, dlGuard, sendReceipt),
-				TLSConfig: &tls.Config{Certificates: []tls.Certificate{id.TLSCert}, MinVersion: tls.VersionTLS12},
+			dlSrv, derr := downloadServer(c.DownloadAddr, urlHost(c.DownloadURL),
+				newDownloadHandler(ds, storageSecret, dlGuard, sendReceipt))
+			if derr != nil {
+				return fmt.Errorf("download listener certificate: %w", derr)
 			}
 			go func() {
 				if err := dlSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
