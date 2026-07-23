@@ -1,54 +1,16 @@
+// 建连的入口。传输那一层（offer/answer、ICE、DataChannel、状态机、拆除）在
+// webrtc-core.ts 的 establish()；本文件只留 relayium 自己的那一层：
+//   connect()       —— 首次建连，带 commit-then-reveal 密钥握手
+//   connectResume() —— 掉线重连，纯传输，另一个信令世代
 import type { SignalingClient } from "./signaling";
 import { commitKey, randomNonce, verifyCommit } from "./crypto";
+import { establish } from "./webrtc-core";
+import { classifyPath } from "./webrtc-core";
+import type { Conn, ConnPath, InboundSignal, Reveal, RtcConfig } from "./webrtc-core";
 
-export interface RtcConfig {
-  iceServers: RTCIceServer[];
-  // "relay" makes ICE gather/use only TURN candidates — set on the cross-network
-  // path so we skip the ~20 s wait for doomed direct candidate checks to time out
-  // before ICE falls back to the relay it would use anyway. Only safe when a TURN
-  // server is actually configured (see hasTurnServer).
-  iceTransportPolicy?: RTCIceTransportPolicy;
-}
-
-export const DEFAULT_ICE: RtcConfig = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-};
-
-/** A public key + nonce revealed only after both commitments were exchanged. */
-export interface Reveal {
-  key: string; // base64 public key
-  nonce: string; // base64 commitment nonce
-}
-
-export interface InboundSignal {
-  sdp?: RTCSessionDescriptionInit;
-  /** base64 BLAKE2b(pub || nonce); travels with the offer/answer SDP. */
-  commit?: string;
-  /** Sent only after this side has seen the peer's commit. */
-  reveal?: Reveal;
-  ice?: RTCIceCandidateInit;
-  /** Marks a signal as belonging to a resume (connectResume) connection rather
-   *  than the original connect(). Each side ignores the other generation's
-   *  signals, so a dying original connection can't cross-route a resume offer. */
-  resume?: boolean;
-  /** The peer refused the offer because it is already in a transfer. Lets the
-   *  sender fail fast with a "peer busy" message instead of waiting out the ICE
-   *  timeout and mislabelling it a connection failure. */
-  busy?: boolean;
-  /** Peer renamed itself; the roster entry for that peer id should be updated to
-   *  this display name. Opaque to the WebRTC handlers (like relayRtt/busy). */
-  rename?: string;
-}
-
-/** The peer declined a fresh offer because it is mid-transfer (one at a time).
- *  Thrown by connect() so the caller can surface "peer busy" rather than a
- *  generic connection failure. */
-export class PeerBusyError extends Error {
-  constructor() {
-    super("relayium: peer busy");
-    this.name = "PeerBusyError";
-  }
-}
+// 传输层的类型/工具从这里再导出：调用方只认 "./webrtc" 这一个入口，拆分是内部事。
+export { DEFAULT_ICE, PeerBusyError, classifyPath } from "./webrtc-core";
+export type { Conn, ConnPath, InboundSignal, Reveal, RtcConfig } from "./webrtc-core";
 
 interface ConnectOpts {
   signaling: SignalingClient;
@@ -62,22 +24,6 @@ interface ConnectOpts {
    *  drop as a failed transfer instead of hanging forever. "failed"/"closed" are
    *  terminal; a transient "disconnected" triggers an automatic ICE restart. */
   onStateChange?: (state: RTCPeerConnectionState) => void;
-}
-
-/** Which ICE path the connection is actually using. "lan" is a host↔host hop on
- *  the local network, "relay" means traffic is going through TURN, "p2p" is a
- *  direct hole-punched path over the public internet. "unknown" until a pair is
- *  selected (or on browsers that don't surface it). */
-export type ConnPath = "lan" | "p2p" | "relay" | "unknown";
-
-export interface Conn {
-  channel: RTCDataChannel;
-  /** Tear down the peer connection and stop listening for this peer's signals. */
-  close(): void;
-  /** The live ICE path, read from getStats() on demand. */
-  path(): Promise<ConnPath>;
-  /** Raw getStats() report — for the ?debug=1 diagnostics panel. */
-  stats(): Promise<RTCStatsReport>;
 }
 
 /** One end of the selected ICE pair. `address`/`port` are omitted unless the
@@ -100,30 +46,6 @@ export interface ConnDiagnostics {
   local?: CandidateInfo;
   remote?: CandidateInfo;
   dataChannel?: { state?: string; messagesSent?: number; messagesReceived?: number; bytesSent?: number; bytesReceived?: number };
-}
-
-/** Classify the in-use ICE path from a getStats() report: find the selected
- *  candidate pair, then read the candidate type on each end. A relay on either
- *  side means TURN; host↔host is a LAN direct hop; anything else (srflx/prflx,
- *  i.e. a NAT-traversed direct path) is P2P. Firefox flags the live pair with
- *  `selected`; Chromium leaves `nominated` + `succeeded` on it — accept either.
- *  Exported for unit testing against synthetic stats. */
-export function classifyPath(stats: RTCStatsReport): ConnPath {
-  let pair: { localCandidateId?: string; remoteCandidateId?: string } | undefined;
-  stats.forEach((r) => {
-    const s = r as unknown as { type: string; selected?: boolean; nominated?: boolean; state?: string };
-    if (s.type === "candidate-pair" && (s.selected || (s.nominated && s.state === "succeeded"))) {
-      pair ??= r as unknown as typeof pair;
-    }
-  });
-  if (!pair) return "unknown";
-  const typeOf = (id?: string) =>
-    id ? (stats.get(id) as unknown as { candidateType?: string } | undefined)?.candidateType : undefined;
-  const local = typeOf(pair.localCandidateId);
-  const remote = typeOf(pair.remoteCandidateId);
-  if (local === "relay" || remote === "relay") return "relay";
-  if (local === "host" && remote === "host") return "lan";
-  return "p2p";
 }
 
 /** Extract a readable connection diagnostic from a getStats() report: the selected
@@ -193,53 +115,20 @@ function unb64(s: string): Uint8Array {
   return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 }
 
+/**
+ * 首次建连。传输交给 establish()，本函数只负责 commit-then-reveal：
+ * 随 SDP 发出 BLAKE2b(selfKey || selfNonce)，等拿到对端的 commit 之后才揭示
+ * selfKey/selfNonce。为什么这一步才让 6 位 SAS 挡得住恶意信令服务器的中间人，
+ * 见 crypto.ts 的注释。
+ */
 export async function connect(opts: ConnectOpts): Promise<Conn> {
-  const pc = new RTCPeerConnection(opts.config ?? DEFAULT_ICE);
   const { signaling, peerId, selfKey, role, onPeerKey } = opts;
 
-  // Commit-then-reveal: publish BLAKE2b(selfKey || selfNonce) with the SDP, and
-  // only disclose selfKey/selfNonce once the peer's commit is in hand. See
-  // crypto.ts for why this is what makes a 6-digit SAS safe against a relay MITM.
   const selfNonce = randomNonce();
   const selfCommit = b64(commitKey(selfKey, selfNonce));
   let peerCommit: Uint8Array | undefined;
   let revealSent = false;
   let peerKeyDelivered = false;
-
-  pc.onicecandidate = (e) => {
-    if (e.candidate) signaling.sendSignal(peerId, { ice: e.candidate });
-  };
-
-  let channel: RTCDataChannel;
-  let opened = false;
-  let failReady!: (err: Error) => void;
-  const ready = new Promise<RTCDataChannel>((resolve, reject) => {
-    failReady = reject;
-    const open = (ch: RTCDataChannel) => { opened = true; resolve(ch); };
-    if (role === "initiator") {
-      channel = pc.createDataChannel("relayium");
-      channel.binaryType = "arraybuffer";
-      channel.bufferedAmountLowThreshold = 8 << 20; // 8 MB in-flight window keeps the pipe full
-      channel.onopen = () => open(channel);
-    } else {
-      pc.ondatachannel = (ev) => {
-        channel = ev.channel;
-        channel.binaryType = "arraybuffer";
-        channel.bufferedAmountLowThreshold = 8 << 20; // 8 MB in-flight window keeps the pipe full
-        if (channel.readyState === "open") open(channel);
-        else channel.onopen = () => open(channel);
-      };
-    }
-  });
-
-  // Fail fast if the data channel never opens. Two escape hatches: a "failed"
-  // connection state, and an overall timeout for the case where ICE sits in
-  // "checking" and never flips to "failed" (no reachable path, TURN blocked).
-  // Without this, a caller awaiting connect() hangs at "connecting" 0% forever.
-  const CONNECT_TIMEOUT_MS = 30_000;
-  const connectTimer = setTimeout(() => {
-    if (!opened) failReady(new Error("relayium: connection timed out"));
-  }, CONNECT_TIMEOUT_MS);
 
   // Disclose our real key + nonce. Guarded to once: an ICE-restart answer would
   // otherwise re-trigger this after the SAS is already fixed.
@@ -251,115 +140,49 @@ export async function connect(opts: ConnectOpts): Promise<Conn> {
     });
   }
 
-  // Verify a peer reveal against its earlier commit. A mismatch means the value
-  // was chosen after seeing our key (or tampered in flight): abort hard, never
-  // open the channel — silently continuing would defeat the SAS entirely.
-  function handleReveal(rev: Reveal) {
-    if (peerKeyDelivered) return; // ignore duplicates (e.g. ICE restart)
-    const peerPub = unb64(rev.key);
-    const peerNonce = unb64(rev.nonce);
-    if (!peerCommit || !verifyCommit(peerCommit, peerPub, peerNonce)) {
-      // failReady unblocks a caller still awaiting connect(); close() tears down
-      // even if the channel already opened (then failReady is a settled no-op),
-      // surfacing to the app as a dropped connection rather than a silent MITM.
-      failReady(new Error("relayium: key commitment mismatch — possible MITM"));
-      close();
-      return;
-    }
-    peerKeyDelivered = true;
-    // Responder learns the peer key from the reveal and only now discloses its
-    // own; the initiator has already revealed (on receiving the answer's commit).
-    if (role === "responder") sendReveal();
-    onPeerKey(peerPub);
-  }
+  return establish({
+    signaling,
+    peerId,
+    role,
+    config: opts.config,
+    initialSignal: opts.initialSignal,
+    onStateChange: opts.onStateChange,
 
-  async function handleSignal(msg: InboundSignal) {
-    if (msg.commit) peerCommit = unb64(msg.commit);
-    if (msg.sdp) {
-      await pc.setRemoteDescription(msg.sdp);
-      if (msg.sdp.type === "offer") {
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        signaling.sendSignal(peerId, { sdp: answer, commit: selfCommit });
-      } else if (msg.sdp.type === "answer") {
-        // Initiator now holds the responder's commit → safe to reveal our key.
-        sendReveal();
-      }
-    }
-    if (msg.reveal) handleReveal(msg.reveal);
-    if (msg.ice) {
-      try {
-        await pc.addIceCandidate(msg.ice);
-      } catch {
-        // A candidate arriving before remoteDescription is set, or after close,
-        // is non-fatal on a LAN where host candidates in the SDP usually suffice.
-      }
-    }
-  }
+    // The commit rides along with every offer/answer we send.
+    sdpExtra: () => ({ commit: selfCommit }),
 
-  const off = signaling.onSignal((from, data) => {
-    if (from !== peerId || (data as InboundSignal).resume) return; // resume-gen signals aren't ours
-    const msg = data as InboundSignal;
-    // The responder is mid-transfer and won't answer — stop waiting for a channel
-    // that will never open and report it as "peer busy". A no-op once opened.
-    if (msg.busy) { if (!opened) failReady(new PeerBusyError()); return; }
-    handleSignal(msg).catch((err) => console.error("relayium signal error", err));
+    // Must run *before* the SDP is handled: answering an offer sends our commit,
+    // and the peer's commit has to be recorded by then or a reveal that arrives
+    // in the same burst has nothing to verify against.
+    beforeSdp: (msg) => {
+      if (msg.commit) peerCommit = unb64(msg.commit);
+    },
+
+    // Initiator now holds the responder's commit → safe to reveal our key.
+    onAnswer: sendReveal,
+
+    // Verify a peer reveal against its earlier commit. A mismatch means the value
+    // was chosen after seeing our key (or tampered in flight): abort hard, never
+    // open the channel — silently continuing would defeat the SAS entirely.
+    afterSdp: (msg, ctx) => {
+      if (!msg.reveal || peerKeyDelivered) return; // ignore duplicates (e.g. ICE restart)
+      const peerPub = unb64(msg.reveal.key);
+      const peerNonce = unb64(msg.reveal.nonce);
+      if (!peerCommit || !verifyCommit(peerCommit, peerPub, peerNonce)) {
+        // fail() unblocks a caller still awaiting connect(); close() tears down
+        // even if the channel already opened (then fail() is a settled no-op),
+        // surfacing to the app as a dropped connection rather than a silent MITM.
+        ctx.fail(new Error("relayium: key commitment mismatch — possible MITM"));
+        ctx.close();
+        return;
+      }
+      peerKeyDelivered = true;
+      // Responder learns the peer key from the reveal and only now discloses its
+      // own; the initiator has already revealed (on receiving the answer's commit).
+      if (role === "responder") sendReveal();
+      onPeerKey(peerPub);
+    },
   });
-
-  // A transient "disconnected" (a NAT rebinding, a brief network blip) often
-  // recovers on its own, and an ICE restart forces fresh candidate gathering to
-  // speed that up. Only the initiator drives renegotiation; guard to one attempt
-  // so a genuinely dead path fails fast instead of looping offers.
-  let restarted = false;
-  async function tryIceRestart() {
-    if (restarted || role !== "initiator") return;
-    restarted = true;
-    try {
-      const offer = await pc.createOffer({ iceRestart: true });
-      await pc.setLocalDescription(offer);
-      signaling.sendSignal(peerId, { sdp: offer });
-    } catch (err) {
-      console.error("relayium ice restart error", err);
-    }
-  }
-
-  pc.onconnectionstatechange = () => {
-    const state = pc.connectionState;
-    opts.onStateChange?.(state);
-    if (state === "disconnected") tryIceRestart();
-    // A failure before the channel ever opened must unblock connect(); after it
-    // opened, ready is already settled and this reject is a harmless no-op.
-    if (state === "failed" && !opened) failReady(new Error("relayium: connection failed"));
-    // Once the connection reaches a terminal state, stop routing this peer's
-    // signals so listeners don't pile up across repeated transfers.
-    if (state === "closed" || state === "failed") off();
-  };
-
-  function close() {
-    off();
-    try { pc.close(); } catch { /* already closed */ }
-  }
-
-  if (role === "initiator") {
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    signaling.sendSignal(peerId, { sdp: offer, commit: selfCommit });
-  } else if (opts.initialSignal) {
-    await handleSignal(opts.initialSignal);
-  }
-
-  try {
-    const openChannel = await ready;
-    clearTimeout(connectTimer);
-    return { channel: openChannel, close, path: () => pc.getStats().then(classifyPath), stats: () => pc.getStats() };
-  } catch (err) {
-    // Establishment failed or timed out: clean up the listener and peer
-    // connection, then propagate so the caller shows a retryable failure
-    // instead of a progress bar frozen at 0%.
-    clearTimeout(connectTimer);
-    close();
-    throw err;
-  }
 }
 
 interface ResumeOpts {
@@ -376,105 +199,12 @@ interface ResumeOpts {
  * WITHOUT re-running the commit-reveal handshake. Trust and the session keys were
  * already anchored (and SAS-verified by the user) on the first connection; the
  * caller reuses those keys, so no new key is exchanged here and the SAS is
- * unchanged. This is a deliberate transport-only mirror of connect() — it shares
- * no auth state with it, which is exactly why the security path stays isolated.
+ * unchanged.
+ *
+ * 它和 connect() 共用 establish() 的传输骨架，但**一个鉴权钩子都不挂**——这就是
+ * "纯传输" 这句话在代码里的形态，而不是一句注释里的承诺。`resume: true` 让它跑在
+ * 另一个信令世代上：正在死掉的原连接与它互相看不见对方的 SDP。
  */
 export async function connectResume(opts: ResumeOpts): Promise<Conn> {
-  const pc = new RTCPeerConnection(opts.config ?? DEFAULT_ICE);
-  const { signaling, peerId, role } = opts;
-
-  pc.onicecandidate = (e) => {
-    if (e.candidate) signaling.sendSignal(peerId, { ice: e.candidate, resume: true });
-  };
-
-  let channel: RTCDataChannel;
-  let opened = false;
-  let failReady!: (err: Error) => void;
-  const ready = new Promise<RTCDataChannel>((resolve, reject) => {
-    failReady = reject;
-    const open = (ch: RTCDataChannel) => { opened = true; resolve(ch); };
-    if (role === "initiator") {
-      channel = pc.createDataChannel("relayium");
-      channel.binaryType = "arraybuffer";
-      channel.bufferedAmountLowThreshold = 8 << 20;
-      channel.onopen = () => open(channel);
-    } else {
-      pc.ondatachannel = (ev) => {
-        channel = ev.channel;
-        channel.binaryType = "arraybuffer";
-        channel.bufferedAmountLowThreshold = 8 << 20;
-        if (channel.readyState === "open") open(channel);
-        else channel.onopen = () => open(channel);
-      };
-    }
-  });
-
-  const CONNECT_TIMEOUT_MS = 30_000;
-  const connectTimer = setTimeout(() => {
-    if (!opened) failReady(new Error("relayium: resume connection timed out"));
-  }, CONNECT_TIMEOUT_MS);
-
-  // No commit/reveal: plain SDP + ICE only. All signals carry resume:true.
-  async function handleSignal(msg: InboundSignal) {
-    if (msg.sdp) {
-      await pc.setRemoteDescription(msg.sdp);
-      if (msg.sdp.type === "offer") {
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        signaling.sendSignal(peerId, { sdp: answer, resume: true });
-      }
-    }
-    if (msg.ice) {
-      try { await pc.addIceCandidate(msg.ice); } catch { /* pre-remote-desc / post-close: non-fatal */ }
-    }
-  }
-
-  const off = signaling.onSignal((from, data) => {
-    if (from !== peerId || !(data as InboundSignal).resume) return; // only this resume generation's signals
-    handleSignal(data as InboundSignal).catch((err) => console.error("relayium resume signal error", err));
-  });
-
-  let restarted = false;
-  async function tryIceRestart() {
-    if (restarted || role !== "initiator") return;
-    restarted = true;
-    try {
-      const offer = await pc.createOffer({ iceRestart: true });
-      await pc.setLocalDescription(offer);
-      signaling.sendSignal(peerId, { sdp: offer, resume: true });
-    } catch (err) {
-      console.error("relayium resume ice restart error", err);
-    }
-  }
-
-  pc.onconnectionstatechange = () => {
-    const state = pc.connectionState;
-    opts.onStateChange?.(state);
-    if (state === "disconnected") tryIceRestart();
-    if (state === "failed" && !opened) failReady(new Error("relayium: resume connection failed"));
-    if (state === "closed" || state === "failed") off();
-  };
-
-  function close() {
-    off();
-    try { pc.close(); } catch { /* already closed */ }
-  }
-
-  if (role === "initiator") {
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    signaling.sendSignal(peerId, { sdp: offer, resume: true });
-  } else if (opts.initialSignal) {
-    await handleSignal(opts.initialSignal);
-  }
-
-  try {
-    const openChannel = await ready;
-    clearTimeout(connectTimer);
-    return { channel: openChannel, close, path: () => pc.getStats().then(classifyPath), stats: () => pc.getStats() };
-  } catch (err) {
-    clearTimeout(connectTimer);
-    close();
-    throw err;
-  }
+  return establish({ ...opts, resume: true, label: "resume" });
 }

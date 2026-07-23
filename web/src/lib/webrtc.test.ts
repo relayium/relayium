@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
-import { connect, classifyPath, summarizeStats, PeerBusyError, type InboundSignal } from "./webrtc";
+import { connect, connectResume, classifyPath, summarizeStats, PeerBusyError, type InboundSignal } from "./webrtc";
 import type { SignalingClient } from "./signaling";
 import { ready, generateKeyPair, sas } from "./crypto";
 
@@ -47,22 +47,35 @@ class FakePC {
 // listeners on a later tick; an optional interceptor can tamper in flight.
 function makeHub() {
   const listeners: Record<"I" | "R", ((from: string, data: unknown) => void)[]> = { I: [], R: [] };
+  const sent: Record<"I" | "R", InboundSignal[]> = { I: [], R: [] };
   let intercept: ((data: InboundSignal) => InboundSignal) | null = null;
   const clone = (d: unknown) => JSON.parse(JSON.stringify(d)) as InboundSignal;
   function side(self: "I" | "R", peer: "I" | "R"): SignalingClient {
     return {
       onSignal(cb: (from: string, data: unknown) => void) {
         listeners[self].push(cb);
-        return () => {};
+        return () => {
+          const i = listeners[self].indexOf(cb);
+          if (i >= 0) listeners[self].splice(i, 1);
+        };
       },
       sendSignal(_to: string, data: unknown) {
         let d = clone(data);
+        sent[self].push(d);
         if (intercept) d = intercept(d);
         setTimeout(() => listeners[peer].forEach((cb) => cb(self, clone(d))), 0);
       },
     } as unknown as SignalingClient;
   }
-  return { I: side("I", "R"), R: side("R", "I"), setIntercept: (fn: typeof intercept) => (intercept = fn) };
+  return {
+    I: side("I", "R"),
+    R: side("R", "I"),
+    sent,
+    /** Deliver a raw signal to one side as if it came from the peer. */
+    inject: (to: "I" | "R", from: "I" | "R", data: InboundSignal) =>
+      listeners[to].forEach((cb) => cb(from, clone(data))),
+    setIntercept: (fn: typeof intercept) => (intercept = fn),
+  };
 }
 
 const flush = async () => { for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0)); };
@@ -232,5 +245,108 @@ describe("summarizeStats", () => {
     const m = new Map<string, unknown>([["cp", { type: "candidate-pair", state: "in-progress" }]]);
     const d = summarizeStats(m as unknown as RTCStatsReport);
     expect(d).toEqual({ path: "unknown" });
+  });
+});
+
+// connectResume is the transport-only mirror of connect(): no commit/reveal, and
+// every signal tagged `resume: true` so a dying original connection and its
+// replacement can't cross-route each other's SDP. Both properties are load-bearing
+// (a mid-transfer resume is exactly when both generations are alive at once), and
+// neither had a test before the connect/connectResume dedup.
+describe("connectResume", () => {
+  it("establishes a channel with no commit/reveal exchange", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder" });
+    const iP = connectResume({ signaling: hub.I, peerId: "R", role: "initiator" });
+
+    await flush();
+    openAll();
+    const [ic, rc] = await Promise.all([iP, rP]);
+    expect(ic.channel).toBeTruthy();
+    expect(rc.channel).toBeTruthy();
+    // No key material on the wire — the caller reuses the original session keys.
+    for (const side of ["I", "R"] as const) {
+      expect(hub.sent[side].some((m) => m.commit || m.reveal)).toBe(false);
+    }
+    ic.close();
+    rc.close();
+  });
+
+  it("tags every outgoing signal with resume:true", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder" });
+    const iP = connectResume({ signaling: hub.I, peerId: "R", role: "initiator" });
+    await flush();
+    openAll();
+    const [ic, rc] = await Promise.all([iP, rP]);
+
+    expect(hub.sent.I.length).toBeGreaterThan(0);
+    expect(hub.sent.R.length).toBeGreaterThan(0);
+    for (const side of ["I", "R"] as const) {
+      expect(hub.sent[side].every((m) => m.resume === true)).toBe(true);
+    }
+    ic.close();
+    rc.close();
+  });
+
+  it("ignores untagged signals — the dying original connection can't feed it SDP", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder" });
+    await flush();
+    // An offer from the *original* generation (no resume tag) must not be answered.
+    hub.inject("R", "I", { sdp: { type: "offer", sdp: "stale" } });
+    await flush();
+    expect(hub.sent.R.length).toBe(0);
+
+    // The properly tagged offer is answered.
+    hub.inject("R", "I", { sdp: { type: "offer", sdp: "fresh" }, resume: true });
+    await flush();
+    expect(hub.sent.R.some((m) => m.sdp?.type === "answer")).toBe(true);
+    openAll();
+    (await rP).close();
+  });
+
+  it("connect() ignores resume-tagged signals for the same reason", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const rKey = generateKeyPair();
+    const rP = connect({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
+    await flush();
+    hub.inject("R", "I", { sdp: { type: "offer", sdp: "resume-gen" }, resume: true });
+    await flush();
+    expect(hub.sent.R.length).toBe(0);
+    // rP never resolves (no offer was ever accepted) — that IS the assertion.
+    // Swallow its eventual 30s timeout rejection so it can't leak past this test.
+    rP.catch(() => {});
+  });
+
+  it("rejects when the peer connection fails before the channel opens", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const p = connectResume({ signaling: hub.I, peerId: "R", role: "initiator" });
+    const rejected = expect(p).rejects.toThrow(/resume connection failed/);
+    await flush();
+    const pc = instances[0];
+    pc.connectionState = "failed";
+    pc.onconnectionstatechange?.();
+    await rejected;
+  });
+
+  it("reports state changes to the caller (how the app notices a re-drop)", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const seen: string[] = [];
+    const p = connectResume({ signaling: hub.I, peerId: "R", role: "initiator", onStateChange: (s) => seen.push(s) });
+    await flush();
+    openAll();
+    const c = await p;
+    const pc = instances[0];
+    pc.connectionState = "connected";
+    pc.onconnectionstatechange?.();
+    expect(seen).toContain("connected");
+    c.close();
   });
 });
