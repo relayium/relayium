@@ -40,11 +40,16 @@ function loadSW() {
   // caches / fetch 大多只是为了让脚本能加载；缓存写入这一项是真的被断言的，
   // 所以 put 记账而不是空实现。
   const put: { url: string; body: string }[] = [];
+  // 分享缓存是真的会被枚举和删除的（sweepStaleShares），所以这个桩不能只有 put。
+  const shareEntries = new Map<string, string>();
+  const shareCache = {
+    addAll: async () => {},
+    put: async (req: { url: string }, res: Response) => void put.push({ url: req.url, body: await res.text() }),
+    keys: async () => [...shareEntries.keys()].map((url) => ({ url })),
+    delete: async (req: { url: string }) => shareEntries.delete(req.url),
+  };
   const cachesStub = {
-    open: async () => ({
-      addAll: async () => {},
-      put: async (req: { url: string }, res: Response) => void put.push({ url: req.url, body: await res.text() }),
-    }),
+    open: async () => shareCache,
     keys: async () => [] as string[],
     delete: async () => true,
     match: async () => undefined,
@@ -55,7 +60,14 @@ function loadSW() {
 
   return {
     put,
+    shareEntries,
     skipWaitingCalls,
+    /** 触发 activate（并 await 它 waitUntil 的那个 promise）。 */
+    async activate() {
+      let done: Promise<unknown> = Promise.resolve();
+      for (const f of listeners.activate || []) f({ waitUntil: (p: Promise<unknown>) => { done = p; } });
+      await done;
+    },
     /** 触发 install（并 await 它 waitUntil 的那个 promise）。 */
     async install() {
       let done: Promise<unknown> = Promise.resolve();
@@ -343,5 +355,42 @@ describe("sw-template 换版时机", () => {
     await sw.install();
     sw.message({ type: "skip-waiting" });
     expect(sw.skipWaitingCalls.length).toBe(1);
+  });
+});
+
+// Web Share Target 把用户选的文件交给 SW，SW 先存进 Cache API 再让应用来取。
+// 正常路径上应用一开就取走并删掉；但用户分享完直接划掉通知、再没打开过应用的话，
+// 这些**明文文件**就无限期留在磁盘上，而且界面上没有任何痕迹显示它们存在。
+describe("sw-template 分享缓存的过期清理", () => {
+  const stamp = (msAgo: number) => (Date.now() - msAgo).toString(36);
+
+  it("activate 时清掉超过一天的分享条目，保留新的", async () => {
+    const sw = loadSW();
+    const old1 = `https://relayium.test/__shared__/${stamp(25 * 3600_000)}-abc/0`;
+    const old2 = `https://relayium.test/__shared__/${stamp(25 * 3600_000)}-abc/count`;
+    const fresh = `https://relayium.test/__shared__/${stamp(60_000)}-xyz/0`;
+    sw.shareEntries.set(old1, "x");
+    sw.shareEntries.set(old2, "1");
+    sw.shareEntries.set(fresh, "y");
+
+    await sw.activate();
+
+    expect([...sw.shareEntries.keys()], "过期条目没被清掉").toEqual([fresh]);
+  });
+
+  it("时间戳解不出来的条目也清掉（坏数据不该长期留着）", async () => {
+    const sw = loadSW();
+    const junk = "https://relayium.test/__shared__/!!!-abc/0";
+    sw.shareEntries.set(junk, "x");
+    await sw.activate();
+    expect(sw.shareEntries.size).toBe(0);
+  });
+
+  it("不碰分享路径以外的东西", async () => {
+    const sw = loadSW();
+    const other = "https://relayium.test/assets/index-abcdefgh.js";
+    sw.shareEntries.set(other, "x");
+    await sw.activate();
+    expect([...sw.shareEntries.keys()]).toEqual([other]);
   });
 });

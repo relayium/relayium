@@ -60,7 +60,7 @@ const zh: Messages = {
   descOffline: "在浏览器中加密文件后上传，生成零知识下载链接；服务器只保存无法解密的密文。",
   reconnecting: "连接已断开，正在重连…",
   confirmLeave: "当前有传输正在进行，切换会中断它。确定要继续吗？",
-  confirmRecv: (n) => `${n} 想接收文件`,
+  confirmRecv: (n) => `一台自称「${n}」的设备想接收文件`,
   confirmRecvSend: "发送",
   confirmRecvCancel: "取消",
   status: {

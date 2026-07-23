@@ -108,15 +108,41 @@ export function resumeReqFrame(index: number, offset: number): Bytes {
   return frame(KIND_RESUME_REQ, 0, enc.encode(JSON.stringify({ index, offset })));
 }
 
-/** Decode a resume request; null if the frame is not one. */
+/**
+ * Decode a resume request; null if the frame is not one **or is not a sane
+ * resume point**.
+ *
+ * 续传通道没有对端认证（L3）：重连的 offer 和这条请求都可以由信令层的中间人注入。
+ * 内容仍然安全（密钥没有重新协商，攻击者解不开也伪造不了密文），但这里的两个数字
+ * 会被发送端直接拿去切文件：
+ *   files.slice(0, index)            —— 巨大的 index 会跳过所有文件，传输静默空转；
+ *   file.slice(offset, offset+N)     —— **负的 offset 会从文件尾部倒着切**，发出去的
+ *                                       就是文件末尾的字节，而不是接收端要的那一段。
+ * 所以在解析这一层就把形状卡死：非负整数，其余一律当作"这不是一条续传请求"。
+ * 上界（index 是否落在 manifest 内、offset 是否超出该文件大小）由调用方校验——
+ * 只有它知道这次传输有哪些文件。
+ */
 export function parseResumeReq(buf: ArrayBuffer): ResumePoint | null {
   const b = new Uint8Array(buf);
   if (b[0] !== KIND_RESUME_REQ) return null;
   try {
-    return JSON.parse(dec.decode(b.slice(5))) as ResumePoint;
+    const p = JSON.parse(dec.decode(b.slice(5))) as ResumePoint;
+    if (!isIndex(p?.index) || !isIndex(p?.offset)) return null;
+    return { index: p.index, offset: p.offset };
   } catch {
     return null;
   }
+}
+
+/** 非负安全整数。NaN / Infinity / 负数 / 小数 / 非数字全部落在外面。 */
+function isIndex(n: unknown): n is number {
+  return typeof n === "number" && Number.isSafeInteger(n) && n >= 0;
+}
+
+/** 这个续传点落在这批文件的范围内吗（index 有对应文件、offset 不超过它的大小）。
+ *  调用方在拿到 parseResumeReq 的结果之后校验一次。 */
+export function resumePointInRange(p: ResumePoint, sizes: number[]): boolean {
+  return p.index < sizes.length && p.offset <= sizes[p.index];
 }
 
 const enc = new TextEncoder();
@@ -252,7 +278,13 @@ export class Receiver {
     if (kind === KIND_RESUME_START) {
       // The App restores the chain snapshot and calls resumeAt(); we just surface
       // the announced start so it can align file index/offset and the nonce.
-      return { resume: JSON.parse(dec.decode(payload)) as ResumePoint & { seq: number } };
+      // 同样卡形状：这条帧是明文的，信令层的中间人可以注入。seq 会直接变成解密用的
+      // 计数器起点，一个 NaN 会让之后每一次比较都为假、传输停在原地。
+      const r = JSON.parse(dec.decode(payload)) as ResumePoint & { seq: number };
+      if (!isIndex(r?.index) || !isIndex(r?.offset) || !isIndex(r?.seq)) {
+        throw new Error("relayium: malformed resume announcement");
+      }
+      return { resume: r };
     }
     if (kind === KIND_CHUNK) {
       if (seq !== this.expectedSeq) throw new Error("out-of-order chunk");

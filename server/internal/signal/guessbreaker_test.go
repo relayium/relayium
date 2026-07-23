@@ -39,7 +39,7 @@ func TestGuessBreakerTripsAndCoolsDown(t *testing.T) {
 func TestGuessBreakerLogThrottledToCooldown(t *testing.T) {
 	now := int64(0)
 	b := NewGuessBreaker(1, time.Minute, 30*time.Second, func() int64 { return now })
-	b.RecordInvalid() // 1 (budget)
+	b.RecordInvalid()                            // 1 (budget)
 	if _, logNow := b.RecordInvalid(); !logNow { // 2 -> over -> open, first log
 		t.Fatal("first open should log")
 	}

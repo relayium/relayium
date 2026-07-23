@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -92,7 +93,33 @@ func parseConfig() (config, error) {
 		return c, fmt.Errorf("missing required config: %s", strings.Join(missing, ", "))
 	}
 	c.CentralURL = strings.TrimRight(c.CentralURL, "/")
+	if err := requireSecureCentral(c.CentralURL); err != nil {
+		return c, err
+	}
 	return c, nil
+}
+
+// requireSecureCentral 拒绝非 https 的中心地址（loopback 除外）。
+//
+// 节点每 30 秒就把 fleet bearer token 发给中心，心跳响应里回的是 TURNSecret；配成
+// http:// 的话这两样每次都以明文过网。这不是假想：`-central-url` 是安装脚本里手填的
+// 一行，少个 s 不会有任何症状——节点照常工作，凭据照常泄漏。所以宁可启动失败。
+//
+// loopback 放行是为了本地开发和同机部署，那条路径上没有网络可窃听。
+func requireSecureCentral(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid -central-url %q: %w", raw, err)
+	}
+	if u.Scheme == "https" {
+		return nil
+	}
+	host := u.Hostname()
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		return nil
+	}
+	return fmt.Errorf("-central-url must be https (got %q): the node sends its bearer token there every heartbeat "+
+		"and receives the TURN secret back; over http both travel in the clear", raw)
 }
 
 func main() {

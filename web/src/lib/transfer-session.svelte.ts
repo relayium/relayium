@@ -21,6 +21,7 @@ import {
   controlKind,
   resumeReqFrame,
   parseResumeReq,
+  resumePointInRange,
   ackFrame,
   parseAck,
   FLOW_WINDOW,
@@ -538,7 +539,10 @@ export function createTransferSession(deps: SessionDeps) {
             const a = parseAck(buf);
             if (a !== null) { onAck(a); return; }
             const rp = parseResumeReq(buf);
-            if (rp) { resolveReq(rp); return; }
+            // 范围校验：越界的续传点会让下面的 files.slice / file.slice 切出错误的
+            // 字节区间。形状（非负整数）已由 parseResumeReq 保证，这里只能由我们
+            // 判断上界——只有发送端知道这批文件各多大。
+            if (rp && resumePointInRange(rp, files.map((f) => f.size))) { resolveReq(rp); return; }
             if (controlKind(buf) === "complete") doneAck = true;
           };
           // The receiver sends its resume request as soon as the channel opens.

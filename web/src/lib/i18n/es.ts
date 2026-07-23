@@ -60,7 +60,7 @@ const es: Messages = {
   descOffline: "Sube un archivo cifrado en el navegador y comparte un enlace de descarga de conocimiento cero; el servidor almacena únicamente texto cifrado.",
   reconnecting: "Conexión perdida — reconectando…",
   confirmLeave: "Hay una transferencia en curso. Cambiar la interrumpirá. ¿Continuar?",
-  confirmRecv: (n) => `${n} quiere recibir`,
+  confirmRecv: (n) => `Un dispositivo que dice llamarse «${n}» quiere recibir`,
   confirmRecvSend: "Enviar",
   confirmRecvCancel: "Cancelar",
   status: {

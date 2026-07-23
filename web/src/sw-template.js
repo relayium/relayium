@@ -33,6 +33,36 @@ self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE)));
 });
 
+/**
+ * 分享进来的文件在缓存里能待多久。
+ *
+ * 这些是**明文文件**：Web Share Target 把用户选的文件交给 SW，SW 先存进 Cache API，
+ * 再把浏览器导航到应用去取。正常路径上应用一打开就取走并删掉；但用户如果分享完就
+ * 划掉了通知、再也没打开过应用，这些文件就**无限期**留在缓存里——一份用户以为只是
+ * "分享了一下"的文件，实际上落在了磁盘上，而且没有任何界面显示它的存在。
+ *
+ * 一天足够覆盖"分享完隔一会儿再打开"的真实用法，又不至于让它变成一个影子文件夹。
+ */
+const SHARE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** 删掉超过 SHARE_TTL_MS 的分享条目。时间戳就在 token 前缀里（36 进制的毫秒）。 */
+async function sweepStaleShares(cache) {
+  try {
+    const now = Date.now();
+    for (const req of await cache.keys()) {
+      const path = new URL(req.url).pathname;
+      if (!path.startsWith("/__shared__/")) continue; // 不是分享条目，不归这里管
+      const m = /^\/__shared__\/([0-9a-z]+)-/.exec(path);
+      const at = m ? parseInt(m[1], 36) : NaN;
+      // 解不出时间戳的**也删**：那是坏数据或另一套命名留下的，没人会来取，
+      // 留着就是一份永远不过期的明文文件。
+      if (!Number.isFinite(at) || now - at > SHARE_TTL_MS) await cache.delete(req);
+    }
+  } catch {
+    /* 缓存不可用——没什么可清的 */
+  }
+}
+
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches
@@ -44,6 +74,7 @@ self.addEventListener("activate", (e) => {
             .map((k) => caches.delete(k)),
         ),
       )
+      .then(() => caches.open(SHARE_CACHE).then(sweepStaleShares).catch(() => {}))
       .then(() => self.clients.claim()),
   );
 });
@@ -238,6 +269,7 @@ async function handleShare(req) {
     const files = form.getAll("files").filter((f) => f instanceof File);
     const token = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
     const cache = await caches.open(SHARE_CACHE);
+    await sweepStaleShares(cache); // 顺手清掉过期的（见 SHARE_TTL_MS）
     const base = "/__shared__/" + token + "/";
     await cache.put(base + "count", new Response(String(files.length)));
     for (let i = 0; i < files.length; i++) {

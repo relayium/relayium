@@ -60,7 +60,7 @@ const de: Messages = {
   descOffline: "Eine im Browser verschlüsselte Datei hochladen und einen Zero-Knowledge-Downloadlink teilen; der Server speichert nur Chiffretext.",
   reconnecting: "Verbindung getrennt – neu verbinden…",
   confirmLeave: "Eine Übertragung läuft. Ein Wechsel bricht sie ab. Fortfahren?",
-  confirmRecv: (n) => `${n} möchte empfangen`,
+  confirmRecv: (n) => `Ein Gerät, das sich „${n}“ nennt, möchte empfangen`,
   confirmRecvSend: "Senden",
   confirmRecvCancel: "Abbrechen",
   status: {

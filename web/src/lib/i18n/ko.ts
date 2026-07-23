@@ -60,7 +60,7 @@ const ko: Messages = {
   descOffline: "브라우저에서 암호화한 파일을 업로드하고 제로 지식 다운로드 링크를 공유하세요. 서버는 복호화할 수 없는 암호문만 저장합니다.",
   reconnecting: "연결이 끊어졌습니다. 다시 연결하는 중…",
   confirmLeave: "전송이 진행 중입니다. 전환하면 중단됩니다. 계속할까요?",
-  confirmRecv: (n) => `${n} 님이 받기를 원합니다`,
+  confirmRecv: (n) => `“${n}”라고 밝힌 기기가 받기를 원합니다`,
   confirmRecvSend: "보내기",
   confirmRecvCancel: "취소",
   status: {

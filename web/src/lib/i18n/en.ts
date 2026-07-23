@@ -60,7 +60,7 @@ const en: Messages = {
   descOffline: "Upload a browser-encrypted file and share a zero-knowledge download link; the server stores only ciphertext.",
   reconnecting: "Connection lost — reconnecting…",
   confirmLeave: "A transfer is in progress. Switching will interrupt it. Continue?",
-  confirmRecv: (n) => `${n} wants to receive`,
+  confirmRecv: (n) => `A device calling itself “${n}” wants to receive`,
   confirmRecvSend: "Send",
   confirmRecvCancel: "Cancel",
   status: {

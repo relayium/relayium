@@ -44,11 +44,20 @@ func (s *Service) stunServers() []ICEServer {
 // included; a TURN entry with an ephemeral credential is added only when the
 // request names a live pairing code (?code=<code>) AND a TURN secret is
 // configured. Without this, pairing-code transfers would be STUN-only and fail
-// to relay across strict/symmetric NATs. It always returns 200 and never
-// reveals code validity.
+// to relay across strict/symmetric NATs.
+//
+// 它**确实**会泄漏配对码是否有效：状态码永远是 200，但响应体里有没有 turn: 条目
+// 直接对应码的有效性。以前这里写着"never reveals code validity"，那句是假的——
+// 而一句写错的安全声明比没有声明更糟，后来的改动会依赖它。
+//
+// 不打算把响应做成一致的：那意味着对无效码也签发中继凭据，等于把付费带宽白送给
+// 任何人，代价远大于这个预言机本身。真正的边界是码的熵（24^6，见 signal.CodeAlphabet）
+// 加上这里的 5 次/分钟/IP；而且 /ws 本来就是一个更好用的预言机（30 次/分钟/IP），
+// 攻击者没有理由挑这一个。
 func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
-	// H1: brute-forcing the 6-digit pairing code (10^6 space, 15-min TTL) would
-	// steal a victim's TURN credentials; cap per-IP attempts. 5/min/IP.
+	// H1: 猜中一个活着的配对码就能偷走受害者的 TURN 凭据（并让对方为流量买单），
+	// 所以这里按 IP 限速 5 次/分钟。码空间自 2026-07-23 起是 24^6 ≈ 1.91e8
+	// （原为 6 位数字 1e6），TTL 5 分钟（原 15 分钟）——见 signal.CodeAlphabet。
 	if s.iceLimiter != nil && !s.iceLimiter.Allow(s.clientIP(r)) {
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
 		return

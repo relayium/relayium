@@ -60,7 +60,7 @@ const fr: Messages = {
   descOffline: "Téléversez un fichier chiffré dans votre navigateur et partagez un lien de téléchargement zero-knowledge ; le serveur ne stocke que du texte chiffré.",
   reconnecting: "Connexion perdue — reconnexion…",
   confirmLeave: "Un transfert est en cours. Changer l'interrompra. Continuer ?",
-  confirmRecv: (n) => `${n} veut recevoir`,
+  confirmRecv: (n) => `Un appareil se présentant comme « ${n} » veut recevoir`,
   confirmRecvSend: "Envoyer",
   confirmRecvCancel: "Annuler",
   status: {

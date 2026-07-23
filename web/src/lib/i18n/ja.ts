@@ -60,7 +60,7 @@ const ja: Messages = {
   descOffline: "ブラウザ内で暗号化したファイルをアップロードし、ゼロ知識のダウンロードリンクを共有——サーバーは復号できない暗号文のみを保存します。",
   reconnecting: "接続が切れました。再接続しています…",
   confirmLeave: "転送が進行中です。切り替えると中断されます。続けますか？",
-  confirmRecv: (n) => `${n} が受信を希望しています`,
+  confirmRecv: (n) => `「${n}」と名乗る端末が受信を希望しています`,
   confirmRecvSend: "送信",
   confirmRecvCancel: "キャンセル",
   status: {

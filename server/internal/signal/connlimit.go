@@ -56,3 +56,9 @@ func (l *connLimiter) admit(frameLen int) (bool, string) {
 	}
 	return true, ""
 }
+
+// maxMalformedFrames 是一条连接上允许**连续**出现多少个解不开的帧。
+//
+// 正常客户端每一帧都是自己 JSON 编码的，解不开只会来自 bug 或恶意；给一点余量是
+// 为了容忍升级窗口里新增字段之类的擦碰，但连着几十帧都解不开就只有一种解释。
+const maxMalformedFrames = 20

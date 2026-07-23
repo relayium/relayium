@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { ready, generateKeyPair, deriveSession } from "./crypto";
 import {
   Sender, Receiver, FRAME, CHUNK_SIZE, CHUNK_OVERHEAD, FLOW_WINDOW, FLOW_ACK_INTERVAL,
-  ackFrame, parseAck, type ResumePoint,
+  ackFrame, parseAck, parseResumeReq, resumePointInRange, type ResumePoint,
 } from "./transfer";
 
 beforeAll(async () => { await ready(); });
@@ -431,3 +431,54 @@ async function chainOnce(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
   buf.set(bytes, 32);
   return buf;
 }
+
+// 续传通道没有对端认证（报告 L3）：重连的 offer 和续传请求都能被信令层的中间人注入。
+// 内容仍然安全（密钥没重新协商），但这两个数字会被发送端直接拿去切文件。
+describe("续传点的范围校验", () => {
+  const req = (o: unknown) => {
+    const body = new TextEncoder().encode(JSON.stringify(o));
+    const b = new Uint8Array(5 + body.length);
+    b[0] = 5; // KIND_RESUME_REQ
+    b.set(body, 5);
+    return b.buffer as ArrayBuffer;
+  };
+
+  it("接受正常的续传点", () => {
+    expect(parseResumeReq(req({ index: 1, offset: 4096 }))).toEqual({ index: 1, offset: 4096 });
+  });
+
+  it("拒绝负的 offset —— file.slice(负数) 会从文件尾部倒着切", () => {
+    expect(parseResumeReq(req({ index: 0, offset: -1000 }))).toBeNull();
+  });
+
+  it("拒绝负的 index、小数、NaN、Infinity 和非数字", () => {
+    for (const bad of [
+      { index: -1, offset: 0 },
+      { index: 0.5, offset: 0 },
+      { index: NaN, offset: 0 },
+      { index: 0, offset: Number.POSITIVE_INFINITY },
+      { index: "0", offset: 0 },
+      { index: 0 },
+      {},
+      null,
+    ]) {
+      expect(parseResumeReq(req(bad)), `${JSON.stringify(bad)} 应当被拒`).toBeNull();
+    }
+  });
+
+  it("上界由调用方按本次批次校验", () => {
+    const sizes = [100, 200];
+    expect(resumePointInRange({ index: 0, offset: 100 }, sizes)).toBe(true); // 正好写满
+    expect(resumePointInRange({ index: 1, offset: 201 }, sizes)).toBe(false); // 超出该文件
+    expect(resumePointInRange({ index: 2, offset: 0 }, sizes)).toBe(false); // 没有这个文件
+  });
+
+  it("畸形的 RESUME_START 被拒绝，而不是把 NaN 塞进 nonce 计数器", async () => {
+    const { kb } = await session();
+    const body = new TextEncoder().encode(JSON.stringify({ index: 0, offset: 0, seq: "nope" }));
+    const b = new Uint8Array(5 + body.length) as Uint8Array<ArrayBuffer>;
+    b[0] = 4; // KIND_RESUME_START
+    b.set(body, 5);
+    await expect(new Receiver().feed(b, kb)).rejects.toThrow(/malformed resume/);
+  });
+});

@@ -86,7 +86,10 @@ export interface Messages {
   descOffline: string; // <meta description> for the offline-transfer route
   reconnecting: string; // signalling socket dropped, trying to reconnect
   confirmLeave: string; // confirm() before an action would interrupt an active transfer
-  confirmRecv: (name: string) => string; // "<name> wants to receive"
+  // 这条确认栏出现在**建连之前**，所以此刻还没有 SAS 可以并排显示（sasCode 要等
+  // 握手完成才算得出来）。而 name 是对端自己设的，一个拿到配对码进了房间的人可以把
+  // 自己叫成任何名字。所以文案必须把它写成**自称**——界面不该暗示一件它并不知道的事。
+  confirmRecv: (name: string) => string; // 'A device calling itself "<name>" wants to receive'
   confirmRecvSend: string;
   confirmRecvCancel: string;
   status: {
