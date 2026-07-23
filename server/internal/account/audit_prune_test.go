@@ -4,14 +4,31 @@ import (
 	"context"
 	"io"
 	"log"
+	"strings"
 	"testing"
 )
 
-// seedAudit inserts one audit row at time `at` with the given actor/action.
+// seedAudit inserts one HUMAN audit row at time `at` (auth "password", the
+// same as writeAudit records for a logged-in admin).
 func seedAudit(t *testing.T, s *SQLiteStore, at int64, actor, action string) {
 	t.Helper()
+	seedAuditAuth(t, s, at, actor, action, "password")
+}
+
+// seedNodeAudit inserts one MACHINE row exactly as writeNodeAudit would: actor
+// "node:<id>" AND auth nodeAuditAuth. The auth column is what PruneNodeAudit
+// discriminates on (it is set by writeNodeAudit alone and is not
+// operator-influenced, unlike an actor string), so a fixture that sets only the
+// actor would test a rule the production writer never produces.
+func seedNodeAudit(t *testing.T, s *SQLiteStore, at int64, nodeID, action string) {
+	t.Helper()
+	seedAuditAuth(t, s, at, nodeAuditActor(nodeID), action, nodeAuditAuth)
+}
+
+func seedAuditAuth(t *testing.T, s *SQLiteStore, at int64, actor, action, auth string) {
+	t.Helper()
 	if err := s.InsertAudit(context.Background(), AuditEntry{
-		At: at, Actor: actor, IP: "1.2.3.4", Auth: "password",
+		At: at, Actor: actor, IP: "1.2.3.4", Auth: auth,
 		Action: action, Target: "-", Changes: "", StepUp: "",
 	}); err != nil {
 		t.Fatal(err)
@@ -70,9 +87,14 @@ func TestPruneNodeAuditCapsMachineRowsAndSparesAdminRows(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	for i := 0; i < 10; i++ {
-		seedAudit(t, s, int64(100+i), nodeAuditActor("n"), AuditNodeDeregister)
+		seedNodeAudit(t, s, int64(100+i), "n", AuditNodeDeregister)
 	}
 	seedAudit(t, s, 1, "boss", AuditLoginOK) // oldest row on the table, but human
+	// An admin username can be anything, including something that looks like a
+	// machine actor. Discriminating on the actor string would let an operator
+	// (or an attacker who set the username) aim the eviction at human rows;
+	// discriminating on auth cannot be steered that way. This row must survive.
+	seedAudit(t, s, 2, nodeAuditActor("impostor"), AuditLoginOK)
 
 	if err := s.PruneNodeAudit(ctx, 4); err != nil {
 		t.Fatal(err)
@@ -83,7 +105,7 @@ func TestPruneNodeAuditCapsMachineRowsAndSparesAdminRows(t *testing.T) {
 	}
 	node, admin := 0, 0
 	for _, r := range rows {
-		if r.Actor == nodeAuditActor("n") {
+		if r.Auth == nodeAuditAuth {
 			node++
 			if r.At < 106 {
 				t.Fatalf("cap kept an older machine row (at=%d); it must keep the NEWEST 4", r.At)
@@ -95,15 +117,45 @@ func TestPruneNodeAuditCapsMachineRowsAndSparesAdminRows(t *testing.T) {
 	if node != 4 {
 		t.Fatalf("machine rows after cap = %d, want 4", node)
 	}
-	if admin != 1 {
-		t.Fatalf("admin rows after cap = %d, want 1 (the cap must never evict them)", admin)
+	if admin != 2 {
+		t.Fatalf("admin rows after cap = %d, want 2 (the cap must never evict them, "+
+			"including one whose actor merely looks like a node)", admin)
 	}
 	// Idempotent.
 	if err := s.PruneNodeAudit(ctx, 4); err != nil {
 		t.Fatal(err)
 	}
-	if rows, _ := s.ListAudit(ctx, 1000, 0, ""); len(rows) != 5 {
+	if rows, _ := s.ListAudit(ctx, 1000, 0, ""); len(rows) != 6 {
 		t.Fatalf("second cap pass changed the table: %d rows", len(rows))
+	}
+}
+
+// The cap runs every 10 minutes forever, so the case that matters most is the
+// one where there is NOTHING to do: it must not full-scan admin_audit to
+// discover that. The pre-check is a count over idx_admin_audit_machine, and
+// the delete only runs when the cap is actually exceeded.
+func TestPruneNodeAuditNoOpIsIndexed(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	for i := 0; i < 5; i++ {
+		seedNodeAudit(t, s, int64(100+i), "n", AuditNodeDeregister)
+	}
+	// Under the cap: nothing may be deleted.
+	if err := s.PruneNodeAudit(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	if rows, _ := s.ListAudit(ctx, 100, 0, ""); len(rows) != 5 {
+		t.Fatalf("under-cap sweep deleted rows: %d left, want 5", len(rows))
+	}
+	// And the pre-check must be answered from the index, not a table scan.
+	var detail string
+	if err := s.db.QueryRowContext(ctx,
+		`EXPLAIN QUERY PLAN SELECT COUNT(*) FROM admin_audit WHERE auth = ?`,
+		nodeAuditAuth).Scan(new(int), new(int), new(int), &detail); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(detail, "idx_admin_audit_machine") || strings.HasPrefix(detail, "SCAN admin_audit ") {
+		t.Fatalf("machine-row pre-check is not index-driven: %s", detail)
 	}
 }
 

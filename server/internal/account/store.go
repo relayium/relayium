@@ -846,9 +846,12 @@ type Store interface {
 	ListNodes(ctx context.Context) ([]Node, error)
 	// ListByoNodes returns ONE PAGE of user-contributed (owner_type='user')
 	// nodes matching q, plus the total number of matches. Filtering, ranking
-	// and paging all happen in SQL: the BYO population is unbounded, so the
-	// admin dashboard must never read the whole table just to render 20 rows
-	// (which is exactly what ListNodes + an in-memory filter/sort/truncate did).
+	// and paging all happen in SQL rather than in Go, so an operator can reach
+	// any node in an unbounded population instead of only the top of a list.
+	// For the unsearched live page the ranking is index-supplied and the rows
+	// past the page really are not read; see SQLiteStore.ListByoNodes for the
+	// exact query plan, including the cases (search, the removed section) where
+	// more than the page is touched.
 	ListByoNodes(ctx context.Context, q AdminByoNodeQuery) ([]Node, int64, error)
 	// UserNodes returns a user's own (owner_type='user') nodes seen since `since`.
 	UserNodes(ctx context.Context, userID string, since int64) ([]Node, error)
@@ -1037,10 +1040,12 @@ type Store interface {
 	ListAudit(ctx context.Context, limit, offset int, action string) ([]AuditEntry, error)
 	// PruneAudit deletes audit rows written strictly before `before`, the
 	// age-based half of keeping admin_audit bounded (see auditRetentionDefault
-	// for why the window is deliberately long).
+	// for why the window is deliberately long). NOT scoped to machine rows: it
+	// deletes ADMIN rows of that age too, which is why the configured window
+	// is the one knob here that can destroy the human audit trail.
 	PruneAudit(ctx context.Context, before int64) error
 	// PruneNodeAudit keeps only the newest `keep` MACHINE-written audit rows
-	// (actor 'node:<id>'), the burst-based half. Admin/human rows are never
+	// (auth = 'node-token'), the burst-based half. Admin/human rows are never
 	// touched by it — see auditNodeRowsMax.
 	PruneNodeAudit(ctx context.Context, keep int) error
 }
@@ -1058,11 +1063,10 @@ type Store interface {
 // two queries rather than one flag-less list precisely so a pile of tombstones
 // can never crowd the live rows out of the page — and so a search can still
 // reach a removed node.
+// Search is clamped to adminByoSearchMax before it reaches LIKE; a term past
+// SQLite's pattern limit is an error, not an empty result.
 type AdminByoNodeQuery struct {
-	Search  string
-	Removed bool
-	// Now is the "live file" cutoff used for ranking (a node still holding
-	// unexpired files outranks an idle one); same definition as NodeFileCounts.
-	Now           int64
+	Search        string
+	Removed       bool
 	Limit, Offset int
 }

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -609,22 +610,49 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 	// usage_events, so the recorded_at composite indexes an earlier version added
 	// here are dead weight — and they added write cost to every heartbeat's
 	// high-water update. Drop them.
+	//
+	// NOTE ON STARTUP COST: these run BEFORE the HTTP listener binds, so a
+	// CREATE INDEX over a large table delays /healthz becoming ok. The deploy
+	// health gate polls /healthz for a bounded time and reports a failure if it
+	// never answers, so a slow first index build can be misread as a broken
+	// deploy. Each statement therefore logs before it runs (a slow start must
+	// be diagnosable, not mysterious), and docs/DEPLOYMENT.md documents
+	// building these out of band with sqlite3 BEFORE the deploy — after which
+	// the CREATE INDEX IF NOT EXISTS here is a no-op.
 	for _, idx := range []string{
 		`DROP INDEX IF EXISTS idx_usage_user_recorded`,
 		`DROP INDEX IF EXISTS idx_usage_node_recorded`,
-		// stored_files.node_id was never indexed, so "does this node still hold
-		// live files" was a full table scan. NodeFileCounts pays it once per
-		// dashboard render; ListByoNodes's ranking would pay it per candidate
-		// row. Composite with expires_at so the "live" predicate is answered
-		// from the index alone. Created here (not in the base schema) because
+		// stored_files.node_id was never indexed, so NodeFileCounts (once per
+		// admin-dashboard render, over the largest table here) grouped by an
+		// unindexed column: it walked idx_stored_files_expires, fetched the
+		// ROW behind every live file to read node_id, and then sorted the lot
+		// into a temp b-tree to group it. Composite with expires_at so the
+		// whole aggregate is answered from the index alone — no row lookups,
+		// no temp b-tree. Created here rather than in the base schema because
 		// node_id itself arrives via the SP2 ALTER block above.
 		`CREATE INDEX IF NOT EXISTS idx_stored_files_node ON stored_files(node_id, expires_at)`,
-		// The BYO admin table filters on owner_type and splits on removed_at;
-		// last_seen_at is its ranking tiebreak. One composite index answers the
-		// live/removed split and the ordering without touching the fleet
-		// table's own reads.
-		`CREATE INDEX IF NOT EXISTS idx_nodes_byo ON nodes(owner_type, removed_at, last_seen_at)`,
+		// The admin BYO table's live page: filter on owner_type, split on
+		// removed_at, then ORDER BY draining DESC, last_seen_at DESC, id ASC.
+		// Column order and per-column direction are chosen so SQLite can supply
+		// that order straight from the index and stop after LIMIT rows instead
+		// of sorting the whole matching population into a temp b-tree — see
+		// ListByoNodes, which explains why the ordering has no cross-table term
+		// in it any more.
+		`CREATE INDEX IF NOT EXISTS idx_nodes_byo_rank ON nodes(owner_type, removed_at, draining DESC, last_seen_at DESC, id ASC)`,
+		// Superseded by idx_nodes_byo_rank (same leading columns, wrong order
+		// for the ORDER BY). Only ever existed on machines that ran a pre-merge
+		// build of this branch; dropping it is free everywhere else.
+		`DROP INDEX IF EXISTS idx_nodes_byo`,
+		// PruneNodeAudit's cap is scoped to machine-written rows (auth =
+		// 'node-token'); without an index every 10-minute sweep full-scanned
+		// admin_audit even when there was nothing over the cap. The equality
+		// prefix makes the "how many machine rows are there" pre-check an index
+		// seek, and at/id carry the newest-first ordering the cap needs.
+		`CREATE INDEX IF NOT EXISTS idx_admin_audit_machine ON admin_audit(auth, at DESC, id DESC)`,
 	} {
+		if strings.HasPrefix(idx, "CREATE INDEX") {
+			log.Printf("sqlite: ensuring index (may take a while on a large table, and runs before the listener binds): %s", idx)
+		}
 		if _, err := db.ExecContext(context.Background(), idx); err != nil {
 			db.Close()
 			return nil, err
@@ -3283,34 +3311,85 @@ func (s *SQLiteStore) ListNodes(ctx context.Context) ([]Node, error) {
 	return s.queryNodes(ctx, `SELECT `+nodeCols+` FROM nodes ORDER BY last_seen_at DESC`)
 }
 
+// adminByoSearchMax bounds the length of a BYO search term.
+//
+// Not a UX nicety: the term is wrapped in %…% and handed to LIKE, and SQLite
+// rejects a pattern past SQLITE_MAX_LIKE_PATTERN_LENGTH with "LIKE or GLOB
+// pattern too complex" — an ERROR, which the dashboard would otherwise have to
+// render as "no matches", i.e. a confident wrong answer in the one table where
+// acting on "there is no such node" is expensive. 200 is far above any real
+// term (a node id is 32 chars, an email under 100, a label shorter still), so
+// clamping to it cannot hide a match: a truncated substring pattern matches a
+// SUPERSET of what the full one would, and the clamped term is echoed back in
+// the search box so the operator sees exactly what was searched.
+const adminByoSearchMax = 200
+
+// clampByoSearch trims a search term to adminByoSearchMax runes (runes, not
+// bytes — cutting a UTF-8 sequence in half would produce a pattern that
+// matches nothing).
+func clampByoSearch(s string) string {
+	r := []rune(s)
+	if len(r) <= adminByoSearchMax {
+		return s
+	}
+	return string(r[:adminByoSearchMax])
+}
+
 // ListByoNodes returns one page of user-contributed nodes plus the total number
 // of matches. See AdminByoNodeQuery for what Search matches and why.
 //
 // Everything the admin BYO table needs — the owner_type filter, the
 // live/removed split, the text search, the ranking and the page window — is
 // expressed here in SQL. It used to be ListNodes (every row, fleet and BYO)
-// followed by a Go filter + sort.Slice + truncate, which meant the dashboard
-// read and sorted the entire unbounded BYO population on every render just to
-// draw twenty rows, and gave an operator no way to reach node #21 at all.
+// followed by a Go filter + sort.Slice + truncate, which gave an operator no
+// way to reach node #21 at all.
 //
-// The ranking is the same one the old in-memory sort applied, and for the same
-// reasons: a draining node means an operation is already in progress and the
-// operator probably came back to watch it; a node still holding unexpired
-// files cannot be touched without destroying them; the id tiebreak keeps the
-// order stable across refreshes (SQLite, like sort.Slice, gives no ordering
-// guarantee for ties, and "where did that row go" is the worst kind of
-// phantom). Removed rows rank by removed_at instead: that section is a
-// most-recent-mistake-first recovery list, not a history archive.
+// WHAT SQLITE ACTUALLY DOES, for the unsearched live page (the one that
+// renders on every admin home load):
+//
+//	SEARCH nodes USING COVERING INDEX idx_nodes_byo_rank (owner_type=? AND removed_at=?)
+//
+// No temp b-tree: idx_nodes_byo_rank supplies the ORDER BY directly, so the
+// scan stops after LIMIT+OFFSET rows and the rows past the page are genuinely
+// not read. That is only true because the ordering is expressible by an index
+// on `nodes` alone. An earlier version ranked "still holding unexpired files"
+// second, via a correlated EXISTS over stored_files; no index can supply that
+// order, so SQLite read EVERY matching BYO row, ran the subquery per row, and
+// sorted the lot into a temp b-tree before applying LIMIT — i.e. the page
+// limit bounded what was RENDERED, never what was read. The term is gone:
+//   - it existed because the old table truncated at 20 rows with no way to see
+//     row 21, so the top 20 had to be the "right" 20. Search and pagination
+//     removed that constraint — every BYO node is now reachable — which is
+//     what makes dropping the tier honest rather than a regression;
+//   - the per-row "剩余文件 / 最早可安全卸载" column still shows the same fact
+//     on the row itself, which is where an operator reads it before acting.
+//
+// What survives is `draining DESC` (an operation is already in progress and
+// the operator most likely came back to watch it), then last_seen_at DESC,
+// then id ASC — the id tiebreak keeps the order stable across refreshes
+// (SQLite, like sort.Slice, guarantees nothing for ties, and "where did that
+// row go" is the worst kind of phantom).
+//
+// A SEARCHED page cannot be covering (the LIKE terms and the users EXISTS are
+// outside the index) and the count is an aggregate, but both still scan the
+// index range in order rather than sorting: no temp b-tree appears in either.
+//
+// Removed rows rank by removed_at DESC, id ASC instead: that section is a
+// most-recent-mistake-first recovery list, not a history archive. `removed_at
+// != 0` is not an index constraint, so that query walks the owner_type='user'
+// range in removed_at order and sorts only the LAST term (ties on removed_at,
+// which are manual admin actions seconds apart — the partial sort is bounded
+// by a tie group, not by the population).
 func (s *SQLiteStore) ListByoNodes(ctx context.Context, q AdminByoNodeQuery) ([]Node, int64, error) {
 	where := ` WHERE owner_type='user' AND removed_at` + map[bool]string{false: `=0`, true: `!=0`}[q.Removed]
 	var whereArgs []any
-	if q.Search != "" {
+	if search := clampByoSearch(q.Search); search != "" {
 		// The owner's email lives on users, reached with EXISTS rather than a
 		// JOIN so a node whose owner row is gone (deleted account) still lists
 		// and still matches on its own columns.
 		where += ` AND (id LIKE ? ESCAPE '\' OR label LIKE ? ESCAPE '\' OR region LIKE ? ESCAPE '\'
 		   OR EXISTS (SELECT 1 FROM users u WHERE u.id = nodes.owner_user_id AND u.email LIKE ? ESCAPE '\'))`
-		like := "%" + escapeLike(q.Search) + "%"
+		like := "%" + escapeLike(search) + "%"
 		whereArgs = append(whereArgs, like, like, like, like)
 	}
 
@@ -3321,18 +3400,14 @@ func (s *SQLiteStore) ListByoNodes(ctx context.Context, q AdminByoNodeQuery) ([]
 	}
 
 	order := ` ORDER BY removed_at DESC, id ASC`
-	listArgs := append([]any{}, whereArgs...)
 	if !q.Removed {
-		order = ` ORDER BY draining DESC,
-		    (EXISTS (SELECT 1 FROM stored_files sf WHERE sf.node_id = nodes.id AND sf.expires_at > ?)) DESC,
-		    last_seen_at DESC, id ASC`
-		listArgs = append(listArgs, q.Now)
+		order = ` ORDER BY draining DESC, last_seen_at DESC, id ASC`
 	}
 	limit := q.Limit
 	if limit <= 0 {
 		limit = 1
 	}
-	listArgs = append(listArgs, limit, q.Offset)
+	listArgs := append(append([]any{}, whereArgs...), limit, q.Offset)
 	nodes, err := s.queryNodes(ctx,
 		`SELECT `+nodeCols+` FROM nodes`+where+order+` LIMIT ? OFFSET ?`, listArgs...)
 	if err != nil {
@@ -4006,8 +4081,8 @@ func (s *SQLiteStore) PruneAudit(ctx context.Context, before int64) error {
 	return err
 }
 
-// PruneNodeAudit keeps only the newest `keep` MACHINE-written audit rows
-// (actor 'node:<id>', written by writeNodeAudit) and deletes the rest.
+// PruneNodeAudit keeps only the newest `keep` MACHINE-written audit rows and
+// deletes the rest.
 //
 // This is the burst bound that an age-based prune cannot provide: a node-token
 // holder looping register→deregister writes one node.deregister row per
@@ -4015,6 +4090,13 @@ func (s *SQLiteStore) PruneAudit(ctx context.Context, before int64) error {
 // change" guard in handleNodeDeregister does not stop it — and
 // /api/nodes/register has no rate limit. Age retention alone therefore leaves
 // the table unbounded WITHIN the window.
+//
+// Machine rows are identified by auth = nodeAuditAuth ('node-token'), the
+// actual authentication that produced the row, not by `actor LIKE 'node:%'`.
+// The actor string is a formatted display value and an operator could in
+// principle create an admin username that matches the pattern; `auth` is set
+// by writeNodeAudit alone and is not operator-influenced, so it cannot be made
+// to point the eviction at human rows.
 //
 // Scoped to machine rows on purpose. Evicting rows is destroying evidence, so
 // the ceiling is applied only to the one writer that an attacker can drive at
@@ -4025,16 +4107,51 @@ func (s *SQLiteStore) PruneAudit(ctx context.Context, before int64) error {
 // would silently stop recording legitimate deregistrations forever once the
 // ceiling was reached.
 //
+// COST IN THE STEADY STATE, which is the case that runs forever: an earlier
+// version ran one unconditional statement that materialised up to `keep` ids
+// into a NOT IN list and full-scanned admin_audit inside a write transaction —
+//
+//	SCAN admin_audit
+//	LIST SUBQUERY 1
+//	  SCAN admin_audit USING INDEX idx_admin_audit_at
+//	  USE TEMP B-TREE FOR LAST TERM OF ORDER BY
+//
+// — every 10 minutes, whether or not anything was over the cap. It now starts
+// with a count over idx_admin_audit_machine (an equality seek on auth, then a
+// covering walk of only the machine rows) and returns immediately when the cap
+// is not exceeded, which is every sweep of a healthy deployment. Only when it
+// IS exceeded does it read the boundary row and delete by (at, id) range —
+// still index-driven, and with no 100k-element IN list.
+//
 // keep <= 0 is treated as "no cap" rather than "delete everything": a
 // misconfigured knob must not wipe the audit trail.
 func (s *SQLiteStore) PruneNodeAudit(ctx context.Context, keep int) error {
 	if keep <= 0 {
 		return nil
 	}
+	// Cheap pre-check: the no-op case must not pay for the delete.
+	var n int64
+	if err := s.reader().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM admin_audit WHERE auth = ?`, nodeAuditAuth).Scan(&n); err != nil {
+		return err
+	}
+	if n <= int64(keep) {
+		return nil
+	}
+	// The keep-th newest machine row is the boundary; everything strictly
+	// older than it goes. Ordering matches the index's own (at DESC, id DESC),
+	// so this is a seek + skip, not a sort.
+	var bAt, bID int64
+	if err := s.reader().QueryRowContext(ctx,
+		`SELECT at, id FROM admin_audit WHERE auth = ?
+		  ORDER BY at DESC, id DESC LIMIT 1 OFFSET ?`, nodeAuditAuth, keep-1).Scan(&bAt, &bID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil // raced with another deleter; nothing to do
+		}
+		return err
+	}
 	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM admin_audit
-		   WHERE actor LIKE 'node:%'
-		     AND id NOT IN (SELECT id FROM admin_audit WHERE actor LIKE 'node:%'
-		                     ORDER BY at DESC, id DESC LIMIT ?)`, keep)
+		   WHERE auth = ? AND (at < ? OR (at = ? AND id < ?))`, nodeAuditAuth, bAt, bAt, bID)
 	return err
 }

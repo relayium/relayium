@@ -126,8 +126,14 @@ func main() {
 		"days before purge the one-time pre-purge reminder email is sent (default 3)")
 	// Deliberately long by default: the audit trail is read AFTER an incident,
 	// and incidents surface late. See account.auditRetentionDefault.
+	//
+	// This window is NOT scoped to machine-written rows: shortening it deletes
+	// ADMIN audit rows of that age too (the machine-row ceiling is the only
+	// part that spares human rows). And it only takes effect at all when
+	// stored transfers are enabled — GC, which runs the prune, is constructed
+	// solely in that branch below.
 	auditRetentionDays := flag.Int64("audit-retention-days", envInt64("RELAYIUM_AUDIT_RETENTION_DAYS", 730),
-		"how long admin audit-log rows are kept, in days (default 730 = 2 years; 0 uses the built-in default)")
+		"how long admin audit-log rows are kept, in days (default 730 = 2 years; 0 uses the built-in default); applies to ADMIN rows too, and only runs when stored transfers are enabled")
 	trustedProxies := flag.String("trusted-proxies", envStr("RELAYIUM_TRUSTED_PROXIES", ""), "comma-separated CIDRs (or IPs) of reverse proxies whose X-Forwarded-For is trusted; empty (default) ignores XFF and uses the direct peer IP")
 	blobDiskMax := flag.Int64("blob-disk-max", envInt64("RELAYIUM_BLOB_DISK_MAX", 0),
 		"global blob-volume high-water mark in bytes; new uploads 503 once used >= this (0 disables the global soft cap)")

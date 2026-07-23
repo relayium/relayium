@@ -39,10 +39,21 @@ const pendingDeleteMaxAge = int64(7 * 24 * 3600) // 7 days
 // Overridable per deployment via -audit-retention-days /
 // RELAYIUM_AUDIT_RETENTION_DAYS (main.go), the same flag+env mechanism the
 // other retention knobs use; GC.AuditRetention carries the resolved seconds.
+//
+// TWO RESIDUALS, named because they are easy to be surprised by:
+//
+//  1. The age prune (Store.PruneAudit) is NOT scoped to machine rows. Setting
+//     a short retention deletes the ADMIN trail of that age as well — "who
+//     changed this setting" entries included. The row cap below is the only
+//     part of audit pruning that spares human rows; this flag is not.
+//  2. GC itself is only constructed in main.go's stored-transfers-enabled
+//     branch. With stored transfers OFF, no sweep runs at all and admin_audit
+//     is never pruned by either half — the table simply grows, and the
+//     retention configured here has no effect.
 const auditRetentionDefault = int64(730 * 24 * 3600) // 2 years
 
 // auditNodeRowsMax bounds the MACHINE-written share of admin_audit
-// (actor 'node:<id>'). Age retention does not bound a burst: a node-token
+// (auth 'node-token'). Age retention does not bound a burst: a node-token
 // holder looping register→deregister writes one genuine node.deregister row
 // per iteration and /api/nodes/register has no rate limit, so within the
 // two-year window the table is otherwise unbounded. 100k rows is ~20 MB and
