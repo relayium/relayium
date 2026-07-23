@@ -20,6 +20,48 @@ const receiptRetention = int64(86400) // 24h
 // pending_node_deletes rows would otherwise retry forever and never self-clean.
 const pendingDeleteMaxAge = int64(7 * 24 * 3600) // 7 days
 
+// auditRetentionDefault is how long admin_audit rows are kept: TWO YEARS.
+//
+// This is deliberately far more generous than the other retentions in this
+// file, and the reason is the asymmetry of the mistake. Pruning upload_events
+// too early costs a quota-window rounding error; pruning the audit trail too
+// early destroys the only record of who changed what — and an audit trail is
+// consulted AFTER an incident, which is routinely discovered months later
+// (credential misuse, a quietly relaxed setting, a node retired by someone who
+// should not have been able to). A window shorter than the discovery delay
+// silently deletes exactly the evidence the table exists to preserve, and
+// unlike a missing metric it cannot be reconstructed from anywhere else.
+//
+// Two years also comfortably covers the usual one-year "keep your logs" bar in
+// security questionnaires, while still bounding a table nobody would otherwise
+// ever shrink. The cost of being generous is a few tens of MB.
+//
+// Overridable per deployment via -audit-retention-days /
+// RELAYIUM_AUDIT_RETENTION_DAYS (main.go), the same flag+env mechanism the
+// other retention knobs use; GC.AuditRetention carries the resolved seconds.
+//
+// TWO RESIDUALS, named because they are easy to be surprised by:
+//
+//  1. The age prune (Store.PruneAudit) is NOT scoped to machine rows. Setting
+//     a short retention deletes the ADMIN trail of that age as well — "who
+//     changed this setting" entries included. The row cap below is the only
+//     part of audit pruning that spares human rows; this flag is not.
+//  2. GC itself is only constructed in main.go's stored-transfers-enabled
+//     branch. With stored transfers OFF, no sweep runs at all and admin_audit
+//     is never pruned by either half — the table simply grows, and the
+//     retention configured here has no effect.
+const auditRetentionDefault = int64(730 * 24 * 3600) // 2 years
+
+// auditNodeRowsMax bounds the MACHINE-written share of admin_audit
+// (auth 'node-token'). Age retention does not bound a burst: a node-token
+// holder looping register→deregister writes one genuine node.deregister row
+// per iteration and /api/nodes/register has no rate limit, so within the
+// two-year window the table is otherwise unbounded. 100k rows is ~20 MB and
+// several orders of magnitude above any real fleet+BYO deregistration rate,
+// so a healthy deployment never reaches it. Admin/human rows are never
+// touched by this cap — see SQLiteStore.PruneNodeAudit.
+const auditNodeRowsMax = 100_000
+
 // GC periodically deletes expired stored files (and their blobs) and prunes the
 // upload-events ledger. Modeled on metering.Worker; Now is injected for tests.
 type GC struct {
@@ -50,6 +92,20 @@ type GC struct {
 	// ReapSessions, when set, drops abandoned in-memory chunked-upload sessions
 	// (and their partial blobs) each sweep. Wired to Service.ReapPendingUploads.
 	ReapSessions func(now int64)
+
+	// AuditRetention is how long admin_audit rows are kept, in seconds.
+	// <= 0 falls back to auditRetentionDefault — a zero/garbage configuration
+	// must not be read as "prune everything".
+	AuditRetention int64
+}
+
+// auditRetention resolves the configured audit window, falling back to the
+// default when unset.
+func (g *GC) auditRetention() int64 {
+	if g.AuditRetention <= 0 {
+		return auditRetentionDefault
+	}
+	return g.AuditRetention
 }
 
 func (g *GC) sweep(ctx context.Context) {
@@ -78,6 +134,15 @@ func (g *GC) sweep(ctx context.Context) {
 	// download (24h) so a duplicate receipt can never re-appear as "first".
 	if err := g.Store.PruneDownloadReceipts(ctx, now-receiptRetention); err != nil {
 		g.Log.Printf("gc: prune download receipts: %v", err)
+	}
+	// Admin audit trail: age-based prune (long window — see
+	// auditRetentionDefault) plus a ceiling on the machine-written rows, which
+	// age alone cannot bound against a burst.
+	if err := g.Store.PruneAudit(ctx, now-g.auditRetention()); err != nil {
+		g.Log.Printf("gc: prune audit: %v", err)
+	}
+	if err := g.Store.PruneNodeAudit(ctx, auditNodeRowsMax); err != nil {
+		g.Log.Printf("gc: cap machine audit rows: %v", err)
 	}
 	// Auth tables are otherwise append-only: expired/revoked sessions and
 	// spent/expired magic tokens are never deleted on the request path, so GC

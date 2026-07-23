@@ -7,7 +7,6 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -105,8 +104,8 @@ type adminNodeView struct {
 	// with no explanation; the delete button is how an operator retires the row.
 	Removed bool
 	// RemovedAt is the raw Node.RemovedAt timestamp (0 if not removed), used
-	// only to rank the BYO removed section by most-recently-removed first —
-	// see byoNodeViews. Not rendered directly.
+	// only by the BYO removed section, which SQL ranks by most-recently-removed
+	// first (see SQLiteStore.ListByoNodes). Not rendered directly.
 	RemovedAt int64
 }
 
@@ -140,14 +139,32 @@ func nodeViews(nodes []Node, monthly map[string]int64, fileCounts map[string]Nod
 	return out
 }
 
-// adminByoNodesShown 是自带节点表（在线/排空中的那些）最多渲染多少行。
+// adminByoNodesShown 是自带节点表的**每页行数**。
 //
 // 机队节点是我们自己的机器，十几台，全列出来没问题；自带节点谁都能贡献一台，
 // 数量**没有上界**，全渲染意味着后台首页会随用户增长而无限膨胀（一页几千行，
-// 每行还带三个表单）。所以这里只给"最该被看到"的那些行，标题上写清总数。
+// 每行还带三个表单）。以前这里是"只渲染最该被看到的 N 行、其余的看不见也够
+// 不着"；现在它是分页的页长。过滤/排序/分页都在 SQL 里做（ListByoNodes）。
+// **不搜索**的那一页排序由索引 idx_nodes_byo_rank 直接给出，扫到 LIMIT 就
+// 停，页外的行确实没被读；带搜索时 LIKE 条件走不了索引，仍要扫过
+// owner_type='user' 的那段索引范围来数匹配数（但不排序）。别把这句话夸大成
+// "任何情况下只读 20 行"。
+//
+// 搜索能到达任何一台节点——搜索是按 id/label/region/邮箱做等值/LIKE 匹配，
+// 结果与"这一刻数据库里有什么"直接对应，不依赖遍历顺序。
+//
+// **翻页不能。** 排序键是 last_seen_at（在线节点每 ~30 秒心跳一次就会更新，
+// 见 nodeHeartbeatInterval），OFFSET 分页假设"两次读之间顺序不变"，而这个
+// 假设对一个每 30 秒就整体重新洗牌一次的键是不成立的：管理员翻到第 2 页时，
+// 原本排第 21 的节点可能已经因为一次心跳升到第 15 名，落回第 1 页——于是它
+// 要么在这次翻页里被跳过，要么在两页里各出现一次。也就是说"第 N+1 行不再是
+// 永远消失"这句话只对**不再心跳的节点**成立（已离线、静止不动的那一段排在
+// 表尾，OFFSET 对它们才是稳定的）；对仍在心跳的在线节点，翻页只是一个当前
+// 快照的视图，不是一次能保证走完的清点——按行翻页去数"到底有多少台在线"，
+// 数出来的不是真实台数。真要找某一台确定的节点，用上面的搜索，不要翻页。
 const adminByoNodesShown = 20
 
-// adminByoRemovedShown 是"已卸载的自带节点"这个独立小节最多渲染多少行。
+// adminByoRemovedShown 是"已卸载的自带节点"这个独立小节的**每页行数**。
 //
 // removed_at 一旦写上就再也不会自己清掉（只有管理员手动"恢复"才清），而自带
 // 节点的数量没有上界——卸载只会单调累积。曾经把已卸载节点和在线/排空中的节点
@@ -155,79 +172,27 @@ const adminByoNodesShown = 20
 // 上限，整张表就会被清一色的墓碑行占满：不仅看不到真正在线、正在闹脾气的节点，
 // "恢复"这个手动纠错入口也跟着从后台彻底消失——误卸载之后只能改数据库。现在
 // 已卸载节点单独成节、单独限行，"恢复"入口只要还有已卸载节点就一定在页面上。
-// 上限给得比 adminByoNodesShown 小很多：这里只是最近误操作的纠错入口，不是
-// 卸载历史的存档视图（那是审计日志的活）。
+// 页长给得比 adminByoNodesShown 小很多：这里只是最近误操作的纠错入口，不是
+// 卸载历史的存档视图（那是审计日志的活）。但它同样**分页**（参数 brp）：搜索
+// 命中 5 台以上时，第 6 台不能就这么够不着——否则"多老的卸载都搜得到"就只对
+// 窄搜索成立。
 const adminByoRemovedShown = 5
 
-// byoNodeViews 从全部节点里挑出自带节点，拆成两组：
-//
-//   - live：还在线/排空中的（未卸载），按"操作员最可能要处理"的顺序排好，截到
-//     adminByoNodesShown 行。
-//   - removed：已卸载的，按卸载时间倒序（最近卸载的排最前），截到
-//     adminByoRemovedShown 行——这是"恢复"这个手动纠错操作的唯一入口，必须
-//     独立于 live 表的容量，不能被大量在线节点挤没。
-//
-// 两个返回的 int 分别是各自截断前的总数，标题要用它们。
-//
-// live 组排序口径（这是全部的取舍，别按"最近上线"一刀切）：
-//  1. 已经在排空中的：说明有一次操作正在进行中，操作员多半就是回来看它的；
-//  2. 手上还压着未过期文件的：这台机器不能随便动，动了文件就没了；
-//  3. 其余按最后心跳倒序，再按 ID 兜底——sort.Slice 不稳定，没有这个兜底，同
-//     一批节点两次刷新可能给出不同的顺序，而"上次那行去哪了"是最难查的错觉。
-func byoNodeViews(all []adminNodeView) (live []adminNodeView, liveTotal int, removed []adminNodeView, removedTotal int) {
-	for _, nv := range all {
-		if nv.OwnerType != "user" {
-			continue
-		}
-		if nv.Removed {
-			removed = append(removed, nv)
-		} else {
-			live = append(live, nv)
-		}
-	}
-	liveTotal, removedTotal = len(live), len(removed)
-
-	rank := func(nv adminNodeView) int {
-		switch {
-		case nv.Draining:
-			return 0
-		case nv.StoredFileCount > 0:
-			return 1
-		default:
-			return 2
-		}
-	}
-	sort.Slice(live, func(i, j int) bool {
-		if ri, rj := rank(live[i]), rank(live[j]); ri != rj {
-			return ri < rj
-		}
-		if live[i].LastSeenAt != live[j].LastSeenAt {
-			return live[i].LastSeenAt > live[j].LastSeenAt
-		}
-		return live[i].ID < live[j].ID
-	})
-	if len(live) > adminByoNodesShown {
-		live = live[:adminByoNodesShown]
-	}
-
-	sort.Slice(removed, func(i, j int) bool {
-		if removed[i].RemovedAt != removed[j].RemovedAt {
-			return removed[i].RemovedAt > removed[j].RemovedAt
-		}
-		return removed[i].ID < removed[j].ID
-	})
-	if len(removed) > adminByoRemovedShown {
-		removed = removed[:adminByoRemovedShown]
-	}
-	return live, liveTotal, removed, removedTotal
-}
+// 排序口径住在 SQLiteStore.ListByoNodes 的 SQL 里（排空中优先、再按最后心跳
+// 倒序、最后按 ID 兜底稳定）。这里曾经有一个 byoNodeViews：先 ListNodes 读全
+// 表，再在 Go 里过滤+sort.Slice+截断，而且第 21 行的节点在界面上根本无法到达。
+// 注意排序里原本还有一档"手上还压着未过期文件的排前面"，现已去掉：那一档要跨
+// 表算 EXISTS，任何索引都给不出这个顺序，SQLite 只能把整批匹配行读出来排进临时
+// B 树再取 LIMIT——也就是分页只限制了"画多少行"，没有限制"读多少行"。这一档
+// 当初存在是因为只显示 20 行且看不到第 21 行；有了搜索和分页之后每台节点都够得
+// 着，而"剩余文件"这一列本来就在行上，操作员动手前看的是那一列。
 
 // fillByoOwnerEmails resolves each row's OwnerUserID to an email via a single
 // batched lookup and returns the same slice with OwnerEmail populated.
-// Deliberately called AFTER byoNodeViews has already capped the rows: the
-// lookup set is bounded by the display cap, not by the unbounded BYO
-// population, so this can never become the per-row query the rest of this
-// file works hard to avoid.
+// Deliberately called on ONE PAGE of rows (ListByoNodes has already applied
+// the search and the LIMIT): the lookup set is bounded by the page size, not
+// by the unbounded BYO population, so this can never become the per-row query
+// the rest of this file works hard to avoid.
 func fillByoOwnerEmails(ctx context.Context, byo []adminNodeView, emails func(ctx context.Context, ids []string) (map[string]string, error)) []adminNodeView {
 	if len(byo) == 0 {
 		return byo
@@ -360,6 +325,125 @@ func adminListHref(search, sort, dir, period string, page int) string {
 		return "/admin"
 	}
 	return "/admin?" + v.Encode()
+}
+
+// adminPageLink is one numbered page link in a pager.
+type adminPageLink struct {
+	Num     int
+	Href    string
+	Current bool
+}
+
+// adminByoPageWindow is how many numbered page links flank the current one.
+// A full 1..N list would itself grow without bound, which is the exact problem
+// the pager exists to solve.
+const adminByoPageWindow = 3
+
+// BYO query params. Deliberately distinct from the user list's q/page: the two
+// tables are paged independently, and the BYO pager must never reset the user
+// list's search/sort/page — an operator three pages into the user list who
+// clicks "next" on the node table would otherwise silently lose their place.
+// Do not fold them together.
+const (
+	byoSearchParam  = "bq"  // BYO search term (shared by both BYO sections)
+	byoPageParam    = "bp"  // live BYO table page
+	byoRemPageParam = "brp" // removed BYO section page
+)
+
+// adminByoHref builds a /admin link that sets the BYO search (bq) and ONE of
+// the two BYO pagers (pageKey), carrying every other query param — including
+// the OTHER BYO pager and the whole user list's state — through untouched.
+func adminByoHref(base url.Values, search, pageKey string, page int) string {
+	v := url.Values{}
+	for k, vals := range base {
+		if k == byoSearchParam || k == pageKey {
+			continue
+		}
+		v[k] = vals
+	}
+	if search != "" {
+		v.Set(byoSearchParam, search)
+	}
+	if page > 1 && pageKey != "" {
+		v.Set(pageKey, strconv.Itoa(page))
+	}
+	if len(v) == 0 {
+		return "/admin"
+	}
+	return "/admin?" + v.Encode()
+}
+
+// adminByoClearHref drops the BYO search AND both BYO page numbers (a page
+// number from a filtered result set means nothing once the filter is gone),
+// while keeping the user list's own params — "clear" must not double as
+// "reset the rest of the page".
+func adminByoClearHref(base url.Values) string {
+	v := url.Values{}
+	for k, vals := range base {
+		if k == byoSearchParam || k == byoPageParam || k == byoRemPageParam {
+			continue
+		}
+		v[k] = vals
+	}
+	if len(v) == 0 {
+		return "/admin"
+	}
+	return "/admin?" + v.Encode()
+}
+
+// adminByoPageParam reads a 1-based page number out of the query string,
+// falling back to 1 for anything missing, non-numeric or below 1.
+func adminByoPageParam(q url.Values, key string) int {
+	p, err := strconv.Atoi(q.Get(key))
+	if err != nil || p < 1 {
+		return 1
+	}
+	return p
+}
+
+// listByoPage reads one page of a BYO section and returns the rows, the total
+// number of matches, the page actually used, the page count and any error.
+//
+// A page number past the end (stale bookmark, nodes restored since) re-reads
+// the last real page rather than rendering an empty table with no way back.
+// On error it returns zero rows AND the error: the caller must render "the
+// query failed", never an empty table that reads as "no such node".
+func (s *Service) listByoPage(r *http.Request, q AdminByoNodeQuery, page, size int) (rows []Node, total int64, gotPage, totalPages int, err error) {
+	q.Limit, q.Offset = size, (page-1)*size
+	rows, total, err = s.store.ListByoNodes(r.Context(), q)
+	if err != nil {
+		return nil, 0, page, 1, err
+	}
+	totalPages = int(math.Ceil(float64(total) / float64(size)))
+	if totalPages < 1 {
+		totalPages = 1
+	}
+	if page > totalPages {
+		page = totalPages
+		q.Offset = (page - 1) * size
+		rows, total, err = s.store.ListByoNodes(r.Context(), q)
+		if err != nil {
+			return nil, 0, page, totalPages, err
+		}
+	}
+	return rows, total, page, totalPages, nil
+}
+
+// byoPageLinks renders the numbered links around the current page of one BYO
+// section (pageKey selects which).
+func byoPageLinks(base url.Values, search, pageKey string, page, totalPages int) []adminPageLink {
+	from, to := page-adminByoPageWindow, page+adminByoPageWindow
+	if from < 1 {
+		from = 1
+	}
+	if to > totalPages {
+		to = totalPages
+	}
+	out := make([]adminPageLink, 0, to-from+1)
+	for p := from; p <= to; p++ {
+		out = append(out, adminPageLink{Num: p, Href: adminByoHref(base, search, pageKey, p), Current: p == page})
+	}
+	return out
 }
 
 // recentMonths returns the last n billing periods ('YYYYMM', UTC), newest first,
@@ -721,13 +805,36 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 	// One grouped query for every node's live file count / safe-to-uninstall
 	// time, same reasoning as monthly above: the nodes table renders every row
 	// from a single read, never one query per node.
+	//
+	// THIS is where the measured per-render win of the BYO work actually
+	// landed — stored_files.node_id was unindexed, so grouping by it meant a
+	// row lookup per live file plus a sort. Measured with EXPLAIN QUERY PLAN:
+	//
+	//	before: SEARCH stored_files USING INDEX idx_stored_files_expires (expires_at>?)
+	//	        USE TEMP B-TREE FOR GROUP BY
+	//	after:  SEARCH stored_files USING COVERING INDEX idx_stored_files_node (node_id>?)
+	//
+	// i.e. it no longer touches a single stored_files ROW (everything it needs
+	// is in the index) and no longer sorts the result set to group it. It is
+	// still a whole-relation read — it is a GROUP BY over every node, and it
+	// feeds the FLEET table too, so scoping it to the BYO page would just mean
+	// a second query for the same data. One grouped read, never an N+1.
 	fileCounts, fcErr := s.store.NodeFileCounts(r.Context(), now)
 	if fcErr != nil {
 		log.Printf("admin: NodeFileCounts failed: %v", fcErr)
 	}
 	var nodeVs []adminNodeView
-	// allNodes is loaded ONCE and fed to both the nodes section and the two
-	// rollout panels; the panels used to re-query the same rows per track.
+	// allNodes is loaded ONCE and fed to both the fleet nodes section and the
+	// two rollout panels; the panels used to re-query the same rows per track.
+	//
+	// BE HONEST ABOUT WHAT THIS STILL COSTS: this read is every node row,
+	// including every BYO one. The BYO *table* no longer depends on it (it
+	// pages in SQL, below), but the BYO rollout panel does — byoOpenBatchMembers
+	// derives batch membership from the full ordered node set, and the panel
+	// must not disagree with what /api/nodes/update-check will actually allow.
+	// Bounding that means changing the rollout decision semantics, which is a
+	// separate change with its own risk. So: one full node read per admin home
+	// render remains, and it is the rollout panels that require it.
 	var allNodes []Node
 	nodesErr := false
 	if ns, nerr := s.store.ListNodes(r.Context()); nerr != nil {
@@ -743,15 +850,59 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 			fleetNodeCount++
 		}
 	}
-	// The BYO rows come off the SAME nodeVs slice (one ListNodes read, one
-	// grouped NodeFileCounts read) — the BYO tables add no query at all, and
-	// must not: their row count is unbounded, so a per-row query here would be
-	// the worst possible place for an N+1. Two batched email lookups (one per
-	// table, each bounded by that table's own display cap) is still O(1)
-	// queries per page load, not O(rows).
-	byoNodeVs, byoNodeCount, byoRemovedVs, byoRemovedCount := byoNodeViews(nodeVs)
-	byoNodeVs = fillByoOwnerEmails(r.Context(), byoNodeVs, s.store.AdminUserEmailsByIDs)
-	byoRemovedVs = fillByoOwnerEmails(r.Context(), byoRemovedVs, s.store.AdminUserEmailsByIDs)
+	// The BYO tables are SEARCHED and PAGED IN SQL (ListByoNodes), not carved
+	// out of nodeVs in Go, so an operator can reach a specific node instead of
+	// only the top of a ranked list, and the unsearched live page stops reading
+	// at the LIMIT (see ListByoNodes for the query plan and for the case —
+	// search — where the whole matching index range is still walked to count).
+	//
+	// Four bounded queries per render: two counts + two page reads (live and
+	// removed), plus one batched email lookup per table. Still O(1) queries per
+	// page load, never O(rows) — a per-row query here would be the worst
+	// possible place for an N+1.
+	//
+	// Search is CLAMPED (clampByoSearch) before it reaches SQL: past SQLite's
+	// LIKE pattern limit the query errors, and an error rendered as "0 matches"
+	// is a confident wrong answer in the one table where believing "there is no
+	// such node" is expensive. When the query fails anyway, byoErr/remErr are
+	// surfaced in the UI instead of an empty table.
+	byoSearch := clampByoSearch(strings.TrimSpace(q.Get(byoSearchParam)))
+	byoPage := adminByoPageParam(q, byoPageParam)
+	byoRemPage := adminByoPageParam(q, byoRemPageParam)
+	byoRows, byoNodeCount, byoPage, byoTotalPages, byoErr :=
+		s.listByoPage(r, AdminByoNodeQuery{Search: byoSearch}, byoPage, adminByoNodesShown)
+	if byoErr != nil {
+		log.Printf("admin: ListByoNodes failed: %v", byoErr)
+	}
+	// The removed section is a SEPARATE, much shorter page: it is the entry
+	// point to /restore for a recent mistake, not an archive of every uninstall
+	// ever (that is the audit log's job). It IS searched and it IS paged — a
+	// search matching six removed nodes must not leave the sixth unreachable,
+	// or "findable however old the uninstall is" would only hold for searches
+	// narrow enough to match five.
+	byoRemovedRows, byoRemovedCount, byoRemPage, byoRemTotalPages, remErr :=
+		s.listByoPage(r, AdminByoNodeQuery{Search: byoSearch, Removed: true}, byoRemPage, adminByoRemovedShown)
+	if remErr != nil {
+		log.Printf("admin: ListByoNodes(removed) failed: %v", remErr)
+	}
+	byoNodeVs := fillByoOwnerEmails(r.Context(),
+		nodeViews(byoRows, monthly, fileCounts, s.now(), st), s.store.AdminUserEmailsByIDs)
+	byoRemovedVs := fillByoOwnerEmails(r.Context(),
+		nodeViews(byoRemovedRows, monthly, fileCounts, s.now(), st), s.store.AdminUserEmailsByIDs)
+	byoPrev, byoNext := "", ""
+	if byoPage > 1 {
+		byoPrev = adminByoHref(q, byoSearch, byoPageParam, byoPage-1)
+	}
+	if byoPage < byoTotalPages {
+		byoNext = adminByoHref(q, byoSearch, byoPageParam, byoPage+1)
+	}
+	byoRemPrev, byoRemNext := "", ""
+	if byoRemPage > 1 {
+		byoRemPrev = adminByoHref(q, byoSearch, byoRemPageParam, byoRemPage-1)
+	}
+	if byoRemPage < byoRemTotalPages {
+		byoRemNext = adminByoHref(q, byoSearch, byoRemPageParam, byoRemPage+1)
+	}
 	var tokenVs []adminFleetTokenView
 	if fts, ferr := s.store.ListActiveFleetTokens(r.Context()); ferr != nil {
 		log.Printf("admin: ListActiveFleetTokens failed: %v", ferr)
@@ -805,7 +956,16 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		Nodes: nodeVs, FleetNodeCount: fleetNodeCount, FleetTokens: tokenVs,
 		ByoNodes: byoNodeVs, ByoNodeCount: byoNodeCount,
 		ByoRemovedNodes: byoRemovedVs, ByoRemovedNodeCount: byoRemovedCount,
-		Plans: planVs, ActivePlans: activePlanVs,
+		ByoSearch: byoSearch, ByoPage: byoPage, ByoTotalPages: byoTotalPages,
+		ByoPrevHref: byoPrev, ByoNextHref: byoNext,
+		ByoPages:       byoPageLinks(q, byoSearch, byoPageParam, byoPage, byoTotalPages),
+		ByoClearHref:   adminByoClearHref(q),
+		ByoErr:         byoErr != nil,
+		ByoRemovedPage: byoRemPage, ByoRemovedTotalPages: byoRemTotalPages,
+		ByoRemovedPrevHref: byoRemPrev, ByoRemovedNextHref: byoRemNext,
+		ByoRemovedPages: byoPageLinks(q, byoSearch, byoRemPageParam, byoRemPage, byoRemTotalPages),
+		ByoRemovedErr:   remErr != nil,
+		Plans:           planVs, ActivePlans: activePlanVs,
 		CentralStoredBytes: centralStored,
 		Passkeys:           passkeys,
 		PasskeysErr:        passkeysErr,

@@ -49,28 +49,56 @@ type adminHomeData struct {
 	PasskeysErr bool
 
 	// ByoNodes are USER-CONTRIBUTED nodes, in their own table with their own
-	// controls. Kept as a separate, PRE-FILTERED and PRE-CAPPED slice rather
-	// than a second {{if}} pass over Nodes, for two reasons: the population is
-	// unbounded (anyone can contribute a node, and the dashboard must not grow
-	// with the user base), and the two tables must never be able to render each
-	// other's rows — draining "our machine" and draining "a user's machine" are
-	// very different acts. ByoNodeCount is the count BEFORE the cap.
+	// controls. It is ONE PAGE, filtered/ranked/paged in SQL (ListByoNodes),
+	// never a second {{if}} pass over Nodes: the population is unbounded
+	// (anyone can contribute a node, and the dashboard must not grow with the
+	// user base), and the two tables must never be able to render each other's
+	// rows — draining "our machine" and draining "a user's machine" are very
+	// different acts. ByoNodeCount is the total number of MATCHES, not the
+	// page length.
 	ByoNodes     []adminNodeView
-	ByoNodeCount int
+	ByoNodeCount int64
+	// BYO table search + pagination state. ByoSearch is the filter (node id /
+	// owner email / label / region) shared by both BYO sections; the pager
+	// links carry it, and the user list's own q/sort/dir/page params, through
+	// unchanged.
+	ByoSearch     string
+	ByoPage       int
+	ByoTotalPages int
+	ByoPrevHref   string // empty = no previous page
+	ByoNextHref   string // empty = no next page
+	ByoPages      []adminPageLink
+	// ByoClearHref drops the BYO search while keeping the user list's own
+	// params — "clear" must not double as "reset the rest of the page".
+	ByoClearHref string
+	// ByoErr means the BYO query FAILED. It must render as a failure, not as
+	// an empty table: "共 0 台 / 没有匹配的自带节点" in answer to a query that
+	// errored is a confident wrong answer, and this is the table where acting
+	// on "there is no such node" costs the most.
+	ByoErr bool
 	// ByoRemovedNodes is a SEPARATE, small section rendered below the main BYO
 	// table for already-uninstalled BYO nodes, so /admin/nodes/{id}/restore —
 	// the documented manual recovery for a mistaken deregistration — always has
-	// a reachable row: the main table above ranks removed nodes last (see
-	// byoNodeViews), so once at least adminByoNodesShown non-removed nodes
-	// exist, a removed node would never earn a row there at all.
-	// ByoRemovedNodeCount is the count BEFORE that section's own (much smaller)
-	// cap, same convention as ByoNodeCount above.
-	ByoRemovedNodes     []adminNodeView
-	ByoRemovedNodeCount int
-	FleetTokens         []adminFleetTokenView
-	FleetNodeCount      int    // count of Nodes with OwnerType == "fleet" (matches table body's guard)
-	MintedToken         string // set once, right after minting; shown inline then gone
-	MintedInstallCmd    string // install one-liner for the freshly minted token
+	// a reachable row: the main table above lists only NON-removed nodes (see
+	// SQLiteStore.ListByoNodes), so a removed node would never earn a row
+	// there at all. It is searched with the same term as the main table AND
+	// paged with its own param (brp), so a specific removed node stays findable
+	// however old the uninstall is even when the search matches more of them
+	// than fit in one short page.
+	// ByoRemovedNodeCount is the total number of removed nodes MATCHING the
+	// current search, not the page length.
+	ByoRemovedNodes      []adminNodeView
+	ByoRemovedNodeCount  int64
+	ByoRemovedPage       int
+	ByoRemovedTotalPages int
+	ByoRemovedPrevHref   string
+	ByoRemovedNextHref   string
+	ByoRemovedPages      []adminPageLink
+	ByoRemovedErr        bool // same contract as ByoErr, for the removed query
+	FleetTokens          []adminFleetTokenView
+	FleetNodeCount       int    // count of Nodes with OwnerType == "fleet" (matches table body's guard)
+	MintedToken          string // set once, right after minting; shown inline then gone
+	MintedInstallCmd     string // install one-liner for the freshly minted token
 	// CentralStoredBytes is the ciphertext currently held on the app server's own
 	// disk (node_id unset) — the default fallback store, shown so the operator can
 	// see how much rides on central and decide whether to disable it.
@@ -552,6 +580,9 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 .byo-nodes{border-left:3px solid #d97706;padding-left:14px;margin:28px 0}
 .byo-nodes h2{margin-bottom:6px}
 .byo-warn{color:var(--muted);font-size:12px;margin:0 0 12px;max-width:760px}
+.byo-search{display:flex;gap:8px;align-items:center;margin:0 0 12px}
+.byo-search input[type=search]{font:inherit;padding:7px 9px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg)}
+.byo-search a{color:var(--a);text-decoration:none;font-size:13px}.byo-search a:hover{text-decoration:underline}
 .byo-nodes-removed{border-left:3px solid var(--muted);padding-left:14px;margin:16px 0 28px;opacity:.85}
 .byo-nodes-removed h2{margin-bottom:6px}
 .rollout{margin:0 0 28px}.rollout h2{margin-bottom:12px}
@@ -667,12 +698,28 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
      黄色左边框、抬头一句话说明），因为把用户的机器当成自己的机器去排空/移除，
      后果完全不同：那台机器上的文件是用户自己的，而且我们并不拥有那台机器。
      没有"删除"按钮 —— 删行是官方节点的退役操作，用户的节点由用户自己删。
-     这张表只列未卸载的节点（byoNodeViews 已把已卸载的挑到下面独立小节），
-     所以这里不再需要"已卸载"分支——一台已卸载的节点永远不会出现在这张表里，
-     恢复入口在下面那个不受这张表行数上限影响的小节。 */}}
+     这张表只列未卸载的节点（ListByoNodes 的 removed_at=0 过滤；已卸载的在下面
+     独立小节），所以这里不需要"已卸载"分支——一台已卸载的节点永远不会出现在
+     这张表里，恢复入口在下面那个不受本表分页影响的小节。 */}}
 <section class="nodes byo-nodes">
-<h2>自带节点（用户机器，共 {{.ByoNodeCount}} 台{{if gt .ByoNodeCount (len .ByoNodes)}}，下表只列最需要关注的 {{len .ByoNodes}} 台{{end}}）</h2>
+{{/* 标题在查询失败时绝不能报"共 0 台"——那是把一次错误说成了一个答案。 */}}
+<h2>自带节点（用户机器{{if .ByoErr}}，查询失败{{else if .ByoSearch}}，匹配"{{.ByoSearch}}"的共 {{.ByoNodeCount}} 台，第 {{.ByoPage}}/{{.ByoTotalPages}} 页{{else}}，共 {{.ByoNodeCount}} 台，第 {{.ByoPage}}/{{.ByoTotalPages}} 页{{end}}）</h2>
 <p class="byo-warn">这些不是我们的机器，是用户贡献的。排空/标记已移除只影响<b>该用户自己的</b>放置池与直连下载，机器本身仍在用户手里运行；先看清"剩余文件"再动手，节点上的文件没有副本。</p>
+{{/* 搜索是 GET（安全方法，不带 CSRF token，和用户列表的搜索一致）。隐藏字段把
+     用户列表自己的 q/sort/dir/period **和页码 page** 原样带过去：两张表各自分
+     页，提交节点表的搜索绝不能把用户列表的搜索、排序和页码清掉。这里刻意不带
+     bp/brp——换了搜索词，旧的页码没有意义，两个自带节点小节都回到第 1 页。 */}}
+<form method="get" action="/admin" class="byo-search">
+<input type="hidden" name="q" value="{{.Search}}">
+<input type="hidden" name="sort" value="{{.Sort}}">
+<input type="hidden" name="dir" value="{{.Dir}}">
+<input type="hidden" name="period" value="{{.Period}}">
+<input type="hidden" name="page" value="{{.Page}}">
+<input type="search" name="bq" value="{{.ByoSearch}}" placeholder="搜索：节点 ID / 用户邮箱 / 备注名 / 区域" maxlength="200" style="width:300px">
+<button type="submit">搜索</button>
+{{if .ByoSearch}}<a href="{{.ByoClearHref}}">清除</a>{{end}}
+</form>
+{{if .ByoErr}}<p class="err">自带节点查询失败，下表<b>不是</b>"没有匹配"的结果——是这次查询没跑成功。请查看服务端日志后重试；在确认之前不要据此认定某台节点不存在。</p>{{end}}
 <table>
 <thead><tr><th>备注 / ID</th><th>所属用户</th><th>IP</th><th>状态</th><th>版本</th><th>最后心跳(UTC)</th><th>排空</th><th>剩余文件 / 最早可安全卸载</th></tr></thead>
 <tbody>
@@ -696,21 +743,40 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <td>{{if .StoredFileCount}}{{.StoredFileCount}} 个 / {{ts .SafeToUninstallAt}}{{else}}0 个 · 可随时移除{{end}}</td>
 </tr>
 {{else}}
-<tr><td colspan="8" style="color:var(--muted)">暂无用户自带节点</td></tr>
+<tr><td colspan="8" style="color:var(--muted)">{{if .ByoErr}}查询失败，结果未知{{else if .ByoSearch}}没有匹配的自带节点{{else}}暂无用户自带节点{{end}}</td></tr>
 {{end}}
 </tbody></table>
+{{/* 分页导航是 GET 链接，不是表单：翻页不改任何状态。带页码的链接（不只是
+     上一页/下一页）是为了让"跳回第 1 页"这种最常见的动作只要一次点击。 */}}
+{{if gt .ByoTotalPages 1}}
+<div class="pager">
+{{if .ByoPrevHref}}<a href="{{.ByoPrevHref}}">← 上一页</a>{{else}}<span class="off">← 上一页</span>{{end}}
+{{range .ByoPages}}{{if .Current}}<b>{{.Num}}</b>{{else}}<a href="{{.Href}}">{{.Num}}</a>{{end}}{{end}}
+{{if .ByoNextHref}}<a href="{{.ByoNextHref}}">下一页 →</a>{{else}}<span class="off">下一页 →</span>{{end}}
+</div>
+{{/* 见 adminByoNodesShown 的注释：排序键 last_seen_at 每次在线节点心跳
+     （~30 秒一次）都会变，OFFSET 分页对仍在心跳的节点不是一次能走完的清点——
+     翻页时可能跳过或重复看到同一台在线节点。只对搜索、以及不再心跳的节点
+     （已离线/已卸载）才是可靠的。这里明说，免得管理员把"翻完所有页"当成
+     "点清了所有在线节点"。 */}}
+<p class="byo-warn">翻页看到的是当前这一刻的快照：在线节点每次心跳都会重新排名，翻页不保证遍历到每一台在线节点（可能跳过或重复）。要确认某一台节点还在，请用上面的搜索定位，不要靠翻页去清点。</p>
+{{end}}
 </section>
 
-{{/* 已卸载的自带节点：独立成节、单独限行（adminByoRemovedShown，远小于上面
-     那张表的上限），跟上面那张表用不同的样式（灰色左边框、略微淡化），操作员
-     一眼就能看出这是"卸载记录 + 手动纠错"区，不会跟当前在线的机器混着看、
-     误按到"恢复"。这是 /admin/nodes/{id}/restore 的唯一入口——上面那张表按
-     ranking 只显示未卸载节点，行数一旦被在线节点占满，已卸载节点在那张表里
-     永远排不到号，"恢复"就无处可按了。只在存在已卸载节点时渲染，免得健康的
-     部署也要看一个空表。 */}}
-{{if .ByoRemovedNodes}}
+{{/* 已卸载的自带节点：独立成节、单独一套很短的分页（adminByoRemovedShown，远小
+     于上面那张表的页长），跟上面那张表用不同的样式（灰色左边框、略微淡化），
+     操作员一眼就能看出这是"卸载记录 + 手动纠错"区，不会跟当前在线的机器混着
+     看、误按到"恢复"。这是 /admin/nodes/{id}/restore 的唯一入口——上面那张表
+     只列未卸载节点，已卸载节点在那张表里永远不会出现。它也分页（brp）：搜索命
+     中 6 台时，第 6 台不能够不着。只在有行或查询出错时渲染，免得健康的部署也要
+     看一个空表。 */}}
+{{if or .ByoRemovedNodes .ByoRemovedErr}}
 <section class="nodes byo-nodes-removed">
-<h2>已卸载的自带节点（共 {{.ByoRemovedNodeCount}} 台{{if gt .ByoRemovedNodeCount (len .ByoRemovedNodes)}}，仅显示最近卸载的 {{len .ByoRemovedNodes}} 台{{end}}）</h2>
+{{/* 标题必须说清"当前有没有在过滤"。上面那张表带搜索时会写"匹配 X 的共 N 台"，
+     这里以前只写一个光秃秃的"共 N 台"，看起来像是全部已卸载节点的总数，其实是
+     过滤后的数量——同一页上两个口径不一致最容易读错。 */}}
+<h2>已卸载的自带节点（{{if .ByoRemovedErr}}查询失败{{else if .ByoSearch}}匹配"{{.ByoSearch}}"的共 {{.ByoRemovedNodeCount}} 台，第 {{.ByoRemovedPage}}/{{.ByoRemovedTotalPages}} 页{{else}}共 {{.ByoRemovedNodeCount}} 台，第 {{.ByoRemovedPage}}/{{.ByoRemovedTotalPages}} 页{{end}}）</h2>
+{{if .ByoRemovedErr}}<p class="err">已卸载自带节点查询失败，下面<b>不是</b>"没有匹配"的结果。请查看服务端日志后重试。</p>{{end}}
 <p class="byo-warn">这些用户节点已被标记卸载，已退出对应用户的放置池/ICE/直连下载。如果是误操作或卸载脚本没跑完整，用"恢复"撤销——不影响它的文件与历史。</p>
 <table>
 <thead><tr><th>备注 / ID</th><th>所属用户</th><th>IP</th><th>版本</th><th>最后心跳(UTC)</th><th></th></tr></thead>
@@ -724,8 +790,20 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <td>{{if .LastSeenAt}}{{ts .LastSeenAt}}{{else}}—{{end}}</td>
 <td><form method="post" action="/admin/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('恢复该用户节点？它会重新进入该用户的放置池/ICE/直连下载。')"><button type="submit" title="清除已卸载标记（不影响它的文件与历史）">恢复</button></form></td>
 </tr>
+{{else}}
+{{/* 与上面的实时节点表一致：查询出错时也要在表内给一行明确的"查询失败"，
+     不能只留一个空 tbody——空表在这张"恢复"入口所在的表里尤其容易被读成
+     "没有已卸载节点"。 */}}
+<tr><td colspan="6" style="color:var(--muted)">{{if .ByoRemovedErr}}查询失败，结果未知{{else if .ByoSearch}}没有匹配的已卸载节点{{else}}暂无已卸载节点{{end}}</td></tr>
 {{end}}
 </tbody></table>
+{{if gt .ByoRemovedTotalPages 1}}
+<div class="pager">
+{{if .ByoRemovedPrevHref}}<a href="{{.ByoRemovedPrevHref}}">← 上一页</a>{{else}}<span class="off">← 上一页</span>{{end}}
+{{range .ByoRemovedPages}}{{if .Current}}<b>{{.Num}}</b>{{else}}<a href="{{.Href}}">{{.Num}}</a>{{end}}{{end}}
+{{if .ByoRemovedNextHref}}<a href="{{.ByoRemovedNextHref}}">下一页 →</a>{{else}}<span class="off">下一页 →</span>{{end}}
+</div>
+{{end}}
 </section>
 {{end}}
 

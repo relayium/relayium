@@ -8,8 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -143,7 +145,9 @@ CREATE TABLE IF NOT EXISTS nodes (
   last_seen_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_nodes_last_seen ON nodes(last_seen_at);
-CREATE INDEX IF NOT EXISTS idx_nodes_owner_type ON nodes(owner_type);
+-- idx_nodes_owner_type(owner_type) is dropped by the ALTER loop below on
+-- existing databases; not created here any more on a fresh one either — see
+-- the DROP INDEX next to idx_nodes_byo_rank for why it's dead weight.
 CREATE TABLE IF NOT EXISTS pending_node_deletes (
   blob_key    TEXT NOT NULL,
   node_id     TEXT NOT NULL,
@@ -609,10 +613,58 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 	// usage_events, so the recorded_at composite indexes an earlier version added
 	// here are dead weight — and they added write cost to every heartbeat's
 	// high-water update. Drop them.
+	//
+	// NOTE ON STARTUP COST: these run BEFORE the HTTP listener binds, so a
+	// CREATE INDEX over a large table delays /healthz becoming ok. The deploy
+	// health gate polls /healthz for a bounded time and reports a failure if it
+	// never answers, so a slow first index build can be misread as a broken
+	// deploy. Each statement therefore logs before it runs (a slow start must
+	// be diagnosable, not mysterious), and docs/DEPLOYMENT.md documents
+	// building these out of band with sqlite3 BEFORE the deploy — after which
+	// the CREATE INDEX IF NOT EXISTS here is a no-op.
 	for _, idx := range []string{
 		`DROP INDEX IF EXISTS idx_usage_user_recorded`,
 		`DROP INDEX IF EXISTS idx_usage_node_recorded`,
+		// stored_files.node_id was never indexed, so NodeFileCounts (once per
+		// admin-dashboard render, over the largest table here) grouped by an
+		// unindexed column: it walked idx_stored_files_expires, fetched the
+		// ROW behind every live file to read node_id, and then sorted the lot
+		// into a temp b-tree to group it. Composite with expires_at so the
+		// whole aggregate is answered from the index alone — no row lookups,
+		// no temp b-tree. Created here rather than in the base schema because
+		// node_id itself arrives via the SP2 ALTER block above.
+		`CREATE INDEX IF NOT EXISTS idx_stored_files_node ON stored_files(node_id, expires_at)`,
+		// The admin BYO table's live page: filter on owner_type, split on
+		// removed_at, then ORDER BY draining DESC, last_seen_at DESC, id ASC.
+		// Column order and per-column direction are chosen so SQLite can supply
+		// that order straight from the index and stop after LIMIT rows instead
+		// of sorting the whole matching population into a temp b-tree — see
+		// ListByoNodes, which explains why the ordering has no cross-table term
+		// in it any more.
+		`CREATE INDEX IF NOT EXISTS idx_nodes_byo_rank ON nodes(owner_type, removed_at, draining DESC, last_seen_at DESC, id ASC)`,
+		// Superseded by idx_nodes_byo_rank (same leading columns, wrong order
+		// for the ORDER BY). Only ever existed on machines that ran a pre-merge
+		// build of this branch; dropping it is free everywhere else.
+		`DROP INDEX IF EXISTS idx_nodes_byo`,
+		// PruneNodeAudit's cap is scoped to machine-written rows (auth =
+		// 'node-token'); without an index every 10-minute sweep full-scanned
+		// admin_audit even when there was nothing over the cap. The equality
+		// prefix makes the "how many machine rows are there" pre-check an index
+		// seek, and at/id carry the newest-first ordering the cap needs.
+		`CREATE INDEX IF NOT EXISTS idx_admin_audit_machine ON admin_audit(auth, at DESC, id DESC)`,
+		// idx_nodes_owner_type(owner_type) is now a strict prefix of
+		// idx_nodes_byo_rank(owner_type, removed_at, draining DESC,
+		// last_seen_at DESC, id ASC): any lookup the single-column index could
+		// serve, the wider one already serves just as well, so it is dead
+		// write cost on every insert/update to `nodes`. Checked before
+		// dropping: nothing in this codebase references it by name, and no
+		// query plan captured while writing this branch chose it over
+		// idx_nodes_byo_rank.
+		`DROP INDEX IF EXISTS idx_nodes_owner_type`,
 	} {
+		if strings.HasPrefix(idx, "CREATE INDEX") {
+			log.Printf("sqlite: ensuring index (may take a while on a large table, and runs before the listener binds): %s", idx)
+		}
 		if _, err := db.ExecContext(context.Background(), idx); err != nil {
 			db.Close()
 			return nil, err
@@ -3271,6 +3323,140 @@ func (s *SQLiteStore) ListNodes(ctx context.Context) ([]Node, error) {
 	return s.queryNodes(ctx, `SELECT `+nodeCols+` FROM nodes ORDER BY last_seen_at DESC`)
 }
 
+// adminByoSearchMax bounds the length of a BYO search term.
+//
+// Not a UX nicety: the term is wrapped in %…% and handed to LIKE, and SQLite
+// rejects a pattern past SQLITE_MAX_LIKE_PATTERN_LENGTH with "LIKE or GLOB
+// pattern too complex" — an ERROR, which the dashboard would otherwise have to
+// render as "no matches", i.e. a confident wrong answer in the one table where
+// acting on "there is no such node" is expensive. 200 is far above any real
+// term (a node id is 32 chars, an email under 100, a label shorter still), so
+// clamping to it cannot hide a match: a truncated substring pattern matches a
+// SUPERSET of what the full one would, and the clamped term is echoed back in
+// the search box so the operator sees exactly what was searched.
+const adminByoSearchMax = 200
+
+// clampByoSearch trims a search term to adminByoSearchMax runes (runes, not
+// bytes — cutting a UTF-8 sequence in half would produce a pattern that
+// matches nothing).
+func clampByoSearch(s string) string {
+	r := []rune(s)
+	if len(r) <= adminByoSearchMax {
+		return s
+	}
+	return string(r[:adminByoSearchMax])
+}
+
+// ListByoNodes returns one page of user-contributed nodes plus the total number
+// of matches. See AdminByoNodeQuery for what Search matches and why.
+//
+// Everything the admin BYO table needs — the owner_type filter, the
+// live/removed split, the text search, the ranking and the page window — is
+// expressed here in SQL. It used to be ListNodes (every row, fleet and BYO)
+// followed by a Go filter + sort.Slice + truncate, which gave an operator no
+// way to reach node #21 at all.
+//
+// WHAT SQLITE ACTUALLY DOES, for the unsearched live page (the one that
+// renders on every admin home load) — verified with EXPLAIN QUERY PLAN
+// against the REAL statements (real nodeCols, not a hand-written SELECT):
+//
+//	-- the COUNT(*):
+//	SEARCH nodes USING COVERING INDEX idx_nodes_byo_rank (owner_type=? AND removed_at=?)
+//	-- the page SELECT (all 28 nodeCols):
+//	SEARCH nodes USING INDEX idx_nodes_byo_rank (owner_type=? AND removed_at=?)
+//
+// Only the COUNT(*) is covering — it only needs the indexed columns. The page
+// SELECT reads every one of the 28 nodeCols, which idx_nodes_byo_rank does not
+// carry, so SQLite still does a row lookup per matching id; it is NOT a
+// covering-index scan, and no comment here should say otherwise. What does
+// hold: no temp b-tree for either — idx_nodes_byo_rank supplies the ORDER BY
+// directly, so the scan (and its row lookups) stops after LIMIT+OFFSET rows,
+// and the rows past the page are genuinely not read. That is only true
+// because the ordering is expressible by an index on `nodes` alone. An
+// earlier version ranked "still holding unexpired files"
+// second, via a correlated EXISTS over stored_files; no index can supply that
+// order, so SQLite read EVERY matching BYO row, ran the subquery per row, and
+// sorted the lot into a temp b-tree before applying LIMIT — i.e. the page
+// limit bounded what was RENDERED, never what was read. The term is gone:
+//   - it existed because the old table truncated at 20 rows with no way to see
+//     row 21, so the top 20 had to be the "right" 20. Search and pagination
+//     removed that constraint — every BYO node is now reachable — which is
+//     what makes dropping the tier honest rather than a regression;
+//   - the per-row "剩余文件 / 最早可安全卸载" column still shows the same fact
+//     on the row itself, which is where an operator reads it before acting.
+//
+// WHAT IS ACTUALLY LOST, recorded here as a decision rather than left to be
+// discovered as an accident: there is no longer any way to answer, FROM THIS
+// DASHBOARD, "which BYO nodes are still holding files" as a set. There is no
+// sort key and no filter for it, and Search (see AdminByoNodeQuery) matches
+// only id/label/region/owner-email — none of which is "has files". An
+// operator has to already know which node to look for (or page/search through
+// the whole live set and read the per-row column on each one); the old
+// ranking tier was the only way to get that answer as a LIST, and dropping it
+// removes that capability, not just a display nicety.
+//
+// What survives is `draining DESC` (an operation is already in progress and
+// the operator most likely came back to watch it), then last_seen_at DESC,
+// then id ASC — the id tiebreak keeps the order stable across refreshes
+// (SQLite, like sort.Slice, guarantees nothing for ties, and "where did that
+// row go" is the worst kind of phantom).
+//
+// A SEARCHED page cannot be covering (the LIKE terms and the users EXISTS are
+// outside the index) and the count is an aggregate, but both still scan the
+// index range in order rather than sorting: no temp b-tree appears in either.
+//
+// Removed rows rank by removed_at DESC, id ASC instead: that section is a
+// most-recent-mistake-first recovery list, not a history archive. `removed_at
+// != 0` is not an index constraint, so that query walks the owner_type='user'
+// range in removed_at order and sorts only the LAST term (ties on removed_at,
+// which are manual admin actions seconds apart — the partial sort is bounded
+// by a tie group, not by the population).
+// byoListWhereOrder builds the WHERE-clause fragment (with its bound args)
+// and the ORDER BY fragment ListByoNodes assembles into both its COUNT and
+// its page SELECT. Factored out to one definition, used by ListByoNodes
+// itself, so a test can EXPLAIN QUERY PLAN the REAL fragments the query
+// issues instead of a hand-copied literal — a copy would keep passing after
+// an ORDER BY change made only here; this can't, because it IS here.
+func byoListWhereOrder(q AdminByoNodeQuery) (where string, whereArgs []any, order string) {
+	where = ` WHERE owner_type='user' AND removed_at` + map[bool]string{false: `=0`, true: `!=0`}[q.Removed]
+	if search := clampByoSearch(q.Search); search != "" {
+		// The owner's email lives on users, reached with EXISTS rather than a
+		// JOIN so a node whose owner row is gone (deleted account) still lists
+		// and still matches on its own columns.
+		where += ` AND (id LIKE ? ESCAPE '\' OR label LIKE ? ESCAPE '\' OR region LIKE ? ESCAPE '\'
+		   OR EXISTS (SELECT 1 FROM users u WHERE u.id = nodes.owner_user_id AND u.email LIKE ? ESCAPE '\'))`
+		like := "%" + escapeLike(search) + "%"
+		whereArgs = append(whereArgs, like, like, like, like)
+	}
+	order = ` ORDER BY removed_at DESC, id ASC`
+	if !q.Removed {
+		order = ` ORDER BY draining DESC, last_seen_at DESC, id ASC`
+	}
+	return where, whereArgs, order
+}
+
+func (s *SQLiteStore) ListByoNodes(ctx context.Context, q AdminByoNodeQuery) ([]Node, int64, error) {
+	where, whereArgs, order := byoListWhereOrder(q)
+
+	var total int64
+	if err := s.reader().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM nodes`+where, whereArgs...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 1
+	}
+	listArgs := append(append([]any{}, whereArgs...), limit, q.Offset)
+	nodes, err := s.queryNodes(ctx,
+		`SELECT `+nodeCols+` FROM nodes`+where+order+` LIMIT ? OFFSET ?`, listArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	return nodes, total, nil
+}
+
 // UserNodes returns a user's own (owner_type='user') nodes online since
 // `since`. Uninstalled nodes are excluded, same as OnlineNodes — this feeds ICE
 // and the strict-mode "do you have a node at all" check, and neither should
@@ -3925,4 +4111,127 @@ func (s *SQLiteStore) ListAudit(ctx context.Context, limit, offset int, action s
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// PruneAudit deletes audit rows older than `before`. Age-based, exactly like
+// PruneUploadEvents / PruneDownloadReceipts; the retention window itself lives
+// in gc.go (auditRetentionDefault) because that is where every other retention
+// knob is defined.
+func (s *SQLiteStore) PruneAudit(ctx context.Context, before int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM admin_audit WHERE at < ?`, before)
+	return err
+}
+
+// PruneNodeAudit keeps only the newest `keep` MACHINE-written audit rows and
+// deletes the rest.
+//
+// This is the burst bound that an age-based prune cannot provide: a node-token
+// holder looping register→deregister writes one node.deregister row per
+// iteration — each one a genuine state transition, so the "only audit a real
+// change" guard in handleNodeDeregister does not stop it — and
+// /api/nodes/register has no rate limit. Age retention alone therefore leaves
+// the table unbounded WITHIN the window.
+//
+// Machine rows are identified by auth = nodeAuditAuth ('node-token'), the
+// actual authentication that produced the row, not by `actor LIKE 'node:%'`.
+// The actor string is a formatted display value and an operator could in
+// principle create an admin username that matches the pattern; `auth` is set
+// by writeNodeAudit alone and is not operator-influenced, so it cannot be made
+// to point the eviction at human rows.
+//
+// Scoped to machine rows on purpose. Evicting rows is destroying evidence, so
+// the ceiling is applied only to the writer bounded ELSEWHERE ONLY BY AGE, and
+// never to admin/human rows: no flood of machine traffic can push a single
+// "who changed this setting" entry out of the trail.
+//
+// There are in fact two writers an unauthenticated party can drive at will,
+// not one, and they are bounded differently:
+//   - node-token registrations (this cap): no rate limit on
+//     /api/nodes/register, one row per register/deregister call, unbounded
+//     within the two-year age window without this cap.
+//   - failed admin logins (handleAdminLogin's AuditLoginFail, auth=""): every
+//     wrong password writes a row too, and that row is NOT auth=nodeAuditAuth
+//     so this cap does not touch it. It is bounded only by (a) the
+//     Service.adminLogins per-IP lockout (loginThrottle), which throttles the
+//     RATE from one source but does not cap the total from many source IPs,
+//     and (b) the two-year age prune
+//     (PruneAudit), the same blunt bound every other row in the table has.
+//     A distributed flood of login attempts is therefore still only
+//     age-bounded, not row-capped, same as it was before this branch.
+//
+// The cost of the machine-row bound is that under a real flood the OLDEST
+// machine rows are lost while the flood's own rows are kept — accepted
+// because the alternative (keep oldest) would silently stop recording
+// legitimate deregistrations forever once the ceiling was reached.
+//
+// COST IN THE STEADY STATE, which is the case that runs forever: an earlier
+// version ran one unconditional statement that materialised up to `keep` ids
+// into a NOT IN list and full-scanned admin_audit inside a write transaction —
+//
+//	SCAN admin_audit
+//	LIST SUBQUERY 1
+//	  SCAN admin_audit USING INDEX idx_admin_audit_at
+//	  USE TEMP B-TREE FOR LAST TERM OF ORDER BY
+//
+// — every 10 minutes, whether or not anything was over the cap. It now starts
+// with a count over idx_admin_audit_machine (an equality seek on auth, then a
+// covering walk of only the machine rows) and returns immediately when the cap
+// is not exceeded, which is every sweep of a healthy deployment. Only when it
+// IS exceeded does it read the boundary row and delete by (at, id) range —
+// still index-driven, and with no 100k-element IN list.
+//
+// keep <= 0 is treated as "no cap" rather than "delete everything": a
+// misconfigured knob must not wipe the audit trail.
+//
+// pruneNodeAuditPrecheckQuery is the exact statement the pre-check below
+// issues, factored out to one definition so a test can EXPLAIN QUERY PLAN the
+// literal PruneNodeAudit actually runs instead of a hand-copied duplicate that
+// could silently drift from it.
+const pruneNodeAuditPrecheckQuery = `SELECT COUNT(*) FROM admin_audit WHERE auth = ?`
+
+// pruneNodeAuditBoundaryRuns counts how many times PruneNodeAudit has gone
+// past the pre-check to run the boundary-row query. It exists ONLY so a test
+// can prove the pre-check actually short-circuits an under-cap sweep: the row
+// OUTCOME of an under-cap sweep is identical whether the pre-check runs or is
+// deleted entirely (the boundary query's OFFSET keep-1 also finds no row on a
+// table shorter than keep, so it also returns nil) — a row-count assertion
+// alone cannot tell "the pre-check ran and skipped the expensive path" from
+// "there is no pre-check, and the expensive path happened to be a no-op
+// anyway". This counter is the only thing that tells the two apart. Never
+// read in production; incremented unconditionally (a plain int64, not behind
+// a build tag) because the package's tests are not run with t.Parallel, so a
+// package-level counter needs no synchronization beyond atomicity against a
+// future parallel test.
+var pruneNodeAuditBoundaryRuns int64
+
+func (s *SQLiteStore) PruneNodeAudit(ctx context.Context, keep int) error {
+	if keep <= 0 {
+		return nil
+	}
+	// Cheap pre-check: the no-op case must not pay for the delete.
+	var n int64
+	if err := s.reader().QueryRowContext(ctx,
+		pruneNodeAuditPrecheckQuery, nodeAuditAuth).Scan(&n); err != nil {
+		return err
+	}
+	if n <= int64(keep) {
+		return nil
+	}
+	atomic.AddInt64(&pruneNodeAuditBoundaryRuns, 1)
+	// The keep-th newest machine row is the boundary; everything strictly
+	// older than it goes. Ordering matches the index's own (at DESC, id DESC),
+	// so this is a seek + skip, not a sort.
+	var bAt, bID int64
+	if err := s.reader().QueryRowContext(ctx,
+		`SELECT at, id FROM admin_audit WHERE auth = ?
+		  ORDER BY at DESC, id DESC LIMIT 1 OFFSET ?`, nodeAuditAuth, keep-1).Scan(&bAt, &bID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil // raced with another deleter; nothing to do
+		}
+		return err
+	}
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM admin_audit
+		   WHERE auth = ? AND (at < ? OR (at = ? AND id < ?))`, nodeAuditAuth, bAt, bAt, bID)
+	return err
 }

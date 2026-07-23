@@ -844,6 +844,15 @@ type Store interface {
 	StorageNodes(ctx context.Context, since, minFree int64) ([]Node, error)
 	OnlineNodes(ctx context.Context, since int64) ([]Node, error)
 	ListNodes(ctx context.Context) ([]Node, error)
+	// ListByoNodes returns ONE PAGE of user-contributed (owner_type='user')
+	// nodes matching q, plus the total number of matches. Filtering, ranking
+	// and paging all happen in SQL rather than in Go, so an operator can reach
+	// any node in an unbounded population instead of only the top of a list.
+	// For the unsearched live page the ranking is index-supplied and the rows
+	// past the page really are not read; see SQLiteStore.ListByoNodes for the
+	// exact query plan, including the cases (search, the removed section) where
+	// more than the page is touched.
+	ListByoNodes(ctx context.Context, q AdminByoNodeQuery) ([]Node, int64, error)
 	// UserNodes returns a user's own (owner_type='user') nodes seen since `since`.
 	UserNodes(ctx context.Context, userID string, since int64) ([]Node, error)
 	// UserNodesAll returns all of a user's own nodes regardless of last_seen,
@@ -1029,4 +1038,35 @@ type Store interface {
 	InsertAudit(ctx context.Context, e AuditEntry) error
 	// ListAudit 按时间倒序返回审计记录。action 非空时按动作过滤。
 	ListAudit(ctx context.Context, limit, offset int, action string) ([]AuditEntry, error)
+	// PruneAudit deletes audit rows written strictly before `before`, the
+	// age-based half of keeping admin_audit bounded (see auditRetentionDefault
+	// for why the window is deliberately long). NOT scoped to machine rows: it
+	// deletes ADMIN rows of that age too, which is why the configured window
+	// is the one knob here that can destroy the human audit trail.
+	PruneAudit(ctx context.Context, before int64) error
+	// PruneNodeAudit keeps only the newest `keep` MACHINE-written audit rows
+	// (auth = 'node-token'), the burst-based half. Admin/human rows are never
+	// touched by it — see auditNodeRowsMax.
+	PruneNodeAudit(ctx context.Context, keep int) error
+}
+
+// AdminByoNodeQuery is one page of the admin dashboard's BYO node table.
+//
+// Search matches the three things an operator actually has in hand when
+// hunting one node out of an unbounded population: the node id (from a log
+// line), the owner's email (from a support ticket), and the label/region the
+// owner set on the machine. Empty = no filter.
+//
+// Removed selects WHICH half of the population is being listed: false = live
+// and draining nodes (the main table), true = already-uninstalled ones (the
+// separate small section that is the only entry point to /restore). They are
+// two queries rather than one flag-less list precisely so a pile of tombstones
+// can never crowd the live rows out of the page — and so a search can still
+// reach a removed node.
+// Search is clamped to adminByoSearchMax before it reaches LIKE; a term past
+// SQLite's pattern limit is an error, not an empty result.
+type AdminByoNodeQuery struct {
+	Search        string
+	Removed       bool
+	Limit, Offset int
 }
