@@ -207,12 +207,25 @@ func TestListByoNodesRanksDrainingFirstThenHeartbeat(t *testing.T) {
 // live page's ordering. A Go-level row-count assertion cannot tell the two
 // apart — SQLite returns the same 20 rows whether it stopped at the LIMIT or
 // sorted the whole population first.
+//
+// Builds the statement from byoListWhereOrder — the same function
+// ListByoNodes itself calls — rather than a hand-written copy of the SQL, so
+// an ORDER BY change made inside that function (i.e. inside the real code
+// path) cannot slip past this test. A hand-copied literal previously here
+// caught the index being dropped only by accident; it would not have noticed
+// the ORDER BY itself drifting. (Deliberately broke this by swapping
+// `last_seen_at DESC` for `last_seen_at ASC` inside byoListWhereOrder: the
+// index's column order no longer matches the requested ORDER BY, so the
+// planner still used idx_nodes_byo_rank for the WHERE but fell back to
+// `USE TEMP B-TREE FOR LAST 2 TERMS OF ORDER BY` — this test failed on that,
+// exactly the case it exists to catch; restored after confirming the
+// failure.)
 func TestListByoNodesLivePageOrderingIsIndexSupplied(t *testing.T) {
 	s := newTestStore(t)
+	where, whereArgs, order := byoListWhereOrder(AdminByoNodeQuery{Limit: 20})
+	args := append(append([]any{}, whereArgs...), 20, 0)
 	rows, err := s.db.QueryContext(context.Background(),
-		`EXPLAIN QUERY PLAN SELECT `+nodeCols+` FROM nodes
-		  WHERE owner_type='user' AND removed_at=0
-		  ORDER BY draining DESC, last_seen_at DESC, id ASC LIMIT 20 OFFSET 0`)
+		`EXPLAIN QUERY PLAN SELECT `+nodeCols+` FROM nodes`+where+order+` LIMIT ? OFFSET ?`, args...)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -754,6 +754,12 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 {{range .ByoPages}}{{if .Current}}<b>{{.Num}}</b>{{else}}<a href="{{.Href}}">{{.Num}}</a>{{end}}{{end}}
 {{if .ByoNextHref}}<a href="{{.ByoNextHref}}">下一页 →</a>{{else}}<span class="off">下一页 →</span>{{end}}
 </div>
+{{/* 见 adminByoNodesShown 的注释：排序键 last_seen_at 每次在线节点心跳
+     （~30 秒一次）都会变，OFFSET 分页对仍在心跳的节点不是一次能走完的清点——
+     翻页时可能跳过或重复看到同一台在线节点。只对搜索、以及不再心跳的节点
+     （已离线/已卸载）才是可靠的。这里明说，免得管理员把"翻完所有页"当成
+     "点清了所有在线节点"。 */}}
+<p class="byo-warn">翻页看到的是当前这一刻的快照：在线节点每次心跳都会重新排名，翻页不保证遍历到每一台在线节点（可能跳过或重复）。要确认某一台节点还在，请用上面的搜索定位，不要靠翻页去清点。</p>
 {{end}}
 </section>
 
@@ -784,6 +790,11 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <td>{{if .LastSeenAt}}{{ts .LastSeenAt}}{{else}}—{{end}}</td>
 <td><form method="post" action="/admin/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('恢复该用户节点？它会重新进入该用户的放置池/ICE/直连下载。')"><button type="submit" title="清除已卸载标记（不影响它的文件与历史）">恢复</button></form></td>
 </tr>
+{{else}}
+{{/* 与上面的实时节点表一致：查询出错时也要在表内给一行明确的"查询失败"，
+     不能只留一个空 tbody——空表在这张"恢复"入口所在的表里尤其容易被读成
+     "没有已卸载节点"。 */}}
+<tr><td colspan="6" style="color:var(--muted)">{{if .ByoRemovedErr}}查询失败，结果未知{{else if .ByoSearch}}没有匹配的已卸载节点{{else}}暂无已卸载节点{{end}}</td></tr>
 {{end}}
 </tbody></table>
 {{if gt .ByoRemovedTotalPages 1}}

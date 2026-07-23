@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -134,12 +135,23 @@ func TestPruneNodeAuditCapsMachineRowsAndSparesAdminRows(t *testing.T) {
 // one where there is NOTHING to do: it must not full-scan admin_audit to
 // discover that. The pre-check is a count over idx_admin_audit_machine, and
 // the delete only runs when the cap is actually exceeded.
+//
+// A row-count assertion alone does NOT prove the pre-check ran: deleting the
+// pre-check entirely still leaves an under-cap sweep a no-op, because the
+// boundary query's `OFFSET keep-1` also finds no row on a table shorter than
+// keep and returns nil the same way (see pruneNodeAuditBoundaryRuns). So this
+// test asserts, via that counter, that the boundary query did NOT execute —
+// the only thing that actually distinguishes "the pre-check short-circuited"
+// from "there was nothing to do either way". Deliberately breaking this test
+// by deleting the pre-check block: the boundary query then always runs, the
+// counter advances, and this test fails (verified by hand while writing it).
 func TestPruneNodeAuditNoOpIsIndexed(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	for i := 0; i < 5; i++ {
 		seedNodeAudit(t, s, int64(100+i), "n", AuditNodeDeregister)
 	}
+	before := atomic.LoadInt64(&pruneNodeAuditBoundaryRuns)
 	// Under the cap: nothing may be deleted.
 	if err := s.PruneNodeAudit(ctx, 100); err != nil {
 		t.Fatal(err)
@@ -147,10 +159,17 @@ func TestPruneNodeAuditNoOpIsIndexed(t *testing.T) {
 	if rows, _ := s.ListAudit(ctx, 100, 0, ""); len(rows) != 5 {
 		t.Fatalf("under-cap sweep deleted rows: %d left, want 5", len(rows))
 	}
+	if after := atomic.LoadInt64(&pruneNodeAuditBoundaryRuns); after != before {
+		t.Fatalf("pre-check did not short-circuit: boundary-row query ran on an "+
+			"under-cap sweep (count %d -> %d)", before, after)
+	}
 	// And the pre-check must be answered from the index, not a table scan.
+	// EXPLAIN QUERY PLAN on pruneNodeAuditPrecheckQuery itself — the literal
+	// PruneNodeAudit issues, not a copy of it — so this can't drift from what
+	// the pre-check actually runs.
 	var detail string
 	if err := s.db.QueryRowContext(ctx,
-		`EXPLAIN QUERY PLAN SELECT COUNT(*) FROM admin_audit WHERE auth = ?`,
+		`EXPLAIN QUERY PLAN `+pruneNodeAuditPrecheckQuery,
 		nodeAuditAuth).Scan(new(int), new(int), new(int), &detail); err != nil {
 		t.Fatal(err)
 	}
