@@ -47,6 +47,9 @@ func TestSecurityHeaders(t *testing.T) {
 		"connect-src 'self' https://*.relayium.com;",
 		"'nonce-",           // per-request script nonce present
 		"'sha256-deadbeef'", // SPA inline-script hash folded in
+		// libsodium is WASM and WebAssembly.instantiate answers to script-src.
+		// Drop this and every transfer breaks at startup — see buildCSP.
+		"'wasm-unsafe-eval'",
 	} {
 		if !strings.Contains(csp, must) {
 			t.Errorf("CSP missing %q; got %q", must, csp)
@@ -56,6 +59,10 @@ func TestSecurityHeaders(t *testing.T) {
 	// connect-src must not allow arbitrary-host exfiltration.
 	if strings.Contains(csp, "'unsafe-inline'; connect") || strings.Contains(csp, "script-src 'self' 'unsafe-inline'") {
 		t.Errorf("script-src must not allow 'unsafe-inline'; got %q", csp)
+	}
+	// 'wasm-unsafe-eval' must not be widened into full 'unsafe-eval'.
+	if strings.Contains(csp, " 'unsafe-eval'") {
+		t.Errorf("script-src must not allow 'unsafe-eval'; got %q", csp)
 	}
 	if strings.Contains(csp, "connect-src 'self' https:;") || strings.Contains(csp, "connect-src 'self' https: ") || strings.Contains(csp, "wss:") {
 		t.Errorf("connect-src must not carry a broad https:/wss: exfil wildcard; got %q", csp)

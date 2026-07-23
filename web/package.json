@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
     "gen:pages": "node scripts/gen-pages.mjs",
-    "test": "vitest"
+    "test": "vitest",
+    "test:e2e": "node e2e/lan-transfer.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.1.2",

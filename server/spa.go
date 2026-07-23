@@ -32,7 +32,18 @@ import (
 // 'unsafe-inline' for now (Svelte style attributes). frame-ancestors 'none' is
 // the clickjacking defense.
 func buildCSP(nonce string, spaScriptHashes []string) string {
-	script := "script-src 'self' 'nonce-" + nonce + "'"
+	// 'wasm-unsafe-eval' is required, not optional: libsodium is a WebAssembly
+	// module, and WebAssembly.instantiate is governed by script-src. Without this
+	// token the browser refuses to compile it, crypto.ready() rejects, and the app
+	// never gets past "connecting to the signaling server" — i.e. NO transfer of
+	// any kind works. Production has never hit it only because nginx serves the
+	// SPA shell itself and this header never reaches those responses; anything
+	// served by Go directly (local runs, a nginx-less deploy) was fully broken.
+	// A regression test (TestSecurityHeaders) and e2e/lan-transfer.mjs both cover it.
+	//
+	// It is the narrow token, NOT 'unsafe-eval': it permits WebAssembly
+	// compilation and nothing else — eval()/new Function() stay blocked.
+	script := "script-src 'self' 'wasm-unsafe-eval' 'nonce-" + nonce + "'"
 	for _, h := range spaScriptHashes {
 		script += " " + h
 	}

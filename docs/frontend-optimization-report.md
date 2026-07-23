@@ -143,3 +143,43 @@ QuotaMeters 里另有含义，同名的全局规则会漏进去。
 生产构建 + headless Chrome 冒烟（首页与 /offline-transfer 渲染正常、无 console error、
 canonical 随路由更新、libsodium 懒加载生效、进度条与文件选择框的全局样式解析正确）。
 **未做**：真机/多浏览器手测——#4 的 Firefox 下载与 #8 的换版时机最终要在真环境确认。
+
+---
+
+## #12 / #13 实施状态（2026-07-23，第二轮）
+
+**#13 webrtc 去重**：传输骨架抽成 `web/src/lib/webrtc-core.ts` 的 `establish()`。
+`connect()` 只剩 commit-reveal（挂在 beforeSdp/onAnswer/afterSdp 三个钩子上），
+`connectResume()` 变成一行 `establish({ resume: true })`——"纯传输"从注释里的承诺
+变成了代码里的事实。世代标记（`resume: true`）现在只有一处、且双向生效。
+`connectResume` 原本零测试，先补了 6 条特征测试再动刀。
+
+**#12 App.svelte 拆分**：1809 → 1129 行。
+- ① 收发管道 + 传输状态 → `web/src/lib/transfer-session.svelte.ts`（752 行）的
+  `createTransferSession(deps)`，依赖（signaling/rtcConfig/文案/flash）显式注入。
+- ② 调试面板 → `web/src/lib/DebugPanel.svelte`（102 行，自带轮询与样式）。
+- ③ **没做，且不该做**：把 Account 改成动态 import 实测让首屏**变大 20KB**
+  （entry 108.18+41.55KB → 135.66+34.71KB，rolldown 把原本共享的块复制进了入口）。
+  报告里"~60KB+ 源码"是源码行数，不等于产物字节。已实测否决。
+
+### 顺带修掉的两个真 bug（都不是本轮引入的）
+
+1. **CSP 挡掉 WASM**（`server/spa.go`）：`script-src` 缺 `'wasm-unsafe-eval'`，
+   libsodium 编译不了 → `ready()` reject → 应用卡在"连接信令服务器中"，**任何传输
+   都用不了**。产线没暴露只是因为 nginx 自己兜静态壳、这个响应头压根没发出去；
+   Go 直接兜 SPA 的部署（本地跑、无 nginx 部署）是完全坏的。已加 token + Go 单测。
+   已在 826842d（本轮改动之前）上复现，确认非本轮回归。
+2. **建连途中失败抛 ReferenceError**（`App.svelte`）：`connect()` 会在建连过程中
+   同步回调 onStateChange，而接收端的掉线处理函数当时还是个未初始化的 const（TDZ），
+   于是抛 ReferenceError 而不是干净地失败，接收卡片卡死。改成函数声明；E2E 用故障
+   注入钉住（**先验证过：不修则该用例必红**）。
+
+### 新增：真·端到端回归网
+
+`web/e2e/lan-transfer.mjs`（`npm run test:e2e`，说明见 `web/e2e/README.md`）。
+两个真标签页跑一次真传输，按 SHA-256 比对收到的字节；外加 SAS 一致性、确认卡片
+显示文件名、建连失败要报得干净四项。只桩掉操作系统的"另存为"对话框。
+这补上的正是 #12 最大的风险面——收发管道此前**一行单元测试都没有**。
+
+**验证**：`npm run check` 0 error/0 warning；vitest 580 条全绿；`go test ./...` 全绿；
+E2E 连跑多次全绿。仍**未做**真机/多浏览器手测。
