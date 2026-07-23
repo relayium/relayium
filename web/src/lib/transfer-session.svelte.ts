@@ -76,6 +76,17 @@ const UI_TICK_MS = 150;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * 这一块写下去会不会超出 manifest 为该文件声明的大小。
+ *
+ * 单独提出来是为了能被测到：调用点在接收管道的闭包深处，那里没法直接构造。
+ * `declared` 为 undefined 表示这个下标在 manifest 里根本不存在（发送端多发了一个
+ * 文件），按 0 处理——任何字节都算越界。
+ */
+export function wouldExceedDeclared(declared: number | undefined, offset: number, chunkLen: number): boolean {
+  return offset + chunkLen > (declared ?? 0);
+}
+
 export function createTransferSession(deps: SessionDeps) {
   let incoming = $state<Incoming | null>(null); // pending receive awaiting accept/reject
   let recv = $state<Xfer | null>(null);
@@ -370,6 +381,20 @@ export function createTransferSession(deps: SessionDeps) {
         return;
       }
       if (out.chunk && sink) {
+        // 越界写入的闸门。manifest 声明了每个文件的大小，接收端正是拿这个数字向用户
+        // 展示"要收什么"、并据此做出接受的决定；但**发送端完全可以不守这份声明**
+        // ——比如无视接收端给出的续传点、从 0 重发整个文件。
+        //
+        // 没有这道闸，多出来的字节会照单全收地写进磁盘/内存：末尾的链式哈希最终会
+        // 对不上、这次传输会被判失败，但那是**写完之后**才发生的事。"先无界写入、
+        // 再报错"不是一个可接受的顺序——用户同意接收的是 N 字节，就不该被写入超过
+        // N 字节。所以在写之前拦，而不是在校验时兜。
+        if (wouldExceedDeclared(manifest[fileIndex]?.size, fileOffset, out.chunk.length)) {
+          console.error("relayium: sender exceeded the declared size of", manifest[fileIndex]?.name);
+          if (sink) { try { await sink.close(); } catch { /* 已经废了 */ } }
+          failRecv("integrityFail"); // 用户看到的是"完整性校验失败"——收到的东西确实与承诺不符
+          return;
+        }
         await sink.write(out.chunk);
         resumable = true; // a byte is now durably written — a drop from here can resume
         got += out.chunk.length;
