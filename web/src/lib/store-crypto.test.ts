@@ -31,6 +31,25 @@ describe("store-crypto base64url", () => {
     expect(s).not.toContain("=");
     expect(decodeKey(s)).toEqual(sk.raw);
   });
+  it("decodes without any async init (no libsodium ready() gate)", () => {
+    // The fragment key is decoded straight out of location.hash on page load;
+    // it must not depend on a wasm module having finished booting.
+    expect(decodeKey(encodeKey(new Uint8Array([0, 1, 250, 255])))).toEqual(
+      new Uint8Array([0, 1, 250, 255]),
+    );
+  });
+  it("encodes the URL-safe alphabet without padding", () => {
+    // 0xfb 0xff 0xbf → "+/+_" in standard base64; must come out URL-safe.
+    expect(encodeKey(new Uint8Array([0xfb, 0xff, 0xbf]))).toBe("-_-_");
+    expect(encodeKey(new Uint8Array([1]))).toBe("AQ");
+    expect(encodeKey(new Uint8Array([]))).toBe("");
+  });
+  it("rejects malformed input rather than returning garbage", () => {
+    expect(() => decodeKey("AQ=")).toThrow();      // padding is not part of the variant
+    expect(() => decodeKey("A")).toThrow();        // impossible length
+    expect(() => decodeKey("a+b/")).toThrow();     // standard-alphabet chars
+    expect(() => decodeKey("aa a")).toThrow();     // whitespace
+  });
 });
 
 describe("store-crypto manifest", () => {

@@ -17,7 +17,17 @@ async function boot() {
   } catch {
     await setLang('en').catch(() => {})
   }
-  return mount(App, { target: document.getElementById('app')! })
+  mount(App, { target: document.getElementById('app')! })
 }
 
-export default boot()
+// Not exported: nothing imports main.ts, so an exported boot promise was only a
+// promise nobody could await — and an unhandled rejection if mount ever threw.
+// A failed mount now leaves a plain-text message instead of a blank white page.
+boot().catch((err) => {
+  console.error('relayium boot failed', err)
+  const root = document.getElementById('app')
+  if (root) {
+    root.textContent = 'Relayium failed to start. Please reload the page.'
+    root.setAttribute('style', 'padding:2rem;font:16px system-ui;text-align:center')
+  }
+})

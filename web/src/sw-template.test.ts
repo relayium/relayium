@@ -30,15 +30,21 @@ function loadSW() {
     .replace("__STREAM_ROUTE__", STREAM_ROUTE);
 
   const listeners: Record<string, ((e: unknown) => void)[]> = {};
+  const skipWaitingCalls: number[] = [];
   const swSelf = {
     location: { origin: ORIGIN },
     addEventListener: (t: string, f: (e: unknown) => void) => void (listeners[t] ||= []).push(f),
-    skipWaiting: () => {},
+    skipWaiting: () => void skipWaitingCalls.push(1),
     clients: { claim: async () => {} },
   };
-  // caches / fetch 只是为了让脚本能加载并让别的分支不炸；本文件只测流式那一段。
+  // caches / fetch 大多只是为了让脚本能加载；缓存写入这一项是真的被断言的，
+  // 所以 put 记账而不是空实现。
+  const put: { url: string; body: string }[] = [];
   const cachesStub = {
-    open: async () => ({ addAll: async () => {}, put: async () => {} }),
+    open: async () => ({
+      addAll: async () => {},
+      put: async (req: { url: string }, res: Response) => void put.push({ url: req.url, body: await res.text() }),
+    }),
     keys: async () => [] as string[],
     delete: async () => true,
     match: async () => undefined,
@@ -48,6 +54,14 @@ function loadSW() {
   new Function("self", "caches", "fetch", src)(swSelf, cachesStub, fetchStub);
 
   return {
+    put,
+    skipWaitingCalls,
+    /** 触发 install（并 await 它 waitUntil 的那个 promise）。 */
+    async install() {
+      let done: Promise<unknown> = Promise.resolve();
+      for (const f of listeners.install || []) f({ waitUntil: (p: Promise<unknown>) => { done = p; } });
+      await done;
+    },
     /** 发一个 fetch 事件，返回 SW 交出的 Response；没拦截则返回 null。 */
     fetch(req: { method?: string; url: string; mode?: string }): Promise<Response> | null {
       let answer: Promise<Response> | null = null;
@@ -294,5 +308,40 @@ describe("sw-template message 分派", () => {
   it("留着给 vite-plugin-pwa 替换的 __STREAM_ROUTE__ 占位符", () => {
     const src = readFileSync(resolve(process.cwd(), "src/sw-template.js"), "utf8");
     expect(src).toContain("__STREAM_ROUTE__");
+  });
+});
+
+describe("sw-template 运行时缓存回填", () => {
+  it("precache 之外的带 hash 资源，未命中取网络后写回缓存", async () => {
+    // 语言包（9 个，约 460KB）故意不进 precache——见 vite-plugin-pwa.ts。没有这个
+    // 回填，它们就永远只走网络，离线时整个应用起不来，那条排除就成了纯损失。
+    const sw = loadSW();
+    const url = ORIGIN + "/assets/en-CLd7DiBC.js";
+    const res = await sw.fetch({ url })!;
+    expect(await res.text()).toBe("from network"); // 响应体仍原样交给页面
+    await until(() => sw.put.length > 0);
+    expect(sw.put).toEqual([{ url, body: "from network" }]);
+  });
+
+  it("不缓存无 hash 的动态路径（/api 之类没人负责失效）", async () => {
+    const sw = loadSW();
+    await sw.fetch({ url: ORIGIN + "/api/me/usage" })!;
+    await tick();
+    expect(sw.put).toEqual([]);
+  });
+});
+
+describe("sw-template 换版时机", () => {
+  it("install 不自动 skipWaiting —— 顶掉旧 SW 会杀掉它内存里在途的流式下载", async () => {
+    const sw = loadSW();
+    await sw.install();
+    expect(sw.skipWaitingCalls.length).toBe(0);
+  });
+
+  it("页面确认空闲后发 skip-waiting 才换版", async () => {
+    const sw = loadSW();
+    await sw.install();
+    sw.message({ type: "skip-waiting" });
+    expect(sw.skipWaitingCalls.length).toBe(1);
   });
 });

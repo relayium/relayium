@@ -10,6 +10,10 @@
 // 并自己强制响应头（见 sw-template.js 的 streamHeaders——消息内容不可信）。
 // 精确匹配比在 SW 里重新解析一遍更严格，也免了把解析逻辑复制进那个不参与打包的文件。
 
+// 显式 .js 后缀：本文件也被 vite-plugin-pwa.ts 引用，那条链走 tsconfig.node.json
+// 的 nodenext 解析，省略后缀会直接报 TS2835。
+import { stripBidi } from "./filename.js";
+
 /**
  * 流式 URL 的路径前缀。用 dunder 命名与真实路由隔离：
  * router.svelte.ts 的路由表（/、/cross-network、/offline-transfer、/me、/cli、
@@ -61,43 +65,10 @@ export function streamURL(token: string, filename: string): string {
 }
 
 /**
- * Unicode Bidi_Control 属性的全部码点：U+061C（ALM）、U+200E–U+200F（LRM/RLM）、
- * U+202A–U+202E（LRE/RLE/PDF/LRO/RLO）、U+2066–U+2069（LRI/RLI/FSI/PDI）。
- * 用 String.fromCodePoint 从数值码点拼字符类，不在源码里直接敲这些字符本身——
- * 敲字面字符会让这份 .ts 源文件自己变成一份 Trojan Source（CVE-2021-42574）：
- * RLO/LRO 之类的字符一旦落进源码，编辑器会把它之后的代码视觉重排，这正是本
- * 模块想替 relayium 的 UI 挡掉的攻击手法，源码自己没道理反过来中招。
- */
-const BIDI_CONTROL_RE = new RegExp(
-  `[${String.fromCodePoint(0x061c, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069)}]`,
-  "g",
-);
-
-/**
- * 剥离双向文本控制符。**不是** header 注入防护——百分号编码之后 header 仍是纯
- * ASCII，Chrome/Firefox 落盘时也会各自剥掉 RLO 这类字符——真正的风险面是
- * relayium 自己页面上渲染文件名的地方（下载列表、传输记录等）没有任何浏览器
- * 给的保护：一个 RLO 就能让存的名字 evil<RLO>gnp.exe 在我们自己的 UI 里视觉
- * 倒转成看着像 evilexe.png 的东西，是经典的伪装可执行文件手法。
- *
- * LRO/RLO/LRE/RLE 和四个 isolate 会真正重排/隔离显示顺序，是核心风险；
- * LRM/RLM 只影响相邻中性字符的方向，但同样没道理出现在文件名里，一并清掉
- * 更简单也不留后门。ALM（U+061C）单独出现时比前面这些都弱——它只影响
- * 数字/中性符号的局部方向，不会像 RLO 那样反转扩展名，也不代表"阿拉伯语
- * 文字本身"（文件名合法带阿拉伯语文字是另一回事，ALM 是控制符不是文字）——
- * 但它仍是 Bidi_Control 这同一族里的不可见格式字符，在文件名里没有任何合法
- * 用途，一并剥掉能让"剥离双向控制符"这条规则整族生效，不留一个解释不清的
- * 例外。
- */
-function stripBidi(s: string): string {
-  return s.replace(BIDI_CONTROL_RE, "");
-}
-
-/**
  * 去掉不能进 header 的字符：
  *  - C0/C1 控制字符（含 CR/LF）。文件名在实时模式下完全由发送端控制
  *    （见 zip.ts 的 safeSegments 注释），带 \r\n 就是 header 注入。
- *  - 双向文本控制符。这不是本条注释的重点，理由和码点列表见 stripBidi 的注释。
+ *  - 双向文本控制符。这不是本条注释的重点，理由和码点列表见 filename.ts 的 stripBidi。
  *  - 落单的代理项。它们会让 encodeURIComponent 抛 URIError，直接把下载打断。
  */
 function stripUnsafe(s: string): string {

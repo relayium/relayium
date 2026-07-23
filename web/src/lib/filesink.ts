@@ -134,6 +134,20 @@ let swStreamProbed = false;
 let swProbeCleanup: (() => void) | null = null;
 
 /**
+ * 当前有多少条流式下载在途。
+ *
+ * 用途是发版换 SW 的时机：旧 SW 一被顶掉，它全局作用域里的 streams 注册表就消失，
+ * 在途下载会永远等不到 ack。换版放行（share-target.ts 的 activateWhenIdle）拿这个
+ * 数当闸门——为 0 才放行。
+ */
+let liveStreams = 0;
+
+/** 此刻是否有流式下载在途。见 liveStreams。 */
+export function streamDownloadsActive(): boolean {
+  return liveStreams > 0;
+}
+
+/**
  * 探测正在控制本页的 SW 认不认识流式路由，结果存进 swStreamProbed。
  * 由 share-target.ts 的 registerServiceWorker 在启动时调用（dev 不注册 SW，
  * 因此 dev 下这条路径永远不就绪，和既有的 import.meta.env.PROD 门一致）。
@@ -237,6 +251,15 @@ async function openSwStream(name: string, cd: string): Promise<FileSink> {
   let serveTimer: ReturnType<typeof setTimeout> | undefined;
   let iframe: HTMLIFrameElement | undefined;
 
+  // 这条流不再占着换版闸门。counted 保证只在真的记过数之后减（握手就失败的流
+  // 从没加过），released 保证只减一次（close 成功之后 fail 仍可能被调用）。
+  let counted = false;
+  let released = false;
+  const release = () => {
+    if (released || !counted) return;
+    released = true;
+    liveStreams--;
+  };
   const stopTimers = () => {
     clearInterval(keepalive);
     clearTimeout(serveTimer);
@@ -244,7 +267,7 @@ async function openSwStream(name: string, cd: string): Promise<FileSink> {
   };
   const fail = (err: Error): Error => {
     const first = !failure;
-    if (!failure) failure = err;
+    if (!failure) { failure = err; release(); }
     const s = settle;
     settle = null;
     stopTimers();
@@ -313,6 +336,8 @@ async function openSwStream(name: string, cd: string): Promise<FileSink> {
     [ch.port2],
   );
   await opened;
+  liveStreams++; // 换版闸门：从这里到 release() 之间不允许激活新 SW
+  counted = true;
 
   // SW 空闲约 30s 会被回收，注册表跟着没。写入本身就是消息，会不断刷新计时器；
   // 心跳只覆盖上游长时间不出数据的那段（对端卡住、暂停）。
@@ -345,6 +370,7 @@ async function openSwStream(name: string, cd: string): Promise<FileSink> {
       const closed = awaitReply("close", STREAM_CLOSE_TIMEOUT_MS);
       port.postMessage({ type: "close" });
       await closed;
+      release();
       // 收尾成功之后才停心跳/摘监听：在此之前 controllerchange 仍是最后的救场。
       stopTimers();
       // 不在这里 close() 端口、也不立刻摘 iframe：流虽然已经收尾，浏览器可能还在
@@ -554,12 +580,28 @@ function concat(parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-/** Trigger a browser download of a blob under the given filename. */
+/**
+ * Trigger a browser download of a blob under the given filename.
+ *
+ * This is the *only* download path on Firefox/Safari/mobile (no File System
+ * Access API, no SW stream), so two details are load-bearing rather than
+ * cosmetic:
+ *  - the anchor must be in the document. Firefox ignores programmatic clicks on
+ *    a detached anchor.
+ *  - the object URL must outlive the click. Starting a download is async; a
+ *    synchronous revoke races it and the download fails with nothing on screen.
+ *    The delay is the browser's window to latch the blob, after which we still
+ *    free it — a leaked object URL pins the whole file in memory.
+ */
 function download(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = name;
+  a.rel = "noopener";
+  a.style.display = "none";
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

@@ -1,4 +1,35 @@
-import sodium from "libsodium-wrappers";
+import type Sodium from "libsodium-wrappers";
+
+// libsodium is ~450KB of wasm/asm and is the single biggest thing the app can
+// download. It's loaded lazily (and cached as one promise) instead of statically
+// imported so it lands in its own chunk: the entry bundle no longer carries it,
+// and a business-logic release doesn't invalidate it in the browser cache.
+//
+// Every synchronous export below reaches for `lib` — all of them are already
+// documented as "requires ready()", and every call site awaits `ready()` during
+// startup, so the throw is a contract violation, not a reachable state.
+let lib: typeof Sodium | undefined;
+let loading: Promise<typeof Sodium> | undefined;
+
+export async function ready(): Promise<void> {
+  loading ??= import("libsodium-wrappers").then(async (m) => {
+    const s = m.default;
+    await s.ready;
+    lib = s;
+    return s;
+  });
+  try {
+    await loading;
+  } catch (e) {
+    loading = undefined; // a failed fetch (flaky network) must not poison every retry
+    throw e;
+  }
+}
+
+function sodiumSync(): typeof Sodium {
+  if (!lib) throw new Error("libsodium not initialised — await ready() first");
+  return lib;
+}
 
 // Buffers that cross the Web Crypto / DOM boundary must be explicitly
 // ArrayBuffer-backed: TS's generic `Uint8Array<ArrayBufferLike>` is rejected by
@@ -16,12 +47,8 @@ export interface SessionKeys {
   recv: CryptoKey;
 }
 
-export async function ready(): Promise<void> {
-  await sodium.ready;
-}
-
 export function generateKeyPair(): KeyPair {
-  const kp = sodium.crypto_kx_keypair();
+  const kp = sodiumSync().crypto_kx_keypair();
   return { publicKey: kp.publicKey, privateKey: kp.privateKey };
 }
 
@@ -41,12 +68,12 @@ export async function deriveSession(
   // keys so that one side's tx equals the other side's rx.
   const keys =
     role === "initiator"
-      ? sodium.crypto_kx_client_session_keys(
+      ? sodiumSync().crypto_kx_client_session_keys(
           self.publicKey,
           self.privateKey,
           peerPublic,
         )
-      : sodium.crypto_kx_server_session_keys(
+      : sodiumSync().crypto_kx_server_session_keys(
           self.publicKey,
           self.privateKey,
           peerPublic,
@@ -106,7 +133,7 @@ export const NONCE_BYTES = 32;
 
 /** Fresh 32-byte commitment nonce. Requires ready(). */
 export function randomNonce(): Uint8Array {
-  return sodium.randombytes_buf(NONCE_BYTES);
+  return sodiumSync().randombytes_buf(NONCE_BYTES);
 }
 
 /** Commitment to a public key: 32-byte BLAKE2b(pub || nonce). */
@@ -114,7 +141,7 @@ export function commitKey(pub: Uint8Array, nonce: Uint8Array): Uint8Array {
   const combined = new Uint8Array(pub.length + nonce.length);
   combined.set(pub, 0);
   combined.set(nonce, pub.length);
-  return sodium.crypto_generichash(COMMIT_BYTES, combined, null);
+  return sodiumSync().crypto_generichash(COMMIT_BYTES, combined, null);
 }
 
 /** Constant-time check that `commit` opens to (pub, nonce). False on any
@@ -126,7 +153,7 @@ export function verifyCommit(
 ): boolean {
   const expected = commitKey(pub, nonce);
   if (commit.length !== expected.length) return false;
-  return sodium.memcmp(commit as Bytes, expected as Bytes);
+  return sodiumSync().memcmp(commit as Bytes, expected as Bytes);
 }
 
 export function sas(self: Uint8Array, peer: Uint8Array): string {
@@ -137,7 +164,7 @@ export function sas(self: Uint8Array, peer: Uint8Array): string {
   combined.set(b, a.length);
   // `null` key = unkeyed BLAKE2b (byte-identical to omitting it); the resolved
   // libsodium-wrappers types mark the key parameter as required, so pass it.
-  const digest = sodium.crypto_generichash(8, combined, null);
+  const digest = sodiumSync().crypto_generichash(8, combined, null);
   const view = new DataView(digest.buffer, digest.byteOffset, digest.byteLength);
   const num = (view.getUint32(0) ^ view.getUint32(4)) >>> 0;
   return (num % 1_000_000).toString().padStart(6, "0");

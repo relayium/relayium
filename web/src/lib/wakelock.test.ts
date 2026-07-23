@@ -85,3 +85,19 @@ describe("createWakeLock", () => {
     expect(request).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("createWakeLock destroy", () => {
+  it("摘掉 visibilitychange，销毁后不再重新请求锁", async () => {
+    const { api, request } = fakeWakeLock();
+    stub(api);
+    const wl = createWakeLock();
+    wl.acquire();
+    await tick();
+    expect(request).toHaveBeenCalledTimes(1);
+
+    wl.destroy();
+    document.dispatchEvent(new Event("visibilitychange"));
+    await tick();
+    expect(request).toHaveBeenCalledTimes(1); // 没有第二次
+  });
+});

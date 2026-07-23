@@ -7,6 +7,10 @@ export default defineConfig({
   // condition is present, which would mount .svelte components as no-op SSR
   // stubs (lifecycle_function_unavailable) instead of real client components.
   resolve: { conditions: ["browser"] },
+  // Keep vitest's cache out of src/. Left to itself it has landed in
+  // src/node_modules, where tsconfig.app.json's allowJs+checkJs then typechecked
+  // 6MB of cached transforms (tsconfig's "exclude" now also names that path).
+  cacheDir: "node_modules/.vitest",
   test: {
     environment: "jsdom",
     globals: true,

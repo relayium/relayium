@@ -276,6 +276,7 @@ const fr: Messages = {
     confirmDelNode: "Retirer ce nœud ? Il ne relaiera ni ne stockera plus pour votre compte.",
     copyLink: "Copier le lien",
     linkHint: "La clé d'un lien de partage n'est conservée que dans le navigateur depuis lequel vous avez envoyé — elle est irrécupérable sur un autre appareil, alors enregistrez le lien.",
+    actionFailed: "Une erreur s'est produite. Vérifiez votre connexion et réessayez.",
   },
   why: {
     heading: "À propos des comptes",

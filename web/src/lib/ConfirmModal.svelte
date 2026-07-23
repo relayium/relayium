@@ -1,5 +1,6 @@
 <script lang="ts">
   import { confirmState, resolveConfirm } from "./confirm-dialog.svelte";
+  import { trapFocus } from "./focus-trap";
   import { lang, messages, type Messages } from "./i18n.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
@@ -14,7 +15,7 @@
 
 {#if confirmState.open}
   <button type="button" class="backdrop" aria-label={t.dialogCancel} onclick={() => resolveConfirm(false)}></button>
-  <div class="modal" role="dialog" aria-modal="true">
+  <div class="modal" role="dialog" aria-modal="true" use:trapFocus>
     <p class="msg">{confirmState.message}</p>
     <div class="actions">
       <button type="button" class="btn btn-ghost" onclick={() => resolveConfirm(false)}>{t.dialogCancel}</button>

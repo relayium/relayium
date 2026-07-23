@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { trapFocus } from "./focus-trap";
   import { lang, messages, type Messages } from "./i18n.svelte";
   const t = $derived<Messages>(messages[lang()]);
 
@@ -62,7 +63,7 @@
   }
 </script>
 
-<div class="backdrop" role="dialog" aria-modal="true">
+<div class="backdrop" role="dialog" aria-modal="true" use:trapFocus>
   <div class="modal">
     <h3>{t.billing.changePlan} · {planName} {cycleWord(cycle)}</h3>
     {#if loadFailed}

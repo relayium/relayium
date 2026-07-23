@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { formatSize } from "./lib/format";
   import { fade } from "svelte/transition";
   import {
     ready,
@@ -122,6 +123,16 @@
   // How long each side keeps trying to reconnect-and-resume after a mid-transfer
   // drop before giving up and failing the transfer.
   const RESUME_WINDOW_MS = 90_000;
+  // How often the transfer loops are allowed to publish progress into $state.
+  // On a gigabit LAN they iterate 500+ times a second, and each write to
+  // `send`/`recv` invalidates every reader of it: the progress card, the
+  // format*/eta helpers and the head-title effect — all to move a bar by a third
+  // of a pixel, while AES-GCM is already contending for the same main thread
+  // (badly so on phones). The loops therefore keep their counters in plain
+  // locals and publish at ~7Hz; the byte counts themselves are never throttled.
+  // Every terminal or boundary transition publishes immediately, so no card ever
+  // settles on a stale number.
+  const UI_TICK_MS = 150;
   // Live ICE path per direction, kept out of Xfer so the async getStats() poll
   // never races the transfer loop's high-frequency rewrites of send/recv.
   let sendPath = $state<ConnPath | undefined>();
@@ -248,15 +259,14 @@
         : !unsupported,
   );
 
-  // Reflect transfer progress in the tab title (follows the language switch), and
-  // set the per-route <title>/<meta description> otherwise (SEO for the
-  // cross-network/offline-transfer product modes).
+  // <head> upkeep, split in two on purpose. The meta/canonical/hreflang block
+  // depends only on route + language, but it used to sit in the same effect as
+  // the progress title — which reads `send`/`recv` and therefore re-ran on every
+  // 192KB chunk, redoing ~14 querySelector/setAttribute calls hundreds of times
+  // a second during a transfer. Keeping them apart means the DOM work happens
+  // on navigation, and the hot path only touches document.title.
   $effect(() => {
-    const x = (send && !send.done && send) || (recv && !recv.done && recv);
     const meta = pageMeta(currentRoute(), messages[lang()]);
-    document.title = x
-      ? `${pct(x)}% ${x.dir === "send" ? "↑" : "↓"} · Relayium`
-      : meta.title;
     const md = document.querySelector('meta[name="description"]');
     if (md) md.setAttribute("content", meta.description);
     const canon = location.origin + meta.canonicalPath;
@@ -269,6 +279,16 @@
         .querySelector(`link[rel="alternate"][hreflang="${hreflang}"]`)
         ?.setAttribute("href", location.origin + path);
     }
+  });
+
+  // Reflect transfer progress in the tab title (follows the language switch), and
+  // fall back to the per-route title when nothing is in flight. Throttled at the
+  // source: `send`/`recv` only change every UI_TICK_MS during a transfer.
+  $effect(() => {
+    const x = (send && !send.done && send) || (recv && !recv.done && recv);
+    document.title = x
+      ? `${pct(x)}% ${x.dir === "send" ? "↑" : "↓"} · Relayium`
+      : pageMeta(currentRoute(), messages[lang()]).title;
   });
 
   // Notify when a transfer finishes and the user is on another tab/app, so a long
@@ -376,11 +396,19 @@
 
   // Poll the live ICE path a few times once a channel is up: the selected
   // candidate pair can settle shortly after the data channel opens.
+  // Fire-and-forget from three call sites, so it must never reject: conn.path()
+  // calls getStats(), which rejects as soon as the peer connection is closed —
+  // i.e. at the end of *every* transfer, while this poll is still sleeping.
+  // Swallow it and stop polling; the path label just keeps its last value.
   async function trackPath(conn: Conn, set: (p: ConnPath) => void) {
     activeConn = conn; // latest live connection — the ?debug=1 panel polls its stats
     for (let i = 0; i < 8; i++) {
-      const p = await conn.path();
-      if (p !== "unknown") { set(p); return; }
+      try {
+        const p = await conn.path();
+        if (p !== "unknown") { set(p); return; }
+      } catch {
+        return; // connection gone
+      }
       await sleep(400);
     }
   }
@@ -429,12 +457,22 @@
     return parts.length ? parts.join(" ") : "—";
   };
 
+  // Separate, *synchronous* onMount: Svelte only honours a cleanup function
+  // returned directly, so anything registered in the async onMount below can
+  // never be torn down (its return value is a Promise, which Svelte ignores).
+  onMount(() => {
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      wake.destroy(); // 摘掉它自己挂的 visibilitychange
+    };
+  });
+
   onMount(async () => {
     document.documentElement.lang = lang();
     document.documentElement.dir = dir(lang());
     initRoomFromLocation();
     syncRouteFromLocation();
-    window.addEventListener("popstate", onPopState);
     registerServiceWorker();
     // Pick up any files launched into the app via the OS share sheet (installed
     // PWA, Android/Chromium). The auto-send effect routes them once a peer is up.
@@ -456,6 +494,7 @@
       selfId = id; selfIP = ip; joinedRoom = true;
       // A welcome means the socket is (re)connected — clear any reconnect state.
       connState = "ready";
+      reconnectAttempt = 0; // the next outage starts from the short delay again
       if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = undefined; }
     });
     // A peer (re)appearing is our cue to (re)send our relay measurements to it.
@@ -482,15 +521,27 @@
 
   // Reconnect the signalling socket to the current room after an unexpected drop.
   // A single pending timer at a time; onSelfId cancels it once the welcome lands.
+  //
+  // Exponential backoff with jitter, NOT a fixed interval: when the signalling
+  // server restarts, every client in the world drops at the same instant, and a
+  // fixed 2s retry turns them into a synchronised herd that re-DoSes the server
+  // as it comes back up (and drains phone batteries while it's down). The jitter
+  // is what breaks the synchronisation; the ceiling keeps a long outage cheap.
+  const RECONNECT_BASE_MS = 2_000;
+  const RECONNECT_MAX_MS = 30_000;
+  let reconnectAttempt = 0;
   function scheduleReconnect() {
     if (reconnectTimer) return;
+    const backoff = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS);
+    reconnectAttempt++;
+    const delay = Math.round(backoff * (0.75 + Math.random() * 0.5)); // ±25% jitter
     reconnectTimer = setTimeout(() => {
       reconnectTimer = undefined;
       if (!signaling) return;
       // reconnect() intentionally swaps the socket (won't re-fire onClose); if this
       // fresh socket also closes, onClose runs again and re-schedules.
       signaling.reconnect(wsURL(location, roomCode));
-    }, 2000);
+    }, delay);
   }
 
   function onPopState() {
@@ -507,6 +558,7 @@
     // wedged as "busy".
     const epoch = ++roomEpoch; // newer switch supersedes any slower in-flight one
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = undefined; }
+    reconnectAttempt = 0; // a deliberate room switch is not an outage — don't inherit its backoff
     sendAbort?.();
     recvAbort?.();
     peers = [];
@@ -703,6 +755,17 @@
     let conn: Conn | undefined;
     let cancelled = false; // user hit cancel (possibly during ICE, before conn exists)
     let lastActivity = Date.now();
+    // Publish progress into $state at most every UI_TICK_MS. See UI_TICK_MS.
+    // `got`/`fileIndex` stay the source of truth in plain locals; `force` is for
+    // moments the user must see exactly (file boundary, pause, end of batch).
+    let lastUiAt = 0;
+    const showProgress = (force = false) => {
+      const now = Date.now();
+      if (!force && now - lastUiAt < UI_TICK_MS) return;
+      lastUiAt = now;
+      const elapsed = (now - start) / 1000;
+      recv = r = { ...r, sent: got, index: fileIndex, speed: elapsed > 0 ? (got - speedBase) / elapsed : 0 };
+    };
     let watchdog: ReturnType<typeof setInterval> | undefined;
     const clearWatchdog = () => { if (watchdog) { clearInterval(watchdog); watchdog = undefined; } };
     // Central "this receive is dead" path: mark failed once, stop the watchdog,
@@ -825,6 +888,7 @@
       if (pausedRecv || resuming) return; // already waiting or mid-resume
       clearWatchdog();
       conn?.close(); // drop the dead pc + its signalling listener so it can't cross-route the resume
+      showProgress(true); // the loop has stopped — flush the throttled byte count before it freezes on screen
       recv = r = { ...r, status: "resuming", speed: 0 };
       pausedRecv = { from, resume };
       // Give up if the sender never comes back within the window.
@@ -911,8 +975,7 @@
           lastAckSent = got;
           try { conn!.channel.send(ackFrame(got)); } catch { /* gone — the drop path handles it */ }
         }
-        const elapsed = (Date.now() - start) / 1000;
-        recv = r = { ...r, sent: got, index: fileIndex, speed: elapsed > 0 ? (got - speedBase) / elapsed : 0 };
+        showProgress();
         return;
       }
       if (out.done) {
@@ -926,7 +989,7 @@
           // New file, fresh chain: checkpoint the boundary so a drop before the
           // first chunk resumes this file from 0.
           checkpoint = { index: fileIndex, offset: 0, chain: new Uint8Array(32) };
-          recv = r = { ...r, index: fileIndex };
+          showProgress(true); // file boundary: publish the exact byte count with the new index
         } else {
           completing = true; // from here a "closed" is the normal end-of-batch, not a drop
           clearWatchdog();
@@ -1057,6 +1120,7 @@
           ackedAt = Date.now();
           const start = Date.now();
           let sent = base, idx = rp.index;
+          let lastUiAt = 0; // UI progress throttle — see UI_TICK_MS
           for await (const frame of sender.dataFrames(files, keys, rp)) {
             if (lost) throw new Error("connection lost during resume");
             await backpressure(rconn.channel);
@@ -1064,8 +1128,12 @@
             rconn.channel.send(frame);
             if (frame[0] === FRAME.CHUNK) sent += frame.byteLength - CHUNK_OVERHEAD;
             else if (frame[0] === FRAME.DONE) idx++;
-            const elapsed = (Date.now() - start) / 1000;
-            send = s = { ...s, sent: Math.min(total, sent), index: Math.min(idx, files.length - 1), speed: elapsed > 0 ? (sent - base) / elapsed : 0 };
+            const now = Date.now();
+            if (now - lastUiAt >= UI_TICK_MS) {
+              lastUiAt = now;
+              const elapsed = (now - start) / 1000;
+              send = s = { ...s, sent: Math.min(total, sent), index: Math.min(idx, files.length - 1), speed: elapsed > 0 ? (sent - base) / elapsed : 0 };
+            }
           }
           send = s = { ...s, sent: total, index: files.length - 1, status: "finishing", speed: 0 };
           const completeAck = new Promise<void>((r) => {
@@ -1134,14 +1202,19 @@
       trackPath(conn, (p) => (sendPath = p));
       const start = Date.now();
       let sent = 0, idx = 0;
+      let lastUiAt = 0; // UI progress throttle — see UI_TICK_MS
       for await (const frame of sender.dataFrames(files, keys)) {
         await backpressure(conn.channel);
         await creditGate(sent); // don't outrun the receiver's durable writes
         conn.channel.send(frame);
         if (frame[0] === FRAME.CHUNK) sent += frame.byteLength - CHUNK_OVERHEAD;
         else if (frame[0] === FRAME.DONE) idx++;
-        const elapsed = (Date.now() - start) / 1000;
-        send = s = { ...s, sent: Math.min(total, sent), index: Math.min(idx, files.length - 1), speed: elapsed > 0 ? sent / elapsed : 0 };
+        const now = Date.now();
+        if (now - lastUiAt >= UI_TICK_MS) {
+          lastUiAt = now;
+          const elapsed = (now - start) / 1000;
+          send = s = { ...s, sent: Math.min(total, sent), index: Math.min(idx, files.length - 1), speed: elapsed > 0 ? sent / elapsed : 0 };
+        }
       }
       // All frames are queued, but channel.send() only buffers them. Closing now would
       // drop whatever is still in flight (the receiver would stall short of 100%), so
@@ -1226,13 +1299,6 @@
   function pathLabel(m: Messages, p: ConnPath): string {
     return p === "lan" ? m.pathLan : p === "relay" ? m.pathRelay : m.pathP2p;
   }
-  function formatSize(n: number): string {
-    if (n < 1024) return `${n} B`;
-    const units = ["KB", "MB", "GB", "TB"];
-    let v = n / 1024, i = 0;
-    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
-    return `${v.toFixed(v >= 10 ? 0 : 1)} ${units[i]}`;
-  }
   function formatSpeed(bps: number): string {
     return bps > 0 ? `${formatSize(bps)}/s` : "";
   }
@@ -1281,7 +1347,7 @@
           <span class="pick">{t.pickHint(MAX_FILES)}</span>
         {/if}
       </span>
-      <input id={`pick-${p.id}`} type="file" multiple disabled={busy}
+      <input class="file-pick-input" id={`pick-${p.id}`} type="file" multiple disabled={busy}
         onclick={(e) => { if (outbox().length) { e.preventDefault(); sendFiles(p.id, takeOutbox()); } }}
         onchange={(e) => pickFile(e, p.id)} />
     </label>
@@ -1290,7 +1356,7 @@
       {#if folderUploadSupported}
         <label class="act-btn" class:disabled={busy}>
           📁 {t.sendFolder}
-          <input type="file" webkitdirectory multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
+          <input class="file-pick-input" type="file" webkitdirectory multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
         </label>
       {/if}
     </div>
@@ -1387,7 +1453,7 @@
       {/if}
       {#if !xf.done}
         {@const path = xf.dir === "send" ? sendPath : recvPath}
-        <div class="bar" role="progressbar" aria-valuenow={pct(xf)} aria-valuemin="0" aria-valuemax="100"><div class="fill" style:width="{pct(xf)}%"></div></div>
+        <div class="progress-bar" role="progressbar" aria-valuenow={pct(xf)} aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style:width="{pct(xf)}%"></div></div>
         <div class="meta">
           <span>{pct(xf)}% · {formatSize(xf.sent)} / {formatSize(xf.total)}</span>
           <span class="meta-right">
@@ -1648,24 +1714,8 @@
     border: 1px solid var(--accent-border); border-radius: var(--radius-sm);
     padding: var(--space-2) var(--space-3); background: var(--accent-bg);
   }
-
-  .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; }
   /* A translucent sheen sweeps across the filled portion so an in-flight transfer
      reads as actively moving, not stalled. The fill only renders while !done. */
-  .fill {
-    height: 100%; border-radius: 999px;
-    background:
-      linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, .35) 50%, transparent 100%),
-      linear-gradient(90deg, var(--accent), var(--accent-deep));
-    background-size: 40% 100%, 100% 100%;
-    background-repeat: no-repeat;
-    transition: width .2s ease;
-    animation: fill-sheen 1.4s linear infinite;
-  }
-  @keyframes fill-sheen {
-    from { background-position: -45% 0, 0 0; }
-    to   { background-position: 145% 0, 0 0; }
-  }
   .meta { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 12.5px; color: var(--text); }
   .meta-right { display: inline-flex; align-items: center; gap: 12px; }
   /* Connection-path badge: a coloured dot + label. Green LAN, blue P2P, orange relay. */
@@ -1676,7 +1726,6 @@
   }
   @keyframes dot-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
   @media (prefers-reduced-motion: reduce) {
-    .fill { animation: none; background: linear-gradient(90deg, var(--accent), var(--accent-deep)); }
     .path .dot { animation: none; }
     .card.ok { animation: none; }
   }
@@ -1727,7 +1776,6 @@
   .peers ul.solo .pname { font-size: 17px; }
   .pname { color: var(--text-h); font-weight: 500; font-size: 16px; }
   .pick { color: var(--text); font-size: 13px; }
-  .peer input[type="file"] { display: none; }
   .peer-actions { display: flex; gap: 8px; margin: 0 12px 10px; }
   .act-btn {
     flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;

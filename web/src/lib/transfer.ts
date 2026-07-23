@@ -1,4 +1,5 @@
 import { seal, open, type SessionKeys } from "./crypto";
+import { sanitizeNames } from "./filename";
 
 // Frames flow into DataChannel.send() and Web Crypto, which require an
 // explicitly ArrayBuffer-backed `Uint8Array` rather than the generic
@@ -213,7 +214,11 @@ export class Receiver {
     const seq = new DataView(encoded.buffer, encoded.byteOffset).getUint32(1);
     const payload = encoded.slice(5);
     if (kind === KIND_BATCH) {
-      return { batch: JSON.parse(dec.decode(payload)) as Manifest };
+      const batch = JSON.parse(dec.decode(payload)) as Manifest;
+      // 文件名由发送端任意构造，而接收方的确认卡片正是用户做信任决策的地方：
+      // 在这个唯一入口把双向控制符洗掉，下游的 UI/历史记录/落盘名就都拿的是
+      // 洗过的值（散在模板里逐处调用必然漏一个）。
+      return { batch: { ...batch, files: sanitizeNames(batch.files) } };
     }
     if (kind === KIND_RESUME_START) {
       // The App restores the chain snapshot and calls resumeAt(); we just surface

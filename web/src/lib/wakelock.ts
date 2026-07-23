@@ -4,6 +4,9 @@
 export interface WakeLockController {
   acquire(): void;
   release(): void;
+  /** 摘掉 visibilitychange 监听。每个实例都会挂一个全局监听器，不摘就意味着
+   *  每 new 一个 controller 就永久多一个——调用方销毁时必须调这个。 */
+  destroy(): void;
 }
 
 export function createWakeLock(): WakeLockController {
@@ -34,11 +37,11 @@ export function createWakeLock(): WakeLockController {
     }
   }
 
-  if (typeof document !== "undefined") {
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") request();
-    });
-  }
+  const onVisible = () => {
+    if (document.visibilityState === "visible") request();
+  };
+  const hasDoc = typeof document !== "undefined";
+  if (hasDoc) document.addEventListener("visibilitychange", onVisible);
 
   return {
     acquire() {
@@ -51,6 +54,10 @@ export function createWakeLock(): WakeLockController {
       const s = sentinel;
       sentinel = null;
       s?.release().catch(() => {});
+    },
+    destroy() {
+      this.release();
+      if (hasDoc) document.removeEventListener("visibilitychange", onVisible);
     },
   };
 }

@@ -17,7 +17,12 @@
     "moduleDetection": "force"
   },
   "include": ["src/**/*.ts", "src/**/*.js", "src/**/*.svelte"],
-  /* sw-template.js is a service-worker template with build-time __PLACEHOLDERS__,
+  /* An explicit "exclude" REPLACES TypeScript's defaults (node_modules et al),
+     so "src/node_modules" has to be listed by name: vitest used to drop a 6MB
+     cache there and allowJs+checkJs pulled the whole thing into the typecheck.
+     vitest.config.ts now points its cache elsewhere; this stays as the backstop.
+
+     sw-template.js is a service-worker template with build-time __PLACEHOLDERS__,
      never imported or bundled — it can't and shouldn't be typechecked here. */
-  "exclude": ["src/sw-template.js"]
+  "exclude": ["src/sw-template.js", "src/node_modules", "**/node_modules"]
 }

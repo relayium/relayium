@@ -20,8 +20,22 @@ export function pwaPlugin(): Plugin {
       const templatePath = fileURLToPath(new URL("./src/sw-template.js", import.meta.url));
       const template = readFileSync(templatePath, "utf8");
 
+      // The shell precache deliberately skips the per-language chunks. There are
+      // nine of them (~460KB total) and a user ever reads one or two, so
+      // precaching the set means ~8/9 of the install bandwidth is spent on bytes
+      // that will never be parsed — on a phone, on someone's mobile data. The
+      // language actually in use is fetched on boot and kept by the runtime
+      // cache-fill in sw-template.js, which is what makes offline still work.
+      //
+      // Matched on the source module rather than the hashed filename: a regex
+      // over `assets/en-*.js` would also catch a future `entry-*.js` and would
+      // silently rot the day a language is added.
+      const isLangChunk = (f: string) => {
+        const c = bundle[f];
+        return c.type === "chunk" && /\/lib\/i18n\/[a-z-]+\.ts$/.test(c.facadeModuleId ?? "");
+      };
       const assets = Object.keys(bundle)
-        .filter((f) => /\.(js|css)$/.test(f))
+        .filter((f) => /\.(js|css)$/.test(f) && !isLangChunk(f))
         .map((f) => "/" + f);
       const precache = ["/", "/site.webmanifest", ...assets].sort();
       const version = createHash("sha1").update(precache.join("\n")).digest("hex").slice(0, 12);

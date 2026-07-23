@@ -276,6 +276,7 @@ const de: Messages = {
     confirmDelNode: "Diesen Knoten entfernen? Er wird dann nicht mehr für dein Konto relayen oder speichern.",
     copyLink: "Link kopieren",
     linkHint: "Der Schlüssel eines Freigabelinks liegt nur im Browser, aus dem du hochgeladen hast — auf einem anderen Gerät ist er nicht wiederherstellbar; speichere daher den Link.",
+    actionFailed: "Etwas ist schiefgelaufen. Prüfe deine Verbindung und versuche es erneut.",
   },
   why: {
     heading: "Zum Konto",

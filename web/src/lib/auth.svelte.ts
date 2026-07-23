@@ -33,6 +33,35 @@ export function session(): { user: SessionUser | null } {
   return { user };
 }
 
+/**
+ * 带凭据的 JSON 请求。**永不抛**：请求根本没到服务器（离线 / DNS / CORS）时返回
+ * null，调用方一律把它翻译成 `{ ok: false, error: "network" }`——这个区分对表单很
+ * 重要，"没发出去" 和 "服务器拒绝了" 要给用户不同的话术。
+ *
+ * 抽出来之前这段 try/fetch/catch 在本文件里逐字重复了七遍，每一遍都得记得
+ * credentials 和 Content-Type 两件事，漏一个就是一次静默的未登录请求。
+ */
+async function apiSend(path: string, init: RequestInit = {}): Promise<Response | null> {
+  try {
+    return await fetch(path, {
+      credentials: "include",
+      ...init,
+      headers: init.body ? { "Content-Type": "application/json", ...init.headers } : init.headers,
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** JSON body 里的 `error` 字段；body 不是 JSON（网关的 HTML 错误页）时给回退值。 */
+async function errorCode(res: Response, fallback = "error"): Promise<string> {
+  try {
+    return ((await res.json()) as { error?: string }).error ?? fallback;
+  } catch {
+    return fallback; // 非 JSON 响应体
+  }
+}
+
 export async function refreshSession(): Promise<void> {
   const res = await fetch("/api/me", { credentials: "include" });
   if (res.ok) {
@@ -47,17 +76,12 @@ export async function requestMagicLink(
   email: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const form = new URLSearchParams({ email });
-  let res: Response;
-  try {
-    res = await fetch("/api/auth/magic/request", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: form.toString(),
-    });
-  } catch {
-    return { ok: false, error: "network" };
-  }
+  const res = await apiSend("/api/auth/magic/request", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: form.toString(),
+  });
+  if (!res) return { ok: false, error: "network" };
   // A 429/500 must not read as "link sent" — the caller shows an error instead.
   if (!res.ok) return { ok: false, error: "error" };
   return { ok: true };
@@ -112,31 +136,14 @@ async function postForUser(
   path: string,
   payload: Record<string, string>,
 ): Promise<{ ok: boolean; error?: string }> {
-  let res: Response;
-  try {
-    res = await fetch(path, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  } catch {
-    // Never reached the server (offline / DNS / CORS) — a structured error the
-    // form can surface instead of failing silently.
-    return { ok: false, error: "network" };
-  }
+  const res = await apiSend(path, { method: "POST", body: JSON.stringify(payload) });
+  if (!res) return { ok: false, error: "network" };
   if (res.ok) {
     const body = (await res.json()) as { user: SessionUser };
     user = body.user;
     return { ok: true };
   }
-  let error = "error";
-  try {
-    error = ((await res.json()) as { error?: string }).error ?? error;
-  } catch {
-    /* non-JSON body */
-  }
-  return { ok: false, error };
+  return { ok: false, error: await errorCode(res) };
 }
 
 // Flat like the rest of this module's result shapes (ok + optional error) —
@@ -156,28 +163,16 @@ export async function register(
   password: string,
   displayName = "",
 ): Promise<RegisterResult> {
-  let res: Response;
-  try {
-    res = await fetch("/api/auth/register", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, displayName }),
-    });
-  } catch {
-    return { ok: false, error: "network" };
-  }
+  const res = await apiSend("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ email, password, displayName }),
+  });
+  if (!res) return { ok: false, error: "network" };
   if (res.ok) {
     const body = (await res.json()) as { status: "verification_sent"; email: string };
     return { ok: true, status: "verification_sent", email: body.email };
   }
-  let error = "error";
-  try {
-    error = ((await res.json()) as { error?: string }).error ?? error;
-  } catch {
-    /* non-JSON body */
-  }
-  return { ok: false, error };
+  return { ok: false, error: await errorCode(res) };
 }
 
 // Flat like RegisterResult — `unverified`/`email` are only populated when the
@@ -191,17 +186,11 @@ export interface LoginResult {
 }
 
 export async function passwordLogin(email: string, password: string): Promise<LoginResult> {
-  let res: Response;
-  try {
-    res = await fetch("/api/auth/password/login", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-  } catch {
-    return { ok: false, error: "network" };
-  }
+  const res = await apiSend("/api/auth/password/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res) return { ok: false, error: "network" };
   if (res.ok) {
     const body = (await res.json()) as { user: SessionUser };
     user = body.user;
@@ -235,31 +224,14 @@ export async function verifyEmail(token: string, password = ""): Promise<{ ok: b
 // Fire-and-forget resend; the server always answers 200 (anti-enumeration —
 // it does not reveal whether the address exists or is already verified).
 export async function resendVerification(email: string): Promise<void> {
-  try {
-    await fetch("/api/auth/email/resend", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-  } catch {
-    /* best-effort; the caller shows a generic "check your email" regardless */
-  }
+  // best-effort; the caller shows a generic "check your email" regardless
+  await apiSend("/api/auth/email/resend", { method: "POST", body: JSON.stringify({ email }) });
 }
 
 // Fire-and-forget forgot-password request; the server always answers 200 for
 // the same anti-enumeration reason as resendVerification.
 export async function forgotPassword(email: string): Promise<void> {
-  try {
-    await fetch("/api/auth/password/forgot", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-  } catch {
-    /* best-effort */
-  }
+  await apiSend("/api/auth/password/forgot", { method: "POST", body: JSON.stringify({ email }) }); // best-effort
 }
 
 // On success the server sets the session cookie and returns {user}; update
@@ -275,28 +247,16 @@ export async function changePassword(
   currentPassword: string,
   newPassword: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  let res: Response;
-  try {
-    res = await fetch("/api/auth/password/change", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentPassword, newPassword }),
-    });
-  } catch {
-    return { ok: false, error: "network" };
-  }
+  const res = await apiSend("/api/auth/password/change", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  if (!res) return { ok: false, error: "network" };
   if (res.ok) {
     if (user) user = { ...user, hasPassword: true };
     return { ok: true };
   }
-  let error = "error";
-  try {
-    error = ((await res.json()) as { error?: string }).error ?? error;
-  } catch {
-    /* non-JSON body */
-  }
-  return { ok: false, error };
+  return { ok: false, error: await errorCode(res) };
 }
 
 /** Remove a linked OAuth provider from the current account. The server refuses
@@ -305,15 +265,8 @@ export async function changePassword(
 export async function unlinkIdentity(
   provider: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  let res: Response;
-  try {
-    res = await fetch(`/api/auth/identities/${provider}`, {
-      method: "DELETE",
-      credentials: "include",
-    });
-  } catch {
-    return { ok: false, error: "network" };
-  }
+  const res = await apiSend(`/api/auth/identities/${provider}`, { method: "DELETE" });
+  if (!res) return { ok: false, error: "network" };
   if (res.ok) {
     try {
       const body = (await res.json()) as { linkedMethods?: string[] };
@@ -329,11 +282,19 @@ export async function unlinkIdentity(
 
 const DEVICE_KEY = "relayium_device_id";
 
+// localStorage throws outright in Safari private mode (and when storage is
+// blocked by policy), so every access in this codebase is guarded — this one was
+// the exception, and it sits on the login path. A fresh id per call is a fine
+// degradation: the id only labels a session, it doesn't authenticate anything.
 export function localDeviceId(): string {
-  let id = localStorage.getItem(DEVICE_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(DEVICE_KEY, id);
+  try {
+    let id = localStorage.getItem(DEVICE_KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(DEVICE_KEY, id);
+    }
+    return id;
+  } catch {
+    return crypto.randomUUID();
   }
-  return id;
 }

@@ -276,6 +276,7 @@ const pt: Messages = {
     confirmDelNode: "Remover este nó? Ele deixará de retransmitir ou armazenar para sua conta.",
     copyLink: "Copiar link",
     linkHint: "A chave de um link de compartilhamento fica apenas no navegador de onde você fez o envio — ela não pode ser recuperada em outro dispositivo, então salve o link.",
+    actionFailed: "Algo deu errado. Verifique sua conexão e tente novamente.",
   },
   why: {
     heading: "Sobre as contas",

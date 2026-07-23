@@ -2,8 +2,7 @@
 // upload encrypts both the manifest (filenames + sizes) and the file bytes,
 // reusing the same nonce-from-counter scheme as transfer.ts. The key lives only
 // in the URL fragment; the server stores opaque ciphertext.
-import sodium from "libsodium-wrappers";
-import { ready } from "./crypto";
+import { sanitizeNames } from "./filename";
 
 type Bytes = Uint8Array<ArrayBuffer>;
 
@@ -36,8 +35,8 @@ function nonce(seq: number): Bytes {
 }
 
 export async function generateStoreKey(): Promise<StoreKey> {
-  await ready();
-  const raw = sodium.randombytes_buf(32) as Bytes;
+  const raw = new Uint8Array(32) as Bytes;
+  crypto.getRandomValues(raw);
   return { key: await importKey(raw), raw };
 }
 
@@ -45,12 +44,28 @@ export async function importStoreKey(raw: Uint8Array): Promise<CryptoKey> {
   return importKey(raw as Bytes);
 }
 
+// base64url without padding — libsodium's URLSAFE_NO_PADDING variant, done with
+// btoa/atob so this module needs no wasm at all. That matters twice over: the
+// fragment key is decoded synchronously on page load (a ready() gate here was a
+// latent race), and keeping libsodium out of this import graph keeps it out of
+// the entry chunk.
 export function encodeKey(raw: Uint8Array): string {
-  return sodium.to_base64(raw, sodium.base64_variants.URLSAFE_NO_PADDING);
+  let s = "";
+  for (const b of raw) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 export function decodeKey(s: string): Bytes {
-  return sodium.from_base64(s, sodium.base64_variants.URLSAFE_NO_PADDING) as Bytes;
+  // Strict, like from_base64: no padding, no standard-alphabet chars, no
+  // whitespace, and no length that base64 can't produce. A silently-truncated
+  // key would decrypt nothing and look like corrupt ciphertext instead.
+  if (!/^[A-Za-z0-9_-]*$/.test(s) || s.length % 4 === 1) {
+    throw new Error("invalid base64url key");
+  }
+  const b = atob(s.replace(/-/g, "+").replace(/_/g, "/"));
+  const out = new Uint8Array(b.length) as Bytes;
+  for (let i = 0; i < b.length; i++) out[i] = b.charCodeAt(i);
+  return out;
 }
 
 export async function encryptManifest(key: CryptoKey, m: StoredManifest): Promise<Bytes> {
@@ -61,7 +76,10 @@ export async function encryptManifest(key: CryptoKey, m: StoredManifest): Promis
 
 export async function decryptManifest(key: CryptoKey, ct: Uint8Array): Promise<StoredManifest> {
   const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce(0) }, key, ct as Bytes);
-  return JSON.parse(dec.decode(new Uint8Array(pt))) as StoredManifest;
+  const m = JSON.parse(dec.decode(new Uint8Array(pt))) as StoredManifest;
+  // 文件名由上传者任意构造，服务端只见密文、无从校验：在解密这个唯一入口把
+  // 双向控制符洗掉（理由见 filename.ts），下载页和落盘名都用洗过的值。
+  return { ...m, files: sanitizeNames(m.files) };
 }
 
 // length-prefixed frame: uint32BE(len(ct)) || ct.

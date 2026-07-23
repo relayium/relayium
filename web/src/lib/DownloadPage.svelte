@@ -203,8 +203,10 @@
     {/if}
 
     {#if pageState === "downloading"}
-      <div class="bar" role="progressbar" aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"><div class="fill" style:width="{progress}%"></div></div>
-      <p aria-live="polite">{t.download.downloading} {progress}%</p>
+      <div class="progress-bar" role="progressbar" aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style:width="{progress}%"></div></div>
+      <!-- 不加 aria-live：百分比每块都在变，读屏会被刷屏（进度本身已由上面的
+           role="progressbar" + aria-valuenow 如实传达）。aria-live 只留给状态切换。 -->
+      <p>{t.download.downloading} {progress}%</p>
     {:else if pageState === "done"}
       <p class="ok">{t.download.done}</p>
     {:else if memWarn}
@@ -279,25 +281,6 @@
   }
   .memwarn p { margin: 0 0 var(--space-2); }
   .memwarn .how { color: var(--text); }
-
-  .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; }
-  .fill {
-    height: 100%;
-    background:
-      linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, .35) 50%, transparent 100%),
-      linear-gradient(90deg, var(--accent), var(--accent-deep));
-    background-size: 40% 100%, 100% 100%;
-    background-repeat: no-repeat;
-    transition: width .2s;
-    animation: fill-sheen 1.4s linear infinite;
-  }
-  @keyframes fill-sheen {
-    from { background-position: -45% 0, 0 0; }
-    to   { background-position: 145% 0, 0 0; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .fill { animation: none; background: linear-gradient(90deg, var(--accent), var(--accent-deep)); }
-  }
   .error { color: var(--danger); } .ok { color: #2ecc71; }
 
   .sendcta {

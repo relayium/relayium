@@ -156,3 +156,24 @@ describe("SignalingClient", () => {
     expect(closes).toBe(1);
   });
 });
+
+describe("SignalingClient.send 在重连窗口里", () => {
+  it("socket 已关时既不发也不抛（即发即忘的调用点不该产生 unhandled rejection）", () => {
+    class ClosedSocket extends FakeSocket {
+      readonly readyState = 3; // CLOSED
+    }
+    const sock = new ClosedSocket();
+    const c = new SignalingClient("ws://x", "Alice", () => sock);
+    expect(() => c.sendSignal("peer", { hi: true })).not.toThrow();
+    expect(sock.sent).toEqual([]);
+  });
+
+  it("send 本身抛 InvalidStateError 也被吞掉", () => {
+    class ThrowingSocket extends FakeSocket {
+      readonly readyState = 1; // OPEN，但底层仍可能抛
+      send() { throw new DOMException("still in CONNECTING state", "InvalidStateError"); }
+    }
+    const c = new SignalingClient("ws://x", "Alice", () => new ThrowingSocket());
+    expect(() => c.sendSignal("peer", { hi: true })).not.toThrow();
+  });
+});

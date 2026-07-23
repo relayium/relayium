@@ -306,6 +306,7 @@ export interface Messages {
     confirmDelNode: string; // confirm() before removing a node
     copyLink: string; // copy the rebuilt share link for a stored file (key held locally)
     linkHint: string; // note: links are recoverable only on the browser that uploaded
+    actionFailed: string; // generic "the request failed" notice for the write actions on this page
   };
   // Shared "why an account?" explainer shown on the two login-gated feature pages
   // (/cross-network, /offline-transfer) and, compact, on the /me login gate.

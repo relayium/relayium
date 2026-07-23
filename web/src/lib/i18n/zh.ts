@@ -276,6 +276,7 @@ const zh: Messages = {
     confirmDelNode: "确定移除这个节点？移除后它将不再参与中转与存储。",
     copyLink: "复制链接",
     linkHint: "分享链接的密钥只保存在你上传时用的这台浏览器本地——换设备无法找回，请及时保存链接。",
+    actionFailed: "操作失败，请检查网络后重试。",
   },
   why: {
     heading: "关于账号",

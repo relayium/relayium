@@ -276,6 +276,7 @@ const es: Messages = {
     confirmDelNode: "¿Quitar este nodo? Dejará de retransmitir o almacenar para tu cuenta.",
     copyLink: "Copiar enlace",
     linkHint: "La clave de un enlace para compartir se guarda solo en el navegador desde el que lo subiste — no se puede recuperar en otro dispositivo, así que guarda el enlace.",
+    actionFailed: "Algo salió mal. Comprueba tu conexión e inténtalo de nuevo.",
   },
   why: {
     heading: "Acerca de las cuentas",

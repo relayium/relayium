@@ -24,10 +24,13 @@ const STREAM_ROUTE = "__STREAM_ROUTE__"; // e.g. "/__stream__/" — see lib/sw-s
  */
 const streams = new Map();
 
+// 装完**不自动** skipWaiting。旧 SW 一被顶掉，它全局作用域里的 streams 注册表就
+// 随之消失，正在落盘的流式下载会在下一个 chunk 上永远等不到 ack——发版恰好撞上
+// 一次大文件下载就是一次静默的下载失败。改成由页面在确认自己没有在途流式下载时
+// 发 skip-waiting 来放行（见 share-target.ts 的 activateWhenIdle）；页面全关掉时
+// 浏览器也会自然激活等待中的版本。
 self.addEventListener("install", (e) => {
-  e.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(PRECACHE)).then(() => self.skipWaiting()),
-  );
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE)));
 });
 
 self.addEventListener("activate", (e) => {
@@ -88,10 +91,34 @@ self.addEventListener("fetch", (e) => {
   }
 
   if (url.origin === self.location.origin) {
-    // Cache-first for our own hashed, immutable assets.
-    e.respondWith(caches.match(req).then((hit) => hit || fetch(req)));
+    // Cache-first for our own hashed, immutable assets, and fill the cache on a
+    // miss. Without the fill, anything outside the precache list (the language
+    // chunks, most notably) would go to the network forever and the app would
+    // break the moment it went offline — the precache list is deliberately
+    // narrow, so the runtime fill is what makes that narrowing safe.
+    e.respondWith(
+      caches.match(req).then((hit) => hit || fetch(req).then((res) => fill(req, res))),
+    );
   }
 });
+
+/**
+ * 把一条网络响应存进 shell cache 并原样交还。
+ *
+ * 只存 200 且**带 hash 的**同源资源：hash 名是不可变的，存下来永远不会变陈旧；
+ * 反过来，把 /api/… 之类的动态响应或 opaque/错误响应存进这个按版本清理的 cache，
+ * 就会得到一份没人负责失效的影子副本。res.clone() 必须在返回前做——响应体只能读
+ * 一次，先给了浏览器就没得存了。
+ */
+function fill(req, res) {
+  const cacheable =
+    res && res.ok && res.type !== "opaque" && res.type !== "opaqueredirect";
+  if (cacheable && /-[A-Za-z0-9_-]{8,}\.(js|css)$/.test(new URL(req.url).pathname)) {
+    const copy = res.clone();
+    caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+  }
+  return res;
+}
 
 // 页面 → SW 的控制通道。只认两种消息，其余一律忽略（同源页面才能发到这里，
 // 但保持严格没有坏处）。
@@ -103,6 +130,11 @@ self.addEventListener("message", (e) => {
     // navigator.serviceWorker.controller 非空不够：部署换版期间控制页面的可能
     // 还是一个不认识 STREAM_ROUTE 的旧 SW，那种情况下下载会漏到 nginx。
     if (e.ports[0]) e.ports[0].postMessage({ type: "stream-probe-ok" });
+    return;
+  }
+  if (d.type === "skip-waiting") {
+    // 页面确认此刻没有在途流式下载，放行换版。见 install 里不自动 skipWaiting 的注释。
+    self.skipWaiting();
     return;
   }
   if (d.type === "stream-ping") return; // 保活空包：收到即刷新 SW 的空闲计时器

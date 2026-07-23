@@ -1,5 +1,6 @@
 <!-- web/src/lib/CodePairing.svelte -->
 <script lang="ts">
+  import { copyFeedback } from "./clipboard.svelte";
   import { createPair, CROSS_PATH, HttpError } from "./transfer-link";
   import { canShare, share } from "./share";
   import { enterRoom } from "./room.svelte";
@@ -21,7 +22,7 @@
   let busy = $state(false);
   let err = $state("");
   // Which copy button last fired ("" = none) so each shows its own "copied" state.
-  let copied = $state<"" | "code" | "link">("");
+  const copied = copyFeedback();
 
   // The full join link the recipient opens (same string the QR encodes). Opening
   // it auto-joins the code room, so forwarding this link == sharing the code.
@@ -111,15 +112,8 @@
     enterRoom({ code: entry });
   }
 
-  async function copyText(what: "code" | "link") {
-    try {
-      await navigator.clipboard.writeText(what === "code" ? roomCode : joinLink);
-    } catch {
-      return; // clipboard blocked (permissions/insecure context) — the value is on screen
-    }
-    copied = what;
-    setTimeout(() => { if (copied === what) copied = ""; }, 2000);
-  }
+  const copyText = (what: "code" | "link") =>
+    copied.copy(what === "code" ? roomCode : joinLink, what);
 </script>
 
 <section class="pairing">
@@ -133,8 +127,8 @@
       <p class="lead">{t.pair.yourCode}</p>
       <div class="code">{roomCode}</div>
       <div class="row wrap">
-        <button class="btn btn-ghost" class:copied={copied === "code"} onclick={() => copyText("code")}>{copied === "code" ? t.pair.copied : t.pair.copy}</button>
-        <button class="btn btn-ghost" class:copied={copied === "link"} onclick={() => copyText("link")}>{copied === "link" ? t.pair.copied : t.pair.copyLink}</button>
+        <button class="btn btn-ghost" class:copied={copied.value === "code"} onclick={() => copyText("code")}>{copied.value === "code" ? t.pair.copied : t.pair.copy}</button>
+        <button class="btn btn-ghost" class:copied={copied.value === "link"} onclick={() => copyText("link")}>{copied.value === "link" ? t.pair.copied : t.pair.copyLink}</button>
         {#if canShare()}<button class="btn btn-ghost" onclick={() => share({ title: "Relayium", text: `Relayium: ${roomCode}`, url: joinLink })}>{t.share}</button>{/if}
         {#if remaining}<span class="ttl">{t.pair.expiresIn(remaining)}</span>{/if}
       </div>
@@ -157,6 +151,7 @@
         inputmode="numeric"
         maxlength="6"
         placeholder="000000"
+        aria-label={t.pair.enterHint}
         bind:value={entry}
         oninput={() => {
           entry = entry.replace(/\D/g, "").slice(0, 6);
@@ -171,12 +166,12 @@
     <div class="choices">
       <label class="btn btn-primary" class:disabled={busy}>
         📄 {t.sendFile}
-        <input type="file" multiple disabled={busy} onchange={pickAndSend} />
+        <input class="file-pick-input" type="file" multiple disabled={busy} onchange={pickAndSend} />
       </label>
       {#if folderUploadSupported}
         <label class="btn btn-primary" class:disabled={busy}>
           📁 {t.sendFolder}
-          <input type="file" webkitdirectory multiple disabled={busy} onchange={pickAndSend} />
+          <input class="file-pick-input" type="file" webkitdirectory multiple disabled={busy} onchange={pickAndSend} />
         </label>
       {/if}
       <button class="btn btn-ghost" onclick={() => (mode = "receive")}>{t.pair.enterCode}</button>
@@ -195,7 +190,6 @@
 <style>
   .pairing { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; }
   .choices { display: flex; gap: var(--space-3); flex-wrap: wrap; justify-content: center; }
-  .choices label.btn input[type="file"] { display: none; }
   .choices label.btn.disabled { opacity: .55; cursor: not-allowed; }
   .queued { margin: 0; font-size: var(--fs-xs); color: var(--text-h); text-align: center; }
   .signin { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }

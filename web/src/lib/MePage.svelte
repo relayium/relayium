@@ -9,6 +9,7 @@
   import { formatSize, formatRemaining } from "./format";
   import { nodeRunCommand, nodePortsCommand } from "./nodes";
   import { buildDownloadLink } from "./stored-file";
+  import { copyFeedback } from "./clipboard.svelte";
   import { uploadKey, forgetUploadKey, pruneUploadKeys } from "./upload-keys";
   import WhyAccount from "./WhyAccount.svelte";
   import CommandBlock from "./CommandBlock.svelte";
@@ -49,7 +50,15 @@
   // Local id→key map for files this browser uploaded, so their share link (whose
   // key the server never holds) can be rebuilt and re-copied from here.
   let fileKeys = $state<Record<string, string>>({});
-  let copiedId = $state(""); // file id whose "copy link" just fired, for the ✓ state
+  const linkCopy = copyFeedback(); // file id whose "copy link" just fired, for the ✓ state
+  // Transient failure notice for the write actions below. Without it a failed
+  // request was completely silent: the row simply didn't change and the user had
+  // no way to tell a rejected request from one that never left the browser.
+  let actionErr = $state("");
+  function failed() {
+    actionErr = t.me.actionFailed;
+    setTimeout(() => (actionErr = ""), 5000);
+  }
   let loading = $state(true);
   let nowSec = $state(Math.floor(Date.now() / 1000));
   let loadedFor = ""; // user id we last loaded data for; guards against refetch loops
@@ -75,12 +84,17 @@
   async function saveRename(id: string) {
     const label = renameDraft.trim();
     renamingId = null;
-    const res = await fetch(`/api/nodes/${id}/label`, {
-      method: "PUT", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: label }),
-    });
-    if (res.ok) nodes = nodes.map((n) => (n.id === id ? { ...n, name: label } : n));
+    try {
+      const res = await fetch(`/api/nodes/${id}/label`, {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: label }),
+      });
+      if (!res.ok) { failed(); return; }
+      nodes = nodes.map((n) => (n.id === id ? { ...n, name: label } : n));
+    } catch {
+      failed(); // offline / connection dropped — fetch rejects rather than returning !ok
+    }
   }
 
   async function loadNodes() {
@@ -139,55 +153,70 @@
   async function copyLink(id: string) {
     const key = fileKeys[id];
     if (!key) return;
-    const link = buildDownloadLink(location.origin, id, key);
-    try {
-      await navigator.clipboard.writeText(link);
-    } catch {
-      return; // clipboard blocked
-    }
-    copiedId = id;
-    setTimeout(() => { if (copiedId === id) copiedId = ""; }, 2000);
+    await linkCopy.copy(buildDownloadLink(location.origin, id, key), id);
   }
 
   async function addNode() {
     const name = newNodeName.trim();
-    const res = await fetch("/api/nodes/provision", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-    if (res.ok) {
+    try {
+      const res = await fetch("/api/nodes/provision", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) { failed(); return; }
       const body = (await res.json()) as { token: string };
       newToken = body.token;
       newNodeName = "";
       addingNode = false;
       await loadNodes();
+    } catch {
+      failed();
     }
   }
 
   async function deleteNode(id: string) {
     if (!(await confirmDialog(t.me.confirmDelNode))) return;
-    const res = await fetch(`/api/nodes/${id}`, { method: "DELETE", credentials: "include" });
-    if (res.ok) nodes = nodes.filter((n) => n.id !== id);
+    try {
+      const res = await fetch(`/api/nodes/${id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) { failed(); return; }
+      nodes = nodes.filter((n) => n.id !== id);
+    } catch {
+      failed();
+    }
   }
 
   async function setStrict(next: boolean) {
     if (next === strict) return;
     const prev = strict;
     strict = next; // optimistic — matches the option the user just picked
-    const res = await fetch("/api/me/strict-nodes", {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ onlyOwnNodes: next }),
-    });
-    if (!res.ok) strict = prev; // revert on failure
+    try {
+      const res = await fetch("/api/me/strict-nodes", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ onlyOwnNodes: next }),
+      });
+      if (!res.ok) { strict = prev; failed(); } // revert on failure
+    } catch {
+      // A rejected fetch left the optimistic toggle showing a setting the server
+      // never received — the one case where silence is actively misleading.
+      strict = prev;
+      failed();
+    }
   }
 
   async function del(id: string) {
     if (!(await confirmDialog(t.me.confirmDel))) return;
-    const res = await fetch(`/api/files/${id}`, { method: "DELETE", credentials: "include" });
+    let res: Response;
+    try {
+      res = await fetch(`/api/files/${id}`, { method: "DELETE", credentials: "include" });
+    } catch {
+      failed();
+      return;
+    }
+    if (!res.ok) failed();
     if (res.ok) {
       files = files.filter((f) => f.id !== id);
       forgetUploadKey(id);
@@ -235,6 +264,10 @@
     <button class="back" onclick={() => navigate("lan")}>{t.me.back}</button>
     <h1>{t.me.title}</h1>
   </header>
+
+  {#if actionErr}
+    <p class="action-err" role="alert">{actionErr}</p>
+  {/if}
 
   {#if !session().user}
     <div class="gate">
@@ -291,8 +324,8 @@
                 ⏳ {t.me.expiresIn(formatRemaining(secLeft, t.download.durUnits))}
               </span>
               {#if fileKeys[f.id]}
-                <button class="linkbtn" class:copied={copiedId === f.id} onclick={() => copyLink(f.id)}>
-                  {copiedId === f.id ? "✓" : "🔗 " + t.me.copyLink}
+                <button class="linkbtn" class:copied={linkCopy.value === f.id} onclick={() => copyLink(f.id)}>
+                  {linkCopy.value === f.id ? "✓" : "🔗 " + t.me.copyLink}
                 </button>
               {/if}
               <button class="del" onclick={() => del(f.id)} aria-label={t.me.del}>{t.me.del}</button>
@@ -383,6 +416,15 @@
 </section>
 
 <style>
+  .action-err {
+    margin: 0 0 1rem;
+    padding: 0.6rem 0.9rem;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--danger, #e5484d) 12%, transparent);
+    color: var(--danger, #e5484d);
+    font-size: 0.9rem;
+  }
+
   .me { position: relative; max-width: 1120px; margin: 0 auto; }
 
   .me-head { text-align: center; padding: var(--space-2) 0 var(--space-5); position: relative; }

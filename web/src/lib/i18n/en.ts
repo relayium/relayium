@@ -276,6 +276,7 @@ const en: Messages = {
     confirmDelNode: "Remove this node? It will stop relaying or storing for your account.",
     copyLink: "Copy link",
     linkHint: "A share link's key is kept only in the browser you uploaded from — it can't be recovered on another device, so save the link.",
+    actionFailed: "Something went wrong. Check your connection and try again.",
   },
   why: {
     heading: "About accounts",

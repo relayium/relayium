@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { copyFeedback } from "./clipboard.svelte";
   import { onMount } from "svelte";
   import { uploadFileResumable, buildDownloadLink, UploadError } from "./stored-file";
   import { canShare, share } from "./share";
@@ -66,8 +67,8 @@
   let link = $state("");
   let expiresAt = $state(0); // unix seconds of the generated link, 0 until ready
   let err = $state("");
-  let copied = $state(false);
-  let cmdCopied = $state(false);
+  const linkCopy = copyFeedback();
+  const cmdCopy = copyFeedback();
   let dest = $state("."); // download destination for the `relayium down` command builder
   let qrDataUrl = $state("");
 
@@ -169,25 +170,8 @@
     controller?.abort();
   }
 
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(link);
-    } catch {
-      return; // clipboard blocked — the link is visible in the read-only field
-    }
-    copied = true;
-    setTimeout(() => (copied = false), 2000);
-  }
-
-  async function copyCmd() {
-    try {
-      await navigator.clipboard.writeText(downCmd);
-    } catch {
-      return; // clipboard blocked — the command is visible and selectable
-    }
-    cmdCopied = true;
-    setTimeout(() => (cmdCopied = false), 2000);
-  }
+  const copy = () => linkCopy.copy(link);
+  const copyCmd = () => cmdCopy.copy(downCmd);
 </script>
 
 <section class="stored">
@@ -211,7 +195,7 @@
     ondragleave={onDragLeave}
     ondrop={onDrop}
   >
-    <input type="file" multiple disabled={busy} onchange={onPick} />
+    <input class="file-pick-input" type="file" multiple disabled={busy} onchange={onPick} />
     <span>{busy ? t.stored.uploading : t.stored.pick}</span>
     <span class="drophint">{t.stored.dropHint}</span>
   </label>
@@ -219,8 +203,9 @@
   {#if bigBatch}<p class="bignote">{t.stored.bigNote}</p>{/if}
 
   {#if busy}
-    <div class="bar" role="progressbar" aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"><div class="fill" style:width="{progress}%"></div></div>
-    <p class="phase" aria-live="polite">{phase === "uploading" ? `${t.stored.uploadingNow} ${progress}%` : `${t.stored.encrypting} ${progress}%`}</p>
+    <div class="progress-bar" role="progressbar" aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style:width="{progress}%"></div></div>
+    <!-- 同 DownloadPage：百分比不进 live region，理由见那里的注释。 -->
+    <p class="phase">{phase === "uploading" ? `${t.stored.uploadingNow} ${progress}%` : `${t.stored.encrypting} ${progress}%`}</p>
     <button type="button" class="btn btn-ghost cancel" onclick={cancel}>{t.cancel}</button>
   {/if}
 
@@ -230,7 +215,7 @@
     <p class="ready">{t.stored.linkReady}</p>
     <div class="row">
       <input readonly value={link} />
-      <button class="btn btn-ghost" onclick={copy}>{copied ? t.stored.copied : t.stored.copy}</button>
+      <button class="btn btn-ghost" onclick={copy}>{linkCopy.value ? t.stored.copied : t.stored.copy}</button>
       {#if canShare()}<button class="btn btn-ghost" onclick={() => share({ title: "Relayium", url: link })}>{t.share}</button>{/if}
     </div>
     {#if expiresAt > 0}
@@ -248,7 +233,7 @@
       <p class="cli-hint">{t.stored.cliDestHint}</p>
       <div class="cli-cmd">
         <code>{downCmd}</code>
-        <button class="btn btn-ghost" onclick={copyCmd}>{cmdCopied ? t.stored.copied : t.stored.cliCopy}</button>
+        <button class="btn btn-ghost" onclick={copyCmd}>{cmdCopy.value ? t.stored.copied : t.stored.cliCopy}</button>
       </div>
     </div>
   {/if}
@@ -262,7 +247,6 @@
   .pick:hover { border-color: var(--accent-border); }
   .pick.dragover { border-color: var(--accent); background: var(--code-bg); }
   .pick.disabled { opacity: .6; cursor: not-allowed; }
-  .pick input[type="file"] { display: none; }
   .pick .drophint { width: 100%; font-size: var(--fs-xs); color: var(--text); }
   .max-hint { display: block; margin-top: var(--space-2); font-size: var(--fs-xs); color: var(--text); }
   .notbackup { margin: var(--space-2) 0 0; font-size: var(--fs-xs); color: var(--text); }
@@ -271,24 +255,8 @@
     border-radius: var(--radius-sm); background: var(--code-bg); border: 1px solid var(--accent-border);
     font-size: var(--fs-xs); line-height: 1.55; color: var(--text-h);
   }
-  .bar { height: 8px; border-radius: 999px; background: var(--code-bg); overflow: hidden; margin-top: var(--space-3); }
-  .fill {
-    height: 100%;
-    background:
-      linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, .35) 50%, transparent 100%),
-      linear-gradient(90deg, var(--accent), var(--accent-deep));
-    background-size: 40% 100%, 100% 100%;
-    background-repeat: no-repeat;
-    transition: width .2s;
-    animation: fill-sheen 1.4s linear infinite;
-  }
-  @keyframes fill-sheen {
-    from { background-position: -45% 0, 0 0; }
-    to   { background-position: 145% 0, 0 0; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .fill { animation: none; background: linear-gradient(90deg, var(--accent), var(--accent-deep)); }
-  }
+  /* 其余进度条样式在 app.css 的 .progress-bar/.progress-fill；这里只留本页的间距。 */
+  .progress-bar { margin-top: var(--space-3); }
   .phase { margin: var(--space-2) 0 0; font-size: var(--fs-xs); color: var(--text); }
   .cancel { align-self: flex-start; margin-top: var(--space-3); }
   .ready { color: var(--text-h); font-size: var(--fs-sm); margin: var(--space-3) 0 var(--space-2); }

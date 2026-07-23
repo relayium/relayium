@@ -15,6 +15,8 @@ function safeParseEnvelope(data: string): Envelope | null {
 
 export interface WebSocketLike {
   send(d: string): void;
+  /** 真 WebSocket 有；假 socket 可以不实现。见 SignalingClient.send。 */
+  readonly readyState?: number;
   close(): void;
   onopen: (() => void) | null;
   onmessage: ((ev: { data: string }) => void) | null;
@@ -73,7 +75,22 @@ export class SignalingClient {
     this.send({ type: "signal", to, data });
   }
 
-  private send(e: Envelope) { this.sock.send(JSON.stringify(e)); }
+  /**
+   * 发一帧。**不抛**：底层 socket 在重连窗口里（CLOSING/CLOSED）send 会抛
+   * InvalidStateError，而这里的调用点全是即发即忘的 UI 路径（busy 应答、relay RTT
+   * 广播），一路抛上去就是一条 unhandled rejection，还可能把 onmessage 的分发循环
+   * 打断。信令帧本来就是尽力而为——重连成功后 join/peers 会把状态重新对齐。
+   */
+  private send(e: Envelope) {
+    // readyState 是可选的：WebSocketLike 只要求一个 send，测试里的假 socket 没有它。
+    const rs = (this.sock as { readyState?: number }).readyState;
+    if (rs !== undefined && rs !== 1 /* OPEN */) return;
+    try {
+      this.sock.send(JSON.stringify(e));
+    } catch {
+      /* 重连窗口——丢掉这一帧，重连后会重新对齐 */
+    }
+  }
 
   private handle(e: Envelope | null) {
     // Validate the envelope shape at runtime before dispatch: an inbound frame

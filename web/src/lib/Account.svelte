@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { trapFocus } from "./focus-trap";
   import { onMount } from "svelte";
   import {
     session, refreshSession, logout, localDeviceId,
@@ -340,7 +341,7 @@
 
   {#if open}
     <button type="button" class="backdrop" aria-label={t.close} onclick={() => (open = false)}></button>
-    <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal" role="dialog" aria-modal="true" use:trapFocus>
       <button class="close-x" onclick={() => (open = false)} aria-label={t.close}>✕</button>
       {#if session().user}
         <div class="menu">

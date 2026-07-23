@@ -178,8 +178,16 @@ export function summarizeStats(stats: RTCStatsReport, includeIps = false): ConnD
   return d;
 }
 
+// 分块拼而不是 String.fromCharCode(...bytes)：spread 会把每个字节铺成一个实参，
+// 几万字节就能撞上引擎的实参上限直接抛 RangeError。这里的输入只有公钥/承诺
+// （32 字节），但这个函数没有任何东西保证调用方永远只传小 buffer。
 function b64(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes));
+  let s = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    s += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(s);
 }
 function unb64(s: string): Uint8Array {
   return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
