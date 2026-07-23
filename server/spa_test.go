@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -44,7 +45,7 @@ func TestSecurityHeaders(t *testing.T) {
 		"object-src 'none'",
 		// Scoped to our own domain: apex + fleet node subdomains for direct
 		// downloads, but no broad 'https:'/'wss:' exfil wildcard.
-		"connect-src 'self' https://*.relayium.com;",
+		"connect-src 'self' https://*.relayium.com https://*.relayium.com:2053",
 		"'nonce-",           // per-request script nonce present
 		"'sha256-deadbeef'", // SPA inline-script hash folded in
 		// libsodium is WASM and WebAssembly.instantiate answers to script-src.
@@ -125,5 +126,30 @@ func TestSPAHandler(t *testing.T) {
 				t.Fatalf("%s: body = %q, want %q", c.path, rec.Body.String(), c.wantBody)
 			}
 		})
+	}
+}
+
+// TestCSPCoversEveryNodeDownloadPort: a CSP host-source with no port matches
+// ONLY the scheme's default port, so a node on 2053 (the installer's default,
+// because a node often shares a host with something already on 443) would be
+// blocked by a bare https://*.relayium.com. The failure mode is invisible until
+// direct download is switched on, and then it is every stored download.
+func TestCSPCoversEveryNodeDownloadPort(t *testing.T) {
+	csp := buildCSP("n", nil)
+	for _, p := range nodeDownloadPorts {
+		want := "https://*.relayium.com:" + strconv.Itoa(p)
+		if !strings.Contains(csp, want) {
+			t.Errorf("connect-src missing %q; got %q", want, csp)
+		}
+	}
+	// The port-less source must remain: it is how 443 is allowed.
+	if !strings.Contains(csp, "https://*.relayium.com ") {
+		t.Errorf("connect-src lost the port-less (443) source; got %q", csp)
+	}
+	// Still scoped to our own zone.
+	// (a bare "https:" scheme-source, not the "https://…" host-sources above)
+	if strings.Contains(csp, "https://*:") || strings.Contains(csp, "connect-src 'self' https:;") ||
+		strings.Contains(csp, "connect-src 'self' https: ") {
+		t.Errorf("connect-src widened beyond our zone; got %q", csp)
 	}
 }

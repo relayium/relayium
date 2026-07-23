@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/relayium/relayium/internal/account"
@@ -21,16 +22,38 @@ import (
 // because index.html is served as a static file). A script is allowed if it
 // matches EITHER, so both surfaces work with no 'unsafe-inline'.
 //
-// connect-src is 'self' PLUS https://*.relayium.com: the SPA fetches from the
-// apex (API, signalling WebSocket via wsURL's wss://<same host>/ws) and, for
-// decentralized stored downloads, follows a 302 to a fleet node subdomain
-// (nodeN.relayium.com) to pull the ciphertext straight from the node. The
+// connect-src is 'self' PLUS https://*.relayium.com on each port a node can
+// serve on: the SPA fetches from the apex (API, signalling WebSocket via
+// wsURL's wss://<same host>/ws) and, for decentralized stored downloads,
+// follows a 302 to a fleet node subdomain (nodeN.relayium.com) to pull the
+// ciphertext straight from the node. A CSP host-source with NO port matches
+// only the scheme's default port, so listing just https://*.relayium.com would
+// silently block every node that is not on 443 — and the node's default
+// download port is 2053, because a node often shares a host with something
+// that already owns 443. The port list is exactly the set install-node.sh
+// accepts (Cloudflare's proxied HTTPS ports); the two must stay in sync, so
+// nodeDownloadPorts is the single place either is written down. The
 // wildcard is scoped to our OWN domain, so it does NOT reopen the broad
 // exfiltration hole the previous 'https:' wildcard did — a foothold still can't
 // POST the zero-knowledge keys to an arbitrary host, only to relayium.com
 // subdomains we control (which accept no such data). style-src keeps
 // 'unsafe-inline' for now (Svelte style attributes). frame-ancestors 'none' is
 // the clickjacking defense.
+// nodeDownloadPorts are the client-facing HTTPS ports a fleet node's download
+// listener can be reached on — Cloudflare's proxied HTTPS ports, the same set
+// install-node.sh refuses to configure outside of. 443 is expressed by the
+// port-less source (which matches the default port and nothing else).
+var nodeDownloadPorts = []int{2053, 2083, 2087, 2096, 8443}
+
+// nodeConnectSrc renders the fleet-node half of connect-src.
+func nodeConnectSrc() string {
+	out := "https://*.relayium.com"
+	for _, p := range nodeDownloadPorts {
+		out += " https://*.relayium.com:" + strconv.Itoa(p)
+	}
+	return out
+}
+
 func buildCSP(nonce string, spaScriptHashes []string) string {
 	// 'wasm-unsafe-eval' is required, not optional: libsodium is a WebAssembly
 	// module, and WebAssembly.instantiate is governed by script-src. Without this
@@ -55,7 +78,7 @@ func buildCSP(nonce string, spaScriptHashes []string) string {
 		"img-src 'self' data: blob:; " +
 		"style-src 'self' 'unsafe-inline'; " +
 		script + "; " +
-		"connect-src 'self' https://*.relayium.com; " +
+		"connect-src 'self' " + nodeConnectSrc() + "; " +
 		"font-src 'self' data:; " +
 		"worker-src 'self'; " +
 		"manifest-src 'self'"

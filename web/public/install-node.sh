@@ -221,8 +221,14 @@ ${storage_rw}
 WantedBy=multi-user.target
 EOF
   systemctl daemon-reload
-  systemctl enable --now relayium-node
-  echo "relayium-node.service enabled (locked-down, non-root) — check: systemctl status relayium-node"
+  systemctl enable relayium-node
+  # restart, NOT `enable --now`: on a host that already runs an older node,
+  # --now only *starts* the unit, and starting an already-active unit does
+  # nothing at all. The new binary would sit on disk while the old process keeps
+  # serving — an upgrade that reports success and changes nothing. (This is how
+  # the first v0.10.0 install went: installer said OK, central still saw 0.7.0.)
+  systemctl restart relayium-node
+  echo "relayium-node.service enabled and (re)started (locked-down, non-root) — check: systemctl status relayium-node"
   echo "it should appear online in ${RELAYIUM_CENTRAL_URL}/admin within ~30s"
   echo "auto-update: central only ever hands out a version NUMBER; the binary is downloaded"
   echo "and signature-verified on this machine, same as this installer just did — never trust-on-say-so."
