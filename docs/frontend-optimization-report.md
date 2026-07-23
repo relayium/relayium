@@ -229,3 +229,18 @@ pickWhen 5, flagMeanings 8, fileDescs 3"的手写注释本身就已经漂移了�
 2. 运行时兜底：`i18n.test.ts` 断言每种语言的四个数组长度等于对应常量数组、且每条
    非空。因为类型错误只在有人真的跑 `npm run check` 时才会被看见，而 CI 目前只跑
    发布流程。实测删掉德语一条 fileDescs → 用例报 "de 的 fileDescs 条数不对: expected 2 to be 3"。
+
+### 补：#24 首页折叠线以下的区块懒加载（2026-07-23）
+
+HowToSteps / 跨网络引流 / FeatureStrip / CliCallout / UseCases / Faq 原本静态挂在
+App.svelte 上，于是每个深链访客（/d/<id> 下载页、/me、/pricing…）都要先下载一份自己
+根本看不到的首页长文案。合并成 `HomeSections.svelte` 一个懒加载边界（**一个**而不是
+五个：五个边界会让打包器把共享部分复制五份——上一次 Account 懒加载正是这么变大的）。
+
+实测（入口 js + 入口 css）：**149,939 → 133,260 字节**（js 108,388→101,200，
+css 41,551→32,060），首页访客多取一个 8.3KB 的 HomeSections 块。
+
+E2E 加了一条结构断言（`.how` / `.crosscta` / `.faq` 三个都在）守这个边界：它在折叠线
+以下，坏掉不会有任何报错，页面只是从此少了一半内容。**第一版断言我写成了文案匹配，
+结果是假红**（英文标题是 "Frequently asked questions"，并不含 "FAQ"），已改成结构选择器
+——9 种语言的文案不能当断言用。

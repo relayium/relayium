@@ -425,6 +425,18 @@ async function main() {
     await receiver.waitFor(peersSeen, "the receiver to see the sender on the radar");
     ok("both tabs joined the room and discovered each other");
 
+    // 首页折叠线以下的营销区块是懒加载的（HomeSections）。它在首屏之外，坏掉了
+    // 不会有任何报错——页面只是从此少了一半内容。这里明确等它出现。
+    // 用结构选择器而不是文案匹配：文案有 9 种语言、还会改，拿它当断言只会制造
+    // 假红——第一版就踩了（英文标题是 "Frequently asked questions"，并不含 "FAQ"）。
+    // .how / .crosscta / .faq 分别来自 HomeSections 里的三个子组件，三个都在才说明
+    // 这个懒加载边界整块挂上了。
+    await sender.waitFor(
+      "['.how', '.crosscta', '.faq'].every((sel) => document.querySelector(sel))",
+      "the lazily-loaded home sections to render",
+    );
+    ok("the lazy home sections rendered on the LAN page");
+
     // ── 发送：真的往那个 file input 里塞一个文件（CDP 的原生入口）──────────
     const payload = randomBytes(FILE_BYTES);
     const expected = createHash("sha256").update(payload).digest("hex");

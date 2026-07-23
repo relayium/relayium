@@ -29,9 +29,6 @@
   import DeviceRadar from "./lib/DeviceRadar.svelte";
   import QuotaNotice from "./lib/QuotaNotice.svelte";
   import ReceiveActions from "./lib/ReceiveActions.svelte";
-  import FeatureStrip from "./lib/FeatureStrip.svelte";
-  import CliCallout from "./lib/CliCallout.svelte";
-  import HowToSteps from "./lib/HowToSteps.svelte";
   import DebugPanel from "./lib/DebugPanel.svelte";
 
   // Route pages are code-split and loaded on first navigation, so they stay out of
@@ -48,6 +45,8 @@
     pricing: () => import("./lib/PricingPage.svelte"),
     "verify-email": () => import("./lib/VerifyEmail.svelte"),
     "reset-password": () => import("./lib/ResetPassword.svelte"),
+    // 不是路由，是首页折叠线以下那一大块 —— 借用同一个记忆化加载器，省得再写一套。
+    "home-sections": () => import("./lib/HomeSections.svelte"),
   } as const;
   const routeCache = new Map<string, ReturnType<(typeof routeLoaders)[keyof typeof routeLoaders]>>();
   function routePage<K extends keyof typeof routeLoaders>(key: K): ReturnType<(typeof routeLoaders)[K]> {
@@ -55,8 +54,6 @@
     if (!p) { p = routeLoaders[key](); routeCache.set(key, p); }
     return p as ReturnType<(typeof routeLoaders)[K]>;
   }
-  import UseCases from "./lib/UseCases.svelte";
-  import Faq from "./lib/Faq.svelte";
 
   // Concise label for a completed transfer's history entry: the first file's
   // name, plus a "+N" count when the batch had more than one.
@@ -860,23 +857,12 @@
       </details>
     </section>
 
-    <HowToSteps maxFiles={MAX_FILES} />
-
-    <section class="crosscta reveal" use:reveal>
-      <div class="cc-text">
-        <h3>{t.homeCross.title}</h3>
-        <p>{t.homeCross.desc}</p>
-      </div>
-      <div class="cc-actions">
-        <button class="btn btn-primary" onclick={() => navigate("cross")}>{t.homeCross.realtimeCta}</button>
-        <button class="btn btn-ghost" onclick={() => navigate("offline")}>{t.homeCross.offlineCta}</button>
-      </div>
-    </section>
-
-    <FeatureStrip />
-    <CliCallout />
-    <UseCases />
-    <Faq variant="home" />
+    <!-- 折叠线以下的营销区块：懒加载，深链访客（/d/<id>、/me…）不必为首页长文案
+         付下载成本。await 里不放占位骨架——它在首屏之外，加载期间什么都不显示比
+         闪一块灰更安稳。 -->
+    {#await routePage("home-sections") then { default: HomeSections }}
+      <HomeSections maxFiles={MAX_FILES} />
+    {/await}
 
     <footer>
       <nav class="legal" aria-label="Legal">
@@ -937,17 +923,6 @@
   }
 
 
-  .crosscta {
-    margin: var(--section-gap) 0 var(--space-2);
-    display: flex; align-items: center; gap: var(--space-5); flex-wrap: wrap;
-    padding: var(--space-5) var(--space-6); border-radius: var(--radius);
-    border: 1px solid var(--accent-border); background: var(--accent-bg);
-  }
-  .crosscta .cc-text { flex: 1 1 260px; min-width: 0; }
-  .crosscta h3 { margin: 0 0 6px; font-size: 18px; color: var(--text-h); font-weight: 600; }
-  .crosscta p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text); }
-  .crosscta .btn { white-space: nowrap; }
-  .crosscta .cc-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; }
 
   .card {
     border: 1px solid var(--border);
