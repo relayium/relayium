@@ -97,7 +97,14 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>中央从不下发二进制。它的全部回答就是一个版本号、两个开关（这台节点现在能不能动、这是不是一次刻意的降级）和一句简短的理由——没有字节流，没有 URL，没有命令。之后是节点自己去取那个发布版本，把压缩包的 SHA-256 与该版本的 checksums.txt 比对，再用编译进「正在做这次校验的那个二进制」里的公钥，验证 checksums.txt 上的 ECDSA P-256 签名。这把钥匙的私钥半边并不在回答这些轮询的服务器上。所以中央即使被攻破，也只能报一个版本号，变不出一个能通过验签的二进制。</p>
       <p>更新器和节点是两个权限恰好相反的进程。relayium-node.service 就是上面那个沙箱——在 ProtectSystem=strict 之下它根本无法写 /usr/local/bin，所以节点永远改不了任何二进制，包括它自己的。relayium-node-update.service 则是一个只做一件事的 oneshot unit，以 root 运行，并且刻意不套沙箱：因为替换 /usr/local/bin 里的文件，需要的正是节点沙箱存在的意义所要拒绝的那份权限。把「能改二进制」这件事收进这一个单一用途的 unit，而不是去松动节点本体的加固，正是这个拆分的全部意义：拿着 root 的那个进程只负责换二进制，笼子里的那个永远碰不到二进制。</p>
       <p>更新出了问题会自己撤销。更新器会把旧二进制留在新二进制旁边，重启服务，然后最多盯十分钟等心跳；如果新版本在这个窗口里没能报健康，它就把旧二进制换回去、再重启一次，并记下这个坏版本不再重试。整个过程从头到尾都不会读、移动或删除存储的文件。</p>
-      <ul><li>不想要它：带 RELAYIUM_NODE_AUTO_UPDATE=off 重跑一遍安装脚本。timer 和它的 service 会被停用并删除；节点照常运行，什么时候升级由你决定。</li><li>彻底不用了：先下载、检查，再执行——直接管道给 `sh` 的话，一旦链接暂时 404 或网络抖动，整条命令会什么都不打印、退出码却是 0，看起来就像卸载成功了。`curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; [ -s uninstall-node.sh ] &amp;&amp; sudo sh uninstall-node.sh` 会删掉 unit、二进制、配置和那个服务账户，并尽力（best-effort）告知 relayium.com 这台节点已下线——如果这次调用失败，终端上只会多一行提示（不是卸载出了问题），并会打印这台节点的 ID，方便管理员手动标记为已移除。</li><li>如果这台节点存了东西，只要存储目录里还有它不认识的文件——不只是活着的文件，一个已经过期、只是清理还没轮到的 blob 也算——卸载脚本就会拒绝执行，而不是把它们扔在那儿：每个存储的文件只存在于唯一一台节点上，没有副本。等这个数字归零再跑一次，或者加 RELAYIUM_NODE_FORCE=1 表示你接受这些文件从此不可达。存储目录本身除非你另外加上 RELAYIUM_NODE_PURGE_STORAGE=1，否则永远不会被删除。</li></ul>
+      <ul><li>不想要它：带 RELAYIUM_NODE_AUTO_UPDATE=off 重跑一遍安装脚本。timer 和它的 service 会被停用并删除；节点照常运行，什么时候升级由你决定。</li><li>彻底不用这台节点了：见下面的「移除你的节点」。</li></ul>
+      <h2>移除你的节点</h2>
+      <p>卸载只有一个脚本，无论这台节点只做中继还是也存文件，用的都是它。它会删掉 unit、二进制、配置和那个服务账户，并尽力（best-effort）通知 relayium.com 这台节点已经下线。这次调用失败的话，终端上只多一行提示，不是卸载出了问题——它会打印节点 ID，方便手工标记为已移除。</p>
+      <p>先下载、检查，再执行。直接管道给 `sh` 的话，一旦 404 或网络抖动，整条命令会什么都不打印、退出码却是 0，看起来和卸载成功一模一样。</p>
+      <p>它只删自己认得的东西：状态目录或存储目录里出现的意外文件会被保留并报告，而不是一并扫掉。</p>
+      <pre><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; \
+  [ -s uninstall-node.sh ] &amp;&amp; sudo sh uninstall-node.sh</code></pre>
+      <ul><li>只要存储目录里还有它认不出的文件，它就拒绝卸载——包括清理还没轮到的过期 blob——因为每个存储文件只存在于唯一一台节点上，没有副本。等这个数变成 0 再跑，或者加 RELAYIUM_NODE_FORCE=1 表示你接受那些文件从此不可达。</li><li>如果它判断不出你的 blob 在哪，它会停下来而不是猜。RELAYIUM_NODE_ASSUME_NO_STORAGE=1 是唯一的放行开关，而且它照样不会删任何认不出的东西。</li><li>存储目录本身会被保留，除非你另外加 RELAYIUM_NODE_PURGE_STORAGE=1。环境变量过不了 `| sudo sh`，要写成 `sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh`。</li><li>卸完之后，`systemctl status relayium-node` 应该是 not-found，也不该再列出 relayium-node 的 timer。以后重装的话，你账户里会多出一台**新**节点：卸载把节点的身份文件删掉了，所以重装是注册一台全新节点，而不是把旧的那台救回来。</li></ul>
       <h2>第三步 —— 放通入站端口</h2>
       <p>「在线」（向 relayium.com 发心跳）只需要出站访问，你已经有了。但要让别人真正通过你的节点中转、往上存储，它的入站端口必须可达。如果这台主机开了防火墙，就放通它们——用 ufw 就是：</p>
       <pre><code>sudo ufw allow 3478/udp        # TURN

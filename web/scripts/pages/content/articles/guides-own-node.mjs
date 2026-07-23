@@ -96,8 +96,22 @@ const en = {
       ],
       bullets: [
         "Don't want it: re-run the installer with RELAYIUM_NODE_AUTO_UPDATE=off. The timer and its service are disabled and deleted; the node keeps running and you update it when you choose.",
-        "Done with it entirely: download it, check it, then run it — piping straight into `sh` means a 404 or a network blip makes the whole command print nothing and exit 0, which reads as a successful uninstall. `curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh` removes the units, the binary, the config and the service account, and makes a best-effort call to tell relayium.com the node is gone — if that call fails it's one line on your terminal, not a broken uninstall, and it prints the node's ID so an admin can mark it removed by hand instead.",
-        "On a node that stores, that uninstall refuses while it finds any file in the storage directory it doesn't recognise, not only live ones — an already-expired blob the periodic cleanup hasn't reached yet counts the same way — rather than stranding them: every stored file lives on exactly one node and there are no replicas. Wait for that count to reach zero and run it again, or pass RELAYIUM_NODE_FORCE=1 to accept that they become unreachable. The storage directory itself is never deleted unless you also pass RELAYIUM_NODE_PURGE_STORAGE=1.",
+        "Done with the node entirely: see “Removing your node” below.",
+      ],
+    },
+    {
+      heading: "Removing your node",
+      body: [
+        "Uninstalling is one script, and it is the same one whether your node stores files or only relays. It removes the units, the binary, the config and the service account, and makes a best-effort call telling relayium.com the node is gone. If that call fails it is one line on your terminal, not a broken uninstall — it prints the node's ID so it can be marked removed by hand.",
+        "Download it, check it, then run it. Piping straight into `sh` means a 404 or a network blip makes the whole command print nothing and exit 0, which reads exactly like a successful uninstall.",
+        "It removes only what it recognises: anything unexpected in the state or storage directories is kept and reported rather than swept away.",
+      ],
+      code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
+      bullets: [
+        "It refuses while the storage directory still holds any file it doesn't recognise — an expired blob the cleanup hasn't reached yet counts too — because every stored file lives on exactly one node and there are no replicas. Wait for that count to reach zero, or pass RELAYIUM_NODE_FORCE=1 to accept that those files become unreachable.",
+        "If it cannot work out where your blobs live, it stops instead of guessing. RELAYIUM_NODE_ASSUME_NO_STORAGE=1 is the only way past that, and it still deletes nothing it does not recognise.",
+        "The storage directory itself is kept unless you also pass RELAYIUM_NODE_PURGE_STORAGE=1. Environment variables do not survive `| sudo sh` — pass them as `sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh`.",
+        "Afterwards, `systemctl status relayium-node` should say not-found and no relayium-node timer should be listed. Install again later and your account gets a NEW node: the uninstall removes the node's identity file, so a fresh install registers a fresh node rather than reviving the old one.",
       ],
     },
     {
@@ -231,8 +245,22 @@ const zh = {
       ],
       bullets: [
         "不想要它：带 RELAYIUM_NODE_AUTO_UPDATE=off 重跑一遍安装脚本。timer 和它的 service 会被停用并删除；节点照常运行，什么时候升级由你决定。",
-        "彻底不用了：先下载、检查，再执行——直接管道给 `sh` 的话，一旦链接暂时 404 或网络抖动，整条命令会什么都不打印、退出码却是 0，看起来就像卸载成功了。`curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh` 会删掉 unit、二进制、配置和那个服务账户，并尽力（best-effort）告知 relayium.com 这台节点已下线——如果这次调用失败，终端上只会多一行提示（不是卸载出了问题），并会打印这台节点的 ID，方便管理员手动标记为已移除。",
-        "如果这台节点存了东西，只要存储目录里还有它不认识的文件——不只是活着的文件，一个已经过期、只是清理还没轮到的 blob 也算——卸载脚本就会拒绝执行，而不是把它们扔在那儿：每个存储的文件只存在于唯一一台节点上，没有副本。等这个数字归零再跑一次，或者加 RELAYIUM_NODE_FORCE=1 表示你接受这些文件从此不可达。存储目录本身除非你另外加上 RELAYIUM_NODE_PURGE_STORAGE=1，否则永远不会被删除。",
+        "彻底不用这台节点了：见下面的「移除你的节点」。",
+      ],
+    },
+    {
+      heading: "移除你的节点",
+      body: [
+        "卸载只有一个脚本，无论这台节点只做中继还是也存文件，用的都是它。它会删掉 unit、二进制、配置和那个服务账户，并尽力（best-effort）通知 relayium.com 这台节点已经下线。这次调用失败的话，终端上只多一行提示，不是卸载出了问题——它会打印节点 ID，方便手工标记为已移除。",
+        "先下载、检查，再执行。直接管道给 `sh` 的话，一旦 404 或网络抖动，整条命令会什么都不打印、退出码却是 0，看起来和卸载成功一模一样。",
+        "它只删自己认得的东西：状态目录或存储目录里出现的意外文件会被保留并报告，而不是一并扫掉。",
+      ],
+      code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
+      bullets: [
+        "只要存储目录里还有它认不出的文件，它就拒绝卸载——包括清理还没轮到的过期 blob——因为每个存储文件只存在于唯一一台节点上，没有副本。等这个数变成 0 再跑，或者加 RELAYIUM_NODE_FORCE=1 表示你接受那些文件从此不可达。",
+        "如果它判断不出你的 blob 在哪，它会停下来而不是猜。RELAYIUM_NODE_ASSUME_NO_STORAGE=1 是唯一的放行开关，而且它照样不会删任何认不出的东西。",
+        "存储目录本身会被保留，除非你另外加 RELAYIUM_NODE_PURGE_STORAGE=1。环境变量过不了 `| sudo sh`，要写成 `sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh`。",
+        "卸完之后，`systemctl status relayium-node` 应该是 not-found，也不该再列出 relayium-node 的 timer。以后重装的话，你账户里会多出一台**新**节点：卸载把节点的身份文件删掉了，所以重装是注册一台全新节点，而不是把旧的那台救回来。",
       ],
     },
     {
@@ -366,8 +394,22 @@ const ja = {
       ],
       bullets: [
         "不要な場合: RELAYIUM_NODE_AUTO_UPDATE=off を付けてインストーラーを再実行します。タイマーとそのサービスは無効化され削除されます。ノードはそのまま動き続け、更新の時期はあなたが決めます。",
-        "完全にやめる場合: まずダウンロードして中身を確認してから実行してください — `sh` にそのままパイプすると、404 やネットワークの瞬断が起きたときにコマンド全体が何も出力せず終了コード 0 で終わってしまい、アンインストールが成功したように見えます。`curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh` は、ユニット、バイナリ、設定、サービスアカウントを削除し、relayium.com にこのノードの離脱をベストエフォートで伝えます — その呼び出しが失敗しても、ターミナルに1行表示されるだけで（アンインストール自体が壊れたわけではありません）、このノードの ID が表示されるので、管理者が手動で「削除済み」にマークできます。",
-        "保存を行うノードでは、ストレージディレクトリ内にそのスクリプトが認識しないファイルが1つでも残っている限り — 生きているファイルだけでなく、すでに期限切れだが定期クリーンアップがまだ到達していないブロブも同様に数えられます — アンインストーラーはそれらを置き去りにせず実行を拒否します。保存された各ファイルはただ1つのノード上にのみ存在し、複製はありません。その数がゼロになるまで待って再実行するか、それらが到達不能になることを受け入れて RELAYIUM_NODE_FORCE=1 を渡してください。ストレージディレクトリ自体は、別途 RELAYIUM_NODE_PURGE_STORAGE=1 を渡さない限り削除されません。",
+        "ノードを完全にやめる場合: 下の「ノードを削除する」を参照してください。",
+      ],
+    },
+    {
+      heading: "ノードを削除する",
+      body: [
+        "アンインストールはスクリプト 1 本だけで、ファイルを保存するノードでもリレー専用でも同じものを使います。ユニット、バイナリ、設定、サービスアカウントを削除し、ノードが無くなったことを relayium.com にベストエフォートで伝えます。その通知が失敗しても、ターミナルに 1 行出るだけで、アンインストールが壊れたわけではありません — ノード ID が表示されるので、手動で削除済みにできます。",
+        "ダウンロードして、中身を確認してから実行してください。`sh` に直接パイプすると、404 やネットワークの瞬断のときにコマンド全体が何も出力せず終了コード 0 で終わり、成功したように見えます。",
+        "削除するのは把握しているものだけです。状態ディレクトリや保存ディレクトリに想定外のファイルがあれば、消さずに保持して報告します。",
+      ],
+      code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
+      bullets: [
+        "保存ディレクトリに把握していないファイルが 1 つでも残っている間は拒否します（クリーンアップがまだ届いていない期限切れの blob も同じ扱いです）。保存ファイルは 1 台のノードにしか存在せず、レプリカが無いためです。0 になるまで待つか、それらが到達不能になることを受け入れて RELAYIUM_NODE_FORCE=1 を渡してください。",
+        "blob の場所を特定できない場合は、推測せずに停止します。RELAYIUM_NODE_ASSUME_NO_STORAGE=1 が唯一の回避手段で、それでも把握していないものは削除しません。",
+        "保存ディレクトリ自体は、RELAYIUM_NODE_PURGE_STORAGE=1 を併せて渡さない限り残ります。環境変数は `| sudo sh` を越えないので、`sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh` の形で渡してください。",
+        "その後、`systemctl status relayium-node` は not-found になり、relayium-node のタイマーも一覧に出ないはずです。後で再インストールすると、アカウントには**新しい**ノードが追加されます。アンインストールがノードの識別ファイルを削除するため、再インストールは旧ノードの復活ではなく新規登録になります。",
       ],
     },
     {
@@ -501,8 +543,22 @@ const ko = {
       ],
       bullets: [
         "원하지 않는다면: RELAYIUM_NODE_AUTO_UPDATE=off를 주고 설치 프로그램을 다시 실행하세요. 타이머와 그 서비스는 비활성화되고 삭제됩니다. 노드는 계속 동작하며, 업데이트 시점은 여러분이 정합니다.",
-        "완전히 그만두려면: 먼저 내려받아 확인한 뒤에 실행하세요 — `sh`로 바로 파이프하면 404나 일시적인 네트워크 문제가 있을 때 명령 전체가 아무것도 출력하지 않은 채 종료 코드 0으로 끝나 버려, 마치 제거가 성공한 것처럼 보입니다. `curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh`가 유닛, 바이너리, 설정, 서비스 계정을 제거하고 relayium.com에 이 노드가 사라졌음을 최선을 다해(best-effort) 알립니다 — 그 호출이 실패해도 터미널에 한 줄만 더 나올 뿐이며(제거 자체가 고장 난 것이 아닙니다), 이 노드의 ID가 함께 출력되므로 관리자가 수동으로 제거됨으로 표시할 수 있습니다.",
-        "저장을 하는 노드에서는, 스토리지 디렉터리에 스크립트가 인식하지 못하는 파일이 하나라도 남아 있는 한 — 살아 있는 파일뿐 아니라 이미 만료되었지만 주기적 정리가 아직 처리하지 못한 블롭도 마찬가지로 셉니다 — 제거 스크립트가 그것들을 방치하는 대신 실행을 거부합니다. 저장된 각 파일은 오직 한 노드에만 존재하며 복제본이 없습니다. 그 개수가 0이 될 때까지 기다렸다가 다시 실행하거나, 그 파일들이 도달 불가능해지는 것을 감수하고 RELAYIUM_NODE_FORCE=1을 넘기세요. 스토리지 디렉터리 자체는 RELAYIUM_NODE_PURGE_STORAGE=1을 따로 넘기지 않는 한 삭제되지 않습니다.",
+        "노드를 완전히 그만두려면: 아래 “노드 제거하기”를 보세요.",
+      ],
+    },
+    {
+      heading: "노드 제거하기",
+      body: [
+        "제거는 스크립트 하나로 끝나며, 파일을 저장하는 노드든 중계만 하는 노드든 같은 스크립트를 씁니다. 유닛, 바이너리, 설정, 서비스 계정을 제거하고 노드가 사라졌음을 relayium.com에 최선을 다해 알립니다. 그 호출이 실패해도 터미널에 한 줄이 더 나올 뿐 제거가 고장 난 것은 아니며, 노드 ID가 출력되므로 수동으로 제거됨 표시를 할 수 있습니다.",
+        "내려받고, 확인한 다음 실행하세요. `sh`로 바로 파이프하면 404나 일시적인 네트워크 문제에서 명령 전체가 아무것도 출력하지 않고 종료 코드 0으로 끝나, 제거가 성공한 것처럼 보입니다.",
+        "아는 것만 지웁니다. 상태 디렉터리나 저장 디렉터리에 예상치 못한 파일이 있으면 지우지 않고 보관한 뒤 보고합니다.",
+      ],
+      code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
+      bullets: [
+        "저장 디렉터리에 알아보지 못하는 파일이 하나라도 남아 있으면 거부합니다(정리가 아직 닿지 않은 만료된 blob도 마찬가지). 저장된 파일은 정확히 한 노드에만 있고 복제본이 없기 때문입니다. 0이 될 때까지 기다리거나, 그 파일들이 도달 불가능해지는 것을 감수하고 RELAYIUM_NODE_FORCE=1을 넘기세요.",
+        "blob이 어디 있는지 판단할 수 없으면 추측하지 않고 멈춥니다. RELAYIUM_NODE_ASSUME_NO_STORAGE=1이 유일한 통과 방법이며, 그래도 알아보지 못하는 것은 삭제하지 않습니다.",
+        "저장 디렉터리 자체는 RELAYIUM_NODE_PURGE_STORAGE=1을 함께 넘기지 않는 한 남습니다. 환경 변수는 `| sudo sh`를 넘지 못하므로 `sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh` 형태로 넘기세요.",
+        "그다음 `systemctl status relayium-node`는 not-found여야 하고 relayium-node 타이머도 보이지 않아야 합니다. 나중에 다시 설치하면 계정에 **새** 노드가 생깁니다. 제거가 노드의 신원 파일을 지우므로, 재설치는 옛 노드를 되살리는 것이 아니라 새로 등록하는 것입니다.",
       ],
     },
     {
@@ -636,8 +692,22 @@ const de = {
       ],
       bullets: [
         "Nicht erwünscht: Führen Sie den Installer erneut mit RELAYIUM_NODE_AUTO_UPDATE=off aus. Der Timer und sein Dienst werden deaktiviert und gelöscht; der Node läuft weiter, und Sie aktualisieren ihn, wann Sie wollen.",
-        "Ganz Schluss damit: erst herunterladen, prüfen, dann ausführen — direkt in `sh` zu pipen bedeutet, dass ein 404 oder ein kurzer Netzwerkaussetzer den ganzen Befehl nichts ausgeben und mit Exit-Code 0 enden lässt, was wie eine erfolgreiche Deinstallation aussieht. `curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh` entfernt die Units, die Binärdatei, die Konfiguration und das Dienstkonto und versucht nach bestem Wissen (best effort), relayium.com zu melden, dass der Node weg ist — schlägt das fehl, ist das nur eine einzige Zeile auf Ihrem Terminal (keine kaputte Deinstallation), und die dabei ausgegebene Node-ID erlaubt es einem Admin, ihn von Hand als entfernt zu markieren.",
-        "Auf einem speichernden Node verweigert diese Deinstallation den Dienst, solange sie im Speicherverzeichnis irgendeine Datei findet, die sie nicht kennt — nicht nur lebende: ein bereits abgelaufener Blob, den die regelmäßige Bereinigung noch nicht erreicht hat, zählt genauso —, statt sie stranden zu lassen: Jede gespeicherte Datei liegt auf genau einem Node, Replikate gibt es nicht. Warten Sie, bis diese Zahl auf null steht, und führen Sie das Kommando erneut aus, oder übergeben Sie RELAYIUM_NODE_FORCE=1 und nehmen Sie in Kauf, dass die Dateien unerreichbar werden. Das Speicherverzeichnis selbst wird nur gelöscht, wenn Sie zusätzlich RELAYIUM_NODE_PURGE_STORAGE=1 übergeben.",
+        "Node ganz aufgeben: siehe „Node entfernen“ weiter unten.",
+      ],
+    },
+    {
+      heading: "Node entfernen",
+      body: [
+        "Die Deinstallation ist ein einziges Skript — dasselbe, ob Ihr Node Dateien speichert oder nur weiterleitet. Es entfernt die Units, die Binärdatei, die Konfiguration und das Dienstkonto und meldet relayium.com nach bestem Wissen, dass der Node weg ist. Schlägt dieser Aufruf fehl, ist das eine Zeile auf Ihrem Terminal und keine kaputte Deinstallation — die ausgegebene Node-ID erlaubt es, ihn von Hand als entfernt zu markieren.",
+        "Herunterladen, prüfen, dann ausführen. Direkt in `sh` zu pipen bedeutet, dass ein 404 oder ein kurzer Netzaussetzer den ganzen Befehl nichts ausgeben und mit Code 0 enden lässt — was wie eine erfolgreiche Deinstallation aussieht.",
+        "Entfernt wird nur, was es kennt: Unerwartetes im Status- oder Speicherverzeichnis wird behalten und gemeldet statt mitgelöscht.",
+      ],
+      code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
+      bullets: [
+        "Es verweigert die Deinstallation, solange im Speicherverzeichnis noch eine Datei liegt, die es nicht kennt — auch ein abgelaufener Blob, den die Aufräumung noch nicht erreicht hat. Jede gespeicherte Datei liegt auf genau einem Node, Repliken gibt es nicht. Warten Sie, bis dieser Zähler null ist, oder übergeben Sie RELAYIUM_NODE_FORCE=1 und nehmen in Kauf, dass diese Dateien unerreichbar werden.",
+        "Kann es nicht ermitteln, wo Ihre Blobs liegen, hält es an, statt zu raten. RELAYIUM_NODE_ASSUME_NO_STORAGE=1 ist der einzige Weg daran vorbei — und löscht weiterhin nichts, was es nicht kennt.",
+        "Das Speicherverzeichnis selbst bleibt erhalten, sofern Sie nicht zusätzlich RELAYIUM_NODE_PURGE_STORAGE=1 übergeben. Umgebungsvariablen überleben `| sudo sh` nicht — übergeben Sie sie als `sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh`.",
+        "Danach sollte `systemctl status relayium-node` not-found melden und kein relayium-node-Timer mehr gelistet sein. Installieren Sie später erneut, erhält Ihr Konto einen **neuen** Node: die Deinstallation löscht die Identitätsdatei, eine Neuinstallation registriert also einen frischen Node statt den alten wiederzubeleben.",
       ],
     },
     {
@@ -771,8 +841,22 @@ const fr = {
       ],
       bullets: [
         "Vous n'en voulez pas : relancez l'installateur avec RELAYIUM_NODE_AUTO_UPDATE=off. Le minuteur et son service sont désactivés puis supprimés ; le nœud continue de tourner et vous le mettez à jour quand vous le décidez.",
-        "Vous arrêtez tout : téléchargez-la, vérifiez-la, puis exécutez-la — la faire passer directement dans `sh` signifie qu'une 404 ou un accroc réseau fait que toute la commande n'affiche rien et se termine avec le code 0, ce qui ressemble à une désinstallation réussie. `curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh` retire les unités, le binaire, la configuration et le compte de service, et tente, sans garantie (best effort), de signaler à relayium.com que le nœud a disparu — si cet appel échoue, c'est une simple ligne sur votre terminal (pas une désinstallation cassée), et l'identifiant du nœud qu'elle affiche permet à un administrateur de le marquer comme retiré à la main.",
-        "Sur un nœud qui stocke, cette désinstallation refuse de s'exécuter tant qu'elle trouve, dans le répertoire de stockage, un fichier qu'elle ne reconnaît pas — pas seulement les fichiers vivants : un blob déjà expiré que le nettoyage périodique n'a pas encore atteint compte de la même façon — plutôt que de les abandonner : chaque fichier stocké réside sur un seul nœud et il n'existe aucun réplica. Attendez que ce compte revienne à zéro et relancez la commande, ou passez RELAYIUM_NODE_FORCE=1 en acceptant que ces fichiers deviennent inaccessibles. Le répertoire de stockage lui-même n'est jamais supprimé, sauf si vous passez également RELAYIUM_NODE_PURGE_STORAGE=1.",
+        "Vous arrêtez tout : voir « Retirer votre nœud » plus bas.",
+      ],
+    },
+    {
+      heading: "Retirer votre nœud",
+      body: [
+        "La désinstallation tient en un seul script, le même que votre nœud stocke des fichiers ou se contente de relayer. Il retire les unités, le binaire, la configuration et le compte de service, et signale à relayium.com, sans garantie, que le nœud a disparu. Si cet appel échoue, c'est une ligne sur votre terminal et non une désinstallation cassée — l'identifiant du nœud s'affiche pour qu'on puisse le marquer retiré à la main.",
+        "Téléchargez-le, vérifiez-le, puis exécutez-le. Le faire passer directement dans `sh` signifie qu'une 404 ou un accroc réseau fait que toute la commande n'affiche rien et se termine avec le code 0 — ce qui ressemble à une désinstallation réussie.",
+        "Il ne retire que ce qu'il reconnaît : tout élément inattendu dans le répertoire d'état ou de stockage est conservé et signalé plutôt que balayé.",
+      ],
+      code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
+      bullets: [
+        "Il refuse tant que le répertoire de stockage contient un fichier qu'il ne reconnaît pas — y compris un blob expiré que le nettoyage n'a pas encore atteint — car chaque fichier stocké vit sur un seul nœud et il n'y a pas de réplique. Attendez que ce compte tombe à zéro, ou passez RELAYIUM_NODE_FORCE=1 en acceptant que ces fichiers deviennent inaccessibles.",
+        "S'il n'arrive pas à déterminer où vivent vos blobs, il s'arrête au lieu de deviner. RELAYIUM_NODE_ASSUME_NO_STORAGE=1 est le seul moyen de passer outre, et il ne supprime toujours rien qu'il ne reconnaisse pas.",
+        "Le répertoire de stockage lui-même est conservé sauf si vous passez aussi RELAYIUM_NODE_PURGE_STORAGE=1. Les variables d'environnement ne survivent pas à `| sudo sh` — passez-les via `sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh`.",
+        "Ensuite, `systemctl status relayium-node` doit répondre not-found et aucun minuteur relayium-node ne doit être listé. Si vous réinstallez plus tard, votre compte obtient un **nouveau** nœud : la désinstallation supprime le fichier d'identité, donc une nouvelle installation enregistre un nœud neuf au lieu de ressusciter l'ancien.",
       ],
     },
     {
@@ -906,8 +990,22 @@ const ar = {
       ],
       bullets: [
         "إن لم ترده: أعد تشغيل المثبّت مع RELAYIUM_NODE_AUTO_UPDATE=off. عندها يُعطَّل المؤقّت وخدمته ويُحذفان؛ وتستمر العقدة في العمل، وتحدّثها أنت متى شئت.",
-        "إن انتهيت منه تمامًا: نزّله أولًا وتحقّق منه ثم شغّله — تمريره مباشرة إلى `sh` عبر أنبوب يعني أن خطأ 404 أو انقطاعًا عابرًا في الشبكة سيجعل الأمر كله لا يطبع شيئًا وينتهي برمز خروج 0، وهو ما يبدو وكأن الإلغاء قد نجح. الأمر `curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh` يزيل الوحدات والثنائي والإعدادات وحساب الخدمة، ويحاول قدر استطاعته (best effort) إبلاغ relayium.com بأن العقدة لم تعد موجودة — وإن فشل ذلك الاتصال فكل ما يحدث هو سطر واحد على طرفيتك (وليس إلغاءً معطوبًا)، ويطبع معه معرّف العقدة كي يستطيع أحد المسؤولين تعليمها يدويًا كمُزالة.",
-        "على عقدة تخزّن، يرفض هذا الإلغاء العمل ما دام يجد في مجلد التخزين أي ملف لا يتعرّف عليه — لا الملفات الحيّة فقط: فالكتلة التي انتهت صلاحيتها فعلًا ولم يصلها التنظيف الدوري بعد تُحسَب بالطريقة نفسها — بدل أن يتركها معلّقة: فكل ملف مخزَّن يوجد على عقدة واحدة فقط ولا توجد نسخ مطابقة. انتظر حتى يصل هذا العدد إلى صفر ثم أعد تشغيل الأمر، أو مرّر RELAYIUM_NODE_FORCE=1 قابلًا بأن تلك الملفات ستصبح غير قابلة للوصول. أما مجلد التخزين نفسه فلا يُحذف أبدًا ما لم تمرّر أيضًا RELAYIUM_NODE_PURGE_STORAGE=1.",
+        "إن انتهيت من العقدة تمامًا: انظر «إزالة عقدتك» أدناه.",
+      ],
+    },
+    {
+      heading: "إزالة عقدتك",
+      body: [
+        "الإلغاء سكربت واحد، وهو نفسه سواء كانت عقدتك تخزّن الملفات أو تُرحّل فقط. يزيل الوحدات والثنائي والإعدادات وحساب الخدمة، ويحاول قدر استطاعته إبلاغ relayium.com بأن العقدة لم تعد موجودة. وإن فشل ذلك الاتصال فهو سطر واحد على طرفيتك لا إلغاء معطوب — ويطبع معرّف العقدة كي تُعلَّم كمُزالة يدويًا.",
+        "نزّله وتحقّق منه ثم شغّله. تمريره مباشرة إلى `sh` يعني أن خطأ 404 أو انقطاعًا عابرًا في الشبكة سيجعل الأمر كله لا يطبع شيئًا وينتهي برمز 0، وهو ما يبدو كإلغاء ناجح.",
+        "لا يزيل إلا ما يعرفه: أي شيء غير متوقع في دليل الحالة أو دليل التخزين يُحتفظ به ويُبلَّغ عنه بدل حذفه.",
+      ],
+      code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
+      bullets: [
+        "يرفض ما دام دليل التخزين يحوي أي ملف لا يعرفه — بما في ذلك كائن منتهي الصلاحية لم يصله التنظيف بعد — لأن كل ملف مخزَّن يوجد على عقدة واحدة فقط ولا توجد نسخ. انتظر حتى يصل العدد إلى صفر، أو مرّر RELAYIUM_NODE_FORCE=1 قابلًا بأن تصبح تلك الملفات غير قابلة للوصول.",
+        "إن تعذّر عليه تحديد مكان الكائنات، يتوقف بدل أن يخمّن. المتغير RELAYIUM_NODE_ASSUME_NO_STORAGE=1 هو السبيل الوحيد لتجاوز ذلك، ومع هذا لا يحذف شيئًا لا يعرفه.",
+        "يبقى دليل التخزين نفسه ما لم تمرّر أيضًا RELAYIUM_NODE_PURGE_STORAGE=1. متغيرات البيئة لا تعبر `| sudo sh` — مرّرها هكذا: `sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh`.",
+        "بعد ذلك يجب أن يقول `systemctl status relayium-node` أنه not-found وألا يظهر أي مؤقّت relayium-node. وإذا أعدت التثبيت لاحقًا فستحصل في حسابك على عقدة **جديدة**: فالإلغاء يحذف ملف هوية العقدة، لذا يسجّل التثبيت الجديد عقدة جديدة بدل إحياء القديمة.",
       ],
     },
     {
@@ -1041,8 +1139,22 @@ const es = {
       ],
       bullets: [
         "Si no la quieres: vuelve a ejecutar el instalador con RELAYIUM_NODE_AUTO_UPDATE=off. El temporizador y su servicio se desactivan y se eliminan; el nodo sigue funcionando y lo actualizas cuando tú decidas.",
-        "Si has terminado del todo: descárgalo, compruébalo y luego ejecútalo — canalizarlo directamente a `sh` significa que un 404 o un corte de red pasajero hace que todo el comando no muestre nada y termine con código de salida 0, lo que parece una desinstalación correcta. `curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh` elimina las unidades, el binario, la configuración y la cuenta de servicio, y hace un intento de mejor esfuerzo (best effort) por avisar a relayium.com de que el nodo ya no está — si esa llamada falla, es solo una línea en tu terminal (no una desinstalación rota), y muestra el ID del nodo para que un administrador pueda marcarlo como eliminado a mano.",
-        "En un nodo que almacena, esa desinstalación se niega a ejecutarse mientras encuentre en el directorio de almacenamiento cualquier archivo que no reconozca, no solo los vivos — un blob ya caducado que la limpieza periódica todavía no ha alcanzado cuenta igual —, en vez de dejarlos abandonados: cada archivo almacenado vive en un único nodo y no hay réplicas. Espera a que ese recuento llegue a cero y vuelve a ejecutarla, o pasa RELAYIUM_NODE_FORCE=1 asumiendo que esos archivos quedarán inaccesibles. El directorio de almacenamiento en sí nunca se borra salvo que pases además RELAYIUM_NODE_PURGE_STORAGE=1.",
+        "¿Terminaste del todo con el nodo?: consulta “Eliminar tu nodo” más abajo.",
+      ],
+    },
+    {
+      heading: "Eliminar tu nodo",
+      body: [
+        "Desinstalar es un solo script, el mismo tanto si tu nodo almacena archivos como si solo retransmite. Elimina las unidades, el binario, la configuración y la cuenta de servicio, y hace un intento de mejor esfuerzo por avisar a relayium.com de que el nodo ya no está. Si esa llamada falla, es una línea en tu terminal y no una desinstalación rota: muestra el ID del nodo para poder marcarlo como eliminado a mano.",
+        "Descárgalo, compruébalo y luego ejecútalo. Canalizarlo directamente a `sh` significa que un 404 o un corte de red pasajero hace que todo el comando no muestre nada y termine con código 0, lo que parece una desinstalación correcta.",
+        "Solo elimina lo que reconoce: cualquier cosa inesperada en el directorio de estado o de almacenamiento se conserva y se informa en vez de barrerse.",
+      ],
+      code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
+      bullets: [
+        "Se niega mientras el directorio de almacenamiento contenga algún archivo que no reconozca — incluido un blob caducado que la limpieza aún no ha alcanzado — porque cada archivo almacenado vive en exactamente un nodo y no hay réplicas. Espera a que ese recuento llegue a cero, o pasa RELAYIUM_NODE_FORCE=1 aceptando que esos archivos queden inalcanzables.",
+        "Si no logra determinar dónde viven tus blobs, se detiene en lugar de adivinar. RELAYIUM_NODE_ASSUME_NO_STORAGE=1 es la única forma de saltarse eso, y sigue sin borrar nada que no reconozca.",
+        "El directorio de almacenamiento se conserva salvo que pases también RELAYIUM_NODE_PURGE_STORAGE=1. Las variables de entorno no sobreviven a `| sudo sh`: pásalas como `sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh`.",
+        "Después, `systemctl status relayium-node` debería decir not-found y no debería listarse ningún temporizador relayium-node. Si vuelves a instalarlo más adelante, tu cuenta obtiene un nodo **nuevo**: la desinstalación borra el archivo de identidad del nodo, así que una instalación nueva registra un nodo nuevo en lugar de revivir el anterior.",
       ],
     },
     {
@@ -1176,8 +1288,22 @@ const pt = {
       ],
       bullets: [
         "Se você não quiser: execute o instalador de novo com RELAYIUM_NODE_AUTO_UPDATE=off. O temporizador e o serviço dele são desativados e removidos; o nó continua rodando e você o atualiza quando decidir.",
-        "Se terminou de vez: baixe, verifique e só então execute — canalizar direto para o `sh` significa que um 404 ou uma falha passageira de rede faz o comando inteiro não exibir nada e sair com código 0, o que parece uma desinstalação bem-sucedida. `curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh` remove as unidades, o binário, a configuração e a conta de serviço, e tenta, em regime de melhor esforço (best effort), avisar ao relayium.com que o nó se foi — se essa chamada falhar, é só uma linha a mais no seu terminal (não uma desinstalação quebrada), e ela imprime o ID do nó para que um administrador possa marcá-lo como removido manualmente.",
-        "Em um nó que armazena, essa desinstalação se recusa a rodar enquanto encontrar, no diretório de armazenamento, qualquer arquivo que não reconheça — não só os vivos: um blob já expirado que a limpeza periódica ainda não alcançou conta do mesmo jeito —, em vez de abandoná-los: cada arquivo armazenado vive em exatamente um nó e não há réplicas. Espere essa contagem chegar a zero e execute de novo, ou passe RELAYIUM_NODE_FORCE=1 aceitando que esses arquivos ficarão inacessíveis. O diretório de armazenamento em si nunca é apagado, a menos que você passe também RELAYIUM_NODE_PURGE_STORAGE=1.",
+        "Terminou de vez com o nó: veja “Remover o seu nó” mais abaixo.",
+      ],
+    },
+    {
+      heading: "Remover o seu nó",
+      body: [
+        "Desinstalar é um único script, o mesmo quer o seu nó armazene ficheiros quer apenas retransmita. Ele remove as unidades, o binário, a configuração e a conta de serviço, e tenta, em regime de melhor esforço, avisar o relayium.com de que o nó se foi. Se essa chamada falhar, é uma linha no seu terminal e não uma desinstalação partida — ela imprime o ID do nó para que seja marcado como removido à mão.",
+        "Baixe, verifique e só então execute. Canalizar direto para o `sh` significa que um 404 ou uma falha passageira de rede faz o comando inteiro não exibir nada e sair com código 0, o que parece uma desinstalação bem-sucedida.",
+        "Só remove o que reconhece: qualquer coisa inesperada no diretório de estado ou de armazenamento é mantida e reportada em vez de ser varrida.",
+      ],
+      code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
+      bullets: [
+        "Ele recusa enquanto o diretório de armazenamento tiver algum ficheiro que não reconheça — incluindo um blob expirado que a limpeza ainda não alcançou — porque cada ficheiro armazenado vive em exatamente um nó e não há réplicas. Espere esse número chegar a zero, ou passe RELAYIUM_NODE_FORCE=1 aceitando que esses ficheiros fiquem inacessíveis.",
+        "Se não conseguir determinar onde vivem os seus blobs, ele para em vez de adivinhar. RELAYIUM_NODE_ASSUME_NO_STORAGE=1 é a única forma de passar disso, e mesmo assim não apaga nada que não reconheça.",
+        "O diretório de armazenamento em si é mantido a menos que passe também RELAYIUM_NODE_PURGE_STORAGE=1. Variáveis de ambiente não sobrevivem ao `| sudo sh` — passe-as como `sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh`.",
+        "Depois, `systemctl status relayium-node` deve dizer not-found e nenhum temporizador relayium-node deve aparecer. Se instalar novamente mais tarde, a sua conta recebe um nó **novo**: a desinstalação apaga o ficheiro de identidade do nó, por isso uma nova instalação regista um nó novo em vez de ressuscitar o antigo.",
       ],
     },
     {
