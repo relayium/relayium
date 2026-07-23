@@ -9,16 +9,16 @@
 // ── English master (source of truth for translation + accuracy) ──
 // title: "Cross-network file transfer — realtime, end-to-end encrypted | Relayium"
 // description: "Send files device-to-device across different networks with a
-//   6-digit pairing code. End-to-end encrypted over a fast relay that carries
+//   6-character pairing code. End-to-end encrypted over a fast relay that carries
 //   only ciphertext it can't read — verified with a SAS code so even a
 //   compromised relay can't eavesdrop."
 // hero.h1: "Cross-network file transfer, end-to-end encrypted"
-// hero.pitch: "Two devices on different networks pair with a 6-digit code (or
+// hero.pitch: "Two devices on different networks pair with a 6-character code (or
 //   its link/QR). Files stream over an encrypted channel through a fast relay
 //   that only ever sees ciphertext — your keys never leave the two devices."
 // hero.cta: "Start a transfer"
 // how.steps:
-//   1. "The sender signs in and mints a 6-digit pairing code (or shares its
+//   1. "The sender signs in and mints a 6-character pairing code (or shares its
 //      join link / QR)."
 //   2. "The receiver opens the link or enters the code — no account needed to
 //      receive."
@@ -51,8 +51,8 @@
 //     through Relayium's relay for a reliable cross-network connection —
 //     but it's end-to-end encrypted, so the relay only ever sees ciphertext
 //     it can't read."
-//   - "Is a code required?" / "Yes: a 6-digit code (or its join link/QR),
-//     valid 15 minutes, pairs the two devices across networks."
+//   - "Is a code required?" / "Yes: a 6-character code (or its join link/QR),
+//     valid 5 minutes, pairs the two devices across networks."
 //   - "Do I need an account?" / "The sender signs in to mint a code; the
 //     receiver joins anonymously."
 //   - "Is it end-to-end encrypted?" / "Yes — X25519 + per-chunk AES-256-GCM,
@@ -127,7 +127,7 @@ const zh = {
       },
       {
         q: "一定要用配对码吗？",
-        a: "是的：6 位配对码（或其加入链接/二维码）有效期 15 分钟，用于让两台设备跨网络配对。",
+        a: "是的：6 位配对码（或其加入链接/二维码）有效期 5 分钟，用于让两台设备跨网络配对。",
       },
       {
         q: "需要注册账号吗？",
@@ -146,17 +146,17 @@ const zh = {
 const ja = {
   title: "ネットワークをまたぐファイル転送——リアルタイム・エンドツーエンド暗号化 | Relayium",
   description:
-    "6桁のペアリングコードで、異なるネットワークの2台の端末間でファイルを送受信します。エンドツーエンドで暗号化し、Relayiumの高速リレーを経由します——リレーは復号できない暗号文しか扱いません。SASコードで検証するため、リレーが侵害されていても盗聴されません。",
+    "6文字のペアリングコードで、異なるネットワークの2台の端末間でファイルを送受信します。エンドツーエンドで暗号化し、Relayiumの高速リレーを経由します——リレーは復号できない暗号文しか扱いません。SASコードで検証するため、リレーが侵害されていても盗聴されません。",
   hero: {
     h1: "ネットワークをまたぐファイル転送、エンドツーエンド暗号化",
     pitch:
-      "異なるネットワーク上の2台の端末が、6桁のコード（またはその参加リンク/QR）でペアリングします。ファイルは暗号化されたチャネルを通じて、Relayiumの高速リレーを経由して流れます——リレーが目にするのは暗号文だけで、鍵は常に2台の端末間にとどまります。",
+      "異なるネットワーク上の2台の端末が、6文字のコード（またはその参加リンク/QR）でペアリングします。ファイルは暗号化されたチャネルを通じて、Relayiumの高速リレーを経由して流れます——リレーが目にするのは暗号文だけで、鍵は常に2台の端末間にとどまります。",
     cta: "転送を始める",
   },
   how: {
     heading: "4ステップで転送",
     steps: [
-      "送信側がサインインし、6桁のペアリングコードを発行します（参加リンク/QRの共有も可能）。",
+      "送信側がサインインし、6文字のペアリングコードを発行します（参加リンク/QRの共有も可能）。",
       "受信側はリンクを開くかコードを入力するだけ——受信にアカウントは不要です。",
       "両方の画面に表示される同じ6桁のSASコードを照合し、中間者がいないことを確認します。",
       "ファイルはエンドツーエンドで暗号化され（チャンクごとにAES-256-GCM）、Relayiumの高速リレーを経由してストリーミング転送されます。リレーは復号できない暗号文しか扱いません。",
@@ -209,7 +209,7 @@ const ja = {
       },
       {
         q: "コードは必須ですか？",
-        a: "はい。6桁のコード（またはその参加リンク/QR）は15分間有効で、ネットワークをまたぐ2台の端末をペアリングします。",
+        a: "はい。6文字のコード（またはその参加リンク/QR）は5分間有効で、ネットワークをまたぐ2台の端末をペアリングします。",
       },
       {
         q: "アカウントは必要ですか？",
@@ -291,7 +291,7 @@ const ko = {
       },
       {
         q: "코드가 꼭 필요한가요?",
-        a: "네. 6자리 코드(또는 참여 링크/QR)는 15분간 유효하며 네트워크를 넘는 두 기기를 페어링합니다.",
+        a: "네. 6자리 코드(또는 참여 링크/QR)는 5분간 유효하며 네트워크를 넘는 두 기기를 페어링합니다.",
       },
       {
         q: "계정이 필요한가요?",
@@ -373,7 +373,7 @@ const de = {
       },
       {
         q: "Ist ein Code erforderlich?",
-        a: "Ja: Ein 6-stelliger Code (oder dessen Beitrittslink/QR), 15 Minuten gültig, koppelt die beiden Geräte über Netzwerke hinweg.",
+        a: "Ja: Ein 6-stelliger Code (oder dessen Beitrittslink/QR), 5 Minuten gültig, koppelt die beiden Geräte über Netzwerke hinweg.",
       },
       {
         q: "Brauche ich ein Konto?",
@@ -392,17 +392,17 @@ const de = {
 const fr = {
   title: "Transfert de fichiers inter-réseaux — temps réel, chiffré de bout en bout | Relayium",
   description:
-    "Envoyez des fichiers d'un appareil à l'autre entre réseaux différents avec un code d'appairage à 6 chiffres. Chiffré de bout en bout — le flux transite par le relais rapide de Relayium, qui ne transporte que du contenu chiffré qu'il ne peut pas lire, vérifié par un code SAS afin que même un relais compromis ne puisse pas espionner.",
+    "Envoyez des fichiers d'un appareil à l'autre entre réseaux différents avec un code d'appairage à 6 caractères. Chiffré de bout en bout — le flux transite par le relais rapide de Relayium, qui ne transporte que du contenu chiffré qu'il ne peut pas lire, vérifié par un code SAS afin que même un relais compromis ne puisse pas espionner.",
   hero: {
     h1: "Transfert de fichiers inter-réseaux, chiffré de bout en bout",
     pitch:
-      "Deux appareils sur des réseaux différents s'appairent avec un code à 6 chiffres (ou son lien/QR). Les fichiers circulent via un canal chiffré à travers le relais rapide de Relayium — le relais ne voit jamais que du contenu chiffré, les clés ne quittent jamais les deux appareils.",
+      "Deux appareils sur des réseaux différents s'appairent avec un code à 6 caractères (ou son lien/QR). Les fichiers circulent via un canal chiffré à travers le relais rapide de Relayium — le relais ne voit jamais que du contenu chiffré, les clés ne quittent jamais les deux appareils.",
     cta: "Démarrer le transfert",
   },
   how: {
     heading: "Transférer en quatre étapes",
     steps: [
-      "L'expéditeur se connecte et génère un code d'appairage à 6 chiffres (ou partage son lien d'accès/QR).",
+      "L'expéditeur se connecte et génère un code d'appairage à 6 caractères (ou partage son lien d'accès/QR).",
       "Le destinataire ouvre le lien ou saisit le code — aucun compte n'est nécessaire pour recevoir.",
       "Les deux parties vérifient le même code SAS à 6 chiffres à l'écran pour écarter tout homme du milieu.",
       "Les fichiers sont transférés chiffrés de bout en bout (AES-256-GCM par bloc) via le relais rapide de Relayium, qui ne transporte que du contenu chiffré qu'il ne peut pas lire.",
@@ -455,7 +455,7 @@ const fr = {
       },
       {
         q: "Un code est-il obligatoire ?",
-        a: "Oui : un code à 6 chiffres (ou son lien d'accès/QR), valable 15 minutes, appaire les deux appareils entre réseaux différents.",
+        a: "Oui : un code à 6 caractères (ou son lien d'accès/QR), valable 5 minutes, appaire les deux appareils entre réseaux différents.",
       },
       {
         q: "Faut-il un compte ?",
@@ -474,17 +474,17 @@ const fr = {
 const ar = {
   title: "نقل الملفات عبر الشبكات — فوري، مُشفَّر من الطرف إلى الطرف | Relayium",
   description:
-    "أرسل الملفات من جهاز إلى آخر عبر شبكات مختلفة برمز اقتران مكوّن من 6 أرقام. مُشفَّر من الطرف إلى الطرف — يمر التدفق عبر مُرحِّل Relayium السريع الذي لا ينقل سوى نص مُشفَّر لا يستطيع قراءته، ويُتحقق منه برمز SAS بحيث لا يستطيع حتى مُرحِّل مخترَق التنصّت.",
+    "أرسل الملفات من جهاز إلى آخر عبر شبكات مختلفة برمز اقتران مكوّن من 6 خانات. مُشفَّر من الطرف إلى الطرف — يمر التدفق عبر مُرحِّل Relayium السريع الذي لا ينقل سوى نص مُشفَّر لا يستطيع قراءته، ويُتحقق منه برمز SAS بحيث لا يستطيع حتى مُرحِّل مخترَق التنصّت.",
   hero: {
     h1: "نقل الملفات عبر الشبكات، مُشفَّر من الطرف إلى الطرف",
     pitch:
-      "يقترن جهازان على شبكتين مختلفتين برمز مكوّن من 6 أرقام (أو رابطه/رمز QR الخاص به). تنتقل الملفات عبر قناة مُشفَّرة خلال مُرحِّل Relayium السريع — لا يرى المُرحِّل سوى نص مُشفَّر، والمفاتيح لا تغادر الجهازين أبدًا.",
+      "يقترن جهازان على شبكتين مختلفتين برمز مكوّن من 6 خانات (أو رابطه/رمز QR الخاص به). تنتقل الملفات عبر قناة مُشفَّرة خلال مُرحِّل Relayium السريع — لا يرى المُرحِّل سوى نص مُشفَّر، والمفاتيح لا تغادر الجهازين أبدًا.",
     cta: "ابدأ النقل",
   },
   how: {
     heading: "انقل في أربع خطوات",
     steps: [
-      "يسجّل المُرسِل الدخول ويولّد رمز اقتران مكوّنًا من 6 أرقام (أو يشارك رابط الانضمام/رمز QR الخاص به).",
+      "يسجّل المُرسِل الدخول ويولّد رمز اقتران مكوّنًا من 6 خانات (أو يشارك رابط الانضمام/رمز QR الخاص به).",
       "يفتح المُستقبِل الرابط أو يُدخل الرمز — لا حاجة إلى حساب للاستقبال.",
       "يتحقق الطرفان من رمز SAS نفسه المكوّن من 6 أرقام على الشاشة لاستبعاد أي هجوم وسيط.",
       "تُنقل الملفات مُشفَّرة من الطرف إلى الطرف (AES-256-GCM لكل كتلة) عبر مُرحِّل Relayium السريع الذي لا ينقل سوى نص مُشفَّر لا يستطيع قراءته.",
@@ -537,7 +537,7 @@ const ar = {
       },
       {
         q: "هل الرمز إلزامي؟",
-        a: "نعم: رمز مكوّن من 6 أرقام (أو رابط الانضمام/رمز QR الخاص به)، صالح لمدة 15 دقيقة، يقرن الجهازين عبر شبكات مختلفة.",
+        a: "نعم: رمز مكوّن من 6 خانات (أو رابط الانضمام/رمز QR الخاص به)، صالح لمدة 5 دقائق، يقرن الجهازين عبر شبكات مختلفة.",
       },
       {
         q: "هل يلزم حساب؟",
@@ -556,17 +556,17 @@ const ar = {
 const es = {
   title: "Transferencia de archivos entre redes — en tiempo real, cifrada de extremo a extremo | Relayium",
   description:
-    "Envía archivos de un dispositivo a otro entre redes distintas con un código de emparejamiento de 6 dígitos. Cifrado de extremo a extremo — el flujo pasa por el retransmisor rápido de Relayium, que solo transporta contenido cifrado que no puede leer, verificado con un código SAS para que ni siquiera un retransmisor comprometido pueda espiar.",
+    "Envía archivos de un dispositivo a otro entre redes distintas con un código de emparejamiento de 6 caracteres. Cifrado de extremo a extremo — el flujo pasa por el retransmisor rápido de Relayium, que solo transporta contenido cifrado que no puede leer, verificado con un código SAS para que ni siquiera un retransmisor comprometido pueda espiar.",
   hero: {
     h1: "Transferencia de archivos entre redes, cifrada de extremo a extremo",
     pitch:
-      "Dos dispositivos en redes distintas se emparejan con un código de 6 dígitos (o su enlace/QR). Los archivos circulan por un canal cifrado a través del retransmisor rápido de Relayium — el retransmisor solo ve contenido cifrado, y las claves nunca salen de los dos dispositivos.",
+      "Dos dispositivos en redes distintas se emparejan con un código de 6 caracteres (o su enlace/QR). Los archivos circulan por un canal cifrado a través del retransmisor rápido de Relayium — el retransmisor solo ve contenido cifrado, y las claves nunca salen de los dos dispositivos.",
     cta: "Iniciar transferencia",
   },
   how: {
     heading: "Transferir en cuatro pasos",
     steps: [
-      "El remitente inicia sesión y genera un código de emparejamiento de 6 dígitos (o comparte su enlace de acceso/QR).",
+      "El remitente inicia sesión y genera un código de emparejamiento de 6 caracteres (o comparte su enlace de acceso/QR).",
       "El destinatario abre el enlace o introduce el código — no hace falta cuenta para recibir.",
       "Ambas partes verifican en pantalla el mismo código SAS de 6 dígitos para descartar cualquier intermediario.",
       "Los archivos se transfieren cifrados de extremo a extremo (AES-256-GCM por bloque) a través del retransmisor rápido de Relayium, que solo transporta contenido cifrado que no puede leer.",
@@ -619,7 +619,7 @@ const es = {
       },
       {
         q: "¿Es obligatorio un código?",
-        a: "Sí: un código de 6 dígitos (o su enlace de acceso/QR), válido 15 minutos, empareja los dos dispositivos entre redes distintas.",
+        a: "Sí: un código de 6 caracteres (o su enlace de acceso/QR), válido 5 minutos, empareja los dos dispositivos entre redes distintas.",
       },
       {
         q: "¿Necesito una cuenta?",
@@ -638,17 +638,17 @@ const es = {
 const pt = {
   title: "Transferência de arquivos entre redes — em tempo real, criptografia de ponta a ponta | Relayium",
   description:
-    "Envie arquivos de um dispositivo a outro entre redes diferentes com um código de emparelhamento de 6 dígitos. Criptografia de ponta a ponta — o fluxo passa pelo retransmissor rápido do Relayium, que só transporta conteúdo cifrado que não consegue ler, verificado com um código SAS para que nem mesmo um retransmissor comprometido consiga espionar.",
+    "Envie arquivos de um dispositivo a outro entre redes diferentes com um código de emparelhamento de 6 caracteres. Criptografia de ponta a ponta — o fluxo passa pelo retransmissor rápido do Relayium, que só transporta conteúdo cifrado que não consegue ler, verificado com um código SAS para que nem mesmo um retransmissor comprometido consiga espionar.",
   hero: {
     h1: "Transferência de arquivos entre redes, criptografia de ponta a ponta",
     pitch:
-      "Dois dispositivos em redes diferentes se emparelham com um código de 6 dígitos (ou seu link/QR). Os arquivos circulam por um canal criptografado através do retransmissor rápido do Relayium — o retransmissor só vê conteúdo cifrado, e as chaves nunca saem dos dois dispositivos.",
+      "Dois dispositivos em redes diferentes se emparelham com um código de 6 caracteres (ou seu link/QR). Os arquivos circulam por um canal criptografado através do retransmissor rápido do Relayium — o retransmissor só vê conteúdo cifrado, e as chaves nunca saem dos dois dispositivos.",
     cta: "Iniciar transferência",
   },
   how: {
     heading: "Transferir em quatro passos",
     steps: [
-      "O remetente faz login e gera um código de emparelhamento de 6 dígitos (ou compartilha seu link de acesso/QR).",
+      "O remetente faz login e gera um código de emparelhamento de 6 caracteres (ou compartilha seu link de acesso/QR).",
       "O destinatário abre o link ou digita o código — não é preciso conta para receber.",
       "As duas partes verificam na tela o mesmo código SAS de 6 dígitos para descartar qualquer intermediário.",
       "Os arquivos são transferidos com criptografia de ponta a ponta (AES-256-GCM por bloco) através do retransmissor rápido do Relayium, que só transporta conteúdo cifrado que não consegue ler.",
@@ -701,7 +701,7 @@ const pt = {
       },
       {
         q: "Um código é obrigatório?",
-        a: "Sim: um código de 6 dígitos (ou seu link de acesso/QR), válido por 15 minutos, empareja os dois dispositivos entre redes diferentes.",
+        a: "Sim: um código de 6 caracteres (ou seu link de acesso/QR), válido por 5 minutos, empareja os dois dispositivos entre redes diferentes.",
       },
       {
         q: "Preciso de uma conta?",
