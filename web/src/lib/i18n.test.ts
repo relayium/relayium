@@ -3,6 +3,7 @@ import { LANGS, detect, pageUrl, loadLang, setLang, lang, messages as liveMessag
 // Language tables are code-split, so `messages` is empty until loaded at runtime.
 // The completeness checks want every language synchronously, so import the split
 // modules directly and reassemble the full record here.
+import { PICK_MODES, FLAG_ROWS, TRUST_FILES, GUIDES } from "./cli-page-data";
 import zh from "./i18n/zh";
 import en from "./i18n/en";
 import ja from "./i18n/ja";
@@ -192,5 +193,34 @@ describe("language code-splitting", () => {
     await setLang("ja");
     expect(lang()).toBe("ja");
     expect(liveMessages.ja.tagline).toBeTruthy();
+  });
+});
+
+// /cli 页把 cli-page-data.ts 的常量和这些文案**按下标**配对渲染。类型层面已经用
+// 等长元组钉死了（见 cli-page-data.ts 的 SameLength），这里再加一道运行时兜底：
+// 类型错误只在有人真的跑 `npm run check` 时才会被看见，而 CI 目前只跑发布流程。
+// 错位的表现是静默的——第 i 条解释配到了第 i 个 flag 上，或者干脆渲染出 undefined。
+describe("/cli 页的下标配对数组与代码常量等长", () => {
+  const pairs: [string, readonly unknown[], (m: Messages) => readonly string[]][] = [
+    ["pickWhen ↔ PICK_MODES", PICK_MODES, (m) => m.cliPage.pickWhen],
+    ["flagMeanings ↔ FLAG_ROWS", FLAG_ROWS, (m) => m.cliPage.flagMeanings],
+    ["fileDescs ↔ TRUST_FILES", TRUST_FILES, (m) => m.cliPage.fileDescs],
+    ["guides ↔ GUIDES", GUIDES, (m) => m.cliPage.guides],
+  ];
+  for (const [label, constants, pick] of pairs) {
+    it(`${label}：每种语言都是 ${constants.length} 条`, () => {
+      for (const { code } of LANGS) {
+        expect(pick(messages[code]).length, `${code} 的 ${label} 条数不对`).toBe(constants.length);
+      }
+    });
+  }
+  it("每一条文案都非空（漏翻会渲染成一个空格）", () => {
+    for (const { code } of LANGS) {
+      for (const [label, , pick] of pairs) {
+        for (const [i, text] of pick(messages[code]).entries()) {
+          expect(text.trim().length, `${code} 的 ${label} 第 ${i} 条是空的`).toBeGreaterThan(0);
+        }
+      }
+    }
   });
 });

@@ -213,3 +213,19 @@ manifest 声明每个文件多大、用户据此决定接不接收，但发送�
 
 误伤检查同样做了：带闸门的干净构建跑完整 E2E（含续传）全绿——续传恢复到 checkpoint
 之后继续写不会碰到这条线。
+
+### 补：#15 i18n 索引耦合数组（2026-07-23）
+
+/cli 页把常量（flag、指南 slug、信任文件名、模式卡片）与 t.cliPage 里的文案**按下标**
+配对渲染，两边长度没有任何东西保证——翻译少一条、或代码多加一个 flag，渲染出来就是
+错位或 undefined，而且是静默的，9 个语言文件靠人肉数守不住。原来那条"badges 3,
+pickWhen 5, flagMeanings 8, fileDescs 3"的手写注释本身就已经漂移了（实际 15 条）。
+
+做法（两层，都实测验证过会红）：
+1. 常量搬到 `web/src/lib/cli-page-data.ts` 并 `as const`，i18n 类型改成
+   `SameLength<typeof FLAG_ROWS>` 这样的**等长元组**（同态映射类型作用在元组上保留
+   长度）。往 FLAG_ROWS 加一行 → 9 份语言文件同时报类型错，且错误信息直接写明
+   "Source has 15 element(s) but target requires 16"。
+2. 运行时兜底：`i18n.test.ts` 断言每种语言的四个数组长度等于对应常量数组、且每条
+   非空。因为类型错误只在有人真的跑 `npm run check` 时才会被看见，而 CI 目前只跑
+   发布流程。实测删掉德语一条 fileDescs → 用例报 "de 的 fileDescs 条数不对: expected 2 to be 3"。

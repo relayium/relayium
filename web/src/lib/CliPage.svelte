@@ -2,6 +2,7 @@
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate, PRICING_PATH } from "./router.svelte";
   import CommandBlock from "./CommandBlock.svelte";
+  import { PICK_MODES, FLAG_ROWS, TRUST_FILES, GUIDES } from "./cli-page-data";
   const t = $derived<Messages>(messages[lang()]);
   const repo = "https://github.com/relayium/relayium";
 
@@ -37,31 +38,9 @@ Accept and remember this peer? [y/N] y
 relayium authorize 74318e3b…`;
 
   // Literal command names / flags / emoji; all prose comes from t.cliPage.
+  // 与文案按下标配对的那几组常量住在 cli-page-data.ts —— 那里的类型把"两边等长"
+  // 变成了编译期约束（见该文件的 SameLength）。
   const osBadge = "macOS · Linux · Windows";
-  const pick = [
-    { g: "🔑", title: "push / pull", cmd: "relayium push … user@host:path" },
-    { g: "🔗", title: "send / receive", cmd: "relayium send … <code>" },
-    { g: "🖧", title: "daemon direct", cmd: "relayium push … relayium://host" },
-    { g: "🔁", title: "sync", cmd: "relayium sync … relayium://host" },
-    { g: "☁️", title: "up / down", cmd: "relayium up … / down <link>" },
-  ];
-  const flagRows = [
-    { flag: "--dir <d>", who: "serve" },
-    { flag: "--port <n>", who: "serve, relayium://" },
-    { flag: "--once", who: "serve" },
-    { flag: "--no-resume", who: "push / pull / serve" },
-    { flag: "--config-dir <d>", who: "serve / push / sync / id / authorize" },
-    { flag: "-i <file>", who: "push / pull / sync" },
-    { flag: "-p <n>", who: "push / pull / sync" },
-    { flag: "--verify", who: "send / receive" },
-    { flag: "--delete", who: "sync" },
-    { flag: "--watch", who: "sync" },
-    { flag: "--allow-delete", who: "serve" },
-    { flag: "--burn", who: "up" },
-    { flag: "--ttl <dur>", who: "up" },
-    { flag: "--max-downloads <n>", who: "up" },
-    { flag: "--server <url>", who: "login / up / down" },
-  ];
   const syncCmd = "relayium sync ./site relayium://receiver.example.com --delete --watch";
   const loginCmd = "relayium login   # opens relayium.com/device — enter the code to bind this machine";
   const upCmd = `relayium up ./report.pdf
@@ -73,16 +52,6 @@ relayium up ./report.pdf --ttl 7d            # kept 7 days (your plan sets the c
 relayium up ./report.pdf --max-downloads 5   # allow 5 downloads`;
   const downCmd = `# on another machine — no login needed
 relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
-  const fileNames = ["id.key / id.crt", "known_hosts", "authorized_fingerprints"];
-  const guideSlugs = [
-    "guides/transfer-files-from-terminal",
-    "guides/back-up-a-server-over-ssh",
-    "guides/send-a-file-to-someone",
-    "guides/server-to-server-transfers",
-    "guides/sync-a-large-folder-between-servers",
-    "guides/push-to-cloud-pull-on-another-computer",
-  ];
-  const guideIcons = ["🚀", "🔑", "🔗", "🖧", "🔁", "☁️"];
   const guideUrl = (slug: string) => (lang() === "en" ? `/${slug}` : `/${lang()}/${slug}`);
 </script>
 
@@ -114,7 +83,7 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     <h2>{t.cliPage.whichH2}</h2>
     <p>{t.cliPage.whichIntro}</p>
     <div class="pick">
-      {#each pick as p, i (p.title)}
+      {#each PICK_MODES as p, i (p.title)}
         <div class="pick-card">
           <span class="g" aria-hidden="true">{p.g}</span>
           <h3>{p.title}</h3>
@@ -199,9 +168,9 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
   <div class="block">
     <h2>{t.cliPage.guidesH2}</h2>
     <div class="guide-cards">
-      {#each guideSlugs as slug, i (slug)}
-        <a class="guide-card" href={guideUrl(slug)}>
-          <span class="g" aria-hidden="true">{guideIcons[i]}</span>
+      {#each GUIDES as g, i (g.slug)}
+        <a class="guide-card" href={guideUrl(g.slug)}>
+          <span class="g" aria-hidden="true">{g.icon}</span>
           <span class="gt">{t.cliPage.guides[i]}</span>
           <span class="arr" aria-hidden="true">→</span>
         </a>
@@ -218,7 +187,7 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
       <table>
         <thead><tr><th>{t.cliPage.thFlag}</th><th>{t.cliPage.thApplies}</th><th>{t.cliPage.thMeaning}</th></tr></thead>
         <tbody>
-          {#each flagRows as f, i (f.flag)}
+          {#each FLAG_ROWS as f, i (f.flag)}
             <tr><td><code>{f.flag}</code></td><td>{f.who}</td><td>{t.cliPage.flagMeanings[i]}</td></tr>
           {/each}
         </tbody>
@@ -228,7 +197,7 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     <h3>{t.cliPage.trustH3}</h3>
     <p>{t.cliPage.trustIntro}</p>
     <ul class="files">
-      {#each fileNames as name, i (name)}
+      {#each TRUST_FILES as name, i (name)}
         <li><code>{name}</code> — {t.cliPage.fileDescs[i]}</li>
       {/each}
     </ul>

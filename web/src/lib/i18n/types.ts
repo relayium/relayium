@@ -1,3 +1,5 @@
+import type { SameLength, PICK_MODES, FLAG_ROWS, TRUST_FILES, GUIDES } from "../cli-page-data";
+
 // Pure i18n types and locale-independent helpers. No message data and no
 // runtime state live here, so language tables and the reactive facade can both
 // import it without a cycle.
@@ -368,8 +370,13 @@ export interface Messages {
     };
   };
   // /cli docs page body. Command blocks stay literal English (code); only prose
-  // and labels are localised. Arrays keep a fixed length matching CliPage.svelte:
-  // badges 3, pickWhen 5, flagMeanings 8, fileDescs 3.
+  // and labels are localised.
+  //
+  // 四个数组是**按下标**和 cli-page-data.ts 里的常量配对渲染的（第 i 条解释配第 i
+  // 个 flag），所以它们的类型是与那些常量等长的**元组**而不是 string[]：少一条、多
+  // 一条，或者往常量数组里加了一项却忘了补翻译，都会在这里变成编译错误。
+  // 手写"badges 3, pickWhen 5…"那种注释守不住——它自己就曾经漂移过（写着
+  // flagMeanings 8，实际是 15）。badges 例外：它是遍历渲染的，不和任何常量配对。
   cliPage: {
     badges: string[];
     freenote: string;
@@ -380,7 +387,7 @@ export interface Messages {
     installHelp: string;
     whichH2: string;
     whichIntro: string;
-    pickWhen: string[];
+    pickWhen: SameLength<typeof PICK_MODES>;
     mode1Title: string;
     mode1Tag: string;
     mode1Body: string;
@@ -401,17 +408,17 @@ export interface Messages {
     thFlag: string;
     thApplies: string;
     thMeaning: string;
-    flagMeanings: string[];
+    flagMeanings: SameLength<typeof FLAG_ROWS>;
     trustH3: string;
     trustIntro: string;
-    fileDescs: string[];
+    fileDescs: SameLength<typeof TRUST_FILES>;
     integrityH3: string;
     integrityNote: string;
     footerSource: string;
     footerReleases: string;
     footerBrowser: string;
     guidesH2: string;
-    guides: string[];
+    guides: SameLength<typeof GUIDES>;
     syncH2: string;
     syncNote: string;
     cloudH2: string;
