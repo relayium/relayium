@@ -296,10 +296,11 @@ func TestPasswordLoginFrozenWhenPendingDeletion(t *testing.T) {
 	}
 }
 
-// TestMagicLoginFrozenWhenPendingDeletion mirrors the password-login guard
-// for the magic-link path: verify redirects to the pending_deletion query
-// params carrying a fresh reactivate token instead of "/", and sets no
-// session cookie.
+// TestMagicLoginFrozenWhenPendingDeletion mirrors the password-login guard for
+// the magic-link path: a frozen account gets no session and a fresh reactivate
+// token instead. Since M5 the token is consumed by the POST (the GET only
+// redirects into the SPA page), so the reactivate token comes back in the JSON
+// body — which also keeps it out of the URL and the Referer entirely.
 func TestMagicLoginFrozenWhenPendingDeletion(t *testing.T) {
 	ts, _, store, mail := newFileServer(t)
 	ctx := context.Background()
@@ -320,21 +321,23 @@ func TestMagicLoginFrozenWhenPendingDeletion(t *testing.T) {
 	if i < 0 {
 		t.Fatalf("no magic token captured: %q", mail.lastLink)
 	}
-	resp, err := client.Get(ts.URL + "/api/auth/magic/verify?token=" + mail.lastLink[i+len("token="):])
+	resp, err := client.Post(ts.URL+"/api/auth/magic/verify", "application/json",
+		strings.NewReader(`{"token":"`+mail.lastLink[i+len("token="):]+`"}`))
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("want redirect, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200 with a pending_deletion body, got %d", resp.StatusCode)
 	}
-	loc := resp.Header.Get("Location")
-	// The reactivate token must ride the URL FRAGMENT, not the query, so it never
-	// reaches server logs or a Referer header.
-	if !strings.Contains(loc, "#account=pending_deletion") || !strings.Contains(loc, "token=") {
-		t.Fatalf("want pending_deletion fragment redirect with token, got %q", loc)
+	var body struct {
+		Status          string `json:"status"`
+		ReactivateToken string `json:"reactivateToken"`
 	}
-	if strings.Contains(loc, "?account=pending_deletion") {
-		t.Fatalf("reactivate token must not be in the query string: %q", loc)
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Status != "pending_deletion" || body.ReactivateToken == "" {
+		t.Fatalf("want a pending_deletion status with a fresh reactivate token, got %+v", body)
 	}
 	if hasSessionCookie(resp.Cookies()) {
 		t.Fatal("no session cookie must be set for a frozen account via magic link")

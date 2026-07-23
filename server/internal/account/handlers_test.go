@@ -40,7 +40,8 @@ func TestMagicRequestAlwaysOKAndLoginFlow(t *testing.T) {
 	if err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("request: %v status=%v", err, resp.StatusCode)
 	}
-	// Pull the token from the captured link and hit verify.
+	// Pull the token from the captured link. The link is a GET that now only
+	// redirects into the SPA page — it must NOT sign anyone in (see M5).
 	i := strings.Index(mail.lastLink, "token=")
 	token := mail.lastLink[i+len("token="):]
 	resp, err = client.Get(ts.URL + "/api/auth/magic/verify?token=" + token)
@@ -48,7 +49,19 @@ func TestMagicRequestAlwaysOKAndLoginFlow(t *testing.T) {
 		t.Fatalf("verify: %v", err)
 	}
 	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("verify should redirect, got %d", resp.StatusCode)
+		t.Fatalf("the emailed link should redirect, got %d", resp.StatusCode)
+	}
+	for _, c := range resp.Cookies() {
+		if c.Name == sessionCookie {
+			t.Fatal("the GET handed out a session cookie — a mail gateway prefetch would receive a live login")
+		}
+	}
+
+	// The click on the page POSTs the token; that is what signs in.
+	resp, err = client.Post(ts.URL+"/api/auth/magic/verify", "application/json",
+		strings.NewReader(`{"token":"`+token+`"}`))
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST verify: %v status=%v", err, resp.StatusCode)
 	}
 	var cookie *http.Cookie
 	for _, c := range resp.Cookies() {
@@ -109,7 +122,8 @@ func TestDeviceCRUDOverHTTP(t *testing.T) {
 	// Log in via magic link to get a cookie.
 	_, _ = client.PostForm(ts.URL+"/api/auth/magic/request", url.Values{"email": {"dev@example.com"}})
 	i := strings.Index(mail.lastLink, "token=")
-	resp, _ := client.Get(ts.URL + "/api/auth/magic/verify?token=" + mail.lastLink[i+len("token="):])
+	resp, _ := client.Post(ts.URL+"/api/auth/magic/verify", "application/json",
+		strings.NewReader(`{"token":"`+mail.lastLink[i+len("token="):]+`"}`))
 	var cookie *http.Cookie
 	for _, c := range resp.Cookies() {
 		if c.Name == sessionCookie {
@@ -171,7 +185,8 @@ func TestUsageEndpointRequiresSessionAndReturnsTotal(t *testing.T) {
 	// Log in via magic link → cookie + a known user.
 	_, _ = client.PostForm(ts.URL+"/api/auth/magic/request", url.Values{"email": {"u@example.com"}})
 	i := strings.Index(mail.lastLink, "token=")
-	verify, _ := client.Get(ts.URL + "/api/auth/magic/verify?token=" + mail.lastLink[i+len("token="):])
+	verify, _ := client.Post(ts.URL+"/api/auth/magic/verify", "application/json",
+		strings.NewReader(`{"token":"`+mail.lastLink[i+len("token="):]+`"}`))
 	var cookie *http.Cookie
 	for _, c := range verify.Cookies() {
 		if c.Name == sessionCookie {

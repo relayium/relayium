@@ -126,7 +126,10 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("GET /api/auth/methods", s.handleAuthMethods)
 	if s.cfg.EnableMagic {
 		mux.HandleFunc("POST /api/auth/magic/request", s.handleMagicRequest)
-		mux.HandleFunc("GET /api/auth/magic/verify", s.handleMagicVerify)
+		// GET 只重定向到 SPA 页面（邮件网关预取无副作用）；POST 才消费令牌。见
+		// handleMagicVerifyRedirect 的注释。
+		mux.HandleFunc("GET /api/auth/magic/verify", s.handleMagicVerifyRedirect)
+		mux.HandleFunc("POST /api/auth/magic/verify", s.handleMagicVerify)
 	}
 	if s.cfg.EnableGoogle {
 		mux.HandleFunc("GET /api/auth/google/start", s.handleGoogleStart)
@@ -333,24 +336,58 @@ func (s *Service) handleMagicRequest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
 }
 
-func (s *Service) handleMagicVerify(w http.ResponseWriter, r *http.Request) {
+// handleMagicVerifyRedirect 只把邮件里的链接转成 SPA 路由，**不碰令牌**。
+//
+// 以前这里是一个 GET：读 token → 消费掉 → 下发 30 天会话 cookie → 302。企业邮件网关
+// （Proofpoint / Mimecast / Defender Safe Links）会在投递前预取邮件里的每个链接，于是：
+//  1. 一次性令牌被扫描器烧掉，用户真的点开时看到"链接已过期"；
+//  2. 更糟的是，`Set-Cookie: <30 天会话>` 被交给了**扫描器的 HTTP 客户端**——一个活
+//     着的登录态被投递进第三方的扫描基础设施。
+//
+// 现在 GET 只做重定向（对扫描器而言无副作用），真正的消费在 POST /api/auth/magic/verify
+// 上，由页面上的一次点击触发。这也让它和另外三条邮件链路（验证邮箱、重置密码、删除
+// 确认）终于一致——那三条本来就是"链接指向 SPA 路由、POST 才动令牌"。
+//
+// **不做有效性预检**：预检要么得消费令牌（回到原点），要么得新加一个"只读探测"接口，
+// 而后者会把这个端点变成令牌有效性预言机。让 POST 去判，GET 一律照转。
+func (s *Service) handleMagicVerifyRedirect(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
+	// 令牌留在 query 里：SPA 挂载时会 replaceState 把它从 URL 抹掉（与 /verify-email、
+	// /reset-password 同一套做法）。
+	http.Redirect(w, r, magicLinkPath+"?token="+url.QueryEscape(token), http.StatusFound)
+}
+
+// magicLinkPath 是承接邮件链接的 SPA 路由。必须与 web/src/lib/router.svelte.ts 的
+// MAGIC_PATH 一致。
+const magicLinkPath = "/magic-link"
+
+func (s *Service) handleMagicVerify(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Token string `json:"token"`
+	}
+	if err := decodeJSONBody(w, r, &in); err != nil || in.Token == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	token := in.Token
 	sess, err := s.VerifyMagicLink(r.Context(), token)
 	var pd *PendingDeletionError
 	if errors.As(err, &pd) {
-		// Frozen login (Task 4): no session cookie, redirect carrying a fresh
-		// reactivate token instead of the usual post-login "/".
-		// Fragment, not query: keeps the reactivate token out of server logs and
-		// Referer (see oauth.go's frozen-login redirect).
-		http.Redirect(w, r, "/#account=pending_deletion&token="+url.QueryEscape(pd.ReactivateToken), http.StatusFound)
+		// Frozen login: no session cookie. The reactivate token goes back in the
+		// JSON body rather than a redirect fragment — the caller is fetch() now,
+		// and a body keeps it out of both the URL and the Referer.
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":          "pending_deletion",
+			"reactivateToken": pd.ReactivateToken,
+		})
 		return
 	}
 	if err != nil {
-		http.Redirect(w, r, "/?login=expired", http.StatusFound)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_token"})
 		return
 	}
 	s.setSessionCookie(w, sess)
-	http.Redirect(w, r, "/", http.StatusFound)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {

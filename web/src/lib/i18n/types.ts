@@ -343,6 +343,18 @@ export interface Messages {
     errGeneric: string; // any other server error on submit
     backHome: string; // link back to the app
   };
+  // /magic-link 落地页。这一页存在的唯一理由是它需要一次点击——邮件网关的预取
+  // 不会点按钮，所以令牌不会被烧掉、会话 cookie 也不会发给扫描器。
+  magicLink: {
+    title: string;
+    lead: string;
+    cta: string;
+    working: string;
+    done: string;
+    expired: string;
+    noToken: string;
+    home: string;
+  };
   nav: { lanTab: string; crossTab: string; offlineTab: string; cliTab: string; appsTab: string };
   // Full page headings for the cross/offline pages. The nav.*Tab strings are the
   // short pill labels; these are the descriptive <h1> titles.

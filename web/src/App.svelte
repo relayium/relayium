@@ -45,6 +45,7 @@
     pricing: () => import("./lib/PricingPage.svelte"),
     "verify-email": () => import("./lib/VerifyEmail.svelte"),
     "reset-password": () => import("./lib/ResetPassword.svelte"),
+    "magic-link": () => import("./lib/MagicLink.svelte"),
     // 不是路由，是首页折叠线以下那一大块 —— 借用同一个记忆化加载器，省得再写一套。
     "home-sections": () => import("./lib/HomeSections.svelte"),
   } as const;
@@ -196,6 +197,7 @@
     currentRoute() === "download" || currentRoute() === "offline" || currentRoute() === "me" || currentRoute() === "cli"
     || currentRoute() === "apps"
     || currentRoute() === "pricing" || currentRoute() === "verify-email" || currentRoute() === "reset-password"
+    || currentRoute() === "magic-link"
       ? false
       : currentRoute() === "cross"
         ? showTransfer
@@ -827,6 +829,10 @@
   {:else if currentRoute() === "reset-password"}
     {#await routePage("reset-password") then { default: ResetPassword }}
       <ResetPassword />
+    {/await}
+  {:else if currentRoute() === "magic-link"}
+    {#await routePage("magic-link") then { default: MagicLink }}
+      <MagicLink />
     {/await}
   {:else}
     <Hero {connState} {unsupported} {selfName} {selfIP} onRename={commitName} />

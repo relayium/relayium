@@ -59,7 +59,9 @@ func loginCookie(t *testing.T, ts *httptest.Server, mail *capturingMailer, email
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	_, _ = client.PostForm(ts.URL+"/api/auth/magic/request", map[string][]string{"email": {email}})
 	i := strings.Index(mail.lastLink, "token=")
-	verify, _ := client.Get(ts.URL + "/api/auth/magic/verify?token=" + mail.lastLink[i+len("token="):])
+	// POST 才消费令牌（GET 只重定向，见 M5），所以登录必须走 POST。
+	verify, _ := client.Post(ts.URL+"/api/auth/magic/verify", "application/json",
+		strings.NewReader(`{"token":"`+mail.lastLink[i+len("token="):]+`"}`))
 	for _, c := range verify.Cookies() {
 		if c.Name == sessionCookie {
 			return c

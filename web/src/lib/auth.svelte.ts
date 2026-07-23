@@ -230,6 +230,39 @@ export async function verifyEmail(token: string, password = ""): Promise<{ ok: b
   return postForUser("/api/auth/email/verify", { token, password });
 }
 
+/** Result of spending an emailed sign-in link. */
+export interface MagicResult {
+  ok: boolean;
+  /** The account is scheduled for deletion: no session was issued, but a fresh
+   *  reactivate token came back so the user can undo it. */
+  pendingDeletion?: boolean;
+  reactivateToken?: string;
+  error?: string;
+}
+
+/**
+ * 花掉邮件里的登录令牌。**只能由一次真实点击触发。**
+ *
+ * 邮件里的链接指向 GET /api/auth/magic/verify，那个 GET 只把浏览器重定向到本页、
+ * 不碰令牌；真正消费它的是这里的 POST。这个分工是有意的：企业邮件网关会在投递前
+ * 预取邮件里的每个链接，如果 GET 就消费，用户点开时永远看到"链接已过期"，而那张
+ * 30 天的会话 cookie 已经发给扫描器了。
+ *
+ * 所以**不要**在页面挂载时自动调用它——那等于把防线又搬回 GET 上。
+ */
+export async function completeMagicLink(token: string): Promise<MagicResult> {
+  const res = await apiSend("/api/auth/magic/verify", { method: "POST", body: JSON.stringify({ token }) });
+  if (!res) return { ok: false, error: "network" };
+  if (!res.ok) return { ok: false, error: await errorCode(res) };
+  const body = (await res.json()) as { status?: string; reactivateToken?: string };
+  if (body.status === "pending_deletion") {
+    return { ok: false, pendingDeletion: true, reactivateToken: body.reactivateToken };
+  }
+  // 服务端只回 {status:"ok"} 并种下 cookie，用户信息另外拉一次。
+  await refreshSession();
+  return { ok: true };
+}
+
 // Fire-and-forget resend; the server always answers 200 (anti-enumeration —
 // it does not reveal whether the address exists or is already verified).
 export async function resendVerification(email: string): Promise<void> {
