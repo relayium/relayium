@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"crypto/ecdsa"
+	"crypto/x509"
 	"strconv"
 	"testing"
 )
@@ -46,5 +49,46 @@ func TestReplayGuardPrunes(t *testing.T) {
 	}
 	if len(g.used) >= before+4*minPruneAt {
 		t.Fatalf("used-set never pruned: %d entries after %d", len(g.used), before)
+	}
+}
+
+// TestDownloadCertIsNotEd25519 pins the one property that made the first real
+// v0.10.0 canary fail: the download listener presented the node's Ed25519
+// identity certificate, Cloudflare could not complete a TLS handshake with it,
+// and every proxied download came back 525 while the origin answered fine on
+// localhost. ECDSA is what CF's origin connection accepts.
+func TestDownloadCertIsNotEd25519(t *testing.T) {
+	for _, host := range []string{"n5.relayium.com", "203.0.113.7", ""} {
+		cert, err := downloadTLSCert(host)
+		if err != nil {
+			t.Fatalf("downloadTLSCert(%q): %v", host, err)
+		}
+		leaf, err := x509.ParseCertificate(cert.Certificate[0])
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		if leaf.PublicKeyAlgorithm != x509.ECDSA {
+			t.Fatalf("download cert key algorithm = %v, want ECDSA (Cloudflare cannot handshake with Ed25519)",
+				leaf.PublicKeyAlgorithm)
+		}
+		if _, ok := cert.PrivateKey.(*ecdsa.PrivateKey); !ok {
+			t.Fatalf("private key %T is not ECDSA", cert.PrivateKey)
+		}
+	}
+}
+
+// The identity cert must NOT be what the public listener serves: central pins
+// its fingerprint for the storage channel, so it stays off the public face.
+func TestDownloadCertDiffersFromIdentity(t *testing.T) {
+	a, err := downloadTLSCert("n5.relayium.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := downloadTLSCert("n5.relayium.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(a.Certificate[0], b.Certificate[0]) {
+		t.Fatal("two calls produced the same certificate — it should be per-process, not a stored key")
 	}
 }
