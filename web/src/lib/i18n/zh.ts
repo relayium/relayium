@@ -652,6 +652,7 @@ const zh: Messages = {
   historyTitle: "最近传输",
   historyEmpty: "暂无记录",
   historyClear: "清空",
+  historyKeep: "在本机保留传输记录",
 };
 
 

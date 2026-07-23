@@ -45,6 +45,10 @@ export interface KeyPair {
 export interface SessionKeys {
   send: CryptoKey;
   recv: CryptoKey;
+  /** HMAC key both sides derive to the SAME value, used to authenticate resume
+   *  signalling (see signResume). Separate from send/recv on purpose: it signs
+   *  attacker-visible plaintext, so it must not be the key protecting content. */
+  resumeAuth: CryptoKey;
 }
 
 export function generateKeyPair(): KeyPair {
@@ -83,7 +87,63 @@ export async function deriveSession(
   return {
     send: await importAesKey(keys.sharedTx as Bytes),
     recv: await importAesKey(keys.sharedRx as Bytes),
+    resumeAuth: await deriveResumeAuth(keys.sharedTx as Bytes, keys.sharedRx as Bytes),
   };
+}
+
+/** Domain separation: this key must never produce a tag that could be replayed
+ *  into any other context that might later hash the same session secrets. */
+const RESUME_AUTH_DOMAIN = "relayium-resume-auth-v1\0";
+
+/** Derive the shared resume-authentication key from the session secrets.
+ *
+ *  crypto_kx hands the two sides MIRRORED secrets (one's tx is the other's rx),
+ *  so hashing them in local order would give the peers two different keys. They
+ *  are sorted first — the pair as a SET is identical on both sides, so the sort
+ *  is what makes this derivation symmetric without any extra round trip. */
+async function deriveResumeAuth(tx: Bytes, rx: Bytes): Promise<CryptoKey> {
+  const [a, b] = compareBytes(tx, rx) <= 0 ? [tx, rx] : [rx, tx];
+  const domain = new TextEncoder().encode(RESUME_AUTH_DOMAIN);
+  const input = new Uint8Array(domain.length + a.length + b.length);
+  input.set(domain, 0);
+  input.set(a, domain.length);
+  input.set(b, domain.length + a.length);
+  const raw = sodiumSync().crypto_generichash(32, input) as Bytes;
+  return crypto.subtle.importKey("raw", raw, { name: "HMAC", hash: "SHA-256" }, false, [
+    "sign",
+    "verify",
+  ]);
+}
+
+function compareBytes(x: Uint8Array, y: Uint8Array): number {
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    if (x[i] !== y[i]) return x[i] - y[i];
+  }
+  return x.length - y.length;
+}
+
+/** Tag for a resume signalling message, base64. */
+export async function signResume(key: CryptoKey, payload: string): Promise<string> {
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+  return btoa(String.fromCharCode(...new Uint8Array(mac)));
+}
+
+/** Check a resume tag. A malformed/absent tag is a failure, never a pass —
+ *  falling back to "unauthenticated is fine" would make the whole binding
+ *  optional at the attacker's choosing. */
+export async function verifyResume(
+  key: CryptoKey,
+  payload: string,
+  mac: string | undefined,
+): Promise<boolean> {
+  if (!mac) return false;
+  let sig: Uint8Array;
+  try {
+    sig = Uint8Array.from(atob(mac), (c) => c.charCodeAt(0));
+  } catch {
+    return false;
+  }
+  return crypto.subtle.verify("HMAC", key, sig, new TextEncoder().encode(payload));
 }
 
 function nonceFromSeq(seq: number): Bytes {

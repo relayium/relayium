@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { recordTransfer, loadHistory, clearHistory, HISTORY_MAX } from "./history";
+import {
+  recordTransfer,
+  loadHistory,
+  clearHistory,
+  historyEnabled,
+  setHistoryEnabled,
+  HISTORY_MAX,
+} from "./history";
 
 beforeEach(() => localStorage.clear());
 
@@ -26,5 +33,34 @@ describe("history", () => {
     recordTransfer({ name: "x", size: 1, direction: "send", peer: "p" });
     clearHistory();
     expect(loadHistory()).toEqual([]);
+  });
+});
+
+describe("history opt-out", () => {
+  it("records by default — the setting is opt-OUT", () => {
+    expect(historyEnabled()).toBe(true);
+    recordTransfer({ name: "a.txt", size: 1, direction: "send", peer: "p" });
+    expect(loadHistory()).toHaveLength(1);
+  });
+  it("stops recording once turned off", () => {
+    setHistoryEnabled(false);
+    expect(historyEnabled()).toBe(false);
+    recordTransfer({ name: "a.txt", size: 1, direction: "send", peer: "p" });
+    expect(loadHistory()).toEqual([]);
+  });
+  it("turning it off drops what was already stored", () => {
+    recordTransfer({ name: "secret.pdf", size: 1, direction: "recv", peer: "Bob" });
+    expect(loadHistory()).toHaveLength(1);
+    setHistoryEnabled(false);
+    // Nothing left behind: not the entries, and not the raw key either.
+    expect(loadHistory()).toEqual([]);
+    expect(localStorage.getItem("relayium.history")).toBeNull();
+  });
+  it("turning it back on resumes recording", () => {
+    setHistoryEnabled(false);
+    setHistoryEnabled(true);
+    expect(historyEnabled()).toBe(true);
+    recordTransfer({ name: "a.txt", size: 1, direction: "send", peer: "p" });
+    expect(loadHistory()).toHaveLength(1);
   });
 });

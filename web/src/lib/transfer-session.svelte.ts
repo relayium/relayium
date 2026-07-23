@@ -9,9 +9,9 @@
 //
 // 状态用 getter 暴露而不是直接导出变量：Svelte 5 的 $state 靠属性访问建立依赖，
 // 导出一个 let 只会把当时的快照值发出去，组件永远不会重渲染。
-import { generateKeyPair, deriveSession, sas, type SessionKeys } from "./crypto";
+import { generateKeyPair, deriveSession, sas, signResume, verifyResume, type SessionKeys } from "./crypto";
 import type { SignalingClient } from "./signaling";
-import { connect, connectResume, PeerBusyError, type InboundSignal, type Conn, type ConnPath, type RtcConfig } from "./webrtc";
+import { connect, connectResume, PeerBusyError, type InboundSignal, type Conn, type ConnPath, type RtcConfig, type SignalAuth } from "./webrtc";
 import {
   Sender,
   Receiver,
@@ -133,6 +133,15 @@ export function createTransferSession(deps: SessionDeps) {
         recv = { peer: from, dir: "recv", files: [], index: 0, sent: 0, total: 0, status: "connectFail", done: true, ok: false, speed: 0 };
       }
     });
+  }
+
+  /** Signal authentication for a resume connection, keyed by the session the
+   *  first (SAS-verified) connection established. */
+  function resumeAuthOf(k: SessionKeys): SignalAuth {
+    return {
+      sign: (payload) => signResume(k.resumeAuth, payload),
+      verify: (payload, mac) => verifyResume(k.resumeAuth, payload, mac),
+    };
   }
 
   async function beginReceive(from: string, offer: InboundSignal) {
@@ -321,6 +330,10 @@ export function createTransferSession(deps: SessionDeps) {
     // against re-entrancy so a duplicate/ICE-restart offer can't spawn a second one.
     async function resume(offer: InboundSignal) {
       if (r.done || cancelled || resuming) return;
+      // No keys means the first connection never finished its handshake, so there
+      // is nothing to authenticate the re-offer against. Refuse rather than fall
+      // back to an unauthenticated resume — that is precisely the hole.
+      if (!keys) return;
       resuming = true;
       pausedRecv = null; // claim it: a concurrent offer must not re-enter
       const old = conn;
@@ -328,7 +341,7 @@ export function createTransferSession(deps: SessionDeps) {
       try {
         c = await connectResume({
           signaling: signaling(), peerId: from, role: "responder", initialSignal: offer,
-          config: rtcConfig(),
+          config: rtcConfig(), auth: resumeAuthOf(keys),
           onStateChange: (state) => { if (state === "failed" || state === "closed") onRecvDrop(); },
         });
       } catch {
@@ -528,6 +541,7 @@ export function createTransferSession(deps: SessionDeps) {
           let lost = false;
           rconn = await connectResume({
             signaling: signaling(), peerId, role: "initiator", config: rtcConfig(),
+            auth: resumeAuthOf(keys),
             onStateChange: (state) => { if (state === "failed" || state === "closed") lost = true; },
           });
           conn = rconn; // so sendAbort tears down the current connection

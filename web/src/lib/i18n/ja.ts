@@ -652,6 +652,7 @@ const ja: Messages = {
   historyTitle: "最近の転送",
   historyEmpty: "まだ転送履歴はありません",
   historyClear: "クリア",
+  historyKeep: "この端末に転送履歴を残す",
 };
 
 

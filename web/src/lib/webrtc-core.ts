@@ -47,6 +47,10 @@ export interface InboundSignal {
    *  sender fail fast with a "peer busy" message instead of waiting out the ICE
    *  timeout and mislabelling it a connection failure. */
   busy?: boolean;
+  /** base64 HMAC over this message's SDP/ICE payload, keyed by a value derived
+   *  from the session keys (see SignalAuth). Present only on resume signalling,
+   *  where there is no commit-reveal handshake to anchor the peer's identity. */
+  auth?: string;
   /** Peer renamed itself; the roster entry for that peer id should be updated to
    *  this display name. Opaque to the WebRTC handlers (like relayRtt/busy). */
   rename?: string;
@@ -127,6 +131,31 @@ export interface CoreContext {
   close(): void;
 }
 
+/** Authenticates signalling on a connection that runs no handshake of its own.
+ *  A resume connection reuses keys the peers already agreed on (and the user
+ *  already compared via SAS), so possession of those keys is exactly the proof
+ *  that the offer came from the same peer — and a signalling MITM, which sees
+ *  every SDP in the clear, cannot produce it. */
+export interface SignalAuth {
+  sign(payload: string): Promise<string>;
+  verify(payload: string, mac: string | undefined): Promise<boolean>;
+}
+
+/** The exact bytes a signal's tag covers. Fields are listed explicitly rather
+ *  than stringifying the message, so what is bound can't drift when a new
+ *  field is added to InboundSignal, and so key order can't differ between the
+ *  signer and the verifier. */
+export function authPayload(msg: InboundSignal): string {
+  return JSON.stringify({
+    sdpType: msg.sdp?.type ?? null,
+    sdp: msg.sdp?.sdp ?? null,
+    candidate: msg.ice?.candidate ?? null,
+    sdpMid: msg.ice?.sdpMid ?? null,
+    sdpMLineIndex: msg.ice?.sdpMLineIndex ?? null,
+    usernameFragment: msg.ice?.usernameFragment ?? null,
+  });
+}
+
 export interface CoreOpts extends CoreHooks {
   signaling: SignalingClient;
   peerId: string;
@@ -140,6 +169,9 @@ export interface CoreOpts extends CoreHooks {
   /** 错误文案前缀，让 "connection failed" 和 "resume connection failed" 在日志和
    *  测试里可区分。 */
   label?: string;
+  /** 给这条连接的信令加**对端认证**。不传 = 不认证（connect() 就不传：它自己跑
+   *  commit-reveal）。传了就是双向强制：外发全签，入站没签或签不对的一律丢弃。 */
+  auth?: SignalAuth;
 }
 
 export async function establish(opts: CoreOpts): Promise<Conn> {
@@ -151,8 +183,22 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
   const tag = <T extends object>(msg: T): T & { resume?: boolean } =>
     resume ? { ...msg, resume: true } : msg;
 
+  // 外发信令统一走这里：盖世代标记 → 签名 → 发。签名是异步的，所以用一条串行链
+  // 保序——offer 之后紧跟的 ICE 候选如果因为签名耗时反超到 offer 前面，对端会把它
+  // 当作"remoteDescription 之前到达的候选"丢掉。
+  let sendChain: Promise<void> = Promise.resolve();
+  function send(msg: Omit<InboundSignal, "resume" | "auth">) {
+    sendChain = sendChain
+      .then(async () => {
+        const out: InboundSignal = tag(msg);
+        if (opts.auth) out.auth = await opts.auth.sign(authPayload(out));
+        signaling.sendSignal(peerId, out);
+      })
+      .catch((err) => console.error(`relayium ${what} send error`, err));
+  }
+
   pc.onicecandidate = (e) => {
-    if (e.candidate) signaling.sendSignal(peerId, tag({ ice: e.candidate }));
+    if (e.candidate) send({ ice: e.candidate });
   };
 
   let channel: RTCDataChannel;
@@ -196,7 +242,7 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
       if (msg.sdp.type === "offer") {
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        signaling.sendSignal(peerId, tag({ sdp: answer, ...opts.sdpExtra?.() }));
+        send({ sdp: answer, ...opts.sdpExtra?.() });
       } else if (msg.sdp.type === "answer") {
         opts.onAnswer?.();
       }
@@ -212,13 +258,29 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
     }
   }
 
+  /** Verify (when authenticated) and then handle. A signal that fails the check
+   *  is DROPPED, not fatal: the genuine peer's next signal still gets through,
+   *  and if nothing genuine ever arrives the connect timeout ends it anyway. */
+  async function accept(msg: InboundSignal) {
+    if (opts.auth && !(await opts.auth.verify(authPayload(msg), msg.auth))) {
+      console.warn(`relayium ${what}: dropped an unauthenticated signal`);
+      return;
+    }
+    await handleSignal(msg);
+  }
+
+  // 入站也串行：accept 里多了一次异步校验，两条信令并发跑 setRemoteDescription
+  // 会互相踩。
+  let recvChain: Promise<void> = Promise.resolve();
   const off = signaling.onSignal((from, data) => {
     const msg = data as InboundSignal;
     if (from !== peerId || !!msg.resume !== resume) return; // 别的世代的信令不是我们的
     // The peer is mid-transfer and won't answer — stop waiting for a channel that
     // will never open and report it as "peer busy". A no-op once opened.
     if (msg.busy) { if (!opened) failReady(new PeerBusyError()); return; }
-    handleSignal(msg).catch((err) => console.error(`relayium ${what} signal error`, err));
+    recvChain = recvChain
+      .then(() => accept(msg))
+      .catch((err) => console.error(`relayium ${what} signal error`, err));
   });
 
   // A transient "disconnected" (a NAT rebinding, a brief network blip) often
@@ -232,7 +294,7 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
     try {
       const offer = await pc.createOffer({ iceRestart: true });
       await pc.setLocalDescription(offer);
-      signaling.sendSignal(peerId, tag({ sdp: offer }));
+      send({ sdp: offer });
     } catch (err) {
       console.error(`relayium ${what} ice restart error`, err);
     }
@@ -253,9 +315,11 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
   if (role === "initiator") {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    signaling.sendSignal(peerId, tag({ sdp: offer, ...opts.sdpExtra?.() }));
+    send({ sdp: offer, ...opts.sdpExtra?.() });
   } else if (opts.initialSignal) {
-    await handleSignal(opts.initialSignal);
+    // The signal that got us here goes through the same check as every later
+    // one — it is the resume OFFER, i.e. exactly the message L3 is about.
+    await accept(opts.initialSignal);
   }
 
   try {

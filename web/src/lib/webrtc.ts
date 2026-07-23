@@ -6,11 +6,11 @@ import type { SignalingClient } from "./signaling";
 import { commitKey, randomNonce, verifyCommit } from "./crypto";
 import { establish } from "./webrtc-core";
 import { classifyPath } from "./webrtc-core";
-import type { Conn, ConnPath, InboundSignal, Reveal, RtcConfig } from "./webrtc-core";
+import type { Conn, ConnPath, InboundSignal, Reveal, RtcConfig, SignalAuth } from "./webrtc-core";
 
 // 传输层的类型/工具从这里再导出：调用方只认 "./webrtc" 这一个入口，拆分是内部事。
 export { DEFAULT_ICE, PeerBusyError, classifyPath } from "./webrtc-core";
-export type { Conn, ConnPath, InboundSignal, Reveal, RtcConfig } from "./webrtc-core";
+export type { Conn, ConnPath, InboundSignal, Reveal, RtcConfig, SignalAuth } from "./webrtc-core";
 
 interface ConnectOpts {
   signaling: SignalingClient;
@@ -189,6 +189,9 @@ interface ResumeOpts {
   signaling: SignalingClient;
   peerId: string;
   role: "initiator" | "responder";
+  /** Authenticates this connection's signalling with the keys the first
+   *  connection already anchored. Required in the app — see connectResume. */
+  auth: SignalAuth;
   config?: RtcConfig;
   initialSignal?: InboundSignal;
   onStateChange?: (state: RTCPeerConnectionState) => void;
@@ -201,9 +204,15 @@ interface ResumeOpts {
  * caller reuses those keys, so no new key is exchanged here and the SAS is
  * unchanged.
  *
- * 它和 connect() 共用 establish() 的传输骨架，但**一个鉴权钩子都不挂**——这就是
+ * 它和 connect() 共用 establish() 的传输骨架，但**不重跑握手**——这就是
  * "纯传输" 这句话在代码里的形态，而不是一句注释里的承诺。`resume: true` 让它跑在
  * 另一个信令世代上：正在死掉的原连接与它互相看不见对方的 SDP。
+ *
+ * 唯一挂上的是 `auth`：这条路径没有 commit-reveal，如果信令不做对端认证，能改写
+ * 信令的中间人就可以自己发一个 resume offer 接管这一半会话——密文他解不开（密钥没
+ * 换），但足以窥探进度元数据、投递畸形的 RESUME_REQ、重放密文把传输弄坏。用会话
+ * 密钥派生的 HMAC 绑定信令，"拿得出这个 tag" 本身就等价于 "持有第一次连接协商出的
+ * 密钥"，而那正是用户当时用 SAS 核对过的东西。
  */
 export async function connectResume(opts: ResumeOpts): Promise<Conn> {
   return establish({ ...opts, resume: true, label: "resume" });

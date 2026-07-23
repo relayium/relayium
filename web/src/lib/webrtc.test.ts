@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import { connect, connectResume, classifyPath, summarizeStats, PeerBusyError, type InboundSignal } from "./webrtc";
 import type { SignalingClient } from "./signaling";
-import { ready, generateKeyPair, sas } from "./crypto";
+import { ready, generateKeyPair, deriveSession, signResume, verifyResume, type SessionKeys } from "./crypto";
+import { sas } from "./crypto";
+import { authPayload, type SignalAuth } from "./webrtc-core";
 
 // ── Minimal RTCPeerConnection / RTCDataChannel doubles ───────────────────────
 // Enough surface for connect()'s offer/answer + commit-then-reveal state machine.
@@ -80,6 +82,24 @@ function makeHub() {
 
 const flush = async () => { for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0)); };
 const openAll = () => instances.forEach((pc) => { if (pc.channel && pc.channel.readyState !== "open") pc.channel._open(); });
+
+// A real pair of SignalAuths: two ephemeral keypairs run through the same
+// crypto_kx exchange the first (SAS-verified) connection would have done. Using
+// the real derivation — rather than a stub that always says yes — is what makes
+// the resume tests below also prove the two sides derive the SAME key.
+function authOf(k: SessionKeys): SignalAuth {
+  return {
+    sign: (payload) => signResume(k.resumeAuth, payload),
+    verify: (payload, mac) => verifyResume(k.resumeAuth, payload, mac),
+  };
+}
+async function pairAuth(): Promise<{ I: SignalAuth; R: SignalAuth; iKeys: SessionKeys }> {
+  const i = generateKeyPair();
+  const r = generateKeyPair();
+  const iKeys = await deriveSession("initiator", i, r.publicKey);
+  const rKeys = await deriveSession("responder", r, i.publicKey);
+  return { I: authOf(iKeys), R: authOf(rKeys), iKeys };
+}
 
 beforeAll(async () => { await ready(); });
 afterEach(() => { instances.length = 0; vi.unstubAllGlobals(); });
@@ -257,8 +277,9 @@ describe("connectResume", () => {
   it("establishes a channel with no commit/reveal exchange", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
-    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder" });
-    const iP = connectResume({ signaling: hub.I, peerId: "R", role: "initiator" });
+    const a = await pairAuth();
+    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
+    const iP = connectResume({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
 
     await flush();
     openAll();
@@ -276,8 +297,9 @@ describe("connectResume", () => {
   it("tags every outgoing signal with resume:true", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
-    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder" });
-    const iP = connectResume({ signaling: hub.I, peerId: "R", role: "initiator" });
+    const a = await pairAuth();
+    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
+    const iP = connectResume({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
     await flush();
     openAll();
     const [ic, rc] = await Promise.all([iP, rP]);
@@ -294,15 +316,18 @@ describe("connectResume", () => {
   it("ignores untagged signals — the dying original connection can't feed it SDP", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
-    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder" });
+    const a = await pairAuth();
+    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
     await flush();
     // An offer from the *original* generation (no resume tag) must not be answered.
     hub.inject("R", "I", { sdp: { type: "offer", sdp: "stale" } });
     await flush();
     expect(hub.sent.R.length).toBe(0);
 
-    // The properly tagged offer is answered.
-    hub.inject("R", "I", { sdp: { type: "offer", sdp: "fresh" }, resume: true });
+    // The properly tagged (and properly signed) offer is answered.
+    const fresh: InboundSignal = { sdp: { type: "offer", sdp: "fresh" }, resume: true };
+    fresh.auth = await a.I.sign(authPayload(fresh));
+    hub.inject("R", "I", fresh);
     await flush();
     expect(hub.sent.R.some((m) => m.sdp?.type === "answer")).toBe(true);
     openAll();
@@ -326,7 +351,8 @@ describe("connectResume", () => {
   it("rejects when the peer connection fails before the channel opens", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
-    const p = connectResume({ signaling: hub.I, peerId: "R", role: "initiator" });
+    const a = await pairAuth();
+    const p = connectResume({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
     const rejected = expect(p).rejects.toThrow(/resume connection failed/);
     await flush();
     const pc = instances[0];
@@ -338,8 +364,9 @@ describe("connectResume", () => {
   it("reports state changes to the caller (how the app notices a re-drop)", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
+    const a = await pairAuth();
     const seen: string[] = [];
-    const p = connectResume({ signaling: hub.I, peerId: "R", role: "initiator", onStateChange: (s) => seen.push(s) });
+    const p = connectResume({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I, onStateChange: (s) => seen.push(s) });
     await flush();
     openAll();
     const c = await p;
@@ -348,5 +375,75 @@ describe("connectResume", () => {
     pc.onconnectionstatechange?.();
     expect(seen).toContain("connected");
     c.close();
+  });
+});
+
+// L3: a resume connection runs no commit-reveal, so without a binding the
+// signalling server (or anyone who can rewrite signalling) could send its own
+// resume offer and take over that half of the session. It never learns the
+// session keys, so it can't produce the tag.
+describe("resume signalling is bound to the session keys", () => {
+  it("signs every outgoing resume signal", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const a = await pairAuth();
+    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
+    const iP = connectResume({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
+    await flush();
+    openAll();
+    const [ic, rc] = await Promise.all([iP, rP]);
+    for (const side of ["I", "R"] as const) {
+      expect(hub.sent[side].length).toBeGreaterThan(0);
+      expect(hub.sent[side].every((m) => typeof m.auth === "string" && m.auth.length > 0)).toBe(true);
+    }
+    // And the tags actually verify under the OTHER side's key — i.e. the two
+    // sides really did derive the same value from their mirrored secrets.
+    for (const m of hub.sent.I) {
+      expect(await a.R.verify(authPayload(m), m.auth)).toBe(true);
+    }
+    ic.close();
+    rc.close();
+  });
+
+  it("drops an injected resume offer that carries no tag", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const a = await pairAuth();
+    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
+    await flush();
+    hub.inject("R", "I", { sdp: { type: "offer", sdp: "mitm" }, resume: true });
+    await flush();
+    expect(hub.sent.R.length).toBe(0); // never answered
+    rP.catch(() => {});
+  });
+
+  it("drops a resume offer signed with the wrong session's key", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const a = await pairAuth();
+    const other = await pairAuth(); // an attacker running its own key exchange
+    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
+    await flush();
+    const forged: InboundSignal = { sdp: { type: "offer", sdp: "mitm" }, resume: true };
+    forged.auth = await other.I.sign(authPayload(forged));
+    hub.inject("R", "I", forged);
+    await flush();
+    expect(hub.sent.R.length).toBe(0);
+    rP.catch(() => {});
+  });
+
+  it("drops a genuine offer whose SDP was rewritten in flight", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const a = await pairAuth();
+    // The MITM keeps the real tag but swaps the SDP for one pointing at itself.
+    hub.setIntercept((d) => (d.sdp ? { ...d, sdp: { ...d.sdp, sdp: "attacker-sdp" } } : d));
+    const rP = connectResume({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
+    const iP = connectResume({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
+    await flush();
+    // The responder never answers a tampered offer, so no channel is ever built.
+    expect(hub.sent.R.some((m) => m.sdp?.type === "answer")).toBe(false);
+    iP.catch(() => {});
+    rP.catch(() => {});
   });
 });

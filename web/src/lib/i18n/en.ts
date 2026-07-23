@@ -666,6 +666,7 @@ const en: Messages = {
   historyTitle: "Recent transfers",
   historyEmpty: "No transfers yet",
   historyClear: "Clear",
+  historyKeep: "Keep a record of transfers on this device",
 };
 
 

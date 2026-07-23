@@ -13,7 +13,7 @@
   import { requestNotifyPermission, notifyTransfer } from "./lib/notify";
   import { MAX_FILES } from "./lib/transfer";
   import { createTransferSession, type Xfer } from "./lib/transfer-session.svelte";
-  import { recordTransfer, loadHistory, clearHistory, type HistEntry } from "./lib/history";
+  import { recordTransfer, loadHistory, clearHistory, historyEnabled, setHistoryEnabled, type HistEntry } from "./lib/history";
   import { fetchIceConfig, hasTurnServer, measureRelays, pickRelay, type RelayEntry } from "./lib/ice";
   import type { Peer } from "./lib/protocol";
   import { lang, dir, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
@@ -88,6 +88,7 @@
   // Refreshed after each recorded completion and on clear — never read live from
   // storage during render.
   let history = $state<HistEntry[]>(loadHistory());
+  let historyKeep = $state(historyEnabled());
   let notice = $state(""); // transient hint (e.g. "busy", "too many files")
   let dragActive = $state(false);
   let dragDepth = 0; // non-reactive: dragenter/dragleave fire per element; count to know when the drag truly leaves the window
@@ -596,6 +597,13 @@
     clearHistory();
     history = loadHistory();
   }
+  // Turning recording off also wipes what's already there (see setHistoryEnabled),
+  // so the panel has to be re-read either way.
+  function toggleHistoryKeep(e: Event) {
+    historyKeep = (e.currentTarget as HTMLInputElement).checked;
+    setHistoryEnabled(historyKeep);
+    history = loadHistory();
+  }
   function historyWhen(at: number): string {
     return new Date(at).toLocaleString();
   }
@@ -862,6 +870,10 @@
         {:else}
           <p class="history-empty">{t.historyEmpty}</p>
         {/if}
+        <label class="history-keep">
+          <input type="checkbox" checked={historyKeep} onchange={toggleHistoryKeep} />
+          {t.historyKeep}
+        </label>
       </details>
     </section>
 
@@ -958,6 +970,11 @@
   .history .filelist { margin-top: 12px; }
   .history-empty { margin: 12px 0 0; font-size: 13.5px; color: var(--text); }
   .history-clear { margin-top: 4px; font-size: 13px; padding: 6px 12px; }
+  .history-keep {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 12px; font-size: 13px; color: var(--muted); cursor: pointer;
+  }
+  .history-keep input { cursor: pointer; }
   .sas {
     font-size: 13.5px; margin-bottom: 14px; padding: 10px 12px;
     border-radius: 10px; background: var(--accent-bg); border: 1px solid var(--accent-border);

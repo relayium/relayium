@@ -652,6 +652,7 @@ const pt: Messages = {
   historyTitle: "Transferências recentes",
   historyEmpty: "Nenhuma transferência ainda",
   historyClear: "Limpar",
+  historyKeep: "Guardar um registo das transferências neste dispositivo",
 };
 
 

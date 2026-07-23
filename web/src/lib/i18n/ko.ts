@@ -652,6 +652,7 @@ const ko: Messages = {
   historyTitle: "최근 전송",
   historyEmpty: "아직 전송 기록이 없습니다",
   historyClear: "지우기",
+  historyKeep: "이 기기에 전송 기록 보관",
 };
 
 

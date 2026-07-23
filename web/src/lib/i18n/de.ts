@@ -653,6 +653,7 @@ const de: Messages = {
   historyTitle: "Letzte Übertragungen",
   historyEmpty: "Noch keine Übertragungen",
   historyClear: "Löschen",
+  historyKeep: "Übertragungen auf diesem Gerät protokollieren",
 };
 
 

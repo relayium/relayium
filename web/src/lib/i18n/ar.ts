@@ -652,6 +652,7 @@ const ar: Messages = {
   historyTitle: "عمليات النقل الأخيرة",
   historyEmpty: "لا توجد عمليات نقل بعد",
   historyClear: "مسح",
+  historyKeep: "الاحتفاظ بسجل عمليات النقل على هذا الجهاز",
 };
 
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import {
   ready, generateKeyPair, deriveSession, sas, seal, open,
-  commitKey, verifyCommit, randomNonce,
+  commitKey, verifyCommit, randomNonce, signResume, verifyResume,
 } from "./crypto";
 
 beforeAll(async () => { await ready(); });
@@ -66,5 +66,50 @@ describe("crypto", () => {
     const kb = await deriveSession("responder", b, a.publicKey);
     const ct = await seal(ka.send, 5, new Uint8Array([1, 2, 3]));
     await expect(open(kb.recv, 6, ct)).rejects.toThrow();
+  });
+});
+
+// The resume-auth key has to come out IDENTICAL on both sides even though
+// crypto_kx hands them mirrored secrets — that symmetry is the whole reason
+// resume signalling can be authenticated with no extra round trip.
+describe("resume signal authentication", () => {
+  it("both roles derive the same key: one side's tag verifies on the other", async () => {
+    const a = generateKeyPair();
+    const b = generateKeyPair();
+    const ka = await deriveSession("initiator", a, b.publicKey);
+    const kb = await deriveSession("responder", b, a.publicKey);
+    const tag = await signResume(ka.resumeAuth, "payload");
+    expect(await verifyResume(kb.resumeAuth, "payload", tag)).toBe(true);
+  });
+
+  it("rejects a tag from a different session", async () => {
+    const a = generateKeyPair();
+    const b = generateKeyPair();
+    const c = generateKeyPair();
+    const ka = await deriveSession("initiator", a, b.publicKey);
+    const kOther = await deriveSession("initiator", a, c.publicKey);
+    const tag = await signResume(kOther.resumeAuth, "payload");
+    expect(await verifyResume(ka.resumeAuth, "payload", tag)).toBe(false);
+  });
+
+  it("rejects a tampered payload, a garbage tag, and a missing tag", async () => {
+    const a = generateKeyPair();
+    const b = generateKeyPair();
+    const ka = await deriveSession("initiator", a, b.publicKey);
+    const tag = await signResume(ka.resumeAuth, "payload");
+    expect(await verifyResume(ka.resumeAuth, "payload!", tag)).toBe(false);
+    expect(await verifyResume(ka.resumeAuth, "payload", "not base64 @@")).toBe(false);
+    expect(await verifyResume(ka.resumeAuth, "payload", undefined)).toBe(false);
+    expect(await verifyResume(ka.resumeAuth, "payload", "")).toBe(false);
+  });
+
+  it("is not the content key: the resume key can't decrypt frames", async () => {
+    const a = generateKeyPair();
+    const b = generateKeyPair();
+    const ka = await deriveSession("initiator", a, b.publicKey);
+    // An HMAC key has no encrypt/decrypt usage at all — the type system won't
+    // even offer it, and Web Crypto refuses at runtime.
+    expect(ka.resumeAuth.usages.sort()).toEqual(["sign", "verify"]);
+    expect(ka.resumeAuth.algorithm.name).toBe("HMAC");
   });
 });

@@ -653,6 +653,7 @@ const fr: Messages = {
   historyTitle: "Transferts récents",
   historyEmpty: "Aucun transfert pour l'instant",
   historyClear: "Effacer",
+  historyKeep: "Conserver un historique des transferts sur cet appareil",
 };
 
 

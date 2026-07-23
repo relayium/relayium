@@ -591,6 +591,7 @@ export interface Messages {
   historyTitle: string;
   historyEmpty: string;
   historyClear: string;
+  historyKeep: string;
 }
 
 export function legalUrl(slug: "privacy" | "terms" | "security" | "support", l: Lang): string {

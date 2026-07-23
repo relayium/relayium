@@ -652,6 +652,7 @@ const es: Messages = {
   historyTitle: "Transferencias recientes",
   historyEmpty: "Aún no hay transferencias",
   historyClear: "Borrar",
+  historyKeep: "Guardar un registro de las transferencias en este dispositivo",
 };
 
 
