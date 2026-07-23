@@ -30,15 +30,25 @@ export interface Manifest {
 }
 
 // Frame wire format: [1 byte kind][4 byte big-endian seq][payload].
-const KIND_BATCH = 3; // manifest (plaintext): the whole batch's file list
 const KIND_CHUNK = 1; // one encrypted file slice
-const KIND_DONE = 2; // end-of-file integrity hash (plaintext)
+const KIND_BATCH_ENC = 7; // manifest, sealed with the session key
+const KIND_DONE_ENC = 8; // end-of-file integrity hash, sealed with the session key
+
+// 旧的明文 manifest / DONE。**只用来识别老版本对端**，不再解析。
+//
+// 为什么必须加密它们：commit-reveal 挡的是"信令中继改写 SDP 指纹做 DTLS 中间人"。
+// 那种攻击者推不出会话密钥（文件内容仍然保密），但它坐在 DTLS 里面，能看见通道上
+// 一切明文的东西——而 manifest 是**文件名和大小**，DONE 是**每个文件的 SHA-256**。
+// 后者尤其糟：它让攻击者能确认"这是不是就是那份文件 X"，一次比对即可，不需要解密。
+// 所以"端到端加密"这句话在改之前只覆盖内容、不覆盖元数据。
+const KIND_BATCH_LEGACY = 3;
+const KIND_DONE_LEGACY = 2;
 const KIND_RESUME_START = 4; // sender->receiver (plaintext): {index, offset, seq} — where a resumed stream picks up
 const KIND_RESUME_REQ = 5; // receiver->sender (plaintext): {index, offset} — the last durably-written point
 const KIND_ACK = 6; // receiver->sender (plaintext): cumulative bytes durably written — flow-control credit
 
 /** Frame kinds, exported so the UI can read a frame's type for progress tracking. */
-export const FRAME = { CHUNK: KIND_CHUNK, DONE: KIND_DONE, BATCH: KIND_BATCH } as const;
+export const FRAME = { CHUNK: KIND_CHUNK, DONE: KIND_DONE_ENC, BATCH: KIND_BATCH_ENC } as const;
 
 /** A resume checkpoint: the receiver has durably written `offset` bytes of file
  *  `index`; the sender continues from there. */
@@ -139,14 +149,24 @@ export class Sender {
   // resumed connection safe. Chunks lost in-flight simply burn their seq.
   private seq = 0;
 
-  /** The plaintext manifest frame; sent first so the receiver can prompt once for
-   *  the batch. Throws if the encoded manifest would exceed the DataChannel
-   *  message ceiling (too many files, or paths too long). */
-  batchFrame(files: FileMeta[]): Bytes {
+  /**
+   * 批次 manifest，用会话密钥封装后发出；接收方据此弹一次确认。
+   *
+   * 它**消费一个 seq**（和数据块共用同一个单调计数器），所以第一个数据块从 1 开始。
+   * 共用计数器是这里唯一安全的做法：任何"给 manifest 留一个特殊 seq"的方案都要额外
+   * 保证那个值永远不会被数据块用到，而续传会让计数器从一个任意点继续——多一个不变量
+   * 就多一处能悄悄反复使用同一个 nonce 的地方。
+   *
+   * manifest 过大（文件太多、路径太长）会超过 DataChannel 的单帧上限，直接抛错。
+   */
+  async batchFrame(files: FileMeta[], keys: SessionKeys): Promise<Bytes> {
     const manifest: Manifest = { files };
-    const payload = enc.encode(JSON.stringify(manifest));
-    if (payload.length > MANIFEST_MAX_BYTES) throw new Error("relayium: manifest too large");
-    return frame(KIND_BATCH, 0, payload);
+    const payload = enc.encode(JSON.stringify(manifest)) as Bytes;
+    // 上限比的是密文长度：GCM 会多出 16 字节 tag，按明文比会让临界的 manifest
+    // 通过检查、然后在 send() 上炸掉。
+    if (payload.length + 16 > MANIFEST_MAX_BYTES) throw new Error("relayium: manifest too large");
+    const s = this.seq++;
+    return frame(KIND_BATCH_ENC, s, await seal(keys.send, s, payload));
   }
 
   /** Announce where a resumed stream picks up. `this.seq` is the nonce the first
@@ -182,8 +202,14 @@ export class Sender {
           yield frame(KIND_CHUNK, s, await seal(keys.send, s, piece));
         }
       }
-      // DONE is unencrypted and does not consume a nonce slot.
-      yield frame(KIND_DONE, this.seq, enc.encode(JSON.stringify({ sha256: toHex(hash) })));
+      // DONE 也走加密，因此**同样消费一个 seq**。它带的是整份文件的 SHA-256——
+      // 明文发等于把"这是不是文件 X"的判定能力白送给通道里的中间人。
+      const ds = this.seq++;
+      yield frame(
+        KIND_DONE_ENC,
+        ds,
+        await seal(keys.send, ds, enc.encode(JSON.stringify({ sha256: toHex(hash) })) as Bytes),
+      );
     }
   }
 }
@@ -213,8 +239,11 @@ export class Receiver {
     const kind = encoded[0];
     const seq = new DataView(encoded.buffer, encoded.byteOffset).getUint32(1);
     const payload = encoded.slice(5);
-    if (kind === KIND_BATCH) {
-      const batch = JSON.parse(dec.decode(payload)) as Manifest;
+    if (kind === KIND_BATCH_ENC) {
+      if (seq !== this.expectedSeq) throw new Error("out-of-order manifest");
+      const plain = await open(keys.recv, seq, payload); // throws on tamper
+      this.expectedSeq++;
+      const batch = JSON.parse(dec.decode(plain)) as Manifest;
       // 文件名由发送端任意构造，而接收方的确认卡片正是用户做信任决策的地方：
       // 在这个唯一入口把双向控制符洗掉，下游的 UI/历史记录/落盘名就都拿的是
       // 洗过的值（散在模板里逐处调用必然漏一个）。
@@ -232,11 +261,20 @@ export class Receiver {
       this.hash = await chainHash(this.hash, plain);
       return { chunk: plain };
     }
-    if (kind === KIND_DONE) {
-      const { sha256 } = JSON.parse(dec.decode(payload)) as { sha256: string };
+    if (kind === KIND_DONE_ENC) {
+      if (seq !== this.expectedSeq) throw new Error("out-of-order done");
+      const plain = await open(keys.recv, seq, payload); // throws on tamper
+      this.expectedSeq++;
+      const { sha256 } = JSON.parse(dec.decode(plain)) as { sha256: string };
       const ok = sha256 === toHex(this.hash);
       this.hash = new Uint8Array(32); // reset chain for the next file in the batch
       return { done: { ok } };
+    }
+    if (kind === KIND_BATCH_LEGACY || kind === KIND_DONE_LEGACY) {
+      // 对端跑的是加密 manifest 之前的版本。**不回落到明文解析**：那条回落一旦存在
+      // 就永远不会被删掉，等于给中间人留了一条"让对端用明文发"的降级路径。这里宁可
+      // 明确失败，让用户刷新页面——两端都是从同一个源加载的，刷新即修复。
+      throw new Error("relayium: peer is running an older version — reload the page on both devices");
     }
     throw new Error("unknown frame kind " + kind);
   }

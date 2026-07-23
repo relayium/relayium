@@ -36,7 +36,7 @@ async function driveWithDrop(
   let offset = 0;
   let checkpoint: { index: number; offset: number; chain: Uint8Array } = { index: 0, offset: 0, chain: new Uint8Array(32) };
 
-  await receiver.feed(sender.batchFrame(files.map((f) => ({ name: f.name, size: f.size }))), kb);
+  await receiver.feed(await sender.batchFrame(files.map((f) => ({ name: f.name, size: f.size })), ka), kb);
 
   const handle = async (f: Uint8Array<ArrayBuffer>) => {
     if (f[0] === FRAME.CHUNK) seqsUsed.push(seqOf(f));
@@ -102,7 +102,7 @@ async function roundTrip(
   const receiver = new Receiver();
 
   const manifestOut = await receiver.feed(
-    sender.batchFrame(files.map((f) => ({ name: f.name, size: f.size }))),
+    await sender.batchFrame(files.map((f) => ({ name: f.name, size: f.size })), ka),
     kb,
   );
 
@@ -151,22 +151,23 @@ describe("transfer", () => {
   });
 
   it("carries a folder-relative path through the manifest", async () => {
-    const { kb } = await session();
+    const { ka, kb } = await session();
     const sender = new Sender();
     const out = await new Receiver().feed(
-      sender.batchFrame([{ name: "a.jpg", size: 3, path: "trip/day1/a.jpg" }]),
+      await sender.batchFrame([{ name: "a.jpg", size: 3, path: "trip/day1/a.jpg" }], ka),
       kb,
     );
     expect(out.batch!.files[0].path).toBe("trip/day1/a.jpg");
   });
 
-  it("rejects a manifest that would exceed the DataChannel message ceiling", () => {
+  it("rejects a manifest that would exceed the DataChannel message ceiling", async () => {
+    const { ka } = await session();
     const many = Array.from({ length: 3000 }, (_, i) => ({
       name: `file-${i}.bin`,
       size: i,
       path: `deeply/nested/folder/path/segment/file-${i}.bin`,
     }));
-    expect(() => new Sender().batchFrame(many)).toThrow(/manifest too large/);
+    await expect(new Sender().batchFrame(many, ka)).rejects.toThrow(/manifest too large/);
   });
 
   it("reports integrity failure when a chunk is corrupted", async () => {
@@ -174,7 +175,7 @@ describe("transfer", () => {
     const file = new File([new Uint8Array(100_000)], "x.bin");
     const sender = new Sender();
     const receiver = new Receiver();
-    await receiver.feed(sender.batchFrame([{ name: file.name, size: file.size }]), kb);
+    await receiver.feed(await sender.batchFrame([{ name: file.name, size: file.size }], ka), kb);
 
     let ok: boolean | undefined;
     let first = true;
@@ -297,7 +298,7 @@ describe("flow-control ack frame", () => {
 
     const sender = new Sender();
     const receiver = new Receiver();
-    await receiver.feed(sender.batchFrame([{ name: "big.bin", size: bytes.length }]), kb);
+    await receiver.feed(await sender.batchFrame([{ name: "big.bin", size: bytes.length }], ka), kb);
 
     // Pre-encrypt every data frame (the wire the App would send).
     const frames: Uint8Array[] = [];
@@ -332,3 +333,101 @@ describe("flow-control ack frame", () => {
     expect(maxAhead).toBeGreaterThan(FLOW_WINDOW - CHUNK_SIZE); // window actually engaged (test is meaningful)
   }, 30_000);
 });
+
+// commit-reveal 挡的是「信令中继改写 SDP 指纹做 DTLS 中间人」。那种攻击者推不出会话
+// 密钥（文件内容保密），但它坐在 DTLS 里面，通道上一切明文它都看得见。改之前 manifest
+// （文件名 + 大小）和 DONE（每个文件的 SHA-256）都是明文——后者尤其糟，它让攻击者
+// **不用解密**就能确认"这是不是就是那份文件 X"。
+//
+// 这几条用例检查的是线缆上的字节，而不是 API 的行为：这是唯一能真正说明"元数据没有
+// 泄漏"的检查方式。
+describe("通道上的元数据不可读", () => {
+  const wire = (f: Uint8Array) => new TextDecoder("utf-8", { fatal: false }).decode(f.slice(5));
+
+  it("manifest 帧里看不到文件名", async () => {
+    const { ka } = await session();
+    const entry = { name: "salary-2026.pdf", size: 1234, path: "hr/salary-2026.pdf" };
+    const f = await new Sender().batchFrame([entry], ka);
+    expect(wire(f)).not.toContain("salary");
+    expect(wire(f)).not.toContain("hr/");
+    expect(wire(f)).not.toContain("1234");
+
+    // 对照：同样的检测方式作用在**明文**帧上必须看得见文件名。没有这一条，上面
+    // 三个 not.toContain 有可能只是因为解码方式不对而恒真。
+    const plain = new Uint8Array(5 + new TextEncoder().encode(JSON.stringify({ files: [entry] })).length);
+    plain.set(new TextEncoder().encode(JSON.stringify({ files: [entry] })), 5);
+    expect(wire(plain), "检测方式本身失效了").toContain("salary");
+  });
+
+  it("DONE 帧里看不到文件哈希（否则一次比对就能确认是哪份文件）", async () => {
+    const { ka, kb } = await session();
+    const bytes = new Uint8Array(1000).map((_, i) => i % 7);
+    const expected = [...new Uint8Array(await crypto.subtle.digest("SHA-256", await chainOnce(bytes)))]
+      .map((b) => b.toString(16).padStart(2, "0")).join("");
+
+    const sender = new Sender();
+    await sender.batchFrame([{ name: "x.bin", size: bytes.length }], ka);
+    let doneFrame: Uint8Array | undefined;
+    for await (const fr of sender.dataFrames([new File([bytes], "x.bin")], ka)) {
+      if (fr[0] === FRAME.DONE) doneFrame = fr;
+    }
+    expect(doneFrame, "没有产生 DONE 帧").toBeTruthy();
+    expect(wire(doneFrame!)).not.toContain(expected.slice(0, 16));
+    expect(wire(doneFrame!)).not.toContain("sha256");
+
+    // 对照：明文版的同一份内容里，那个哈希是找得到的。
+    const plainDone = new Uint8Array(5 + 200);
+    const body = new TextEncoder().encode(JSON.stringify({ sha256: expected }));
+    plainDone.set(body, 5);
+    expect(wire(plainDone.slice(0, 5 + body.length)), "检测方式本身失效了").toContain(expected.slice(0, 16));
+
+    // 加密之后，完整性校验照常成立（这是同一批数据的正向回归）。
+    const receiver = new Receiver();
+    const s2 = new Sender();
+    await receiver.feed(await s2.batchFrame([{ name: "x.bin", size: bytes.length }], ka), kb);
+    let ok: boolean | undefined;
+    for await (const fr of s2.dataFrames([new File([bytes], "x.bin")], ka)) {
+      const out = await receiver.feed(fr, kb);
+      if (out.done) ok = out.done.ok;
+    }
+    expect(ok, "加密 DONE 之后完整性校验坏了").toBe(true);
+  });
+
+  it("manifest 被篡改会被 AEAD 抓住，而不是悄悄改掉确认卡片上的文件名", async () => {
+    const { ka, kb } = await session();
+    const f = await new Sender().batchFrame([{ name: "a.bin", size: 1 }], ka);
+    f[9] ^= 0x01; // 翻密文里的一个 bit
+    await expect(new Receiver().feed(f, kb)).rejects.toThrow();
+  });
+
+  it("老版本对端发来的明文 manifest 被明确拒绝，而不是回落到明文解析", async () => {
+    const { kb } = await session();
+    // 手工拼一个旧格式帧：kind=3（明文 manifest）。
+    const body = new TextEncoder().encode(JSON.stringify({ files: [{ name: "a", size: 1 }] }));
+    const legacy = new Uint8Array(5 + body.length);
+    legacy[0] = 3;
+    legacy.set(body, 5);
+    await expect(new Receiver().feed(legacy as Uint8Array<ArrayBuffer>, kb)).rejects.toThrow(/older version/);
+  });
+
+  it("manifest 与数据块共用同一个 nonce 计数器，不重复使用 seq", async () => {
+    const { ka } = await session();
+    const sender = new Sender();
+    const seqs: number[] = [];
+    const seqOfFrame = (f: Uint8Array) => new DataView(f.buffer, f.byteOffset).getUint32(1);
+    seqs.push(seqOfFrame(await sender.batchFrame([{ name: "a", size: 10 }], ka)));
+    for await (const fr of sender.dataFrames([new File([new Uint8Array(10)], "a")], ka)) {
+      seqs.push(seqOfFrame(fr));
+    }
+    expect(seqs).toEqual([...seqs].sort((a, b) => a - b)); // 单调
+    expect(new Set(seqs).size, `seq 被重复使用: ${seqs}`).toBe(seqs.length);
+    expect(seqs[0]).toBe(0); // manifest 吃掉 0，数据块从 1 开始
+  });
+});
+
+// DONE 里的哈希是「整份文件的链式哈希」，这里复算一份用于比对。
+async function chainOnce(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
+  const buf = new Uint8Array(32 + bytes.length) as Uint8Array<ArrayBuffer>;
+  buf.set(bytes, 32);
+  return buf;
+}

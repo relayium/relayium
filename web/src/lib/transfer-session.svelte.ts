@@ -621,7 +621,9 @@ export function createTransferSession(deps: SessionDeps) {
       }
 
       sender = new Sender();
-      conn.channel.send(sender.batchFrame(metas)); // announce the batch; wait for the decision
+      // manifest 现在是加密的（见 transfer.ts 的 KIND_BATCH_ENC），所以要 await，
+      // 也必须在拿到 keys 之后发——上面那个 while 循环保证了这一点。
+      conn.channel.send(await sender.batchFrame(metas, keys)); // announce the batch; wait for the decision
       send = s = { ...s, status: "waitingAccept" };
 
       const ok = await accepted;
