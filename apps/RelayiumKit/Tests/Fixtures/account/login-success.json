@@ -1,0 +1,1 @@
+{ "token": "rlm_cli_TESTTOKEN", "user": { "id": "u_1", "email": "a@b.co", "displayName": "Ada", "hasPassword": true, "emailVerified": true, "linkedMethods": ["password"], "onlyOwnNodes": false, "planId": "free", "subscriptionStatus": "", "subscriptionEnd": 0, "hasBilling": false, "scheduledPlanId": "", "scheduledCycle": "", "billingCycle": "" } }

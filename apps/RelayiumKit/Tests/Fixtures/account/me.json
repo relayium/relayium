@@ -1,0 +1,1 @@
+{ "user": { "id":"u_1","email":"a@b.co","displayName":"Ada","hasPassword":true,"emailVerified":true,"linkedMethods":["password"],"onlyOwnNodes":false,"planId":"pro","subscriptionStatus":"active","subscriptionEnd":1790000000,"hasBilling":true,"scheduledPlanId":"","scheduledCycle":"","billingCycle":"monthly" } }

@@ -1,0 +1,4 @@
+{ "period": 678, "resetsAt": 1780000000,
+  "traffic": { "used": 1048576, "cap": 5368709120 },
+  "storage": { "used": 2097152, "cap": 0 },
+  "plan": { "id":"pro","name":"Pro","storageBytes":10737418240,"trafficBytes":5368709120,"retentionSecs":604800,"priceMonthly":900,"priceYearly":9000,"isTop":false,"subscriptionStatus":"active","subscriptionEnd":1790000000,"billingCycle":"monthly","scheduledPlanId":"","scheduledPlanName":"","scheduledCycle":"" } }
