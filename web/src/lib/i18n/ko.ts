@@ -352,6 +352,9 @@ const ko: Messages = {
     },
   },
   cliPage: {
+    metaTitle: "Relayium CLI — 터미널에서 하는 암호화 파일 전송",
+    metaDesc:
+      "macOS·Linux·Windows용 단일 바이너리. 내 SSH로 복사하고, 페어링 코드로 보내고, 서버 간 직접 전송하고, 폴더를 미러링하고, 먼저 올린 뒤 나중에 받으세요. 무료 오픈 소스입니다.",
     badges: ["무료 P2P", "종단간 암호화", "자체 호스팅 가능"],
     freenote:
       "push/pull, send/receive, daemon 직결에서는 파일이 두 기기 사이를 직접 오가며 Relayium 서버를 거치지 않습니다 — 오직 작은 랑데부 핸드셰이크만, 그것도 send/receive에서만 서버를 거칩니다. 유일한 예외는 클라우드 up/down으로, 파일을 종단 간 암호화해 저장하여 다른 기기가 나중에 가져갈 수 있게 합니다.",

@@ -366,6 +366,9 @@ const en: Messages = {
     },
   },
   cliPage: {
+    metaTitle: "Relayium CLI — encrypted file transfer from the terminal",
+    metaDesc:
+      "A single binary for macOS, Linux and Windows: copy files over your own SSH, send by pairing code, push server-to-server, mirror a folder, or upload now and pull later. Free and open source.",
     badges: ["Free P2P", "End-to-end encrypted", "Self-hostable"],
     freenote:
       "In push/pull, send/receive and daemon-direct, files go straight between machines and never touch Relayium's servers — only a tiny rendezvous handshake does, and only for send/receive. The exception is cloud up/down, which stores your file end-to-end encrypted so another machine can fetch it later.",

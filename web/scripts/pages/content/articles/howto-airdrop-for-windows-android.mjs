@@ -692,6 +692,7 @@ const pt = {
 
 export default {
   slug: "how-to/airdrop-for-windows-and-android",
+  published: "2026-07-09",
   updated: "2026-07-09",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

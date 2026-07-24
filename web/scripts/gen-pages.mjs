@@ -58,6 +58,7 @@ import {
   articleLinksByLang,
   articleGroupsByLang,
 } from "./pages/build-pages.mjs";
+import { renderNotFoundPage } from "./pages/notfound-template.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const publicDir = resolve(here, "..", "public");
@@ -113,6 +114,7 @@ async function main() {
       learn: articleLinksByLang([cliCloudAsync]),
     }),
     ...buildModePages(apps, { slug: "apps" }),
+    { path: "404.html", html: renderNotFoundPage() },
   ];
   for (const page of pages) {
     const abs = join(publicDir, page.path);
@@ -131,6 +133,9 @@ async function main() {
         { def: offlineTransfer, slug: "offline-transfer" },
         { def: apps, slug: "apps" },
       ],
+      // Served by the per-route SPA shells (vite-plugin-route-shells.ts), not by
+      // a generated directory — hence no trailing slash.
+      spaPages: [{ path: "/pricing" }, { path: "/cli" }],
     }),
     "utf8"
   );

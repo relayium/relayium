@@ -220,11 +220,29 @@
     document.querySelector('meta[property="og:url"]')?.setAttribute("content", canon);
     // Repoint the hreflang alternates at this route's own localized URLs; index.html
     // hard-codes the homepage cluster, which is wrong for /cross-network & /offline-transfer.
-    for (const { hreflang, path } of altHreflangs(meta.canonicalPath)) {
-      document
-        .querySelector(`link[rel="alternate"][hreflang="${hreflang}"]`)
-        ?.setAttribute("href", location.origin + path);
+    // Routes with no localized twin (/pricing, /cli) get an EMPTY list, and the
+    // stale tags are removed rather than left pointing at /zh/pricing — a page
+    // that does not exist. Client-side navigation goes both ways, so the tags
+    // are re-created when the user lands back on a clustered route.
+    const alts = altHreflangs(meta.canonicalPath);
+    const stale = new Map(
+      [...document.head.querySelectorAll('link[rel="alternate"][hreflang]')].map((l) => [
+        l.getAttribute("hreflang"),
+        l,
+      ]),
+    );
+    for (const { hreflang, path } of alts) {
+      let link = stale.get(hreflang);
+      if (!link) {
+        link = document.createElement("link");
+        link.setAttribute("rel", "alternate");
+        link.setAttribute("hreflang", hreflang);
+        document.head.appendChild(link);
+      }
+      link.setAttribute("href", location.origin + path);
+      stale.delete(hreflang);
     }
+    for (const link of stale.values()) link.remove();
   });
 
   // Reflect transfer progress in the tab title (follows the language switch), and

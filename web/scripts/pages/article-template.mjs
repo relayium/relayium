@@ -1,7 +1,7 @@
 // web/scripts/pages/article-template.mjs — renders one article (one language) to a
 // self-contained static HTML string. No JS, no external CSS: styles are inlined so
 // the page is independent of the Vite asset graph and crawlable with JS disabled.
-import { LANGS, DEFAULT_LANG, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, BCP47, OG_LOCALE, SITE, urlPath, absUrl, esc, ctaHref, landingUrl, dirAttr } from "./shared.mjs";
+import { LANGS, DEFAULT_LANG, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, ctaHref, landingUrl, dirAttr } from "./shared.mjs";
 
 // Footer link label; matches content/landing.mjs footer.privacy per language.
 const PRIVACY_LABELS = {
@@ -178,10 +178,22 @@ function hasTable(doc) {
   return (doc.sections || []).some((s) => s.table);
 }
 
-export function renderArticlePage({ slug, lang, doc, updated, related = [] }) {
+export function renderArticlePage({ slug, lang, doc, updated, published, related = [] }) {
   const dateModified = doc.updated || updated;
   const canonical = absUrl(urlPath(slug, lang));
   const ogImage = SITE.origin + "/og-image.jpg";
+  // The Organization node is spelled out (rather than a bare name/url) so the
+  // logo travels with it: Google's article rich results want a publisher logo,
+  // and index.html's #org node already carries one. datePublished comes from the
+  // article's own `published` field — the day the file landed in git, not a
+  // guess; falling back to dateModified would claim every article was written
+  // the day it was last touched.
+  const org = {
+    "@type": "Organization",
+    name: SITE.name,
+    url: SITE.origin + "/",
+    logo: { "@type": "ImageObject", url: SITE.origin + "/icon-512.png", width: 512, height: 512 },
+  };
   const ld = {
     "@context": "https://schema.org",
     "@graph": [
@@ -190,10 +202,12 @@ export function renderArticlePage({ slug, lang, doc, updated, related = [] }) {
         headline: doc.title,
         description: doc.description,
         inLanguage: BCP47[lang],
+        ...(published ? { datePublished: published } : {}),
         dateModified,
+        image: ogImage,
         mainEntityOfPage: canonical,
-        author: { "@type": "Organization", name: SITE.name, url: SITE.origin + "/" },
-        publisher: { "@type": "Organization", name: SITE.name, url: SITE.origin + "/" },
+        author: org,
+        publisher: org,
       },
       ...(doc.faq
         ? [
@@ -237,10 +251,12 @@ export function renderArticlePage({ slug, lang, doc, updated, related = [] }) {
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="${SITE.name}" />
     <meta property="og:title" content="${esc(doc.title)}" />
     <meta property="og:description" content="${esc(doc.description)}" />
     <meta property="og:url" content="${canonical}" />
     <meta property="og:image" content="${ogImage}" />
+    ${OG_IMAGE_META}
     <meta property="og:locale" content="${OG_LOCALE[lang]}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${esc(doc.title)}" />

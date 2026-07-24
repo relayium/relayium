@@ -5,7 +5,7 @@
 ## What it is
 
 - **Category:** Secure file transfer / file sharing between devices (web app), on the same network or across the internet.
-- **Same-network (default):** Open https://relayium.com on two devices on the same network. They discover each other automatically (grouped into a "room" by shared public IP). Pick a file (or drag-and-drop, up to 10 at once), the receiver accepts, both sides compare a short verification code, and the file streams device-to-device. No account needed.
+- **Same-network (default):** Open https://relayium.com on two devices on the same network. They discover each other automatically (grouped into a "room" by shared public IP). Pick a file (or drag-and-drop, up to 1,000 at once), the receiver accepts, both sides compare a short verification code, and the file streams device-to-device. No account needed.
 - **Cross-network:** two pages — realtime direct at /cross-network (pairing code / join link / QR, no account), and async stored transfer at /offline-transfer (sender signs in, recipients never need an account).
 
 ## Transfer modes
@@ -22,7 +22,7 @@
 - **Integrity:** per-chunk AES-GCM authentication tag plus a per-file SHA-256 hash verified end-to-end on the receiver.
 - **Privacy:** the signaling server only ever sees room membership (public IP), a device nickname, presence, and signaling envelopes. It never sees file contents or file names. In realtime mode, no file bytes touch the server at all.
 - **Stored download links:** the decryption key lives only in the URL fragment and is never sent to the server; the server keeps ciphertext + ciphertext size + timestamps, never plaintext, filenames, or keys; auto-deleted at expiry or first download.
-- Full threat model: https://relayium.com/security
+- Full threat model: https://relayium.com/security/
 
 ## Accounts
 
@@ -35,7 +35,7 @@
 - Price: free. No install. All realtime transfers (LAN, or a pairing code and its join link) need no account; only stored download links require the sender to sign in (recipients never need an account).
 - Platforms: any modern browser with WebRTC over HTTPS — Chrome, Edge, Firefox, Safari, on desktop and mobile.
 - Large files: Chrome/Edge stream straight to disk (no memory cap); Firefox/Safari buffer in memory (keep files under ~200 MB).
-- Multi-file: up to 10 files per batch, streamed to disk.
+- Multi-file: up to 1,000 files per batch, streamed to disk.
 - Languages: English, Chinese (中文), Japanese (日本語), Korean (한국어), German (Deutsch), French (Français), Arabic (العربية), Spanish (Español), Portuguese (Português) — auto-detected.
 - Network scope: same network and across networks / over the internet — realtime via a pairing code (and the join link it generates, with encrypted TURN relay fallback), or an asynchronous stored download link.
 - Tech stack: Svelte single-page app + a single Go server (WebRTC signaling, accounts, and the stored-file API), SQLite for account data, libsodium for browser crypto; optional coturn for the TURN relay and Redis for relay-byte metering.
@@ -64,7 +64,7 @@
 ## Links
 
 - Live app: https://relayium.com/
-- Security & threat model: https://relayium.com/security
-- Privacy policy: https://relayium.com/privacy
+- Security & threat model: https://relayium.com/security/
+- Privacy policy: https://relayium.com/privacy/
 - Source code (GitHub): https://github.com/relayium/relayium
 - License: MIT

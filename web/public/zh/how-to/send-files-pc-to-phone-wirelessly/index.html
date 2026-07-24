@@ -21,16 +21,21 @@
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="电脑无线传文件到手机：不用数据线，不用装 App" />
     <meta property="og:description" content="一步步教你在电脑和手机之间通过 Wi-Fi 传文件——拖拽即发，不用数据线，不用网盘账号，全程端到端加密。" />
     <meta property="og:url" content="https://relayium.com/zh/how-to/send-files-pc-to-phone-wirelessly/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="电脑无线传文件到手机：不用数据线，不用装 App" />
     <meta name="twitter:description" content="一步步教你在电脑和手机之间通过 Wi-Fi 传文件——拖拽即发，不用数据线，不用网盘账号，全程端到端加密。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"电脑无线传文件到手机：不用数据线，不用装 App","description":"一步步教你在电脑和手机之间通过 Wi-Fi 传文件——拖拽即发，不用数据线，不用网盘账号，全程端到端加密。","inLanguage":"zh-Hans","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/zh/how-to/send-files-pc-to-phone-wirelessly/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Mac 和 Android 也行吗，不只是 Windows 和 iPhone？","acceptedAnswer":{"@type":"Answer","text":"行。Relayium 在 Windows、macOS、Linux、Android 和 iOS 的浏览器里都能运行，所以任意组合都可以——Windows 传 Android、Mac 传 iPhone、Linux 传手机，反过来也一样。两端都无需安装任何东西。"}},{"@type":"Question","name":"传输速度有多快？","acceptedAnswer":{"@type":"Answer","text":"在同一 Wi-Fi 下，两台设备直接互连，所以速度由你的本地网络决定，而不受任何服务器限制——通常能跑满你的 Wi-Fi。跨网络时则取决于双方的网络，而且只有在无法直连时，Relayium 才会退回到加密中继。"}},{"@type":"Question","name":"这样传文件安全吗？","acceptedAnswer":{"@type":"Answer","text":"安全。在浏览器的传输加密之上，Relayium 再加了一层：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，这把密钥从不接触服务器。两台设备会显示同一段 6 位校验码（SAS），你可以据此确认没有人插在中间；每个文件还会用 SHA-256 做端到端校验。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"电脑无线传文件到手机：不用数据线，不用装 App","description":"一步步教你在电脑和手机之间通过 Wi-Fi 传文件——拖拽即发，不用数据线，不用网盘账号，全程端到端加密。","inLanguage":"zh-Hans","datePublished":"2026-07-03","dateModified":"2026-07-03","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-files-pc-to-phone-wirelessly/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Mac 和 Android 也行吗，不只是 Windows 和 iPhone？","acceptedAnswer":{"@type":"Answer","text":"行。Relayium 在 Windows、macOS、Linux、Android 和 iOS 的浏览器里都能运行，所以任意组合都可以——Windows 传 Android、Mac 传 iPhone、Linux 传手机，反过来也一样。两端都无需安装任何东西。"}},{"@type":"Question","name":"传输速度有多快？","acceptedAnswer":{"@type":"Answer","text":"在同一 Wi-Fi 下，两台设备直接互连，所以速度由你的本地网络决定，而不受任何服务器限制——通常能跑满你的 Wi-Fi。跨网络时则取决于双方的网络，而且只有在无法直连时，Relayium 才会退回到加密中继。"}},{"@type":"Question","name":"这样传文件安全吗？","acceptedAnswer":{"@type":"Answer","text":"安全。在浏览器的传输加密之上，Relayium 再加了一层：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，这把密钥从不接触服务器。两台设备会显示同一段 6 位校验码（SAS），你可以据此确认没有人插在中间；每个文件还会用 SHA-256 做端到端校验。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}

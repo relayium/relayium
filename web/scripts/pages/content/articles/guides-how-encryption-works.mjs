@@ -825,6 +825,7 @@ const pt = {
 
 export default {
   slug: "guides/how-relayium-encrypts-your-files",
+  published: "2026-07-09",
   updated: "2026-07-09",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

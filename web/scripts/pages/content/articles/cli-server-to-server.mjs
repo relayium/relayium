@@ -1177,6 +1177,7 @@ WantedBy=multi-user.target`,
 
 export default {
   slug: "guides/server-to-server-transfers",
+  published: "2026-07-08",
   updated: "2026-07-12",
   langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

@@ -961,6 +961,7 @@ const pt = {
 
 export default {
   slug: "guides/is-it-safe-to-send-files-over-the-internet",
+  published: "2026-07-09",
   updated: "2026-07-09",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

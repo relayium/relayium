@@ -352,6 +352,9 @@ const zh: Messages = {
     },
   },
   cliPage: {
+    metaTitle: "Relayium 命令行——在终端里加密传文件",
+    metaDesc:
+      "一个二进制文件，支持 macOS、Linux 与 Windows：走你自己的 SSH 收发文件、用配对码发给别人、服务器之间直推、镜像整个文件夹，或先上传稍后再取。免费开源。",
     badges: ["免费 P2P", "端到端加密", "可自托管"],
     freenote:
       "在 push/pull、send/receive 和 daemon 直连中，文件直接在机器之间传输，绝不经过 Relayium 的服务器——只有一次很小的会合握手会经过，且仅用于 send/receive。唯一的例外是云端 up/down：它把你的文件端到端加密后存下，好让另一台机器之后取回。",

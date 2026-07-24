@@ -844,6 +844,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
 
 export default {
   slug: "guides/back-up-a-server-over-ssh",
+  published: "2026-07-08",
   updated: "2026-07-12",
   langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

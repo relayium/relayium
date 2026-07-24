@@ -37,6 +37,7 @@ export function buildArticlePages(articles) {
         lang,
         doc: a.langs[lang],
         updated: a.updated,
+        published: a.published,
         related: articles
           .filter((o) => o.slug !== a.slug)
           .map((o) => ({ slug: o.slug, title: o.langs[lang].title })),
@@ -88,7 +89,7 @@ export function buildModePages(modeDef, { slug, learn = null }) {
   }));
 }
 
-export function buildSitemap(docs, { home = true, landing = null, articles = [], guidesIndex = null, modes = [] } = {}) {
+export function buildSitemap(docs, { home = true, landing = null, articles = [], guidesIndex = null, modes = [], spaPages = [] } = {}) {
   // urlPath() only keeps a mode's English URL slash-less if the slug is listed in
   // SPA_ONLY_EN_SLUGS. A mode added here but not there would emit /new-mode/ —
   // a URL with no directory behind it. Fail the build instead.
@@ -130,6 +131,13 @@ export function buildSitemap(docs, { home = true, landing = null, articles = [],
     for (const lang of LANDING_LANGS) {
       urls.push({ loc: absUrl(urlPath(slug, lang)), lastmod: def.updated, priority: "0.8", changefreq: "weekly" });
     }
+  }
+  // English-only SPA routes (/pricing, /cli). They have no localized twin and no
+  // generated directory, so they carry no trailing slash and no hreflang cluster
+  // — but they are public pages, and leaving them out of the sitemap is why
+  // /pricing had zero coverage while the router called it "public marketing".
+  for (const p of spaPages) {
+    urls.push({ loc: absUrl(p.path), lastmod: p.updated ?? newest, priority: "0.7", changefreq: "monthly" });
   }
   const body = urls
     .map(

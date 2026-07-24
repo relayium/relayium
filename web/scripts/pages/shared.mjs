@@ -28,6 +28,18 @@ export function dirAttr(lang) {
 
 export const SITE = { origin: "https://relayium.com", name: "Relayium" };
 
+/** The one social preview image, as the absolute URL every unfurler needs. */
+export const OG_IMAGE = SITE.origin + "/og-image.jpg";
+
+// The companions to og:image. Dimensions are not decoration: LinkedIn (and a few
+// other unfurlers) drop an image whose size they would have to fetch the file to
+// learn, so a card that renders fine on X/Slack silently loses its image there.
+// index.html already emitted these; the generated templates did not.
+export const OG_IMAGE_META = `<meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />`;
+
 export function pagePath(slug, lang) {
   return lang === DEFAULT_LANG ? `${slug}/index.html` : `${lang}/${slug}/index.html`;
 }

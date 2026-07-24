@@ -743,6 +743,7 @@ const pt = {
 
 export default {
   slug: "guides/transfer-files-from-terminal",
+  published: "2026-07-08",
   updated: "2026-07-08",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

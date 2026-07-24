@@ -1,7 +1,7 @@
 // web/scripts/pages/guides-index-template.mjs — renders the Guides hub (one language)
 // to a self-contained static HTML string. Same inlined-style, no-JS approach as
 // article-template.mjs so it is crawlable and independent of the Vite asset graph.
-import { LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, BCP47, OG_LOCALE, SITE, urlPath, absUrl, esc, ctaHref, dirAttr } from "./shared.mjs";
+import { LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, ctaHref, dirAttr } from "./shared.mjs";
 
 // Copy this verbatim from article-template.mjs:7-10 (same six labels).
 const PRIVACY_LABELS = {
@@ -99,10 +99,12 @@ export function renderGuidesIndexPage({ lang, doc, groups }) {
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="${SITE.name}" />
     <meta property="og:title" content="${esc(doc.title)}" />
     <meta property="og:description" content="${esc(doc.description)}" />
     <meta property="og:url" content="${canonical}" />
     <meta property="og:image" content="${ogImage}" />
+    ${OG_IMAGE_META}
     <meta property="og:locale" content="${OG_LOCALE[lang]}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${esc(doc.title)}" />

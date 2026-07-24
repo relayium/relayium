@@ -698,6 +698,7 @@ const pt = {
 
 export default {
   slug: "compare/airdrop",
+  published: "2026-07-03",
   updated: "2026-07-03",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

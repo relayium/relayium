@@ -6,60 +6,96 @@
 // Terminology mirrors src/lib/i18n/*.ts (pairing code / SAS / relay
 // wording) for consistency with the app UI.
 //
-// ── English master (source of truth for translation + accuracy) ──
-// title: "Cross-network file transfer — realtime, end-to-end encrypted | Relayium"
-// description: "Send files device-to-device across different networks with a
-//   6-character pairing code. End-to-end encrypted over a fast relay that carries
-//   only ciphertext it can't read — verified with a SAS code so even a
-//   compromised relay can't eavesdrop."
-// hero.h1: "Cross-network file transfer, end-to-end encrypted"
-// hero.pitch: "Two devices on different networks pair with a 6-character code (or
-//   its link/QR). Files stream over an encrypted channel through a fast relay
-//   that only ever sees ciphertext — your keys never leave the two devices."
-// hero.cta: "Start a transfer"
-// how.steps:
-//   1. "The sender signs in and mints a 6-character pairing code (or shares its
-//      join link / QR)."
-//   2. "The receiver opens the link or enters the code — no account needed to
-//      receive."
-//   3. "Both sides verify the same 6-digit SAS on screen to rule out a
-//      man-in-the-middle."
-//   4. "Files stream end-to-end encrypted (AES-256-GCM per chunk) through
-//      Relayium's fast relay, which carries only ciphertext it can't read."
-// why.items:
-//   - "End-to-end encrypted" / "X25519 key exchange + per-chunk AES-256-GCM;
-//     keys are negotiated only between the two devices, so neither the relay
-//     nor the server can decrypt."
-//   - "SAS anti-MITM" / "Both screens show the same 6-digit code; matching it
-//     defeats even a compromised relay or signaling server."
-//   - "Relay sees only ciphertext" / "Cross-network transfers travel through
-//     a fast relay for a reliable connection across any NAT — and it only
-//     ever carries ciphertext, never your keys or plaintext."
-//   - "Cross-platform" / "Windows, macOS, Linux, Android, iOS — any modern
-//     browser, nothing to install."
-//   - "Free" / "Free to use within a monthly relay allowance; minting a code
-//     needs the sender signed in, the receiver joins anonymously."
-// compare.items:
-//   - "vs AirDrop" / "AirDrop is Apple-only and same-vicinity; Relayium
-//     connects Windows, Android, iPhone and Mac across different networks,
-//     end-to-end encrypted, with just a browser."
-//   - "vs Snapdrop/PairDrop" / "Those are same-network only; Relayium adds
-//     cross-network pairing plus app-layer E2E + a SAS code, so even a
-//     compromised relay or signaling server can't eavesdrop."
-// faq.items:
-//   - "Do my files go through a server?" / "The encrypted stream travels
-//     through Relayium's relay for a reliable cross-network connection —
-//     but it's end-to-end encrypted, so the relay only ever sees ciphertext
-//     it can't read."
-//   - "Is a code required?" / "Yes: a 6-character code (or its join link/QR),
-//     valid 5 minutes, pairs the two devices across networks."
-//   - "Do I need an account?" / "The sender signs in to mint a code; the
-//     receiver joins anonymously."
-//   - "Is it end-to-end encrypted?" / "Yes — X25519 + per-chunk AES-256-GCM,
-//     verified with the SAS code, so neither the relay nor the server can
-//     decrypt."
-// learnHeading: "Learn more"
-// footer: {privacy, terms, security} — reuse landing.mjs's per-locale labels.
+// The English master is the `en` doc below — a real object, not a comment, so
+// the per-route SPA shell (/cross-network etc. serve the app, not a static page)
+// can render the same prose for crawlers. buildModePages still generates static
+// pages for LANDING_LANGS only; `en` feeds scripts/pages/shells.mjs.
+
+const en = {
+  // title/description are byte-identical to titleCross/descCross in
+  // src/lib/i18n/en.ts: the SPA rewrites the served <head> on boot, so the shell
+  // and the app must agree or the URL has two different <head>s depending on who
+  // is looking. shells.test.mjs asserts it.
+  title: "Cross-network file transfer — realtime, end-to-end encrypted | Relayium",
+  description:
+    "Send files across networks with a 6-character code — realtime transfer, end-to-end encrypted; the relay only ever sees ciphertext, never your files.",
+  hero: {
+    h1: "Cross-network file transfer, end-to-end encrypted",
+    pitch:
+      "Two devices on different networks pair with a 6-character code (or its link/QR). Files stream over an encrypted channel through a fast relay that only ever sees ciphertext — your keys never leave the two devices.",
+    cta: "Start a transfer",
+  },
+  how: {
+    heading: "A transfer in four steps",
+    steps: [
+      "The sender signs in and mints a 6-character pairing code (or shares its join link / QR).",
+      "The receiver opens the link or enters the code — no account needed to receive.",
+      "Both sides verify the same 6-digit SAS on screen to rule out a man-in-the-middle.",
+      "Files stream end-to-end encrypted (AES-256-GCM per chunk) through Relayium's fast relay, which carries only ciphertext it can't read.",
+    ],
+  },
+  why: {
+    heading: "Why transfer this way",
+    items: [
+      {
+        title: "End-to-end encrypted",
+        desc: "X25519 key exchange + per-chunk AES-256-GCM; keys are negotiated only between the two devices, so neither the relay nor the server can decrypt.",
+      },
+      {
+        title: "SAS anti-MITM",
+        desc: "Both screens show the same 6-digit code; matching it defeats even a compromised relay or signaling server.",
+      },
+      {
+        title: "Relay sees only ciphertext",
+        desc: "Cross-network transfers travel through a fast relay for a reliable connection across any NAT — and it only ever carries ciphertext, never your keys or plaintext.",
+      },
+      {
+        title: "Cross-platform",
+        desc: "Windows, macOS, Linux, Android, iOS — any modern browser, nothing to install.",
+      },
+      {
+        title: "Free",
+        desc: "Free to use within a monthly relay allowance; minting a code needs the sender signed in, the receiver joins anonymously.",
+      },
+    ],
+  },
+  compare: {
+    heading: "Compared with the alternatives",
+    items: [
+      {
+        title: "vs AirDrop",
+        body: "AirDrop is Apple-only and same-vicinity; Relayium connects Windows, Android, iPhone and Mac across different networks, end-to-end encrypted, with just a browser.",
+      },
+      {
+        title: "vs Snapdrop / PairDrop",
+        body: "Those are same-network only; Relayium adds cross-network pairing plus app-layer E2E + a SAS code, so even a compromised relay or signaling server can't eavesdrop.",
+      },
+    ],
+  },
+  faq: {
+    heading: "Frequently asked questions",
+    items: [
+      {
+        q: "Do my files go through a server?",
+        a: "The encrypted stream travels through Relayium's relay for a reliable cross-network connection — but it's end-to-end encrypted, so the relay only ever sees ciphertext it can't read.",
+      },
+      {
+        q: "Is a code required?",
+        a: "Yes: a 6-character code (or its join link/QR), valid 5 minutes, pairs the two devices across networks.",
+      },
+      {
+        q: "Do I need an account?",
+        a: "The sender signs in to mint a code; the receiver joins anonymously.",
+      },
+      {
+        q: "Is it end-to-end encrypted?",
+        a: "Yes — X25519 + per-chunk AES-256-GCM, verified with the SAS code, so neither the relay nor the server can decrypt.",
+      },
+    ],
+  },
+  learnHeading: "Learn more",
+  footer: { privacy: "Privacy", terms: "Terms", security: "Security" },
+};
 
 const zh = {
   title: "跨网络文件传输——实时、端到端加密 | Relayium",
@@ -719,5 +755,5 @@ const pt = {
 
 export default {
   updated: "2026-07-10",
-  langs: { zh, ja, ko, de, fr, ar, es, pt },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

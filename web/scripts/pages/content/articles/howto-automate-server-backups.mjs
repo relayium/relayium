@@ -916,6 +916,7 @@ relayium push ./data relayium://backup-server:9031`,
 
 export default {
   slug: "how-to/automate-server-backups",
+  published: "2026-07-09",
   updated: "2026-07-12",
   langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

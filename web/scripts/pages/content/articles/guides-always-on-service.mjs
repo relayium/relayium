@@ -1359,6 +1359,7 @@ WantedBy=multi-user.target`,
 
 export default {
   slug: "guides/run-relayium-as-an-always-on-service",
+  published: "2026-07-09",
   updated: "2026-07-12",
   langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

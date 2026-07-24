@@ -933,6 +933,7 @@ const pt = {
 
 export default {
   slug: "how-to/transfer-files-between-mac-and-windows",
+  published: "2026-07-09",
   updated: "2026-07-09",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

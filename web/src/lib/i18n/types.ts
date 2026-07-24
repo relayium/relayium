@@ -403,6 +403,8 @@ export interface Messages {
   // 手写"badges 3, pickWhen 5…"那种注释守不住——它自己就曾经漂移过（写着
   // flagMeanings 8，实际是 15）。badges 例外：它是遍历渲染的，不和任何常量配对。
   cliPage: {
+    metaTitle: string;
+    metaDesc: string;
     badges: string[];
     freenote: string;
     installH2: string;

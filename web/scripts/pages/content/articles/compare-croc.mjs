@@ -870,6 +870,7 @@ const pt = {
 
 export default {
   slug: "compare/croc",
+  published: "2026-07-09",
   updated: "2026-07-12",
   langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

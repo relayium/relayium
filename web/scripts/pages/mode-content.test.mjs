@@ -1,12 +1,14 @@
 import { describe, it, expect } from "vitest";
 import crossNetwork from "./content/cross-network.mjs";
 import offlineTransfer from "./content/offline-transfer.mjs";
-import { LANDING_LANGS } from "./shared.mjs";
+import { LANGS, LANDING_LANGS } from "./shared.mjs";
 
 describe("cross-network content", () => {
-  it("defines all 5 non-english locales with the full structure", () => {
-    expect(Object.keys(crossNetwork.langs).sort()).toEqual([...LANDING_LANGS].sort());
-    for (const l of LANDING_LANGS) {
+  it("defines every locale (incl. the English master) with the full structure", () => {
+    // `en` is the master doc the per-route SPA shell renders from (shells.mjs);
+    // the eight others are the generated static pages.
+    expect(Object.keys(crossNetwork.langs).sort()).toEqual([...LANGS].sort());
+    for (const l of LANGS) {
       const d = crossNetwork.langs[l];
       expect(d.title).toBeTruthy();
       expect(d.description).toBeTruthy();
@@ -24,9 +26,9 @@ describe("cross-network content", () => {
 });
 
 describe("offline-transfer content", () => {
-  it("defines all 5 non-english locales with the full structure", () => {
-    expect(Object.keys(offlineTransfer.langs).sort()).toEqual([...LANDING_LANGS].sort());
-    for (const l of LANDING_LANGS) {
+  it("defines every locale (incl. the English master) with the full structure", () => {
+    expect(Object.keys(offlineTransfer.langs).sort()).toEqual([...LANGS].sort());
+    for (const l of LANGS) {
       const d = offlineTransfer.langs[l];
       expect(d.title).toBeTruthy();
       expect(d.description).toBeTruthy();

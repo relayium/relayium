@@ -21,16 +21,21 @@
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="用 Relayium CLI 跨网络把文件发给对方" />
     <meta property="og:description" content="使用 relayium send 和 receive，凭一个简短的配对码，把文件直接在两个不同网络上的人之间传输。端到端加密，用 SAS 码验证，而且免费——文件径直在你们之间传输，从不经过我们的服务器。" />
     <meta property="og:url" content="https://relayium.com/zh/guides/send-a-file-to-someone/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="用 Relayium CLI 跨网络把文件发给对方" />
     <meta name="twitter:description" content="使用 relayium send 和 receive，凭一个简短的配对码，把文件直接在两个不同网络上的人之间传输。端到端加密，用 SAS 码验证，而且免费——文件径直在你们之间传输，从不经过我们的服务器。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 跨网络把文件发给对方","description":"使用 relayium send 和 receive，凭一个简短的配对码，把文件直接在两个不同网络上的人之间传输。端到端加密，用 SAS 码验证，而且免费——文件径直在你们之间传输，从不经过我们的服务器。","inLanguage":"zh-Hans","dateModified":"2026-07-12","mainEntityOfPage":"https://relayium.com/zh/guides/send-a-file-to-someone/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"配对码是从哪来的？","acceptedAnswer":{"@type":"Answer","text":"是你自己定的。任何一个双方都能输入的简短字符串都行——打电话或聊天时约定好。它只需要在两端一致即可。"}},{"@type":"Question","name":"文件会上传到什么地方吗？","acceptedAnswer":{"@type":"Answer","text":"不会。文件在你们两个之间直接流式传输，端到端加密。只有一次很小的会合握手会经过 Relayium 来介绍双方——文件本身从不经过。"}},{"@type":"Question","name":"如果连接不上怎么办？","acceptedAnswer":{"@type":"Answer","text":"如果两端都在严格 NAT 之后、没有可达地址，就无法建立直连，传输会失败——CLI 按设计没有中继兜底。当没有直连路径时，可以在两台可达的服务器之间用 daemon direct，或者用 SSH push。"}},{"@type":"Question","name":"我怎么知道对面真的是对的人？","acceptedAnswer":{"@type":"Answer","text":"两边的终端会打印出一个从会话密钥得出的相同的 6 位 SAS 码。用带外方式对比一下；如果一致，就说明中间没有人。加上 --verify 可以要求在任何字节移动之前先完成这个确认。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 跨网络把文件发给对方","description":"使用 relayium send 和 receive，凭一个简短的配对码，把文件直接在两个不同网络上的人之间传输。端到端加密，用 SAS 码验证，而且免费——文件径直在你们之间传输，从不经过我们的服务器。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/send-a-file-to-someone/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"配对码是从哪来的？","acceptedAnswer":{"@type":"Answer","text":"是你自己定的。任何一个双方都能输入的简短字符串都行——打电话或聊天时约定好。它只需要在两端一致即可。"}},{"@type":"Question","name":"文件会上传到什么地方吗？","acceptedAnswer":{"@type":"Answer","text":"不会。文件在你们两个之间直接流式传输，端到端加密。只有一次很小的会合握手会经过 Relayium 来介绍双方——文件本身从不经过。"}},{"@type":"Question","name":"如果连接不上怎么办？","acceptedAnswer":{"@type":"Answer","text":"如果两端都在严格 NAT 之后、没有可达地址，就无法建立直连，传输会失败——CLI 按设计没有中继兜底。当没有直连路径时，可以在两台可达的服务器之间用 daemon direct，或者用 SSH push。"}},{"@type":"Question","name":"我怎么知道对面真的是对的人？","acceptedAnswer":{"@type":"Answer","text":"两边的终端会打印出一个从会话密钥得出的相同的 6 位 SAS 码。用带外方式对比一下；如果一致，就说明中间没有人。加上 --verify 可以要求在任何字节移动之前先完成这个确认。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}

@@ -1356,6 +1356,7 @@ const pt = {
 
 export default {
   slug: "guides/bring-your-own-node",
+  published: "2026-07-10",
   updated: "2026-07-22",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

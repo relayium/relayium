@@ -21,16 +21,21 @@
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="如何通过互联网在两台电脑之间传文件" />
     <meta property="og:description" content="一步步教你在两台电脑之间通过互联网直接传文件——点对点直连，不用上传到云端，不用安装软件，全程端到端加密。" />
     <meta property="og:url" content="https://relayium.com/zh/how-to/send-files-between-two-computers-over-the-internet/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="如何通过互联网在两台电脑之间传文件" />
     <meta name="twitter:description" content="一步步教你在两台电脑之间通过互联网直接传文件——点对点直连，不用上传到云端，不用安装软件，全程端到端加密。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"如何通过互联网在两台电脑之间传文件","description":"一步步教你在两台电脑之间通过互联网直接传文件——点对点直连，不用上传到云端，不用安装软件，全程端到端加密。","inLanguage":"zh-Hans","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/zh/how-to/send-files-between-two-computers-over-the-internet/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"这真的是点对点直连吗，会经过服务器吗？","acceptedAnswer":{"@type":"Answer","text":"能直连时，文件直接从一个浏览器流向另一个浏览器，从不存储在服务器上。只有在无法建立直连（比如某一侧有严格防火墙或 NAT）时才会退回到中继——即便如此，中继看到的也只是加密密文，从来看不到文件本身。"}},{"@type":"Question","name":"双方都需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。同一网络下，双方都不需要账号。跨网络时，发送方需要登录才能生成配对码——这是 Relayium 生成和管理配对码所必需的——但接收方始终无需账号，无论对方是输入配对码还是直接打开链接。"}},{"@type":"Question","name":"能跨不同网络甚至不同国家传输吗？","acceptedAnswer":{"@type":"Answer","text":"可以。配对码正是为这种情况设计的：两台不在同一局域网的电脑，无论各自身处世界哪个角落，都能点对点直连，只有在无法直连时才会退回到加密中继。"}},{"@type":"Question","name":"文件大小或数量有限制吗？","acceptedAnswer":{"@type":"Answer","text":"一批最多可以发送 1,000 个文件。服务器不设大小上限——限制取决于接收方浏览器能扛多大：Chrome 或 Edge（流式写入磁盘）基本没有上限，Firefox 或 Safari（内存缓冲）单个文件约在 200 MB 左右。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"如何通过互联网在两台电脑之间传文件","description":"一步步教你在两台电脑之间通过互联网直接传文件——点对点直连，不用上传到云端，不用安装软件，全程端到端加密。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-09","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-files-between-two-computers-over-the-internet/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"这真的是点对点直连吗，会经过服务器吗？","acceptedAnswer":{"@type":"Answer","text":"能直连时，文件直接从一个浏览器流向另一个浏览器，从不存储在服务器上。只有在无法建立直连（比如某一侧有严格防火墙或 NAT）时才会退回到中继——即便如此，中继看到的也只是加密密文，从来看不到文件本身。"}},{"@type":"Question","name":"双方都需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。同一网络下，双方都不需要账号。跨网络时，发送方需要登录才能生成配对码——这是 Relayium 生成和管理配对码所必需的——但接收方始终无需账号，无论对方是输入配对码还是直接打开链接。"}},{"@type":"Question","name":"能跨不同网络甚至不同国家传输吗？","acceptedAnswer":{"@type":"Answer","text":"可以。配对码正是为这种情况设计的：两台不在同一局域网的电脑，无论各自身处世界哪个角落，都能点对点直连，只有在无法直连时才会退回到加密中继。"}},{"@type":"Question","name":"文件大小或数量有限制吗？","acceptedAnswer":{"@type":"Answer","text":"一批最多可以发送 1,000 个文件。服务器不设大小上限——限制取决于接收方浏览器能扛多大：Chrome 或 Edge（流式写入磁盘）基本没有上限，Firefox 或 Safari（内存缓冲）单个文件约在 200 MB 左右。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}

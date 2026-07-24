@@ -21,16 +21,21 @@
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="用会过期的安全链接分享文件" />
     <meta property="og:description" content="在浏览器里加密文件，生成一个连服务器都解不开的链接。可选 1 小时、1 天、3 天、7 天、最长 14 天有效期（上限取决于套餐）,或首次下载后即焚——你准备好了再发。" />
     <meta property="og:url" content="https://relayium.com/zh/how-to/share-a-file-with-an-expiring-link/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="用会过期的安全链接分享文件" />
     <meta name="twitter:description" content="在浏览器里加密文件，生成一个连服务器都解不开的链接。可选 1 小时、1 天、3 天、7 天、最长 14 天有效期（上限取决于套餐）,或首次下载后即焚——你准备好了再发。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用会过期的安全链接分享文件","description":"在浏览器里加密文件，生成一个连服务器都解不开的链接。可选 1 小时、1 天、3 天、7 天、最长 14 天有效期（上限取决于套餐）,或首次下载后即焚——你准备好了再发。","inLanguage":"zh-Hans","dateModified":"2026-07-09","mainEntityOfPage":"https://relayium.com/zh/how-to/share-a-file-with-an-expiring-link/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"我发链接的对象需要账号吗?","acceptedAnswer":{"@type":"Answer","text":"不需要。任何拿到完整链接的人——包括 `#` 后面那部分——都能打开并下载文件。只有发送方在创建链接时需要登录。"}},{"@type":"Question","name":"Relayium 能看到我的文件内容吗?","acceptedAnswer":{"@type":"Answer","text":"不能。你的浏览器会在上传前用一把随机生成的 AES-256-GCM 密钥加密文件,这把密钥只存在于 URL 片段里,永远不会到达服务器。服务器保存的是它无法解密的密文——这是一种零知识设计。"}},{"@type":"Question","name":"链接能保留多久?","acceptedAnswer":{"@type":"Answer","text":"由你在创建时选择:1 小时、1 天、3 天、7 天或最长 14 天（可选范围取决于套餐）,也可以设置为首次完整下载后即焚,而不是固定时长。到期之后链接就会失效。"}},{"@type":"Question","name":"首次下载后即焚,文件真的会消失吗?","acceptedAnswer":{"@type":"Answer","text":"首次下载后即焚就是为「只下载一次」设计的:一旦收件人完成下载,之后任何人再打开这个链接都不会再生效,所以它不会被人悄悄再看一次。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用会过期的安全链接分享文件","description":"在浏览器里加密文件，生成一个连服务器都解不开的链接。可选 1 小时、1 天、3 天、7 天、最长 14 天有效期（上限取决于套餐）,或首次下载后即焚——你准备好了再发。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-09","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/share-a-file-with-an-expiring-link/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"我发链接的对象需要账号吗?","acceptedAnswer":{"@type":"Answer","text":"不需要。任何拿到完整链接的人——包括 `#` 后面那部分——都能打开并下载文件。只有发送方在创建链接时需要登录。"}},{"@type":"Question","name":"Relayium 能看到我的文件内容吗?","acceptedAnswer":{"@type":"Answer","text":"不能。你的浏览器会在上传前用一把随机生成的 AES-256-GCM 密钥加密文件,这把密钥只存在于 URL 片段里,永远不会到达服务器。服务器保存的是它无法解密的密文——这是一种零知识设计。"}},{"@type":"Question","name":"链接能保留多久?","acceptedAnswer":{"@type":"Answer","text":"由你在创建时选择:1 小时、1 天、3 天、7 天或最长 14 天（可选范围取决于套餐）,也可以设置为首次完整下载后即焚,而不是固定时长。到期之后链接就会失效。"}},{"@type":"Question","name":"首次下载后即焚,文件真的会消失吗?","acceptedAnswer":{"@type":"Answer","text":"首次下载后即焚就是为「只下载一次」设计的:一旦收件人完成下载,之后任何人再打开这个链接都不会再生效,所以它不会被人悄悄再看一次。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}

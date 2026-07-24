@@ -352,6 +352,9 @@ const de: Messages = {
     },
   },
   cliPage: {
+    metaTitle: "Relayium CLI — verschlüsselte Dateiübertragung im Terminal",
+    metaDesc:
+      "Eine einzige Binärdatei für macOS, Linux und Windows: Dateien über dein eigenes SSH kopieren, per Kopplungscode senden, Server-zu-Server übertragen, Ordner spiegeln oder jetzt hochladen und später abholen. Kostenlos und quelloffen.",
     badges: ["Kostenloses P2P", "Ende-zu-Ende-verschlüsselt", "Selbst hostbar"],
     freenote:
       "Bei push/pull, send/receive und Daemon-Direkt gehen Dateien direkt zwischen den Rechnern und laufen nie über Relayiums Server — nur ein kleiner Rendezvous-Handshake tut das, und auch nur bei send/receive. Die Ausnahme ist Cloud up/down: Sie speichert deine Datei Ende-zu-Ende-verschlüsselt, damit ein anderer Rechner sie später abholen kann.",

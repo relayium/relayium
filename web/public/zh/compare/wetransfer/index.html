@@ -21,16 +21,21 @@
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Relayium 对比 WeTransfer：不经服务器传大文件" />
     <meta property="og:description" content="客观对比 Relayium 与 WeTransfer。WeTransfer 擅长异步链接分享；Relayium 的实时模式无大小上限、文件不落服务器，还有零知识加密的存储下载链接。" />
     <meta property="og:url" content="https://relayium.com/zh/compare/wetransfer/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Relayium 对比 WeTransfer：不经服务器传大文件" />
     <meta name="twitter:description" content="客观对比 Relayium 与 WeTransfer。WeTransfer 擅长异步链接分享；Relayium 的实时模式无大小上限、文件不落服务器，还有零知识加密的存储下载链接。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 WeTransfer：不经服务器传大文件","description":"客观对比 Relayium 与 WeTransfer。WeTransfer 擅长异步链接分享；Relayium 的实时模式无大小上限、文件不落服务器，还有零知识加密的存储下载链接。","inLanguage":"zh-Hans","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/zh/compare/wetransfer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"真的没有文件大小限制吗？","acceptedAnswer":{"@type":"Answer","text":"实时模式下没有服务器端上限，因为文件从不经过服务器。在 Chrome 或 Edge 中，下载会直接流式写入磁盘，所以几 GB 的文件都没问题；Firefox 和 Safari 则会缓冲在内存里，因此建议这类传输保持在约 200 MB 以内。存储下载链接则有与账号绑定的配额。"}},{"@type":"Question","name":"对方不在线怎么办？","acceptedAnswer":{"@type":"Answer","text":"用存储下载链接。你的浏览器会用 AES-256-GCM 加密文件，密钥只留在 URL 片段里，服务器保存的是零知识密文，收件方稍后即可取回。生成链接需要发送方登录，并可设为到期失效或首次下载后即焚。"}},{"@type":"Question","name":"Relayium 免费吗？","acceptedAnswer":{"@type":"Answer","text":"免费。Relayium 采用 MIT 许可，是免费开源软件，完整的协议与代码都在 github.com/relayium/relayium。没有付费档去解锁更大的实时传输——大文件的空间来自浏览器的流式写盘，而不是订阅。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 WeTransfer：不经服务器传大文件","description":"客观对比 Relayium 与 WeTransfer。WeTransfer 擅长异步链接分享；Relayium 的实时模式无大小上限、文件不落服务器，还有零知识加密的存储下载链接。","inLanguage":"zh-Hans","datePublished":"2026-07-03","dateModified":"2026-07-03","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/compare/wetransfer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"真的没有文件大小限制吗？","acceptedAnswer":{"@type":"Answer","text":"实时模式下没有服务器端上限，因为文件从不经过服务器。在 Chrome 或 Edge 中，下载会直接流式写入磁盘，所以几 GB 的文件都没问题；Firefox 和 Safari 则会缓冲在内存里，因此建议这类传输保持在约 200 MB 以内。存储下载链接则有与账号绑定的配额。"}},{"@type":"Question","name":"对方不在线怎么办？","acceptedAnswer":{"@type":"Answer","text":"用存储下载链接。你的浏览器会用 AES-256-GCM 加密文件，密钥只留在 URL 片段里，服务器保存的是零知识密文，收件方稍后即可取回。生成链接需要发送方登录，并可设为到期失效或首次下载后即焚。"}},{"@type":"Question","name":"Relayium 免费吗？","acceptedAnswer":{"@type":"Answer","text":"免费。Relayium 采用 MIT 许可，是免费开源软件，完整的协议与代码都在 github.com/relayium/relayium。没有付费档去解锁更大的实时传输——大文件的空间来自浏览器的流式写盘，而不是订阅。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}

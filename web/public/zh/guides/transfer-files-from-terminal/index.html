@@ -21,16 +21,21 @@
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="用 Relayium CLI 从终端传输文件" />
     <meta property="og:description" content="安装免费、端到端加密的 Relayium CLI，从终端以三种方式传输文件——通过你自己的 SSH、跨网络使用配对码，或直接在两台服务器之间传输。无需账号，文件字节从不经过我们的服务器。" />
     <meta property="og:url" content="https://relayium.com/zh/guides/transfer-files-from-terminal/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="用 Relayium CLI 从终端传输文件" />
     <meta name="twitter:description" content="安装免费、端到端加密的 Relayium CLI，从终端以三种方式传输文件——通过你自己的 SSH、跨网络使用配对码，或直接在两台服务器之间传输。无需账号，文件字节从不经过我们的服务器。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 从终端传输文件","description":"安装免费、端到端加密的 Relayium CLI，从终端以三种方式传输文件——通过你自己的 SSH、跨网络使用配对码，或直接在两台服务器之间传输。无需账号，文件字节从不经过我们的服务器。","inLanguage":"zh-Hans","dateModified":"2026-07-08","mainEntityOfPage":"https://relayium.com/zh/guides/transfer-files-from-terminal/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"CLI 要收费吗？","acceptedAnswer":{"@type":"Answer","text":"不收费。CLI 完全免费。它直接连接你的机器，从不代理你的文件字节经过 Relayium，因此没有什么可计量，也没有什么可付费。"}},{"@type":"Question","name":"需要 Relayium 账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。push / pull 用你自己的 SSH，daemon direct 在你的服务器之间使用公钥信任，send / receive 用你们线下约定的配对码。三者都不需要账号。"}},{"@type":"Question","name":"支持哪些操作系统？","acceptedAnswer":{"@type":"Answer","text":"macOS、Linux 和 Windows 上均提供预编译二进制，覆盖 x86-64 和 arm64。安装脚本适用于 macOS 和 Linux；在 Windows 上，请从发布页下载 .zip。"}},{"@type":"Question","name":"我的文件会经过 Relayium 的服务器吗？","acceptedAnswer":{"@type":"Answer","text":"不会。在每种模式下，文件字节都在两端之间直接传输。只有 send / receive 会联系到我们的服务器，而且只是为了一次很小的会合握手——从不涉及文件内容。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 从终端传输文件","description":"安装免费、端到端加密的 Relayium CLI，从终端以三种方式传输文件——通过你自己的 SSH、跨网络使用配对码，或直接在两台服务器之间传输。无需账号，文件字节从不经过我们的服务器。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-07-08","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/transfer-files-from-terminal/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"CLI 要收费吗？","acceptedAnswer":{"@type":"Answer","text":"不收费。CLI 完全免费。它直接连接你的机器，从不代理你的文件字节经过 Relayium，因此没有什么可计量，也没有什么可付费。"}},{"@type":"Question","name":"需要 Relayium 账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。push / pull 用你自己的 SSH，daemon direct 在你的服务器之间使用公钥信任，send / receive 用你们线下约定的配对码。三者都不需要账号。"}},{"@type":"Question","name":"支持哪些操作系统？","acceptedAnswer":{"@type":"Answer","text":"macOS、Linux 和 Windows 上均提供预编译二进制，覆盖 x86-64 和 arm64。安装脚本适用于 macOS 和 Linux；在 Windows 上，请从发布页下载 .zip。"}},{"@type":"Question","name":"我的文件会经过 Relayium 的服务器吗？","acceptedAnswer":{"@type":"Answer","text":"不会。在每种模式下，文件字节都在两端之间直接传输。只有 send / receive 会联系到我们的服务器，而且只是为了一次很小的会合握手——从不涉及文件内容。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}

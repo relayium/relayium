@@ -21,16 +21,21 @@
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="如何不用网盘传输大文件" />
     <meta property="og:description" content="把几 GB 的视频和工程文件在浏览器之间直接互传——无需上传网盘，实时模式没有大小上限，支持断点续传和逐文件完整性校验。" />
     <meta property="og:url" content="https://relayium.com/zh/how-to/send-large-files-without-cloud/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="如何不用网盘传输大文件" />
     <meta name="twitter:description" content="把几 GB 的视频和工程文件在浏览器之间直接互传——无需上传网盘，实时模式没有大小上限，支持断点续传和逐文件完整性校验。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"如何不用网盘传输大文件","description":"把几 GB 的视频和工程文件在浏览器之间直接互传——无需上传网盘，实时模式没有大小上限，支持断点续传和逐文件完整性校验。","inLanguage":"zh-Hans","dateModified":"2026-07-03","mainEntityOfPage":"https://relayium.com/zh/how-to/send-large-files-without-cloud/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"最大能传多大的文件？","acceptedAnswer":{"@type":"Answer","text":"实时模式没有服务器端限制——上限来自接收端的浏览器。在 Chrome 或 Edge 上，文件会流式写入磁盘，因此可以传几十 GB 而不会耗尽内存。在 Firefox 或 Safari 上，文件会在内存中缓冲，所以在这两个浏览器上请把单个文件控制在约 200 MB 以内。"}},{"@type":"Question","name":"传输中断了怎么办？","acceptedAnswer":{"@type":"Answer","text":"会自动续传。如果传输中途断开——Wi-Fi 掉线、笔记本休眠、切换网络——Relayium 会从停下的地方接着传，而不是把整个文件从头再来，所以一次长传不会因短暂的波动而前功尽弃。"}},{"@type":"Question","name":"传大文件时隐私如何保证？","acceptedAnswer":{"@type":"Answer","text":"实时传输用 X25519 密钥交换加逐块 AES-256-GCM 做端到端加密，而这把密钥从不抵达任何服务器。两台设备会显示 6 位校验码以确认没有中间人，每个文件都用 SHA-256 校验。即便需要 TURN 中继，它也只能看到密文。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"如何不用网盘传输大文件","description":"把几 GB 的视频和工程文件在浏览器之间直接互传——无需上传网盘，实时模式没有大小上限，支持断点续传和逐文件完整性校验。","inLanguage":"zh-Hans","datePublished":"2026-07-03","dateModified":"2026-07-03","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-large-files-without-cloud/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"最大能传多大的文件？","acceptedAnswer":{"@type":"Answer","text":"实时模式没有服务器端限制——上限来自接收端的浏览器。在 Chrome 或 Edge 上，文件会流式写入磁盘，因此可以传几十 GB 而不会耗尽内存。在 Firefox 或 Safari 上，文件会在内存中缓冲，所以在这两个浏览器上请把单个文件控制在约 200 MB 以内。"}},{"@type":"Question","name":"传输中断了怎么办？","acceptedAnswer":{"@type":"Answer","text":"会自动续传。如果传输中途断开——Wi-Fi 掉线、笔记本休眠、切换网络——Relayium 会从停下的地方接着传，而不是把整个文件从头再来，所以一次长传不会因短暂的波动而前功尽弃。"}},{"@type":"Question","name":"传大文件时隐私如何保证？","acceptedAnswer":{"@type":"Answer","text":"实时传输用 X25519 密钥交换加逐块 AES-256-GCM 做端到端加密，而这把密钥从不抵达任何服务器。两台设备会显示 6 位校验码以确认没有中间人，每个文件都用 SHA-256 校验。即便需要 TURN 中继，它也只能看到密文。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}

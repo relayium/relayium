@@ -352,6 +352,9 @@ const ja: Messages = {
     },
   },
   cliPage: {
+    metaTitle: "Relayium CLI — ターミナルから暗号化ファイル転送",
+    metaDesc:
+      "macOS・Linux・Windows 対応の単一バイナリ。自分の SSH 経由でのコピー、ペアリングコードでの送信、サーバー間の直接転送、フォルダーの同期、先にアップロードして後で取得——すべて無料・オープンソースです。",
     badges: ["無料の P2P", "エンドツーエンド暗号化", "セルフホスト可能"],
     freenote:
       "push/pull、send/receive、daemon 直結では、ファイルはマシン間を直接移動し、Relayium のサーバーを経由しません——通過するのは send/receive 時の小さなランデブーハンドシェイクだけです。唯一の例外はクラウド up/down で、ファイルをエンドツーエンド暗号化して保存し、別のマシンが後で取得できるようにします。",

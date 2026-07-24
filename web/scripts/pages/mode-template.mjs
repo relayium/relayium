@@ -13,6 +13,7 @@ import {
   APPS_LABELS,
   BCP47,
   OG_LOCALE,
+  OG_IMAGE_META,
   SITE,
   urlPath,
   absUrl,
@@ -122,10 +123,12 @@ export function renderModePage({ slug, lang, doc, updated, articleLinks = [] }) 
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="${SITE.name}" />
     <meta property="og:title" content="${esc(doc.title)}" />
     <meta property="og:description" content="${esc(doc.description)}" />
     <meta property="og:url" content="${canonical}" />
     <meta property="og:image" content="${ogImage}" />
+    ${OG_IMAGE_META}
     <meta property="og:locale" content="${OG_LOCALE[lang]}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${esc(doc.title)}" />

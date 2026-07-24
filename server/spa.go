@@ -153,14 +153,40 @@ func spaScriptHashes(dir string) []string {
 	return out
 }
 
-// spaHandler serves static files from dir, but falls back to index.html for
-// extensionless paths that don't map to a real file or directory — these are
-// client-side SPA routes (e.g. /cross-network). Real files, directories that
-// carry their own index.html (e.g. /privacy), and missing assets (paths with an
-// extension) keep the plain FileServer behaviour.
+// downloadPrefix is the stored-download route (/d/<id>). The id is dynamic, so
+// it can't have a file of its own; it is served from d.html, the noindex SPA
+// shell the web build emits for it. Must match DOWNLOAD_PREFIX in
+// web/src/lib/transfer-link.ts.
+const downloadPrefix = "/d/"
+
+// spaHandler serves static files from dir, and resolves client-side SPA routes
+// (e.g. /cross-network) to the per-route shell the web build emits for them —
+// <route>.html, a copy of index.html whose <head> and <noscript> describe that
+// route. Anything else is a genuine 404 with the static 404 page.
+//
+// The set of shell files IS the route whitelist, and it is the same whitelist
+// nginx uses (`try_files $uri $uri.html $uri/ =404`, see
+// deploy/nginx/relayium.conf.example) — one list, generated, impossible to let
+// drift. Before this, every extensionless unknown path answered 200 with the
+// homepage: /compare/typo, a deleted article and any random string all rendered
+// index.html, which is a soft 404 in Search Console's eyes and means a removed
+// page never leaves the index.
 func spaHandler(dir string) http.Handler {
 	fs := http.FileServer(http.Dir(dir))
-	index := filepath.Join(dir, "index.html")
+	// Read once: the build output doesn't change under a running server (a
+	// deploy swaps the directory and restarts the binary).
+	notFoundPage, notFoundErr := os.ReadFile(filepath.Join(dir, "404.html"))
+	notFound := func(w http.ResponseWriter, r *http.Request) {
+		if notFoundErr != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusNotFound)
+		if r.Method != http.MethodHead {
+			_, _ = w.Write(notFoundPage)
+		}
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			fs.ServeHTTP(w, r)
@@ -179,9 +205,26 @@ func spaHandler(dir string) http.Handler {
 			}
 		}
 		if path.Ext(upath) != "" {
-			fs.ServeHTTP(w, r) // unknown path with an extension → genuine 404
+			notFound(w, r) // unknown path with an extension
 			return
 		}
-		http.ServeFile(w, r, index) // extensionless unknown path → SPA shell
+		// A known SPA route: <route>.html next to index.html.
+		if shell := full + ".html"; fileExists(shell) {
+			http.ServeFile(w, r, shell)
+			return
+		}
+		// /d/<id> — dynamic ids share one shell.
+		if strings.HasPrefix(upath, downloadPrefix) {
+			if shell := filepath.Join(dir, "d.html"); fileExists(shell) {
+				http.ServeFile(w, r, shell)
+				return
+			}
+		}
+		notFound(w, r)
 	})
+}
+
+func fileExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir()
 }

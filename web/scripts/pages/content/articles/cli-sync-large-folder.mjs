@@ -1347,6 +1347,7 @@ pkill -f 'relayium serve'`,
 
 export default {
   slug: "guides/sync-a-large-folder-between-servers",
+  published: "2026-07-08",
   updated: "2026-07-08",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

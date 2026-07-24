@@ -617,6 +617,7 @@ const pt = {
 
 export default {
   slug: "how-to/send-large-files-without-cloud",
+  published: "2026-07-03",
   updated: "2026-07-03",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

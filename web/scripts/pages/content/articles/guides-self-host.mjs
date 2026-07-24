@@ -790,6 +790,7 @@ const pt = {
 
 export default {
   slug: "guides/self-host-relayium",
+  published: "2026-07-09",
   updated: "2026-07-12",
   langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }, selfHostInstall),
 };

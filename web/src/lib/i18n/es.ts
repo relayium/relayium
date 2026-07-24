@@ -352,6 +352,9 @@ const es: Messages = {
     },
   },
   cliPage: {
+    metaTitle: "CLI de Relayium — transferencia de archivos cifrada desde la terminal",
+    metaDesc:
+      "Un único binario para macOS, Linux y Windows: copia por tu propio SSH, envía con un código de emparejamiento, transfiere de servidor a servidor, replica una carpeta, o sube ahora y descarga después. Gratis y de código abierto.",
     badges: ["P2P gratis", "Cifrado de extremo a extremo", "Autoalojable"],
     freenote:
       "En push/pull, send/receive y daemon-direct, los archivos van directamente entre máquinas y nunca pasan por los servidores de Relayium — solo lo hace un pequeño handshake de encuentro, y únicamente para send/receive. La excepción es up/down en la nube, que almacena tu archivo cifrado de extremo a extremo para que otra máquina pueda recuperarlo después.",

@@ -102,6 +102,10 @@ func TestSPAHandler(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "index.html"), "INDEX")
 	writeFile(t, filepath.Join(dir, "assets", "app.js"), "JS")
 	writeFile(t, filepath.Join(dir, "privacy", "index.html"), "PRIVACY")
+	// Per-route SPA shells emitted by the web build (vite-plugin-route-shells).
+	writeFile(t, filepath.Join(dir, "cross-network.html"), "CROSS")
+	writeFile(t, filepath.Join(dir, "d.html"), "DOWNLOAD")
+	writeFile(t, filepath.Join(dir, "404.html"), "NOTFOUND")
 
 	h := spaHandler(dir)
 
@@ -110,10 +114,19 @@ func TestSPAHandler(t *testing.T) {
 		wantCode             int
 	}{
 		{"root serves index", "/", "INDEX", 200},
-		{"app route serves index", "/cross-network", "INDEX", 200},
+		// The route's own shell, NOT index.html: that is the whole point — the
+		// bare HTML at /cross-network has to describe /cross-network.
+		{"app route serves its shell", "/cross-network", "CROSS", 200},
 		{"real asset served", "/assets/app.js", "JS", 200},
-		{"missing asset 404s", "/assets/missing.js", "", 404},
+		{"missing asset 404s", "/assets/missing.js", "NOTFOUND", 404},
 		{"directory with index served", "/privacy/", "PRIVACY", 200},
+		// The soft-404 fix: an unknown extensionless path must NOT answer 200
+		// with the homepage. A typo'd article, a deleted page and a random
+		// string were all indexable duplicates of "/" before this.
+		{"unknown route is a real 404", "/compare/typo", "NOTFOUND", 404},
+		{"unknown top-level route is a real 404", "/definitely-not-a-page", "NOTFOUND", 404},
+		// /d/<id> is dynamic, so every id shares the one noindex shell.
+		{"download link serves the download shell", "/d/abc123", "DOWNLOAD", 200},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

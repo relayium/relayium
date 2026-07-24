@@ -352,6 +352,9 @@ const fr: Messages = {
     },
   },
   cliPage: {
+    metaTitle: "CLI Relayium — transfert de fichiers chiffré depuis le terminal",
+    metaDesc:
+      "Un seul binaire pour macOS, Linux et Windows : copiez via votre propre SSH, envoyez avec un code d'appairage, transférez de serveur à serveur, synchronisez un dossier, ou déposez maintenant pour récupérer plus tard. Libre et open source.",
     badges: ["P2P gratuit", "Chiffré de bout en bout", "Auto-hébergeable"],
     freenote:
       "Avec push/pull, send/receive et daemon-direct, les fichiers vont directement entre les machines et ne passent jamais par les serveurs de Relayium — seule une petite poignée de main de mise en relation y transite, et uniquement pour send/receive. L'exception est le cloud up/down, qui stocke votre fichier chiffré de bout en bout pour qu'une autre machine puisse le récupérer plus tard.",

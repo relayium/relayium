@@ -1202,6 +1202,7 @@ relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
 
 export default {
   slug: "guides/push-to-cloud-pull-on-another-computer",
+  published: "2026-07-12",
   updated: "2026-07-12",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

@@ -10,39 +10,66 @@
 // the SPA hub stay consistent. Bundle ids com.relayium.mac / com.relayium.app
 // are kept verbatim.
 //
-// ── English master (source of truth for translation + accuracy) ──
-// title: "Get Relayium — apps for web, CLI, macOS & iOS"
-// description: "Download Relayium: use it in any browser, install the
-//   command-line tool, or get the native macOS and iOS apps (coming soon).
-//   End-to-end encrypted file transfer on every device."
-// hero.h1: "Get Relayium"
-// hero.pitch: "One end-to-end encrypted file transfer, everywhere you work.
-//   Pick your platform."
-// hero.cta: "Open the web app"
-// how.heading: "Which one should I use?"
-// how.steps:
-//   1. "Web app — zero-install, in any modern browser on any OS."
-//   2. "Command line — scriptable transfers, folder sync and server backups on
-//      macOS, Linux and Windows."
-//   3. "macOS app — a real native app, coming soon."
-//   4. "iOS app — a native iPhone & iPad app, coming to the App Store."
-// why.heading: "One transfer, every device"
-// why.items (reuse appsPage.cards.*.desc):
-//   - "Web app" / "Nothing to install. Open it in any modern browser on any OS
-//     and start transferring."
-//   - "Command line" / "Scriptable transfers, folder sync and server-to-server
-//     backups for macOS, Linux and Windows."
-//   - "macOS app" / "A true native menu-bar app (com.relayium.mac). Signed &
-//     notarized for one-click install — in the works."
-//   - "iOS app" / "A native iPhone & iPad app (com.relayium.app) with
-//     share-sheet sending. Coming to the App Store."
-// compare.heading: "Native or browser?"
-// compare.items:
-//   - "Use the web app" / "Works everywhere today, nothing to install — just
-//     open your browser."
-//   - "Get a native app" / "Deeper OS integration. The macOS and iOS versions
-//     are coming soon."
-// footer: {privacy, terms, security} — reuse cross-network.mjs's per-locale labels.
+// The English master is the `en` doc below — a real object, not a comment, so
+// the per-route SPA shell (/cross-network etc. serve the app, not a static page)
+// can render the same prose for crawlers. buildModePages still generates static
+// pages for LANDING_LANGS only; `en` feeds scripts/pages/shells.mjs.
+
+const en = {
+  title: "Get Relayium — apps for web, CLI, macOS & iOS",
+  description:
+    "Download Relayium: use it in any browser, install the command-line tool, or get the native macOS and iOS apps (coming soon). End-to-end encrypted file transfer on every device.",
+  hero: {
+    h1: "Get Relayium",
+    pitch: "One end-to-end encrypted file transfer, everywhere you work. Pick your platform.",
+    cta: "Open the web app",
+  },
+  how: {
+    heading: "Which one should I use?",
+    steps: [
+      "Web app — zero-install, in any modern browser on any OS.",
+      "Command line — scriptable transfers, folder sync and server backups on macOS, Linux and Windows.",
+      "macOS app — a real native app, coming soon.",
+      "iOS app — a native iPhone & iPad app, coming to the App Store.",
+    ],
+  },
+  why: {
+    heading: "One transfer, every device",
+    items: [
+      {
+        title: "Web app",
+        desc: "Nothing to install. Open it in any modern browser on any OS and start transferring.",
+      },
+      {
+        title: "Command line",
+        desc: "Scriptable transfers, folder sync and server-to-server backups for macOS, Linux and Windows.",
+      },
+      {
+        title: "macOS app",
+        desc: "A true native menu-bar app (com.relayium.mac). Signed & notarized for one-click install — in the works.",
+      },
+      {
+        title: "iOS app",
+        desc: "A native iPhone & iPad app (com.relayium.app) with share-sheet sending. Coming to the App Store.",
+      },
+    ],
+  },
+  compare: {
+    heading: "Native or browser?",
+    items: [
+      {
+        title: "Use the web app",
+        body: "Works everywhere today, nothing to install — just open your browser.",
+      },
+      {
+        title: "Get a native app",
+        body: "Deeper OS integration. The macOS and iOS versions are coming soon.",
+      },
+    ],
+  },
+  learnHeading: "Learn more",
+  footer: { privacy: "Privacy", terms: "Terms", security: "Security" },
+};
 
 const zh = {
   title: "获取 Relayium——网页版、命令行、macOS 与 iOS 应用",
@@ -486,5 +513,5 @@ const pt = {
 
 export default {
   updated: "2026-07-19",
-  langs: { zh, ja, ko, de, fr, ar, es, pt },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

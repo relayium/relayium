@@ -770,6 +770,7 @@ const pt = {
 
 export default {
   slug: "how-to/transfer-files-android-to-iphone",
+  published: "2026-07-03",
   updated: "2026-07-03",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

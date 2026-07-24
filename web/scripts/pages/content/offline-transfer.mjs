@@ -20,54 +20,96 @@
 // burn-after-read / TTL / zero-knowledge wording) for consistency with the
 // app UI, and articles/howto-share-file-expiring-link.mjs for tone.
 //
-// ── English master (source of truth for translation + accuracy) ──
-// title: "Encrypted file link — upload now, download later, zero-knowledge (Relayium)"
-// description: "Upload a file encrypted in your browser and share a download
-//   link. The server stores only ciphertext it can't decrypt — the key lives
-//   in the link. Optional burn-after-read and expiry."
-// hero.h1: "Send a file as an encrypted link"
-// hero.pitch: "When the other side isn't online, upload now and share a link.
-//   Your browser encrypts before upload; the server keeps only ciphertext it
-//   can't read — the key never leaves the link."
-// hero.cta: "Upload a file"
-// how.steps:
-//   1. "Sign in and pick a file — your browser encrypts it locally before
-//      anything leaves the device."
-//   2. "The server stores only the ciphertext; the decryption key stays in
-//      the link fragment and is never sent to the server."
-//   3. "Share the download link (optionally burn-after-read, with an expiry
-//      you choose)."
-//   4. "The recipient opens the link; their browser fetches the ciphertext
-//      and decrypts it with the key from the link."
-// why.items:
-//   - "Zero-knowledge" / "The file is encrypted in the browser; the server
-//     only ever holds ciphertext it cannot decrypt."
-//   - "Key in the link" / "The decryption key lives in the URL fragment
-//     (after #), which browsers never send to the server."
-//   - "Burn-after-read + expiry" / "Optionally delete the file on first
-//     download, and set a time-to-live after which it's gone."
-//   - "No recipient account" / "Anyone with the link can download; only the
-//     uploader needs to sign in."
-//   - "Async complement" / "Use this when the other side isn't online right
-//     now; use realtime cross-network transfer when both are present."
-// compare.items:
-//   - "vs WeTransfer/Dropbox links" / "Those can read your files server-side;
-//     Relayium's server only holds ciphertext it can't decrypt — the key
-//     stays in the link."
-//   - "vs realtime mode" / "Realtime needs both sides online at the same time
-//     online; this stores encrypted so the recipient can fetch later."
-// faq.items:
-//   - "Can the server read my file?" / "No — it's encrypted in your browser;
-//     the server stores only ciphertext and the key never reaches it."
-//   - "Where is the key?" / "In the link's fragment (after #). Browsers
-//     don't send fragments to servers, so only someone with the full link
-//     can decrypt."
-//   - "Do I need an account?" / "To upload, yes (it uses storage). To
-//     download, no — just the link."
-//   - "Can I make it one-time?" / "Yes — enable burn-after-read, and set an
-//     expiry."
-// learnHeading: "Learn more"
-// footer: {privacy, terms, security} — reuse landing.mjs's per-locale labels.
+// The English master is the `en` doc below — a real object, not a comment, so
+// the per-route SPA shell (/cross-network etc. serve the app, not a static page)
+// can render the same prose for crawlers. buildModePages still generates static
+// pages for LANDING_LANGS only; `en` feeds scripts/pages/shells.mjs.
+
+const en = {
+  // title/description are byte-identical to titleOffline/descOffline in
+  // src/lib/i18n/en.ts: the SPA rewrites the served <head> on boot, so the shell
+  // and the app must agree or the URL has two different <head>s depending on who
+  // is looking. shells.test.mjs asserts it.
+  title: "Encrypted file link — upload now, download later | Relayium",
+  description:
+    "Upload a browser-encrypted file and share a zero-knowledge download link; the server stores only ciphertext.",
+  hero: {
+    h1: "Send a file as an encrypted link",
+    pitch:
+      "When the other side isn't online, upload now and share a link. Your browser encrypts before upload; the server keeps only ciphertext it can't read — the key never leaves the link.",
+    cta: "Upload a file",
+  },
+  how: {
+    heading: "How the link is made",
+    steps: [
+      "Sign in and pick a file — your browser encrypts it locally before anything leaves the device.",
+      "The server stores only the ciphertext; the decryption key stays in the link fragment and is never sent to the server.",
+      "Share the download link (optionally burn-after-read, with an expiry you choose).",
+      "The recipient opens the link; their browser fetches the ciphertext and decrypts it with the key from the link.",
+    ],
+  },
+  why: {
+    heading: "Why send it this way",
+    items: [
+      {
+        title: "Zero-knowledge",
+        desc: "The file is encrypted in the browser; the server only ever holds ciphertext it cannot decrypt.",
+      },
+      {
+        title: "Key in the link",
+        desc: "The decryption key lives in the URL fragment (after #), which browsers never send to the server.",
+      },
+      {
+        title: "Burn-after-read + expiry",
+        desc: "Optionally delete the file on first download, and set a time-to-live after which it's gone.",
+      },
+      {
+        title: "No recipient account",
+        desc: "Anyone with the link can download; only the uploader needs to sign in.",
+      },
+      {
+        title: "Async complement",
+        desc: "Use this when the other side isn't online right now; use realtime cross-network transfer when both are present.",
+      },
+    ],
+  },
+  compare: {
+    heading: "Compared with the alternatives",
+    items: [
+      {
+        title: "vs WeTransfer / Dropbox links",
+        body: "Those can read your files server-side; Relayium's server only holds ciphertext it can't decrypt — the key stays in the link.",
+      },
+      {
+        title: "vs realtime mode",
+        body: "Realtime needs both sides online at the same time; this stores the file encrypted so the recipient can fetch it later.",
+      },
+    ],
+  },
+  faq: {
+    heading: "Frequently asked questions",
+    items: [
+      {
+        q: "Can the server read my file?",
+        a: "No — it's encrypted in your browser; the server stores only ciphertext and the key never reaches it.",
+      },
+      {
+        q: "Where is the key?",
+        a: "In the link's fragment (after #). Browsers don't send fragments to servers, so only someone with the full link can decrypt.",
+      },
+      {
+        q: "Do I need an account?",
+        a: "To upload, yes (it uses storage). To download, no — just the link.",
+      },
+      {
+        q: "Can I make it one-time?",
+        a: "Yes — enable burn-after-read, and set an expiry.",
+      },
+    ],
+  },
+  learnHeading: "Learn more",
+  footer: { privacy: "Privacy", terms: "Terms", security: "Security" },
+};
 
 const zh = {
   title: "加密文件链接——先上传，后下载，零知识（Relayium）",
@@ -767,5 +809,5 @@ const pt = {
 
 export default {
   updated: "2026-07-10",
-  langs: { zh, ja, ko, de, fr, ar, es, pt },
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

@@ -700,6 +700,7 @@ relayium receive 428571`,
 
 export default {
   slug: "guides/send-a-file-to-someone",
+  published: "2026-07-08",
   updated: "2026-07-12",
   langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

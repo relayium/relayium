@@ -1,5 +1,27 @@
 # Relayium SEO 审查报告
 
+> **处理状态（2026-07-24）**：报告逐条复核属实（只有两处行号漂移：`spa.go` 实际 161-186；
+> "up to 10" 在 `index.html:101,184` 而非 173）。除下面标注"未做"的以外全部已实现：
+>
+> | 条目 | 状态 |
+> |---|---|
+> | 1.1 软 404 | ✅ 代码已做（`server/spa.go` + `deploy/nginx/relayium.conf.example` + 生成 `404.html`）；**线上 nginx 需手动应用**，见 `docs/runbook-seo-404-nginx.md` |
+> | 1.2 / 5.2 英文路由 JS-only | ✅ 构建产出每路由静态外壳（`web/scripts/pages/shells.mjs` + `vite-plugin-route-shells.ts`），head + 英文正文均正确 |
+> | 1.3 `/pricing` | ✅ 有外壳 + 入 sitemap |
+> | 1.4 `/cli` canonical | ✅ 外壳 + `pageMeta` 补 `cli` 分支 + `cliPage.metaTitle/metaDesc`（9 语言）+ 入 sitemap |
+> | 1.5 `/d/*` | ⚠️ 部分：`d.html` 外壳已带 `noindex`；仍保留 robots.txt 的 `Disallow: /d/`（隐私优先，代价是 noindex 抓不到）。服务端对过期 id 返 410 未做 |
+> | 1.6 尾斜杠 | ✅ |
+> | 2.1 sitemap `xhtml:link` | ❌ 未做（长期项，405×9 会让文件膨胀，收益有限） |
+> | 2.2 文章 JSON-LD | ✅ 补 `datePublished`（取 git 首次提交日，非编造）、`image`、publisher/author logo |
+> | 2.3 OG 补全 | ✅ 4 个模板补 `og:site_name` + `og:image:width/height/alt`（legal 模板本就无 OG，未新增） |
+> | 3.3 相关文章策展 | ❌ 未做（产品判断，全网格暂留） |
+> | 4.1 批次上限 1,000 vs 10 | ✅ 真值 1,000；已改 `index.html`×2、`llms.txt`×2，并加回归测试锁死 |
+> | 5.3 `pt_BR` | ❌ 未改（报告自己也说 OG 层面无害） |
+>
+> **额外修掉的两个报告没抓到的问题**：SPA 在 `/pricing`、`/cli` 上会把 hreflang 改写成
+> `/zh/pricing` 这类**根本不存在**的 URL；以及模式页的 SPA hreflang 少尾斜杠、与静态页
+> 自述形式不一致（互指不成立）。见 `src/lib/page-meta.ts` 的 `CLUSTERED_PATHS`。
+
 > 审查对象：代码库（`web/scripts/` 静态页管线、`web/index.html` SPA 外壳、`server/` + `deploy/nginx/` 模板），非线上站点实测。
 > 日期：2026-07-23
 > 注意：`deploy/nginx/relayium.conf.example` 是模板文件，线上重定向/缓存头/SPA fallback 行为以实际生产配置为准，本报告相关结论假定生产与模板一致。
