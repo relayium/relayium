@@ -5,7 +5,10 @@ final class CloudClientTests: XCTestCase {
     private func client() -> CloudClient {
         CloudClient(baseURL: URL(string: "https://relayium.test")!, session: StubURLProtocol.session())
     }
-    override func tearDown() { StubURLProtocol.stub = nil; StubURLProtocol.lastRequest = nil; StubURLProtocol.lastBodyBytes = [] }
+    override func tearDown() {
+        StubURLProtocol.stub = nil; StubURLProtocol.router = nil
+        StubURLProtocol.lastRequest = nil; StubURLProtocol.lastBodyBytes = []
+    }
 
     func testUploadPostsBodyWithBearerAndQuery() async throws {
         let v = try Vectors.load("store-wire-vectors")
@@ -31,5 +34,33 @@ final class CloudClientTests: XCTestCase {
             burnAfterRead: false, ttl: 3600, token: "t")) {
             XCTAssertEqual($0 as? CloudError, .quota)
         }
+    }
+
+    func testDownloadRoundTripsWebProducedTransfer() async throws {
+        let v = try Vectors.load("store-wire-vectors")
+        let encManifestB64 = Data(v.hex("manifest.ctHex")).base64EncodedString()   // base64 STANDARD
+        // 1st stub: /meta. 2nd stub: /blob. Use a path-routing stub.
+        StubURLProtocol.router = { req in
+            if req.url?.path.hasSuffix("/meta") == true {
+                let meta = #"{"encManifest":"\#(encManifestB64)","size":54,"burnAfterRead":false,"expiresAt":1790000000}"#
+                return .init(status: 200, body: Data(meta.utf8), check: nil)
+            }
+            return .init(status: 200, body: Data(v.hex("streamHex")), check: nil)   // /blob = frame stream
+        }
+        var got = [UInt8]()
+        try await client().download(id: "abc", key: v.hex("keyHex")) { got += $0 }
+        // recovered plaintext == the two files concatenated in order
+        XCTAssertEqual(got, v.fileDatas().flatMap { $0 })
+    }
+    func testDownloadTruncatedStreamThrows() async throws {
+        let v = try Vectors.load("store-wire-vectors")
+        let encManifestB64 = Data(v.hex("manifest.ctHex")).base64EncodedString()
+        StubURLProtocol.router = { req in
+            if req.url?.path.hasSuffix("/meta") == true {
+                return .init(status: 200, body: Data(#"{"encManifest":"\#(encManifestB64)","size":54,"burnAfterRead":false,"expiresAt":1}"#.utf8), check: nil)
+            }
+            return .init(status: 200, body: Data(v.hex("streamHex").dropLast(5)), check: nil)  // truncated
+        }
+        await XCTAssertThrowsErrorAsync(try await self.client().download(id: "abc", key: v.hex("keyHex")) { _ in }) { _ in }
     }
 }

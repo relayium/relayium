@@ -5,6 +5,7 @@ import Foundation
 final class StubURLProtocol: URLProtocol {
     struct Stub { let status: Int; let body: Data; let check: ((URLRequest) -> Void)? }
     nonisolated(unsafe) static var stub: Stub?
+    nonisolated(unsafe) static var router: ((URLRequest) -> Stub)?
     nonisolated(unsafe) static var lastRequest: URLRequest?
     nonisolated(unsafe) static var lastBodyBytes: [UInt8] = []
     static func bodyBytes(_ req: URLRequest) -> [UInt8] { lastBodyBytes }
@@ -26,7 +27,7 @@ final class StubURLProtocol: URLProtocol {
         } else { Self.lastBodyBytes = [] }
         Self.lastRequest = request
         Self.stub?.check?(request)
-        let s = Self.stub ?? Stub(status: 500, body: Data(), check: nil)
+        let s = Self.router?(request) ?? Self.stub ?? Stub(status: 500, body: Data(), check: nil)
         let resp = HTTPURLResponse(url: request.url!, statusCode: s.status,
                                    httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
