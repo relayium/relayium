@@ -15,14 +15,18 @@ final class AccountModelsTests: XCTestCase {
     }
     func testDecodeUsageUnlimitedStorage() throws {
         let u = try fixture("me-usage", UsageResponse.self)
+        XCTAssertEqual(u.period, "202607")
         XCTAssertEqual(u.traffic.cap, 5_368_709_120)
         XCTAssertEqual(u.storage.cap, 0)          // 0 = unlimited
+        XCTAssertTrue(u.storage.isUnlimited)
+        XCTAssertFalse(u.traffic.isUnlimited)
         XCTAssertEqual(u.plan.name, "Pro")
         XCTAssertFalse(u.plan.isTop)
     }
     func testDecodeLoginSuccess() throws {
         let ok = try fixture("login-success", LoginSuccessBody.self)  // see AccountModels
         XCTAssertEqual(ok.token, "rlm_cli_TESTTOKEN")
-        XCTAssertEqual(ok.user.planId, "free")
+        XCTAssertEqual(ok.user.email, "a@b.co")
+        XCTAssertEqual(ok.user.displayName, "Ada")
     }
 }

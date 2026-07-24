@@ -132,10 +132,11 @@ git commit -m "feat(account): allow bearer auth on GET /api/me and /api/me/usage
 
 **Interfaces:**
 - Produces:
-  - `struct NativeUser: Codable, Equatable { id, email, displayName, hasPassword, emailVerified: Bool; planId, subscriptionStatus, billingCycle: String; ... }`
+  - `struct NativeUser: Codable, Equatable { id, email, displayName, hasPassword, emailVerified: Bool; planId, subscriptionStatus, billingCycle: String; ... }` — the full 14-field `/api/me` shape (`handleMe`).
+  - `struct LoginUser: Codable, Equatable { id, email, displayName: String; hasPassword, emailVerified: Bool; linkedMethods: [String] }` — the SLIM 6-field shape emitted by `finishNativeLogin` (`server/internal/account/native.go:99-105`, shared by native password login and Apple native login). Login does NOT send the 8 billing fields — do not reuse `NativeUser` here or decoding a real login response throws `keyNotFound`.
   - `struct MeResponse: Codable, Equatable { let user: NativeUser }`
-  - `struct UsageResponse: Codable, Equatable { period: Int; resetsAt: Int64; traffic, storage: Meter; plan: PlanInfo }` with `struct Meter: Codable, Equatable { used, cap: Int64 }` and `struct PlanInfo: Codable, Equatable { id, name: String; storageBytes, trafficBytes, retentionSecs, priceMonthly, priceYearly: Int64; isTop: Bool; ... }`
-  - `enum LoginOutcome: Equatable { case success(token: String, user: NativeUser); case emailUnverified(email: String); case pendingDeletion(purgeAfter: Int64, reactivateToken: String) }`
+  - `struct UsageResponse: Codable, Equatable { period: String; resetsAt: Int64; traffic, storage: Meter; plan: PlanInfo }` — `period` is a JSON STRING like `"202607"` (`server/internal/account/sqlite.go:3059` `periodOf` does `Format("200601")`), NOT an Int. `struct Meter: Codable, Equatable { used, cap: Int64 }` and `struct PlanInfo: Codable, Equatable { id, name: String; storageBytes, trafficBytes, retentionSecs, priceMonthly, priceYearly: Int64; isTop: Bool; ... }`
+  - `enum LoginOutcome: Equatable { case success(token: String, user: LoginUser); case emailUnverified(email: String); case pendingDeletion(purgeAfter: Int64, reactivateToken: String) }` — note `user: LoginUser`, not `NativeUser`.
   - `enum AccountError: Error, Equatable { case invalidCredentials, rateLimited, server(status: Int), decoding, network }`
 
 - [ ] **Step 1: Freeze the fixtures**
@@ -143,16 +144,18 @@ git commit -m "feat(account): allow bearer auth on GET /api/me and /api/me/usage
 Create these files (exact server shapes; keep them minimal but complete). `apps/RelayiumKit/Tests/Fixtures/account/login-success.json`:
 
 ```json
-{ "token": "rlm_cli_TESTTOKEN", "user": { "id": "u_1", "email": "a@b.co", "displayName": "Ada", "hasPassword": true, "emailVerified": true, "linkedMethods": ["password"], "onlyOwnNodes": false, "planId": "free", "subscriptionStatus": "", "subscriptionEnd": 0, "hasBilling": false, "scheduledPlanId": "", "scheduledCycle": "", "billingCycle": "" } }
+{ "token": "rlm_cli_TESTTOKEN", "user": { "id": "u_1", "email": "a@b.co", "displayName": "Ada", "hasPassword": true, "emailVerified": true, "linkedMethods": ["password"] } }
 ```
+
+Note: login's user object has ONLY these 6 fields (matches `LoginUser`, not `NativeUser`) — `finishNativeLogin` does not emit the 8 billing fields.
 
 `login-unverified.json`: `{ "error": "email_unverified", "email": "a@b.co" }`
 `login-pending-deletion.json`: `{ "status": "pending_deletion", "purgeAfter": 1780000000, "reactivateToken": "react_abc" }`
 `me.json`: `{ "user": { "id":"u_1","email":"a@b.co","displayName":"Ada","hasPassword":true,"emailVerified":true,"linkedMethods":["password"],"onlyOwnNodes":false,"planId":"pro","subscriptionStatus":"active","subscriptionEnd":1790000000,"hasBilling":true,"scheduledPlanId":"","scheduledCycle":"","billingCycle":"monthly" } }`
-`me-usage.json`:
+`me-usage.json` (`period` is a STRING, `"200601"`-format):
 
 ```json
-{ "period": 678, "resetsAt": 1780000000,
+{ "period": "202607", "resetsAt": 1780000000,
   "traffic": { "used": 1048576, "cap": 5368709120 },
   "storage": { "used": 2097152, "cap": 0 },
   "plan": { "id":"pro","name":"Pro","storageBytes":10737418240,"trafficBytes":5368709120,"retentionSecs":604800,"priceMonthly":900,"priceYearly":9000,"isTop":false,"subscriptionStatus":"active","subscriptionEnd":1790000000,"billingCycle":"monthly","scheduledPlanId":"","scheduledPlanName":"","scheduledCycle":"" } }
@@ -192,15 +195,19 @@ final class AccountModelsTests: XCTestCase {
     }
     func testDecodeUsageUnlimitedStorage() throws {
         let u = try fixture("me-usage", UsageResponse.self)
+        XCTAssertEqual(u.period, "202607")
         XCTAssertEqual(u.traffic.cap, 5_368_709_120)
         XCTAssertEqual(u.storage.cap, 0)          // 0 = unlimited
+        XCTAssertTrue(u.storage.isUnlimited)
+        XCTAssertFalse(u.traffic.isUnlimited)
         XCTAssertEqual(u.plan.name, "Pro")
         XCTAssertFalse(u.plan.isTop)
     }
     func testDecodeLoginSuccess() throws {
         let ok = try fixture("login-success", LoginSuccessBody.self)  // see AccountModels
         XCTAssertEqual(ok.token, "rlm_cli_TESTTOKEN")
-        XCTAssertEqual(ok.user.planId, "free")
+        XCTAssertEqual(ok.user.email, "a@b.co")
+        XCTAssertEqual(ok.user.displayName, "Ada")   // LoginUser has no planId — that's NativeUser-only
     }
 }
 ```
@@ -236,6 +243,18 @@ public struct NativeUser: Codable, Equatable {
 
 public struct MeResponse: Codable, Equatable { public let user: NativeUser }
 
+/// The 6-field user shape emitted by `finishNativeLogin` (native password login
+/// and Apple native login share this path) — NOT the full 14-field `NativeUser`.
+/// Only `/api/me` sends the billing fields.
+public struct LoginUser: Codable, Equatable {
+    public var id: String
+    public var email: String
+    public var displayName: String
+    public var hasPassword: Bool
+    public var emailVerified: Bool
+    public var linkedMethods: [String]
+}
+
 public struct Meter: Codable, Equatable {
     public var used: Int64
     public var cap: Int64                      // 0 == unlimited
@@ -260,7 +279,7 @@ public struct PlanInfo: Codable, Equatable {
 }
 
 public struct UsageResponse: Codable, Equatable {
-    public var period: Int
+    public var period: String                  // "200601"-format, e.g. "202607"
     public var resetsAt: Int64
     public var traffic: Meter
     public var storage: Meter
@@ -270,11 +289,11 @@ public struct UsageResponse: Codable, Equatable {
 /// The 200-success login body (`{token, user}`). Decoded only on the 200 path.
 public struct LoginSuccessBody: Codable, Equatable {
     public var token: String
-    public var user: NativeUser
+    public var user: LoginUser
 }
 
 public enum LoginOutcome: Equatable {
-    case success(token: String, user: NativeUser)
+    case success(token: String, user: LoginUser)
     case emailUnverified(email: String)
     case pendingDeletion(purgeAfter: Int64, reactivateToken: String)
 }
@@ -372,9 +391,10 @@ final class AccountClientTests: XCTestCase {
             XCTAssertEqual(req.httpMethod, "POST")
         })
         let outcome = try await client().login(email: "a@b.co", password: "pw", deviceName: "Mac")
-        guard case let .success(token, user) = outcome else { return XCTFail("want success") }
+        guard case let .success(token, user) = outcome else { return XCTFail("want success") }  // user: LoginUser
         XCTAssertEqual(token, "rlm_cli_TESTTOKEN")
-        XCTAssertEqual(user.planId, "free")
+        XCTAssertEqual(user.email, "a@b.co")
+        XCTAssertEqual(user.displayName, "Ada")
     }
     func testLoginInvalidCredentials() async {
         StubURLProtocol.stub = .init(status: 401, body: Data(#"{"error":"invalid credentials"}"#.utf8), check: nil)
@@ -708,7 +728,7 @@ git commit -m "feat(native): TokenStore protocol + in-memory + Keychain implemen
 
 - **Spec coverage:** server bearer-enable for `/api/me`+`/api/me/usage` → Task 1; Codable models mirroring the exact Go shapes → Task 2; `login` with 200/401/403/429/pending_deletion mapping → Task 3; bearer-authed `fetchMe`/`fetchUsage` → Task 4; Keychain token persistence → Task 5. `cap==0`→unlimited modelled in `Meter.isUnlimited`. Directory-level test resources (clears R1-B deferred note) → Task 2 Step 2.
 - **Placeholder scan:** none — every code step carries complete code. Task 1's Go test uses the package's existing helper names (`newTestService`/`seedVerifiedUser`) which the implementer must map to the real helpers in `internal/account/*_test.go` — flagged explicitly as "adapt to the package's existing helpers," not a silent gap.
-- **Type consistency:** `NativeUser`, `MeResponse`, `UsageResponse`, `Meter`, `PlanInfo`, `LoginSuccessBody`, `LoginOutcome`, `AccountError` defined once (Task 2) and reused (Tasks 3–4). `AccountClient` (Task 3) extended in Task 4. `TokenStore` (Task 5) is independent. `StubURLProtocol` (Task 3) reused in Task 4. Field names match the Go handlers verbatim.
+- **Type consistency:** `NativeUser`, `LoginUser`, `MeResponse`, `UsageResponse`, `Meter`, `PlanInfo`, `LoginSuccessBody`, `LoginOutcome`, `AccountError` defined once (Task 2) and reused (Tasks 3–4). `AccountClient` (Task 3) extended in Task 4. `TokenStore` (Task 5) is independent. `StubURLProtocol` (Task 3) reused in Task 4. Field names match the Go handlers verbatim.
 
 ## Interop / correctness safety
 

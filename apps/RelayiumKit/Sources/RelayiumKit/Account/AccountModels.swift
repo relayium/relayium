@@ -19,6 +19,18 @@ public struct NativeUser: Codable, Equatable {
 
 public struct MeResponse: Codable, Equatable { public let user: NativeUser }
 
+/// The 6-field user shape emitted by `finishNativeLogin` (native password login
+/// and Apple native login share this path) — NOT the full 14-field `NativeUser`.
+/// Only `/api/me` sends the billing fields.
+public struct LoginUser: Codable, Equatable {
+    public var id: String
+    public var email: String
+    public var displayName: String
+    public var hasPassword: Bool
+    public var emailVerified: Bool
+    public var linkedMethods: [String]
+}
+
 public struct Meter: Codable, Equatable {
     public var used: Int64
     public var cap: Int64                      // 0 == unlimited
@@ -43,7 +55,7 @@ public struct PlanInfo: Codable, Equatable {
 }
 
 public struct UsageResponse: Codable, Equatable {
-    public var period: Int
+    public var period: String                  // "200601"-format, e.g. "202607"
     public var resetsAt: Int64
     public var traffic: Meter
     public var storage: Meter
@@ -53,11 +65,11 @@ public struct UsageResponse: Codable, Equatable {
 /// The 200-success login body (`{token, user}`). Decoded only on the 200 path.
 public struct LoginSuccessBody: Codable, Equatable {
     public var token: String
-    public var user: NativeUser
+    public var user: LoginUser
 }
 
 public enum LoginOutcome: Equatable {
-    case success(token: String, user: NativeUser)
+    case success(token: String, user: LoginUser)
     case emailUnverified(email: String)
     case pendingDeletion(purgeAfter: Int64, reactivateToken: String)
 }
