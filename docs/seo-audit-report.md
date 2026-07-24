@@ -21,6 +21,23 @@
 > **额外修掉的两个报告没抓到的问题**：SPA 在 `/pricing`、`/cli` 上会把 hreflang 改写成
 > `/zh/pricing` 这类**根本不存在**的 URL；以及模式页的 SPA hreflang 少尾斜杠、与静态页
 > 自述形式不一致（互指不成立）。见 `src/lib/page-meta.ts` 的 `CLUSTERED_PATHS`。
+>
+> **第二轮（2026-07-24，对照 GSC coverage 导出实爬生产）又发现 3 项本报告漏掉的**，
+> 详见 `docs/runbook-seo-404-nginx.md` 的 "Round 2"：
+>
+> 1. **`/foo/index.html` 孪生 URL（约 400 个）**——生成页都写在 `<slug>/index.html`，
+>    nginx 直接 200 提供，canonical 指向带斜杠形式。这正是 "Alternate page with proper
+>    canonical tag" 60 条的成因。Go 的 `http.FileServer` 一直会 301，只有 nginx 没有。已修并上线。
+> 2. **`/pricing` 是孤儿页**——在 sitemap 里但全站 0 个页面链接它（"Discovered - currently
+>    not indexed" 的典型）。已加入全部约 400 个生成页的页脚 + SPA 外壳页脚。
+> 3. **`/fr/guides/` 与 `/guides/` 标题完全相同**（法语 "Guides" 同形）。已改法语标题。
+>
+> 另有一项**不在仓库里、需要你在 Cloudflare 面板关**：Scrape Shield 的 Email Address
+> Obfuscation 在边缘把 27 个法律/支持页的 `support@relayium.com` 改写成 404 的
+> `/cdn-cgi/l/email-protection` 链接（源站产物里 0 处）。见 `docs/cloudflare-setup.md` §7。
+>
+> 新增 `web/scripts/pages/site-graph.test.mjs`：重复标题 / 孤儿页 / 指向重定向或 404 的内链 /
+> 指向 `*/index.html` 的链接，任一复发都会让测试红。
 
 > 审查对象：代码库（`web/scripts/` 静态页管线、`web/index.html` SPA 外壳、`server/` + `deploy/nginx/` 模板），非线上站点实测。
 > 日期：2026-07-23
