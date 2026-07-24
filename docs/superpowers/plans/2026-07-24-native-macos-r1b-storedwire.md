@@ -503,14 +503,52 @@ public struct StoredManifest: Codable, Equatable {
 }
 
 /// Compact JSON matching JS `JSON.stringify({files:[{name,size},…]})` byte-for-byte:
-/// no spaces, key order files/name/size, no slash escaping. Verified against the
-/// golden manifest ciphertext — if the bytes differ, encryption won't match.
-private func manifestJSON(_ m: StoredManifest) throws -> [UInt8] {
-    let enc = JSONEncoder()
-    enc.outputFormatting = [.withoutEscapingSlashes]   // NOT .sortedKeys — see note
-    // Codable emits keys in declaration order (name, then size), matching JS
-    // insertion order. Top-level has only `files`. No spaces by default.
-    return [UInt8](try enc.encode(m))
+/// no spaces, fixed key order files/name/size, no slash escaping. Verified against
+/// the golden manifest ciphertext — if the bytes differ, encryption won't match.
+///
+/// Hand-written, NOT `JSONEncoder` — see the named risk below.
+func manifestJSON(_ m: StoredManifest) throws -> [UInt8] {
+    var out = "{\"files\":["
+    for (i, f) in m.files.enumerated() {
+        if i > 0 { out += "," }
+        out += "{\"name\":\""
+        out += escapeJSONString(f.name)
+        out += "\",\"size\":"
+        out += String(f.size)
+        out += "}"
+    }
+    out += "]}"
+    return Array(out.utf8)
+}
+
+/// Escapes a string exactly like JavaScript's `JSON.stringify`: `"` and `\` are
+/// backslash-escaped, the named control shorthands (`\b \t \n \f \r`) are used
+/// where applicable, every other C0 control scalar becomes `\u00XX` (lowercase
+/// hex), and everything else — including DEL, C1 controls, bidi overrides like
+/// U+202E, and all non-ASCII text — is emitted raw as UTF-8. `/` is never escaped.
+private func escapeJSONString(_ s: String) -> String {
+    var out = String.UnicodeScalarView()
+    for scalar in s.unicodeScalars {
+        switch scalar {
+        case "\"": out.append("\\"); out.append("\"")
+        case "\\": out.append("\\"); out.append("\\")
+        case "\u{08}": out.append("\\"); out.append("b")
+        case "\u{09}": out.append("\\"); out.append("t")
+        case "\u{0A}": out.append("\\"); out.append("n")
+        case "\u{0C}": out.append("\\"); out.append("f")
+        case "\u{0D}": out.append("\\"); out.append("r")
+        default:
+            if scalar.value < 0x20 {
+                let hex = String(scalar.value, radix: 16)
+                out.append("\\"); out.append("u")
+                for _ in 0..<(4 - hex.count) { out.append("0") }
+                out.append(contentsOf: hex.unicodeScalars)
+            } else {
+                out.append(scalar)
+            }
+        }
+    }
+    return String(out)
 }
 
 public func encryptManifest(key: [UInt8], _ m: StoredManifest) throws -> [UInt8] {
@@ -526,12 +564,16 @@ public func decryptManifest(key: [UInt8], _ ct: [UInt8]) throws -> StoredManifes
 }
 ```
 
-> **Named risk — JSON byte-parity.** `manifestJSON` MUST equal JS `JSON.stringify` bytes. Swift's default `JSONEncoder` emits compact JSON (no spaces) with keys in property-declaration order — `name` before `size`, matching JS insertion order — so DO NOT set `.sortedKeys` (that's alphabetical, which happens to also be name,size here, but don't rely on it; declaration order is the contract). `.withoutEscapingSlashes` avoids `\/`. If `testEncryptManifestMatchesVector` fails, diff the produced plaintext against `JSON.stringify(manifest.json)` byte-by-byte and adjust (candidate culprits: slash escaping, non-ASCII escaping, key order).
+> **Named risk — JSON byte-parity.** `manifestJSON` MUST equal JS `JSON.stringify` bytes, and it must do so *deterministically*. The original draft of this step used `JSONEncoder` with `.withoutEscapingSlashes`, reasoning that Codable emits keys in declaration order. That reasoning is wrong on Darwin: `JSONEncoder`'s keyed-container output is NOT stable/insertion-ordered — it routes through `JSONSerialization`, whose key order is effectively hash-ordered and can differ run-to-run in the same process (confirmed: `{"size":..,"name":..}` on some encodes, `{"name":..,"size":..}` on others). That flakiness broke interop with the golden manifest ciphertext intermittently. The fix is to hand-write the serializer: fixed key order (`files`, then `name`, `size` per file), manual JS-`JSON.stringify`-compatible string escaping (see `escapeJSONString` above), and no `JSONEncoder` anywhere in the manifest plaintext path. `manifestJSON` is `internal` (not `private`) so tests can assert its exact byte output directly, independent of the ciphertext. If `testEncryptManifestMatchesVector` ever fails again, diff the produced plaintext against `JSON.stringify(manifest.json)` byte-by-byte (candidate culprits: escaping, key order) — and re-run the test in a loop, since `JSONEncoder`-based non-determinism won't reproduce on every single run.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `swift test --filter StoredManifestTests`
-Expected: PASS (2 tests). If encrypt fails on byte-parity, follow the named-risk note.
+Expected: PASS (4 tests: the original 2 plus `testManifestPlaintextExactBytes` and
+`testManifestEscapesQuotesAndBackslashes`, added to pin the hand-written serializer's
+exact output). If encrypt fails on byte-parity, follow the named-risk note — and run
+it in a loop (8+ times), since `JSONEncoder`-based non-determinism doesn't reproduce
+on every single run.
 
 - [ ] **Step 5: Commit**
 
