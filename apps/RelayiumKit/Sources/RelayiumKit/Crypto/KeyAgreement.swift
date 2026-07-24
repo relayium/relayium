@@ -17,21 +17,27 @@ public struct SessionKeys {
     public let recv: [UInt8]  // sharedRx
 }
 
+public enum CryptoError: Error, Equatable {
+    case keyAgreementFailed
+}
+
 public func generateKeyPair() -> KeyPair {
     var pk = [UInt8](repeating: 0, count: Int(crypto_kx_PUBLICKEYBYTES))
     var sk = [UInt8](repeating: 0, count: Int(crypto_kx_SECRETKEYBYTES))
-    crypto_kx_keypair(&pk, &sk)
+    _ = crypto_kx_keypair(&pk, &sk)
     return KeyPair(publicKey: pk, secretKey: sk)
 }
 
-public func deriveSession(role: Role, self selfKeys: KeyPair, peerPublic: [UInt8]) -> SessionKeys {
+public func deriveSession(role: Role, self selfKeys: KeyPair, peerPublic: [UInt8]) throws -> SessionKeys {
     var rx = [UInt8](repeating: 0, count: Int(crypto_kx_SESSIONKEYBYTES))
     var tx = [UInt8](repeating: 0, count: Int(crypto_kx_SESSIONKEYBYTES))
+    let rc: Int32
     switch role {
     case .initiator:
-        crypto_kx_client_session_keys(&rx, &tx, selfKeys.publicKey, selfKeys.secretKey, peerPublic)
+        rc = crypto_kx_client_session_keys(&rx, &tx, selfKeys.publicKey, selfKeys.secretKey, peerPublic)
     case .responder:
-        crypto_kx_server_session_keys(&rx, &tx, selfKeys.publicKey, selfKeys.secretKey, peerPublic)
+        rc = crypto_kx_server_session_keys(&rx, &tx, selfKeys.publicKey, selfKeys.secretKey, peerPublic)
     }
+    guard rc == 0 else { throw CryptoError.keyAgreementFailed }
     return SessionKeys(send: tx, recv: rx)
 }

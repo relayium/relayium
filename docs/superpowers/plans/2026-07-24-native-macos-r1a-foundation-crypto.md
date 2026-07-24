@@ -349,7 +349,8 @@ git commit -m "feat(native): RelayiumKit package + libsodium init + macOS app sh
   - `enum Role { case initiator, responder }`
   - `struct SessionKeys { public let send: [UInt8]; public let recv: [UInt8] }`
   - `func generateKeyPair() -> KeyPair`
-  - `func deriveSession(role: Role, self selfKeys: KeyPair, peerPublic: [UInt8]) -> SessionKeys`
+  - `enum CryptoError: Error, Equatable { case keyAgreementFailed }`
+  - `func deriveSession(role: Role, self selfKeys: KeyPair, peerPublic: [UInt8]) throws -> SessionKeys` — throws `CryptoError.keyAgreementFailed` if libsodium's `crypto_kx_*_session_keys` returns non-zero (e.g. a small-order/invalid peer public key), rather than silently returning an all-zero session.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -364,9 +365,20 @@ final class KeyAgreementTests: XCTestCase {
         let v = try Vectors.load()
         let alice = KeyPair(publicKey: v.hex("alice.pub"), secretKey: v.hex("alice.sec"))
         let bobPub = v.hex("bob.pub")
-        let keys = deriveSession(role: .initiator, self: alice, peerPublic: bobPub)
+        let keys = try deriveSession(role: .initiator, self: alice, peerPublic: bobPub)
         XCTAssertEqual(keys.send, v.hex("session.aliceSend"))
         XCTAssertEqual(keys.recv, v.hex("session.aliceRecv"))
+    }
+
+    func testDeriveSessionThrowsOnInvalidPeerKey() throws {
+        let v = try Vectors.load()
+        let alice = KeyPair(publicKey: v.hex("alice.pub"), secretKey: v.hex("alice.sec"))
+        let allZeroPeerPublic = [UInt8](repeating: 0, count: 32)
+        XCTAssertThrowsError(
+            try deriveSession(role: .initiator, self: alice, peerPublic: allZeroPeerPublic)
+        ) { error in
+            XCTAssertEqual(error as? CryptoError, CryptoError.keyAgreementFailed)
+        }
     }
 }
 ```
@@ -443,32 +455,38 @@ public struct SessionKeys {
     public let recv: [UInt8]  // sharedRx
 }
 
+public enum CryptoError: Error, Equatable {
+    case keyAgreementFailed
+}
+
 public func generateKeyPair() -> KeyPair {
     var pk = [UInt8](repeating: 0, count: Int(crypto_kx_PUBLICKEYBYTES))
     var sk = [UInt8](repeating: 0, count: Int(crypto_kx_SECRETKEYBYTES))
-    crypto_kx_keypair(&pk, &sk)
+    _ = crypto_kx_keypair(&pk, &sk)
     return KeyPair(publicKey: pk, secretKey: sk)
 }
 
-public func deriveSession(role: Role, self selfKeys: KeyPair, peerPublic: [UInt8]) -> SessionKeys {
+public func deriveSession(role: Role, self selfKeys: KeyPair, peerPublic: [UInt8]) throws -> SessionKeys {
     var rx = [UInt8](repeating: 0, count: Int(crypto_kx_SESSIONKEYBYTES))
     var tx = [UInt8](repeating: 0, count: Int(crypto_kx_SESSIONKEYBYTES))
+    let rc: Int32
     switch role {
     case .initiator:
-        crypto_kx_client_session_keys(&rx, &tx, selfKeys.publicKey, selfKeys.secretKey, peerPublic)
+        rc = crypto_kx_client_session_keys(&rx, &tx, selfKeys.publicKey, selfKeys.secretKey, peerPublic)
     case .responder:
-        crypto_kx_server_session_keys(&rx, &tx, selfKeys.publicKey, selfKeys.secretKey, peerPublic)
+        rc = crypto_kx_server_session_keys(&rx, &tx, selfKeys.publicKey, selfKeys.secretKey, peerPublic)
     }
+    guard rc == 0 else { throw CryptoError.keyAgreementFailed }
     return SessionKeys(send: tx, recv: rx)
 }
 ```
 
-> Note: `Clibsodium` is re-exported by `swift-sodium`; if the C symbols aren't visible, add `import Clibsodium` (already above) and confirm the module map. The web `deriveSession` maps `send = sharedTx`, `recv = sharedRx` — mirror it exactly.
+> Note: `Clibsodium` is re-exported by `swift-sodium`; if the C symbols aren't visible, add `import Clibsodium` (already above) and confirm the module map. The web `deriveSession` maps `send = sharedTx`, `recv = sharedRx` — mirror it exactly. `crypto_kx_client_session_keys`/`crypto_kx_server_session_keys` return `-1` (leaving rx/tx unwritten) when `peerPublic` is a small-order/invalid point — since `peerPublic` is attacker-influenced, the return code must be checked and surfaced as a thrown error rather than silently yielding an all-zero session key. `generateKeyPair()`'s `crypto_kx_keypair` call cannot fail with correctly-sized buffers, so its result is discarded with `_ =` rather than checked.
 
 - [ ] **Step 5: Run the test to verify it passes**
 
 Run: `swift test --filter KeyAgreementTests`
-Expected: PASS. Cross-check: swapping `.initiator`↔`.responder` would flip send/recv and fail — confirms role mapping is real.
+Expected: PASS (both the vector test and the invalid-peer-key throwing test). Cross-check: swapping `.initiator`↔`.responder` would flip send/recv and fail — confirms role mapping is real.
 
 - [ ] **Step 6: Commit**
 
