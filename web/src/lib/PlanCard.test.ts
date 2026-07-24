@@ -73,7 +73,7 @@ describe("PlanCard", () => {
     );
     const btns = buttons();
     expect(btns).toContain("Upgrade");
-    expect(btns).not.toContain("Manage or cancel");
+    expect(btns).not.toContain("Manage billing");
   });
 
   it("付费档额外给出管理订阅入口", async () => {
@@ -85,7 +85,37 @@ describe("PlanCard", () => {
     );
     const btns = buttons();
     expect(btns).toContain("Change plan");
-    expect(btns).toContain("Manage or cancel");
+    expect(btns).toContain("Manage billing");
+    // A paid subscriber gets an explicit, standalone Cancel entry — not buried
+    // in "Manage billing". Cancelling routes to the same Stripe portal.
+    expect(btns).toContain("Cancel subscription");
+  });
+
+  it("取消订阅是独立入口，点击打开 Stripe 门户", async () => {
+    // mountWith stubs fetch for /api/me{,/usage}; swap it for a portal handler
+    // AFTER mount so the click's fetch is the one we assert on.
+    await mountWith(
+      plan({ id: "pro", name: "Pro", priceMonthly: 890, subscriptionStatus: "active" }),
+      { hasBilling: true },
+    );
+    const portalMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/billing/portal") {
+        expect(init?.method).toBe("POST");
+        return { ok: true, status: 200, json: async () => ({ url: "https://billing.stripe.com/p/xyz" }) };
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", portalMock as unknown as typeof fetch);
+    const cancelBtn = Array.from(target.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Cancel subscription") as HTMLButtonElement;
+    expect(cancelBtn).toBeTruthy();
+    cancelBtn.click();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(portalMock).toHaveBeenCalledWith("/api/billing/portal", expect.objectContaining({ method: "POST" }));
+  });
+
+  it("免费用户（无 Stripe 客户）不显示取消入口", async () => {
+    await mountWith(plan()); // free, hasBilling default false
+    expect(buttons()).not.toContain("Cancel subscription");
   });
 
   it("最高档不再引导升级", async () => {
@@ -98,7 +128,7 @@ describe("PlanCard", () => {
     expect(btns).not.toContain("Upgrade");
     expect(target.textContent).toContain("You're on the highest tier.");
     // 顶档也是付费的，管理订阅入口不能跟着升级入口一起消失。
-    expect(btns).toContain("Manage or cancel");
+    expect(btns).toContain("Manage billing");
   });
 
   it("无限档的权益不显示成 0", async () => {
@@ -122,7 +152,7 @@ describe("PlanCard", () => {
       { planId: "legacy", subscriptionStatus: "active", subscriptionEnd: 4102444800 },
     );
     const btns = buttons();
-    expect(btns).not.toContain("Manage or cancel"); // usage 说没订阅
+    expect(btns).not.toContain("Manage billing"); // usage 说没订阅
     expect(target.textContent).toContain("Free");
     expect(target.textContent).not.toContain("active");
   });
@@ -164,7 +194,7 @@ describe("PlanCard", () => {
       { hasBilling: true },
     );
     const btns = buttons();
-    expect(btns).toContain("Manage or cancel");
+    expect(btns).toContain("Manage billing");
     expect(target.textContent ?? "").toContain("Payment failed");
   });
 

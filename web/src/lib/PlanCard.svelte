@@ -113,6 +113,13 @@
         <button class="btn" disabled={portalBusy} onclick={onManageBilling}>{t.billing.manageBilling}</button>
       {/if}
     </div>
+    <!-- Cancel is a standalone, low-key link — not buried inside "Manage
+         billing" — so it's discoverable without being an easy misclick, per
+         click-to-cancel. Shown only when there's a live (non-canceled)
+         subscription to cancel; it opens the same Stripe portal. -->
+    {#if session().user?.hasBilling && plan.subscriptionStatus && plan.subscriptionStatus !== "canceled"}
+      <button type="button" class="cancel-link" disabled={portalBusy} onclick={onManageBilling}>{t.billing.cancelSubscription}</button>
+    {/if}
     {#if portalError}<p class="err">{portalError}</p>{/if}
   </section>
 {/if}
@@ -145,5 +152,14 @@
   .sched { margin: var(--space-3) 0 0; color: var(--text); font-size: var(--fs-xs); }
   .hint { margin: var(--space-3) 0 0; color: var(--text); font-size: var(--fs-xs); }
   .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+  /* Deliberately understated: a plain text link, not a button, so cancelling is
+     visible and one click away but never competes with Change plan / Manage. */
+  .cancel-link {
+    margin-top: var(--space-3); padding: 0; border: none; background: none;
+    color: var(--text); font: inherit; font-size: var(--fs-xs);
+    text-decoration: underline; cursor: pointer; display: block;
+  }
+  .cancel-link:hover { color: var(--text-h); }
+  .cancel-link:disabled { opacity: 0.5; cursor: default; }
   .err { margin: var(--space-2) 0 0; color: var(--danger); font-size: var(--fs-xs); }
 </style>

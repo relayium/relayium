@@ -355,6 +355,10 @@
             {#if session().user!.hasBilling}
               <button class="btn btn-ghost" onclick={() => { open = false; navigate("pricing"); }}>{t.billing.upgrade}</button>
               <button class="btn btn-ghost" disabled={portalBusy} onclick={onManageBilling}>{t.billing.manageBilling}</button>
+              <!-- Standalone cancel link (same portal), shown when a live sub exists. -->
+              {#if session().user!.subscriptionStatus && session().user!.subscriptionStatus !== "canceled"}
+                <button type="button" class="btn-link cancel-link" disabled={portalBusy} onclick={onManageBilling}>{t.billing.cancelSubscription}</button>
+              {/if}
               {#if portalError}<p class="err">{portalError}</p>{/if}
             {:else}
               <button class="btn btn-ghost" onclick={() => (showPricing = !showPricing)}>{t.billing.upgrade}</button>
@@ -536,6 +540,9 @@
   .linked-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); font-size: var(--fs-xs); color: var(--text-h); }
   .linked-row .btn-link { padding: 0; }
   .menu .hint { color: var(--text); font-size: var(--fs-xs); margin: 0; }
+  /* Cancel sits on its own line under the billing buttons, small and underlined
+     — discoverable but clearly secondary to Upgrade / Manage billing. */
+  .billing-section .cancel-link { display: block; font-size: var(--fs-xs); margin-top: var(--space-1); }
   .menu .err { color: var(--danger); font-size: 12px; margin: 0; }
 
   .billing-section {

@@ -100,7 +100,7 @@ describe("Account billing", () => {
     await mountAccount();
 
     expect(target.textContent).toContain("active");
-    const manageBtn = Array.from(target.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Manage or cancel");
+    const manageBtn = Array.from(target.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Manage billing");
     expect(manageBtn).toBeTruthy();
     // Subscribed users also get an Upgrade/change-plan link (to the /pricing page),
     // but it must NOT reveal the inline free-user Pricing component here.
@@ -125,7 +125,7 @@ describe("Account billing", () => {
     }) as unknown as typeof fetch);
     await mountAccount();
 
-    const manageBtn = Array.from(target.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Manage or cancel");
+    const manageBtn = Array.from(target.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Manage billing");
     manageBtn!.click();
     await new Promise((r) => setTimeout(r, 0));
     flushSync();
