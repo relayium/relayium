@@ -23,3 +23,9 @@ public func safeDisplayName(_ s: String) -> String {
         return !(v <= 0x1F || (v >= 0x7F && v <= 0x9F))
     }))
 }
+
+/// Sanitize each file's display name. (No `path` field in StoredManifest today;
+/// add per-segment path sanitize here if StoredManifest gains a path field.)
+public func sanitizeNames(_ files: [ManifestFile]) -> [ManifestFile] {
+    files.map { ManifestFile(name: safeDisplayName($0.name), size: $0.size) }
+}

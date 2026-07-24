@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+@testable import RelayiumKit
 
 struct Vectors {
     let json: [String: Any]
@@ -20,6 +21,19 @@ struct Vectors {
         var node: Any = json
         for k in path.split(separator: ".") { node = (node as! [String: Any])[String(k)]! }
         return node as! Int
+    }
+    /// Dot-path lookup returning a JSON array of strings.
+    func strArray(_ path: String) -> [String] {
+        var node: Any = json
+        for k in path.split(separator: ".") { node = (node as! [String: Any])[String(k)]! }
+        return (node as! [Any]).map { $0 as! String }
+    }
+    /// Reads `manifest.json.files` into `[ManifestFile]`.
+    func manifestFiles() -> [ManifestFile] {
+        var node: Any = json
+        for k in "manifest.json.files".split(separator: ".") { node = (node as! [String: Any])[String(k)]! }
+        let arr = node as! [[String: Any]]
+        return arr.map { ManifestFile(name: $0["name"] as! String, size: $0["size"] as! Int) }
     }
     private func hexString(_ path: String) -> String { str(path) }
 }
