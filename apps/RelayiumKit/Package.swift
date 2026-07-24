@@ -14,7 +14,10 @@ let package = Package(
             name: "RelayiumKitTests",
             dependencies: ["RelayiumKit"],
             path: "Tests",
-            resources: [.process("Fixtures/crypto-vectors.json")]
+            resources: [
+                .process("Fixtures/crypto-vectors.json"),
+                .process("Fixtures/store-wire-vectors.json"),
+            ]
         ),
     ]
 )

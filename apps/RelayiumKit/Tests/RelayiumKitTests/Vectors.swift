@@ -3,8 +3,8 @@ import XCTest
 
 struct Vectors {
     let json: [String: Any]
-    static func load() throws -> Vectors {
-        let url = Bundle.module.url(forResource: "crypto-vectors", withExtension: "json")!
+    static func load(_ name: String = "crypto-vectors") throws -> Vectors {
+        let url = Bundle.module.url(forResource: name, withExtension: "json")!
         let data = try Data(contentsOf: url)
         let obj = try JSONSerialization.jsonObject(with: data) as! [String: Any]
         return Vectors(json: obj)
