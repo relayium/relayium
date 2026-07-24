@@ -1,0 +1,40 @@
+{
+  "keyHex": "5555555555555555555555555555555555555555555555555555555555555555",
+  "keyB64url": "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU",
+  "manifest": {
+    "json": {
+      "files": [
+        {
+          "name": "hello.txt",
+          "size": 11
+        },
+        {
+          "name": "a‮b.txt",
+          "size": 3
+        }
+      ]
+    },
+    "ctHex": "125fde5a29f138de06357fabbe98ea8595dca36ad3de3f534ed96f5f1e3219a5b1cbde23b5587b97f9ec3a1948e34eb574d06bc8b4835915c3fac2b35eaf25a7173fc65dbaacdfbc25ed4b9171cbad6a4904402c4ce736f8",
+    "sanitizedNames": [
+      "hello.txt",
+      "ab.txt"
+    ]
+  },
+  "files": [
+    {
+      "name": "hello.txt",
+      "dataHex": "68656c6c6f20776f726c64"
+    },
+    {
+      "name": "a‮b.txt",
+      "dataHex": "78797a"
+    }
+  ],
+  "streamHex": "0000001bcaaac1bc77356bf1e05529df59dd5759d254a7098b9836c5229bf000000013f0baf1b7c39debf58b21b748fbc9d0c1f1824f",
+  "cipherSize": 54,
+  "plaintextBytes": 14,
+  "sanitize": {
+    "in": "a‮b.txt",
+    "out": "ab.txt"
+  }
+}
