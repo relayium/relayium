@@ -1,5 +1,5 @@
 import Foundation
-import Clibsodium
+import CryptoKit
 
 /// 12-byte nonce derived from the frame sequence number. Mirrors crypto.ts
 /// nonceFromSeq: 4 zero bytes, then BE high-32 of seq, then BE low-32.
@@ -14,34 +14,33 @@ public func nonceFromSeq(_ seq: UInt64) -> [UInt8] {
     return n
 }
 
-/// AES-256-GCM, combined mode (ciphertext has the 16-byte tag appended),
-/// matching Web Crypto's AES-GCM output layout.
+/// AES-256-GCM via CryptoKit, ciphertext with the 16-byte tag appended
+/// (ct || tag), matching Web Crypto's AES-GCM output layout.
 ///
-/// NOTE: intentionally does NOT gate on `crypto_aead_aes256gcm_is_available()`.
-/// On the bundled libsodium 1.0.22 xcframework, that check returns 0 on
-/// Apple Silicon (arm64) even though the ARM crypto-extension AES-GCM
-/// implementation it links is fully functional — a known upstream
-/// misdetection (is_available() isn't wired to Apple's ARM feature probe),
-/// not a real absence of hardware support. Verified empirically here:
-/// seal() output is byte-identical to the Web-Crypto-derived vector and
-/// open() round-trips + correctly fails closed on a wrong seq. Gating on
-/// is_available() would make this unconditionally crash on every real
-/// Apple Silicon Mac, which is strictly worse than not gating.
+/// NOTE: this intentionally uses CryptoKit's AES.GCM rather than libsodium's
+/// crypto_aead_aes256gcm. libsodium reports that primitive as unavailable on
+/// Apple Silicon (crypto_aead_aes256gcm_is_available() returns 0, since its
+/// AES-GCM implementation is gated on x86 AES-NI) — relying on it would be
+/// fragile across machines / CI / swift-sodium versions even though it
+/// happens to produce correct output on some builds. CryptoKit's AES.GCM is
+/// guaranteed-available and hardware-accelerated on every Apple platform and
+/// is standard, interoperable AES-256-GCM.
 public func seal(key: [UInt8], seq: UInt64, plaintext: [UInt8]) -> [UInt8] {
-    let nonce = nonceFromSeq(seq)
-    var ct = [UInt8](repeating: 0, count: plaintext.count + Int(crypto_aead_aes256gcm_ABYTES))
-    var ctLen: UInt64 = 0
-    _ = crypto_aead_aes256gcm_encrypt(&ct, &ctLen, plaintext, UInt64(plaintext.count),
-                                      nil, 0, nil, nonce, key)
-    return Array(ct.prefix(Int(ctLen)))
+    let nonce = try! AES.GCM.Nonce(data: Data(nonceFromSeq(seq)))
+    let box = try! AES.GCM.seal(Data(plaintext), using: SymmetricKey(data: key), nonce: nonce)
+    // box.combined would prepend the nonce; the wire layout here is ct||tag
+    // only, since the nonce is derived from seq independently on both ends.
+    return [UInt8](box.ciphertext) + [UInt8](box.tag)
 }
 
 public func open(key: [UInt8], seq: UInt64, ciphertext: [UInt8]) -> [UInt8]? {
-    let nonce = nonceFromSeq(seq)
-    guard ciphertext.count >= Int(crypto_aead_aes256gcm_ABYTES) else { return nil }
-    var pt = [UInt8](repeating: 0, count: ciphertext.count - Int(crypto_aead_aes256gcm_ABYTES))
-    var ptLen: UInt64 = 0
-    let rc = crypto_aead_aes256gcm_decrypt(&pt, &ptLen, nil, ciphertext, UInt64(ciphertext.count),
-                                           nil, 0, nonce, key)
-    return rc == 0 ? Array(pt.prefix(Int(ptLen))) : nil
+    guard ciphertext.count >= 16 else { return nil }
+    let ct = ciphertext[..<(ciphertext.count - 16)]
+    let tag = ciphertext[(ciphertext.count - 16)...]
+    guard let nonce = try? AES.GCM.Nonce(data: Data(nonceFromSeq(seq))) else { return nil }
+    guard let box = try? AES.GCM.SealedBox(nonce: nonce, ciphertext: Data(ct), tag: Data(tag)) else {
+        return nil
+    }
+    guard let pt = try? AES.GCM.open(box, using: SymmetricKey(data: key)) else { return nil }
+    return [UInt8](pt)
 }

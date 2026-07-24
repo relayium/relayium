@@ -552,7 +552,7 @@ Create `apps/RelayiumKit/Sources/RelayiumKit/Crypto/Aead.swift`:
 
 ```swift
 import Foundation
-import Clibsodium
+import CryptoKit
 
 /// 12-byte nonce derived from the frame sequence number. Mirrors crypto.ts
 /// nonceFromSeq: 4 zero bytes, then BE high-32 of seq, then BE low-32.
@@ -567,30 +567,30 @@ public func nonceFromSeq(_ seq: UInt64) -> [UInt8] {
     return n
 }
 
-/// AES-256-GCM, combined mode (ciphertext has the 16-byte tag appended),
-/// matching Web Crypto's AES-GCM output layout.
+/// AES-256-GCM via CryptoKit, ciphertext with the 16-byte tag appended
+/// (ct || tag), matching Web Crypto's AES-GCM output layout.
 public func seal(key: [UInt8], seq: UInt64, plaintext: [UInt8]) -> [UInt8] {
-    precondition(crypto_aead_aes256gcm_is_available() == 1, "AES-GCM HW not available")
-    let nonce = nonceFromSeq(seq)
-    var ct = [UInt8](repeating: 0, count: plaintext.count + Int(crypto_aead_aes256gcm_ABYTES))
-    var ctLen: UInt64 = 0
-    _ = crypto_aead_aes256gcm_encrypt(&ct, &ctLen, plaintext, UInt64(plaintext.count),
-                                      nil, 0, nil, nonce, key)
-    return Array(ct.prefix(Int(ctLen)))
+    let nonce = try! AES.GCM.Nonce(data: Data(nonceFromSeq(seq)))
+    let box = try! AES.GCM.seal(Data(plaintext), using: SymmetricKey(data: key), nonce: nonce)
+    // box.combined would prepend the nonce; the wire layout here is ct||tag
+    // only, since the nonce is derived from seq independently on both ends.
+    return [UInt8](box.ciphertext) + [UInt8](box.tag)
 }
 
 public func open(key: [UInt8], seq: UInt64, ciphertext: [UInt8]) -> [UInt8]? {
-    let nonce = nonceFromSeq(seq)
-    guard ciphertext.count >= Int(crypto_aead_aes256gcm_ABYTES) else { return nil }
-    var pt = [UInt8](repeating: 0, count: ciphertext.count - Int(crypto_aead_aes256gcm_ABYTES))
-    var ptLen: UInt64 = 0
-    let rc = crypto_aead_aes256gcm_decrypt(&pt, &ptLen, nil, ciphertext, UInt64(ciphertext.count),
-                                           nil, 0, nonce, key)
-    return rc == 0 ? Array(pt.prefix(Int(ptLen))) : nil
+    guard ciphertext.count >= 16 else { return nil }
+    let ct = ciphertext[..<(ciphertext.count - 16)]
+    let tag = ciphertext[(ciphertext.count - 16)...]
+    guard let nonce = try? AES.GCM.Nonce(data: Data(nonceFromSeq(seq))) else { return nil }
+    guard let box = try? AES.GCM.SealedBox(nonce: nonce, ciphertext: Data(ct), tag: Data(tag)) else {
+        return nil
+    }
+    guard let pt = try? AES.GCM.open(box, using: SymmetricKey(data: key)) else { return nil }
+    return [UInt8](pt)
 }
 ```
 
-> Web Crypto AES-GCM and libsodium `crypto_aead_aes256gcm` both output `ct || tag` with a 16-byte tag and identical GCM semantics, so the vector matches. On Apple Silicon `crypto_aead_aes256gcm_is_available()` is 1. If a target lacks it, the fallback (CryptoKit `AES.GCM`) is documented in Task 5's follow-up note, but is not needed for macOS.
+> Web Crypto AES-GCM and CryptoKit `AES.GCM` both output/consume `ct || tag` with a 16-byte tag and identical GCM semantics, so the vector matches. This uses CryptoKit rather than libsodium's `crypto_aead_aes256gcm` because that primitive reports itself unavailable on Apple Silicon (`crypto_aead_aes256gcm_is_available()` returns 0 — its AES-GCM is gated on x86 AES-NI, not the ARM crypto extensions). Depending on a "not supported here" primitive would be fragile across machines / CI / swift-sodium versions even if it happens to produce correct output on some builds. CryptoKit's `AES.GCM` is guaranteed-available and hardware-accelerated on every Apple platform, per the Global Constraint allowing either libsodium or CryptoKit for AES-GCM as long as the byte layout matches.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
