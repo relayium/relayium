@@ -15,6 +15,7 @@ final class AeadTests: XCTestCase {
         let ct = v.hex("aead.ctHex")
         XCTAssertEqual(open(key: key, seq: 5, ciphertext: ct), v.hex("aead.ptHex"))
         XCTAssertNil(open(key: key, seq: 6, ciphertext: ct)) // wrong seq → auth fail
+        XCTAssertNil(open(key: key, seq: 5, ciphertext: [1, 2, 3])) // too short → nil
     }
     func testNonceLayout() {
         // seq = 0x0000000100000002 → bytes 4..8 = 00 00 00 01, bytes 8..12 = 00 00 00 02

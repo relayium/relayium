@@ -22,6 +22,7 @@ public enum CryptoError: Error, Equatable {
 }
 
 public func generateKeyPair() -> KeyPair {
+    ensureSodiumInit()
     var pk = [UInt8](repeating: 0, count: Int(crypto_kx_PUBLICKEYBYTES))
     var sk = [UInt8](repeating: 0, count: Int(crypto_kx_SECRETKEYBYTES))
     _ = crypto_kx_keypair(&pk, &sk)
@@ -29,6 +30,7 @@ public func generateKeyPair() -> KeyPair {
 }
 
 public func deriveSession(role: Role, self selfKeys: KeyPair, peerPublic: [UInt8]) throws -> SessionKeys {
+    ensureSodiumInit()
     var rx = [UInt8](repeating: 0, count: Int(crypto_kx_SESSIONKEYBYTES))
     var tx = [UInt8](repeating: 0, count: Int(crypto_kx_SESSIONKEYBYTES))
     let rc: Int32

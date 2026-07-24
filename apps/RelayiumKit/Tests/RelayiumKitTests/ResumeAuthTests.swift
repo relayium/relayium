@@ -19,4 +19,22 @@ final class ResumeAuthTests: XCTestCase {
         XCTAssertEqual(deriveResumeAuth(sendKey: tx, recvKey: rx),
                        deriveResumeAuth(sendKey: rx, recvKey: tx))
     }
+    /// Pins deriveResumeAuth to the golden vector: resumeAuth.keyHex is computed
+    /// from aliceK.sharedTx/sharedRx, i.e. session.aliceSend/session.aliceRecv.
+    func testDeriveResumeAuthMatchesGoldenVector() throws {
+        let v = try Vectors.load()
+        XCTAssertEqual(
+            deriveResumeAuth(sendKey: v.hex("session.aliceSend"), recvKey: v.hex("session.aliceRecv")),
+            v.hex("resumeAuth.keyHex")
+        )
+    }
+    /// A syntactically valid base64 payload (32 zero bytes) with the wrong MAC
+    /// must not verify.
+    func testVerifyResumeRejectsValidBase64WithWrongMac() throws {
+        let v = try Vectors.load()
+        let key = v.hex("resumeAuth.keyHex")
+        let payload = v.str("resumeAuth.payload")
+        XCTAssertFalse(verifyResume(key: key, payload: payload,
+                                     mac: Data(repeating: 0, count: 32).base64EncodedString()))
+    }
 }
