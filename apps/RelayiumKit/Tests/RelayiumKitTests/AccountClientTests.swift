@@ -43,6 +43,30 @@ final class AccountClientTests: XCTestCase {
             XCTAssertEqual($0 as? AccountError, .rateLimited)
         }
     }
+    func testFetchMeSendsBearerAndDecodes() async throws {
+        StubURLProtocol.stub = .init(status: 200, body: try data("me"), check: { req in
+            XCTAssertEqual(req.url?.path, "/api/me")
+            XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer rlm_cli_TESTTOKEN")
+        })
+        let user = try await client().fetchMe(token: "rlm_cli_TESTTOKEN")
+        XCTAssertEqual(user.planId, "pro")
+        XCTAssertEqual(user.subscriptionStatus, "active")
+    }
+    func testFetchUsageSendsBearerAndDecodes() async throws {
+        StubURLProtocol.stub = .init(status: 200, body: try data("me-usage"), check: { req in
+            XCTAssertEqual(req.url?.path, "/api/me/usage")
+            XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer rlm_cli_TESTTOKEN")
+        })
+        let u = try await client().fetchUsage(token: "rlm_cli_TESTTOKEN")
+        XCTAssertTrue(u.storage.isUnlimited)
+        XCTAssertEqual(u.plan.name, "Pro")
+    }
+    func testFetchMeUnauthorizedThrows() async {
+        StubURLProtocol.stub = .init(status: 401, body: Data("unauthorized".utf8), check: nil)
+        await XCTAssertThrowsErrorAsync(try await self.client().fetchMe(token: "bad")) {
+            XCTAssertEqual($0 as? AccountError, .invalidCredentials)
+        }
+    }
 }
 
 /// Small async throwing-assert helper (XCTAssertThrowsError has no async form).

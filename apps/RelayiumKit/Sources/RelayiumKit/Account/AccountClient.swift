@@ -48,3 +48,27 @@ public struct AccountClient {
 
 private struct PendingDeletionBody: Decodable { let status: String; let purgeAfter: Int64; let reactivateToken: String }
 private struct ErrorBody: Decodable { let error: String; let email: String? }
+
+extension AccountClient {
+    public func fetchMe(token: String) async throws -> NativeUser {
+        try await authedGet("api/me", token: token, as: MeResponse.self).user
+    }
+    public func fetchUsage(token: String) async throws -> UsageResponse {
+        try await authedGet("api/me/usage", token: token, as: UsageResponse.self)
+    }
+
+    private func authedGet<T: Decodable>(_ path: String, token: String, as: T.Type) async throws -> T {
+        var req = URLRequest(url: baseURL.appendingPathComponent(path))
+        req.httpMethod = "GET"
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (data, resp) = try await send(req)
+        switch resp.statusCode {
+        case 200:
+            guard let v = try? JSONDecoder().decode(T.self, from: data) else { throw AccountError.decoding }
+            return v
+        case 401: throw AccountError.invalidCredentials   // stale/invalid bearer
+        case 429: throw AccountError.rateLimited
+        default:  throw AccountError.server(status: resp.statusCode)
+        }
+    }
+}
