@@ -22,8 +22,17 @@ absence is not a reduction.
    rules) to prove interop and the wire core before iOS.
 3. **Core architecture**: pure-Swift `RelayiumKit` + **native WebRTC**
    (`stasel/WebRTC`) for the realtime path so native interoperates with the
-   browser peer base; **CryptoKit + URLSession** for the cloud-async path
-   (background-transfer capable, which also sidesteps iOS backgrounding later).
+   browser peer base; **URLSession** background sessions for the cloud-async path
+   (which also sidesteps iOS backgrounding later).
+   - **Crypto correction (from grounding in `web/src/lib/crypto.ts`)**: the web
+     crypto is **not** pure Web Crypto — its key agreement is libsodium
+     `crypto_kx` (X25519 + libsodium's BLAKE2b KDF) and its commitment/SAS/
+     resume-auth-key all use `crypto_generichash` (BLAKE2b). CryptoKit provides
+     neither `crypto_kx` nor BLAKE2b, so byte-identical interop is impossible on
+     CryptoKit alone. The Swift `Crypto` module therefore wraps **libsodium**
+     (`swift-sodium` / `Clibsodium`) for `crypto_kx` and `crypto_generichash`;
+     AES-GCM (12-byte nonce derived from the frame seq, per `nonceFromSeq`) may
+     use libsodium or CryptoKit as long as the byte layout matches.
 4. **iOS paid plans**: Apple **IAP (StoreKit)** — deferred to R4.
 5. **macOS distribution/billing (R1)**: **direct download (.dmg)** with
    Developer ID signing + notarization; billing stays on the existing **Stripe
@@ -148,8 +157,9 @@ RelayiumKit (extractable pure-logic core)
   │              mirrors internal/signal Envelope semantics
   ├─ Realtime    native WebRTC (stasel/WebRTC); DataChannel + ACK credit-window
   │              flow control + WireVersion handshake; TURN relay-only fallback
-  ├─ Crypto      CryptoKit; zero-knowledge AES-GCM + #k= fragment derivation +
-  │              SAS + Identity; byte-for-byte aligned with web crypto.ts
+  ├─ Crypto      libsodium (swift-sodium) crypto_kx + generichash(BLAKE2b) +
+  │              AES-GCM (seq nonce) + #k= derivation + SAS/commitment + Identity;
+  │              byte-for-byte aligned with web crypto.ts
   ├─ Wire        manifest / framing / resumable offsets; data-plane message
   │              format shared with JS
   ├─ Cloud       URLSession background up/down; chunked resume; stored-link
