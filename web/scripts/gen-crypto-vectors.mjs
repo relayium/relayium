@@ -12,13 +12,24 @@ const bobSeed = fromHex("22".repeat(32));
 const alice = s.crypto_kx_seed_keypair(aliceSeed);
 const bob = s.crypto_kx_seed_keypair(bobSeed);
 
+// Byte-wise comparator matching web/src/lib/crypto.ts exactly (memcmp/lexicographic
+// semantics, byte 0 first). NOTE: do NOT use libsodium's s.compare here — that is
+// sodium_compare, which treats the bytes as a LITTLE-endian number (last byte most
+// significant) and does not match crypto.ts's ordering.
+function compareBytes(x, y) {
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    if (x[i] !== y[i]) return x[i] - y[i];
+  }
+  return x.length - y.length;
+}
+
 // role initiator = client; responder = server. Alice initiates.
 const aliceK = s.crypto_kx_client_session_keys(alice.publicKey, alice.privateKey, bob.publicKey);
 const bobK = s.crypto_kx_server_session_keys(bob.publicKey, bob.privateKey, alice.publicKey);
 
 // SAS (sort raw pubs, generichash 8)
 const sasOf = (x, y) => {
-  const [a, b] = s.compare(x, y) <= 0 ? [x, y] : [y, x];
+  const [a, b] = compareBytes(x, y) <= 0 ? [x, y] : [y, x];
   const combined = new Uint8Array(a.length + b.length);
   combined.set(a, 0); combined.set(b, a.length);
   const d = s.crypto_generichash(8, combined, null);
@@ -48,7 +59,7 @@ const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: non
 
 // resume-auth key + mac
 const DOMAIN = new TextEncoder().encode("relayium-resume-auth-v1\0");
-const [ra, rb] = s.compare(aliceK.sharedTx, aliceK.sharedRx) <= 0
+const [ra, rb] = compareBytes(aliceK.sharedTx, aliceK.sharedRx) <= 0
   ? [aliceK.sharedTx, aliceK.sharedRx] : [aliceK.sharedRx, aliceK.sharedTx];
 const raInput = new Uint8Array(DOMAIN.length + ra.length + rb.length);
 raInput.set(DOMAIN, 0); raInput.set(ra, DOMAIN.length); raInput.set(rb, DOMAIN.length + ra.length);
