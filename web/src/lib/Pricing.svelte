@@ -153,6 +153,28 @@
     }
   }
 
+  // Open the Stripe Billing Portal. Downgrading to Free is a cancellation —
+  // Free has no Stripe price, so handleBillingChangePlan 400s on it — and the
+  // cancel/refund/payment-method controls all live in the portal. Same call as
+  // Account.svelte's onManageBilling.
+  let portalBusy = $state(false);
+  async function openPortal() {
+    if (portalBusy) return;
+    checkoutError = "";
+    portalBusy = true;
+    try {
+      const res = await fetch("/api/billing/portal", { method: "POST", credentials: "include" });
+      if (!res.ok) { checkoutError = t.billing.portalError; return; }
+      const data = (await res.json()) as { url?: string };
+      if (data.url) location.href = data.url;
+      else checkoutError = t.billing.portalError;
+    } catch {
+      checkoutError = t.billing.portalError;
+    } finally {
+      portalBusy = false;
+    }
+  }
+
   // Cancel a pending period-end downgrade (stay on the current tier).
   async function cancelScheduled() {
     if (busyPlanId) return;
@@ -227,7 +249,21 @@
         {:else if tier.id === scheduledPlanId}
           <div class="current-badge">{t.billing.scheduledBadge}</div>
         {:else if isFree(tier)}
-          <div class="tier-note">{t.billing.free}</div>
+          {#if isSubscribed}
+            <!-- A paid subscriber viewing Free: this is their downgrade/cancel
+                 path. Free has no Stripe price, so it goes through the portal
+                 (period-end cancel), not change-plan. -->
+            <button
+              type="button"
+              class="btn btn-primary"
+              disabled={portalBusy}
+              onclick={openPortal}
+            >
+              {t.billing.downgradeToFree}
+            </button>
+          {:else}
+            <div class="tier-note">{t.billing.free}</div>
+          {/if}
         {:else}
           <button
             type="button"

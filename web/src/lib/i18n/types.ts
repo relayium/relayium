@@ -192,7 +192,8 @@ export interface Messages {
     retention: string; // tier capability line label
     days: (n: number) => string; // "N day(s)" retention value
     currentPlan: string; // "Plan" label in the account billing section
-    manageBilling: string; // CTA that opens the Stripe billing portal
+    manageBilling: string; // CTA that opens the Stripe billing portal (manage payment/invoices, and cancel)
+    downgradeToFree: string; // Free-tier CTA for subscribers → portal (Free has no Stripe price, so leaving = cancel)
     portalError: string; // billing-portal open failure
     checkoutSuccess: string; // banner after Stripe Checkout success redirect
     checkoutCanceled: string; // banner after Stripe Checkout cancel redirect

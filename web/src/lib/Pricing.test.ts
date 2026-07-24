@@ -347,4 +347,40 @@ describe("Pricing", () => {
     expect(cancelCalls).toBe(1);
     expect(fetchMock).toHaveBeenCalledWith("/api/billing/cancel-scheduled-change", expect.objectContaining({ method: "POST" }));
   });
+
+  it("a subscribed user gets a Downgrade-to-Free button on the free tier that opens the billing portal", async () => {
+    // The bug: the Free tier card was dead for subscribers — just the word
+    // "Free", no button — so a paid user had no way to leave from the page they'd
+    // naturally look on. Downgrading to Free is a cancellation (Free has no Stripe
+    // price), so the button routes to the Stripe portal, where the cancel lives.
+    const SUB_TIERS = [
+      { id: "free", name: "Free", storageBytes: 1e9, trafficBytes: 1e9, retentionSecs: 86400, priceMonthly: 0, priceYearly: 0, purchasableMonthly: false, purchasableYearly: false },
+      { id: "plus", name: "Plus", storageBytes: 5e9, trafficBytes: 3e11, retentionSecs: 30 * 86400, priceMonthly: 390, priceYearly: 2900, purchasableMonthly: true, purchasableYearly: true },
+    ];
+    const subUser = { id: "u1", email: "sub@example.com", displayName: "", hasPassword: true, planId: "plus", subscriptionStatus: "active", hasBilling: true };
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/plans") return { ok: true, status: 200, json: async () => SUB_TIERS };
+      if (url === "/api/me") return { ok: true, status: 200, json: async () => ({ user: subUser }) };
+      if (url === "/api/billing/portal") {
+        expect(init?.method).toBe("POST");
+        return { ok: true, status: 200, json: async () => ({ url: "https://billing.stripe.com/session/xyz" }) };
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+    const { refreshSession } = await import("./auth.svelte");
+    await refreshSession();
+    await mountPricing();
+
+    const freeCard = Array.from(target.querySelectorAll(".tier")).find((c) => c.textContent?.includes("Free"))!;
+    const btn = Array.from(freeCard.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Downgrade to Free") as HTMLButtonElement;
+    expect(btn, "Free tier must offer a Downgrade-to-Free action to subscribers").toBeTruthy();
+
+    btn.click();
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/billing/portal", expect.objectContaining({ method: "POST" }));
+    expect(window.location.href).toBe("https://billing.stripe.com/session/xyz");
+  });
 });

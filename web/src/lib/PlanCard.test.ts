@@ -73,7 +73,7 @@ describe("PlanCard", () => {
     );
     const btns = buttons();
     expect(btns).toContain("Upgrade");
-    expect(btns).not.toContain("Manage billing");
+    expect(btns).not.toContain("Manage or cancel");
   });
 
   it("付费档额外给出管理订阅入口", async () => {
@@ -85,7 +85,7 @@ describe("PlanCard", () => {
     );
     const btns = buttons();
     expect(btns).toContain("Change plan");
-    expect(btns).toContain("Manage billing");
+    expect(btns).toContain("Manage or cancel");
   });
 
   it("最高档不再引导升级", async () => {
@@ -98,7 +98,7 @@ describe("PlanCard", () => {
     expect(btns).not.toContain("Upgrade");
     expect(target.textContent).toContain("You're on the highest tier.");
     // 顶档也是付费的，管理订阅入口不能跟着升级入口一起消失。
-    expect(btns).toContain("Manage billing");
+    expect(btns).toContain("Manage or cancel");
   });
 
   it("无限档的权益不显示成 0", async () => {
@@ -122,7 +122,7 @@ describe("PlanCard", () => {
       { planId: "legacy", subscriptionStatus: "active", subscriptionEnd: 4102444800 },
     );
     const btns = buttons();
-    expect(btns).not.toContain("Manage billing"); // usage 说没订阅
+    expect(btns).not.toContain("Manage or cancel"); // usage 说没订阅
     expect(target.textContent).toContain("Free");
     expect(target.textContent).not.toContain("active");
   });
@@ -164,7 +164,7 @@ describe("PlanCard", () => {
       { hasBilling: true },
     );
     const btns = buttons();
-    expect(btns).toContain("Manage billing");
+    expect(btns).toContain("Manage or cancel");
     expect(target.textContent ?? "").toContain("Payment failed");
   });
 
