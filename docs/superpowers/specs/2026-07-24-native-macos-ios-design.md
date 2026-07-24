@@ -74,6 +74,33 @@ Sequencing rationale: R1 uses a permissive platform to flatten the hardest work
 proven (avoid premature abstraction); R4/R5 are orthogonal, independent items
 that must not block a usable client shipping.
 
+### R1 internal sub-plans (refined during implementation)
+
+R1-A (foundation + `Crypto`) shipped (merged to main; RelayiumKit builds, suite
+green, `apps/mac` shell builds under Xcode 26). Grounding in the web code then
+revealed the "Wire module" is really **two formats split by transport**, both
+reusing the seq-nonce AES-GCM already in `Crypto`:
+
+- **Stored wire** (`web/src/lib/store-crypto.ts`) — length-prefixed AES-GCM
+  frames over an HTTPS byte stream + an encrypted manifest (seq 0) + a base64url
+  `#k=` key. Interoperable web↔CLI↔native. No transport state.
+- **Realtime wire** (`web/src/lib/transfer.ts`) — one chunk per DataChannel
+  message + a plaintext manifest + the ACK credit-window flow control. WebRTC-only.
+
+Because the stored/cloud path is the simplest (pure byte-stream codec, no
+signaling/WebRTC/flow-control), fully interoperable, and background-transfer
+friendly, R1 is **reordered cloud-first** (decision confirmed with the user):
+
+| Sub-plan | Module | Status |
+|---|---|---|
+| R1-A | Foundation + `Crypto` (crypto_kx, AEAD, SAS/commit, resume-auth) | **done (merged)** |
+| **R1-B** | **`StoredWire` codec** (encrypted manifest + length-prefixed frames + `StoreDecryptor` + base64url `#k=` key + filename sanitize); frozen stored-wire doc; golden vectors | **this plan** |
+| R1-C | `Account` (native login + Keychain + usage/plan) | next |
+| R1-D | `Cloud` (URLSession bg up/down of StoredWire, `#k=` links, 302 node-follow) — **first working native transfer, web/CLI-interop** | |
+| R1-E | `Signaling` (WS `/signal` rooms, pairing, commit/reveal handshake) | |
+| R1-F | `RealtimeWire` framing + `Realtime` WebRTC + ACK credit-window; browser↔native E2E | |
+| R1-G | macOS UI + Universal Links + distribution (Developer ID sign/notarize/Sparkle/.dmg) | |
+
 ## Existing-codebase adjustments to support native
 
 Mostly **enabling dormant capabilities**, not building from scratch.
