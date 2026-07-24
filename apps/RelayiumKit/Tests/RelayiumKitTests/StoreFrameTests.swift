@@ -53,4 +53,11 @@ final class StoreFrameTests: XCTestCase {
             XCTAssertEqual($0 as? StoredWireError, .lengthMismatch)
         }
     }
+    func testDecryptorThrowsOnTamperedFrame() throws {
+        let v = try Vectors.load("store-wire-vectors")
+        var stream = v.hex("streamHex")
+        stream[5] ^= 0x01                     // corrupt a ciphertext byte in frame 1 (not the length prefix at [0..4))
+        let d = StoreDecryptor(key: v.hex("keyHex"))
+        XCTAssertThrowsError(try d.push(stream))
+    }
 }

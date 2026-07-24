@@ -26,4 +26,10 @@ final class StoredManifestTests: XCTestCase {
         let expected = "{\"files\":[{\"name\":\"a\\\"b\\\\c\",\"size\":0}]}"
         XCTAssertEqual(bytes, Array(expected.utf8))
     }
+    func testDecryptManifestThrowsOnTamper() throws {
+        let v = try Vectors.load("store-wire-vectors")
+        var ct = v.hex("manifest.ctHex")
+        ct[ct.count - 1] ^= 0x01              // flip a tag byte
+        XCTAssertThrowsError(try decryptManifest(key: v.hex("keyHex"), ct))
+    }
 }
