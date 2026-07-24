@@ -384,8 +384,15 @@
           <input type="radio" name="node-routing" checked={!strict} onchange={() => setStrict(false)} />
           <span class="ropt-text"><b>{t.me.routeAuto}</b><span class="hint">{t.me.routeAutoHint}</span></span>
         </label>
-        <label class="routeopt" class:sel={strict}>
-          <input type="radio" name="node-routing" checked={strict} onchange={() => setStrict(true)} />
+        <label class="routeopt" class:sel={strict} class:disabled={nodes.length === 0}>
+          <input
+            type="radio"
+            name="node-routing"
+            checked={strict}
+            disabled={nodes.length === 0}
+            title={nodes.length === 0 ? t.me.nodesEmpty : undefined}
+            onchange={() => setStrict(true)}
+          />
           <span class="ropt-text"><b>{t.me.strictLabel}</b><span class="hint">{t.me.strictHint}</span></span>
         </label>
       </div>
@@ -579,6 +586,7 @@
     background: var(--social-bg); cursor: pointer; transition: border-color .13s;
   }
   .routeopt.sel { border-color: var(--accent-border); }
+  .routeopt.disabled { opacity: 0.55; cursor: not-allowed; }
   .routeopt input { margin-top: 2px; flex: none; accent-color: var(--accent); }
   .ropt-text { display: flex; flex-direction: column; gap: 2px; }
   .ropt-text b { color: var(--text-h); font-weight: 600; font-size: var(--fs-sm); }

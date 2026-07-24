@@ -140,6 +140,24 @@ func (s *Service) handleStrictNodes(w http.ResponseWriter, r *http.Request, u Us
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	// Enabling "only my nodes" with zero registered nodes would strand EVERY
+	// transfer: uploads have no own node to land on (placeUpload → errStrictNoNode
+	// → 503) and realtime has no own relay to offer (turn.go withholds the fleet
+	// pool), so both the stored and realtime paths fail. Refuse it — the setting
+	// is meaningless without a node and silently honouring it bricks the account.
+	// Disabling is always allowed: it is the recovery path for a user who is
+	// already stuck (or who removed their last node).
+	if req.OnlyOwnNodes {
+		nodes, err := s.store.UserNodesAll(r.Context(), u.ID)
+		if err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if len(nodes) == 0 {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "no_own_nodes"})
+			return
+		}
+	}
 	if err := s.store.SetOnlyOwnNodes(r.Context(), u.ID, req.OnlyOwnNodes); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return

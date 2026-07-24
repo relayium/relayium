@@ -223,6 +223,12 @@ func TestUserNodesAPIStrictToggle(t *testing.T) {
 		t.Fatal("expected OnlyOwnNodes false by default")
 	}
 
+	// Strict mode requires at least one registered own node (see the guard in
+	// handleStrictNodes); seed one so this test exercises the happy path.
+	if _, err := store.UpsertNode(context.Background(), Node{OwnerType: "user", OwnerUserID: u.ID, Label: "n"}); err != nil {
+		t.Fatalf("seed node: %v", err)
+	}
+
 	resp := doJSON(t, ts, "PUT", "/api/me/strict-nodes", cookie, strictReq{OnlyOwnNodes: true})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("strict on: got %d", resp.StatusCode)
@@ -253,5 +259,27 @@ func TestUserNodesAPIStrictToggle(t *testing.T) {
 	u, _, _ = store.GetUserByIdentity(context.Background(), "email", "strict@example.com")
 	if u.OnlyOwnNodes {
 		t.Fatal("expected OnlyOwnNodes false after toggling off")
+	}
+}
+
+// Enabling "only my nodes" with zero registered nodes would strand every
+// transfer (uploads have no node to land on; realtime has no relay to offer),
+// so the server must refuse it. Disabling is always allowed (the recovery path).
+func TestStrictNodesRejectedWithoutNode(t *testing.T) {
+	ts, store, mail := newUserNodesServer(t)
+	cookie := loginCookie(t, ts, mail, "nonode@example.com")
+
+	resp := doJSON(t, ts, "PUT", "/api/me/strict-nodes", cookie, strictReq{OnlyOwnNodes: true})
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("strict on with no node: got %d, want 409", resp.StatusCode)
+	}
+	u, _, _ := store.GetUserByIdentity(context.Background(), "email", "nonode@example.com")
+	if u.OnlyOwnNodes {
+		t.Fatal("OnlyOwnNodes must stay false when the enable is rejected")
+	}
+
+	off := doJSON(t, ts, "PUT", "/api/me/strict-nodes", cookie, strictReq{OnlyOwnNodes: false})
+	if off.StatusCode != http.StatusOK {
+		t.Fatalf("strict off with no node: got %d, want 200", off.StatusCode)
 	}
 }
