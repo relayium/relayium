@@ -152,8 +152,13 @@ func (s *Service) routeMux() *http.ServeMux {
 	// Manage linked login methods (session- or bearer-authed).
 	mux.HandleFunc("DELETE /api/auth/identities/{provider}", s.RequireAuth(s.handleUnlinkIdentity))
 	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
-	mux.HandleFunc("GET /api/me", s.RequireSession(s.handleMe))
-	mux.HandleFunc("GET /api/me/usage", s.RequireSession(s.handleMeUsage))
+	// RequireAuth (session cookie OR bearer) so native/app clients that hold a
+	// rlm_cli_ bearer — not a session cookie — can read their own profile and
+	// quota. Both are GET reads; bearer requests carry no ambient auth so there
+	// is no CSRF surface. The web (cookie) path is unaffected: RequireAuth tries
+	// the session cookie first.
+	mux.HandleFunc("GET /api/me", s.RequireAuth(s.handleMe))
+	mux.HandleFunc("GET /api/me/usage", s.RequireAuth(s.handleMeUsage))
 	mux.HandleFunc("GET /api/devices", s.RequireSession(s.handleListDevices))
 	mux.HandleFunc("POST /api/devices", s.RequireSession(s.handleUpsertDevice))
 	mux.HandleFunc("PATCH /api/devices/{id}", s.RequireSession(s.handleRenameDevice))

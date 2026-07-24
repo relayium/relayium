@@ -84,6 +84,40 @@ func TestNativeLoginUnverifiedBlocked(t *testing.T) {
 	}
 }
 
+// TestBearerCanReadMeAndUsage proves a native client holding only a bearer
+// token (no session cookie) can read its own profile and usage — GET
+// /api/me and /api/me/usage must accept RequireAuth's bearer path, not just
+// the cookie-only RequireSession they were mounted with before R1-C Task 1.
+func TestBearerCanReadMeAndUsage(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	// Create a real user the same way the rest of the suite does (magic-link
+	// login), then mint a bearer for it directly via issueBearer — this
+	// mirrors what handleNativeLogin does under the hood, without needing a
+	// password account.
+	loginCookie(t, ts, mail, "bearer-me@example.com")
+	u, ok, err := store.UserByCanonicalEmail(context.Background(), "bearer-me@example.com")
+	if err != nil || !ok {
+		t.Fatalf("lookup user: ok=%v err=%v", ok, err)
+	}
+	token, err := svc.issueBearer(context.Background(), u.ID, "TestApp")
+	if err != nil {
+		t.Fatalf("issueBearer: %v", err)
+	}
+
+	for _, path := range []string{"/api/me", "/api/me/usage"} {
+		req, _ := http.NewRequest("GET", ts.URL+path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("%s with bearer: got %d, want 200", path, res.StatusCode)
+		}
+	}
+}
+
 // TestUnlinkIdentityGuard proves you can unlink a provider while a password (or
 // another identity) remains, but not the last remaining login method.
 func TestUnlinkIdentityGuard(t *testing.T) {
