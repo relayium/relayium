@@ -53,7 +53,7 @@ extension CloudClient {
         }
     }
 
-    public func download(id: String, key: [UInt8], onChunk: ([UInt8]) throws -> Void) async throws {
+    public func download(id: String, key: [UInt8], onChunk: ([UInt8]) throws -> Void) async throws -> StoredManifest {
         // 1) manifest → expected plaintext total (truncation defense).
         let meta = try await fetchMeta(id: id)
         guard let encManifest = Data(base64Encoded: meta.encManifest) else { throw CloudError.decoding }
@@ -76,12 +76,19 @@ extension CloudClient {
         // 3) decrypt frame-by-frame; end() enforces the expected total.
         let dec = StoreDecryptor(key: key)
         var buf = [UInt8](); buf.reserveCapacity(64 * 1024)
-        for try await b in bytes {
-            buf.append(b)
-            if buf.count >= 64 * 1024 { for pt in try dec.push(buf) { try onChunk(pt) }; buf.removeAll(keepingCapacity: true) }
+        do {
+            for try await b in bytes {
+                buf.append(b)
+                if buf.count >= 64 * 1024 { for pt in try dec.push(buf) { try onChunk(pt) }; buf.removeAll(keepingCapacity: true) }
+            }
+            if !buf.isEmpty { for pt in try dec.push(buf) { try onChunk(pt) } }
+        } catch let e as StoredWireError {
+            throw e
+        } catch {
+            throw CloudError.network
         }
-        if !buf.isEmpty { for pt in try dec.push(buf) { try onChunk(pt) } }
         try dec.end(expectedBytes: expected)
+        return manifest
     }
 
     private func streamed(_ req: URLRequest) async throws -> (URLSession.AsyncBytes, URLResponse) {

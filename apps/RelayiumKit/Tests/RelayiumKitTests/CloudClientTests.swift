@@ -48,9 +48,10 @@ final class CloudClientTests: XCTestCase {
             return .init(status: 200, body: Data(v.hex("streamHex")), check: nil)   // /blob = frame stream
         }
         var got = [UInt8]()
-        try await client().download(id: "abc", key: v.hex("keyHex")) { got += $0 }
+        let manifest = try await client().download(id: "abc", key: v.hex("keyHex")) { got += $0 }
         // recovered plaintext == the two files concatenated in order
         XCTAssertEqual(got, v.fileDatas().flatMap { $0 })
+        XCTAssertEqual(manifest.files.map(\.name), ["hello.txt", "ab.txt"])
     }
     func testDownloadTruncatedStreamThrows() async throws {
         let v = try Vectors.load("store-wire-vectors")
