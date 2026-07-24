@@ -102,8 +102,21 @@ const articles = [
   guidesOwnNode,
 ];
 
-async function main() {
-  const pages = [
+const MODES = [
+  { def: crossNetwork, slug: "cross-network" },
+  { def: offlineTransfer, slug: "offline-transfer" },
+  { def: apps, slug: "apps" },
+];
+// English-only SPA routes: served by the per-route shells
+// (vite-plugin-route-shells.ts), not by a generated directory — hence no
+// trailing slash.
+const SPA_PAGES = [{ path: "/pricing" }, { path: "/cli" }];
+
+/** Every generated page, as [{ path, html }]. Exported so the site-graph test
+ *  can check the real output (duplicate titles, orphans, dead internal links)
+ *  instead of a hand-maintained copy of this wiring that would drift. */
+export function buildAllPages() {
+  return [
     ...buildLegalPages(legalDocs),
     ...buildLandingPages(landing, articleLinksByLang(articles)),
     ...buildArticlePages(articles),
@@ -116,33 +129,35 @@ async function main() {
     ...buildModePages(apps, { slug: "apps" }),
     { path: "404.html", html: renderNotFoundPage() },
   ];
+}
+
+/** The sitemap XML for the whole site. */
+export function buildSiteSitemap() {
+  return buildSitemap(legalDocs, {
+    home: true,
+    landing,
+    articles,
+    guidesIndex,
+    modes: MODES,
+    spaPages: SPA_PAGES,
+  });
+}
+
+async function main() {
+  const pages = buildAllPages();
   for (const page of pages) {
     const abs = join(publicDir, page.path);
     await mkdir(dirname(abs), { recursive: true });
     await writeFile(abs, page.html, "utf8");
   }
-  await writeFile(
-    join(publicDir, "sitemap.xml"),
-    buildSitemap(legalDocs, {
-      home: true,
-      landing,
-      articles,
-      guidesIndex,
-      modes: [
-        { def: crossNetwork, slug: "cross-network" },
-        { def: offlineTransfer, slug: "offline-transfer" },
-        { def: apps, slug: "apps" },
-      ],
-      // Served by the per-route SPA shells (vite-plugin-route-shells.ts), not by
-      // a generated directory — hence no trailing slash.
-      spaPages: [{ path: "/pricing" }, { path: "/cli" }],
-    }),
-    "utf8"
-  );
+  await writeFile(join(publicDir, "sitemap.xml"), buildSiteSitemap(), "utf8");
   console.log(`gen-pages: wrote ${pages.length} pages + sitemap.xml to public/`);
 }
 
-main().catch((err) => {
-  console.error("gen-pages failed:", err);
-  process.exit(1);
-});
+// Only run as a script, not when the test imports the builders.
+if (process.argv[1] && process.argv[1].endsWith("gen-pages.mjs")) {
+  main().catch((err) => {
+    console.error("gen-pages failed:", err);
+    process.exit(1);
+  });
+}

@@ -1,7 +1,7 @@
 // web/scripts/pages/legal-template.mjs — renders one legal document (one language) to a
 // self-contained static HTML string. No JS, no external CSS: styles are inlined so
 // the page is independent of the Vite asset graph and crawlable with JS disabled.
-import { LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, BCP47, SITE, urlPath, absUrl, esc, dirAttr } from "./shared.mjs";
+import { LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, PRICING_LABELS, PRICING_URL, BCP47, SITE, urlPath, absUrl, esc, dirAttr } from "./shared.mjs";
 
 const STYLE = `
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
@@ -86,6 +86,7 @@ export function renderLegalPage({ slug, lang, doc }) {
         <a href="/">← ${esc(SITE.name)}</a>
         <a href="${urlPath("apps", lang)}">${esc(APPS_LABELS[lang])}</a>
         <a href="${urlPath(otherSlug, lang)}">${esc(doc.otherDocLabel)}</a>
+        <a href="${PRICING_URL}">${esc(PRICING_LABELS[lang])}</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

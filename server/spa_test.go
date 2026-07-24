@@ -127,6 +127,14 @@ func TestSPAHandler(t *testing.T) {
 		{"unknown top-level route is a real 404", "/definitely-not-a-page", "NOTFOUND", 404},
 		// /d/<id> is dynamic, so every id shares the one noindex shell.
 		{"download link serves the download shell", "/d/abc123", "DOWNLOAD", 200},
+		// Every generated page is written to <slug>/index.html, so /privacy/index.html
+		// serves the same bytes as /privacy/ and canonicals at it — a duplicate URL
+		// for all ~400 pages. http.FileServer redirects it for us; the assertion is
+		// here so a future rewrite of this handler can't quietly drop that (nginx
+		// did NOT do it, and Search Console filed the twins under "Alternate page
+		// with proper canonical tag").
+		{"index.html redirects to the directory", "/privacy/index.html", "", 301},
+		{"root index.html redirects to /", "/index.html", "", 301},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

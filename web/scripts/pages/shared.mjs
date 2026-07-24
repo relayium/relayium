@@ -14,6 +14,17 @@ export const GUIDES_LABELS = {
 export const APPS_LABELS = {
   en: "Apps", zh: "应用", ja: "アプリ", ko: "앱", de: "Apps", fr: "Applis", ar: "التطبيقات", es: "Apps", pt: "Apps",
 };
+// Footer link label for /pricing. The page itself is English-only (the plan
+// tiers come from the billing API), but the label is localized like every other
+// footer link — and the link has to exist somewhere in the static graph at all:
+// /pricing was in the sitemap while literally no page linked to it, which is the
+// definition of an orphan and a strong "Discovered - currently not indexed"
+// candidate.
+export const PRICING_LABELS = {
+  en: "Pricing", zh: "价格", ja: "料金", ko: "요금제", de: "Preise", fr: "Tarifs", ar: "الأسعار", es: "Precios", pt: "Preços",
+};
+/** The /pricing URL. English-only, an SPA route, so no trailing slash. */
+export const PRICING_URL = "/pricing";
 export const BCP47 = { en: "en", zh: "zh-Hans", ja: "ja", ko: "ko", de: "de", fr: "fr", ar: "ar", es: "es", pt: "pt" };
 // Open Graph wants language_TERRITORY with an underscore, not BCP47.
 export const OG_LOCALE = { en: "en_US", zh: "zh_CN", ja: "ja_JP", ko: "ko_KR", de: "de_DE", fr: "fr_FR", ar: "ar_AR", es: "es_ES", pt: "pt_BR" };

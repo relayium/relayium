@@ -43,7 +43,11 @@ const de = {
   categories: { guides: "Anleitungen", howTo: "How-to", compare: "Vergleiche" },
 };
 const fr = {
-  title: "Guides · Relayium",
+  // "Guides" is the same word in French and English, so this page and /guides/
+  // shipped byte-identical <title>s — a duplicate title across two indexable
+  // URLs. Qualified here rather than in English, where "Guides" is the term
+  // people search for.
+  title: "Guides et tutoriels · Relayium",
   description:
     "Guides pas à pas et comparatifs pour transférer des fichiers avec Relayium — depuis le terminal, entre téléphones, de serveur à serveur, et face aux autres outils.",
   heading: "Guides",

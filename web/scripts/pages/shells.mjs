@@ -34,6 +34,7 @@ import {
   OG_LOCALE,
   OG_IMAGE,
   OG_IMAGE_META,
+  PRICING_URL,
   SITE,
   urlPath,
   absUrl,
@@ -158,6 +159,7 @@ function proseBody(doc, { links = [], langSlug = null } = {}) {
   }
   p.push(
     `<p><a href="/">Relayium home</a> · <a href="/guides/">Guides</a> · ` +
+      `<a href="/apps">Apps</a> · <a href="${PRICING_URL}">Pricing</a> · <a href="/cli">CLI</a> · ` +
       `<a href="/privacy/">Privacy</a> · <a href="/terms/">Terms</a> · <a href="/security/">Security</a></p>`
   );
   return `<noscript>\n      <main>\n        ${p.join("\n        ")}\n      </main>\n    </noscript>`;
