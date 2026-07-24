@@ -792,12 +792,15 @@ public func signResume(key: [UInt8], payload: String) -> String {
 
 public func verifyResume(key: [UInt8], payload: String, mac: String?) -> Bool {
     guard let mac, let sig = Data(base64Encoded: mac) else { return false }
-    let expected = HMAC<SHA256>.authenticationCode(for: Array(payload.utf8), using: SymmetricKey(data: key))
-    return Data(expected) == sig
+    return HMAC<SHA256>.isValidAuthenticationCode(
+        sig,
+        authenticating: Array(payload.utf8),
+        using: SymmetricKey(data: key)
+    )
 }
 ```
 
-> HMAC-SHA256 is identical across CryptoKit and Web Crypto, so using CryptoKit here is safe (unlike crypto_kx/BLAKE2b). The BLAKE2b key derivation still goes through `genericHash` (libsodium).
+> HMAC-SHA256 is identical across CryptoKit and Web Crypto, so using CryptoKit here is safe (unlike crypto_kx/BLAKE2b). The BLAKE2b key derivation still goes through `genericHash` (libsodium). `verifyResume` uses CryptoKit's constant-time `isValidAuthenticationCode` rather than recomputing the MAC and comparing with `==` — Foundation's `Data ==` is an early-exit byte compare and would leak timing information about attacker-visible resume signalling.
 
 - [ ] **Step 4: Run the test to verify it passes**
 

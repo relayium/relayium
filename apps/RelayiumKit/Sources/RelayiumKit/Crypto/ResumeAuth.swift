@@ -22,6 +22,9 @@ public func signResume(key: [UInt8], payload: String) -> String {
 
 public func verifyResume(key: [UInt8], payload: String, mac: String?) -> Bool {
     guard let mac, let sig = Data(base64Encoded: mac) else { return false }
-    let expected = HMAC<SHA256>.authenticationCode(for: Array(payload.utf8), using: SymmetricKey(data: key))
-    return Data(expected) == sig
+    return HMAC<SHA256>.isValidAuthenticationCode(
+        sig,
+        authenticating: Array(payload.utf8),
+        using: SymmetricKey(data: key)
+    )
 }
