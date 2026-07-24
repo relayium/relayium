@@ -35,6 +35,11 @@ struct Vectors {
         let arr = node as! [[String: Any]]
         return arr.map { ManifestFile(name: $0["name"] as! String, size: $0["size"] as! Int) }
     }
+    /// Reads `files[].dataHex` into `[[UInt8]]`.
+    func fileDatas() -> [[UInt8]] {
+        let arr = json["files"] as! [[String: Any]]
+        return arr.map { ($0["dataHex"] as! String).hexBytes }
+    }
     private func hexString(_ path: String) -> String { str(path) }
 }
 
