@@ -1,11 +1,11 @@
 # Relayium SEO 审查报告
 
-> **处理状态（2026-07-24）**：报告逐条复核属实（只有两处行号漂移：`spa.go` 实际 161-186；
+> **处理状态（2026-07-24，已上线且线上 nginx 已应用）**：报告逐条复核属实（只有两处行号漂移：`spa.go` 实际 161-186；
 > "up to 10" 在 `index.html:101,184` 而非 173）。除下面标注"未做"的以外全部已实现：
 >
 > | 条目 | 状态 |
 > |---|---|
-> | 1.1 软 404 | ✅ 代码已做（`server/spa.go` + `deploy/nginx/relayium.conf.example` + 生成 `404.html`）；**线上 nginx 需手动应用**，见 `docs/runbook-seo-404-nginx.md` |
+> | 1.1 软 404 | ✅ 全部完成，线上 nginx 已于 2026-07-24 02:22 UTC 应用并验证（407 条 sitemap URL 全 200，未知路径返真 404）；见 `docs/runbook-seo-404-nginx.md` |
 > | 1.2 / 5.2 英文路由 JS-only | ✅ 构建产出每路由静态外壳（`web/scripts/pages/shells.mjs` + `vite-plugin-route-shells.ts`），head + 英文正文均正确 |
 > | 1.3 `/pricing` | ✅ 有外壳 + 入 sitemap |
 > | 1.4 `/cli` canonical | ✅ 外壳 + `pageMeta` 补 `cli` 分支 + `cliPage.metaTitle/metaDesc`（9 语言）+ 入 sitemap |
