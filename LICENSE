@@ -11,26 +11,32 @@ the table below and the `LICENSE` file inside the relevant directory.
 | `server/`             | GNU Affero General Public License v3.0 (AGPL-3.0-only) | [`server/LICENSE`](server/LICENSE) |
 | `web/`                | GNU Affero General Public License v3.0 (AGPL-3.0-only) | [`web/LICENSE`](web/LICENSE)       |
 | `apps/`               | Apache License 2.0                        | [`apps/LICENSE`](apps/LICENSE)     |
-| `docs/protocol/`      | Creative Commons Attribution 4.0 International (CC BY 4.0) | [`docs/protocol/LICENSE`](docs/protocol/LICENSE) |
+| `docs/` (including `docs/protocol/`) | Creative Commons Attribution 4.0 International (CC BY 4.0) | [`docs/LICENSE`](docs/LICENSE) |
+| `scripts/`            | GNU Affero General Public License v3.0 (AGPL-3.0-only) | no separate file — covered by this default |
 
-Everything else in the repository (top-level docs, build config, CI, etc.)
-is not itself a distributable component and is not separately licensed;
-treat it as covered by the license of the directory it configures or
-documents unless stated otherwise.
+**Default for everything else:** any file in this repository not covered by
+a more specific statement above (root-level config, CI workflows under
+`.github/`, and anything added later that isn't given its own `LICENSE`)
+is **AGPL-3.0-only** by default. This directory table exists to name the
+exceptions — `apps/` (Apache-2.0) and `docs/` (CC BY 4.0) — not to leave a
+gap; there is no "not separately licensed" no-man's-land in this
+repository.
 
 ## Why three licenses
 
-- **AGPL-3.0** on `server/` and `web/`: this is the signaling server, relay
+- **AGPL-3.0** on `server/`, `web/`, `scripts/`, and everything else the
+  default catches: `server/` and `web/` are the signaling server, relay
   node, CLI, and the Svelte web client — the parts that make up a running
-  Relayium *service*. AGPL's network-use clause means that anyone who
-  modifies this code and offers it as a hosted service to others must
-  publish their modified source. That is what stops a competitor from
-  taking the whole stack — including the SEO article content under
-  `web/scripts/pages/` — and standing up a rival hosted service without
-  giving anything back. It is still OSI-approved open source: self-hosters
-  keep every right they had before (run it, modify it, redistribute it),
-  they just can't turn a private fork into an unshared competing service.
-  Grafana, MinIO, and Mastodon all made the same call for the same reason.
+  Relayium *service*; `scripts/` is repository tooling of the same
+  character. AGPL's network-use clause means that anyone who modifies this
+  code and offers it as a hosted service to others must publish their
+  modified source. That is what stops a competitor from taking the whole
+  stack — including the SEO article content under `web/scripts/pages/` —
+  and standing up a rival hosted service without giving anything back. It
+  is still OSI-approved open source: self-hosters keep every right they
+  had before (run it, modify it, redistribute it), they just can't turn a
+  private fork into an unshared competing service. Grafana, MinIO, and
+  Mastodon all made the same call for the same reason.
 - **Apache-2.0** on `apps/` (RelayiumKit, the macOS app, and future iOS):
   GPL-family licenses' "no further restrictions" requirement is in tension
   with the App Store's terms — its DRM (FairPlay) and device-count limits
@@ -38,11 +44,16 @@ documents unless stated otherwise.
   is why VLC was pulled from the App Store in 2011 under GPLv2. Apache-2.0
   carries no such clause, so the Apple clients can ship there without that
   conflict.
-- **CC BY 4.0** on `docs/protocol/`: a wire protocol specification is
-  meant to be implemented by as many people as possible. A code license
-  would be the wrong tool here; CC BY 4.0 only asks for attribution and
-  otherwise gets out of the way of third-party implementations — including
-  competing ones.
+- **CC BY 4.0** on `docs/` (including `docs/protocol/`): a wire protocol
+  specification is meant to be implemented by as many people as possible —
+  a code license would be the wrong tool for it, since CC BY 4.0 only asks
+  for attribution and otherwise gets out of the way of third-party
+  implementations, including competing ones. The same reasoning extends
+  cleanly to the rest of `docs/` (design notes, testing procedures,
+  planning records): documentation prose isn't something we want locked
+  under an "all rights reserved" default either, and one license for the
+  whole directory avoids a `docs/protocol/`-only statement drifting out of
+  sync with the directory around it.
 
 ## Prior versions remain MIT
 

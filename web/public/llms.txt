@@ -67,4 +67,4 @@
 - Security & threat model: https://relayium.com/security/
 - Privacy policy: https://relayium.com/privacy/
 - Source code (GitHub): https://github.com/relayium/relayium
-- License: AGPL-3.0 (server/, web/); Apache-2.0 (apps/); CC BY 4.0 (docs/protocol/) — see LICENSE
+- License: AGPL-3.0 (server/, web/, scripts/); Apache-2.0 (apps/); CC BY 4.0 (docs/) — see LICENSE

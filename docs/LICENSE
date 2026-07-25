@@ -1,0 +1,36 @@
+Relayium Documentation
+Copyright (c) 2026 Relayium
+
+Everything under `docs/` — including the wire protocol specification in
+`docs/protocol/`, the design and testing documents at the top of this
+directory, and the planning material under `docs/superpowers/` — is
+licensed under the Creative Commons Attribution 4.0 International License
+(CC BY 4.0).
+
+You are free to:
+
+  - Share — copy and redistribute the material in any medium or format
+  - Adapt — remix, transform, and build upon the material
+
+for any purpose, even commercially, as long as you give appropriate credit,
+provide a link to the license, and indicate if changes were made.
+
+This single license statement covers the whole directory (there is
+deliberately no separate, narrower `docs/protocol/LICENSE` — one statement
+avoids the two ever drifting apart). It applies with equal force to the
+protocol specification: a specification exists to be implemented by third
+parties, so CC BY 4.0 is used here deliberately, instead of a code license,
+so that independent client and server implementations of the Relayium wire
+protocol are unambiguously permitted and encouraged, with attribution as
+the only condition. The same reasoning does no harm applied to the rest of
+`docs/` — design notes, testing procedures, and planning records are
+likewise meant to be freely reusable with credit, not walled off.
+
+Full license text: https://creativecommons.org/licenses/by/4.0/legalcode
+Human-readable summary: https://creativecommons.org/licenses/by/4.0/
+
+This license applies only to the documentation in this directory. It does
+not apply to the reference implementation of the protocol found in
+`server/`, `web/`, and `scripts/` (AGPL-3.0-only) or `apps/` (Apache-2.0),
+which are licensed separately — see the root `LICENSE` file for the full
+breakdown.
