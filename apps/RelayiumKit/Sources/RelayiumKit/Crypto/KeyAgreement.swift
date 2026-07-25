@@ -12,7 +12,7 @@ public struct KeyPair {
 
 public enum Role { case initiator, responder }
 
-public struct SessionKeys {
+public struct SessionKeys: Equatable {
     public let send: [UInt8]  // sharedTx
     public let recv: [UInt8]  // sharedRx
 }
