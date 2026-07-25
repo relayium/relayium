@@ -23,7 +23,7 @@
 | 存量老用户 | **全部视为已验证**，只有新注册走验证流程，不打扰现网用户 |
 | 忘记密码 | **本次一并实现** |
 | 发件邮箱 | **`noreply@relayium.com`**（注意：无连字符，与代码旧默认值 `no-reply@` 不同） |
-| 邮件主机名 | `mail.relayium.com`（A 记录 → 64.188.27.178 本机；SMTP 用主机名连接以匹配 TLS 证书 CN） |
+| 邮件主机名 | `mail.relayium.com`（A 记录 → `<production-app-server-IP>` 本机；SMTP 用主机名连接以匹配 TLS 证书 CN） |
 
 ## 2. 复用的现有基础设施
 

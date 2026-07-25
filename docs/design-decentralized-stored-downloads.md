@@ -98,7 +98,7 @@ t = base64url(exp ‖ nonce ‖ HMAC-SHA256(nodeSecret, "dl" ‖ key ‖ exp ‖
 - 中央查出文件在 node K，`302` 到 `https://nodeK.relayium.com/dl/{key}?t=…`。
 - **用户端全程只看到 `relayium.com` 域名 + CF 证书；节点真实 IP 藏在 CF 后面**（比裸子域名 A 记录更好），且 **CF 带宽免费**。数据面是 客户端→CF→节点，中央退出。
 - 节点起一个**只服务 `/dl`**的公开监听（默认 `:443`，CF 代理到此），绝不暴露 bearer 的 `/blob` 写接口。
-- 部署手册见 `docs/direct-download-deploy.md`。
+- 部署手册见 `docs/self-hosting.md`。
 
 > 真要做到"任意节点服务任意文件"才需要"随便哪个 IP 都行"，那要把每个文件复制到所有节点（副本，存储成本翻数倍，现在不做也不建议为此做）。
 
@@ -193,7 +193,7 @@ CDN 对"唯一密文 + burn"基本无效，排除为主方案；可作为多下�
 6. ✅ 测试全绿。
 
 7. ✅ **客户端跟随 302**：Web `downloadBlob` 的 fetch 与 CLI 的 Go http.Client 都原生跟随 302（Range 跨主机转发），无需改动；配套改了 **CSP `connect-src` 加 `https://*.relayium.com`**（否则 SPA 被自己的 CSP 拦住连不到节点子域名）+ 节点 `/dl` 的 **CORS 预检 + expose headers**。
-8. ✅ **自动化**：`internal/cfdns` 自动建 A 记录（proxied）；节点公开 `/dl` 监听（复用自签证书，CF Full）；`install-node.sh` 升到 v0.8，透传 download/CF env + 按需授予 `CAP_NET_BIND_SERVICE`。部署手册 `docs/direct-download-deploy.md`。
+8. ✅ **自动化**：`internal/cfdns` 自动建 A 记录（proxied）；节点公开 `/dl` 监听（复用自签证书，CF Full）；`install-node.sh` 升到 v0.8，透传 download/CF env + 按需授予 `CAP_NET_BIND_SERVICE`。部署手册 `docs/self-hosting.md`。
 
 **仍需真机验证（给了 CF API token + 部署后）**：节点 `:443` TLS 监听 + CF 代理链路 + 自动 DNS upsert 的端到端；`RELAYIUM_DIRECT_DOWNLOAD=true` 开启后浏览器/CLI 实测。
 

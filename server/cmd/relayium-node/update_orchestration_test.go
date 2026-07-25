@@ -271,7 +271,7 @@ func TestRunUpdateWithRollsBackWhenRestartFails(t *testing.T) {
 // ordering (restartedAt captured AFTER Restart() returns) must see this
 // heartbeat as no-later-than the restart and time out instead.
 // The updater replaced a binary the unit does not actually execute — the case
-// `-bin`/RELAYIUM_NODE_BIN makes reachable, e.g. docs/node-hardening.md's unit
+// `-bin`/RELAYIUM_NODE_BIN makes reachable, e.g. the node-hardening runbook's (relayium-ops) unit
 // running /opt/relayium/relayium-node while the updater defaults to
 // /usr/local/bin/relayium-node. The old process keeps heartbeating happily, and
 // every one of those heartbeats is genuine and stamped after the restart. Only

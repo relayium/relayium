@@ -615,14 +615,14 @@ type Store interface {
 	// check passes; a false result must fail the login / step-up.
 	ClaimTOTPStep(ctx context.Context, step int64) (ok bool, err error)
 	// Admin sessions live in the store (shared across instances), not a
-	// per-process map. See docs/multi-instance-state-migration.md item #4.
+	// per-process map. See the multi-instance-state-migration doc in relayium-ops, item #4.
 	CreateAdminSession(ctx context.Context, token, auth, credFP string, expires int64) error
 	AdminSession(ctx context.Context, token, credFP string, now int64) (auth string, lastStepUpAt int64, ok bool, err error)
 	MarkAdminStepUp(ctx context.Context, token string, at int64) error
 	DeleteAdminSession(ctx context.Context, token string) error
 	PurgeExpiredAdminSessions(ctx context.Context, now int64) error
 	// Pending high-risk actions live in the store (claimable exactly once on any
-	// instance). See docs/multi-instance-state-migration.md item #2.
+	// instance). See the multi-instance-state-migration doc in relayium-ops, item #2.
 	PutPendingAction(ctx context.Context, token, sessionTok, action, form, pathID string, now, expires int64, cap int) (ok bool, err error)
 	TakePendingAction(ctx context.Context, token string) (sessionTok, action, form, pathID string, expires int64, ok bool, err error)
 	// In-flight WebAuthn ceremonies live in the store (spendable exactly once on
@@ -630,7 +630,7 @@ type Store interface {
 	PutPasskeyCeremony(ctx context.Context, token, kind, session, name string, now, expires int64, cap int) (ok bool, err error)
 	TakePasskeyCeremony(ctx context.Context, token string) (kind, session, name string, expires int64, ok bool, err error)
 	// Resumable upload sessions live in the store (multi-instance + restart-safe).
-	// See docs/multi-instance-state-migration.md item #9.
+	// See the multi-instance-state-migration doc in relayium-ops, item #9.
 	CreateUploadSession(ctx context.Context, row UploadSessionRow, maxPerUser int) (ok bool, err error)
 	GetUploadSession(ctx context.Context, id, userID string) (UploadSessionRow, bool, error)
 	// AdvanceUploadReceived monotonically advances the committed offset (only ever

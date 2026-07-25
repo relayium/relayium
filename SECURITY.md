@@ -38,7 +38,7 @@ Especially valuable areas to scrutinize:
 - **WebRTC / signaling** (`web/src/lib/webrtc.ts`, `web/src/lib/signaling.ts`, `server/`) — what the
   signaling server can observe or tamper with, and whether the SAS reliably catches a MITM.
 - **Admin dashboard auth** (`server/internal/account/admin.go`, `totp.go`, `throttle.go`) — the optional
-  TOTP 2FA gate on `/admin` login; see [`docs/admin-2fa.md`](docs/admin-2fa.md) for the deployer setup guide.
+  TOTP 2FA gate on `/admin` login; see [`docs/self-hosting.md`](docs/self-hosting.md) for the deployer setup guide.
 - **TURN/relay credentials and metering** (`server/internal/account/turn.go`, `server/internal/metering/`) —
   ephemeral TURN-REST credential issuance, the multi-relay pool, and relay-usage/quota attribution for
   cross-network pairing-code transfers.

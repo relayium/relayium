@@ -35,7 +35,7 @@ services:
   # --- Optional: TURN relay for cross-network transfers (profile: relay) ---
   # TURN needs the host's real IP and a wide UDP relay-port range, so it runs
   # with host networking. Set RELAYIUM_TURN_SECRET (and the server's matching
-  # -turn-secret / -turn-urls) before enabling. See docs/coturn.md.
+  # -turn-secret / -turn-urls) before enabling. See docs/self-hosting.md.
   coturn:
     image: coturn/coturn:latest
     profiles: ["relay"]

@@ -191,7 +191,7 @@ TURN relay that only ever sees ciphertext; this requires the sender to sign in.
   extend `send` to stdin, Docker images, the clipboard — toward "TCP between developers." *(CLI shipped — see [Command-line client](#command-line-client-cli); stdin/Docker/clipboard still ahead.)*
 
 **Self-hosting:** a root [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) build a
-single self-contained image (`docker compose up -d --build`). See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+single self-contained image (`docker compose up -d --build`). See [`docs/self-hosting.md`](docs/self-hosting.md).
 
 See [`docs/`](docs/) for the full design spec and the manual acceptance procedure.
 

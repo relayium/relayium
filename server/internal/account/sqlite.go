@@ -416,13 +416,13 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// Admin TOTP replay guard (multi-instance): a single-row monotonic step
 		// counter, advanced atomically by ClaimTOTPStep. Persisting it makes admin
 		// 2FA "one code, one use" hold across instances and across restarts, instead
-		// of a per-process in-memory counter. See docs/multi-instance-state-migration.md.
+		// of a per-process in-memory counter. See the multi-instance-state-migration doc in relayium-ops.
 		`CREATE TABLE IF NOT EXISTS admin_totp_guard (
   id INTEGER PRIMARY KEY CHECK (id = 1), last_step INTEGER NOT NULL DEFAULT 0)`,
 		`INSERT OR IGNORE INTO admin_totp_guard (id, last_step) VALUES (1, 0)`,
 		// Admin sessions (multi-instance): shared so any instance recognizes a
 		// login and the step-up grace window, instead of a per-process map.
-		// See docs/multi-instance-state-migration.md item #4.
+		// See the multi-instance-state-migration doc in relayium-ops, item #4.
 		`CREATE TABLE IF NOT EXISTS admin_sessions (
   token TEXT PRIMARY KEY, auth TEXT NOT NULL,
   expires INTEGER NOT NULL, last_step_up_at INTEGER NOT NULL DEFAULT 0)`,
@@ -619,7 +619,7 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 	// health gate polls /healthz for a bounded time and reports a failure if it
 	// never answers, so a slow first index build can be misread as a broken
 	// deploy. Each statement therefore logs before it runs (a slow start must
-	// be diagnosable, not mysterious), and docs/DEPLOYMENT.md documents
+	// be diagnosable, not mysterious), and docs/self-hosting.md documents
 	// building these out of band with sqlite3 BEFORE the deploy — after which
 	// the CREATE INDEX IF NOT EXISTS here is a no-op.
 	for _, idx := range []string{

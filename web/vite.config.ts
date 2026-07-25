@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [svelte(), pwaPlugin(), routeShellsPlugin()],
   // Dev-only: forward API + signaling to the local Go server (`go run .` on :8080),
   // so `npm run dev` can exercise login, accounts, ICE and WebRTC signaling.
-  // In production nginx does this routing instead (see docs/DEPLOYMENT.md).
+  // In production nginx does this routing instead (see docs/self-hosting.md).
   server: {
     proxy: {
       '/api': 'http://localhost:8080',

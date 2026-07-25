@@ -17,8 +17,8 @@ const (
 // round-robin instances (rounded to nearest, floored at 1). divisor <= 1 returns
 // n unchanged.
 //
-// It exists for the multi-instance interim (docs/multi-instance-state-migration.md
-// §7.5): the rate limiters and lockouts are per-process, so behind a load
+// It exists for the multi-instance interim (see the multi-instance-state-migration
+// doc in relayium-ops, §7.5): the rate limiters and lockouts are per-process, so behind a load
 // balancer their effective global budget must be reconciled with instance count.
 // The PREFERRED reconciliation is not division at all but **IP-hash / sticky-by-IP
 // LB routing** — then every per-IP limiter and lockout sees all of a given IP's

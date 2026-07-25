@@ -31,7 +31,7 @@ jobs:
           RELAYIUM_RELEASE_KEY: ${{ secrets.RELAYIUM_RELEASE_KEY }}
         run: |
           if [ -z "$RELAYIUM_RELEASE_KEY" ]; then
-            echo "::error::RELAYIUM_RELEASE_KEY secret is not set — add it before tagging a release (see docs/release-signing.md)"
+            echo "::error::RELAYIUM_RELEASE_KEY secret is not set — add it before tagging a release (see the release-signing runbook in relayium-ops)"
             exit 1
           fi
           keyfile="$RUNNER_TEMP/relayium-release.key"

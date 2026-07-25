@@ -57,7 +57,7 @@ type Config struct {
 	// here; the signal rate limiters + GuessBreaker in main) for a round-robin
 	// multi-instance deployment. Default 0/1 = no change (single instance, or an
 	// IP-hash LB where the full threshold is already correct). See
-	// PerInstanceThreshold and docs/multi-instance-state-migration.md §7.5.
+	// PerInstanceThreshold and the multi-instance-state-migration doc in relayium-ops, §7.5.
 	RateLimitDivisor int
 	BaseURL          string
 	SessionTTL       time.Duration
@@ -153,7 +153,7 @@ type Service struct {
 	appleSecExp time.Time
 	// Admin sessions and the TOTP replay guard now live in the store (persistent,
 	// multi-instance safe) — no process-local session map or counter here anymore.
-	// See docs/multi-instance-state-migration.md.
+	// See the multi-instance-state-migration doc in relayium-ops.
 	adminLogins *loginThrottle
 	// adminPasskeyLogins is a SEPARATE bucket from adminLogins on purpose: if
 	// passkey failures counted against the password bucket, an attacker could

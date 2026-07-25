@@ -284,7 +284,7 @@ fail to connect — that fallback is ②b (TURN), out of scope here.
 
 ## Cross-network TURN relay (②b-1)
 
-Prerequisites: a running coturn (see `docs/coturn.md`) and the Go server started
+Prerequisites: a running coturn (see `docs/self-hosting.md`) and the Go server started
 with matching `-turn-secret` / `-turn-urls`.
 
 1. **STUN-only regression (no TURN configured):** start the server WITHOUT
@@ -307,7 +307,7 @@ with matching `-turn-secret` / `-turn-urls`.
 Metering is now **anonymous**: ingested relay bytes are recorded as a global total,
 unattributed to any account (realtime relay sessions are authorized by a pairing
 code, not a sign-in). Prerequisites: Redis running; coturn with `redis-statsdb=...`
-(see `docs/coturn.md`); the Go server started with `-redis-addr <host:port>` and
+(see `docs/self-hosting.md`); the Go server started with `-redis-addr <host:port>` and
 matching TURN flags.
 
 1. **Metering off (regression):** start the server WITHOUT `-redis-addr`. A

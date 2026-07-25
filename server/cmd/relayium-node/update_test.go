@@ -36,7 +36,7 @@ func TestParseUpdateFlagsReadsStateDirFromEnvFile(t *testing.T) {
 	}
 }
 
-// docs/node-hardening.md runs the binary from /opt/relayium; the updater must
+// The node-hardening runbook (relayium-ops) runs the binary from /opt/relayium; the updater must
 // replace the binary that is actually running, not the installer's default.
 func TestParseUpdateFlagsReadsBinPathFromEnvFile(t *testing.T) {
 	t.Setenv("RELAYIUM_NODE_BIN", "")
