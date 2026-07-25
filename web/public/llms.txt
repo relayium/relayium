@@ -31,7 +31,7 @@
 
 ## Key facts
 
-- License: MIT (free and open source).
+- License: AGPL-3.0 (free and open source; the native Apple clients under apps/ are Apache-2.0).
 - Price: free. No install. All realtime transfers (LAN, or a pairing code and its join link) need no account; only stored download links require the sender to sign in (recipients never need an account).
 - Platforms: any modern browser with WebRTC over HTTPS — Chrome, Edge, Firefox, Safari, on desktop and mobile.
 - Large files: Chrome/Edge stream straight to disk (no memory cap); Firefox/Safari buffer in memory (keep files under ~200 MB).
@@ -52,7 +52,7 @@
 
 ## FAQ
 
-- **Is Relayium free?** Yes — free and open source under the MIT license.
+- **Is Relayium free?** Yes — free and open source under the AGPL-3.0 license.
 - **Do I need an account or to install anything?** No installation. All realtime transfers (LAN, or a pairing code and its join link) need no account — just open the URL in a browser on both devices. Only creating a stored download link requires the sender to sign in; recipients never need an account.
 - **Do my files get uploaded to a server?** In realtime mode: no — files stream directly between the two devices over WebRTC and never touch the server (a TURN relay may forward the encrypted stream across strict networks, but it only ever sees ciphertext). The optional stored download-link mode uploads only zero-knowledge ciphertext (AES-256-GCM); the server cannot read content, filenames, or the key.
 - **Is it end-to-end encrypted?** Yes — X25519 key exchange and AES-256-GCM, with keys that never leave the two devices, plus a 6-digit code to verify against man-in-the-middle attacks.
@@ -67,4 +67,4 @@
 - Security & threat model: https://relayium.com/security/
 - Privacy policy: https://relayium.com/privacy/
 - Source code (GitHub): https://github.com/relayium/relayium
-- License: MIT
+- License: AGPL-3.0 (server/, web/); Apache-2.0 (apps/); CC BY 4.0 (docs/protocol/) — see LICENSE

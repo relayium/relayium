@@ -39,7 +39,7 @@ const en = {
       heading: "What's actually protecting the file",
       body: [
         "Both modes above are realtime transfers, and both use the same encryption: an X25519 key exchange derives a key used for per-chunk AES-256-GCM, negotiated only between the two devices. Both sides display the same 6-digit verification code (a Short Authentication String) so you can confirm no one is sitting in the middle, and each file is checked end-to-end with a SHA-256 hash.",
-        "Nothing is stored on a server in this mode — it exists only for the duration of the transfer. Relayium is open source under the MIT license at github.com/relayium/relayium, so the mechanics are auditable rather than a black box.",
+        "Nothing is stored on a server in this mode — it exists only for the duration of the transfer. Relayium is open source under the AGPL-3.0 license at github.com/relayium/relayium, so the mechanics are auditable rather than a black box.",
       ],
     },
     {
@@ -115,7 +115,7 @@ const zh = {
       heading: "真正保护文件的是什么",
       body: [
         "上面两种模式都是实时传输，用的是同一套加密：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，只在两台设备之间协商完成。两端会显示同一段 6 位校验码（SAS），你可据此确认没有人插在中间；每个文件还会用 SHA-256 做端到端校验。",
-        "这种模式下服务器不会保存任何东西——一切只在传输期间存在。Relayium 采用 MIT 许可开源，代码公开在 github.com/relayium/relayium，机制可审计，而非黑箱。",
+        "这种模式下服务器不会保存任何东西——一切只在传输期间存在。Relayium 采用 AGPL-3.0 许可开源，代码公开在 github.com/relayium/relayium，机制可审计，而非黑箱。",
       ],
     },
     {
@@ -191,7 +191,7 @@ const ja = {
       heading: "実際にファイルを守っているもの",
       body: [
         "上記どちらのモードもリアルタイム転送で、同じ暗号化方式を使います：X25519 の鍵交換で導出した鍵をブロックごとの AES-256-GCM に使い、2台の端末の間だけで協議されます。両端が同じ6桁の検証コード（ショート認証文字列、SAS）を表示するので、間に誰もいないことを確認でき、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。",
-        "このモードではサーバーに何も保存されません——存在するのは転送中の間だけです。Relayium は MIT ライセンスのオープンソースで、コードは github.com/relayium/relayium にあり、ブラックボックスではなく仕組みを検証できます。",
+        "このモードではサーバーに何も保存されません——存在するのは転送中の間だけです。Relayium は AGPL-3.0 ライセンスのオープンソースで、コードは github.com/relayium/relayium にあり、ブラックボックスではなく仕組みを検証できます。",
       ],
     },
     {
@@ -267,7 +267,7 @@ const ko = {
       heading: "실제로 파일을 지키는 것",
       body: [
         "위 두 모드 모두 실시간 전송이며, 같은 암호화 방식을 씁니다: X25519 키 교환으로 도출한 키를 블록별 AES-256-GCM에 사용하며, 오직 두 기기 사이에서만 협상됩니다. 양쪽이 동일한 6자리 검증 코드(짧은 인증 문자열, SAS)를 표시하므로 사이에 아무도 없음을 확인할 수 있고, 각 파일은 SHA-256 해시로 종단간 검증됩니다.",
-        "이 모드에서는 서버에 아무것도 저장되지 않습니다 — 전송이 이루어지는 동안만 존재합니다. Relayium은 MIT 라이선스로 오픈소스이며 코드는 github.com/relayium/relayium에 있어, 블랙박스가 아니라 검증 가능한 구조입니다.",
+        "이 모드에서는 서버에 아무것도 저장되지 않습니다 — 전송이 이루어지는 동안만 존재합니다. Relayium은 AGPL-3.0 라이선스로 오픈소스이며 코드는 github.com/relayium/relayium에 있어, 블랙박스가 아니라 검증 가능한 구조입니다.",
       ],
     },
     {
@@ -343,7 +343,7 @@ const de = {
       heading: "Was die Datei tatsächlich schützt",
       body: [
         "Beide obigen Modi sind Echtzeitübertragungen und nutzen dieselbe Verschlüsselung: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, ausgehandelt nur zwischen den beiden Geräten. Beide Seiten zeigen denselben sechsstelligen Prüfcode (einen Short Authentication String), sodass du bestätigen kannst, dass niemand dazwischensitzt, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft.",
-        "In diesem Modus wird nichts auf einem Server gespeichert — es existiert nur für die Dauer der Übertragung. Relayium ist quelloffen unter der MIT-Lizenz auf github.com/relayium/relayium, die Mechanik ist also prüfbar statt eine Blackbox.",
+        "In diesem Modus wird nichts auf einem Server gespeichert — es existiert nur für die Dauer der Übertragung. Relayium ist quelloffen unter der AGPL-3.0-Lizenz auf github.com/relayium/relayium, die Mechanik ist also prüfbar statt eine Blackbox.",
       ],
     },
     {
@@ -419,7 +419,7 @@ const fr = {
       heading: "Ce qui protège réellement le fichier",
       body: [
         "Les deux modes ci-dessus sont des transferts en temps réel et utilisent le même chiffrement : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, négocié uniquement entre les deux appareils. Les deux côtés affichent le même code de vérification à 6 chiffres (une chaîne d'authentification courte), ce qui vous permet de confirmer que personne ne s'intercale, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256.",
-        "Rien n'est stocké sur un serveur dans ce mode — il n'existe que pour la durée du transfert. Relayium est open source sous licence MIT sur github.com/relayium/relayium, la mécanique est donc auditable plutôt qu'une boîte noire.",
+        "Rien n'est stocké sur un serveur dans ce mode — il n'existe que pour la durée du transfert. Relayium est open source sous licence AGPL-3.0 sur github.com/relayium/relayium, la mécanique est donc auditable plutôt qu'une boîte noire.",
       ],
     },
     {
@@ -495,7 +495,7 @@ const ar = {
       heading: "ما الذي يحمي الملف فعليًا",
       body: [
         "كلا الوضعين أعلاه نقل فوري، وكلاهما يستخدم التشفير نفسه: تبادل مفاتيح X25519 يشتق مفتاحًا يُستخدم في AES-256-GCM لكل جزء، ويُتفاوض عليه بين الجهازين فقط. ويعرض الطرفان رمز التحقق نفسه المكوَّن من 6 أرقام (سلسلة مصادقة قصيرة، SAS) كي تتأكد من عدم وجود أحد في المنتصف، ويُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
-        "لا يُخزَّن أي شيء على خادم في هذا الوضع — فهو لا يوجد إلا طوال مدة النقل. وRelayium مفتوح المصدر بموجب رخصة MIT على github.com/relayium/relayium، فآليته قابلة للتدقيق وليست صندوقًا أسود.",
+        "لا يُخزَّن أي شيء على خادم في هذا الوضع — فهو لا يوجد إلا طوال مدة النقل. وRelayium مفتوح المصدر بموجب رخصة AGPL-3.0 على github.com/relayium/relayium، فآليته قابلة للتدقيق وليست صندوقًا أسود.",
       ],
     },
     {
@@ -571,7 +571,7 @@ const es = {
       heading: "Qué protege realmente el archivo",
       body: [
         "Ambos modos anteriores son transferencias en tiempo real, y ambos usan el mismo cifrado: un intercambio de claves X25519 deriva una clave que se usa para AES-256-GCM por fragmento, negociada solo entre los dos dispositivos. Ambos lados muestran el mismo código de verificación de 6 dígitos (una Short Authentication String) para que puedas confirmar que nadie está en medio, y cada archivo se comprueba de extremo a extremo con un hash SHA-256.",
-        "En este modo no se almacena nada en un servidor — existe solo durante la transferencia. Relayium es de código abierto bajo la licencia MIT en github.com/relayium/relayium, así que su mecánica es auditable en lugar de una caja negra.",
+        "En este modo no se almacena nada en un servidor — existe solo durante la transferencia. Relayium es de código abierto bajo la licencia AGPL-3.0 en github.com/relayium/relayium, así que su mecánica es auditable en lugar de una caja negra.",
       ],
     },
     {
@@ -647,7 +647,7 @@ const pt = {
       heading: "O que realmente protege o arquivo",
       body: [
         "Ambos os modos acima são transferências em tempo real, e ambos usam a mesma criptografia: uma troca de chaves X25519 deriva uma chave usada para AES-256-GCM por bloco, negociada apenas entre os dois dispositivos. Os dois lados exibem o mesmo código de verificação de 6 dígitos (uma Short Authentication String) para que você possa confirmar que ninguém está no meio, e cada arquivo é verificado de ponta a ponta com um hash SHA-256.",
-        "Nesse modo, nada é armazenado em um servidor — existe apenas durante a transferência. O Relayium é de código aberto sob a licença MIT em github.com/relayium/relayium, então a mecânica é auditável em vez de uma caixa-preta.",
+        "Nesse modo, nada é armazenado em um servidor — existe apenas durante a transferência. O Relayium é de código aberto sob a licença AGPL-3.0 em github.com/relayium/relayium, então a mecânica é auditável em vez de uma caixa-preta.",
       ],
     },
     {

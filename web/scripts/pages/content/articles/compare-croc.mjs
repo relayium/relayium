@@ -69,7 +69,7 @@ const en = {
         "No direct path available: croc's relay carries the encrypted stream so the transfer still completes; Relayium's send/receive is direct-only.",
         "Verification: both are encrypted end to end; Relayium's send/receive additionally prints a short code both sides compare before the transfer starts.",
         "Self-hosting: both are self-hostable — croc's relay is a small standalone binary; Relayium's server also runs the web app, and the CLI's send/receive can point at your own with --server.",
-        "License and cost: both MIT-licensed, both completely free, neither requires an account.",
+        "License and cost: both AGPL-3.0-licensed, both completely free, neither requires an account.",
       ],
     },
   ],
@@ -78,7 +78,7 @@ const en = {
     items: [
       {
         q: "Is Relayium's CLI free?",
-        a: "Yes, completely. There's no paid tier and nothing to meter — every mode connects the two ends directly, and the CLI is MIT-licensed and open source.",
+        a: "Yes, completely. There's no paid tier and nothing to meter — every mode connects the two ends directly, and the CLI is AGPL-3.0-licensed and open source.",
       },
       {
         q: "Does it need an account?",
@@ -164,7 +164,7 @@ const zh = {
         "无法直连时：croc 的中继会承载加密数据流，传输依然能完成；Relayium 的 send/receive 是纯直连的。",
         "验证：两者都端到端加密；Relayium 的 send/receive 额外会在传输开始前打印一段供双方核对的简短验证码。",
         "自托管：两者都可自托管——croc 的中继是一个小巧的独立二进制；Relayium 的服务器同时也运行着网页版，CLI 的 send/receive 也可以用 --server 指向你自己的实例。",
-        "许可证与费用：都是 MIT 许可，都完全免费，都不需要账号。",
+        "许可证与费用：都是 AGPL-3.0 许可，都完全免费，都不需要账号。",
       ],
     },
   ],
@@ -173,7 +173,7 @@ const zh = {
     items: [
       {
         q: "Relayium 的 CLI 免费吗？",
-        a: "完全免费。没有付费档位，也没有什么可计量的——每种模式都是两端直接连接，CLI 采用 MIT 许可并开源。",
+        a: "完全免费。没有付费档位，也没有什么可计量的——每种模式都是两端直接连接，CLI 采用 AGPL-3.0 许可并开源。",
       },
       {
         q: "需要账号吗？",
@@ -259,7 +259,7 @@ const ja = {
         "直接経路がない場合：croc のリレーは暗号化ストリームを運ぶので転送は完了する；Relayium の send/receive は直接接続専用です。",
         "検証：どちらもエンドツーエンドで暗号化される；Relayium の send/receive はさらに、転送開始前に双方が照合する短いコードを表示します。",
         "セルフホスト：どちらもセルフホスト可能——croc のリレーは小さな単独バイナリ；Relayium のサーバーはウェブアプリも動かしており、CLI の send/receive も --server で自分のインスタンスを指定できます。",
-        "ライセンスと費用：どちらも MIT ライセンスで完全に無料、どちらもアカウント不要です。",
+        "ライセンスと費用：どちらも AGPL-3.0 ライセンスで完全に無料、どちらもアカウント不要です。",
       ],
     },
   ],
@@ -268,7 +268,7 @@ const ja = {
     items: [
       {
         q: "Relayium の CLI は無料ですか？",
-        a: "はい、完全に無料です。有料プランはなく、計測するものもありません——どのモードでも両端が直接つながり、CLI は MIT ライセンスでオープンソースです。",
+        a: "はい、完全に無料です。有料プランはなく、計測するものもありません——どのモードでも両端が直接つながり、CLI は AGPL-3.0 ライセンスでオープンソースです。",
       },
       {
         q: "アカウントは必要ですか？",
@@ -354,7 +354,7 @@ const ko = {
         "직접 경로가 없을 때: croc의 릴레이는 암호화된 스트림을 실어 날라 전송이 여전히 완료됨; Relayium의 send/receive는 직접 연결 전용임.",
         "검증: 둘 다 종단간 암호화됨; Relayium의 send/receive는 추가로 전송 시작 전 양쪽이 대조하는 짧은 코드를 표시함.",
         "자체 호스팅: 둘 다 자체 호스팅 가능 — croc의 릴레이는 작은 독립 바이너리; Relayium의 서버는 웹 앱도 함께 운영하며, CLI의 send/receive도 --server로 자신의 인스턴스를 가리킬 수 있음.",
-        "라이선스와 비용: 둘 다 MIT 라이선스, 둘 다 완전 무료, 둘 다 계정 불필요.",
+        "라이선스와 비용: 둘 다 AGPL-3.0 라이선스, 둘 다 완전 무료, 둘 다 계정 불필요.",
       ],
     },
   ],
@@ -363,7 +363,7 @@ const ko = {
     items: [
       {
         q: "Relayium의 CLI는 무료인가요?",
-        a: "네, 완전히 무료입니다. 유료 등급이 없고 계량할 것도 없습니다 — 모든 모드가 양쪽을 직접 연결하며, CLI는 MIT 라이선스로 오픈소스입니다.",
+        a: "네, 완전히 무료입니다. 유료 등급이 없고 계량할 것도 없습니다 — 모든 모드가 양쪽을 직접 연결하며, CLI는 AGPL-3.0 라이선스로 오픈소스입니다.",
       },
       {
         q: "계정이 필요한가요?",
@@ -449,7 +449,7 @@ const de = {
         "Kein direkter Pfad verfügbar: crocs Relay trägt den verschlüsselten Datenstrom, sodass die Übertragung trotzdem abgeschlossen wird; Relayiums send/receive ist rein direkt.",
         "Verifikation: Beide sind Ende-zu-Ende verschlüsselt; Relayiums send/receive zeigt zusätzlich einen kurzen Code, den beide Seiten vor Übertragungsbeginn vergleichen.",
         "Selbst hosten: Beide sind selbst hostbar — crocs Relay ist ein kleines eigenständiges Binary; Relayiums Server betreibt auch die Web-App, und die send/receive-Funktion der CLI kann mit --server auf deine eigene Instanz zeigen.",
-        "Lizenz und Kosten: Beide MIT-lizenziert, beide völlig kostenlos, keines braucht ein Konto.",
+        "Lizenz und Kosten: Beide AGPL-3.0-lizenziert, beide völlig kostenlos, keines braucht ein Konto.",
       ],
     },
   ],
@@ -458,7 +458,7 @@ const de = {
     items: [
       {
         q: "Ist Relayiums CLI kostenlos?",
-        a: "Ja, vollständig. Es gibt keine bezahlte Stufe und nichts zu messen — jeder Modus verbindet die beiden Enden direkt, und die CLI ist MIT-lizenziert und quelloffen.",
+        a: "Ja, vollständig. Es gibt keine bezahlte Stufe und nichts zu messen — jeder Modus verbindet die beiden Enden direkt, und die CLI ist AGPL-3.0-lizenziert und quelloffen.",
       },
       {
         q: "Braucht sie ein Konto?",
@@ -544,7 +544,7 @@ const fr = {
         "Aucun chemin direct disponible : le relais de croc transporte le flux chiffré, si bien que le transfert aboutit quand même ; le send/receive de Relayium est exclusivement direct.",
         "Vérification : les deux sont chiffrés de bout en bout ; le send/receive de Relayium affiche en plus un court code que les deux parties comparent avant le début du transfert.",
         "Auto-hébergement : les deux sont auto-hébergeables — le relais de croc est un petit binaire autonome ; le serveur de Relayium fait aussi tourner l'application web, et le send/receive de la CLI peut pointer vers votre propre instance avec --server.",
-        "Licence et coût : les deux sous licence MIT, tous deux entièrement gratuits, aucun des deux ne nécessite de compte.",
+        "Licence et coût : les deux sous licence AGPL-3.0, tous deux entièrement gratuits, aucun des deux ne nécessite de compte.",
       ],
     },
   ],
@@ -553,7 +553,7 @@ const fr = {
     items: [
       {
         q: "La CLI Relayium est-elle gratuite ?",
-        a: "Oui, entièrement. Il n'y a aucun palier payant et rien à mesurer — chaque mode connecte directement les deux extrémités, et la CLI est sous licence MIT et open source.",
+        a: "Oui, entièrement. Il n'y a aucun palier payant et rien à mesurer — chaque mode connecte directement les deux extrémités, et la CLI est sous licence AGPL-3.0 et open source.",
       },
       {
         q: "A-t-elle besoin d'un compte ?",
@@ -641,7 +641,7 @@ const ar = {
         "لا مسار مباشر متاح: يحمل مُرحِّل croc التدفّق المُشفَّر فيكتمل النقل رغم ذلك؛ أمّا send/receive في Relayium فمباشر فقط.",
         "التحقّق: كلاهما مُشفَّر من الطرف إلى الطرف؛ ويطبع send/receive في Relayium إضافةً إلى ذلك رمزًا قصيرًا يقارنه الطرفان قبل بدء النقل.",
         "الاستضافة الذاتية: كلاهما قابل للاستضافة الذاتية — مُرحِّل croc ملف تنفيذي مستقلّ صغير؛ وخادم Relayium يُشغّل أيضًا تطبيق الويب، ويمكن لِـ send/receive في الواجهة أن يشير إلى نسختك الخاصة بـ --server.",
-        "الرخصة والتكلفة: كلاهما مرخّص بـ MIT، وكلاهما مجاني تمامًا، ولا يتطلّب أيٌّ منهما حسابًا.",
+        "الرخصة والتكلفة: كلاهما مرخّص بـ AGPL-3.0، وكلاهما مجاني تمامًا، ولا يتطلّب أيٌّ منهما حسابًا.",
       ],
     },
   ],
@@ -650,7 +650,7 @@ const ar = {
     items: [
       {
         q: "هل واجهة Relayium على سطر الأوامر مجانية؟",
-        a: "نعم، مجانية تمامًا. لا فئة مدفوعة ولا شيء يُقاس — كل وضع يوصل الطرفين مباشرةً، والواجهة مرخّصة بـ MIT ومفتوحة المصدر.",
+        a: "نعم، مجانية تمامًا. لا فئة مدفوعة ولا شيء يُقاس — كل وضع يوصل الطرفين مباشرةً، والواجهة مرخّصة بـ AGPL-3.0 ومفتوحة المصدر.",
       },
       {
         q: "هل تحتاج إلى حساب؟",
@@ -738,7 +738,7 @@ const es = {
         "Sin camino directo disponible: el retransmisor de croc lleva el flujo cifrado, así que la transferencia se completa igualmente; el send/receive de Relayium es solo directo.",
         "Verificación: ambas van cifradas de extremo a extremo; el send/receive de Relayium además imprime un código corto que ambos lados comparan antes de que empiece la transferencia.",
         "Autoalojamiento: ambas son autoalojables — el retransmisor de croc es un pequeño binario independiente; el servidor de Relayium también ejecuta la aplicación web, y el send/receive de la CLI puede apuntar al tuyo propio con --server.",
-        "Licencia y coste: ambas con licencia MIT, ambas completamente gratis, ninguna requiere cuenta.",
+        "Licencia y coste: ambas con licencia AGPL-3.0, ambas completamente gratis, ninguna requiere cuenta.",
       ],
     },
   ],
@@ -747,7 +747,7 @@ const es = {
     items: [
       {
         q: "¿La CLI de Relayium es gratis?",
-        a: "Sí, por completo. No hay ningún nivel de pago ni nada que medir — cada modo conecta los dos extremos directamente, y la CLI tiene licencia MIT y es de código abierto.",
+        a: "Sí, por completo. No hay ningún nivel de pago ni nada que medir — cada modo conecta los dos extremos directamente, y la CLI tiene licencia AGPL-3.0 y es de código abierto.",
       },
       {
         q: "¿Necesita cuenta?",
@@ -835,7 +835,7 @@ const pt = {
         "Nenhum caminho direto disponível: o retransmissor do croc carrega o fluxo criptografado, então a transferência ainda se completa; o send/receive do Relayium é só direto.",
         "Verificação: ambas são criptografadas de ponta a ponta; o send/receive do Relayium ainda imprime um código curto que os dois lados comparam antes de a transferência começar.",
         "Auto-hospedagem: ambas são auto-hospedáveis — o retransmissor do croc é um pequeno binário independente; o servidor do Relayium também roda o aplicativo web, e o send/receive da CLI pode apontar para o seu próprio com --server.",
-        "Licença e custo: ambas licenciadas sob MIT, ambas completamente gratuitas, nenhuma exige conta.",
+        "Licença e custo: ambas licenciadas sob AGPL-3.0, ambas completamente gratuitas, nenhuma exige conta.",
       ],
     },
   ],
@@ -844,7 +844,7 @@ const pt = {
     items: [
       {
         q: "A CLI do Relayium é gratuita?",
-        a: "Sim, completamente. Não há nível pago nem nada para medir — cada modo conecta as duas pontas diretamente, e a CLI é licenciada sob MIT e de código aberto.",
+        a: "Sim, completamente. Não há nível pago nem nada para medir — cada modo conecta as duas pontas diretamente, e a CLI é licenciada sob AGPL-3.0 e de código aberto.",
       },
       {
         q: "Ela precisa de conta?",

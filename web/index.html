@@ -95,7 +95,7 @@
             "browserRequirements": "Requires a modern browser with WebRTC over HTTPS",
             "softwareVersion": "M0",
             "isAccessibleForFree": true,
-            "license": "https://opensource.org/licenses/MIT",
+            "license": "https://www.gnu.org/licenses/agpl-3.0.html",
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "inLanguage": ["en", "zh", "ja", "ko", "de", "fr", "ar", "es", "pt"],
             "author": { "@id": "https://relayium.com/#org" },
@@ -126,7 +126,7 @@
               {
                 "@type": "Question",
                 "name": "Is Relayium free?",
-                "acceptedAnswer": { "@type": "Answer", "text": "Yes. Relayium is free and open source under the MIT license, with no installation. Realtime transfers over the LAN or a pairing code need no account; creating a share link or a stored download link requires the sender to sign in." }
+                "acceptedAnswer": { "@type": "Answer", "text": "Yes. Relayium is free and open source (AGPL-3.0), with no installation. Realtime transfers over the LAN or a pairing code need no account; creating a share link or a stored download link requires the sender to sign in." }
               },
               {
                 "@type": "Question",
@@ -203,7 +203,7 @@
           <li><strong>Peer-to-peer on your network (realtime mode)</strong> — on the same network, file bytes flow over WebRTC directly between devices and never pass through the server, which only helps the devices find each other; across networks they pass only through an encrypted relay that sees nothing but ciphertext. An optional stored download-link mode keeps files as zero-knowledge ciphertext only you can decrypt.</li>
           <li><strong>Man-in-the-middle protection</strong> — a 6-digit Short Authentication String (SAS) on top of WebRTC's DTLS.</li>
           <li><strong>Cross-platform</strong> — works between Windows, macOS, Linux, Android and iOS through any modern browser (Chrome, Edge, Firefox, Safari).</li>
-          <li><strong>Free and open source</strong> — MIT licensed, no install; realtime transfers need no account (share and download links require the sender to sign in).</li>
+          <li><strong>Free and open source</strong> — AGPL-3.0 licensed, no install; realtime transfers need no account (share and download links require the sender to sign in).</li>
         </ul>
 
         <h2>How Relayium compares</h2>
@@ -215,7 +215,7 @@
 
         <h2>Frequently asked questions</h2>
         <h3>Is Relayium free?</h3>
-        <p>Yes — free and open source under the MIT license, with no installation. Realtime transfers (LAN or pairing code) need no account; creating a share link or a stored download link requires the sender to sign in.</p>
+        <p>Yes — free and open source (AGPL-3.0), with no installation. Realtime transfers (LAN or pairing code) need no account; creating a share link or a stored download link requires the sender to sign in.</p>
         <h3>Do my files get uploaded to a server?</h3>
         <p>On the same network: no — files stream directly between the two devices over WebRTC and never touch the server. Across networks the connection may go through an encrypted relay that only ever sees ciphertext. There is also an optional stored download-link mode where your browser encrypts files before upload and the server stores only zero-knowledge ciphertext (AES-256-GCM, key only in the URL fragment).</p>
         <h3>Is it end-to-end encrypted?</h3>

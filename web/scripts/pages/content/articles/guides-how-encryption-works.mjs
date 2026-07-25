@@ -80,7 +80,7 @@ const en = {
       },
       {
         q: "Is Relayium open source?",
-        a: "Yes. The protocol design and all client and server code are public on GitHub under the MIT license, so the cryptography described here can be independently audited rather than taken on trust.",
+        a: "Yes. The protocol design and all client and server code are public on GitHub under the AGPL-3.0 license, so the cryptography described here can be independently audited rather than taken on trust.",
       },
       {
         q: "What if the two verification codes on screen don't match?",
@@ -171,7 +171,7 @@ const zh = {
       },
       {
         q: "Relayium 是开源的吗？",
-        a: "是的。协议设计以及全部前后端代码都以 MIT 许可证公开在 GitHub 上，因此这里描述的加密方案可以被独立审查，而不必单凭信任。",
+        a: "是的。协议设计以及全部前后端代码都以 AGPL-3.0 许可证公开在 GitHub 上，因此这里描述的加密方案可以被独立审查，而不必单凭信任。",
       },
       {
         q: "如果屏幕上两边的校验码不一致怎么办？",
@@ -262,7 +262,7 @@ const ja = {
       },
       {
         q: "Relayium はオープンソースですか？",
-        a: "はい。プロトコル設計とクライアント・サーバーの全コードは MIT ライセンスのもと GitHub で公開されているため、ここで説明した暗号方式は信じるしかないものではなく、独自に監査できます。",
+        a: "はい。プロトコル設計とクライアント・サーバーの全コードは AGPL-3.0 ライセンスのもと GitHub で公開されているため、ここで説明した暗号方式は信じるしかないものではなく、独自に監査できます。",
       },
       {
         q: "画面上の2つの検証コードが一致しない場合はどうすればいいですか？",
@@ -353,7 +353,7 @@ const ko = {
       },
       {
         q: "Relayium은 오픈 소스인가요?",
-        a: "네. 프로토콜 설계와 클라이언트·서버의 모든 코드가 MIT 라이선스로 GitHub에 공개되어 있어, 여기서 설명한 암호화 방식을 그냥 믿는 대신 독립적으로 감사할 수 있습니다.",
+        a: "네. 프로토콜 설계와 클라이언트·서버의 모든 코드가 AGPL-3.0 라이선스로 GitHub에 공개되어 있어, 여기서 설명한 암호화 방식을 그냥 믿는 대신 독립적으로 감사할 수 있습니다.",
       },
       {
         q: "화면에 표시된 두 검증 코드가 일치하지 않으면 어떻게 하나요?",
@@ -444,7 +444,7 @@ const de = {
       },
       {
         q: "Ist Relayium Open Source?",
-        a: "Ja. Das Protokolldesign und der gesamte Client- und Servercode sind unter der MIT-Lizenz auf GitHub öffentlich, sodass die hier beschriebene Kryptografie unabhängig geprüft werden kann, statt sie einfach glauben zu müssen.",
+        a: "Ja. Das Protokolldesign und der gesamte Client- und Servercode sind unter der AGPL-3.0-Lizenz auf GitHub öffentlich, sodass die hier beschriebene Kryptografie unabhängig geprüft werden kann, statt sie einfach glauben zu müssen.",
       },
       {
         q: "Was, wenn die beiden Prüfcodes auf dem Bildschirm nicht übereinstimmen?",
@@ -535,7 +535,7 @@ const fr = {
       },
       {
         q: "Relayium est-il open source ?",
-        a: "Oui. La conception du protocole et tout le code client et serveur sont publics sur GitHub sous licence MIT, si bien que la cryptographie décrite ici peut être auditée de façon indépendante plutôt que crue sur parole.",
+        a: "Oui. La conception du protocole et tout le code client et serveur sont publics sur GitHub sous licence AGPL-3.0, si bien que la cryptographie décrite ici peut être auditée de façon indépendante plutôt que crue sur parole.",
       },
       {
         q: "Que faire si les deux codes de vérification à l'écran ne correspondent pas ?",
@@ -626,7 +626,7 @@ const ar = {
       },
       {
         q: "هل Relayium مفتوح المصدر؟",
-        a: "نعم. تصميم البروتوكول وكامل شيفرة العميل والخادم متاحة علناً على GitHub بموجب رخصة MIT، لذا يمكن تدقيق التعمية الموصوفة هنا بشكل مستقل بدلاً من تصديقها على عِلّاتها.",
+        a: "نعم. تصميم البروتوكول وكامل شيفرة العميل والخادم متاحة علناً على GitHub بموجب رخصة AGPL-3.0، لذا يمكن تدقيق التعمية الموصوفة هنا بشكل مستقل بدلاً من تصديقها على عِلّاتها.",
       },
       {
         q: "ماذا لو لم يتطابق رمزا التحقق على الشاشة؟",
@@ -717,7 +717,7 @@ const es = {
       },
       {
         q: "¿Es Relayium de código abierto?",
-        a: "Sí. El diseño del protocolo y todo el código de cliente y servidor son públicos en GitHub bajo la licencia MIT, así que la criptografía descrita aquí puede auditarse de forma independiente en lugar de aceptarse por fe.",
+        a: "Sí. El diseño del protocolo y todo el código de cliente y servidor son públicos en GitHub bajo la licencia AGPL-3.0, así que la criptografía descrita aquí puede auditarse de forma independiente en lugar de aceptarse por fe.",
       },
       {
         q: "¿Qué pasa si los dos códigos de verificación en pantalla no coinciden?",
@@ -808,7 +808,7 @@ const pt = {
       },
       {
         q: "O Relayium é de código aberto?",
-        a: "Sim. O design do protocolo e todo o código de cliente e servidor são públicos no GitHub sob a licença MIT, então a criptografia descrita aqui pode ser auditada de forma independente em vez de aceita por fé.",
+        a: "Sim. O design do protocolo e todo o código de cliente e servidor são públicos no GitHub sob a licença AGPL-3.0, então a criptografia descrita aqui pode ser auditada de forma independente em vez de aceita por fé.",
       },
       {
         q: "E se os dois códigos de verificação na tela não coincidirem?",

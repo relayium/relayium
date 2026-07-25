@@ -69,11 +69,11 @@ footer a{color:var(--text-h);text-decoration:none}
       <h1>Relayium 셀프 호스팅: 나만의 파일 전송 서버 운영하기</h1>
       <p class="updated">마지막 업데이트: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/self-host-relayium/">English</a><a href="/zh/guides/self-host-relayium/">中文</a><a href="/ja/guides/self-host-relayium/">日本語</a><a href="/ko/guides/self-host-relayium/" aria-current="true">한국어</a><a href="/de/guides/self-host-relayium/">Deutsch</a><a href="/fr/guides/self-host-relayium/">Français</a><a href="/ar/guides/self-host-relayium/">العربية</a><a href="/es/guides/self-host-relayium/">Español</a><a href="/pt/guides/self-host-relayium/">Português</a></nav>
-      <p class="lead">Relayium은 MIT 라이선스 오픈소스이며, 서버는 단일한 자체 완결형 이미지입니다 — 외부 데이터베이스도, 서드파티 스토리지 버킷도 필요 없고, 가입할 것도 없습니다. relayium.com에 의존하는 대신 전체를 직접 운영하고 싶다면, 이 가이드는 Docker로 서버를 띄우고 CLI를 그 서버로 연결하는 방법을 안내합니다.</p>
+      <p class="lead">Relayium은 AGPL-3.0 라이선스 오픈소스이며, 서버는 단일한 자체 완결형 이미지입니다 — 외부 데이터베이스도, 서드파티 스토리지 버킷도 필요 없고, 가입할 것도 없습니다. relayium.com에 의존하는 대신 전체를 직접 운영하고 싶다면, 이 가이드는 Docker로 서버를 띄우고 CLI를 그 서버로 연결하는 방법을 안내합니다.</p>
       <p class="lead">셀프 호스팅을 하면 데이터가 어디에 저장되는지 완전히 통제할 수 있고, 자신의 도메인과 TLS 인증서를 쓸 수 있으며, 다른 누구의 운영 판단에도 의존하지 않습니다. 아래 내용은 모두 저장소에 실제로 존재하는 파일 — docker-compose.yml, server/.env.example, docs/self-hosting.md — 을 근거로 하므로, 실제로 존재하지 않는 플래그나 설정은 등장하지 않습니다.</p>
       <h2>왜 셀프 호스팅을 하나</h2>
       <p>Relayium의 실시간 전송은 원래부터 P2P이자 종단간 암호화되어 있어, 그 과정에서 서버는 파일 데이터를 전혀 보지 못합니다. 하지만 서버는 여러분의 계정을 보관하며, 저장형/링크형 전송의 경우 암호화된 블롭과 작은 SQLite 데이터베이스도 보관합니다. 셀프 호스팅이란 그 데이터가 여러분이 통제하는 인프라 위에, 여러분의 도메인 아래 놓이고, 다른 누구의 운영 판단도 개입하지 않는다는 뜻입니다.</p>
-      <p>이 프로젝트는 MIT 라이선스로 오픈소스(github.com/relayium/relayium)이므로, 무언가를 맡기기 전에 서버가 정확히 무엇을 하는지 직접 읽어볼 수 있고, 자유롭게 fork하거나 수정할 수도 있습니다.</p>
+      <p>이 프로젝트는 AGPL-3.0 라이선스로 오픈소스(github.com/relayium/relayium)이므로, 무언가를 맡기기 전에 서버가 정확히 무엇을 하는지 직접 읽어볼 수 있고, 자유롭게 fork하거나 수정할 수도 있습니다.</p>
       <h2>Docker로 빠르게 시작하기</h2>
       <p>저장소 루트에는 Dockerfile과 docker-compose.yml이 있으며, 이들은 단일한 자체 완결형 이미지 — 미리 빌드된 웹 앱을 제공하는 정적 Go 바이너리 — 를 빌드합니다. 그저 실행만 하는 데는 별도의 Node, Go 툴체인, nginx가 필요 없습니다:</p>
       <pre><code>docker compose up -d --build</code></pre>

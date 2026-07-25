@@ -13,7 +13,7 @@ const en = {
     {
       heading: "The service",
       body: [
-        "Relayium transfers files peer-to-peer between devices. The core service is free and its source code is open source under the MIT license. Optional paid plans raise storage, transfer, and retention limits — see Subscriptions and billing.",
+        "Relayium transfers files peer-to-peer between devices. The core service is free and its source code is open source under the AGPL-3.0 license. Optional paid plans raise storage, transfer, and retention limits — see Subscriptions and billing.",
       ],
     },
     {
@@ -89,7 +89,7 @@ const en = {
     {
       heading: "Open source and licenses",
       body: [
-        "Relayium's source code is available under the MIT license. Your use of the source code is governed by that license.",
+        "Relayium's source code is available under the AGPL-3.0 license. Your use of the source code is governed by that license.",
       ],
     },
     {
@@ -123,7 +123,7 @@ const zh = {
   sections: [
     {
       heading: "服务说明",
-      body: ["Relayium 在设备之间点对点传输文件。核心服务免费,其源代码以 MIT 许可证开源。可选的付费套餐可提高存储、传输与保留时长上限——详见「订阅与计费」。"],
+      body: ["Relayium 在设备之间点对点传输文件。核心服务免费,其源代码以 AGPL-3.0 许可证开源。可选的付费套餐可提高存储、传输与保留时长上限——详见「订阅与计费」。"],
     },
     {
       heading: "使用资格",
@@ -197,7 +197,7 @@ const zh = {
     },
     {
       heading: "开源与许可",
-      body: ["Relayium 的源代码以 MIT 许可证提供。你对源代码的使用受该许可证约束。"],
+      body: ["Relayium 的源代码以 AGPL-3.0 许可证提供。你对源代码的使用受该许可证约束。"],
     },
     {
       heading: "适用法律",
@@ -232,7 +232,7 @@ const ja = {
     {
       heading: "サービスについて",
       body: [
-        "Relayiumはデバイス間でピアツーピアでファイルを転送します。コア機能は無料で、そのソースコードはMITライセンスのもとオープンソースとして公開されています。オプションの有料プランでは、ストレージ、転送、保存期間の上限を引き上げることができます——詳細は「サブスクリプションと請求」をご覧ください。",
+        "Relayiumはデバイス間でピアツーピアでファイルを転送します。コア機能は無料で、そのソースコードはAGPL-3.0ライセンスのもとオープンソースとして公開されています。オプションの有料プランでは、ストレージ、転送、保存期間の上限を引き上げることができます——詳細は「サブスクリプションと請求」をご覧ください。",
       ],
     },
     {
@@ -308,7 +308,7 @@ const ja = {
     {
       heading: "オープンソースとライセンス",
       body: [
-        "RelayiumのソースコードはMITライセンスのもとで公開されています。ソースコードの使用はそのライセンスに従います。",
+        "RelayiumのソースコードはAGPL-3.0ライセンスのもとで公開されています。ソースコードの使用はそのライセンスに従います。",
       ],
     },
     {
@@ -344,7 +344,7 @@ const ko = {
     {
       heading: "서비스 소개",
       body: [
-        "Relayium은 장치 간에 피어 투 피어로 파일을 전송합니다. 핵심 서비스는 무료이며 소스 코드는 MIT 라이선스 하에 오픈소스로 공개되어 있습니다. 선택적 유료 플랜을 이용하면 저장 용량, 전송량, 보관 기간 한도를 늘릴 수 있습니다 — 자세한 내용은 '구독 및 결제'를 참고하세요.",
+        "Relayium은 장치 간에 피어 투 피어로 파일을 전송합니다. 핵심 서비스는 무료이며 소스 코드는 AGPL-3.0 라이선스 하에 오픈소스로 공개되어 있습니다. 선택적 유료 플랜을 이용하면 저장 용량, 전송량, 보관 기간 한도를 늘릴 수 있습니다 — 자세한 내용은 '구독 및 결제'를 참고하세요.",
       ],
     },
     {
@@ -420,7 +420,7 @@ const ko = {
     {
       heading: "오픈소스 및 라이선스",
       body: [
-        "Relayium의 소스 코드는 MIT 라이선스 하에 이용 가능합니다. 소스 코드의 사용은 해당 라이선스의 적용을 받습니다.",
+        "Relayium의 소스 코드는 AGPL-3.0 라이선스 하에 이용 가능합니다. 소스 코드의 사용은 해당 라이선스의 적용을 받습니다.",
       ],
     },
     {
@@ -456,7 +456,7 @@ const de = {
     {
       heading: "Der Dienst",
       body: [
-        "Relayium überträgt Dateien Peer-to-Peer zwischen Geräten. Der Kerndienst ist kostenlos und sein Quellcode ist unter der MIT-Lizenz quelloffen. Optionale kostenpflichtige Pläne erhöhen die Grenzwerte für Speicher, Übertragung und Aufbewahrung — siehe Abonnements und Abrechnung.",
+        "Relayium überträgt Dateien Peer-to-Peer zwischen Geräten. Der Kerndienst ist kostenlos und sein Quellcode ist unter der AGPL-3.0-Lizenz quelloffen. Optionale kostenpflichtige Pläne erhöhen die Grenzwerte für Speicher, Übertragung und Aufbewahrung — siehe Abonnements und Abrechnung.",
       ],
     },
     {
@@ -532,7 +532,7 @@ const de = {
     {
       heading: "Open Source und Lizenzen",
       body: [
-        "Der Quellcode von Relayium ist unter der MIT-Lizenz verfügbar. Ihre Nutzung des Quellcodes unterliegt dieser Lizenz.",
+        "Der Quellcode von Relayium ist unter der AGPL-3.0-Lizenz verfügbar. Ihre Nutzung des Quellcodes unterliegt dieser Lizenz.",
       ],
     },
     {
@@ -568,7 +568,7 @@ const fr = {
     {
       heading: "Le service",
       body: [
-        "Relayium transfère des fichiers de pair à pair entre appareils. Le service de base est gratuit et son code source est open source sous licence MIT. Les forfaits payants optionnels augmentent les limites de stockage, de transfert et de conservation — voir Abonnements et facturation.",
+        "Relayium transfère des fichiers de pair à pair entre appareils. Le service de base est gratuit et son code source est open source sous licence AGPL-3.0. Les forfaits payants optionnels augmentent les limites de stockage, de transfert et de conservation — voir Abonnements et facturation.",
       ],
     },
     {
@@ -644,7 +644,7 @@ const fr = {
     {
       heading: "Open source et licences",
       body: [
-        "Le code source de Relayium est disponible sous licence MIT. Votre utilisation du code source est régie par cette licence.",
+        "Le code source de Relayium est disponible sous licence AGPL-3.0. Votre utilisation du code source est régie par cette licence.",
       ],
     },
     {
@@ -680,7 +680,7 @@ const ar = {
     {
       heading: "الخدمة",
       body: [
-        "تنقل Relayium الملفات من الند للند بين الأجهزة. الخدمة الأساسية مجانية وشِفرتها المصدرية مفتوحة المصدر بموجب رخصة MIT. تتيح الخطط المدفوعة الاختيارية رفع حدود التخزين والنقل والاحتفاظ بالبيانات — راجع «الاشتراكات والفوترة».",
+        "تنقل Relayium الملفات من الند للند بين الأجهزة. الخدمة الأساسية مجانية وشِفرتها المصدرية مفتوحة المصدر بموجب رخصة AGPL-3.0. تتيح الخطط المدفوعة الاختيارية رفع حدود التخزين والنقل والاحتفاظ بالبيانات — راجع «الاشتراكات والفوترة».",
       ],
     },
     {
@@ -756,7 +756,7 @@ const ar = {
     {
       heading: "المصدر المفتوح والتراخيص",
       body: [
-        "شِفرة Relayium المصدرية متاحة بموجب رخصة MIT. ويخضع استخدامك للشِفرة المصدرية لتلك الرخصة.",
+        "شِفرة Relayium المصدرية متاحة بموجب رخصة AGPL-3.0. ويخضع استخدامك للشِفرة المصدرية لتلك الرخصة.",
       ],
     },
     {
@@ -792,7 +792,7 @@ const es = {
     {
       heading: "El servicio",
       body: [
-        "Relayium transfiere archivos de igual a igual entre dispositivos. El servicio básico es gratuito y su código fuente es de código abierto bajo la licencia MIT. Los planes de pago opcionales aumentan los límites de almacenamiento, transferencia y retención — consulta Suscripciones y facturación.",
+        "Relayium transfiere archivos de igual a igual entre dispositivos. El servicio básico es gratuito y su código fuente es de código abierto bajo la licencia AGPL-3.0. Los planes de pago opcionales aumentan los límites de almacenamiento, transferencia y retención — consulta Suscripciones y facturación.",
       ],
     },
     {
@@ -868,7 +868,7 @@ const es = {
     {
       heading: "Código abierto y licencias",
       body: [
-        "El código fuente de Relayium está disponible bajo la licencia MIT. Tu uso del código fuente se rige por esa licencia.",
+        "El código fuente de Relayium está disponible bajo la licencia AGPL-3.0. Tu uso del código fuente se rige por esa licencia.",
       ],
     },
     {
@@ -904,7 +904,7 @@ const pt = {
     {
       heading: "O serviço",
       body: [
-        "A Relayium transfere arquivos ponto a ponto entre dispositivos. O serviço principal é gratuito e seu código-fonte é de código aberto sob a licença MIT. Planos pagos opcionais aumentam os limites de armazenamento, transferência e retenção — veja Assinaturas e cobrança.",
+        "A Relayium transfere arquivos ponto a ponto entre dispositivos. O serviço principal é gratuito e seu código-fonte é de código aberto sob a licença AGPL-3.0. Planos pagos opcionais aumentam os limites de armazenamento, transferência e retenção — veja Assinaturas e cobrança.",
       ],
     },
     {
@@ -980,7 +980,7 @@ const pt = {
     {
       heading: "Código aberto e licenças",
       body: [
-        "O código-fonte da Relayium está disponível sob a licença MIT. Seu uso do código-fonte é regido por essa licença.",
+        "O código-fonte da Relayium está disponível sob a licença AGPL-3.0. Seu uso do código-fonte é regido por essa licença.",
       ],
     },
     {

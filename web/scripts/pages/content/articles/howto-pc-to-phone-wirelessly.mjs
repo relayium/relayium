@@ -37,7 +37,7 @@ const en = {
       heading: "Install it like an app (optional PWA)",
       body: [
         "Relayium is a website, so there is genuinely nothing to install. But if you send files often, you can add it to your home screen or desktop as a Progressive Web App: it then opens in its own window and launches like a native app, while still being just the web page under the hood.",
-        "On the phone, use your browser's \"Add to Home Screen\" option; on the computer, use the install icon in the address bar. It stays free either way — Relayium is open source under the MIT license at github.com/relayium/relayium, and works on Windows, macOS, Linux, Android and iOS.",
+        "On the phone, use your browser's \"Add to Home Screen\" option; on the computer, use the install icon in the address bar. It stays free either way — Relayium is open source under the AGPL-3.0 license at github.com/relayium/relayium, and works on Windows, macOS, Linux, Android and iOS.",
       ],
     },
     {
@@ -118,7 +118,7 @@ const zh = {
       heading: "像 App 一样安装（可选的 PWA）",
       body: [
         "Relayium 就是一个网站，所以确实没有什么要安装的。但如果你经常传文件，可以把它添加到主屏幕或桌面，作为渐进式网页应用（PWA）：它会在独立窗口中打开，像原生应用一样启动，而底层依然只是那张网页。",
-        "在手机上用浏览器的\"添加到主屏幕\"；在电脑上用地址栏里的安装图标。无论哪种方式它都保持免费——Relayium 采用 MIT 许可开源，代码在 github.com/relayium/relayium，支持 Windows、macOS、Linux、Android 和 iOS。",
+        "在手机上用浏览器的\"添加到主屏幕\"；在电脑上用地址栏里的安装图标。无论哪种方式它都保持免费——Relayium 采用 AGPL-3.0 许可开源，代码在 github.com/relayium/relayium，支持 Windows、macOS、Linux、Android 和 iOS。",
       ],
     },
     {
@@ -199,7 +199,7 @@ const ja = {
       heading: "アプリのようにインストール（任意の PWA）",
       body: [
         "Relayium はウェブサイトなので、本当にインストールするものはありません。ただ、頻繁に送るなら、ホーム画面やデスクトップにプログレッシブウェブアプリ（PWA）として追加できます。独立したウィンドウで開き、ネイティブアプリのように起動しますが、中身はあくまでそのウェブページです。",
-        "スマホではブラウザの「ホーム画面に追加」を、パソコンではアドレスバーのインストールアイコンを使います。どちらでも無料のままです——Relayium は MIT ライセンスのオープンソースで、コードは github.com/relayium/relayium にあり、Windows、macOS、Linux、Android、iOS で動作します。",
+        "スマホではブラウザの「ホーム画面に追加」を、パソコンではアドレスバーのインストールアイコンを使います。どちらでも無料のままです——Relayium は AGPL-3.0 ライセンスのオープンソースで、コードは github.com/relayium/relayium にあり、Windows、macOS、Linux、Android、iOS で動作します。",
       ],
     },
     {
@@ -280,7 +280,7 @@ const ko = {
       heading: "앱처럼 설치하기 (선택적 PWA)",
       body: [
         "Relayium은 웹사이트라서 정말로 설치할 것이 없습니다. 다만 자주 보낸다면 홈 화면이나 바탕화면에 프로그레시브 웹 앱(PWA)으로 추가할 수 있습니다. 그러면 독립된 창에서 열리고 네이티브 앱처럼 실행되지만, 속은 여전히 그 웹 페이지입니다.",
-        "휴대폰에서는 브라우저의 '홈 화면에 추가'를, 컴퓨터에서는 주소창의 설치 아이콘을 씁니다. 어느 쪽이든 무료 그대로입니다 — Relayium은 MIT 라이선스 오픈소스이며 코드는 github.com/relayium/relayium에 있고, Windows, macOS, Linux, Android, iOS에서 동작합니다.",
+        "휴대폰에서는 브라우저의 '홈 화면에 추가'를, 컴퓨터에서는 주소창의 설치 아이콘을 씁니다. 어느 쪽이든 무료 그대로입니다 — Relayium은 AGPL-3.0 라이선스 오픈소스이며 코드는 github.com/relayium/relayium에 있고, Windows, macOS, Linux, Android, iOS에서 동작합니다.",
       ],
     },
     {
@@ -361,7 +361,7 @@ const de = {
       heading: "Wie eine App installieren (optionale PWA)",
       body: [
         "Relayium ist eine Website, es gibt also wirklich nichts zu installieren. Wenn du aber oft Dateien sendest, kannst du sie als Progressive Web App (PWA) zum Startbildschirm oder Desktop hinzufügen: Sie öffnet sich dann in einem eigenen Fenster und startet wie eine native App, während sie im Kern weiterhin nur die Webseite ist.",
-        "Nutze auf dem Handy die Option „Zum Startbildschirm hinzufügen“ deines Browsers; am Computer das Installationssymbol in der Adressleiste. Kostenlos bleibt es so oder so — Relayium ist quelloffen unter der MIT-Lizenz auf github.com/relayium/relayium und läuft unter Windows, macOS, Linux, Android und iOS.",
+        "Nutze auf dem Handy die Option „Zum Startbildschirm hinzufügen“ deines Browsers; am Computer das Installationssymbol in der Adressleiste. Kostenlos bleibt es so oder so — Relayium ist quelloffen unter der AGPL-3.0-Lizenz auf github.com/relayium/relayium und läuft unter Windows, macOS, Linux, Android und iOS.",
       ],
     },
     {
@@ -442,7 +442,7 @@ const fr = {
       heading: "L'installer comme une appli (PWA facultative)",
       body: [
         "Relayium est un site web, il n'y a donc vraiment rien à installer. Mais si vous envoyez souvent des fichiers, vous pouvez l'ajouter à votre écran d'accueil ou à votre bureau en tant qu'application web progressive (PWA) : elle s'ouvre alors dans sa propre fenêtre et se lance comme une appli native, tout en restant, au fond, la même page web.",
-        "Sur le téléphone, utilisez l'option « Ajouter à l'écran d'accueil » de votre navigateur ; sur l'ordinateur, l'icône d'installation dans la barre d'adresse. Cela reste gratuit dans tous les cas — Relayium est open source sous licence MIT sur github.com/relayium/relayium et fonctionne sous Windows, macOS, Linux, Android et iOS.",
+        "Sur le téléphone, utilisez l'option « Ajouter à l'écran d'accueil » de votre navigateur ; sur l'ordinateur, l'icône d'installation dans la barre d'adresse. Cela reste gratuit dans tous les cas — Relayium est open source sous licence AGPL-3.0 sur github.com/relayium/relayium et fonctionne sous Windows, macOS, Linux, Android et iOS.",
       ],
     },
     {
@@ -523,7 +523,7 @@ const ar = {
       heading: "ثبّته كتطبيق (تطبيق ويب تقدُّمي PWA اختياري)",
       body: [
         "Relayium موقع ويب، فلا يوجد فعلًا ما يُثبَّت. لكن إن كنت تُرسِل الملفات كثيرًا، فيمكنك إضافته إلى شاشتك الرئيسية أو سطح مكتبك كتطبيق ويب تقدُّمي (PWA): عندها يُفتح في نافذته الخاصة ويُطلَق كتطبيق أصلي، بينما يبقى في جوهره مجرد صفحة الويب نفسها.",
-        "على الهاتف، استخدم خيار \"إضافة إلى الشاشة الرئيسية\" في متصفحك؛ وعلى الحاسوب، استخدم أيقونة التثبيت في شريط العنوان. يبقى مجانيًا في كلتا الحالتين — Relayium مفتوح المصدر بموجب رخصة MIT على github.com/relayium/relayium، ويعمل على Windows وmacOS وLinux وAndroid وiOS.",
+        "على الهاتف، استخدم خيار \"إضافة إلى الشاشة الرئيسية\" في متصفحك؛ وعلى الحاسوب، استخدم أيقونة التثبيت في شريط العنوان. يبقى مجانيًا في كلتا الحالتين — Relayium مفتوح المصدر بموجب رخصة AGPL-3.0 على github.com/relayium/relayium، ويعمل على Windows وmacOS وLinux وAndroid وiOS.",
       ],
     },
     {
@@ -604,7 +604,7 @@ const es = {
       heading: "Instálalo como una app (PWA opcional)",
       body: [
         "Relayium es un sitio web, así que de verdad no hay nada que instalar. Pero si envías archivos a menudo, puedes añadirlo a tu pantalla de inicio o escritorio como aplicación web progresiva (PWA): entonces se abre en su propia ventana y se lanza como una app nativa, aunque por debajo sigue siendo solo la página web.",
-        "En el teléfono, usa la opción «Añadir a la pantalla de inicio» de tu navegador; en el ordenador, el icono de instalar en la barra de direcciones. De cualquier modo sigue siendo gratis — Relayium es de código abierto bajo la licencia MIT en github.com/relayium/relayium, y funciona en Windows, macOS, Linux, Android e iOS.",
+        "En el teléfono, usa la opción «Añadir a la pantalla de inicio» de tu navegador; en el ordenador, el icono de instalar en la barra de direcciones. De cualquier modo sigue siendo gratis — Relayium es de código abierto bajo la licencia AGPL-3.0 en github.com/relayium/relayium, y funciona en Windows, macOS, Linux, Android e iOS.",
       ],
     },
     {
@@ -685,7 +685,7 @@ const pt = {
       heading: "Instale como um app (PWA opcional)",
       body: [
         "O Relayium é um site, então realmente não há nada para instalar. Mas se você envia arquivos com frequência, pode adicioná-lo à tela inicial ou à área de trabalho como um aplicativo web progressivo (PWA): ele então abre na própria janela e é iniciado como um app nativo, embora por baixo continue sendo apenas a página web.",
-        "No celular, use a opção «Adicionar à tela inicial» do seu navegador; no computador, o ícone de instalar na barra de endereços. De qualquer forma continua gratuito — o Relayium é de código aberto sob a licença MIT em github.com/relayium/relayium, e funciona em Windows, macOS, Linux, Android e iOS.",
+        "No celular, use a opção «Adicionar à tela inicial» do seu navegador; no computador, o ícone de instalar na barra de endereços. De qualquer forma continua gratuito — o Relayium é de código aberto sob a licença AGPL-3.0 em github.com/relayium/relayium, e funciona em Windows, macOS, Linux, Android e iOS.",
       ],
     },
     {

@@ -11,7 +11,7 @@ const en = {
     "Run the whole Relayium stack yourself with one Docker command — your own domain, your own data, no account required. Covers the env keys, the optional TURN relay, and pointing the CLI at it.",
   updatedLabel: "Last updated",
   lead: [
-    "Relayium is MIT-licensed and open source, and the server is one self-contained image — no external database, no third-party storage bucket, nothing to sign up for. If you'd rather run the whole thing yourself than rely on relayium.com, this guide gets a server up with Docker and points the CLI at it.",
+    "Relayium is AGPL-3.0-licensed and open source, and the server is one self-contained image — no external database, no third-party storage bucket, nothing to sign up for. If you'd rather run the whole thing yourself than rely on relayium.com, this guide gets a server up with Docker and points the CLI at it.",
     "Self-hosting gives you full control over where your data lives, your own domain and TLS certificate, and no dependency on anyone else's infrastructure. Everything below is grounded in the files that ship in the repo — `docker-compose.yml`, `server/.env.example`, and `docs/self-hosting.md` — so nothing here is a flag or setting that doesn't actually exist.",
   ],
   sections: [
@@ -19,7 +19,7 @@ const en = {
       heading: "Why self-host",
       body: [
         "Relayium's realtime transfers are already peer-to-peer and end-to-end encrypted, so the server never sees your file bytes there. But it does hold your account, and — for stored/link-based transfers — ciphertext blobs and a small SQLite database. Self-hosting means that data lives on infrastructure you control, under your own domain, with nobody else's operational decisions in the loop.",
-        "Because the project is MIT-licensed and open source (github.com/relayium/relayium), you can read exactly what the server does before you trust it with anything, and fork or modify it freely.",
+        "Because the project is AGPL-3.0-licensed and open source (github.com/relayium/relayium), you can read exactly what the server does before you trust it with anything, and fork or modify it freely.",
       ],
     },
     {
@@ -98,7 +98,7 @@ const zh = {
     "用一条 Docker 命令自己运行完整的 Relayium 服务端——自己的域名、自己的数据，无需账号。涵盖环境变量、可选的 TURN 中继，以及如何让 CLI 指向它。",
   updatedLabel: "最近更新",
   lead: [
-    "Relayium 采用 MIT 许可、开源，服务端是一个自包含的镜像——不需要外部数据库，不需要第三方存储桶，也没有什么需要注册。如果你更想自己运行整套系统而不是依赖 relayium.com，本指南会带你用 Docker 起一台服务器，并让 CLI 指向它。",
+    "Relayium 采用 AGPL-3.0 许可、开源，服务端是一个自包含的镜像——不需要外部数据库，不需要第三方存储桶，也没有什么需要注册。如果你更想自己运行整套系统而不是依赖 relayium.com，本指南会带你用 Docker 起一台服务器，并让 CLI 指向它。",
     "自托管让你完全掌控数据存放的位置、拥有自己的域名和 TLS 证书，也不依赖别人的运维决策。以下内容全部基于仓库中实际存在的文件——docker-compose.yml、server/.env.example 和 docs/self-hosting.md——因此这里不会出现任何实际不存在的参数或配置项。",
   ],
   sections: [
@@ -106,7 +106,7 @@ const zh = {
       heading: "为什么要自托管",
       body: [
         "Relayium 的实时传输本身就是点对点、端到端加密的，服务器在这个过程中根本看不到你的文件字节。但服务器确实保存着你的账号，以及——对于存储型/链接型传输——密文数据块和一个小型 SQLite 数据库。自托管意味着这些数据存放在你自己掌控的基础设施上，挂在你自己的域名下，不受任何人其他运维决策的影响。",
-        "由于该项目采用 MIT 许可并且开源（github.com/relayium/relayium），你可以在信任它之前先读清楚服务端到底做了什么，也可以自由 fork 或修改它。",
+        "由于该项目采用 AGPL-3.0 许可并且开源（github.com/relayium/relayium），你可以在信任它之前先读清楚服务端到底做了什么，也可以自由 fork 或修改它。",
       ],
     },
     {
@@ -185,7 +185,7 @@ const ja = {
     "1つの Docker コマンドで Relayium のサーバー一式を自分で運用——自分のドメイン、自分のデータ、アカウント不要。環境変数、任意の TURN リレー、CLI をそのサーバーに向ける方法を解説します。",
   updatedLabel: "最終更新",
   lead: [
-    "Relayium は MIT ライセンスのオープンソースで、サーバーは1つの自己完結型イメージです——外部データベースも、サードパーティのストレージバケットも不要で、登録するものもありません。relayium.com に頼るのではなく全体を自分で運用したいなら、本ガイドで Docker によりサーバーを立ち上げ、CLI をそこに向ける方法を案内します。",
+    "Relayium は AGPL-3.0 ライセンスのオープンソースで、サーバーは1つの自己完結型イメージです——外部データベースも、サードパーティのストレージバケットも不要で、登録するものもありません。relayium.com に頼るのではなく全体を自分で運用したいなら、本ガイドで Docker によりサーバーを立ち上げ、CLI をそこに向ける方法を案内します。",
     "セルフホストすることで、データがどこに置かれるかを完全に管理でき、自分のドメインと TLS 証明書を使え、他人のインフラ運用判断に依存しません。以下の内容はすべてリポジトリに実際に存在するファイル——docker-compose.yml、server/.env.example、docs/self-hosting.md——に基づいており、実在しないフラグや設定は登場しません。",
   ],
   sections: [
@@ -193,7 +193,7 @@ const ja = {
       heading: "なぜセルフホストするのか",
       body: [
         "Relayium のリアルタイム転送はもともとピアツーピアかつエンドツーエンドで暗号化されているため、その過程でサーバーがファイルのバイトを目にすることはありません。しかしサーバーはあなたのアカウントを保持し、また保存型/リンク型の転送については、暗号化されたブロブと小さな SQLite データベースを保持します。セルフホストとは、そのデータが自分が管理するインフラ上に、自分のドメインの下に置かれ、他人の運用判断が介在しないということです。",
-        "このプロジェクトは MIT ライセンスでオープンソース（github.com/relayium/relayium）なので、何かを任せる前にサーバーが正確に何をしているかを読んで確認でき、自由に fork したり改変したりできます。",
+        "このプロジェクトは AGPL-3.0 ライセンスでオープンソース（github.com/relayium/relayium）なので、何かを任せる前にサーバーが正確に何をしているかを読んで確認でき、自由に fork したり改変したりできます。",
       ],
     },
     {
@@ -272,7 +272,7 @@ const ko = {
     "Docker 명령어 하나로 Relayium 전체 스택을 직접 운영하세요 — 자신의 도메인, 자신의 데이터, 계정 불필요. 환경 변수, 선택적 TURN 릴레이, CLI를 서버로 연결하는 방법까지 다룹니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "Relayium은 MIT 라이선스 오픈소스이며, 서버는 단일한 자체 완결형 이미지입니다 — 외부 데이터베이스도, 서드파티 스토리지 버킷도 필요 없고, 가입할 것도 없습니다. relayium.com에 의존하는 대신 전체를 직접 운영하고 싶다면, 이 가이드는 Docker로 서버를 띄우고 CLI를 그 서버로 연결하는 방법을 안내합니다.",
+    "Relayium은 AGPL-3.0 라이선스 오픈소스이며, 서버는 단일한 자체 완결형 이미지입니다 — 외부 데이터베이스도, 서드파티 스토리지 버킷도 필요 없고, 가입할 것도 없습니다. relayium.com에 의존하는 대신 전체를 직접 운영하고 싶다면, 이 가이드는 Docker로 서버를 띄우고 CLI를 그 서버로 연결하는 방법을 안내합니다.",
     "셀프 호스팅을 하면 데이터가 어디에 저장되는지 완전히 통제할 수 있고, 자신의 도메인과 TLS 인증서를 쓸 수 있으며, 다른 누구의 운영 판단에도 의존하지 않습니다. 아래 내용은 모두 저장소에 실제로 존재하는 파일 — docker-compose.yml, server/.env.example, docs/self-hosting.md — 을 근거로 하므로, 실제로 존재하지 않는 플래그나 설정은 등장하지 않습니다.",
   ],
   sections: [
@@ -280,7 +280,7 @@ const ko = {
       heading: "왜 셀프 호스팅을 하나",
       body: [
         "Relayium의 실시간 전송은 원래부터 P2P이자 종단간 암호화되어 있어, 그 과정에서 서버는 파일 데이터를 전혀 보지 못합니다. 하지만 서버는 여러분의 계정을 보관하며, 저장형/링크형 전송의 경우 암호화된 블롭과 작은 SQLite 데이터베이스도 보관합니다. 셀프 호스팅이란 그 데이터가 여러분이 통제하는 인프라 위에, 여러분의 도메인 아래 놓이고, 다른 누구의 운영 판단도 개입하지 않는다는 뜻입니다.",
-        "이 프로젝트는 MIT 라이선스로 오픈소스(github.com/relayium/relayium)이므로, 무언가를 맡기기 전에 서버가 정확히 무엇을 하는지 직접 읽어볼 수 있고, 자유롭게 fork하거나 수정할 수도 있습니다.",
+        "이 프로젝트는 AGPL-3.0 라이선스로 오픈소스(github.com/relayium/relayium)이므로, 무언가를 맡기기 전에 서버가 정확히 무엇을 하는지 직접 읽어볼 수 있고, 자유롭게 fork하거나 수정할 수도 있습니다.",
       ],
     },
     {
@@ -359,7 +359,7 @@ const de = {
     "Betreibe den gesamten Relayium-Stack mit einem einzigen Docker-Befehl selbst — eigene Domain, eigene Daten, kein Konto nötig. Behandelt die Env-Keys, das optionale TURN-Relay und das Ausrichten der CLI darauf.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
-    "Relayium ist MIT-lizenziert und Open Source, und der Server ist ein einziges eigenständiges Image — keine externe Datenbank, kein Storage-Bucket eines Drittanbieters, nichts, wofür man sich anmelden müsste. Wenn du lieber alles selbst betreibst, statt dich auf relayium.com zu verlassen, bringt dich diese Anleitung mit Docker zu einem laufenden Server und richtet die CLI darauf aus.",
+    "Relayium ist AGPL-3.0-lizenziert und Open Source, und der Server ist ein einziges eigenständiges Image — keine externe Datenbank, kein Storage-Bucket eines Drittanbieters, nichts, wofür man sich anmelden müsste. Wenn du lieber alles selbst betreibst, statt dich auf relayium.com zu verlassen, bringt dich diese Anleitung mit Docker zu einem laufenden Server und richtet die CLI darauf aus.",
     "Selbst hosten heißt, volle Kontrolle darüber zu haben, wo deine Daten liegen, eine eigene Domain und ein eigenes TLS-Zertifikat zu nutzen, und von niemandes fremden Betriebsentscheidungen abhängig zu sein. Alles Folgende stützt sich auf Dateien, die tatsächlich im Repository liegen — docker-compose.yml, server/.env.example und docs/self-hosting.md —, sodass hier keine Flag oder Einstellung erwähnt wird, die es nicht wirklich gibt.",
   ],
   sections: [
@@ -367,7 +367,7 @@ const de = {
       heading: "Warum selbst hosten",
       body: [
         "Relayiums Echtzeit-Übertragungen sind bereits Peer-to-Peer und Ende-zu-Ende verschlüsselt, sodass der Server dabei nie deine Dateibytes sieht. Er hält aber dein Konto und — bei gespeicherten/link-basierten Übertragungen — verschlüsselte Blobs sowie eine kleine SQLite-Datenbank. Selbst hosten bedeutet, dass diese Daten auf Infrastruktur liegen, die du kontrollierst, unter deiner eigenen Domain, ohne dass fremde Betriebsentscheidungen mitspielen.",
-        "Da das Projekt MIT-lizenziert und Open Source ist (github.com/relayium/relayium), kannst du genau nachlesen, was der Server tut, bevor du ihm irgendetwas anvertraust, und ihn frei forken oder verändern.",
+        "Da das Projekt AGPL-3.0-lizenziert und Open Source ist (github.com/relayium/relayium), kannst du genau nachlesen, was der Server tut, bevor du ihm irgendetwas anvertraust, und ihn frei forken oder verändern.",
       ],
     },
     {
@@ -446,7 +446,7 @@ const fr = {
     "Faites tourner toute la pile Relayium vous-même avec une seule commande Docker — votre propre domaine, vos propres données, aucun compte requis. Couvre les clés d'environnement, le relais TURN optionnel et le paramétrage de la CLI.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Relayium est sous licence MIT et open source, et le serveur est une image unique et autonome — pas de base de données externe, pas de bucket de stockage tiers, rien à quoi s'inscrire. Si vous préférez tout faire tourner vous-même plutôt que dépendre de relayium.com, ce guide vous fait monter un serveur avec Docker et paramètre la CLI pour qu'elle s'y connecte.",
+    "Relayium est sous licence AGPL-3.0 et open source, et le serveur est une image unique et autonome — pas de base de données externe, pas de bucket de stockage tiers, rien à quoi s'inscrire. Si vous préférez tout faire tourner vous-même plutôt que dépendre de relayium.com, ce guide vous fait monter un serveur avec Docker et paramètre la CLI pour qu'elle s'y connecte.",
     "S'auto-héberger vous donne un contrôle total sur l'emplacement de vos données, votre propre domaine et certificat TLS, et aucune dépendance aux décisions opérationnelles de quelqu'un d'autre. Tout ce qui suit s'appuie sur des fichiers réellement présents dans le dépôt — docker-compose.yml, server/.env.example et docs/self-hosting.md — donc rien ici n'est un indicateur ou un réglage qui n'existe pas réellement.",
   ],
   sections: [
@@ -454,7 +454,7 @@ const fr = {
       heading: "Pourquoi s'auto-héberger",
       body: [
         "Les transferts en temps réel de Relayium sont déjà pair-à-pair et chiffrés de bout en bout, donc le serveur ne voit jamais les octets de vos fichiers dans ce cas. Mais il conserve bien votre compte et — pour les transferts stockés/basés sur un lien — des blobs chiffrés ainsi qu'une petite base SQLite. S'auto-héberger signifie que ces données vivent sur une infrastructure que vous contrôlez, sous votre propre domaine, sans que les décisions opérationnelles de quelqu'un d'autre n'interviennent.",
-        "Le projet étant sous licence MIT et open source (github.com/relayium/relayium), vous pouvez lire exactement ce que fait le serveur avant de lui confier quoi que ce soit, et le forker ou le modifier librement.",
+        "Le projet étant sous licence AGPL-3.0 et open source (github.com/relayium/relayium), vous pouvez lire exactement ce que fait le serveur avant de lui confier quoi que ce soit, et le forker ou le modifier librement.",
       ],
     },
     {
@@ -533,7 +533,7 @@ const ar = {
     "شغّل حزمة Relayium بالكامل بنفسك بأمر Docker واحد — نطاقك الخاص، بياناتك الخاصة، بلا حساب مطلوب. يغطّي مفاتيح البيئة، ومُرحِّل TURN الاختياري، وتوجيه الـ CLI إليه.",
   updatedLabel: "آخر تحديث",
   lead: [
-    "‏Relayium مرخَّص بموجب MIT ومفتوح المصدر، والخادم صورة واحدة مكتفية بذاتها — بلا قاعدة بيانات خارجية، بلا حاوية تخزين لطرف ثالث، ولا شيء للتسجيل فيه. إن كنت تفضّل تشغيل كل شيء بنفسك بدل الاعتماد على relayium.com، فهذا الدليل يشغّل خادمًا بـ Docker ويوجّه الـ CLI إليه.",
+    "‏Relayium مرخَّص بموجب AGPL-3.0 ومفتوح المصدر، والخادم صورة واحدة مكتفية بذاتها — بلا قاعدة بيانات خارجية، بلا حاوية تخزين لطرف ثالث، ولا شيء للتسجيل فيه. إن كنت تفضّل تشغيل كل شيء بنفسك بدل الاعتماد على relayium.com، فهذا الدليل يشغّل خادمًا بـ Docker ويوجّه الـ CLI إليه.",
     "تمنحك الاستضافة الذاتية تحكمًا كاملًا في مكان بياناتك، ونطاقك الخاص وشهادة TLS خاصة بك، وبلا اعتماد على بنية أحد آخر. كل ما يلي مبني على ملفات موجودة فعلًا في المستودع — `docker-compose.yml` و `server/.env.example` و `docs/self-hosting.md` — فلا شيء هنا عبارة عن راية أو إعداد غير موجود فعلًا.",
   ],
   sections: [
@@ -541,7 +541,7 @@ const ar = {
       heading: "لماذا الاستضافة الذاتية",
       body: [
         "عمليات النقل الفوري في Relayium من الند للند ومشفَّرة من الطرف إلى الطرف أصلًا، لذا لا يرى الخادم بايتات ملفك هناك أبدًا. لكنه يحتفظ بحسابك، و — لعمليات النقل المُخزَّنة/المبنية على رابط — بكتل نص مُشفَّر وقاعدة بيانات SQLite صغيرة. الاستضافة الذاتية تعني أن تعيش تلك البيانات على بنية تتحكم فيها أنت، تحت نطاقك الخاص، دون أن تتدخل قرارات تشغيل أحد آخر.",
-        "لأن المشروع مرخَّص بموجب MIT ومفتوح المصدر (github.com/relayium/relayium)، يمكنك أن تقرأ بالضبط ما يفعله الخادم قبل أن تأتمنه على أي شيء، وأن تنسخه (fork) أو تعدّله بحرية.",
+        "لأن المشروع مرخَّص بموجب AGPL-3.0 ومفتوح المصدر (github.com/relayium/relayium)، يمكنك أن تقرأ بالضبط ما يفعله الخادم قبل أن تأتمنه على أي شيء، وأن تنسخه (fork) أو تعدّله بحرية.",
       ],
     },
     {
@@ -620,7 +620,7 @@ const es = {
     "Ejecuta toda la pila de Relayium por tu cuenta con un solo comando de Docker — tu propio dominio, tus propios datos, sin cuenta requerida. Cubre las claves de entorno, el retransmisor TURN opcional y cómo apuntar la CLI hacia él.",
   updatedLabel: "Última actualización",
   lead: [
-    "Relayium tiene licencia MIT y es de código abierto, y el servidor es una única imagen autocontenida — sin base de datos externa, sin bucket de almacenamiento de terceros, nada para lo que registrarse. Si prefieres ejecutarlo todo por tu cuenta en vez de depender de relayium.com, esta guía levanta un servidor con Docker y apunta la CLI hacia él.",
+    "Relayium tiene licencia AGPL-3.0 y es de código abierto, y el servidor es una única imagen autocontenida — sin base de datos externa, sin bucket de almacenamiento de terceros, nada para lo que registrarse. Si prefieres ejecutarlo todo por tu cuenta en vez de depender de relayium.com, esta guía levanta un servidor con Docker y apunta la CLI hacia él.",
     "Alojar por tu cuenta te da control total sobre dónde viven tus datos, tu propio dominio y certificado TLS, y ninguna dependencia de la infraestructura de nadie más. Todo lo que sigue se basa en los archivos que se distribuyen en el repositorio — `docker-compose.yml`, `server/.env.example` y `docs/self-hosting.md` — así que nada de lo que hay aquí es un indicador o ajuste que no exista de verdad.",
   ],
   sections: [
@@ -628,7 +628,7 @@ const es = {
       heading: "Por qué alojar por tu cuenta",
       body: [
         "Las transferencias en tiempo real de Relayium ya son de igual a igual y cifradas de extremo a extremo, así que el servidor nunca ve los bytes de tu archivo ahí. Pero sí guarda tu cuenta y — para las transferencias almacenadas/basadas en enlace — blobs de texto cifrado y una pequeña base de datos SQLite. Alojar por tu cuenta significa que esos datos viven en infraestructura que tú controlas, bajo tu propio dominio, sin las decisiones operativas de nadie más de por medio.",
-        "Como el proyecto tiene licencia MIT y es de código abierto (github.com/relayium/relayium), puedes leer exactamente qué hace el servidor antes de confiarle nada, y bifurcarlo o modificarlo libremente.",
+        "Como el proyecto tiene licencia AGPL-3.0 y es de código abierto (github.com/relayium/relayium), puedes leer exactamente qué hace el servidor antes de confiarle nada, y bifurcarlo o modificarlo libremente.",
       ],
     },
     {
@@ -707,7 +707,7 @@ const pt = {
     "Rode toda a pilha do Relayium por conta própria com um único comando Docker — seu próprio domínio, seus próprios dados, sem conta necessária. Cobre as chaves de ambiente, o retransmissor TURN opcional e como apontar a CLI para ele.",
   updatedLabel: "Última atualização",
   lead: [
-    "O Relayium tem licença MIT e é de código aberto, e o servidor é uma única imagem autocontida — sem banco de dados externo, sem bucket de armazenamento de terceiros, nada para se cadastrar. Se você prefere rodar tudo por conta própria em vez de depender do relayium.com, este guia coloca um servidor no ar com Docker e aponta a CLI para ele.",
+    "O Relayium tem licença AGPL-3.0 e é de código aberto, e o servidor é uma única imagem autocontida — sem banco de dados externo, sem bucket de armazenamento de terceiros, nada para se cadastrar. Se você prefere rodar tudo por conta própria em vez de depender do relayium.com, este guia coloca um servidor no ar com Docker e aponta a CLI para ele.",
     "Hospedar por conta própria dá a você controle total sobre onde seus dados ficam, seu próprio domínio e certificado TLS, e nenhuma dependência da infraestrutura de mais ninguém. Tudo a seguir se baseia nos arquivos que acompanham o repositório — `docker-compose.yml`, `server/.env.example` e `docs/self-hosting.md` — então nada aqui é uma flag ou configuração que não exista de verdade.",
   ],
   sections: [
@@ -715,7 +715,7 @@ const pt = {
       heading: "Por que hospedar por conta própria",
       body: [
         "As transferências em tempo real do Relayium já são ponto a ponto e com criptografia de ponta a ponta, então o servidor nunca vê os bytes do seu arquivo ali. Mas ele guarda sua conta e — para transferências armazenadas/baseadas em link — blobs de texto cifrado e um pequeno banco de dados SQLite. Hospedar por conta própria significa que esses dados ficam em infraestrutura que você controla, sob seu próprio domínio, sem as decisões operacionais de mais ninguém envolvidas.",
-        "Como o projeto tem licença MIT e é de código aberto (github.com/relayium/relayium), você pode ler exatamente o que o servidor faz antes de confiar qualquer coisa a ele, e fazer fork ou modificá-lo livremente.",
+        "Como o projeto tem licença AGPL-3.0 e é de código aberto (github.com/relayium/relayium), você pode ler exatamente o que o servidor faz antes de confiar qualquer coisa a ele, e fazer fork ou modificá-lo livremente.",
       ],
     },
     {

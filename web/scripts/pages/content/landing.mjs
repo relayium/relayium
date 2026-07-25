@@ -42,7 +42,7 @@ const zh = {
       },
       {
         title: "免费开源",
-        desc: "MIT 许可，协议与全部前后端代码都在 GitHub 公开；同一网络下实时传输免登录，跨网络配对码传输仅发送方需登录。",
+        desc: "AGPL-3.0 许可，协议与全部前后端代码都在 GitHub 公开；同一网络下实时传输免登录，跨网络配对码传输仅发送方需登录。",
       },
     ],
   },
@@ -68,7 +68,7 @@ const zh = {
     items: [
       {
         q: "免费吗？",
-        a: "免费。Relayium 采用 MIT 许可开源，完全无任何费用；同一网络下实时传输无需登录，跨网络配对码传输仅发送方需登录，接收方始终无需账号。",
+        a: "免费。Relayium 采用 AGPL-3.0 许可开源，完全无任何费用；同一网络下实时传输无需登录，跨网络配对码传输仅发送方需登录，接收方始终无需账号。",
       },
       {
         q: "文件会上传到服务器吗？",
@@ -136,7 +136,7 @@ const ja = {
       },
       {
         title: "無料でオープンソース",
-        desc: "MITライセンス。プロトコルとすべてのコードはGitHubで公開。同じネットワークならリアルタイム転送はログイン不要、ネットワークをまたぐペアリングコードでの転送は送信側のみサインインが必要です。",
+        desc: "AGPL-3.0ライセンス。プロトコルとすべてのコードはGitHubで公開。同じネットワークならリアルタイム転送はログイン不要、ネットワークをまたぐペアリングコードでの転送は送信側のみサインインが必要です。",
       },
     ],
   },
@@ -162,7 +162,7 @@ const ja = {
     items: [
       {
         q: "無料ですか？",
-        a: "無料です。RelayiumはMITライセンスのオープンソースで、料金は一切かかりません。同じネットワークならリアルタイム転送はログイン不要で、ネットワークをまたぐペアリングコードでの転送は送信側のみサインインが必要です。受信側はどちらの場合もアカウント不要です。",
+        a: "無料です。RelayiumはAGPL-3.0ライセンスのオープンソースで、料金は一切かかりません。同じネットワークならリアルタイム転送はログイン不要で、ネットワークをまたぐペアリングコードでの転送は送信側のみサインインが必要です。受信側はどちらの場合もアカウント不要です。",
       },
       {
         q: "ファイルはサーバーにアップロードされますか？",
@@ -230,7 +230,7 @@ const ko = {
       },
       {
         title: "무료 오픈소스",
-        desc: "MIT 라이선스로 프로토콜과 모든 코드가 GitHub에 공개되어 있습니다. 같은 네트워크에서는 실시간 전송에 로그인이 필요 없고, 네트워크를 넘는 페어링 코드 전송은 보내는 쪽만 로그인하면 됩니다.",
+        desc: "AGPL-3.0 라이선스로 프로토콜과 모든 코드가 GitHub에 공개되어 있습니다. 같은 네트워크에서는 실시간 전송에 로그인이 필요 없고, 네트워크를 넘는 페어링 코드 전송은 보내는 쪽만 로그인하면 됩니다.",
       },
     ],
   },
@@ -256,7 +256,7 @@ const ko = {
     items: [
       {
         q: "무료인가요?",
-        a: "무료입니다. Relayium은 MIT 라이선스의 오픈소스이며 비용은 전혀 들지 않습니다. 같은 네트워크에서는 실시간 전송에 로그인이 필요 없고, 네트워크를 넘는 페어링 코드 전송은 보내는 쪽만 로그인하면 됩니다 — 받는 쪽은 어느 경우든 계정이 필요 없습니다.",
+        a: "무료입니다. Relayium은 AGPL-3.0 라이선스의 오픈소스이며 비용은 전혀 들지 않습니다. 같은 네트워크에서는 실시간 전송에 로그인이 필요 없고, 네트워크를 넘는 페어링 코드 전송은 보내는 쪽만 로그인하면 됩니다 — 받는 쪽은 어느 경우든 계정이 필요 없습니다.",
       },
       {
         q: "파일이 서버에 업로드되나요?",
@@ -324,7 +324,7 @@ const de = {
       },
       {
         title: "Kostenlos & Open Source",
-        desc: "MIT-Lizenz; Protokoll und der gesamte Code liegen offen auf GitHub. Im selben Netz brauchen Echtzeitübertragungen kein Konto; für Pairing über Netzwerke hinweg meldet sich nur der Absender an.",
+        desc: "AGPL-3.0-Lizenz; Protokoll und der gesamte Code liegen offen auf GitHub. Im selben Netz brauchen Echtzeitübertragungen kein Konto; für Pairing über Netzwerke hinweg meldet sich nur der Absender an.",
       },
     ],
   },
@@ -350,7 +350,7 @@ const de = {
     items: [
       {
         q: "Ist es kostenlos?",
-        a: "Ja. Relayium ist Open Source unter der MIT-Lizenz und ohne jede Gebühr nutzbar. Im selben Netz sind Echtzeitübertragungen ohne Anmeldung möglich; für Pairing über Netzwerke hinweg meldet sich nur der Absender an — der Empfänger braucht in beiden Fällen kein Konto.",
+        a: "Ja. Relayium ist Open Source unter der AGPL-3.0-Lizenz und ohne jede Gebühr nutzbar. Im selben Netz sind Echtzeitübertragungen ohne Anmeldung möglich; für Pairing über Netzwerke hinweg meldet sich nur der Absender an — der Empfänger braucht in beiden Fällen kein Konto.",
       },
       {
         q: "Werden meine Dateien auf einen Server hochgeladen?",
@@ -418,7 +418,7 @@ const fr = {
       },
       {
         title: "Gratuit et open source",
-        desc: "Licence MIT ; le protocole et tout le code sont publics sur GitHub. Sur le même réseau, les transferts en temps réel ne nécessitent aucun compte ; pour s'appairer entre réseaux différents, seul l'expéditeur se connecte.",
+        desc: "Licence AGPL-3.0 ; le protocole et tout le code sont publics sur GitHub. Sur le même réseau, les transferts en temps réel ne nécessitent aucun compte ; pour s'appairer entre réseaux différents, seul l'expéditeur se connecte.",
       },
     ],
   },
@@ -444,7 +444,7 @@ const fr = {
     items: [
       {
         q: "Est-ce gratuit ?",
-        a: "Oui. Relayium est open source sous licence MIT et s'utilise sans aucun frais. Sur le même réseau, les transferts en temps réel ne demandent aucune connexion ; pour s'appairer entre réseaux différents, seul l'expéditeur doit se connecter — le destinataire n'a jamais besoin de compte.",
+        a: "Oui. Relayium est open source sous licence AGPL-3.0 et s'utilise sans aucun frais. Sur le même réseau, les transferts en temps réel ne demandent aucune connexion ; pour s'appairer entre réseaux différents, seul l'expéditeur doit se connecter — le destinataire n'a jamais besoin de compte.",
       },
       {
         q: "Mes fichiers sont-ils téléversés sur un serveur ?",
@@ -512,7 +512,7 @@ const ar = {
       },
       {
         title: "مجاني ومفتوح المصدر",
-        desc: "رخصة MIT؛ البروتوكول وكامل الشيفرة منشوران علنًا على GitHub. على نفس الشبكة لا يتطلب النقل الفوري أي حساب؛ وللاقتران عبر الشبكات المختلفة يسجّل المُرسِل وحده الدخول.",
+        desc: "رخصة AGPL-3.0؛ البروتوكول وكامل الشيفرة منشوران علنًا على GitHub. على نفس الشبكة لا يتطلب النقل الفوري أي حساب؛ وللاقتران عبر الشبكات المختلفة يسجّل المُرسِل وحده الدخول.",
       },
     ],
   },
@@ -538,7 +538,7 @@ const ar = {
     items: [
       {
         q: "هل هو مجاني؟",
-        a: "نعم. Relayium مفتوح المصدر برخصة MIT ويُستخدم دون أي رسوم. على نفس الشبكة لا يتطلب النقل الفوري أي تسجيل دخول؛ وللاقتران عبر الشبكات المختلفة يسجّل المُرسِل وحده الدخول — ولا يحتاج المُستقبِل إلى حساب أبدًا.",
+        a: "نعم. Relayium مفتوح المصدر برخصة AGPL-3.0 ويُستخدم دون أي رسوم. على نفس الشبكة لا يتطلب النقل الفوري أي تسجيل دخول؛ وللاقتران عبر الشبكات المختلفة يسجّل المُرسِل وحده الدخول — ولا يحتاج المُستقبِل إلى حساب أبدًا.",
       },
       {
         q: "هل تُرفع ملفاتي إلى خادم؟",
@@ -606,7 +606,7 @@ const es = {
       },
       {
         title: "Gratis y de código abierto",
-        desc: "Licencia MIT; el protocolo y todo el código son públicos en GitHub. En la misma red, las transferencias en tiempo real no requieren cuenta; para emparejar entre redes distintas solo el remitente inicia sesión.",
+        desc: "Licencia AGPL-3.0; el protocolo y todo el código son públicos en GitHub. En la misma red, las transferencias en tiempo real no requieren cuenta; para emparejar entre redes distintas solo el remitente inicia sesión.",
       },
     ],
   },
@@ -632,7 +632,7 @@ const es = {
     items: [
       {
         q: "¿Es gratis?",
-        a: "Sí. Relayium es de código abierto bajo licencia MIT y se usa sin coste alguno. En la misma red, las transferencias en tiempo real no requieren iniciar sesión; para emparejar entre redes distintas solo el remitente debe iniciar sesión — el destinatario nunca necesita cuenta.",
+        a: "Sí. Relayium es de código abierto bajo licencia AGPL-3.0 y se usa sin coste alguno. En la misma red, las transferencias en tiempo real no requieren iniciar sesión; para emparejar entre redes distintas solo el remitente debe iniciar sesión — el destinatario nunca necesita cuenta.",
       },
       {
         q: "¿Se suben mis archivos a un servidor?",
@@ -700,7 +700,7 @@ const pt = {
       },
       {
         title: "Gratuito e de código aberto",
-        desc: "Licença MIT; o protocolo e todo o código são públicos no GitHub. Na mesma rede, as transferências em tempo real não exigem conta; para emparelhar entre redes diferentes só o remetente faz login.",
+        desc: "Licença AGPL-3.0; o protocolo e todo o código são públicos no GitHub. Na mesma rede, as transferências em tempo real não exigem conta; para emparelhar entre redes diferentes só o remetente faz login.",
       },
     ],
   },
@@ -726,7 +726,7 @@ const pt = {
     items: [
       {
         q: "É gratuito?",
-        a: "Sim. O Relayium é de código aberto sob licença MIT e é usado sem custo algum. Na mesma rede, as transferências em tempo real não exigem login; para emparelhar entre redes diferentes só o remetente precisa fazer login — o destinatário nunca precisa de conta.",
+        a: "Sim. O Relayium é de código aberto sob licença AGPL-3.0 e é usado sem custo algum. Na mesma rede, as transferências em tempo real não exigem login; para emparelhar entre redes diferentes só o remetente precisa fazer login — o destinatário nunca precisa de conta.",
       },
       {
         q: "Meus arquivos são enviados para um servidor?",

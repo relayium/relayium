@@ -69,11 +69,11 @@ footer a{color:var(--text-h);text-decoration:none}
       <h1>Relayium をセルフホスト：自分専用のファイル転送サーバーを運用</h1>
       <p class="updated">最終更新: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/self-host-relayium/">English</a><a href="/zh/guides/self-host-relayium/">中文</a><a href="/ja/guides/self-host-relayium/" aria-current="true">日本語</a><a href="/ko/guides/self-host-relayium/">한국어</a><a href="/de/guides/self-host-relayium/">Deutsch</a><a href="/fr/guides/self-host-relayium/">Français</a><a href="/ar/guides/self-host-relayium/">العربية</a><a href="/es/guides/self-host-relayium/">Español</a><a href="/pt/guides/self-host-relayium/">Português</a></nav>
-      <p class="lead">Relayium は MIT ライセンスのオープンソースで、サーバーは1つの自己完結型イメージです——外部データベースも、サードパーティのストレージバケットも不要で、登録するものもありません。relayium.com に頼るのではなく全体を自分で運用したいなら、本ガイドで Docker によりサーバーを立ち上げ、CLI をそこに向ける方法を案内します。</p>
+      <p class="lead">Relayium は AGPL-3.0 ライセンスのオープンソースで、サーバーは1つの自己完結型イメージです——外部データベースも、サードパーティのストレージバケットも不要で、登録するものもありません。relayium.com に頼るのではなく全体を自分で運用したいなら、本ガイドで Docker によりサーバーを立ち上げ、CLI をそこに向ける方法を案内します。</p>
       <p class="lead">セルフホストすることで、データがどこに置かれるかを完全に管理でき、自分のドメインと TLS 証明書を使え、他人のインフラ運用判断に依存しません。以下の内容はすべてリポジトリに実際に存在するファイル——docker-compose.yml、server/.env.example、docs/self-hosting.md——に基づいており、実在しないフラグや設定は登場しません。</p>
       <h2>なぜセルフホストするのか</h2>
       <p>Relayium のリアルタイム転送はもともとピアツーピアかつエンドツーエンドで暗号化されているため、その過程でサーバーがファイルのバイトを目にすることはありません。しかしサーバーはあなたのアカウントを保持し、また保存型/リンク型の転送については、暗号化されたブロブと小さな SQLite データベースを保持します。セルフホストとは、そのデータが自分が管理するインフラ上に、自分のドメインの下に置かれ、他人の運用判断が介在しないということです。</p>
-      <p>このプロジェクトは MIT ライセンスでオープンソース（github.com/relayium/relayium）なので、何かを任せる前にサーバーが正確に何をしているかを読んで確認でき、自由に fork したり改変したりできます。</p>
+      <p>このプロジェクトは AGPL-3.0 ライセンスでオープンソース（github.com/relayium/relayium）なので、何かを任せる前にサーバーが正確に何をしているかを読んで確認でき、自由に fork したり改変したりできます。</p>
       <h2>Docker でクイックスタート</h2>
       <p>リポジトリのルートには Dockerfile と docker-compose.yml があり、これらは1つの自己完結型イメージ——事前ビルド済みの Web アプリを配信する静的 Go バイナリ——をビルドします。実行するためだけに別途 Node、Go ツールチェーン、nginx は不要です:</p>
       <pre><code>docker compose up -d --build</code></pre>

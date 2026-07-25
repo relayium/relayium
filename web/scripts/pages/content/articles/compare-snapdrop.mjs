@@ -69,7 +69,7 @@ const en = {
       },
       {
         q: "Is Relayium open source and self-hostable?",
-        a: "Yes. Relayium is MIT-licensed and the full protocol and code are public at github.com/relayium/relayium, so you can audit it or run your own instance — the same openness that made Snapdrop and PairDrop trusted.",
+        a: "Yes. Relayium is AGPL-3.0-licensed and the full protocol and code are public at github.com/relayium/relayium, so you can audit it or run your own instance — the same openness that made Snapdrop and PairDrop trusted.",
       },
       {
         q: "Is there a performance difference?",
@@ -150,7 +150,7 @@ const zh = {
       },
       {
         q: "Relayium 开源且可自托管吗？",
-        a: "是的。Relayium 采用 MIT 许可，完整的协议与代码都公开在 github.com/relayium/relayium，你可以审计它或自建实例——这正是让 Snapdrop 与 PairDrop 赢得信任的同一种开放。",
+        a: "是的。Relayium 采用 AGPL-3.0 许可，完整的协议与代码都公开在 github.com/relayium/relayium，你可以审计它或自建实例——这正是让 Snapdrop 与 PairDrop 赢得信任的同一种开放。",
       },
       {
         q: "性能上有差异吗？",
@@ -231,7 +231,7 @@ const ja = {
       },
       {
         q: "Relayium はオープンソースで自己ホストできますか？",
-        a: "はい。Relayium は MIT ライセンスで、プロトコルとコードのすべてが github.com/relayium/relayium で公開されています。監査も自分のインスタンス運用も可能です——Snapdrop と PairDrop が信頼された、まさに同じ開放性です。",
+        a: "はい。Relayium は AGPL-3.0 ライセンスで、プロトコルとコードのすべてが github.com/relayium/relayium で公開されています。監査も自分のインスタンス運用も可能です——Snapdrop と PairDrop が信頼された、まさに同じ開放性です。",
       },
       {
         q: "性能に違いはありますか？",
@@ -312,7 +312,7 @@ const ko = {
       },
       {
         q: "Relayium은 오픈소스이며 자체 호스팅이 가능한가요?",
-        a: "네. Relayium은 MIT 라이선스이며 프로토콜과 코드 전체가 github.com/relayium/relayium에 공개되어 있어 감사하거나 자체 인스턴스를 운영할 수 있습니다. Snapdrop과 PairDrop이 신뢰받게 한 바로 그 개방성입니다.",
+        a: "네. Relayium은 AGPL-3.0 라이선스이며 프로토콜과 코드 전체가 github.com/relayium/relayium에 공개되어 있어 감사하거나 자체 인스턴스를 운영할 수 있습니다. Snapdrop과 PairDrop이 신뢰받게 한 바로 그 개방성입니다.",
       },
       {
         q: "성능 차이가 있나요?",
@@ -393,7 +393,7 @@ const de = {
       },
       {
         q: "Ist Relayium quelloffen und selbst hostbar?",
-        a: "Ja. Relayium ist MIT-lizenziert, und das vollständige Protokoll samt Code ist öffentlich unter github.com/relayium/relayium — du kannst es prüfen oder eine eigene Instanz betreiben, dieselbe Offenheit, die Snapdrop und PairDrop Vertrauen verschafft hat.",
+        a: "Ja. Relayium ist AGPL-3.0-lizenziert, und das vollständige Protokoll samt Code ist öffentlich unter github.com/relayium/relayium — du kannst es prüfen oder eine eigene Instanz betreiben, dieselbe Offenheit, die Snapdrop und PairDrop Vertrauen verschafft hat.",
       },
       {
         q: "Gibt es einen Leistungsunterschied?",
@@ -474,7 +474,7 @@ const fr = {
       },
       {
         q: "Relayium est-il open source et auto-hébergeable ?",
-        a: "Oui. Relayium est sous licence MIT et l'intégralité du protocole et du code est publique sur github.com/relayium/relayium, vous pouvez donc l'auditer ou faire tourner votre propre instance — la même ouverture qui a rendu Snapdrop et PairDrop dignes de confiance.",
+        a: "Oui. Relayium est sous licence AGPL-3.0 et l'intégralité du protocole et du code est publique sur github.com/relayium/relayium, vous pouvez donc l'auditer ou faire tourner votre propre instance — la même ouverture qui a rendu Snapdrop et PairDrop dignes de confiance.",
       },
       {
         q: "Y a-t-il une différence de performance ?",
@@ -555,7 +555,7 @@ const ar = {
       },
       {
         q: "هل Relayium مفتوح المصدر وقابل للاستضافة الذاتية؟",
-        a: "نعم. Relayium مرخّص بـ MIT، والبروتوكول والشيفرة كاملين متاحان علنًا على github.com/relayium/relayium، فيمكنك تدقيقه أو تشغيل نسختك الخاصة — نفس الانفتاح الذي جعل Snapdrop وPairDrop موثوقين.",
+        a: "نعم. Relayium مرخّص بـ AGPL-3.0، والبروتوكول والشيفرة كاملين متاحان علنًا على github.com/relayium/relayium، فيمكنك تدقيقه أو تشغيل نسختك الخاصة — نفس الانفتاح الذي جعل Snapdrop وPairDrop موثوقين.",
       },
       {
         q: "هل هناك فرق في الأداء؟",
@@ -636,7 +636,7 @@ const es = {
       },
       {
         q: "¿Relayium es de código abierto y autoalojable?",
-        a: "Sí. Relayium está bajo licencia MIT y el protocolo y el código completos son públicos en github.com/relayium/relayium, así que puedes auditarlo o ejecutar tu propia instancia: la misma apertura que hizo confiables a Snapdrop y PairDrop.",
+        a: "Sí. Relayium está bajo licencia AGPL-3.0 y el protocolo y el código completos son públicos en github.com/relayium/relayium, así que puedes auditarlo o ejecutar tu propia instancia: la misma apertura que hizo confiables a Snapdrop y PairDrop.",
       },
       {
         q: "¿Hay diferencia de rendimiento?",
@@ -717,7 +717,7 @@ const pt = {
       },
       {
         q: "O Relayium é de código aberto e auto-hospedável?",
-        a: "Sim. O Relayium é licenciado sob MIT e o protocolo e o código completos são públicos em github.com/relayium/relayium, então você pode auditá-lo ou rodar a sua própria instância — a mesma abertura que tornou o Snapdrop e o PairDrop confiáveis.",
+        a: "Sim. O Relayium é licenciado sob AGPL-3.0 e o protocolo e o código completos são públicos em github.com/relayium/relayium, então você pode auditá-lo ou rodar a sua própria instância — a mesma abertura que tornou o Snapdrop e o PairDrop confiáveis.",
       },
       {
         q: "Há diferença de desempenho?",

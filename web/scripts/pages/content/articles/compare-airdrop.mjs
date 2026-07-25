@@ -69,7 +69,7 @@ const en = {
       },
       {
         q: "Do I need to install an app?",
-        a: "No. Relayium is a web page — there is nothing to install on either device, on any operating system. It is free and open source under the MIT license at github.com/relayium/relayium, so you can audit it or run your own instance.",
+        a: "No. Relayium is a web page — there is nothing to install on either device, on any operating system. It is free and open source under the AGPL-3.0 license at github.com/relayium/relayium, so you can audit it or run your own instance.",
       },
     ],
   },
@@ -146,7 +146,7 @@ const zh = {
       },
       {
         q: "需要安装 App 吗？",
-        a: "不需要。Relayium 就是一个网页——在任何操作系统上、任何一台设备上都无需安装。它采用 MIT 许可，免费且开源，代码公开在 github.com/relayium/relayium，你可以审计它或自建实例。",
+        a: "不需要。Relayium 就是一个网页——在任何操作系统上、任何一台设备上都无需安装。它采用 AGPL-3.0 许可，免费且开源，代码公开在 github.com/relayium/relayium，你可以审计它或自建实例。",
       },
     ],
   },
@@ -223,7 +223,7 @@ const ja = {
       },
       {
         q: "アプリのインストールは必要ですか？",
-        a: "いいえ。Relayium はウェブページです——どの OS でも、どちらの端末にもインストールするものはありません。MIT ライセンスの無料オープンソースで、コードは github.com/relayium/relayium に公開されており、監査も自分のインスタンス運用も可能です。",
+        a: "いいえ。Relayium はウェブページです——どの OS でも、どちらの端末にもインストールするものはありません。AGPL-3.0 ライセンスの無料オープンソースで、コードは github.com/relayium/relayium に公開されており、監査も自分のインスタンス運用も可能です。",
       },
     ],
   },
@@ -300,7 +300,7 @@ const ko = {
       },
       {
         q: "앱을 설치해야 하나요?",
-        a: "아니요. Relayium은 웹 페이지입니다 — 어떤 OS에서도, 어느 기기에도 설치할 것이 없습니다. MIT 라이선스의 무료 오픈소스이며 코드는 github.com/relayium/relayium에 공개되어 있어 감사하거나 자체 인스턴스를 운영할 수 있습니다.",
+        a: "아니요. Relayium은 웹 페이지입니다 — 어떤 OS에서도, 어느 기기에도 설치할 것이 없습니다. AGPL-3.0 라이선스의 무료 오픈소스이며 코드는 github.com/relayium/relayium에 공개되어 있어 감사하거나 자체 인스턴스를 운영할 수 있습니다.",
       },
     ],
   },
@@ -377,7 +377,7 @@ const de = {
       },
       {
         q: "Muss ich eine App installieren?",
-        a: "Nein. Relayium ist eine Webseite — auf keinem Gerät und keinem Betriebssystem ist etwas zu installieren. Es ist kostenlos und quelloffen unter der MIT-Lizenz auf github.com/relayium/relayium, sodass du es prüfen oder eine eigene Instanz betreiben kannst.",
+        a: "Nein. Relayium ist eine Webseite — auf keinem Gerät und keinem Betriebssystem ist etwas zu installieren. Es ist kostenlos und quelloffen unter der AGPL-3.0-Lizenz auf github.com/relayium/relayium, sodass du es prüfen oder eine eigene Instanz betreiben kannst.",
       },
     ],
   },
@@ -454,7 +454,7 @@ const fr = {
       },
       {
         q: "Dois-je installer une application ?",
-        a: "Non. Relayium est une page web — il n'y a rien à installer sur aucun appareil, quel que soit le système d'exploitation. C'est gratuit et open source sous licence MIT sur github.com/relayium/relayium, vous pouvez donc l'auditer ou faire tourner votre propre instance.",
+        a: "Non. Relayium est une page web — il n'y a rien à installer sur aucun appareil, quel que soit le système d'exploitation. C'est gratuit et open source sous licence AGPL-3.0 sur github.com/relayium/relayium, vous pouvez donc l'auditer ou faire tourner votre propre instance.",
       },
     ],
   },
@@ -531,7 +531,7 @@ const ar = {
       },
       {
         q: "هل أحتاج إلى تثبيت تطبيق؟",
-        a: "لا. Relayium صفحة ويب — لا شيء لتثبيته على أيٍّ من الجهازين، على أي نظام تشغيل. وهو مجاني ومفتوح المصدر بموجب رخصة MIT على github.com/relayium/relayium، فيمكنك تدقيقه أو تشغيل نسختك الخاصة.",
+        a: "لا. Relayium صفحة ويب — لا شيء لتثبيته على أيٍّ من الجهازين، على أي نظام تشغيل. وهو مجاني ومفتوح المصدر بموجب رخصة AGPL-3.0 على github.com/relayium/relayium، فيمكنك تدقيقه أو تشغيل نسختك الخاصة.",
       },
     ],
   },
@@ -608,7 +608,7 @@ const es = {
       },
       {
         q: "¿Necesito instalar una app?",
-        a: "No. Relayium es una página web — no hay nada que instalar en ninguno de los dispositivos, en cualquier sistema operativo. Es gratis y de código abierto bajo la licencia MIT en github.com/relayium/relayium, así que puedes auditarlo o ejecutar tu propia instancia.",
+        a: "No. Relayium es una página web — no hay nada que instalar en ninguno de los dispositivos, en cualquier sistema operativo. Es gratis y de código abierto bajo la licencia AGPL-3.0 en github.com/relayium/relayium, así que puedes auditarlo o ejecutar tu propia instancia.",
       },
     ],
   },
@@ -685,7 +685,7 @@ const pt = {
       },
       {
         q: "Preciso instalar um aplicativo?",
-        a: "Não. O Relayium é uma página web — não há nada para instalar em nenhum dos dispositivos, em qualquer sistema operacional. É gratuito e de código aberto sob a licença MIT em github.com/relayium/relayium, então você pode auditá-lo ou rodar sua própria instância.",
+        a: "Não. O Relayium é uma página web — não há nada para instalar em nenhum dos dispositivos, em qualquer sistema operacional. É gratuito e de código aberto sob a licença AGPL-3.0 em github.com/relayium/relayium, então você pode auditá-lo ou rodar sua própria instância.",
       },
     ],
   },

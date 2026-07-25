@@ -76,7 +76,7 @@ const en = {
       },
       {
         q: "Is Relayium open source?",
-        a: "Yes, MIT-licensed, with the full protocol and code public at github.com/relayium/relayium — the same kind of openness that makes LocalSend trustworthy.",
+        a: "Yes, AGPL-3.0-licensed, with the full protocol and code public at github.com/relayium/relayium — the same kind of openness that makes LocalSend trustworthy.",
       },
       {
         q: "Which one is more private?",
@@ -164,7 +164,7 @@ const zh = {
       },
       {
         q: "Relayium 是开源的吗？",
-        a: "是的，采用 MIT 许可证，完整的协议与代码都公开在 github.com/relayium/relayium——这正是让 LocalSend 值得信任的同一种开放。",
+        a: "是的，采用 AGPL-3.0 许可证，完整的协议与代码都公开在 github.com/relayium/relayium——这正是让 LocalSend 值得信任的同一种开放。",
       },
       {
         q: "哪一个更私密？",
@@ -252,7 +252,7 @@ const ja = {
       },
       {
         q: "Relayium はオープンソースですか？",
-        a: "はい、MIT ライセンスで、プロトコルとコードの全体が github.com/relayium/relayium で公開されています——LocalSend を信頼できるものにしているのと同じ種類の開放性です。",
+        a: "はい、AGPL-3.0 ライセンスで、プロトコルとコードの全体が github.com/relayium/relayium で公開されています——LocalSend を信頼できるものにしているのと同じ種類の開放性です。",
       },
       {
         q: "どちらがより秘匿性が高いですか？",
@@ -340,7 +340,7 @@ const ko = {
       },
       {
         q: "Relayium은 오픈소스인가요?",
-        a: "네, MIT 라이선스이며 프로토콜과 코드 전체가 github.com/relayium/relayium에 공개되어 있습니다 — LocalSend를 신뢰할 수 있게 만든 것과 같은 종류의 개방성입니다.",
+        a: "네, AGPL-3.0 라이선스이며 프로토콜과 코드 전체가 github.com/relayium/relayium에 공개되어 있습니다 — LocalSend를 신뢰할 수 있게 만든 것과 같은 종류의 개방성입니다.",
       },
       {
         q: "어느 쪽이 더 사적인가요?",
@@ -428,7 +428,7 @@ const de = {
       },
       {
         q: "Ist Relayium quelloffen?",
-        a: "Ja, MIT-lizenziert, das vollständige Protokoll samt Code ist öffentlich unter github.com/relayium/relayium — dieselbe Art von Offenheit, die LocalSend vertrauenswürdig macht.",
+        a: "Ja, AGPL-3.0-lizenziert, das vollständige Protokoll samt Code ist öffentlich unter github.com/relayium/relayium — dieselbe Art von Offenheit, die LocalSend vertrauenswürdig macht.",
       },
       {
         q: "Welches ist privater?",
@@ -516,7 +516,7 @@ const fr = {
       },
       {
         q: "Relayium est-il open source ?",
-        a: "Oui, sous licence MIT, avec l'intégralité du protocole et du code publique sur github.com/relayium/relayium — le même genre d'ouverture qui rend LocalSend digne de confiance.",
+        a: "Oui, sous licence AGPL-3.0, avec l'intégralité du protocole et du code publique sur github.com/relayium/relayium — le même genre d'ouverture qui rend LocalSend digne de confiance.",
       },
       {
         q: "Lequel est le plus privé ?",
@@ -604,7 +604,7 @@ const ar = {
       },
       {
         q: "هل Relayium مفتوح المصدر؟",
-        a: "نعم، مرخّص بموجب MIT، والبروتوكول والشيفرة بالكامل علنيان على github.com/relayium/relayium — النوع نفسه من الانفتاح الذي يجعل LocalSend جديرًا بالثقة.",
+        a: "نعم، مرخّص بموجب AGPL-3.0، والبروتوكول والشيفرة بالكامل علنيان على github.com/relayium/relayium — النوع نفسه من الانفتاح الذي يجعل LocalSend جديرًا بالثقة.",
       },
       {
         q: "أيّهما أكثر خصوصية؟",
@@ -692,7 +692,7 @@ const es = {
       },
       {
         q: "¿Es Relayium de código abierto?",
-        a: "Sí, bajo licencia MIT, con el protocolo y el código completos públicos en github.com/relayium/relayium: el mismo tipo de apertura que hace confiable a LocalSend.",
+        a: "Sí, bajo licencia AGPL-3.0, con el protocolo y el código completos públicos en github.com/relayium/relayium: el mismo tipo de apertura que hace confiable a LocalSend.",
       },
       {
         q: "¿Cuál es más privado?",
@@ -780,7 +780,7 @@ const pt = {
       },
       {
         q: "O Relayium é de código aberto?",
-        a: "Sim, licenciado sob MIT, com o protocolo e o código completos públicos em github.com/relayium/relayium — o mesmo tipo de abertura que torna o LocalSend confiável.",
+        a: "Sim, licenciado sob AGPL-3.0, com o protocolo e o código completos públicos em github.com/relayium/relayium — o mesmo tipo de abertura que torna o LocalSend confiável.",
       },
       {
         q: "Qual é mais privado?",

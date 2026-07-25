@@ -39,7 +39,7 @@ const en = {
       heading: "Beyond link sharing: realtime transfer, a CLI, and self-hosting",
       body: [
         "Firefox Send only ever did one thing — encrypted, async link sharing — and Relayium's stored mode covers that ground. But Relayium also has a mode Firefox Send never offered: realtime peer-to-peer transfer, where files stream directly between two open browsers over an end-to-end encrypted WebRTC channel and nothing is stored on a server at all. On the same network it needs no account for either side; sending across networks with a pairing code needs the sender to sign in, and the receiver still never does.",
-        "For people who want more control, Relayium also ships a free, open-source CLI (push/pull over SSH, cross-network send/receive, folder sync) and a self-hostable server you can run yourself — none of which Firefox Send ever had. The whole project is MIT-licensed and open source on GitHub.",
+        "For people who want more control, Relayium also ships a free, open-source CLI (push/pull over SSH, cross-network send/receive, folder sync) and a self-hostable server you can run yourself — none of which Firefox Send ever had. The whole project is AGPL-3.0-licensed and open source on GitHub.",
       ],
     },
   ],
@@ -60,7 +60,7 @@ const en = {
       },
       {
         q: "Is Relayium free?",
-        a: "Yes. Relayium is free and open source under the MIT license. Creating a stored download link requires the sender to sign in (links count against your account's storage quota), but the recipient never needs an account to download.",
+        a: "Yes. Relayium is free and open source under the AGPL-3.0 license. Creating a stored download link requires the sender to sign in (links count against your account's storage quota), but the recipient never needs an account to download.",
       },
     ],
   },
@@ -106,7 +106,7 @@ const zh = {
       heading: "不止链接分享：实时传输、命令行工具与自托管",
       body: [
         "Firefox Send 只做一件事——异步加密链接分享，Relayium 的存储模式覆盖了这一点。但 Relayium 还有一种 Firefox Send 从未提供过的模式：实时点对点传输，文件通过端到端加密的 WebRTC 通道在两个打开的浏览器之间直接流动，完全不落到服务器上。同一网络下双方都无需账号；跨网络用配对码发送时需要发送方登录，接收方仍然始终无需账号。",
-        "对想要更多掌控权的人，Relayium 还提供免费开源的命令行工具（基于 SSH 的 push/pull、跨网络的 send/receive、文件夹同步）以及可自行运行的自托管服务端——这些都是 Firefox Send 从未有过的。整个项目在 GitHub 上以 MIT 许可开源。",
+        "对想要更多掌控权的人，Relayium 还提供免费开源的命令行工具（基于 SSH 的 push/pull、跨网络的 send/receive、文件夹同步）以及可自行运行的自托管服务端——这些都是 Firefox Send 从未有过的。整个项目在 GitHub 上以 AGPL-3.0 许可开源。",
       ],
     },
   ],
@@ -127,7 +127,7 @@ const zh = {
       },
       {
         q: "Relayium 免费吗？",
-        a: "免费。Relayium 采用 MIT 许可，免费开源。生成存储下载链接需要发送方登录（链接计入你账号的存储配额），但收件方下载始终无需账号。",
+        a: "免费。Relayium 采用 AGPL-3.0 许可，免费开源。生成存储下载链接需要发送方登录（链接计入你账号的存储配额），但收件方下载始终无需账号。",
       },
     ],
   },
@@ -173,7 +173,7 @@ const ja = {
       heading: "リンク共有を超えて：リアルタイム転送、CLI、セルフホスト",
       body: [
         "Firefox Send は非同期の暗号化リンク共有という一つのことしかしませんでしたが、Relayium の保存モードはその範囲をカバーします。しかし Relayium には Firefox Send が一度も提供しなかったモードもあります。リアルタイムのピアツーピア転送では、ファイルはエンドツーエンド暗号化された WebRTC チャネルを通じて、開いている2つのブラウザ間を直接流れ、サーバーには一切保存されません。同じネットワークならどちらもアカウント不要です。ペアリングコードでネットワークをまたいで送る場合は送信側のサインインが必要ですが、受信側は依然として不要です。",
-        "より多くの制御を望む人向けに、Relayium は無料でオープンソースの CLI（SSH 経由の push/pull、ネットワークをまたぐ send/receive、フォルダ同期）と、自分で運用できるセルフホスト型サーバーも提供します——どちらも Firefox Send にはなかったものです。プロジェクト全体は MIT ライセンスで GitHub 上にオープンソース公開されています。",
+        "より多くの制御を望む人向けに、Relayium は無料でオープンソースの CLI（SSH 経由の push/pull、ネットワークをまたぐ send/receive、フォルダ同期）と、自分で運用できるセルフホスト型サーバーも提供します——どちらも Firefox Send にはなかったものです。プロジェクト全体は AGPL-3.0 ライセンスで GitHub 上にオープンソース公開されています。",
       ],
     },
   ],
@@ -194,7 +194,7 @@ const ja = {
       },
       {
         q: "Relayium は無料ですか？",
-        a: "はい。Relayium は MIT ライセンスの無料オープンソースです。保存型ダウンロードリンクの作成には送信側のサインインが必要です（リンクはアカウントの保存容量枠に計上されます）が、受信側はダウンロードに決してアカウントを必要としません。",
+        a: "はい。Relayium は AGPL-3.0 ライセンスの無料オープンソースです。保存型ダウンロードリンクの作成には送信側のサインインが必要です（リンクはアカウントの保存容量枠に計上されます）が、受信側はダウンロードに決してアカウントを必要としません。",
       },
     ],
   },
@@ -240,7 +240,7 @@ const ko = {
       heading: "링크 공유를 넘어서: 실시간 전송, CLI, 셀프호스팅",
       body: [
         "Firefox Send는 비동기 암호화 링크 공유라는 한 가지만 했으며, Relayium의 저장 모드가 그 영역을 커버합니다. 하지만 Relayium에는 Firefox Send가 전혀 제공한 적 없는 모드도 있습니다. 실시간 피어투피어 전송에서는 파일이 종단간 암호화된 WebRTC 채널을 통해 열려 있는 두 브라우저 사이를 직접 흐르며 서버에는 전혀 저장되지 않습니다. 같은 네트워크에서는 양쪽 모두 계정이 필요 없습니다. 페어링 코드로 네트워크를 넘어 보낼 때는 보내는 쪽의 로그인이 필요하지만, 받는 쪽은 여전히 필요 없습니다.",
-        "더 많은 제어를 원하는 사람들을 위해 Relayium은 무료 오픈소스 CLI(SSH를 통한 push/pull, 네트워크를 넘나드는 send/receive, 폴더 동기화)와 직접 운영할 수 있는 셀프호스팅 서버도 제공합니다——둘 다 Firefox Send에는 없던 것입니다. 프로젝트 전체는 MIT 라이선스로 GitHub에 오픈소스로 공개되어 있습니다.",
+        "더 많은 제어를 원하는 사람들을 위해 Relayium은 무료 오픈소스 CLI(SSH를 통한 push/pull, 네트워크를 넘나드는 send/receive, 폴더 동기화)와 직접 운영할 수 있는 셀프호스팅 서버도 제공합니다——둘 다 Firefox Send에는 없던 것입니다. 프로젝트 전체는 AGPL-3.0 라이선스로 GitHub에 오픈소스로 공개되어 있습니다.",
       ],
     },
   ],
@@ -261,7 +261,7 @@ const ko = {
       },
       {
         q: "Relayium은 무료인가요?",
-        a: "네. Relayium은 MIT 라이선스의 무료 오픈소스입니다. 저장형 다운로드 링크를 만들려면 보내는 쪽의 로그인이 필요합니다(링크는 계정의 저장 용량 한도에 포함됩니다). 하지만 받는 쪽은 다운로드에 계정이 전혀 필요하지 않습니다.",
+        a: "네. Relayium은 AGPL-3.0 라이선스의 무료 오픈소스입니다. 저장형 다운로드 링크를 만들려면 보내는 쪽의 로그인이 필요합니다(링크는 계정의 저장 용량 한도에 포함됩니다). 하지만 받는 쪽은 다운로드에 계정이 전혀 필요하지 않습니다.",
       },
     ],
   },
@@ -307,7 +307,7 @@ const de = {
       heading: "Mehr als Link-Teilen: Echtzeitübertragung, eine CLI und Self-Hosting",
       body: [
         "Firefox Send konnte immer nur eines — asynchrones, verschlüsseltes Link-Teilen —, und Relayiums Speichermodus deckt das ab. Aber Relayium hat auch einen Modus, den Firefox Send nie bot: Echtzeit-Peer-to-Peer-Übertragung, bei der Dateien direkt zwischen zwei geöffneten Browsern über einen Ende-zu-Ende-verschlüsselten WebRTC-Kanal streamen und überhaupt nichts auf einem Server gespeichert wird. Im selben Netz braucht keine Seite ein Konto; beim Senden über Netzwerke hinweg mit einem Pairing-Code muss sich der Absender anmelden, der Empfänger weiterhin nie.",
-        "Für alle, die mehr Kontrolle wollen, bietet Relayium außerdem eine kostenlose, quelloffene CLI (push/pull über SSH, netzwerkübergreifendes send/receive, Ordnersynchronisation) und einen selbst hostbaren Server, den du selbst betreiben kannst — nichts davon hatte Firefox Send je. Das ganze Projekt ist MIT-lizenziert und quelloffen auf GitHub.",
+        "Für alle, die mehr Kontrolle wollen, bietet Relayium außerdem eine kostenlose, quelloffene CLI (push/pull über SSH, netzwerkübergreifendes send/receive, Ordnersynchronisation) und einen selbst hostbaren Server, den du selbst betreiben kannst — nichts davon hatte Firefox Send je. Das ganze Projekt ist AGPL-3.0-lizenziert und quelloffen auf GitHub.",
       ],
     },
   ],
@@ -328,7 +328,7 @@ const de = {
       },
       {
         q: "Ist Relayium kostenlos?",
-        a: "Ja. Relayium ist kostenlos und quelloffen unter der MIT-Lizenz. Das Erstellen eines gespeicherten Download-Links erfordert die Anmeldung des Absenders (Links zählen gegen das Speicherkontingent deines Kontos), aber der Empfänger braucht zum Herunterladen niemals ein Konto.",
+        a: "Ja. Relayium ist kostenlos und quelloffen unter der AGPL-3.0-Lizenz. Das Erstellen eines gespeicherten Download-Links erfordert die Anmeldung des Absenders (Links zählen gegen das Speicherkontingent deines Kontos), aber der Empfänger braucht zum Herunterladen niemals ein Konto.",
       },
     ],
   },
@@ -374,7 +374,7 @@ const fr = {
       heading: "Au-delà du partage de liens : transfert en temps réel, CLI et auto-hébergement",
       body: [
         "Firefox Send ne faisait qu'une seule chose — le partage de liens chiffrés asynchrone — et le mode stocké de Relayium couvre ce terrain. Mais Relayium a aussi un mode que Firefox Send n'a jamais offert : le transfert pair-à-pair en temps réel, où les fichiers circulent directement entre deux navigateurs ouverts via un canal WebRTC chiffré de bout en bout, sans jamais rien stocker sur un serveur. Sur le même réseau, aucun compte n'est requis d'un côté comme de l'autre ; envoyer entre réseaux différents avec un code d'appairage exige que l'expéditeur se connecte, le destinataire n'en ayant toujours pas besoin.",
-        "Pour ceux qui veulent plus de contrôle, Relayium propose aussi une CLI gratuite et open source (push/pull via SSH, send/receive entre réseaux, synchronisation de dossiers) et un serveur auto-hébergeable que vous pouvez faire tourner vous-même — rien de tout cela n'a jamais existé chez Firefox Send. L'ensemble du projet est sous licence MIT et open source sur GitHub.",
+        "Pour ceux qui veulent plus de contrôle, Relayium propose aussi une CLI gratuite et open source (push/pull via SSH, send/receive entre réseaux, synchronisation de dossiers) et un serveur auto-hébergeable que vous pouvez faire tourner vous-même — rien de tout cela n'a jamais existé chez Firefox Send. L'ensemble du projet est sous licence AGPL-3.0 et open source sur GitHub.",
       ],
     },
   ],
@@ -395,7 +395,7 @@ const fr = {
       },
       {
         q: "Relayium est-il gratuit ?",
-        a: "Oui. Relayium est gratuit et open source sous licence MIT. Créer un lien de téléchargement stocké exige que l'expéditeur se connecte (les liens comptent dans le quota de stockage de votre compte), mais le destinataire n'a jamais besoin de compte pour télécharger.",
+        a: "Oui. Relayium est gratuit et open source sous licence AGPL-3.0. Créer un lien de téléchargement stocké exige que l'expéditeur se connecte (les liens comptent dans le quota de stockage de votre compte), mais le destinataire n'a jamais besoin de compte pour télécharger.",
       },
     ],
   },
@@ -441,7 +441,7 @@ const ar = {
       heading: "أبعد من مشاركة الروابط: النقل الفوري، وواجهة سطر الأوامر، والاستضافة الذاتية",
       body: [
         "لم يفعل Firefox Send سوى شيء واحد — مشاركة روابط مشفّرة غير متزامنة — ووضع Relayium المُخزَّن يغطي تلك الأرضية. لكن لدى Relayium أيضًا وضعًا لم يقدّمه Firefox Send قط: النقل الفوري من الند للند، حيث تتدفق الملفات مباشرةً بين متصفحين مفتوحين عبر قناة WebRTC مشفّرة من الطرف إلى الطرف، ولا يُخزَّن أي شيء على خادم على الإطلاق. على نفس الشبكة لا يحتاج أي من الطرفين إلى حساب؛ أما الإرسال عبر الشبكات برمز اقتران فيتطلب تسجيل دخول المُرسِل، ويظل المُستقبِل لا يحتاج إلى ذلك أبدًا.",
-        "لمن يريدون مزيدًا من التحكم، يوفّر Relayium أيضًا واجهة سطر أوامر CLI مجانية ومفتوحة المصدر (push/pull عبر SSH، وإرسال/استقبال عبر الشبكات، ومزامنة المجلدات) وخادمًا قابلًا للاستضافة الذاتية يمكنك تشغيله بنفسك — ولم يكن أيٌّ من هذا موجودًا في Firefox Send قط. المشروع بأكمله مرخّص بموجب MIT ومفتوح المصدر على GitHub.",
+        "لمن يريدون مزيدًا من التحكم، يوفّر Relayium أيضًا واجهة سطر أوامر CLI مجانية ومفتوحة المصدر (push/pull عبر SSH، وإرسال/استقبال عبر الشبكات، ومزامنة المجلدات) وخادمًا قابلًا للاستضافة الذاتية يمكنك تشغيله بنفسك — ولم يكن أيٌّ من هذا موجودًا في Firefox Send قط. المشروع بأكمله مرخّص بموجب AGPL-3.0 ومفتوح المصدر على GitHub.",
       ],
     },
   ],
@@ -462,7 +462,7 @@ const ar = {
       },
       {
         q: "هل Relayium مجاني؟",
-        a: "نعم. Relayium مجاني ومفتوح المصدر بموجب رخصة MIT. يتطلب إنشاء رابط تنزيل مُخزَّن تسجيل دخول المُرسِل (تُحتسب الروابط ضمن حصة التخزين في حسابك)، لكن المُستقبِل لا يحتاج إلى حساب أبدًا للتنزيل.",
+        a: "نعم. Relayium مجاني ومفتوح المصدر بموجب رخصة AGPL-3.0. يتطلب إنشاء رابط تنزيل مُخزَّن تسجيل دخول المُرسِل (تُحتسب الروابط ضمن حصة التخزين في حسابك)، لكن المُستقبِل لا يحتاج إلى حساب أبدًا للتنزيل.",
       },
     ],
   },
@@ -508,7 +508,7 @@ const es = {
       heading: "Más allá de compartir enlaces: transferencia en tiempo real, una CLI y autoalojamiento",
       body: [
         "Firefox Send solo hizo una cosa —compartir enlaces cifrados de forma asíncrona— y el modo almacenado de Relayium cubre ese terreno. Pero Relayium también tiene un modo que Firefox Send nunca ofreció: la transferencia en tiempo real de igual a igual, en la que los archivos fluyen directamente entre dos navegadores abiertos a través de un canal WebRTC cifrado de extremo a extremo y no se almacena nada en ningún servidor. En la misma red no necesita cuenta ninguna de las partes; enviar entre redes con un código de emparejamiento requiere que el remitente inicie sesión, y el receptor sigue sin necesitarla nunca.",
-        "Para quienes quieren más control, Relayium también incluye una CLI gratuita y de código abierto (push/pull por SSH, envío/recepción entre redes, sincronización de carpetas) y un servidor autoalojable que puedes ejecutar tú mismo, nada de lo cual tuvo nunca Firefox Send. Todo el proyecto está bajo licencia MIT y es de código abierto en GitHub.",
+        "Para quienes quieren más control, Relayium también incluye una CLI gratuita y de código abierto (push/pull por SSH, envío/recepción entre redes, sincronización de carpetas) y un servidor autoalojable que puedes ejecutar tú mismo, nada de lo cual tuvo nunca Firefox Send. Todo el proyecto está bajo licencia AGPL-3.0 y es de código abierto en GitHub.",
       ],
     },
   ],
@@ -529,7 +529,7 @@ const es = {
       },
       {
         q: "¿Es Relayium gratis?",
-        a: "Sí. Relayium es gratis y de código abierto bajo la licencia MIT. Crear un enlace de descarga almacenado requiere que el remitente inicie sesión (los enlaces cuentan para la cuota de almacenamiento de tu cuenta), pero el destinatario nunca necesita cuenta para descargar.",
+        a: "Sí. Relayium es gratis y de código abierto bajo la licencia AGPL-3.0. Crear un enlace de descarga almacenado requiere que el remitente inicie sesión (los enlaces cuentan para la cuota de almacenamiento de tu cuenta), pero el destinatario nunca necesita cuenta para descargar.",
       },
     ],
   },
@@ -575,7 +575,7 @@ const pt = {
       heading: "Além do compartilhamento de links: transferência em tempo real, uma CLI e auto-hospedagem",
       body: [
         "O Firefox Send só fez uma coisa — compartilhamento de links criptografados de forma assíncrona — e o modo armazenado do Relayium cobre esse terreno. Mas o Relayium também tem um modo que o Firefox Send nunca ofereceu: a transferência em tempo real ponto a ponto, em que os arquivos fluem diretamente entre dois navegadores abertos por um canal WebRTC criptografado de ponta a ponta e nada é armazenado em nenhum servidor. Na mesma rede, nenhum dos lados precisa de conta; enviar entre redes com um código de emparelhamento exige que o remetente faça login, e o receptor continua nunca precisando.",
-        "Para quem quer mais controle, o Relayium também traz uma CLI gratuita e de código aberto (push/pull por SSH, envio/recebimento entre redes, sincronização de pastas) e um servidor auto-hospedável que você mesmo pode rodar — nada disso o Firefox Send jamais teve. Todo o projeto é licenciado sob MIT e de código aberto no GitHub.",
+        "Para quem quer mais controle, o Relayium também traz uma CLI gratuita e de código aberto (push/pull por SSH, envio/recebimento entre redes, sincronização de pastas) e um servidor auto-hospedável que você mesmo pode rodar — nada disso o Firefox Send jamais teve. Todo o projeto é licenciado sob AGPL-3.0 e de código aberto no GitHub.",
       ],
     },
   ],
@@ -596,7 +596,7 @@ const pt = {
       },
       {
         q: "O Relayium é gratuito?",
-        a: "Sim. O Relayium é gratuito e de código aberto sob a licença MIT. Criar um link de download armazenado exige que o remetente faça login (os links contam para a cota de armazenamento da sua conta), mas o destinatário nunca precisa de conta para baixar.",
+        a: "Sim. O Relayium é gratuito e de código aberto sob a licença AGPL-3.0. Criar um link de download armazenado exige que o remetente faça login (os links contam para a cota de armazenamento da sua conta), mas o destinatário nunca precisa de conta para baixar.",
       },
     ],
   },
