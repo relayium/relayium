@@ -59,8 +59,9 @@ handshake ride inside `data` and are defined by the realtime layer, not here.
 
 ## Connection
 - `GET <wsBase>/ws?code=<urlencoded code>` upgraded to a WebSocket.
-- Empty code → the LAN room; non-empty code → that code room. Exactly two peers
-  share a room.
+- Empty code → the LAN room; non-empty code → that code room. A pairing-code room
+  holds exactly two peers; the LAN room holds up to a server cap (currently 50),
+  so the `peers` roster there may list more than one other peer.
 
 ## Envelope (every frame, both directions), JSON:
 { "type": string, "from"?: string, "to"?: string, "name"?: string,
