@@ -83,9 +83,10 @@ public final class RealtimeReceiver {
                 let obj = try? JSONSerialization.jsonObject(with: Data(payload)) as? [String: Any],
                 let index = safeIndex(obj["index"]),
                 let offset = safeIndex(obj["offset"]),
-                let rseq = safeIndex(obj["seq"])
+                let rseq = safeIndex(obj["seq"]),
+                let seq32 = UInt32(exactly: rseq)
             else { throw RealtimeError.malformed }
-            return .resume(index: index, offset: offset, seq: UInt32(rseq))
+            return .resume(index: index, offset: offset, seq: seq32)
 
         case RealtimeKind.batchLegacy, RealtimeKind.doneLegacy:
             // Peer is running a pre-encrypted-manifest version. No plaintext
@@ -137,7 +138,9 @@ private struct DonePayload: Decodable {
 /// Sanitize one manifest entry's display name and — since `FileMeta` carries
 /// a folder-relative `path` that `sanitizeNames`/`ManifestFile` don't have —
 /// sanitize it per path segment too, so a bidi/control-character payload
-/// can't hide in a folder name either.
+/// can't hide in a folder name either. Mirrors web/src/lib/filename.ts's
+/// generic `sanitizeNames<T>` (name + per-`/`-segment path); R1-B's Swift
+/// `sanitizeNames` only covers `ManifestFile`, which has no path field.
 private func sanitizeFileMeta(_ f: FileMeta) -> FileMeta {
     let name = safeDisplayName(f.name)
     let path = f.path.map { p in
