@@ -21,6 +21,8 @@ public final class URLSessionWebSocketChannel: NSObject, WebSocketChannel, URLSe
 
     private var task: URLSessionWebSocketTask!
     private lazy var session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+    private var closedFired = false   // one-shot: a close arrives via BOTH the receive
+                                       // failure and the didClose delegate — fire onClose once.
 
     public init(url: URL) {
         super.init()
@@ -42,7 +44,8 @@ public final class URLSessionWebSocketChannel: NSObject, WebSocketChannel, URLSe
         }
     }
     private func markClosed() {
-        guard isOpen || task != nil else { return }
+        guard !closedFired else { return }   // idempotent: at most one onClose per socket
+        closedFired = true
         isOpen = false
         onClose?()
     }

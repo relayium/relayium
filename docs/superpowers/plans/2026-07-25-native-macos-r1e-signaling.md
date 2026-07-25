@@ -354,8 +354,12 @@ public final class URLSessionWebSocketChannel: NSObject, WebSocketChannel, URLSe
             }
         }
     }
+    private var closedFired = false   // one-shot guard (see markClosed)
     private func markClosed() {
-        guard isOpen || task != nil else { return }
+        // A close arrives via BOTH the receive failure and the didClose delegate;
+        // fire onClose at most once so downstream reconnect/cleanup isn't double-run.
+        guard !closedFired else { return }
+        closedFired = true
         isOpen = false
         onClose?()
     }
