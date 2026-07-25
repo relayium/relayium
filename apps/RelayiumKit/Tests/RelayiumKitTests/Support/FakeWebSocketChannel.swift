@@ -5,7 +5,7 @@ final class FakeWebSocketChannel: WebSocketChannel {
     var onOpen: (() -> Void)?
     var onText: ((String) -> Void)?
     var onClose: (() -> Void)?
-    private(set) var sent: [String] = []
+    var sent: [String] = []   // internal (not private(set)): tests across files mutate e.g. removeAll()
     private(set) var closed = false
     var isOpen: Bool = false
 
