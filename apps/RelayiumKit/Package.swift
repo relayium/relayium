@@ -7,9 +7,16 @@ let package = Package(
     products: [.library(name: "RelayiumKit", targets: ["RelayiumKit"])],
     dependencies: [
         .package(url: "https://github.com/jedisct1/swift-sodium.git", from: "0.9.1"),
+        .package(url: "https://github.com/stasel/WebRTC.git", branch: "latest"),
     ],
     targets: [
-        .target(name: "RelayiumKit", dependencies: [.product(name: "Sodium", package: "swift-sodium")]),
+        .target(
+            name: "RelayiumKit",
+            dependencies: [
+                .product(name: "Sodium", package: "swift-sodium"),
+                .product(name: "WebRTC", package: "WebRTC"),
+            ]
+        ),
         .testTarget(
             name: "RelayiumKitTests",
             dependencies: ["RelayiumKit"],
