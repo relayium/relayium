@@ -114,16 +114,22 @@ private func hexEncoded(_ bytes: [UInt8]) -> String {
     return String(decoding: out, as: UTF8.self)
 }
 
-/// Non-negative safe integer, mirroring transfer.ts's `isIndex`: rejects
-/// missing/non-numeric/negative/non-integer values (JSONSerialization never
-/// hands back NaN/Infinity for a well-formed JSON number, but a string like
-/// `"nope"` in the `seq` field must still be rejected, not coerced).
+/// Non-negative safe integer, mirroring transfer.ts's `isIndex` exactly:
+/// `typeof n === "number" && Number.isSafeInteger(n) && n >= 0`. That caps at
+/// 2^53-1 (9007199254740991, `Number.MAX_SAFE_INTEGER`) — NOT `Int.max`
+/// (2^63-1): a JS sender can never legitimately produce a value above 2^53-1
+/// (it stops being an exact integer past that), so accepting up to `Int.max`
+/// here would let a malformed/attacker-supplied value through that the real
+/// protocol can never emit. Also rejects missing/non-numeric/negative/
+/// non-integer values (JSONSerialization never hands back NaN/Infinity for a
+/// well-formed JSON number, but a string like `"nope"` in the `seq` field
+/// must still be rejected, not coerced).
 private func safeIndex(_ v: Any?) -> Int? {
     guard let n = v as? NSNumber else { return nil }
     // Exclude booleans, which bridge to NSNumber too.
     if CFGetTypeID(n) == CFBooleanGetTypeID() { return nil }
     let d = n.doubleValue
-    guard d.rounded(.towardZero) == d, d >= 0, d <= Double(Int.max) else { return nil }
+    guard d.rounded(.towardZero) == d, d >= 0, d <= 9_007_199_254_740_991 else { return nil }
     return n.intValue
 }
 

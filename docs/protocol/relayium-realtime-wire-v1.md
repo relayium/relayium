@@ -40,3 +40,6 @@ transport and handshake are defined elsewhere.
 ## Ordering / errors
 - Receiver enforces BATCH/CHUNK/DONE seq == expected (monotonic); any mismatch,
   tamper (GCM auth fail), or legacy kind is a hard error (fail closed).
+- The wire `seq` is uint32 (max 2^32-1); a RESUME_START announcing a `seq` at
+  or above 2^32 can never match a real frame's on-wire seq, so it's malformed
+  and rejected outright rather than accepted and left permanently unmatchable.

@@ -63,10 +63,46 @@ const key = await crypto.subtle.importKey("raw", keyRaw, "AES-GCM", false, ["enc
 
 // --- fixed files ---
 const enc = new TextEncoder();
+// The manifest carries RAW (unsanitized) names — only the receiver sanitizes,
+// on decode, per web/src/lib/filename.ts's `sanitizeNames` (name + per-`/`-
+// segment path). The second file's name and path deliberately embed a bidi
+// control (U+202E, RLO) and a C0 control (U+0007, BEL) so the sealed BATCH
+// frame actually contains characters that must be stripped — proving the
+// Swift `sanitizeFileMeta` really strips rather than the golden vectors just
+// happening to be clean already. Built via String.fromCodePoint, not literal
+// characters, so this source file doesn't itself become a Trojan-source
+// vector (RLO reorders anything after it in an editor) — see filename.ts's
+// own comment for why.
 const files = [
   { name: "a.txt", data: enc.encode("hello world") }, // 11 bytes, no path
-  { name: "b/c.txt", data: enc.encode("xyz"), path: "b/c.txt" }, // 3 bytes, path present
+  {
+    name: "b" + String.fromCodePoint(0x202e) + "c.txt",
+    data: enc.encode("xyz"),
+    path: "sub" + String.fromCodePoint(0x202e) + "dir/" + "c" + String.fromCodePoint(0x07) + ".txt",
+  }, // 3 bytes, path present, both segments carry a control char
 ];
+
+// Expected receiver-side sanitized values — same strip logic as
+// web/src/lib/filename.ts's `safeDisplayName`/`sanitizeNames`: Bidi_Control
+// {U+061C, U+200E, U+200F, U+202A-U+202E, U+2066-U+2069} + C0/C1
+// {U+0000-U+001F, U+007F-U+009F} removed from `name` and from each `/`-
+// separated segment of `path`. Copied as code-point-built regexes (not
+// literal bidi characters) for the same Trojan-source reason as above.
+const BIDI_CONTROL_RE = new RegExp(
+  `[${String.fromCodePoint(0x061c, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069)}]`,
+  "g",
+);
+const CONTROL_RE = new RegExp(
+  `[${String.fromCodePoint(0)}-${String.fromCodePoint(0x1f)}${String.fromCodePoint(0x7f)}-${String.fromCodePoint(0x9f)}]`,
+  "g",
+);
+const safeDisplayName = (s) => s.replace(BIDI_CONTROL_RE, "").replace(CONTROL_RE, "");
+const sanitizePath = (p) => p.split("/").map(safeDisplayName).join("/");
+const sanitizedNames = files.map((f) => {
+  const out = { name: safeDisplayName(f.name) };
+  if (f.path !== undefined) out.path = sanitizePath(f.path);
+  return out;
+});
 
 // manifest: {files:[{name,size,path?}]} — path key omitted when absent
 const manifestObj = {
@@ -119,6 +155,7 @@ const out = {
     complete: CTRL_COMPLETE.toString(16),
   },
   doneHashes,
+  sanitizedNames,
 };
 
 writeFileSync("../apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json", JSON.stringify(out, null, 2) + "\n");

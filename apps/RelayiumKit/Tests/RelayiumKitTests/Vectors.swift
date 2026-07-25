@@ -56,6 +56,14 @@ struct Vectors {
     func realtimeFrameList() -> [[UInt8]] {
         strArray("framesHex").map { $0.hexBytes }
     }
+    /// Reads `sanitizedNames` — the expected receiver-side stripped
+    /// name/path for each `manifest.files` entry (bidi + C0/C1 controls
+    /// removed, per-`/`-segment for `path`) — into `(name, path?)` pairs,
+    /// parallel to `realtimeManifestFiles()`.
+    func realtimeSanitizedNames() -> [(name: String, path: String?)] {
+        let arr = json["sanitizedNames"] as! [[String: Any]]
+        return arr.map { (name: $0["name"] as! String, path: $0["path"] as? String) }
+    }
     private func hexString(_ path: String) -> String { str(path) }
 }
 

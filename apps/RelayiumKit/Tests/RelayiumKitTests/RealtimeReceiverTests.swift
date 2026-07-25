@@ -14,7 +14,25 @@ final class RealtimeReceiverTests: XCTestCase {
         for f in frames { events.append(try r.feed(f)) }
         // batch, chunk(f0), done(f0 ok), chunk(f1), done(f1 ok)
         guard case let .batch(files) = events[0] else { return XCTFail() }
-        XCTAssertEqual(files.map(\.name), ["a.txt","b/c.txt"])
+        // The raw manifest's 2nd file embeds a bidi control (U+202E) and a C0
+        // control (U+0007) in both its name and its path (see
+        // gen-realtime-wire-vectors.mjs) — the sealed BATCH frame therefore
+        // carries them verbatim (RealtimeSenderTests byte-pins that same raw
+        // manifest), but `feed`'s decode is the one place that must strip
+        // them before they reach a confirmation card. Assert against the
+        // fixture's `sanitizedNames` (computed with the same strip logic as
+        // web/src/lib/filename.ts) AND explicitly assert the raw control
+        // chars are gone, so this would fail if sanitizeFileMeta were ever
+        // reduced to a no-op.
+        let expected = v.realtimeSanitizedNames()
+        XCTAssertEqual(files.map(\.name), expected.map(\.name))
+        XCTAssertEqual(files.map(\.path), expected.map(\.path))
+        XCTAssertEqual(files[1].name, "bc.txt")
+        XCTAssertEqual(files[1].path, "subdir/c.txt")
+        for s in [files[1].name, files[1].path ?? ""] {
+            XCTAssertFalse(s.unicodeScalars.contains(Unicode.Scalar(0x202e)!), "bidi control (U+202E) leaked through sanitize")
+            XCTAssertFalse(s.unicodeScalars.contains(Unicode.Scalar(0x07)!), "C0 control (U+0007) leaked through sanitize")
+        }
         XCTAssertEqual(events[1], .chunk(v.realtimeFileDatas()[0]))
         XCTAssertEqual(events[2], .done(ok: true))
         XCTAssertEqual(events[4], .done(ok: true))
