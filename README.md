@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://relayium.com/"><img src="https://img.shields.io/badge/live%20demo-relayium.com-aa3bff" alt="Live demo"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0%20%2F%20Apache--2.0-blue" alt="License: AGPL-3.0 (server, web) / Apache-2.0 (apps)"></a>
   <img src="https://img.shields.io/badge/status-M0%20MVP-orange" alt="Status: M0 MVP">
   <img src="https://img.shields.io/badge/built%20with-Go%20%C2%B7%20Svelte%20%C2%B7%20WebRTC-2ea44f" alt="Built with Go, Svelte, WebRTC">
 </p>
@@ -88,7 +88,7 @@ Full docs at [relayium.com/cli](https://relayium.com/cli); prebuilt binaries on 
 | No install               | ✅                      | ✅               | ⚠️ size limits      | ✅                  |
 | No account               | ⚠️ LAN\*                | ✅               | ⚠️ size limits      | ✅                  |
 | Server-imposed size cap  | ❌ none                 | ❌ none          | ✅ (e.g. 2 GB free) | ❌ none             |
-| Open source              | ✅ MIT                  | ❌               | ❌                 | ✅                  |
+| Open source              | ✅ AGPL-3.0 / Apache-2.0 | ❌               | ❌                 | ✅                  |
 
 \* Realtime transfers over the **same LAN** need no account at all. Cross-network transfers via a **pairing
 code** (and the join link/QR it generates) require the **sender** to sign in — the receiver never needs an
@@ -216,9 +216,10 @@ relayium/
 ## FAQ
 
 **Is Relayium free?**
-Yes — free and open source under the MIT license. No install, ever. Same-LAN realtime transfers need no
+Yes — free and open source. No install, ever. Same-LAN realtime transfers need no
 account; cross-network transfers via a pairing code require the sender to sign in (the receiver never does);
-creating a stored download link also requires the sender to sign in.
+creating a stored download link also requires the sender to sign in. See [License](#license) for which
+open-source license covers which part.
 
 **Do my files get uploaded to a server?**
 No. File bytes stream directly between the two devices over the WebRTC DataChannel and never pass through
@@ -263,4 +264,19 @@ larger changes.
 
 ## License
 
-[MIT](LICENSE) © Relayium
+Relayium is **open core** — different parts of this repository use different open-source licenses,
+chosen per part rather than one blanket license for everything. See the [`LICENSE`](LICENSE) file for
+the full index; in short:
+
+| Part | License | What that means for you |
+| --- | --- | --- |
+| [`server/`](server) (signaling server, relay node, CLI) and [`web/`](web) (the app you use at relayium.com) | [AGPL-3.0](server/LICENSE) | You can run, study, modify, and redistribute it freely — including self-hosting it for yourself or your org. The one extra condition versus a permissive license: if you modify it and run your modified version as a network service for *other* people, you must publish your changes' source under the same license. This is what stops someone taking the whole stack (SEO content included) and standing up a competing hosted service without giving back. |
+| [`apps/`](apps) (RelayiumKit, the macOS app, future iOS) | [Apache-2.0](apps/LICENSE) | A fully permissive license — use it, embed it, ship modified versions closed-source if you like, no obligation to publish changes. It's Apache-2.0 rather than AGPL specifically so these clients can be distributed through the Apple App Store, whose terms conflict with GPL-family "no further restrictions" clauses. |
+| [`docs/protocol/`](docs/protocol) (the wire protocol spec) | [CC BY 4.0](docs/protocol/LICENSE) | Implement the protocol however you like, in any codebase, under any license — just credit Relayium as the source of the spec. |
+
+**If you already have a copy of Relayium from before this relicensing** (any commit prior to the one that
+added this table), that copy remains MIT-licensed forever — relicensing doesn't and can't revoke a license
+already granted. It only applies to versions published from here on.
+
+Contributions are accepted under the [DCO](DCO) (sign off your commits with `git commit -s`) — see
+[CONTRIBUTING.md](CONTRIBUTING.md#license).
