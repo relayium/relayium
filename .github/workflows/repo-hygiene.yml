@@ -1,0 +1,20 @@
+name: repo-hygiene
+on:
+  push:
+  pull_request:
+
+jobs:
+  no-production-identifiers:
+    runs-on: ubuntu-latest
+    steps:
+      # Third-party actions are pinned to a full commit SHA (with the human-readable
+      # version in a trailing comment) so a compromised or retagged upstream release
+      # can't silently change what runs here.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      # scripts/check-production-identifiers.sh guards against production
+      # infrastructure detail (real IPs, /opt/relayium paths, internal node
+      # hostnames) leaking into this public repo. See the header comment in
+      # that script for the full rationale and the reasoning behind its
+      # allowlists — do not delete this step because it "looks like noise."
+      - name: Check for production identifiers
+        run: scripts/check-production-identifiers.sh

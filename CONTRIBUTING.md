@@ -46,6 +46,9 @@ cd web && npx vitest run && npm run check
 
 # Server: tests
 cd server && go test ./...
+
+# Repo hygiene: no production IPs/paths/hostnames leaking into the public repo
+scripts/check-production-identifiers.sh
 ```
 
 - **Match the surrounding code** — naming, comment density, and idioms. Keep changes focused.
