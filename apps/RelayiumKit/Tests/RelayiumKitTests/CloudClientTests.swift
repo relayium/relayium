@@ -53,6 +53,36 @@ final class CloudClientTests: XCTestCase {
         XCTAssertEqual(got, v.fileDatas().flatMap { $0 })
         XCTAssertEqual(manifest.files.map(\.name), ["hello.txt", "ab.txt"])
     }
+    func testDownloadHandlesMultipleDataChunks() async throws {
+        let v = try Vectors.load("store-wire-vectors")
+        let encManifestB64 = Data(v.hex("manifest.ctHex")).base64EncodedString()
+        let streamBytes = Data(v.hex("streamHex"))
+        // Split the blob across several didLoad deliveries (uneven sizes, including a 1-byte
+        // chunk) to prove decryption is correct regardless of chunk boundaries.
+        var chunks = [Data]()
+        var idx = streamBytes.startIndex
+        let sizes = [1, 3, 7, Int.max]
+        var i = 0
+        while idx < streamBytes.endIndex {
+            let n = min(sizes[min(i, sizes.count - 1)], streamBytes.distance(from: idx, to: streamBytes.endIndex))
+            let end = streamBytes.index(idx, offsetBy: n)
+            chunks.append(streamBytes[idx..<end])
+            idx = end; i += 1
+        }
+        XCTAssertGreaterThan(chunks.count, 1)
+        StubURLProtocol.router = { req in
+            if req.url?.path.hasSuffix("/meta") == true {
+                let meta = #"{"encManifest":"\#(encManifestB64)","size":54,"burnAfterRead":false,"expiresAt":1790000000}"#
+                return .init(status: 200, body: Data(meta.utf8), check: nil)
+            }
+            return .init(status: 200, bodyChunks: chunks, check: nil)
+        }
+        var got = [UInt8]()
+        let manifest = try await client().download(id: "abc", key: v.hex("keyHex")) { got += $0 }
+        XCTAssertEqual(got, v.fileDatas().flatMap { $0 })
+        XCTAssertEqual(manifest.files.map(\.name), ["hello.txt", "ab.txt"])
+    }
+
     func testDownloadTruncatedStreamThrows() async throws {
         let v = try Vectors.load("store-wire-vectors")
         let encManifestB64 = Data(v.hex("manifest.ctHex")).base64EncodedString()

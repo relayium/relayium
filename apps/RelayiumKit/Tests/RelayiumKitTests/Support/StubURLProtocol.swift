@@ -3,7 +3,17 @@ import Foundation
 /// Intercepts URLSession requests and returns a canned (status, body). Install
 /// via a URLSessionConfiguration whose protocolClasses = [StubURLProtocol].
 final class StubURLProtocol: URLProtocol {
-    struct Stub { let status: Int; let body: Data; let check: ((URLRequest) -> Void)? }
+    struct Stub {
+        let status: Int
+        let body: Data
+        /// When set, the body is delivered across multiple `didLoad` calls (one per element)
+        /// instead of as a single chunk — exercises chunk-boundary-independent reassembly.
+        let bodyChunks: [Data]?
+        let check: ((URLRequest) -> Void)?
+        init(status: Int, body: Data = Data(), bodyChunks: [Data]? = nil, check: ((URLRequest) -> Void)? = nil) {
+            self.status = status; self.body = body; self.bodyChunks = bodyChunks; self.check = check
+        }
+    }
     nonisolated(unsafe) static var stub: Stub?
     nonisolated(unsafe) static var router: ((URLRequest) -> Stub)?
     nonisolated(unsafe) static var lastRequest: URLRequest?
@@ -31,7 +41,11 @@ final class StubURLProtocol: URLProtocol {
         let resp = HTTPURLResponse(url: request.url!, statusCode: s.status,
                                    httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: s.body)
+        if let chunks = s.bodyChunks {
+            for c in chunks { client?.urlProtocol(self, didLoad: c) }
+        } else {
+            client?.urlProtocol(self, didLoad: s.body)
+        }
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}
