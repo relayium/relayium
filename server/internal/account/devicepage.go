@@ -22,8 +22,8 @@ type devicePageData struct {
 // approve endpoint (handleDeviceApprove) decodes a JSON body, and a native
 // form submit would send application/x-www-form-urlencoded, which the JSON
 // decoder rejects with 400. Instead it does a same-origin fetch() with a
-// JSON body; csrfGuard only rejects unsafe methods when Origin is present
-// AND mismatched (see csrfGuard in handlers.go), and a same-origin fetch
+// JSON body; CSRFGuard only rejects unsafe methods when Origin is present
+// AND mismatched (see CSRFGuard in handlers.go), and a same-origin fetch
 // always sends a matching Origin, so this passes without a separate CSRF
 // token.
 var devicePageTmpl = template.Must(template.New("device").Parse(`<!doctype html>

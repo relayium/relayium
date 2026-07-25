@@ -16,7 +16,7 @@ import (
 // 关键约束：这里的转换必须复用 handleAdminSettings / handleAdminUpsertPlan
 // 写库时实际用的那份解析（parseSettingsForm / parsePlanForm）。绝不能另写
 // 一份平行解析——两份迟早漂移，确认页显示的就不再是即将写入的值。
-// pathID 是原始请求的 {id} 路径通配符（表单里没有的那半个身份）。requireStepUp
+// pathID 是原始请求的 {id} 路径通配符（表单里没有的那半个身份）。RequireStepUp
 // 从 r.PathValue("id") 拿，handleAdminConfirm 从 pendingAction 里拿——两边必须
 // 传同一个值，否则确认页显示的目标和真正执行的目标就会不是一回事。
 func (s *Service) beforeImageFor(ctx context.Context, action, pathID string, form url.Values) (before, after map[string]any, target string, err error) {

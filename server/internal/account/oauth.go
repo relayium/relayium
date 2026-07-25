@@ -56,7 +56,7 @@ func (s *Service) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
 	state := authx.RandToken()
 	http.SetCookie(w, &http.Cookie{
 		Name: oauthStateCookie, Value: state, Path: "/", MaxAge: 600,
-		HttpOnly: true, Secure: s.cookieSecure(), SameSite: http.SameSiteLaxMode,
+		HttpOnly: true, Secure: s.CookieSecure(), SameSite: http.SameSiteLaxMode,
 	})
 	http.Redirect(w, r, s.googleConfig().AuthCodeURL(state), http.StatusFound)
 }

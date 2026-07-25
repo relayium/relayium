@@ -491,58 +491,58 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// legitimate submissions carry a matching Origin; a cross-site forgery does
 	// not. GET /admin (the login/dashboard page) is a safe method, left alone.
 	mux.HandleFunc("GET /admin", s.handleAdminHome)
-	// Read-only: no csrfGuard (GET is a safe method, same as GET /admin
-	// above) and NOT wrapped in requireStepUp (that guard is for writes —
+	// Read-only: no CSRFGuard (GET is a safe method, same as GET /admin
+	// above) and NOT wrapped in RequireStepUp (that guard is for writes —
 	// this handler never mutates anything).
 	mux.HandleFunc("GET /admin/audit", s.handleAdminAudit)
-	mux.Handle("POST /admin/login", s.csrfGuard(http.HandlerFunc(s.handleAdminLogin)))
-	mux.Handle("POST /admin/logout", s.csrfGuard(http.HandlerFunc(s.handleAdminLogout)))
-	// The passkey endpoints are fetch-only, so a missing Origin (which csrfGuard
+	mux.Handle("POST /admin/login", s.CSRFGuard(http.HandlerFunc(s.handleAdminLogin)))
+	mux.Handle("POST /admin/logout", s.CSRFGuard(http.HandlerFunc(s.handleAdminLogout)))
+	// The passkey endpoints are fetch-only, so a missing Origin (which CSRFGuard
 	// lets through for form posts and native clients) is a forgery signal here.
 	mux.Handle("POST /admin/passkey/login/begin",
-		s.csrfGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminPasskeyLoginBegin))))
+		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminPasskeyLoginBegin))))
 	mux.Handle("POST /admin/passkey/login/finish",
-		s.csrfGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminPasskeyLoginFinish))))
+		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminPasskeyLoginFinish))))
 	mux.Handle("POST /admin/passkey/register/begin",
-		s.csrfGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminPasskeyRegisterBegin))))
+		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminPasskeyRegisterBegin))))
 	mux.Handle("POST /admin/passkey/register/finish",
-		s.csrfGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminPasskeyRegisterFinish))))
+		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminPasskeyRegisterFinish))))
 	// Step-up passkey assertion challenge, issued to the confirmation page when
 	// passkey is the offered factor. fetch-only like the other passkey
 	// endpoints, so a missing Origin is a forgery signal.
 	mux.Handle("POST /admin/stepup/passkey/begin",
-		s.csrfGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminStepUpPasskeyBegin))))
-	// Delete is a plain form submission, not fetch, so it gets csrfGuard only.
+		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminStepUpPasskeyBegin))))
+	// Delete is a plain form submission, not fetch, so it gets CSRFGuard only.
 	// It is high-risk (see the reversed exemption note on
 	// handleAdminPasskeyDelete in passkey_register.go) so it also goes
-	// through requireStepUp, same as the other five below.
+	// through RequireStepUp, same as the other five below.
 	mux.Handle("POST /admin/passkey/delete",
-		s.csrfGuard(s.requireStepUp(AuditPasskeyDelete, s.handleAdminPasskeyDelete)))
-	// These six are high-risk writes: requireStepUp intercepts the POST,
+		s.CSRFGuard(s.RequireStepUp(AuditPasskeyDelete, s.handleAdminPasskeyDelete)))
+	// These six are high-risk writes: RequireStepUp intercepts the POST,
 	// stashes it as a pending action, and renders a confirmation page
 	// showing the diff instead of applying it directly. The actual write
 	// only happens via POST /admin/confirm (handleAdminConfirm) below.
 	mux.Handle("POST /admin/settings",
-		s.csrfGuard(s.requireStepUp(AuditSettings, s.handleAdminSettings)))
+		s.CSRFGuard(s.RequireStepUp(AuditSettings, s.handleAdminSettings)))
 	mux.Handle("POST /admin/plans",
-		s.csrfGuard(s.requireStepUp(AuditPlanUpsert, s.handleAdminUpsertPlan)))
+		s.CSRFGuard(s.RequireStepUp(AuditPlanUpsert, s.handleAdminUpsertPlan)))
 	mux.Handle("POST /admin/users/plan",
-		s.csrfGuard(s.requireStepUp(AuditUserPlan, s.handleAdminSetUserPlan)))
+		s.CSRFGuard(s.RequireStepUp(AuditUserPlan, s.handleAdminSetUserPlan)))
 	mux.Handle("POST /admin/nodes/token",
-		s.csrfGuard(s.requireStepUp(AuditTokenMint, s.handleAdminMintToken)))
+		s.CSRFGuard(s.RequireStepUp(AuditTokenMint, s.handleAdminMintToken)))
 	mux.Handle("POST /admin/nodes/{id}/delete",
-		s.csrfGuard(s.requireStepUp(AuditNodeDelete, s.handleAdminDeleteNode)))
-	mux.Handle("POST /admin/confirm", s.csrfGuard(http.HandlerFunc(s.handleAdminConfirm)))
+		s.CSRFGuard(s.RequireStepUp(AuditNodeDelete, s.handleAdminDeleteNode)))
+	mux.Handle("POST /admin/confirm", s.CSRFGuard(http.HandlerFunc(s.handleAdminConfirm)))
 	// Low-risk writes (no lockout/destructive-at-scale potential) apply
 	// directly — no confirmation page.
-	mux.Handle("POST /admin/nodes/token/{id}/revoke", s.csrfGuard(http.HandlerFunc(s.handleAdminRevokeToken)))
-	mux.Handle("POST /admin/nodes/{id}/limits", s.csrfGuard(http.HandlerFunc(s.handleAdminNodeLimits)))
-	mux.Handle("POST /admin/nodes/{id}/label", s.csrfGuard(http.HandlerFunc(s.handleAdminNodeLabel)))
-	mux.Handle("POST /admin/nodes/{id}/draining", s.csrfGuard(http.HandlerFunc(s.handleAdminNodeDraining)))
+	mux.Handle("POST /admin/nodes/token/{id}/revoke", s.CSRFGuard(http.HandlerFunc(s.handleAdminRevokeToken)))
+	mux.Handle("POST /admin/nodes/{id}/limits", s.CSRFGuard(http.HandlerFunc(s.handleAdminNodeLimits)))
+	mux.Handle("POST /admin/nodes/{id}/label", s.CSRFGuard(http.HandlerFunc(s.handleAdminNodeLabel)))
+	mux.Handle("POST /admin/nodes/{id}/draining", s.CSRFGuard(http.HandlerFunc(s.handleAdminNodeDraining)))
 	// Restore is the inverse of /api/nodes/deregister and the reason that endpoint
 	// is no longer a one-way door. Same CSRF guard as its neighbours; no step-up,
 	// because it returns a node to service rather than taking one out.
-	mux.Handle("POST /admin/nodes/{id}/restore", s.csrfGuard(http.HandlerFunc(s.handleAdminRestoreNode)))
+	mux.Handle("POST /admin/nodes/{id}/restore", s.CSRFGuard(http.HandlerFunc(s.handleAdminRestoreNode)))
 	// The other half of the same door: for when deregistration never happened at
 	// all (central was unreachable when the uninstaller ran best-effort, and by
 	// the time anyone notices state.json — and with it the token and node id —
@@ -553,28 +553,28 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// Same CSRF guard as restore, no step-up: it is the admin-console mirror of
 	// an action a node can already take on itself with nothing but a bearer
 	// token, not a new capability.
-	mux.Handle("POST /admin/nodes/{id}/remove", s.csrfGuard(http.HandlerFunc(s.handleAdminMarkNodeRemoved)))
+	mux.Handle("POST /admin/nodes/{id}/remove", s.CSRFGuard(http.HandlerFunc(s.handleAdminMarkNodeRemoved)))
 	// 节点版本发布控制。**每条轨道一套独立路由**（track 在 path 里），不是一个
 	// 带轨道下拉框的表单：机队轨和自带节点轨是两台各自独立的控制器，任何把它们
 	// 合并成一个入口的做法都会把一条轨道的故障传染给另一条 —— 而"BYO 卡住时机队
 	// 仍能照常发布"正是这套双轨设计存在的理由。
 	//
-	// 通配符叫 {id} 而不是 {track}：requireStepUp / putPending 只搬运名为 "id"
+	// 通配符叫 {id} 而不是 {track}：RequireStepUp / putPending 只搬运名为 "id"
 	// 的通配符，紧急发布要经过确认页往返，所以它必须叫 id；四个直接生效的动作
 	// 也用同一个名字，免得同一组 handler 里两种读法。
-	mux.Handle("POST /admin/rollout/{id}/target", s.csrfGuard(http.HandlerFunc(s.handleAdminRolloutTarget)))
-	mux.Handle("POST /admin/rollout/{id}/rollback", s.csrfGuard(http.HandlerFunc(s.handleAdminRolloutRollback)))
+	mux.Handle("POST /admin/rollout/{id}/target", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutTarget)))
+	mux.Handle("POST /admin/rollout/{id}/rollback", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutRollback)))
 	// BYO-only, and deliberately NOT on the {id} wildcard: this is the one
 	// action that changes a target without consulting the byo-behind-fleet
 	// gate, and the fleet track has no business reaching it.
-	mux.Handle("POST /admin/rollout/byo/rollback-previous", s.csrfGuard(http.HandlerFunc(s.handleAdminRolloutByoRollbackPrevious)))
-	mux.Handle("POST /admin/rollout/{id}/pause", s.csrfGuard(http.HandlerFunc(s.handleAdminRolloutPause)))
-	mux.Handle("POST /admin/rollout/{id}/resume", s.csrfGuard(http.HandlerFunc(s.handleAdminRolloutResume)))
+	mux.Handle("POST /admin/rollout/byo/rollback-previous", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutByoRollbackPrevious)))
+	mux.Handle("POST /admin/rollout/{id}/pause", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutPause)))
+	mux.Handle("POST /admin/rollout/{id}/resume", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutResume)))
 	// 紧急发布跳过分批、对整条轨道一次性放行 —— 没有金丝雀能再兜住这次发布了，
-	// 所以它和删除节点一样走 requireStepUp：确认页展示 diff、校验第二因子、
+	// 所以它和删除节点一样走 RequireStepUp：确认页展示 diff、校验第二因子、
 	// 由 handleAdminConfirm 落审计。
 	mux.Handle("POST /admin/rollout/{id}/emergency",
-		s.csrfGuard(s.requireStepUp(AuditRolloutEmergency, s.handleAdminRolloutEmergency)))
+		s.CSRFGuard(s.RequireStepUp(AuditRolloutEmergency, s.handleAdminRolloutEmergency)))
 }
 
 // newAdminSession mints a session token and records how it was established
@@ -659,7 +659,7 @@ func (s *Service) verifyAdminCreds(user, pass, code string) (totpStep int64, ok 
 	credsOK := userOK&passOK == 1
 	step, totpOK := int64(0), true
 	if s.AdminTOTPEnabled() {
-		step, totpOK = s.matchAdminTOTPStep(code)
+		step, totpOK = s.MatchAdminTOTPStep(code)
 	}
 	return step, credsOK && totpOK
 }
@@ -668,7 +668,7 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	ip := s.clientIP(r)
 	if s.adminLogins.locked(ip, s.now()) {
 		s.renderAdminLogin(w, r, http.StatusTooManyRequests, "尝试过于频繁，请稍后再试",
-			s.adminPasskeyCount(r.Context()) > 0)
+			s.AdminPasskeyCount(r.Context()) > 0)
 		return
 	}
 
@@ -677,10 +677,10 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		s.adminLogins.recordFail(ip, s.now())
 		s.renderAdminLogin(w, r, http.StatusUnauthorized, "账号、密码或验证码错误",
-			s.adminPasskeyCount(r.Context()) > 0)
+			s.AdminPasskeyCount(r.Context()) > 0)
 		// 只记"有人试过且失败了"。绝不记录尝试的用户名或密码：
 		// 用户名常被误输成密码，把它记下来等于把密码写进日志。
-		s.writeAudit(r, AuditLoginFail, "-", nil, StepUpNone)
+		s.WriteAudit(r, AuditLoginFail, "-", nil, StepUpNone)
 		return
 	}
 
@@ -691,8 +691,8 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		if claimed, cerr := s.store.ClaimTOTPStep(r.Context(), totpStep); cerr != nil || !claimed {
 			s.adminLogins.recordFail(ip, s.now())
 			s.renderAdminLogin(w, r, http.StatusUnauthorized, "账号、密码或验证码错误",
-				s.adminPasskeyCount(r.Context()) > 0)
-			s.writeAudit(r, AuditLoginFail, "-", nil, StepUpNone)
+				s.AdminPasskeyCount(r.Context()) > 0)
+			s.WriteAudit(r, AuditLoginFail, "-", nil, StepUpNone)
 			return
 		}
 	}
@@ -700,32 +700,32 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	tok, err := s.newAdminSession(r.Context(), "password")
 	if err != nil {
 		s.renderAdminLogin(w, r, http.StatusInternalServerError, "服务器错误，请稍后再试",
-			s.adminPasskeyCount(r.Context()) > 0)
+			s.AdminPasskeyCount(r.Context()) > 0)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: adminCookie, Value: tok, Path: "/admin",
-		HttpOnly: true, Secure: s.cookieSecure(), SameSite: http.SameSiteLaxMode,
+		HttpOnly: true, Secure: s.CookieSecure(), SameSite: http.SameSiteLaxMode,
 		MaxAge: int(adminSessionTTL / time.Second),
 	})
 	// adminAuthMethod 从 r 的 cookie 反查会话；这个请求本身还没带上刚铸造的
-	// cookie（它只被写进了响应），所以这里手动补一份到 r 上，writeAudit 才能
+	// cookie（它只被写进了响应），所以这里手动补一份到 r 上，WriteAudit 才能
 	// 读出 auth=password 而不是空字符串。
 	r.AddCookie(&http.Cookie{Name: adminCookie, Value: tok})
-	s.writeAudit(r, AuditLoginOK, "-", nil, StepUpNone)
+	s.WriteAudit(r, AuditLoginOK, "-", nil, StepUpNone)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 
 func (s *Service) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
-	// writeAudit 在删除会话之前调用：它经 adminAuthMethod 从 r 的 cookie 反查
+	// WriteAudit 在删除会话之前调用：它经 adminAuthMethod 从 r 的 cookie 反查
 	// 会话拿到 auth，删除之后就查不到了，记出来的 auth 会永远是空。
-	s.writeAudit(r, AuditLogout, "-", nil, StepUpNone)
+	s.WriteAudit(r, AuditLogout, "-", nil, StepUpNone)
 	if c, err := r.Cookie(adminCookie); err == nil {
 		_ = s.store.DeleteAdminSession(r.Context(), c.Value)
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: adminCookie, Value: "", Path: "/admin", MaxAge: -1,
-		HttpOnly: true, Secure: s.cookieSecure(), SameSite: http.SameSiteLaxMode,
+		HttpOnly: true, Secure: s.CookieSecure(), SameSite: http.SameSiteLaxMode,
 	})
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
@@ -990,7 +990,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 
 func (s *Service) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
-		s.renderAdminLogin(w, r, http.StatusOK, "", s.adminPasskeyCount(r.Context()) > 0)
+		s.renderAdminLogin(w, r, http.StatusOK, "", s.AdminPasskeyCount(r.Context()) > 0)
 		return
 	}
 	data, err := s.buildAdminHomeData(r)
@@ -1022,7 +1022,7 @@ func adminAuditHref(action string, page int) string {
 
 // handleAdminAudit renders the read-only audit log page. It is the only new
 // read endpoint in the step-up/audit feature and MUST NOT be gated by
-// requireStepUp — that guard exists to confirm writes, and this handler never
+// RequireStepUp — that guard exists to confirm writes, and this handler never
 // writes anything. Its one security property is the redirect below: an
 // unauthenticated request must never see a single audit row.
 func (s *Service) handleAdminAudit(w http.ResponseWriter, r *http.Request) {
@@ -1280,7 +1280,7 @@ func (s *Service) handleAdminNodeLimits(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	s.writeAudit(r, AuditNodeLimits, "node:"+id, []ChangeField{
+	s.WriteAudit(r, AuditNodeLimits, "node:"+id, []ChangeField{
 		{Field: "traffic_limit_bytes", Old: before.TrafficLimitBytes, New: trafficBytes},
 		{Field: "disk_limit_bytes", Old: before.DiskLimitBytes, New: diskBytes},
 	}, StepUpNone)
@@ -1307,7 +1307,7 @@ func (s *Service) handleAdminNodeLabel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	s.writeAudit(r, AuditNodeLabel, "node:"+id,
+	s.WriteAudit(r, AuditNodeLabel, "node:"+id,
 		[]ChangeField{{Field: "label", Old: before.Label, New: label}}, StepUpNone)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
@@ -1333,7 +1333,7 @@ func (s *Service) handleAdminNodeDraining(w http.ResponseWriter, r *http.Request
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	s.writeAudit(r, AuditNodeDraining, "node:"+id,
+	s.WriteAudit(r, AuditNodeDraining, "node:"+id,
 		[]ChangeField{{Field: "draining", Old: before.Draining, New: on}}, StepUpNone)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
@@ -1373,7 +1373,7 @@ func (s *Service) handleAdminRestoreNode(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	s.writeAudit(r, AuditNodeRestore, "node:"+id,
+	s.WriteAudit(r, AuditNodeRestore, "node:"+id,
 		[]ChangeField{{Field: "removed_at", Old: before.RemovedAt, New: int64(0)}}, StepUpNone)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
@@ -1413,7 +1413,7 @@ func (s *Service) handleAdminMarkNodeRemoved(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	s.writeAudit(r, AuditNodeRemove, "node:"+id,
+	s.WriteAudit(r, AuditNodeRemove, "node:"+id,
 		[]ChangeField{{Field: "removed_at", Old: before.RemovedAt, New: at}}, StepUpNone)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
@@ -1445,7 +1445,7 @@ func (s *Service) handleAdminRevokeToken(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	// 只记 token id，绝不记明文 —— 明文只在铸造时内联显示一次，库里存的是哈希。
-	s.writeAudit(r, AuditTokenRevoke, "token:"+id,
+	s.WriteAudit(r, AuditTokenRevoke, "token:"+id,
 		[]ChangeField{{Field: "revoked_at", Old: int64(0), New: revokedAt}}, StepUpNone)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }

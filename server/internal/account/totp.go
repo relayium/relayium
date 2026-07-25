@@ -11,7 +11,7 @@ import (
 // totpForwardHealSteps is how many 30-second steps the persisted replay guard
 // may sit AHEAD of a presented code's step before ClaimTOTPStep treats it as a
 // clock-poisoned value and self-heals (resets to the current step). Legit skew
-// is at most ±1 step (matchAdminTOTPStep's window), so 2 leaves a safe margin;
+// is at most ±1 step (MatchAdminTOTPStep's window), so 2 leaves a safe margin;
 // any real forward clock jump that would lock out 2FA is far larger.
 const totpForwardHealSteps = 2
 
@@ -31,7 +31,7 @@ func (s *Service) AdminTOTPEnabled() bool {
 	return s.AdminEnabled() && s.cfg.AdminTOTPSecret != ""
 }
 
-// matchAdminTOTPStep checks a 6-digit code against the configured secret,
+// MatchAdminTOTPStep checks a 6-digit code against the configured secret,
 // allowing ±1 time-step of clock skew, and returns the time-step it maps to.
 //
 // It is CRYPTO-ONLY and side-effect-free: it does NOT enforce replay. Replay is
@@ -42,7 +42,7 @@ func (s *Service) AdminTOTPEnabled() bool {
 // password, and code-validity are checked together with no state mutation, so a
 // failed attempt leaks nothing via timing; the claim is a separate axis that
 // only matters once the creds are valid.
-func (s *Service) matchAdminTOTPStep(code string) (step int64, ok bool) {
+func (s *Service) MatchAdminTOTPStep(code string) (step int64, ok bool) {
 	secret := s.cfg.AdminTOTPSecret
 	if secret == "" || code == "" {
 		return 0, false

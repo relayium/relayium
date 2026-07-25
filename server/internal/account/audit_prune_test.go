@@ -10,7 +10,7 @@ import (
 )
 
 // seedAudit inserts one HUMAN audit row at time `at` (auth "password", the
-// same as writeAudit records for a logged-in admin).
+// same as WriteAudit records for a logged-in admin).
 func seedAudit(t *testing.T, s *SQLiteStore, at int64, actor, action string) {
 	t.Helper()
 	seedAuditAuth(t, s, at, actor, action, "password")

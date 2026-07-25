@@ -62,7 +62,7 @@ func newAdminSettingsServer(t *testing.T) (*httptest.Server, *Service, *SQLiteSt
 }
 
 // callAdminHandler invokes a high-risk admin handler DIRECTLY (bypassing
-// RegisterAdmin's mux and, with it, requireStepUp), for tests whose purpose
+// RegisterAdmin's mux and, with it, RequireStepUp), for tests whose purpose
 // is the handler's own business logic/validation rather than the step-up
 // gate in front of it — that gate is exercised separately by
 // stepup_test.go. Mirrors the existing pattern of calling handlers straight
@@ -98,7 +98,7 @@ func adminLogin(t *testing.T, ts *httptest.Server) *http.Cookie {
 }
 
 // These settings tests call handleAdminSettings directly rather than through
-// POST /admin/settings: that route now sits behind requireStepUp (Task 7),
+// POST /admin/settings: that route now sits behind RequireStepUp (Task 7),
 // which renders a confirmation page instead of applying anything — the
 // point of these tests is handleAdminSettings' OWN validation/persistence
 // logic, which is unchanged and still worth testing on its own. The route's
@@ -186,7 +186,7 @@ func TestAdminSettingsRejectsInvalid(t *testing.T) {
 }
 
 // Through the real route, an unauthenticated POST /admin/settings never
-// reaches handleAdminSettings at all — requireStepUp's own isAdminReq gate
+// reaches handleAdminSettings at all — RequireStepUp's own isAdminReq gate
 // intercepts it first and redirects to /admin (302), which is what an
 // operator's browser needs. handleAdminSettings keeps its own isAdminReq
 // check regardless (defense in depth, and the contract any direct caller —

@@ -50,7 +50,7 @@ func TestDevicePageShowsFormWhenAuthed(t *testing.T) {
 	}
 	// The approve control must fetch the JSON endpoint (not a native form
 	// post, which the JSON decoder would reject) with same-origin creds so
-	// csrfGuard's Origin check passes without a separate CSRF token.
+	// CSRFGuard's Origin check passes without a separate CSRF token.
 	if !strings.Contains(bs, "/api/cli/device/approve") || !strings.Contains(bs, "credentials") {
 		t.Fatalf("authed /device should wire an approve fetch to the JSON endpoint, got: %s", bs)
 	}

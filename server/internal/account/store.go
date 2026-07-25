@@ -1034,7 +1034,7 @@ type Store interface {
 	// credential is registered yet (the first registration mints one).
 	AdminUserHandle(ctx context.Context) ([]byte, bool, error)
 	// InsertAudit 追加一条管理员操作记录。审计写入失败绝不能让业务操作回滚：
-	// 调用方记录错误后继续（见 writeAudit）。
+	// 调用方记录错误后继续（见 WriteAudit）。
 	InsertAudit(ctx context.Context, e AuditEntry) error
 	// ListAudit 按时间倒序返回审计记录。action 非空时按动作过滤。
 	ListAudit(ctx context.Context, limit, offset int, action string) ([]AuditEntry, error)

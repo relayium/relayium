@@ -39,7 +39,7 @@ func TestWriteAuditNeverBreaksTheRequest(t *testing.T) {
 	svc.cfg.AdminUser = "admin"
 	req := httptest.NewRequest(http.MethodPost, "/admin/nodes/x/label", nil)
 	// store 正常，只验证调用不 panic、不返回错误通道
-	svc.writeAudit(req, "node.label", "node:x",
+	svc.WriteAudit(req, "node.label", "node:x",
 		[]ChangeField{{Field: "label", Old: "a", New: "b"}}, "")
 }
 

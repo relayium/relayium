@@ -11,7 +11,7 @@ import (
 
 // The plan/user-plan tests below call the handlers directly rather than
 // through POST /admin/plans or /admin/users/plan: those routes now sit
-// behind requireStepUp (Task 7), which renders a confirmation page instead
+// behind RequireStepUp (Task 7), which renders a confirmation page instead
 // of applying anything. These tests target the handlers' own
 // validation/persistence logic, which is unchanged; the routes' step-up
 // gating is covered separately by stepup_test.go.

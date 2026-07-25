@@ -2021,7 +2021,7 @@ func (s *SQLiteStore) ClaimTOTPStep(ctx context.Context, step int64) (bool, erro
 	// Normal path: claim iff `step` is strictly newer than the last used step.
 	// Self-heal path (`last_step - step > totpForwardHealSteps`): the guard is
 	// implausibly far in the FUTURE relative to this code's step. `step` always
-	// tracks wall-clock (matchAdminTOTPStep only accepts codes within ±1 step of
+	// tracks wall-clock (MatchAdminTOTPStep only accepts codes within ±1 step of
 	// now), so a last_step many steps ahead can only come from a transient forward
 	// clock jump (e.g. an NTP glitch) that committed a future step; once the clock
 	// is corrected every real code would be rejected forever without this. Healing

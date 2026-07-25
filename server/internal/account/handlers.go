@@ -20,18 +20,18 @@ const sessionCookie = "relayium_session"
 // silently retunes the other).
 const deleteTokenTTL = time.Hour
 
-// cookieSecure reports whether auth cookies should carry the Secure attribute.
+// CookieSecure reports whether auth cookies should carry the Secure attribute.
 // Derived from the base URL scheme: production (https) gets Secure cookies,
 // while plain http://localhost development keeps real-browser login working.
-func (s *Service) cookieSecure() bool {
+func (s *Service) CookieSecure() bool {
 	return strings.HasPrefix(s.cfg.BaseURL, "https://")
 }
 
 // Routes returns the account API handler. State-changing requests pass through
-// csrfGuard first; the returned http.Handler is not a *ServeMux, so callers must
+// CSRFGuard first; the returned http.Handler is not a *ServeMux, so callers must
 // treat it as an opaque handler.
 func (s *Service) Routes() http.Handler {
-	return s.csrfGuard(s.routeMux())
+	return s.CSRFGuard(s.routeMux())
 }
 
 // selfOrigin is the scheme://host the app is served from, derived from BaseURL.
@@ -46,14 +46,14 @@ func (s *Service) selfOrigin() string {
 	return u.Scheme + "://" + u.Host
 }
 
-// csrfGuard rejects state-changing requests (POST/PUT/PATCH/DELETE) whose Origin
+// CSRFGuard rejects state-changing requests (POST/PUT/PATCH/DELETE) whose Origin
 // header is present and does not match the site's own origin. This complements
 // the SameSite=Lax session cookie as defense-in-depth against CSRF: a cross-site
 // attacker's fetch/XHR always sends a foreign Origin, so it is blocked here even
 // if a browser or proxy quirk were to weaken SameSite enforcement. Safe methods
 // (GET/HEAD/OPTIONS) and requests with no Origin (e.g. top-level OAuth/magic-link
 // redirects, non-browser clients) are left alone.
-func (s *Service) csrfGuard(next http.Handler) http.Handler {
+func (s *Service) CSRFGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet, http.MethodHead, http.MethodOptions:
@@ -161,11 +161,11 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("GET /api/plans", s.handlePublicPlans)
 	// Stripe webhook: unauthenticated (no session, no CSRF token — Stripe
 	// can't provide either), authenticated instead by its own HMAC signature
-	// inside handleStripeWebhook. Safe to mount on routeMux/csrfGuard because
-	// csrfGuard only rejects a state-changing request whose Origin header is
+	// inside handleStripeWebhook. Safe to mount on routeMux/CSRFGuard because
+	// CSRFGuard only rejects a state-changing request whose Origin header is
 	// PRESENT and mismatched; Stripe's webhook POSTs carry no Origin header at
-	// all, so csrfGuard's `if origin != ""` check is false and it falls
-	// through untouched (see csrfGuard above).
+	// all, so CSRFGuard's `if origin != ""` check is false and it falls
+	// through untouched (see CSRFGuard above).
 	mux.HandleFunc("POST /api/stripe/webhook", s.handleStripeWebhook)
 	// Device-code CLI login flow (RFC 8628-style): start/poll are called by
 	// the unauthenticated CLI (it has no credential yet), approve is called
@@ -255,7 +255,7 @@ func (s *Service) setSessionCookie(w http.ResponseWriter, sess Session) {
 		Path:     "/",
 		Expires:  time.Unix(sess.ExpiresAt, 0),
 		HttpOnly: true,
-		Secure:   s.cookieSecure(),
+		Secure:   s.CookieSecure(),
 		SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -267,7 +267,7 @@ func (s *Service) clearSessionCookie(w http.ResponseWriter) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   s.cookieSecure(),
+		Secure:   s.CookieSecure(),
 		SameSite: http.SameSiteLaxMode,
 	})
 }

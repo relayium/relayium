@@ -368,7 +368,7 @@ func (s *Service) rolloutSetVersion(w http.ResponseWriter, r *http.Request, acti
 		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "目标版本设置失败："+err.Error())
 		return
 	}
-	s.writeAudit(r, action, "rollout:"+track, []ChangeField{
+	s.WriteAudit(r, action, "rollout:"+track, []ChangeField{
 		{Field: "target_version", Old: before.TargetVersion, New: version},
 		{Field: "status", Old: before.Status, New: "rolling"},
 	}, StepUpNone)
@@ -418,7 +418,7 @@ func (s *Service) handleAdminRolloutByoRollbackPrevious(w http.ResponseWriter, r
 	// Audited as a rollback, the same action the version-box rollback writes:
 	// what an incident review needs is "byo was taken off X onto Y", and the
 	// diff below says exactly that.
-	s.writeAudit(r, AuditRolloutRollback, "rollout:byo", []ChangeField{
+	s.WriteAudit(r, AuditRolloutRollback, "rollout:byo", []ChangeField{
 		{Field: "target_version", Old: before.TargetVersion, New: version},
 		{Field: "status", Old: before.Status, New: "rolling"},
 	}, StepUpNone)
@@ -454,7 +454,7 @@ func (s *Service) handleAdminRolloutPause(w http.ResponseWriter, r *http.Request
 	// not just the automatic ones. The target version is not read back here --
 	// this path holds no track row -- and is not worth a second query.
 	log.Printf("%s track=%s target=? reason=%q", rolloutHaltLogPrefix, track, "管理员手动暂停")
-	s.writeAudit(r, AuditRolloutPause, "rollout:"+track,
+	s.WriteAudit(r, AuditRolloutPause, "rollout:"+track,
 		[]ChangeField{{Field: "status", Old: "rolling", New: "halted"}}, StepUpNone)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
@@ -483,7 +483,7 @@ func (s *Service) handleAdminRolloutResume(w http.ResponseWriter, r *http.Reques
 		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "继续失败：该轨道当前不是已中止状态")
 		return
 	}
-	s.writeAudit(r, AuditRolloutResume, "rollout:"+track,
+	s.WriteAudit(r, AuditRolloutResume, "rollout:"+track,
 		[]ChangeField{{Field: "status", Old: "halted", New: "rolling"}}, StepUpNone)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
@@ -493,7 +493,7 @@ func (s *Service) handleAdminRolloutResume(w http.ResponseWriter, r *http.Reques
 // update check bypass the staged ladder for every node of this track (see
 // RolloutTrack.Emergency and updateCheckEmergency).
 //
-// It is registered behind requireStepUp, so by the time this runs the operator
+// It is registered behind RequireStepUp, so by the time this runs the operator
 // has seen a confirmation page naming the version and the fact that staging is
 // skipped, and has re-presented a second factor; handleAdminConfirm writes the
 // audit entry (rollout.emergency, target rollout:<track>, with the factor that

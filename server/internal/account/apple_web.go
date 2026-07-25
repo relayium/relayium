@@ -74,7 +74,7 @@ func (s *Service) handleAppleWebStart(w http.ResponseWriter, r *http.Request) {
 			// from appleid.apple.com) — SameSite=Lax cookies are NOT sent on
 			// cross-site POST navigations, so this MUST be None (requires Secure)
 			// or the callback never sees the cookie. Do not "fix" this back to Lax.
-			HttpOnly: true, Secure: s.cookieSecure(), SameSite: http.SameSiteNoneMode,
+			HttpOnly: true, Secure: s.CookieSecure(), SameSite: http.SameSiteNoneMode,
 		})
 	}
 	q := url.Values{

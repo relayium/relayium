@@ -106,8 +106,8 @@ func TestCookieSecureDerivedFromBaseURL(t *testing.T) {
 	}
 	for _, c := range cases {
 		svc := &Service{cfg: Config{BaseURL: c.baseURL}}
-		if got := svc.cookieSecure(); got != c.want {
-			t.Errorf("cookieSecure(%q) = %v, want %v", c.baseURL, got, c.want)
+		if got := svc.CookieSecure(); got != c.want {
+			t.Errorf("CookieSecure(%q) = %v, want %v", c.baseURL, got, c.want)
 		}
 	}
 }

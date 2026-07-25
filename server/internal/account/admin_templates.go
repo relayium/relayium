@@ -142,7 +142,7 @@ type adminLoginData struct {
 	Nonce   string // per-request CSP script nonce for the inline passkey script
 }
 
-// confirmPageData is passed to adminConfirmTmpl (requireStepUp's confirmation
+// confirmPageData is passed to adminConfirmTmpl (RequireStepUp's confirmation
 // page): the diff a pending high-risk write would apply, plus the token that
 // identifies it so the confirm POST can retrieve (and burn) it.
 type confirmPageData struct {
@@ -163,7 +163,7 @@ type confirmPageData struct {
 	Changes []ChangeField
 	// NeedFactor is false only inside the step-up grace window. It must
 	// NEVER affect whether this page renders at all — only whether the
-	// factor input below is required. See requireStepUp's doc comment.
+	// factor input below is required. See RequireStepUp's doc comment.
 	NeedFactor bool
 	Factor     string // which factor to prompt for: StepUpPasskey/TOTP/Password
 	Nonce      string // per-request CSP script nonce for the inline passkey script
@@ -208,7 +208,7 @@ func withPasskeyJS(t *template.Template) *template.Template {
 // never be treated as a confirmation step: buildCSP emits
 // script-src 'self' 'nonce-…' with no 'unsafe-inline' / 'unsafe-hashes', so the
 // browser blocks inline event handlers and the form posts with no dialog. The
-// only real 二次确认 is requireStepUp's server-rendered confirmation page,
+// only real 二次确认 is RequireStepUp's server-rendered confirmation page,
 // which is why the emergency form (the one where it actually mattered) carries
 // no onsubmit at all — it is behind step-up, and adminConfirmTmpl names the
 // track in a banner.
@@ -376,7 +376,7 @@ button:hover{filter:brightness(1.07)}
 {{end}}
 </body></html>`))
 
-// adminConfirmTmpl draws requireStepUp's confirmation page: the field-level
+// adminConfirmTmpl draws RequireStepUp's confirmation page: the field-level
 // diff a pending high-risk write would apply, plus a form that posts the
 // pending-action token (and, once Task 8 lands, the second factor) to
 // /admin/confirm. Values interpolated below (Field/Old/New, Action, Target)

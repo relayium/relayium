@@ -13,7 +13,7 @@ import (
 // adminLoginCookie logs into the admin dashboard seeded by newAdminAuditServer
 // (user "admin", password "secret123") and returns the resulting session
 // cookie. No Origin header is sent, matching admin_test.go's adminLogin
-// helper: csrfGuard lets Origin-less requests through (top-level form post),
+// helper: CSRFGuard lets Origin-less requests through (top-level form post),
 // so login itself doesn't need one.
 func adminLoginCookie(t *testing.T, ts *httptest.Server) *http.Cookie {
 	t.Helper()
@@ -36,7 +36,7 @@ func adminLoginCookie(t *testing.T, ts *httptest.Server) *http.Cookie {
 
 // postAdminForm POSTs form to path with cookie attached AND an Origin header
 // matching the test server's configured BaseURL (http://example.test) —
-// csrfGuard lets Origin-less requests through unconditionally, so a test that
+// CSRFGuard lets Origin-less requests through unconditionally, so a test that
 // wants to actually exercise the Origin-match branch has to set one that
 // matches. Redirects are not followed, so callers can assert on 302 vs 200.
 func postAdminForm(t *testing.T, ts *httptest.Server, cookie *http.Cookie, path string, form url.Values) *http.Response {
@@ -162,7 +162,7 @@ func TestGracePeriodStillShowsConfirmPage(t *testing.T) {
 // 提交确认页时不带任何第二因子，/admin/confirm 绝不能执行待确认操作 —— 否则
 // 拿着会话 cookie 的人（比如 XSS 窃取）能跳过第二因子直接兑现高危写操作，
 // confirm 页存在的意义就没了。这条直接盯住 handleAdminConfirm 本身，而不是
-// 只测 requireStepUp 拦下了原始 POST。测试服务未配 TOTP/passkey，因子即密码，
+// 只测 RequireStepUp 拦下了原始 POST。测试服务未配 TOTP/passkey，因子即密码，
 // 空密码必被拒。
 func TestConfirmWithoutFactorDoesNotApply(t *testing.T) {
 	ts, svc, _, _ := newAdminAuditServer(t)

@@ -151,7 +151,7 @@ func (s *Service) handleAdminPasskeyRegisterFinish(w http.ResponseWriter, r *htt
 // else. That reasoning was overridden: credential removal is now treated as a
 // high-risk action like the rest, because a stolen session that can silently
 // strip the operator's passkeys turns a recoverable compromise into a lockout.
-// The gating lives in RegisterAdmin (requireStepUp), not here.
+// The gating lives in RegisterAdmin (RequireStepUp), not here.
 func (s *Service) handleAdminPasskeyDelete(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
 		http.Redirect(w, r, "/admin", http.StatusFound)

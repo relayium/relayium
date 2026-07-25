@@ -61,15 +61,15 @@ const (
 	StepUpGrace    = "grace"
 )
 
-// writeAudit 追加一条审计记录。
+// WriteAudit 追加一条审计记录。
 //
 // **它绝不返回错误，也绝不让调用方失败。** 业务操作此时已经成功提交，把审计
 // 写入失败上报成 500 会让管理员以为操作没生效而重试一次，反而造成二次变更。
 // 写不进去就记到进程日志里，这是我们能做的最好补救。
-func (s *Service) writeAudit(r *http.Request, action, target string, fields []ChangeField, stepUp string) {
+func (s *Service) WriteAudit(r *http.Request, action, target string, fields []ChangeField, stepUp string) {
 	if s.store == nil {
 		// Some lightweight handler tests build a *Service with a nil store
-		// (NewService(nil, nil, Config{...})). writeAudit must never break the
+		// (NewService(nil, nil, Config{...})). WriteAudit must never break the
 		// request it's attached to, and a nil store is just a more extreme
 		// version of "the audit write failed" — same rule applies.
 		return
@@ -92,7 +92,7 @@ func (s *Service) writeAudit(r *http.Request, action, target string, fields []Ch
 // nodeAuditActor 是"这条记录不是人做的"的写法：actor 写成 node:<id>，
 // auth 写成 node-token。
 //
-// 绝不能退回去用 writeAudit —— 它取的是 s.adminUsername()，在没有管理员登录的
+// 绝不能退回去用 WriteAudit —— 它取的是 s.adminUsername()，在没有管理员登录的
 // 请求里就是空字符串，审计页上会渲染成一个没有名字的管理员，等于把一次机器自
 // 助下线记成"某个我们没记下名字的人干的"。审计日志在最要紧的地方说谎，比没有
 // 这条记录更糟。
@@ -102,7 +102,7 @@ func nodeAuditActor(nodeID string) string { return "node:" + nodeID }
 
 // writeNodeAudit 追加一条**由节点自己发起**的审计记录。
 //
-// 与 writeAudit 同样：绝不返回错误、绝不让请求失败。这里的理由更强——调用方是
+// 与 WriteAudit 同样：绝不返回错误、绝不让请求失败。这里的理由更强——调用方是
 // 卸载脚本，它把每一次失败都当成非致命并继续卸载，所以为了写不进审计而回一个
 // 500，只会让"机器已经走了"这个事实连日志都留不下。
 func (s *Service) writeNodeAudit(r *http.Request, action, nodeID string, fields []ChangeField) {

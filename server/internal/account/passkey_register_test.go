@@ -595,7 +595,7 @@ func TestPasskeyDelete(t *testing.T) {
 	//
 	// Calls handleAdminPasskeyDelete directly rather than through the real
 	// POST /admin/passkey/delete route: that route now sits behind
-	// requireStepUp (Task 7 gates passkey deletion as high-risk — see the
+	// RequireStepUp (Task 7 gates passkey deletion as high-risk — see the
 	// doc comment on handleAdminPasskeyDelete), which renders a confirmation
 	// page instead of deleting anything. This asserts the handler's own
 	// deletion logic; the route's step-up gating is covered by

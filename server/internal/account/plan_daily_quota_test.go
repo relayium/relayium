@@ -199,7 +199,7 @@ func TestFreePlanUploadStillHitsGlobalDailyQuota(t *testing.T) {
 
 // postPlanForm calls handleAdminUpsertPlan directly and returns the status
 // code. It used to POST through the real /admin/plans route, but that route
-// now sits behind requireStepUp (Task 7), which renders a confirmation page
+// now sits behind RequireStepUp (Task 7), which renders a confirmation page
 // instead of applying anything — these tests target
 // handleAdminUpsertPlan's own persistence logic, which is unchanged; the
 // route's step-up gating is covered separately by stepup_test.go.

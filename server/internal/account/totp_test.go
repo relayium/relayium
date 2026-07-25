@@ -43,13 +43,13 @@ func TestMatchAdminTOTPStep(t *testing.T) {
 	base := time.Unix(1_700_000_000, 0)
 	s := newTOTPService(testSecret, base)
 
-	step, ok := s.matchAdminTOTPStep(codeAt(t, base))
+	step, ok := s.MatchAdminTOTPStep(codeAt(t, base))
 	if !ok || step == 0 {
 		t.Fatalf("current-step code should match, got step=%d ok=%v", step, ok)
 	}
 	// Crypto-only + side-effect-free: repeated matching still succeeds. Replay is
 	// enforced separately by the store's atomic ClaimTOTPStep, NOT here.
-	if _, ok := s.matchAdminTOTPStep(codeAt(t, base)); !ok {
+	if _, ok := s.MatchAdminTOTPStep(codeAt(t, base)); !ok {
 		t.Fatal("matching must be side-effect-free: a repeated match should still succeed")
 	}
 }
@@ -59,17 +59,17 @@ func TestMatchAdminTOTPStepSkew(t *testing.T) {
 
 	// -1 step
 	s := newTOTPService(testSecret, base)
-	if _, ok := s.matchAdminTOTPStep(codeAt(t, base.Add(-30*time.Second))); !ok {
+	if _, ok := s.MatchAdminTOTPStep(codeAt(t, base.Add(-30*time.Second))); !ok {
 		t.Fatal("-1 step code should pass (skew=1)")
 	}
 	// +1 step
 	s = newTOTPService(testSecret, base)
-	if _, ok := s.matchAdminTOTPStep(codeAt(t, base.Add(30*time.Second))); !ok {
+	if _, ok := s.MatchAdminTOTPStep(codeAt(t, base.Add(30*time.Second))); !ok {
 		t.Fatal("+1 step code should pass (skew=1)")
 	}
 	// +2 steps must fail
 	s = newTOTPService(testSecret, base)
-	if _, ok := s.matchAdminTOTPStep(codeAt(t, base.Add(60*time.Second))); ok {
+	if _, ok := s.MatchAdminTOTPStep(codeAt(t, base.Add(60*time.Second))); ok {
 		t.Fatal("+2 step code must be rejected")
 	}
 }
@@ -77,7 +77,7 @@ func TestMatchAdminTOTPStepSkew(t *testing.T) {
 func TestMatchAdminTOTPStepWrongCode(t *testing.T) {
 	base := time.Unix(1_700_000_000, 0)
 	s := newTOTPService(testSecret, base)
-	if _, ok := s.matchAdminTOTPStep("000000"); ok {
+	if _, ok := s.MatchAdminTOTPStep("000000"); ok {
 		t.Fatal("wrong code must be rejected")
 	}
 }
@@ -173,7 +173,7 @@ func TestTOTPReplayAcrossInstances(t *testing.T) {
 	ctx := context.Background()
 	code := codeAt(t, base)
 
-	stepA, ok := svcA.matchAdminTOTPStep(code)
+	stepA, ok := svcA.MatchAdminTOTPStep(code)
 	if !ok {
 		t.Fatal("A: code should validate")
 	}
@@ -181,7 +181,7 @@ func TestTOTPReplayAcrossInstances(t *testing.T) {
 		t.Fatalf("A: first claim should win: claimed=%v err=%v", claimed, err)
 	}
 	// B still sees the code as cryptographically valid in-window...
-	stepB, ok := svcB.matchAdminTOTPStep(code)
+	stepB, ok := svcB.MatchAdminTOTPStep(code)
 	if !ok {
 		t.Fatal("B: code is still cryptographically valid in the window")
 	}

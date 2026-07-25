@@ -154,7 +154,7 @@ func TestAdminDashboardShowsEffectiveNodeTrafficLimit(t *testing.T) {
 }
 
 // TestAdminMintShowsTokenOnce calls handleAdminMintToken directly: through
-// the real route it now sits behind requireStepUp (Task 7). See the comment
+// the real route it now sits behind RequireStepUp (Task 7). See the comment
 // on TestAdminMintFleetToken in admin_official_nodes_test.go.
 func TestAdminMintShowsTokenOnce(t *testing.T) {
 	ts, svc, _ := newAdminSettingsServer(t)

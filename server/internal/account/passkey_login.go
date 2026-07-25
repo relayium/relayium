@@ -120,7 +120,7 @@ func (s *Service) putCeremony(ctx context.Context, w http.ResponseWriter, kind c
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: passkeyCeremonyCookie, Value: tok, Path: "/admin",
-		HttpOnly: true, Secure: s.cookieSecure(), SameSite: http.SameSiteLaxMode,
+		HttpOnly: true, Secure: s.CookieSecure(), SameSite: http.SameSiteLaxMode,
 		MaxAge: int(passkeyCeremonyTTL / time.Second),
 	})
 	return true
@@ -338,13 +338,13 @@ func (s *Service) handleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.R
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: adminCookie, Value: tok, Path: "/admin",
-		HttpOnly: true, Secure: s.cookieSecure(), SameSite: http.SameSiteLaxMode,
+		HttpOnly: true, Secure: s.CookieSecure(), SameSite: http.SameSiteLaxMode,
 		MaxAge: int(adminSessionTTL / time.Second),
 	})
 	// adminAuthMethod 从 r 的 cookie 反查会话；这个请求本身还没带上刚铸造的
-	// cookie（它只被写进了响应），所以这里手动补一份到 r 上，writeAudit 才能
+	// cookie（它只被写进了响应），所以这里手动补一份到 r 上，WriteAudit 才能
 	// 读出 auth=passkey 而不是空字符串。
 	r.AddCookie(&http.Cookie{Name: adminCookie, Value: tok})
-	s.writeAudit(r, AuditLoginOK, "-", nil, StepUpNone)
+	s.WriteAudit(r, AuditLoginOK, "-", nil, StepUpNone)
 	httpx.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

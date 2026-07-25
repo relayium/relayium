@@ -13,7 +13,7 @@ import (
 // Reuse newAdminSettingsServer + adminLogin from admin_test.go.
 
 // TestAdminMintFleetToken calls handleAdminMintToken directly: through the
-// real route it now sits behind requireStepUp (Task 7), which renders a
+// real route it now sits behind RequireStepUp (Task 7), which renders a
 // confirmation page instead of minting anything. This test targets the
 // handler's own persistence logic; the route's gating is covered by
 // stepup_test.go.
@@ -54,7 +54,7 @@ func TestAdminSetNodeLimits(t *testing.T) {
 }
 
 // TestAdminDeleteFleetNode calls handleAdminDeleteNode directly: through the
-// real route it now sits behind requireStepUp (Task 7). See the comment on
+// real route it now sits behind RequireStepUp (Task 7). See the comment on
 // TestAdminMintFleetToken above.
 func TestAdminDeleteFleetNode(t *testing.T) {
 	ts, svc, store := newAdminSettingsServer(t)
@@ -116,7 +116,7 @@ func TestAdminSetNodeLimitsUserNodeNotFound(t *testing.T) {
 }
 
 // Through the real route, an unauthed POST /admin/nodes/token is caught by
-// requireStepUp's own isAdminReq gate (302 to /admin) before it ever reaches
+// RequireStepUp's own isAdminReq gate (302 to /admin) before it ever reaches
 // handleAdminMintToken. This test targets handleAdminMintToken's own
 // isAdminReq check directly — see the comment on TestAdminSettingsRequiresAdmin.
 func TestAdminNodeRoutesRequireAdmin(t *testing.T) {

@@ -14,13 +14,13 @@ type stepUpCtxKey struct{}
 
 // stepUpDoneKey marks a request that handleAdminConfirm has already resolved
 // (pending action taken, original form restored onto the request) and is now
-// forwarding to the real handler. requireStepUp checks for this and, when
+// forwarding to the real handler. RequireStepUp checks for this and, when
 // present, lets the request straight through instead of intercepting it
 // again — without it, the forwarded POST would just mint a second pending
 // action and re-render the confirm page instead of ever applying anything.
 var stepUpDoneKey = stepUpCtxKey{}
 
-// requireStepUp turns a high-risk write handler into "render a confirmation
+// RequireStepUp turns a high-risk write handler into "render a confirmation
 // first, apply later". It intercepts the original POST, stashes the form in
 // a session-bound pending action, and renders a page showing exactly what
 // would change. The actual write only happens in handleAdminConfirm, once
@@ -32,7 +32,7 @@ var stepUpDoneKey = stepUpCtxKey{}
 // factor (see stepUpGraceSecs' doc comment in admin.go) — it must never skip
 // showing the diff, because the diff view is the actual anti-misclick
 // mechanism, not the factor prompt.
-func (s *Service) requireStepUp(action string, next http.HandlerFunc) http.HandlerFunc {
+func (s *Service) RequireStepUp(action string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.isAdminReq(r) {
 			http.Redirect(w, r, "/admin", http.StatusFound)
@@ -95,7 +95,7 @@ func (s *Service) requireStepUp(action string, next http.HandlerFunc) http.Handl
 // a password from being locked out of high-risk admin actions entirely. The
 // confirmation page nudges that operator to set up real 2FA instead.
 func (s *Service) availableStepUpFactor(ctx context.Context) string {
-	if s.adminPasskeyCount(ctx) > 0 {
+	if s.AdminPasskeyCount(ctx) > 0 {
 		return StepUpPasskey
 	}
 	if s.AdminTOTPEnabled() {
@@ -117,7 +117,7 @@ func (s *Service) renderConfirmPage(w http.ResponseWriter, data confirmPageData)
 // confirmHandlerFor maps a pending action name to the handler that actually
 // applies it. This is an explicit map, not reflection: the set of
 // confirmable actions is meant to be readable at a glance right next to the
-// six requireStepUp registrations in RegisterAdmin, and a typo in an action
+// six RequireStepUp registrations in RegisterAdmin, and a typo in an action
 // constant fails as an "unknown pending action" 500 instead of silently
 // resolving to the wrong method via name-matching.
 func (s *Service) confirmHandlerFor(action string) (http.HandlerFunc, bool) {
@@ -144,7 +144,7 @@ func (s *Service) confirmHandlerFor(action string) (http.HandlerFunc, bool) {
 // the pending action.
 //
 // The grace window is checked first and mirrors exactly the NeedFactor
-// computation requireStepUp did when it rendered this pending action's page: a
+// computation RequireStepUp did when it rendered this pending action's page: a
 // recent successful step-up on this same session waves the factor. That path
 // returns StepUpGrace, never a real factor name — the audit must not claim a
 // factor was re-checked when it was let through (see StepUpGrace's doc comment).
@@ -162,11 +162,11 @@ func (s *Service) verifyStepUpFactor(r *http.Request, pending pendingAction) (st
 			return StepUpPasskey, true
 		}
 	case StepUpTOTP:
-		// matchAdminTOTPStep is crypto-only; ClaimTOTPStep atomically spends the
+		// MatchAdminTOTPStep is crypto-only; ClaimTOTPStep atomically spends the
 		// step so a code already used (at login or an earlier step-up, on ANY
 		// instance) is refused. The claim IS the single-use lock now — a false
 		// result (or a store error, failing closed) rejects the factor.
-		if step, ok := s.matchAdminTOTPStep(r.FormValue("factor_code")); ok {
+		if step, ok := s.MatchAdminTOTPStep(r.FormValue("factor_code")); ok {
 			if claimed, err := s.store.ClaimTOTPStep(r.Context(), step); err == nil && claimed {
 				return StepUpTOTP, true
 			}
@@ -205,7 +205,7 @@ func (s *Service) handleAdminConfirm(w http.ResponseWriter, r *http.Request) {
 	}
 	handler, ok := s.confirmHandlerFor(pending.action)
 	if !ok {
-		// Unreachable in practice: every action requireStepUp can mint a
+		// Unreachable in practice: every action RequireStepUp can mint a
 		// pending token for is registered in confirmHandlerFor. Fail closed
 		// rather than silently dropping an operator-confirmed action.
 		http.Error(w, "unknown pending action", http.StatusInternalServerError)
@@ -264,7 +264,7 @@ func (s *Service) handleAdminConfirm(w http.ResponseWriter, r *http.Request) {
 	if diffErr == nil {
 		changes = diffFields(before, after)
 	}
-	s.writeAudit(r, pending.action, target, changes, factor)
+	s.WriteAudit(r, pending.action, target, changes, factor)
 }
 
 // statusRecorder wraps a ResponseWriter to remember the first status code the
