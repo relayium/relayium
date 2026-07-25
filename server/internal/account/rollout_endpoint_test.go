@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // newUpdateCheckServer builds a node-routes-only server whose clock is pinned to
@@ -273,7 +275,7 @@ func TestUpdateCheckRoutesUserNodesToTheByoTrack(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := st.CreateNodeToken(ctx, NodeToken{
-		ID: "nt1", TokenHash: hashToken("user-token"), UserID: u.ID, Name: "home", CreatedAt: 1,
+		ID: "nt1", TokenHash: authx.HashToken("user-token"), UserID: u.ID, Name: "home", CreatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -550,7 +552,7 @@ func newByoFleet(t *testing.T, st *SQLiteStore, n int, version string) []NodeSna
 		t.Fatal(err)
 	}
 	if err := st.CreateNodeToken(ctx, NodeToken{
-		ID: "nt1", TokenHash: hashToken("user-token"), UserID: u.ID, Name: "home", CreatedAt: 1,
+		ID: "nt1", TokenHash: authx.HashToken("user-token"), UserID: u.ID, Name: "home", CreatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -4,6 +4,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/relayium/relayium/internal/httpx"
 )
 
 func TestLoginThrottleLocksAfterThreshold(t *testing.T) {
@@ -93,11 +95,11 @@ func TestLoginThrottleDecaysCountAfterWindow(t *testing.T) {
 func TestClientIP(t *testing.T) {
 	r := httptest.NewRequest("POST", "/admin/login", nil)
 	r.RemoteAddr = "9.9.9.9:5555"
-	if got := clientIP(r); got != "9.9.9.9" {
+	if got := httpx.ClientIP(r); got != "9.9.9.9" {
 		t.Fatalf("RemoteAddr host: got %q", got)
 	}
 	r.Header.Set("X-Forwarded-For", "5.5.5.5, 9.9.9.9")
-	if got := clientIP(r); got != "5.5.5.5" {
+	if got := httpx.ClientIP(r); got != "5.5.5.5" {
 		t.Fatalf("XFF first entry: got %q", got)
 	}
 }

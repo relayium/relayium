@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 func TestNodeOwnerAdminFleetToken(t *testing.T) {
@@ -14,7 +16,7 @@ func TestNodeOwnerAdminFleetToken(t *testing.T) {
 	s := &Service{store: st, cfg: Config{EnableUserNodes: true}, now: func() time.Time { return time.Unix(5000, 0) }}
 
 	raw := "admin-minted-secret"
-	st.CreateFleetToken(ctx, FleetToken{ID: "ft1", TokenHash: hashToken(raw), Name: "sh", CreatedAt: 1})
+	st.CreateFleetToken(ctx, FleetToken{ID: "ft1", TokenHash: authx.HashToken(raw), Name: "sh", CreatedAt: 1})
 
 	r, _ := http.NewRequest("POST", "/", nil)
 	r.Header.Set("Authorization", "Bearer "+raw)

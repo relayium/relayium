@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // postDeregister POSTs an uninstall notice with the given bearer token.
@@ -123,10 +125,10 @@ func TestDeregisterOwnershipBoundary(t *testing.T) {
 	ctx := context.Background()
 	alice, _ := st.UpsertUserByEmail(ctx, "alice@example.com", "")
 	bob, _ := st.UpsertUserByEmail(ctx, "bob@example.com", "")
-	if err := st.CreateNodeToken(ctx, NodeToken{ID: "ta", TokenHash: hashToken("alicetok"), UserID: alice.ID, Name: "a", CreatedAt: 1}); err != nil {
+	if err := st.CreateNodeToken(ctx, NodeToken{ID: "ta", TokenHash: authx.HashToken("alicetok"), UserID: alice.ID, Name: "a", CreatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.CreateNodeToken(ctx, NodeToken{ID: "tb", TokenHash: hashToken("bobtok"), UserID: bob.ID, Name: "b", CreatedAt: 1}); err != nil {
+	if err := st.CreateNodeToken(ctx, NodeToken{ID: "tb", TokenHash: authx.HashToken("bobtok"), UserID: bob.ID, Name: "b", CreatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
 	s := &Service{store: st, cfg: Config{NodeToken: "fleet-secret", EnableUserNodes: true},

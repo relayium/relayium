@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/url"
 	"time"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 const (
@@ -38,7 +40,7 @@ type pendingAction struct {
 // 调用方必须据此拒绝请求而不是继续往下走。Stored in the DB so the confirm token
 // is claimable on any instance (form is query-string encoded).
 func (s *Service) putPending(ctx context.Context, sessionTok, action, pathID string, form url.Values) (string, bool) {
-	tok := randToken()
+	tok := authx.RandToken()
 	now := s.now().Unix()
 	ok, err := s.store.PutPendingAction(ctx, tok, sessionTok, action, form.Encode(), pathID,
 		now, now+int64(pendingActionTTL.Seconds()), pendingActionCap)
@@ -66,7 +68,7 @@ func (s *Service) takePending(ctx context.Context, tok, sessionTok string) (pend
 	}
 	// st is the STORED hash of the minting session's cookie (the store hashes
 	// session_tok on write), so compare it against the hash of the current cookie.
-	if st != hashToken(sessionTok) {
+	if st != authx.HashToken(sessionTok) {
 		return pendingAction{}, false // burned above; a mismatched session can't retry
 	}
 	form, _ := url.ParseQuery(formEnc)

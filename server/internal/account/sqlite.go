@@ -2,9 +2,7 @@ package account
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +13,8 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // SQLiteStore keeps a single writer connection (db) — write-path atomicity
@@ -962,14 +962,6 @@ func (s *SQLiteStore) Close() error {
 	return s.db.Close()
 }
 
-func newID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		panic("account: crypto/rand failed: " + err.Error())
-	}
-	return hex.EncodeToString(b)
-}
-
 func normEmail(e string) string { return strings.ToLower(strings.TrimSpace(e)) }
 
 func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName string) (User, error) {
@@ -987,7 +979,7 @@ func (s *SQLiteStore) UpsertUserByEmail(ctx context.Context, email, displayName 
 	if err != sql.ErrNoRows {
 		return User{}, err
 	}
-	u = User{ID: newID(), Email: email, DisplayName: displayName, CreatedAt: time.Now().Unix()}
+	u = User{ID: authx.NewID(), Email: email, DisplayName: displayName, CreatedAt: time.Now().Unix()}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO users (id, email, display_name, created_at, canonical_email) VALUES (?, ?, ?, ?, ?)`,
 		u.ID, u.Email, u.DisplayName, u.CreatedAt, canonicalEmail(email))
@@ -1039,7 +1031,7 @@ func (s *SQLiteStore) InsertUserDedupedByCanonical(ctx context.Context, email, d
 		return User{}, true, nil
 	}
 
-	u := User{ID: newID(), Email: email, DisplayName: displayName, CreatedAt: time.Now().Unix()}
+	u := User{ID: authx.NewID(), Email: email, DisplayName: displayName, CreatedAt: time.Now().Unix()}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO users (id, email, display_name, created_at, canonical_email) VALUES (?, ?, ?, ?, ?)`,
 		u.ID, u.Email, u.DisplayName, u.CreatedAt, canonical); err != nil {
@@ -1687,15 +1679,15 @@ func (s *SQLiteStore) UnlinkIdentityIfSafe(ctx context.Context, provider, userID
 // 令牌就是 cookie 的值：明文存库意味着任何一次只读的库泄露（备份、快照、卷、一条
 // SELECT 的 SQL 注入）都等于把所有在线用户的会话直接交出去，而且 TTL 是 14 天。
 // 本项目其余每一种令牌（magic / reset / CLI / node / fleet / admin 会话）本来就都是
-// hashToken() 存的，唯独用户会话是例外——这里把它补齐。
+// authx.HashToken() 存的，唯独用户会话是例外——这里把它补齐。
 //
-// 升级不做数据迁移，也不需要：切换之后查询用的是 hashToken(cookie)，旧行里存的是
+// 升级不做数据迁移，也不需要：切换之后查询用的是 authx.HashToken(cookie)，旧行里存的是
 // 原始令牌，要让它再次命中得对 sha256 求原像。所以旧行既失效又不可利用，
 // DeleteExpiredSessions 会在它们到期时收走。代价是所有人被登出一次。
 func (s *SQLiteStore) CreateSession(ctx context.Context, sess Session) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions (id, user_id, created_at, expires_at, revoked) VALUES (?, ?, ?, ?, 0)`,
-		hashToken(sess.ID), sess.UserID, sess.CreatedAt, sess.ExpiresAt)
+		authx.HashToken(sess.ID), sess.UserID, sess.CreatedAt, sess.ExpiresAt)
 	return err
 }
 
@@ -1705,7 +1697,7 @@ func (s *SQLiteStore) GetSession(ctx context.Context, id string) (Session, bool,
 	// 不 SELECT id：库里存的是哈希，回填给调用方会让它有机会被当成 cookie 值发出去。
 	// 直接把调用方传进来的原始令牌放回 sess.ID。
 	err := s.db.QueryRowContext(ctx,
-		`SELECT user_id, created_at, expires_at, revoked FROM sessions WHERE id = ?`, hashToken(id),
+		`SELECT user_id, created_at, expires_at, revoked FROM sessions WHERE id = ?`, authx.HashToken(id),
 	).Scan(&sess.UserID, &sess.CreatedAt, &sess.ExpiresAt, &revoked)
 	if err == sql.ErrNoRows {
 		return Session{}, false, nil
@@ -1722,7 +1714,7 @@ func (s *SQLiteStore) GetSession(ctx context.Context, id string) (Session, bool,
 }
 
 func (s *SQLiteStore) RevokeSession(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE sessions SET revoked = 1 WHERE id = ?`, hashToken(id))
+	_, err := s.db.ExecContext(ctx, `UPDATE sessions SET revoked = 1 WHERE id = ?`, authx.HashToken(id))
 	return err
 }
 
@@ -1732,7 +1724,7 @@ func (s *SQLiteStore) RevokeUserSessions(ctx context.Context, userID, exceptID s
 	// exceptID 也要哈希后再比，否则"保留当前会话"会退化成"一个都不保留"——
 	// 改密码之后连自己都被登出，而这条路径恰恰是改密码在走。
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE sessions SET revoked = 1 WHERE user_id = ? AND id <> ?`, userID, hashToken(exceptID))
+		`UPDATE sessions SET revoked = 1 WHERE user_id = ? AND id <> ?`, userID, authx.HashToken(exceptID))
 	return err
 }
 
@@ -2063,7 +2055,7 @@ func (s *SQLiteStore) ClaimTOTPStep(ctx context.Context, step int64) (bool, erro
 func (s *SQLiteStore) CreateAdminSession(ctx context.Context, token, auth, credFP string, expires int64) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO admin_sessions (token, auth, cred_fp, expires, last_step_up_at) VALUES (?, ?, ?, ?, 0)`,
-		hashToken(token), auth, credFP, expires)
+		authx.HashToken(token), auth, credFP, expires)
 	return err
 }
 
@@ -2073,7 +2065,7 @@ func (s *SQLiteStore) CreateAdminSession(ctx context.Context, token, auth, credF
 func (s *SQLiteStore) AdminSession(ctx context.Context, token, credFP string, now int64) (auth string, lastStepUpAt int64, ok bool, err error) {
 	err = s.db.QueryRowContext(ctx,
 		`SELECT auth, last_step_up_at FROM admin_sessions WHERE token = ? AND cred_fp = ? AND expires > ?`,
-		hashToken(token), credFP, now).Scan(&auth, &lastStepUpAt)
+		authx.HashToken(token), credFP, now).Scan(&auth, &lastStepUpAt)
 	if err == sql.ErrNoRows {
 		return "", 0, false, nil
 	}
@@ -2086,13 +2078,13 @@ func (s *SQLiteStore) AdminSession(ctx context.Context, token, credFP string, no
 // MarkAdminStepUp records the time of a successful step-up (opens the grace window).
 func (s *SQLiteStore) MarkAdminStepUp(ctx context.Context, token string, at int64) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE admin_sessions SET last_step_up_at = ? WHERE token = ?`, at, hashToken(token))
+		`UPDATE admin_sessions SET last_step_up_at = ? WHERE token = ?`, at, authx.HashToken(token))
 	return err
 }
 
 // DeleteAdminSession removes a session (logout).
 func (s *SQLiteStore) DeleteAdminSession(ctx context.Context, token string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM admin_sessions WHERE token = ?`, hashToken(token))
+	_, err := s.db.ExecContext(ctx, `DELETE FROM admin_sessions WHERE token = ?`, authx.HashToken(token))
 	return err
 }
 
@@ -2123,7 +2115,7 @@ func (s *SQLiteStore) PutPendingAction(ctx context.Context, token, sessionTok, a
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO admin_pending_actions (token, session_tok, action, form, path_id, expires)
-		 VALUES (?, ?, ?, ?, ?, ?)`, hashToken(token), hashToken(sessionTok), action, form, pathID, expires); err != nil {
+		 VALUES (?, ?, ?, ?, ?, ?)`, authx.HashToken(token), authx.HashToken(sessionTok), action, form, pathID, expires); err != nil {
 		return false, err
 	}
 	return true, tx.Commit()
@@ -2135,12 +2127,12 @@ func (s *SQLiteStore) PutPendingAction(ctx context.Context, token, sessionTok, a
 // session and expiry) — so a stolen token can't be probed repeatedly. The delete
 // + return is one statement, so exactly one instance claims a given token.
 // The returned sessionTok is the STORED hash of the minting session's cookie
-// (hashToken), so the caller compares it against hashToken(current cookie), not
+// (hashToken), so the caller compares it against authx.HashToken(current cookie), not
 // the raw cookie.
 func (s *SQLiteStore) TakePendingAction(ctx context.Context, token string) (sessionTok, action, form, pathID string, expires int64, ok bool, err error) {
 	err = s.db.QueryRowContext(ctx,
 		`DELETE FROM admin_pending_actions WHERE token = ?
-		 RETURNING session_tok, action, form, path_id, expires`, hashToken(token),
+		 RETURNING session_tok, action, form, path_id, expires`, authx.HashToken(token),
 	).Scan(&sessionTok, &action, &form, &pathID, &expires)
 	if err == sql.ErrNoRows {
 		return "", "", "", "", 0, false, nil
@@ -2172,7 +2164,7 @@ func (s *SQLiteStore) PutPasskeyCeremony(ctx context.Context, token, kind, sessi
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO admin_passkey_ceremonies (token, kind, session, name, expires)
-		 VALUES (?, ?, ?, ?, ?)`, hashToken(token), kind, session, name, expires); err != nil {
+		 VALUES (?, ?, ?, ?, ?)`, authx.HashToken(token), kind, session, name, expires); err != nil {
 		return false, err
 	}
 	return true, tx.Commit()
@@ -2185,7 +2177,7 @@ func (s *SQLiteStore) PutPasskeyCeremony(ctx context.Context, token, kind, sessi
 func (s *SQLiteStore) TakePasskeyCeremony(ctx context.Context, token string) (kind, session, name string, expires int64, ok bool, err error) {
 	err = s.db.QueryRowContext(ctx,
 		`DELETE FROM admin_passkey_ceremonies WHERE token = ?
-		 RETURNING kind, session, name, expires`, hashToken(token),
+		 RETURNING kind, session, name, expires`, authx.HashToken(token),
 	).Scan(&kind, &session, &name, &expires)
 	if err == sql.ErrNoRows {
 		return "", "", "", 0, false, nil
@@ -3196,7 +3188,7 @@ const nodeCols = `id, owner_type, owner_user_id, region, urls, turn_secret, vers
 
 func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	if n.ID == "" {
-		n.ID = newID()
+		n.ID = authx.NewID()
 	}
 	urls, err := json.Marshal(n.URLs)
 	if err != nil {

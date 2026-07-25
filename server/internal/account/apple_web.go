@@ -17,6 +17,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // loadAppleP8 parses Apple's downloadable Sign in with Apple key (.p8), a
@@ -62,7 +64,7 @@ const appleTokenURL = "https://appleid.apple.com/auth/token"
 // authorization endpoint. response_mode=form_post is required whenever the
 // "name email" scope is requested.
 func (s *Service) handleAppleWebStart(w http.ResponseWriter, r *http.Request) {
-	state, nonce := randToken(), randToken()
+	state, nonce := authx.RandToken(), authx.RandToken()
 	for _, c := range []struct{ name, val string }{
 		{oauthStateCookie, state}, {oauthNonceCookie, nonce},
 	} {

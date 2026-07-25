@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/relayium/relayium/internal/httpx"
 )
 
 // nodeOnlineWindow bounds how long since its last heartbeat a node is still
@@ -59,7 +61,7 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 	// 所以这里按 IP 限速 5 次/分钟。码空间自 2026-07-23 起是 24^6 ≈ 1.91e8
 	// （原为 6 位数字 1e6），TTL 5 分钟（原 15 分钟）——见 signal.CodeAlphabet。
 	if s.iceLimiter != nil && !s.iceLimiter.Allow(s.clientIP(r)) {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
+		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
 		return
 	}
 	servers := s.stunServers()
@@ -210,7 +212,7 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 		resp["relayDenied"] = relayDenied
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
 // turnCredentials builds a coturn TURN-REST ephemeral credential. The shared

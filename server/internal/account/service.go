@@ -5,9 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -17,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/internal/httpx"
 	"github.com/relayium/relayium/internal/storage"
 )
 
@@ -61,19 +61,19 @@ type Config struct {
 	RateLimitDivisor int
 	BaseURL          string
 	SessionTTL       time.Duration
-	MagicTTL       time.Duration
-	VerifyTTL      time.Duration // email verification link lifetime (default 24h)
-	ResetTTL       time.Duration // password reset link lifetime (default 1h)
-	STUNURLs       []string
-	TURNURLs       []string
-	TURNSecret     string
-	TURNCredTTL    time.Duration
-	TURNRelays     []RelayConfig // multi-relay pool; empty = legacy single TURN only
-	GoogleClientID string
-	GoogleSecret   string
-	GoogleRedirect string
-	EnableGoogle   bool
-	EnableMagic    bool
+	MagicTTL         time.Duration
+	VerifyTTL        time.Duration // email verification link lifetime (default 24h)
+	ResetTTL         time.Duration // password reset link lifetime (default 1h)
+	STUNURLs         []string
+	TURNURLs         []string
+	TURNSecret       string
+	TURNCredTTL      time.Duration
+	TURNRelays       []RelayConfig // multi-relay pool; empty = legacy single TURN only
+	GoogleClientID   string
+	GoogleSecret     string
+	GoogleRedirect   string
+	EnableGoogle     bool
+	EnableMagic      bool
 	// Sign in with Apple. EnableApple gates the /api/auth/apple/* routes (off by
 	// default → dormant until an Apple developer account is configured).
 	// AppleClientIDs is the aud allowlist: the app's Bundle ID (native SiwA) and
@@ -164,7 +164,7 @@ type Service struct {
 	// spendable exactly once on any instance — no process-local map here.
 	// pendingActions now live in the store (admin_pending_actions, item #2),
 	// claimable exactly once on any instance — no process-local map here.
-	pwLogins *loginThrottle // per email+IP failed password-login limiter
+	pwLogins       *loginThrottle              // per email+IP failed password-login limiter
 	magicRequests  *loginThrottle              // per email+IP magic-link request rate limiter
 	verifyRequests *loginThrottle              // per email+IP resend-verification limiter
 	resetRequests  *loginThrottle              // per email+IP forgot-password limiter
@@ -243,12 +243,12 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 	maxFails := PerInstanceThreshold(adminLoginMaxFails, cfg.RateLimitDivisor)
 	svc := &Service{store: store, mailer: mailer, cfg: cfg, now: time.Now,
 		adminLogins: newLoginThrottle(maxFails),
-		pwLogins: newLoginThrottle(maxFails), magicRequests: newLoginThrottle(maxFails),
+		pwLogins:    newLoginThrottle(maxFails), magicRequests: newLoginThrottle(maxFails),
 		verifyRequests: newLoginThrottle(maxFails), resetRequests: newLoginThrottle(maxFails),
 		deleteRequests: newLoginThrottle(maxFails),
 		uploadSem:      newUploadSem(maxConcurrentUploadsPerUser)}
 	svc.adminPasskeyLogins = newLoginThrottle(maxFails)
-	svc.clientIP = clientIP
+	svc.clientIP = httpx.ClientIP
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
 	svc.exchangeAppleCode = svc.realExchangeAppleCode
 	svc.appleKey = newAppleKeyStore().key
@@ -325,29 +325,16 @@ func (s *Service) SetDirectDownload(on bool) { s.directDownload = on }
 // writing a 429 and returning false when the per-IP begin budget is exhausted.
 func (s *Service) passkeyBeginAllowed(w http.ResponseWriter, r *http.Request) bool {
 	if s.passkeyBeginLimiter != nil && !s.passkeyBeginLimiter.Allow(s.clientIP(r)) {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "尝试过于频繁，请稍后再试"})
+		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "尝试过于频繁，请稍后再试"})
 		return false
 	}
 	return true
 }
 
-func randToken() string {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		panic("account: crypto/rand failed: " + err.Error())
-	}
-	return hex.EncodeToString(b)
-}
-
-func hashToken(raw string) string {
-	sum := sha256.Sum256([]byte(raw))
-	return hex.EncodeToString(sum[:])
-}
-
 func (s *Service) IssueSession(ctx context.Context, userID string) (Session, error) {
 	now := s.now()
 	sess := Session{
-		ID:        randToken(),
+		ID:        authx.RandToken(),
 		UserID:    userID,
 		CreatedAt: now.Unix(),
 		ExpiresAt: now.Add(s.cfg.SessionTTL).Unix(),
@@ -410,10 +397,10 @@ func (s *Service) RequestMagicLink(ctx context.Context, email string) error {
 	if _, err := mail.ParseAddress(email); err != nil {
 		return nil
 	}
-	raw := randToken()
+	raw := authx.RandToken()
 	now := s.now()
 	tok := MagicToken{
-		TokenHash: hashToken(raw),
+		TokenHash: authx.HashToken(raw),
 		Email:     email,
 		CreatedAt: now.Unix(),
 		ExpiresAt: now.Add(s.cfg.MagicTTL).Unix(),
@@ -426,7 +413,7 @@ func (s *Service) RequestMagicLink(ctx context.Context, email string) error {
 }
 
 func (s *Service) VerifyMagicLink(ctx context.Context, rawToken string) (Session, error) {
-	tok, ok, err := s.store.UseMagicToken(ctx, hashToken(rawToken), s.now().Unix())
+	tok, ok, err := s.store.UseMagicToken(ctx, authx.HashToken(rawToken), s.now().Unix())
 	if err != nil {
 		return Session{}, err
 	}

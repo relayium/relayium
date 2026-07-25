@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // seedDailyUsage debits the rolling-24h upload ledger by n bytes so the tests
@@ -16,7 +18,7 @@ func seedDailyUsage(t *testing.T, svc *Service, store *SQLiteStore, userID strin
 	t.Helper()
 	now := svc.now().Unix()
 	ok, err := store.ReserveUpload(context.Background(),
-		UploadEvent{ID: newID(), UserID: userID, Bytes: n, UploadedAt: now},
+		UploadEvent{ID: authx.NewID(), UserID: userID, Bytes: n, UploadedAt: now},
 		now-dayWindow, 1<<40)
 	if err != nil || !ok {
 		t.Fatalf("seedDailyUsage: ok=%v err=%v", ok, err)

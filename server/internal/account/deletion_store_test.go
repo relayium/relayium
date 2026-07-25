@@ -3,6 +3,8 @@ package account
 import (
 	"context"
 	"testing"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // PurgeTransientUserData is the deletion-confirmation-time purge (Task 3
@@ -23,36 +25,36 @@ func TestPurgeTransientUserData(t *testing.T) {
 	u, _ := st.UpsertUserByEmail(ctx, "a@example.com", "")
 
 	// --- transient/live rows that MUST be purged ---
-	sessID := newID()
+	sessID := authx.NewID()
 	if err := st.CreateSession(ctx, Session{ID: sessID, UserID: u.ID, CreatedAt: 1, ExpiresAt: 1 << 40}); err != nil {
 		t.Fatalf("create session: %v", err)
 	}
-	dev, _ := st.UpsertDevice(ctx, Device{ID: newID(), UserID: u.ID, Name: "cli", Kind: "cli", CreatedAt: 1})
-	if err := st.CreateCLIToken(ctx, CLIToken{TokenHash: hashToken("t"), UserID: u.ID, DeviceID: dev.ID, CreatedAt: 1}); err != nil {
+	dev, _ := st.UpsertDevice(ctx, Device{ID: authx.NewID(), UserID: u.ID, Name: "cli", Kind: "cli", CreatedAt: 1})
+	if err := st.CreateCLIToken(ctx, CLIToken{TokenHash: authx.HashToken("t"), UserID: u.ID, DeviceID: dev.ID, CreatedAt: 1}); err != nil {
 		t.Fatalf("create cli token: %v", err)
 	}
-	if err := st.CreateStoredFile(ctx, StoredFile{ID: newID(), UserID: u.ID, BlobKey: "bk", EncManifest: []byte("x"), Size: 1, ExpiresAt: 1 << 40, CreatedAt: 1}); err != nil {
+	if err := st.CreateStoredFile(ctx, StoredFile{ID: authx.NewID(), UserID: u.ID, BlobKey: "bk", EncManifest: []byte("x"), Size: 1, ExpiresAt: 1 << 40, CreatedAt: 1}); err != nil {
 		t.Fatalf("create stored file: %v", err)
 	}
 	// magic_tokens has no user_id column — it's keyed by the login email, and
 	// PurgeTransientUserData matches on the user's stored email. Insert one for
 	// this user's email so the email-subquery path is exercised.
-	if err := st.CreateMagicToken(ctx, MagicToken{TokenHash: hashToken("magic"), Email: u.Email, CreatedAt: 1, ExpiresAt: 1 << 40}); err != nil {
+	if err := st.CreateMagicToken(ctx, MagicToken{TokenHash: authx.HashToken("magic"), Email: u.Email, CreatedAt: 1, ExpiresAt: 1 << 40}); err != nil {
 		t.Fatalf("create magic token: %v", err)
 	}
 	// cli_device_auth row bound to the user (approved-state: user_id set).
-	if err := st.CreateDeviceAuth(ctx, DeviceAuthRequest{UserCode: "WDJB-MJHT", DeviceCodeHash: hashToken("dev"), Status: "pending", CreatedAt: 1, ExpiresAt: 1 << 40}); err != nil {
+	if err := st.CreateDeviceAuth(ctx, DeviceAuthRequest{UserCode: "WDJB-MJHT", DeviceCodeHash: authx.HashToken("dev"), Status: "pending", CreatedAt: 1, ExpiresAt: 1 << 40}); err != nil {
 		t.Fatalf("create device auth: %v", err)
 	}
-	if ok, err := st.ApproveDeviceAuth(ctx, "WDJB-MJHT", u.ID, hashToken("clitok"), "rlm_cli_raw", 2); err != nil || !ok {
+	if ok, err := st.ApproveDeviceAuth(ctx, "WDJB-MJHT", u.ID, authx.HashToken("clitok"), "rlm_cli_raw", 2); err != nil || !ok {
 		t.Fatalf("approve device auth: ok=%v err=%v", ok, err)
 	}
 	// A user-owned node + a node_token bound to the user.
-	node, err := st.UpsertNode(ctx, Node{ID: newID(), OwnerType: "user", OwnerUserID: u.ID, URLs: []string{"turn:example:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1 << 40})
+	node, err := st.UpsertNode(ctx, Node{ID: authx.NewID(), OwnerType: "user", OwnerUserID: u.ID, URLs: []string{"turn:example:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1 << 40})
 	if err != nil {
 		t.Fatalf("upsert node: %v", err)
 	}
-	if err := st.CreateNodeToken(ctx, NodeToken{ID: newID(), TokenHash: hashToken("nt"), UserID: u.ID, Name: "byo", CreatedAt: 1}); err != nil {
+	if err := st.CreateNodeToken(ctx, NodeToken{ID: authx.NewID(), TokenHash: authx.HashToken("nt"), UserID: u.ID, Name: "byo", CreatedAt: 1}); err != nil {
 		t.Fatalf("create node token: %v", err)
 	}
 
@@ -60,7 +62,7 @@ func TestPurgeTransientUserData(t *testing.T) {
 	if err := st.LinkIdentity(ctx, "email", u.Email, u.ID); err != nil {
 		t.Fatalf("link identity: %v", err)
 	}
-	if err := st.CreateEmailToken(ctx, EmailToken{TokenHash: hashToken("verif"), UserID: u.ID, Email: u.Email, Purpose: "verify", CreatedAt: 1, ExpiresAt: 1 << 40}); err != nil {
+	if err := st.CreateEmailToken(ctx, EmailToken{TokenHash: authx.HashToken("verif"), UserID: u.ID, Email: u.Email, Purpose: "verify", CreatedAt: 1, ExpiresAt: 1 << 40}); err != nil {
 		t.Fatalf("create email token: %v", err)
 	}
 	if err := st.RecordMeter(ctx, u.ID, MeterUpload, 4096, 100); err != nil {
@@ -86,7 +88,7 @@ func TestPurgeTransientUserData(t *testing.T) {
 	if devs, _ := st.ListDevices(ctx, u.ID); len(devs) != 0 {
 		t.Fatalf("devices survived: %d", len(devs))
 	}
-	if _, _, ok, _ := st.GetCLITokenUser(ctx, hashToken("t")); ok {
+	if _, _, ok, _ := st.GetCLITokenUser(ctx, authx.HashToken("t")); ok {
 		t.Fatal("cli token should be gone")
 	}
 	if countRows(t, st, `SELECT COUNT(*) FROM magic_tokens WHERE email=?`, u.Email) != 0 {
@@ -101,7 +103,7 @@ func TestPurgeTransientUserData(t *testing.T) {
 	if nodes, _ := st.UserNodesAll(ctx, u.ID); len(nodes) != 0 {
 		t.Fatalf("user nodes survived: %d", len(nodes))
 	}
-	if _, ok, _ := st.NodeTokenByHash(ctx, hashToken("nt")); ok {
+	if _, ok, _ := st.NodeTokenByHash(ctx, authx.HashToken("nt")); ok {
 		t.Fatal("node token should be gone (a leftover would let a deregistered node keep authenticating)")
 	}
 	if toks, _ := st.ListNodeTokensByUser(ctx, u.ID); len(toks) != 0 {

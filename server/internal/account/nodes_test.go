@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 func nodeService(t *testing.T, token string) *Service {
@@ -115,7 +117,7 @@ func TestNodeOwnerFleetAndUser(t *testing.T) {
 	st := newTestStore(t)
 	u, _ := st.UpsertUserByEmail(context.Background(), "own@x.com", "o")
 	// user token "usertok" -> hash stored
-	st.CreateNodeToken(context.Background(), NodeToken{ID: "t1", TokenHash: hashToken("usertok"), UserID: u.ID, Name: "n", CreatedAt: 1})
+	st.CreateNodeToken(context.Background(), NodeToken{ID: "t1", TokenHash: authx.HashToken("usertok"), UserID: u.ID, Name: "n", CreatedAt: 1})
 	s := &Service{store: st, cfg: Config{NodeToken: "fleetsecret", EnableUserNodes: true}, now: func() time.Time { return time.Unix(5, 0) }}
 
 	req := func(bearer string) *http.Request {
@@ -140,7 +142,7 @@ func TestNodeOwnerFleetAndUser(t *testing.T) {
 func TestRegisterUserNodeSetsOwner(t *testing.T) {
 	st := newTestStore(t)
 	u, _ := st.UpsertUserByEmail(context.Background(), "reg@x.com", "r")
-	st.CreateNodeToken(context.Background(), NodeToken{ID: "t1", TokenHash: hashToken("usertok"), UserID: u.ID, Name: "n", CreatedAt: 1})
+	st.CreateNodeToken(context.Background(), NodeToken{ID: "t1", TokenHash: authx.HashToken("usertok"), UserID: u.ID, Name: "n", CreatedAt: 1})
 	s := &Service{store: st, cfg: Config{EnableUserNodes: true}, now: func() time.Time { return time.Unix(5, 0) }}
 	mux := http.NewServeMux()
 	s.RegisterNodeRoutes(mux)
@@ -172,7 +174,7 @@ func TestHeartbeatBillableAndCrossUserReject(t *testing.T) {
 	owner, _ := st.UpsertUserByEmail(ctx, "hbo@x.com", "o")
 	// a user-owned node
 	n, _ := st.UpsertNode(ctx, Node{ID: "un", OwnerType: "user", OwnerUserID: owner.ID, URLs: []string{"turn:x:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1})
-	st.CreateNodeToken(ctx, NodeToken{ID: "t1", TokenHash: hashToken("utok"), UserID: owner.ID, NodeID: "un", Name: "n", CreatedAt: 1})
+	st.CreateNodeToken(ctx, NodeToken{ID: "t1", TokenHash: authx.HashToken("utok"), UserID: owner.ID, NodeID: "un", Name: "n", CreatedAt: 1})
 	s := &Service{store: st, cfg: Config{EnableUserNodes: true}, now: func() time.Time { return time.Unix(50, 0) }}
 	mux := http.NewServeMux()
 	s.RegisterNodeRoutes(mux)
@@ -208,7 +210,7 @@ func TestHeartbeatUserTokenForeignNode(t *testing.T) {
 	attacker, _ := st.UpsertUserByEmail(ctx, "atk@x.com", "a")
 	// node owned by `owner`; token belongs to `attacker`.
 	n, _ := st.UpsertNode(ctx, Node{ID: "victimnode", OwnerType: "user", OwnerUserID: owner.ID, URLs: []string{"turn:x:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1})
-	st.CreateNodeToken(ctx, NodeToken{ID: "ta", TokenHash: hashToken("atktok"), UserID: attacker.ID, Name: "n", CreatedAt: 1})
+	st.CreateNodeToken(ctx, NodeToken{ID: "ta", TokenHash: authx.HashToken("atktok"), UserID: attacker.ID, Name: "n", CreatedAt: 1})
 	s := &Service{store: st, cfg: Config{EnableUserNodes: true}, now: func() time.Time { return time.Unix(50, 0) }}
 	mux := http.NewServeMux()
 	s.RegisterNodeRoutes(mux)
@@ -232,7 +234,7 @@ func TestRegisterRejectsNodeIDTakeover(t *testing.T) {
 	st.UpsertNode(ctx, Node{ID: "fleet-1", OwnerType: "fleet", URLs: []string{"turn:f:3478"}, TURNSecret: "fs", CreatedAt: 1, LastSeenAt: 1})
 	// An existing USER node owned by victim.
 	st.UpsertNode(ctx, Node{ID: "victim-node", OwnerType: "user", OwnerUserID: victim.ID, URLs: []string{"turn:v:3478"}, TURNSecret: "vs", CreatedAt: 1, LastSeenAt: 1})
-	st.CreateNodeToken(ctx, NodeToken{ID: "at", TokenHash: hashToken("atktok"), UserID: attacker.ID, Name: "n", CreatedAt: 1})
+	st.CreateNodeToken(ctx, NodeToken{ID: "at", TokenHash: authx.HashToken("atktok"), UserID: attacker.ID, Name: "n", CreatedAt: 1})
 
 	s := &Service{store: st, cfg: Config{EnableUserNodes: true}, now: func() time.Time { return time.Unix(5, 0) }}
 	mux := http.NewServeMux()
@@ -260,7 +262,7 @@ func TestRegisterRejectsNodeIDTakeover(t *testing.T) {
 	}
 	// A brand-new id matching central's own charset/length registers fine
 	// (owned by attacker).
-	validNew := strings.Repeat("ab", 16) // 32 lowercase hex chars, like newID()
+	validNew := strings.Repeat("ab", 16) // 32 lowercase hex chars, like authx.NewID()
 	if code := reg(validNew); code != http.StatusOK {
 		t.Fatalf("new-id register: want 200, got %d", code)
 	}
@@ -274,7 +276,7 @@ func TestRegisterRejectsInvalidNewNodeID(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()
 	attacker, _ := st.UpsertUserByEmail(ctx, "a2@x.com", "a2")
-	st.CreateNodeToken(ctx, NodeToken{ID: "at2", TokenHash: hashToken("atktok2"), UserID: attacker.ID, Name: "n", CreatedAt: 1})
+	st.CreateNodeToken(ctx, NodeToken{ID: "at2", TokenHash: authx.HashToken("atktok2"), UserID: attacker.ID, Name: "n", CreatedAt: 1})
 
 	s := &Service{store: st, cfg: Config{EnableUserNodes: true}, now: func() time.Time { return time.Unix(5, 0) }}
 	mux := http.NewServeMux()

@@ -3,6 +3,8 @@ package account
 import (
 	"net/http"
 	"strings"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // RequireAuth wraps a handler, resolving the caller as an authenticated User
@@ -21,7 +23,7 @@ func (s *Service) RequireAuth(next func(http.ResponseWriter, *http.Request, User
 		h := r.Header.Get("Authorization")
 		if strings.HasPrefix(h, bearerPrefix) {
 			raw := strings.TrimSpace(h[len(bearerPrefix):])
-			hash := hashToken(raw)
+			hash := authx.HashToken(raw)
 			uid, _, ok, err := s.store.GetCLITokenUser(r.Context(), hash)
 			if err == nil && ok {
 				u, gerr := s.store.GetUserByID(r.Context(), uid)

@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/relayium/relayium/internal/httpx"
 )
 
 // appleIssuer is the fixed `iss` claim in every Sign in with Apple identity token.
@@ -146,7 +148,7 @@ func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
 	}
 	claims, err := s.verifyAppleIDToken(r.Context(), in.IDToken, in.Nonce)
 	if err != nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_token"})
+		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_token"})
 		return
 	}
 	u, found, err := s.store.GetUserByIdentity(r.Context(), "apple", claims.Sub)
@@ -158,7 +160,7 @@ func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
 		// First sign-in for this Apple id. Apple only gives us the email now, so
 		// this is our one chance to create/link the account by it.
 		if claims.Email == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no_email_first_signin"})
+			httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "no_email_first_signin"})
 			return
 		}
 		u, err = s.store.UpsertUserByEmail(r.Context(), claims.Email, in.Name)
@@ -205,7 +207,7 @@ func (s *Service) frozenBlocked(w http.ResponseWriter, u User) bool {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return true
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"status": "pending_deletion", "purgeAfter": u.PurgeAfter, "reactivateToken": raw,
 	})
 	return true

@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/relayium/relayium/internal/authx"
 	"github.com/relayium/relayium/internal/storage"
 )
 
@@ -146,7 +147,7 @@ func TestUploadOverQuotaIs429(t *testing.T) {
 	cookie := loginCookie(t, ts, mail, "quota@example.com")
 	u, _ := store.UpsertUserByEmail(context.Background(), "quota@example.com", "")
 	// Pre-fill the rolling window to within 100 bytes of the 4096 quota.
-	_ = store.RecordUpload(context.Background(), UploadEvent{ID: newID(), UserID: u.ID, Bytes: 4000, UploadedAt: time.Now().Unix()})
+	_ = store.RecordUpload(context.Background(), UploadEvent{ID: authx.NewID(), UserID: u.ID, Bytes: 4000, UploadedAt: time.Now().Unix()})
 	resp := postUpload(t, ts, cookie, "?ttl=0", uploadBody([]byte("m"), bytes.Repeat([]byte("y"), 500)))
 	if resp.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("over quota: want 429, got %d", resp.StatusCode)

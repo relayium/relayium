@@ -2,28 +2,17 @@ package account
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/internal/httpx"
 )
 
 const sessionCookie = "relayium_session"
-
-// maxJSONBody caps a JSON API request body. Every JSON endpoint here carries a
-// small payload (a few fields), so 1 MiB is generous; it exists only to stop an
-// unbounded body from being buffered/decoded. Streaming endpoints (blob/upload)
-// do NOT use decodeJSONBody — they enforce their own, much larger, size limits.
-const maxJSONBody = 1 << 20
-
-// decodeJSONBody caps r.Body at maxJSONBody, then decodes it into dst. Used in
-// place of a bare json.NewDecoder(r.Body).Decode so no JSON handler can be made
-// to buffer an arbitrarily large request body.
-func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
-	return json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBody)).Decode(dst)
-}
 
 // deleteTokenTTL bounds how long a self-serve-deletion confirm link stays
 // valid — short, since it's re-requestable and email delivery is normally
@@ -84,21 +73,6 @@ func (s *Service) csrfGuard(next http.Handler) http.Handler {
 				http.Error(w, "cross-origin request rejected", http.StatusForbidden)
 				return
 			}
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-// requireOrigin rejects requests that carry no Origin header. csrfGuard
-// deliberately exempts those (top-level form posts, native clients need it),
-// but the passkey JSON endpoints are only ever called by fetch, which always
-// sends Origin — so a missing one there is a forgery signal, not a legitimate
-// client. Compose as csrfGuard(requireOrigin(h)).
-func (s *Service) requireOrigin(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Origin") == "" {
-			http.Error(w, "origin required", http.StatusForbidden)
-			return
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -212,7 +186,7 @@ func (s *Service) routeMux() *http.ServeMux {
 // show upfront size/TTL hints without guessing. Public — no session required.
 func (s *Service) handleConfig(w http.ResponseWriter, r *http.Request) {
 	st := s.resolveSettings(r.Context())
-	writeJSON(w, http.StatusOK, map[string]int64{
+	httpx.WriteJSON(w, http.StatusOK, map[string]int64{
 		"maxFileSize": st.MaxFileSize,
 		"dailyQuota":  st.DailyQuota,
 		"defaultTTL":  st.DefaultTTL,
@@ -226,7 +200,7 @@ func (s *Service) handleListDevices(w http.ResponseWriter, r *http.Request, u Us
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"devices": ds})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"devices": ds})
 }
 
 func (s *Service) handleUpsertDevice(w http.ResponseWriter, r *http.Request, u User) {
@@ -234,12 +208,12 @@ func (s *Service) handleUpsertDevice(w http.ResponseWriter, r *http.Request, u U
 		ID   string `json:"id"`
 		Name string `json:"name"`
 	}
-	if err := decodeJSONBody(w, r, &in); err != nil || in.Name == "" {
+	if err := httpx.DecodeJSONBody(w, r, &in); err != nil || in.Name == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 	if in.ID == "" {
-		in.ID = newID()
+		in.ID = authx.NewID()
 	}
 	d, err := s.store.UpsertDevice(r.Context(), Device{
 		ID: in.ID, UserID: u.ID, Name: in.Name, CreatedAt: s.now().Unix(),
@@ -248,14 +222,14 @@ func (s *Service) handleUpsertDevice(w http.ResponseWriter, r *http.Request, u U
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"device": d})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"device": d})
 }
 
 func (s *Service) handleRenameDevice(w http.ResponseWriter, r *http.Request, u User) {
 	var in struct {
 		Name string `json:"name"`
 	}
-	if err := decodeJSONBody(w, r, &in); err != nil || in.Name == "" {
+	if err := httpx.DecodeJSONBody(w, r, &in); err != nil || in.Name == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -263,7 +237,7 @@ func (s *Service) handleRenameDevice(w http.ResponseWriter, r *http.Request, u U
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *Service) handleDeleteDevice(w http.ResponseWriter, r *http.Request, u User) {
@@ -271,7 +245,7 @@ func (s *Service) handleDeleteDevice(w http.ResponseWriter, r *http.Request, u U
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *Service) setSessionCookie(w http.ResponseWriter, sess Session) {
@@ -319,12 +293,6 @@ func (s *Service) RequireSession(next func(http.ResponseWriter, *http.Request, U
 	}
 }
 
-func writeJSON(w http.ResponseWriter, code int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
 func (s *Service) handleMagicRequest(w http.ResponseWriter, r *http.Request) {
 	email := normEmail(r.FormValue("email"))
 	// Rate-limit per email+IP so the endpoint can't be turned into an email bomb.
@@ -338,7 +306,7 @@ func (s *Service) handleMagicRequest(w http.ResponseWriter, r *http.Request) {
 			_ = s.RequestMagicLink(r.Context(), email)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "sent"})
 }
 
 // handleMagicVerifyRedirect 只把邮件里的链接转成 SPA 路由，**不碰令牌**。
@@ -370,7 +338,7 @@ func (s *Service) handleMagicVerify(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Token string `json:"token"`
 	}
-	if err := decodeJSONBody(w, r, &in); err != nil || in.Token == "" {
+	if err := httpx.DecodeJSONBody(w, r, &in); err != nil || in.Token == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -381,18 +349,18 @@ func (s *Service) handleMagicVerify(w http.ResponseWriter, r *http.Request) {
 		// Frozen login: no session cookie. The reactivate token goes back in the
 		// JSON body rather than a redirect fragment — the caller is fetch() now,
 		// and a body keeps it out of both the URL and the Referer.
-		writeJSON(w, http.StatusOK, map[string]any{
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{
 			"status":          "pending_deletion",
 			"reactivateToken": pd.ReactivateToken,
 		})
 		return
 	}
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_token"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_token"})
 		return
 	}
 	s.setSessionCookie(w, sess)
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -400,7 +368,7 @@ func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
 		_ = s.store.RevokeSession(r.Context(), c.Value)
 	}
 	s.clearSessionCookie(w)
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *Service) handleUsage(w http.ResponseWriter, r *http.Request, u User) {
@@ -409,7 +377,7 @@ func (s *Service) handleUsage(w http.ResponseWriter, r *http.Request, u User) {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"relayedBytes": total})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"relayedBytes": total})
 }
 
 // handleStats serves the personal-center aggregates: lifetime upload/download
@@ -426,7 +394,7 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request, u User) {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"transfers":     st.TransfersTotal,
 		"downloads":     st.DownloadsTotal,
 		"uploadBytes":   st.UploadBytes,
@@ -442,7 +410,7 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {
 		return
 	}
 	linked, _ := s.store.ListIdentityProviders(r.Context(), u.ID)
-	writeJSON(w, http.StatusOK, map[string]any{
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"user": map[string]any{
 			"id": u.ID, "email": u.Email, "displayName": u.DisplayName,
 			"hasPassword": hasPass, "emailVerified": u.EmailVerified,
@@ -547,7 +515,7 @@ func (s *Service) handleMeUsage(w http.ResponseWriter, r *http.Request, u User) 
 			scheduledName = sp.Name
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"period":   period,
 		"resetsAt": monthEnd,
 		"traffic":  map[string]any{"used": traffic, "cap": trafficCap},
@@ -587,7 +555,7 @@ func (s *Service) handleChangePassword(w http.ResponseWriter, r *http.Request, u
 		CurrentPassword string `json:"currentPassword"`
 		NewPassword     string `json:"newPassword"`
 	}
-	if err := decodeJSONBody(w, r, &in); err != nil {
+	if err := httpx.DecodeJSONBody(w, r, &in); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -598,18 +566,18 @@ func (s *Service) handleChangePassword(w http.ResponseWriter, r *http.Request, u
 	err := s.ChangePassword(r.Context(), u, currentSessionID, in.CurrentPassword, in.NewPassword)
 	switch {
 	case errors.Is(err, ErrBadCredentials):
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "current password incorrect"})
+		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "current password incorrect"})
 	case errors.Is(err, ErrWeakPassword):
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})
 	case err != nil:
 		http.Error(w, "server error", http.StatusInternalServerError)
 	default:
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
 }
 
 func (s *Service) handleAuthMethods(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]bool{
+	httpx.WriteJSON(w, http.StatusOK, map[string]bool{
 		"password": true,
 		"google":   s.cfg.EnableGoogle,
 		"apple":    s.cfg.EnableApple,
@@ -619,7 +587,7 @@ func (s *Service) handleAuthMethods(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) writeUser(ctx context.Context, w http.ResponseWriter, code int, u User) {
 	hasPass, _ := s.store.HasPassword(ctx, u.ID)
-	writeJSON(w, code, map[string]any{
+	httpx.WriteJSON(w, code, map[string]any{
 		"user": map[string]any{
 			"id": u.ID, "email": u.Email, "displayName": u.DisplayName,
 			"hasPassword": hasPass, "emailVerified": u.EmailVerified,
@@ -631,7 +599,7 @@ func (s *Service) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// H2a: POST /api/auth/register sends one verification email per new address,
 	// so an un-limited endpoint is an email bomb + Sybil mint. 5/min/IP.
 	if s.registerLimiter != nil && !s.registerLimiter.Allow(s.clientIP(r)) {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
+		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
 		return
 	}
 	var in struct {
@@ -639,31 +607,31 @@ func (s *Service) handleRegister(w http.ResponseWriter, r *http.Request) {
 		Password    string `json:"password"`
 		DisplayName string `json:"displayName"`
 	}
-	if err := decodeJSONBody(w, r, &in); err != nil {
+	if err := httpx.DecodeJSONBody(w, r, &in); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 	_, err := s.Register(r.Context(), in.Email, in.Password, in.DisplayName)
 	switch {
 	case errors.Is(err, ErrWeakPassword):
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})
 	case errors.Is(err, ErrPendingDeletion):
 		// Task 4: this email (or its canonical sibling) belongs to an account
 		// mid-grace-period. Refuse the new registration rather than silently
 		// creating a second account on the same address the original owner
 		// might still reactivate into.
-		writeJSON(w, http.StatusConflict, map[string]string{
+		httpx.WriteJSON(w, http.StatusConflict, map[string]string{
 			"error": "account_pending_deletion",
 			"hint":  "an account for this address is scheduled for deletion; use the reactivation link emailed at delete time, or try again after the grace period ends",
 		})
 	case errors.Is(err, ErrEmailTaken):
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "email already registered"})
+		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "email already registered"})
 	case errors.Is(err, ErrInvalidEmail):
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_email"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_email"})
 	case err != nil:
 		http.Error(w, "server error", http.StatusInternalServerError)
 	default:
-		writeJSON(w, http.StatusOK, map[string]string{"status": "verification_sent", "email": normEmail(in.Email)})
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "verification_sent", "email": normEmail(in.Email)})
 	}
 }
 
@@ -672,7 +640,7 @@ func (s *Service) handlePasswordLogin(w http.ResponseWriter, r *http.Request) {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
-	if err := decodeJSONBody(w, r, &in); err != nil {
+	if err := httpx.DecodeJSONBody(w, r, &in); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -681,17 +649,17 @@ func (s *Service) handlePasswordLogin(w http.ResponseWriter, r *http.Request) {
 	// lock a victim out of their own account from unrelated IPs.
 	key := normEmail(in.Email) + "|" + s.clientIP(r)
 	if s.pwLogins.locked(key, s.now()) {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts, try again later"})
+		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts, try again later"})
 		return
 	}
 	sess, err := s.Login(r.Context(), in.Email, in.Password)
 	if errors.Is(err, ErrBadCredentials) {
 		s.pwLogins.recordFail(key, s.now())
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
+		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 		return
 	}
 	if errors.Is(err, ErrEmailUnverified) {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "email_unverified", "email": normEmail(in.Email)})
+		httpx.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "email_unverified", "email": normEmail(in.Email)})
 		return
 	}
 	var pd *PendingDeletionError
@@ -699,7 +667,7 @@ func (s *Service) handlePasswordLogin(w http.ResponseWriter, r *http.Request) {
 		// Frozen login (Task 4): correct credentials, but the account is
 		// pending deletion — no session, HTTP 200 (this is not a credentials
 		// failure) carrying the reactivation state instead.
-		writeJSON(w, http.StatusOK, map[string]any{
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{
 			"status":          "pending_deletion",
 			"purgeAfter":      pd.PurgeAfter,
 			"reactivateToken": pd.ReactivateToken,
@@ -725,7 +693,7 @@ func (s *Service) handleEmailVerify(w http.ResponseWriter, r *http.Request) {
 		Token    string `json:"token"`
 		Password string `json:"password"` // optional: confirms the registration password so it's kept
 	}
-	if err := decodeJSONBody(w, r, &in); err != nil || in.Token == "" {
+	if err := httpx.DecodeJSONBody(w, r, &in); err != nil || in.Token == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -735,7 +703,7 @@ func (s *Service) handleEmailVerify(w http.ResponseWriter, r *http.Request) {
 		// Frozen account (blocker fix, mirrors handlePasswordLogin's Task 4
 		// guard): no session, HTTP 200 (the token itself was valid) carrying
 		// the reactivation state instead.
-		writeJSON(w, http.StatusOK, map[string]any{
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{
 			"status":          "pending_deletion",
 			"purgeAfter":      pd.PurgeAfter,
 			"reactivateToken": pd.ReactivateToken,
@@ -743,7 +711,7 @@ func (s *Service) handleEmailVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if errors.Is(err, ErrInvalidToken) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_token"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_token"})
 		return
 	}
 	if err != nil {
@@ -763,7 +731,7 @@ func (s *Service) handleResendVerification(w http.ResponseWriter, r *http.Reques
 	var in struct {
 		Email string `json:"email"`
 	}
-	_ = decodeJSONBody(w, r, &in)
+	_ = httpx.DecodeJSONBody(w, r, &in)
 	email := normEmail(in.Email)
 	// Anti-enumeration + anti-bomb: throttle per email+IP; only resend when the
 	// account exists AND is still unverified; always respond 200.
@@ -780,14 +748,14 @@ func (s *Service) handleResendVerification(w http.ResponseWriter, r *http.Reques
 			}
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "sent"})
 }
 
 func (s *Service) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Email string `json:"email"`
 	}
-	_ = decodeJSONBody(w, r, &in)
+	_ = httpx.DecodeJSONBody(w, r, &in)
 	email := normEmail(in.Email)
 	if email != "" {
 		key := email + "|" + s.clientIP(r)
@@ -796,7 +764,7 @@ func (s *Service) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 			_ = s.RequestPasswordReset(r.Context(), email)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "sent"})
 }
 
 func (s *Service) handleResetPassword(w http.ResponseWriter, r *http.Request) {
@@ -804,7 +772,7 @@ func (s *Service) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 		Token       string `json:"token"`
 		NewPassword string `json:"newPassword"`
 	}
-	if err := decodeJSONBody(w, r, &in); err != nil || in.Token == "" {
+	if err := httpx.DecodeJSONBody(w, r, &in); err != nil || in.Token == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -815,7 +783,7 @@ func (s *Service) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 		// guard): no session, HTTP 200 (the token itself was valid) carrying
 		// the reactivation state instead — the password is left unchanged
 		// (ResetPassword checks DeletedAt before mutating anything).
-		writeJSON(w, http.StatusOK, map[string]any{
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{
 			"status":          "pending_deletion",
 			"purgeAfter":      pd.PurgeAfter,
 			"reactivateToken": pd.ReactivateToken,
@@ -824,10 +792,10 @@ func (s *Service) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case errors.Is(err, ErrWeakPassword):
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})
 		return
 	case errors.Is(err, ErrInvalidToken):
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_token"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_token"})
 		return
 	case err != nil:
 		http.Error(w, "server error", http.StatusInternalServerError)

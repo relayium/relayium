@@ -3,6 +3,8 @@ package account
 import (
 	"context"
 	"testing"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // Admin bearer tokens must be stored as SHA-256 hashes, never raw: a read of the
@@ -26,8 +28,8 @@ func TestAdminSessionTokenStoredHashed(t *testing.T) {
 	if stored == raw {
 		t.Fatal("admin session token stored raw — DB/backup read yields a live admin cookie")
 	}
-	if stored != hashToken(raw) {
-		t.Fatalf("stored token = %q, want hashToken(raw) = %q", stored, hashToken(raw))
+	if stored != authx.HashToken(raw) {
+		t.Fatalf("stored token = %q, want authx.HashToken(raw) = %q", stored, authx.HashToken(raw))
 	}
 
 	// Lookup by the raw token must still resolve the session.
@@ -61,17 +63,17 @@ func TestPendingActionTokensStoredHashed(t *testing.T) {
 	if storedTok == tok || storedSess == sess {
 		t.Fatal("pending action token/session_tok stored raw")
 	}
-	if storedTok != hashToken(tok) || storedSess != hashToken(sess) {
+	if storedTok != authx.HashToken(tok) || storedSess != authx.HashToken(sess) {
 		t.Fatal("pending action columns are not the token hashes")
 	}
 
 	// Claim by the raw token; the returned session_tok is the stored hash, which
-	// the service compares against hashToken(current cookie).
+	// the service compares against authx.HashToken(current cookie).
 	gotSess, action, form, pathID, _, ok, err := store.TakePendingAction(ctx, tok)
 	if err != nil || !ok {
 		t.Fatalf("TakePendingAction = %v/%v", ok, err)
 	}
-	if gotSess != hashToken(sess) || action != "user.plan" || form != "plan=max" || pathID != "u123" {
+	if gotSess != authx.HashToken(sess) || action != "user.plan" || form != "plan=max" || pathID != "u123" {
 		t.Fatalf("claimed fields wrong: sess=%q action=%q form=%q path=%q", gotSess, action, form, pathID)
 	}
 }
@@ -93,8 +95,8 @@ func TestPasskeyCeremonyTokenStoredHashed(t *testing.T) {
 	if stored == tok {
 		t.Fatal("passkey ceremony token stored raw")
 	}
-	if stored != hashToken(tok) {
-		t.Fatalf("stored = %q, want hashToken(raw) = %q", stored, hashToken(tok))
+	if stored != authx.HashToken(tok) {
+		t.Fatalf("stored = %q, want authx.HashToken(raw) = %q", stored, authx.HashToken(tok))
 	}
 
 	kind, _, _, _, ok, err := store.TakePasskeyCeremony(ctx, tok)

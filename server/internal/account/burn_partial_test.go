@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // truncWriter is a ResponseWriter that accepts at most `limit` bytes total, then
@@ -52,7 +54,7 @@ func seedLimitedFile(t *testing.T, svc *Service, store *SQLiteStore, ownerEmail 
 	if _, err := bs.Put(ctx, blobKey, bytes.NewReader(bytes.Repeat([]byte("x"), 400))); err != nil {
 		t.Fatalf("put blob: %v", err)
 	}
-	id := newID()
+	id := authx.NewID()
 	now := svc.now().Unix()
 	if err := store.CreateStoredFile(ctx, StoredFile{
 		ID: id, UserID: u.ID, BlobKey: blobKey, EncManifest: []byte("m"),

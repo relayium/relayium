@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 func TestSeedPlansCreatesFourDefaultsIdempotently(t *testing.T) {
@@ -94,8 +96,8 @@ func TestUsageReadQueries(t *testing.T) {
 		t.Fatalf("UserMonthlyUpDown(no-row period) = %d,%v want 0,nil", upNoRow, err)
 	}
 
-	_ = st.CreateStoredFile(ctx, StoredFile{ID: newID(), UserID: u.ID, BlobKey: "b1", EncManifest: []byte("x"), Size: 4096, ExpiresAt: 1 << 40, CreatedAt: 1}) // live
-	_ = st.CreateStoredFile(ctx, StoredFile{ID: newID(), UserID: u.ID, BlobKey: "b2", EncManifest: []byte("x"), Size: 1000, ExpiresAt: 5, CreatedAt: 1})       // already expired at now=10
+	_ = st.CreateStoredFile(ctx, StoredFile{ID: authx.NewID(), UserID: u.ID, BlobKey: "b1", EncManifest: []byte("x"), Size: 4096, ExpiresAt: 1 << 40, CreatedAt: 1}) // live
+	_ = st.CreateStoredFile(ctx, StoredFile{ID: authx.NewID(), UserID: u.ID, BlobKey: "b2", EncManifest: []byte("x"), Size: 1000, ExpiresAt: 5, CreatedAt: 1})       // already expired at now=10
 
 	cs, err := st.CurrentStorage(ctx, u.ID, 10)
 	if err != nil || cs != 4096 {
@@ -110,7 +112,7 @@ func TestUsageReadQueries(t *testing.T) {
 	// A second user's live file must be counted by GlobalStorageUsed (unscoped)
 	// but must NOT leak into CurrentStorage for the first user (per-user scoped).
 	u2, _ := st.UpsertUserByEmail(ctx, "usage2@example.com", "")
-	_ = st.CreateStoredFile(ctx, StoredFile{ID: newID(), UserID: u2.ID, BlobKey: "b3", EncManifest: []byte("x"), Size: 2048, ExpiresAt: 1 << 40, CreatedAt: 1}) // live, belongs to u2
+	_ = st.CreateStoredFile(ctx, StoredFile{ID: authx.NewID(), UserID: u2.ID, BlobKey: "b3", EncManifest: []byte("x"), Size: 2048, ExpiresAt: 1 << 40, CreatedAt: 1}) // live, belongs to u2
 
 	gs2, err := st.GlobalStorageUsed(ctx, 10)
 	if err != nil || gs2 != 6144 { // 4096 (u1's b1) + 2048 (u2's b3): both users' live bytes
@@ -122,7 +124,7 @@ func TestUsageReadQueries(t *testing.T) {
 	}
 
 	// --- Expiry boundary: ExpiresAt == now must be excluded (strictly > , not >=) ---
-	_ = st.CreateStoredFile(ctx, StoredFile{ID: newID(), UserID: u.ID, BlobKey: "b4", EncManifest: []byte("x"), Size: 777, ExpiresAt: 10, CreatedAt: 1}) // expires exactly at now=10 → not live
+	_ = st.CreateStoredFile(ctx, StoredFile{ID: authx.NewID(), UserID: u.ID, BlobKey: "b4", EncManifest: []byte("x"), Size: 777, ExpiresAt: 10, CreatedAt: 1}) // expires exactly at now=10 → not live
 
 	cs3, err := st.CurrentStorage(ctx, u.ID, 10)
 	if err != nil || cs3 != 4096 { // b4 excluded: total is still just b1's 4096

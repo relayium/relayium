@@ -7,6 +7,9 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+
+	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/internal/httpx"
 )
 
 // RequestAccountDeletion issues a short-lived, single-use "delete" email
@@ -17,10 +20,10 @@ import (
 // generic 200 regardless of the outcome here, matching the reset/verify flows'
 // anti-enumeration contract.
 func (s *Service) RequestAccountDeletion(ctx context.Context, userID, email string) error {
-	raw := randToken()
+	raw := authx.RandToken()
 	now := s.now()
 	tok := EmailToken{
-		TokenHash: hashToken(raw),
+		TokenHash: authx.HashToken(raw),
 		UserID:    userID,
 		Email:     email,
 		Purpose:   "delete",
@@ -47,7 +50,7 @@ func (s *Service) RequestAccountDeletion(ctx context.Context, userID, email stri
 //     within the grace window.
 func (s *Service) ConfirmAccountDeletion(ctx context.Context, rawToken string) error {
 	now := s.now()
-	tok, ok, err := s.store.UseEmailToken(ctx, hashToken(rawToken), "delete", now.Unix())
+	tok, ok, err := s.store.UseEmailToken(ctx, authx.HashToken(rawToken), "delete", now.Unix())
 	if err != nil {
 		return err
 	}
@@ -122,11 +125,11 @@ func (s *Service) ConfirmAccountDeletion(ctx context.Context, rawToken string) e
 // own independently-expiring token rather than depending on the original
 // confirm email having survived or still being at hand.
 func (s *Service) issueReactivateToken(ctx context.Context, userID, email string) (string, error) {
-	raw := randToken()
+	raw := authx.RandToken()
 	now := s.now()
 	st := s.resolveSettings(ctx)
 	tok := EmailToken{
-		TokenHash: hashToken(raw),
+		TokenHash: authx.HashToken(raw),
 		UserID:    userID,
 		Email:     email,
 		Purpose:   "reactivate",
@@ -172,17 +175,17 @@ func (s *Service) handleReactivate(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Token string `json:"token"`
 	}
-	if err := decodeJSONBody(w, r, &in); err != nil || in.Token == "" {
+	if err := httpx.DecodeJSONBody(w, r, &in); err != nil || in.Token == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	tok, ok, err := s.store.UseEmailToken(r.Context(), hashToken(in.Token), "reactivate", s.now().Unix())
+	tok, ok, err := s.store.UseEmailToken(r.Context(), authx.HashToken(in.Token), "reactivate", s.now().Unix())
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
 	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_token"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_token"})
 		return
 	}
 	u, err := s.store.GetUserByID(r.Context(), tok.UserID)
@@ -198,7 +201,7 @@ func (s *Service) handleReactivate(w http.ResponseWriter, r *http.Request) {
 	// so a leaked one is now spent. Same generic error as a bad token (no
 	// enumeration of account state).
 	if u.DeletedAt == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_token"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_token"})
 		return
 	}
 	if err := s.store.ClearAccountDeletion(r.Context(), tok.UserID); err != nil {
@@ -231,7 +234,7 @@ func (s *Service) handleDeleteRequest(w http.ResponseWriter, r *http.Request, u 
 		s.deleteRequests.recordFail(key, s.now())
 		_ = s.RequestAccountDeletion(r.Context(), u.ID, u.Email)
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "sent"})
 }
 
 // handleDeleteConfirm consumes the delete token from the request body. No
@@ -242,18 +245,18 @@ func (s *Service) handleDeleteConfirm(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Token string `json:"token"`
 	}
-	if err := decodeJSONBody(w, r, &in); err != nil || in.Token == "" {
+	if err := httpx.DecodeJSONBody(w, r, &in); err != nil || in.Token == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 	err := s.ConfirmAccountDeletion(r.Context(), in.Token)
 	if errors.Is(err, ErrInvalidToken) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_token"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_token"})
 		return
 	}
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

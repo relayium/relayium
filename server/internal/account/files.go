@@ -15,7 +15,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/relayium/relayium/internal/authx"
 	"github.com/relayium/relayium/internal/dltoken"
+	"github.com/relayium/relayium/internal/httpx"
 	"github.com/relayium/relayium/internal/storage"
 )
 
@@ -196,7 +198,7 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		}
 	}
 
-	blobKey := randToken()
+	blobKey := authx.RandToken()
 	// Bound the on-disk write. Own-node uploads use the user's own disk, so only
 	// MaxFileSize applies; a billable central upload is additionally capped to
 	// what the user could actually keep (uploadWriteCap) so a chunked/understated
@@ -259,7 +261,7 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
-		reservedUploadID = newID()
+		reservedUploadID = authx.NewID()
 		ok, err := s.store.ReserveUpload(r.Context(),
 			UploadEvent{ID: reservedUploadID, UserID: u.ID, Bytes: billed, UploadedAt: now},
 			now-dayWindow, quota)
@@ -282,7 +284,7 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 			_ = s.store.RefundUpload(r.Context(), reservedUploadID)
 		}
 	}
-	id := newID()
+	id := authx.NewID()
 	// resolveRetention above turns request params + admin default policy into
 	// (ttl, maxDL); maxDL==1 is the burn-equivalent slot count, so the
 	// generalized ClaimDownloadSlot enforcement (files.go handleFileBlob) covers
@@ -323,7 +325,7 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	if billable {
 		_ = s.store.RecordMeter(r.Context(), u.ID, MeterUpload, size, now)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"id": id, "expiresAt": sf.ExpiresAt})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"id": id, "expiresAt": sf.ExpiresAt})
 }
 
 // dropBlob reclaims an orphaned upload blob. It deletes best-effort, and on a
@@ -347,7 +349,7 @@ func (s *Service) handleFileMeta(w http.ResponseWriter, r *http.Request) {
 	// 同 handleBlob：加密的 manifest（文件名、大小）不该在任何中间缓存里留副本，
 	// 尤其是 burn-after-read 的那些——元数据滞留同样泄漏"这里曾经有过什么"。
 	w.Header().Set("Cache-Control", "private, no-store")
-	writeJSON(w, http.StatusOK, map[string]any{
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"encManifest":   base64.StdEncoding.EncodeToString(sf.EncManifest),
 		"size":          sf.Size,
 		"burnAfterRead": sf.BurnAfterRead,
@@ -360,7 +362,7 @@ func (s *Service) handleFileMeta(w http.ResponseWriter, r *http.Request) {
 // with no round-trip to central). Central leaves the data path.
 func (s *Service) redirectToNode(w http.ResponseWriter, r *http.Request, node Node, blobKey string) {
 	exp := s.now().Add(2 * time.Minute).Unix()
-	tok := dltoken.Sign(node.StorageSecret, blobKey, exp, randToken())
+	tok := dltoken.Sign(node.StorageSecret, blobKey, exp, authx.RandToken())
 	loc := strings.TrimRight(node.DownloadURL, "/") + "/dl/" + blobKey + "?t=" + url.QueryEscape(tok)
 	http.Redirect(w, r, loc, http.StatusFound)
 }
@@ -662,7 +664,7 @@ func (s *Service) handleListFiles(w http.ResponseWriter, r *http.Request, u User
 			"downloadCount": f.DownloadCount,
 		})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"files": out})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"files": out})
 }
 
 func (s *Service) handleDeleteFile(w http.ResponseWriter, r *http.Request, u User) {
@@ -684,7 +686,7 @@ func (s *Service) handleDeleteFile(w http.ResponseWriter, r *http.Request, u Use
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // liveFile fetches a stored file that exists and has not expired; ok=false maps

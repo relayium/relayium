@@ -13,19 +13,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/internal/httpx"
 	"github.com/relayium/relayium/internal/relayusage"
 	"github.com/relayium/relayium/internal/selfupdate"
 )
 
-// nodeIDPattern is exactly what newID() produces: 16 random bytes, hex-encoded
-// (32 lowercase hex characters). Kept in lockstep with newID() by hand — there
+// nodeIDPattern is exactly what authx.NewID() produces: 16 random bytes, hex-encoded
+// (32 lowercase hex characters). Kept in lockstep with authx.NewID() by hand — there
 // is no shared constant, because the two live in different files for
 // different reasons (newID is store-side id generation; this is wire input
 // validation), but a future change to one must carry the other.
 var nodeIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
 // validNodeID reports whether id is a plausible central-generated node id —
-// the charset and length newID() itself produces. Used to reject a
+// the charset and length authx.NewID() itself produces. Used to reject a
 // client-supplied id for a BRAND-NEW registration (see handleNodeRegister);
 // an existing id is validated by ownership instead, not by this.
 func validNodeID(id string) bool {
@@ -191,42 +193,42 @@ func (s *Service) RegisterNodeRoutes(mux *http.ServeMux) {
 func (s *Service) handleNodeDeregister(w http.ResponseWriter, r *http.Request) {
 	ownerType, ownerUserID, ok := s.nodeOwner(r)
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 	var req struct {
 		NodeID string `json:"nodeID"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
 		return
 	}
 	if req.NodeID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "nodeID required"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "nodeID required"})
 		return
 	}
 	node, known, err := s.store.GetNode(r.Context(), req.NodeID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
 	if !known {
 		// Nothing to remove. The uninstall is still correct, so this is not an
 		// error the script should shout about.
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "removed": false})
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "removed": false})
 		return
 	}
 	if ownerType == "user" && (node.OwnerType != "user" || node.OwnerUserID != ownerUserID) {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not your node"})
+		httpx.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "not your node"})
 		return
 	}
 	if ownerType == "fleet" && node.OwnerType != "fleet" {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not a fleet node"})
+		httpx.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "not a fleet node"})
 		return
 	}
 	at := s.now().Unix()
 	if err := s.store.MarkNodeRemoved(r.Context(), req.NodeID, at); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
 	// Audited, exactly like the two admin controls that reach the SAME store
@@ -259,7 +261,7 @@ func (s *Service) handleNodeDeregister(w http.ResponseWriter, r *http.Request) {
 	} else {
 		log.Printf("node %s deregistered (uninstalled)", req.NodeID)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "removed": true})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "removed": true})
 }
 
 // updateCheckReq is what a node's ROOT UPDATER asks central: "what should I be
@@ -317,34 +319,34 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		// An unauthenticated caller learns nothing — not even the target
 		// version, which would name the exact release to hunt for CVEs in.
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 	var req updateCheckReq
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
 		return
 	}
 	if req.NodeID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "nodeID required"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "nodeID required"})
 		return
 	}
 	if req.Result != "" && !updateResults[req.Result] {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown result"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown result"})
 		return
 	}
 	ctx := r.Context()
 	node, known, err := s.store.GetNode(ctx, req.NodeID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
 	if !known {
-		writeJSON(w, http.StatusGone, map[string]string{"error": "unknown node, re-register"})
+		httpx.WriteJSON(w, http.StatusGone, map[string]string{"error": "unknown node, re-register"})
 		return
 	}
 	if ownerType == "user" && (node.OwnerType != "user" || node.OwnerUserID != ownerUserID) {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not your node"})
+		httpx.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "not your node"})
 		return
 	}
 	// The other direction of the same boundary. The shared fleet token stands in
@@ -353,7 +355,7 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	// have it written to that node's row (SetNodeUpdateResult runs before the
 	// track is even resolved), corrupting decideByo's failure numerator.
 	if ownerType == "fleet" && node.OwnerType != "fleet" {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not a fleet node"})
+		httpx.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "not a fleet node"})
 		return
 	}
 	now := s.now().Unix()
@@ -388,7 +390,7 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	// polls this every 30 seconds and a failing endpoint would just produce
 	// log noise on a machine that is about to disappear.
 	if node.RemovedAt != 0 {
-		writeJSON(w, http.StatusOK, updateCheckResp{Reason: "node is deregistered"})
+		httpx.WriteJSON(w, http.StatusOK, updateCheckResp{Reason: "node is deregistered"})
 		return
 	}
 
@@ -398,7 +400,7 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	// this very poll).
 	if req.Result != "" {
 		if err := s.store.SetNodeUpdateResult(ctx, req.NodeID, req.Result); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+			httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 			return
 		}
 		node.UpdateResult = req.Result
@@ -413,11 +415,11 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	tr, found, err := s.store.GetRolloutTrack(ctx, track)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
 	if !found {
-		writeJSON(w, http.StatusOK, updateCheckResp{Reason: "no rollout configured for this track"})
+		httpx.WriteJSON(w, http.StatusOK, updateCheckResp{Reason: "no rollout configured for this track"})
 		return
 	}
 	resp := updateCheckResp{
@@ -444,7 +446,7 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	if tr.Status != "rolling" {
 		resp.Reason = "rollout track is " + tr.Status
-		writeJSON(w, http.StatusOK, resp)
+		httpx.WriteJSON(w, http.StatusOK, resp)
 		return
 	}
 
@@ -454,7 +456,7 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	// would make that node vanish instead of halting the track.
 	all, err := s.store.NodesByOwnerType(ctx, ownerClass)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
 	snaps := nodeSnapshots(all)
@@ -468,10 +470,10 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	if tr.Emergency {
 		resp.Eligible, resp.Reason, err = s.updateCheckEmergency(ctx, tr, snaps, node, now)
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+			httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 			return
 		}
-		writeJSON(w, http.StatusOK, resp)
+		httpx.WriteJSON(w, http.StatusOK, resp)
 		return
 	}
 
@@ -481,10 +483,10 @@ func (s *Service) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		resp.Eligible, resp.Reason, err = s.updateCheckByo(ctx, tr, snaps, node, now)
 	}
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
 // updateCheckEmergency answers a node while its track is in emergency mode:
@@ -995,12 +997,12 @@ func (s *Service) nodeOwner(r *http.Request) (ownerType, ownerUserID string, ok 
 	}
 	// Admin-minted fleet tokens (userless) — resolved like the env token but
 	// per-node and revocable from the admin panel.
-	if ft, found, err := s.store.FleetTokenByHash(r.Context(), hashToken(tok)); err == nil && found {
+	if ft, found, err := s.store.FleetTokenByHash(r.Context(), authx.HashToken(tok)); err == nil && found {
 		_ = s.store.TouchFleetTokenUsed(r.Context(), ft.ID, s.now().Unix())
 		return "fleet", "", true
 	}
 	if s.cfg.EnableUserNodes {
-		if nt, found, err := s.store.NodeTokenByHash(r.Context(), hashToken(tok)); err == nil && found {
+		if nt, found, err := s.store.NodeTokenByHash(r.Context(), authx.HashToken(tok)); err == nil && found {
 			_ = s.store.TouchNodeTokenUsed(r.Context(), nt.ID, s.now().Unix())
 			return "user", nt.UserID, true
 		}
@@ -1021,23 +1023,23 @@ func containsCap(caps []string, want string) bool {
 func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 	ownerType, ownerUserID, ok := s.nodeOwner(r)
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 	var req nodeRegisterReq
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
 		return
 	}
 	if req.TURNSecret == "" || len(req.URLs) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "turnSecret and urls required"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "turnSecret and urls required"})
 		return
 	}
 	// StorageURL is user-controlled and central makes outbound calls to it;
 	// reject non-public / malformed endpoints to prevent SSRF.
 	if req.StorageURL != "" {
 		if err := validateNodeStorageURL(req.StorageURL, s.allowPrivateNodeURLs); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
 	}
@@ -1049,12 +1051,12 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 	if req.NodeID != "" {
 		e, found, gerr := s.store.GetNode(r.Context(), req.NodeID)
 		if gerr != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+			httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 			return
 		}
 		if !found && !validNodeID(req.NodeID) {
 			// A BRAND-NEW id must match the charset/length central itself
-			// generates (newID(): 16 random bytes, lowercase hex). Nothing here
+			// generates (authx.NewID(): 16 random bytes, lowercase hex). Nothing here
 			// lets an attacker impersonate an admin — the audit actor is always
 			// "node:<id>" with auth=node-token, and the audit page auto-escapes
 			// — but with no check at all, an arbitrary client-supplied id like
@@ -1062,9 +1064,9 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 			// reachable for no good reason: central never generates an id like
 			// that, so nothing legitimate is lost by rejecting one. An EXISTING
 			// id is exempt (checked below by the ownership guard instead): every
-			// node id already in the store was either generated by newID() or
+			// node id already in the store was either generated by authx.NewID() or
 			// has already passed this same check on some earlier registration.
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid node id"})
+			httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid node id"})
 			return
 		}
 		if found {
@@ -1072,7 +1074,7 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 			mismatch := existing.OwnerType != ownerType ||
 				(ownerType == "user" && existing.OwnerUserID != ownerUserID)
 			if mismatch {
-				writeJSON(w, http.StatusForbidden, map[string]string{"error": "node id belongs to another owner"})
+				httpx.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "node id belongs to another owner"})
 				return
 			}
 			// A deregistered node id coming back is worth shouting about. Upsert
@@ -1117,11 +1119,11 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 	var fleetTok *FleetToken
 	label := ""
 	if ownerType == "user" {
-		if nt, found, e := s.store.NodeTokenByHash(r.Context(), hashToken(tok)); e == nil && found {
+		if nt, found, e := s.store.NodeTokenByHash(r.Context(), authx.HashToken(tok)); e == nil && found {
 			userTok = &nt
 			label = nt.Name
 		}
-	} else if ft, found, e := s.store.FleetTokenByHash(r.Context(), hashToken(tok)); e == nil && found {
+	} else if ft, found, e := s.store.FleetTokenByHash(r.Context(), authx.HashToken(tok)); e == nil && found {
 		fleetTok = &ft
 		label = ft.Name
 	}
@@ -1151,7 +1153,7 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	saved, err := s.store.UpsertNode(r.Context(), n)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
 	// Bind the presented token to its node for per-node revoke/delete.
@@ -1161,7 +1163,7 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 		// An admin-minted fleet token (not the shared env token) binds to its node.
 		_ = s.store.BindFleetToken(r.Context(), fleetTok.ID, saved.ID)
 	}
-	writeJSON(w, http.StatusOK, nodeRegisterResp{
+	httpx.WriteJSON(w, http.StatusOK, nodeRegisterResp{
 		NodeID: saved.ID, HeartbeatInterval: nodeHeartbeatInterval,
 		nodeLimits: s.nodeLimitsFor(r.Context(), saved),
 	})
@@ -1175,32 +1177,32 @@ func (s *Service) handleNodeRegister(w http.ResponseWriter, r *http.Request) {
 func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 	ownerType, ownerUserID, ok := s.nodeOwner(r)
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 	var req nodeHeartbeatReq
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
 		return
 	}
 	if req.NodeID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "nodeID required"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "nodeID required"})
 		return
 	}
 	// A node unknown to us (DB reset / never registered) is told to re-register
 	// with 410 Gone.
 	node, known, err := s.store.GetNode(r.Context(), req.NodeID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
 	if !known {
-		writeJSON(w, http.StatusGone, map[string]string{"error": "unknown node, re-register"})
+		httpx.WriteJSON(w, http.StatusGone, map[string]string{"error": "unknown node, re-register"})
 		return
 	}
 	// A user token may only heartbeat a node it owns (a fleet token may heartbeat any fleet node).
 	if ownerType == "user" && (node.OwnerType != "user" || node.OwnerUserID != ownerUserID) {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not your node"})
+		httpx.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "not your node"})
 		return
 	}
 	// ...and the mirror check, which deregister/update-check already had and this
@@ -1210,7 +1212,7 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 	// ActiveTransfers (steer which node gets canary builds first). Every one of
 	// those is a user-visible lie about hardware the caller does not own.
 	if ownerType == "fleet" && node.OwnerType != "fleet" {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not a fleet node"})
+		httpx.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "not a fleet node"})
 		return
 	}
 	billable := node.OwnerType == "fleet"
@@ -1231,7 +1233,7 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := s.store.TouchNode(r.Context(), req.NodeID, req.RelayedTotal, req.StoredBytes, req.StorageTotal, req.StorageFree, now, active); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 		return
 	}
 	// 单次心跳给单个用户记了多少（用于下面的异常告警）。
@@ -1304,7 +1306,7 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	warnImplausibleAttribution(req.NodeID, len(req.Usage), attributed)
-	writeJSON(w, http.StatusOK, nodeHeartbeatResp{
+	httpx.WriteJSON(w, http.StatusOK, nodeHeartbeatResp{
 		OK: true, HeartbeatInterval: nodeHeartbeatInterval,
 		nodeLimits: s.nodeLimitsFor(r.Context(), node),
 	})

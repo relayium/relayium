@@ -5,6 +5,8 @@ import (
 	"io"
 	"log"
 	"testing"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // TestGCPurgesDueAccountsAndArchives is the brief's Step-1 acceptance test:
@@ -93,32 +95,32 @@ func TestArchiveAndPurgeUserClearsEveryLinkedTable(t *testing.T) {
 	if err := st.LinkIdentity(ctx, "email", u.Email, u.ID); err != nil {
 		t.Fatalf("link identity: %v", err)
 	}
-	if err := st.CreateSession(ctx, Session{ID: newID(), UserID: u.ID, CreatedAt: 1, ExpiresAt: 1 << 40}); err != nil {
+	if err := st.CreateSession(ctx, Session{ID: authx.NewID(), UserID: u.ID, CreatedAt: 1, ExpiresAt: 1 << 40}); err != nil {
 		t.Fatalf("create session: %v", err)
 	}
-	if err := st.CreateMagicToken(ctx, MagicToken{TokenHash: hashToken("magic"), Email: u.Email, CreatedAt: 1, ExpiresAt: 1 << 40}); err != nil {
+	if err := st.CreateMagicToken(ctx, MagicToken{TokenHash: authx.HashToken("magic"), Email: u.Email, CreatedAt: 1, ExpiresAt: 1 << 40}); err != nil {
 		t.Fatalf("create magic token: %v", err)
 	}
-	dev, err := st.UpsertDevice(ctx, Device{ID: newID(), UserID: u.ID, Name: "cli", Kind: "cli", CreatedAt: 1})
+	dev, err := st.UpsertDevice(ctx, Device{ID: authx.NewID(), UserID: u.ID, Name: "cli", Kind: "cli", CreatedAt: 1})
 	if err != nil {
 		t.Fatalf("upsert device: %v", err)
 	}
-	if err := st.CreateCLIToken(ctx, CLIToken{TokenHash: hashToken("clitok"), UserID: u.ID, DeviceID: dev.ID, CreatedAt: 1}); err != nil {
+	if err := st.CreateCLIToken(ctx, CLIToken{TokenHash: authx.HashToken("clitok"), UserID: u.ID, DeviceID: dev.ID, CreatedAt: 1}); err != nil {
 		t.Fatalf("create cli token: %v", err)
 	}
-	if err := st.CreateDeviceAuth(ctx, DeviceAuthRequest{UserCode: "WDJB-MJHT", DeviceCodeHash: hashToken("dev"), Status: "pending", CreatedAt: 1, ExpiresAt: 1 << 40}); err != nil {
+	if err := st.CreateDeviceAuth(ctx, DeviceAuthRequest{UserCode: "WDJB-MJHT", DeviceCodeHash: authx.HashToken("dev"), Status: "pending", CreatedAt: 1, ExpiresAt: 1 << 40}); err != nil {
 		t.Fatalf("create device auth: %v", err)
 	}
-	if ok, err := st.ApproveDeviceAuth(ctx, "WDJB-MJHT", u.ID, hashToken("approvedtok"), "rlm_cli_raw", 2); err != nil || !ok {
+	if ok, err := st.ApproveDeviceAuth(ctx, "WDJB-MJHT", u.ID, authx.HashToken("approvedtok"), "rlm_cli_raw", 2); err != nil || !ok {
 		t.Fatalf("approve device auth: ok=%v err=%v", ok, err)
 	}
-	if err := st.RecordUsage(ctx, UsageEvent{AllocID: newID(), Token: "t", UserID: u.ID, RelayedBytes: 10, RecordedAt: 1}); err != nil {
+	if err := st.RecordUsage(ctx, UsageEvent{AllocID: authx.NewID(), Token: "t", UserID: u.ID, RelayedBytes: 10, RecordedAt: 1}); err != nil {
 		t.Fatalf("record usage: %v", err)
 	}
-	if err := st.CreateStoredFile(ctx, StoredFile{ID: newID(), UserID: u.ID, BlobKey: "bk", EncManifest: []byte("x"), Size: 1, ExpiresAt: 1 << 40, CreatedAt: 1}); err != nil {
+	if err := st.CreateStoredFile(ctx, StoredFile{ID: authx.NewID(), UserID: u.ID, BlobKey: "bk", EncManifest: []byte("x"), Size: 1, ExpiresAt: 1 << 40, CreatedAt: 1}); err != nil {
 		t.Fatalf("create stored file: %v", err)
 	}
-	if err := st.RecordUpload(ctx, UploadEvent{ID: newID(), UserID: u.ID, Bytes: 1, UploadedAt: 1}); err != nil {
+	if err := st.RecordUpload(ctx, UploadEvent{ID: authx.NewID(), UserID: u.ID, Bytes: 1, UploadedAt: 1}); err != nil {
 		t.Fatalf("record upload: %v", err)
 	}
 	if err := st.AddUploadStat(ctx, u.ID, 100); err != nil {
@@ -127,14 +129,14 @@ func TestArchiveAndPurgeUserClearsEveryLinkedTable(t *testing.T) {
 	if err := st.RecordMeter(ctx, u.ID, MeterUpload, 4096, 100); err != nil {
 		t.Fatalf("record meter: %v", err)
 	}
-	if err := st.CreateEmailToken(ctx, EmailToken{TokenHash: hashToken("verif"), UserID: u.ID, Email: u.Email, Purpose: "verify", CreatedAt: 1, ExpiresAt: 1 << 40}); err != nil {
+	if err := st.CreateEmailToken(ctx, EmailToken{TokenHash: authx.HashToken("verif"), UserID: u.ID, Email: u.Email, Purpose: "verify", CreatedAt: 1, ExpiresAt: 1 << 40}); err != nil {
 		t.Fatalf("create email token: %v", err)
 	}
-	node, err := st.UpsertNode(ctx, Node{ID: newID(), OwnerType: "user", OwnerUserID: u.ID, URLs: []string{"turn:example:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1 << 40})
+	node, err := st.UpsertNode(ctx, Node{ID: authx.NewID(), OwnerType: "user", OwnerUserID: u.ID, URLs: []string{"turn:example:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1 << 40})
 	if err != nil {
 		t.Fatalf("upsert node: %v", err)
 	}
-	if err := st.CreateNodeToken(ctx, NodeToken{ID: newID(), TokenHash: hashToken("nt"), UserID: u.ID, NodeID: node.ID, Name: "byo", CreatedAt: 1}); err != nil {
+	if err := st.CreateNodeToken(ctx, NodeToken{ID: authx.NewID(), TokenHash: authx.HashToken("nt"), UserID: u.ID, NodeID: node.ID, Name: "byo", CreatedAt: 1}); err != nil {
 		t.Fatalf("create node token: %v", err)
 	}
 
@@ -211,7 +213,7 @@ func TestArchiveAndPurgeUserSkipsReactivatedAccount(t *testing.T) {
 	ctx := context.Background()
 	u, _ := st.UpsertUserByEmail(ctx, "revived@example.com", "Revived")
 	_ = st.RecordMeter(ctx, u.ID, MeterUpload, 777, 100)
-	_ = st.CreateStoredFile(ctx, StoredFile{ID: newID(), UserID: u.ID, BlobKey: "bk", EncManifest: []byte("x"), Size: 1, ExpiresAt: 1 << 40, CreatedAt: 1})
+	_ = st.CreateStoredFile(ctx, StoredFile{ID: authx.NewID(), UserID: u.ID, BlobKey: "bk", EncManifest: []byte("x"), Size: 1, ExpiresAt: 1 << 40, CreatedAt: 1})
 	_ = st.SetAccountDeletion(ctx, u.ID, 1, 100) // due at purge_after=100
 
 	// User reactivates just before GC's purge fires.

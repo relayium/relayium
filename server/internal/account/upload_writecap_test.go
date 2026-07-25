@@ -3,6 +3,8 @@ package account
 import (
 	"context"
 	"testing"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // uploadWriteCap must bound a billable single-shot upload's on-disk write to the
@@ -40,7 +42,7 @@ func TestUploadWriteCapBoundsToRemainingQuota(t *testing.T) {
 	}
 
 	// After consuming 9 MiB of the quota, the cap shrinks with the remainder.
-	ok, err := st.ReserveUpload(ctx, UploadEvent{ID: newID(), UserID: u.ID, Bytes: 9 << 20, UploadedAt: now}, now-dayWindow, 10<<20)
+	ok, err := st.ReserveUpload(ctx, UploadEvent{ID: authx.NewID(), UserID: u.ID, Bytes: 9 << 20, UploadedAt: now}, now-dayWindow, 10<<20)
 	if err != nil || !ok {
 		t.Fatalf("reserve: ok=%v err=%v", ok, err)
 	}
@@ -63,7 +65,7 @@ func TestUploadWriteCapFlooredWhenExhausted(t *testing.T) {
 	_ = st.UpsertPlan(ctx, Plan{ID: "unl", Name: "Unl", StorageBytes: 0, DailyQuotaBytes: 0, Active: true, UpdatedAt: now})
 	_ = st.SetUserPlan(ctx, u.ID, "unl", now)
 	// Blow past the 1 MiB quota.
-	_, _ = st.ReserveUpload(ctx, UploadEvent{ID: newID(), UserID: u.ID, Bytes: 5 << 20, UploadedAt: now}, now-dayWindow, 100<<20)
+	_, _ = st.ReserveUpload(ctx, UploadEvent{ID: authx.NewID(), UserID: u.ID, Bytes: 5 << 20, UploadedAt: now}, now-dayWindow, 100<<20)
 
 	cap := svc.uploadWriteCap(ctx, u.ID, int64(1)<<30)
 	if cap != minBillableBytes {

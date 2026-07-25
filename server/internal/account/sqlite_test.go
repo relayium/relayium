@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 func newTestStore(t *testing.T) *SQLiteStore {
@@ -706,7 +708,7 @@ func TestReserveUploadNeverExceedsQuota(t *testing.T) {
 			defer wg.Done()
 			<-start
 			ok, err := s.ReserveUpload(ctx,
-				UploadEvent{ID: newID(), UserID: u.ID, Bytes: each, UploadedAt: 100},
+				UploadEvent{ID: authx.NewID(), UserID: u.ID, Bytes: each, UploadedAt: 100},
 				0, quota)
 			if err != nil {
 				t.Errorf("reserve: %v", err)

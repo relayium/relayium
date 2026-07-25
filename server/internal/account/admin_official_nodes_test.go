@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // Reuse newAdminSettingsServer + adminLogin from admin_test.go.
@@ -75,7 +77,7 @@ func TestAdminRevokeFleetToken(t *testing.T) {
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 	if err := store.CreateFleetToken(context.Background(), FleetToken{
-		ID: "ft-rev", TokenHash: hashToken("x"), Name: "n", CreatedAt: 1,
+		ID: "ft-rev", TokenHash: authx.HashToken("x"), Name: "n", CreatedAt: 1,
 	}); err != nil {
 		t.Fatalf("CreateFleetToken: %v", err)
 	}

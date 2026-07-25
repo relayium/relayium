@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/internal/httpx"
 )
 
 const maxNodeTokensPerUser = 10
@@ -51,15 +54,15 @@ func (s *Service) handleProvisionNode(w http.ResponseWriter, r *http.Request, u 
 		http.Error(w, "too many nodes", http.StatusTooManyRequests)
 		return
 	}
-	raw := randToken() // unguessable plaintext, shown once
-	id := newID()
+	raw := authx.RandToken() // unguessable plaintext, shown once
+	id := authx.NewID()
 	if err := s.store.CreateNodeToken(r.Context(), NodeToken{
-		ID: id, TokenHash: hashToken(raw), UserID: u.ID, Name: req.Name, CreatedAt: s.now().Unix(),
+		ID: id, TokenHash: authx.HashToken(raw), UserID: u.ID, Name: req.Name, CreatedAt: s.now().Unix(),
 	}); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"id": id, "token": raw, "name": req.Name})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"id": id, "token": raw, "name": req.Name})
 }
 
 // handleMyNodes lists all of the caller's own nodes (online and offline), for
@@ -81,7 +84,7 @@ func (s *Service) handleMyNodes(w http.ResponseWriter, r *http.Request, u User) 
 			"storageFree": n.StorageFree, "storageTotal": n.StorageTotal, "lastSeen": n.LastSeenAt,
 		})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"nodes": out})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"nodes": out})
 }
 
 type renameReq struct {
@@ -105,7 +108,7 @@ func (s *Service) handleRenameMyNode(w http.ResponseWriter, r *http.Request, u U
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"name": label})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"name": label})
 }
 
 // handleDeleteMyNode removes one of the caller's own nodes and revokes any
@@ -133,7 +136,7 @@ func (s *Service) handleDeleteMyNode(w http.ResponseWriter, r *http.Request, u U
 			_ = s.store.SetOnlyOwnNodes(r.Context(), u.ID, false)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 type strictReq struct {
@@ -163,7 +166,7 @@ func (s *Service) handleStrictNodes(w http.ResponseWriter, r *http.Request, u Us
 			return
 		}
 		if len(nodes) == 0 {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "no_own_nodes"})
+			httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "no_own_nodes"})
 			return
 		}
 	}
@@ -171,5 +174,5 @@ func (s *Service) handleStrictNodes(w http.ResponseWriter, r *http.Request, u Us
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"onlyOwnNodes": req.OnlyOwnNodes})
+	httpx.WriteJSON(w, http.StatusOK, map[string]bool{"onlyOwnNodes": req.OnlyOwnNodes})
 }

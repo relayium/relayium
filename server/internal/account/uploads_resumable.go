@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/internal/httpx"
 	"github.com/relayium/relayium/internal/storage"
 )
 
@@ -189,7 +191,7 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 	}
 
 	row := UploadSessionRow{
-		ID: newID(), UserID: u.ID, BlobKey: randToken(), NodeID: nodeID, Billable: billable,
+		ID: authx.NewID(), UserID: u.ID, BlobKey: authx.RandToken(), NodeID: nodeID, Billable: billable,
 		EncManifest: encManifest, TTL: ttl, MaxDL: maxDL,
 		MaxSize:   s.sessionWriteCap(r.Context(), u.ID, st.MaxFileSize, billable),
 		CreatedAt: s.now().Unix(),
@@ -204,7 +206,7 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 		http.Error(w, "too many concurrent uploads", http.StatusTooManyRequests)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"uploadId": row.ID, "chunkSize": uploadChunkSize})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"uploadId": row.ID, "chunkSize": uploadChunkSize})
 }
 
 // sessionWriteCap 给一个 chunked 上传会话定写入上限：单文件上限与用户三项剩余
@@ -273,11 +275,11 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 	if start < sess.Received {
 		// Client re-sent bytes we already have (a resume overshoot) — ack the
 		// current offset so it advances without corrupting the blob.
-		writeJSON(w, http.StatusOK, map[string]any{"received": sess.Received})
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{"received": sess.Received})
 		return
 	}
 	if start > sess.Received {
-		writeJSON(w, http.StatusConflict, map[string]any{"received": sess.Received})
+		httpx.WriteJSON(w, http.StatusConflict, map[string]any{"received": sess.Received})
 		return
 	}
 
@@ -330,14 +332,14 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 	if errors.Is(err, storage.ErrOffsetMismatch) {
 		// The blob and our counter disagree (e.g. a duplicated request lost the
 		// race); report the blob's truth so the client re-syncs.
-		writeJSON(w, http.StatusConflict, map[string]any{"received": newSize})
+		httpx.WriteJSON(w, http.StatusConflict, map[string]any{"received": newSize})
 		return
 	}
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"received": newSize})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"received": newSize})
 }
 
 // handleUploadFinalize (POST /api/files/uploads/{uploadId}/finalize) commits the
@@ -400,7 +402,7 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 			fail("server error", http.StatusInternalServerError)
 			return
 		}
-		evID := newID()
+		evID := authx.NewID()
 		reserved, err := s.store.ReserveUpload(r.Context(),
 			UploadEvent{ID: evID, UserID: u.ID, Bytes: billed, UploadedAt: now},
 			now-dayWindow, quota)
@@ -415,7 +417,7 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		reservedUploadID = evID // committed — a later failure must refund it
 	}
 
-	fid := newID()
+	fid := authx.NewID()
 	sf := StoredFile{
 		ID: fid, UserID: u.ID, BlobKey: sess.BlobKey, EncManifest: sess.EncManifest,
 		Size: size, BurnAfterRead: sess.MaxDL == 1, CreatedAt: now, ExpiresAt: now + sess.TTL,
@@ -440,7 +442,7 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		_ = s.store.RecordMeter(r.Context(), u.ID, MeterUpload, size, now)
 	}
 	_ = s.store.DeleteUploadSession(r.Context(), sess.ID)
-	writeJSON(w, http.StatusOK, map[string]any{"id": fid, "expiresAt": sf.ExpiresAt})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"id": fid, "expiresAt": sf.ExpiresAt})
 }
 
 // handleUploadStatus (GET /api/files/uploads/{uploadId}) reports the committed
@@ -455,7 +457,7 @@ func (s *Service) handleUploadStatus(w http.ResponseWriter, r *http.Request, u U
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"received": sess.Received})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"received": sess.Received})
 }
 
 // parseContentRangeStart pulls N from "bytes N-M/total" (the standard request

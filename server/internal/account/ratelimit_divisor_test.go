@@ -7,16 +7,16 @@ import (
 
 func TestPerInstanceThreshold(t *testing.T) {
 	cases := []struct{ n, div, want int }{
-		{5, 1, 5},   // single instance / IP-hash: unchanged
-		{5, 0, 5},   // 0 treated as 1
-		{5, -1, 5},  // negative treated as 1
-		{5, 2, 3},   // round to nearest (2.5 -> 3)
-		{5, 3, 2},   // 1.67 -> 2
-		{5, 5, 1},   // exactly 1
-		{5, 10, 1},  // would be 0.5 -> floored at 1
-		{1, 3, 1},   // would be 0 -> floored at 1
+		{5, 1, 5},    // single instance / IP-hash: unchanged
+		{5, 0, 5},    // 0 treated as 1
+		{5, -1, 5},   // negative treated as 1
+		{5, 2, 3},    // round to nearest (2.5 -> 3)
+		{5, 3, 2},    // 1.67 -> 2
+		{5, 5, 1},    // exactly 1
+		{5, 10, 1},   // would be 0.5 -> floored at 1
+		{1, 3, 1},    // would be 0 -> floored at 1
 		{200, 3, 67}, // breaker threshold
-		{30, 4, 8},  // ws limiter (7.5 -> 8)
+		{30, 4, 8},   // ws limiter (7.5 -> 8)
 	}
 	for _, c := range cases {
 		if got := PerInstanceThreshold(c.n, c.div); got != c.want {

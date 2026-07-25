@@ -6,6 +6,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+
+	"github.com/relayium/relayium/internal/httpx"
 )
 
 // handleBillingCheckout starts a Stripe Checkout Session for the signed-in
@@ -27,14 +29,14 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 	// authoritative signal — PlanSource stays "stripe" after cancellation, so it
 	// alone cannot distinguish a live sub from a lapsed one.
 	if u.StripeCustomerID != "" && liveSubStatus(u.SubscriptionStatus) {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "already_subscribed"})
+		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "already_subscribed"})
 		return
 	}
 	var in struct {
 		PlanID string `json:"planId"`
 		Cycle  string `json:"cycle"` // "monthly" | "yearly"
 	}
-	if err := decodeJSONBody(w, r, &in); err != nil {
+	if err := httpx.DecodeJSONBody(w, r, &in); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -55,7 +57,7 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 		priceID = plan.StripePriceMonthlyID
 	}
 	if priceID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "plan not purchasable"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "plan not purchasable"})
 		return
 	}
 	// Bind a SINGLE Stripe customer to the user before checkout, then always pass
@@ -89,7 +91,7 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"url": url})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"url": url})
 }
 
 // handleBillingPortal opens a Stripe Billing Portal session for the signed-in
@@ -109,7 +111,7 @@ func (s *Service) handleBillingPortal(w http.ResponseWriter, r *http.Request, u 
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"url": url})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"url": url})
 }
 
 // cycleOfPrice tells which billing cycle a Stripe Price id represents for the
@@ -167,7 +169,7 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 		PlanID string `json:"planId"`
 		Cycle  string `json:"cycle"` // "monthly" | "yearly"
 	}
-	if err := decodeJSONBody(w, r, &in); err != nil {
+	if err := httpx.DecodeJSONBody(w, r, &in); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -178,7 +180,7 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 	// to a clear 409 that routes them back to checkout — not a 500 from Stripe's
 	// "no live subscription".
 	if u.StripeCustomerID == "" || u.PlanSource != "stripe" || !liveSubStatus(u.SubscriptionStatus) {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "no_active_subscription"})
+		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "no_active_subscription"})
 		return
 	}
 	plan, ok, err := s.store.GetPlan(r.Context(), in.PlanID)
@@ -205,7 +207,7 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 	}
 	sameTier := plan.ID == u.PlanID
 	if sameTier && (u.BillingCycle == "" || u.BillingCycle == wantCycle) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "already_on_plan"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "already_on_plan"})
 		return
 	}
 	// Already scheduled to downgrade to exactly this tier AND cycle — nothing to
@@ -213,7 +215,7 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 	// the pending schedule (release + reschedule below). A '' scheduled cycle is a
 	// legacy row → fall back to tier-only matching.
 	if plan.ID == u.ScheduledPlanID && (u.ScheduledCycle == "" || wantCycle == u.ScheduledCycle) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "effective": "period_end"})
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok", "effective": "period_end"})
 		return
 	}
 	var priceID string
@@ -224,7 +226,7 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 		priceID = plan.StripePriceMonthlyID
 	}
 	if priceID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "plan not purchasable"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "plan not purchasable"})
 		return
 	}
 
@@ -271,7 +273,7 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 	// Record (or clear) the pending-downgrade hint. Best-effort: the Stripe op
 	// already succeeded, so don't fail the request if this write hiccups.
 	_ = s.store.SetScheduledPlan(r.Context(), u.ID, scheduledPlan, scheduledCycle)
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "effective": effective})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok", "effective": effective})
 }
 
 // handleBillingPreview reports what changing to {planId,cycle} would do
@@ -291,14 +293,14 @@ func (s *Service) handleBillingPreview(w http.ResponseWriter, r *http.Request, u
 		PlanID string `json:"planId"`
 		Cycle  string `json:"cycle"` // "monthly" | "yearly"
 	}
-	if err := decodeJSONBody(w, r, &in); err != nil {
+	if err := httpx.DecodeJSONBody(w, r, &in); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 	// Same guard as change-plan: a canceled subscriber (plan_source still "stripe")
 	// gets a clean 409, not a 500, when previewing a change with no live sub.
 	if u.StripeCustomerID == "" || u.PlanSource != "stripe" || !liveSubStatus(u.SubscriptionStatus) {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "no_active_subscription"})
+		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "no_active_subscription"})
 		return
 	}
 	plan, ok, err := s.store.GetPlan(r.Context(), in.PlanID)
@@ -321,7 +323,7 @@ func (s *Service) handleBillingPreview(w http.ResponseWriter, r *http.Request, u
 		nextAmount = plan.PriceYearly
 	}
 	if priceID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "plan not purchasable"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "plan not purchasable"})
 		return
 	}
 	// Upgrade vs downgrade decides both timing and whether we bother asking
@@ -341,7 +343,7 @@ func (s *Service) handleBillingPreview(w http.ResponseWriter, r *http.Request, u
 	}
 	if downgrade {
 		resp["effective"] = "period_end"
-		writeJSON(w, http.StatusOK, resp)
+		httpx.WriteJSON(w, http.StatusOK, resp)
 		return
 	}
 	cents, err := s.biller.PreviewChange(r.Context(), u.StripeCustomerID, priceID)
@@ -353,7 +355,7 @@ func (s *Service) handleBillingPreview(w http.ResponseWriter, r *http.Request, u
 		return
 	}
 	resp["immediateChargeCents"] = cents
-	writeJSON(w, http.StatusOK, resp)
+	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
 // handleBillingCancelScheduledChange cancels a pending period-end downgrade,
@@ -366,11 +368,11 @@ func (s *Service) handleBillingCancelScheduledChange(w http.ResponseWriter, r *h
 		return
 	}
 	if u.StripeCustomerID == "" || u.PlanSource != "stripe" {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "no_active_subscription"})
+		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "no_active_subscription"})
 		return
 	}
 	if u.ScheduledPlanID == "" {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "none"})
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "none"})
 		return
 	}
 	if err := s.biller.ReleaseSchedule(r.Context(), u.StripeCustomerID); err != nil {
@@ -378,7 +380,7 @@ func (s *Service) handleBillingCancelScheduledChange(w http.ResponseWriter, r *h
 		return
 	}
 	_ = s.store.SetScheduledPlan(r.Context(), u.ID, "", "")
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // publicPlanView is the pricing UI's projection of a Plan: never includes the
@@ -421,7 +423,7 @@ func (s *Service) handlePublicPlans(w http.ResponseWriter, r *http.Request) {
 			PurchasableYearly:  s.biller != nil && p.StripePriceYearlyID != "",
 		})
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
 // maxWebhookBodyBytes caps the raw Stripe webhook payload we'll read before

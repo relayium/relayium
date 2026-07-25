@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/relayium/relayium/internal/httpx"
 )
 
 // nodePinVerify matches a node's leaf TLS cert SHA-256 (hex) against want, for
@@ -56,14 +58,14 @@ func (s *Service) handleCheckNode(w http.ResponseWriter, r *http.Request, u User
 
 	if n.StorageURL == "" {
 		resp.Error = "no storage endpoint (relay-only node)"
-		writeJSON(w, http.StatusOK, resp)
+		httpx.WriteJSON(w, http.StatusOK, resp)
 		return
 	}
 	// Re-run the SSRF gate: StorageURL is user-controlled and we're about to make
 	// central issue an outbound request to it.
 	if verr := validateNodeStorageURL(n.StorageURL, s.allowPrivateNodeURLs); verr != nil {
 		resp.Error = "storage URL not probeable"
-		writeJSON(w, http.StatusOK, resp)
+		httpx.WriteJSON(w, http.StatusOK, resp)
 		return
 	}
 
@@ -90,11 +92,11 @@ func (s *Service) handleCheckNode(w http.ResponseWriter, r *http.Request, u User
 	if perr != nil {
 		resp.Reachable = false
 		resp.Error = "unreachable — check the node is running and its storage port is open"
-		writeJSON(w, http.StatusOK, resp)
+		httpx.WriteJSON(w, http.StatusOK, resp)
 		return
 	}
 	res.Body.Close()
 	resp.Reachable = true
 	resp.LatencyMs = s.now().Sub(start).Milliseconds()
-	writeJSON(w, http.StatusOK, resp)
+	httpx.WriteJSON(w, http.StatusOK, resp)
 }

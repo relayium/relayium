@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // httptestPost issues a POST with an optional string body and cookie against
@@ -56,7 +58,7 @@ func TestDeleteRequestThenConfirm(t *testing.T) {
 	ctx := context.Background()
 	u, _ := store.UpsertUserByEmail(ctx, "a@example.com", "")
 	sess, _ := svc.IssueSession(ctx, u.ID)
-	_ = store.CreateStoredFile(ctx, StoredFile{ID: newID(), UserID: u.ID, BlobKey: "bk", EncManifest: []byte("x"), Size: 1, ExpiresAt: 1 << 40, CreatedAt: 1})
+	_ = store.CreateStoredFile(ctx, StoredFile{ID: authx.NewID(), UserID: u.ID, BlobKey: "bk", EncManifest: []byte("x"), Size: 1, ExpiresAt: 1 << 40, CreatedAt: 1})
 
 	// request → sends a delete email token, no destructive action
 	req := httptestPost(t, ts.URL+"/api/account/delete/request", "", withCookie(sess.ID))
@@ -157,7 +159,7 @@ func TestDeleteConfirmSurvivesScheduledEmailFailure(t *testing.T) {
 		t.Fatalf("deletion must still be scheduled: %+v", u2)
 	}
 	// A reactivate token must exist and be usable for this user.
-	rtok, ok, err := store.UseEmailToken(ctx, hashToken(mail.lastReactivateToken(t)), "reactivate", svc.now().Unix())
+	rtok, ok, err := store.UseEmailToken(ctx, authx.HashToken(mail.lastReactivateToken(t)), "reactivate", svc.now().Unix())
 	if err != nil {
 		t.Fatalf("use reactivate token: %v", err)
 	}

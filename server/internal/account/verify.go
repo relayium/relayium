@@ -4,14 +4,16 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // SendVerifyEmail issues a one-time verification token for u and emails the link.
 func (s *Service) SendVerifyEmail(ctx context.Context, u User) error {
-	raw := randToken()
+	raw := authx.RandToken()
 	now := s.now()
 	tok := EmailToken{
-		TokenHash: hashToken(raw),
+		TokenHash: authx.HashToken(raw),
 		UserID:    u.ID,
 		Email:     normEmail(u.Email),
 		Purpose:   "verify",
@@ -32,7 +34,7 @@ func (s *Service) SendVerifyEmail(ctx context.Context, u User) error {
 // pre-hijack variant where a victim's click would activate an attacker's
 // password. Passwordless (magic/OAuth) verifications pass "".
 func (s *Service) VerifyEmail(ctx context.Context, rawToken, password string) (Session, error) {
-	tok, ok, err := s.store.UseEmailToken(ctx, hashToken(rawToken), "verify", s.now().Unix())
+	tok, ok, err := s.store.UseEmailToken(ctx, authx.HashToken(rawToken), "verify", s.now().Unix())
 	if err != nil {
 		return Session{}, err
 	}

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+
+	"github.com/relayium/relayium/internal/httpx"
 )
 
 // handleAdminPasskeyRegisterBegin gates registration behind a fresh password +
@@ -13,7 +15,7 @@ import (
 // rare enough that the extra prompt costs nothing.
 func (s *Service) handleAdminPasskeyRegisterBegin(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "未登录"})
+		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "未登录"})
 		return
 	}
 	if !s.passkeyBeginAllowed(w, r) {
@@ -23,14 +25,14 @@ func (s *Service) handleAdminPasskeyRegisterBegin(w http.ResponseWriter, r *http
 	// Step-up really is a password+TOTP check, so its failures belong in the
 	// adminLogins bucket rather than the passkey-login one.
 	if s.adminLogins.locked(ip, s.now()) {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "尝试过于频繁，请稍后再试"})
+		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "尝试过于频繁，请稍后再试"})
 		return
 	}
 	step, ok := s.verifyAdminCreds(
 		r.FormValue("username"), r.FormValue("password"), r.FormValue("totp"))
 	if !ok {
 		s.adminLogins.recordFail(ip, s.now())
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "账号、密码或验证码错误"})
+		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "账号、密码或验证码错误"})
 		return
 	}
 	if s.AdminTOTPEnabled() {
@@ -38,7 +40,7 @@ func (s *Service) handleAdminPasskeyRegisterBegin(w http.ResponseWriter, r *http
 		// like a bad credential (replay guard, multi-instance safe).
 		if claimed, cerr := s.store.ClaimTOTPStep(r.Context(), step); cerr != nil || !claimed {
 			s.adminLogins.recordFail(ip, s.now())
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "账号、密码或验证码错误"})
+			httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "账号、密码或验证码错误"})
 			return
 		}
 	}
@@ -47,13 +49,13 @@ func (s *Service) handleAdminPasskeyRegisterBegin(w http.ResponseWriter, r *http
 	rp, err := s.adminRP()
 	if err != nil {
 		log.Printf("passkey: building relying party failed: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "passkey 未正确配置"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "passkey 未正确配置"})
 		return
 	}
 	user, err := s.loadAdminPasskeyUser(r.Context())
 	if err != nil {
 		log.Printf("passkey: loading admin passkey user failed: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "读取凭据失败"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "读取凭据失败"})
 		return
 	}
 	// First registration mints the handle; later ones reuse it so all passkeys
@@ -62,7 +64,7 @@ func (s *Service) handleAdminPasskeyRegisterBegin(w http.ResponseWriter, r *http
 		h := make([]byte, 32)
 		if _, err := rand.Read(h); err != nil {
 			log.Printf("passkey: minting user handle failed: %v", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "生成标识失败"})
+			httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "生成标识失败"})
 			return
 		}
 		user.handle = h
@@ -77,20 +79,20 @@ func (s *Service) handleAdminPasskeyRegisterBegin(w http.ResponseWriter, r *http
 	creation, sess, err := rp.BeginRegistration(user, adminRegistrationOpts(user.creds)...)
 	if err != nil {
 		log.Printf("passkey: BeginRegistration failed: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "无法发起注册"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "无法发起注册"})
 		return
 	}
 	if !s.putCeremony(r.Context(), w, ceremonyRegister, *sess, name) {
 		log.Printf("passkey: ceremony cap (%d) reached, rejecting register/begin", passkeyCeremonyCap)
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "系统繁忙，请稍后再试"})
+		httpx.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "系统繁忙，请稍后再试"})
 		return
 	}
-	writeJSON(w, http.StatusOK, creation)
+	httpx.WriteJSON(w, http.StatusOK, creation)
 }
 
 func (s *Service) handleAdminPasskeyRegisterFinish(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "未登录"})
+		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "未登录"})
 		return
 	}
 	// The kind check is the step-up boundary. login/begin is unauthenticated, so
@@ -99,19 +101,19 @@ func (s *Service) handleAdminPasskeyRegisterFinish(w http.ResponseWriter, r *htt
 	// unconditionally, so a wrong-kind attempt is consumed and cannot be retried.
 	cer, ok := s.takeCeremony(r)
 	if !ok || cer.kind != ceremonyRegister {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "注册已过期，请重试"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "注册已过期，请重试"})
 		return
 	}
 	rp, err := s.adminRP()
 	if err != nil {
 		log.Printf("passkey: building relying party failed: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "passkey 未正确配置"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "passkey 未正确配置"})
 		return
 	}
 	user, err := s.loadAdminPasskeyUser(r.Context())
 	if err != nil {
 		log.Printf("passkey: loading admin passkey user failed: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "读取凭据失败"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "读取凭据失败"})
 		return
 	}
 	// The handle minted at begin lives in the ceremony's SessionData, which is
@@ -121,13 +123,13 @@ func (s *Service) handleAdminPasskeyRegisterFinish(w http.ResponseWriter, r *htt
 	cred, err := rp.FinishRegistration(user, cer.session, r)
 	if err != nil {
 		log.Printf("passkey: FinishRegistration failed: %v", err)
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "注册验证失败"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "注册验证失败"})
 		return
 	}
 	blob, err := json.Marshal(cred)
 	if err != nil {
 		log.Printf("passkey: marshaling new credential failed: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "序列化失败"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "序列化失败"})
 		return
 	}
 	err = s.store.InsertAdminCredential(r.Context(), AdminCredential{
@@ -136,10 +138,10 @@ func (s *Service) handleAdminPasskeyRegisterFinish(w http.ResponseWriter, r *htt
 	})
 	if err != nil {
 		log.Printf("passkey: InsertAdminCredential failed: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "保存失败"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "保存失败"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	httpx.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // handleAdminPasskeyDelete removes one registered credential.

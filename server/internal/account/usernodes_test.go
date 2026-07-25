@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // newUserNodesServer mirrors newFileServer's harness but without a blob store
@@ -76,7 +78,7 @@ func TestUserNodesAPIProvision(t *testing.T) {
 	}
 
 	// The plaintext token resolves via its hash to the logged-in user.
-	nt, ok, err := store.NodeTokenByHash(context.Background(), hashToken(out.Token))
+	nt, ok, err := store.NodeTokenByHash(context.Background(), authx.HashToken(out.Token))
 	if err != nil || !ok {
 		t.Fatalf("NodeTokenByHash: ok=%v err=%v", ok, err)
 	}
@@ -177,7 +179,7 @@ func TestUserNodesAPIDeleteOwnerScoped(t *testing.T) {
 	}
 	// Bind a token to the node so we can assert it gets revoked on delete.
 	if err := store.CreateNodeToken(context.Background(), NodeToken{
-		ID: "tok1", TokenHash: hashToken("rawtoken"), UserID: owner.ID, NodeID: "delnode",
+		ID: "tok1", TokenHash: authx.HashToken("rawtoken"), UserID: owner.ID, NodeID: "delnode",
 		Name: "n", CreatedAt: now,
 	}); err != nil {
 		t.Fatalf("create token: %v", err)
@@ -201,7 +203,7 @@ func TestUserNodesAPIDeleteOwnerScoped(t *testing.T) {
 	if _, ok, _ := store.GetNode(context.Background(), "delnode"); ok {
 		t.Fatal("node still exists after owner delete")
 	}
-	if _, ok, _ := store.NodeTokenByHash(context.Background(), hashToken("rawtoken")); ok {
+	if _, ok, _ := store.NodeTokenByHash(context.Background(), authx.HashToken("rawtoken")); ok {
 		t.Fatal("bound token still resolves after node delete")
 	}
 

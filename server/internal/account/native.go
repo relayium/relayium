@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+
+	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/internal/httpx"
 )
 
 // issueBearer mints a long-lived hashed bearer token ("rlm_cli_…") bound to a
@@ -17,16 +20,16 @@ func (s *Service) issueBearer(ctx context.Context, userID, deviceName string) (s
 	if deviceName == "" {
 		deviceName = "App"
 	}
-	raw := "rlm_cli_" + randToken()
+	raw := "rlm_cli_" + authx.RandToken()
 	now := s.now().Unix()
 	dev, err := s.store.UpsertDevice(ctx, Device{
-		ID: newID(), UserID: userID, Name: deviceName, Kind: "app", CreatedAt: now,
+		ID: authx.NewID(), UserID: userID, Name: deviceName, Kind: "app", CreatedAt: now,
 	})
 	if err != nil {
 		return "", err
 	}
 	if err := s.store.CreateCLIToken(ctx, CLIToken{
-		TokenHash: hashToken(raw), UserID: userID, DeviceID: dev.ID, CreatedAt: now,
+		TokenHash: authx.HashToken(raw), UserID: userID, DeviceID: dev.ID, CreatedAt: now,
 	}); err != nil {
 		return "", err
 	}
@@ -50,22 +53,22 @@ func (s *Service) handleNativeLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	key := normEmail(in.Email) + "|" + s.clientIP(r)
 	if s.pwLogins.locked(key, s.now()) {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts, try again later"})
+		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts, try again later"})
 		return
 	}
 	uid, err := s.authenticate(r.Context(), in.Email, in.Password)
 	if errors.Is(err, ErrBadCredentials) {
 		s.pwLogins.recordFail(key, s.now())
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
+		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 		return
 	}
 	if errors.Is(err, ErrEmailUnverified) {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "email_unverified", "email": normEmail(in.Email)})
+		httpx.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "email_unverified", "email": normEmail(in.Email)})
 		return
 	}
 	var pd *PendingDeletionError
 	if errors.As(err, &pd) {
-		writeJSON(w, http.StatusOK, map[string]any{
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{
 			"status":          "pending_deletion",
 			"purgeAfter":      pd.PurgeAfter,
 			"reactivateToken": pd.ReactivateToken,
@@ -96,7 +99,7 @@ func (s *Service) finishNativeLogin(w http.ResponseWriter, r *http.Request, user
 	}
 	hasPass, _ := s.store.HasPassword(r.Context(), u.ID)
 	linked, _ := s.store.ListIdentityProviders(r.Context(), u.ID)
-	writeJSON(w, http.StatusOK, map[string]any{
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"token": token,
 		"user": map[string]any{
 			"id": u.ID, "email": u.Email, "displayName": u.DisplayName,
@@ -128,7 +131,7 @@ func (s *Service) handleUnlinkIdentity(w http.ResponseWriter, r *http.Request, u
 		return
 	}
 	if wouldOrphan {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "last_login_method"})
+		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "last_login_method"})
 		return
 	}
 	if !deleted {
@@ -153,7 +156,7 @@ func (s *Service) handleUnlinkIdentity(w http.ResponseWriter, r *http.Request, u
 		}
 		after = append(after, p)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"linkedMethods": loginMethods(hasPass, after)})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"linkedMethods": loginMethods(hasPass, after)})
 }
 
 // loginMethods lists the ways this account can sign in: "password" (if set) plus

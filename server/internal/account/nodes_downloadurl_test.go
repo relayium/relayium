@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 func registerNode(t *testing.T, s *Service, bearer string, req nodeRegisterReq) nodeRegisterResp {
@@ -48,7 +50,7 @@ func TestNodeRegisterHttpsDownloadURLPersisted(t *testing.T) {
 func TestNodeRegisterUserNodeDownloadURLPersisted(t *testing.T) {
 	st := newTestStore(t)
 	u, _ := st.UpsertUserByEmail(context.Background(), "byoreg@x.com", "r")
-	st.CreateNodeToken(context.Background(), NodeToken{ID: "t1", TokenHash: hashToken("usertok"), UserID: u.ID, Name: "n", CreatedAt: 1})
+	st.CreateNodeToken(context.Background(), NodeToken{ID: "t1", TokenHash: authx.HashToken("usertok"), UserID: u.ID, Name: "n", CreatedAt: 1})
 	s := &Service{store: st, cfg: Config{EnableUserNodes: true}, now: func() time.Time { return time.Unix(5, 0) }}
 	resp := registerNode(t, s, "usertok", nodeRegisterReq{
 		TURNSecret: "sek", URLs: []string{"turn:1.2.3.4:3478"}, Capabilities: []string{"storage"},

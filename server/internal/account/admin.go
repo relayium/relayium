@@ -10,6 +10,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/internal/httpx"
 )
 
 const (
@@ -497,18 +500,18 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// The passkey endpoints are fetch-only, so a missing Origin (which csrfGuard
 	// lets through for form posts and native clients) is a forgery signal here.
 	mux.Handle("POST /admin/passkey/login/begin",
-		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminPasskeyLoginBegin))))
+		s.csrfGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminPasskeyLoginBegin))))
 	mux.Handle("POST /admin/passkey/login/finish",
-		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminPasskeyLoginFinish))))
+		s.csrfGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminPasskeyLoginFinish))))
 	mux.Handle("POST /admin/passkey/register/begin",
-		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminPasskeyRegisterBegin))))
+		s.csrfGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminPasskeyRegisterBegin))))
 	mux.Handle("POST /admin/passkey/register/finish",
-		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminPasskeyRegisterFinish))))
+		s.csrfGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminPasskeyRegisterFinish))))
 	// Step-up passkey assertion challenge, issued to the confirmation page when
 	// passkey is the offered factor. fetch-only like the other passkey
 	// endpoints, so a missing Origin is a forgery signal.
 	mux.Handle("POST /admin/stepup/passkey/begin",
-		s.csrfGuard(s.requireOrigin(http.HandlerFunc(s.handleAdminStepUpPasskeyBegin))))
+		s.csrfGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminStepUpPasskeyBegin))))
 	// Delete is a plain form submission, not fetch, so it gets csrfGuard only.
 	// It is high-risk (see the reversed exemption note on
 	// handleAdminPasskeyDelete in passkey_register.go) so it also goes
@@ -585,11 +588,11 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 // and restarting revokes every prior session — the classic incident response for
 // a leaked cookie, which persisting sessions had quietly broken.
 func (s *Service) adminCredFP() string {
-	return hashToken(s.cfg.AdminPassword + "\x00" + s.cfg.AdminTOTPSecret)
+	return authx.HashToken(s.cfg.AdminPassword + "\x00" + s.cfg.AdminTOTPSecret)
 }
 
 func (s *Service) newAdminSession(ctx context.Context, auth string) (string, error) {
-	tok := randToken()
+	tok := authx.RandToken()
 	if err := s.store.CreateAdminSession(ctx, tok, auth, s.adminCredFP(), s.now().Add(adminSessionTTL).Unix()); err != nil {
 		return "", err
 	}
@@ -1228,9 +1231,9 @@ func (s *Service) handleAdminMintToken(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		name = "official-node"
 	}
-	raw := randToken()
+	raw := authx.RandToken()
 	if err := s.store.CreateFleetToken(r.Context(), FleetToken{
-		ID: newID(), TokenHash: hashToken(raw), Name: name, CreatedAt: s.now().Unix(),
+		ID: authx.NewID(), TokenHash: authx.HashToken(raw), Name: name, CreatedAt: s.now().Unix(),
 	}); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return

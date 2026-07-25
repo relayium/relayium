@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // TestRequireAuthBearer proves RequireAuth accepts a valid CLI bearer token
@@ -19,12 +21,12 @@ func TestRequireAuthBearer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("upsert user: %v", err)
 	}
-	raw := "rlm_cli_" + randToken()
-	dev, err := s.store.UpsertDevice(ctx, Device{ID: newID(), UserID: u.ID, Name: "cli", Kind: "cli", CreatedAt: 1})
+	raw := "rlm_cli_" + authx.RandToken()
+	dev, err := s.store.UpsertDevice(ctx, Device{ID: authx.NewID(), UserID: u.ID, Name: "cli", Kind: "cli", CreatedAt: 1})
 	if err != nil {
 		t.Fatalf("upsert device: %v", err)
 	}
-	if err := s.store.CreateCLIToken(ctx, CLIToken{TokenHash: hashToken(raw), UserID: u.ID, DeviceID: dev.ID, CreatedAt: 1}); err != nil {
+	if err := s.store.CreateCLIToken(ctx, CLIToken{TokenHash: authx.HashToken(raw), UserID: u.ID, DeviceID: dev.ID, CreatedAt: 1}); err != nil {
 		t.Fatalf("create cli token: %v", err)
 	}
 

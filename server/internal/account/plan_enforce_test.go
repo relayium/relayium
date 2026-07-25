@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 func newPlanService(t *testing.T) (*Service, *SQLiteStore) {
@@ -107,7 +109,7 @@ func TestOverGlobalStorage(t *testing.T) {
 	// ExpiresAt must be in the future relative to now=100 to count as "live".
 	u, _ := st.UpsertUserByEmail(ctx, "global-storage@example.com", "")
 	if err := st.CreateStoredFile(ctx, StoredFile{
-		ID: newID(), UserID: u.ID, BlobKey: "gb1", EncManifest: []byte("x"),
+		ID: authx.NewID(), UserID: u.ID, BlobKey: "gb1", EncManifest: []byte("x"),
 		Size: 900, CreatedAt: 1, ExpiresAt: 1 << 40, // 1<<40 unix seconds ≫ now=100, so it's live
 	}); err != nil {
 		t.Fatal(err)

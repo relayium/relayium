@@ -12,6 +12,9 @@ import (
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
+
+	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/internal/httpx"
 )
 
 const (
@@ -105,7 +108,7 @@ func (s *Service) putCeremony(ctx context.Context, w http.ResponseWriter, kind c
 	if err != nil {
 		return false
 	}
-	tok := randToken()
+	tok := authx.RandToken()
 	now := s.now().Unix()
 	// The store transaction drops expired rows + enforces the cap (reject, not
 	// evict — see passkeyCeremonyCap) + inserts, so the challenge is spendable on
@@ -150,7 +153,7 @@ func (s *Service) takeCeremony(r *http.Request) (passkeyCeremony, bool) {
 // login/begin cannot be spent here.
 func (s *Service) handleAdminStepUpPasskeyBegin(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "未登录"})
+		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "未登录"})
 		return
 	}
 	if !s.passkeyBeginAllowed(w, r) {
@@ -159,22 +162,22 @@ func (s *Service) handleAdminStepUpPasskeyBegin(w http.ResponseWriter, r *http.R
 	rp, err := s.adminRP()
 	if err != nil {
 		log.Printf("passkey: building relying party failed: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "passkey 未正确配置"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "passkey 未正确配置"})
 		return
 	}
 	assertion, sess, err := rp.BeginDiscoverableLogin(
 		webauthn.WithUserVerification(protocol.VerificationRequired))
 	if err != nil {
 		log.Printf("passkey: step-up BeginDiscoverableLogin failed: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "无法发起验证"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "无法发起验证"})
 		return
 	}
 	if !s.putCeremony(r.Context(), w, ceremonyStepUp, *sess, "") {
 		log.Printf("passkey: ceremony cap (%d) reached, rejecting stepup/begin", passkeyCeremonyCap)
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "系统繁忙，请稍后再试"})
+		httpx.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "系统繁忙，请稍后再试"})
 		return
 	}
-	writeJSON(w, http.StatusOK, assertion)
+	httpx.WriteJSON(w, http.StatusOK, assertion)
 }
 
 // verifyStepUpPasskey validates the WebAuthn assertion a confirmation POST
@@ -237,34 +240,34 @@ func (s *Service) handleAdminPasskeyLoginBegin(w http.ResponseWriter, r *http.Re
 	}
 	ip := s.clientIP(r)
 	if s.adminPasskeyLogins.locked(ip, s.now()) {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "尝试过于频繁，请稍后再试"})
+		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "尝试过于频繁，请稍后再试"})
 		return
 	}
 	rp, err := s.adminRP()
 	if err != nil {
 		log.Printf("passkey: building relying party failed: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "passkey 未正确配置"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "passkey 未正确配置"})
 		return
 	}
 	assertion, sess, err := rp.BeginDiscoverableLogin(
 		webauthn.WithUserVerification(protocol.VerificationRequired))
 	if err != nil {
 		log.Printf("passkey: BeginDiscoverableLogin failed: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "无法发起验证"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "无法发起验证"})
 		return
 	}
 	if !s.putCeremony(r.Context(), w, ceremonyLogin, *sess, "") {
 		log.Printf("passkey: ceremony cap (%d) reached, rejecting login/begin", passkeyCeremonyCap)
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "系统繁忙，请稍后再试"})
+		httpx.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "系统繁忙，请稍后再试"})
 		return
 	}
-	writeJSON(w, http.StatusOK, assertion)
+	httpx.WriteJSON(w, http.StatusOK, assertion)
 }
 
 func (s *Service) handleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 	ip := s.clientIP(r)
 	if s.adminPasskeyLogins.locked(ip, s.now()) {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "尝试过于频繁，请稍后再试"})
+		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "尝试过于频繁，请稍后再试"})
 		return
 	}
 	// takeCeremony deletes unconditionally, so a wrong-kind attempt burns the
@@ -272,13 +275,13 @@ func (s *Service) handleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.R
 	// response is identical so the two are indistinguishable to a caller.
 	cer, ok := s.takeCeremony(r)
 	if !ok || cer.kind != ceremonyLogin {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "验证已过期，请重试"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "验证已过期，请重试"})
 		return
 	}
 	rp, err := s.adminRP()
 	if err != nil {
 		log.Printf("passkey: building relying party failed: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "passkey 未正确配置"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "passkey 未正确配置"})
 		return
 	}
 	user, err := s.loadAdminPasskeyUser(r.Context())
@@ -292,7 +295,7 @@ func (s *Service) handleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.R
 		} else {
 			log.Printf("passkey: login attempted with no credentials registered")
 		}
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "尚未注册 passkey"})
+		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "尚未注册 passkey"})
 		return
 	}
 	handler := func(rawID, userHandle []byte) (webauthn.User, error) {
@@ -304,7 +307,7 @@ func (s *Service) handleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.R
 	_, cred, err := rp.FinishPasskeyLogin(handler, cer.session, r)
 	if err != nil {
 		s.adminPasskeyLogins.recordFail(ip, s.now())
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "验证失败"})
+		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "验证失败"})
 		return
 	}
 	// CloneWarning means the counter went backwards: two copies of the private
@@ -312,7 +315,7 @@ func (s *Service) handleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.R
 	// (iCloud Keychain and other synced passkeys never increment).
 	if cred.Authenticator.CloneWarning {
 		s.adminPasskeyLogins.recordFail(ip, s.now())
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "凭据异常，已拒绝"})
+		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "凭据异常，已拒绝"})
 		return
 	}
 	blob, err := json.Marshal(cred)
@@ -330,7 +333,7 @@ func (s *Service) handleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.R
 	s.adminPasskeyLogins.reset(ip)
 	tok, err := s.newAdminSession(r.Context(), "passkey")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "服务器错误"})
+		httpx.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "服务器错误"})
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -343,5 +346,5 @@ func (s *Service) handleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.R
 	// 读出 auth=passkey 而不是空字符串。
 	r.AddCookie(&http.Cookie{Name: adminCookie, Value: tok})
 	s.writeAudit(r, AuditLoginOK, "-", nil, StepUpNone)
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	httpx.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

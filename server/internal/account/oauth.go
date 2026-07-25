@@ -9,6 +9,8 @@ import (
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 func (s *Service) googleConfig() *oauth2.Config {
@@ -51,7 +53,7 @@ func (s *Service) realFetchGoogleUser(ctx context.Context, code string) (sub, em
 const oauthStateCookie = "relayium_oauth_state"
 
 func (s *Service) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
-	state := randToken()
+	state := authx.RandToken()
 	http.SetCookie(w, &http.Cookie{
 		Name: oauthStateCookie, Value: state, Path: "/", MaxAge: 600,
 		HttpOnly: true, Secure: s.cookieSecure(), SameSite: http.SameSiteLaxMode,

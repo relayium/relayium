@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 func TestAdminDashboardShowsOfficialNodesSection(t *testing.T) {
@@ -34,7 +36,7 @@ func TestAdminDashboardShowsOfficialNodesSection(t *testing.T) {
 	diskLimit, storedBytes := 100*gib, 93*gib
 	n, _ := store.UpsertNode(context.Background(), Node{OwnerType: "fleet", Region: "cn-sh", URLs: []string{"turn:1.1.1.1:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1, TrafficLimitBytes: 500 << 30, DiskLimitBytes: diskLimit,
 		StorageEnabled: true, StorageFree: storageFree, StorageTotal: storageTotal, StoredBytes: storedBytes})
-	store.CreateFleetToken(context.Background(), FleetToken{ID: "ft1", TokenHash: hashToken("x"), Name: "cn-sh-1", CreatedAt: 1})
+	store.CreateFleetToken(context.Background(), FleetToken{ID: "ft1", TokenHash: authx.HashToken("x"), Name: "cn-sh-1", CreatedAt: 1})
 	// A user-owned BYO node should not inflate the official-nodes heading count.
 	store.UpsertNode(context.Background(), Node{OwnerType: "user", OwnerUserID: "u1", URLs: []string{"turn:8.8.8.8:3478"}, TURNSecret: "s", CreatedAt: 1, LastSeenAt: 1})
 

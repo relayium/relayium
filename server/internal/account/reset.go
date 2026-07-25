@@ -7,6 +7,8 @@ import (
 	"net/url"
 
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // RequestPasswordReset emails a reset link when the address has a password
@@ -26,10 +28,10 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email string) error 
 	if !ok {
 		return nil // no password account: silent
 	}
-	raw := randToken()
+	raw := authx.RandToken()
 	now := s.now()
 	tok := EmailToken{
-		TokenHash: hashToken(raw),
+		TokenHash: authx.HashToken(raw),
 		UserID:    uid,
 		Email:     email,
 		Purpose:   "reset",
@@ -50,7 +52,7 @@ func (s *Service) ResetPassword(ctx context.Context, rawToken, newPassword strin
 	if len(newPassword) < minPasswordLen {
 		return Session{}, ErrWeakPassword
 	}
-	tok, ok, err := s.store.UseEmailToken(ctx, hashToken(rawToken), "reset", s.now().Unix())
+	tok, ok, err := s.store.UseEmailToken(ctx, authx.HashToken(rawToken), "reset", s.now().Unix())
 	if err != nil {
 		return Session{}, err
 	}

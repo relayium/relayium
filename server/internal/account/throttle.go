@@ -1,9 +1,6 @@
 package account
 
 import (
-	"net"
-	"net/http"
-	"strings"
 	"sync"
 	"time"
 )
@@ -131,22 +128,4 @@ func (t *loginThrottle) reset(key string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	delete(t.entries, key)
-}
-
-// clientIP returns the client's IP: first X-Forwarded-For entry when a reverse
-// proxy sets it, else RemoteAddr with the port stripped. Mirrors
-// internal/signal.ClientIP — SAME DEPLOYMENT CONTRACT: the proxy MUST overwrite
-// (not append) X-Forwarded-For, else an attacker can spoof the leading entry
-// and dodge the per-IP admin-login limit.
-func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if first := strings.TrimSpace(strings.Split(xff, ",")[0]); first != "" {
-			return first
-		}
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
 }

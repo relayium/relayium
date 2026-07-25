@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"testing"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 func TestClaimDownloadSlot_CountLimit(t *testing.T) {
@@ -17,7 +19,7 @@ func TestClaimDownloadSlot_CountLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := StoredFile{ID: newID(), UserID: u.ID, BlobKey: "b", EncManifest: []byte("m"), Size: 1, MaxDownloads: 2, ExpiresAt: 1 << 40, CreatedAt: 1}
+	f := StoredFile{ID: authx.NewID(), UserID: u.ID, BlobKey: "b", EncManifest: []byte("m"), Size: 1, MaxDownloads: 2, ExpiresAt: 1 << 40, CreatedAt: 1}
 	if err := st.CreateStoredFile(ctx, f); err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +51,7 @@ func TestClaimDownloadSlot_Unlimited(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := StoredFile{ID: newID(), UserID: u.ID, BlobKey: "b", EncManifest: []byte("m"), Size: 1, MaxDownloads: 0, ExpiresAt: 1 << 40, CreatedAt: 1}
+	f := StoredFile{ID: authx.NewID(), UserID: u.ID, BlobKey: "b", EncManifest: []byte("m"), Size: 1, MaxDownloads: 0, ExpiresAt: 1 << 40, CreatedAt: 1}
 	if err := st.CreateStoredFile(ctx, f); err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +84,7 @@ func TestClaimDownloadSlot_SlotNumberDrivesDeleteNotRecount(t *testing.T) {
 		t.Fatal(err)
 	}
 	const maxDL = 3
-	f := StoredFile{ID: newID(), UserID: u.ID, BlobKey: "b", EncManifest: []byte("m"), Size: 1, MaxDownloads: maxDL, ExpiresAt: 1 << 40, CreatedAt: 1}
+	f := StoredFile{ID: authx.NewID(), UserID: u.ID, BlobKey: "b", EncManifest: []byte("m"), Size: 1, MaxDownloads: maxDL, ExpiresAt: 1 << 40, CreatedAt: 1}
 	if err := st.CreateStoredFile(ctx, f); err != nil {
 		t.Fatal(err)
 	}

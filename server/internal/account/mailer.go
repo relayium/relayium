@@ -9,6 +9,8 @@ import (
 	"net/smtp"
 	"strings"
 	"time"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // Mailer sends the magic-link email. Abstracted so dev uses a log and prod uses SMTP.
@@ -108,7 +110,7 @@ func (m *SMTPMailer) buildMessage(to, subject, text, html string) []byte {
 	b.WriteString("To: " + to + "\r\n")
 	b.WriteString("Subject: " + subject + "\r\n")
 	b.WriteString("Date: " + time.Now().Format(time.RFC1123Z) + "\r\n")
-	b.WriteString("Message-ID: <" + randToken() + "@" + smtpDomain(m.From, m.Addr) + ">\r\n")
+	b.WriteString("Message-ID: <" + authx.RandToken() + "@" + smtpDomain(m.From, m.Addr) + ">\r\n")
 	b.WriteString("MIME-Version: 1.0\r\n")
 	b.WriteString("Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n\r\n")
 	b.WriteString("--" + boundary + "\r\n")

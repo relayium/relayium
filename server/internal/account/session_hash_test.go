@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"strings"
 	"testing"
+
+	"github.com/relayium/relayium/internal/authx"
 )
 
 // 会话令牌就是 cookie 的值。明文入库意味着任何一次**只读**的库泄露——备份、快照、
@@ -15,7 +17,7 @@ func TestSessionTokenNotStoredInPlaintext(t *testing.T) {
 	ctx := context.Background()
 	u, _ := store.UpsertUserByEmail(ctx, "s@example.com", "S")
 
-	raw := randToken()
+	raw := authx.RandToken()
 	if err := store.CreateSession(ctx, Session{ID: raw, UserID: u.ID, CreatedAt: 1, ExpiresAt: 1 << 40}); err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +29,7 @@ func TestSessionTokenNotStoredInPlaintext(t *testing.T) {
 	if stored == raw {
 		t.Fatal("session token is stored verbatim — a read-only DB leak hands over every live session")
 	}
-	if stored != hashToken(raw) {
+	if stored != authx.HashToken(raw) {
 		t.Fatalf("stored id = %q, want sha256 of the token", stored)
 	}
 
@@ -52,7 +54,7 @@ func TestRevokeSessionHashesToken(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 	u, _ := store.UpsertUserByEmail(ctx, "r@example.com", "R")
-	raw := randToken()
+	raw := authx.RandToken()
 	_ = store.CreateSession(ctx, Session{ID: raw, UserID: u.ID, CreatedAt: 1, ExpiresAt: 1 << 40})
 
 	if err := store.RevokeSession(ctx, raw); err != nil {
@@ -69,7 +71,7 @@ func TestRevokeUserSessionsKeepsTheCurrentOne(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 	u, _ := store.UpsertUserByEmail(ctx, "k@example.com", "K")
-	mine, other := randToken(), randToken()
+	mine, other := authx.RandToken(), authx.RandToken()
 	_ = store.CreateSession(ctx, Session{ID: mine, UserID: u.ID, CreatedAt: 1, ExpiresAt: 1 << 40})
 	_ = store.CreateSession(ctx, Session{ID: other, UserID: u.ID, CreatedAt: 1, ExpiresAt: 1 << 40})
 
@@ -91,7 +93,7 @@ func TestLegacyPlaintextSessionRowsAreInert(t *testing.T) {
 	ctx := context.Background()
 	u, _ := store.UpsertUserByEmail(ctx, "l@example.com", "L")
 
-	legacy := randToken()
+	legacy := authx.RandToken()
 	if _, err := store.db.ExecContext(ctx,
 		`INSERT INTO sessions (id, user_id, created_at, expires_at, revoked) VALUES (?, ?, 1, ?, 0)`,
 		legacy, u.ID, int64(1)<<40); err != nil && !strings.Contains(err.Error(), "UNIQUE") {

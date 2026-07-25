@@ -4,6 +4,9 @@ import (
 	"crypto/rand"
 	"net/http"
 	"time"
+
+	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/internal/httpx"
 )
 
 // deviceCodeTTL bounds how long an unclaimed device-code request stays valid
@@ -47,15 +50,15 @@ func (s *Service) handleDeviceStart(w http.ResponseWriter, r *http.Request) {
 	// Unauthenticated by design (first call the CLI ever makes), so without a
 	// throttle an anonymous caller can mint cli_device_auth rows without bound.
 	if s.registerLimiter != nil && !s.registerLimiter.Allow(s.clientIP(r)) {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
+		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
 		return
 	}
 	now := s.now().Unix()
-	deviceCode := randToken()
+	deviceCode := authx.RandToken()
 	userCode := genUserCode()
 	req := DeviceAuthRequest{
 		UserCode:       userCode,
-		DeviceCodeHash: hashToken(deviceCode),
+		DeviceCodeHash: authx.HashToken(deviceCode),
 		Status:         "pending",
 		CreatedAt:      now,
 		ExpiresAt:      now + int64(deviceCodeTTL.Seconds()),
@@ -69,7 +72,7 @@ func (s *Service) handleDeviceStart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"user_code":        userCode,
 		"device_code":      deviceCode,
 		"verification_uri": s.cfg.BaseURL + "/device",
@@ -106,10 +109,10 @@ func (s *Service) handleDevicePending(w http.ResponseWriter, r *http.Request, _ 
 		return
 	}
 	if !ok || req.Status != "pending" || s.now().Unix() >= req.ExpiresAt {
-		writeJSON(w, http.StatusOK, map[string]any{"found": false})
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{"found": false})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"found":      true,
 		"started_at": req.CreatedAt,
 		"client_ip":  req.ClientIP,
@@ -126,28 +129,28 @@ func (s *Service) handleDevicePoll(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		DeviceCode string `json:"device_code"`
 	}
-	if err := decodeJSONBody(w, r, &in); err != nil || in.DeviceCode == "" {
+	if err := httpx.DecodeJSONBody(w, r, &in); err != nil || in.DeviceCode == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 	ctx := r.Context()
 	now := s.now().Unix()
-	req, ok, err := s.store.GetDeviceAuthByCodeHash(ctx, hashToken(in.DeviceCode))
+	req, ok, err := s.store.GetDeviceAuthByCodeHash(ctx, authx.HashToken(in.DeviceCode))
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
 	if !ok || now >= req.ExpiresAt {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "expired"})
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "expired"})
 		return
 	}
 	switch req.Status {
 	case "denied":
-		writeJSON(w, http.StatusOK, map[string]string{"status": "denied"})
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "denied"})
 	case "pending":
-		writeJSON(w, http.StatusOK, map[string]string{"status": "authorization_pending"})
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "authorization_pending"})
 	case "approved":
-		raw, consumed, err := s.store.ConsumeDeviceAuth(ctx, hashToken(in.DeviceCode), now)
+		raw, consumed, err := s.store.ConsumeDeviceAuth(ctx, authx.HashToken(in.DeviceCode), now)
 		if err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
@@ -155,7 +158,7 @@ func (s *Service) handleDevicePoll(w http.ResponseWriter, r *http.Request) {
 		if !consumed {
 			// Already consumed by an earlier poll (or lost the race to one) —
 			// the token was already handed out once and must not be re-sent.
-			writeJSON(w, http.StatusOK, map[string]string{"status": "expired"})
+			httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "expired"})
 			return
 		}
 		u, err := s.store.GetUserByID(ctx, req.UserID)
@@ -163,13 +166,13 @@ func (s *Service) handleDevicePoll(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{
 			"status":        "ok",
 			"access_token":  raw,
 			"account_email": u.Email,
 		})
 	default:
-		writeJSON(w, http.StatusOK, map[string]string{"status": "expired"})
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "expired"})
 	}
 }
 
@@ -181,7 +184,7 @@ func (s *Service) handleDeviceApprove(w http.ResponseWriter, r *http.Request, u 
 	var in struct {
 		UserCode string `json:"user_code"`
 	}
-	if err := decodeJSONBody(w, r, &in); err != nil || in.UserCode == "" {
+	if err := httpx.DecodeJSONBody(w, r, &in); err != nil || in.UserCode == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -191,15 +194,15 @@ func (s *Service) handleDeviceApprove(w http.ResponseWriter, r *http.Request, u 
 	// ApproveDeviceAuth gate on user_code FIRST. An ordinary expired/mistyped/
 	// double-submitted code fails here having created no DB rows, so it can't
 	// leave a phantom "CLI" device in the user's list or an orphaned cli_token.
-	raw := "rlm_cli_" + randToken()
-	h := hashToken(raw)
+	raw := "rlm_cli_" + authx.RandToken()
+	h := authx.HashToken(raw)
 	ok, err := s.store.ApproveDeviceAuth(ctx, in.UserCode, u.ID, h, raw, now)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
 	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_code"})
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_code"})
 		return
 	}
 	// Only now that the code is validated do we persist the device + token. A
@@ -207,7 +210,7 @@ func (s *Service) handleDeviceApprove(w http.ResponseWriter, r *http.Request, u 
 	// commit; that's benign — the token row is created regardless, so a CLI
 	// retry (5s poll interval) self-heals. No rollback machinery needed.
 	dev, err := s.store.UpsertDevice(ctx, Device{
-		ID: newID(), UserID: u.ID, Name: "CLI", Kind: "cli", CreatedAt: now,
+		ID: authx.NewID(), UserID: u.ID, Name: "CLI", Kind: "cli", CreatedAt: now,
 	})
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -219,5 +222,5 @@ func (s *Service) handleDeviceApprove(w http.ResponseWriter, r *http.Request, u 
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "account_email": u.Email})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok", "account_email": u.Email})
 }
