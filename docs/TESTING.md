@@ -307,8 +307,9 @@ with matching `-turn-secret` / `-turn-urls`.
 Metering is now **anonymous**: ingested relay bytes are recorded as a global total,
 unattributed to any account (realtime relay sessions are authorized by a pairing
 code, not a sign-in). Prerequisites: Redis running; coturn with `redis-statsdb=...`
-(see `docs/self-hosting.md`); the Go server started with `-redis-addr <host:port>` and
-matching TURN flags.
+set (a coturn config directive — see coturn's own docs; Relayium's production
+coturn config lives in the private relayium-ops repo); the Go server started
+with `-redis-addr <host:port>` and matching TURN flags.
 
 1. **Metering off (regression):** start the server WITHOUT `-redis-addr`. A
    relayed transfer still works; no usage is ingested. The server logs no

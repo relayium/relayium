@@ -9,7 +9,7 @@ import (
 const maxNodeTokensPerUser = 10
 
 // nodeHost extracts the host (IP or DNS name) from a node's first TURN URL,
-// e.g. "turn:8.212.173.136:3478?transport=udp" -> "8.212.173.136". Returns ""
+// e.g. "turn:203.0.113.7:3478?transport=udp" -> "203.0.113.7". Returns ""
 // when there are no URLs. Public info for the node's own dashboard/admin.
 func nodeHost(urls []string) string {
 	if len(urls) == 0 {

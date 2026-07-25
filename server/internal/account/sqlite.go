@@ -619,9 +619,11 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 	// health gate polls /healthz for a bounded time and reports a failure if it
 	// never answers, so a slow first index build can be misread as a broken
 	// deploy. Each statement therefore logs before it runs (a slow start must
-	// be diagnosable, not mysterious), and docs/self-hosting.md documents
-	// building these out of band with sqlite3 BEFORE the deploy — after which
-	// the CREATE INDEX IF NOT EXISTS here is a no-op.
+	// be diagnosable, not mysterious). To avoid that startup cost on a large
+	// table, build these indexes out of band before deploying: run the same
+	// CREATE INDEX IF NOT EXISTS statements below directly against the
+	// database with sqlite3 ahead of time — the loop here then finds them
+	// already present and is a no-op.
 	for _, idx := range []string{
 		`DROP INDEX IF EXISTS idx_usage_user_recorded`,
 		`DROP INDEX IF EXISTS idx_usage_node_recorded`,

@@ -36,11 +36,15 @@ docker run -d -p 8080:8080 -v relayium-data:/data relayium
 
 The Web Crypto API and streaming-to-disk require a secure context. `localhost`
 counts, but any real deployment must terminate TLS. Put a reverse proxy you
-already trust in front (Caddy, nginx, Traefik, Cloudflare) and proxy `/api`,
-`/ws`, `/admin`, and `/healthz` to port 8080 — a proxy that forwards `/ws` but
-forgets `/api` is the single most common self-hosting breakage: `fetch`s to
-`/api/*` fall through to the SPA's `index.html` instead of reaching the Go
-server, and login silently does nothing.
+already trust in front (Caddy, nginx, Traefik, Cloudflare) and proxy
+*everything* — `/`, `/api`, `/ws`, `/admin`, and `/healthz` — to port 8080.
+There's no separate static-file server to configure: the Go server serves the
+built SPA itself (`RELAYIUM_STATIC`) as well as those routes, so one catch-all
+proxy block covers the whole app. Just make sure it passes `/ws` through as a
+WebSocket upgrade rather than buffering it — a proxy that handles plain HTTP
+fine but drops the `Upgrade`/`Connection` headers is the single most common
+self-hosting breakage, and it fails silently: the page loads, but realtime
+transfers never connect.
 
 ## Configuration
 

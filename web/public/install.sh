@@ -61,8 +61,8 @@ dl "${BASE_URL}/${asset}" "${tmp}/${asset}" || err "download failed (has a relea
 dl "${BASE_URL}/checksums.txt" "${tmp}/checksums.txt" || err "checksum list download failed"
 
 # Release public key (ECDSA P-256, PKIX PEM). Empty until release signing is
-# configured (see docs/release-signing.md); then we verify checksums.txt's
-# signature with openssl — no cosign needed. Its private half is the
+# configured (setup notes live in the private relayium-ops repo); then we
+# verify checksums.txt's signature with openssl — no cosign needed. Its private half is the
 # RELAYIUM_RELEASE_KEY GitHub secret. This is the PUBLIC key, safe to publish.
 RELEASE_PUBKEY='-----BEGIN PUBLIC KEY-----
 MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAErOLLZclLFkpUWt8w4KIZ4SYB4JZf

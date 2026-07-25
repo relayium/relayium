@@ -9,7 +9,8 @@
 //
 // The production nginx config now lives in the private relayium-ops repo (see
 // docs/self-hosting.md), so it's normally absent here — this guard only runs
-// when a relayium-ops checkout is symlinked/copied in alongside this repo.
+// when a relayium-ops checkout's nginx directory is copied in at
+// <repo>/deploy/nginx/ (gitignored; see .gitignore).
 import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";

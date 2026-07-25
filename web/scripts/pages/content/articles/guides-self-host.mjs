@@ -12,7 +12,7 @@ const en = {
   updatedLabel: "Last updated",
   lead: [
     "Relayium is MIT-licensed and open source, and the server is one self-contained image — no external database, no third-party storage bucket, nothing to sign up for. If you'd rather run the whole thing yourself than rely on relayium.com, this guide gets a server up with Docker and points the CLI at it.",
-    "Self-hosting gives you full control over where your data lives, your own domain and TLS certificate, and no dependency on anyone else's infrastructure. Everything below is grounded in the files that ship in the repo — `docker-compose.yml`, `server/.env.example`, and `docs/DEPLOYMENT.md` — so nothing here is a flag or setting that doesn't actually exist.",
+    "Self-hosting gives you full control over where your data lives, your own domain and TLS certificate, and no dependency on anyone else's infrastructure. Everything below is grounded in the files that ship in the repo — `docker-compose.yml`, `server/.env.example`, and `docs/self-hosting.md` — so nothing here is a flag or setting that doesn't actually exist.",
   ],
   sections: [
     {
@@ -29,7 +29,7 @@ const en = {
       ],
       code: ["docker compose up -d --build"],
       bullets: [
-        "That's the whole server, listening on :8080. Put nginx or Caddy in front for TLS in production — see docs/DEPLOYMENT.md for a full nginx config.",
+        "That's the whole server, listening on :8080. Put nginx or Caddy in front for TLS in production — docs/self-hosting.md covers the Docker path and what to proxy; Relayium's own production nginx configuration isn't published.",
         "App config comes from an optional server/.env file plus the environment: block in docker-compose.yml. Every setting has a RELAYIUM_* key — copy server/.env.example as a starting point.",
         "The four keys that matter for a basic deploy: RELAYIUM_ADDR (listen address), RELAYIUM_STATIC (path to the built web app), RELAYIUM_DB (SQLite file path), and RELAYIUM_BLOB_DIR (where stored-link ciphertext is written). docker-compose.yml already sets sane defaults for all four and persists them in a named volume.",
       ],
@@ -44,7 +44,7 @@ const en = {
         "RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build",
       ],
       bullets: [
-        "coturn needs the host's real public IP and an open UDP port range to work — see docs/coturn.md for the full setup (including a one-command install script) and docs/enable-turn.md for troubleshooting a NAT-traversal-only failure.",
+        "coturn needs the host's real public IP and an open UDP port range to work — docs/self-hosting.md covers running it through the Docker relay profile above; Relayium's own production coturn configuration (and install script) isn't published.",
         "Without --profile relay and RELAYIUM_TURN_SECRET, the server still runs fine — cross-network transfers just fall back to STUN-only, which works for easier NAT types but not the strictest ones.",
       ],
     },
@@ -76,7 +76,7 @@ const en = {
       },
       {
         q: "Can I use my own domain and TLS certificate?",
-        a: "Yes. The Docker image listens on plain HTTP on :8080; put nginx or Caddy in front with your own domain and certificate (e.g. via certbot/Let's Encrypt). docs/DEPLOYMENT.md has a complete nginx config to copy.",
+        a: "Yes. The Docker image listens on plain HTTP on :8080; put nginx or Caddy in front with your own domain and certificate (e.g. via certbot/Let's Encrypt). docs/self-hosting.md covers what to proxy; Relayium's own production nginx configuration isn't published, so you'll write your own.",
       },
       {
         q: "What data does my self-hosted server store?",
@@ -99,7 +99,7 @@ const zh = {
   updatedLabel: "最近更新",
   lead: [
     "Relayium 采用 MIT 许可、开源，服务端是一个自包含的镜像——不需要外部数据库，不需要第三方存储桶，也没有什么需要注册。如果你更想自己运行整套系统而不是依赖 relayium.com，本指南会带你用 Docker 起一台服务器，并让 CLI 指向它。",
-    "自托管让你完全掌控数据存放的位置、拥有自己的域名和 TLS 证书，也不依赖别人的运维决策。以下内容全部基于仓库中实际存在的文件——docker-compose.yml、server/.env.example 和 docs/DEPLOYMENT.md——因此这里不会出现任何实际不存在的参数或配置项。",
+    "自托管让你完全掌控数据存放的位置、拥有自己的域名和 TLS 证书，也不依赖别人的运维决策。以下内容全部基于仓库中实际存在的文件——docker-compose.yml、server/.env.example 和 docs/self-hosting.md——因此这里不会出现任何实际不存在的参数或配置项。",
   ],
   sections: [
     {
@@ -116,7 +116,7 @@ const zh = {
       ],
       code: ["docker compose up -d --build"],
       bullets: [
-        "这就是完整的服务器，监听在 :8080。生产环境请在前面加一层 nginx 或 Caddy 来处理 TLS——完整的 nginx 配置见 docs/DEPLOYMENT.md。",
+        "这就是完整的服务器，监听在 :8080。生产环境请在前面加一层 nginx 或 Caddy 来处理 TLS——docs/self-hosting.md 说明了 Docker 部署路径以及需要反代哪些路径；Relayium 自己生产环境用的 nginx 配置并未公开。",
         "应用配置来自可选的 server/.env 文件，加上 docker-compose.yml 里的 environment: 块。每个设置项都有对应的 RELAYIUM_* 环境变量——可以先复制 server/.env.example 作为起点。",
         "基础部署最关键的四个变量是：RELAYIUM_ADDR（监听地址）、RELAYIUM_STATIC（已构建的 Web 应用路径）、RELAYIUM_DB（SQLite 文件路径），以及 RELAYIUM_BLOB_DIR（存储型链接密文的写入位置）。docker-compose.yml 已经为这四项设好了合理的默认值，并把它们持久化在一个具名卷里。",
       ],
@@ -131,7 +131,7 @@ const zh = {
         "RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build",
       ],
       bullets: [
-        "coturn 需要主机真实的公网 IP，以及一段开放的 UDP 端口范围才能工作——完整搭建步骤（包括一个一条命令的安装脚本）见 docs/coturn.md，排查纯粹的 NAT 穿透失败见 docs/enable-turn.md。",
+        "coturn 需要主机真实的公网 IP，以及一段开放的 UDP 端口范围才能工作——docs/self-hosting.md 说明了通过 Docker 的 relay profile 运行它；Relayium 自己生产环境用的 coturn 配置（以及安装脚本）并未公开。",
         "如果不加 --profile relay 和 RELAYIUM_TURN_SECRET，服务器依然能正常运行——只是跨网络传输会退化为纯 STUN，这对较宽松的 NAT 类型没问题，但对最严格的类型不行。",
       ],
     },
@@ -163,7 +163,7 @@ const zh = {
       },
       {
         q: "我可以用自己的域名和 TLS 证书吗？",
-        a: "可以。Docker 镜像本身在 :8080 上以明文 HTTP 监听；在前面加一层 nginx 或 Caddy，配上你自己的域名和证书（例如通过 certbot/Let's Encrypt）。docs/DEPLOYMENT.md 里有一份完整的 nginx 配置可以直接照抄。",
+        a: "可以。Docker 镜像本身在 :8080 上以明文 HTTP 监听；在前面加一层 nginx 或 Caddy，配上你自己的域名和证书（例如通过 certbot/Let's Encrypt）。docs/self-hosting.md 说明了需要反代哪些路径；Relayium 自己生产环境用的 nginx 配置并未公开，需要你自己编写。",
       },
       {
         q: "我自托管的服务器会存储哪些数据？",
@@ -186,7 +186,7 @@ const ja = {
   updatedLabel: "最終更新",
   lead: [
     "Relayium は MIT ライセンスのオープンソースで、サーバーは1つの自己完結型イメージです——外部データベースも、サードパーティのストレージバケットも不要で、登録するものもありません。relayium.com に頼るのではなく全体を自分で運用したいなら、本ガイドで Docker によりサーバーを立ち上げ、CLI をそこに向ける方法を案内します。",
-    "セルフホストすることで、データがどこに置かれるかを完全に管理でき、自分のドメインと TLS 証明書を使え、他人のインフラ運用判断に依存しません。以下の内容はすべてリポジトリに実際に存在するファイル——docker-compose.yml、server/.env.example、docs/DEPLOYMENT.md——に基づいており、実在しないフラグや設定は登場しません。",
+    "セルフホストすることで、データがどこに置かれるかを完全に管理でき、自分のドメインと TLS 証明書を使え、他人のインフラ運用判断に依存しません。以下の内容はすべてリポジトリに実際に存在するファイル——docker-compose.yml、server/.env.example、docs/self-hosting.md——に基づいており、実在しないフラグや設定は登場しません。",
   ],
   sections: [
     {
@@ -203,7 +203,7 @@ const ja = {
       ],
       code: ["docker compose up -d --build"],
       bullets: [
-        "これでサーバー全体が :8080 で待ち受けます。本番環境では前段に nginx か Caddy を置いて TLS を処理してください——完全な nginx 設定は docs/DEPLOYMENT.md にあります。",
+        "これでサーバー全体が :8080 で待ち受けます。本番環境では前段に nginx か Caddy を置いて TLS を処理してください——docs/self-hosting.md は Docker での構成とプロキシすべきパスを説明しています。Relayium 自身の本番 nginx 設定は公開されていません。",
         "アプリの設定は任意の server/.env ファイルと、docker-compose.yml 内の environment: ブロックから読み込まれます。すべての設定項目に対応する RELAYIUM_* キーがあります——出発点として server/.env.example をコピーしてください。",
         "基本的なデプロイで重要な4つのキーは、RELAYIUM_ADDR（リッスンアドレス）、RELAYIUM_STATIC（ビルド済み Web アプリのパス）、RELAYIUM_DB（SQLite ファイルパス）、RELAYIUM_BLOB_DIR（保存型リンクの暗号文の書き込み先）です。docker-compose.yml はこの4つすべてに妥当なデフォルトを設定済みで、名前付きボリュームに永続化します。",
       ],
@@ -218,7 +218,7 @@ const ja = {
         "RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build",
       ],
       bullets: [
-        "coturn が動作するにはホストの実際のパブリック IP と、開放された UDP ポート範囲が必要です——完全なセットアップ（1コマンドのインストールスクリプトを含む）は docs/coturn.md、NAT 越え限定の失敗のトラブルシューティングは docs/enable-turn.md を参照してください。",
+        "coturn が動作するにはホストの実際のパブリック IP と、開放された UDP ポート範囲が必要です——docs/self-hosting.md は Docker の relay プロファイルでの起動方法を説明しています。Relayium 自身の本番 coturn 設定（インストールスクリプトを含む）は公開されていません。",
         "--profile relay と RELAYIUM_TURN_SECRET を使わなくてもサーバー自体は問題なく動作します——ネットワークをまたぐ転送は単に STUN のみにフォールバックし、比較的緩い NAT タイプでは機能しますが、最も厳しいタイプでは機能しません。",
       ],
     },
@@ -250,7 +250,7 @@ const ja = {
       },
       {
         q: "自分のドメインと TLS 証明書を使えますか？",
-        a: "使えます。Docker イメージ自体は :8080 で平文の HTTP を待ち受けます。前段に nginx か Caddy を置き、自分のドメインと証明書（例えば certbot/Let's Encrypt 経由）を設定してください。docs/DEPLOYMENT.md にそのままコピーできる完全な nginx 設定があります。",
+        a: "使えます。Docker イメージ自体は :8080 で平文の HTTP を待ち受けます。前段に nginx か Caddy を置き、自分のドメインと証明書（例えば certbot/Let's Encrypt 経由）を設定してください。docs/self-hosting.md はプロキシすべき内容を説明しています。Relayium 自身の本番 nginx 設定は公開されていないため、自分で用意する必要があります。",
       },
       {
         q: "セルフホストしたサーバーはどんなデータを保存しますか？",
@@ -273,7 +273,7 @@ const ko = {
   updatedLabel: "마지막 업데이트",
   lead: [
     "Relayium은 MIT 라이선스 오픈소스이며, 서버는 단일한 자체 완결형 이미지입니다 — 외부 데이터베이스도, 서드파티 스토리지 버킷도 필요 없고, 가입할 것도 없습니다. relayium.com에 의존하는 대신 전체를 직접 운영하고 싶다면, 이 가이드는 Docker로 서버를 띄우고 CLI를 그 서버로 연결하는 방법을 안내합니다.",
-    "셀프 호스팅을 하면 데이터가 어디에 저장되는지 완전히 통제할 수 있고, 자신의 도메인과 TLS 인증서를 쓸 수 있으며, 다른 누구의 운영 판단에도 의존하지 않습니다. 아래 내용은 모두 저장소에 실제로 존재하는 파일 — docker-compose.yml, server/.env.example, docs/DEPLOYMENT.md — 을 근거로 하므로, 실제로 존재하지 않는 플래그나 설정은 등장하지 않습니다.",
+    "셀프 호스팅을 하면 데이터가 어디에 저장되는지 완전히 통제할 수 있고, 자신의 도메인과 TLS 인증서를 쓸 수 있으며, 다른 누구의 운영 판단에도 의존하지 않습니다. 아래 내용은 모두 저장소에 실제로 존재하는 파일 — docker-compose.yml, server/.env.example, docs/self-hosting.md — 을 근거로 하므로, 실제로 존재하지 않는 플래그나 설정은 등장하지 않습니다.",
   ],
   sections: [
     {
@@ -290,7 +290,7 @@ const ko = {
       ],
       code: ["docker compose up -d --build"],
       bullets: [
-        "이것이 서버 전체이며, :8080에서 대기합니다. 운영 환경에서는 앞단에 nginx나 Caddy를 두어 TLS를 처리하세요 — 전체 nginx 설정은 docs/DEPLOYMENT.md에 있습니다.",
+        "이것이 서버 전체이며, :8080에서 대기합니다. 운영 환경에서는 앞단에 nginx나 Caddy를 두어 TLS를 처리하세요 — docs/self-hosting.md에 Docker 배포 경로와 프록시해야 할 경로가 설명되어 있습니다. Relayium이 실제 운영에 쓰는 nginx 설정 자체는 공개되어 있지 않습니다.",
         "앱 설정은 선택적인 server/.env 파일과 docker-compose.yml의 environment: 블록에서 옵니다. 모든 설정 항목에는 대응하는 RELAYIUM_* 키가 있습니다 — 시작점으로 server/.env.example을 복사하세요.",
         "기본 배포에서 중요한 4가지 키는 RELAYIUM_ADDR(리스닝 주소), RELAYIUM_STATIC(빌드된 웹 앱 경로), RELAYIUM_DB(SQLite 파일 경로), RELAYIUM_BLOB_DIR(저장형 링크 암호문이 기록되는 위치)입니다. docker-compose.yml은 이미 이 4가지 모두에 합리적인 기본값을 설정해 두었고, 명명된 볼륨에 영속화합니다.",
       ],
@@ -305,7 +305,7 @@ const ko = {
         "RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build",
       ],
       bullets: [
-        "coturn이 동작하려면 호스트의 실제 공인 IP와 열려 있는 UDP 포트 범위가 필요합니다 — 전체 설정 방법(원커맨드 설치 스크립트 포함)은 docs/coturn.md를, NAT 통과 실패만의 문제 해결은 docs/enable-turn.md를 참고하세요.",
+        "coturn이 동작하려면 호스트의 실제 공인 IP와 열려 있는 UDP 포트 범위가 필요합니다 — docs/self-hosting.md에 Docker의 relay 프로필로 실행하는 방법이 설명되어 있습니다. Relayium이 실제 운영에 쓰는 coturn 설정(설치 스크립트 포함)은 공개되어 있지 않습니다.",
         "--profile relay와 RELAYIUM_TURN_SECRET 없이도 서버 자체는 문제없이 동작합니다 — 다만 네트워크 간 전송이 STUN만 사용하는 방식으로 대체되며, 이는 비교적 느슨한 NAT 유형에서는 동작하지만 가장 엄격한 유형에서는 동작하지 않습니다.",
       ],
     },
@@ -337,7 +337,7 @@ const ko = {
       },
       {
         q: "자신의 도메인과 TLS 인증서를 쓸 수 있나요?",
-        a: "네. Docker 이미지 자체는 :8080에서 평문 HTTP로 대기합니다. 앞단에 nginx나 Caddy를 두고 자신의 도메인과 인증서(예: certbot/Let's Encrypt)를 설정하세요. docs/DEPLOYMENT.md에 그대로 복사해 쓸 수 있는 완전한 nginx 설정이 있습니다.",
+        a: "네. Docker 이미지 자체는 :8080에서 평문 HTTP로 대기합니다. 앞단에 nginx나 Caddy를 두고 자신의 도메인과 인증서(예: certbot/Let's Encrypt)를 설정하세요. docs/self-hosting.md에 프록시해야 할 경로가 설명되어 있습니다. Relayium이 실제 운영에 쓰는 nginx 설정은 공개되어 있지 않으므로 직접 작성해야 합니다.",
       },
       {
         q: "셀프 호스팅한 서버는 어떤 데이터를 저장하나요?",
@@ -360,7 +360,7 @@ const de = {
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "Relayium ist MIT-lizenziert und Open Source, und der Server ist ein einziges eigenständiges Image — keine externe Datenbank, kein Storage-Bucket eines Drittanbieters, nichts, wofür man sich anmelden müsste. Wenn du lieber alles selbst betreibst, statt dich auf relayium.com zu verlassen, bringt dich diese Anleitung mit Docker zu einem laufenden Server und richtet die CLI darauf aus.",
-    "Selbst hosten heißt, volle Kontrolle darüber zu haben, wo deine Daten liegen, eine eigene Domain und ein eigenes TLS-Zertifikat zu nutzen, und von niemandes fremden Betriebsentscheidungen abhängig zu sein. Alles Folgende stützt sich auf Dateien, die tatsächlich im Repository liegen — docker-compose.yml, server/.env.example und docs/DEPLOYMENT.md —, sodass hier keine Flag oder Einstellung erwähnt wird, die es nicht wirklich gibt.",
+    "Selbst hosten heißt, volle Kontrolle darüber zu haben, wo deine Daten liegen, eine eigene Domain und ein eigenes TLS-Zertifikat zu nutzen, und von niemandes fremden Betriebsentscheidungen abhängig zu sein. Alles Folgende stützt sich auf Dateien, die tatsächlich im Repository liegen — docker-compose.yml, server/.env.example und docs/self-hosting.md —, sodass hier keine Flag oder Einstellung erwähnt wird, die es nicht wirklich gibt.",
   ],
   sections: [
     {
@@ -377,7 +377,7 @@ const de = {
       ],
       code: ["docker compose up -d --build"],
       bullets: [
-        "Das ist bereits der gesamte Server, er lauscht auf :8080. Setze in Produktion nginx oder Caddy davor, um TLS zu übernehmen — eine vollständige nginx-Konfiguration findest du in docs/DEPLOYMENT.md.",
+        "Das ist bereits der gesamte Server, er lauscht auf :8080. Setze in Produktion nginx oder Caddy davor, um TLS zu übernehmen — docs/self-hosting.md beschreibt den Docker-Weg und was du proxyen musst; Relayiums eigene Produktions-nginx-Konfiguration ist nicht veröffentlicht.",
         "Die App-Konfiguration kommt aus einer optionalen server/.env-Datei plus dem environment:-Block in docker-compose.yml. Jede Einstellung hat einen passenden RELAYIUM_*-Key — kopiere server/.env.example als Ausgangspunkt.",
         "Die vier für eine einfache Bereitstellung wichtigen Keys: RELAYIUM_ADDR (Listen-Adresse), RELAYIUM_STATIC (Pfad zur gebauten Web-App), RELAYIUM_DB (SQLite-Dateipfad) und RELAYIUM_BLOB_DIR (wohin das Chiffrat gespeicherter Links geschrieben wird). docker-compose.yml setzt für alle vier bereits sinnvolle Standardwerte und persistiert sie in einem benannten Volume.",
       ],
@@ -392,7 +392,7 @@ const de = {
         "RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build",
       ],
       bullets: [
-        "coturn braucht die echte öffentliche IP des Hosts und einen offenen UDP-Portbereich, um zu funktionieren — die vollständige Einrichtung (inklusive Ein-Befehl-Installationsskript) steht in docs/coturn.md, Fehlersuche bei einem reinen NAT-Traversal-Problem in docs/enable-turn.md.",
+        "coturn braucht die echte öffentliche IP des Hosts und einen offenen UDP-Portbereich, um zu funktionieren — docs/self-hosting.md beschreibt den Start über das Docker-relay-Profil; Relayiums eigene Produktions-coturn-Konfiguration (inklusive Installationsskript) ist nicht veröffentlicht.",
         "Ohne --profile relay und RELAYIUM_TURN_SECRET läuft der Server trotzdem einwandfrei — netzwerkübergreifende Übertragungen fallen dann nur auf reines STUN zurück, das bei einfacheren NAT-Typen funktioniert, aber nicht bei den strengsten.",
       ],
     },
@@ -424,7 +424,7 @@ const de = {
       },
       {
         q: "Kann ich meine eigene Domain und ein eigenes TLS-Zertifikat verwenden?",
-        a: "Ja. Das Docker-Image lauscht selbst auf reinem HTTP auf :8080; setze nginx oder Caddy mit deiner eigenen Domain und deinem Zertifikat davor (z. B. über certbot/Let's Encrypt). docs/DEPLOYMENT.md enthält eine vollständige nginx-Konfiguration zum Übernehmen.",
+        a: "Ja. Das Docker-Image lauscht selbst auf reinem HTTP auf :8080; setze nginx oder Caddy mit deiner eigenen Domain und deinem Zertifikat davor (z. B. über certbot/Let's Encrypt). docs/self-hosting.md beschreibt, was zu proxyen ist; Relayiums eigene Produktions-nginx-Konfiguration ist nicht veröffentlicht, du musst also deine eigene schreiben.",
       },
       {
         q: "Welche Daten speichert mein selbst gehosteter Server?",
@@ -447,7 +447,7 @@ const fr = {
   updatedLabel: "Dernière mise à jour",
   lead: [
     "Relayium est sous licence MIT et open source, et le serveur est une image unique et autonome — pas de base de données externe, pas de bucket de stockage tiers, rien à quoi s'inscrire. Si vous préférez tout faire tourner vous-même plutôt que dépendre de relayium.com, ce guide vous fait monter un serveur avec Docker et paramètre la CLI pour qu'elle s'y connecte.",
-    "S'auto-héberger vous donne un contrôle total sur l'emplacement de vos données, votre propre domaine et certificat TLS, et aucune dépendance aux décisions opérationnelles de quelqu'un d'autre. Tout ce qui suit s'appuie sur des fichiers réellement présents dans le dépôt — docker-compose.yml, server/.env.example et docs/DEPLOYMENT.md — donc rien ici n'est un indicateur ou un réglage qui n'existe pas réellement.",
+    "S'auto-héberger vous donne un contrôle total sur l'emplacement de vos données, votre propre domaine et certificat TLS, et aucune dépendance aux décisions opérationnelles de quelqu'un d'autre. Tout ce qui suit s'appuie sur des fichiers réellement présents dans le dépôt — docker-compose.yml, server/.env.example et docs/self-hosting.md — donc rien ici n'est un indicateur ou un réglage qui n'existe pas réellement.",
   ],
   sections: [
     {
@@ -464,7 +464,7 @@ const fr = {
       ],
       code: ["docker compose up -d --build"],
       bullets: [
-        "C'est tout le serveur, à l'écoute sur :8080. En production, placez nginx ou Caddy devant pour le TLS — voir docs/DEPLOYMENT.md pour une configuration nginx complète.",
+        "C'est tout le serveur, à l'écoute sur :8080. En production, placez nginx ou Caddy devant pour le TLS — docs/self-hosting.md couvre le chemin Docker et ce qu'il faut proxyfier ; la configuration nginx de production propre à Relayium n'est pas publiée.",
         "La configuration de l'appli provient d'un fichier server/.env optionnel plus le bloc environment: dans docker-compose.yml. Chaque réglage a une clé RELAYIUM_* correspondante — copiez server/.env.example comme point de départ.",
         "Les quatre clés qui comptent pour un déploiement de base : RELAYIUM_ADDR (adresse d'écoute), RELAYIUM_STATIC (chemin vers l'application web compilée), RELAYIUM_DB (chemin du fichier SQLite) et RELAYIUM_BLOB_DIR (où est écrit le chiffré des liens stockés). docker-compose.yml définit déjà des valeurs par défaut raisonnables pour ces quatre clés et les persiste dans un volume nommé.",
       ],
@@ -479,7 +479,7 @@ const fr = {
         "RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build",
       ],
       bullets: [
-        "coturn a besoin de la véritable IP publique de l'hôte et d'une plage de ports UDP ouverte pour fonctionner — voir docs/coturn.md pour la configuration complète (avec un script d'installation en une commande) et docs/enable-turn.md pour dépanner un échec limité au NAT traversal.",
+        "coturn a besoin de la véritable IP publique de l'hôte et d'une plage de ports UDP ouverte pour fonctionner — docs/self-hosting.md couvre le démarrage via le profil relay de Docker ; la configuration coturn de production propre à Relayium (y compris son script d'installation) n'est pas publiée.",
         "Sans --profile relay ni RELAYIUM_TURN_SECRET, le serveur fonctionne quand même parfaitement — les transferts entre réseaux différents basculent simplement sur STUN seul, ce qui fonctionne pour les NAT les plus simples mais pas pour les plus stricts.",
       ],
     },
@@ -511,7 +511,7 @@ const fr = {
       },
       {
         q: "Puis-je utiliser mon propre domaine et mon propre certificat TLS ?",
-        a: "Oui. L'image Docker écoute elle-même en HTTP simple sur :8080 ; placez nginx ou Caddy devant avec votre propre domaine et votre certificat (par exemple via certbot/Let's Encrypt). docs/DEPLOYMENT.md contient une configuration nginx complète à reprendre telle quelle.",
+        a: "Oui. L'image Docker écoute elle-même en HTTP simple sur :8080 ; placez nginx ou Caddy devant avec votre propre domaine et votre certificat (par exemple via certbot/Let's Encrypt). docs/self-hosting.md couvre ce qu'il faut proxyfier ; la configuration nginx de production propre à Relayium n'est pas publiée, il faudra écrire la vôtre.",
       },
       {
         q: "Quelles données mon serveur auto-hébergé stocke-t-il ?",
@@ -534,7 +534,7 @@ const ar = {
   updatedLabel: "آخر تحديث",
   lead: [
     "‏Relayium مرخَّص بموجب MIT ومفتوح المصدر، والخادم صورة واحدة مكتفية بذاتها — بلا قاعدة بيانات خارجية، بلا حاوية تخزين لطرف ثالث، ولا شيء للتسجيل فيه. إن كنت تفضّل تشغيل كل شيء بنفسك بدل الاعتماد على relayium.com، فهذا الدليل يشغّل خادمًا بـ Docker ويوجّه الـ CLI إليه.",
-    "تمنحك الاستضافة الذاتية تحكمًا كاملًا في مكان بياناتك، ونطاقك الخاص وشهادة TLS خاصة بك، وبلا اعتماد على بنية أحد آخر. كل ما يلي مبني على ملفات موجودة فعلًا في المستودع — `docker-compose.yml` و `server/.env.example` و `docs/DEPLOYMENT.md` — فلا شيء هنا عبارة عن راية أو إعداد غير موجود فعلًا.",
+    "تمنحك الاستضافة الذاتية تحكمًا كاملًا في مكان بياناتك، ونطاقك الخاص وشهادة TLS خاصة بك، وبلا اعتماد على بنية أحد آخر. كل ما يلي مبني على ملفات موجودة فعلًا في المستودع — `docker-compose.yml` و `server/.env.example` و `docs/self-hosting.md` — فلا شيء هنا عبارة عن راية أو إعداد غير موجود فعلًا.",
   ],
   sections: [
     {
@@ -551,7 +551,7 @@ const ar = {
       ],
       code: ["docker compose up -d --build"],
       bullets: [
-        "هذا هو الخادم بالكامل، يستمع على ‎:8080. ضع nginx أو Caddy أمامه لأجل TLS في الإنتاج — راجع docs/DEPLOYMENT.md للحصول على تهيئة nginx كاملة.",
+        "هذا هو الخادم بالكامل، يستمع على ‎:8080. ضع nginx أو Caddy أمامه لأجل TLS في الإنتاج — يغطّي docs/self-hosting.md مسار Docker وما ينبغي توجيهه عبر البروكسي؛ تهيئة nginx الخاصة ببيئة إنتاج Relayium نفسها غير منشورة.",
         "تأتي تهيئة التطبيق من ملف server/.env اختياري إضافةً إلى كتلة environment: في docker-compose.yml. لكل إعداد مفتاح ‎RELAYIUM_*‎ — انسخ server/.env.example كنقطة انطلاق.",
         "المفاتيح الأربعة المهمة لنشر أساسي: RELAYIUM_ADDR (عنوان الاستماع)، وRELAYIUM_STATIC (مسار تطبيق الويب المبني)، وRELAYIUM_DB (مسار ملف SQLite)، وRELAYIUM_BLOB_DIR (حيث يُكتَب النص المُشفَّر لروابط التخزين). يضبط docker-compose.yml أصلًا قيمًا افتراضية معقولة للأربعة جميعًا ويحفظها في وحدة تخزين مُسمّاة.",
       ],
@@ -566,7 +566,7 @@ const ar = {
         "RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build",
       ],
       bullets: [
-        "يحتاج coturn عنوان IP العام الحقيقي للمضيف ونطاق منافذ UDP مفتوحًا ليعمل — راجع docs/coturn.md للإعداد الكامل (بما في ذلك برنامج تثبيت بأمر واحد) وdocs/enable-turn.md لاستكشاف فشل يقتصر على اجتياز NAT.",
+        "يحتاج coturn عنوان IP العام الحقيقي للمضيف ونطاق منافذ UDP مفتوحًا ليعمل — يغطّي docs/self-hosting.md التشغيل عبر ملف تعريف relay في Docker؛ تهيئة coturn الخاصة ببيئة إنتاج Relayium نفسها (بما في ذلك برنامج التثبيت) غير منشورة.",
         "بدون ‎--profile relay‎ وRELAYIUM_TURN_SECRET، يظل الخادم يعمل جيدًا — تتراجع عمليات النقل عبر الشبكات فقط إلى STUN وحده، وهو يعمل مع أنواع NAT الأسهل لكن ليس الأشد صرامة.",
       ],
     },
@@ -598,7 +598,7 @@ const ar = {
       },
       {
         q: "هل يمكنني استخدام نطاقي الخاص وشهادة TLS خاصة بي؟",
-        a: "نعم. تستمع صورة Docker على HTTP عادي على ‎:8080؛ ضع nginx أو Caddy أمامها بنطاقك الخاص وشهادتك (مثلًا عبر certbot/Let's Encrypt). يحتوي docs/DEPLOYMENT.md على تهيئة nginx كاملة للنسخ.",
+        a: "نعم. تستمع صورة Docker على HTTP عادي على ‎:8080؛ ضع nginx أو Caddy أمامها بنطاقك الخاص وشهادتك (مثلًا عبر certbot/Let's Encrypt). يغطّي docs/self-hosting.md ما ينبغي توجيهه عبر البروكسي؛ تهيئة nginx الخاصة ببيئة إنتاج Relayium نفسها غير منشورة، لذا عليك كتابة تهيئتك الخاصة.",
       },
       {
         q: "ما البيانات التي يخزّنها خادمي المُستضاف ذاتيًا؟",
@@ -621,7 +621,7 @@ const es = {
   updatedLabel: "Última actualización",
   lead: [
     "Relayium tiene licencia MIT y es de código abierto, y el servidor es una única imagen autocontenida — sin base de datos externa, sin bucket de almacenamiento de terceros, nada para lo que registrarse. Si prefieres ejecutarlo todo por tu cuenta en vez de depender de relayium.com, esta guía levanta un servidor con Docker y apunta la CLI hacia él.",
-    "Alojar por tu cuenta te da control total sobre dónde viven tus datos, tu propio dominio y certificado TLS, y ninguna dependencia de la infraestructura de nadie más. Todo lo que sigue se basa en los archivos que se distribuyen en el repositorio — `docker-compose.yml`, `server/.env.example` y `docs/DEPLOYMENT.md` — así que nada de lo que hay aquí es un indicador o ajuste que no exista de verdad.",
+    "Alojar por tu cuenta te da control total sobre dónde viven tus datos, tu propio dominio y certificado TLS, y ninguna dependencia de la infraestructura de nadie más. Todo lo que sigue se basa en los archivos que se distribuyen en el repositorio — `docker-compose.yml`, `server/.env.example` y `docs/self-hosting.md` — así que nada de lo que hay aquí es un indicador o ajuste que no exista de verdad.",
   ],
   sections: [
     {
@@ -638,7 +638,7 @@ const es = {
       ],
       code: ["docker compose up -d --build"],
       bullets: [
-        "Ese es el servidor entero, escuchando en :8080. Pon nginx o Caddy delante para el TLS en producción — consulta docs/DEPLOYMENT.md para una configuración nginx completa.",
+        "Ese es el servidor entero, escuchando en :8080. Pon nginx o Caddy delante para el TLS en producción — docs/self-hosting.md cubre la vía Docker y qué hay que redirigir (proxy); la configuración nginx de producción propia de Relayium no está publicada.",
         "La configuración de la aplicación viene de un archivo server/.env opcional más el bloque environment: en docker-compose.yml. Cada ajuste tiene una clave RELAYIUM_* — copia server/.env.example como punto de partida.",
         "Las cuatro claves que importan para un despliegue básico: RELAYIUM_ADDR (dirección de escucha), RELAYIUM_STATIC (ruta a la aplicación web compilada), RELAYIUM_DB (ruta del archivo SQLite) y RELAYIUM_BLOB_DIR (dónde se escribe el texto cifrado de los enlaces almacenados). docker-compose.yml ya fija valores por defecto sensatos para las cuatro y las persiste en un volumen con nombre.",
       ],
@@ -653,7 +653,7 @@ const es = {
         "RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build",
       ],
       bullets: [
-        "coturn necesita la IP pública real del host y un rango de puertos UDP abierto para funcionar — consulta docs/coturn.md para la configuración completa (incluido un script de instalación de un comando) y docs/enable-turn.md para diagnosticar un fallo limitado al recorrido de NAT.",
+        "coturn necesita la IP pública real del host y un rango de puertos UDP abierto para funcionar — docs/self-hosting.md cubre cómo levantarlo con el perfil relay de Docker; la configuración coturn de producción propia de Relayium (incluido su script de instalación) no está publicada.",
         "Sin --profile relay ni RELAYIUM_TURN_SECRET, el servidor igual funciona bien — las transferencias entre redes simplemente recurren a solo STUN, que funciona para los tipos de NAT más fáciles pero no para los más estrictos.",
       ],
     },
@@ -685,7 +685,7 @@ const es = {
       },
       {
         q: "¿Puedo usar mi propio dominio y certificado TLS?",
-        a: "Sí. La imagen de Docker escucha en HTTP simple en :8080; pon nginx o Caddy delante con tu propio dominio y certificado (por ejemplo, vía certbot/Let's Encrypt). docs/DEPLOYMENT.md tiene una configuración nginx completa para copiar.",
+        a: "Sí. La imagen de Docker escucha en HTTP simple en :8080; pon nginx o Caddy delante con tu propio dominio y certificado (por ejemplo, vía certbot/Let's Encrypt). docs/self-hosting.md cubre qué hay que redirigir; la configuración nginx de producción propia de Relayium no está publicada, así que tendrás que escribir la tuya.",
       },
       {
         q: "¿Qué datos almacena mi servidor alojado por mi cuenta?",
@@ -708,7 +708,7 @@ const pt = {
   updatedLabel: "Última atualização",
   lead: [
     "O Relayium tem licença MIT e é de código aberto, e o servidor é uma única imagem autocontida — sem banco de dados externo, sem bucket de armazenamento de terceiros, nada para se cadastrar. Se você prefere rodar tudo por conta própria em vez de depender do relayium.com, este guia coloca um servidor no ar com Docker e aponta a CLI para ele.",
-    "Hospedar por conta própria dá a você controle total sobre onde seus dados ficam, seu próprio domínio e certificado TLS, e nenhuma dependência da infraestrutura de mais ninguém. Tudo a seguir se baseia nos arquivos que acompanham o repositório — `docker-compose.yml`, `server/.env.example` e `docs/DEPLOYMENT.md` — então nada aqui é uma flag ou configuração que não exista de verdade.",
+    "Hospedar por conta própria dá a você controle total sobre onde seus dados ficam, seu próprio domínio e certificado TLS, e nenhuma dependência da infraestrutura de mais ninguém. Tudo a seguir se baseia nos arquivos que acompanham o repositório — `docker-compose.yml`, `server/.env.example` e `docs/self-hosting.md` — então nada aqui é uma flag ou configuração que não exista de verdade.",
   ],
   sections: [
     {
@@ -725,7 +725,7 @@ const pt = {
       ],
       code: ["docker compose up -d --build"],
       bullets: [
-        "Esse é o servidor inteiro, escutando em :8080. Coloque nginx ou Caddy na frente para o TLS em produção — veja docs/DEPLOYMENT.md para uma configuração nginx completa.",
+        "Esse é o servidor inteiro, escutando em :8080. Coloque nginx ou Caddy na frente para o TLS em produção — docs/self-hosting.md cobre o caminho Docker e o que precisa ser redirecionado (proxy); a configuração nginx de produção da própria Relayium não é publicada.",
         "A configuração do aplicativo vem de um arquivo server/.env opcional mais o bloco environment: no docker-compose.yml. Cada configuração tem uma chave RELAYIUM_* — copie server/.env.example como ponto de partida.",
         "As quatro chaves que importam para uma implantação básica: RELAYIUM_ADDR (endereço de escuta), RELAYIUM_STATIC (caminho para o aplicativo web compilado), RELAYIUM_DB (caminho do arquivo SQLite) e RELAYIUM_BLOB_DIR (onde o texto cifrado dos links armazenados é escrito). O docker-compose.yml já define valores padrão sensatos para as quatro e as persiste em um volume nomeado.",
       ],
@@ -740,7 +740,7 @@ const pt = {
         "RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build",
       ],
       bullets: [
-        "O coturn precisa do IP público real do host e de uma faixa de portas UDP aberta para funcionar — veja docs/coturn.md para a configuração completa (incluindo um script de instalação de um comando) e docs/enable-turn.md para solucionar uma falha limitada à travessia de NAT.",
+        "O coturn precisa do IP público real do host e de uma faixa de portas UDP aberta para funcionar — docs/self-hosting.md cobre como executá-lo com o perfil relay do Docker; a configuração coturn de produção da própria Relayium (incluindo o script de instalação) não é publicada.",
         "Sem --profile relay e RELAYIUM_TURN_SECRET, o servidor ainda funciona bem — as transferências entre redes apenas recorrem a só STUN, que funciona para os tipos de NAT mais fáceis, mas não para os mais rígidos.",
       ],
     },
@@ -772,7 +772,7 @@ const pt = {
       },
       {
         q: "Posso usar meu próprio domínio e certificado TLS?",
-        a: "Sim. A imagem Docker escuta em HTTP simples na :8080; coloque nginx ou Caddy na frente com seu próprio domínio e certificado (por exemplo, via certbot/Let's Encrypt). docs/DEPLOYMENT.md tem uma configuração nginx completa para copiar.",
+        a: "Sim. A imagem Docker escuta em HTTP simples na :8080; coloque nginx ou Caddy na frente com seu próprio domínio e certificado (por exemplo, via certbot/Let's Encrypt). docs/self-hosting.md cobre o que precisa ser redirecionado; a configuração nginx de produção da própria Relayium não é publicada, então você vai escrever a sua.",
       },
       {
         q: "Quais dados o meu servidor auto-hospedado armazena?",

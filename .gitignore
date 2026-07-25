@@ -21,3 +21,7 @@ server/relayium-node
 
 # Superpowers workspace (planning docs, internal scratch)
 .superpowers/
+
+# Production ops (moved to the private relayium-ops repo; must never be
+# re-committed here — nginx/coturn configs and the systemd unit are private)
+deploy/

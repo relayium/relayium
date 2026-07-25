@@ -42,7 +42,7 @@
 
 ## Self-hosting
 
-- Fully self-hostable: the server is a single static Go binary that also serves the web app. A `Dockerfile` and `docker-compose.yml` are provided (`docker compose up`), and STUN/TURN servers are configurable. See `docs/DEPLOYMENT.md` in the repository.
+- Fully self-hostable: the server is a single static Go binary that also serves the web app. A `Dockerfile` and `docker-compose.yml` are provided (`docker compose up`), and STUN/TURN servers are configurable. See `docs/self-hosting.md` in the repository.
 
 ## How Relayium compares
 

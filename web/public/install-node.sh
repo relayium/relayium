@@ -71,8 +71,8 @@ curl -fsSL "${BASE_URL}/${asset}" -o "$tmp/a.tar.gz" || err "download failed"
 curl -fsSL "${BASE_URL}/checksums.txt" -o "$tmp/checksums.txt" || err "checksum list download failed"
 
 # Release public key (ECDSA P-256, PKIX PEM). Empty until release signing is
-# configured (see docs/release-signing.md); then verify checksums.txt's signature
-# with openssl — no cosign needed. Private half = RELAYIUM_RELEASE_KEY secret.
+# configured (setup notes live in the private relayium-ops repo); then verify
+# checksums.txt's signature with openssl — no cosign needed. Private half = RELAYIUM_RELEASE_KEY secret.
 RELEASE_PUBKEY='-----BEGIN PUBLIC KEY-----
 MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAErOLLZclLFkpUWt8w4KIZ4SYB4JZf
 bDRZOmWOdGsmHGKTU2GNeZZpJYPCL22ylULbxvQJEkdveZqkFIyYcGKNoA==

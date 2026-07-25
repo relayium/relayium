@@ -7,7 +7,7 @@
 > - P0-1 `/security` 六语言威胁模型页（生成 18 个静态页、footer 已链接、真实 Go 服务器路由已验证）
 > - P0-2 首屏「如何使用」改为可视化步骤流（内联 SVG，已截图确认）+ FeatureStrip 增加「了解如何加密」跳转 /security
 > - P0-3 修正「无需账号」不实文案（README / index.html / llms.txt；应用内 i18n 本就准确）
-> - P0-4 根目录 `Dockerfile` + `docker-compose.yml` + `.dockerignore`（两阶段构建已在本机验证）+ DEPLOYMENT.md Docker 章节
+> - P0-4 根目录 `Dockerfile` + `docker-compose.yml` + `.dockerignore`（两阶段构建已在本机验证）+ 旧版部署文档的 Docker 章节（该文档后来被拆分：面向公众的部分并入 `docs/self-hosting.md`，运维专属部分移入私有 relayium-ops 仓库）
 > P1（含 CLI）与 P2 待后续。
 >
 > **P1 进度（2026-07-02 续）**：
@@ -27,7 +27,7 @@
 | QR 码配对（报告列为 P1） | 已有三处 QR：配对码加入链接、分享链接、下载链接 | `web/src/lib/CodePairing.svelte`、`CrossNetwork.svelte`、`StoredUpload.svelte` |
 | 两个模式的用户化包装 | 跨网络页已有三张卡片（配对码 / 分享链接 / 下载链接）+ 模式对比表 | `web/src/lib/CrossPage.svelte`、`ModeCompare.svelte` |
 | FAQ + 竞品对比 | FAQ 组件 + JSON-LD + README/首页对比表（vs AirDrop/WeTransfer/Snapdrop/PairDrop） | `web/src/lib/Faq.svelte`、`web/index.html` |
-| TURN / 复杂网络回退 | coturn + TURN-REST 临时凭证已接好 | `server/internal/account/turn.go`、`docs/coturn.md` |
+| TURN / 复杂网络回退 | coturn + TURN-REST 临时凭证已接好 | `server/internal/account/turn.go`（生产 coturn 配置见私有 relayium-ops 仓库，公开的 Docker relay profile 见 `docs/self-hosting.md`） |
 | 多文件传输、进度/速度显示、关页警告 | 最多 10 文件、进度+实时速率、beforeunload 警告均有 | `web/src/lib/transfer.ts`、`App.svelte` |
 | 多语言 | 6 语言 i18n 已全量覆盖 | `web/src/lib/i18n.svelte.ts` |
 | SAS 命名用户化 | UI 已叫「校验码 / Verification code」，非报告担心的裸「SAS」 | i18n `codeLabel` |
@@ -62,7 +62,7 @@
 - **这是什么（补充解释）**：
   - **Dockerfile** = 一份「打包配方」。它把 Relayium 服务器连同运行环境封装成一个标准化镜像，任何装了 Docker 的机器上一条 `docker run` 就能跑，不用手动装 Go、配 nginx、写 systemd 服务。
   - **docker-compose** = 一份「编排配方」（一个 `docker-compose.yml` 文件）。它把多个容器——Relayium 服务器 + coturn（TURN 中继）+ redis（中继流量计量）——一次性拉起来、自动连好网络，`docker compose up` 一条命令启动整套。
-- **现状**：README 提到 Docker、`docs/DEPLOYMENT.md` 有 nginx+systemd 手动部署教程，但仓库里**没有任何 Dockerfile**。
+- **现状**：README 提到 Docker、旧版部署文档（已拆分/下线，见上）有 nginx+systemd 手动部署教程，但仓库里**没有任何 Dockerfile**。
 - **需求**：单体 Dockerfile（服务端 Go 二进制已内嵌前端静态文件，一个镜像即完整应用）+ 可选 `docker-compose.yml`（server + coturn + redis 一键编排）。
 - **理由**：自托管用户最怕的就是「照着部署文档手动装一堆东西」。Relayium 服务端本来就是单个 Go 二进制，打成镜像几乎零额外成本，却能把自托管门槛从「一小时折腾」降到「一条命令」——这是吸引隐私用户 / 公司内网 / 开发者的入场券，PairDrop 已支持。
 
