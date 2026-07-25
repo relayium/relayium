@@ -1,14 +1,26 @@
 import Foundation
 import WebRTC
 
+/// Runs `RTCInitializeSSL()` exactly once for the process (a Swift file-scope
+/// `let` is lazily initialized under a `dispatch_once`-style guard, so this is
+/// thread-safe even with concurrent first callers). There is deliberately no
+/// paired `RTCCleanupSSL()` anywhere in this file: per Google's own contract,
+/// SSL init/cleanup is process-global, not per-connection — tearing it down
+/// while ANY `RealtimeConnection` is still alive would break every other live
+/// connection sharing the process.
+private let rtcSSLInitialized: Void = { RTCInitializeSSL() }()
+
+/// Call before touching any WebRTC SSL-dependent API. Cheap after the first call.
+private func ensureRTCSSL() {
+    _ = rtcSSLInitialized
+}
+
 /// True once the WebRTC framework is linked and a peer-connection factory can be
 /// constructed. A link-time smoke check, independent of `RealtimeConnection` below.
 public func webrtcAvailable() -> Bool {
-    RTCInitializeSSL()
+    ensureRTCSSL()
     let factory = RTCPeerConnectionFactory()
-    let ok = String(describing: type(of: factory)) == "RTCPeerConnectionFactory"
-    RTCCleanupSSL()
-    return ok
+    return String(describing: type(of: factory)) == "RTCPeerConnectionFactory"
 }
 
 /// Ties `RTCPeerConnection`/`RTCDataChannel` to the R1-E `SignalingClient` and the
@@ -37,6 +49,17 @@ public final class RealtimeConnection: NSObject {
         /// An operation (e.g. `send`) was attempted before the handshake/channel
         /// were ready.
         case notReady
+        /// `send(files:)` was called a second time on this connection. Refused
+        /// rather than run: a fresh `RealtimeSender` restarts its AES-GCM nonce
+        /// (seq) counter at 0 under the same session key, so a second send would
+        /// reuse nonces already used by the first — catastrophic for GCM.
+        case alreadySending
+        /// The receiver sent CTRL_REJECT (or the connection closed) before
+        /// accepting the batch; the data frames were never streamed.
+        case rejected
+        /// The receiver never accepted the batch, or stalled mid-transfer
+        /// without acking, for longer than the wait deadline.
+        case timedOut
     }
 
     // MARK: Public callbacks
@@ -94,13 +117,20 @@ public final class RealtimeConnection: NSObject {
     private var sentTotal = 0
     private var openedSignaled = false
     private var closed = false
+    /// One-shot guard for `send(files:)` — see `ConnectionError.alreadySending`.
+    private var sendStarted = false
+    /// Set when a CTRL_ACCEPT/CTRL_REJECT control frame arrives, gating the
+    /// send path between the batch frame and the data frames (mirrors
+    /// `web/src/lib/transfer-session.svelte.ts`'s `accepted` promise).
+    private var accepted = false
+    private var rejected = false
 
     public init(signaling: SignalingClient, peerId: String, role: Role, iceServers: [RTCIceServer]) {
         self.signaling = signaling
         self.peerId = peerId
         self.role = role
         self.handshake = HandshakeState(role: role)
-        RTCInitializeSSL()
+        ensureRTCSSL()
         self.factory = RTCPeerConnectionFactory()
         super.init()
 
@@ -275,6 +305,11 @@ public final class RealtimeConnection: NSObject {
             return
         }
         if let control = parseControl(bytes) {
+            switch control {
+            case .accept: accepted = true
+            case .reject: rejected = true
+            case .complete: break
+            }
             onControl?(control)
             return
         }
@@ -305,10 +340,29 @@ public final class RealtimeConnection: NSObject {
 
     // MARK: - Send
 
+    /// How long the send path will wait for a stalled step (the receiver's
+    /// accept/reject decision, or forward progress while streaming data frames)
+    /// before giving up. Mirrors the 60s stall timeout in
+    /// `web/src/lib/transfer-session.svelte.ts`'s `creditGate`.
+    private static let sendStallTimeout: TimeInterval = 60
+
     /// Seals the manifest + file bytes with the derived session key and streams
     /// them over the DataChannel, gated by `SendWindow` (receiver ack credit) and
     /// the SCTP send buffer.
+    ///
+    /// One-shot: a second call is refused (see `ConnectionError.alreadySending`)
+    /// because a fresh `RealtimeSender` would restart its GCM nonce counter at 0
+    /// under the same session key.
     public func send(files: [(meta: FileMeta, data: [UInt8])]) {
+        let alreadyStarted = queue.sync { () -> Bool in
+            if self.sendStarted { return true }
+            self.sendStarted = true
+            return false
+        }
+        guard !alreadyStarted else {
+            queue.async { [weak self] in self?.onError?(ConnectionError.alreadySending) }
+            return
+        }
         sendQueue.async { [weak self] in self?.sendOnSendQueue(files: files) }
     }
 
@@ -320,13 +374,42 @@ public final class RealtimeConnection: NSObject {
         let sender = RealtimeSender(sessionKey: sendKey)
         do {
             let batch = try sender.batchFrame(files.map { $0.meta })
-            transmit(batch)
+            guard transmit(batch) else { return }
+
+            // Web parity: announce the batch, then wait for the receiver's
+            // CTRL_ACCEPT before streaming any data frames; abort on
+            // CTRL_REJECT, on close, or if the receiver never answers.
+            guard waitForAccept() else { return }
+
             for frame in sender.dataFrames(files) {
                 if queue.sync(execute: { self.closed }) { return }
-                transmit(frame)
+                guard transmit(frame) else { return }
             }
         } catch {
             queue.async { [weak self] in self?.onError?(error) }
+        }
+    }
+
+    /// Busy-polls (on `sendQueue`, never `queue`) until the receiver has
+    /// accepted or rejected the batch, the connection closes, or the stall
+    /// deadline elapses. Returns `true` only on acceptance.
+    private func waitForAccept() -> Bool {
+        let deadline = Date().addingTimeInterval(Self.sendStallTimeout)
+        while true {
+            let (accepted, rejected, isClosed) = queue.sync { () -> (Bool, Bool, Bool) in
+                (self.accepted, self.rejected, self.closed)
+            }
+            if isClosed { return false }
+            if rejected {
+                queue.async { [weak self] in self?.onError?(ConnectionError.rejected) }
+                return false
+            }
+            if accepted { return true }
+            if Date() >= deadline {
+                queue.async { [weak self] in self?.onError?(ConnectionError.timedOut) }
+                return false
+            }
+            Thread.sleep(forTimeInterval: 0.005)
         }
     }
 
@@ -335,15 +418,26 @@ public final class RealtimeConnection: NSObject {
     /// `didChangeBufferedAmount`/a completion signal. Acceptable for this
     /// integration shell (per the task brief); a production driver should await
     /// the async signal instead of polling.
-    private func transmit(_ frame: [UInt8]) {
+    ///
+    /// Bounded by the same stall deadline as `waitForAccept()` so a receiver
+    /// that stops acking (window never opens back up) doesn't spin forever —
+    /// mirrors the web's `creditGate` stall timeout. Returns `false` (having
+    /// already reported `onError`) on close or timeout without sending.
+    @discardableResult
+    private func transmit(_ frame: [UInt8]) -> Bool {
+        let deadline = Date().addingTimeInterval(Self.sendStallTimeout)
         while true {
             let (ready, isClosed) = queue.sync { () -> (Bool, Bool) in
                 guard !self.closed else { return (false, true) }
                 guard let channel = self.channel else { return (false, false) }
                 return (self.sendWindow.maySend && channel.bufferedAmount <= UInt64(FLOW_WINDOW), false)
             }
-            if isClosed { return }
+            if isClosed { return false }
             if ready { break }
+            if Date() >= deadline {
+                queue.async { [weak self] in self?.onError?(ConnectionError.timedOut) }
+                return false
+            }
             Thread.sleep(forTimeInterval: 0.005)
         }
         queue.sync {
@@ -354,6 +448,7 @@ public final class RealtimeConnection: NSObject {
                 self.onProgress?(self.sentTotal)
             }
         }
+        return true
     }
 
     // MARK: - Close
@@ -371,6 +466,32 @@ public final class RealtimeConnection: NSObject {
         pc?.close()
         signaling.onSignal = nil
         onClose?()
+    }
+
+    /// Safety net for a caller that drops its last reference without calling
+    /// `close()`: makes sure WebRTC's `pc`/`channel` never hold `self` as a
+    /// (non-ARC-tracked, from the C++ layer's point of view) delegate past this
+    /// instance's lifetime, and that `signaling` can't invoke a dead handler.
+    ///
+    /// Deliberately does NOT call `close()`/`closeLocked()` via `queue`:
+    /// `close()`'s `queue.async { [weak self] ... }` forms a *new* weak
+    /// reference to `self`, and on an `NSObject` subclass the Objective-C
+    /// runtime traps ("Cannot form weak reference ... in the process of
+    /// deallocation") if that happens once `deinit` has started — confirmed
+    /// empirically, not a theoretical concern. `queue.sync` isn't safe either:
+    /// if this is the very last strong reference and it was released while
+    /// already executing on `queue` (e.g. inside a `queue.async` closure that
+    /// captured `self` strongly), a nested `queue.sync` here would deadlock.
+    /// By the time `deinit` runs, no strong reference to `self` can remain —
+    /// ARC guarantees that — so nothing else can be concurrently mutating this
+    /// state via a legitimate strong-ref path, and it's safe to tear down
+    /// directly without hopping onto `queue` at all.
+    deinit {
+        channel?.delegate = nil
+        channel = nil
+        pc?.delegate = nil
+        pc?.close()
+        signaling.onSignal = nil
     }
 }
 
