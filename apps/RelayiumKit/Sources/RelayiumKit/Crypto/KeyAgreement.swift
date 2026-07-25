@@ -31,6 +31,14 @@ public func generateKeyPair() -> KeyPair {
 
 public func deriveSession(role: Role, self selfKeys: KeyPair, peerPublic: [UInt8]) throws -> SessionKeys {
     ensureSodiumInit()
+    // Belt-and-suspenders: crypto_kx_{client,server}_session_keys read a FIXED
+    // crypto_kx_PUBLICKEYBYTES from peerPublic's buffer regardless of its actual
+    // Swift array length. A short/malformed peerPublic here would be an
+    // out-of-bounds native read. Callers (e.g. HandshakeState) should already
+    // reject bad lengths before reaching this point, but this is the real
+    // boundary to the unsafe C call, so it's guarded here too for every caller
+    // (including the future Realtime module).
+    guard peerPublic.count == Int(crypto_kx_PUBLICKEYBYTES) else { throw CryptoError.keyAgreementFailed }
     var rx = [UInt8](repeating: 0, count: Int(crypto_kx_SESSIONKEYBYTES))
     var tx = [UInt8](repeating: 0, count: Int(crypto_kx_SESSIONKEYBYTES))
     let rc: Int32

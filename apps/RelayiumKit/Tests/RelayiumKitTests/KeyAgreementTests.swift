@@ -11,6 +11,15 @@ final class KeyAgreementTests: XCTestCase {
         XCTAssertEqual(keys.recv, v.hex("session.aliceRecv"))
     }
 
+    func testDeriveSessionRejectsShortPeerKey() throws {
+        let alice = generateKeyPair()
+        XCTAssertThrowsError(
+            try deriveSession(role: .initiator, self: alice, peerPublic: [1,2,3,4])
+        ) { error in
+            XCTAssertEqual(error as? CryptoError, CryptoError.keyAgreementFailed)
+        }
+    }
+
     func testDeriveSessionThrowsOnInvalidPeerKey() throws {
         let v = try Vectors.load()
         let alice = KeyPair(publicKey: v.hex("alice.pub"), secretKey: v.hex("alice.sec"))

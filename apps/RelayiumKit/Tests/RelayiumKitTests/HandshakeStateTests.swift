@@ -33,6 +33,15 @@ final class HandshakeStateTests: XCTestCase {
         let b = HandshakeState(role: .responder)
         XCTAssertThrowsError(try b.verifyPeerReveal(a.reveal())) { XCTAssertEqual($0 as? HandshakeError, .noCommitRecorded) }
     }
+    func testShortPeerKeyRejectedBeforeDerive() throws {
+        let b = HandshakeState(role: .responder)
+        let shortKey: [UInt8] = [1,2,3,4]            // 4 bytes, not 32
+        let nonce = randomNonce()
+        let commit = commitKey(pub: shortKey, nonce: nonce)   // b commits-records this
+        try b.recordPeerCommit(Data(commit).base64EncodedString())
+        let reveal = Reveal(key: Data(shortKey).base64EncodedString(), nonce: Data(nonce).base64EncodedString())
+        XCTAssertThrowsError(try b.verifyPeerReveal(reveal)) { XCTAssertEqual($0 as? HandshakeError, .invalidKey) }
+    }
     func testCommitAndSASMatchCryptoVectors() throws {
         // Reuse R1-A crypto-vectors: commitKey(alicePub, commit.nonce) == commit.value; sas(alice,bob)==sas.
         let v = try Vectors.load()   // crypto-vectors

@@ -224,7 +224,7 @@ final class HandshakeStateTests: XCTestCase {
 ```swift
 import Foundation
 
-public enum HandshakeError: Error, Equatable { case mitm, noCommitRecorded, badBase64 }
+public enum HandshakeError: Error, Equatable { case mitm, noCommitRecorded, badBase64, invalidKey }
 public struct HandshakeResult: Equatable {
     public let keys: SessionKeys
     public let sas: String
@@ -260,7 +260,16 @@ public final class HandshakeState {
             throw HandshakeError.badBase64
         }
         let peerPub = [UInt8](keyD)
-        guard verifyCommit(commit: commit, pub: peerPub, nonce: [UInt8](nonceD)) else {
+        let peerNonce = [UInt8](nonceD)
+        // verifyCommit only proves BLAKE2b(peerPub||nonce)==commit; it does not
+        // constrain peerPub.count. Without this guard a malicious peer can commit
+        // to a SHORT key and reveal it, passing verifyCommit — then deriveSession's
+        // libsodium call reads a FIXED 32 bytes from peerPub, an out-of-bounds
+        // native read on a short buffer (confirmed with AddressSanitizer: a
+        // heap-buffer-overflow in blake2b_update, i.e. even verifyCommit's own
+        // hashing over a short peerPub overflows first). Reject before either.
+        guard peerPub.count == 32, peerNonce.count == 32 else { throw HandshakeError.invalidKey }
+        guard verifyCommit(commit: commit, pub: peerPub, nonce: peerNonce) else {
             throw HandshakeError.mitm
         }
         let keys = try deriveSession(role: role, self: keypair, peerPublic: peerPub)
@@ -268,6 +277,13 @@ public final class HandshakeState {
     }
 }
 ```
+> **Hardening note (post-review):** `deriveSession` (`KeyAgreement.swift`) also gained its own
+> `guard peerPublic.count == Int(crypto_kx_PUBLICKEYBYTES) else { throw CryptoError.keyAgreementFailed }`
+> at the top, ahead of the `crypto_kx_client_session_keys`/`crypto_kx_server_session_keys` C calls.
+> That's the real boundary to unsafe C, so it's guarded there too for every caller (including the
+> future Realtime module), independent of whether `HandshakeState` already checked. Belt-and-suspenders,
+> not a substitute for the `HandshakeState` guard above (which fires first and gives the more specific
+> `.invalidKey` error instead of `.keyAgreementFailed`).
 > `SessionKeys` (R1-A) is `Equatable`? If not, the mirrored-keys assertions compare `.send`/`.recv` arrays directly (they are `[UInt8]`), which the test already does — no need to make `SessionKeys` Equatable. If `HandshakeResult: Equatable` requires `SessionKeys: Equatable`, either add that conformance to R1-A `SessionKeys` (it's a struct of `[UInt8]`, trivially Equatable) or drop `Equatable` from `HandshakeResult` and compare fields in tests. Prefer adding `Equatable` to `SessionKeys`.
 - [ ] **Step 4: run → PASS** (two parties derive mirrored keys + identical SAS; MITM + no-commit rejected; commit/SAS match R1-A vectors). Full `swift test` green.
 - [ ] **Step 5: commit** `feat(native): Handshake commit-reveal SAS state machine (two-party interop-proven)`
