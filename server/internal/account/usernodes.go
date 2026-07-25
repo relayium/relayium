@@ -124,6 +124,15 @@ func (s *Service) handleDeleteMyNode(w http.ResponseWriter, r *http.Request, u U
 			_ = s.store.RevokeNodeToken(r.Context(), t.ID, u.ID, s.now().Unix())
 		}
 	}
+	// Maintain the invariant "strict ⟹ ≥1 node": if this was the user's last node
+	// while "only my nodes" is on, clear the restriction. Leaving it on would
+	// silently strand every future transfer (see the enable-side guard in
+	// handleStrictNodes); the user re-enables it deliberately once they add a node.
+	if u.OnlyOwnNodes {
+		if nodes, err := s.store.UserNodesAll(r.Context(), u.ID); err == nil && len(nodes) == 0 {
+			_ = s.store.SetOnlyOwnNodes(r.Context(), u.ID, false)
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

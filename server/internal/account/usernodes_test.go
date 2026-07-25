@@ -283,3 +283,51 @@ func TestStrictNodesRejectedWithoutNode(t *testing.T) {
 		t.Fatalf("strict off with no node: got %d, want 200", off.StatusCode)
 	}
 }
+
+// Invariant "strict ⟹ ≥1 node": deleting the LAST node while "only my nodes" is
+// on must clear the restriction, otherwise every future transfer would strand.
+func TestDeletingLastNodeClearsStrict(t *testing.T) {
+	ts, store, mail := newUserNodesServer(t)
+	cookie := loginCookie(t, ts, mail, "lastnode@example.com")
+	u, _, _ := store.GetUserByIdentity(context.Background(), "email", "lastnode@example.com")
+
+	n, err := store.UpsertNode(context.Background(), Node{OwnerType: "user", OwnerUserID: u.ID, Label: "only"})
+	if err != nil {
+		t.Fatalf("seed node: %v", err)
+	}
+	if r := doJSON(t, ts, "PUT", "/api/me/strict-nodes", cookie, strictReq{OnlyOwnNodes: true}); r.StatusCode != http.StatusOK {
+		t.Fatalf("enable strict: got %d", r.StatusCode)
+	}
+	if r := doJSON(t, ts, "DELETE", "/api/nodes/"+n.ID, cookie, nil); r.StatusCode != http.StatusOK {
+		t.Fatalf("delete node: got %d", r.StatusCode)
+	}
+	u, _, _ = store.GetUserByIdentity(context.Background(), "email", "lastnode@example.com")
+	if u.OnlyOwnNodes {
+		t.Fatal("deleting the last node must clear OnlyOwnNodes")
+	}
+}
+
+// Deleting a node while another remains must NOT touch the strict setting.
+func TestDeletingNonLastNodeKeepsStrict(t *testing.T) {
+	ts, store, mail := newUserNodesServer(t)
+	cookie := loginCookie(t, ts, mail, "twonode@example.com")
+	u, _, _ := store.GetUserByIdentity(context.Background(), "email", "twonode@example.com")
+
+	n1, err := store.UpsertNode(context.Background(), Node{OwnerType: "user", OwnerUserID: u.ID, Label: "a"})
+	if err != nil {
+		t.Fatalf("seed node a: %v", err)
+	}
+	if _, err := store.UpsertNode(context.Background(), Node{OwnerType: "user", OwnerUserID: u.ID, Label: "b"}); err != nil {
+		t.Fatalf("seed node b: %v", err)
+	}
+	if r := doJSON(t, ts, "PUT", "/api/me/strict-nodes", cookie, strictReq{OnlyOwnNodes: true}); r.StatusCode != http.StatusOK {
+		t.Fatalf("enable strict: got %d", r.StatusCode)
+	}
+	if r := doJSON(t, ts, "DELETE", "/api/nodes/"+n1.ID, cookie, nil); r.StatusCode != http.StatusOK {
+		t.Fatalf("delete node: got %d", r.StatusCode)
+	}
+	u, _, _ = store.GetUserByIdentity(context.Background(), "email", "twonode@example.com")
+	if !u.OnlyOwnNodes {
+		t.Fatal("deleting a non-last node must keep OnlyOwnNodes")
+	}
+}
