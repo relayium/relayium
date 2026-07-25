@@ -342,10 +342,11 @@ emit_turnserver_conf() {
   # --- Layer 1 cost caps (see docs/superpowers/specs/2026-07-09-relay-cost-hardening-design.md) ---
   # max-bps: per-session bandwidth ceiling in bytes/sec. Caps a single 1h
   # credential window and stops the relay being used as a fat proxy. Tunable.
-  echo "max-bps=2000000"
+  # (Actual production values live only in deploy/coturn-setup.sh, relayium-ops.)
+  echo "max-bps=<per-session-bps-cap>"
   # user-quota / total-quota: max simultaneous allocations per user / server-wide.
-  echo "user-quota=12"
-  echo "total-quota=1200"
+  echo "user-quota=<per-user-allocation-cap>"
+  echo "total-quota=<server-total-allocation-cap>"
   if [ -n "$tls_cert" ] && [ -n "$tls_key" ]; then
     echo "tls-listening-port=5349"
     echo "cert=$tls_cert"
@@ -386,7 +387,7 @@ git add deploy/coturn-setup.sh deploy/test/coturn-conf-test.sh
 git commit -m "feat(coturn): add max-bps + allocation quotas; extract testable conf generator"
 ```
 
-> **Implementation-time verification (spec open item #1):** on a real relay host, confirm the installed `turnserver` accepts `max-bps`/`user-quota`/`total-quota` and that their units match this plan's intent (`turnserver --help` / the man page for the installed version). Adjust the starter values (spec open item #2) if the box's normal transfer speeds need more than 2 MB/s per session.
+> **Implementation-time verification (spec open item #1):** on a real relay host, confirm the installed `turnserver` accepts `max-bps`/`user-quota`/`total-quota` and that their units match this plan's intent (`turnserver --help` / the man page for the installed version). Adjust the starter values (spec open item #2) if the box's normal transfer speeds need more than the configured per-session cap.
 
 ---
 
