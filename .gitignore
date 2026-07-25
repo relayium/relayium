@@ -1,6 +1,9 @@
 # Go
 server/relayium-server
 server/relayium
+server/relayium.db
+server/relayium.db-wal
+server/relayium.db-shm
 /dist/
 # Node
 node_modules/
@@ -15,3 +18,6 @@ server/relayium-node
 
 # macOS
 **/.DS_Store
+
+# Superpowers workspace (planning docs, internal scratch)
+.superpowers/
