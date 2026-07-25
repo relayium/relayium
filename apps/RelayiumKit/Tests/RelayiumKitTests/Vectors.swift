@@ -52,6 +52,10 @@ struct Vectors {
         let arr = json["files"] as! [[String: Any]]
         return arr.map { ($0["dataHex"] as! String).hexBytes }
     }
+    /// Reads `framesHex` (pre-split individual frames) into `[[UInt8]]`.
+    func realtimeFrameList() -> [[UInt8]] {
+        strArray("framesHex").map { $0.hexBytes }
+    }
     private func hexString(_ path: String) -> String { str(path) }
 }
 

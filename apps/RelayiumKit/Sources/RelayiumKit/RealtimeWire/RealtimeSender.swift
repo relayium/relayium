@@ -2,7 +2,7 @@ import Foundation
 
 /// One file's manifest entry. Mirrors transfer.ts's `FileMeta`: `path` is only
 /// present for files inside a dropped folder (relative path within it).
-public struct FileMeta: Equatable {
+public struct FileMeta: Codable, Equatable {
     public var name: String
     public var size: Int
     public var path: String?
