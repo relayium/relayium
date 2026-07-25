@@ -45,10 +45,14 @@ server, and login silently does nothing.
 ## Configuration
 
 The container reads config from `./server/.env` (optional — copy from
-[`server/.env.example`](../server/.env.example), which documents every key)
-plus the `environment:` block in `docker-compose.yml`. Every setting is a
+[`server/.env.example`](../server/.env.example) as a starting template) plus
+the `environment:` block in `docker-compose.yml`. Every setting is a
 `RELAYIUM_*` environment variable with a matching CLI flag (env wins over the
-built-in default; an explicit flag wins over env). The essentials:
+built-in default; an explicit flag wins over env). `server/.env.example` is a
+template, not a complete reference — it covers the common cases but omits
+several real flags (stored-transfer quotas/retention, node-fleet settings,
+the multi-relay TURN pool, and more); the authoritative list is the flag
+definitions in [`server/main.go`](../server/main.go). The essentials:
 
 | Variable | Purpose |
 |---|---|
@@ -60,8 +64,8 @@ built-in default; an explicit flag wins over env). The essentials:
 | `RELAYIUM_STUN_URLS` | Comma-separated STUN URLs for cross-network NAT traversal. Empty is derived from `RELAYIUM_TURN_URLS` (a TURN server answers STUN on the same host:port); with neither set, no STUN is advertised and only same-LAN transfers work. |
 | `RELAYIUM_TURN_URLS` / `RELAYIUM_TURN_SECRET` | Optional TURN relay for transfers where a direct P2P connection isn't possible (see [Cross-network transfers](#cross-network-transfers) below). |
 | `RELAYIUM_REDIS_ADDR` | Optional Redis `host:port` for TURN relay-byte metering. Empty disables metering entirely; transfers still work without it. |
-| `RELAYIUM_ADMIN_USER` / `RELAYIUM_ADMIN_PASS` | Credentials for the read-only `/admin` dashboard. Password empty (the default) disables `/admin` outright — it 404s and falls through to the SPA. |
-| `RELAYIUM_ADMIN_TOTP_SECRET` | Optional TOTP 2FA on top of the admin login. See [Admin dashboard](#admin-dashboard-optional) below. |
+| `RELAYIUM_ADMIN_USER` / `RELAYIUM_ADMIN_PASS` | Credentials for the `/admin` console (username defaults to `admin` if unset). It is a full mutating console, not a read-only viewer — see [Admin dashboard](#admin-dashboard-optional-and-not-read-only) below. Password empty (the default) disables `/admin` outright — it 404s and falls through to the SPA. |
+| `RELAYIUM_ADMIN_TOTP_SECRET` | Optional TOTP 2FA on top of the admin login. See [Admin dashboard](#admin-dashboard-optional-and-not-read-only) below. |
 | `RELAYIUM_BIND` | Docker-compose only (not read by the server itself) — the host address the container's port 8080 is published on. Defaults to the loopback interface only, so a public host doesn't expose plaintext HTTP; set it to the wildcard address (all interfaces) for direct LAN access without a reverse proxy. |
 
 `server/.env.example` also documents optional Google/Apple sign-in, Stripe
@@ -72,20 +76,43 @@ Secrets belong in `server/.env` with mode `0600` — never on the command line,
 where `ps` or `/proc/<pid>/environ` would expose them. `server/.env` is
 git-ignored by default; never commit real secrets to your fork.
 
-## Admin dashboard (optional)
+## Admin dashboard (optional, and NOT read-only)
 
-Setting `RELAYIUM_ADMIN_PASS` turns on a read-only user-list dashboard at
-`/admin`. To add TOTP 2FA on top of the username/password login, generate a
-secret from inside the `server/` directory (or `docker compose exec server`):
+Setting `RELAYIUM_ADMIN_PASS` turns on an admin console at `/admin`. It is
+**not** a read-only viewer: alongside the user list and a read-only audit
+log, it can edit site-wide settings, create/edit billing plans, change a
+user's plan, mint and revoke node bearer tokens, delete/restore/relabel
+nodes, and control feature/version rollouts (target a track, pause, resume,
+roll back, or force an emergency release). The higher-risk of these actions
+(settings, plan edits, user-plan changes, token minting, node deletion,
+emergency rollout) render a confirmation page showing exactly what will
+change before applying it, and re-check a second factor if one is
+configured — but a leaked admin password alone is enough to reach and use
+every route above.
 
-```bash
-go run . -gen-admin-totp
-```
+Because of that blast radius, treat `/admin` credentials like production
+secrets:
 
-This prints a QR code and a base32 secret — scan the QR with any TOTP app
-(Google Authenticator, 1Password, …), then put the secret in
-`RELAYIUM_ADMIN_TOTP_SECRET` and restart the server. Leaving it unset keeps
-`/admin` on username/password only.
+- Use a strong, unique `RELAYIUM_ADMIN_PASS` — never reuse a password from
+  elsewhere.
+- Enable TOTP 2FA. Generate a secret from inside the `server/` directory (or
+  `docker compose exec server`):
+
+  ```bash
+  go run . -gen-admin-totp
+  ```
+
+  This prints a QR code and a base32 secret — scan the QR with any TOTP app
+  (Google Authenticator, 1Password, …), then put the secret in
+  `RELAYIUM_ADMIN_TOTP_SECRET` and restart the server. Leaving it unset keeps
+  `/admin` on username/password only, with no second factor on the
+  confirmation step above.
+- Consider also restricting `/admin` at your reverse proxy (IP allowlist,
+  VPN-only, or an additional auth layer) rather than relying solely on the
+  application login.
+
+Leaving `RELAYIUM_ADMIN_PASS` empty (the default) disables `/admin`
+entirely — it 404s and falls through to the SPA.
 
 ## Cross-network transfers
 
