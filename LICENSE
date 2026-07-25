@@ -1,21 +1,63 @@
-MIT License
-
+Relayium — License Index
 Copyright (c) 2026 Relayium
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Relayium is open core: different directories in this repository are
+licensed differently, according to the trust boundary each one sits on.
+There is no single license that covers the whole repository — consult
+the table below and the `LICENSE` file inside the relevant directory.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+| Directory            | License                                   | Full text                          |
+|-----------------------|-------------------------------------------|-------------------------------------|
+| `server/`             | GNU Affero General Public License v3.0 (AGPL-3.0-only) | [`server/LICENSE`](server/LICENSE) |
+| `web/`                | GNU Affero General Public License v3.0 (AGPL-3.0-only) | [`web/LICENSE`](web/LICENSE)       |
+| `apps/`               | Apache License 2.0                        | [`apps/LICENSE`](apps/LICENSE)     |
+| `docs/protocol/`      | Creative Commons Attribution 4.0 International (CC BY 4.0) | [`docs/protocol/LICENSE`](docs/protocol/LICENSE) |
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Everything else in the repository (top-level docs, build config, CI, etc.)
+is not itself a distributable component and is not separately licensed;
+treat it as covered by the license of the directory it configures or
+documents unless stated otherwise.
+
+## Why three licenses
+
+- **AGPL-3.0** on `server/` and `web/`: this is the signaling server, relay
+  node, CLI, and the Svelte web client — the parts that make up a running
+  Relayium *service*. AGPL's network-use clause means that anyone who
+  modifies this code and offers it as a hosted service to others must
+  publish their modified source. That is what stops a competitor from
+  taking the whole stack — including the SEO article content under
+  `web/scripts/pages/` — and standing up a rival hosted service without
+  giving anything back. It is still OSI-approved open source: self-hosters
+  keep every right they had before (run it, modify it, redistribute it),
+  they just can't turn a private fork into an unshared competing service.
+  Grafana, MinIO, and Mastodon all made the same call for the same reason.
+- **Apache-2.0** on `apps/` (RelayiumKit, the macOS app, and future iOS):
+  GPL-family licenses' "no further restrictions" requirement is in tension
+  with the App Store's terms — its DRM (FairPlay) and device-count limits
+  are exactly the kind of extra restriction the AGPL forbids adding, which
+  is why VLC was pulled from the App Store in 2011 under GPLv2. Apache-2.0
+  carries no such clause, so the Apple clients can ship there without that
+  conflict.
+- **CC BY 4.0** on `docs/protocol/`: a wire protocol specification is
+  meant to be implemented by as many people as possible. A code license
+  would be the wrong tool here; CC BY 4.0 only asks for attribution and
+  otherwise gets out of the way of third-party implementations — including
+  competing ones.
+
+## Prior versions remain MIT
+
+Every version of this repository published before this relicensing was
+released under the MIT License, and that grant is irrevocable. Anyone who
+already has, or forks, a pre-relicensing copy of this code may continue to
+use, modify, and redistribute *that copy* under MIT forever — this change
+cannot and does not reach back and revoke it. Relicensing only governs
+versions published from this point forward. If you need the last MIT
+version, it is the last commit before this file changed, in this
+repository's git history.
+
+## Contributions
+
+This project accepts contributions under the Developer Certificate of
+Origin (DCO) — see [`DCO`](DCO) and [`CONTRIBUTING.md`](CONTRIBUTING.md).
+By signing off a commit (`git commit -s`) you certify you have the right
+to submit it under the license that covers the directory it lands in.
