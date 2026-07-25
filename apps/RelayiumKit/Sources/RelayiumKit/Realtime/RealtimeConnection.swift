@@ -338,6 +338,24 @@ public final class RealtimeConnection: NSObject {
         }
     }
 
+    // MARK: - Receiver control replies
+
+    /// The receiver accepts the incoming batch: sends CTRL_ACCEPT so the sender
+    /// begins streaming data frames. Call this from `onManifest`. Mirrors the web
+    /// receiver sending `ACCEPT` on the user's accept click.
+    public func accept() { sendControl(.accept) }
+    /// The receiver rejects the incoming batch (CTRL_REJECT); the sender aborts.
+    public func reject() { sendControl(.reject) }
+    /// The receiver signals it received and verified the whole batch (CTRL_COMPLETE).
+    public func complete() { sendControl(.complete) }
+
+    private func sendControl(_ c: RealtimeControl) {
+        queue.async { [weak self] in
+            guard let self, let ch = self.channel, !self.closed else { return }
+            _ = ch.sendData(RTCDataBuffer(data: Data([c.rawValue]), isBinary: true))
+        }
+    }
+
     // MARK: - Send
 
     /// How long the send path will wait for a stalled step (the receiver's

@@ -23,5 +23,15 @@ let package = Package(
             path: "Tests",
             resources: [.process("Fixtures")]
         ),
+        // Live realtime E2E harness (native<->native over prod /ws). Not a unit
+        // test — run manually: `swift run RealtimeE2E`. Needs the network.
+        .executableTarget(
+            name: "RealtimeE2E",
+            dependencies: [
+                "RelayiumKit",
+                .product(name: "WebRTC", package: "WebRTC"),
+            ],
+            path: "Sources/RealtimeE2E"
+        ),
     ]
 )
