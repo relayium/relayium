@@ -56,6 +56,7 @@ scripts/check-production-identifiers.sh
 - **Commit messages** follow a conventional style used in the history, e.g.
   `feat(web): ...`, `fix(server): ...`, `docs: ...`.
 - For changes that touch the wire protocol or crypto, describe the security reasoning in the PR.
+- **Sign off every commit** with `git commit -s` — see [License](#license) below.
 
 ## Manual acceptance
 
@@ -64,4 +65,24 @@ acceptance procedure (two devices on a LAN) — please run the relevant parts fo
 
 ## License
 
-By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE).
+Relayium is [open core](LICENSE): `server/` and `web/` are AGPL-3.0, `apps/` is
+Apache-2.0, and `docs/protocol/` is CC BY 4.0. By contributing, you agree that
+your contribution is licensed under whichever of those licenses covers the
+directory it lands in — see the root [`LICENSE`](LICENSE) for the full
+breakdown.
+
+We use the **[Developer Certificate of Origin](DCO)** (DCO) instead of a CLA.
+It's lighter weight: it just asserts you wrote the contribution (or otherwise
+have the right to submit it), and it's already trusted by very large projects
+(Linux kernel, Git, and most CNCF projects). No paperwork, no signing up
+anywhere — sign off each commit instead:
+
+```bash
+git commit -s -m "feat(web): ..."
+```
+
+`-s` appends a `Signed-off-by: Your Name <you@example.com>` trailer using your
+git `user.name` / `user.email`. If you forgot on the last commit, fix it with
+`git commit --amend -s` (or `git rebase --exec 'git commit --amend --no-edit -s' -i <base>`
+for a range). PRs with unsigned commits will be asked to add sign-off before
+merge.
