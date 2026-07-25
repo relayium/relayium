@@ -362,13 +362,21 @@ public final class URLSessionWebSocketChannel: NSObject, WebSocketChannel, URLSe
         closedFired = true
         isOpen = false
         onClose?()
+        // URLSession retains its delegate (self) until invalidated; break the
+        // session <-> channel retain cycle on every terminal path (remote drop,
+        // receive failure, or explicit close all funnel through here).
+        session.invalidateAndCancel()
     }
 
     public func send(_ text: String) {
         guard isOpen else { return }          // best-effort; drop when not open
         task.send(.string(text)) { _ in }     // fire-and-forget; a lost frame is re-aligned after reconnect
     }
-    public func close() { isOpen = false; task.cancel(with: .goingAway, reason: nil) }
+    public func close() {
+        isOpen = false
+        task.cancel(with: .goingAway, reason: nil)
+        session.invalidateAndCancel()   // safe to call again even if already invalidated
+    }
 
     // URLSessionWebSocketDelegate:
     public func urlSession(_ s: URLSession, webSocketTask: URLSessionWebSocketTask,
@@ -505,6 +513,13 @@ public final class SignalingClient {
 
     /// End the signaling session (closes the underlying socket).
     public func close() { channel.close() }
+
+    // Tear down the channel even if `close()` was never called explicitly —
+    // e.g. the owner drops the client while the socket is still OPEN. The
+    // channel's callbacks are `[weak self]`, so nothing here keeps
+    // SignalingClient alive; this just makes sure dropping it also releases
+    // the underlying URLSession (see URLSessionWebSocketChannel.close/markClosed).
+    deinit { channel.close() }
 
     /// Build a real client at `<wsBase>/ws?code=<code>` (empty code → LAN room).
     public static func connect(wsBase: URL, code: String, name: String) -> SignalingClient {

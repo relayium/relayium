@@ -22,6 +22,14 @@ final class SignalingClientTests: XCTestCase {
         }
         XCTAssertNil(weakClient, "SignalingClient must deinit when its owner drops it (no channel↔client cycle)")
     }
+    func testDeinitClosesChannel() {
+        let ch = FakeWebSocketChannel()
+        do {
+            let c = SignalingClient(channel: ch, name: "Mac")
+            withExtendedLifetime(c) {}
+        }
+        XCTAssertTrue(ch.closed, "SignalingClient.deinit must close its channel (breaks the real session↔channel retain cycle)")
+    }
     func testWelcomeDeliversSelfIdAndIp() {
         let ch = FakeWebSocketChannel(); let c = SignalingClient(channel: ch, name: "Mac")
         var selfId = ""; var ip = ""

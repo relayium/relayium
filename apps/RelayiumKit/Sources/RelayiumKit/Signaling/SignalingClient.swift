@@ -24,6 +24,13 @@ public final class SignalingClient {
     /// End the signaling session (closes the underlying socket).
     public func close() { channel.close() }
 
+    // Tear down the channel even if `close()` was never called explicitly —
+    // e.g. the owner drops the client while the socket is still OPEN. The
+    // channel's callbacks are `[weak self]`, so nothing here keeps
+    // SignalingClient alive; this just makes sure dropping it also releases
+    // the underlying URLSession (see URLSessionWebSocketChannel.close/markClosed).
+    deinit { channel.close() }
+
     /// Build a real client at `<wsBase>/ws?code=<code>` (empty code → LAN room).
     public static func connect(wsBase: URL, code: String, name: String) -> SignalingClient {
         var comps = URLComponents(url: wsBase.appendingPathComponent("ws"), resolvingAgainstBaseURL: false)!

@@ -48,13 +48,21 @@ public final class URLSessionWebSocketChannel: NSObject, WebSocketChannel, URLSe
         closedFired = true
         isOpen = false
         onClose?()
+        // URLSession retains its delegate (self) until invalidated; break the
+        // session <-> channel retain cycle on every terminal path (remote drop,
+        // receive failure, or explicit close all funnel through here).
+        session.invalidateAndCancel()
     }
 
     public func send(_ text: String) {
         guard isOpen else { return }          // best-effort; drop when not open
         task.send(.string(text)) { _ in }     // fire-and-forget; a lost frame is re-aligned after reconnect
     }
-    public func close() { isOpen = false; task.cancel(with: .goingAway, reason: nil) }
+    public func close() {
+        isOpen = false
+        task.cancel(with: .goingAway, reason: nil)
+        session.invalidateAndCancel()   // safe to call again even if already invalidated
+    }
 
     // URLSessionWebSocketDelegate:
     public func urlSession(_ s: URLSession, webSocketTask: URLSessionWebSocketTask,
