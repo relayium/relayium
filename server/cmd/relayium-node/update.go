@@ -246,7 +246,7 @@ func (s systemctlCtl) Restart() error {
 //     is genuinely fresh but came from a process still running the OLD binary.
 //     That happens whenever the unit executes a path other than the one this
 //     command replaced — `-bin`/RELAYIUM_NODE_BIN make that path configurable,
-//     and a host whose unit runs e.g. /opt/relayium/relayium-node while the
+//     and a host whose unit runs the binary from a custom install path while the
 //     updater defaults to /usr/local/bin/relayium-node would otherwise report a
 //     confident false success.
 //

@@ -229,7 +229,7 @@ func (s *Service) ResetPassword(ctx, rawToken, newPassword) (Session, error)
 
 ## 8. 配置 / 环境变量（对接 DMS）
 
-`/opt/relayium/server/.env` 追加（**发件地址无连字符**）：
+`<production-server>/server/.env` 追加（**发件地址无连字符**）：
 
 ```dotenv
 RELAYIUM_SMTP_ADDR=mail.relayium.com:587
@@ -262,7 +262,7 @@ RELAYIUM_BASE_URL=https://relayium.com
      --server mail.relayium.com:587 --tls \
      --auth-user noreply@relayium.com --auth-password '<口令>'
    ```
-4. **写 `.env` + 重启**（已完成 ✅）：追加第 8 节变量后 `systemctl restart relayium`。
+4. **写 `.env` + 重启**（已完成 ✅）：追加第 8 节变量后重启 relayium 服务（部署步骤见运维文档）。
 5. **端到端复核**（部署后做）：网站真实注册一个邮箱 → 确认收到验证邮件、非垃圾箱 → 点链接→自动登录。忘记密码同样走一遍。
 
 ## 10. 安全

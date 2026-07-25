@@ -36,19 +36,20 @@ func TestParseUpdateFlagsReadsStateDirFromEnvFile(t *testing.T) {
 	}
 }
 
-// The node-hardening runbook (relayium-ops) runs the binary from /opt/relayium; the updater must
-// replace the binary that is actually running, not the installer's default.
+// A node operator's systemd unit may run the binary from a custom install path
+// (RELAYIUM_NODE_BIN in the env file); the updater must replace the binary that
+// is actually running, not the installer's default.
 func TestParseUpdateFlagsReadsBinPathFromEnvFile(t *testing.T) {
 	t.Setenv("RELAYIUM_NODE_BIN", "")
-	envFile := writeEnvFile(t, "RELAYIUM_NODE_BIN=\"/opt/relayium/relayium-node\"\n")
+	envFile := writeEnvFile(t, "RELAYIUM_NODE_BIN=\"/srv/relayium-node/relayium-node\"\n")
 
 	var errBuf bytes.Buffer
 	uc, err := parseUpdateFlags([]string{"-to", "v0.9.0", "-env-file", envFile}, &errBuf)
 	if err != nil {
 		t.Fatalf("parseUpdateFlags: %v", err)
 	}
-	if uc.BinPath != "/opt/relayium/relayium-node" {
-		t.Errorf("BinPath = %q, want the env file's %q (quotes stripped)", uc.BinPath, "/opt/relayium/relayium-node")
+	if uc.BinPath != "/srv/relayium-node/relayium-node" {
+		t.Errorf("BinPath = %q, want the env file's %q (quotes stripped)", uc.BinPath, "/srv/relayium-node/relayium-node")
 	}
 }
 
