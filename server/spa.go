@@ -165,8 +165,9 @@ const downloadPrefix = "/d/"
 // route. Anything else is a genuine 404 with the static 404 page.
 //
 // The set of shell files IS the route whitelist, and it is the same whitelist
-// nginx uses (`try_files $uri $uri.html $uri/ =404`, see
-// deploy/nginx/relayium.conf.example) — one list, generated, impossible to let
+// nginx uses (`try_files $uri $uri.html $uri/ =404`; the production nginx
+// config lives in the private relayium-ops repo, see docs/self-hosting.md
+// for the self-hosting equivalent) — one list, generated, impossible to let
 // drift. Before this, every extensionless unknown path answered 200 with the
 // homepage: /compare/typo, a deleted article and any random string all rendered
 // index.html, which is a soft 404 in Search Console's eyes and means a removed

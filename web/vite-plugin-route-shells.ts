@@ -18,7 +18,8 @@ import { CLI_ARTICLES } from "./scripts/pages/content/cli-articles.mjs";
  * Emits one HTML file per English SPA route (`cross-network.html`,
  * `pricing.html`, …) next to `index.html`, each being the same built shell with
  * its SEO-HEAD/SEO-BODY regions swapped for that route's own metadata and prose.
- * See scripts/pages/shells.mjs for why, and deploy/nginx/relayium.conf.example
+ * See scripts/pages/shells.mjs for why, and the production nginx config (now
+ * in the private relayium-ops repo; see docs/self-hosting.md for self-hosting)
  * for the `try_files $uri $uri.html` rule that serves them.
  *
  * It runs in closeBundle, not generateBundle, because it needs the FINAL

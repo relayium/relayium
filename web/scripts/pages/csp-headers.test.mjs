@@ -6,12 +6,18 @@
 // snippet is ever edited, the hardcoded hash stops matching and the browser
 // refuses to run it — a theme flash plus a console CSP error, on every page.
 // This test fails the build in that case, pointing at the file to update.
+//
+// The production nginx config now lives in the private relayium-ops repo (see
+// docs/self-hosting.md), so it's normally absent here — this guard only runs
+// when a relayium-ops checkout is symlinked/copied in alongside this repo.
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), "utf8");
+const nginxSnippetPath = "../deploy/nginx/relayium-security.conf";
+const hasNginxSnippet = existsSync(resolve(process.cwd(), nginxSnippetPath));
 
 // The same extraction server/spa.go's spaScriptHashes uses: an inline <script>
 // with no src and no non-JS type. The theme snippet is the first such block in
@@ -27,7 +33,12 @@ function firstInlineScriptHash(html) {
 }
 
 describe("nginx CSP snippet", () => {
-  const snippet = read("../deploy/nginx/relayium-security.conf");
+  if (!hasNginxSnippet) {
+    it.skip("relayium-ops checkout not present — see docs/self-hosting.md", () => {});
+    return;
+  }
+
+  const snippet = read(nginxSnippetPath);
   const csp = snippet.match(/Content-Security-Policy "([^"]*)"/)?.[1];
 
   it("exists and has the expected shape", () => {
