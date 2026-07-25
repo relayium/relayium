@@ -4,11 +4,23 @@ import XCTest
 final class SignalingClientTests: XCTestCase {
     func testJoinsOnOpen() {
         let ch = FakeWebSocketChannel()
-        _ = SignalingClient(channel: ch, name: "Mac")
+        let c = SignalingClient(channel: ch, name: "Mac")
         ch.fireOpen()
         XCTAssertEqual(ch.sent.count, 1)
         let e = try! JSONDecoder().decode(Envelope.self, from: Data(ch.sent[0].utf8))
         XCTAssertEqual(e.type, "join"); XCTAssertEqual(e.name, "Mac")
+        withExtendedLifetime(c) {}
+    }
+    func testNoRetainCycle() {
+        weak var weakClient: SignalingClient?
+        do {
+            let ch = FakeWebSocketChannel()
+            let c = SignalingClient(channel: ch, name: "Mac")
+            weakClient = c
+            ch.fireOpen()
+            withExtendedLifetime(c) {}
+        }
+        XCTAssertNil(weakClient, "SignalingClient must deinit when its owner drops it (no channel↔client cycle)")
     }
     func testWelcomeDeliversSelfIdAndIp() {
         let ch = FakeWebSocketChannel(); let c = SignalingClient(channel: ch, name: "Mac")

@@ -400,7 +400,7 @@ git commit -m "feat(native): WebSocketChannel protocol + URLSessionWebSocketTask
 **Interfaces:**
 - Consumes: `Envelope`/`Peer`/`JSONValue` (Task 2), `WebSocketChannel`/`FakeWebSocketChannel` (Task 3).
 - Produces:
-  - `final class SignalingClient` with `init(channel: WebSocketChannel, name: String)`; callbacks `onSelfId`, `onPeers`, `onSignal`, `onClose`; `sendSignal(to:data:)`.
+  - `final class SignalingClient` with `init(channel: WebSocketChannel, name: String)`; callbacks `onSelfId`, `onPeers`, `onSignal`, `onClose`; `sendSignal(to:data:)`; `close()` to end the session.
   - A convenience `static func connect(wsBase: URL, code: String, name: String) -> SignalingClient` building `URLSessionWebSocketChannel` at `<wsBase>/ws?code=<code>`.
 
 - [ ] **Step 1: Write the failing test**
@@ -502,6 +502,9 @@ public final class SignalingClient {
         channel.onText = { [weak self] t in self?.handle(t) }
         channel.onClose = { [weak self] in self?.onClose?() }
     }
+
+    /// End the signaling session (closes the underlying socket).
+    public func close() { channel.close() }
 
     /// Build a real client at `<wsBase>/ws?code=<code>` (empty code → LAN room).
     public static func connect(wsBase: URL, code: String, name: String) -> SignalingClient {

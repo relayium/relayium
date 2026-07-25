@@ -16,20 +16,13 @@ public final class SignalingClient {
     public init(channel: WebSocketChannel, name: String) {
         self.channel = channel
         self.name = name
-        // Strong self: the channel is often the only thing keeping a freshly
-        // `connect()`-ed client alive until its first event fires (a caller may
-        // discard the returned instance and rely on the callbacks it already
-        // wired up). That makes channel→closure→self and self→channel a cycle;
-        // it's broken below once the socket closes, so both can deinit then.
-        channel.onOpen = { self.sendJoin() }
-        channel.onText = { self.handle($0) }
-        channel.onClose = {
-            self.onClose?()
-            channel.onOpen = nil
-            channel.onText = nil
-            channel.onClose = nil
-        }
+        channel.onOpen = { [weak self] in self?.sendJoin() }
+        channel.onText = { [weak self] in self?.handle($0) }
+        channel.onClose = { [weak self] in self?.onClose?() }
     }
+
+    /// End the signaling session (closes the underlying socket).
+    public func close() { channel.close() }
 
     /// Build a real client at `<wsBase>/ws?code=<code>` (empty code → LAN room).
     public static func connect(wsBase: URL, code: String, name: String) -> SignalingClient {
