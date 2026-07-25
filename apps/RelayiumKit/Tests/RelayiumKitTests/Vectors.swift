@@ -40,6 +40,18 @@ struct Vectors {
         let arr = json["files"] as! [[String: Any]]
         return arr.map { ($0["dataHex"] as! String).hexBytes }
     }
+    /// Reads `manifest.files` into `[FileMeta]`, including the optional `path`.
+    func realtimeManifestFiles() -> [FileMeta] {
+        var node: Any = json
+        for k in "manifest.files".split(separator: ".") { node = (node as! [String: Any])[String(k)]! }
+        let arr = node as! [[String: Any]]
+        return arr.map { FileMeta(name: $0["name"] as! String, size: $0["size"] as! Int, path: $0["path"] as? String) }
+    }
+    /// Reads `files[].dataHex` into `[[UInt8]]` (RealtimeWire vectors).
+    func realtimeFileDatas() -> [[UInt8]] {
+        let arr = json["files"] as! [[String: Any]]
+        return arr.map { ($0["dataHex"] as! String).hexBytes }
+    }
     private func hexString(_ path: String) -> String { str(path) }
 }
 
@@ -52,4 +64,8 @@ extension String {
         }
         return out
     }
+}
+
+extension Array where Element == UInt8 {
+    var hexString: String { map { String(format: "%02x", $0) }.joined() }
 }
