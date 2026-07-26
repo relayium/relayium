@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -95,6 +97,61 @@ func TestRunSendChecksSourceBeforeMinting(t *testing.T) {
 	}
 	if strings.Contains(got, "needs an account") {
 		t.Fatalf("mint ran before the manifest check (not-logged-in error leaked through): %q", got)
+	}
+}
+
+// Only "does not exist" makes the last argument a candidate pairing code. Any
+// other stat failure means we could not tell, and guessing "code" there hands
+// a real filename to the rendezvous while swallowing the error that actually
+// stopped the user. Standing in a directory with no traverse bit makes a bare,
+// code-shaped relative name fail with EACCES while the file is genuinely there.
+func TestSplitSendArgsKeepsAnUnstatableArgumentAsASource(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores the missing traverse bit, so os.Stat cannot be made to fail with EACCES here")
+	}
+	dir := t.TempDir()
+	real := filepath.Join(dir, "a.zip")
+	if err := os.WriteFile(real, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	work := filepath.Join(dir, "work")
+	if err := os.Mkdir(work, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// A real file that happens to be named like a well-formed code.
+	if err := os.WriteFile(filepath.Join(work, "K7M4XR"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(work); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prev) })
+	if err := os.Chmod(work, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	// LIFO: this restores the mode before the Chdir above is undone and before
+	// t.TempDir's own cleanup tries to remove the tree.
+	t.Cleanup(func() { _ = os.Chmod(work, 0o700) })
+
+	// Precondition. If this platform (or this filesystem) still lets the stat
+	// through, or reports plain ENOENT, there is nothing here to exercise.
+	if _, statErr := os.Stat("K7M4XR"); statErr == nil || errors.Is(statErr, fs.ErrNotExist) {
+		t.Skipf("os.Stat(K7M4XR) = %v; no non-ENOENT stat failure available here", statErr)
+	}
+
+	srcs, code, err := splitSendArgs([]string{real, "K7M4XR"})
+	if err != nil {
+		t.Fatalf("an unstatable argument must stay a source, got error: %v", err)
+	}
+	if code != "" {
+		t.Errorf("code = %q, want none — a file we merely cannot stat is not a pairing code", code)
+	}
+	if strings.Join(srcs, "|") != strings.Join([]string{real, "K7M4XR"}, "|") {
+		t.Errorf("srcs = %v, want both arguments kept as sources", srcs)
 	}
 }
 

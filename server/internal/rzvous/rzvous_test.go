@@ -60,10 +60,16 @@ func TestJoinRejectsMalformedCodeWithoutDialing(t *testing.T) {
 	if n := atomic.LoadInt32(&hits); n != 0 {
 		t.Errorf("malformed code still dialed the server %d time(s)", n)
 	}
-	for _, want := range []string{"726122", "6 characters", "relayium.com"} {
+	for _, want := range []string{"726122", "6 characters", "5 minutes", "issued by the server"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not mention %q", err, want)
 		}
+	}
+	// serverURL is whatever --server points at. Naming the first-party host
+	// tells a self-hoster their own instance's codes come from a service they
+	// deliberately are not using.
+	if strings.Contains(err.Error(), "relayium.com") {
+		t.Errorf("error %q hard-codes the first-party issuer", err)
 	}
 }
 

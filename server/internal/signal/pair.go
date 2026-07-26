@@ -134,6 +134,21 @@ const CodeAlphabet = "ACDEFHJKMNPRTWXY23456789"
 // grounds. Both numbers are therefore load-bearing.
 const CodeLen = 6
 
+// CodeTTLSeconds is how long a minted pairing code stays valid — the value
+// main.go hands NewPairRegistry, and the one the CLI's error copy quotes.
+//
+// It is exported for the same reason CodeLen and CodeAlphabet are: the CLI
+// tells the user what a code is ("6 characters from …, and last 5 minutes")
+// and every one of those numbers has to come from the same place as the
+// behaviour, or the copy goes stale the first time the value moves. It was a
+// bare 300 at the NewPairRegistry call site with the "5 minutes" typed out by
+// hand in three separate strings.
+//
+// 5 分钟：配对码是跨网传输的唯一准入凭证，有效期直接决定爆破窗口有多大。真正扛住
+// 爆破的是码的熵（24^6，见 CodeAlphabet），TTL 只是再乘 1/3；但两者都便宜，就都
+// 拿上。用户来不及的话界面本来就有重新生成的流程。
+const CodeTTLSeconds int64 = 300
+
 // randCode returns a uniformly random CodeLen-character code over CodeAlphabet.
 //
 // Drawn per character with crypto/rand.Int over the alphabet length, so there is

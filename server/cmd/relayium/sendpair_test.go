@@ -30,6 +30,92 @@ func TestAPIBase(t *testing.T) {
 	}
 }
 
+// The path is dropped, not carried. `--server ws://host/ws` is a valid
+// signaling target (rzvous.Join sets the path itself), but as an API base it
+// used to yield "http://host/ws" — which mismatched the stored creds.Server and
+// refused to mint, then printed a remedy whose /api/pair would 404.
+func TestAPIBaseKeepsOnlySchemeAndHost(t *testing.T) {
+	cases := map[string]string{
+		"ws://host/ws":                    "http://host",
+		"wss://relayium.com/ws":           "https://relayium.com",
+		"wss://relayium.com/ws?code=1#f":  "https://relayium.com",
+		"http://192.168.1.9:8080/signal/": "http://192.168.1.9:8080",
+	}
+	for in, want := range cases {
+		got, err := apiBase(in)
+		if err != nil {
+			t.Fatalf("apiBase(%q): %v", in, err)
+		}
+		if got != want {
+			t.Errorf("apiBase(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// A value that is not scheme+host is refused here, where we can name it, rather
+// than surfacing url.Parse's "first path segment in URL cannot contain colon"
+// or, for the empty string, an uncopyable "relayium login --server " remedy.
+func TestAPIBaseRejectsUnusableServerURLs(t *testing.T) {
+	for _, in := range []string{"", "127.0.0.1:18080", "localhost:8080", "relayium.com", "ftp://relayium.com", "wss://"} {
+		got, err := apiBase(in)
+		if err == nil {
+			t.Errorf("apiBase(%q) = %q, want an error", in, got)
+			continue
+		}
+		msg := err.Error()
+		if !strings.Contains(msg, fmt.Sprintf("%q", in)) {
+			t.Errorf("apiBase(%q) error %q does not quote what was passed", in, msg)
+		}
+		if !strings.Contains(msg, "wss://relayium.com") {
+			t.Errorf("apiBase(%q) error %q does not show the expected shape", in, msg)
+		}
+	}
+}
+
+// End to end for the path case: a login stored against the plain origin must
+// still mint when send is pointed at the same host with the /ws signaling path.
+func TestMintCodeAcceptsASignalingURLWithAPath(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"code":"K7M4XR","expiresAt":4102444800}`))
+	}))
+	defer srv.Close()
+
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfgDir, err := resolveConfigDir("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cloud.Save(cfgDir, cloud.Creds{Server: srv.URL, AccessToken: "rlm_cli_abc"}); err != nil {
+		t.Fatal(err)
+	}
+	var errb bytes.Buffer
+	code, err := mintCode(context.Background(), srv.URL+"/ws", &errb)
+	if err != nil {
+		t.Fatalf("mintCode against the signaling path: %v", err)
+	}
+	if code != "K7M4XR" {
+		t.Fatalf("code = %q", code)
+	}
+}
+
+// An empty --server must fail on the flag, not slide into the not-logged-in
+// copy where it rendered as "run `relayium login --server ` first".
+func TestMintCodeRejectsAnEmptyServer(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var errb bytes.Buffer
+	_, err := mintCode(context.Background(), "", &errb)
+	if err == nil {
+		t.Fatal("want an error for an empty --server")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "not a usable server URL") {
+		t.Errorf("want the flag error, got %q", msg)
+	}
+	if strings.Contains(msg, "relayium login") {
+		t.Errorf("an empty --server must not print a login remedy with nothing after it: %q", msg)
+	}
+}
+
 // Minting needs an account, and on a server there is no browser to bounce
 // through — so this must fail fast and say what to run, never start a login.
 func TestMintCodeNotLoggedIn(t *testing.T) {

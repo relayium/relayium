@@ -39,9 +39,13 @@ func Join(ctx context.Context, serverURL, code, name string) (*Session, error) {
 		// come back as an opaque 403, and "expected handshake response status
 		// code 101 but got 403" tells the user nothing about what to type instead.
 		if !signal.ValidCodeFormat(code) {
+			// "issued by the server", not "issued by relayium.com": serverURL is
+			// whatever --server points at, so naming the first-party host tells a
+			// self-hoster their own instance's codes come from a service they
+			// deliberately are not using.
 			return nil, fmt.Errorf(
-				"pairing code %q is not a valid code: codes are %d characters from %s, last 5 minutes, and are issued by relayium.com — one cannot be made up",
-				code, signal.CodeLen, signal.CodeAlphabet)
+				"pairing code %q is not a valid code: codes are %d characters from %s, last %d minutes, and are issued by the server — one cannot be made up",
+				code, signal.CodeLen, signal.CodeAlphabet, signal.CodeTTLSeconds/60)
 		}
 		u.RawQuery = "code=" + url.QueryEscape(code)
 	}
@@ -92,7 +96,9 @@ func dialError(err error, resp *http.Response) error {
 		if reason == "" {
 			reason = "invalid or expired pairing code"
 		}
-		return fmt.Errorf("rendezvous dial: %s — a pairing code is issued by relayium.com and lasts 5 minutes, so ask for a fresh one", reason)
+		// Same reason as in Join: the issuer is whichever server this dial went
+		// to, which for a self-hoster is their own.
+		return fmt.Errorf("rendezvous dial: %s — a pairing code is issued by the server and lasts %d minutes, so ask for a fresh one", reason, signal.CodeTTLSeconds/60)
 	case http.StatusTooManyRequests:
 		if reason == "" {
 			reason = "rate limited"

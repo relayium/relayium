@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/relayium/relayium/internal/cloud"
@@ -16,18 +15,46 @@ import (
 // apiBase turns the crossnet --server URL (a wss:// signaling base) into the
 // HTTP base the account API lives on, so a self-hoster passes one flag rather
 // than two.
+//
+// It keeps the scheme and host and nothing else. `--server ws://host/ws` is a
+// perfectly valid signaling target — rzvous.Join overwrites u.Path with "/ws"
+// itself — but this is an API *base*, and carrying the path through produced
+// "http://host/ws": it mismatched the stored creds.Server so minting was
+// refused, and the remedy that refusal printed, `relayium login --server
+// http://host/ws`, would have stored credentials whose /api/pair resolves to
+// /ws/api/pair, a 404. Query and fragment go with it, for the same reason.
+//
+// Anything that is not ws/wss/http/https over a host is rejected here rather
+// than carried into the error copy downstream. `--server 127.0.0.1:18080`
+// (schemeless) used to surface url.Parse's "first path segment in URL cannot
+// contain colon", and `--server ""` produced the uncopyable remedy "run
+// `relayium login --server ` before sending from there".
 func apiBase(server string) (string, error) {
 	u, err := url.Parse(server)
-	if err != nil {
-		return "", err
+	if err != nil || u.Host == "" {
+		return "", badServerURL(server)
 	}
+	var scheme string
 	switch u.Scheme {
-	case "wss":
-		u.Scheme = "https"
-	case "ws":
-		u.Scheme = "http"
+	case "wss", "https":
+		scheme = "https"
+	case "ws", "http":
+		scheme = "http"
+	default:
+		return "", badServerURL(server)
 	}
-	return strings.TrimRight(u.String(), "/"), nil
+	return (&url.URL{Scheme: scheme, Host: u.Host}).String(), nil
+}
+
+// badServerURL names what was passed and what is expected. It quotes the value
+// because the failing inputs are the ones that read as nothing at all — an
+// empty string, or a host that was silently taken for a scheme.
+func badServerURL(server string) error {
+	return fmt.Errorf(
+		"--server %q is not a usable server URL\n"+
+			"  expected a scheme and a host, e.g. wss://relayium.com or http://192.168.1.9:8080\n"+
+			"  accepted schemes: ws, wss, http, https",
+		server)
 }
 
 // errNotLoggedIn is the copy for "minting needs an account". It never starts a
@@ -90,6 +117,15 @@ func mintCode(ctx context.Context, server string, stderr io.Writer) (string, err
 // printHandoff writes the one block a sender pastes into a chat window or
 // another machine's SSH session: everything the recipient needs, no link to
 // follow (the CLI cannot consume a URL, and the recipient is at a terminal).
+//
+// This block goes to stderr, which is deliberately the opposite of runUp's
+// convention (cloud.go: the share link goes to stdout so `relayium up … |
+// pbcopy` keeps piping a clean link). The difference is that `up` finishes and
+// leaves the link as its terminal artifact, whereas `send` prints this and then
+// blocks waiting for the receiver — nothing downstream of a pipe would run
+// until the transfer ended, so there is no pipeline to keep clean. Treat it as
+// interactive hand-off, alongside the SAS line and "path: direct" that
+// crossnetConn already writes to stderr, rather than as command output.
 func printHandoff(w io.Writer, p cloud.Pair, base string) {
 	fmt.Fprintf(w, "Code: %s%s\n", p.Code, ttlClause(p.ExpiresAt))
 	fmt.Fprintf(w, "On the other machine:  relayium receive %s\n", p.Code)

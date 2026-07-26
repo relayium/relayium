@@ -265,10 +265,9 @@ func main() {
 
 	// Anonymous, login-free pairing: short numeric codes for cross-network
 	// realtime rendezvous. Pure in-memory — works even if the DB is unavailable.
-	// 5 分钟：配对码是跨网传输的唯一准入凭证，有效期直接决定爆破窗口有多大。
-	// 真正扛住爆破的是码的熵（24^6，见 signal.CodeAlphabet），TTL 只是再乘 1/3；
-	// 但两者都便宜，就都拿上。用户来不及的话界面本来就有重新生成的流程。
-	pairReg := signal.NewPairRegistry(300, func() int64 { return time.Now().Unix() }) // 5 min
+	// TTL 是 signal.CodeTTLSeconds（5 分钟），理由写在那个常量上；导出成常量是因为
+	// CLI 的报错文案要照着说「有效 5 分钟」，行为和文案必须取自同一个来源。
+	pairReg := signal.NewPairRegistry(signal.CodeTTLSeconds, func() int64 { return time.Now().Unix() })
 	go pairReg.Run(context.Background(), time.Minute)
 	// div lowers the per-instance thresholds below for a round-robin multi-instance
 	// deployment; 1 (the default, and correct for a single instance or an IP-hash
