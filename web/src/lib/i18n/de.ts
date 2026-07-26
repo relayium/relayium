@@ -184,7 +184,7 @@ const de: Messages = {
     freeTitle: "Immer kostenlos",
     freeLead: "Übertragen Sie Dateien für immer kostenlos:",
     free1: "Übertragungen im lokalen Netzwerk (LAN) – sofort, ohne Konto.",
-    free2: "Direkte Peer-to-Peer-Übertragungen mit dem CLI – über Ihr eigenes SSH, Daemon-direkt oder einen Pairing-Code – ohne Konto und ohne Verbrauchsmessung.",
+    free2: "Direkte Peer-to-Peer-Übertragungen mit dem CLI – über Ihr eigenes SSH, Daemon-direkt oder einen Pairing-Code – ohne Verbrauchsmessung. Ein Konto braucht nur das Erzeugen eines send-Pairing-Codes; zum Empfangen nie.",
     free3: "Ende-zu-Ende-verschlüsselt, ohne Dateigrößenbeschränkung, und Ihre Dateien gehen direkt von Gerät zu Gerät – sie berühren nie unsere Server.",
     freeWhy: "Direkte und LAN-Übertragungen kosten uns nichts und bleiben daher für alle kostenlos – zum Empfangen ist keine Anmeldung nötig.",
     paidTitle: "Wofür Sie bezahlen",
@@ -381,7 +381,7 @@ const de: Messages = {
     mode2Title: "send / receive — per Pairing-Code",
     mode2Tag: "kostenlos · direktes P2P",
     mode2Body:
-      "Sende netzwerkübergreifend an eine andere Person. Vereinbart außerhalb des Kanals einen kurzen Code (etwa am Telefon — ein beliebiger kurzer String), dann sendet die eine Seite und die andere empfängt. Die Verbindung ist direktes Peer-to-Peer: Nur ein kleiner Rendezvous-Handshake läuft über Relayium, um die beiden Enden einander vorzustellen — die Dateibytes nie. Sind beide Enden hinter strengem NAT und können sich nicht direkt verbinden, schlägt die Übertragung schlicht fehl (die CLI hat kein Relay). Beide Terminals zeigen einen 6-stelligen SAS-Code an — vergleicht sie, um einen Man-in-the-Middle auszuschließen (mit --verify wird eine Bestätigung verlangt, bevor überhaupt Bytes fließen).",
+      "Sende netzwerkübergreifend an eine andere Person. Melde dich einmal mit relayium login an und führe send dann ohne Code aus: Die CLI erzeugt einen Pairing-Code aus 6 Zeichen (aus einem Alphabet ohne 0 und 1), gültig für 5 Minuten, und gibt den genauen Befehl für die Gegenseite aus. Gib diesen Code außerhalb des Kanals weiter — etwa am Telefon. Selbst wählen kannst du ihn nicht, der Server akzeptiert nur selbst ausgegebene Codes, und der Empfänger braucht kein Konto. Beide Enden müssen die CLI sein; für jemanden mit nur einem Browser nimm stattdessen relayium up. Die Verbindung ist direktes Peer-to-Peer: Nur ein kleiner Rendezvous-Handshake läuft über Relayium, um die beiden Enden einander vorzustellen — die Dateibytes nie. Sind beide Enden hinter strengem NAT und können sich nicht direkt verbinden, schlägt die Übertragung schlicht fehl (die CLI hat kein Relay). Beide Terminals zeigen einen 6-stelligen SAS-Code an — vergleicht sie, um einen Man-in-the-Middle auszuschließen (mit --verify wird eine Bestätigung verlangt, bevor überhaupt Bytes fließen).",
     mode3Title: "daemon direct — Server zu Server",
     mode3Tag: "kostenlos",
     mode3Body:

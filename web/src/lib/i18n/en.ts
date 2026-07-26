@@ -184,7 +184,7 @@ const en: Messages = {
     freeTitle: "Always free",
     freeLead: "Move files at zero cost, forever:",
     free1: "Local network (LAN) transfers — instant, no account needed.",
-    free2: "Direct peer-to-peer transfers with the CLI — over your own SSH, daemon-direct, or a pairing code — with no account and nothing metered.",
+    free2: "Direct peer-to-peer transfers with the CLI — over your own SSH, daemon-direct, or a pairing code — with nothing metered. Only minting a send pairing code needs an account; receiving never does.",
     free3: "End-to-end encrypted, no file-size limits, and your files go straight between devices — they never touch our servers.",
     freeWhy: "Direct and LAN transfers cost us nothing, so they stay free for everyone — no sign-up needed to receive.",
     paidTitle: "What you pay for",
@@ -395,7 +395,7 @@ const en: Messages = {
     mode2Title: "send / receive — by pairing code",
     mode2Tag: "free · direct P2P",
     mode2Body:
-      "Send to another person across networks. Agree on a short code out of band (say it over a call — it's any short string), then one side sends and the other receives. The connection is direct peer-to-peer: only a small rendezvous handshake passes through Relayium to introduce the two ends — the file bytes never do. If both ends are behind strict NAT and can't connect directly, the transfer simply fails (the CLI has no relay). Both terminals print a 6-digit SAS code — compare them to rule out a man-in-the-middle (add --verify to require confirmation before any bytes move).",
+      "Send to another person across networks. Sign in once with relayium login, then run send with no code: the CLI mints a 6-character pairing code (drawn from an alphabet with no 0 or 1), good for 5 minutes, and prints the exact command the other end runs. Pass that code on out of band — say it over a call. You can't pick it yourself, the server only accepts codes it issued, and the receiver needs no account. Both ends must be the CLI; for someone with only a browser, use relayium up instead. The connection is direct peer-to-peer: only a small rendezvous handshake passes through Relayium to introduce the two ends — the file bytes never do. If both ends are behind strict NAT and can't connect directly, the transfer simply fails (the CLI has no relay). Both terminals print a 6-digit SAS code — compare them to rule out a man-in-the-middle (add --verify to require confirmation before any bytes move).",
     mode3Title: "daemon direct — server to server",
     mode3Tag: "free",
     mode3Body:

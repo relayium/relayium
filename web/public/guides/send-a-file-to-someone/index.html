@@ -92,7 +92,7 @@ relayium receive K7M4XR</code></pre>
       <h2>Direct only — free, or it fails</h2>
       <p>The transfer races a direct connection between the two ends. When one can be established — which is the common case for at least one side with a reachable address — the file streams straight across, encrypted, at full speed and at no cost.</p>
       <p>If both ends are behind strict NAT and no direct path can be found, the transfer fails cleanly rather than routing your file through a relay. That keeps the CLI completely free and keeps your file bytes off our servers. If you hit this, the reliable answer is daemon direct between two reachable servers, or push over SSH.</p>
-      <ul><li>Direct connection succeeds → free, full-speed, end-to-end encrypted.</li><li>No direct path → the transfer fails; the CLI never proxies the file for you.</li><li>Both ends can be anywhere geographically — they just each need to run the command with the same code.</li></ul>
+      <ul><li>Direct connection succeeds → free, full-speed, end-to-end encrypted.</li><li>No direct path → the transfer fails; the CLI never proxies the file for you.</li><li>Both ends can be anywhere geographically — the sender just runs send, and the receiver runs receive with the code it printed.</li></ul>
       <h2>Frequently asked questions</h2>
       <h3>Where does the pairing code come from?</h3>
       <p>Relayium mints it. Run `relayium send ./release.zip` (after `relayium login`) and the CLI prints a 6-character code good for five minutes, plus the exact command the other end runs. You can&#39;t choose it yourself — the server only accepts codes it issued.</p>

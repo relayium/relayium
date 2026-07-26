@@ -46,7 +46,7 @@ const en = {
         "relayium serve turns a machine you own into a daemon-direct target reachable over pinned TLS 1.3 — no SSH, no port 22, trust established on the first connection (approved interactively, or pre-authorized with relayium authorize for unattended use) and pinned from then on. Push straight to it with a relayium:// address.",
         "For sending to someone across the internet who you don't have SSH access to at all, relayium send / receive pairs two computers with a short code instead — direct peer-to-peer, with a short verification code (SAS) both sides check before any bytes move. scp has no answer for that case; you'd need SSH access first.",
       ],
-      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf ABCD-1234"],
+      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf"],
     },
     {
       heading: "Folder mirroring: sync vs re-running scp -r",
@@ -74,7 +74,7 @@ const en = {
     items: [
       {
         q: "Does Relayium's CLI need an account?",
-        a: "No. push/pull uses your own SSH access exactly like scp does — no Relayium account, no sign-in, for any CLI mode.",
+        a: "Not for push/pull — it uses your own SSH access exactly like scp does, with no Relayium account and no sign-in, and the same goes for daemon-direct and sync. send is the exception: it needs an account so the server can mint its pairing code. Receiving never needs one.",
       },
       {
         q: "Does push work if the remote server doesn't have Relayium installed?",
@@ -141,7 +141,7 @@ const zh = {
         "relayium serve 能把你拥有的一台机器变成一个 daemon-direct 目标，通过锁定的 TLS 1.3 访问——无需 SSH、无需 22 端口，信任建立在第一次连接时（可交互批准，或用 relayium authorize 提前授权以支持无人值守），此后一直锁定。用 relayium:// 地址直接向它 push。",
         "如果要发给一个你完全没有 SSH 访问权限、身处互联网另一端的人，relayium send / receive 则改用一个简短代码来配对两台电脑——直连点对点，并在两端都打印一段验证码（SAS），传输开始前双方核对确认。这种场景 scp 完全无解，你首先得有 SSH 访问权限才行。",
       ],
-      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf ABCD-1234"],
+      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf"],
     },
     {
       heading: "文件夹镜像：sync 对比反复运行 scp -r",
@@ -169,7 +169,7 @@ const zh = {
     items: [
       {
         q: "Relayium 的 CLI 需要账号吗？",
-        a: "不需要。push/pull 使用你自己的 SSH 访问权限，方式和 scp 完全一样——CLI 的任何模式都不需要 Relayium 账号，也不需要登录。",
+        a: "push/pull 不需要——它使用你自己的 SSH 访问权限，方式和 scp 完全一样，不需要 Relayium 账号，也不需要登录；daemon 直连和 sync 同样如此。send 是例外：它需要账号，好让服务器签发配对码。接收则从不需要。",
       },
       {
         q: "如果远程服务器没装 Relayium，push 还能用吗？",
@@ -236,7 +236,7 @@ const ja = {
         "relayium serve は、所有するマシンをピン留めされた TLS 1.3 経由で到達可能な daemon-direct のターゲットに変えます——SSH も 22 番ポートも不要で、信頼は最初の接続時に成立し（対話的に承認するか、無人運用向けに relayium authorize で事前承認）、以後はピン留めされます。relayium:// アドレスで直接そこへ push できます。",
         "SSH アクセスがまったくない、インターネットの向こう側にいる相手へ送る場合は、代わりに relayium send / receive が短いコードで2台のコンピュータをペアリングします——直接の P2P で、バイトが動く前に両端で短い検証コード（SAS）を確認します。この場合 scp には答えがなく、そもそも SSH アクセスが必要になります。",
       ],
-      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf ABCD-1234"],
+      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf"],
     },
     {
       heading: "フォルダのミラーリング：sync 対 scp -r の繰り返し",
@@ -264,7 +264,7 @@ const ja = {
     items: [
       {
         q: "Relayium の CLI にアカウントは必要ですか？",
-        a: "いいえ。push/pull は scp とまったく同じように自分の SSH アクセスを使います——CLI のどのモードでも Relayium アカウントもサインインも不要です。",
+        a: "push/pull には不要です——scp とまったく同じように自分の SSH アクセスを使うので、Relayium アカウントもサインインも要りません。daemon 直結と sync も同様です。send は例外で、サーバーがペアリングコードを発行するためにアカウントが必要です。受信には決して必要ありません。",
       },
       {
         q: "リモートサーバーに Relayium がインストールされていなくても push は動きますか？",
@@ -331,7 +331,7 @@ const ko = {
         "relayium serve는 소유한 기기를 고정된 TLS 1.3을 통해 도달 가능한 daemon-direct 대상으로 바꿉니다 — SSH도, 22번 포트도 필요 없고, 신뢰는 첫 연결에서 성립하며(대화식으로 승인하거나, 무인 운영을 위해 relayium authorize로 미리 승인) 이후 계속 고정됩니다. relayium:// 주소로 곧바로 push할 수 있습니다.",
         "SSH 접근 권한이 전혀 없는, 인터넷 건너편의 누군가에게 보내야 한다면 relayium send / receive가 대신 짧은 코드로 두 컴퓨터를 페어링합니다 — 직접 P2P이며, 바이트가 움직이기 전 양쪽에서 짧은 검증 코드(SAS)를 확인합니다. 이런 경우 scp는 답이 없습니다 — 애초에 SSH 접근 권한이 먼저 있어야 합니다.",
       ],
-      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf ABCD-1234"],
+      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf"],
     },
     {
       heading: "폴더 미러링: sync 대 scp -r 반복 실행",
@@ -359,7 +359,7 @@ const ko = {
     items: [
       {
         q: "Relayium의 CLI에 계정이 필요한가요?",
-        a: "아니요. push/pull은 scp와 완전히 똑같은 방식으로 자신의 SSH 접근을 사용합니다 — CLI의 어떤 모드도 Relayium 계정이나 로그인이 필요 없습니다.",
+        a: "push/pull에는 필요 없습니다 — scp와 완전히 똑같은 방식으로 자신의 SSH 접근을 사용하므로 Relayium 계정도 로그인도 필요 없고, daemon 직결과 sync도 마찬가지입니다. send는 예외로, 서버가 페어링 코드를 발급할 수 있도록 계정이 필요합니다. 받는 데는 전혀 필요 없습니다.",
       },
       {
         q: "원격 서버에 Relayium이 설치되어 있지 않아도 push가 동작하나요?",
@@ -426,7 +426,7 @@ const de = {
         "relayium serve macht aus einer dir gehörenden Maschine ein daemon-direct-Ziel, erreichbar über gepinntes TLS 1.3 — kein SSH, kein Port 22, Vertrauen entsteht bei der ersten Verbindung (interaktiv bestätigt oder mit relayium authorize für unbeaufsichtigten Betrieb vorab autorisiert) und ist danach gepinnt. Pushe direkt dorthin mit einer relayium://-Adresse.",
         "Um an jemanden über das Internet zu senden, bei dem du gar keinen SSH-Zugang hast, koppelt relayium send / receive stattdessen zwei Computer mit einem kurzen Code — direktes Peer-to-Peer, mit einem kurzen Prüfcode (SAS), den beide Seiten prüfen, bevor überhaupt Bytes fließen. Für diesen Fall hat scp keine Antwort; du bräuchtest zuerst SSH-Zugang.",
       ],
-      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf ABCD-1234"],
+      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf"],
     },
     {
       heading: "Ordnerspiegelung: sync statt scp -r wiederholt auszuführen",
@@ -454,7 +454,7 @@ const de = {
     items: [
       {
         q: "Braucht Relayiums CLI ein Konto?",
-        a: "Nein. push/pull nutzt deinen eigenen SSH-Zugang genau wie scp — kein Relayium-Konto, keine Anmeldung, für keinen CLI-Modus.",
+        a: "Für push/pull nicht — es nutzt deinen eigenen SSH-Zugang genau wie scp, ohne Relayium-Konto und ohne Anmeldung, und für Daemon-Direkt und sync gilt dasselbe. send ist die Ausnahme: Es braucht ein Konto, damit der Server seinen Pairing-Code erzeugen kann. Zum Empfangen nie.",
       },
       {
         q: "Funktioniert push, wenn auf dem entfernten Server kein Relayium installiert ist?",
@@ -521,7 +521,7 @@ const fr = {
         "relayium serve transforme une machine que vous possédez en cible daemon-direct, accessible via TLS 1.3 épinglé — pas de SSH, pas de port 22, la confiance s'établit à la première connexion (approuvée de façon interactive, ou pré-autorisée avec relayium authorize pour un usage sans surveillance) puis reste épinglée ensuite. Poussez directement vers elle avec une adresse relayium://.",
         "Pour envoyer à quelqu'un sur Internet auprès de qui vous n'avez aucun accès SSH, relayium send / receive appaire à la place deux ordinateurs avec un court code — pair-à-pair direct, avec un court code de vérification (SAS) que les deux parties comparent avant que le moindre octet ne bouge. scp n'a aucune réponse à ce cas de figure ; il vous faudrait d'abord un accès SSH.",
       ],
-      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf ABCD-1234"],
+      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf"],
     },
     {
       heading: "Miroir de dossiers : sync contre scp -r relancé sans cesse",
@@ -549,7 +549,7 @@ const fr = {
     items: [
       {
         q: "La CLI Relayium a-t-elle besoin d'un compte ?",
-        a: "Non. push/pull utilise votre propre accès SSH exactement comme scp — aucun compte Relayium, aucune connexion, pour aucun mode de la CLI.",
+        a: "Pas pour push/pull — il utilise votre propre accès SSH exactement comme scp, sans compte Relayium ni connexion, et il en va de même pour daemon direct et sync. send fait exception : il lui faut un compte pour que le serveur puisse générer son code d'appairage. Recevoir n'en demande jamais.",
       },
       {
         q: "push fonctionne-t-il si le serveur distant n'a pas Relayium installé ?",
@@ -618,7 +618,7 @@ const ar = {
         "يحوّل relayium serve جهازًا تملكه إلى هدف daemon-direct يمكن الوصول إليه عبر TLS 1.3 مثبَّت — بلا SSH، ولا منفذ 22، تُنشأ الثقة عند أول اتصال (تُوافَق عليها تفاعليًا، أو تُصرَّح مسبقًا بـ relayium authorize للاستخدام دون إشراف) وتظل مثبَّتة بعد ذلك. ادفع إليه مباشرة بعنوان relayium://.",
         "للإرسال إلى شخص عبر الإنترنت لا تملك تجاهه أي وصول SSH على الإطلاق، يقرن relayium send / receive حاسوبين برمز قصير بدلًا من ذلك — من الند للند مباشرةً، مع رمز تحقق قصير (SAS) يتحقق منه الطرفان قبل أن تتحرك أي بايتات. لا جواب لدى scp لهذه الحالة؛ ستحتاج إلى وصول SSH أولًا.",
       ],
-      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf ABCD-1234"],
+      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf"],
     },
     {
       heading: "مزامنة المجلدات: sync مقابل إعادة تشغيل scp -r",
@@ -646,7 +646,7 @@ const ar = {
     items: [
       {
         q: "هل تحتاج واجهة Relayium السطرية إلى حساب؟",
-        a: "لا. يستخدم push/pull وصول SSH الخاص بك تمامًا كما يفعل scp — بلا حساب Relayium، وبلا تسجيل دخول، لأي وضع من أوضاع الواجهة السطرية.",
+        a: "ليس لـ push/pull — فهو يستخدم وصول SSH الخاص بك تمامًا كما يفعل scp، بلا حساب Relayium وبلا تسجيل دخول، وكذلك daemon-direct وsync. أما send فهو الاستثناء: يحتاج حسابًا كي يُصدر الخادم رمز الاقتران. أما الاستقبال فلا يحتاجه أبدًا.",
       },
       {
         q: "هل يعمل push إذا لم يكن الخادم البعيد يحتوي على Relayium مثبَّتًا؟",
@@ -715,7 +715,7 @@ const es = {
         "relayium serve convierte una máquina de tu propiedad en un destino daemon-direct accesible por TLS 1.3 fijado (pinned): sin SSH, sin puerto 22, la confianza se establece en la primera conexión (aprobada de forma interactiva, o preautorizada con relayium authorize para un uso desatendido) y queda fijada a partir de ahí. Haz push directamente hacia ella con una dirección relayium://.",
         "Para enviar por internet a alguien sobre quien no tienes ningún acceso SSH, relayium send / receive empareja en su lugar dos ordenadores con un código corto: de igual a igual directo, con un código de verificación corto (SAS) que ambas partes comparan antes de que se mueva un solo byte. scp no tiene respuesta para ese caso; primero necesitarías acceso SSH.",
       ],
-      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf ABCD-1234"],
+      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf"],
     },
     {
       heading: "Réplica de carpetas: sync frente a reejecutar scp -r",
@@ -743,7 +743,7 @@ const es = {
     items: [
       {
         q: "¿La CLI de Relayium necesita una cuenta?",
-        a: "No. push/pull usa tu propio acceso SSH exactamente igual que scp: sin cuenta de Relayium, sin iniciar sesión, para cualquier modo de la CLI.",
+        a: "Para push/pull no: usa tu propio acceso SSH exactamente igual que scp, sin cuenta de Relayium y sin iniciar sesión, y lo mismo vale para daemon-direct y sync. send es la excepción: necesita cuenta para que el servidor pueda generar su código de emparejamiento. Recibir no la necesita nunca.",
       },
       {
         q: "¿Funciona push si el servidor remoto no tiene Relayium instalado?",
@@ -812,7 +812,7 @@ const pt = {
         "relayium serve transforma uma máquina sua num destino daemon-direct acessível por TLS 1.3 fixado (pinned) — sem SSH, sem porta 22, a confiança se estabelece na primeira conexão (aprovada de forma interativa, ou pré-autorizada com relayium authorize para uso sem supervisão) e fica fixada dali em diante. Faça push direto para ela com um endereço relayium://.",
         "Para enviar pela internet a alguém sobre quem você não tem nenhum acesso SSH, relayium send / receive emparelha, em vez disso, dois computadores com um código curto — ponto a ponto direto, com um código de verificação curto (SAS) que os dois lados comparam antes de qualquer byte se mover. O scp não tem resposta para esse caso; você precisaria antes de acesso SSH.",
       ],
-      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf ABCD-1234"],
+      code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf"],
     },
     {
       heading: "Espelhamento de pastas: sync versus reexecutar scp -r",
@@ -840,7 +840,7 @@ const pt = {
     items: [
       {
         q: "A CLI do Relayium precisa de conta?",
-        a: "Não. push/pull usa seu próprio acesso SSH exatamente como o scp — sem conta Relayium, sem fazer login, para qualquer modo da CLI.",
+        a: "Para o push/pull não — ele usa seu próprio acesso SSH exatamente como o scp, sem conta Relayium e sem fazer login, e o mesmo vale para daemon-direct e sync. O send é a exceção: precisa de conta para que o servidor possa gerar o seu código de emparelhamento. Receber nunca precisa.",
       },
       {
         q: "push funciona se o servidor remoto não tiver o Relayium instalado?",

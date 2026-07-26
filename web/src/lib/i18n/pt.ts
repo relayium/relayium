@@ -184,7 +184,7 @@ const pt: Messages = {
     freeTitle: "Sempre grátis",
     freeLead: "Transfira arquivos sem custo, para sempre:",
     free1: "Transferências na rede local (LAN) — instantâneas, sem precisar de conta.",
-    free2: "Transferências diretas ponto a ponto com a CLI — pelo seu próprio SSH, daemon direto ou um código de pareamento — sem conta e sem medição.",
+    free2: "Transferências diretas ponto a ponto com a CLI — pelo seu próprio SSH, daemon direto ou um código de pareamento — sem medição. Só gerar um código de pareamento para o send precisa de conta; receber nunca precisa.",
     free3: "Criptografadas de ponta a ponta, sem limite de tamanho de arquivo, e seus arquivos vão direto entre os dispositivos — nunca passam pelos nossos servidores.",
     freeWhy: "Transferências diretas e por LAN não têm custo para nós, então continuam gratuitas para todos — não é preciso se cadastrar para receber.",
     paidTitle: "Pelo que você paga",
@@ -381,7 +381,7 @@ const pt: Messages = {
     mode2Title: "send / receive — por código de emparelhamento",
     mode2Tag: "grátis · P2P direto",
     mode2Body:
-      "Envie para outra pessoa entre redes. Combinem um código curto por um canal externo (diga-o numa ligação — pode ser qualquer sequência curta), então um lado envia e o outro recebe. A conexão é ponto a ponto direta: apenas um pequeno handshake de encontro passa pela Relayium para apresentar as duas pontas — os bytes do arquivo nunca passam. Se ambas as pontas estiverem atrás de um NAT restrito e não conseguirem conectar diretamente, a transferência simplesmente falha (a CLI não tem retransmissor). Os dois terminais exibem um código SAS de 6 dígitos — compare-os para descartar um ataque de intermediário (adicione --verify para exigir confirmação antes que qualquer byte se mova).",
+      "Envie para outra pessoa entre redes. Faça login uma vez com relayium login e depois rode send sem código: a CLI gera um código de emparelhamento de 6 caracteres (de um alfabeto sem 0 nem 1), válido por 5 minutos, e exibe o comando exato que a outra ponta executa. Repasse esse código por um canal externo — diga-o numa ligação. Você não pode escolhê-lo, o servidor só aceita os códigos que ele mesmo emitiu, e quem recebe não precisa de conta. As duas pontas precisam ser a CLI; para alguém que só tem navegador, use relayium up. A conexão é ponto a ponto direta: apenas um pequeno handshake de encontro passa pela Relayium para apresentar as duas pontas — os bytes do arquivo nunca passam. Se ambas as pontas estiverem atrás de um NAT restrito e não conseguirem conectar diretamente, a transferência simplesmente falha (a CLI não tem retransmissor). Os dois terminais exibem um código SAS de 6 dígitos — compare-os para descartar um ataque de intermediário (adicione --verify para exigir confirmação antes que qualquer byte se mova).",
     mode3Title: "daemon direct — de servidor para servidor",
     mode3Tag: "grátis",
     mode3Body:

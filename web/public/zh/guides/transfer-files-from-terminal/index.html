@@ -83,7 +83,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <pre><code>relayium push ./photos user@your-server:backups/</code></pre>
       <ul><li>如果远程也装了 relayium，push 就会使用原生协议（可续传、逐文件 SHA-256）。</li><li>如果远程没装 relayium，push 会退化为普通的 tar 流，因此在裸机服务器上依然可用——这个兜底只属于 push。</li><li>用这个命令把同样的文件取回来：relayium pull user@your-server:backups/ ./restore——pull 始终需要远程装有 relayium（没有 tar 兜底），请先在远程装好它。</li></ul>
       <h2>免费，且从设计上保护隐私</h2>
-      <p>没有任何费用；唯一需要登录的地方，是 send / receive 模式下的发送方，好让 CLI 生成配对码。CLI 直接连接两端，因此你的文件永远不会上传到中间的服务器——唯一会接触 Relayium 的，是 send / receive 模式下一次很小的会合握手，用来撮合两端，绝不是文件本身。</p>
+      <p>没有任何费用。上面三种方式里，唯一需要登录的是 send / receive 模式下的发送方，好让 CLI 生成配对码（云端 up / down 同样会用到你的账号）。CLI 直接连接两端，因此你的文件永远不会上传到中间的服务器——唯一会接触 Relayium 的，是 send / receive 模式下一次很小的会合握手，用来撮合两端，绝不是文件本身。</p>
       <p>每次传输都端到端加密，每个文件到达时都会用 SHA-256 哈希校验，中断的传输会从断点续传而不是从头再来。它可在 macOS、Linux 和 Windows 上运行，整个项目开源、可自托管。</p>
       <h2>常见问题</h2>
       <h3>CLI 要收费吗？</h3>
