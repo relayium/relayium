@@ -1,5 +1,9 @@
 import Foundation
-import RelayiumKit
+// @preconcurrency: RelayiumKit predates strict concurrency and marks nothing Sendable.
+// The one capture this silences — the TokenStore existential crossing to a background
+// queue in loadTokenOffMainActor() — is safe: KeychainTokenStore is a final class with
+// two immutable lets, calling thread-safe Keychain APIs.
+@preconcurrency import RelayiumKit
 
 public enum SessionState: Equatable {
     case restoring
