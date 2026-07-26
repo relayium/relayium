@@ -30,16 +30,29 @@ func TestAPIBase(t *testing.T) {
 	}
 }
 
-// The path is dropped, not carried. `--server ws://host/ws` is a valid
+// The signaling endpoint path — a trailing "/ws" — is stripped, because it is
+// an endpoint rather than an origin. `--server ws://host/ws` is a valid
 // signaling target (rzvous.Join sets the path itself), but as an API base it
 // used to yield "http://host/ws" — which mismatched the stored creds.Server and
 // refused to mint, then printed a remedy whose /api/pair would 404.
-func TestAPIBaseKeepsOnlySchemeAndHost(t *testing.T) {
+//
+// Every other path is a deployment prefix and survives: a self-hoster at
+// https://host/relay has its API under /relay, so flattening to the bare origin
+// breaks minting there. Both halves are pinned here because the fix for one is
+// the regression for the other.
+func TestAPIBaseStripsTheSignalingPathAndKeepsAnyPrefix(t *testing.T) {
 	cases := map[string]string{
-		"ws://host/ws":                    "http://host",
-		"wss://relayium.com/ws":           "https://relayium.com",
-		"wss://relayium.com/ws?code=1#f":  "https://relayium.com",
-		"http://192.168.1.9:8080/signal/": "http://192.168.1.9:8080",
+		// signaling endpoint: stripped
+		"ws://host/ws":                   "http://host",
+		"wss://relayium.com/ws":          "https://relayium.com",
+		"wss://relayium.com/ws/":         "https://relayium.com",
+		"wss://relayium.com/ws?code=1#f": "https://relayium.com",
+		// sub-path deployment: preserved
+		"https://host/relay":              "https://host/relay",
+		"wss://host/relay/ws":             "https://host/relay",
+		"http://192.168.1.9:8080/signal/": "http://192.168.1.9:8080/signal",
+		// no path at all
+		"wss://host": "https://host",
 	}
 	for in, want := range cases {
 		got, err := apiBase(in)
@@ -92,6 +105,41 @@ func TestMintCodeAcceptsASignalingURLWithAPath(t *testing.T) {
 	code, err := mintCode(context.Background(), srv.URL+"/ws", &errb)
 	if err != nil {
 		t.Fatalf("mintCode against the signaling path: %v", err)
+	}
+	if code != "K7M4XR" {
+		t.Fatalf("code = %q", code)
+	}
+}
+
+// End to end for the sub-path case: a self-hoster serving Relayium under
+// /relay must still mint, i.e. the request has to land on /relay/api/pair.
+// Flattening the API base to the bare origin sends it to /api/pair, which on
+// that deployment is not Relayium at all.
+func TestMintCodeAcceptsASubPathDeployment(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		if r.URL.Path != "/relay/api/pair" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(`{"code":"K7M4XR","expiresAt":4102444800}`))
+	}))
+	defer srv.Close()
+
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfgDir, err := resolveConfigDir("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cloud.Save(cfgDir, cloud.Creds{Server: srv.URL + "/relay", AccessToken: "rlm_cli_abc"}); err != nil {
+		t.Fatal(err)
+	}
+	var errb bytes.Buffer
+	// The sender passes the signaling URL of that same deployment.
+	code, err := mintCode(context.Background(), srv.URL+"/relay/ws", &errb)
+	if err != nil {
+		t.Fatalf("mintCode against a sub-path deployment: %v (request hit %q)", err, gotPath)
 	}
 	if code != "K7M4XR" {
 		t.Fatalf("code = %q", code)

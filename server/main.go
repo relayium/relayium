@@ -263,8 +263,16 @@ func main() {
 	// figure rather than leaving it unbounded.
 	globalConns := signal.NewGlobalConnLimiter()
 
-	// Anonymous, login-free pairing: short numeric codes for cross-network
-	// realtime rendezvous. Pure in-memory — works even if the DB is unavailable.
+	// Short codes for cross-network realtime rendezvous. Minting one requires a
+	// signed-in account: POST /api/pair resolves a session cookie (web) or a CLI
+	// bearer token, so the code has an owner to attribute relay usage to (see
+	// pairUser and the route registration below). JOINING the code's room is
+	// anonymous — the receiver signs in nowhere, it just presents the code to
+	// /ws?code= and /api/ice?code=. Codes are not numeric: they are drawn from
+	// signal.CodeAlphabet (upper-case letters and digits, with the
+	// visually-ambiguous glyphs removed), which is why the CLI copy interpolates
+	// that constant instead of describing digits.
+	// Pure in-memory — works even if the DB is unavailable.
 	// TTL 是 signal.CodeTTLSeconds（5 分钟），理由写在那个常量上；导出成常量是因为
 	// CLI 的报错文案要照着说「有效 5 分钟」，行为和文案必须取自同一个来源。
 	pairReg := signal.NewPairRegistry(signal.CodeTTLSeconds, func() int64 { return time.Now().Unix() })
@@ -276,7 +284,8 @@ func main() {
 	pairLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(10, div), time.Minute, func() int64 { return time.Now().Unix() })
 	go pairLimiter.Run(context.Background(), time.Minute)
 	// Separate limiter for /ws code-join attempts: 30/min/IP caps brute-force of
-	// the 10^6 code space while allowing a real recipient to reload a few times.
+	// the code space (24^6, see signal.CodeAlphabet — it was 10^6 back when codes
+	// were digits) while allowing a real recipient to reload a few times.
 	wsCodeLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(30, div), time.Minute, func() int64 { return time.Now().Unix() })
 	go wsCodeLimiter.Run(context.Background(), time.Minute)
 	// Global (non-per-IP) breaker on INVALID pairing-code join attempts: sheds

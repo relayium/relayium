@@ -145,8 +145,9 @@ func runSendCross(args []string, stdout, stderr io.Writer) int {
 	xfer.WarnIfEmpty(m, stderr)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	// Mint only after the sources check out: a code starts its 5-minute clock
-	// the moment it is minted, and burning one on a typo'd path wastes it.
+	// Mint only after the sources check out: a code starts its expiry clock
+	// (signal.CodeTTLSeconds) the moment it is minted, and burning one on a
+	// typo'd path wastes it.
 	if code == "" {
 		if code, err = mintCode(ctx, f.server, stderr); err != nil {
 			fmt.Fprintln(stderr, err)

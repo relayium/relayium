@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/relayium/relayium/internal/cloud"
@@ -16,13 +17,23 @@ import (
 // HTTP base the account API lives on, so a self-hoster passes one flag rather
 // than two.
 //
-// It keeps the scheme and host and nothing else. `--server ws://host/ws` is a
-// perfectly valid signaling target — rzvous.Join overwrites u.Path with "/ws"
-// itself — but this is an API *base*, and carrying the path through produced
-// "http://host/ws": it mismatched the stored creds.Server so minting was
+// It strips a trailing "/ws" — the signaling endpoint itself — and keeps
+// whatever path prefix is left. `--server ws://host/ws` is a perfectly valid
+// signaling target (rzvous.Join overwrites u.Path with "/ws" itself), but that
+// path is the endpoint, not the origin: carrying it through produced
+// "http://host/ws", which mismatched the stored creds.Server so minting was
 // refused, and the remedy that refusal printed, `relayium login --server
 // http://host/ws`, would have stored credentials whose /api/pair resolves to
-// /ws/api/pair, a 404. Query and fragment go with it, for the same reason.
+// /ws/api/pair, a 404.
+//
+// Any *other* path is a deployment prefix and must survive: a self-hoster
+// serving Relayium under https://host/relay has its API at
+// https://host/relay/api/pair, so flattening to the bare origin broke minting
+// there just as thoroughly (that is why this does not simply drop the path).
+// "/relay/ws" — the same deployment's signaling URL — correctly yields
+// "/relay". A trailing slash is trimmed so the base concatenates cleanly and
+// so sameServer's comparison against stored creds holds. Query and fragment
+// are dropped: an API base has no use for them.
 //
 // Anything that is not ws/wss/http/https over a host is rejected here rather
 // than carried into the error copy downstream. `--server 127.0.0.1:18080`
@@ -43,7 +54,9 @@ func apiBase(server string) (string, error) {
 	default:
 		return "", badServerURL(server)
 	}
-	return (&url.URL{Scheme: scheme, Host: u.Host}).String(), nil
+	path := strings.TrimSuffix(u.Path, "/")
+	path = strings.TrimSuffix(path, "/ws")
+	return (&url.URL{Scheme: scheme, Host: u.Host, Path: path}).String(), nil
 }
 
 // badServerURL names what was passed and what is expected. It quotes the value

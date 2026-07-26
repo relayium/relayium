@@ -101,17 +101,57 @@ func runWhoami(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// parseTTL accepts either a Go duration string ("2h", "30m") or a bare
-// integer, interpreted as seconds — so `--ttl 3600` and `--ttl 1h` both work.
+const (
+	secsPerDay  int64 = 86400
+	secsPerWeek int64 = 7 * secsPerDay
+)
+
+// parseTTL accepts a day or week count ("7d", "2w"), a Go duration string
+// ("2h", "30m", "1h30m"), or a bare integer interpreted as seconds — so
+// `--ttl 3600`, `--ttl 1h` and `--ttl 7d` all work.
+//
+// The day/week units are handled here because time.ParseDuration has no unit
+// larger than an hour, and without them this function rejected exactly the
+// strings formatTTL emits: a "kept 1d, not the 7d you asked for" notice could
+// not be pasted back into the next command, though its doc comment promised it
+// could. TestTTLRoundTrip pins that property. Weeks are accepted (though never
+// emitted — formatTTL prefers days, which round-trip) because the longest plan
+// retention is 14 days, so "2w" is a value a user can legitimately ask for.
 func parseTTL(s string) (int64, error) {
+	if secs, ok := parseDayOrWeek(s); ok {
+		return secs, nil
+	}
 	if d, err := time.ParseDuration(s); err == nil {
 		return int64(d.Seconds()), nil
 	}
 	n, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("invalid --ttl %q: not a duration or a number of seconds", s)
+		return 0, fmt.Errorf("invalid --ttl %q: not a duration (7d, 2w, 2h, 90m) or a number of seconds", s)
 	}
 	return n, nil
+}
+
+// parseDayOrWeek reads "<int>d" / "<int>w" into seconds. It reports false for
+// anything else, including a count that would overflow int64, so the caller
+// falls through to the other forms and ultimately to parseTTL's error.
+func parseDayOrWeek(s string) (int64, bool) {
+	var unit int64
+	switch {
+	case strings.HasSuffix(s, "d"):
+		unit = secsPerDay
+	case strings.HasSuffix(s, "w"):
+		unit = secsPerWeek
+	default:
+		return 0, false
+	}
+	n, err := strconv.ParseInt(strings.TrimSuffix(s, s[len(s)-1:]), 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	if n != 0 && (n*unit)/unit != n { // overflow
+		return 0, false
+	}
+	return n * unit, true
 }
 
 // formatTTL renders a second count the way --ttl accepts it back ("7d", "2h"),
@@ -165,7 +205,7 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	var maxDownloads int64
 	var server string
 	fs.BoolVar(&burn, "burn", false, "delete after first download")
-	fs.StringVar(&ttlArg, "ttl", "", "retention, as a duration (2h) or seconds")
+	fs.StringVar(&ttlArg, "ttl", "", "retention, as a duration (7d, 2h, 90m) or seconds")
 	fs.Int64Var(&maxDownloads, "max-downloads", 0, "max number of downloads allowed")
 	fs.StringVar(&server, "server", "", "override the cloud server (defaults to the logged-in server)")
 	if err := parseArgs(fs, args); err != nil {
