@@ -6,7 +6,10 @@ struct RelayiumApp: App {
     @StateObject private var session = AppEnvironment.makeSession()
 
     var body: some Scene {
-        WindowGroup {
+        // Identified so the menu bar can reopen it: closing the last window does
+        // not quit the app (the MenuBarExtra keeps it running), so without an id
+        // there is no way back to the UI short of quitting and relaunching.
+        WindowGroup(id: "main") {
             ContentView()
                 .environmentObject(session)
                 .task { await session.restore() }
