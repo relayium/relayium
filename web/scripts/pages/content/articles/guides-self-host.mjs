@@ -8,7 +8,7 @@ import { withInstall, selfHostInstall } from "../install-section.mjs";
 const en = {
   title: "Self-host Relayium: run your own file-transfer server",
   description:
-    "Run the whole Relayium stack yourself with one Docker command — your own domain, your own data, no account required. Covers the env keys, the optional TURN relay, and pointing the CLI at it.",
+    "Run the whole Relayium stack yourself with one Docker command — your own domain, your own data, no third-party account. Covers the env keys, the optional TURN relay, and pointing the CLI at it.",
   updatedLabel: "Last updated",
   lead: [
     "Relayium is AGPL-3.0-licensed and open source, and the server is one self-contained image — no external database, no third-party storage bucket, nothing to sign up for. If you'd rather run the whole thing yourself than rely on relayium.com, this guide gets a server up with Docker and points the CLI at it.",
@@ -58,7 +58,7 @@ const en = {
         "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "The CLI is free either way — --server changes which rendezvous server it talks to for the pairing-code handshake. send mints its code against that same server, so sign in there first with relayium login --server https://your-domain; receive still needs no account.",
+        "The CLI is free either way — --server changes which rendezvous server it talks to for the pairing-code handshake. send mints its code against that same server, and cloud up stores under an account on it, so sign in there first with relayium login --server https://your-domain; receive and down still need no account.",
         "push/pull (over your own SSH) and serve + daemon-direct push relayium://host don't touch relayium.com at all, self-hosted or not — they connect straight to the remote you specify.",
       ],
     },
@@ -72,7 +72,7 @@ const en = {
       },
       {
         q: "Is the CLI still free if I self-host?",
-        a: "Yes. The CLI is completely free whether it talks to relayium.com or a server you run yourself — --server just points it at your instance. The one thing that needs an account is send, and it needs one on whichever server you point it at, so run relayium login --server https://your-domain first.",
+        a: "Yes. The CLI is completely free whether it talks to relayium.com or a server you run yourself — --server just points it at your instance. What needs an account is send when it has to mint a code (not when you hand it one) and up to store a file — and the account has to be on whichever server you point at, so run relayium login --server https://your-domain first. receive and down need none.",
       },
       {
         q: "Can I use my own domain and TLS certificate?",
@@ -95,7 +95,7 @@ const en = {
 const zh = {
   title: "自托管 Relayium：运行属于你自己的文件传输服务器",
   description:
-    "用一条 Docker 命令自己运行完整的 Relayium 服务端——自己的域名、自己的数据，无需账号。涵盖环境变量、可选的 TURN 中继，以及如何让 CLI 指向它。",
+    "用一条 Docker 命令自己运行完整的 Relayium 服务端——自己的域名、自己的数据，无需任何第三方账号。涵盖环境变量、可选的 TURN 中继，以及如何让 CLI 指向它。",
   updatedLabel: "最近更新",
   lead: [
     "Relayium 采用 AGPL-3.0 许可、开源，服务端是一个自包含的镜像——不需要外部数据库，不需要第三方存储桶，也没有什么需要注册。如果你更想自己运行整套系统而不是依赖 relayium.com，本指南会带你用 Docker 起一台服务器，并让 CLI 指向它。",
@@ -145,7 +145,7 @@ const zh = {
         "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "无论用哪个服务器，CLI 都是免费的——--server 只是改变了配对码握手所连接的会合服务器。send 的配对码也由同一台服务器签发，所以要先用 relayium login --server https://your-domain 在那边登录；receive 依然不需要账号。",
+        "无论用哪个服务器，CLI 都是免费的——--server 只是改变了配对码握手所连接的会合服务器。send 的配对码也由同一台服务器签发，云端 up 也存到那台服务器上的账号下，所以要先用 relayium login --server https://your-domain 在那边登录；receive 和 down 依然不需要账号。",
         "push/pull（走你自己的 SSH）以及 serve + daemon-direct 的 push relayium://host，无论是否自托管都完全不会接触 relayium.com——它们直接连到你指定的远程地址。",
       ],
     },
@@ -159,7 +159,7 @@ const zh = {
       },
       {
         q: "自托管之后 CLI 还免费吗？",
-        a: "是的。无论连接的是 relayium.com 还是你自己运行的服务器，CLI 都完全免费——--server 只是让它指向你的实例。唯一需要账号的是 send，而且账号要在你所指向的那台服务器上，所以请先运行 relayium login --server https://your-domain。",
+        a: "是的。无论连接的是 relayium.com 还是你自己运行的服务器，CLI 都完全免费——--server 只是让它指向你的实例。需要账号的是：send 在需要生成配对码时（用别人给的码则不需要），以及 up 存文件时——而且账号要在你所指向的那台服务器上，所以请先运行 relayium login --server https://your-domain。receive 和 down 都不需要。",
       },
       {
         q: "我可以用自己的域名和 TLS 证书吗？",
@@ -182,7 +182,7 @@ const zh = {
 const ja = {
   title: "Relayium をセルフホスト：自分専用のファイル転送サーバーを運用",
   description:
-    "1つの Docker コマンドで Relayium のサーバー一式を自分で運用——自分のドメイン、自分のデータ、アカウント不要。環境変数、任意の TURN リレー、CLI をそのサーバーに向ける方法を解説します。",
+    "1つの Docker コマンドで Relayium のサーバー一式を自分で運用——自分のドメイン、自分のデータ、第三者のアカウントは不要。環境変数、任意の TURN リレー、CLI をそのサーバーに向ける方法を解説します。",
   updatedLabel: "最終更新",
   lead: [
     "Relayium は AGPL-3.0 ライセンスのオープンソースで、サーバーは1つの自己完結型イメージです——外部データベースも、サードパーティのストレージバケットも不要で、登録するものもありません。relayium.com に頼るのではなく全体を自分で運用したいなら、本ガイドで Docker によりサーバーを立ち上げ、CLI をそこに向ける方法を案内します。",
@@ -232,7 +232,7 @@ const ja = {
         "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "どちらのサーバーを使っても CLI は無料です——--server はペアリングコードのハンドシェイクで話すランデブーサーバーを変更するだけです。send のコードも同じサーバーが発行するので、先に relayium login --server https://your-domain でそちらにサインインしてください。receive は引き続きアカウント不要です。",
+        "どちらのサーバーを使っても CLI は無料です——--server はペアリングコードのハンドシェイクで話すランデブーサーバーを変更するだけです。send のコードも同じサーバーが発行し、クラウドの up もそのサーバー上のアカウントに保存するので、先に relayium login --server https://your-domain でそちらにサインインしてください。receive と down は引き続きアカウント不要です。",
         "push/pull（自分の SSH 経由）や、serve と daemon-direct の push relayium://host は、セルフホストかどうかにかかわらず relayium.com に一切触れません——指定したリモートに直接接続します。",
       ],
     },
@@ -246,7 +246,7 @@ const ja = {
       },
       {
         q: "セルフホストしても CLI は無料のままですか？",
-        a: "はい。relayium.com に接続する場合でも自分で運用するサーバーに接続する場合でも、CLI は完全無料です——--server は単に自分のインスタンスを指すようにするだけです。アカウントが要るのは send だけで、しかも指し先のサーバー上のアカウントが必要なので、先に relayium login --server https://your-domain を実行してください。",
+        a: "はい。relayium.com に接続する場合でも自分で運用するサーバーに接続する場合でも、CLI は完全無料です——--server は単に自分のインスタンスを指すようにするだけです。アカウントが要るのは、コードを発行する必要がある send（渡されたコードを使う場合は不要）と、ファイルを保存する up です。しかも指し先のサーバー上のアカウントが必要なので、先に relayium login --server https://your-domain を実行してください。receive と down には不要です。",
       },
       {
         q: "自分のドメインと TLS 証明書を使えますか？",
@@ -269,7 +269,7 @@ const ja = {
 const ko = {
   title: "Relayium 셀프 호스팅: 나만의 파일 전송 서버 운영하기",
   description:
-    "Docker 명령어 하나로 Relayium 전체 스택을 직접 운영하세요 — 자신의 도메인, 자신의 데이터, 계정 불필요. 환경 변수, 선택적 TURN 릴레이, CLI를 서버로 연결하는 방법까지 다룹니다.",
+    "Docker 명령어 하나로 Relayium 전체 스택을 직접 운영하세요 — 자신의 도메인, 자신의 데이터, 제3자 계정 불필요. 환경 변수, 선택적 TURN 릴레이, CLI를 서버로 연결하는 방법까지 다룹니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
     "Relayium은 AGPL-3.0 라이선스 오픈소스이며, 서버는 단일한 자체 완결형 이미지입니다 — 외부 데이터베이스도, 서드파티 스토리지 버킷도 필요 없고, 가입할 것도 없습니다. relayium.com에 의존하는 대신 전체를 직접 운영하고 싶다면, 이 가이드는 Docker로 서버를 띄우고 CLI를 그 서버로 연결하는 방법을 안내합니다.",
@@ -319,7 +319,7 @@ const ko = {
         "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "어느 서버를 쓰든 CLI는 무료입니다 — --server는 페어링 코드 핸드셰이크가 대화하는 랑데부 서버만 바꿀 뿐입니다. send의 코드도 같은 서버가 발급하므로 먼저 relayium login --server https://your-domain으로 그쪽에 로그인하세요. receive는 여전히 계정이 필요 없습니다.",
+        "어느 서버를 쓰든 CLI는 무료입니다 — --server는 페어링 코드 핸드셰이크가 대화하는 랑데부 서버만 바꿀 뿐입니다. send의 코드도 같은 서버가 발급하고 클라우드 up도 그 서버의 계정에 저장하므로, 먼저 relayium login --server https://your-domain으로 그쪽에 로그인하세요. receive와 down은 여전히 계정이 필요 없습니다.",
         "push/pull(자신의 SSH를 통한)과 serve + daemon-direct의 push relayium://host는 셀프 호스팅 여부와 무관하게 relayium.com에 전혀 닿지 않습니다 — 지정한 원격지에 직접 연결됩니다.",
       ],
     },
@@ -333,7 +333,7 @@ const ko = {
       },
       {
         q: "셀프 호스팅해도 CLI는 여전히 무료인가요?",
-        a: "네. relayium.com에 연결하든 직접 운영하는 서버에 연결하든 CLI는 완전히 무료입니다 — --server는 단지 자신의 인스턴스를 가리키도록 할 뿐입니다. 계정이 필요한 것은 send뿐이며, 그것도 가리키는 그 서버의 계정이어야 하므로 먼저 relayium login --server https://your-domain을 실행하세요.",
+        a: "네. relayium.com에 연결하든 직접 운영하는 서버에 연결하든 CLI는 완전히 무료입니다 — --server는 단지 자신의 인스턴스를 가리키도록 할 뿐입니다. 계정이 필요한 것은 코드를 발급해야 하는 send(건네받은 코드를 쓸 때는 불필요)와 파일을 저장하는 up입니다. 그것도 가리키는 그 서버의 계정이어야 하므로 먼저 relayium login --server https://your-domain을 실행하세요. receive와 down은 필요 없습니다.",
       },
       {
         q: "자신의 도메인과 TLS 인증서를 쓸 수 있나요?",
@@ -356,7 +356,7 @@ const ko = {
 const de = {
   title: "Relayium selbst hosten: eigener Dateiübertragungs-Server",
   description:
-    "Betreibe den gesamten Relayium-Stack mit einem einzigen Docker-Befehl selbst — eigene Domain, eigene Daten, kein Konto nötig. Behandelt die Env-Keys, das optionale TURN-Relay und das Ausrichten der CLI darauf.",
+    "Betreibe den gesamten Relayium-Stack mit einem einzigen Docker-Befehl selbst — eigene Domain, eigene Daten, kein Konto bei Dritten nötig. Behandelt die Env-Keys, das optionale TURN-Relay und das Ausrichten der CLI darauf.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "Relayium ist AGPL-3.0-lizenziert und Open Source, und der Server ist ein einziges eigenständiges Image — keine externe Datenbank, kein Storage-Bucket eines Drittanbieters, nichts, wofür man sich anmelden müsste. Wenn du lieber alles selbst betreibst, statt dich auf relayium.com zu verlassen, bringt dich diese Anleitung mit Docker zu einem laufenden Server und richtet die CLI darauf aus.",
@@ -406,7 +406,7 @@ const de = {
         "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "Egal welchen Server sie nutzt, die CLI ist kostenlos — --server ändert nur, mit welchem Rendezvous-Server sie für den Pairing-Code-Handshake spricht. send lässt seinen Code von genau diesem Server erzeugen, melde dich dort also zuerst mit relayium login --server https://your-domain an; receive braucht weiterhin kein Konto.",
+        "Egal welchen Server sie nutzt, die CLI ist kostenlos — --server ändert nur, mit welchem Rendezvous-Server sie für den Pairing-Code-Handshake spricht. send lässt seinen Code von genau diesem Server erzeugen, und Cloud-up speichert unter einem Konto auf ihm, melde dich dort also zuerst mit relayium login --server https://your-domain an; receive und down brauchen weiterhin kein Konto.",
         "push/pull (über dein eigenes SSH) sowie serve + daemon-direct push relayium://host berühren relayium.com überhaupt nicht, selbst gehostet oder nicht — sie verbinden sich direkt mit der von dir angegebenen Gegenstelle.",
       ],
     },
@@ -420,7 +420,7 @@ const de = {
       },
       {
         q: "Ist die CLI beim Selbsthosten immer noch kostenlos?",
-        a: "Ja. Ob sie mit relayium.com oder einem selbst betriebenen Server spricht, die CLI ist völlig kostenlos — --server richtet sie nur auf deine Instanz aus. Ein Konto braucht allein send, und zwar auf genau dem Server, auf den du sie richtest: führe zuerst relayium login --server https://your-domain aus.",
+        a: "Ja. Ob sie mit relayium.com oder einem selbst betriebenen Server spricht, die CLI ist völlig kostenlos — --server richtet sie nur auf deine Instanz aus. Ein Konto brauchen send, wenn es einen Code erzeugen muss (nicht, wenn du ihm einen gibst), und up, um eine Datei zu speichern — und zwar auf genau dem Server, auf den du sie richtest: führe zuerst relayium login --server https://your-domain aus. receive und down brauchen keines.",
       },
       {
         q: "Kann ich meine eigene Domain und ein eigenes TLS-Zertifikat verwenden?",
@@ -443,7 +443,7 @@ const de = {
 const fr = {
   title: "Auto-héberger Relayium : gérez votre propre serveur de transfert",
   description:
-    "Faites tourner toute la pile Relayium vous-même avec une seule commande Docker — votre propre domaine, vos propres données, aucun compte requis. Couvre les clés d'environnement, le relais TURN optionnel et le paramétrage de la CLI.",
+    "Faites tourner toute la pile Relayium vous-même avec une seule commande Docker — votre propre domaine, vos propres données, aucun compte tiers requis. Couvre les clés d'environnement, le relais TURN optionnel et le paramétrage de la CLI.",
   updatedLabel: "Dernière mise à jour",
   lead: [
     "Relayium est sous licence AGPL-3.0 et open source, et le serveur est une image unique et autonome — pas de base de données externe, pas de bucket de stockage tiers, rien à quoi s'inscrire. Si vous préférez tout faire tourner vous-même plutôt que dépendre de relayium.com, ce guide vous fait monter un serveur avec Docker et paramètre la CLI pour qu'elle s'y connecte.",
@@ -493,7 +493,7 @@ const fr = {
         "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "Quel que soit le serveur utilisé, la CLI est gratuite — --server change seulement le serveur de rendez-vous avec lequel elle communique pour la poignée de main du code d'appairage. send fait générer son code par ce même serveur, connectez-vous donc d'abord dessus avec relayium login --server https://your-domain ; receive ne nécessite toujours aucun compte.",
+        "Quel que soit le serveur utilisé, la CLI est gratuite — --server change seulement le serveur de rendez-vous avec lequel elle communique pour la poignée de main du code d'appairage. send fait générer son code par ce même serveur, et le up cloud stocke sous un compte dessus, connectez-vous donc d'abord avec relayium login --server https://your-domain ; receive et down ne nécessitent toujours aucun compte.",
         "push/pull (via votre propre SSH) ainsi que serve + le push daemon-direct relayium://host ne touchent jamais relayium.com, auto-hébergé ou non — ils se connectent directement à la machine distante que vous indiquez.",
       ],
     },
@@ -507,7 +507,7 @@ const fr = {
       },
       {
         q: "La CLI reste-t-elle gratuite si je m'auto-héberge ?",
-        a: "Oui. Qu'elle parle à relayium.com ou à un serveur que vous exploitez vous-même, la CLI est entièrement gratuite — --server la fait simplement pointer vers votre instance. La seule chose qui nécessite un compte, c'est send, et il lui en faut un sur le serveur que vous visez : lancez d'abord relayium login --server https://your-domain.",
+        a: "Oui. Qu'elle parle à relayium.com ou à un serveur que vous exploitez vous-même, la CLI est entièrement gratuite — --server la fait simplement pointer vers votre instance. Ce qui nécessite un compte, c'est send quand il doit générer un code (pas quand vous lui en passez un) et up pour stocker un fichier — et le compte doit être sur le serveur que vous visez : lancez d'abord relayium login --server https://your-domain. receive et down n'en demandent aucun.",
       },
       {
         q: "Puis-je utiliser mon propre domaine et mon propre certificat TLS ?",
@@ -530,7 +530,7 @@ const fr = {
 const ar = {
   title: "الاستضافة الذاتية لـ Relayium: شغّل خادم نقل الملفات الخاص بك",
   description:
-    "شغّل حزمة Relayium بالكامل بنفسك بأمر Docker واحد — نطاقك الخاص، بياناتك الخاصة، بلا حساب مطلوب. يغطّي مفاتيح البيئة، ومُرحِّل TURN الاختياري، وتوجيه الـ CLI إليه.",
+    "شغّل حزمة Relayium بالكامل بنفسك بأمر Docker واحد — نطاقك الخاص، بياناتك الخاصة، بلا حساب لدى طرف ثالث. يغطّي مفاتيح البيئة، ومُرحِّل TURN الاختياري، وتوجيه الـ CLI إليه.",
   updatedLabel: "آخر تحديث",
   lead: [
     "‏Relayium مرخَّص بموجب AGPL-3.0 ومفتوح المصدر، والخادم صورة واحدة مكتفية بذاتها — بلا قاعدة بيانات خارجية، بلا حاوية تخزين لطرف ثالث، ولا شيء للتسجيل فيه. إن كنت تفضّل تشغيل كل شيء بنفسك بدل الاعتماد على relayium.com، فهذا الدليل يشغّل خادمًا بـ Docker ويوجّه الـ CLI إليه.",
@@ -580,7 +580,7 @@ const ar = {
         "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "الـ CLI مجاني في كلتا الحالتين — ‎--server‎ يغيّر فقط خادم الالتقاء الذي يتحدث إليه لمصافحة رمز الاقتران. و send يستصدر رمزه من الخادم نفسه، لذا سجّل الدخول هناك أولًا بـ ‎relayium login --server https://your-domain‎؛ أما receive فلا يزال لا يحتاج حسابًا.",
+        "الـ CLI مجاني في كلتا الحالتين — ‎--server‎ يغيّر فقط خادم الالتقاء الذي يتحدث إليه لمصافحة رمز الاقتران. و send يستصدر رمزه من الخادم نفسه، كما يخزّن up السحابي تحت حساب عليه، لذا سجّل الدخول هناك أولًا بـ ‎relayium login --server https://your-domain‎؛ أما receive و down فلا يزالان لا يحتاجان حسابًا.",
         "‏push/pull (عبر SSH الخاص بك) وserve + الدفع المباشر عبر الخدمة push relayium://host لا يلمسان relayium.com إطلاقًا، سواء بالاستضافة الذاتية أم لا — يتصلان مباشرةً بالجهاز البعيد الذي تحدده.",
       ],
     },
@@ -594,7 +594,7 @@ const ar = {
       },
       {
         q: "هل يبقى الـ CLI مجانيًا إن استضفتُ ذاتيًا؟",
-        a: "نعم. الـ CLI مجاني تمامًا سواء تحدّث إلى relayium.com أو إلى خادم تشغّله بنفسك — ‎--server‎ يوجّهه فقط إلى نسختك. والشيء الوحيد الذي يحتاج حسابًا هو send، ويحتاجه على الخادم الذي توجّهه إليه، فشغّل أولًا ‎relayium login --server https://your-domain‎.",
+        a: "نعم. الـ CLI مجاني تمامًا سواء تحدّث إلى relayium.com أو إلى خادم تشغّله بنفسك — ‎--server‎ يوجّهه فقط إلى نسختك. والذي يحتاج حسابًا هو send حين يلزمه إصدار رمز (لا حين تمرّر له رمزًا جاهزًا)، و up لتخزين ملف — ويجب أن يكون الحساب على الخادم الذي توجّهه إليه، فشغّل أولًا ‎relayium login --server https://your-domain‎. أما receive و down فلا يحتاجان حسابًا.",
       },
       {
         q: "هل يمكنني استخدام نطاقي الخاص وشهادة TLS خاصة بي؟",
@@ -617,7 +617,7 @@ const ar = {
 const es = {
   title: "Aloja Relayium por tu cuenta: ejecuta tu propio servidor de transferencia de archivos",
   description:
-    "Ejecuta toda la pila de Relayium por tu cuenta con un solo comando de Docker — tu propio dominio, tus propios datos, sin cuenta requerida. Cubre las claves de entorno, el retransmisor TURN opcional y cómo apuntar la CLI hacia él.",
+    "Ejecuta toda la pila de Relayium por tu cuenta con un solo comando de Docker — tu propio dominio, tus propios datos, sin cuenta de terceros. Cubre las claves de entorno, el retransmisor TURN opcional y cómo apuntar la CLI hacia él.",
   updatedLabel: "Última actualización",
   lead: [
     "Relayium tiene licencia AGPL-3.0 y es de código abierto, y el servidor es una única imagen autocontenida — sin base de datos externa, sin bucket de almacenamiento de terceros, nada para lo que registrarse. Si prefieres ejecutarlo todo por tu cuenta en vez de depender de relayium.com, esta guía levanta un servidor con Docker y apunta la CLI hacia él.",
@@ -667,7 +667,7 @@ const es = {
         "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "La CLI es gratis en cualquier caso — --server solo cambia con qué servidor de encuentro habla para el handshake del código de emparejamiento. send genera su código contra ese mismo servidor, así que inicia sesión allí primero con relayium login --server https://your-domain; receive sigue sin necesitar cuenta.",
+        "La CLI es gratis en cualquier caso — --server solo cambia con qué servidor de encuentro habla para el handshake del código de emparejamiento. send genera su código contra ese mismo servidor, y el up en la nube guarda bajo una cuenta en él, así que inicia sesión allí primero con relayium login --server https://your-domain; receive y down siguen sin necesitar cuenta.",
         "push/pull (por tu propio SSH) y serve + el push daemon-direct relayium://host no tocan relayium.com en absoluto, con o sin alojamiento propio — se conectan directamente al remoto que indiques.",
       ],
     },
@@ -681,7 +681,7 @@ const es = {
       },
       {
         q: "¿La CLI sigue siendo gratis si alojo por mi cuenta?",
-        a: "Sí. Tanto si habla con relayium.com como con un servidor que ejecutas tú mismo, la CLI es completamente gratis — --server solo la apunta hacia tu instancia. Lo único que necesita cuenta es send, y la necesita en el servidor al que la apuntes: ejecuta primero relayium login --server https://your-domain.",
+        a: "Sí. Tanto si habla con relayium.com como con un servidor que ejecutas tú mismo, la CLI es completamente gratis — --server solo la apunta hacia tu instancia. Lo que necesita cuenta es send cuando tiene que generar un código (no cuando le pasas uno) y up para guardar un archivo — y la cuenta tiene que estar en el servidor al que la apuntes: ejecuta primero relayium login --server https://your-domain. receive y down no necesitan ninguna.",
       },
       {
         q: "¿Puedo usar mi propio dominio y certificado TLS?",
@@ -704,7 +704,7 @@ const es = {
 const pt = {
   title: "Hospede o Relayium por conta própria: rode seu próprio servidor de transferência de arquivos",
   description:
-    "Rode toda a pilha do Relayium por conta própria com um único comando Docker — seu próprio domínio, seus próprios dados, sem conta necessária. Cobre as chaves de ambiente, o retransmissor TURN opcional e como apontar a CLI para ele.",
+    "Rode toda a pilha do Relayium por conta própria com um único comando Docker — seu próprio domínio, seus próprios dados, sem conta de terceiros. Cobre as chaves de ambiente, o retransmissor TURN opcional e como apontar a CLI para ele.",
   updatedLabel: "Última atualização",
   lead: [
     "O Relayium tem licença AGPL-3.0 e é de código aberto, e o servidor é uma única imagem autocontida — sem banco de dados externo, sem bucket de armazenamento de terceiros, nada para se cadastrar. Se você prefere rodar tudo por conta própria em vez de depender do relayium.com, este guia coloca um servidor no ar com Docker e aponta a CLI para ele.",
@@ -754,7 +754,7 @@ const pt = {
         "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "A CLI é gratuita em qualquer dos casos — --server apenas muda com qual servidor de encontro ela fala para o handshake do código de emparelhamento. O send gera o código nesse mesmo servidor, então faça login lá primeiro com relayium login --server https://your-domain; o receive continua sem precisar de conta.",
+        "A CLI é gratuita em qualquer dos casos — --server apenas muda com qual servidor de encontro ela fala para o handshake do código de emparelhamento. O send gera o código nesse mesmo servidor, e o up na nuvem guarda sob uma conta nele, então faça login lá primeiro com relayium login --server https://your-domain; o receive e o down continuam sem precisar de conta.",
         "push/pull (pelo seu próprio SSH) e serve + o push daemon-direct relayium://host não tocam o relayium.com em nada, com ou sem auto-hospedagem — eles se conectam diretamente ao remoto que você especificar.",
       ],
     },
@@ -768,7 +768,7 @@ const pt = {
       },
       {
         q: "A CLI continua gratuita se eu hospedar por conta própria?",
-        a: "Sim. Quer ela fale com o relayium.com ou com um servidor que você mesmo opera, a CLI é completamente gratuita — --server apenas a aponta para a sua instância. A única coisa que precisa de conta é o send, e ele precisa de uma no servidor para o qual você apontá-lo: rode primeiro relayium login --server https://your-domain.",
+        a: "Sim. Quer ela fale com o relayium.com ou com um servidor que você mesmo opera, a CLI é completamente gratuita — --server apenas a aponta para a sua instância. O que precisa de conta é o send quando tem de gerar um código (não quando você lhe passa um) e o up para guardar um arquivo — e a conta tem de estar no servidor para o qual você apontá-lo: rode primeiro relayium login --server https://your-domain. O receive e o down não precisam de nenhuma.",
       },
       {
         q: "Posso usar meu próprio domínio e certificado TLS?",

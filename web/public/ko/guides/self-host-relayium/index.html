@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Relayium 셀프 호스팅: 나만의 파일 전송 서버 운영하기 · Relayium</title>
-    <meta name="description" content="Docker 명령어 하나로 Relayium 전체 스택을 직접 운영하세요 — 자신의 도메인, 자신의 데이터, 계정 불필요. 환경 변수, 선택적 TURN 릴레이, CLI를 서버로 연결하는 방법까지 다룹니다." />
+    <meta name="description" content="Docker 명령어 하나로 Relayium 전체 스택을 직접 운영하세요 — 자신의 도메인, 자신의 데이터, 제3자 계정 불필요. 환경 변수, 선택적 TURN 릴레이, CLI를 서버로 연결하는 방법까지 다룹니다." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ko/guides/self-host-relayium/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/self-host-relayium/" />
@@ -23,7 +23,7 @@
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Relayium 셀프 호스팅: 나만의 파일 전송 서버 운영하기" />
-    <meta property="og:description" content="Docker 명령어 하나로 Relayium 전체 스택을 직접 운영하세요 — 자신의 도메인, 자신의 데이터, 계정 불필요. 환경 변수, 선택적 TURN 릴레이, CLI를 서버로 연결하는 방법까지 다룹니다." />
+    <meta property="og:description" content="Docker 명령어 하나로 Relayium 전체 스택을 직접 운영하세요 — 자신의 도메인, 자신의 데이터, 제3자 계정 불필요. 환경 변수, 선택적 TURN 릴레이, CLI를 서버로 연결하는 방법까지 다룹니다." />
     <meta property="og:url" content="https://relayium.com/ko/guides/self-host-relayium/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -33,9 +33,9 @@
     <meta property="og:locale" content="ko_KR" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Relayium 셀프 호스팅: 나만의 파일 전송 서버 운영하기" />
-    <meta name="twitter:description" content="Docker 명령어 하나로 Relayium 전체 스택을 직접 운영하세요 — 자신의 도메인, 자신의 데이터, 계정 불필요. 환경 변수, 선택적 TURN 릴레이, CLI를 서버로 연결하는 방법까지 다룹니다." />
+    <meta name="twitter:description" content="Docker 명령어 하나로 Relayium 전체 스택을 직접 운영하세요 — 자신의 도메인, 자신의 데이터, 제3자 계정 불필요. 환경 변수, 선택적 TURN 릴레이, CLI를 서버로 연결하는 방법까지 다룹니다." />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 셀프 호스팅: 나만의 파일 전송 서버 운영하기","description":"Docker 명령어 하나로 Relayium 전체 스택을 직접 운영하세요 — 자신의 도메인, 자신의 데이터, 계정 불필요. 환경 변수, 선택적 TURN 릴레이, CLI를 서버로 연결하는 방법까지 다룹니다.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/self-host-relayium/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"TURN을 설정해야 하나요?","acceptedAnswer":{"@type":"Answer","text":"네트워크를 넘나드는 실시간 전송이 엄격한 NAT 환경에서도 동작하길 원할 때만 필요합니다. 동일 네트워크 전송, SSH 기반 push/pull, daemon-direct는 모두 TURN 없이 동작합니다 — TURN은 네트워크 간 페어링 코드 경로의 NAT 통과에만 쓰입니다."}},{"@type":"Question","name":"셀프 호스팅해도 CLI는 여전히 무료인가요?","acceptedAnswer":{"@type":"Answer","text":"네. relayium.com에 연결하든 직접 운영하는 서버에 연결하든 CLI는 완전히 무료입니다 — --server는 단지 자신의 인스턴스를 가리키도록 할 뿐입니다. 계정이 필요한 것은 send뿐이며, 그것도 가리키는 그 서버의 계정이어야 하므로 먼저 relayium login --server https://your-domain을 실행하세요."}},{"@type":"Question","name":"자신의 도메인과 TLS 인증서를 쓸 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"네. Docker 이미지 자체는 :8080에서 평문 HTTP로 대기합니다. 앞단에 nginx나 Caddy를 두고 자신의 도메인과 인증서(예: certbot/Let's Encrypt)를 설정하세요. docs/self-hosting.md에 프록시해야 할 경로가 설명되어 있습니다. Relayium이 실제 운영에 쓰는 nginx 설정은 공개되어 있지 않으므로 직접 작성해야 합니다."}},{"@type":"Question","name":"셀프 호스팅한 서버는 어떤 데이터를 저장하나요?","acceptedAnswer":{"@type":"Answer","text":"RELAYIUM_DB에 있는 SQLite 데이터베이스(계정, 세션)와, 저장형/링크형 전송의 경우 RELAYIUM_BLOB_DIR에 있는 암호화된 블롭 — 이는 서버 자신도 복호화할 수 없습니다. 실시간 P2P 전송은 어디에도 저장되지 않습니다 — 서버는 시그널링 핸드셰이크만 중계할 뿐입니다."}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 셀프 호스팅: 나만의 파일 전송 서버 운영하기","description":"Docker 명령어 하나로 Relayium 전체 스택을 직접 운영하세요 — 자신의 도메인, 자신의 데이터, 제3자 계정 불필요. 환경 변수, 선택적 TURN 릴레이, CLI를 서버로 연결하는 방법까지 다룹니다.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/self-host-relayium/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"TURN을 설정해야 하나요?","acceptedAnswer":{"@type":"Answer","text":"네트워크를 넘나드는 실시간 전송이 엄격한 NAT 환경에서도 동작하길 원할 때만 필요합니다. 동일 네트워크 전송, SSH 기반 push/pull, daemon-direct는 모두 TURN 없이 동작합니다 — TURN은 네트워크 간 페어링 코드 경로의 NAT 통과에만 쓰입니다."}},{"@type":"Question","name":"셀프 호스팅해도 CLI는 여전히 무료인가요?","acceptedAnswer":{"@type":"Answer","text":"네. relayium.com에 연결하든 직접 운영하는 서버에 연결하든 CLI는 완전히 무료입니다 — --server는 단지 자신의 인스턴스를 가리키도록 할 뿐입니다. 계정이 필요한 것은 코드를 발급해야 하는 send(건네받은 코드를 쓸 때는 불필요)와 파일을 저장하는 up입니다. 그것도 가리키는 그 서버의 계정이어야 하므로 먼저 relayium login --server https://your-domain을 실행하세요. receive와 down은 필요 없습니다."}},{"@type":"Question","name":"자신의 도메인과 TLS 인증서를 쓸 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"네. Docker 이미지 자체는 :8080에서 평문 HTTP로 대기합니다. 앞단에 nginx나 Caddy를 두고 자신의 도메인과 인증서(예: certbot/Let's Encrypt)를 설정하세요. docs/self-hosting.md에 프록시해야 할 경로가 설명되어 있습니다. Relayium이 실제 운영에 쓰는 nginx 설정은 공개되어 있지 않으므로 직접 작성해야 합니다."}},{"@type":"Question","name":"셀프 호스팅한 서버는 어떤 데이터를 저장하나요?","acceptedAnswer":{"@type":"Answer","text":"RELAYIUM_DB에 있는 SQLite 데이터베이스(계정, 세션)와, 저장형/링크형 전송의 경우 RELAYIUM_BLOB_DIR에 있는 암호화된 블롭 — 이는 서버 자신도 복호화할 수 없습니다. 실시간 P2P 전송은 어디에도 저장되지 않습니다 — 서버는 시그널링 핸드셰이크만 중계할 뿐입니다."}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -91,12 +91,12 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>Relayium CLI는 네트워크 간 send/receive에서 기본적으로 relayium.com의 랑데부 서버를 사용합니다. --server를 전달하면 대신 자신의 서버를 사용할 수 있습니다:</p>
       <pre><code>relayium send ./report.pdf --server https://your-domain</code></pre>
       <pre><code>relayium receive K7M4XR --server https://your-domain</code></pre>
-      <ul><li>어느 서버를 쓰든 CLI는 무료입니다 — --server는 페어링 코드 핸드셰이크가 대화하는 랑데부 서버만 바꿀 뿐입니다. send의 코드도 같은 서버가 발급하므로 먼저 relayium login --server https://your-domain으로 그쪽에 로그인하세요. receive는 여전히 계정이 필요 없습니다.</li><li>push/pull(자신의 SSH를 통한)과 serve + daemon-direct의 push relayium://host는 셀프 호스팅 여부와 무관하게 relayium.com에 전혀 닿지 않습니다 — 지정한 원격지에 직접 연결됩니다.</li></ul>
+      <ul><li>어느 서버를 쓰든 CLI는 무료입니다 — --server는 페어링 코드 핸드셰이크가 대화하는 랑데부 서버만 바꿀 뿐입니다. send의 코드도 같은 서버가 발급하고 클라우드 up도 그 서버의 계정에 저장하므로, 먼저 relayium login --server https://your-domain으로 그쪽에 로그인하세요. receive와 down은 여전히 계정이 필요 없습니다.</li><li>push/pull(자신의 SSH를 통한)과 serve + daemon-direct의 push relayium://host는 셀프 호스팅 여부와 무관하게 relayium.com에 전혀 닿지 않습니다 — 지정한 원격지에 직접 연결됩니다.</li></ul>
       <h2>자주 묻는 질문</h2>
       <h3>TURN을 설정해야 하나요?</h3>
       <p>네트워크를 넘나드는 실시간 전송이 엄격한 NAT 환경에서도 동작하길 원할 때만 필요합니다. 동일 네트워크 전송, SSH 기반 push/pull, daemon-direct는 모두 TURN 없이 동작합니다 — TURN은 네트워크 간 페어링 코드 경로의 NAT 통과에만 쓰입니다.</p>
       <h3>셀프 호스팅해도 CLI는 여전히 무료인가요?</h3>
-      <p>네. relayium.com에 연결하든 직접 운영하는 서버에 연결하든 CLI는 완전히 무료입니다 — --server는 단지 자신의 인스턴스를 가리키도록 할 뿐입니다. 계정이 필요한 것은 send뿐이며, 그것도 가리키는 그 서버의 계정이어야 하므로 먼저 relayium login --server https://your-domain을 실행하세요.</p>
+      <p>네. relayium.com에 연결하든 직접 운영하는 서버에 연결하든 CLI는 완전히 무료입니다 — --server는 단지 자신의 인스턴스를 가리키도록 할 뿐입니다. 계정이 필요한 것은 코드를 발급해야 하는 send(건네받은 코드를 쓸 때는 불필요)와 파일을 저장하는 up입니다. 그것도 가리키는 그 서버의 계정이어야 하므로 먼저 relayium login --server https://your-domain을 실행하세요. receive와 down은 필요 없습니다.</p>
       <h3>자신의 도메인과 TLS 인증서를 쓸 수 있나요?</h3>
       <p>네. Docker 이미지 자체는 :8080에서 평문 HTTP로 대기합니다. 앞단에 nginx나 Caddy를 두고 자신의 도메인과 인증서(예: certbot/Let&#39;s Encrypt)를 설정하세요. docs/self-hosting.md에 프록시해야 할 경로가 설명되어 있습니다. Relayium이 실제 운영에 쓰는 nginx 설정은 공개되어 있지 않으므로 직접 작성해야 합니다.</p>
       <h3>셀프 호스팅한 서버는 어떤 데이터를 저장하나요?</h3>
