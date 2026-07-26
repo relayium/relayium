@@ -1,4 +1,5 @@
 import XCTest
+import Combine
 import RelayiumKit
 @testable import RelayiumAppKit
 
@@ -197,6 +198,192 @@ final class AccountSessionTests: XCTestCase {
         await s.restore()
         guard case .ready = s.state else { return XCTFail("must stay ready, got \(s.state)") }
     }
+
+    // MARK: - Operation identity
+    //
+    // Being @MainActor serializes each step, not each operation: `logOut()` is
+    // synchronous and a load has two suspension points, so a sign-out lands
+    // *between* a load's awaits whenever the server is slow — which is exactly
+    // when the user reaches for Sign out. These are the interleavings; the
+    // `RequestGate` below holds a response open so they are deterministic.
+
+    func testSignOutDuringAnInFlightRefreshStaysSignedOut() async throws {
+        let store = InMemoryTokenStore()
+        try store.save("rlm_cli_TESTTOKEN")
+        try routeLoggedIn(loginBody: Data())
+        let s = session(store: store)
+        await s.restore()
+        guard case .ready = s.state else { return XCTFail("setup failed, got \(s.state)") }
+
+        let gate = RequestGate()
+        let me = try fixture("me"), usage = try fixture("me-usage")
+        StubURLProtocol.router = { req in
+            switch req.url?.path {
+            case "/api/me":       gate.hold(); return .init(status: 200, body: me)
+            case "/api/me/usage": return .init(status: 200, body: usage)
+            default:              return .init(status: 500)
+            }
+        }
+        let refreshing = Task { await s.refresh() }
+        await gate.reached()
+        s.logOut()          // user signs out while the refresh is in flight
+        gate.release()
+        await refreshing.value
+
+        XCTAssertEqual(s.state, .loggedOut, "a completed refresh must not undo an explicit sign-out")
+        XCTAssertFalse(s.isStale)
+        XCTAssertNil(try store.load())
+    }
+
+    func testSignOutDuringAnInFlightLoginNeverLandsReady() async throws {
+        let store = InMemoryTokenStore()
+        let loginBody = try fixture("login-success")
+        let me = try fixture("me"), usage = try fixture("me-usage")
+        let gate = RequestGate()
+        StubURLProtocol.router = { req in
+            switch req.url?.path {
+            case "/api/me":       return .init(status: 200, body: me)
+            case "/api/me/usage": return .init(status: 200, body: usage)
+            default:              gate.hold(); return .init(status: 200, body: loginBody)
+            }
+        }
+        let s = session(store: store)
+        let signingIn = Task { await s.logIn(email: "a@b.co", password: "pw") }
+        await gate.reached()
+        s.logOut()
+        gate.release()
+        await signingIn.value
+
+        XCTAssertEqual(s.state, .loggedOut, "a login that finished after sign-out must not sign the user back in")
+        XCTAssertNil(try store.load(), "and must not write its token into the keychain afterwards")
+    }
+
+    // `.task` is cancelled when the window closes, which surfaces as a transport
+    // error. Painting that as "Couldn't reach the server" reports an outage that
+    // is not happening.
+    func testACancelledLoadDoesNotRenderAnOutage() async throws {
+        let store = InMemoryTokenStore()
+        try store.save("rlm_cli_TESTTOKEN")
+        let gate = RequestGate()
+        StubURLProtocol.router = { _ in gate.hold(); return .init(status: 503, body: Data()) }
+        let s = session(store: store)
+
+        let restoring = Task { await s.restore() }
+        await gate.reached()
+        restoring.cancel()
+        gate.release()
+        await restoring.value
+
+        if case .unavailable = s.state {
+            XCTFail("a user-initiated cancel must not be reported as a server outage")
+        }
+    }
+
+    // MARK: - Re-entrant restore
+    //
+    // A WindowGroup gives ⌘N and window-reopen for free, and every ContentView
+    // runs `.task { await session.restore() }`.
+
+    func testRestoreOnALiveSessionKeepsTheAccountOnScreen() async throws {
+        let store = InMemoryTokenStore()
+        try store.save("rlm_cli_TESTTOKEN")
+        try routeLoggedIn(loginBody: Data())
+        let s = session(store: store)
+        await s.restore()
+        guard case .ready = s.state else { return XCTFail("setup failed, got \(s.state)") }
+
+        // Record every state the second restore publishes, and make the server
+        // hostile while it runs: neither may cost the user the loaded account.
+        var seen: [SessionState] = []
+        let sub = s.$state.sink { seen.append($0) }
+        defer { sub.cancel() }
+        StubURLProtocol.router = { _ in .init(status: 503, body: Data()) }
+
+        await s.restore()
+
+        guard case let .ready(user, usage) = s.state else {
+            return XCTFail("a second window must not discard the loaded account, got \(s.state)")
+        }
+        XCTAssertEqual(user.planId, "pro")
+        XCTAssertEqual(usage.plan.name, "Pro")
+        XCTAssertFalse(seen.contains(.restoring), "and must not flash a full-screen spinner over it")
+        XCTAssertFalse(s.isStale, "nor refetch — the account screen has an explicit Refresh")
+    }
+
+    // A new window opening mid-sign-in must not restart from the (still empty)
+    // keychain: that would supersede the sign-in and drop the user on the form.
+    func testRestoreDuringAnInFlightLoginDoesNotAbortIt() async throws {
+        let store = InMemoryTokenStore()
+        let loginBody = try fixture("login-success")
+        let me = try fixture("me"), usage = try fixture("me-usage")
+        let gate = RequestGate()
+        StubURLProtocol.router = { req in
+            switch req.url?.path {
+            case "/api/me":       return .init(status: 200, body: me)
+            case "/api/me/usage": return .init(status: 200, body: usage)
+            default:              gate.hold(); return .init(status: 200, body: loginBody)
+            }
+        }
+        let s = session(store: store)
+        let signingIn = Task { await s.logIn(email: "a@b.co", password: "pw") }
+        await gate.reached()
+        await s.restore()               // ⌘N while the sign-in is in flight
+        gate.release()
+        await signingIn.value
+
+        guard case .ready = s.state else { return XCTFail("the sign-in must still land, got \(s.state)") }
+        XCTAssertEqual(try store.load(), "rlm_cli_TESTTOKEN")
+    }
+
+    // The other half: a token in hand but no account on screen. Reopening the
+    // window there *should* retry — it just must not do it as a cold start.
+    func testRestoreFromUnavailableRetriesWithoutAFullScreenSpinner() async throws {
+        let store = InMemoryTokenStore()
+        try store.save("rlm_cli_TESTTOKEN")
+        StubURLProtocol.router = { _ in .init(status: 503, body: Data()) }
+        let s = session(store: store)
+        await s.restore()
+        guard case .unavailable = s.state else { return XCTFail("setup failed, got \(s.state)") }
+
+        var seen: [SessionState] = []
+        let sub = s.$state.sink { seen.append($0) }
+        defer { sub.cancel() }
+        try routeLoggedIn(loginBody: Data())
+
+        await s.restore()
+
+        guard case .ready = s.state else { return XCTFail("want ready, got \(s.state)") }
+        XCTAssertFalse(seen.contains(.restoring), "a reopened window is a refresh, not a cold start")
+    }
+}
+
+/// A latch a stubbed response can block on, so a test can run a main-actor call
+/// (sign out, cancel) *while* a request is in flight. `hold()` runs on
+/// URLSession's own thread from inside the stub; `reached()` waits for it without
+/// ever blocking the main actor, so the session under test keeps running.
+final class RequestGate {
+    private let entered = DispatchSemaphore(value: 0)
+    private let released = DispatchSemaphore(value: 0)
+
+    /// Call from inside the stub: announce arrival, then block until released.
+    func hold() {
+        entered.signal()
+        released.wait()
+    }
+
+    func reached() async {
+        // The semaphore, not `self`: `DispatchSemaphore` is Sendable, so the wait
+        // crosses to the background queue without a capture warning.
+        let entered = self.entered
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+                entered.wait()
+                continuation.resume()
+            }
+        }
+    }
+
+    func release() { released.signal() }
 }
 
 /// A `TokenStore` whose `save` always fails (e.g. a locked keychain), while `load`
