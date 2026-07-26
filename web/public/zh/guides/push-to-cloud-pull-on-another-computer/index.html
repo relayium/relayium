@@ -83,7 +83,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="lead">这是 CLI 里主要会用到 Relayium 账号的部分，另一个是 send——它需要账号来生成配对码。其余功能的绑定是可选的：push/pull、daemon 直连、sync 都无需登录照常可用，receive 也一样。下载则完全不需要账号，有链接即可。</p>
       <h2>什么时候用它</h2>
       <p>按对端是否在线、以及两台机器如何互相触达来选模式：</p>
-      <ul><li>up / down（本指南）——两台机器从不同时在线。你现在上传，之后你（或另一台机器）再下载。走你的账号。</li><li>send / receive——两端此刻都在线，想用一次性配对码做直接点对点传输。</li><li>push / pull——你已经能 ssh 进对端机器。</li><li>除 up 外都无需账号；只有 up 需要 relayium login。</li></ul>
+      <ul><li>up / down（本指南）——两台机器从不同时在线。你现在上传，之后你（或另一台机器）再下载。走你的账号。</li><li>send / receive——两端此刻都在线，想用一次性配对码做直接点对点传输。</li><li>push / pull——你已经能 ssh 进对端机器。</li><li>需要 relayium login 的是 up 和 send——up 是为了把文件存到你的账号下，send 只在必须签发配对码时才需要（别人给了你码就不用）。down、receive、push/pull、daemon 直连、sync 都不需要账号。</li></ul>
       <h2>开始之前</h2>
       <p>第一次 up 之前有两件一次性的事——装好 CLI，以及有个账号。两样都齐了就往下跳。</p>
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>

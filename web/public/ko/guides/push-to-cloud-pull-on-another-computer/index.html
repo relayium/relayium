@@ -83,7 +83,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="lead">이것은 CLI 에서 Relayium 계정을 사용하는 주된 부분이며, 다른 하나는 페어링 코드를 발급하기 위해 계정이 필요한 send 입니다. 나머지의 바인딩은 선택 사항입니다. push/pull, daemon 직결, sync 는 로그인 없이 계속 동작하고 receive 도 마찬가지입니다. 다운로드에는 계정이 전혀 필요 없고 링크만 있으면 됩니다.</p>
       <h2>언제 쓰나</h2>
       <p>상대편이 온라인인지, 두 기기가 서로 어떻게 닿는지에 따라 모드를 고릅니다:</p>
-      <ul><li>up / down (이 가이드) — 두 기기가 동시에 온라인이 되지 않습니다. 지금 업로드하고, 나중에 자신(또는 다른 기기)이 다운로드합니다. 계정을 거칩니다.</li><li>send / receive — 양쪽이 지금 온라인이며 일회용 코드로 직접 피어 투 피어 전송을 원합니다.</li><li>push / pull — 상대 기기에 이미 ssh 할 수 있습니다.</li><li>up 을 제외하면 계정이 필요 없습니다. relayium login 이 필요한 것은 up 뿐입니다.</li></ul>
+      <ul><li>up / down (이 가이드) — 두 기기가 동시에 온라인이 되지 않습니다. 지금 업로드하고, 나중에 자신(또는 다른 기기)이 다운로드합니다. 계정을 거칩니다.</li><li>send / receive — 양쪽이 지금 온라인이며 일회용 코드로 직접 피어 투 피어 전송을 원합니다.</li><li>push / pull — 상대 기기에 이미 ssh 할 수 있습니다.</li><li>relayium login 이 필요한 것은 up 과 send 둘입니다 — up 은 파일을 계정에 저장하기 위해, send 는 페어링 코드를 발급해야 할 때만(코드를 받았다면 필요 없습니다). down, receive, push/pull, daemon 직결, sync 는 계정이 필요 없습니다.</li></ul>
       <h2>시작하기 전에</h2>
       <p>첫 up 전에 한 번만 해두면 되는 두 가지 — CLI 설치와 계정 준비입니다. 둘 다 있으면 건너뛰세요.</p>
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>

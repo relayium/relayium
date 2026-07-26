@@ -164,7 +164,7 @@ export const cli = {
       },
       {
         q: "Can I point it at my own server?",
-        a: "Yes — --server https://your-domain sends login, up and down to a self-hosted Relayium instance.",
+        a: "Yes — --server https://your-domain points login, up, down, send and receive at a self-hosted Relayium instance, so pairing codes are minted by your server too.",
       },
     ],
   },

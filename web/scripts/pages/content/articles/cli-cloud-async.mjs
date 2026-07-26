@@ -20,7 +20,7 @@ const en = {
         "up / down (this guide) — the two machines are never online together. You upload now; you (or another machine) download later. Goes through your account.",
         "send / receive — both ends are online right now and want a direct peer-to-peer transfer over a one-time code.",
         "push / pull — you can already ssh into the far machine.",
-        "Everything except up needs no account; only up requires relayium login.",
+        "up and send are the two that need relayium login — up to store the file under your account, send only when it has to mint a pairing code (handed one, it needs nothing). down, receive, push/pull, daemon-direct and sync need no account.",
       ],
     },
     {
@@ -153,7 +153,7 @@ const zh = {
         "up / down（本指南）——两台机器从不同时在线。你现在上传，之后你（或另一台机器）再下载。走你的账号。",
         "send / receive——两端此刻都在线，想用一次性配对码做直接点对点传输。",
         "push / pull——你已经能 ssh 进对端机器。",
-        "除 up 外都无需账号；只有 up 需要 relayium login。",
+        "需要 relayium login 的是 up 和 send——up 是为了把文件存到你的账号下，send 只在必须签发配对码时才需要（别人给了你码就不用）。down、receive、push/pull、daemon 直连、sync 都不需要账号。",
       ],
     },
     {
@@ -286,7 +286,7 @@ const ja = {
         "up / down（このガイド）——二台が同時にオンラインにならない。今アップロードし、後で自分（または別のマシン）がダウンロードする。アカウント経由。",
         "send / receive——両端が今オンラインで、使い捨てコードで直接ピアツーピア転送したい。",
         "push / pull——相手のマシンに既に ssh できる。",
-        "up 以外はアカウント不要。relayium login が要るのは up だけ。",
+        "relayium login が要るのは up と send の二つ——up はファイルをアカウントに保存するため、send はペアリングコードを発行しなければならないときだけ（コードを渡されていれば不要）。down、receive、push/pull、daemon 直結、sync はアカウント不要。",
       ],
     },
     {
@@ -419,7 +419,7 @@ const ko = {
         "up / down (이 가이드) — 두 기기가 동시에 온라인이 되지 않습니다. 지금 업로드하고, 나중에 자신(또는 다른 기기)이 다운로드합니다. 계정을 거칩니다.",
         "send / receive — 양쪽이 지금 온라인이며 일회용 코드로 직접 피어 투 피어 전송을 원합니다.",
         "push / pull — 상대 기기에 이미 ssh 할 수 있습니다.",
-        "up 을 제외하면 계정이 필요 없습니다. relayium login 이 필요한 것은 up 뿐입니다.",
+        "relayium login 이 필요한 것은 up 과 send 둘입니다 — up 은 파일을 계정에 저장하기 위해, send 는 페어링 코드를 발급해야 할 때만(코드를 받았다면 필요 없습니다). down, receive, push/pull, daemon 직결, sync 는 계정이 필요 없습니다.",
       ],
     },
     {
@@ -552,7 +552,7 @@ const de = {
         "up / down (diese Anleitung) — die beiden Rechner sind nie gleichzeitig online. Du lädst jetzt hoch; du (oder ein anderer Rechner) lädst später herunter. Läuft über dein Konto.",
         "send / receive — beide Seiten sind jetzt online und wollen eine direkte Peer-to-Peer-Übertragung über einen Einmalcode.",
         "push / pull — du kommst bereits per ssh auf den entfernten Rechner.",
-        "Außer up braucht nichts ein Konto; nur up erfordert relayium login.",
+        "relayium login brauchen nur up und send — up, um die Datei unter deinem Konto zu speichern, send nur dann, wenn es einen Pairing-Code erzeugen muss (mit einem übergebenen Code gar nicht). down, receive, push/pull, Daemon-Direkt und sync brauchen kein Konto.",
       ],
     },
     {
@@ -685,7 +685,7 @@ const fr = {
         "up / down (ce guide) — les deux machines ne sont jamais en ligne ensemble. Vous téléversez maintenant ; vous (ou une autre machine) téléchargez plus tard. Passe par votre compte.",
         "send / receive — les deux extrémités sont en ligne maintenant et veulent un transfert pair-à-pair direct via un code à usage unique.",
         "push / pull — vous pouvez déjà vous connecter en ssh à la machine distante.",
-        "Tout sauf up se passe de compte ; seul up requiert relayium login.",
+        "Seuls up et send demandent relayium login — up pour stocker le fichier sous votre compte, send uniquement quand il doit générer un code d'appairage (avec un code qu'on vous a donné, aucun). down, receive, push/pull, daemon direct et sync ne demandent aucun compte.",
       ],
     },
     {
@@ -818,7 +818,7 @@ const ar = {
         "‏up / down (هذا الدليل) — الجهازان لا يكونان متصلين معًا أبدًا. ترفع الآن؛ وتنزّل أنت (أو جهاز آخر) لاحقًا. يمرّ عبر حسابك.",
         "‏send / receive — كلا الطرفين متصل الآن ويريدان نقلًا مباشرًا من الند للند عبر رمز لمرة واحدة.",
         "‏push / pull — يمكنك بالفعل الدخول إلى الجهاز البعيد عبر ssh.",
-        "كل شيء عدا up لا يحتاج إلى حساب؛ وحده up يتطلب relayium login.",
+        "الأمران اللذان يتطلبان relayium login هما up و send — الأول ليخزّن الملف تحت حسابك، والثاني فقط حين يلزمه إصدار رمز اقتران (ومع رمز سُلِّم إليك لا يلزمه شيء). أما down و receive و push/pull و daemon-direct و sync فلا تحتاج إلى حساب.",
       ],
     },
     {
@@ -951,7 +951,7 @@ const es = {
         "up / down (esta guía) — las dos máquinas nunca están en línea a la vez. Subes ahora; tú (u otra máquina) descargas después. Pasa por tu cuenta.",
         "send / receive — ambos extremos están en línea ahora mismo y quieren una transferencia directa de igual a igual con un código de un solo uso.",
         "push / pull — ya puedes entrar por ssh a la máquina remota.",
-        "Todo excepto up se hace sin cuenta; solo up requiere relayium login.",
+        "Los que piden relayium login son up y send — up para guardar el archivo bajo tu cuenta, send solo cuando tiene que generar un código de emparejamiento (con uno que te hayan dado, ninguno). down, receive, push/pull, daemon-direct y sync no necesitan cuenta.",
       ],
     },
     {
@@ -1084,7 +1084,7 @@ const pt = {
         "up / down (este guia) — as duas máquinas nunca estão on-line juntas. Você envia agora; você (ou outra máquina) baixa depois. Passa pela sua conta.",
         "send / receive — as duas pontas estão on-line agora e querem uma transferência ponto a ponto direta com um código de uso único.",
         "push / pull — você já consegue entrar por ssh na máquina remota.",
-        "Tudo exceto o up dispensa conta; só o up exige relayium login.",
+        "Os que pedem relayium login são o up e o send — o up para guardar o arquivo sob a sua conta, o send apenas quando precisa gerar um código de emparelhamento (com um código que lhe deram, nenhum). O down, o receive, push/pull, daemon-direct e sync não precisam de conta.",
       ],
     },
     {

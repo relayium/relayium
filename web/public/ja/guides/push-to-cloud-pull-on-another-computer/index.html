@@ -83,7 +83,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="lead">これは CLI の中で Relayium アカウントを使う主な部分です。もう一つはペアリングコードの発行にアカウントを必要とする send です。残りのバインドは任意で、push/pull、daemon 直結、sync はログインなしで動き続け、receive も同様です。ダウンロードにはアカウントは一切不要で、リンクさえあれば十分です。</p>
       <h2>どんなときに使うか</h2>
       <p>相手側がオンラインかどうか、二台がどう到達し合うかでモードを選びます：</p>
-      <ul><li>up / down（このガイド）——二台が同時にオンラインにならない。今アップロードし、後で自分（または別のマシン）がダウンロードする。アカウント経由。</li><li>send / receive——両端が今オンラインで、使い捨てコードで直接ピアツーピア転送したい。</li><li>push / pull——相手のマシンに既に ssh できる。</li><li>up 以外はアカウント不要。relayium login が要るのは up だけ。</li></ul>
+      <ul><li>up / down（このガイド）——二台が同時にオンラインにならない。今アップロードし、後で自分（または別のマシン）がダウンロードする。アカウント経由。</li><li>send / receive——両端が今オンラインで、使い捨てコードで直接ピアツーピア転送したい。</li><li>push / pull——相手のマシンに既に ssh できる。</li><li>relayium login が要るのは up と send の二つ——up はファイルをアカウントに保存するため、send はペアリングコードを発行しなければならないときだけ（コードを渡されていれば不要）。down、receive、push/pull、daemon 直結、sync はアカウント不要。</li></ul>
       <h2>始める前に</h2>
       <p>最初の up の前に、一度だけ済ませることが二つあります——CLI のインストールと、アカウントの用意です。両方そろっていれば読み飛ばしてください。</p>
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
