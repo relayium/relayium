@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 func registerNode(t *testing.T, s *Service, bearer string, req nodeRegisterReq) nodeRegisterResp {

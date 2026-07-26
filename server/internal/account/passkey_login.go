@@ -13,7 +13,7 @@ import (
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 	"github.com/relayium/relayium/httpx"
 )
 

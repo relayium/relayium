@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 func TestSeedPlansCreatesFourDefaultsIdempotently(t *testing.T) {

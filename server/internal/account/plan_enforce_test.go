@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 func newPlanService(t *testing.T) (*Service, *SQLiteStore) {

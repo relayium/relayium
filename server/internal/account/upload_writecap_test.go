@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 // uploadWriteCap must bound a billable single-shot upload's on-disk write to the

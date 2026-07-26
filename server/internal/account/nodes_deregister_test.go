@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 // postDeregister POSTs an uninstall notice with the given bearer token.

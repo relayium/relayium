@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 func TestClaimDownloadSlot_CountLimit(t *testing.T) {

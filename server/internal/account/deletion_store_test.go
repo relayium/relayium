@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 // PurgeTransientUserData is the deletion-confirmation-time purge (Task 3

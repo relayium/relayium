@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 const (

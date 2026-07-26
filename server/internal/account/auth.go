@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 // RequireAuth wraps a handler, resolving the caller as an authenticated User

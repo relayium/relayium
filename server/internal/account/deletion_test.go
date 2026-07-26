@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 // httptestPost issues a POST with an optional string body and cookie against

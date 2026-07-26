@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 // Mailer sends the magic-link email. Abstracted so dev uses a log and prod uses SMTP.

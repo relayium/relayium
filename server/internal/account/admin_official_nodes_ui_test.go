@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 func TestAdminDashboardShowsOfficialNodesSection(t *testing.T) {

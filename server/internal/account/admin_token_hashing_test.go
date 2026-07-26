@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 // Admin bearer tokens must be stored as SHA-256 hashes, never raw: a read of the

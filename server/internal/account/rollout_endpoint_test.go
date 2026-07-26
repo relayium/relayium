@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 // newUpdateCheckServer builds a node-routes-only server whose clock is pinned to

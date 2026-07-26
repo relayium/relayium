@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 // loadAppleP8 parses Apple's downloadable Sign in with Apple key (.p8), a

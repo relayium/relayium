@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 // newUserNodesServer mirrors newFileServer's harness but without a blob store

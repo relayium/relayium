@@ -6,7 +6,7 @@ import (
 	"log"
 	"testing"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 // TestGCPurgesDueAccountsAndArchives is the brief's Step-1 acceptance test:

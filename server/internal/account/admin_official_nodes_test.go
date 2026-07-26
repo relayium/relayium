@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 // Reuse newAdminSettingsServer + adminLogin from admin_test.go.

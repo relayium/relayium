@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 // 会话令牌就是 cookie 的值。明文入库意味着任何一次**只读**的库泄露——备份、快照、

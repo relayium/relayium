@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 func TestFleetTokenLifecycle(t *testing.T) {

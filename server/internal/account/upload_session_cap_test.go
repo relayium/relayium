@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/relayium/relayium/internal/authx"
+	"github.com/relayium/relayium/authx"
 )
 
 // seedDailyUsage debits the rolling-24h upload ledger by n bytes so the tests
