@@ -32,6 +32,25 @@ final class UsagePresentationTests: XCTestCase {
         XCTAssertTrue(d.isUnlimited)
         XCTAssertEqual(d.usedText, "0 B")
     }
+    // A free account carries an empty status and an active subscription needs no
+    // annotation: both must be silent, or every user gets a meaningless badge.
+    func testNoBadgeForFreeOrActiveSubscriptions() {
+        XCTAssertNil(UsagePresentation.subscriptionBadge(for: ""))
+        XCTAssertNil(UsagePresentation.subscriptionBadge(for: "active"))
+    }
+    // These are raw Stripe statuses. Rendering `past_due` verbatim shows a paying
+    // customer snake_case machine vocabulary at the worst possible moment.
+    func testNonActiveStatusesGetHumanCopy() {
+        XCTAssertEqual(UsagePresentation.subscriptionBadge(for: "past_due"), "Payment failed")
+        XCTAssertEqual(UsagePresentation.subscriptionBadge(for: "canceled"), "Canceled")
+        XCTAssertEqual(UsagePresentation.subscriptionBadge(for: "incomplete"), "Payment incomplete")
+        XCTAssertEqual(UsagePresentation.subscriptionBadge(for: "trialing"), "Trial")
+    }
+    // An unknown future status is still not active, so it must show — as English.
+    func testUnknownStatusShowsButNeverVerbatim() {
+        XCTAssertEqual(UsagePresentation.subscriptionBadge(for: "some_future_status"), "Inactive")
+    }
+
     func testBytesTextUsesBinaryUnitsAndIsLocaleIndependent() {
         XCTAssertEqual(UsagePresentation.bytesText(0), "0 B")
         XCTAssertEqual(UsagePresentation.bytesText(512), "512 B")

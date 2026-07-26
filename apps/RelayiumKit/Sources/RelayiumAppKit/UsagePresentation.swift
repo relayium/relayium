@@ -20,6 +20,31 @@ public enum UsagePresentation {
         )
     }
 
+    /// The badge shown next to the plan name, or `nil` when nothing should show.
+    ///
+    /// Two decisions live here, both of which were previously inside a SwiftUI view
+    /// where no test could reach them. First the predicate: free accounts carry an
+    /// empty status and an active subscription needs no annotation, so both are
+    /// silent. Second the copy: `subscriptionStatus` is a raw Stripe status
+    /// (`past_due`, `incomplete_expired`, …) and rendering it verbatim shows
+    /// snake_case machine vocabulary to a paying customer at the exact moment
+    /// something is wrong with their billing. Wording follows the web's
+    /// (`web/src/lib/PlanCard.svelte` + `i18n/en.ts`) so the two surfaces agree.
+    public static func subscriptionBadge(for status: String) -> String? {
+        switch status {
+        case "", "active":                      return nil
+        case "trialing":                        return "Trial"
+        case "past_due":                        return "Payment failed"
+        case "canceled":                        return "Canceled"
+        case "unpaid":                          return "Unpaid"
+        case "incomplete", "incomplete_expired": return "Payment incomplete"
+        case "paused":                          return "Paused"
+        // An unknown status is still not "active", so it must be visible — but as
+        // English, not as whatever string a future Stripe version invents.
+        default:                                return "Inactive"
+        }
+    }
+
     /// Binary units. `String(format:)` with no locale argument does not localize the
     /// decimal separator, so this is stable across machines and in CI.
     public static func bytesText(_ n: Int64) -> String {
