@@ -7,7 +7,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/coder/websocket"
 	"github.com/relayium/relayium/internal/signal"
@@ -31,11 +34,20 @@ func Join(ctx context.Context, serverURL, code, name string) (*Session, error) {
 	}
 	u.Path = "/ws"
 	if code != "" {
+		// Check the shape here, not just at the server: a code that cannot be a
+		// code (a made-up number, a typo'd character) costs a round trip only to
+		// come back as an opaque 403, and "expected handshake response status
+		// code 101 but got 403" tells the user nothing about what to type instead.
+		if !signal.ValidCodeFormat(code) {
+			return nil, fmt.Errorf(
+				"pairing code %q is not a valid code: codes are %d characters from %s, last 5 minutes, and are issued by relayium.com — one cannot be made up",
+				code, signal.CodeLen, signal.CodeAlphabet)
+		}
 		u.RawQuery = "code=" + url.QueryEscape(code)
 	}
-	conn, _, err := websocket.Dial(ctx, u.String(), nil)
+	conn, resp, err := websocket.Dial(ctx, u.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("rendezvous dial: %w", err)
+		return nil, dialError(err, resp)
 	}
 	s := &Session{conn: conn}
 
@@ -63,6 +75,57 @@ func Join(ctx context.Context, serverURL, code, name string) (*Session, error) {
 			}
 		}
 	}
+}
+
+// dialError turns a failed rendezvous handshake into something the user can act
+// on. The server states its reason in the response body ("invalid or expired
+// pairing code", "too many pairing attempts"), but websocket.Dial's error keeps
+// only the status code — so read the body coder/websocket buffers back into
+// resp.Body on a failed handshake and lead with it.
+func dialError(err error, resp *http.Response) error {
+	if resp == nil {
+		return fmt.Errorf("rendezvous dial: %w", err)
+	}
+	reason := serverReason(resp)
+	switch resp.StatusCode {
+	case http.StatusForbidden:
+		if reason == "" {
+			reason = "invalid or expired pairing code"
+		}
+		return fmt.Errorf("rendezvous dial: %s — a pairing code is issued by relayium.com and lasts 5 minutes, so ask for a fresh one", reason)
+	case http.StatusTooManyRequests:
+		if reason == "" {
+			reason = "rate limited"
+		}
+		return fmt.Errorf("rendezvous dial: %s — wait a minute and retry", reason)
+	}
+	if reason != "" {
+		return fmt.Errorf("rendezvous dial: %s (HTTP %d)", reason, resp.StatusCode)
+	}
+	return fmt.Errorf("rendezvous dial: %w", err)
+}
+
+// serverReason extracts a short one-line reason from a refused handshake's
+// buffered body. The body is remote input, so take only the first line and cap
+// it: a misconfigured proxy answering with an HTML error page must not paint the
+// terminal with markup.
+func serverReason(resp *http.Response) string {
+	if resp.Body == nil {
+		return ""
+	}
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+	resp.Body.Close()
+	line := strings.TrimSpace(string(b))
+	if i := strings.IndexAny(line, "\r\n"); i >= 0 {
+		line = strings.TrimSpace(line[:i])
+	}
+	if len(line) > 200 {
+		line = line[:200] + "…"
+	}
+	if strings.ContainsAny(line, "<>") { // not a plain-text reason from our server
+		return ""
+	}
+	return line
 }
 
 func (s *Session) SendSignal(ctx context.Context, data json.RawMessage) error {
