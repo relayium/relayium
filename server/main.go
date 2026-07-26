@@ -435,12 +435,10 @@ func main() {
 		acct.SetDirectDownload(*directDownload)
 		// /api/pair requires a logged-in owner: the receiver still joins the code
 		// room anonymously via /ws?code= and /api/ice?code=, but minting a
-		// cross-network rendezvous code needs an account for attribution.
-		mux.HandleFunc("POST /api/pair", signal.PairHandler(pairReg, pairLimiter, ipx,
-			func(r *http.Request) (string, bool) {
-				u, ok := acct.UserFromRequest(r)
-				return u.ID, ok
-			}))
+		// cross-network rendezvous code needs an account for attribution. The
+		// owner may authenticate with a session cookie (web) or a CLI bearer
+		// token — pairUser accepts either.
+		mux.HandleFunc("POST /api/pair", signal.PairHandler(pairReg, pairLimiter, ipx, pairUser(acct)))
 		// Relay-node register/heartbeat: bearer-authenticated (not cookie/CSRF),
 		// so mounted directly on the root mux like /api/pair above. No-op when
 		// NodeToken is unset.
