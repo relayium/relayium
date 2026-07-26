@@ -48,7 +48,13 @@ public final class AccountSession: ObservableObject {
 
     public func restore() async {
         state = .restoring
-        guard let token = await loadTokenOffMainActor(), !token.isEmpty else {
+        let token: String?
+        if let held = sessionToken {
+            token = held
+        } else {
+            token = await loadTokenOffMainActor()
+        }
+        guard let token, !token.isEmpty else {
             state = .loggedOut
             isStale = false
             return

@@ -179,6 +179,24 @@ final class AccountSessionTests: XCTestCase {
         await s.refresh()
         guard case .ready = s.state else { return XCTFail("must stay ready, got \(s.state)") }
     }
+
+    // Same defect as above, but for restore() specifically: closing and reopening
+    // the window on macOS recreates ContentView, which re-runs `.task { restore() }`.
+    // If save() had silently failed, a naive restore() that always re-reads the
+    // store would find nothing and drop a live session to .loggedOut even though
+    // sessionToken is still held in memory. restore() must prefer the in-memory
+    // token first, exactly like refresh() already does.
+    func testSwallowedSaveErrorDoesNotCauseFalseLogoutOnRestore() async throws {
+        let store = FailingSaveTokenStore()
+        try routeLoggedIn(loginBody: try fixture("login-success"))
+        let s = session(store: store)
+        await s.logIn(email: "a@b.co", password: "pw")
+        guard case .ready = s.state else { return XCTFail("setup failed, got \(s.state)") }
+        XCTAssertNil(try store.load(), "save() failed, so the store never actually held the token")
+
+        await s.restore()
+        guard case .ready = s.state else { return XCTFail("must stay ready, got \(s.state)") }
+    }
 }
 
 /// A `TokenStore` whose `save` always fails (e.g. a locked keychain), while `load`
