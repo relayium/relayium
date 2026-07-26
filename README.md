@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Open-source, end-to-end encrypted peer-to-peer file transfer — right in your browser.</strong><br>
-  Files stream directly between devices over WebRTC and never touch the server.
+  In realtime mode files stream directly between devices over WebRTC and never touch the server.
 </p>
 
 <p align="center">
@@ -46,7 +46,7 @@ is **how seriously we take end-to-end encryption**:
 
 - 🔒 **End-to-end encrypted** — per-transfer ephemeral X25519 keys → AES-256-GCM per chunk. Keys never leave the two devices.
 - 🛡️ **SAS verification code** — a 6-digit code derived from the session keys; compare it on both screens to defeat a man-in-the-middle.
-- 📡 **True peer-to-peer** — file bytes flow over the WebRTC DataChannel and **never traverse the server**.
+- 📡 **True peer-to-peer** — in realtime transfers, file bytes flow over the WebRTC DataChannel and **never traverse the server**. Stored download links are the one exception: the file is encrypted in your browser first, and the server holds only ciphertext it has no key for (see [docs/billing-transparency.md](docs/billing-transparency.md)).
 - 📦 **Multi-file batches** (up to 10) — streamed straight to disk; large files don't get buffered in memory.
 - ✅ **Per-file SHA-256 integrity check** on the receiving end.
 - 🌐 **6 languages** — English, 中文, 日本語, 한국어, Deutsch, Français — auto-detected, switchable.
