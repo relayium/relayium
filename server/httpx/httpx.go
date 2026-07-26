@@ -1,7 +1,7 @@
 // Package httpx holds small, stateless HTTP helpers shared across account
 // (open) and, eventually, the commercial layer. Every function here is a pure
 // function of its arguments — no package state, no receiver — which is what
-// let it move out of internal/account without dragging any of that package's
+// let it move out of account without dragging any of that package's
 // internals along.
 package httpx
 
