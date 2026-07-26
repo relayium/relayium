@@ -70,3 +70,51 @@ func TestRequireAuthBearer(t *testing.T) {
 		t.Fatalf("frozen account bearer should 401, got %d", rec4.Code)
 	}
 }
+
+// TestUserFromAuthResolvesBothCredentials pins the resolution RequireAuth is
+// built on, now that a root-mux handler (POST /api/pair) needs the user without
+// the wrapper's 401-and-stop behaviour. The frozen-account case is the one that
+// must not be lost in the extraction: a pending-delete account keeps its
+// cli_tokens row, and only this guard stops it from minting.
+func TestUserFromAuthResolvesBothCredentials(t *testing.T) {
+	s, _ := newTestService(t)
+	ctx := context.Background()
+	u, err := s.store.UpsertUserByEmail(ctx, "resolve@example.com", "")
+	if err != nil {
+		t.Fatalf("upsert user: %v", err)
+	}
+	raw := "rlm_cli_" + authx.RandToken()
+	dev, err := s.store.UpsertDevice(ctx, Device{ID: authx.NewID(), UserID: u.ID, Name: "cli", Kind: "cli", CreatedAt: 1})
+	if err != nil {
+		t.Fatalf("upsert device: %v", err)
+	}
+	if err := s.store.CreateCLIToken(ctx, CLIToken{TokenHash: authx.HashToken(raw), UserID: u.ID, DeviceID: dev.ID, CreatedAt: 1}); err != nil {
+		t.Fatalf("create cli token: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/x", nil)
+	req.Header.Set("Authorization", "Bearer "+raw)
+	got, ok := s.UserFromAuth(req)
+	if !ok || got.ID != u.ID {
+		t.Fatalf("bearer: ok=%v id=%q want %q", ok, got.ID, u.ID)
+	}
+
+	if _, ok := s.UserFromAuth(httptest.NewRequest("GET", "/x", nil)); ok {
+		t.Fatal("no credentials should not resolve a user")
+	}
+
+	bad := httptest.NewRequest("GET", "/x", nil)
+	bad.Header.Set("Authorization", "Bearer rlm_cli_nope")
+	if _, ok := s.UserFromAuth(bad); ok {
+		t.Fatal("unknown bearer should not resolve a user")
+	}
+
+	if err := s.store.SetAccountDeletion(ctx, u.ID, s.now().Unix(), s.now().Unix()+100); err != nil {
+		t.Fatalf("schedule deletion: %v", err)
+	}
+	frozen := httptest.NewRequest("GET", "/x", nil)
+	frozen.Header.Set("Authorization", "Bearer "+raw)
+	if _, ok := s.UserFromAuth(frozen); ok {
+		t.Fatal("frozen account should not resolve a user")
+	}
+}
