@@ -18,3 +18,14 @@ jobs:
       # allowlists — do not delete this step because it "looks like noise."
       - name: Check for production identifiers
         run: scripts/check-production-identifiers.sh
+
+  uninstall-node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      # web/public/uninstall-node.sh deletes files on a stranger's machine, and
+      # every bug ever found in it ended the same way: blobs rm -rf'd, exit 0,
+      # "uninstalled." The suite asserts which files SURVIVED, not just the exit
+      # status. Pure POSIX sh with stubbed systemctl/curl — no node required.
+      - name: uninstall-node.sh decision matrix
+        run: sh scripts/test/uninstall-node-test.sh
