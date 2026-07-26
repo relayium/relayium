@@ -35,12 +35,25 @@ func wsTestServer(t *testing.T) string {
 	return "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws"
 }
 
+// testJoinTimeout is the shrunk join deadline these tests install via
+// setJoinTimeoutForTest so they don't wait out the real 30s production value.
+const testJoinTimeout = 200 * time.Millisecond
+
+// setJoinTimeoutForTest overrides the atomic-backed join deadline (client.go's
+// joinTimeoutNS) for the duration of a test, returning a restore func for the
+// caller to defer. Going through the atomic — rather than a plain package var
+// — is what keeps this race-free under -race: a ServeWS goroutine left running
+// from this (or a neighbouring) test can be reading joinTimeout() concurrently
+// with the restore below.
+func setJoinTimeoutForTest(d time.Duration) (restore func()) {
+	prev := joinTimeoutNS.Swap(int64(d))
+	return func() { joinTimeoutNS.Store(prev) }
+}
+
 // A connection that never joins is reaped shortly after joinTimeout, so it can't
 // hold a per-IP slot indefinitely.
 func TestServeWSReapsUnjoinedConnection(t *testing.T) {
-	prev := joinTimeout
-	joinTimeout = 200 * time.Millisecond
-	defer func() { joinTimeout = prev }()
+	defer setJoinTimeoutForTest(testJoinTimeout)()
 
 	url := wsTestServer(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -67,9 +80,7 @@ func TestServeWSReapsUnjoinedConnection(t *testing.T) {
 // join deadline must not bound legitimate post-join idle (waiting for a peer, or
 // an in-progress peer-to-peer transfer that leaves signaling silent).
 func TestServeWSJoinedConnectionSurvivesIdle(t *testing.T) {
-	prev := joinTimeout
-	joinTimeout = 200 * time.Millisecond
-	defer func() { joinTimeout = prev }()
+	defer setJoinTimeoutForTest(testJoinTimeout)()
 
 	url := wsTestServer(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -101,7 +112,7 @@ func TestServeWSJoinedConnectionSurvivesIdle(t *testing.T) {
 	select {
 	case err := <-closed:
 		t.Fatalf("joined connection was wrongly closed after idle: %v", err)
-	case <-time.After(3 * joinTimeout):
+	case <-time.After(3 * testJoinTimeout):
 		// Stayed open well past the join deadline — correct.
 	}
 }

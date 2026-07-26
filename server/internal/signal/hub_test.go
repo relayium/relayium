@@ -24,6 +24,17 @@ func (f *fakeConn) last() Envelope {
 	return f.sent[len(f.sent)-1]
 }
 
+// count returns how many envelopes a fakeConn has received so far, taking the
+// same lock Send/last/countType use. A plain len(f.sent) from a test goroutine
+// races with a debounced roster broadcast that a real time.AfterFunc timer
+// (armed by hub.go's scheduleRoster) can still be delivering via Send
+// concurrently — see TestRelayGoesOnlyToTarget, which uses a real NewHub().
+func (f *fakeConn) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.sent)
+}
+
 // countType counts how many envelopes of a given type a fakeConn has received.
 func countType(f *fakeConn, typ string) int {
 	f.mu.Lock()
@@ -133,13 +144,13 @@ func TestRelayGoesOnlyToTarget(t *testing.T) {
 	h.Join("ip1", "a", "A", a)
 	h.Join("ip1", "b", "B", b)
 	h.Join("ip1", "c", "C", c)
-	bBefore := len(b.sent)
-	cBefore := len(c.sent)
+	bBefore := b.count()
+	cBefore := c.count()
 	h.Relay("ip1", Envelope{Type: TypeSignal, From: "a", To: "b", Data: []byte(`"x"`)})
-	if len(b.sent) != bBefore+1 || b.last().From != "a" {
+	if b.count() != bBefore+1 || b.last().From != "a" {
 		t.Fatalf("b should receive relayed signal from a")
 	}
-	if len(c.sent) != cBefore {
+	if c.count() != cBefore {
 		t.Fatalf("c must NOT receive a's signal")
 	}
 }

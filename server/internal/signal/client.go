@@ -3,6 +3,7 @@ package signal
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -27,9 +28,23 @@ const (
 // un-joined connection otherwise just holds a per-IP slot (kept alive by the
 // ping goroutine) — a cheap slow-hold. We deliberately do NOT bound idle AFTER
 // join: a minted code waits for its peer, and the signaling socket sits idle for
-// the whole transfer (the data flows peer-to-peer over WebRTC, not here). A var
-// so tests can shrink it.
-var joinTimeout = 30 * time.Second
+// the whole transfer (the data flows peer-to-peer over WebRTC, not here).
+//
+// Stored as nanoseconds behind an atomic, not a plain var, so tests can shrink
+// it (see setJoinTimeoutForTest in join_timeout_test.go) without racing a
+// ServeWS goroutine from this — or a neighbouring — test that is concurrently
+// reading it via joinTimeout() below at context.WithTimeout time. Production
+// code sets it once here at init and never writes it again.
+var joinTimeoutNS atomic.Int64
+
+func init() {
+	joinTimeoutNS.Store(int64(30 * time.Second))
+}
+
+// joinTimeout returns the current join deadline.
+func joinTimeout() time.Duration {
+	return time.Duration(joinTimeoutNS.Load())
+}
 
 type wsConn struct {
 	ctx          context.Context
@@ -114,7 +129,7 @@ func ServeWS(h *Hub, idgen func() string) func(ctx context.Context, c *websocket
 		// Until the client joins, reads run under a join deadline so an un-joined
 		// connection can't hold a slot indefinitely. Once joined, reads use the
 		// plain connection context (unbounded idle is legitimate — see joinTimeout).
-		joinCtx, cancelJoin := context.WithTimeout(ctx, joinTimeout)
+		joinCtx, cancelJoin := context.WithTimeout(ctx, joinTimeout())
 		defer cancelJoin()
 
 		malformed := 0 // 连续解不开的帧数，见下面的 maxMalformedFrames
