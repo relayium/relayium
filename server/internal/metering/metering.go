@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/relayium/relayium/internal/account"
+	"github.com/relayium/relayium/account"
 	"github.com/relayium/relayium/internal/relayusage"
 )
 

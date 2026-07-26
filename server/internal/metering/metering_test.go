@@ -6,7 +6,7 @@ import (
 	"log"
 	"testing"
 
-	"github.com/relayium/relayium/internal/account"
+	"github.com/relayium/relayium/account"
 	"github.com/relayium/relayium/internal/relayusage"
 )
 

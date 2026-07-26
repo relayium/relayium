@@ -391,7 +391,7 @@ func resolveTargetFromCentral(uc *updateConfig, stdout, stderr io.Writer) (int, 
 // fetchTarget asks central what this node should be running. It POSTs
 // {nodeID, currentVersion, result} to <centralURL>/api/nodes/update-check
 // with a bearer token, matching handleUpdateCheck's updateCheckReq/Resp
-// exactly (server/internal/account/nodes.go). Any non-200 status is an error;
+// exactly (server/account/nodes.go). Any non-200 status is an error;
 // central's answer is otherwise trusted verbatim (validated by the caller).
 func fetchTarget(centralURL, token, nodeID, currentVersion, prevResult string, hc *http.Client) (tag string, eligible, allowDowngrade bool, err error) {
 	reqBody, err := json.Marshal(struct {

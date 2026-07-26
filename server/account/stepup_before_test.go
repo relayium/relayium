@@ -11,7 +11,7 @@ import (
 // 设置页时浏览器里已填好的那些值。
 //
 // 字段名核对自 handleAdminSettings 实际读取的 r.FormValue(...) 调用
-// （grep -n 'r.FormValue' internal/account/admin.go，settings 段）：
+// （grep -n 'r.FormValue' account/admin.go，settings 段）：
 // max_file_size_mb / daily_quota_mb / default_ttl_hours / max_ttl_hours /
 // default_retention / default_max_downloads / max_max_downloads /
 // storage_disk_cap_mb / disable_central_fallback / node_traffic_default_gb.

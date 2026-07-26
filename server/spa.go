@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/relayium/relayium/internal/account"
+	"github.com/relayium/relayium/account"
 )
 
 // buildCSP assembles the response CSP. script-src carries a per-request nonce

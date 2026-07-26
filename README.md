@@ -209,9 +209,15 @@ relayium/
 │   └── src/lib/i18n.svelte.ts  #   runes-driven i18n (6 languages)
 ├── server/                    # Go signaling server
 │   ├── main.go                 #   HTTP + WebSocket + static file serving
+│   ├── account/, ext/, httpx/, authx/, selfupdate/  #   importable outside internal/, see note below
 │   └── internal/signal/        #   hub (rooms by public IP), envelopes
 └── docs/                      # design spec + manual test procedure
 ```
+
+`server/account`, `server/ext`, `server/httpx`, `server/authx`, and `server/selfupdate` live outside
+`internal/` so they're importable by other Go modules — everything else under `server/internal/` stays
+Go-`internal/`-only by design. Importable does not mean stable: these packages' API is not yet frozen and
+may change without notice until this note says otherwise.
 
 ## FAQ
 

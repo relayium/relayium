@@ -19,7 +19,7 @@ import (
 	"github.com/mdp/qrterminal/v3"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
-	"github.com/relayium/relayium/internal/account"
+	"github.com/relayium/relayium/account"
 	"github.com/relayium/relayium/internal/metering"
 	"github.com/relayium/relayium/internal/signal"
 	"github.com/relayium/relayium/internal/storage"

@@ -12,7 +12,7 @@ import (
 func TestLongTermPasswordMatchesCentral(t *testing.T) {
 	secret := "sek"
 	username := "6000:userX.123456"
-	// central formula (internal/account/turn.go turnCredentials)
+	// central formula (account/turn.go turnCredentials)
 	mac := hmac.New(sha1.New, []byte(secret))
 	mac.Write([]byte(username))
 	want := base64.StdEncoding.EncodeToString(mac.Sum(nil))

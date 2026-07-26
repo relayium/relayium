@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/relayium/relayium/internal/account"
+	"github.com/relayium/relayium/account"
 	"github.com/relayium/relayium/internal/cloud"
 	"github.com/relayium/relayium/internal/storage"
 )

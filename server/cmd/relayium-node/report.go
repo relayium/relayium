@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// JSON bodies — tags MUST match the central handlers (internal/account/nodes.go).
+// JSON bodies — tags MUST match the central handlers (account/nodes.go).
 type registerBody struct {
 	NodeID        string   `json:"nodeID"`
 	TURNSecret    string   `json:"turnSecret"`
@@ -28,7 +28,7 @@ type registerBody struct {
 	DownloadURL string `json:"downloadURL"`
 }
 
-// nodeLimits mirrors central's response (internal/account/nodes.go): the node's
+// nodeLimits mirrors central's response (account/nodes.go): the node's
 // hard caps plus central's authoritative month-to-date relayed total, which the
 // node enforces locally in real time.
 type nodeLimits struct {
