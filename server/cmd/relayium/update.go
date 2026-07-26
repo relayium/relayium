@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/relayium/relayium/internal/selfupdate"
+	"github.com/relayium/relayium/selfupdate"
 )
 
 // updateRepo is the GitHub repo `relayium update` pulls releases from.

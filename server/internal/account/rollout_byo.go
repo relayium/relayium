@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/relayium/relayium/internal/selfupdate"
+	"github.com/relayium/relayium/selfupdate"
 )
 
 // BYO rollout tuning. Unlike the fleet track (strictly serial, one node at a

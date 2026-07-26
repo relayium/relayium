@@ -16,7 +16,7 @@ import (
 	"github.com/relayium/relayium/authx"
 	"github.com/relayium/relayium/httpx"
 	"github.com/relayium/relayium/internal/relayusage"
-	"github.com/relayium/relayium/internal/selfupdate"
+	"github.com/relayium/relayium/selfupdate"
 )
 
 // nodeIDPattern is exactly what authx.NewID() produces: 16 random bytes, hex-encoded

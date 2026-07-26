@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/relayium/relayium/internal/selfupdate"
+	"github.com/relayium/relayium/selfupdate"
 )
 
 // nodeAssetName is the release archive the NODE ships in, spelled out here

@@ -8,7 +8,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/relayium/relayium/internal/selfupdate"
+	"github.com/relayium/relayium/selfupdate"
 )
 
 // Fleet rollout timing constants, all in seconds. fleetFirstWindow is the

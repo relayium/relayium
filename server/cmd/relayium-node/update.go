@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/relayium/relayium/internal/selfupdate"
+	"github.com/relayium/relayium/selfupdate"
 )
 
 // updateRepo is the GitHub repo node updates are pulled from. Same repo as the

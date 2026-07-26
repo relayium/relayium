@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/relayium/relayium/internal/selfupdate"
+	"github.com/relayium/relayium/selfupdate"
 )
 
 // rolloutPanelView is ONE track's panel: its own target version, status, halt

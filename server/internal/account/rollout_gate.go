@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/relayium/relayium/internal/selfupdate"
+	"github.com/relayium/relayium/selfupdate"
 )
 
 // ErrByoAheadOfFleet rejects pointing user nodes at a version our own fleet has

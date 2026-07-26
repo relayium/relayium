@@ -41,7 +41,7 @@ checksum:
   name_template: "checksums.txt"
 
 # ECDSA (P-256) signature over the checksum file with a release key. Its PUBLIC
-# half is embedded in the relayium binary (internal/selfupdate/release_pubkey.go)
+# half is embedded in the relayium binary (server/selfupdate/release_pubkey.go)
 # and in install.sh, so `relayium update` and install.sh verify the signature
 # with the Go standard library / stock openssl — NO cosign needed on the user's
 # machine (the old keyless flow only verified when cosign happened to be present,
