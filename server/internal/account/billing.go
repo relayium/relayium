@@ -7,7 +7,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/relayium/relayium/internal/httpx"
+	"github.com/relayium/relayium/httpx"
 )
 
 // handleBillingCheckout starts a Stripe Checkout Session for the signed-in

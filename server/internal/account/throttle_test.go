@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/relayium/relayium/internal/httpx"
+	"github.com/relayium/relayium/httpx"
 )
 
 func TestLoginThrottleLocksAfterThreshold(t *testing.T) {

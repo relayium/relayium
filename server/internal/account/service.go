@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/relayium/relayium/internal/authx"
-	"github.com/relayium/relayium/internal/httpx"
+	"github.com/relayium/relayium/httpx"
 	"github.com/relayium/relayium/internal/storage"
 )
 

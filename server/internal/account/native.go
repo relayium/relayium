@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/relayium/relayium/internal/authx"
-	"github.com/relayium/relayium/internal/httpx"
+	"github.com/relayium/relayium/httpx"
 )
 
 // issueBearer mints a long-lived hashed bearer token ("rlm_cli_…") bound to a

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/relayium/relayium/internal/httpx"
+	"github.com/relayium/relayium/httpx"
 )
 
 // nodePinVerify matches a node's leaf TLS cert SHA-256 (hex) against want, for

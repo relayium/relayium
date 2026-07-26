@@ -14,7 +14,7 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 
 	"github.com/relayium/relayium/internal/authx"
-	"github.com/relayium/relayium/internal/httpx"
+	"github.com/relayium/relayium/httpx"
 )
 
 const (

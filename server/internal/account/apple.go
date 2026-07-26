@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/relayium/relayium/internal/httpx"
+	"github.com/relayium/relayium/httpx"
 )
 
 // appleIssuer is the fixed `iss` claim in every Sign in with Apple identity token.

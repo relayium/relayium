@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/relayium/relayium/internal/httpx"
+	"github.com/relayium/relayium/httpx"
 )
 
 // handleAdminPasskeyRegisterBegin gates registration behind a fresh password +

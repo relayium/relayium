@@ -9,7 +9,7 @@ import (
 	"net/url"
 
 	"github.com/relayium/relayium/internal/authx"
-	"github.com/relayium/relayium/internal/httpx"
+	"github.com/relayium/relayium/httpx"
 )
 
 // RequestAccountDeletion issues a short-lived, single-use "delete" email

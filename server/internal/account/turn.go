@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/relayium/relayium/internal/httpx"
+	"github.com/relayium/relayium/httpx"
 )
 
 // nodeOnlineWindow bounds how long since its last heartbeat a node is still
