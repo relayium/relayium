@@ -1,6 +1,6 @@
 // 上传有效期选项的档位过滤。
 //
-// 服务端 (server/internal/account/files.go 和 uploads_resumable.go) 对超出档位
+// 服务端 (server/account/files.go 和 uploads_resumable.go) 对超出档位
 // 留存上限的 TTL 是**静默截断**——不返回错误，也不在响应里说明。所以界面这边
 // 必须保证永远不提供一个会被打折的选项，否则用户看到的承诺和实际拿到的保留
 // 时间不一致，而且没有任何提示。

@@ -145,7 +145,7 @@ describe("magic-link 路由", () => {
   it("路径常量与服务端 handlers.go 的 magicLinkPath 一致", () => {
     // 两边写死同一个字符串，差一个字符的表现是：用户点开邮件里的链接，落到 SPA 的
     // 首页而不是登录页——看起来像"链接没反应"，查起来毫无线索。
-    const go = readFileSync(resolve(process.cwd(), "../server/internal/account/handlers.go"), "utf8");
+    const go = readFileSync(resolve(process.cwd(), "../server/account/handlers.go"), "utf8");
     const m = /const magicLinkPath = "([^"]+)"/.exec(go);
     expect(m, "handlers.go 里找不到 magicLinkPath").not.toBeNull();
     expect(m![1]).toBe(MAGIC_PATH);

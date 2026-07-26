@@ -36,7 +36,7 @@ export const RESET_PASSWORD_PATH = "/reset-password";
  *  which only redirects here — the token is spent by a POST from this page, on a
  *  click. That is what stops a mail gateway's prefetch from burning the link and
  *  collecting the session cookie (see handleMagicVerifyRedirect). Must match
- *  magicLinkPath in server/internal/account/handlers.go. */
+ *  magicLinkPath in server/account/handlers.go. */
 export const MAGIC_PATH = "/magic-link";
 
 export { CROSS_PATH };
