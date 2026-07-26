@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/relayium/relayium/internal/connect"
 	"github.com/relayium/relayium/internal/rzvous"
 	"github.com/relayium/relayium/internal/secure"
+	"github.com/relayium/relayium/internal/signal"
 	"github.com/relayium/relayium/internal/xfer"
 )
 
@@ -81,6 +84,36 @@ func crossnetConn(ctx context.Context, code, name string, f crossFlags, stderr i
 	}
 	fmt.Fprintln(stderr, "path: direct")
 	return tconn, nil
+}
+
+// splitSendArgs separates the source paths from an optional trailing pairing
+// code. An empty code means "mint one".
+//
+// The last argument is a code iff it does NOT exist on disk and IS shaped like
+// a code. Both halves matter: shape alone would eat the second file of
+// `send a.zip b.zip`, and the disk check alone would misread a file genuinely
+// named "K7M4XR". When it is neither, guessing either way produces a wrong and
+// confusing error ("no such file: 726122" for a mistyped code, "not a valid
+// code" for a mistyped filename), so name both readings instead.
+func splitSendArgs(args []string) (srcs []string, code string, err error) {
+	if len(args) == 0 {
+		return nil, "", fmt.Errorf("send needs <src...> [code]")
+	}
+	last := args[len(args)-1]
+	if _, statErr := os.Stat(last); statErr == nil {
+		return args, "", nil // a real file wins over a code-shaped name
+	}
+	if len(args) == 1 {
+		return args, "", nil // a lone argument is a source; BuildManifest reports it missing
+	}
+	if signal.ValidCodeFormat(last) {
+		return args[:len(args)-1], last, nil
+	}
+	return nil, "", fmt.Errorf(
+		"last argument %q is neither an existing file nor a pairing code\n"+
+			"  codes are %d characters from %s, and last 5 minutes\n"+
+			"  to mint one automatically, leave it out:  relayium send %s",
+		last, signal.CodeLen, signal.CodeAlphabet, strings.Join(args[:len(args)-1], " "))
 }
 
 func runSendCross(args []string, stdout, stderr io.Writer) int {
