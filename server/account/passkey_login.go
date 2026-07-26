@@ -41,7 +41,7 @@ const (
 // makes a session leak recoverable rather than permanent. go-webauthn's own
 // structural defense (comparing user.WebAuthnID() to session.UserID) cannot
 // help here because register/finish deliberately assigns the handle from the
-// ceremony — see handleAdminPasskeyRegisterFinish. This tag is what makes that
+// ceremony — see HandleAdminPasskeyRegisterFinish. This tag is what makes that
 // assignment safe.
 type ceremonyKind string
 
@@ -145,13 +145,13 @@ func (s *Service) takeCeremony(r *http.Request) (passkeyCeremony, bool) {
 	return passkeyCeremony{kind: ceremonyKind(kind), session: sess, name: name, expires: time.Unix(expires, 0)}, true
 }
 
-// handleAdminStepUpPasskeyBegin issues a WebAuthn assertion challenge for a
+// HandleAdminStepUpPasskeyBegin issues a WebAuthn assertion challenge for a
 // step-up passkey confirmation. It requires an existing admin session — the
 // step-up sits on top of an already-authenticated operator — and mints a
 // ceremonyStepUp. verifyStepUpPasskey refuses any other kind, so a challenge
 // obtained here cannot be diverted, and one obtained at the unauthenticated
 // login/begin cannot be spent here.
-func (s *Service) handleAdminStepUpPasskeyBegin(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleAdminStepUpPasskeyBegin(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
 		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "未登录"})
 		return
@@ -234,7 +234,7 @@ func (s *Service) verifyStepUpPasskey(r *http.Request) bool {
 	return true
 }
 
-func (s *Service) handleAdminPasskeyLoginBegin(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleAdminPasskeyLoginBegin(w http.ResponseWriter, r *http.Request) {
 	if !s.passkeyBeginAllowed(w, r) {
 		return
 	}
@@ -264,7 +264,7 @@ func (s *Service) handleAdminPasskeyLoginBegin(w http.ResponseWriter, r *http.Re
 	httpx.WriteJSON(w, http.StatusOK, assertion)
 }
 
-func (s *Service) handleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 	ip := s.clientIP(r)
 	if s.adminPasskeyLogins.locked(ip, s.now()) {
 		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "尝试过于频繁，请稍后再试"})

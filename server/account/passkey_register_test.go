@@ -593,10 +593,10 @@ func TestPasskeyDelete(t *testing.T) {
 
 	// 有会话 → 删除。
 	//
-	// Calls handleAdminPasskeyDelete directly rather than through the real
+	// Calls HandleAdminPasskeyDelete directly rather than through the real
 	// POST /admin/passkey/delete route: that route now sits behind
 	// RequireStepUp (Task 7 gates passkey deletion as high-risk — see the
-	// doc comment on handleAdminPasskeyDelete), which renders a confirmation
+	// doc comment on HandleAdminPasskeyDelete), which renders a confirmation
 	// page instead of deleting anything. This asserts the handler's own
 	// deletion logic; the route's step-up gating is covered by
 	// stepup_test.go.
@@ -605,7 +605,7 @@ func TestPasskeyDelete(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(session)
 	w := httptest.NewRecorder()
-	s.handleAdminPasskeyDelete(w, req)
+	s.HandleAdminPasskeyDelete(w, req)
 	rows, _ = s.store.ListAdminCredentials(context.Background())
 	if len(rows) != 0 {
 		t.Fatalf("credential still present after delete: %d", len(rows))

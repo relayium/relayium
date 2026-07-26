@@ -84,9 +84,9 @@ func (s *Service) settingOr(ctx context.Context, key string, def int64) int64 {
 	return v
 }
 
-// resolveSettings reads the four limits live: DB value if present, else the
+// ResolveSettings reads the four limits live: DB value if present, else the
 // env/flag default seeded into Config. "Admin change > env default."
-func (s *Service) resolveSettings(ctx context.Context) Settings {
+func (s *Service) ResolveSettings(ctx context.Context) Settings {
 	return Settings{
 		MaxFileSize:            s.settingOr(ctx, SettingMaxFileSize, s.cfg.MaxFileSize),
 		DailyQuota:             s.settingOr(ctx, SettingDailyQuota, s.cfg.DailyQuota),
@@ -107,7 +107,7 @@ func (s *Service) resolveSettings(ctx context.Context) Settings {
 // (Settings.AccountReminderDays*86400) for GC's reminder pass (Task 5), read
 // fresh so an admin setting change takes effect without a restart.
 func (s *Service) ReminderWindowSeconds(ctx context.Context) int64 {
-	return s.resolveSettings(ctx).AccountReminderDays * 86400
+	return s.ResolveSettings(ctx).AccountReminderDays * 86400
 }
 
 // clampMaxDownloads resolves a requested download-count cap: a non-positive

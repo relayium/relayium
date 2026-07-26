@@ -17,12 +17,12 @@ import (
 // 写库时实际用的那份解析（parseSettingsForm / parsePlanForm）。绝不能另写
 // 一份平行解析——两份迟早漂移，确认页显示的就不再是即将写入的值。
 // pathID 是原始请求的 {id} 路径通配符（表单里没有的那半个身份）。RequireStepUp
-// 从 r.PathValue("id") 拿，handleAdminConfirm 从 pendingAction 里拿——两边必须
+// 从 r.PathValue("id") 拿，HandleAdminConfirm 从 pendingAction 里拿——两边必须
 // 传同一个值，否则确认页显示的目标和真正执行的目标就会不是一回事。
 func (s *Service) beforeImageFor(ctx context.Context, action, pathID string, form url.Values) (before, after map[string]any, target string, err error) {
 	switch action {
 	case AuditSettings:
-		cur := s.resolveSettings(ctx)
+		cur := s.ResolveSettings(ctx)
 		return settingsImage(cur), parseSettingsForm(form), "-", nil
 
 	case AuditPlanUpsert:
@@ -80,7 +80,7 @@ func (s *Service) beforeImageFor(ctx context.Context, action, pathID string, for
 	case AuditPasskeyDelete:
 		return map[string]any{}, map[string]any{}, "passkey:" + form.Get("id"), nil
 
-	// Node delete has its id in the path wildcard, not the form; handleAdminConfirm
+	// Node delete has its id in the path wildcard, not the form; HandleAdminConfirm
 	// fills its target from the stashed pathID after this returns.
 	default:
 		return map[string]any{}, map[string]any{}, "-", nil

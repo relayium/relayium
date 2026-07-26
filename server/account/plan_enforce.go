@@ -20,14 +20,14 @@ func freePlanFallback() Plan { return defaultPlans()[0] }
 // real store error is propagated so the over* gates can fail OPEN rather than
 // silently enforcing the Free cap against a paid user during a DB blip.
 func (s *Service) planForUser(ctx context.Context, userID string) (Plan, error) {
-	u, err := s.store.GetUserByID(ctx, userID)
+	u, err := s.Store().GetUserByID(ctx, userID)
 	if err != nil {
 		if err == ErrNotFound {
 			return freePlanFallback(), nil
 		}
 		return freePlanFallback(), err
 	}
-	p, ok, err := s.store.GetPlan(ctx, u.PlanID)
+	p, ok, err := s.Store().GetPlan(ctx, u.PlanID)
 	if err != nil {
 		return freePlanFallback(), err
 	}
@@ -47,20 +47,20 @@ func (s *Service) dailyQuotaFor(ctx context.Context, userID string) (int64, erro
 	if plan.DailyQuotaBytes > 0 {
 		return plan.DailyQuotaBytes, nil
 	}
-	return s.resolveSettings(ctx).DailyQuota, nil
+	return s.ResolveSettings(ctx).DailyQuota, nil
 }
 
 // currentMonthTraffic sums a user's staged upload+download (usage_monthly) plus
 // billable relay (usage_events) for the current month.
 func (s *Service) currentMonthTraffic(ctx context.Context, userID string) (int64, error) {
-	now := s.now().Unix()
+	now := s.Now().Unix()
 	period := periodOf(now)
-	upDown, err := s.store.UserMonthlyUpDown(ctx, userID, period)
+	upDown, err := s.Store().UserMonthlyUpDown(ctx, userID, period)
 	if err != nil {
 		return 0, err
 	}
 	monthStart, _ := monthRange(period)
-	relay, err := s.store.UserRelayedSince(ctx, userID, monthStart)
+	relay, err := s.Store().UserRelayedSince(ctx, userID, monthStart)
 	if err != nil {
 		return 0, err
 	}
@@ -76,14 +76,14 @@ func (s *Service) currentMonthTraffic(ctx context.Context, userID string) (int64
 // planForUser 只返回 Plan。错误处理沿用同一条原则——真实的 store 错误往上传，
 // 让门 fail-open；查不到的用户/档位才回落到 Free。
 func (s *Service) monthlyTrafficCap(ctx context.Context, userID string) (int64, error) {
-	u, err := s.store.GetUserByID(ctx, userID)
+	u, err := s.Store().GetUserByID(ctx, userID)
 	if err != nil {
 		if err == ErrNotFound {
 			return freePlanFallback().TrafficBytes, nil
 		}
 		return 0, err
 	}
-	plan, ok, err := s.store.GetPlan(ctx, u.PlanID)
+	plan, ok, err := s.Store().GetPlan(ctx, u.PlanID)
 	if err != nil {
 		return 0, err
 	}
@@ -91,7 +91,7 @@ func (s *Service) monthlyTrafficCap(ctx context.Context, userID string) (int64, 
 		plan = freePlanFallback()
 	}
 
-	period := periodOf(s.now().Unix())
+	period := periodOf(s.Now().Unix())
 	// 本月没改过档（含全部存量用户，三列都是零值）→ 整月满额。
 	if u.QuotaAccruedPeriod != period {
 		return plan.TrafficBytes, nil
@@ -158,7 +158,7 @@ func (s *Service) remainingStorage(ctx context.Context, userID string) (remainin
 	if plan.StorageBytes <= 0 {
 		return 0, true, nil
 	}
-	used, err := s.store.CurrentStorage(ctx, userID, s.now().Unix())
+	used, err := s.Store().CurrentStorage(ctx, userID, s.Now().Unix())
 	if err != nil {
 		return 0, false, err
 	}
@@ -188,7 +188,7 @@ func (s *Service) remainingDailyQuota(ctx context.Context, userID string) (int64
 	if err != nil {
 		return 0, err
 	}
-	used, err := s.store.UserUploadedSince(ctx, userID, s.now().Unix()-dayWindow)
+	used, err := s.Store().UserUploadedSince(ctx, userID, s.Now().Unix()-dayWindow)
 	if err != nil {
 		return 0, err
 	}
@@ -198,11 +198,11 @@ func (s *Service) remainingDailyQuota(ctx context.Context, userID string) (int64
 // overGlobalStorage reports whether total live storage plus add exceeds the
 // global logical cap (SettingStorageDiskCap). cap<=0 disables the check.
 func (s *Service) overGlobalStorage(ctx context.Context, add int64) (bool, error) {
-	cap := s.resolveSettings(ctx).StorageDiskCap
+	cap := s.ResolveSettings(ctx).StorageDiskCap
 	if cap <= 0 {
 		return false, nil
 	}
-	used, err := s.store.GlobalStorageUsed(ctx, s.now().Unix())
+	used, err := s.Store().GlobalStorageUsed(ctx, s.Now().Unix())
 	if err != nil {
 		return false, err
 	}
@@ -222,14 +222,14 @@ func (s *Service) overGlobalStorage(ctx context.Context, add int64) (bool, error
 // drops the blob — never admits an upload against an unknown cap).
 func (s *Service) persistStoredFile(ctx context.Context, f StoredFile, enforceCaps bool) (reason string, err error) {
 	if !enforceCaps {
-		return "", s.store.CreateStoredFile(ctx, f)
+		return "", s.Store().CreateStoredFile(ctx, f)
 	}
 	plan, err := s.planForUser(ctx, f.UserID)
 	if err != nil {
 		return "", err
 	}
-	globalCap := s.resolveSettings(ctx).StorageDiskCap
-	ok, reason, err := s.store.CreateStoredFileWithinStorageCaps(ctx, f, s.now().Unix(), plan.StorageBytes, globalCap)
+	globalCap := s.ResolveSettings(ctx).StorageDiskCap
+	ok, reason, err := s.Store().CreateStoredFileWithinStorageCaps(ctx, f, s.Now().Unix(), plan.StorageBytes, globalCap)
 	if err != nil {
 		return "", err
 	}

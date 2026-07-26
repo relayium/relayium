@@ -93,7 +93,7 @@ func TestOverGlobalStorage(t *testing.T) {
 	ctx := context.Background()
 
 	// Disabled by default: newPlanService's Config{} leaves StorageDiskCap at
-	// its zero value, so resolveSettings().StorageDiskCap <= 0 and the check
+	// its zero value, so ResolveSettings().StorageDiskCap <= 0 and the check
 	// short-circuits to false regardless of how much is being added.
 	if over, err := svc.overGlobalStorage(ctx, 1<<40); err != nil || over {
 		t.Fatalf("overGlobalStorage with no cap set = %v,%v want false,nil", over, err)

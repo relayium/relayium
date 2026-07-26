@@ -220,7 +220,7 @@ func rolloutOwnerClass(track string) string {
 // nodesErr can bail out.
 func (s *Service) rolloutPanel(ctx context.Context, track, title string, now time.Time, allNodes []Node, nodesErr bool) rolloutPanelView {
 	p := rolloutPanelView{Track: track, Title: title}
-	tr, found, err := s.store.GetRolloutTrack(ctx, track)
+	tr, found, err := s.Store().GetRolloutTrack(ctx, track)
 	if err != nil {
 		log.Printf("admin: GetRolloutTrack(%s) failed: %v", track, err)
 		p.Err = true
@@ -363,7 +363,7 @@ func (s *Service) rolloutSetVersion(w http.ResponseWriter, r *http.Request, acti
 	version := strings.TrimSpace(r.FormValue("version"))
 	// Best-effort before-image for the audit diff; an unknown track simply has
 	// none, and SetTargetVersion rejects it a line later anyway.
-	before, _, _ := s.store.GetRolloutTrack(r.Context(), track)
+	before, _, _ := s.Store().GetRolloutTrack(r.Context(), track)
 	if err := s.SetTargetVersion(r.Context(), track, version); err != nil {
 		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "目标版本设置失败："+err.Error())
 		return
@@ -440,7 +440,7 @@ func (s *Service) handleAdminRolloutPause(w http.ResponseWriter, r *http.Request
 	}
 	// HaltRolloutTrack is conditional on the track still being 'rolling', so a
 	// track another instance just completed is not resurrected as halted.
-	ok, err := s.store.HaltRolloutTrack(r.Context(), track, "管理员手动暂停", s.now().Unix())
+	ok, err := s.Store().HaltRolloutTrack(r.Context(), track, "管理员手动暂停", s.Now().Unix())
 	if err != nil {
 		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "暂停失败："+err.Error())
 		return
@@ -474,7 +474,7 @@ func (s *Service) handleAdminRolloutResume(w http.ResponseWriter, r *http.Reques
 		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "继续失败：未知轨道 "+track)
 		return
 	}
-	ok, err := s.store.ResumeRolloutTrack(r.Context(), track, s.now().Unix())
+	ok, err := s.Store().ResumeRolloutTrack(r.Context(), track, s.Now().Unix())
 	if err != nil {
 		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "继续失败："+err.Error())
 		return
@@ -495,7 +495,7 @@ func (s *Service) handleAdminRolloutResume(w http.ResponseWriter, r *http.Reques
 //
 // It is registered behind RequireStepUp, so by the time this runs the operator
 // has seen a confirmation page naming the version and the fact that staging is
-// skipped, and has re-presented a second factor; handleAdminConfirm writes the
+// skipped, and has re-presented a second factor; HandleAdminConfirm writes the
 // audit entry (rollout.emergency, target rollout:<track>, with the factor that
 // satisfied the step-up) once this returns a non-error status. This handler
 // must therefore NOT write its own audit entry — that would double-log it, and
@@ -517,7 +517,7 @@ func (s *Service) handleAdminRolloutEmergency(w http.ResponseWriter, r *http.Req
 	// to be separate statements, which left a window where a failure of the
 	// second reported 紧急发布失败 to the operator while the track was already
 	// repointed and rolling to that version by the STAGED path — a release
-	// nobody asked for, and (because handleAdminConfirm skips the audit on any
+	// nobody asked for, and (because HandleAdminConfirm skips the audit on any
 	// >=400) with no record that anything had been written at all. There is no
 	// half-applied outcome to report or audit now: this either lands whole or
 	// leaves the row exactly as it was.

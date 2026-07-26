@@ -40,7 +40,7 @@ func TestBeforeImageSettingsDiffsOnlyChanged(t *testing.T) {
 	if err := svc.SeedSettings(ctx); err != nil {
 		t.Fatal(err)
 	}
-	cur := svc.resolveSettings(ctx)
+	cur := svc.ResolveSettings(ctx)
 	form := settingsFormFrom(cur)
 	form.Set("daily_quota_mb", "400") // 只动这一项
 	before, after, target, err := svc.beforeImageFor(ctx, AuditSettings, "", form)

@@ -120,7 +120,7 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		}
 	}
 
-	st := s.resolveSettings(r.Context())
+	st := s.ResolveSettings(r.Context())
 	burn := r.URL.Query().Get("burnAfterRead") == "1"
 	reqTTL, _ := strconv.ParseInt(r.URL.Query().Get("ttl"), 10, 64)
 	reqMaxDL, _ := strconv.ParseInt(r.URL.Query().Get("maxDownloads"), 10, 64)

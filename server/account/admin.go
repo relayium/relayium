@@ -413,7 +413,7 @@ func adminByoPageParam(q url.Values, key string) int {
 // query failed", never an empty table that reads as "no such node".
 func (s *Service) listByoPage(r *http.Request, q AdminByoNodeQuery, page, size int) (rows []Node, total int64, gotPage, totalPages int, err error) {
 	q.Limit, q.Offset = size, (page-1)*size
-	rows, total, err = s.store.ListByoNodes(r.Context(), q)
+	rows, total, err = s.Store().ListByoNodes(r.Context(), q)
 	if err != nil {
 		return nil, 0, page, 1, err
 	}
@@ -424,7 +424,7 @@ func (s *Service) listByoPage(r *http.Request, q AdminByoNodeQuery, page, size i
 	if page > totalPages {
 		page = totalPages
 		q.Offset = (page - 1) * size
-		rows, total, err = s.store.ListByoNodes(r.Context(), q)
+		rows, total, err = s.Store().ListByoNodes(r.Context(), q)
 		if err != nil {
 			return nil, 0, page, totalPages, err
 		}
@@ -471,14 +471,14 @@ func contains(ss []string, s string) bool {
 }
 
 // AdminEnabled 报告是否配置了管理员密码。账号有默认值，故只以密码为开关。
-func (s *Service) AdminEnabled() bool { return s.cfg.AdminPassword != "" }
+func (s *Service) AdminEnabled() bool { return s.Cfg().AdminPassword != "" }
 
 // adminUser 返回有效管理员账号，未配置时默认为 "admin"（向后兼容只设密码的部署）。
 func (s *Service) adminUser() string {
-	if s.cfg.AdminUser == "" {
+	if s.Cfg().AdminUser == "" {
 		return defaultAdminUser
 	}
-	return s.cfg.AdminUser
+	return s.Cfg().AdminUser
 }
 
 // RegisterAdmin 在根 mux 上挂载 /admin 路由（仅当配置了密码）。
@@ -500,28 +500,28 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// The passkey endpoints are fetch-only, so a missing Origin (which CSRFGuard
 	// lets through for form posts and native clients) is a forgery signal here.
 	mux.Handle("POST /admin/passkey/login/begin",
-		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminPasskeyLoginBegin))))
+		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.HandleAdminPasskeyLoginBegin))))
 	mux.Handle("POST /admin/passkey/login/finish",
-		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminPasskeyLoginFinish))))
+		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.HandleAdminPasskeyLoginFinish))))
 	mux.Handle("POST /admin/passkey/register/begin",
-		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminPasskeyRegisterBegin))))
+		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.HandleAdminPasskeyRegisterBegin))))
 	mux.Handle("POST /admin/passkey/register/finish",
-		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminPasskeyRegisterFinish))))
+		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.HandleAdminPasskeyRegisterFinish))))
 	// Step-up passkey assertion challenge, issued to the confirmation page when
 	// passkey is the offered factor. fetch-only like the other passkey
 	// endpoints, so a missing Origin is a forgery signal.
 	mux.Handle("POST /admin/stepup/passkey/begin",
-		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.handleAdminStepUpPasskeyBegin))))
+		s.CSRFGuard(httpx.RequireOrigin(http.HandlerFunc(s.HandleAdminStepUpPasskeyBegin))))
 	// Delete is a plain form submission, not fetch, so it gets CSRFGuard only.
 	// It is high-risk (see the reversed exemption note on
-	// handleAdminPasskeyDelete in passkey_register.go) so it also goes
+	// HandleAdminPasskeyDelete in passkey_register.go) so it also goes
 	// through RequireStepUp, same as the other five below.
 	mux.Handle("POST /admin/passkey/delete",
-		s.CSRFGuard(s.RequireStepUp(AuditPasskeyDelete, s.handleAdminPasskeyDelete)))
+		s.CSRFGuard(s.RequireStepUp(AuditPasskeyDelete, s.HandleAdminPasskeyDelete)))
 	// These six are high-risk writes: RequireStepUp intercepts the POST,
 	// stashes it as a pending action, and renders a confirmation page
 	// showing the diff instead of applying it directly. The actual write
-	// only happens via POST /admin/confirm (handleAdminConfirm) below.
+	// only happens via POST /admin/confirm (HandleAdminConfirm) below.
 	mux.Handle("POST /admin/settings",
 		s.CSRFGuard(s.RequireStepUp(AuditSettings, s.handleAdminSettings)))
 	mux.Handle("POST /admin/plans",
@@ -532,7 +532,7 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 		s.CSRFGuard(s.RequireStepUp(AuditTokenMint, s.handleAdminMintToken)))
 	mux.Handle("POST /admin/nodes/{id}/delete",
 		s.CSRFGuard(s.RequireStepUp(AuditNodeDelete, s.handleAdminDeleteNode)))
-	mux.Handle("POST /admin/confirm", s.CSRFGuard(http.HandlerFunc(s.handleAdminConfirm)))
+	mux.Handle("POST /admin/confirm", s.CSRFGuard(http.HandlerFunc(s.HandleAdminConfirm)))
 	// Low-risk writes (no lockout/destructive-at-scale potential) apply
 	// directly — no confirmation page.
 	mux.Handle("POST /admin/nodes/token/{id}/revoke", s.CSRFGuard(http.HandlerFunc(s.handleAdminRevokeToken)))
@@ -572,7 +572,7 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	mux.Handle("POST /admin/rollout/{id}/resume", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutResume)))
 	// 紧急发布跳过分批、对整条轨道一次性放行 —— 没有金丝雀能再兜住这次发布了，
 	// 所以它和删除节点一样走 RequireStepUp：确认页展示 diff、校验第二因子、
-	// 由 handleAdminConfirm 落审计。
+	// 由 HandleAdminConfirm 落审计。
 	mux.Handle("POST /admin/rollout/{id}/emergency",
 		s.CSRFGuard(s.RequireStepUp(AuditRolloutEmergency, s.handleAdminRolloutEmergency)))
 }
@@ -588,12 +588,12 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 // and restarting revokes every prior session — the classic incident response for
 // a leaked cookie, which persisting sessions had quietly broken.
 func (s *Service) adminCredFP() string {
-	return authx.HashToken(s.cfg.AdminPassword + "\x00" + s.cfg.AdminTOTPSecret)
+	return authx.HashToken(s.Cfg().AdminPassword + "\x00" + s.Cfg().AdminTOTPSecret)
 }
 
 func (s *Service) newAdminSession(ctx context.Context, auth string) (string, error) {
 	tok := authx.RandToken()
-	if err := s.store.CreateAdminSession(ctx, tok, auth, s.adminCredFP(), s.now().Add(adminSessionTTL).Unix()); err != nil {
+	if err := s.Store().CreateAdminSession(ctx, tok, auth, s.adminCredFP(), s.Now().Add(adminSessionTTL).Unix()); err != nil {
 		return "", err
 	}
 	return tok, nil
@@ -604,24 +604,24 @@ func (s *Service) validAdmin(ctx context.Context, tok string) bool {
 		return false
 	}
 	// Fail closed on a store error: a DB blip must not admit an unverified admin.
-	_, _, ok, err := s.store.AdminSession(ctx, tok, s.adminCredFP(), s.now().Unix())
+	_, _, ok, err := s.Store().AdminSession(ctx, tok, s.adminCredFP(), s.Now().Unix())
 	return err == nil && ok
 }
 
 // markStepUp 记下这次步进成功的时刻，开启宽限期。Best-effort: a failed write just
 // means the operator re-enters the factor on the next high-risk action.
 func (s *Service) markStepUp(ctx context.Context, tok string) {
-	_ = s.store.MarkAdminStepUp(ctx, tok, s.now().Unix())
+	_ = s.Store().MarkAdminStepUp(ctx, tok, s.Now().Unix())
 }
 
 // stepUpFresh 报告该会话是否仍在宽限期内。Fail closed on a store error / missing
 // session (require the factor).
 func (s *Service) stepUpFresh(ctx context.Context, tok string) bool {
-	_, lastStepUpAt, ok, err := s.store.AdminSession(ctx, tok, s.adminCredFP(), s.now().Unix())
+	_, lastStepUpAt, ok, err := s.Store().AdminSession(ctx, tok, s.adminCredFP(), s.Now().Unix())
 	if err != nil || !ok || lastStepUpAt == 0 {
 		return false
 	}
-	return s.now().Unix()-lastStepUpAt < stepUpGraceSecs
+	return s.Now().Unix()-lastStepUpAt < stepUpGraceSecs
 }
 
 func (s *Service) isAdminReq(r *http.Request) bool {
@@ -641,7 +641,7 @@ func (s *Service) adminAuthMethod(r *http.Request) string {
 	if err != nil {
 		return ""
 	}
-	auth, _, ok, err := s.store.AdminSession(r.Context(), c.Value, s.adminCredFP(), s.now().Unix())
+	auth, _, ok, err := s.Store().AdminSession(r.Context(), c.Value, s.adminCredFP(), s.Now().Unix())
 	if err != nil || !ok {
 		return ""
 	}
@@ -655,7 +655,7 @@ func (s *Service) adminAuthMethod(r *http.Request) string {
 // step; callers commit it only after full success.
 func (s *Service) verifyAdminCreds(user, pass, code string) (totpStep int64, ok bool) {
 	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(s.adminUser()))
-	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(s.cfg.AdminPassword))
+	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(s.Cfg().AdminPassword))
 	credsOK := userOK&passOK == 1
 	step, totpOK := int64(0), true
 	if s.AdminTOTPEnabled() {
@@ -666,7 +666,7 @@ func (s *Service) verifyAdminCreds(user, pass, code string) (totpStep int64, ok 
 
 func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	ip := s.clientIP(r)
-	if s.adminLogins.locked(ip, s.now()) {
+	if s.AdminLogins().locked(ip, s.Now()) {
 		s.renderAdminLogin(w, r, http.StatusTooManyRequests, "尝试过于频繁，请稍后再试",
 			s.AdminPasskeyCount(r.Context()) > 0)
 		return
@@ -675,7 +675,7 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	totpStep, ok := s.verifyAdminCreds(
 		r.FormValue("username"), r.FormValue("password"), r.FormValue("totp"))
 	if !ok {
-		s.adminLogins.recordFail(ip, s.now())
+		s.AdminLogins().recordFail(ip, s.Now())
 		s.renderAdminLogin(w, r, http.StatusUnauthorized, "账号、密码或验证码错误",
 			s.AdminPasskeyCount(r.Context()) > 0)
 		// 只记"有人试过且失败了"。绝不记录尝试的用户名或密码：
@@ -688,15 +688,15 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		// Atomically spend the TOTP step (replay guard). A false result means the
 		// code was already used — on this or any instance — so treat it exactly
 		// like a bad credential: record the failure and show the generic error.
-		if claimed, cerr := s.store.ClaimTOTPStep(r.Context(), totpStep); cerr != nil || !claimed {
-			s.adminLogins.recordFail(ip, s.now())
+		if claimed, cerr := s.Store().ClaimTOTPStep(r.Context(), totpStep); cerr != nil || !claimed {
+			s.AdminLogins().recordFail(ip, s.Now())
 			s.renderAdminLogin(w, r, http.StatusUnauthorized, "账号、密码或验证码错误",
 				s.AdminPasskeyCount(r.Context()) > 0)
 			s.WriteAudit(r, AuditLoginFail, "-", nil, StepUpNone)
 			return
 		}
 	}
-	s.adminLogins.reset(ip)
+	s.AdminLogins().reset(ip)
 	tok, err := s.newAdminSession(r.Context(), "password")
 	if err != nil {
 		s.renderAdminLogin(w, r, http.StatusInternalServerError, "服务器错误，请稍后再试",
@@ -721,7 +721,7 @@ func (s *Service) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
 	// 会话拿到 auth，删除之后就查不到了，记出来的 auth 会永远是空。
 	s.WriteAudit(r, AuditLogout, "-", nil, StepUpNone)
 	if c, err := r.Cookie(adminCookie); err == nil {
-		_ = s.store.DeleteAdminSession(r.Context(), c.Value)
+		_ = s.Store().DeleteAdminSession(r.Context(), c.Value)
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: adminCookie, Value: "", Path: "/admin", MaxAge: -1,
@@ -750,19 +750,19 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		page = 1
 	}
 
-	now := s.now().Unix()
+	now := s.Now().Unix()
 	months := recentMonths(now, 12)
 	period := q.Get("period")
 	if !contains(months, period) {
 		period = months[0]
 	}
-	metrics, err := s.store.AdminMetrics(r.Context(), period, now)
+	metrics, err := s.Store().AdminMetrics(r.Context(), period, now)
 	if err != nil {
 		return adminHomeData{}, err
 	}
 	query := AdminUserQuery{Search: search, SortBy: sortBy, SortDir: dir, Period: period, Now: now,
 		Limit: adminUsersPerPage, Offset: (page - 1) * adminUsersPerPage}
-	rows, total, err := s.store.AdminListUsers(r.Context(), query)
+	rows, total, err := s.Store().AdminListUsers(r.Context(), query)
 	if err != nil {
 		return adminHomeData{}, err
 	}
@@ -773,7 +773,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 	if page > totalPages {
 		page = totalPages
 		query.Offset = (page - 1) * adminUsersPerPage
-		rows, total, err = s.store.AdminListUsers(r.Context(), query)
+		rows, total, err = s.Store().AdminListUsers(r.Context(), query)
 		if err != nil {
 			return adminHomeData{}, err
 		}
@@ -797,11 +797,11 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 
 	// st is resolved here (rather than down by CentralStoredBytes below) because
 	// nodeViews needs it to derive each node's EffectiveTrafficLimitBytes.
-	st := s.resolveSettings(r.Context())
+	st := s.ResolveSettings(r.Context())
 
 	// Per-node monthly relayed bytes (current month) for the fleet traffic column.
 	monthStart, _ := monthRange(periodOf(now))
-	monthly, mErr := s.store.NodeRelayedSince(r.Context(), monthStart)
+	monthly, mErr := s.Store().NodeRelayedSince(r.Context(), monthStart)
 	if mErr != nil {
 		log.Printf("admin: NodeRelayedSince failed: %v", mErr)
 	}
@@ -822,7 +822,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 	// still a whole-relation read — it is a GROUP BY over every node, and it
 	// feeds the FLEET table too, so scoping it to the BYO page would just mean
 	// a second query for the same data. One grouped read, never an N+1.
-	fileCounts, fcErr := s.store.NodeFileCounts(r.Context(), now)
+	fileCounts, fcErr := s.Store().NodeFileCounts(r.Context(), now)
 	if fcErr != nil {
 		log.Printf("admin: NodeFileCounts failed: %v", fcErr)
 	}
@@ -840,12 +840,12 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 	// render remains, and it is the rollout panels that require it.
 	var allNodes []Node
 	nodesErr := false
-	if ns, nerr := s.store.ListNodes(r.Context()); nerr != nil {
+	if ns, nerr := s.Store().ListNodes(r.Context()); nerr != nil {
 		log.Printf("admin: ListNodes failed: %v", nerr)
 		nodesErr = true
 	} else {
 		allNodes = ns
-		nodeVs = nodeViews(ns, monthly, fileCounts, s.now(), st)
+		nodeVs = nodeViews(ns, monthly, fileCounts, s.Now(), st)
 	}
 	fleetNodeCount := 0
 	for _, nv := range nodeVs {
@@ -889,9 +889,9 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		log.Printf("admin: ListByoNodes(removed) failed: %v", remErr)
 	}
 	byoNodeVs := fillByoOwnerEmails(r.Context(),
-		nodeViews(byoRows, monthly, fileCounts, s.now(), st), s.store.AdminUserEmailsByIDs)
+		nodeViews(byoRows, monthly, fileCounts, s.Now(), st), s.Store().AdminUserEmailsByIDs)
 	byoRemovedVs := fillByoOwnerEmails(r.Context(),
-		nodeViews(byoRemovedRows, monthly, fileCounts, s.now(), st), s.store.AdminUserEmailsByIDs)
+		nodeViews(byoRemovedRows, monthly, fileCounts, s.Now(), st), s.Store().AdminUserEmailsByIDs)
 	byoPrev, byoNext := "", ""
 	if byoPage > 1 {
 		byoPrev = adminByoHref(q, byoSearch, byoPageParam, byoPage-1)
@@ -907,7 +907,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		byoRemNext = adminByoHref(q, byoSearch, byoRemPageParam, byoRemPage+1)
 	}
 	var tokenVs []adminFleetTokenView
-	if fts, ferr := s.store.ListActiveFleetTokens(r.Context()); ferr != nil {
+	if fts, ferr := s.Store().ListActiveFleetTokens(r.Context()); ferr != nil {
 		log.Printf("admin: ListActiveFleetTokens failed: %v", ferr)
 	} else {
 		for _, ft := range fts {
@@ -915,12 +915,12 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		}
 	}
 
-	centralStored, cerr := s.store.CentralStoredBytes(r.Context())
+	centralStored, cerr := s.Store().CentralStoredBytes(r.Context())
 	if cerr != nil {
 		log.Printf("admin: CentralStoredBytes failed: %v", cerr)
 	}
 	var planVs, activePlanVs []planView
-	if plans, plerr := s.store.ListPlans(r.Context()); plerr != nil {
+	if plans, plerr := s.Store().ListPlans(r.Context()); plerr != nil {
 		log.Printf("admin: ListPlans failed: %v", plerr)
 	} else {
 		planVs = planViews(plans)
@@ -937,7 +937,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 	// and settings just as the operator starts diagnosing the database. So
 	// carry on like the fetches above and flag it, and the template swaps the
 	// table for an explicit error.
-	passkeys, pkerr := s.store.ListAdminCredentials(r.Context())
+	passkeys, pkerr := s.Store().ListAdminCredentials(r.Context())
 	passkeysErr := pkerr != nil
 	if pkerr != nil {
 		log.Printf("passkey: ListAdminCredentials failed: %v", pkerr)
@@ -947,8 +947,8 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 	// nodes, and a failure in one sets Err on that panel only — the other
 	// panel, and its controls, are unaffected. That independence is the point
 	// of the two-track design, so keep these two calls separate.
-	rolloutFleet := s.rolloutPanel(r.Context(), "fleet", "机队轨", s.now(), allNodes, nodesErr)
-	rolloutByo := s.rolloutPanel(r.Context(), "byo", "自带节点轨", s.now(), allNodes, nodesErr)
+	rolloutFleet := s.rolloutPanel(r.Context(), "fleet", "机队轨", s.Now(), allNodes, nodesErr)
+	rolloutByo := s.rolloutPanel(r.Context(), "byo", "自带节点轨", s.Now(), allNodes, nodesErr)
 
 	return adminHomeData{
 		RolloutFleet: rolloutFleet, RolloutByo: rolloutByo,
@@ -1037,7 +1037,7 @@ func (s *Service) handleAdminAudit(w http.ResponseWriter, r *http.Request) {
 		page = 1
 	}
 	offset := (page - 1) * auditPageSize
-	entries, err := s.store.ListAudit(r.Context(), auditPageSize, offset, action)
+	entries, err := s.Store().ListAudit(r.Context(), auditPageSize, offset, action)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -1122,7 +1122,7 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 	// Bounds are enforced above; parseSettingsForm supplies the actual bytes/
 	// seconds to write, so the write path and the confirmation-page/audit
 	// diff (beforeImageFor) share the exact same unit conversion.
-	now := s.now().Unix()
+	now := s.Now().Unix()
 	for key, v := range parseSettingsForm(r.Form) {
 		n := int64(0)
 		switch t := v.(type) {
@@ -1133,7 +1133,7 @@ func (s *Service) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 				n = 1
 			}
 		}
-		if err := s.store.SetSetting(r.Context(), key, n, now); err != nil {
+		if err := s.Store().SetSetting(r.Context(), key, n, now); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
@@ -1160,12 +1160,12 @@ func (s *Service) handleAdminUpsertPlan(w http.ResponseWriter, r *http.Request) 
 	// Never leave zero active plans. Fail closed: any store error here
 	// blocks the deactivation rather than silently allowing it.
 	if !p.Active {
-		n, err := s.store.CountActivePlans(r.Context())
+		n, err := s.Store().CountActivePlans(r.Context())
 		if err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
-		cur, ok, err := s.store.GetPlan(r.Context(), p.ID)
+		cur, ok, err := s.Store().GetPlan(r.Context(), p.ID)
 		if err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
@@ -1175,8 +1175,8 @@ func (s *Service) handleAdminUpsertPlan(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	p.UpdatedAt = s.now().Unix()
-	if err := s.store.UpsertPlan(r.Context(), p); err != nil {
+	p.UpdatedAt = s.Now().Unix()
+	if err := s.Store().UpsertPlan(r.Context(), p); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
@@ -1203,7 +1203,7 @@ func (s *Service) handleAdminSetUserPlan(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "user_id and plan_id required", http.StatusBadRequest)
 		return
 	}
-	p, ok, err := s.store.GetPlan(r.Context(), planID)
+	p, ok, err := s.Store().GetPlan(r.Context(), planID)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -1212,7 +1212,7 @@ func (s *Service) handleAdminSetUserPlan(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "unknown or inactive plan", http.StatusBadRequest)
 		return
 	}
-	if err := s.store.SetUserPlanAdmin(r.Context(), userID, planID, s.now().Unix()); err != nil {
+	if err := s.Store().SetUserPlanAdmin(r.Context(), userID, planID, s.Now().Unix()); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
@@ -1232,8 +1232,8 @@ func (s *Service) handleAdminMintToken(w http.ResponseWriter, r *http.Request) {
 		name = "official-node"
 	}
 	raw := authx.RandToken()
-	if err := s.store.CreateFleetToken(r.Context(), FleetToken{
-		ID: authx.NewID(), TokenHash: authx.HashToken(raw), Name: name, CreatedAt: s.now().Unix(),
+	if err := s.Store().CreateFleetToken(r.Context(), FleetToken{
+		ID: authx.NewID(), TokenHash: authx.HashToken(raw), Name: name, CreatedAt: s.Now().Unix(),
 	}); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -1244,7 +1244,7 @@ func (s *Service) handleAdminMintToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data.MintedToken = raw
-	data.MintedInstallCmd = nodeRunCommandGo(s.cfg.BaseURL, raw)
+	data.MintedInstallCmd = nodeRunCommandGo(s.Cfg().BaseURL, raw)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := adminUsersTmpl.Execute(w, data); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -1271,12 +1271,12 @@ func (s *Service) handleAdminNodeLimits(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	trafficBytes, diskBytes := tGB<<30, dGB<<30
-	before, _, err := s.store.GetNode(r.Context(), id)
+	before, _, err := s.Store().GetNode(r.Context(), id)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	if err := s.store.SetNodeLimits(r.Context(), id, trafficBytes, diskBytes); err != nil {
+	if err := s.Store().SetNodeLimits(r.Context(), id, trafficBytes, diskBytes); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -1298,12 +1298,12 @@ func (s *Service) handleAdminNodeLabel(w http.ResponseWriter, r *http.Request) {
 	if len(label) > 64 {
 		label = label[:64]
 	}
-	before, _, err := s.store.GetNode(r.Context(), id)
+	before, _, err := s.Store().GetNode(r.Context(), id)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	if err := s.store.SetNodeLabel(r.Context(), id, label); err != nil {
+	if err := s.Store().SetNodeLabel(r.Context(), id, label); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -1324,12 +1324,12 @@ func (s *Service) handleAdminNodeDraining(w http.ResponseWriter, r *http.Request
 	}
 	id := r.PathValue("id")
 	on := r.FormValue("on") == "1"
-	before, _, err := s.store.GetNode(r.Context(), id)
+	before, _, err := s.Store().GetNode(r.Context(), id)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	if err := s.store.SetNodeDraining(r.Context(), id, on); err != nil {
+	if err := s.Store().SetNodeDraining(r.Context(), id, on); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -1357,7 +1357,7 @@ func (s *Service) handleAdminRestoreNode(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	id := r.PathValue("id")
-	before, found, err := s.store.GetNode(r.Context(), id)
+	before, found, err := s.Store().GetNode(r.Context(), id)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -1369,7 +1369,7 @@ func (s *Service) handleAdminRestoreNode(w http.ResponseWriter, r *http.Request)
 	// A store failure is not "no such node": reporting a DB outage as 404 would
 	// tell an admin the node is gone while it is still there, and the audit entry
 	// below would be skipped with no trace of why.
-	if err := s.store.ClearNodeRemoved(r.Context(), id); err != nil {
+	if err := s.Store().ClearNodeRemoved(r.Context(), id); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
@@ -1399,7 +1399,7 @@ func (s *Service) handleAdminMarkNodeRemoved(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	id := r.PathValue("id")
-	before, found, err := s.store.GetNode(r.Context(), id)
+	before, found, err := s.Store().GetNode(r.Context(), id)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -1408,8 +1408,8 @@ func (s *Service) handleAdminMarkNodeRemoved(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	at := s.now().Unix()
-	if err := s.store.MarkNodeRemoved(r.Context(), id, at); err != nil {
+	at := s.Now().Unix()
+	if err := s.Store().MarkNodeRemoved(r.Context(), id, at); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
@@ -1424,7 +1424,7 @@ func (s *Service) handleAdminDeleteNode(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	if err := s.store.DeleteFleetNode(r.Context(), r.PathValue("id")); err != nil {
+	if err := s.Store().DeleteFleetNode(r.Context(), r.PathValue("id")); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -1439,8 +1439,8 @@ func (s *Service) handleAdminRevokeToken(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	id := r.PathValue("id")
-	revokedAt := s.now().Unix()
-	if err := s.store.RevokeFleetToken(r.Context(), id, revokedAt); err != nil {
+	revokedAt := s.Now().Unix()
+	if err := s.Store().RevokeFleetToken(r.Context(), id, revokedAt); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}

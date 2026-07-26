@@ -179,7 +179,7 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 			if muErr != nil {
 				log.Printf("ice: NodeRelayedSince read failed: %v (traffic caps not enforced this request)", muErr)
 			}
-			st := s.resolveSettings(r.Context())
+			st := s.ResolveSettings(r.Context())
 			if nodes, err := s.store.OnlineNodes(r.Context(), since); err == nil {
 				for _, n := range nodes {
 					if n.ID == "" || n.TURNSecret == "" || len(n.URLs) == 0 || seen[n.ID] {

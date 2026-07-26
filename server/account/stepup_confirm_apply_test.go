@@ -55,7 +55,7 @@ func TestConfirmedNodeDeleteActuallyDeletes(t *testing.T) {
 }
 
 // A confirmed action whose handler REJECTS the write must not leave an audit
-// entry claiming it happened. Regression: handleAdminConfirm wrote the audit
+// entry claiming it happened. Regression: HandleAdminConfirm wrote the audit
 // (and refreshed the step-up grace window) unconditionally, ignoring the
 // handler's status — so a 404/400 rejection was logged as a successful change.
 func TestConfirmedFailingActionIsNotAudited(t *testing.T) {

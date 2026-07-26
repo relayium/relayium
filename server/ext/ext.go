@@ -7,14 +7,21 @@
 // commercial files (billing.go, admin.go, admin_rollout.go,
 // admin_templates.go, plan_enforce.go) actually call that are defined
 // elsewhere in the open layer — verified by grep, not guessed. It does NOT
-// attempt to expose the account Store or any of its domain types (User,
-// Plan, RolloutTrack, UploadSessionRow, ...): that surface is ~90 methods
-// wide and pulling it through this interface would mean either duplicating
-// most of the account domain model here or importing account from
-// ext, which would cycle back against account's own compile-time assertion
-// that *Service satisfies AdminHost. Store access is left for phase 3 to
-// resolve, most likely by having the commercial package hold its own store
-// reference rather than reaching through the host.
+// attempt to expose the account Store, Config, or Settings types (nor
+// domain types like User, Plan, RolloutTrack, UploadSessionRow, ...): Store
+// alone is a ~90-method surface, and all three are defined in account
+// itself, so any AdminHost method returning one would force ext to import
+// account — which cycles back against account's own compile-time assertion
+// that *Service satisfies AdminHost (account already imports ext one way,
+// for that assertion). *Service.Store(), .Cfg(), and .ResolveSettings() are
+// exported directly on the concrete type instead: the commercial layer can
+// call them today because it's still the same package, and once it
+// actually moves to a private repo (a later step, not this one — see
+// account/service.go's doc comments on Store/Cfg for the full reasoning)
+// it will hold its own account.Service (or account.Store) reference rather
+// than reaching through this interface for them. *loginThrottle
+// (AdminLogins' return type) is excluded for a simpler reason: it's
+// unexported, so ext could not even name it in a method signature.
 //
 // ext must never import account: the whole point of this package
 // is a boundary the commercial layer can depend on without pulling in
@@ -26,6 +33,7 @@ package ext
 import (
 	"context"
 	"net/http"
+	"time"
 )
 
 // ChangeField is a field's before/after value, used by WriteAudit to record
@@ -84,4 +92,27 @@ type AdminHost interface {
 	// duplicate or import account for (see package doc).
 	SetTargetVersion(ctx context.Context, track, version string) error
 	SetEmergencyTargetVersion(ctx context.Context, track, version string) error
+
+	// Now returns the service's current time. A thin wrapper over the
+	// injectable clock account.Service uses internally (defaulted to
+	// time.Now, overridden directly by tests) — callers here always observe
+	// whatever clock is wired in. Safe to include unlike Store/Cfg/
+	// ResolveSettings: its return type is time.Time, not an account type,
+	// so it carries no import-cycle risk.
+	Now() time.Time
+
+	// HandleAdminConfirm is the step-up confirmation page's POST target.
+	// HandleAdminPasskeyDelete/LoginBegin/LoginFinish/RegisterBegin/
+	// RegisterFinish and HandleAdminStepUpPasskeyBegin are the admin
+	// passkey ceremony endpoints. All seven are route registrations only —
+	// RegisterAdmin (admin.go, commercial) wires each to a specific
+	// mux.Handle pattern — so, like the rest of AdminHost, their signatures
+	// are plain net/http types with no account-specific type to cycle on.
+	HandleAdminConfirm(w http.ResponseWriter, r *http.Request)
+	HandleAdminPasskeyDelete(w http.ResponseWriter, r *http.Request)
+	HandleAdminPasskeyLoginBegin(w http.ResponseWriter, r *http.Request)
+	HandleAdminPasskeyLoginFinish(w http.ResponseWriter, r *http.Request)
+	HandleAdminPasskeyRegisterBegin(w http.ResponseWriter, r *http.Request)
+	HandleAdminPasskeyRegisterFinish(w http.ResponseWriter, r *http.Request)
+	HandleAdminStepUpPasskeyBegin(w http.ResponseWriter, r *http.Request)
 }

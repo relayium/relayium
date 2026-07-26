@@ -59,7 +59,7 @@ func (s *Service) SetTargetVersion(ctx context.Context, track, version string) e
 // was already repointed to {target: v, status: rolling} but NOT armed: if the
 // second step then failed, the operator was told 紧急发布失败 while a STAGED
 // rollout to that very version was already underway — and, because
-// handleAdminConfirm skips the audit on any >=400, with no record of it
+// HandleAdminConfirm skips the audit on any >=400, with no record of it
 // anywhere. There is no such intermediate state now: PutRolloutTrack is a
 // single INSERT ... ON CONFLICT statement.
 //

@@ -185,7 +185,7 @@ func (s *Service) routeMux() *http.ServeMux {
 // handleConfig exposes the effective stored-transfer limits so clients can
 // show upfront size/TTL hints without guessing. Public — no session required.
 func (s *Service) handleConfig(w http.ResponseWriter, r *http.Request) {
-	st := s.resolveSettings(r.Context())
+	st := s.ResolveSettings(r.Context())
 	httpx.WriteJSON(w, http.StatusOK, map[string]int64{
 		"maxFileSize": st.MaxFileSize,
 		"dailyQuota":  st.DailyQuota,

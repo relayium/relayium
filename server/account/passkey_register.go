@@ -9,11 +9,11 @@ import (
 	"github.com/relayium/relayium/httpx"
 )
 
-// handleAdminPasskeyRegisterBegin gates registration behind a fresh password +
+// HandleAdminPasskeyRegisterBegin gates registration behind a fresh password +
 // TOTP check on top of the existing session. A writable credential table is a
 // permanent backdoor if a leaked session alone can add to it; registration is
 // rare enough that the extra prompt costs nothing.
-func (s *Service) handleAdminPasskeyRegisterBegin(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleAdminPasskeyRegisterBegin(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
 		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "未登录"})
 		return
@@ -90,7 +90,7 @@ func (s *Service) handleAdminPasskeyRegisterBegin(w http.ResponseWriter, r *http
 	httpx.WriteJSON(w, http.StatusOK, creation)
 }
 
-func (s *Service) handleAdminPasskeyRegisterFinish(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleAdminPasskeyRegisterFinish(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
 		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "未登录"})
 		return
@@ -144,7 +144,7 @@ func (s *Service) handleAdminPasskeyRegisterFinish(w http.ResponseWriter, r *htt
 	httpx.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// handleAdminPasskeyDelete removes one registered credential.
+// HandleAdminPasskeyDelete removes one registered credential.
 //
 // This used to be deliberately exempt from step-up, on the grounds that
 // deleting your own credential can only lock you out and never harms anyone
@@ -152,7 +152,7 @@ func (s *Service) handleAdminPasskeyRegisterFinish(w http.ResponseWriter, r *htt
 // high-risk action like the rest, because a stolen session that can silently
 // strip the operator's passkeys turns a recoverable compromise into a lockout.
 // The gating lives in RegisterAdmin (RequireStepUp), not here.
-func (s *Service) handleAdminPasskeyDelete(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleAdminPasskeyDelete(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
 		http.Redirect(w, r, "/admin", http.StatusFound)
 		return

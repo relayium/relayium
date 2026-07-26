@@ -56,7 +56,7 @@ func adminLoginCookieTOTP(t *testing.T, ts *httptest.Server, code string) *http.
 // validSettingsForm is a fully populated settings form that passes
 // handleAdminSettings's own bounds check (every field > 0 where required,
 // default <= max). The test service starts with all-zero config defaults, so a
-// form built from resolveSettings would fail that check at apply time — this
+// form built from ResolveSettings would fail that check at apply time — this
 // gives the apply path something it will actually accept.
 func validSettingsForm(quotaMB string) url.Values {
 	return url.Values{
@@ -98,7 +98,7 @@ func TestConfirmWithinGraceNeedsNoFactor(t *testing.T) {
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("grace-window confirm should apply (302), got %d", resp.StatusCode)
 	}
-	if got := svc.resolveSettings(t.Context()).DailyQuota; got != 999*1024*1024 {
+	if got := svc.ResolveSettings(t.Context()).DailyQuota; got != 999*1024*1024 {
 		t.Fatalf("grace confirm did not apply the setting; daily_quota=%d", got)
 	}
 }
@@ -126,7 +126,7 @@ func TestGraceConfirmIsAuditedAsGrace(t *testing.T) {
 }
 
 // 审计记录的 diff 必须是"改动前 -> 改动后"，而不能因为在写库之后才算 diff 而变成空。
-// 这盯住 handleAdminConfirm 的 before-image 取值时机。
+// 这盯住 HandleAdminConfirm 的 before-image 取值时机。
 func TestConfirmAuditRecordsTheDiff(t *testing.T) {
 	ts, svc, store, _ := newAdminAuditServer(t)
 	cookie := adminLoginCookie(t, ts)
@@ -163,7 +163,7 @@ func TestConfirmAppliesWithValidPassword(t *testing.T) {
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("valid password confirm should apply (302), got %d", resp.StatusCode)
 	}
-	if got := svc.resolveSettings(t.Context()).DailyQuota; got != 555*1024*1024 {
+	if got := svc.ResolveSettings(t.Context()).DailyQuota; got != 555*1024*1024 {
 		t.Fatalf("valid password confirm did not apply; daily_quota=%d", got)
 	}
 	entries, _ := store.ListAudit(context.Background(), 10, 0, AuditSettings)
@@ -176,7 +176,7 @@ func TestConfirmAppliesWithValidPassword(t *testing.T) {
 func TestConfirmRejectsWrongPassword(t *testing.T) {
 	ts, svc, _, _ := newAdminAuditServer(t)
 	cookie := adminLoginCookie(t, ts)
-	before := svc.resolveSettings(t.Context())
+	before := svc.ResolveSettings(t.Context())
 
 	tok := pendingSettingsConfirm(t, ts, svc, cookie, "321")
 	resp := postAdminForm(t, ts, cookie, "/admin/confirm",
@@ -185,7 +185,7 @@ func TestConfirmRejectsWrongPassword(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("wrong password must be rejected with 401, got %d", resp.StatusCode)
 	}
-	if svc.resolveSettings(t.Context()).DailyQuota != before.DailyQuota {
+	if svc.ResolveSettings(t.Context()).DailyQuota != before.DailyQuota {
 		t.Fatal("SECURITY: wrong password still applied the setting")
 	}
 }
@@ -204,7 +204,7 @@ func TestConfirmAppliesWithValidTOTP(t *testing.T) {
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("valid TOTP confirm should apply (302), got %d", resp.StatusCode)
 	}
-	if got := svc.resolveSettings(t.Context()).DailyQuota; got != 222*1024*1024 {
+	if got := svc.ResolveSettings(t.Context()).DailyQuota; got != 222*1024*1024 {
 		t.Fatalf("valid TOTP confirm did not apply; daily_quota=%d", got)
 	}
 	entries, _ := store.ListAudit(context.Background(), 10, 0, AuditSettings)
@@ -217,7 +217,7 @@ func TestConfirmAppliesWithValidTOTP(t *testing.T) {
 func TestConfirmRejectsWrongTOTP(t *testing.T) {
 	ts, svc, _, clk := newStepUpServer(t, testSecret)
 	cookie := adminLoginCookieTOTP(t, ts, codeAt(t, *clk))
-	before := svc.resolveSettings(t.Context())
+	before := svc.ResolveSettings(t.Context())
 
 	tok := pendingSettingsConfirm(t, ts, svc, cookie, "111")
 	resp := postAdminForm(t, ts, cookie, "/admin/confirm",
@@ -226,7 +226,7 @@ func TestConfirmRejectsWrongTOTP(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("wrong TOTP must be rejected with 401, got %d", resp.StatusCode)
 	}
-	if svc.resolveSettings(t.Context()).DailyQuota != before.DailyQuota {
+	if svc.ResolveSettings(t.Context()).DailyQuota != before.DailyQuota {
 		t.Fatal("SECURITY: wrong TOTP still applied the setting")
 	}
 }
@@ -236,7 +236,7 @@ func TestStepUpTOTPCannotBeReplayed(t *testing.T) {
 	ts, svc, _, clk := newStepUpServer(t, testSecret)
 	loginCode := codeAt(t, *clk)
 	cookie := adminLoginCookieTOTP(t, ts, loginCode) // 登录消费了这一步
-	before := svc.resolveSettings(t.Context())
+	before := svc.ResolveSettings(t.Context())
 
 	// 时钟保持不动：同一个码映射到同一步，步进校验必须判定为重放而拒绝。
 	tok := pendingSettingsConfirm(t, ts, svc, cookie, "444")
@@ -246,7 +246,7 @@ func TestStepUpTOTPCannotBeReplayed(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("replayed TOTP must be rejected with 401, got %d", resp.StatusCode)
 	}
-	if svc.resolveSettings(t.Context()).DailyQuota != before.DailyQuota {
+	if svc.ResolveSettings(t.Context()).DailyQuota != before.DailyQuota {
 		t.Fatal("SECURITY: a replayed TOTP code still applied the setting")
 	}
 }
@@ -263,7 +263,7 @@ func TestLoginCeremonyCannotSatisfyStepUp(t *testing.T) {
 		t.Fatal(err)
 	}
 	cookie := adminLoginCookie(t, ts)
-	before := svc.resolveSettings(t.Context())
+	before := svc.ResolveSettings(t.Context())
 	tok := pendingSettingsConfirm(t, ts, svc, cookie, "666")
 
 	// 铸一个 login 类型的 ceremony，把它的 cookie 混进 /admin/confirm。
@@ -297,7 +297,7 @@ func TestLoginCeremonyCannotSatisfyStepUp(t *testing.T) {
 	if resp.StatusCode == http.StatusFound {
 		t.Fatal("SECURITY: a login-kind ceremony satisfied a step-up passkey check")
 	}
-	if svc.resolveSettings(t.Context()).DailyQuota != before.DailyQuota {
+	if svc.ResolveSettings(t.Context()).DailyQuota != before.DailyQuota {
 		t.Fatal("SECURITY: wrong-kind ceremony still applied the setting")
 	}
 }

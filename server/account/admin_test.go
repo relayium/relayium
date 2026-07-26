@@ -190,7 +190,7 @@ func TestAdminSettingsRejectsInvalid(t *testing.T) {
 // intercepts it first and redirects to /admin (302), which is what an
 // operator's browser needs. handleAdminSettings keeps its own isAdminReq
 // check regardless (defense in depth, and the contract any direct caller —
-// including handleAdminConfirm once Task 8 lands — relies on), so that's
+// including HandleAdminConfirm once Task 8 lands — relies on), so that's
 // what this test targets directly.
 func TestAdminSettingsRequiresAdmin(t *testing.T) {
 	_, svc, _ := newAdminSettingsServer(t)

@@ -31,7 +31,7 @@ type pendingAction struct {
 	// confirmation POST lands on /admin/confirm, which has no {id} segment, so
 	// without stashing it here a path-scoped action (e.g. node delete, whose
 	// handler reads r.PathValue("id")) would forward with an empty id and
-	// silently no-op. handleAdminConfirm re-applies it via SetPathValue.
+	// silently no-op. HandleAdminConfirm re-applies it via SetPathValue.
 	pathID  string
 	expires time.Time
 }

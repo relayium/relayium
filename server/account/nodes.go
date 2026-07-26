@@ -119,7 +119,7 @@ func (s *Service) nodeLimitsFor(ctx context.Context, node Node) nodeLimits {
 	return nodeLimits{
 		// 下发**解析后**的上限：节点行里可能是 0（继承全局默认），直接发 0 会让
 		// 节点以为自己不限流量，本地硬闸永远不触发。
-		TrafficLimitBytes: resolveNodeTrafficLimit(node, s.resolveSettings(ctx)),
+		TrafficLimitBytes: resolveNodeTrafficLimit(node, s.ResolveSettings(ctx)),
 		DiskLimitBytes:    node.DiskLimitBytes,
 		RelayedThisMonth:  relayed,
 	}

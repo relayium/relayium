@@ -12,7 +12,7 @@ import (
 // (dynamic type, value).
 type stepUpCtxKey struct{}
 
-// stepUpDoneKey marks a request that handleAdminConfirm has already resolved
+// stepUpDoneKey marks a request that HandleAdminConfirm has already resolved
 // (pending action taken, original form restored onto the request) and is now
 // forwarding to the real handler. RequireStepUp checks for this and, when
 // present, lets the request straight through instead of intercepting it
@@ -23,7 +23,7 @@ var stepUpDoneKey = stepUpCtxKey{}
 // RequireStepUp turns a high-risk write handler into "render a confirmation
 // first, apply later". It intercepts the original POST, stashes the form in
 // a session-bound pending action, and renders a page showing exactly what
-// would change. The actual write only happens in handleAdminConfirm, once
+// would change. The actual write only happens in HandleAdminConfirm, once
 // that page's form is submitted back.
 //
 // Design point that must never regress: **the confirmation page always
@@ -38,7 +38,7 @@ func (s *Service) RequireStepUp(action string, next http.HandlerFunc) http.Handl
 			http.Redirect(w, r, "/admin", http.StatusFound)
 			return
 		}
-		// A request forwarded by handleAdminConfirm carries stepUpDoneKey and
+		// A request forwarded by HandleAdminConfirm carries stepUpDoneKey and
 		// must go straight to the real handler, not be re-intercepted.
 		if r.Context().Value(stepUpDoneKey) != nil {
 			next(w, r)
@@ -127,7 +127,7 @@ func (s *Service) confirmHandlerFor(action string) (http.HandlerFunc, bool) {
 		AuditUserPlan:      s.handleAdminSetUserPlan,
 		AuditTokenMint:     s.handleAdminMintToken,
 		AuditNodeDelete:    s.handleAdminDeleteNode,
-		AuditPasskeyDelete: s.handleAdminPasskeyDelete,
+		AuditPasskeyDelete: s.HandleAdminPasskeyDelete,
 		// Emergency release is the only rollout control behind step-up: it is
 		// the one that ships a build to every node of a track at once, with no
 		// canary left to catch it.
@@ -140,7 +140,7 @@ func (s *Service) confirmHandlerFor(action string) (http.HandlerFunc, bool) {
 // verifyStepUpFactor checks the second factor a confirmation POST presents and
 // returns which factor actually satisfied it — StepUpGrace/Passkey/TOTP/
 // Password — so the audit trail can record the truth, or ("", false) when
-// nothing valid was presented, in which case handleAdminConfirm must NOT apply
+// nothing valid was presented, in which case HandleAdminConfirm must NOT apply
 // the pending action.
 //
 // The grace window is checked first and mirrors exactly the NeedFactor
@@ -183,12 +183,12 @@ func (s *Service) verifyStepUpFactor(r *http.Request, pending pendingAction) (st
 	return "", false
 }
 
-// handleAdminConfirm is the confirmation page's POST target. It takes the
+// HandleAdminConfirm is the confirmation page's POST target. It takes the
 // pending action (burning its token), verifies the second factor, restores the
 // original form onto the request, marks it as step-up-done and forwards to the
 // mapped handler via confirmHandlerFor, then records the audit entry and
 // refreshes the grace window.
-func (s *Service) handleAdminConfirm(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleAdminConfirm(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
 		http.Redirect(w, r, "/admin", http.StatusFound)
 		return
@@ -268,7 +268,7 @@ func (s *Service) handleAdminConfirm(w http.ResponseWriter, r *http.Request) {
 }
 
 // statusRecorder wraps a ResponseWriter to remember the first status code the
-// wrapped handler emitted, so handleAdminConfirm can tell an applied write from
+// wrapped handler emitted, so HandleAdminConfirm can tell an applied write from
 // a rejected one. Defaults to 200: a handler that Writes without an explicit
 // WriteHeader is a success.
 type statusRecorder struct {

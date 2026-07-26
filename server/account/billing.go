@@ -40,7 +40,7 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	plan, ok, err := s.store.GetPlan(r.Context(), in.PlanID)
+	plan, ok, err := s.Store().GetPlan(r.Context(), in.PlanID)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -74,7 +74,7 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
-		if customerID, err = s.store.SetUserStripeCustomerIfEmpty(r.Context(), u.ID, created); err != nil {
+		if customerID, err = s.Store().SetUserStripeCustomerIfEmpty(r.Context(), u.ID, created); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
@@ -84,8 +84,8 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 		CustomerID:      customerID,
 		CustomerEmail:   u.Email,
 		ClientRefUserID: u.ID,
-		SuccessURL:      s.cfg.BaseURL + "/me?billing=success",
-		CancelURL:       s.cfg.BaseURL + "/me?billing=cancel",
+		SuccessURL:      s.Cfg().BaseURL + "/me?billing=success",
+		CancelURL:       s.Cfg().BaseURL + "/me?billing=cancel",
 	})
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -106,7 +106,7 @@ func (s *Service) handleBillingPortal(w http.ResponseWriter, r *http.Request, u 
 	// in the Stripe dashboard, so that field is dead config — change this line,
 	// not the dashboard. /me rather than the home page: the user arrived from
 	// there and expects to land back on their plan state.
-	url, err := s.biller.CreatePortalSession(r.Context(), u.StripeCustomerID, s.cfg.BaseURL+"/me")
+	url, err := s.biller.CreatePortalSession(r.Context(), u.StripeCustomerID, s.Cfg().BaseURL+"/me")
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -183,7 +183,7 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "no_active_subscription"})
 		return
 	}
-	plan, ok, err := s.store.GetPlan(r.Context(), in.PlanID)
+	plan, ok, err := s.Store().GetPlan(r.Context(), in.PlanID)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -244,13 +244,13 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 	// below then fails (500), the DB must not keep advertising a pending downgrade
 	// that no longer exists in Stripe and will never fire.
 	if u.ScheduledPlanID != "" {
-		_ = s.store.SetScheduledPlan(r.Context(), u.ID, "", "")
+		_ = s.Store().SetScheduledPlan(r.Context(), u.ID, "", "")
 	}
 
 	// Upgrade vs downgrade decides timing; see resolveChange for the rule.
 	// If the current plan can't be resolved, treat it as an upgrade (apply now).
 	downgrade := false
-	if cur, ok, err := s.store.GetPlan(r.Context(), u.PlanID); err == nil && ok {
+	if cur, ok, err := s.Store().GetPlan(r.Context(), u.PlanID); err == nil && ok {
 		downgrade = resolveChange(cur, plan, wantCycle)
 	}
 
@@ -272,7 +272,7 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 	}
 	// Record (or clear) the pending-downgrade hint. Best-effort: the Stripe op
 	// already succeeded, so don't fail the request if this write hiccups.
-	_ = s.store.SetScheduledPlan(r.Context(), u.ID, scheduledPlan, scheduledCycle)
+	_ = s.Store().SetScheduledPlan(r.Context(), u.ID, scheduledPlan, scheduledCycle)
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok", "effective": effective})
 }
 
@@ -303,7 +303,7 @@ func (s *Service) handleBillingPreview(w http.ResponseWriter, r *http.Request, u
 		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "no_active_subscription"})
 		return
 	}
-	plan, ok, err := s.store.GetPlan(r.Context(), in.PlanID)
+	plan, ok, err := s.Store().GetPlan(r.Context(), in.PlanID)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -331,7 +331,7 @@ func (s *Service) handleBillingPreview(w http.ResponseWriter, r *http.Request, u
 	// current plan can't be resolved, treat it as an upgrade (matches
 	// handleBillingChangePlan's fallback).
 	downgrade := false
-	if cur, ok, err := s.store.GetPlan(r.Context(), u.PlanID); err == nil && ok {
+	if cur, ok, err := s.Store().GetPlan(r.Context(), u.PlanID); err == nil && ok {
 		downgrade = resolveChange(cur, plan, wantCycle)
 	}
 	resp := map[string]any{
@@ -379,7 +379,7 @@ func (s *Service) handleBillingCancelScheduledChange(w http.ResponseWriter, r *h
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	_ = s.store.SetScheduledPlan(r.Context(), u.ID, "", "")
+	_ = s.Store().SetScheduledPlan(r.Context(), u.ID, "", "")
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -401,7 +401,7 @@ type publicPlanView struct {
 // handlePublicPlans serves the active billing tiers for the pricing UI.
 // Unauthenticated; carries no secrets.
 func (s *Service) handlePublicPlans(w http.ResponseWriter, r *http.Request) {
-	plans, err := s.store.ListPlans(r.Context())
+	plans, err := s.Store().ListPlans(r.Context())
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -453,12 +453,12 @@ func (s *Service) reconcileSubscriptions(ctx context.Context, u User, evCreated 
 	}
 	if len(subs) == 0 {
 		// No live subscription remains → free (a cancellation, or all lapsed).
-		_ = s.store.SetUserStripeSubscription(ctx, u.ID, "")
-		if err := s.store.SetUserSubscription(ctx, u.ID, "free", "canceled", 0, "stripe", "", s.now().Unix(), evCreated); err != nil {
+		_ = s.Store().SetUserStripeSubscription(ctx, u.ID, "")
+		if err := s.Store().SetUserSubscription(ctx, u.ID, "free", "canceled", 0, "stripe", "", s.Now().Unix(), evCreated); err != nil {
 			return false, err
 		}
 		if u.ScheduledPlanID != "" {
-			_ = s.store.SetScheduledPlan(ctx, u.ID, "", "")
+			_ = s.Store().SetScheduledPlan(ctx, u.ID, "", "")
 		}
 		return true, nil
 	}
@@ -469,7 +469,7 @@ func (s *Service) reconcileSubscriptions(ctx context.Context, u User, evCreated 
 			canonical = sub
 		}
 	}
-	_ = s.store.SetUserStripeSubscription(ctx, u.ID, canonical.ID)
+	_ = s.Store().SetUserStripeSubscription(ctx, u.ID, canonical.ID)
 	// Cancel + fully refund every OTHER active subscription — the duplicates a
 	// double-checkout opened. Best-effort per sub: a failure is logged and the next
 	// event (idempotently) re-runs this; the duplicate is at least visible in the
@@ -486,16 +486,16 @@ func (s *Service) reconcileSubscriptions(ctx context.Context, u User, evCreated 
 	}
 	// Drive plan/status from the canonical subscription (not this event's sub).
 	planID, cycle := "free", ""
-	if p, ok, perr := s.store.PlanByStripePrice(ctx, canonical.PriceID); perr == nil && ok {
+	if p, ok, perr := s.Store().PlanByStripePrice(ctx, canonical.PriceID); perr == nil && ok {
 		planID = p.ID
 		cycle = cycleOfPrice(p, canonical.PriceID)
 	}
-	if err := s.store.SetUserSubscription(ctx, u.ID, planID, canonical.Status, canonical.CurrentPeriodEnd, "stripe", cycle, s.now().Unix(), evCreated); err != nil {
+	if err := s.Store().SetUserSubscription(ctx, u.ID, planID, canonical.Status, canonical.CurrentPeriodEnd, "stripe", cycle, s.Now().Unix(), evCreated); err != nil {
 		return false, err
 	}
 	if u.ScheduledPlanID != "" && planID == u.ScheduledPlanID &&
 		(u.ScheduledCycle == "" || cycle == u.ScheduledCycle) {
-		_ = s.store.SetScheduledPlan(ctx, u.ID, "", "")
+		_ = s.Store().SetScheduledPlan(ctx, u.ID, "", "")
 	}
 	return true, nil
 }
@@ -514,7 +514,7 @@ func (s *Service) ReconcileStripeSubscriptions(ctx context.Context) {
 	if s.biller == nil {
 		return
 	}
-	users, err := s.store.ListStripePaidUsers(ctx)
+	users, err := s.Store().ListStripePaidUsers(ctx)
 	if err != nil {
 		log.Printf("billing: reconcile sweep list users: %v", err)
 		return
@@ -530,14 +530,14 @@ func (s *Service) ReconcileStripeSubscriptions(ctx context.Context) {
 		}
 		// Paid plan but no live subscription → a cancellation whose webhook we
 		// never received. Downgrade to free, mirroring customer.subscription.deleted.
-		now := s.now().Unix()
-		_ = s.store.SetUserStripeSubscription(ctx, u.ID, "")
-		if err := s.store.SetUserSubscription(ctx, u.ID, "free", "canceled", 0, "stripe", "", now, now); err != nil {
+		now := s.Now().Unix()
+		_ = s.Store().SetUserStripeSubscription(ctx, u.ID, "")
+		if err := s.Store().SetUserSubscription(ctx, u.ID, "free", "canceled", 0, "stripe", "", now, now); err != nil {
 			log.Printf("billing: reconcile sweep downgrade %s: %v", u.ID, err)
 			continue
 		}
 		if u.ScheduledPlanID != "" {
-			_ = s.store.SetScheduledPlan(ctx, u.ID, "", "")
+			_ = s.Store().SetScheduledPlan(ctx, u.ID, "", "")
 		}
 		log.Printf("billing: reconcile sweep downgraded user %s to free (no active Stripe subscription, missed deletion webhook)", u.ID)
 	}
@@ -557,7 +557,7 @@ func (s *Service) subEventIsStale(ctx context.Context, w http.ResponseWriter, us
 	if created <= 0 {
 		return false
 	}
-	last, err := s.store.LastSubEventAt(ctx, userID)
+	last, err := s.Store().LastSubEventAt(ctx, userID)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return true
@@ -592,7 +592,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	ev, err := s.biller.VerifyWebhook(body, r.Header.Get("Stripe-Signature"), s.now().Unix())
+	ev, err := s.biller.VerifyWebhook(body, r.Header.Get("Stripe-Signature"), s.Now().Unix())
 	if err != nil {
 		if errors.Is(err, ErrWebhookWrongMode) {
 			// Correctly signed but wrong mode (test event on a live deployment or
@@ -616,7 +616,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			// customer, keep it. An unconditional write would let a second
 			// customer's event flip the binding (duplicate-customer takeover of the
 			// column); the reconcile path reaps duplicate subscriptions instead.
-			if _, err := s.store.SetUserStripeCustomerIfEmpty(ctx, ev.ClientRefUserID, ev.CustomerID); err != nil {
+			if _, err := s.Store().SetUserStripeCustomerIfEmpty(ctx, ev.ClientRefUserID, ev.CustomerID); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
@@ -624,7 +624,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 
 	case "customer.subscription.created", "customer.subscription.updated":
-		u, ok, err := s.store.GetUserByStripeCustomer(ctx, ev.CustomerID)
+		u, ok, err := s.Store().GetUserByStripeCustomer(ctx, ev.CustomerID)
 		if err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
@@ -642,11 +642,11 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			}
 			// CAS bind (see checkout.session.completed above): never flip an
 			// existing customer binding under a second customer's event.
-			if _, err := s.store.SetUserStripeCustomerIfEmpty(ctx, ev.MetadataUserID, ev.CustomerID); err != nil {
+			if _, err := s.Store().SetUserStripeCustomerIfEmpty(ctx, ev.MetadataUserID, ev.CustomerID); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
-			u, err = s.store.GetUserByID(ctx, ev.MetadataUserID)
+			u, err = s.Store().GetUserByID(ctx, ev.MetadataUserID)
 			if err != nil {
 				if errors.Is(err, ErrNotFound) {
 					// Metadata referenced a user that no longer exists —
@@ -666,7 +666,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		if u.PlanSource == "admin" {
 			// Admin comp wins: record status/end for visibility, but never
 			// let a webhook change plan_id out from under an admin grant.
-			if err := s.store.SetUserSubscription(ctx, u.ID, u.PlanID, ev.Status, ev.CurrentPeriodEnd, "admin", "", s.now().Unix(), ev.Created); err != nil {
+			if err := s.Store().SetUserSubscription(ctx, u.ID, u.PlanID, ev.Status, ev.CurrentPeriodEnd, "admin", "", s.Now().Unix(), ev.Created); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
@@ -690,12 +690,12 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			// Fall through to per-event logic if the Stripe list failed.
 		} else if u.StripeSubscriptionID == "" && ev.SubscriptionID != "" {
 			// First subscription seen → adopt it as canonical (no Stripe call).
-			_ = s.store.SetUserStripeSubscription(ctx, u.ID, ev.SubscriptionID)
+			_ = s.Store().SetUserStripeSubscription(ctx, u.ID, ev.SubscriptionID)
 		}
 		planID := "free"
 		cycle := ""
 		if ev.Status == "active" || ev.Status == "trialing" {
-			if p, ok, err := s.store.PlanByStripePrice(ctx, ev.PriceID); err != nil {
+			if p, ok, err := s.Store().PlanByStripePrice(ctx, ev.PriceID); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			} else if ok {
@@ -703,7 +703,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 				cycle = cycleOfPrice(p, ev.PriceID)
 			}
 		}
-		if err := s.store.SetUserSubscription(ctx, u.ID, planID, ev.Status, ev.CurrentPeriodEnd, "stripe", cycle, s.now().Unix(), ev.Created); err != nil {
+		if err := s.Store().SetUserSubscription(ctx, u.ID, planID, ev.Status, ev.CurrentPeriodEnd, "stripe", cycle, s.Now().Unix(), ev.Created); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
@@ -717,12 +717,12 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		// scheduled cycle is a legacy row → fall back to tier-only. Best-effort.
 		if u.ScheduledPlanID != "" && planID == u.ScheduledPlanID &&
 			(u.ScheduledCycle == "" || cycle == u.ScheduledCycle) {
-			_ = s.store.SetScheduledPlan(ctx, u.ID, "", "")
+			_ = s.Store().SetScheduledPlan(ctx, u.ID, "", "")
 		}
 		w.WriteHeader(http.StatusOK)
 
 	case "customer.subscription.deleted":
-		u, ok, err := s.store.GetUserByStripeCustomer(ctx, ev.CustomerID)
+		u, ok, err := s.Store().GetUserByStripeCustomer(ctx, ev.CustomerID)
 		if err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
@@ -736,7 +736,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 		if u.PlanSource == "admin" {
 			// Admin comp wins: record the cancellation for visibility but keep the plan.
-			if err := s.store.SetUserSubscription(ctx, u.ID, u.PlanID, "canceled", ev.CurrentPeriodEnd, "admin", "", s.now().Unix(), ev.Created); err != nil {
+			if err := s.Store().SetUserSubscription(ctx, u.ID, u.PlanID, "canceled", ev.CurrentPeriodEnd, "admin", "", s.Now().Unix(), ev.Created); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
@@ -750,13 +750,13 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// The canonical (or an unknown) subscription was canceled → free + clear it.
-		_ = s.store.SetUserStripeSubscription(ctx, u.ID, "")
-		if err := s.store.SetUserSubscription(ctx, u.ID, "free", "canceled", ev.CurrentPeriodEnd, "stripe", "", s.now().Unix(), ev.Created); err != nil {
+		_ = s.Store().SetUserStripeSubscription(ctx, u.ID, "")
+		if err := s.Store().SetUserSubscription(ctx, u.ID, "free", "canceled", ev.CurrentPeriodEnd, "stripe", "", s.Now().Unix(), ev.Created); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
 		if u.ScheduledPlanID != "" {
-			_ = s.store.SetScheduledPlan(ctx, u.ID, "", "")
+			_ = s.Store().SetScheduledPlan(ctx, u.ID, "", "")
 		}
 		w.WriteHeader(http.StatusOK)
 

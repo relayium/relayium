@@ -66,7 +66,7 @@ func (s *Service) ConfirmAccountDeletion(ctx context.Context, rawToken string) e
 		return nil
 	}
 
-	st := s.resolveSettings(ctx)
+	st := s.ResolveSettings(ctx)
 	purgeAfter := now.Unix() + st.AccountGraceDays*86400
 
 	// Issue the reactivate token BEFORE the account becomes pending, so the
@@ -127,7 +127,7 @@ func (s *Service) ConfirmAccountDeletion(ctx context.Context, rawToken string) e
 func (s *Service) issueReactivateToken(ctx context.Context, userID, email string) (string, error) {
 	raw := authx.RandToken()
 	now := s.now()
-	st := s.resolveSettings(ctx)
+	st := s.ResolveSettings(ctx)
 	tok := EmailToken{
 		TokenHash: authx.HashToken(raw),
 		UserID:    userID,

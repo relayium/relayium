@@ -81,7 +81,7 @@ func (s *Service) placeUpload(ctx context.Context, userID string, size int64) (s
 	if len(nodes) == 0 {
 		// Admin opted out of central storage: no node → fail rather than land the
 		// file on the app server's own disk.
-		if s.resolveSettings(ctx).DisableCentralFallback {
+		if s.ResolveSettings(ctx).DisableCentralFallback {
 			return "", nil, false, errStrictNoNode
 		}
 		return "", s.blobs, true, nil
@@ -107,7 +107,7 @@ func (s *Service) placementMinFree(ctx context.Context, size int64) int64 {
 	if size < minBillableBytes {
 		size = minBillableBytes
 	}
-	if max := s.resolveSettings(ctx).MaxFileSize; max > 0 && size > max {
+	if max := s.ResolveSettings(ctx).MaxFileSize; max > 0 && size > max {
 		size = max
 	}
 	return size

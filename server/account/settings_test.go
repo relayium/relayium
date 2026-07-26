@@ -26,7 +26,7 @@ func newSettingsService(t *testing.T) (*Service, *SQLiteStore) {
 
 func TestResolveSettingsFallsBackToEnvDefaults(t *testing.T) {
 	svc, _ := newSettingsService(t)
-	st := svc.resolveSettings(context.Background())
+	st := svc.ResolveSettings(context.Background())
 	if st.MaxFileSize != 50<<20 || st.DailyQuota != 200<<20 || st.DefaultTTL != 86400 || st.MaxTTL != 604800 {
 		t.Fatalf("env fallback wrong: %+v", st)
 	}
@@ -37,7 +37,7 @@ func TestResolveSettingsDBOverridesEnv(t *testing.T) {
 	if err := store.SetSetting(context.Background(), SettingMaxFileSize, 1234, 1); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	st := svc.resolveSettings(context.Background())
+	st := svc.ResolveSettings(context.Background())
 	if st.MaxFileSize != 1234 {
 		t.Fatalf("DB override = %d, want 1234", st.MaxFileSize)
 	}

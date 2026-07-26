@@ -511,7 +511,7 @@ func TestEmergencyConfirmationPageNamesTheTrack(t *testing.T) {
 // step (the emergency CAS), which is the interleaving that used to leave the
 // track repointed and rolling to the confirmed version with emergency mode
 // never armed — while the operator was told 紧急发布失败 and, because
-// handleAdminConfirm skips the audit on any >=400, with nothing in the log.
+// HandleAdminConfirm skips the audit on any >=400, with nothing in the log.
 type armFailStore struct{ *SQLiteStore }
 
 func (armFailStore) SetRolloutEmergency(context.Context, string, string, int64) (bool, error) {

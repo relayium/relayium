@@ -321,6 +321,39 @@ func (s *Service) SetDownloadLimiter(rl rateLimiter) { s.downloadLimiter = rl }
 // advertise a DownloadURL (default off → central proxies every download).
 func (s *Service) SetDirectDownload(on bool) { s.directDownload = on }
 
+// Store returns the account data store. Exported so the commercial
+// admin/billing layer (billing.go, admin.go, admin_rollout.go,
+// plan_enforce.go — slated to move to a private repo, see server/ext) can
+// reach the Store methods it calls without account depending on that layer.
+// Deliberately NOT part of ext.AdminHost: Store is a ~90-method surface and
+// its type is defined here in account, so putting it in AdminHost would
+// force ext to import account — which cycles back against account's own
+// `var _ ext.AdminHost = (*Service)(nil)` assertion. See server/ext/ext.go's
+// package doc for the full reasoning.
+func (s *Service) Store() Store { return s.store }
+
+// Now returns the current time as seen by this service. It is a thin
+// delegate to the injectable clock (s.now, defaulted to time.Now in
+// NewService and overridden directly by tests — see e.g. admin_test.go)
+// rather than a new clock of its own, so callers that switch from s.now()
+// to s.Now() keep observing whatever clock the test wired in. Exported for
+// the same reason as Store; not part of ext.AdminHost only because nothing
+// about it needs to be — unlike Store/Cfg/ResolveSettings it returns a
+// stdlib type, so it could be added there too, and is (see AdminHost.Now).
+func (s *Service) Now() time.Time { return s.now() }
+
+// Cfg returns the service's static configuration. Exported for the same
+// reason as Store. Deliberately NOT part of ext.AdminHost: Config is
+// defined here in account (like Store), so exposing it through AdminHost
+// would force ext to import account and cycle, for the same reason
+// Store is excluded — see Store's doc comment.
+func (s *Service) Cfg() Config { return s.cfg }
+
+// AdminLogins returns the admin login-lockout throttle. Exported for the
+// same reason as Store. Cannot be part of ext.AdminHost: *loginThrottle is
+// unexported, so ext could not even name the return type.
+func (s *Service) AdminLogins() *loginThrottle { return s.adminLogins }
+
 // passkeyBeginAllowed reports whether this IP may start another passkey ceremony,
 // writing a 429 and returning false when the per-IP begin budget is exhausted.
 func (s *Service) passkeyBeginAllowed(w http.ResponseWriter, r *http.Request) bool {

@@ -89,7 +89,7 @@ func TestHighRiskWriteRendersConfirmInsteadOfApplying(t *testing.T) {
 	if err := svc.SeedSettings(ctx); err != nil {
 		t.Fatal(err)
 	}
-	before := svc.resolveSettings(ctx)
+	before := svc.ResolveSettings(ctx)
 
 	form := settingsFormFrom(before)
 	form.Set("daily_quota_mb", "999")
@@ -103,7 +103,7 @@ func TestHighRiskWriteRendersConfirmInsteadOfApplying(t *testing.T) {
 		t.Fatal("the confirm page must carry a pending-action token")
 	}
 
-	after := svc.resolveSettings(ctx)
+	after := svc.ResolveSettings(ctx)
 	if after.DailyQuota != before.DailyQuota {
 		t.Fatal("SECURITY: the setting was applied without confirmation")
 	}
@@ -115,7 +115,7 @@ func TestConfirmPageShowsTheDiff(t *testing.T) {
 	ts, svc, _, _ := newAdminAuditServer(t)
 	cookie := adminLoginCookie(t, ts)
 	_ = svc.SeedSettings(t.Context())
-	cur := svc.resolveSettings(t.Context())
+	cur := svc.ResolveSettings(t.Context())
 	form := settingsFormFrom(cur)
 	form.Set("daily_quota_mb", "999")
 	resp := postAdminForm(t, ts, cookie, "/admin/settings", form)
@@ -149,7 +149,7 @@ func TestGracePeriodStillShowsConfirmPage(t *testing.T) {
 	cookie := adminLoginCookie(t, ts)
 	svc.markStepUp(context.Background(), cookie.Value)
 	_ = svc.SeedSettings(t.Context())
-	cur := svc.resolveSettings(t.Context())
+	cur := svc.ResolveSettings(t.Context())
 	form := settingsFormFrom(cur)
 	form.Set("daily_quota_mb", "888")
 	resp := postAdminForm(t, ts, cookie, "/admin/settings", form)
@@ -161,7 +161,7 @@ func TestGracePeriodStillShowsConfirmPage(t *testing.T) {
 
 // 提交确认页时不带任何第二因子，/admin/confirm 绝不能执行待确认操作 —— 否则
 // 拿着会话 cookie 的人（比如 XSS 窃取）能跳过第二因子直接兑现高危写操作，
-// confirm 页存在的意义就没了。这条直接盯住 handleAdminConfirm 本身，而不是
+// confirm 页存在的意义就没了。这条直接盯住 HandleAdminConfirm 本身，而不是
 // 只测 RequireStepUp 拦下了原始 POST。测试服务未配 TOTP/passkey，因子即密码，
 // 空密码必被拒。
 func TestConfirmWithoutFactorDoesNotApply(t *testing.T) {
@@ -171,7 +171,7 @@ func TestConfirmWithoutFactorDoesNotApply(t *testing.T) {
 	if err := svc.SeedSettings(ctx); err != nil {
 		t.Fatal(err)
 	}
-	before := svc.resolveSettings(ctx)
+	before := svc.ResolveSettings(ctx)
 	form := settingsFormFrom(before)
 	form.Set("daily_quota_mb", "999")
 	resp := postAdminForm(t, ts, cookie, "/admin/settings", form)
@@ -185,7 +185,7 @@ func TestConfirmWithoutFactorDoesNotApply(t *testing.T) {
 		t.Fatalf("SECURITY: /admin/confirm applied the write without a factor check (got a redirect)")
 	}
 
-	after := svc.resolveSettings(ctx)
+	after := svc.ResolveSettings(ctx)
 	if after.DailyQuota != before.DailyQuota {
 		t.Fatal("SECURITY: /admin/confirm applied the setting without factor verification")
 	}
