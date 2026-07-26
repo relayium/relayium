@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -98,13 +100,22 @@ func (c *Client) postJSON(ctx context.Context, path string, body any, out any) e
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	// Bearer when we have one. It is empty during device login — start/poll are
+	// the calls that obtain the token — where the header is simply omitted.
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("%s: unexpected status %d", path, resp.StatusCode)
+		// The server states its reason in the body ("could not mint a pairing
+		// code, try again"); a bare status number throws that away. Bounded read
+		// — the body is remote input, and this goes straight to a terminal.
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return &HTTPError{Path: path, Status: resp.StatusCode, Body: strings.TrimSpace(string(b))}
 	}
 	if out == nil {
 		return nil
