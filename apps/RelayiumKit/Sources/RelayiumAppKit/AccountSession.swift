@@ -34,6 +34,11 @@ public final class AccountSession: ObservableObject {
     private let client: AccountClient
     private let tokenStore: TokenStore
     private let deviceName: String
+    /// The live session token. Source of truth for an in-progress session — the
+    /// keychain is persistence only. A swallowed `save()` failure (locked keychain,
+    /// failing `SecItemAdd`) must not be able to sign a working session out from
+    /// under it just because the store comes back empty on the next refresh.
+    private var sessionToken: String?
 
     public init(client: AccountClient, tokenStore: TokenStore, deviceName: String) {
         self.client = client
@@ -41,16 +46,15 @@ public final class AccountSession: ObservableObject {
         self.deviceName = deviceName
     }
 
-    /// Where a `loadAccount` call came from, which decides what a non-401 failure means.
-    private enum LoadOrigin { case restore, login }
-
     public func restore() async {
         state = .restoring
         guard let token = await loadTokenOffMainActor(), !token.isEmpty else {
             state = .loggedOut
+            isStale = false
             return
         }
-        await loadAccount(token: token, origin: .restore)
+        sessionToken = token
+        await loadAccount(token: token)
     }
 
     public func logIn(email: String, password: String) async {
@@ -61,35 +65,51 @@ public final class AccountSession: ObservableObject {
             case let .success(token, _):
                 // The 6-field LoginUser has no billing fields; only /api/me does. So a
                 // successful login is always followed by a fetch, never rendered directly.
+                sessionToken = token
                 try? tokenStore.save(token)
-                await loadAccount(token: token, origin: .login)
+                await loadAccount(token: token)
             case let .emailUnverified(email):
                 state = .emailUnverified(email: email)
             case let .pendingDeletion(purgeAfter, reactivateToken):
                 state = .pendingDeletion(purgeAfter: purgeAfter, reactivateToken: reactivateToken)
             }
         } catch {
+            // A rejected sign-in (bad credentials, rate limited, login endpoint down)
+            // belongs back on the form — nothing was ever saved for this attempt.
             state = .failed(message: ErrorCopy.message(for: error))
         }
     }
 
     public func refresh() async {
-        guard let token = await loadTokenOffMainActor(), !token.isEmpty else {
+        let token: String?
+        if let held = sessionToken {
+            token = held
+        } else {
+            token = await loadTokenOffMainActor()
+        }
+        guard let token, !token.isEmpty else {
             state = .loggedOut
+            isStale = false
             return
         }
-        await loadAccount(token: token, origin: .restore)
+        sessionToken = token
+        await loadAccount(token: token)
     }
 
     public func logOut() {
         // A keychain clear failure must not strand the user in a signed-in UI: the
         // in-memory session is gone either way.
+        sessionToken = nil
         try? tokenStore.clear()
         isStale = false
         state = .loggedOut
     }
 
-    private func loadAccount(token: String, origin: LoadOrigin) async {
+    /// By the time this is called a token is always already in hand — either just
+    /// issued by a successful login or read back from storage. So a non-401 failure
+    /// here is never a rejected sign-in; it is always "we hold a token but couldn't
+    /// load the account," which is what `.unavailable` (retry, not a login form) means.
+    private func loadAccount(token: String) async {
         do {
             let user = try await client.fetchMe(token: token)
             let usage = try await client.fetchUsage(token: token)
@@ -97,6 +117,7 @@ public final class AccountSession: ObservableObject {
             isStale = false
         } catch AccountError.invalidCredentials {
             // The one and only signal that a stored token has gone bad.
+            sessionToken = nil
             try? tokenStore.clear()
             isStale = false
             state = .loggedOut
@@ -105,9 +126,7 @@ public final class AccountSession: ObservableObject {
             if case .ready = state {
                 isStale = true          // keep the last known good on screen
             } else {
-                // A rejected sign-in belongs back on the form; a token that could not
-                // be exchanged for an account belongs on a retry screen.
-                state = origin == .login ? .failed(message: message) : .unavailable(message: message)
+                state = .unavailable(message: message)
             }
         }
     }

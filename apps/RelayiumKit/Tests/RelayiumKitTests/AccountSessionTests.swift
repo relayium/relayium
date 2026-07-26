@@ -112,7 +112,12 @@ final class AccountSessionTests: XCTestCase {
 
         StubURLProtocol.router = { _ in .init(status: 503, body: Data()) }
         await s.refresh()
-        guard case .ready = s.state else { return XCTFail("must keep last-known-good, got \(s.state)") }
+        // Bound and checked against the fixture's identifying fields, not just the
+        // case: proves the *same* last-known-good data survived rather than the
+        // state being torn down and rebuilt with something else (e.g. defaults).
+        guard case let .ready(user, usage) = s.state else { return XCTFail("must keep last-known-good, got \(s.state)") }
+        XCTAssertEqual(user.planId, "pro")
+        XCTAssertEqual(usage.plan.name, "Pro")
         XCTAssertTrue(s.isStale)
         XCTAssertNotNil(try store.load(), "a 503 is not a bad token — keep it")
     }
@@ -140,4 +145,49 @@ final class AccountSessionTests: XCTestCase {
         XCTAssertFalse(s.isStale)
         XCTAssertNil(try store.load())
     }
+
+    // A freshly issued token is a token in hand, not a rejected sign-in: a down
+    // server here must offer retry, not bounce the user back to the login form
+    // they just successfully filled out.
+    func testLoginSucceedsButAccountFetchFailsIsUnavailableNotFailed() async throws {
+        let store = InMemoryTokenStore()
+        let loginBody = try fixture("login-success")
+        StubURLProtocol.router = { req in
+            switch req.url?.path {
+            case "/api/me": return .init(status: 503, body: Data())
+            default:        return .init(status: 200, body: loginBody)
+            }
+        }
+        let s = session(store: store)
+        await s.logIn(email: "a@b.co", password: "pw")
+        guard case let .unavailable(message) = s.state else { return XCTFail("want unavailable, got \(s.state)") }
+        XCTAssertEqual(message, ErrorCopy.message(for: AccountError.server(status: 503)))
+        XCTAssertEqual(try store.load(), "rlm_cli_TESTTOKEN", "a freshly issued token must be kept, not cleared")
+    }
+
+    // A save() failure (locked keychain, failing SecItemAdd) must not be able to
+    // sign a working session out from under it on the next refresh just because
+    // the store comes back empty.
+    func testSwallowedSaveErrorDoesNotCauseFalseLogoutOnRefresh() async throws {
+        let store = FailingSaveTokenStore()
+        try routeLoggedIn(loginBody: try fixture("login-success"))
+        let s = session(store: store)
+        await s.logIn(email: "a@b.co", password: "pw")
+        guard case .ready = s.state else { return XCTFail("setup failed, got \(s.state)") }
+        XCTAssertNil(try store.load(), "save() failed, so the store never actually held the token")
+
+        await s.refresh()
+        guard case .ready = s.state else { return XCTFail("must stay ready, got \(s.state)") }
+    }
+}
+
+/// A `TokenStore` whose `save` always fails (e.g. a locked keychain), while `load`
+/// and `clear` behave like an in-memory store. Exists only to prove that a
+/// swallowed save error cannot turn a live, in-memory session into a false
+/// sign-out on the next refresh. Not used outside this test file.
+final class FailingSaveTokenStore: TokenStore {
+    private var token: String?
+    func save(_ token: String) throws { throw KeychainError.status(-25308) }
+    func load() throws -> String? { token }
+    func clear() throws { token = nil }
 }
