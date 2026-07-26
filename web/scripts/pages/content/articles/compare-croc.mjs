@@ -82,7 +82,7 @@ const en = {
       },
       {
         q: "Does it need an account?",
-        a: "Only send does. push/pull uses your own SSH access and daemon-direct uses pinned-TLS certificate trust between your machines, so neither touches a Relayium account. send/receive is the exception: only the server can mint a pairing code, and only for a signed-in account, so the sender runs relayium login once. Receiving never needs an account.",
+        a: "send does, and so does cloud up. push/pull uses your own SSH access and daemon-direct uses pinned-TLS certificate trust between your machines, so neither touches a Relayium account. send/receive is the exception: only the server can mint a pairing code, and only for a signed-in account, so the sender runs relayium login once — a send given a code you were handed mints nothing and needs no login. Receiving never needs an account.",
       },
       {
         q: "Can I use the CLI's pairing code with Relayium's browser app?",
@@ -177,7 +177,7 @@ const zh = {
       },
       {
         q: "需要账号吗？",
-        a: "只有 send 需要。push/pull 用你自己的 SSH 权限，daemon-direct 用你机器之间锁定的 TLS 证书信任，这两者都不涉及 Relayium 账号。send/receive 是例外：配对码只能由服务器签发，而且只签发给已登录的账号，所以发送方要先运行一次 relayium login。接收方始终不需要账号。",
+        a: "send 需要，云端 up 也需要。push/pull 用你自己的 SSH 权限，daemon-direct 用你机器之间锁定的 TLS 证书信任，这两者都不涉及 Relayium 账号。send/receive 是例外：配对码只能由服务器签发，而且只签发给已登录的账号，所以发送方要先运行一次 relayium login——如果 send 用的是别人给你的码，它不生成新码，也就不需要登录。接收方始终不需要账号。",
       },
       {
         q: "CLI 的配对码能和 Relayium 的浏览器版互通吗？",
@@ -272,7 +272,7 @@ const ja = {
       },
       {
         q: "アカウントは必要ですか？",
-        a: "send のときだけ必要です。push/pull は自分の SSH アクセスを使い、daemon-direct はマシン間のピン留めされた TLS 証明書の信頼を使うので、どちらも Relayium アカウントには触れません。send/receive は例外です。ペアリングコードを発行できるのはサーバーだけで、しかもサインイン済みのアカウントに対してだけなので、送信側は一度 relayium login を実行します。受信側にアカウントは決して必要ありません。",
+        a: "send と、クラウドの up で必要です。push/pull は自分の SSH アクセスを使い、daemon-direct はマシン間のピン留めされた TLS 証明書の信頼を使うので、どちらも Relayium アカウントには触れません。send/receive は例外です。ペアリングコードを発行できるのはサーバーだけで、しかもサインイン済みのアカウントに対してだけなので、送信側は一度 relayium login を実行します。相手から渡されたコードを指定した send は発行を行わないのでログインは不要です。受信側にアカウントは決して必要ありません。",
       },
       {
         q: "CLI のペアリングコードは Relayium のブラウザ版と使えますか？",
@@ -367,7 +367,7 @@ const ko = {
       },
       {
         q: "계정이 필요한가요?",
-        a: "send만 그렇습니다. push/pull은 자신의 SSH 접근을 사용하고 daemon-direct는 기기 간 고정된 TLS 인증서 신뢰를 사용하므로 둘 다 Relayium 계정을 건드리지 않습니다. send/receive가 예외입니다. 페어링 코드는 서버만, 그것도 로그인된 계정에만 발급할 수 있으므로 보내는 쪽이 relayium login을 한 번 실행합니다. 받는 데는 계정이 전혀 필요 없습니다.",
+        a: "send가 그렇고, 클라우드 up도 그렇습니다. push/pull은 자신의 SSH 접근을 사용하고 daemon-direct는 기기 간 고정된 TLS 인증서 신뢰를 사용하므로 둘 다 Relayium 계정을 건드리지 않습니다. send/receive가 예외입니다. 페어링 코드는 서버만, 그것도 로그인된 계정에만 발급할 수 있으므로 보내는 쪽이 relayium login을 한 번 실행합니다. 건네받은 코드를 지정한 send는 발급을 하지 않으므로 로그인이 필요 없습니다. 받는 데는 계정이 전혀 필요 없습니다.",
       },
       {
         q: "CLI의 페어링 코드를 Relayium 브라우저 앱과 함께 쓸 수 있나요?",
@@ -462,7 +462,7 @@ const de = {
       },
       {
         q: "Braucht sie ein Konto?",
-        a: "Nur send. push/pull nutzt deinen eigenen SSH-Zugang und daemon-direct nutzt gepinntes TLS-Zertifikatsvertrauen zwischen deinen Maschinen, beides berührt also kein Relayium-Konto. send/receive ist die Ausnahme: Einen Pairing-Code kann nur der Server erzeugen, und nur für ein angemeldetes Konto, also führt der Absender einmal relayium login aus. Zum Empfangen braucht es nie ein Konto.",
+        a: "send schon, und Cloud-up ebenfalls. push/pull nutzt deinen eigenen SSH-Zugang und daemon-direct nutzt gepinntes TLS-Zertifikatsvertrauen zwischen deinen Maschinen, beides berührt also kein Relayium-Konto. send/receive ist die Ausnahme: Einen Pairing-Code kann nur der Server erzeugen, und nur für ein angemeldetes Konto, also führt der Absender einmal relayium login aus — ein send mit einem Code, den man dir gegeben hat, erzeugt keinen und braucht keine Anmeldung. Zum Empfangen braucht es nie ein Konto.",
       },
       {
         q: "Kann ich den Pairing-Code der CLI mit Relayiums Browser-App nutzen?",
@@ -557,7 +557,7 @@ const fr = {
       },
       {
         q: "A-t-elle besoin d'un compte ?",
-        a: "Seul send. push/pull utilise votre propre accès SSH et daemon-direct utilise une confiance par certificat TLS épinglé entre vos machines, donc ni l'un ni l'autre ne touche un compte Relayium. send/receive fait exception : seul le serveur peut générer un code de jumelage, et seulement pour un compte connecté, donc l'expéditeur lance une fois relayium login. Recevoir ne nécessite jamais de compte.",
+        a: "send oui, et le up cloud aussi. push/pull utilise votre propre accès SSH et daemon-direct utilise une confiance par certificat TLS épinglé entre vos machines, donc ni l'un ni l'autre ne touche un compte Relayium. send/receive fait exception : seul le serveur peut générer un code de jumelage, et seulement pour un compte connecté, donc l'expéditeur lance une fois relayium login — un send auquel vous passez un code qu'on vous a donné n'en génère aucun et ne demande pas de connexion. Recevoir ne nécessite jamais de compte.",
       },
       {
         q: "Puis-je utiliser le code d'appairage de la CLI avec l'application web de Relayium ?",
@@ -654,7 +654,7 @@ const ar = {
       },
       {
         q: "هل تحتاج إلى حساب؟",
-        a: "‏send وحده. push/pull تستخدم وصول SSH الخاص بك، وdaemon-direct يستخدم ثقة شهادة TLS المثبّتة بين أجهزتك، فلا يمسّ أيٌّ منهما حساب Relayium. أما send/receive فهو الاستثناء: لا يستطيع إصدار رمز الاقتران إلا الخادم، ولحساب مسجَّل الدخول فقط، لذا يشغّل المُرسِل relayium login مرة واحدة. أما الاستقبال فلا يحتاج حسابًا أبدًا.",
+        a: "‏send نعم، وكذلك up السحابي. push/pull تستخدم وصول SSH الخاص بك، وdaemon-direct يستخدم ثقة شهادة TLS المثبّتة بين أجهزتك، فلا يمسّ أيٌّ منهما حساب Relayium. أما send/receive فهو الاستثناء: لا يستطيع إصدار رمز الاقتران إلا الخادم، ولحساب مسجَّل الدخول فقط، لذا يشغّل المُرسِل relayium login مرة واحدة — أما send الذي تمرّر له رمزًا أعطاك إياه غيرك فلا يُصدر شيئًا ولا يحتاج تسجيل دخول. أما الاستقبال فلا يحتاج حسابًا أبدًا.",
       },
       {
         q: "هل يمكنني استخدام رمز الاقتران في الواجهة مع تطبيق Relayium في المتصفّح؟",
@@ -751,7 +751,7 @@ const es = {
       },
       {
         q: "¿Necesita cuenta?",
-        a: "Solo send. push/pull usa tu propio acceso SSH y daemon-direct usa la confianza por certificado TLS fijado entre tus máquinas, así que ninguno toca una cuenta de Relayium. send/receive es la excepción: solo el servidor puede generar un código de emparejamiento, y solo para una cuenta con sesión iniciada, así que quien envía ejecuta relayium login una vez. Recibir nunca necesita cuenta.",
+        a: "send sí, y el up en la nube también. push/pull usa tu propio acceso SSH y daemon-direct usa la confianza por certificado TLS fijado entre tus máquinas, así que ninguno toca una cuenta de Relayium. send/receive es la excepción: solo el servidor puede generar un código de emparejamiento, y solo para una cuenta con sesión iniciada, así que quien envía ejecuta relayium login una vez; un send al que le pasas un código que te dieron no genera ninguno y no necesita inicio de sesión. Recibir nunca necesita cuenta.",
       },
       {
         q: "¿Puedo usar el código de emparejamiento de la CLI con la aplicación de navegador de Relayium?",
@@ -848,7 +848,7 @@ const pt = {
       },
       {
         q: "Ela precisa de conta?",
-        a: "Só o send. O push/pull usa seu próprio acesso SSH e o daemon-direct usa a confiança por certificado TLS fixado entre suas máquinas, então nenhum dos dois toca uma conta do Relayium. O send/receive é a exceção: só o servidor pode gerar um código de emparelhamento, e apenas para uma conta com login feito, então quem envia roda relayium login uma vez. Receber nunca precisa de conta.",
+        a: "O send sim, e o up na nuvem também. O push/pull usa seu próprio acesso SSH e o daemon-direct usa a confiança por certificado TLS fixado entre suas máquinas, então nenhum dos dois toca uma conta do Relayium. O send/receive é a exceção: só o servidor pode gerar um código de emparelhamento, e apenas para uma conta com login feito, então quem envia roda relayium login uma vez; um send ao qual você passa um código que lhe deram não gera nenhum e não precisa de login. Receber nunca precisa de conta.",
       },
       {
         q: "Posso usar o código de emparelhamento da CLI com o aplicativo de navegador do Relayium?",

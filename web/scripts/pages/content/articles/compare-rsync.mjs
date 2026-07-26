@@ -85,7 +85,7 @@ const en = {
       },
       {
         q: "Is it free?",
-        a: "Yes. The Relayium CLI is completely free. sync, push/pull and daemon-direct need no account; only send does, so the server can mint its pairing code.",
+        a: "Yes. The Relayium CLI is completely free. sync, push/pull and daemon-direct need no account. send needs one so the server can mint its pairing code, and cloud up needs one to store the file.",
       },
     ],
   },
@@ -177,7 +177,7 @@ const zh = {
       },
       {
         q: "这是免费的吗？",
-        a: "是的。Relayium CLI 完全免费。sync、push/pull 和 daemon 直连都不需要账号；只有 send 需要，好让服务器签发配对码。",
+        a: "是的。Relayium CLI 完全免费。sync、push/pull 和 daemon 直连都不需要账号。send 需要账号，好让服务器签发配对码；云端 up 需要账号来存文件。",
       },
     ],
   },
@@ -269,7 +269,7 @@ const ja = {
       },
       {
         q: "これは無料ですか?",
-        a: "はい。Relayium CLI は完全に無料です。sync、push/pull、daemon 直結にアカウントは不要で、必要なのは send だけです。サーバーがペアリングコードを発行するためです。",
+        a: "はい。Relayium CLI は完全に無料です。sync、push/pull、daemon 直結にアカウントは不要です。send はサーバーがペアリングコードを発行するために、クラウドの up はファイルを保存するためにアカウントが必要です。",
       },
     ],
   },
@@ -361,7 +361,7 @@ const ko = {
       },
       {
         q: "무료인가요?",
-        a: "네. Relayium CLI는 완전히 무료입니다. sync, push/pull, daemon 다이렉트는 계정이 필요 없고, send만 필요합니다 — 서버가 페어링 코드를 발급해야 하기 때문입니다.",
+        a: "네. Relayium CLI는 완전히 무료입니다. sync, push/pull, daemon 다이렉트는 계정이 필요 없습니다. send는 서버가 페어링 코드를 발급해야 하므로, 클라우드 up은 파일을 저장해야 하므로 계정이 필요합니다.",
       },
     ],
   },
@@ -453,7 +453,7 @@ const de = {
       },
       {
         q: "Ist das kostenlos?",
-        a: "Ja. Die Relayium-CLI ist vollständig kostenlos. sync, push/pull und Daemon-Direkt brauchen kein Konto; nur send braucht eines, damit der Server seinen Pairing-Code erzeugen kann.",
+        a: "Ja. Die Relayium-CLI ist vollständig kostenlos. sync, push/pull und Daemon-Direkt brauchen kein Konto. send braucht eines, damit der Server seinen Pairing-Code erzeugen kann, und Cloud-up eines, um die Datei zu speichern.",
       },
     ],
   },
@@ -545,7 +545,7 @@ const fr = {
       },
       {
         q: "Est-ce gratuit ?",
-        a: "Oui. La CLI Relayium est entièrement gratuite. sync, push/pull et daemon direct ne nécessitent aucun compte ; seul send en demande un, pour que le serveur puisse générer son code d'appairage.",
+        a: "Oui. La CLI Relayium est entièrement gratuite. sync, push/pull et daemon direct ne nécessitent aucun compte. send en demande un pour que le serveur puisse générer son code d'appairage, et le up cloud pour stocker le fichier.",
       },
     ],
   },
@@ -637,7 +637,7 @@ const ar = {
       },
       {
         q: "هل هو مجاني؟",
-        a: "نعم. إن CLI الخاص بـ Relayium مجاني تماماً. لا تحتاج sync ولا push/pull ولا daemon-direct إلى حساب؛ ولا يحتاجه إلا send، كي يُصدر الخادم رمز الاقتران.",
+        a: "نعم. إن CLI الخاص بـ Relayium مجاني تماماً. لا تحتاج sync ولا push/pull ولا daemon-direct إلى حساب. يحتاجه send كي يُصدر الخادم رمز الاقتران، ويحتاجه up السحابي لتخزين الملف.",
       },
     ],
   },
@@ -729,7 +729,7 @@ const es = {
       },
       {
         q: "¿Es gratis?",
-        a: "Sí. La CLI de Relayium es completamente gratis. sync, push/pull y daemon directo no necesitan cuenta; solo send la necesita, para que el servidor pueda generar su código de emparejamiento.",
+        a: "Sí. La CLI de Relayium es completamente gratis. sync, push/pull y daemon directo no necesitan cuenta. send la necesita para que el servidor pueda generar su código de emparejamiento, y el up en la nube para guardar el archivo.",
       },
     ],
   },
@@ -821,7 +821,7 @@ const pt = {
       },
       {
         q: "É gratuito?",
-        a: "Sim. A CLI do Relayium é completamente gratuita. sync, push/pull e daemon direto não precisam de conta; só o send precisa, para que o servidor possa gerar o seu código de emparelhamento.",
+        a: "Sim. A CLI do Relayium é completamente gratuita. sync, push/pull e daemon direto não precisam de conta. O send precisa para que o servidor possa gerar o seu código de emparelhamento, e o up na nuvem para guardar o arquivo.",
       },
     ],
   },

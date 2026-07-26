@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Relayium CLI로 터미널에서 파일 전송하기 · Relayium</title>
-    <meta name="description" content="무료로 종단간 암호화된 Relayium CLI를 설치하고, 터미널에서 세 가지 방식으로 파일을 옮기세요 — 자신의 SSH를 통해, 네트워크를 넘어 페어링 코드로, 또는 두 서버 사이에서 직접. 무료이고 파일 데이터는 절대 저희 서버를 거치지 않습니다 — 계정이 필요한 건 페어링 코드를 발급하는 send뿐입니다." />
+    <meta name="description" content="무료로 종단간 암호화된 Relayium CLI를 설치하고, 터미널에서 세 가지 방식으로 파일을 옮기세요 — 자신의 SSH를 통해, 네트워크를 넘어 페어링 코드로, 또는 두 서버 사이에서 직접. 무료이고 파일 데이터는 절대 저희 서버를 거치지 않습니다 — 페어링 코드로 보내려면 코드 발급을 위한 계정이 필요합니다." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ko/guides/transfer-files-from-terminal/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/transfer-files-from-terminal/" />
@@ -23,7 +23,7 @@
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Relayium CLI로 터미널에서 파일 전송하기" />
-    <meta property="og:description" content="무료로 종단간 암호화된 Relayium CLI를 설치하고, 터미널에서 세 가지 방식으로 파일을 옮기세요 — 자신의 SSH를 통해, 네트워크를 넘어 페어링 코드로, 또는 두 서버 사이에서 직접. 무료이고 파일 데이터는 절대 저희 서버를 거치지 않습니다 — 계정이 필요한 건 페어링 코드를 발급하는 send뿐입니다." />
+    <meta property="og:description" content="무료로 종단간 암호화된 Relayium CLI를 설치하고, 터미널에서 세 가지 방식으로 파일을 옮기세요 — 자신의 SSH를 통해, 네트워크를 넘어 페어링 코드로, 또는 두 서버 사이에서 직접. 무료이고 파일 데이터는 절대 저희 서버를 거치지 않습니다 — 페어링 코드로 보내려면 코드 발급을 위한 계정이 필요합니다." />
     <meta property="og:url" content="https://relayium.com/ko/guides/transfer-files-from-terminal/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -33,9 +33,9 @@
     <meta property="og:locale" content="ko_KR" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Relayium CLI로 터미널에서 파일 전송하기" />
-    <meta name="twitter:description" content="무료로 종단간 암호화된 Relayium CLI를 설치하고, 터미널에서 세 가지 방식으로 파일을 옮기세요 — 자신의 SSH를 통해, 네트워크를 넘어 페어링 코드로, 또는 두 서버 사이에서 직접. 무료이고 파일 데이터는 절대 저희 서버를 거치지 않습니다 — 계정이 필요한 건 페어링 코드를 발급하는 send뿐입니다." />
+    <meta name="twitter:description" content="무료로 종단간 암호화된 Relayium CLI를 설치하고, 터미널에서 세 가지 방식으로 파일을 옮기세요 — 자신의 SSH를 통해, 네트워크를 넘어 페어링 코드로, 또는 두 서버 사이에서 직접. 무료이고 파일 데이터는 절대 저희 서버를 거치지 않습니다 — 페어링 코드로 보내려면 코드 발급을 위한 계정이 필요합니다." />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI로 터미널에서 파일 전송하기","description":"무료로 종단간 암호화된 Relayium CLI를 설치하고, 터미널에서 세 가지 방식으로 파일을 옮기세요 — 자신의 SSH를 통해, 네트워크를 넘어 페어링 코드로, 또는 두 서버 사이에서 직접. 무료이고 파일 데이터는 절대 저희 서버를 거치지 않습니다 — 계정이 필요한 건 페어링 코드를 발급하는 send뿐입니다.","inLanguage":"ko","datePublished":"2026-07-08","dateModified":"2026-07-08","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/transfer-files-from-terminal/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"CLI 사용에 비용이 드나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. CLI는 완전히 무료입니다. 여러분의 기기를 직접 연결하며 파일 데이터를 Relayium을 거쳐 프록시하는 일이 결코 없으므로, 계량할 것도 지불할 것도 없습니다."}},{"@type":"Question","name":"Relayium 계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"send할 때만 필요합니다. push / pull은 자신의 SSH를 사용하고 daemon direct는 서버 간 공개키 신뢰를 사용하므로 둘 다 계정이 필요 없습니다. send는 다릅니다. 페어링 코드는 서버만, 그것도 로그인된 계정에만 발급할 수 있으므로 보내는 쪽이 relayium login을 한 번 실행합니다. 받는 쪽은 절대 로그인하지 않습니다."}},{"@type":"Question","name":"어떤 운영체제를 지원하나요?","acceptedAnswer":{"@type":"Answer","text":"macOS, Linux, Windows용으로 x86-64와 arm64 모두 사전 빌드된 바이너리가 제공됩니다. 설치 스크립트는 macOS와 Linux를 지원합니다. Windows에서는 릴리스 페이지에서 .zip을 내려받으세요."}},{"@type":"Question","name":"제 파일이 Relayium 서버를 거치나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 어떤 모드에서든 파일 데이터는 두 끝 사이에서 직접 이동합니다. 저희 서버에 조금이라도 닿는 것은 send / receive뿐이며, 그마저도 작은 랑데부 핸드셰이크를 위한 것일 뿐 — 파일 내용은 절대 아닙니다."}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI로 터미널에서 파일 전송하기","description":"무료로 종단간 암호화된 Relayium CLI를 설치하고, 터미널에서 세 가지 방식으로 파일을 옮기세요 — 자신의 SSH를 통해, 네트워크를 넘어 페어링 코드로, 또는 두 서버 사이에서 직접. 무료이고 파일 데이터는 절대 저희 서버를 거치지 않습니다 — 페어링 코드로 보내려면 코드 발급을 위한 계정이 필요합니다.","inLanguage":"ko","datePublished":"2026-07-08","dateModified":"2026-07-08","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/transfer-files-from-terminal/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"CLI 사용에 비용이 드나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. CLI는 완전히 무료입니다. 여러분의 기기를 직접 연결하며 파일 데이터를 Relayium을 거쳐 프록시하는 일이 결코 없으므로, 계량할 것도 지불할 것도 없습니다."}},{"@type":"Question","name":"Relayium 계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"send할 때와 클라우드 up에 필요합니다. push / pull은 자신의 SSH를 사용하고 daemon direct는 서버 간 공개키 신뢰를 사용하므로 둘 다 계정이 필요 없습니다. send는 다릅니다. 페어링 코드는 서버만, 그것도 로그인된 계정에만 발급할 수 있으므로 보내는 쪽이 relayium login을 한 번 실행합니다. 건네받은 코드를 쓰는 send는 발급을 하지 않으므로 필요 없습니다. 받는 쪽은 절대 로그인하지 않습니다."}},{"@type":"Question","name":"어떤 운영체제를 지원하나요?","acceptedAnswer":{"@type":"Answer","text":"macOS, Linux, Windows용으로 x86-64와 arm64 모두 사전 빌드된 바이너리가 제공됩니다. 설치 스크립트는 macOS와 Linux를 지원합니다. Windows에서는 릴리스 페이지에서 .zip을 내려받으세요."}},{"@type":"Question","name":"제 파일이 Relayium 서버를 거치나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 어떤 모드에서든 파일 데이터는 두 끝 사이에서 직접 이동합니다. 저희 서버에 조금이라도 닿는 것은 send / receive뿐이며, 그마저도 작은 랑데부 핸드셰이크를 위한 것일 뿐 — 파일 내용은 절대 아닙니다."}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -89,7 +89,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>CLI 사용에 비용이 드나요?</h3>
       <p>아니요. CLI는 완전히 무료입니다. 여러분의 기기를 직접 연결하며 파일 데이터를 Relayium을 거쳐 프록시하는 일이 결코 없으므로, 계량할 것도 지불할 것도 없습니다.</p>
       <h3>Relayium 계정이 필요한가요?</h3>
-      <p>send할 때만 필요합니다. push / pull은 자신의 SSH를 사용하고 daemon direct는 서버 간 공개키 신뢰를 사용하므로 둘 다 계정이 필요 없습니다. send는 다릅니다. 페어링 코드는 서버만, 그것도 로그인된 계정에만 발급할 수 있으므로 보내는 쪽이 relayium login을 한 번 실행합니다. 받는 쪽은 절대 로그인하지 않습니다.</p>
+      <p>send할 때와 클라우드 up에 필요합니다. push / pull은 자신의 SSH를 사용하고 daemon direct는 서버 간 공개키 신뢰를 사용하므로 둘 다 계정이 필요 없습니다. send는 다릅니다. 페어링 코드는 서버만, 그것도 로그인된 계정에만 발급할 수 있으므로 보내는 쪽이 relayium login을 한 번 실행합니다. 건네받은 코드를 쓰는 send는 발급을 하지 않으므로 필요 없습니다. 받는 쪽은 절대 로그인하지 않습니다.</p>
       <h3>어떤 운영체제를 지원하나요?</h3>
       <p>macOS, Linux, Windows용으로 x86-64와 arm64 모두 사전 빌드된 바이너리가 제공됩니다. 설치 스크립트는 macOS와 Linux를 지원합니다. Windows에서는 릴리스 페이지에서 .zip을 내려받으세요.</p>
       <h3>제 파일이 Relayium 서버를 거치나요?</h3>

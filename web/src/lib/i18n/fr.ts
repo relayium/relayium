@@ -415,7 +415,7 @@ const fr: Messages = {
       "Supprimer le téléversement cloud après un seul téléchargement",
       "Durée de vie d'un téléversement cloud, p. ex. 7d ou 24h (plafonnée par votre offre)",
       "Autoriser un nombre fixe de téléchargements cloud, puis supprimer",
-      "Diriger login / up / down vers un serveur auto-hébergé",
+      "Diriger login / up / down / send / receive vers un serveur auto-hébergé",
     ],
     trustH3: "Fichiers de confiance et d'identité",
     trustIntro:
@@ -445,7 +445,7 @@ const fr: Messages = {
     cloudH2: "Cloud — téléverser maintenant, télécharger plus tard",
     cloudTag: "compte · asynchrone",
     cloudIntro:
-      "Téléversez depuis une machine et téléchargez sur une autre quand vous voulez — les deux n'ont jamais besoin d'être en ligne en même temps. C'est le seul mode qui utilise votre compte, et seulement pour téléverser : lancez relayium login une fois, puis up. Le téléchargement ne demande aucun compte. Tout le reste de la CLI reste sans connexion.",
+      "Téléversez depuis une machine et téléchargez sur une autre quand vous voulez — les deux n'ont jamais besoin d'être en ligne en même temps. up et send sont les deux commandes qui utilisent votre compte : up pour stocker le fichier, send pour générer un code d'appairage — lancez relayium login une fois et les deux fonctionnent. Un send auquel vous passez un code qu'on vous a donné n'en génère aucun et ne demande pas de connexion. Le téléchargement ne demande aucun compte, et push/pull, daemon direct et sync jamais.",
     cloudBody:
       "up chiffre les fichiers localement, téléverse le chiffré et affiche un lien de récupération. Ajoutez un drapeau de rétention pour contrôler sa durée de vie (sinon la valeur par défaut de votre compte s'applique) : --burn (un téléchargement), --ttl 7d (durée fixe, plafonnée par votre offre) ou --max-downloads 5 (nombre fixe). Sur l'autre machine, passez le lien à down — aucune connexion requise.",
     cloudLoginNote:

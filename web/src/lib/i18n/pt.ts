@@ -414,7 +414,7 @@ const pt: Messages = {
       "Excluir o envio na nuvem após um único download",
       "Por quanto tempo um envio na nuvem existe, ex.: 7d ou 24h (limitado pelo seu plano)",
       "Permitir um número fixo de downloads na nuvem, depois excluir",
-      "Apontar login / up / down para um servidor hospedado por você",
+      "Apontar login / up / down / send / receive para um servidor hospedado por você",
     ],
     trustH3: "Arquivos de confiança e identidade",
     trustIntro:
@@ -444,7 +444,7 @@ const pt: Messages = {
     cloudH2: "Nuvem — envie agora, baixe depois",
     cloudTag: "conta · assíncrono",
     cloudIntro:
-      "Envie de uma máquina e baixe em outra quando quiser — as duas nunca precisam estar online ao mesmo tempo. Este é o único modo que usa sua conta, e só para o envio: execute relayium login uma vez, depois up. Baixar não precisa de conta. Todo o resto na CLI continua sem login.",
+      "Envie de uma máquina e baixe em outra quando quiser — as duas nunca precisam estar online ao mesmo tempo. up e send são os dois comandos que usam a sua conta: o up para guardar o arquivo, o send para gerar um código de emparelhamento — execute relayium login uma vez e os dois funcionam. Um send ao qual você passa um código que lhe deram não gera nenhum e não precisa de login. Baixar não precisa de conta, e push/pull, daemon direto e sync nunca precisam.",
     cloudBody:
       "up criptografa os arquivos localmente, envia o texto cifrado e imprime um link de resgate. Adicione uma flag de retenção para controlar por quanto tempo ele existe (caso contrário, aplica-se o padrão da sua conta): --burn (um download), --ttl 7d (um tempo fixo, limitado pelo seu plano) ou --max-downloads 5 (uma contagem fixa). Na outra máquina, passe o link para down — sem login.",
     cloudLoginNote:

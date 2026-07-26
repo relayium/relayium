@@ -18,13 +18,13 @@ relayium pull user@host:backups/ ./restore
 
 # pick an SSH key / port
 relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@host:backups/`;
-  const codeCmd = `# both sides agree on a code (any short string), out of band
+  const codeCmd = `# sender (once per machine: relayium login)
+relayium send ./file.zip
+# prints:  Code: K7M4XR   (valid 5 minutes)
+#          On the other machine:  relayium receive K7M4XR
 
-# sender
-relayium send ./file.zip 123456
-
-# receiver
-relayium receive 123456 ./downloads`;
+# receiver — no account needed
+relayium receive K7M4XR ./downloads`;
   const daemonListenCmd = `# on the RECEIVER
 relayium serve --dir ~/inbox      # --once to accept one transfer; --port to change 9031`;
   const daemonPushCmd = `# on the SENDER

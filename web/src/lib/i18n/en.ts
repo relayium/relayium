@@ -428,7 +428,7 @@ const en: Messages = {
       "Delete the cloud upload after a single download",
       "How long a cloud upload lives, e.g. 7d or 24h (capped by your plan)",
       "Allow a fixed number of cloud downloads, then delete",
-      "Point login / up / down at a self-hosted server",
+      "Point login / up / down / send / receive at a self-hosted server",
     ],
     trustH3: "Trust & identity files",
     trustIntro:
@@ -458,7 +458,7 @@ const en: Messages = {
     cloudH2: "Cloud — upload now, download later",
     cloudTag: "account · async",
     cloudIntro:
-      "Upload from one machine and download on another whenever you like — the two never need to be online at the same time. This is the only mode that uses your account, and only for uploading: run relayium login once, then up. Downloading needs no account. Everything else in the CLI stays no-login.",
+      "Upload from one machine and download on another whenever you like — the two never need to be online at the same time. up and send are the two commands that use your account: up to store the file, send to mint a pairing code — run relayium login once and both work. A send given a code you were handed mints nothing and needs no login. Downloading needs no account, and push/pull, daemon-direct and sync never do.",
     cloudBody:
       "up encrypts the files locally, uploads the ciphertext, and prints a claim link. Add a retention flag to control how long it lives (otherwise your account's default applies): --burn (one download), --ttl 7d (a fixed time, capped by your plan), or --max-downloads 5 (a fixed count). On the other machine, hand the link to down — no login needed.",
     cloudLoginNote:

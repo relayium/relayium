@@ -414,7 +414,7 @@ const zh: Messages = {
       "下载一次后即删除该云端上传",
       "云端上传的存活时长，如 7d 或 24h（上限取决于套餐）",
       "允许固定次数的云端下载，之后删除",
-      "让 login / up / down 指向自建服务器",
+      "让 login / up / down / send / receive 指向自建服务器",
     ],
     trustH3: "信任与身份文件",
     trustIntro:
@@ -444,7 +444,7 @@ const zh: Messages = {
     cloudH2: "云端——现在上传，稍后下载",
     cloudTag: "账号 · 异步",
     cloudIntro:
-      "从一台机器上传，之后随时在另一台下载——两者无需同时在线。这是唯一用到账号的模式，而且只在上传时用：先 relayium login 一次，再 up。下载无需账号。CLI 其余功能都免登录。",
+      "从一台机器上传，之后随时在另一台下载——两者无需同时在线。用到账号的是 up 和 send 两个命令：up 用来存文件，send 用来生成配对码——先 relayium login 一次，两者都能用。如果 send 用的是别人给你的码，它不生成新码，也就不需要登录。下载无需账号，push/pull、daemon 直连和 sync 也从不需要。",
     cloudBody:
       "up 在本地加密文件、上传密文，并打印一个取件链接。用保留 flag 控制它存活多久（不给则用你账号的默认）：--burn（下载一次）、--ttl 7d（固定时间，上限取决于套餐）、--max-downloads 5（固定次数）。在另一台机器上，把链接交给 down——无需登录。",
     cloudLoginNote:

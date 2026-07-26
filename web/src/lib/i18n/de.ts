@@ -415,7 +415,7 @@ const de: Messages = {
       "Den Cloud-Upload nach einem einzigen Download löschen",
       "Wie lange ein Cloud-Upload lebt, z. B. 7d oder 24h (durch deinen Tarif begrenzt)",
       "Eine feste Zahl an Cloud-Downloads erlauben, dann löschen",
-      "login / up / down auf einen selbst gehosteten Server richten",
+      "login / up / down / send / receive auf einen selbst gehosteten Server richten",
     ],
     trustH3: "Vertrauens- und Identitätsdateien",
     trustIntro:
@@ -445,7 +445,7 @@ const de: Messages = {
     cloudH2: "Cloud — jetzt hochladen, später herunterladen",
     cloudTag: "Konto · asynchron",
     cloudIntro:
-      "Von einem Rechner hochladen und auf einem anderen herunterladen, wann immer du willst — die beiden müssen nie gleichzeitig online sein. Das ist der einzige Modus, der dein Konto nutzt, und nur zum Hochladen: einmal relayium login, dann up. Das Herunterladen braucht kein Konto. Alles andere in der CLI bleibt ohne Anmeldung.",
+      "Von einem Rechner hochladen und auf einem anderen herunterladen, wann immer du willst — die beiden müssen nie gleichzeitig online sein. up und send sind die beiden Befehle, die dein Konto nutzen: up, um die Datei zu speichern, send, um einen Pairing-Code zu erzeugen — einmal relayium login, dann geht beides. Ein send mit einem Code, den man dir gegeben hat, erzeugt keinen und braucht keine Anmeldung. Das Herunterladen braucht kein Konto, und push/pull, Daemon-Direkt und sync nie.",
     cloudBody:
       "up verschlüsselt die Dateien lokal, lädt den Chiffretext hoch und gibt einen Abhol-Link aus. Steuere mit einem Aufbewahrungs-Flag die Lebensdauer (sonst gilt die Vorgabe deines Kontos): --burn (ein Download), --ttl 7d (feste Zeit, durch deinen Tarif begrenzt) oder --max-downloads 5 (feste Anzahl). Auf dem anderen Rechner gibst du den Link einfach an down — keine Anmeldung nötig.",
     cloudLoginNote:

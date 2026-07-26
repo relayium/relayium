@@ -74,7 +74,7 @@ const en = {
     items: [
       {
         q: "Does Relayium's CLI need an account?",
-        a: "Not for push/pull — it uses your own SSH access exactly like scp does, with no Relayium account and no sign-in, and the same goes for daemon-direct and sync. send is the exception: it needs an account so the server can mint its pairing code. Receiving never needs one.",
+        a: "Not for push/pull — it uses your own SSH access exactly like scp does, with no Relayium account and no sign-in, and the same goes for daemon-direct and sync. send and cloud up are the exceptions: send needs an account so the server can mint its pairing code (one given a code you were handed does not), and up needs one to store the file. Receiving never needs one.",
       },
       {
         q: "Does push work if the remote server doesn't have Relayium installed?",
@@ -169,7 +169,7 @@ const zh = {
     items: [
       {
         q: "Relayium 的 CLI 需要账号吗？",
-        a: "push/pull 不需要——它使用你自己的 SSH 访问权限，方式和 scp 完全一样，不需要 Relayium 账号，也不需要登录；daemon 直连和 sync 同样如此。send 是例外：它需要账号，好让服务器签发配对码。接收则从不需要。",
+        a: "push/pull 不需要——它使用你自己的 SSH 访问权限，方式和 scp 完全一样，不需要 Relayium 账号，也不需要登录；daemon 直连和 sync 同样如此。send 和云端 up 是例外：send 需要账号，好让服务器签发配对码（如果用的是别人给你的码则不需要），up 需要账号来存文件。接收则从不需要。",
       },
       {
         q: "如果远程服务器没装 Relayium，push 还能用吗？",
@@ -264,7 +264,7 @@ const ja = {
     items: [
       {
         q: "Relayium の CLI にアカウントは必要ですか？",
-        a: "push/pull には不要です——scp とまったく同じように自分の SSH アクセスを使うので、Relayium アカウントもサインインも要りません。daemon 直結と sync も同様です。send は例外で、サーバーがペアリングコードを発行するためにアカウントが必要です。受信には決して必要ありません。",
+        a: "push/pull には不要です——scp とまったく同じように自分の SSH アクセスを使うので、Relayium アカウントもサインインも要りません。daemon 直結と sync も同様です。send とクラウドの up が例外です。send はサーバーがペアリングコードを発行するためにアカウントが必要で（渡されたコードを使う場合は不要）、up はファイルを保存するために必要です。受信には決して必要ありません。",
       },
       {
         q: "リモートサーバーに Relayium がインストールされていなくても push は動きますか？",
@@ -359,7 +359,7 @@ const ko = {
     items: [
       {
         q: "Relayium의 CLI에 계정이 필요한가요?",
-        a: "push/pull에는 필요 없습니다 — scp와 완전히 똑같은 방식으로 자신의 SSH 접근을 사용하므로 Relayium 계정도 로그인도 필요 없고, daemon 직결과 sync도 마찬가지입니다. send는 예외로, 서버가 페어링 코드를 발급할 수 있도록 계정이 필요합니다. 받는 데는 전혀 필요 없습니다.",
+        a: "push/pull에는 필요 없습니다 — scp와 완전히 똑같은 방식으로 자신의 SSH 접근을 사용하므로 Relayium 계정도 로그인도 필요 없고, daemon 직결과 sync도 마찬가지입니다. send와 클라우드 up이 예외입니다. send는 서버가 페어링 코드를 발급할 수 있도록 계정이 필요하고(건네받은 코드를 쓰면 불필요), up은 파일을 저장하기 위해 필요합니다. 받는 데는 전혀 필요 없습니다.",
       },
       {
         q: "원격 서버에 Relayium이 설치되어 있지 않아도 push가 동작하나요?",
@@ -454,7 +454,7 @@ const de = {
     items: [
       {
         q: "Braucht Relayiums CLI ein Konto?",
-        a: "Für push/pull nicht — es nutzt deinen eigenen SSH-Zugang genau wie scp, ohne Relayium-Konto und ohne Anmeldung, und für Daemon-Direkt und sync gilt dasselbe. send ist die Ausnahme: Es braucht ein Konto, damit der Server seinen Pairing-Code erzeugen kann. Zum Empfangen nie.",
+        a: "Für push/pull nicht — es nutzt deinen eigenen SSH-Zugang genau wie scp, ohne Relayium-Konto und ohne Anmeldung, und für Daemon-Direkt und sync gilt dasselbe. send und Cloud-up sind die Ausnahmen: send braucht ein Konto, damit der Server seinen Pairing-Code erzeugen kann (mit einem übergebenen Code nicht), und up eines, um die Datei zu speichern. Zum Empfangen nie.",
       },
       {
         q: "Funktioniert push, wenn auf dem entfernten Server kein Relayium installiert ist?",
@@ -549,7 +549,7 @@ const fr = {
     items: [
       {
         q: "La CLI Relayium a-t-elle besoin d'un compte ?",
-        a: "Pas pour push/pull — il utilise votre propre accès SSH exactement comme scp, sans compte Relayium ni connexion, et il en va de même pour daemon direct et sync. send fait exception : il lui faut un compte pour que le serveur puisse générer son code d'appairage. Recevoir n'en demande jamais.",
+        a: "Pas pour push/pull — il utilise votre propre accès SSH exactement comme scp, sans compte Relayium ni connexion, et il en va de même pour daemon direct et sync. send et le up cloud font exception : send a besoin d'un compte pour que le serveur génère son code d'appairage (pas s'il reçoit un code qu'on lui passe), et up d'un compte pour stocker le fichier. Recevoir n'en demande jamais.",
       },
       {
         q: "push fonctionne-t-il si le serveur distant n'a pas Relayium installé ?",
@@ -646,7 +646,7 @@ const ar = {
     items: [
       {
         q: "هل تحتاج واجهة Relayium السطرية إلى حساب؟",
-        a: "ليس لـ push/pull — فهو يستخدم وصول SSH الخاص بك تمامًا كما يفعل scp، بلا حساب Relayium وبلا تسجيل دخول، وكذلك daemon-direct وsync. أما send فهو الاستثناء: يحتاج حسابًا كي يُصدر الخادم رمز الاقتران. أما الاستقبال فلا يحتاجه أبدًا.",
+        a: "ليس لـ push/pull — فهو يستخدم وصول SSH الخاص بك تمامًا كما يفعل scp، بلا حساب Relayium وبلا تسجيل دخول، وكذلك daemon-direct وsync. أما send و up السحابي فهما الاستثناء: يحتاج send حسابًا كي يُصدر الخادم رمز الاقتران (ولا يحتاجه إن مرّرت له رمزًا جاهزًا)، ويحتاجه up لتخزين الملف. أما الاستقبال فلا يحتاجه أبدًا.",
       },
       {
         q: "هل يعمل push إذا لم يكن الخادم البعيد يحتوي على Relayium مثبَّتًا؟",
@@ -743,7 +743,7 @@ const es = {
     items: [
       {
         q: "¿La CLI de Relayium necesita una cuenta?",
-        a: "Para push/pull no: usa tu propio acceso SSH exactamente igual que scp, sin cuenta de Relayium y sin iniciar sesión, y lo mismo vale para daemon-direct y sync. send es la excepción: necesita cuenta para que el servidor pueda generar su código de emparejamiento. Recibir no la necesita nunca.",
+        a: "Para push/pull no: usa tu propio acceso SSH exactamente igual que scp, sin cuenta de Relayium y sin iniciar sesión, y lo mismo vale para daemon-direct y sync. send y el up en la nube son las excepciones: send necesita cuenta para que el servidor genere su código de emparejamiento (no si le pasas un código que te dieron), y up la necesita para guardar el archivo. Recibir no la necesita nunca.",
       },
       {
         q: "¿Funciona push si el servidor remoto no tiene Relayium instalado?",
@@ -840,7 +840,7 @@ const pt = {
     items: [
       {
         q: "A CLI do Relayium precisa de conta?",
-        a: "Para o push/pull não — ele usa seu próprio acesso SSH exatamente como o scp, sem conta Relayium e sem fazer login, e o mesmo vale para daemon-direct e sync. O send é a exceção: precisa de conta para que o servidor possa gerar o seu código de emparelhamento. Receber nunca precisa.",
+        a: "Para o push/pull não — ele usa seu próprio acesso SSH exatamente como o scp, sem conta Relayium e sem fazer login, e o mesmo vale para daemon-direct e sync. O send e o up na nuvem são as exceções: o send precisa de conta para que o servidor gere o seu código de emparelhamento (não se você passar um código que lhe deram), e o up precisa para guardar o arquivo. Receber nunca precisa.",
       },
       {
         q: "push funciona se o servidor remoto não tiver o Relayium instalado?",

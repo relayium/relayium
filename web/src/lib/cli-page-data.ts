@@ -23,7 +23,7 @@ export type SameLength<T extends readonly unknown[]> = { -readonly [K in keyof T
 /** "该用哪种模式"的几张卡片。文案（什么时候用）在 t.cliPage.pickWhen。 */
 export const PICK_MODES = [
   { g: "🔑", title: "push / pull", cmd: "relayium push … user@host:path" },
-  { g: "🔗", title: "send / receive", cmd: "relayium send … <code>" },
+  { g: "🔗", title: "send / receive", cmd: "relayium send … / receive <code>" },
   { g: "🖧", title: "daemon direct", cmd: "relayium push … relayium://host" },
   { g: "🔁", title: "sync", cmd: "relayium sync … relayium://host" },
   { g: "☁️", title: "up / down", cmd: "relayium up … / down <link>" },
@@ -45,7 +45,7 @@ export const FLAG_ROWS = [
   { flag: "--burn", who: "up" },
   { flag: "--ttl <dur>", who: "up" },
   { flag: "--max-downloads <n>", who: "up" },
-  { flag: "--server <url>", who: "login / up / down" },
+  { flag: "--server <url>", who: "login / up / down / send / receive" },
 ] as const;
 
 /** 本地信任材料的文件名。说明在 t.cliPage.fileDescs。 */

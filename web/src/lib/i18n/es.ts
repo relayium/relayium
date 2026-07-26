@@ -414,7 +414,7 @@ const es: Messages = {
       "Eliminar la subida a la nube tras una única descarga",
       "Cuánto vive una subida a la nube, p. ej. 7d o 24h (limitado por tu plan)",
       "Permitir un número fijo de descargas en la nube y luego eliminarla",
-      "Apuntar login / up / down a un servidor autoalojado",
+      "Apuntar login / up / down / send / receive a un servidor autoalojado",
     ],
     trustH3: "Archivos de confianza e identidad",
     trustIntro:
@@ -444,7 +444,7 @@ const es: Messages = {
     cloudH2: "Nube — sube ahora, descarga después",
     cloudTag: "cuenta · asíncrono",
     cloudIntro:
-      "Sube desde una máquina y descarga en otra cuando quieras — las dos nunca necesitan estar en línea al mismo tiempo. Este es el único modo que usa tu cuenta, y solo para subir: ejecuta relayium login una vez y luego up. Descargar no necesita cuenta. Todo lo demás en la CLI sigue sin inicio de sesión.",
+      "Sube desde una máquina y descarga en otra cuando quieras — las dos nunca necesitan estar en línea al mismo tiempo. up y send son los dos comandos que usan tu cuenta: up para guardar el archivo, send para generar un código de emparejamiento — ejecuta relayium login una vez y ambos funcionan. Un send al que le pasas un código que te dieron no genera ninguno y no necesita inicio de sesión. Descargar no necesita cuenta, y push/pull, daemon directo y sync nunca la necesitan.",
     cloudBody:
       "up cifra los archivos localmente, sube el texto cifrado e imprime un enlace de reclamo. Añade una opción de retención para controlar cuánto vive (de lo contrario se aplica el valor predeterminado de tu cuenta): --burn (una descarga), --ttl 7d (un tiempo fijo, limitado por tu plan) o --max-downloads 5 (un número fijo). En la otra máquina, pasa el enlace a down — no se necesita inicio de sesión.",
     cloudLoginNote:
