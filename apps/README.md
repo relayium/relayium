@@ -25,6 +25,9 @@ build when the sandbox is what you are testing:
     xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium \
       -destination 'platform=macOS' -configuration Debug build
 
+    # APP must be set, or codesign reads an empty path and reports "no match" —
+    # which looks exactly like the sandbox failing to apply.
+    APP=$(ls -d ~/Library/Developer/Xcode/DerivedData/Relayium-*/Build/Products/Debug/Relayium.app | head -1)
     codesign -d --entitlements - "$APP" | grep app-sandbox   # proves it applied
 
 For a quick headless build that doesn't need a signing identity (runs
@@ -43,3 +46,16 @@ open ~/Library/Developer/Xcode/DerivedData/Relayium-*/Build/Products/Debug/Relay
 
 Real Developer ID signing + notarization is a later round (R1-G5); for now
 `CODE_SIGN_IDENTITY = "-"` and `CODE_SIGNING_ALLOWED=NO` keep local builds ad-hoc.
+
+### Manual acceptance
+
+Sign-in, keychain persistence and sign-out are verified by hand — `KeychainTokenStore`
+is skipped under the SPM test host, which has no app bundle. Launch the app, sign in,
+check the plan and usage, quit and relaunch to confirm auto-login, then sign out and
+confirm the return to the login form.
+
+When checking auto-login, quit and relaunch **the same build**. A sandboxed,
+ad-hoc-signed binary ties the keychain item's ACL to that binary's signature, so
+rebuilding between the two launches can legitimately produce a keychain access
+prompt or a failed auto-login — a false negative that has nothing to do with the
+code under test.
