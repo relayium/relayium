@@ -27,7 +27,7 @@
 | QR 码配对（报告列为 P1） | 已有三处 QR：配对码加入链接、分享链接、下载链接 | `web/src/lib/CodePairing.svelte`、`CrossNetwork.svelte`、`StoredUpload.svelte` |
 | 两个模式的用户化包装 | 跨网络页已有三张卡片（配对码 / 分享链接 / 下载链接）+ 模式对比表 | `web/src/lib/CrossPage.svelte`、`ModeCompare.svelte` |
 | FAQ + 竞品对比 | FAQ 组件 + JSON-LD + README/首页对比表（vs AirDrop/WeTransfer/Snapdrop/PairDrop） | `web/src/lib/Faq.svelte`、`web/index.html` |
-| TURN / 复杂网络回退 | coturn + TURN-REST 临时凭证已接好 | `server/internal/account/turn.go`（生产 coturn 配置见私有 relayium-ops 仓库，公开的 Docker relay profile 见 `docs/self-hosting.md`） |
+| TURN / 复杂网络回退 | coturn + TURN-REST 临时凭证已接好 | `server/account/turn.go`（生产 coturn 配置见私有 relayium-ops 仓库，公开的 Docker relay profile 见 `docs/self-hosting.md`） |
 | 多文件传输、进度/速度显示、关页警告 | 最多 10 文件、进度+实时速率、beforeunload 警告均有 | `web/src/lib/transfer.ts`、`App.svelte` |
 | 多语言 | 6 语言 i18n 已全量覆盖 | `web/src/lib/i18n.svelte.ts` |
 | SAS 命名用户化 | UI 已叫「校验码 / Verification code」，非报告担心的裸「SAS」 | i18n `codeLabel` |
@@ -111,7 +111,7 @@
 
 **B. 工程与运营（依赖前序功能或面向自托管者）**
 3. **中继策略统一叙事**：目前 LAN 模式只发 STUN、配对码/分享链接才发 TURN（`/api/ice` 按 token 门控）。未来做「LAN direct → P2P → Relay → Encrypted Link 自动降级」时，把 P1-2 的路径徽标升级为完整降级链可视化。（依赖 P1-2）
-4. **管理后台国际化**：admin 界面目前纯中文（`server/internal/account/admin_templates.go`），开源自托管用户是国际的，需要至少英文。（配合 P0-4 自托管一起考虑）
+4. **管理后台国际化**：admin 界面目前纯中文（`server/account/admin_templates.go`），开源自托管用户是国际的，需要至少英文。（配合 P0-4 自托管一起考虑）
 
 ---
 

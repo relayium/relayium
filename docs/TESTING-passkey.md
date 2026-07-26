@@ -3,7 +3,7 @@
 本文记录后台 passkey（WebAuthn）登录的浏览器端验证。
 
 Go 测试已经覆盖了全部安全关键面（凭据存储、RP 校验、challenge 生命周期、
-step-up 鉴权、签名验证——`server/internal/account/passkey_*_test.go` 里有一枚
+step-up 鉴权、签名验证——`server/account/passkey_*_test.go` 里有一枚
 软件 authenticator 跑真实的仪式密码学）。**没有被 Go 测试覆盖的是模板里那段内联
 JS**：`navigator.credentials.create()/get()` 的调用、base64url 编解码、以及
 "零凭据时不渲染按钮"这类渐进增强分支。本文补的就是这一段。
