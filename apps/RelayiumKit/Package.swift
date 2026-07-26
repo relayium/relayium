@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "RelayiumKit",
     platforms: [.macOS(.v13), .iOS(.v16)],
-    products: [.library(name: "RelayiumKit", targets: ["RelayiumKit"])],
+    products: [.library(name: "RelayiumKit", targets: ["RelayiumKit", "RelayiumAppKit"])],
     dependencies: [
         .package(url: "https://github.com/jedisct1/swift-sodium.git", from: "0.9.1"),
         .package(url: "https://github.com/stasel/WebRTC.git", branch: "latest"),
@@ -17,9 +17,13 @@ let package = Package(
                 .product(name: "WebRTC", package: "WebRTC"),
             ]
         ),
+        // @MainActor view-model layer for the native apps. Imports RelayiumKit and
+        // Foundation, never SwiftUI — that is what keeps it unit-testable under
+        // `swift test` and reusable by the iOS app in R3.
+        .target(name: "RelayiumAppKit", dependencies: ["RelayiumKit"]),
         .testTarget(
             name: "RelayiumKitTests",
-            dependencies: ["RelayiumKit"],
+            dependencies: ["RelayiumKit", "RelayiumAppKit"],
             path: "Tests",
             resources: [.process("Fixtures")]
         ),
