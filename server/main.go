@@ -240,6 +240,28 @@ func main() {
 	// Per-IP concurrent /ws connection cap (H4). Acquired after the room is
 	// resolved and before the websocket upgrade; released when the handler returns.
 	ipConns := signal.NewIPConnLimiter()
+	// Global concurrent /ws connection cap (L8), independent of client IP: the
+	// per-IP cap above stops one address from hogging the server, but an
+	// attacker who rotates source IPs gets a fresh budget from every new one,
+	// and nothing bounded the sum. See signal.maxGlobalConns for the derivation.
+	//
+	// Deliberately NOT wrapped in account.PerInstanceThreshold like the rate
+	// limiters below: dividing reconstructs a correct global figure only for
+	// something that resets over a time window, so round-robin skew averages
+	// out every cycle (see PerInstanceThreshold's doc). A live concurrency
+	// gauge has no window to average over — a connection opened on instance A
+	// simply stays counted there for its whole (possibly hours-long) lifetime,
+	// so an unlucky run of routing could park one instance well above n/N with
+	// nothing to correct it. IPConnLimiter above is the same kind of gauge and
+	// is likewise never divided; this follows that precedent. The tradeoff:
+	// in a round-robin multi-instance deployment this cap is enforced
+	// per-process rather than truly globally (each instance can independently
+	// admit up to maxGlobalConns), so the effective ceiling is instances ×
+	// maxGlobalConns. sticky/IP-hash routing (the deployment's recommended
+	// setup per PerInstanceThreshold's doc) avoids this entirely, and even
+	// round-robin still bounds the total to a small multiple of the intended
+	// figure rather than leaving it unbounded.
+	globalConns := signal.NewGlobalConnLimiter()
 
 	// Anonymous, login-free pairing: short numeric codes for cross-network
 	// realtime rendezvous. Pure in-memory — works even if the DB is unavailable.
@@ -325,6 +347,15 @@ func main() {
 			maxPeers = lanMaxPeers // LAN: capped (was unlimited)
 		}
 		ip := ipx.IP(r)
+		// Global check first: it's a plain int compare under the limiter's own
+		// mutex, cheaper than the per-IP map lookup below, and if the server is
+		// already at its global cap there is no reason to pay for that lookup
+		// (or grow the per-IP map with an entry we're about to refuse anyway).
+		if !globalConns.Acquire() {
+			http.Error(w, "too many connections", http.StatusTooManyRequests)
+			return
+		}
+		defer globalConns.Release()
 		if !ipConns.Acquire(ip) {
 			http.Error(w, "too many connections", http.StatusTooManyRequests)
 			return
