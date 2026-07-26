@@ -24,14 +24,14 @@ const en = {
       heading: "Where they differ: sending isn't the same job as storing",
       body: [
         "To send one file through Drive, you upload a copy to Google's infrastructure, then decide who can open it — a specific person's Google account, or \"anyone with the link.\" Get the sharing setting wrong and the file is either unreachable or more open than you meant. Either way, a copy now lives on Google's servers indefinitely, until you go back and remove it.",
-        "Relayium skips the storage step for the common case. Its realtime mode moves bytes directly between the sender's and recipient's devices over an end-to-end encrypted peer-to-peer connection — the file itself is never stored on a server at all. When the recipient is offline and you do want a link, the stored-link mode keeps the zero-knowledge property Drive doesn't have: your browser encrypts the file with a random AES-256-GCM key before upload, and that key lives only in the URL fragment (the part after the #, which browsers never send to a server). Google's servers hold and can technically read your Drive files; Relayium's server, for a stored link, holds only ciphertext it cannot decrypt.",
+        "Relayium skips the storage step for the common case. Its realtime mode moves bytes between the sender's and recipient's devices over an end-to-end encrypted peer-to-peer connection — the file itself is never stored on a server at all. When the recipient is offline and you do want a link, the stored-link mode keeps the zero-knowledge property Drive doesn't have: your browser encrypts the file with a random AES-256-GCM key before upload, and that key lives only in the URL fragment (the part after the #, which browsers never send to a server). Google's servers hold and can technically read your Drive files; Relayium's server, for a stored link, holds only ciphertext it cannot decrypt.",
       ],
     },
     {
       heading: "Realtime: nothing stored on a server",
       body: [
         "For the classic case — both people are online right now — realtime direct transfer sends up to 1,000 files in one batch straight between devices, with no upload step and nothing stored anywhere in between. Both sides see a matching 6-digit verification code (SAS) to rule out a man-in-the-middle, and each file is checked end-to-end with a SHA-256 hash; if the connection drops, the transfer resumes instead of restarting.",
-        "There's no server-side size cap, so the practical limit comes from the receiving browser: Chrome and Edge stream incoming data straight to disk, comfortably handling tens of gigabytes, while Firefox and Safari buffer in memory, so keep those transfers under roughly 200 MB. On the same network, no account is needed at all. Sending across networks uses a pairing code and requires the sender to sign in — the recipient never needs an account, on either network setup. If a direct connection isn't possible, it falls back to an encrypted TURN relay that only ever sees ciphertext.",
+        "There's no server-side size cap, so the practical limit comes from the receiving browser: Chrome and Edge stream incoming data straight to disk, comfortably handling tens of gigabytes. Firefox and Safari lack that API, and when no streaming path applies they hold the incoming data in memory instead — Relayium warns above roughly 256 MB, a deliberately conservative estimate rather than a measured hard limit. On the same network, no account is needed at all and the two devices connect directly to each other. Sending across networks uses a pairing code, requires whoever creates that code to sign in, and runs over an encrypted TURN relay by design, so the connection comes up in a second or two rather than waiting out direct-connection attempts that rarely succeed between two networks; the relay only ever forwards ciphertext it cannot read, and the recipient never needs an account on either network setup.",
       ],
     },
     {
@@ -48,8 +48,8 @@ const en = {
         "Purpose: Google Drive is durable, always-there storage with collaboration built in; Relayium is built for a one-off send — realtime P2P or a self-expiring link.",
         "Where files live: Drive keeps an indefinite copy on Google's servers until you delete it; Relayium realtime never stores the file at all, and stored links auto-expire (1h/1d/3d/7d, depending on plan) or burn after first download.",
         "Who can read it: Google's infrastructure can technically decrypt Drive files; Relayium's stored links are zero-knowledge — the key lives only in the URL fragment, so the server holds ciphertext it can't read.",
-        "Accounts: Drive requires a Google account for the sender, and often for the recipient depending on sharing settings; Relayium needs no account on the same network, and only the sender signs in for cross-network or stored-link sending — the recipient never needs one.",
-        "Size limits: Drive is bounded by your storage quota; Relayium realtime has no server-side cap (Chrome/Edge stream to disk for tens of GB; keep Firefox/Safari under ~200 MB).",
+        "Accounts: Drive requires a Google account for the sender, and often for the recipient depending on sharing settings; Relayium needs no account on the same network, and only the person who creates the pairing code or the stored link signs in — the recipient never needs one.",
+        "Size limits: Drive is bounded by your storage quota; Relayium realtime has no server-side cap (Chrome/Edge stream to disk for tens of GB; when the browser has to buffer in memory instead, Relayium warns above roughly 256 MB).",
         "Cost and openness: Relayium is free and AGPL-3.0-licensed at github.com/relayium/relayium, running in the browser on Windows, macOS, Linux, Android, and iOS with nothing to install.",
       ],
     },
@@ -59,15 +59,15 @@ const en = {
     items: [
       {
         q: "Does Relayium store my files like Google Drive does?",
-        a: "Not in realtime mode — the file goes directly between devices and is never stored on a server. If you create a download link, the server does store something, but only zero-knowledge ciphertext it cannot decrypt; it expires (1h/1d/3d/7d, depending on plan) or burns after the first download.",
+        a: "Not in realtime mode — the file goes straight from one device to the other and is never stored on a server. If you create a download link, the server does store something, but only zero-knowledge ciphertext it cannot decrypt; it expires (1h/1d/3d/7d, depending on plan) or burns after the first download.",
       },
       {
         q: "Do I need an account?",
-        a: "On the same network, no account is needed at all. Sending across networks with a pairing code, or creating a stored download link, requires the sender to sign in. The recipient never needs an account, in either case.",
+        a: "On the same network, no account is needed at all. Creating the pairing code for a cross-network send, or creating a stored download link, requires signing in. The recipient never needs an account, in either case.",
       },
       {
         q: "Is there a size limit?",
-        a: "Realtime transfers carry up to 1,000 files per batch with no server-side size cap — Chrome and Edge stream straight to disk for tens of gigabytes, while Firefox and Safari buffer in memory, so keep those under roughly 200 MB. Stored links count against a quota tied to your account.",
+        a: "Realtime transfers carry up to 1,000 files per batch with no server-side size cap — Chrome and Edge stream straight to disk for tens of gigabytes. When no streaming path applies and the browser has to buffer in memory, Relayium warns above roughly 256 MB; that figure is a deliberately conservative estimate, not a hard limit. Stored links count against a quota tied to your account.",
       },
       {
         q: "Is Relayium free?",
@@ -103,14 +103,14 @@ const zh = {
       heading: "差异所在：发送和存储不是同一件事",
       body: [
         "要通过 Drive 发送一个文件，你需要把一份副本上传到 Google 的基础设施上，再决定谁能打开它——某个具体人的 Google 账号，或者“拥有链接的任何人”。分享设置一旦设错，文件要么无法访问，要么比你想的更公开。无论哪种情况，一份副本都会无限期地留在 Google 的服务器上，直到你回去把它删掉。",
-        "对常见场景，Relayium 干脆跳过了存储这一步。它的实时模式通过端到端加密的点对点连接，在发送方和接收方的设备之间直接传输字节——文件本身根本不会存到任何服务器上。当收件人不在线、你确实需要一个链接时，存储链接模式保留了 Drive 所没有的零知识特性：你的浏览器会在上传前用随机生成的 AES-256-GCM 密钥加密文件，而这个密钥只存在于 URL 片段中（# 之后的部分，浏览器从不会把它发给服务器）。Google 的服务器持有并且在技术上可以读取你 Drive 里的文件；而 Relayium 的服务器对于存储链接，只保存它无法解密的密文。",
+        "对常见场景，Relayium 干脆跳过了存储这一步。它的实时模式通过端到端加密的点对点连接，在发送方和接收方的设备之间传输字节——文件本身根本不会存到任何服务器上。当收件人不在线、你确实需要一个链接时，存储链接模式保留了 Drive 所没有的零知识特性：你的浏览器会在上传前用随机生成的 AES-256-GCM 密钥加密文件，而这个密钥只存在于 URL 片段中（# 之后的部分，浏览器从不会把它发给服务器）。Google 的服务器持有并且在技术上可以读取你 Drive 里的文件；而 Relayium 的服务器对于存储链接，只保存它无法解密的密文。",
       ],
     },
     {
       heading: "实时模式：不在服务器上存任何东西",
       body: [
         "对于最典型的场景——双方现在都在线——实时直连传输可以一次发送最多 1,000 个文件，在设备之间直接传输，没有上传这一步，中间也不存放任何东西。双方会看到一致的 6 位校验码（SAS）以排除中间人攻击，每个文件都用 SHA-256 做端到端校验；连接中断时，传输会断点续传而不是从头再来。",
-        "实时传输没有服务器端的大小上限，实际限制取决于接收方的浏览器：Chrome 和 Edge 会把接收的数据直接流式写入磁盘，轻松应对几十 GB 的文件；Firefox 和 Safari 则会缓冲在内存里，建议这类传输保持在约 200 MB 以内。同一网络下完全无需账号。跨网络发送使用配对码，需要发送方登录——但无论哪种网络场景，接收方都始终无需账号。若无法直连，会退回到加密的 TURN 中继，中继只能看到密文。",
+        "实时传输没有服务器端的大小上限，实际限制取决于接收方的浏览器：Chrome 和 Edge 会把接收的数据直接流式写入磁盘，轻松应对几十 GB 的文件；Firefox 和 Safari 没有这套 API，当所有流式写盘路径都不适用时，它们只能把数据攒在内存里——Relayium 会在超过约 256 MB 时给出提示，这是刻意取的保守估计，而不是实测出来的硬上限。同一网络下完全无需账号，两台设备之间是直连。跨网络发送使用配对码，需要创建配对码的一方登录，并且按设计经由加密的 TURN 中继传输，因此连接一两秒就能建立，不必去等两个网络之间很难成功的直连尝试；中继只转发它读不懂的密文，而无论哪种网络场景，接收方都始终无需账号。",
       ],
     },
     {
@@ -127,8 +127,8 @@ const zh = {
         "定位：Google Drive 是内置协作能力的、始终在线的持久存储；Relayium 是为一次性发送而生——实时点对点或自动到期的链接。",
         "文件存放：Drive 会把副本无限期留在 Google 服务器上，直到你删除；Relayium 实时模式根本不存储文件，存储链接则会自动到期（1小时/1天/3天/7天，视套餐而定）或首次下载后即焚。",
         "谁能读取：Google 的基础设施在技术上可以解密 Drive 上的文件；Relayium 的存储链接是零知识的——密钥只存在于 URL 片段中，服务器保存的是它无法解读的密文。",
-        "账号要求：Drive 要求发送方有 Google 账号，收件方是否需要则取决于分享设置；Relayium 在同一网络下完全无需账号，跨网络发送或创建存储链接时只需发送方登录——接收方始终无需账号。",
-        "大小限制：Drive 的限制取决于你的存储配额；Relayium 实时模式没有服务器端上限（Chrome/Edge 可流式写盘应对几十 GB；Firefox/Safari 建议保持在约 200 MB 以内）。",
+        "账号要求：Drive 要求发送方有 Google 账号，收件方是否需要则取决于分享设置；Relayium 在同一网络下完全无需账号，只有创建配对码或存储链接的一方需要登录——接收方始终无需账号。",
+        "大小限制：Drive 的限制取决于你的存储配额；Relayium 实时模式没有服务器端上限（Chrome/Edge 可流式写盘应对几十 GB；浏览器只能攒内存时，Relayium 会在超过约 256 MB 时给出提示）。",
         "费用与开放：Relayium 免费且采用 AGPL-3.0 许可，代码在 github.com/relayium/relayium；在浏览器中运行，覆盖 Windows、macOS、Linux、Android 和 iOS，无需安装。",
       ],
     },
@@ -142,11 +142,11 @@ const zh = {
       },
       {
         q: "需要账号吗？",
-        a: "同一网络下完全无需账号。用配对码跨网络发送，或创建存储下载链接，都需要发送方登录。无论哪种情况，接收方都始终无需账号。",
+        a: "同一网络下完全无需账号。为跨网络发送创建配对码，或创建存储下载链接，都需要登录。无论哪种情况，接收方都始终无需账号。",
       },
       {
         q: "有大小限制吗？",
-        a: "实时传输一次最多可发送 1,000 个文件，没有服务器端大小上限——Chrome 和 Edge 会直接流式写入磁盘，可应对几十 GB 的文件；Firefox 和 Safari 会缓冲在内存里，建议这类传输保持在约 200 MB 以内。存储链接则计入与账号绑定的配额。",
+        a: "实时传输一次最多可发送 1,000 个文件，没有服务器端大小上限——Chrome 和 Edge 会直接流式写入磁盘，可应对几十 GB 的文件。当所有流式写盘路径都不适用、浏览器只能攒内存时，Relayium 会在超过约 256 MB 时给出提示；这个数字是刻意取的保守估计，不是硬上限。存储链接则计入与账号绑定的配额。",
       },
       {
         q: "Relayium 免费吗？",
@@ -182,14 +182,14 @@ const ja = {
       heading: "違いはどこか：送ることと保存することは同じ作業ではない",
       body: [
         "Drive で1つのファイルを送るには、コピーを Google のインフラにアップロードし、誰が開けるかを決めます——特定の人の Google アカウント、または「リンクを知っている全員」。共有設定を間違えると、ファイルが届かなくなるか、意図したより公開範囲が広くなります。いずれにせよ、コピーはあなたが後で削除しに戻るまで、Google のサーバー上に無期限に存在し続けます。",
-        "Relayium はよくあるケースで、この保存という手順を省きます。リアルタイムモードは、エンドツーエンドで暗号化された P2P 接続を通じて、送信者と受信者の端末間でバイトを直接動かします——ファイル自体はサーバーに一切保存されません。受信者がオフラインで、それでもリンクが欲しいときは、保存リンクモードが Drive にはないゼロ知識の性質を保ちます。ブラウザはアップロード前にランダムな AES-256-GCM 鍵でファイルを暗号化し、その鍵は URL フラグメント（# の後の部分。ブラウザが決してサーバーへ送らない部分）にだけ存在します。Google のサーバーは Drive 上のファイルを保持し、技術的には読むことができます。一方 Relayium のサーバーは、保存リンクについては復号できない暗号文しか保持しません。",
+        "Relayium はよくあるケースで、この保存という手順を省きます。リアルタイムモードは、エンドツーエンドで暗号化された P2P 接続を通じて、送信者と受信者の端末間でバイトを動かします——ファイル自体はサーバーに一切保存されません。受信者がオフラインで、それでもリンクが欲しいときは、保存リンクモードが Drive にはないゼロ知識の性質を保ちます。ブラウザはアップロード前にランダムな AES-256-GCM 鍵でファイルを暗号化し、その鍵は URL フラグメント（# の後の部分。ブラウザが決してサーバーへ送らない部分）にだけ存在します。Google のサーバーは Drive 上のファイルを保持し、技術的には読むことができます。一方 Relayium のサーバーは、保存リンクについては復号できない暗号文しか保持しません。",
       ],
     },
     {
       heading: "リアルタイム：サーバーには何も保存されない",
       body: [
         "典型的なケース——両者が今まさにオンライン——では、リアルタイム直接転送は最大1,000ファイルを1バッチとして端末間で直接送り、アップロードの手順もなく、途中で何も保存されません。両方の端末は一致する6桁の検証コード（SAS）を表示して中間者を排除し、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。接続が切れても、転送は最初からではなく再開します。",
-        "サーバー側のサイズ上限はないため、実用上の限界は受信側のブラウザ次第です。Chrome と Edge は受信データをそのままディスクにストリーミングし、数十ギガバイトでも問題なく扱えます。Firefox と Safari はメモリにバッファするため、そうした転送は約200MB以内に抑えてください。同じネットワーク内ではアカウントは一切不要です。ネットワークをまたぐ送信にはペアリングコードを使い、送信側のサインインが必要です——ただしどちらのネットワーク構成でも、受信側は常にアカウント不要です。直接接続ができない場合は、暗号化された TURN リレーにフォールバックし、リレーは暗号文しか見ません。",
+        "サーバー側のサイズ上限はないため、実用上の限界は受信側のブラウザ次第です。Chrome と Edge は受信データをそのままディスクにストリーミングし、数十ギガバイトでも問題なく扱えます。Firefox と Safari にはその API がなく、ストリーミングで書き出せる経路がどれも使えないときは受信データをメモリに保持します——Relayium は約256MBを超えると警告しますが、これは実測された上限ではなく、意図的に保守的な見積もりです。同じネットワーク内ではアカウントは一切不要で、2台の端末は直接つながります。ネットワークをまたぐ送信にはペアリングコードを使い、そのコードを作る側のサインインが必要で、設計上は暗号化された TURN リレーを経由します。そのため、ネットワーク同士ではめったに成功しない直接接続の試行を待たずに1〜2秒でつながります。リレーが中継するのは読めない暗号文だけで、どちらのネットワーク構成でも受信側は常にアカウント不要です。",
       ],
     },
     {
@@ -206,8 +206,8 @@ const ja = {
         "目的：Google Drive は協業機能を備えた常時利用可能な永続ストレージ；Relayium は一度きりの送信のために作られている——リアルタイム P2P か、自動失効するリンク。",
         "ファイルの置き場所：Drive はあなたが削除するまでコピーを Google のサーバーに無期限に保持；Relayium のリアルタイムはファイルを一切保存せず、保存リンクは自動失効（1時間/1日/3日/7日、プランによる）または初回ダウンロード後に消去。",
         "誰が読めるか：Google のインフラは技術的に Drive 上のファイルを復号できる；Relayium の保存リンクはゼロ知識で、鍵は URL フラグメントにだけ存在し、サーバーは読めない暗号文を保持する。",
-        "アカウント：Drive は送信側に Google アカウントを要求し、共有設定によっては受信側にも必要；Relayium は同一ネットワークではアカウント不要、ネットワークをまたぐ送信や保存リンクの作成では送信側のみサインインが必要——受信側は常にアカウント不要。",
-        "サイズ上限：Drive はあなたの保存容量枠に制約される；Relayium のリアルタイムはサーバー側の上限なし（Chrome/Edge は数十GBまでディスクへストリーミング、Firefox/Safari は約200MB以内に）。",
+        "アカウント：Drive は送信側に Google アカウントを要求し、共有設定によっては受信側にも必要；Relayium は同一ネットワークではアカウント不要で、ペアリングコードや保存リンクを作る側だけがサインインする——受信側は常にアカウント不要。",
+        "サイズ上限：Drive はあなたの保存容量枠に制約される；Relayium のリアルタイムはサーバー側の上限なし（Chrome/Edge は数十GBまでディスクへストリーミング。ブラウザがメモリに溜めるしかない場合は約256MBを超えると警告）。",
         "費用と開放性：Relayium は無料で AGPL-3.0 ライセンス、github.com/relayium/relayium にあり、ブラウザで Windows・macOS・Linux・Android・iOS で動作し、インストール不要。",
       ],
     },
@@ -221,11 +221,11 @@ const ja = {
       },
       {
         q: "アカウントは必要ですか？",
-        a: "同じネットワーク内ではアカウントは一切不要です。ペアリングコードでネットワークをまたいで送信する場合や、保存ダウンロードリンクを作成する場合は、送信側のサインインが必要です。どちらの場合も受信側は常にアカウント不要です。",
+        a: "同じネットワーク内ではアカウントは一切不要です。ネットワークをまたぐ送信のためにペアリングコードを作る場合や、保存ダウンロードリンクを作成する場合は、サインインが必要です。どちらの場合も受信側は常にアカウント不要です。",
       },
       {
         q: "サイズに上限はありますか？",
-        a: "リアルタイム転送は1バッチにつき最大1,000ファイルまで扱え、サーバー側のサイズ上限はありません——Chrome と Edge は数十ギガバイトまでそのままディスクにストリーミングし、Firefox と Safari はメモリにバッファするため約200MB以内に抑えてください。保存リンクはアカウントに紐づく容量枠に計上されます。",
+        a: "リアルタイム転送は1バッチにつき最大1,000ファイルまで扱え、サーバー側のサイズ上限はありません——Chrome と Edge は数十ギガバイトまでそのままディスクにストリーミングします。ストリーミングで書き出せる経路がどれも使えず、ブラウザがメモリに溜めるしかない場合、Relayium は約256MBを超えると警告します。この数字は意図的に保守的な見積もりで、ハードな上限ではありません。保存リンクはアカウントに紐づく容量枠に計上されます。",
       },
       {
         q: "Relayium は無料ですか？",
@@ -261,14 +261,14 @@ const ko = {
       heading: "차이가 나는 지점: 보내는 것과 저장하는 것은 같은 일이 아니다",
       body: [
         "Drive로 파일 하나를 보내려면 사본을 Google 인프라에 업로드한 뒤, 누가 열 수 있는지 정해야 합니다——특정 사람의 Google 계정, 또는 \"링크가 있는 모든 사람\". 공유 설정을 잘못하면 파일에 접근할 수 없거나 의도한 것보다 더 공개됩니다. 어느 쪽이든, 사본은 당신이 나중에 돌아가 지울 때까지 Google 서버에 무기한 남아 있습니다.",
-        "Relayium은 흔한 경우에 이 저장 단계를 건너뜁니다. 실시간 모드는 종단간 암호화된 P2P 연결을 통해 보내는 사람과 받는 사람의 기기 사이에서 바이트를 직접 이동시킵니다——파일 자체는 서버에 전혀 저장되지 않습니다. 받는 사람이 오프라인이라 링크가 정말로 필요할 때는, 저장 링크 모드가 Drive에는 없는 영지식 속성을 유지합니다. 브라우저가 업로드 전에 무작위로 생성한 AES-256-GCM 키로 파일을 암호화하고, 그 키는 URL 프래그먼트——# 뒤의, 브라우저가 서버로 절대 보내지 않는 부분——에만 존재합니다. Google의 서버는 Drive 파일을 보관하며 기술적으로 읽을 수 있습니다. 반면 Relayium의 서버는 저장 링크에 대해 복호화할 수 없는 암호문만 보관합니다.",
+        "Relayium은 흔한 경우에 이 저장 단계를 건너뜁니다. 실시간 모드는 종단간 암호화된 P2P 연결을 통해 보내는 사람과 받는 사람의 기기 사이로 바이트를 옮깁니다——파일 자체는 서버에 전혀 저장되지 않습니다. 받는 사람이 오프라인이라 링크가 정말로 필요할 때는, 저장 링크 모드가 Drive에는 없는 영지식 속성을 유지합니다. 브라우저가 업로드 전에 무작위로 생성한 AES-256-GCM 키로 파일을 암호화하고, 그 키는 URL 프래그먼트——# 뒤의, 브라우저가 서버로 절대 보내지 않는 부분——에만 존재합니다. Google의 서버는 Drive 파일을 보관하며 기술적으로 읽을 수 있습니다. 반면 Relayium의 서버는 저장 링크에 대해 복호화할 수 없는 암호문만 보관합니다.",
       ],
     },
     {
       heading: "실시간: 서버에 아무것도 저장되지 않음",
       body: [
         "가장 전형적인 경우——두 사람이 지금 모두 온라인——에는 실시간 직접 전송이 한 번에 최대 1,000개 파일을 기기 사이에서 곧바로 보내며, 업로드 단계도 없고 그 사이 어디에도 아무것도 저장되지 않습니다. 양쪽 모두 일치하는 6자리 검증 코드(SAS)를 보여 중간자를 배제하고, 각 파일은 SHA-256 해시로 종단간 검증됩니다. 연결이 끊기면 전송은 처음부터가 아니라 이어서 재개됩니다.",
-        "서버 측 크기 제한이 없으므로 실질적인 한계는 받는 쪽 브라우저에서 옵니다. Chrome과 Edge는 들어오는 데이터를 곧바로 디스크로 스트리밍해 수십 기가바이트도 무리 없이 처리하고, Firefox와 Safari는 메모리에 버퍼링하므로 이런 전송은 약 200 MB 이내로 유지하세요. 같은 네트워크에서는 계정이 전혀 필요 없습니다. 네트워크를 넘어 보낼 때는 페어링 코드를 쓰며 보내는 쪽의 로그인이 필요합니다——다만 어느 네트워크 구성이든 받는 쪽은 항상 계정이 필요 없습니다. 직접 연결이 불가능하면 암호화된 TURN 릴레이로 폴백하며, 릴레이는 암호문만 봅니다.",
+        "서버 측 크기 제한이 없으므로 실질적인 한계는 받는 쪽 브라우저에서 옵니다. Chrome과 Edge는 들어오는 데이터를 곧바로 디스크로 스트리밍해 수십 기가바이트도 무리 없이 처리합니다. Firefox와 Safari에는 그 API가 없어, 디스크로 흘려보낼 경로가 하나도 적용되지 않으면 들어오는 데이터를 메모리에 담습니다——Relayium은 약 256 MB를 넘으면 경고하는데, 이는 측정된 하드 한계가 아니라 일부러 보수적으로 잡은 추정치입니다. 같은 네트워크에서는 계정이 전혀 필요 없고, 두 기기가 서로 직접 연결됩니다. 네트워크를 넘어 보낼 때는 페어링 코드를 쓰고, 그 코드를 만드는 쪽의 로그인이 필요하며, 설계상 암호화된 TURN 릴레이를 거칩니다. 덕분에 네트워크 사이에서는 좀처럼 성공하지 않는 직접 연결 시도를 기다리지 않고 1~2초 만에 연결됩니다. 릴레이는 스스로 읽을 수 없는 암호문만 전달하고, 어느 네트워크 구성이든 받는 쪽은 항상 계정이 필요 없습니다.",
       ],
     },
     {
@@ -285,8 +285,8 @@ const ko = {
         "목적: Google Drive는 협업 기능을 갖춘, 항상 그 자리에 있는 영구 저장소; Relayium은 일회성 전송을 위해 만들어짐——실시간 P2P 또는 자동 만료 링크.",
         "파일이 놓이는 곳: Drive는 당신이 삭제할 때까지 사본을 Google 서버에 무기한 보관; Relayium 실시간은 파일을 아예 저장하지 않고, 저장 링크는 자동 만료(1시간/1일/3일/7일, 요금제에 따라 다름)되거나 첫 다운로드 후 소각됨.",
         "누가 읽을 수 있는가: Google의 인프라는 기술적으로 Drive 파일을 복호화할 수 있음; Relayium의 저장 링크는 영지식으로, 키가 URL 프래그먼트에만 있어 서버는 읽을 수 없는 암호문을 보관함.",
-        "계정: Drive는 보내는 쪽에 Google 계정을 요구하고, 공유 설정에 따라 받는 쪽에도 필요할 수 있음; Relayium은 같은 네트워크에서 계정이 전혀 필요 없고, 네트워크를 넘거나 저장 링크를 만들 때만 보내는 쪽이 로그인함——받는 쪽은 항상 계정 불필요.",
-        "크기 제한: Drive는 저장 용량 한도에 제약됨; Relayium 실시간은 서버 측 제한 없음(Chrome/Edge는 수십 GB까지 디스크로 스트리밍, Firefox/Safari는 약 200 MB 이내로 유지).",
+        "계정: Drive는 보내는 쪽에 Google 계정을 요구하고, 공유 설정에 따라 받는 쪽에도 필요할 수 있음; Relayium은 같은 네트워크에서 계정이 전혀 필요 없고, 페어링 코드나 저장 링크를 만드는 쪽만 로그인함——받는 쪽은 항상 계정 불필요.",
+        "크기 제한: Drive는 저장 용량 한도에 제약됨; Relayium 실시간은 서버 측 제한 없음(Chrome/Edge는 수십 GB까지 디스크로 스트리밍하고, 브라우저가 메모리에 담을 수밖에 없을 때는 약 256 MB를 넘으면 경고).",
         "비용과 개방성: Relayium은 무료이며 AGPL-3.0 라이선스로 github.com/relayium/relayium에 있고, 브라우저에서 Windows·macOS·Linux·Android·iOS로 동작하며 설치가 필요 없음.",
       ],
     },
@@ -300,11 +300,11 @@ const ko = {
       },
       {
         q: "계정이 필요한가요?",
-        a: "같은 네트워크에서는 계정이 전혀 필요 없습니다. 페어링 코드로 네트워크를 넘어 보내거나 저장 다운로드 링크를 만들 때는 보내는 쪽의 로그인이 필요합니다. 어느 경우든 받는 쪽은 항상 계정이 필요 없습니다.",
+        a: "같은 네트워크에서는 계정이 전혀 필요 없습니다. 네트워크를 넘어 보내기 위한 페어링 코드를 만들거나 저장 다운로드 링크를 만들 때는 로그인이 필요합니다. 어느 경우든 받는 쪽은 항상 계정이 필요 없습니다.",
       },
       {
         q: "크기 제한이 있나요?",
-        a: "실시간 전송은 한 번에 최대 1,000개 파일을 다룰 수 있고 서버 측 크기 제한이 없습니다——Chrome과 Edge는 수십 기가바이트까지 곧바로 디스크로 스트리밍하고, Firefox와 Safari는 메모리에 버퍼링하므로 약 200 MB 이내로 유지하세요. 저장 링크는 계정에 연결된 용량 한도에 포함됩니다.",
+        a: "실시간 전송은 한 번에 최대 1,000개 파일을 다룰 수 있고 서버 측 크기 제한이 없습니다——Chrome과 Edge는 수십 기가바이트까지 곧바로 디스크로 스트리밍합니다. 디스크로 흘려보낼 경로가 하나도 적용되지 않아 브라우저가 메모리에 담아야 할 때는 Relayium이 약 256 MB를 넘으면 경고합니다. 이 수치는 일부러 보수적으로 잡은 추정치이지 하드 한계가 아닙니다. 저장 링크는 계정에 연결된 용량 한도에 포함됩니다.",
       },
       {
         q: "Relayium은 무료인가요?",
@@ -340,14 +340,14 @@ const de = {
       heading: "Worin sie sich unterscheiden: Senden ist nicht dasselbe wie Speichern",
       body: [
         "Um eine Datei per Drive zu senden, lädst du eine Kopie auf Googles Infrastruktur und entscheidest dann, wer sie öffnen darf — das Google-Konto einer bestimmten Person oder \"jeder mit dem Link\". Stellst du die Freigabe falsch ein, ist die Datei entweder unerreichbar oder offener als beabsichtigt. So oder so liegt jetzt eine Kopie unbefristet auf Googles Servern, bis du zurückgehst und sie entfernst.",
-        "Relayium überspringt den Speicherschritt für den üblichen Fall. Der Echtzeitmodus bewegt Bytes über eine Ende-zu-Ende-verschlüsselte Peer-to-Peer-Verbindung direkt zwischen den Geräten von Absender und Empfänger — die Datei selbst wird nie auf einem Server gespeichert. Ist der Empfänger offline und du willst wirklich einen Link, behält der Speicherlink-Modus die Zero-Knowledge-Eigenschaft, die Drive nicht hat: Dein Browser verschlüsselt die Datei vor dem Hochladen mit einem zufälligen AES-256-GCM-Schlüssel, und dieser Schlüssel lebt nur im URL-Fragment (dem Teil nach dem #, den Browser nie an einen Server senden). Googles Server halten deine Drive-Dateien und können sie technisch lesen; Relayiums Server hält bei einem Speicherlink nur Chiffretext, den er nicht entschlüsseln kann.",
+        "Relayium überspringt den Speicherschritt für den üblichen Fall. Der Echtzeitmodus bewegt Bytes über eine Ende-zu-Ende-verschlüsselte Peer-to-Peer-Verbindung zwischen den Geräten von Absender und Empfänger — die Datei selbst wird nie auf einem Server gespeichert. Ist der Empfänger offline und du willst wirklich einen Link, behält der Speicherlink-Modus die Zero-Knowledge-Eigenschaft, die Drive nicht hat: Dein Browser verschlüsselt die Datei vor dem Hochladen mit einem zufälligen AES-256-GCM-Schlüssel, und dieser Schlüssel lebt nur im URL-Fragment (dem Teil nach dem #, den Browser nie an einen Server senden). Googles Server halten deine Drive-Dateien und können sie technisch lesen; Relayiums Server hält bei einem Speicherlink nur Chiffretext, den er nicht entschlüsseln kann.",
       ],
     },
     {
       heading: "Echtzeit: nichts wird auf einem Server gespeichert",
       body: [
         "Für den klassischen Fall — beide sind gerade online — sendet die direkte Echtzeitübertragung bis zu 1.000 Dateien in einem Durchgang direkt zwischen den Geräten, ohne Hochladeschritt und ohne dass zwischendurch irgendwo etwas gespeichert wird. Beide Seiten sehen einen übereinstimmenden sechsstelligen Prüfcode (SAS), um einen Man-in-the-Middle auszuschließen, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft; bricht die Verbindung ab, wird die Übertragung fortgesetzt statt neu gestartet.",
-        "Es gibt kein serverseitiges Größenlimit, die praktische Grenze kommt also vom empfangenden Browser: Chrome und Edge streamen eingehende Daten direkt auf die Festplatte und bewältigen mühelos mehrere Dutzend Gigabyte, während Firefox und Safari im Arbeitsspeicher puffern — halte solche Übertragungen dort unter etwa 200 MB. Im selben Netz ist überhaupt kein Konto nötig. Beim Senden über Netzwerke hinweg per Pairing-Code muss sich der Absender anmelden — der Empfänger braucht in keinem der beiden Fälle je ein Konto. Ist eine Direktverbindung nicht möglich, weicht die Übertragung auf ein verschlüsseltes TURN-Relay aus, das nur Chiffretext sieht.",
+        "Es gibt kein serverseitiges Größenlimit, die praktische Grenze kommt also vom empfangenden Browser: Chrome und Edge streamen eingehende Daten direkt auf die Festplatte und bewältigen mühelos mehrere Dutzend Gigabyte. Firefox und Safari haben diese API nicht, und wenn kein Streaming-Weg greift, halten sie die eingehenden Daten stattdessen im Arbeitsspeicher — Relayium warnt oberhalb von rund 256 MB, einer bewusst konservativen Schätzung und keiner gemessenen harten Grenze. Im selben Netz ist überhaupt kein Konto nötig, und die beiden Geräte verbinden sich direkt miteinander. Beim Senden über Netzwerke hinweg per Pairing-Code muss sich anmelden, wer diesen Code erstellt, und die Übertragung läuft planmäßig über ein verschlüsseltes TURN-Relay, sodass die Verbindung in ein bis zwei Sekunden steht, statt auf Direktverbindungsversuche zu warten, die zwischen zwei Netzen selten gelingen; das Relay leitet nur Chiffretext weiter, den es nicht lesen kann, und der Empfänger braucht in keinem der beiden Fälle je ein Konto.",
       ],
     },
     {
@@ -364,8 +364,8 @@ const de = {
         "Zweck: Google Drive ist dauerhafter, stets verfügbarer Speicher mit eingebauter Zusammenarbeit; Relayium ist für den einmaligen Versand gebaut — Echtzeit-P2P oder ein Link mit Ablaufdatum.",
         "Wo Dateien liegen: Drive behält eine unbefristete Kopie auf Googles Servern, bis du sie löschst; Relayium-Echtzeit speichert die Datei überhaupt nicht, und Speicherlinks laufen automatisch ab (1 Std./1 Tag/3 Tage/7 Tage, je nach Tarif) oder werden nach dem ersten Download vernichtet.",
         "Wer es lesen kann: Googles Infrastruktur kann Drive-Dateien technisch entschlüsseln; Relayiums Speicherlinks sind Zero-Knowledge — der Schlüssel lebt nur im URL-Fragment, sodass der Server Chiffretext hält, den er nicht lesen kann.",
-        "Konten: Drive verlangt vom Absender ein Google-Konto und je nach Freigabeeinstellung oft auch vom Empfänger; Relayium braucht im selben Netz kein Konto, und nur der Absender meldet sich beim netzübergreifenden Senden oder beim Erstellen eines Speicherlinks an — der Empfänger nie.",
-        "Größenlimits: Drive ist durch dein Speicherkontingent begrenzt; Relayium-Echtzeit hat kein serverseitiges Limit (Chrome/Edge streamen für mehrere Dutzend Gigabyte auf die Festplatte; Firefox/Safari unter ~200 MB halten).",
+        "Konten: Drive verlangt vom Absender ein Google-Konto und je nach Freigabeeinstellung oft auch vom Empfänger; Relayium braucht im selben Netz kein Konto, und nur wer den Pairing-Code oder den Speicherlink erstellt, meldet sich an — der Empfänger nie.",
+        "Größenlimits: Drive ist durch dein Speicherkontingent begrenzt; Relayium-Echtzeit hat kein serverseitiges Limit (Chrome/Edge streamen für mehrere Dutzend Gigabyte auf die Festplatte; muss der Browser stattdessen im Speicher puffern, warnt Relayium oberhalb von rund 256 MB).",
         "Kosten und Offenheit: Relayium ist kostenlos und AGPL-3.0-lizenziert unter github.com/relayium/relayium und läuft im Browser unter Windows, macOS, Linux, Android und iOS ohne Installation.",
       ],
     },
@@ -379,11 +379,11 @@ const de = {
       },
       {
         q: "Brauche ich ein Konto?",
-        a: "Im selben Netz ist überhaupt kein Konto nötig. Beim Senden über Netzwerke hinweg per Pairing-Code oder beim Erstellen eines gespeicherten Download-Links muss sich der Absender anmelden. Der Empfänger braucht in keinem der beiden Fälle je ein Konto.",
+        a: "Im selben Netz ist überhaupt kein Konto nötig. Wer für einen netzübergreifenden Versand den Pairing-Code erstellt oder einen gespeicherten Download-Link anlegt, muss sich anmelden. Der Empfänger braucht in keinem der beiden Fälle je ein Konto.",
       },
       {
         q: "Gibt es ein Größenlimit?",
-        a: "Echtzeitübertragungen fassen bis zu 1.000 Dateien pro Durchgang ohne serverseitiges Größenlimit — Chrome und Edge streamen für mehrere Dutzend Gigabyte direkt auf die Festplatte, während Firefox und Safari im Arbeitsspeicher puffern, halte solche Übertragungen also unter etwa 200 MB. Speicherlinks zählen gegen ein an dein Konto gebundenes Kontingent.",
+        a: "Echtzeitübertragungen fassen bis zu 1.000 Dateien pro Durchgang ohne serverseitiges Größenlimit — Chrome und Edge streamen für mehrere Dutzend Gigabyte direkt auf die Festplatte. Greift kein Streaming-Weg und muss der Browser im Arbeitsspeicher puffern, warnt Relayium oberhalb von rund 256 MB; diese Zahl ist eine bewusst konservative Schätzung, keine harte Grenze. Speicherlinks zählen gegen ein an dein Konto gebundenes Kontingent.",
       },
       {
         q: "Ist Relayium kostenlos?",
@@ -419,14 +419,14 @@ const fr = {
       heading: "Là où ils diffèrent : envoyer n'est pas la même tâche que stocker",
       body: [
         "Pour envoyer un fichier via Drive, vous téléversez une copie sur l'infrastructure de Google, puis décidez qui peut l'ouvrir — le compte Google d'une personne précise, ou « toute personne disposant du lien ». Si vous vous trompez de réglage de partage, le fichier devient soit inaccessible, soit plus ouvert que prévu. Dans les deux cas, une copie réside désormais indéfiniment sur les serveurs de Google, jusqu'à ce que vous reveniez la retirer.",
-        "Relayium saute l'étape du stockage pour le cas courant. Son mode temps réel déplace des octets directement entre les appareils de l'expéditeur et du destinataire via une connexion pair-à-pair chiffrée de bout en bout — le fichier lui-même n'est jamais stocké sur un serveur. Quand le destinataire est hors ligne et que vous voulez vraiment un lien, le mode lien stocké conserve la propriété à divulgation nulle que Drive n'a pas : votre navigateur chiffre le fichier avec une clé AES-256-GCM aléatoire avant le téléversement, et cette clé ne vit que dans le fragment de l'URL (la partie après le #, que les navigateurs n'envoient jamais à un serveur). Les serveurs de Google détiennent vos fichiers Drive et peuvent techniquement les lire ; le serveur de Relayium, pour un lien stocké, ne détient qu'un texte chiffré qu'il ne peut pas déchiffrer.",
+        "Relayium saute l'étape du stockage pour le cas courant. Son mode temps réel déplace des octets entre les appareils de l'expéditeur et du destinataire via une connexion pair-à-pair chiffrée de bout en bout — le fichier lui-même n'est jamais stocké sur un serveur. Quand le destinataire est hors ligne et que vous voulez vraiment un lien, le mode lien stocké conserve la propriété à divulgation nulle que Drive n'a pas : votre navigateur chiffre le fichier avec une clé AES-256-GCM aléatoire avant le téléversement, et cette clé ne vit que dans le fragment de l'URL (la partie après le #, que les navigateurs n'envoient jamais à un serveur). Les serveurs de Google détiennent vos fichiers Drive et peuvent techniquement les lire ; le serveur de Relayium, pour un lien stocké, ne détient qu'un texte chiffré qu'il ne peut pas déchiffrer.",
       ],
     },
     {
       heading: "Temps réel : rien n'est stocké sur un serveur",
       body: [
         "Pour le cas classique — les deux personnes sont en ligne en ce moment — le transfert direct en temps réel envoie jusqu'à 1 000 fichiers en un seul lot directement entre les appareils, sans étape de téléversement et sans rien stocker entre les deux. Les deux côtés voient un code de vérification à 6 chiffres identique (SAS) pour écarter un homme du milieu, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256 ; si la connexion tombe, le transfert reprend au lieu de recommencer.",
-        "Il n'y a aucune limite de taille côté serveur, la limite pratique vient donc du navigateur du destinataire : Chrome et Edge diffusent les données entrantes directement sur le disque, gérant sans peine plusieurs dizaines de gigaoctets, tandis que Firefox et Safari mettent en mémoire tampon, donc gardez ces transferts sous environ 200 Mo. Sur le même réseau, aucun compte n'est nécessaire du tout. Envoyer entre réseaux différents utilise un code d'appairage et exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte, dans aucune des deux configurations réseau. Si une connexion directe est impossible, le transfert bascule vers un relais TURN chiffré qui ne voit que du texte chiffré.",
+        "Il n'y a aucune limite de taille côté serveur, la limite pratique vient donc du navigateur du destinataire : Chrome et Edge écrivent les données entrantes directement sur le disque, gérant sans peine plusieurs dizaines de gigaoctets. Firefox et Safari n'ont pas cette API et, quand aucun chemin d'écriture en flux ne s'applique, gardent les données entrantes en mémoire — Relayium prévient au-delà d'environ 256 Mo, une estimation volontairement prudente et non une limite dure mesurée. Sur le même réseau, aucun compte n'est nécessaire du tout et les deux appareils se connectent directement l'un à l'autre. Envoyer entre réseaux différents utilise un code d'appairage, exige que la personne qui crée ce code se connecte, et passe par conception par un relais TURN chiffré : la connexion s'établit ainsi en une ou deux secondes au lieu d'attendre des tentatives de connexion directe qui aboutissent rarement entre deux réseaux ; le relais ne transporte que du texte chiffré qu'il ne peut pas lire, et le destinataire n'a jamais besoin de compte, dans aucune des deux configurations réseau.",
       ],
     },
     {
@@ -443,8 +443,8 @@ const fr = {
         "Objectif : Google Drive est un stockage durable, toujours disponible, avec collaboration intégrée ; Relayium est conçu pour un envoi ponctuel — P2P en temps réel ou lien à expiration automatique.",
         "Où résident les fichiers : Drive garde une copie indéfinie sur les serveurs de Google jusqu'à ce que vous la supprimiez ; le temps réel de Relayium ne stocke jamais le fichier du tout, et les liens stockés expirent automatiquement (1 h/1 j/3 j/7 j, selon l'offre) ou se détruisent après le premier téléchargement.",
         "Qui peut le lire : l'infrastructure de Google peut techniquement déchiffrer les fichiers Drive ; les liens stockés de Relayium sont à divulgation nulle — la clé ne vit que dans le fragment de l'URL, donc le serveur détient un texte chiffré qu'il ne peut pas lire.",
-        "Comptes : Drive exige un compte Google pour l'expéditeur, et souvent pour le destinataire selon les réglages de partage ; Relayium ne demande aucun compte sur le même réseau, et seul l'expéditeur se connecte pour un envoi entre réseaux ou un lien stocké — le destinataire n'en a jamais besoin.",
-        "Limites de taille : Drive est borné par votre quota de stockage ; le temps réel de Relayium n'a aucune limite côté serveur (Chrome/Edge diffusent sur le disque pour plusieurs dizaines de Go ; gardez Firefox/Safari sous ~200 Mo).",
+        "Comptes : Drive exige un compte Google pour l'expéditeur, et souvent pour le destinataire selon les réglages de partage ; Relayium ne demande aucun compte sur le même réseau, et seule la personne qui crée le code d'appairage ou le lien stocké se connecte — le destinataire n'en a jamais besoin.",
+        "Limites de taille : Drive est borné par votre quota de stockage ; le temps réel de Relayium n'a aucune limite côté serveur (Chrome/Edge écrivent sur le disque pour plusieurs dizaines de Go ; quand le navigateur doit mettre en mémoire tampon, Relayium prévient au-delà d'environ 256 Mo).",
         "Coût et ouverture : Relayium est gratuit et sous licence AGPL-3.0 sur github.com/relayium/relayium, et tourne dans le navigateur sur Windows, macOS, Linux, Android et iOS sans rien installer.",
       ],
     },
@@ -458,11 +458,11 @@ const fr = {
       },
       {
         q: "Ai-je besoin d'un compte ?",
-        a: "Sur le même réseau, aucun compte n'est nécessaire du tout. Envoyer entre réseaux avec un code d'appairage, ou créer un lien de téléchargement stocké, exige que l'expéditeur se connecte. Le destinataire n'a jamais besoin de compte, dans les deux cas.",
+        a: "Sur le même réseau, aucun compte n'est nécessaire du tout. Créer le code d'appairage pour un envoi entre réseaux, ou créer un lien de téléchargement stocké, exige d'être connecté. Le destinataire n'a jamais besoin de compte, dans les deux cas.",
       },
       {
         q: "Y a-t-il une limite de taille ?",
-        a: "Les transferts en temps réel portent jusqu'à 1 000 fichiers par lot sans limite de taille côté serveur — Chrome et Edge diffusent directement sur le disque pour plusieurs dizaines de gigaoctets, tandis que Firefox et Safari mettent en mémoire tampon, gardez donc ces transferts sous environ 200 Mo. Les liens stockés comptent dans un quota lié à votre compte.",
+        a: "Les transferts en temps réel portent jusqu'à 1 000 fichiers par lot sans limite de taille côté serveur — Chrome et Edge écrivent directement sur le disque pour plusieurs dizaines de gigaoctets. Quand aucun chemin d'écriture en flux ne s'applique et que le navigateur doit mettre en mémoire tampon, Relayium prévient au-delà d'environ 256 Mo ; ce chiffre est une estimation volontairement prudente, pas une limite dure. Les liens stockés comptent dans un quota lié à votre compte.",
       },
       {
         q: "Relayium est-il gratuit ?",
@@ -498,14 +498,14 @@ const ar = {
       heading: "أين يختلفان: الإرسال ليس المهمة نفسها كالتخزين",
       body: [
         "لإرسال ملف واحد عبر Drive، ترفع نسخة إلى بنية Google التحتية، ثم تقرر من يمكنه فتحه — حساب Google لشخص محدد، أو \"أي شخص لديه الرابط\". إن أخطأت في إعداد المشاركة، صار الملف إما غير قابل للوصول أو أكثر انفتاحًا مما قصدت. وفي كلتا الحالتين، تصبح نسخة الآن مقيمة على خوادم Google إلى أجل غير مسمى، حتى تعود وتزيلها.",
-        "يتخطى Relayium خطوة التخزين في الحالة الشائعة. ينقل وضعه الفوري البايتات مباشرةً بين جهازَي المُرسِل والمُستقبِل عبر اتصال من الند للند مشفّر من الطرف إلى الطرف — الملف نفسه لا يُخزَّن على خادم على الإطلاق. وعندما يكون المُستقبِل غير متصل وتريد فعلًا رابطًا، يحافظ وضع الرابط المُخزَّن على خاصية المعرفة الصفرية التي لا يملكها Drive: يشفّر متصفحك الملف بمفتاح AES-256-GCM عشوائي قبل الرفع، ويعيش ذلك المفتاح في جزء الـ URL فقط (الجزء بعد #، الذي لا ترسله المتصفحات أبدًا إلى خادم). تحتفظ خوادم Google بملفات Drive الخاصة بك وتستطيع تقنيًا قراءتها؛ أما خادم Relayium، بالنسبة إلى رابط مُخزَّن، فلا يحتفظ إلا بنص مُشفَّر لا يستطيع فكّ تشفيره.",
+        "يتخطى Relayium خطوة التخزين في الحالة الشائعة. ينقل وضعه الفوري البايتات بين جهازَي المُرسِل والمُستقبِل عبر اتصال من الند للند مشفّر من الطرف إلى الطرف — الملف نفسه لا يُخزَّن على خادم على الإطلاق. وعندما يكون المُستقبِل غير متصل وتريد فعلًا رابطًا، يحافظ وضع الرابط المُخزَّن على خاصية المعرفة الصفرية التي لا يملكها Drive: يشفّر متصفحك الملف بمفتاح AES-256-GCM عشوائي قبل الرفع، ويعيش ذلك المفتاح في جزء الـ URL فقط (الجزء بعد #، الذي لا ترسله المتصفحات أبدًا إلى خادم). تحتفظ خوادم Google بملفات Drive الخاصة بك وتستطيع تقنيًا قراءتها؛ أما خادم Relayium، بالنسبة إلى رابط مُخزَّن، فلا يحتفظ إلا بنص مُشفَّر لا يستطيع فكّ تشفيره.",
       ],
     },
     {
       heading: "الفوري: لا شيء مُخزَّن على خادم",
       body: [
         "للحالة الكلاسيكية — كلا الشخصين متصلان الآن — يرسل النقل الفوري المباشر ما يصل إلى 1,000 ملف في دفعة واحدة مباشرةً بين الأجهزة، دون خطوة رفع ودون تخزين أي شيء في أي مكان بينهما. يرى الطرفان رمز تحقق مطابقًا من 6 أرقام (SAS) لاستبعاد هجوم الوسيط، ويُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256؛ وإذا انقطع الاتصال، يستأنف النقل بدلًا من أن يبدأ من جديد.",
-        "لا يوجد حدّ للحجم من جانب الخادم، لذا يأتي الحدّ العملي من متصفح الاستقبال: يبثّ Chrome و Edge البيانات الواردة مباشرةً إلى القرص، متعاملَين بأريحية مع عشرات الغيغابايت، بينما يخزّن Firefox و Safari مؤقتًا في الذاكرة، فأبقِ تلك عمليات النقل دون نحو 200 MB. على نفس الشبكة لا يلزم أي حساب على الإطلاق. الإرسال عبر الشبكات يستخدم رمز اقتران ويتطلب تسجيل دخول المُرسِل — أما المُستقبِل فلا يحتاج إلى حساب أبدًا، في أي من إعدادَي الشبكة. وإذا تعذّر الاتصال المباشر، يعود النقل إلى مُرحِّل TURN مشفّر لا يرى سوى نص مُشفَّر.",
+        "لا يوجد حدّ للحجم من جانب الخادم، لذا يأتي الحدّ العملي من متصفح الاستقبال: يبثّ Chrome و Edge البيانات الواردة مباشرةً إلى القرص، متعاملَين بأريحية مع عشرات الغيغابايت. أما Firefox و Safari فلا يملكان تلك الواجهة، وحين لا ينطبق أي مسار للكتابة التدفّقية يحتفظان بالبيانات الواردة في الذاكرة — ويحذّر Relayium فوق نحو 256 MB، وهو تقدير متحفّظ عن قصد لا حدّ صلب مقيس. على نفس الشبكة لا يلزم أي حساب على الإطلاق، ويتّصل الجهازان أحدهما بالآخر مباشرةً. أما الإرسال عبر الشبكات فيستخدم رمز اقتران، ويتطلب تسجيل دخول مُنشئ الرمز، ويمرّ بحكم التصميم عبر مُرحِّل TURN مشفّر، فينعقد الاتصال خلال ثانية أو ثانيتين بدل انتظار محاولات اتصال مباشر نادرًا ما تنجح بين شبكتين؛ والمُرحِّل لا ينقل سوى نص مُشفَّر لا يستطيع قراءته، ولا يحتاج المُستقبِل إلى حساب أبدًا، في أي من إعدادَي الشبكة.",
       ],
     },
     {
@@ -522,8 +522,8 @@ const ar = {
         "الغرض: Google Drive تخزين دائم متاح دومًا مع تعاون مدمج؛ أما Relayium فمبني للإرسال لمرة واحدة — إما فوري من الند للند أو رابط ذاتي الانتهاء.",
         "أين تعيش الملفات: يحتفظ Drive بنسخة غير محددة المدة على خوادم Google حتى تحذفها؛ أما Relayium الفوري فلا يخزّن الملف على الإطلاق، والروابط المُخزَّنة تنتهي تلقائيًا (ساعة/يوم/3 أيام/7 أيام، حسب الخطة) أو تحترق بعد أول تنزيل.",
         "من يمكنه قراءتها: تستطيع بنية Google التحتية تقنيًا فكّ تشفير ملفات Drive؛ أما روابط Relayium المُخزَّنة فبمعرفة صفرية — يعيش المفتاح في جزء الـ URL فقط، فيحتفظ الخادم بنص مُشفَّر لا يستطيع قراءته.",
-        "الحسابات: يتطلب Drive حساب Google للمُرسِل، وغالبًا للمُستقبِل بحسب إعدادات المشاركة؛ أما Relayium فلا يحتاج إلى حساب على نفس الشبكة، والمُرسِل وحده يسجّل الدخول للإرسال عبر الشبكات أو للرابط المُخزَّن — والمُستقبِل لا يحتاج إليه أبدًا.",
-        "حدود الحجم: Drive محدود بحصة التخزين لديك؛ أما Relayium الفوري فلا حدّ له من جانب الخادم (يبثّ Chrome/Edge إلى القرص لعشرات الغيغابايت؛ أبقِ Firefox/Safari دون نحو 200 MB).",
+        "الحسابات: يتطلب Drive حساب Google للمُرسِل، وغالبًا للمُستقبِل بحسب إعدادات المشاركة؛ أما Relayium فلا يحتاج إلى حساب على نفس الشبكة، ولا يسجّل الدخول إلا من ينشئ رمز الاقتران أو الرابط المُخزَّن — والمُستقبِل لا يحتاج إليه أبدًا.",
+        "حدود الحجم: Drive محدود بحصة التخزين لديك؛ أما Relayium الفوري فلا حدّ له من جانب الخادم (يبثّ Chrome/Edge إلى القرص لعشرات الغيغابايت؛ وحين يضطر المتصفح إلى التخزين في الذاكرة يحذّر Relayium فوق نحو 256 MB).",
         "التكلفة والانفتاح: Relayium مجاني ومرخّص بموجب AGPL-3.0 على github.com/relayium/relayium، ويعمل في المتصفح على Windows و macOS و Linux و Android و iOS دون أي شيء يُثبَّت.",
       ],
     },
@@ -537,11 +537,11 @@ const ar = {
       },
       {
         q: "هل أحتاج إلى حساب؟",
-        a: "على نفس الشبكة لا يلزم أي حساب على الإطلاق. الإرسال عبر الشبكات برمز اقتران، أو إنشاء رابط تنزيل مُخزَّن، يتطلب تسجيل دخول المُرسِل. أما المُستقبِل فلا يحتاج إلى حساب أبدًا، في كلتا الحالتين.",
+        a: "على نفس الشبكة لا يلزم أي حساب على الإطلاق. أما إنشاء رمز الاقتران لإرسال عبر الشبكات، أو إنشاء رابط تنزيل مُخزَّن، فيتطلب تسجيل الدخول. أما المُستقبِل فلا يحتاج إلى حساب أبدًا، في كلتا الحالتين.",
       },
       {
         q: "هل هناك حدّ للحجم؟",
-        a: "تحمل عمليات النقل الفوري ما يصل إلى 1,000 ملف في الدفعة دون حدّ للحجم من جانب الخادم — يبثّ Chrome و Edge مباشرةً إلى القرص لعشرات الغيغابايت، بينما يخزّن Firefox و Safari مؤقتًا في الذاكرة، فأبقِ تلك دون نحو 200 MB. أما الروابط المُخزَّنة فتُحتسب ضمن حصة مرتبطة بحسابك.",
+        a: "تحمل عمليات النقل الفوري ما يصل إلى 1,000 ملف في الدفعة دون حدّ للحجم من جانب الخادم — يبثّ Chrome و Edge مباشرةً إلى القرص لعشرات الغيغابايت. وحين لا ينطبق أي مسار للكتابة التدفّقية ويضطر المتصفح إلى التخزين في الذاكرة، يحذّر Relayium فوق نحو 256 MB؛ وهذا الرقم تقدير متحفّظ عن قصد، لا حدّ صلب. أما الروابط المُخزَّنة فتُحتسب ضمن حصة مرتبطة بحسابك.",
       },
       {
         q: "هل Relayium مجاني؟",
@@ -577,14 +577,14 @@ const es = {
       heading: "En qué se diferencian: enviar no es la misma tarea que almacenar",
       body: [
         "Para enviar un archivo por Drive, subes una copia a la infraestructura de Google y luego decides quién puede abrirlo: la cuenta de Google de una persona concreta, o \"cualquier persona con el enlace\". Si te equivocas con el ajuste de uso compartido, el archivo queda o inaccesible o más abierto de lo que pretendías. En cualquier caso, ahora vive una copia indefinidamente en los servidores de Google, hasta que vuelvas y la elimines.",
-        "Relayium se salta el paso del almacenamiento en el caso común. Su modo en tiempo real mueve los bytes directamente entre los dispositivos del remitente y del destinatario a través de una conexión de igual a igual cifrada de extremo a extremo: el archivo en sí nunca se almacena en un servidor. Cuando el destinatario está desconectado y sí quieres un enlace, el modo de enlace almacenado conserva la propiedad de conocimiento cero que Drive no tiene: tu navegador cifra el archivo con una clave AES-256-GCM aleatoria antes de subirlo, y esa clave vive únicamente en el fragmento de la URL (la parte tras el #, que los navegadores nunca envían a un servidor). Los servidores de Google guardan tus archivos de Drive y técnicamente pueden leerlos; el servidor de Relayium, para un enlace almacenado, solo guarda texto cifrado que no puede descifrar.",
+        "Relayium se salta el paso del almacenamiento en el caso común. Su modo en tiempo real mueve los bytes entre los dispositivos del remitente y del destinatario a través de una conexión de igual a igual cifrada de extremo a extremo: el archivo en sí nunca se almacena en un servidor. Cuando el destinatario está desconectado y sí quieres un enlace, el modo de enlace almacenado conserva la propiedad de conocimiento cero que Drive no tiene: tu navegador cifra el archivo con una clave AES-256-GCM aleatoria antes de subirlo, y esa clave vive únicamente en el fragmento de la URL (la parte tras el #, que los navegadores nunca envían a un servidor). Los servidores de Google guardan tus archivos de Drive y técnicamente pueden leerlos; el servidor de Relayium, para un enlace almacenado, solo guarda texto cifrado que no puede descifrar.",
       ],
     },
     {
       heading: "Tiempo real: nada almacenado en un servidor",
       body: [
         "Para el caso clásico —ambas personas están conectadas ahora mismo— la transferencia directa en tiempo real envía hasta 1.000 archivos en un solo lote directamente entre dispositivos, sin paso de subida y sin nada almacenado en ningún punto intermedio. Ambos lados ven un código de verificación de 6 dígitos coincidente (SAS) para descartar un ataque de intermediario, y cada archivo se comprueba de extremo a extremo con un hash SHA-256; si la conexión se cae, la transferencia se reanuda en lugar de reiniciarse.",
-        "No hay límite de tamaño en el servidor, así que el límite práctico viene del navegador que recibe: Chrome y Edge transmiten los datos entrantes directamente al disco, manejando con holgura decenas de gigabytes, mientras que Firefox y Safari almacenan en memoria, así que mantén esas transferencias por debajo de unos 200 MB. En la misma red no hace falta ninguna cuenta. Enviar entre redes usa un código de emparejamiento y requiere que el remitente inicie sesión; el destinatario nunca necesita cuenta, en ninguna de las dos configuraciones de red. Si no es posible una conexión directa, recurre a un retransmisor TURN cifrado que solo ve texto cifrado.",
+        "No hay límite de tamaño en el servidor, así que el límite práctico viene del navegador que recibe: Chrome y Edge escriben los datos entrantes directamente al disco, manejando con holgura decenas de gigabytes. Firefox y Safari no tienen esa API y, cuando no se aplica ninguna vía de escritura en flujo, guardan los datos entrantes en memoria: Relayium avisa por encima de unos 256 MB, una estimación deliberadamente conservadora y no un límite duro medido. En la misma red no hace falta ninguna cuenta y los dos dispositivos se conectan directamente entre sí. Enviar entre redes usa un código de emparejamiento, requiere que quien crea ese código inicie sesión y viaja por diseño sobre un retransmisor TURN cifrado, de modo que la conexión se levanta en uno o dos segundos en vez de esperar intentos de conexión directa que rara vez prosperan entre dos redes; el retransmisor solo reenvía texto cifrado que no puede leer, y el destinatario nunca necesita cuenta, en ninguna de las dos configuraciones de red.",
       ],
     },
     {
@@ -601,8 +601,8 @@ const es = {
         "Propósito: Google Drive es almacenamiento duradero, siempre disponible, con colaboración integrada; Relayium está hecho para un envío puntual: P2P en tiempo real o un enlace que caduca solo.",
         "Dónde viven los archivos: Drive conserva una copia indefinida en los servidores de Google hasta que la eliminas; el tiempo real de Relayium no almacena el archivo en absoluto, y los enlaces almacenados caducan automáticamente (1h/1d/3d/7d, según el plan) o se consumen tras la primera descarga.",
         "Quién puede leerlo: la infraestructura de Google puede técnicamente descifrar los archivos de Drive; los enlaces almacenados de Relayium son de conocimiento cero: la clave vive únicamente en el fragmento de la URL, así que el servidor guarda texto cifrado que no puede leer.",
-        "Cuentas: Drive requiere una cuenta de Google para el remitente, y a menudo para el destinatario según los ajustes de uso compartido; Relayium no necesita cuenta en la misma red, y solo el remitente inicia sesión para el envío entre redes o de enlace almacenado; el destinatario nunca la necesita.",
-        "Límites de tamaño: Drive está limitado por tu cuota de almacenamiento; el tiempo real de Relayium no tiene límite en el servidor (Chrome/Edge transmiten al disco para decenas de GB; mantén Firefox/Safari por debajo de ~200 MB).",
+        "Cuentas: Drive requiere una cuenta de Google para el remitente, y a menudo para el destinatario según los ajustes de uso compartido; Relayium no necesita cuenta en la misma red, y solo inicia sesión quien crea el código de emparejamiento o el enlace almacenado; el destinatario nunca la necesita.",
+        "Límites de tamaño: Drive está limitado por tu cuota de almacenamiento; el tiempo real de Relayium no tiene límite en el servidor (Chrome/Edge escriben al disco para decenas de GB; cuando el navegador tiene que almacenar en memoria, Relayium avisa por encima de unos 256 MB).",
         "Coste y apertura: Relayium es gratis y está bajo licencia AGPL-3.0 en github.com/relayium/relayium, funcionando en el navegador en Windows, macOS, Linux, Android e iOS sin nada que instalar.",
       ],
     },
@@ -616,11 +616,11 @@ const es = {
       },
       {
         q: "¿Necesito una cuenta?",
-        a: "En la misma red no hace falta ninguna cuenta. Enviar entre redes con un código de emparejamiento, o crear un enlace de descarga almacenado, requiere que el remitente inicie sesión. El destinatario nunca necesita cuenta, en ninguno de los dos casos.",
+        a: "En la misma red no hace falta ninguna cuenta. Crear el código de emparejamiento para un envío entre redes, o crear un enlace de descarga almacenado, requiere iniciar sesión. El destinatario nunca necesita cuenta, en ninguno de los dos casos.",
       },
       {
         q: "¿Hay un límite de tamaño?",
-        a: "Las transferencias en tiempo real llevan hasta 1.000 archivos por lote sin límite de tamaño en el servidor: Chrome y Edge transmiten directamente al disco para decenas de gigabytes, mientras que Firefox y Safari almacenan en memoria, así que mantén esas por debajo de unos 200 MB. Los enlaces almacenados cuentan para una cuota vinculada a tu cuenta.",
+        a: "Las transferencias en tiempo real llevan hasta 1.000 archivos por lote sin límite de tamaño en el servidor: Chrome y Edge escriben directamente al disco para decenas de gigabytes. Cuando no se aplica ninguna vía de escritura en flujo y el navegador tiene que almacenar en memoria, Relayium avisa por encima de unos 256 MB; esa cifra es una estimación deliberadamente conservadora, no un límite duro. Los enlaces almacenados cuentan para una cuota vinculada a tu cuenta.",
       },
       {
         q: "¿Es Relayium gratis?",
@@ -656,14 +656,14 @@ const pt = {
       heading: "Onde eles diferem: enviar não é a mesma tarefa que armazenar",
       body: [
         "Para enviar um arquivo pelo Drive, você faz upload de uma cópia para a infraestrutura do Google e depois decide quem pode abri-lo: a conta Google de uma pessoa específica, ou \"qualquer pessoa com o link\". Se você errar a configuração de compartilhamento, o arquivo fica ou inacessível ou mais aberto do que você pretendia. De todo modo, uma cópia agora vive indefinidamente nos servidores do Google, até você voltar e removê-la.",
-        "O Relayium pula a etapa de armazenamento no caso comum. Seu modo em tempo real move os bytes diretamente entre os dispositivos do remetente e do destinatário por uma conexão ponto a ponto criptografada de ponta a ponta — o arquivo em si nunca é armazenado em um servidor. Quando o destinatário está off-line e você realmente quer um link, o modo de link armazenado mantém a propriedade de conhecimento zero que o Drive não tem: seu navegador criptografa o arquivo com uma chave AES-256-GCM aleatória antes do upload, e essa chave vive apenas no fragmento da URL (a parte após o #, que os navegadores nunca enviam a um servidor). Os servidores do Google guardam seus arquivos do Drive e podem tecnicamente lê-los; o servidor do Relayium, para um link armazenado, guarda apenas texto cifrado que não consegue descriptografar.",
+        "O Relayium pula a etapa de armazenamento no caso comum. Seu modo em tempo real move os bytes entre os dispositivos do remetente e do destinatário por uma conexão ponto a ponto criptografada de ponta a ponta — o arquivo em si nunca é armazenado em um servidor. Quando o destinatário está off-line e você realmente quer um link, o modo de link armazenado mantém a propriedade de conhecimento zero que o Drive não tem: seu navegador criptografa o arquivo com uma chave AES-256-GCM aleatória antes do upload, e essa chave vive apenas no fragmento da URL (a parte após o #, que os navegadores nunca enviam a um servidor). Os servidores do Google guardam seus arquivos do Drive e podem tecnicamente lê-los; o servidor do Relayium, para um link armazenado, guarda apenas texto cifrado que não consegue descriptografar.",
       ],
     },
     {
       heading: "Tempo real: nada armazenado em um servidor",
       body: [
         "Para o caso clássico — as duas pessoas estão on-line agora mesmo — a transferência direta em tempo real envia até 1.000 arquivos em um único lote diretamente entre dispositivos, sem etapa de upload e sem nada armazenado em qualquer ponto intermediário. Os dois lados veem um código de verificação de 6 dígitos correspondente (SAS) para descartar um ataque de intermediário, e cada arquivo é conferido de ponta a ponta com um hash SHA-256; se a conexão cair, a transferência é retomada em vez de recomeçar.",
-        "Não há limite de tamanho no servidor, então o limite prático vem do navegador que recebe: Chrome e Edge transmitem os dados que chegam direto para o disco, lidando com folga com dezenas de gigabytes, enquanto Firefox e Safari armazenam em memória, então mantenha essas transferências abaixo de cerca de 200 MB. Na mesma rede, nenhuma conta é necessária. Enviar entre redes usa um código de emparelhamento e exige que o remetente faça login — o destinatário nunca precisa de conta, em nenhuma das duas configurações de rede. Se uma conexão direta não for possível, recorre a um retransmissor TURN criptografado que só vê texto cifrado.",
+        "Não há limite de tamanho no servidor, então o limite prático vem do navegador que recebe: Chrome e Edge gravam os dados que chegam direto no disco, lidando com folga com dezenas de gigabytes. Firefox e Safari não têm essa API e, quando nenhum caminho de gravação em fluxo se aplica, guardam os dados que chegam na memória — o Relayium avisa acima de cerca de 256 MB, uma estimativa deliberadamente conservadora e não um limite duro medido. Na mesma rede, nenhuma conta é necessária e os dois dispositivos se conectam diretamente um ao outro. Enviar entre redes usa um código de emparelhamento, exige que quem cria esse código faça login e passa por design por um retransmissor TURN criptografado, de modo que a conexão sobe em um ou dois segundos em vez de esperar tentativas de conexão direta que raramente dão certo entre duas redes; o retransmissor só encaminha texto cifrado que não consegue ler, e o destinatário nunca precisa de conta, em nenhuma das duas configurações de rede.",
       ],
     },
     {
@@ -680,8 +680,8 @@ const pt = {
         "Propósito: o Google Drive é armazenamento duradouro, sempre disponível, com colaboração integrada; o Relayium foi feito para um envio pontual — P2P em tempo real ou um link que expira sozinho.",
         "Onde os arquivos ficam: o Drive mantém uma cópia indefinida nos servidores do Google até você excluí-la; o tempo real do Relayium não armazena o arquivo de forma alguma, e os links armazenados expiram automaticamente (1h/1d/3d/7d, conforme o plano) ou se consomem após o primeiro download.",
         "Quem pode lê-lo: a infraestrutura do Google pode tecnicamente descriptografar os arquivos do Drive; os links armazenados do Relayium são de conhecimento zero — a chave vive apenas no fragmento da URL, então o servidor guarda texto cifrado que não consegue ler.",
-        "Contas: o Drive exige uma conta Google para o remetente e, muitas vezes, para o destinatário, conforme as configurações de compartilhamento; o Relayium não precisa de conta na mesma rede, e só o remetente faz login para o envio entre redes ou de link armazenado — o destinatário nunca precisa.",
-        "Limites de tamanho: o Drive é limitado pela sua cota de armazenamento; o tempo real do Relayium não tem limite no servidor (Chrome/Edge transmitem para o disco para dezenas de GB; mantenha Firefox/Safari abaixo de ~200 MB).",
+        "Contas: o Drive exige uma conta Google para o remetente e, muitas vezes, para o destinatário, conforme as configurações de compartilhamento; o Relayium não precisa de conta na mesma rede, e só quem cria o código de emparelhamento ou o link armazenado faz login — o destinatário nunca precisa.",
+        "Limites de tamanho: o Drive é limitado pela sua cota de armazenamento; o tempo real do Relayium não tem limite no servidor (Chrome/Edge gravam no disco para dezenas de GB; quando o navegador precisa armazenar na memória, o Relayium avisa acima de cerca de 256 MB).",
         "Custo e abertura: o Relayium é gratuito e licenciado sob AGPL-3.0 em github.com/relayium/relayium, rodando no navegador em Windows, macOS, Linux, Android e iOS sem nada para instalar.",
       ],
     },
@@ -695,11 +695,11 @@ const pt = {
       },
       {
         q: "Preciso de uma conta?",
-        a: "Na mesma rede, nenhuma conta é necessária. Enviar entre redes com um código de emparelhamento, ou criar um link de download armazenado, exige que o remetente faça login. O destinatário nunca precisa de conta, em nenhum dos casos.",
+        a: "Na mesma rede, nenhuma conta é necessária. Criar o código de emparelhamento para um envio entre redes, ou criar um link de download armazenado, exige login. O destinatário nunca precisa de conta, em nenhum dos casos.",
       },
       {
         q: "Há um limite de tamanho?",
-        a: "As transferências em tempo real levam até 1.000 arquivos por lote sem limite de tamanho no servidor — Chrome e Edge transmitem direto para o disco para dezenas de gigabytes, enquanto Firefox e Safari armazenam em memória, então mantenha essas abaixo de cerca de 200 MB. Os links armazenados contam para uma cota ligada à sua conta.",
+        a: "As transferências em tempo real levam até 1.000 arquivos por lote sem limite de tamanho no servidor — Chrome e Edge gravam direto no disco para dezenas de gigabytes. Quando nenhum caminho de gravação em fluxo se aplica e o navegador precisa armazenar na memória, o Relayium avisa acima de cerca de 256 MB; esse número é uma estimativa deliberadamente conservadora, não um limite duro. Os links armazenados contam para uma cota ligada à sua conta.",
       },
       {
         q: "O Relayium é gratuito?",

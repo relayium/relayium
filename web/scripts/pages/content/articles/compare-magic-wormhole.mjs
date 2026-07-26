@@ -104,20 +104,20 @@ const en = {
 const zh = {
   title: "Relayium 对比 magic-wormhole：命令行文件传输",
   description:
-    "magic-wormhole 和 Relayium CLI 都能用一段简短代码在终端之间端到端加密传输文件。本文客观比较两者，也如实说明一处 Relayium 目前不如它的地方。",
+    "magic-wormhole 和 Relayium CLI 都能用一段简短口令在终端之间端到端加密传输文件。本文客观比较两者，也如实说明一处 Relayium 目前不如它的地方。",
   updatedLabel: "最近更新",
   lead: [
-    "magic-wormhole 悄悄积累了一批忠实用户：运行它，得到一段像 7-crossover-clockwork 这样简短易读的代码，把代码念给对方听，文件就到了——全程加密，不需要账号，也不用操心什么服务器。Relayium CLI 的思路与之相似，用一段简短代码直接配对两台电脑，并加密两者之间传输的一切。",
+    "magic-wormhole 悄悄积累了一批忠实用户：运行它，得到一段像 7-crossover-clockwork 这样简短易读的口令，把口令念给对方听，文件就到了——全程加密，不需要账号，也不用操心什么服务器。Relayium CLI 的思路与之相似，用一段简短的配对码直接配对两台电脑，并加密两者之间传输的一切。",
     "两者重合之处不少，不重合的地方也值得说清楚——包括一处 magic-wormhole 今天确实比 Relayium CLI 更稳健的地方。",
   ],
   sections: [
     {
       heading: "两者的共同点",
       body: [
-        "两个工具用同样老实的方式解决同一个核心问题：文件不会滞留在你无法掌控的服务器上，两端之间唯一需要线下传递的就是一段简短代码。magic-wormhole 完全不需要账号；Relayium 只要求发送方登录，好让服务器签发这个码，接收方依然不用。",
+        "两个工具用同样老实的方式解决同一个核心问题：文件不会滞留在你无法掌控的服务器上，两端之间唯一需要线下传递的就是一段简短口令。magic-wormhole 完全不需要账号；Relayium 只在需要服务器签发配对码时要求发送方登录，接收方依然不用。",
       ],
       bullets: [
-        "端到端加密：magic-wormhole 用一种 PAKE（SPAKE2）算法直接从暗号代码本身推导出会话密钥，就连它自己的会合服务器也永远不会知道这个密钥；Relayium 的 send/receive 在两端之间直接做 X25519 密钥交换，并在任何字节移动之前展示一段简短的验证码（SAS）供双方核对。",
+        "端到端加密：magic-wormhole 用一种 PAKE（SPAKE2）算法直接从 wormhole 口令本身推导出会话密钥，就连它自己的会合服务器也永远不会知道这个密钥；Relayium 的 send/receive 在两端之间直接做 X25519 密钥交换，并在任何字节移动之前展示一段简短的验证码（SAS）供双方核对。",
         "两者接收都不需要账号——magic-wormhole 更是完全不需要。",
         "免费开源——你可以阅读接触你文件的每一行代码。",
         "跨平台：macOS、Linux 和 Windows。",
@@ -134,8 +134,8 @@ const zh = {
       heading: "SSH 与 daemon-direct：对接你已有的服务器",
       body: [
         "Relayium CLI 真正多出来的能力，在一次性配对码传输之外：还有两种传输方式，用的是你本就已有的基础设施，这是 magic-wormhole 没有覆盖的场景。",
-        "relayium push / pull 复用你现有的 SSH 权限，因此没有新增的信任关系，也无需分享任何代码。push 甚至能在远程完全没装 relayium 的服务器上工作，退化为通过 SSH 连接传输一段普通的 tar 流——但这个兜底只属于 push；pull 始终需要远程装有 relayium，因为在那里它要充当发送方。",
-        "relayium serve 能把你拥有的任何一台机器变成一个 daemon-direct 目标，通过锁定的 TLS 1.3 访问，无需 SSH、无需代码——信任建立在第一次连接时（可交互批准，或提前授权以支持无人值守），此后一直锁定，思路和 SSH 的 host key 一样。",
+        "relayium push / pull 复用你现有的 SSH 权限，因此没有新增的信任关系，也无需分享任何配对码。push 甚至能在远程完全没装 relayium 的服务器上工作，退化为通过 SSH 连接传输一段普通的 tar 流——但这个兜底只属于 push；pull 始终需要远程装有 relayium，因为在那里它要充当发送方。",
+        "relayium serve 能把你拥有的任何一台机器变成一个 daemon-direct 目标，通过锁定的 TLS 1.3 访问，无需 SSH，也无需配对码——信任建立在第一次连接时（可交互批准，或提前授权以支持无人值守），此后一直锁定，思路和 SSH 的 host key 一样。",
       ],
       code: [
         "relayium push ./photos user@your-server:backups/",
@@ -156,7 +156,7 @@ const zh = {
       body: ["把最关键的差别并排列出："],
       bullets: [
         "无法直连时：magic-wormhole 的 Transit Relay 会承载加密数据流，传输依然能完成；Relayium 的 send/receive 是纯直连的，在这种情况下会失败。",
-        "对接服务器：Relayium 复用你的 SSH 权限（push/pull）或锁定 TLS 的 daemon；magic-wormhole 没有 SSH 集成——需要两端都装好并共享一段代码。",
+        "对接服务器：Relayium 复用你的 SSH 权限（push/pull）或锁定 TLS 的 daemon；magic-wormhole 没有 SSH 集成——需要两端都装好并共享一段口令。",
         "文件夹同步：relayium sync 支持 --delete 与 --watch 的增量镜像；magic-wormhole 发送一批（或打包的文件夹）后就退出，没有镜像或删除语义。",
         "验证：两者都端到端加密；Relayium 的 send/receive 额外会在传输开始前展示一段供双方核对的简短 SAS 验证码。",
         "自托管：Relayium 的服务器是一个可以自己运行的单一 Docker 镜像，同时服务 CLI 和浏览器版；CLI 的 send/receive 可以用 --server 指向它。",
@@ -190,7 +190,7 @@ const zh = {
     ],
   },
   cta: {
-    text: "安装免费的 Relayium CLI，试试 push、sync 或 send——完全免费，基于代码的传输上手速度不输 magic-wormhole。",
+    text: "安装免费的 Relayium CLI，试试 push、sync 或 send——完全免费，基于配对码的传输上手速度不输 magic-wormhole。",
     button: "获取 CLI",
     href: "/cli",
   },
@@ -215,7 +215,7 @@ const ja = {
       bullets: [
         "エンドツーエンドで暗号化：magic-wormhole は PAKE（SPAKE2）を使って暗号コードそのものからセッション鍵を導出するため、自身のランデブーサーバーですらその鍵を知ることはありません。Relayium の send/receive は両端の間で直接 X25519 鍵交換を行い、バイトが動く前に双方が照合できる短い検証コード（SAS）を表示します。",
         "どちらのツールも受信にアカウントは不要。magic-wormhole は一切不要です。",
-        "無料でオープンソース——ファイルに触れるコードを読むことができます。",
+        "無料でオープンソース——ファイルに触れるソースコードを読むことができます。",
         "クロスプラットフォーム：macOS、Linux、Windows。",
       ],
     },
@@ -230,8 +230,8 @@ const ja = {
       heading: "SSH と daemon-direct：すでに運用しているサーバーと話す",
       body: [
         "Relayium CLI が本当に付加価値を持つのは、一回限りのペアリングコードのケースの外側です——すでに持っているインフラを活かす、magic-wormhole がカバーしようとしていない2つの方法があります。",
-        "relayium push / pull は既存の SSH アクセスを再利用するため、新しく信頼するものも共有するコードもありません。push は relayium がまったくインストールされていないサーバーに対しても動作し、SSH 接続上の単純な tar ストリームにフォールバックします——このフォールバックは push 専用です。pull は常にリモートに relayium が必要です。そこでは pull が送信側として動作するためです。",
-        "relayium serve は、所有する任意のマシンを daemon-direct のターゲットに変え、ピン留めされた TLS 1.3 経由で、SSH もコードもなしにアクセスできます——信頼は最初の接続時に成立し（対話的に承認するか、無人運用向けに事前承認しておく）、以後はピン留めされます。SSH のホスト鍵と同じ考え方です。",
+        "relayium push / pull は既存の SSH アクセスを再利用するため、新しく信頼するものも共有するペアリングコードもありません。push は relayium がまったくインストールされていないサーバーに対しても動作し、SSH 接続上の単純な tar ストリームにフォールバックします——このフォールバックは push 専用です。pull は常にリモートに relayium が必要です。そこでは pull が送信側として動作するためです。",
+        "relayium serve は、所有する任意のマシンを daemon-direct のターゲットに変え、ピン留めされた TLS 1.3 経由で、SSH もペアリングコードもなしにアクセスできます——信頼は最初の接続時に成立し（対話的に承認するか、無人運用向けに事前承認しておく）、以後はピン留めされます。SSH のホスト鍵と同じ考え方です。",
       ],
       code: [
         "relayium push ./photos user@your-server:backups/",
@@ -311,7 +311,7 @@ const ko = {
       bullets: [
         "종단간 암호화: magic-wormhole은 PAKE(SPAKE2)를 사용해 워프홀 코드 자체에서 세션 키를 유도하므로, 자체 랑데부 서버조차 그 키를 알지 못합니다. Relayium의 send/receive는 양쪽 사이에서 직접 X25519 키 교환을 수행하고, 바이트가 움직이기 전에 양쪽이 대조할 수 있는 짧은 검증 코드(SAS)를 보여줍니다.",
         "두 도구 모두 받는 데 계정이 필요 없음 — magic-wormhole은 아예 필요 없습니다.",
-        "무료 오픈소스 — 파일에 접근하는 코드를 직접 읽어볼 수 있습니다.",
+        "무료 오픈소스 — 파일에 접근하는 소스 코드를 직접 읽어볼 수 있습니다.",
         "크로스 플랫폼: macOS, Linux, Windows.",
       ],
     },
@@ -326,8 +326,8 @@ const ko = {
       heading: "SSH와 daemon-direct: 이미 운영 중인 서버와 대화하기",
       body: [
         "Relayium CLI가 정말로 더 갖춘 부분은 일회성 페어링 코드 사례 바깥에 있습니다 — 이미 가진 인프라를 활용하는 두 가지 방식이 더 있으며, 이는 magic-wormhole이 다루려 하지 않는 영역입니다.",
-        "relayium push / pull은 기존 SSH 접근 권한을 재사용하므로 새로 신뢰할 것도, 공유할 코드도 없습니다. push는 relayium이 전혀 설치되지 않은 서버에도 작동해, SSH 연결 위의 일반 tar 스트림으로 대체됩니다 — 이 대체 방식은 push에만 있습니다. pull은 항상 원격지에 relayium이 필요합니다. 그곳에서 pull이 송신자 역할을 하기 때문입니다.",
-        "relayium serve는 소유한 어떤 기기든 daemon-direct 대상으로 바꿔주며, 고정된 TLS 1.3을 통해 SSH도 코드도 없이 접근할 수 있게 합니다 — 신뢰는 첫 연결에서 성립하고(대화식으로 승인하거나, 무인 운영을 위해 미리 승인해 둘 수 있음) 이후로는 고정됩니다. SSH의 host key와 같은 발상입니다.",
+        "relayium push / pull은 기존 SSH 접근 권한을 재사용하므로 새로 신뢰할 것도, 공유할 페어링 코드도 없습니다. push는 relayium이 전혀 설치되지 않은 서버에도 작동해, SSH 연결 위의 일반 tar 스트림으로 대체됩니다 — 이 대체 방식은 push에만 있습니다. pull은 항상 원격지에 relayium이 필요합니다. 그곳에서 pull이 송신자 역할을 하기 때문입니다.",
+        "relayium serve는 소유한 어떤 기기든 daemon-direct 대상으로 바꿔주며, 고정된 TLS 1.3을 통해 SSH도 페어링 코드도 없이 접근할 수 있게 합니다 — 신뢰는 첫 연결에서 성립하고(대화식으로 승인하거나, 무인 운영을 위해 미리 승인해 둘 수 있음) 이후로는 고정됩니다. SSH의 host key와 같은 발상입니다.",
       ],
       code: [
         "relayium push ./photos user@your-server:backups/",
@@ -407,7 +407,7 @@ const de = {
       bullets: [
         "Ende-zu-Ende verschlüsselt: magic-wormhole leitet mit einem PAKE (SPAKE2) einen Sitzungsschlüssel direkt aus dem Wormhole-Code ab, sodass nicht einmal der eigene Rendezvous-Server je den Schlüssel erfährt. Relayiums send/receive führt einen direkten X25519-Schlüsselaustausch zwischen den beiden Enden durch und zeigt einen kurzen Prüfcode (SAS), den ihr vor der ersten übertragenen Bit vergleichen könnt.",
         "Kein Konto zum Empfangen, bei beiden Tools — und bei magic-wormhole überhaupt keines.",
-        "Kostenlos und quelloffen — lies den Code, der deine Dateien berührt.",
+        "Kostenlos und quelloffen — lies den Quellcode, der deine Dateien berührt.",
         "Plattformübergreifend: macOS, Linux und Windows.",
       ],
     },
@@ -422,8 +422,8 @@ const de = {
       heading: "SSH und daemon-direct: mit einem Server sprechen, den du bereits betreibst",
       body: [
         "Dort, wo die Relayium-CLI wirklich zusätzliche Fläche hinzufügt, liegt außerhalb des einmaligen Pairing-Code-Falls: zwei weitere Wege, Dateien zu bewegen, die sich auf Infrastruktur stützen, die du bereits hast — ein Bereich, den magic-wormhole gar nicht abzudecken versucht.",
-        "relayium push / pull nutzt deinen bestehenden SSH-Zugang, also gibt es nichts Neues zu vertrauen und keinen Code zu teilen. push funktioniert sogar gegen einen Server ohne installiertes relayium und fällt dann auf einen einfachen tar-Stream über die SSH-Verbindung zurück — dieser Fallback existiert nur bei push; pull braucht immer relayium auf der Gegenseite, da es dort als Absender agiert.",
-        "relayium serve macht aus jeder Maschine, die dir gehört, ein daemon-direct-Ziel, erreichbar über gepinntes TLS 1.3, ohne SSH und ohne Code — Vertrauen entsteht bei der ersten Verbindung (interaktiv bestätigt oder für unbeaufsichtigten Betrieb vorab autorisiert) und ist danach gepinnt, dieselbe Idee wie ein SSH-Host-Key.",
+        "relayium push / pull nutzt deinen bestehenden SSH-Zugang, also gibt es nichts Neues zu vertrauen und keinen Pairing-Code zu teilen. push funktioniert sogar gegen einen Server ohne installiertes relayium und fällt dann auf einen einfachen tar-Stream über die SSH-Verbindung zurück — dieser Fallback existiert nur bei push; pull braucht immer relayium auf der Gegenseite, da es dort als Absender agiert.",
+        "relayium serve macht aus jeder Maschine, die dir gehört, ein daemon-direct-Ziel, erreichbar über gepinntes TLS 1.3, ohne SSH und ohne Pairing-Code — Vertrauen entsteht bei der ersten Verbindung (interaktiv bestätigt oder für unbeaufsichtigten Betrieb vorab autorisiert) und ist danach gepinnt, dieselbe Idee wie ein SSH-Host-Key.",
       ],
       code: [
         "relayium push ./photos user@your-server:backups/",
@@ -503,7 +503,7 @@ const fr = {
       bullets: [
         "Chiffré de bout en bout : magic-wormhole dérive une clé de session directement à partir du code wormhole via un PAKE (SPAKE2), si bien que même son propre serveur de rendez-vous n'apprend jamais la clé. Le send/receive de Relayium effectue un échange de clés X25519 directement entre les deux extrémités et affiche un court code de vérification (SAS) à comparer avant que le moindre octet ne bouge.",
         "Aucun compte pour recevoir, sur les deux outils — et aucun du tout pour magic-wormhole.",
-        "Gratuit et open source — lisez le code qui touche à vos fichiers.",
+        "Gratuit et open source — lisez le code source qui touche à vos fichiers.",
         "Multiplateforme : macOS, Linux et Windows.",
       ],
     },
@@ -518,8 +518,8 @@ const fr = {
       heading: "SSH et daemon-direct : parler à un serveur que vous exploitez déjà",
       body: [
         "Là où la CLI Relayium ajoute une réelle surface, c'est en dehors du cas ponctuel du code d'appairage : deux autres façons de déplacer des fichiers qui s'appuient sur une infrastructure que vous possédez déjà, un terrain que magic-wormhole ne cherche pas à couvrir.",
-        "relayium push / pull réutilise votre accès SSH existant, donc rien de nouveau à faire confiance et aucun code à partager. push fonctionne même contre un serveur sans relayium installé, en basculant sur un simple flux tar via la connexion SSH — ce repli n'existe que pour push ; pull a toujours besoin de relayium sur la machine distante, puisqu'il y joue le rôle d'expéditeur.",
-        "relayium serve transforme n'importe quelle machine que vous possédez en cible daemon-direct, accessible via TLS 1.3 épinglé, sans SSH ni code — la confiance s'établit à la première connexion (approuvée de façon interactive, ou pré-autorisée pour un usage sans surveillance) puis reste épinglée ensuite, la même idée qu'une clé d'hôte SSH.",
+        "relayium push / pull réutilise votre accès SSH existant, donc rien de nouveau à faire confiance et aucun code d'appairage à partager. push fonctionne même contre un serveur sans relayium installé, en basculant sur un simple flux tar via la connexion SSH — ce repli n'existe que pour push ; pull a toujours besoin de relayium sur la machine distante, puisqu'il y joue le rôle d'expéditeur.",
+        "relayium serve transforme n'importe quelle machine que vous possédez en cible daemon-direct, accessible via TLS 1.3 épinglé, sans SSH ni code d'appairage — la confiance s'établit à la première connexion (approuvée de façon interactive, ou pré-autorisée pour un usage sans surveillance) puis reste épinglée ensuite, la même idée qu'une clé d'hôte SSH.",
       ],
       code: [
         "relayium push ./photos user@your-server:backups/",
@@ -614,8 +614,8 @@ const ar = {
       heading: "SSH و daemon-direct: التحدّث إلى خادم تشغّله أصلاً",
       body: [
         "حيث يضيف CLI الخاص بـ Relayium مساحة حقيقية هو خارج حالة رمز الاقتران لمرة واحدة: طريقتان إضافيتان لنقل الملفات تعتمدان على بنية تحتية تملكها أصلاً، وهو ما لا يحاول magic-wormhole تغطيته.",
-        "يعيد relayium push / pull استخدام وصول SSH القائم لديك، فلا شيء جديد لتثق به ولا رمز لمشاركته. بل يعمل push حتى مقابل خادم لا يوجد فيه relayium مثبَّت إطلاقاً، بالرجوع إلى تدفّق tar عادي عبر اتصال SSH — وهذا الرجوع خاص بـ push فقط؛ أما pull فيحتاج دائماً إلى relayium على الطرف البعيد، إذ يعمل هناك بصفته المُرسِل.",
-        "يحوّل relayium serve أي جهاز تملكه إلى هدف daemon-direct، يمكن الوصول إليه عبر TLS 1.3 مثبَّت بلا SSH وبلا عبارة رمز — تُبنى الثقة عند الاتصال الأول (يُوافَق عليه تفاعلياً، أو يُصرَّح به مسبقاً للاستخدام غير المراقَب) وتبقى مثبَّتة بعد ذلك، وهي الفكرة نفسها مثل مفتاح مضيف SSH.",
+        "يعيد relayium push / pull استخدام وصول SSH القائم لديك، فلا شيء جديد لتثق به ولا رمز اقتران لمشاركته. بل يعمل push حتى مقابل خادم لا يوجد فيه relayium مثبَّت إطلاقاً، بالرجوع إلى تدفّق tar عادي عبر اتصال SSH — وهذا الرجوع خاص بـ push فقط؛ أما pull فيحتاج دائماً إلى relayium على الطرف البعيد، إذ يعمل هناك بصفته المُرسِل.",
+        "يحوّل relayium serve أي جهاز تملكه إلى هدف daemon-direct، يمكن الوصول إليه عبر TLS 1.3 مثبَّت بلا SSH وبلا رمز اقتران — تُبنى الثقة عند الاتصال الأول (يُوافَق عليه تفاعلياً، أو يُصرَّح به مسبقاً للاستخدام غير المراقَب) وتبقى مثبَّتة بعد ذلك، وهي الفكرة نفسها مثل مفتاح مضيف SSH.",
       ],
       code: [
         "relayium push ./photos user@your-server:backups/",
@@ -695,7 +695,7 @@ const es = {
       bullets: [
         "Cifrado de extremo a extremo: magic-wormhole deriva una clave de sesión del propio código wormhole usando un PAKE (SPAKE2), de modo que ni siquiera su propio servidor de encuentro llega a conocer la clave; el send/receive de Relayium hace un intercambio de claves X25519 directamente entre los dos extremos y muestra un código de verificación corto (SAS) que puedes comparar antes de que se mueva ningún byte.",
         "Sin cuenta para recibir, en ambas herramientas — y ninguna en absoluto para magic-wormhole.",
-        "Gratis y de código abierto — lee el código que toca tus archivos.",
+        "Gratis y de código abierto — lee el código fuente que toca tus archivos.",
         "Multiplataforma: macOS, Linux y Windows.",
       ],
     },
@@ -710,8 +710,8 @@ const es = {
       heading: "SSH y daemon-direct: hablar con un servidor que ya operas",
       body: [
         "Donde la CLI de Relayium añade superficie real es fuera del caso puntual del código de emparejamiento: dos formas más de mover archivos que se apoyan en infraestructura que ya tienes, algo que magic-wormhole no intenta cubrir.",
-        "relayium push / pull reutiliza tu acceso SSH existente, así que no hay nada nuevo en lo que confiar ni ningún código que compartir. push incluso funciona contra un servidor sin relayium instalado en absoluto, recurriendo a un simple flujo tar sobre la conexión SSH — ese respaldo es solo para push; pull siempre necesita relayium en el remoto, ya que actúa allí como remitente.",
-        "relayium serve convierte cualquier máquina que poseas en un destino daemon-direct, accesible por TLS 1.3 fijado sin SSH ni frase de código — la confianza se establece en la primera conexión (aprobada de forma interactiva, o preautorizada para uso desatendido) y queda fijada a partir de entonces, la misma idea que una clave de host SSH.",
+        "relayium push / pull reutiliza tu acceso SSH existente, así que no hay nada nuevo en lo que confiar ni ningún código de emparejamiento que compartir. push incluso funciona contra un servidor sin relayium instalado en absoluto, recurriendo a un simple flujo tar sobre la conexión SSH — ese respaldo es solo para push; pull siempre necesita relayium en el remoto, ya que actúa allí como remitente.",
+        "relayium serve convierte cualquier máquina que poseas en un destino daemon-direct, accesible por TLS 1.3 fijado sin SSH ni código de emparejamiento — la confianza se establece en la primera conexión (aprobada de forma interactiva, o preautorizada para uso desatendido) y queda fijada a partir de entonces, la misma idea que una clave de host SSH.",
       ],
       code: [
         "relayium push ./photos user@your-server:backups/",
@@ -791,7 +791,7 @@ const pt = {
       bullets: [
         "Criptografado de ponta a ponta: o magic-wormhole deriva uma chave de sessão do próprio código wormhole usando um PAKE (SPAKE2), de modo que nem seu próprio servidor de encontro chega a conhecer a chave; o send/receive do Relayium faz uma troca de chaves X25519 diretamente entre as duas pontas e mostra um código de verificação curto (SAS) que você pode comparar antes de qualquer byte se mover.",
         "Sem conta para receber, em ambas as ferramentas — e nenhuma conta para o magic-wormhole.",
-        "Gratuito e de código aberto — leia o código que toca seus arquivos.",
+        "Gratuito e de código aberto — leia o código-fonte que toca seus arquivos.",
         "Multiplataforma: macOS, Linux e Windows.",
       ],
     },
@@ -806,8 +806,8 @@ const pt = {
       heading: "SSH e daemon-direct: falar com um servidor que você já opera",
       body: [
         "Onde a CLI do Relayium acrescenta superfície de verdade é fora do caso pontual do código de emparelhamento: mais duas formas de mover arquivos que se apoiam em infraestrutura que você já tem, algo que o magic-wormhole não tenta cobrir.",
-        "O relayium push / pull reutiliza seu acesso SSH existente, então não há nada novo em que confiar nem nenhum código a compartilhar. O push até funciona contra um servidor sem nenhum relayium instalado, recorrendo a um simples fluxo tar sobre a conexão SSH — esse recurso de reserva é só do push; o pull sempre precisa do relayium no remoto, já que ali ele atua como remetente.",
-        "O relayium serve transforma qualquer máquina que você possua em um destino daemon-direct, acessível por TLS 1.3 fixado, sem SSH e sem frase de código — a confiança se estabelece na primeira conexão (aprovada de forma interativa, ou pré-autorizada para uso não supervisionado) e fica fixada a partir daí, a mesma ideia de uma chave de host SSH.",
+        "O relayium push / pull reutiliza seu acesso SSH existente, então não há nada novo em que confiar nem nenhum código de emparelhamento a compartilhar. O push até funciona contra um servidor sem nenhum relayium instalado, recorrendo a um simples fluxo tar sobre a conexão SSH — esse recurso de reserva é só do push; o pull sempre precisa do relayium no remoto, já que ali ele atua como remetente.",
+        "O relayium serve transforma qualquer máquina que você possua em um destino daemon-direct, acessível por TLS 1.3 fixado, sem SSH e sem código de emparelhamento — a confiança se estabelece na primeira conexão (aprovada de forma interativa, ou pré-autorizada para uso não supervisionado) e fica fixada a partir daí, a mesma ideia de uma chave de host SSH.",
       ],
       code: [
         "relayium push ./photos user@your-server:backups/",

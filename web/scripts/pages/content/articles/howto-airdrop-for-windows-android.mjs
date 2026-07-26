@@ -32,7 +32,7 @@ const en = {
       heading: "Across the internet: something AirDrop can't do",
       body: [
         "AirDrop is nearby-only — walk out of Bluetooth/Wi-Fi range and it stops working. Relayium's second mode covers exactly that gap: two devices on completely different networks, anywhere in the world.",
-        "The sender signs in and gets a short pairing code (with a join link and a QR code); the receiver enters it, or scans the QR, or opens the link — and never needs an account. The two devices then connect directly whenever the networks allow it; when a direct path isn't possible, the encrypted stream falls back to a TURN relay that only ever sees ciphertext, so it stays end-to-end encrypted the whole way. A dropped connection can resume instead of restarting from zero.",
+        "The sender signs in and gets a short pairing code (with a join link and a QR code); the receiver enters it, or scans the QR, or opens the link — and never needs an account. That cross-network connection runs over an encrypted TURN relay rather than a direct link, and it does so by design: between two unrelated networks a direct path usually can't be found at all, and trying for one first would leave the connection hanging for about 20 seconds before ending up on the relay regardless. The files are sealed end-to-end before they leave the sender, so the relay only ever forwards ciphertext it has no key to open — the whole route stays end-to-end encrypted. A dropped connection can resume instead of restarting from zero.",
       ],
     },
     {
@@ -45,8 +45,8 @@ const en = {
     {
       heading: "The practical limits, honestly",
       body: [
-        "Because the file never lands on a server, there's no upload quota — the real limit is which browser is receiving. On Windows, Linux or Android with Chrome or Edge, incoming data streams straight to disk, so multi-gigabyte files are fine. On Firefox or an iOS Safari receiver in a mixed fleet, the file buffers in memory instead, so keep those transfers under roughly 200 MB.",
-        "Folders work too: pick a folder on desktop (not iOS) and relative paths are preserved. If the receiving browser can write straight to a chosen directory (Chrome, Edge) files land in place; otherwise (Firefox, Safari) the whole folder arrives as one .zip that unpacks to the same structure.",
+        "Because the file never lands on a server, there's no upload quota — the real limit is which browser is receiving. A desktop browser with the File System Access API (Chrome or Edge on Windows or Linux) streams incoming data straight to disk, so multi-gigabyte files are fine. Firefox, Safari and every phone browser — Chrome on Android included — don't have that API, so there the batch is assembled in memory instead, and Relayium warns the receiver before they accept once it passes roughly 256 MB. Read that as a deliberately cautious estimate rather than a hard ceiling: where it actually gives out depends on the device's memory, its OS and how many tabs are open.",
+        "Folders work too: pick a folder on desktop (not iOS) and relative paths are preserved. If the receiving browser can write straight to a chosen directory (desktop Chrome or Edge) files land in place; otherwise (Firefox, Safari, any phone browser) the whole folder arrives as one .zip that unpacks to the same structure.",
       ],
     },
   ],
@@ -71,7 +71,7 @@ const en = {
       },
       {
         q: "Can it send to a group, like AirDrop can?",
-        a: "On the same network, yes — the local room isn't limited to two devices, so more than one nearby device can receive at once. The pairing-code mode for across-the-internet sending is a direct connection between two devices.",
+        a: "On the same network, yes — the local room isn't limited to two devices, so more than one nearby device can receive at once. The pairing-code mode for across-the-internet sending joins exactly two devices, over an encrypted relay.",
       },
     ],
   },
@@ -108,7 +108,7 @@ const zh = {
       heading: "跨越互联网：AirDrop 做不到的事",
       body: [
         "AirDrop 只能就近使用——走出蓝牙/Wi-Fi 范围就失灵了。Relayium 的第二种模式正好补上这个空缺：两台设备处在完全不同的网络里，无论在世界的哪个角落。",
-        "发送方登录后会拿到一段短配对码（附带加入链接和二维码）；接收方输入这个码，或扫描二维码，或直接打开链接——始终无需账号。只要网络条件允许，两台设备就会直接连接；无法直连时，加密数据流会退回到 TURN 中继，中继全程只能看到密文，因此依旧保持端到端加密。若连接中断，传输可以断点续传，不必从头再来。",
+        "发送方登录后会拿到一段短配对码（附带加入链接和二维码）；接收方输入这个码，或扫描二维码，或直接打开链接——始终无需账号。这条跨网络的连接走的是加密 TURN 中继，而不是两端直连，这是有意为之：在两个互不相干的网络之间，直连路径通常根本找不到，先去试一遍只会让连接悬着二十秒左右，最后照样落到中继上。文件在离开发送方之前就已端到端封装，因此中继全程只转发它无法解开的密文——整条路径依旧是端到端加密的。若连接中断，传输可以断点续传，不必从头再来。",
       ],
     },
     {
@@ -121,8 +121,8 @@ const zh = {
     {
       heading: "诚实说说实际限制",
       body: [
-        "因为文件从不落到服务器上，所以没有上传配额——真正的限制取决于用哪个浏览器接收。在 Windows、Linux 或 Android 上用 Chrome 或 Edge，收到的数据会直接流式写入磁盘，几个 GB 的文件也没问题。若混合设备里由 Firefox 或 iOS Safari 接收，文件会缓冲在内存中，此时单次传输建议控制在约 200 MB 以内。",
-        "文件夹也支持：在桌面端（非 iOS）选择一个文件夹，相对路径会被保留。如果接收方浏览器能直接写入选定目录（Chrome、Edge），文件会各就各位；否则（Firefox、Safari）整个文件夹会作为一个 .zip 到达，解压后结构不变。",
+        "因为文件从不落到服务器上，所以没有上传配额——真正的限制取决于用哪个浏览器接收。桌面端支持 File System Access API 的浏览器（Windows 或 Linux 上的 Chrome、Edge）会把收到的数据直接流式写入磁盘，几个 GB 的文件也没问题。Firefox、Safari 以及所有手机浏览器（包括 Android 上的 Chrome）都没有这个 API，这时整批文件只能先攒在内存里，因此一旦超过约 256 MB，Relayium 会在接收方点「接收」之前先提示一次。这个数字要当成刻意取的保守估计，而不是硬上限：真正撑不住的临界点取决于设备内存、系统以及开了多少标签页。",
+        "文件夹也支持：在桌面端（非 iOS）选择一个文件夹，相对路径会被保留。如果接收方浏览器能直接写入选定目录（桌面版 Chrome、Edge），文件会各就各位；否则（Firefox、Safari 以及手机浏览器）整个文件夹会作为一个 .zip 到达，解压后结构不变。",
       ],
     },
   ],
@@ -147,7 +147,7 @@ const zh = {
       },
       {
         q: "能像 AirDrop 一样发给一群人吗？",
-        a: "在同一网络下可以——本地房间不限于两台设备，因此附近不止一台设备可以同时接收。而跨网络的配对码模式是两台设备之间的直连。",
+        a: "在同一网络下可以——本地房间不限于两台设备，因此附近不止一台设备可以同时接收。而跨网络的配对码模式只连接两台设备，且经由加密中继完成。",
       },
     ],
   },
@@ -184,7 +184,7 @@ const ja = {
       heading: "インターネット越し：AirDrop にはできないこと",
       body: [
         "AirDrop は近接専用です——Bluetooth や Wi-Fi の範囲外に出ると動かなくなります。Relayium の2つ目のモードはまさにその空白を埋めます：まったく異なるネットワーク上の2台の端末を、世界中どこにいても。",
-        "送信側がサインインすると短いペアリングコード（参加リンクと QR コード付き）を受け取ります。受信側はそれを入力するか、QR を読み取るか、リンクを開きます——アカウントは一切不要です。その後、ネットワークが許す限り2台は直接接続します。直接の経路が不可能なときは、暗号化ストリームが暗号文しか見えない TURN リレーにフォールバックするため、道中ずっとエンドツーエンド暗号化のままです。接続が切れても、最初からではなく再開できます。",
+        "送信側がサインインすると短いペアリングコード（参加リンクと QR コード付き）を受け取ります。受信側はそれを入力するか、QR を読み取るか、リンクを開きます——アカウントは一切不要です。このネットワークをまたぐ接続は、端末同士の直接接続ではなく暗号化された TURN リレー経由で行われます。これは設計上の選択です。無関係な2つのネットワークの間では直接経路がそもそも見つからないことがほとんどで、先に試すと接続が20秒ほど宙づりになったあげく結局リレーに落ち着くからです。ファイルは送信側を出る前にエンドツーエンドで封印されているため、リレーが転送するのは鍵を持たない暗号文だけで、経路全体がエンドツーエンド暗号化のままです。接続が切れても、最初からではなく再開できます。",
       ],
     },
     {
@@ -197,8 +197,8 @@ const ja = {
     {
       heading: "正直に言う実際の制限",
       body: [
-        "ファイルがサーバーに置かれることはないため、アップロードの割り当てはありません。実際の上限は、どのブラウザで受信するかで決まります。Windows・Linux・Android で Chrome や Edge を使えば、受信データはそのままディスクへストリーミングされるので、数ギガバイトのファイルでも問題ありません。混在環境で Firefox や iOS の Safari が受信する場合はメモリにバッファされるため、そうした転送は約 200 MB 以内に抑えてください。",
-        "フォルダにも対応しています。デスクトップ（iOS を除く）でフォルダを選ぶと、相対パスが保たれます。受信側のブラウザが選んだディレクトリへ直接書き込めるなら（Chrome、Edge）ファイルはそのまま収まり、そうでなければ（Firefox、Safari）フォルダ全体が1つの .zip として届き、展開すると同じ構造になります。",
+        "ファイルがサーバーに置かれることはないため、アップロードの割り当てはありません。実際の上限は、どのブラウザで受信するかで決まります。File System Access API を備えたデスクトップのブラウザ（Windows や Linux の Chrome・Edge）なら、受信データはそのままディスクへストリーミングされるので、数ギガバイトのファイルでも問題ありません。Firefox・Safari・スマホのブラウザ（Android の Chrome も含みます）にはこの API がないため、そこでは受信分をいったんメモリに溜めることになり、およそ 256 MB を超えると Relayium が受信側の承認前に警告を出します。この数値は実測した上限ではなく意図的に控えめに置いた目安と考えてください。実際に立ち行かなくなる地点は、端末のメモリ・OS・開いているタブの数によって変わります。",
+        "フォルダにも対応しています。デスクトップ（iOS を除く）でフォルダを選ぶと、相対パスが保たれます。受信側のブラウザが選んだディレクトリへ直接書き込めるなら（デスクトップの Chrome、Edge）ファイルはそのまま収まり、そうでなければ（Firefox、Safari、スマホのブラウザ）フォルダ全体が1つの .zip として届き、展開すると同じ構造になります。",
       ],
     },
   ],
@@ -223,7 +223,7 @@ const ja = {
       },
       {
         q: "AirDrop のように複数人へ送れますか？",
-        a: "同じネットワーク上でなら可能です——ローカルの部屋は2台に限定されないため、近くの複数端末が同時に受信できます。インターネット越しのペアリングコードモードは2台の端末間の直接接続です。",
+        a: "同じネットワーク上でなら可能です——ローカルの部屋は2台に限定されないため、近くの複数端末が同時に受信できます。インターネット越しのペアリングコードモードは、暗号化リレーを介した2台の端末どうしの接続です。",
       },
     ],
   },
@@ -260,7 +260,7 @@ const ko = {
       heading: "인터넷 너머로: AirDrop이 할 수 없는 것",
       body: [
         "AirDrop은 근접 전용입니다 — Bluetooth/Wi-Fi 범위를 벗어나면 작동을 멈춥니다. Relayium의 두 번째 모드가 정확히 그 빈틈을 메웁니다: 완전히 다른 네트워크에 있는 두 기기를, 세계 어디에서든.",
-        "보내는 쪽이 로그인하면 짧은 페어링 코드(참여 링크와 QR 코드 포함)를 받습니다. 받는 쪽은 그 코드를 입력하거나, QR을 스캔하거나, 링크를 열면 됩니다 — 계정은 전혀 필요 없습니다. 이후 네트워크가 허락하는 한 두 기기는 직접 연결됩니다. 직접 경로가 불가능할 때는 암호화된 스트림이 암호문만 보는 TURN 릴레이로 폴백하므로, 끝까지 종단간 암호화 상태를 유지합니다. 연결이 끊겨도 처음부터가 아니라 이어서 재개할 수 있습니다.",
+        "보내는 쪽이 로그인하면 짧은 페어링 코드(참여 링크와 QR 코드 포함)를 받습니다. 받는 쪽은 그 코드를 입력하거나, QR을 스캔하거나, 링크를 열면 됩니다 — 계정은 전혀 필요 없습니다. 이 네트워크 간 연결은 기기 사이의 직접 연결이 아니라 암호화된 TURN 릴레이를 거칩니다. 의도된 설계입니다. 서로 무관한 두 네트워크 사이에서는 직접 경로가 아예 없는 경우가 대부분이고, 그것을 먼저 시도하면 연결이 20초쯤 붕 떠 있다가 결국 릴레이로 가게 되기 때문입니다. 파일은 보내는 쪽을 떠나기 전에 종단간으로 봉인되므로 릴레이가 나르는 것은 열 열쇠가 없는 암호문뿐이고, 경로 전체가 종단간 암호화를 유지합니다. 연결이 끊겨도 처음부터가 아니라 이어서 재개할 수 있습니다.",
       ],
     },
     {
@@ -273,8 +273,8 @@ const ko = {
     {
       heading: "솔직한 실제 한계",
       body: [
-        "파일이 서버에 놓이는 일이 없으므로 업로드 할당량이 없습니다 — 실제 한계는 어떤 브라우저로 받느냐에 달렸습니다. Windows·Linux·Android에서 Chrome이나 Edge를 쓰면 들어오는 데이터가 곧장 디스크로 스트리밍되어 수 기가바이트 파일도 괜찮습니다. 혼합 환경에서 Firefox나 iOS Safari가 받는다면 파일이 메모리에 버퍼링되므로, 그런 전송은 약 200 MB 이내로 유지하세요.",
-        "폴더도 지원됩니다: 데스크톱(iOS 제외)에서 폴더를 고르면 상대 경로가 유지됩니다. 받는 쪽 브라우저가 선택한 디렉터리에 바로 쓸 수 있으면(Chrome, Edge) 파일이 그대로 자리를 잡고, 그렇지 않으면(Firefox, Safari) 폴더 전체가 하나의 .zip으로 도착해 풀면 같은 구조가 됩니다.",
+        "파일이 서버에 놓이는 일이 없으므로 업로드 할당량이 없습니다 — 실제 한계는 어떤 브라우저로 받느냐에 달렸습니다. File System Access API를 갖춘 데스크톱 브라우저(Windows나 Linux의 Chrome, Edge)는 들어오는 데이터를 곧장 디스크로 스트리밍해 수 기가바이트 파일도 괜찮습니다. Firefox와 Safari, 그리고 모든 휴대폰 브라우저(Android의 Chrome 포함)에는 그 API가 없어서 받은 내용을 일단 메모리에 모으게 되며, 대략 256 MB를 넘어서면 Relayium이 받는 쪽이 수락하기 전에 미리 경고합니다. 이 수치는 측정된 상한이 아니라 일부러 보수적으로 잡은 추정치로 보세요. 실제로 버티지 못하는 지점은 기기 메모리와 OS, 열어 둔 탭 수에 따라 달라집니다.",
+        "폴더도 지원됩니다: 데스크톱(iOS 제외)에서 폴더를 고르면 상대 경로가 유지됩니다. 받는 쪽 브라우저가 선택한 디렉터리에 바로 쓸 수 있으면(데스크톱 Chrome, Edge) 파일이 그대로 자리를 잡고, 그렇지 않으면(Firefox, Safari, 휴대폰 브라우저) 폴더 전체가 하나의 .zip으로 도착해 풀면 같은 구조가 됩니다.",
       ],
     },
   ],
@@ -299,7 +299,7 @@ const ko = {
       },
       {
         q: "AirDrop처럼 여러 명에게 보낼 수 있나요?",
-        a: "같은 네트워크에서는 가능합니다 — 로컬 방은 두 기기로 제한되지 않으므로 근처의 여러 기기가 동시에 받을 수 있습니다. 인터넷 너머의 페어링 코드 모드는 두 기기 간의 직접 연결입니다.",
+        a: "같은 네트워크에서는 가능합니다 — 로컬 방은 두 기기로 제한되지 않으므로 근처의 여러 기기가 동시에 받을 수 있습니다. 인터넷 너머의 페어링 코드 모드는 암호화된 릴레이를 거쳐 두 기기만 잇습니다.",
       },
     ],
   },
@@ -336,7 +336,7 @@ const de = {
       heading: "Übers Internet: etwas, das AirDrop nicht kann",
       body: [
         "AirDrop funktioniert nur in der Nähe — verlässt man die Bluetooth-/WLAN-Reichweite, ist Schluss. Der zweite Modus von Relayium schließt genau diese Lücke: zwei Geräte in völlig unterschiedlichen Netzwerken, überall auf der Welt.",
-        "Der Absender meldet sich an und erhält einen kurzen Pairing-Code (mit Beitrittslink und QR-Code); der Empfänger gibt ihn ein, scannt den QR-Code oder öffnet den Link — und braucht dabei nie ein Konto. Die beiden Geräte verbinden sich dann direkt, sobald es die Netzwerke zulassen; ist ein direkter Weg nicht möglich, weicht der verschlüsselte Datenstrom auf ein TURN-Relay aus, das nur Chiffretext sieht, sodass es die ganze Strecke Ende-zu-Ende-verschlüsselt bleibt. Eine abgebrochene Verbindung kann fortgesetzt statt neu gestartet werden.",
+        "Der Absender meldet sich an und erhält einen kurzen Pairing-Code (mit Beitrittslink und QR-Code); der Empfänger gibt ihn ein, scannt den QR-Code oder öffnet den Link — und braucht dabei nie ein Konto. Diese netzübergreifende Verbindung läuft über ein verschlüsseltes TURN-Relay statt direkt zwischen den Geräten, und das ist so gewollt: Zwischen zwei fremden Netzwerken lässt sich meist gar kein direkter Weg finden, und der Versuch würde die Verbindung erst rund 20 Sekunden in der Schwebe lassen, bevor sie ohnehin beim Relay landet. Die Dateien sind versiegelt, bevor sie den Absender verlassen, also leitet das Relay nur Chiffretext weiter, für den es keinen Schlüssel hat — die gesamte Strecke bleibt Ende-zu-Ende-verschlüsselt. Eine abgebrochene Verbindung kann fortgesetzt statt neu gestartet werden.",
       ],
     },
     {
@@ -349,8 +349,8 @@ const de = {
     {
       heading: "Die praktischen Grenzen, ehrlich gesagt",
       body: [
-        "Da die Datei nie auf einem Server landet, gibt es kein Upload-Kontingent — die echte Grenze hängt davon ab, welcher Browser empfängt. Unter Windows, Linux oder Android mit Chrome oder Edge streamen eingehende Daten direkt auf die Festplatte, mehrere Gigabyte große Dateien sind also kein Problem. Bei Firefox oder einem iOS-Safari-Empfänger in einer gemischten Umgebung wird die Datei stattdessen im Arbeitsspeicher gepuffert, halte solche Übertragungen also unter etwa 200 MB.",
-        "Ordner funktionieren ebenfalls: Wähle am Desktop (nicht unter iOS) einen Ordner, relative Pfade bleiben erhalten. Kann der empfangende Browser direkt in ein gewähltes Verzeichnis schreiben (Chrome, Edge), landen die Dateien dort; sonst (Firefox, Safari) kommt der gesamte Ordner als eine .zip-Datei an, die sich zur selben Struktur entpackt.",
+        "Da die Datei nie auf einem Server landet, gibt es kein Upload-Kontingent — die echte Grenze hängt davon ab, welcher Browser empfängt. Ein Desktop-Browser mit der File System Access API (Chrome oder Edge unter Windows oder Linux) streamt eingehende Daten direkt auf die Festplatte, mehrere Gigabyte große Dateien sind also kein Problem. Firefox, Safari und sämtliche Handy-Browser — Chrome unter Android eingeschlossen — haben diese API nicht, dort sammelt sich der Empfang stattdessen im Arbeitsspeicher, und ab etwa 256 MB warnt Relayium den Empfänger, bevor er annimmt. Versteh diesen Wert als bewusst vorsichtige Schätzung und nicht als harte Obergrenze: Wo es tatsächlich versagt, hängt vom Arbeitsspeicher des Geräts, vom Betriebssystem und von der Zahl der offenen Tabs ab.",
+        "Ordner funktionieren ebenfalls: Wähle am Desktop (nicht unter iOS) einen Ordner, relative Pfade bleiben erhalten. Kann der empfangende Browser direkt in ein gewähltes Verzeichnis schreiben (Chrome oder Edge am Desktop), landen die Dateien dort; sonst (Firefox, Safari, jeder Handy-Browser) kommt der gesamte Ordner als eine .zip-Datei an, die sich zur selben Struktur entpackt.",
       ],
     },
   ],
@@ -375,7 +375,7 @@ const de = {
       },
       {
         q: "Kann ich, wie bei AirDrop, an mehrere gleichzeitig senden?",
-        a: "Im selben Netzwerk ja — der lokale Raum ist nicht auf zwei Geräte begrenzt, sodass mehr als ein nahes Gerät gleichzeitig empfangen kann. Der Pairing-Code-Modus fürs Senden übers Internet ist eine direkte Verbindung zwischen zwei Geräten.",
+        a: "Im selben Netzwerk ja — der lokale Raum ist nicht auf zwei Geräte begrenzt, sodass mehr als ein nahes Gerät gleichzeitig empfangen kann. Der Pairing-Code-Modus fürs Senden übers Internet verbindet genau zwei Geräte, und zwar über ein verschlüsseltes Relay.",
       },
     ],
   },
@@ -412,7 +412,7 @@ const fr = {
       heading: "À travers internet : ce qu'AirDrop ne sait pas faire",
       body: [
         "AirDrop fonctionne uniquement à proximité — sortez de la portée Bluetooth/Wi-Fi et il s'arrête. Le second mode de Relayium comble exactement ce manque : deux appareils sur des réseaux totalement différents, n'importe où dans le monde.",
-        "L'expéditeur se connecte et obtient un court code d'appairage (avec un lien de participation et un QR code) ; le destinataire le saisit, scanne le QR code, ou ouvre le lien — sans jamais avoir besoin de compte. Les deux appareils se connectent alors directement dès que les réseaux le permettent ; quand une voie directe est impossible, le flux chiffré bascule vers un relais TURN qui ne voit que du texte chiffré, donc il reste chiffré de bout en bout tout du long. Une connexion coupée peut reprendre au lieu de repartir de zéro.",
+        "L'expéditeur se connecte et obtient un court code d'appairage (avec un lien de participation et un QR code) ; le destinataire le saisit, scanne le QR code, ou ouvre le lien — sans jamais avoir besoin de compte. Cette connexion entre réseaux passe par un relais TURN chiffré plutôt que par une liaison directe, et c'est voulu : entre deux réseaux étrangers l'un à l'autre, une voie directe est généralement introuvable, et la chercher d'abord laisserait la connexion en suspens une vingtaine de secondes avant d'aboutir malgré tout au relais. Les fichiers sont scellés de bout en bout avant de quitter l'expéditeur : le relais ne transmet donc que du texte chiffré qu'aucune clé ne lui permet d'ouvrir, et tout le trajet reste chiffré de bout en bout. Une connexion coupée peut reprendre au lieu de repartir de zéro.",
       ],
     },
     {
@@ -425,8 +425,8 @@ const fr = {
     {
       heading: "Les limites pratiques, en toute franchise",
       body: [
-        "Comme le fichier n'atterrit jamais sur un serveur, il n'y a pas de quota de téléversement — la vraie limite dépend du navigateur qui reçoit. Sous Windows, Linux ou Android avec Chrome ou Edge, les données entrantes sont écrites en flux directement sur le disque, donc les fichiers de plusieurs gigaoctets passent sans souci. Avec Firefox ou un iPhone Safari en réception dans un parc mixte, le fichier est plutôt mis en mémoire tampon, gardez donc ces transferts sous environ 200 Mo.",
-        "Les dossiers fonctionnent aussi : choisissez un dossier sur ordinateur (pas sous iOS) et les chemins relatifs sont conservés. Si le navigateur qui reçoit peut écrire directement dans un répertoire choisi (Chrome, Edge), les fichiers s'y placent ; sinon (Firefox, Safari) tout le dossier arrive sous forme d'un seul .zip qui se décompresse en gardant la même structure.",
+        "Comme le fichier n'atterrit jamais sur un serveur, il n'y a pas de quota de téléversement — la vraie limite dépend du navigateur qui reçoit. Un navigateur de bureau doté de l'API File System Access (Chrome ou Edge sous Windows ou Linux) écrit les données entrantes en flux directement sur le disque, donc les fichiers de plusieurs gigaoctets passent sans souci. Firefox, Safari et tous les navigateurs de téléphone — Chrome sous Android compris — n'ont pas cette API : la réception y est assemblée en mémoire, et Relayium prévient le destinataire avant qu'il accepte dès que l'on dépasse environ 256 Mo. À prendre comme une estimation volontairement prudente, pas comme un plafond mesuré : le point où cela lâche vraiment dépend de la mémoire de l'appareil, de son système et du nombre d'onglets ouverts.",
+        "Les dossiers fonctionnent aussi : choisissez un dossier sur ordinateur (pas sous iOS) et les chemins relatifs sont conservés. Si le navigateur qui reçoit peut écrire directement dans un répertoire choisi (Chrome ou Edge sur ordinateur), les fichiers s'y placent ; sinon (Firefox, Safari, tout navigateur de téléphone) tout le dossier arrive sous forme d'un seul .zip qui se décompresse en gardant la même structure.",
       ],
     },
   ],
@@ -451,7 +451,7 @@ const fr = {
       },
       {
         q: "Puis-je envoyer à un groupe, comme avec AirDrop ?",
-        a: "Sur le même réseau, oui — la salle locale n'est pas limitée à deux appareils, donc plusieurs appareils proches peuvent recevoir en même temps. Le mode par code d'appairage pour l'envoi à travers internet est une connexion directe entre deux appareils.",
+        a: "Sur le même réseau, oui — la salle locale n'est pas limitée à deux appareils, donc plusieurs appareils proches peuvent recevoir en même temps. Le mode par code d'appairage pour l'envoi à travers internet relie exactement deux appareils, via un relais chiffré.",
       },
     ],
   },
@@ -488,7 +488,7 @@ const ar = {
       heading: "عبر الإنترنت: أمر لا يقدر عليه AirDrop",
       body: [
         "يعمل AirDrop في النطاق القريب فقط — إذا خرجت عن نطاق Bluetooth/Wi-Fi توقف عن العمل. يسد الوضع الثاني في Relayium هذه الثغرة بالضبط: جهازان على شبكتين مختلفتين تمامًا، في أي مكان في العالم.",
-        "يسجّل المُرسِل الدخول ويحصل على رمز اقتران قصير (مع رابط انضمام ورمز QR)؛ ويُدخله المُستقبِل، أو يمسح رمز QR، أو يفتح الرابط — دون أن يحتاج إلى حساب مطلقًا. عندئذٍ يتصل الجهازان مباشرةً كلما سمحت الشبكتان بذلك؛ وحين يتعذّر وجود مسار مباشر، يتراجع التدفق المُشفَّر إلى مُرحِّل TURN لا يرى سوى نص مُشفَّر، فيبقى مُشفَّرًا من الطرف إلى الطرف طوال الطريق. ويمكن للاتصال المنقطع أن يستأنف بدلًا من البدء من الصفر.",
+        "يسجّل المُرسِل الدخول ويحصل على رمز اقتران قصير (مع رابط انضمام ورمز QR)؛ ويُدخله المُستقبِل، أو يمسح رمز QR، أو يفتح الرابط — دون أن يحتاج إلى حساب مطلقًا. وهذا الاتصال عبر الشبكات يجري عبر مُرحِّل TURN مُشفَّر لا عبر وصلة مباشرة بين الجهازين، وذلك بحكم التصميم: فبين شبكتين لا صلة بينهما يتعذّر في الغالب إيجاد مسار مباشر، ومحاولته أولًا تترك الاتصال معلّقًا نحو عشرين ثانية قبل أن ينتهي إلى المُرحِّل على أي حال. والملفات مختومة من الطرف إلى الطرف قبل أن تغادر المُرسِل، فلا يُمرِّر المُرحِّل سوى نص مُشفَّر لا يملك مفتاحه — ويبقى المسار كله مُشفَّرًا من الطرف إلى الطرف. ويمكن للاتصال المنقطع أن يستأنف بدلًا من البدء من الصفر.",
       ],
     },
     {
@@ -501,8 +501,8 @@ const ar = {
     {
       heading: "الحدود العملية، بكل صراحة",
       body: [
-        "بما أن الملف لا يستقر على خادم أبدًا، فلا توجد حصة رفع — الحد الحقيقي هو المتصفح الذي يستقبل. على Windows أو Linux أو Android مع Chrome أو Edge، تُبَثّ البيانات الواردة مباشرةً إلى القرص، فالملفات التي تبلغ عدة غيغابايت لا مشكلة فيها. أما عند الاستقبال عبر Firefox أو Safari على iOS ضمن مجموعة أجهزة مختلطة، فيُخزَّن الملف مؤقتًا في الذاكرة بدلًا من ذلك، لذا أبقِ تلك عمليات النقل دون 200 ميغابايت تقريبًا.",
-        "المجلدات تعمل أيضًا: اختر مجلدًا على الحاسوب المكتبي (لا على iOS) وتُحفَظ المسارات النسبية. إذا كان المتصفح المُستقبِل قادرًا على الكتابة مباشرةً في دليل مُختار (Chrome، Edge) فإن الملفات تستقر في مكانها؛ وإلا (Firefox، Safari) يصل المجلد بأكمله في ملف .zip واحد يُفَك إلى البنية نفسها.",
+        "بما أن الملف لا يستقر على خادم أبدًا، فلا توجد حصة رفع — الحد الحقيقي هو المتصفح الذي يستقبل. متصفح حاسوب مكتبي يدعم واجهة File System Access (‏Chrome أو Edge على Windows أو Linux) يبثّ البيانات الواردة مباشرةً إلى القرص، فالملفات التي تبلغ عدة غيغابايت لا مشكلة فيها. أما Firefox وSafari وكل متصفحات الهواتف — بما فيها Chrome على Android — فلا تملك تلك الواجهة، فتُجمَّع الدفعة في الذاكرة بدلًا من ذلك، وينبّه Relayium المُستقبِل قبل القبول متى تجاوزت نحو 256 ميغابايت. واعتبر ذلك تقديرًا متحفّظًا عن قصد لا سقفًا مقيسًا: فالنقطة التي ينهار عندها فعلًا تتوقف على ذاكرة الجهاز ونظامه وعدد علامات التبويب المفتوحة.",
+        "المجلدات تعمل أيضًا: اختر مجلدًا على الحاسوب المكتبي (لا على iOS) وتُحفَظ المسارات النسبية. إذا كان المتصفح المُستقبِل قادرًا على الكتابة مباشرةً في دليل مُختار (‏Chrome أو Edge على الحاسوب المكتبي) فإن الملفات تستقر في مكانها؛ وإلا (Firefox، Safari، وأي متصفح هاتف) يصل المجلد بأكمله في ملف .zip واحد يُفَك إلى البنية نفسها.",
       ],
     },
   ],
@@ -527,7 +527,7 @@ const ar = {
       },
       {
         q: "هل يمكنه الإرسال إلى مجموعة، كما يستطيع AirDrop؟",
-        a: "على نفس الشبكة، نعم — الغرفة المحلية ليست مقصورة على جهازين، فيمكن لأكثر من جهاز قريب أن يستقبل في آنٍ واحد. أما وضع رمز الاقتران للإرسال عبر الإنترنت فهو اتصال مباشر بين جهازين.",
+        a: "على نفس الشبكة، نعم — الغرفة المحلية ليست مقصورة على جهازين، فيمكن لأكثر من جهاز قريب أن يستقبل في آنٍ واحد. أما وضع رمز الاقتران للإرسال عبر الإنترنت فيصل بين جهازين اثنين فقط، عبر مُرحِّل مُشفَّر.",
       },
     ],
   },
@@ -564,7 +564,7 @@ const es = {
       heading: "A través de internet: algo que AirDrop no puede hacer",
       body: [
         "AirDrop es solo de cercanía — sal del alcance de Bluetooth/Wi-Fi y deja de funcionar. El segundo modo de Relayium cubre exactamente ese hueco: dos dispositivos en redes completamente distintas, en cualquier parte del mundo.",
-        "El remitente inicia sesión y obtiene un código de emparejamiento corto (con un enlace para unirse y un código QR); el destinatario lo introduce, escanea el QR o abre el enlace — y nunca necesita una cuenta. Los dos dispositivos se conectan entonces directamente siempre que las redes lo permitan; cuando no es posible un camino directo, el flujo cifrado recurre a un retransmisor TURN que solo ve texto cifrado, así que sigue cifrado de extremo a extremo todo el trayecto. Una conexión caída puede reanudarse en lugar de empezar de cero.",
+        "El remitente inicia sesión y obtiene un código de emparejamiento corto (con un enlace para unirse y un código QR); el destinatario lo introduce, escanea el QR o abre el enlace — y nunca necesita una cuenta. Esa conexión entre redes va por un retransmisor TURN cifrado en lugar de por un enlace directo, y es así por diseño: entre dos redes ajenas la una a la otra casi nunca hay una ruta directa, e intentarla primero dejaría la conexión en el aire unos veinte segundos antes de acabar igualmente en el retransmisor. Los archivos van sellados de extremo a extremo antes de salir del remitente, así que el retransmisor solo reenvía texto cifrado que no tiene clave para abrir — todo el trayecto sigue cifrado de extremo a extremo. Una conexión caída puede reanudarse en lugar de empezar de cero.",
       ],
     },
     {
@@ -577,8 +577,8 @@ const es = {
     {
       heading: "Los límites prácticos, con honestidad",
       body: [
-        "Como el archivo nunca aterriza en un servidor, no hay cuota de subida — el límite real es qué navegador está recibiendo. En Windows, Linux o Android con Chrome o Edge, los datos entrantes se transmiten directamente al disco, así que los archivos de varios gigabytes no dan problema. En un receptor con Firefox o Safari de iOS dentro de un conjunto mixto, el archivo se almacena en memoria en su lugar, así que mantén esas transferencias por debajo de unos 200 MB.",
-        "Las carpetas también funcionan: elige una carpeta en el escritorio (no en iOS) y se conservan las rutas relativas. Si el navegador receptor puede escribir directamente en un directorio elegido (Chrome, Edge) los archivos se colocan en su sitio; si no (Firefox, Safari) toda la carpeta llega como un único .zip que se descomprime con la misma estructura.",
+        "Como el archivo nunca aterriza en un servidor, no hay cuota de subida — el límite real es qué navegador está recibiendo. Un navegador de escritorio con la API File System Access (Chrome o Edge en Windows o Linux) transmite los datos entrantes directamente al disco, así que los archivos de varios gigabytes no dan problema. Firefox, Safari y todos los navegadores de móvil — incluido Chrome en Android — no tienen esa API, así que ahí la recepción se acumula en memoria y Relayium avisa a quien recibe antes de que acepte en cuanto se pasa de unos 256 MB. Tómalo como una estimación deliberadamente prudente, no como un techo medido: dónde cede de verdad depende de la memoria del dispositivo, de su sistema y de cuántas pestañas haya abiertas.",
+        "Las carpetas también funcionan: elige una carpeta en el escritorio (no en iOS) y se conservan las rutas relativas. Si el navegador receptor puede escribir directamente en un directorio elegido (Chrome o Edge de escritorio) los archivos se colocan en su sitio; si no (Firefox, Safari, cualquier navegador de móvil) toda la carpeta llega como un único .zip que se descomprime con la misma estructura.",
       ],
     },
   ],
@@ -603,7 +603,7 @@ const es = {
       },
       {
         q: "¿Puede enviar a un grupo, como hace AirDrop?",
-        a: "En la misma red, sí — la sala local no se limita a dos dispositivos, así que más de un dispositivo cercano puede recibir a la vez. El modo con código de emparejamiento para enviar a través de internet es una conexión directa entre dos dispositivos.",
+        a: "En la misma red, sí — la sala local no se limita a dos dispositivos, así que más de un dispositivo cercano puede recibir a la vez. El modo con código de emparejamiento para enviar a través de internet une exactamente a dos dispositivos, a través de un retransmisor cifrado.",
       },
     ],
   },
@@ -640,7 +640,7 @@ const pt = {
       heading: "Pela internet: algo que o AirDrop não consegue fazer",
       body: [
         "O AirDrop é só de proximidade — saia do alcance de Bluetooth/Wi-Fi e ele para de funcionar. O segundo modo do Relayium cobre exatamente essa lacuna: dois dispositivos em redes completamente diferentes, em qualquer lugar do mundo.",
-        "O remetente entra e recebe um código de emparelhamento curto (com um link de entrada e um código QR); o destinatário o digita, escaneia o QR ou abre o link — e nunca precisa de conta. Os dois dispositivos então se conectam diretamente sempre que as redes permitirem; quando um caminho direto não é possível, o fluxo criptografado recorre a um retransmissor TURN que só vê texto cifrado, então permanece criptografado de ponta a ponta o caminho todo. Uma conexão caída pode ser retomada em vez de recomeçar do zero.",
+        "O remetente entra e recebe um código de emparelhamento curto (com um link de entrada e um código QR); o destinatário o digita, escaneia o QR ou abre o link — e nunca precisa de conta. Essa conexão entre redes corre por um retransmissor TURN criptografado em vez de uma ligação direta, e isso é proposital: entre duas redes sem relação uma com a outra quase nunca existe caminho direto, e tentá-lo primeiro deixaria a conexão pendurada por uns vinte segundos antes de terminar no retransmissor mesmo assim. Os arquivos saem selados de ponta a ponta antes de deixar o remetente, então o retransmissor só encaminha texto cifrado que não tem chave para abrir — o trajeto inteiro continua criptografado de ponta a ponta. Uma conexão caída pode ser retomada em vez de recomeçar do zero.",
       ],
     },
     {
@@ -653,8 +653,8 @@ const pt = {
     {
       heading: "Os limites práticos, com honestidade",
       body: [
-        "Como o arquivo nunca aterrissa em um servidor, não há cota de upload — o limite real é qual navegador está recebendo. No Windows, Linux ou Android com Chrome ou Edge, os dados que chegam são gravados direto no disco, então arquivos de vários gigabytes não são problema. Em um receptor com Firefox ou Safari do iOS em um conjunto misto, o arquivo é armazenado na memória, então mantenha essas transferências abaixo de cerca de 200 MB.",
-        "Pastas também funcionam: escolha uma pasta no desktop (não no iOS) e os caminhos relativos são preservados. Se o navegador receptor puder gravar direto em um diretório escolhido (Chrome, Edge), os arquivos ficam em seus lugares; caso contrário (Firefox, Safari), a pasta inteira chega como um único .zip que se descompacta com a mesma estrutura.",
+        "Como o arquivo nunca aterrissa em um servidor, não há cota de upload — o limite real é qual navegador está recebendo. Um navegador de computador com a API File System Access (Chrome ou Edge no Windows ou Linux) grava os dados que chegam direto no disco, então arquivos de vários gigabytes não são problema. Firefox, Safari e todos os navegadores de celular — Chrome no Android incluído — não têm essa API, então neles o lote é montado na memória, e o Relayium avisa quem recebe antes de aceitar assim que passa de cerca de 256 MB. Encare esse número como uma estimativa propositalmente conservadora, não como um teto medido: o ponto em que realmente cede depende da memória do aparelho, do sistema e de quantas abas estão abertas.",
+        "Pastas também funcionam: escolha uma pasta no desktop (não no iOS) e os caminhos relativos são preservados. Se o navegador receptor puder gravar direto em um diretório escolhido (Chrome ou Edge no computador), os arquivos ficam em seus lugares; caso contrário (Firefox, Safari, qualquer navegador de celular), a pasta inteira chega como um único .zip que se descompacta com a mesma estrutura.",
       ],
     },
   ],
@@ -679,7 +679,7 @@ const pt = {
       },
       {
         q: "Dá para enviar para um grupo, como o AirDrop faz?",
-        a: "Na mesma rede, sim — a sala local não se limita a dois dispositivos, então mais de um dispositivo próximo pode receber ao mesmo tempo. O modo por código de emparelhamento para envio pela internet é uma conexão direta entre dois dispositivos.",
+        a: "Na mesma rede, sim — a sala local não se limita a dois dispositivos, então mais de um dispositivo próximo pode receber ao mesmo tempo. O modo por código de emparelhamento para envio pela internet liga exatamente dois dispositivos, por um retransmissor criptografado.",
       },
     ],
   },

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>用 cron 任务自动化加密的服务器备份 · Relayium</title>
-    <meta name="description" content="在 cron 中定时运行 relayium push 或 sync,按计划自动把目录复制到另一台服务器——加密传输、支持断点续传、SHA-256 校验,而且完全免费。" />
+    <meta name="description" content="在 cron 里定时运行 relayium push 或 sync，按计划自动把目录复制到另一台服务器——加密传输、支持断点续传、逐文件 SHA-256 校验，而且想跑多频繁都免费。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/zh/how-to/automate-server-backups/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/automate-server-backups/" />
@@ -23,7 +23,7 @@
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="用 cron 任务自动化加密的服务器备份" />
-    <meta property="og:description" content="在 cron 中定时运行 relayium push 或 sync,按计划自动把目录复制到另一台服务器——加密传输、支持断点续传、SHA-256 校验,而且完全免费。" />
+    <meta property="og:description" content="在 cron 里定时运行 relayium push 或 sync，按计划自动把目录复制到另一台服务器——加密传输、支持断点续传、逐文件 SHA-256 校验，而且想跑多频繁都免费。" />
     <meta property="og:url" content="https://relayium.com/zh/how-to/automate-server-backups/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -33,9 +33,9 @@
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="用 cron 任务自动化加密的服务器备份" />
-    <meta name="twitter:description" content="在 cron 中定时运行 relayium push 或 sync,按计划自动把目录复制到另一台服务器——加密传输、支持断点续传、SHA-256 校验,而且完全免费。" />
+    <meta name="twitter:description" content="在 cron 里定时运行 relayium push 或 sync，按计划自动把目录复制到另一台服务器——加密传输、支持断点续传、逐文件 SHA-256 校验，而且想跑多频繁都免费。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 cron 任务自动化加密的服务器备份","description":"在 cron 中定时运行 relayium push 或 sync,按计划自动把目录复制到另一台服务器——加密传输、支持断点续传、SHA-256 校验,而且完全免费。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/automate-server-backups/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"备份服务器需要装 relayium 吗?","acceptedAnswer":{"@type":"Answer","text":"要看命令。push 不管远端有没有装都能用:装了 relayium 就用原生协议(断点续传 + 每个文件 SHA-256 校验);没装的话,push 会退回到通过 SSH 传输 tar 流,一台裸服务器也能用。sync 则始终需要远端有 relayium 的原生协议——sync 没有 tar 兜底方案,请先在远端装好它。"}},{"@type":"Question","name":"备份会加密并校验吗?","acceptedAnswer":{"@type":"Answer","text":"会。每个文件都会做端到端的 SHA-256 校验,而通过 SSH 或 daemon-direct 推送时,字节已经受该连接自身的加密保护——不需要额外配置。"}},{"@type":"Question","name":"如果 cron 任务在执行到一半时被中断会怎样?","acceptedAnswer":{"@type":"Answer","text":"只要两端都有 relayium,下一次计划运行就会续传未完成的文件,而不是重新发送全部内容。如果你想放弃续传、做一次干净的完整重发,加上 --no-resume 即可。"}},{"@type":"Question","name":"--delete 会不会不小心清空我的目标目录?","acceptedAnswer":{"@type":"Answer","text":"如果源目录里没有任何文件,sync 会直接拒绝执行 --delete;而且接收端必须以 serve --allow-delete 方式启动,删除操作才会真正生效——否则会被跳过,并把结果报告给你。"}},{"@type":"Question","name":"需要账号吗,这个要收费吗?","acceptedAnswer":{"@type":"Answer","text":"不需要。CLI 完全免费,push、pull、sync 都不需要账号——传输走的是你自己的 SSH 连接或直接的 daemon 连接,不经过 Relayium 的服务器。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 cron 任务自动化加密的服务器备份","description":"在 cron 里定时运行 relayium push 或 sync，按计划自动把目录复制到另一台服务器——加密传输、支持断点续传、逐文件 SHA-256 校验，而且想跑多频繁都免费。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/automate-server-backups/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"备份服务器需要装 relayium 吗？","acceptedAnswer":{"@type":"Answer","text":"要看用哪条命令。push 不管远端装没装都能用：装了就走原生协议（断点续传 + 逐文件 SHA-256 校验）；没装的话，push 会退回到通过 SSH 传输 tar 流，一台裸服务器也照样能收。sync 则始终需要远端有 relayium 的原生协议——它没有 tar 兜底方案，请先在远端装好。"}},{"@type":"Question","name":"备份会加密并校验吗？","acceptedAnswer":{"@type":"Answer","text":"会。每个文件都会做端到端的 SHA-256 校验；而通过 SSH 或守护进程直连推送时，字节已经受该连接自身的加密保护——不需要额外配置什么。"}},{"@type":"Question","name":"如果 cron 任务执行到一半被中断会怎样？","acceptedAnswer":{"@type":"Answer","text":"只要两端都有 relayium，下一次计划运行就会接着传没传完的文件，而不是重新发送全部内容。如果你想放弃续传、做一次干净的完整重发，加上 --no-resume 即可。"}},{"@type":"Question","name":"--delete 会不会不小心清空我的目标目录？","acceptedAnswer":{"@type":"Answer","text":"如果源目录里一个文件都没有，sync 会直接拒绝执行 --delete；而且接收端必须以 serve --allow-delete 启动，删除才会真正生效——否则会被跳过，并把结果报告给你。"}},{"@type":"Question","name":"需要账号吗，这个要收费吗？","acceptedAnswer":{"@type":"Answer","text":"都不需要。CLI 完全免费，push、pull、sync 都不需要账号——传输走的是你自己的 SSH 连接，或者一条守护进程直连，不经过 Relayium 的服务器。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -69,53 +69,53 @@ footer a{color:var(--text-h);text-decoration:none}
       <h1>用 cron 任务自动化加密的服务器备份</h1>
       <p class="updated">最近更新: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/automate-server-backups/">English</a><a href="/zh/how-to/automate-server-backups/" aria-current="true">中文</a><a href="/ja/how-to/automate-server-backups/">日本語</a><a href="/ko/how-to/automate-server-backups/">한국어</a><a href="/de/how-to/automate-server-backups/">Deutsch</a><a href="/fr/how-to/automate-server-backups/">Français</a><a href="/ar/how-to/automate-server-backups/">العربية</a><a href="/es/how-to/automate-server-backups/">Español</a><a href="/pt/how-to/automate-server-backups/">Português</a></nav>
-      <p class="lead">需要你记得手动运行的备份,常常就不会发生。cron 会记得,而 Relayium CLI 正是为此而生:一条非交互式命令,把目录复制(或镜像)到另一台机器,校验每一个文件,并且在网络中断时从断点继续。</p>
-      <p class="lead">本文介绍如何用 cron 定时运行 relayium push 和增量的 relayium sync、两者都能使用的两种传输方式,以及可以直接复制使用的 crontab 行。</p>
-      <h2>push 与 sync:整体复制还是增量镜像</h2>
-      <p>push 和 sync 都能把一个目录传送到另一台机器,也都可以放心地反复运行,但它们解决的备份问题略有不同。</p>
-      <p>每次运行 push 都会通过 SSH 或 daemon-direct 发送一份完整拷贝——简单直接,即使远端服务器没装 relayium,也能靠 tar 兜底方案工作。sync 则把目标目录维护成源目录的增量单向镜像:只重新发送发生变化的文件,所以对一个大目录做第一次同步之后,后续的夜间同步会很快。sync 始终需要两端都用 relayium 的原生协议——它没有 tar 兜底方案。</p>
-      <ul><li>如果只是想做一次简单的定时复制,尤其是目标服务器可能没装 relayium,用 push。</li><li>如果目录很大或经常变化,每晚重新发送全部内容会很浪费,用 sync。</li><li>两者都会对每个文件做 SHA-256 校验,中断后也能续传。</li></ul>
+      <p class="lead">需要你记得手动运行的备份，往往就不会发生。cron 会记得，而 Relayium CLI 正是为此而生：一条非交互式命令，把目录复制（或镜像）到另一台机器，逐个校验文件，网络断了也能从断点接着传。</p>
+      <p class="lead">本文介绍如何用 cron 定时运行 relayium push 和增量的 relayium sync、两者共用的两种传输方式，以及可以直接抄走的 crontab 行。</p>
+      <h2>push 与 sync：整体复制还是增量镜像</h2>
+      <p>push 和 sync 都能把一个目录送到另一台机器，也都可以放心地反复运行，但它们解决的备份问题略有不同。</p>
+      <p>每次运行 push 都会通过 SSH 或守护进程直连发送一份完整拷贝——简单直接，即使远端服务器没装 relayium，也能靠 tar 兜底方案工作。sync 则把目标目录维护成源目录的增量单向镜像：只重新发送发生变化的文件，所以一个大目录在首次同步之后，后续的每晚同步都会很快。sync 始终需要两端都用 relayium 的原生协议——它没有 tar 兜底方案。</p>
+      <ul><li>只是想做一次简单的定时复制，尤其是目标服务器可能没装 relayium，就用 push。</li><li>目录很大或者经常变动，每晚重发全部内容太浪费，就用 sync。</li><li>两者都会逐文件做 SHA-256 校验，中断后也能续传。</li></ul>
       <h2>开始之前</h2>
       <p>下面用到的都是 relayium CLI，所以没装的话先装上。在 macOS 或 Linux 上，一条命令就能把预编译二进制放进你的 PATH：</p>
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul>
-      <h2>两种传输方式:SSH 或 daemon-direct</h2>
-      <p>两个命令都可以指向一个 SSH 目标(scp 风格,使用你的 ~/.ssh/config),也可以在对方机器运行着 relayium serve 时,直接通过 daemon-direct 协议连接过去——不需要 SSH。</p>
+      <h2>两种传输方式：SSH 或守护进程直连</h2>
+      <p>两个命令都可以指向一个 SSH 目标（scp 风格，走你的 ~/.ssh/config）；如果对方机器正跑着 relayium serve，也可以用守护进程直连（daemon-direct）协议直接连过去——不需要 SSH。</p>
       <pre><code># SSH destination — uses your existing SSH keys and config
 relayium push ./data user@backup-server:/srv/backups/
 
 # daemon-direct — the destination runs &quot;relayium serve&quot;, no SSH required
 relayium push ./data relayium://backup-server:9031</code></pre>
-      <ul><li>daemon-direct 连接使用带证书锁定的 TLS 1.3,首次连接时信任(trust-on-first-use),之后的每次运行都会校验同一个指纹。</li><li>sync 接受和 push 相同的两种目标写法。</li></ul>
+      <ul><li>守护进程直连走的是带证书锁定的 TLS 1.3：首次连接时信任（trust-on-first-use），之后每次运行都校验同一个指纹。</li><li>sync 接受和 push 完全相同的两种目标写法。</li></ul>
       <h2>用 cron 定时运行</h2>
-      <p>push 和 sync 都是单条非交互式命令,可以直接放进 crontab。给它指定一个没有口令的密钥(或者用 agent),并把输出记录下来以便查看失败:</p>
+      <p>push 和 sync 都是单条非交互式命令，可以直接放进 crontab。给它指定一个没有口令的密钥（或者用 agent），并把输出记下来，好让失败能被看见：</p>
       <pre><code># full copy every night at 2am — add to your crontab (crontab -e)
 0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1
 
 # incremental mirror every 15 minutes instead
 */15 * * * * relayium sync -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ &gt;&gt; ~/relayium-sync.log 2&gt;&amp;1</code></pre>
-      <ul><li>只要有文件未通过完整性校验,命令就会以非零状态退出,这样 cron 的失败邮件通知就能发现问题。</li><li>被中断的一次运行,会在下一次计划运行时自动续传或补上进度。</li></ul>
+      <ul><li>只要有文件没通过完整性校验，命令就会以非零状态退出，cron 的失败邮件通知就能发现问题。</li><li>被中断的一次运行，会在下一次计划运行时自动续传或补上进度。</li></ul>
       <h2>镜像删除与实时同步</h2>
-      <p>默认情况下,sync 只会在目标端新增或更新文件。加上 --delete 就会变成真正的镜像,把源目录中已经不存在的文件也从目标端删除——接收端必须显式以 serve --allow-delete 方式监听,否则这些删除操作会被静默跳过,并在结果里报告为被拒绝。如果源目录解析不到任何文件,sync 也会直接拒绝执行 --delete,这样源路径写错也不会清空目标目录。</p>
-      <p>如果不想等 cron 的下一个执行时间点,--watch 会让 relayium sync 持续运行,一旦源目录下有文件变化,就会在片刻之后自动重新同步——是按计划轮询之外的一种轻量替代方案。</p>
-      <ul><li>relayium sync ./data user@backup-server:/srv/backups/ --delete 会镜像删除操作(接收端需要 serve --allow-delete)。</li><li>relayium sync ./data user@backup-server:/srv/backups/ --watch 会持续运行,有变化就同步,而不是靠 cron 单次触发。</li></ul>
+      <p>默认情况下，sync 只会在目标端新增或更新文件。加上 --delete 才会变成真正的镜像，把源目录里已经不存在的文件也从目标端删掉——接收端必须显式以 serve --allow-delete 监听，否则这些删除会被静默跳过，并在结果里报告为被拒绝。如果源目录解析不出任何文件，sync 还会直接拒绝执行 --delete，这样源路径写错也清空不了目标目录。</p>
+      <p>不想等 cron 的下一个执行点，就用 --watch：它会让 relayium sync 常驻运行，源目录下一有文件变动，片刻之后就自动重新同步——比按计划轮询更轻量。</p>
+      <ul><li>relayium sync ./data user@backup-server:/srv/backups/ --delete 会把删除也镜像过去（接收端需要 serve --allow-delete）。</li><li>relayium sync ./data user@backup-server:/srv/backups/ --watch 会常驻运行，一有变化就同步，而不是靠 cron 单次触发。</li></ul>
       <h2>常见问题</h2>
-      <h3>备份服务器需要装 relayium 吗?</h3>
-      <p>要看命令。push 不管远端有没有装都能用:装了 relayium 就用原生协议(断点续传 + 每个文件 SHA-256 校验);没装的话,push 会退回到通过 SSH 传输 tar 流,一台裸服务器也能用。sync 则始终需要远端有 relayium 的原生协议——sync 没有 tar 兜底方案,请先在远端装好它。</p>
-      <h3>备份会加密并校验吗?</h3>
-      <p>会。每个文件都会做端到端的 SHA-256 校验,而通过 SSH 或 daemon-direct 推送时,字节已经受该连接自身的加密保护——不需要额外配置。</p>
-      <h3>如果 cron 任务在执行到一半时被中断会怎样?</h3>
-      <p>只要两端都有 relayium,下一次计划运行就会续传未完成的文件,而不是重新发送全部内容。如果你想放弃续传、做一次干净的完整重发,加上 --no-resume 即可。</p>
-      <h3>--delete 会不会不小心清空我的目标目录?</h3>
-      <p>如果源目录里没有任何文件,sync 会直接拒绝执行 --delete;而且接收端必须以 serve --allow-delete 方式启动,删除操作才会真正生效——否则会被跳过,并把结果报告给你。</p>
-      <h3>需要账号吗,这个要收费吗?</h3>
-      <p>不需要。CLI 完全免费,push、pull、sync 都不需要账号——传输走的是你自己的 SSH 连接或直接的 daemon 连接,不经过 Relayium 的服务器。</p>
+      <h3>备份服务器需要装 relayium 吗？</h3>
+      <p>要看用哪条命令。push 不管远端装没装都能用：装了就走原生协议（断点续传 + 逐文件 SHA-256 校验）；没装的话，push 会退回到通过 SSH 传输 tar 流，一台裸服务器也照样能收。sync 则始终需要远端有 relayium 的原生协议——它没有 tar 兜底方案，请先在远端装好。</p>
+      <h3>备份会加密并校验吗？</h3>
+      <p>会。每个文件都会做端到端的 SHA-256 校验；而通过 SSH 或守护进程直连推送时，字节已经受该连接自身的加密保护——不需要额外配置什么。</p>
+      <h3>如果 cron 任务执行到一半被中断会怎样？</h3>
+      <p>只要两端都有 relayium，下一次计划运行就会接着传没传完的文件，而不是重新发送全部内容。如果你想放弃续传、做一次干净的完整重发，加上 --no-resume 即可。</p>
+      <h3>--delete 会不会不小心清空我的目标目录？</h3>
+      <p>如果源目录里一个文件都没有，sync 会直接拒绝执行 --delete；而且接收端必须以 serve --allow-delete 启动，删除才会真正生效——否则会被跳过，并把结果报告给你。</p>
+      <h3>需要账号吗，这个要收费吗？</h3>
+      <p>都不需要。CLI 完全免费，push、pull、sync 都不需要账号——传输走的是你自己的 SSH 连接，或者一条守护进程直连，不经过 Relayium 的服务器。</p>
       <div class="ctacard">
-        <p>把备份放进一个你不用记得的日程里——加密传输、支持断点续传,而且免费。</p>
+        <p>把备份交给一个你不用记着的日程——加密传输、支持断点续传，而且免费。</p>
         <a class="cta" href="/cli">获取 CLI</a>
       </div>
       <h2>继续阅读</h2>
-      <ul class="related"><li><a href="/zh/compare/snapdrop/">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop/">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer/">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/transfer-files-android-to-iphone/">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly/">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud/">如何不用网盘传输大文件</a></li><li><a href="/zh/guides/transfer-files-from-terminal/">用 Relayium CLI 从终端传输文件</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh/">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/guides/send-a-file-to-someone/">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/server-to-server-transfers/">用 Relayium CLI 实现服务器到服务器直传（守护进程直连）</a></li><li><a href="/zh/guides/sync-a-large-folder-between-servers/">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li><li><a href="/zh/guides/push-to-cloud-pull-on-another-computer/">在一台电脑上传到云端，在另一台电脑取回</a></li><li><a href="/zh/how-to/share-a-file-with-an-expiring-link/">用会过期的安全链接分享文件</a></li><li><a href="/zh/guides/self-host-relayium/">自托管 Relayium：运行属于你自己的文件传输服务器</a></li><li><a href="/zh/how-to/send-files-between-two-computers-over-the-internet/">如何通过互联网在两台电脑之间传文件</a></li><li><a href="/zh/compare/croc/">Relayium 对比 croc：从终端加密传输文件</a></li><li><a href="/zh/guides/how-relayium-encrypts-your-files/">Relayium 如何对文件端到端加密</a></li><li><a href="/zh/compare/google-drive/">Relayium 对比 Google Drive：发送文件更直接</a></li><li><a href="/zh/compare/rsync/">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</a></li><li><a href="/zh/compare/firefox-send/">2026 年最佳 Firefox Send 替代品</a></li><li><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code/">扫描二维码传输文件</a></li><li><a href="/zh/guides/receive-files-from-the-command-line/">在命令行接收文件</a></li><li><a href="/zh/how-to/send-a-folder/">如何直接发送整个文件夹，而不只是文件</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service/">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/compare/localsend/">Relayium 对比 LocalSend：局域网传输该选哪个</a></li><li><a href="/zh/compare/scp/">Relayium 对比 scp：更简单的 SSH 文件传输</a></li><li><a href="/zh/compare/magic-wormhole/">Relayium 对比 magic-wormhole：命令行文件传输</a></li><li><a href="/zh/compare/nextcloud/">Relayium 对比 Nextcloud：发送文件该选谁</a></li><li><a href="/zh/compare/dropbox/">Relayium 对比 Dropbox：发送单个文件更直接</a></li><li><a href="/zh/how-to/airdrop-for-windows-and-android/">Windows、Linux、Android 的隔空投送替代方案</a></li><li><a href="/zh/how-to/transfer-files-between-mac-and-windows/">如何在 Mac 和 Windows 电脑之间传输文件</a></li><li><a href="/zh/how-to/send-files-on-the-same-wifi/">同一 Wi-Fi 下的设备之间互传文件</a></li><li><a href="/zh/guides/what-is-peer-to-peer-file-transfer/">什么是点对点（P2P）文件传输？</a></li><li><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet/">在网上发送文件到底安全吗?</a></li><li><a href="/zh/guides/bring-your-own-node/">自建节点：免费使用 Relayium 的中转与存储</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      <ul class="related"><li><a href="/zh/compare/snapdrop/">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop/">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer/">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/transfer-files-android-to-iphone/">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly/">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud/">如何不用网盘传输大文件</a></li><li><a href="/zh/guides/transfer-files-from-terminal/">用 Relayium CLI 从终端传输文件</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh/">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/guides/send-a-file-to-someone/">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/server-to-server-transfers/">用 Relayium CLI 实现服务器到服务器直传（守护进程直连）</a></li><li><a href="/zh/guides/sync-a-large-folder-between-servers/">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li><li><a href="/zh/guides/push-to-cloud-pull-on-another-computer/">在一台电脑上传到云端，在另一台电脑取回</a></li><li><a href="/zh/how-to/share-a-file-with-an-expiring-link/">用会过期的安全链接分享文件</a></li><li><a href="/zh/guides/self-host-relayium/">自托管 Relayium：运行属于你自己的文件传输服务器</a></li><li><a href="/zh/how-to/send-files-between-two-computers-over-the-internet/">如何通过互联网在两台电脑之间传文件</a></li><li><a href="/zh/compare/croc/">Relayium 对比 croc：从终端加密传输文件</a></li><li><a href="/zh/guides/how-relayium-encrypts-your-files/">Relayium 如何对文件端到端加密</a></li><li><a href="/zh/compare/google-drive/">Relayium 对比 Google Drive：发送文件更直接</a></li><li><a href="/zh/compare/rsync/">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</a></li><li><a href="/zh/compare/firefox-send/">2026 年最佳 Firefox Send 替代品</a></li><li><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code/">扫描二维码传输文件</a></li><li><a href="/zh/guides/receive-files-from-the-command-line/">在命令行接收文件</a></li><li><a href="/zh/how-to/send-a-folder/">如何直接发送整个文件夹，而不只是文件</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service/">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/compare/localsend/">Relayium 对比 LocalSend：局域网传输该选哪个</a></li><li><a href="/zh/compare/scp/">Relayium 对比 scp：更简单的 SSH 文件传输</a></li><li><a href="/zh/compare/magic-wormhole/">Relayium 对比 magic-wormhole：命令行文件传输</a></li><li><a href="/zh/compare/nextcloud/">Relayium 对比 Nextcloud：发送文件该选谁</a></li><li><a href="/zh/compare/dropbox/">Relayium 对比 Dropbox：发送单个文件更直接</a></li><li><a href="/zh/how-to/airdrop-for-windows-and-android/">Windows、Linux、Android 的隔空投送替代方案</a></li><li><a href="/zh/how-to/transfer-files-between-mac-and-windows/">如何在 Mac 和 Windows 电脑之间传输文件</a></li><li><a href="/zh/how-to/send-files-on-the-same-wifi/">同一 Wi-Fi 下的设备之间互传文件</a></li><li><a href="/zh/guides/what-is-peer-to-peer-file-transfer/">什么是点对点（P2P）文件传输？</a></li><li><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet/">在网上发送文件到底安全吗？</a></li><li><a href="/zh/guides/bring-your-own-node/">自建节点：免费使用 Relayium 的中转与存储</a></li><li><a href="/zh/">Relayium</a></li></ul>
       <footer>
         <a href="/?lang=zh">← Relayium</a>
         <a href="/zh/apps/">应用</a>

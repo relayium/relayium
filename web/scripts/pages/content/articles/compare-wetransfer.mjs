@@ -31,7 +31,7 @@ const en = {
       heading: "Realtime transfers with no size cap",
       body: [
         "Because nothing is stored on a server, the practical file-size limit comes from your own browser. In Chrome or Edge, Relayium streams incoming data straight to disk, so there is effectively no size cap — multi-gigabyte videos and project archives are fine.",
-        "Firefox and Safari do not yet offer the same streaming download, so there the browser buffers the file in memory; keep those transfers under about 200 MB for a smooth experience. On the same network, realtime transfers need no account: open relayium.com on both devices, pick up to 1,000 files, verify the code, and send. Sending across networks with a pairing code requires the sender to sign in — the recipient never needs an account. If a connection drops mid-way, the transfer resumes instead of starting over, and when a direct link is impossible it falls back to an encrypted TURN relay that only ever sees ciphertext.",
+        "Firefox and Safari don't offer that same File System Access streaming, so when no streaming path applies the browser holds the file in memory instead; Relayium warns above roughly 256 MB, a deliberately conservative estimate rather than a measured hard limit. On the same network, realtime transfers need no account and the two devices connect directly: open relayium.com on both, pick up to 1,000 files, verify the code, and send. Sending across networks uses a pairing code, requires whoever creates that code to sign in, and travels over an encrypted TURN relay by design — that is what gets the connection up in a second or two instead of waiting out direct-connection attempts that rarely succeed between two networks, and the relay only ever forwards ciphertext it cannot read. The recipient never needs an account. If a connection drops mid-way, the transfer resumes instead of starting over.",
       ],
     },
     {
@@ -47,7 +47,7 @@ const en = {
         "The differences that matter most, side by side:",
       ],
       bullets: [
-        "Size limit: WeTransfer's free tier caps transfers at 2 GB; Relayium realtime has no server-side cap (Chrome/Edge stream to disk; keep Firefox/Safari under ~200 MB).",
+        "Size limit: WeTransfer's free tier caps transfers at 2 GB; Relayium realtime has no server-side cap (Chrome/Edge stream to disk; when the browser has to buffer in memory instead, Relayium warns above roughly 256 MB).",
         "Where files live: WeTransfer stores your file on its servers; Relayium realtime never puts the file on a server at all.",
         "Encryption: WeTransfer encrypts in transit and at rest but holds the keys; Relayium is end-to-end with a 6-digit SAS code, and stored links are zero-knowledge with the key only in the URL fragment.",
         "Offline recipient: both handle it — WeTransfer via its stored link, Relayium via a zero-knowledge stored download link with expiry or burn-after-download.",
@@ -61,7 +61,7 @@ const en = {
     items: [
       {
         q: "Is there really no file-size limit?",
-        a: "In realtime mode there is no server-side cap, because the file never touches a server. In Chrome or Edge the download streams straight to disk, so multi-gigabyte files are fine. Firefox and Safari buffer in memory instead, so keep those transfers under about 200 MB. Stored download links have a quota tied to your account.",
+        a: "In realtime mode there is no server-side cap, because the file never touches a server. In Chrome or Edge the download streams straight to disk, so multi-gigabyte files are fine. In Firefox or Safari, when no streaming path applies the browser buffers in memory instead, and Relayium warns above roughly 256 MB — a deliberately conservative estimate, not a hard limit. Stored download links have a quota tied to your account.",
       },
       {
         q: "What if the recipient isn't online?",
@@ -108,7 +108,7 @@ const zh = {
       heading: "无大小上限的实时传输",
       body: [
         "因为不在服务器上存储任何东西，实际的文件大小上限取决于你自己的浏览器。在 Chrome 或 Edge 中，Relayium 会把接收的数据直接流式写入磁盘，所以基本没有大小上限——几 GB 的视频和工程压缩包都没问题。",
-        "Firefox 和 Safari 目前还不支持同样的流式下载，因此浏览器会把文件缓冲在内存里；这类传输建议保持在约 200 MB 以内以获得顺滑体验。同一网络下实时传输无需账号：在两台设备上打开 relayium.com，最多选 1,000 个文件，核对校验码，然后发送。跨网络用配对码传输则需要发送方登录——接收方始终无需账号。若连接中途断开，传输会断点续传而非从头再来；当无法直连时，会退回到加密的 TURN 中继，而中继只能看到密文。",
+        "Firefox 和 Safari 没有同样的 File System Access 流式下载，因此当所有流式写盘路径都不适用时，浏览器只能把文件攒在内存里；Relayium 会在超过约 256 MB 时给出提示，这是刻意取的保守估计，而不是实测出来的硬上限。同一网络下实时传输无需账号，两台设备之间是直连：在两台设备上打开 relayium.com，最多选 1,000 个文件，核对校验码，然后发送。跨网络传输要用配对码，需要创建配对码的一方登录，并且按设计经由加密的 TURN 中继——正是这一点让连接一两秒就能建立，而不必去等两个网络之间很难成功的直连尝试；中继只转发它读不懂的密文。接收方始终无需账号。若连接中途断开，传输会断点续传而非从头再来。",
       ],
     },
     {
@@ -124,7 +124,7 @@ const zh = {
         "把最关键的差别并排列出：",
       ],
       bullets: [
-        "大小上限：WeTransfer 免费档每次传输上限 2 GB；Relayium 实时模式无服务器端上限（Chrome/Edge 流式写盘；Firefox/Safari 建议保持在约 200 MB 以内）。",
+        "大小上限：WeTransfer 免费档每次传输上限 2 GB；Relayium 实时模式无服务器端上限（Chrome/Edge 流式写盘；浏览器只能攒内存时，Relayium 会在超过约 256 MB 时给出提示）。",
         "文件存放：WeTransfer 把文件存在它的服务器上；Relayium 实时模式根本不把文件放到服务器上。",
         "加密：WeTransfer 在传输与静态存储时加密，但密钥由它持有；Relayium 端到端加密并带 6 位 SAS 校验码，存储链接为零知识，密钥只在 URL 片段里。",
         "收件方离线：两者都能应对——WeTransfer 靠它的存储链接，Relayium 靠零知识存储下载链接，可设到期或下载后即焚。",
@@ -138,7 +138,7 @@ const zh = {
     items: [
       {
         q: "真的没有文件大小限制吗？",
-        a: "实时模式下没有服务器端上限，因为文件从不经过服务器。在 Chrome 或 Edge 中，下载会直接流式写入磁盘，所以几 GB 的文件都没问题；Firefox 和 Safari 则会缓冲在内存里，因此建议这类传输保持在约 200 MB 以内。存储下载链接则有与账号绑定的配额。",
+        a: "实时模式下没有服务器端上限，因为文件从不经过服务器。在 Chrome 或 Edge 中，下载会直接流式写入磁盘，所以几 GB 的文件都没问题。在 Firefox 或 Safari 中，当所有流式写盘路径都不适用时，浏览器只能攒在内存里，Relayium 会在超过约 256 MB 时给出提示——这是刻意取的保守估计，不是硬上限。存储下载链接则有与账号绑定的配额。",
       },
       {
         q: "对方不在线怎么办？",
@@ -185,7 +185,7 @@ const ja = {
       heading: "サイズ上限のないリアルタイム転送",
       body: [
         "サーバーに何も保存しないため、実用上のファイルサイズ上限は自分のブラウザ次第です。Chrome や Edge では、Relayium は受信データをそのままディスクにストリーミングするので、事実上サイズ上限はありません——数ギガバイトの動画やプロジェクトのアーカイブも問題ありません。",
-        "Firefox と Safari は同じストリーミングダウンロードにまだ対応していないため、ブラウザはファイルをメモリにバッファします。快適に使うにはそうした転送を約 200 MB 以内に抑えてください。同じネットワークならリアルタイム転送にアカウントは不要です。両方の端末で relayium.com を開き、最大1,000ファイルを選び、コードを照合して送ります。ネットワークをまたいでペアリングコードで送る場合は送信側のサインインが必要です——受信側はどちらの場合もアカウント不要です。途中で接続が切れても、転送は最初からではなく再開します。直接接続が不可能なときは暗号化された TURN リレーにフォールバックし、リレーは暗号文しか見ません。",
+        "Firefox と Safari は同じ File System Access のストリーミングを備えていないため、ストリーミングで書き出せる経路がどれも使えないときはファイルをメモリに保持します。Relayium は約 256 MB を超えると警告しますが、これは実測された上限ではなく、意図的に保守的な見積もりです。同じネットワークならリアルタイム転送にアカウントは不要で、2台の端末は直接つながります。両方の端末で relayium.com を開き、最大1,000ファイルを選び、コードを照合して送ります。ネットワークをまたぐ送信にはペアリングコードを使い、そのコードを作る側のサインインが必要で、設計上は暗号化された TURN リレーを経由します——だからこそ、ネットワーク同士ではめったに成功しない直接接続の試行を待たずに1〜2秒でつながり、リレーが中継するのは読めない暗号文だけです。受信側はどちらの場合もアカウント不要です。途中で接続が切れても、転送は最初からではなく再開します。",
       ],
     },
     {
@@ -201,7 +201,7 @@ const ja = {
         "最も重要な違いを並べて示します。",
       ],
       bullets: [
-        "サイズ上限：WeTransfer の無料枠は転送を 2 GB に制限；Relayium のリアルタイムはサーバー側の上限なし（Chrome/Edge はディスクへストリーミング、Firefox/Safari は約 200 MB 以内に）。",
+        "サイズ上限：WeTransfer の無料枠は転送を 2 GB に制限；Relayium のリアルタイムはサーバー側の上限なし（Chrome/Edge はディスクへストリーミング。ブラウザがメモリに溜めるしかない場合は約 256 MB を超えると警告）。",
         "ファイルの置き場所：WeTransfer はファイルをサーバーに保存；Relayium のリアルタイムはファイルをサーバーに一切置かない。",
         "暗号化：WeTransfer は通信中も保存時も暗号化するが鍵を保持；Relayium は6桁の SAS コード付きのエンドツーエンドで、保存リンクは鍵が URL フラグメントだけにあるゼロ知識。",
         "受信側がオフライン：どちらも対応——WeTransfer は保存リンク、Relayium は有効期限やダウンロード後消去付きのゼロ知識保存ダウンロードリンク。",
@@ -215,7 +215,7 @@ const ja = {
     items: [
       {
         q: "本当にファイルサイズの上限はないのですか？",
-        a: "リアルタイムモードではサーバー側の上限はありません。ファイルがサーバーに一切触れないからです。Chrome や Edge ではダウンロードがそのままディスクにストリーミングされるので、数ギガバイトのファイルも問題ありません。Firefox と Safari はメモリにバッファするため、そうした転送は約 200 MB 以内に抑えてください。保存型ダウンロードリンクにはアカウントに紐づく容量枠があります。",
+        a: "リアルタイムモードではサーバー側の上限はありません。ファイルがサーバーに一切触れないからです。Chrome や Edge ではダウンロードがそのままディスクにストリーミングされるので、数ギガバイトのファイルも問題ありません。Firefox や Safari では、ストリーミングで書き出せる経路がどれも使えないときにメモリへ溜めることになり、Relayium は約 256 MB を超えると警告します——意図的に保守的な見積もりで、ハードな上限ではありません。保存型ダウンロードリンクにはアカウントに紐づく容量枠があります。",
       },
       {
         q: "受信側がオンラインでないときは？",
@@ -262,7 +262,7 @@ const ko = {
       heading: "크기 제한 없는 실시간 전송",
       body: [
         "서버에 아무것도 저장하지 않기 때문에, 실질적인 파일 크기 제한은 자신의 브라우저에서 옵니다. Chrome이나 Edge에서는 Relayium이 들어오는 데이터를 곧바로 디스크로 스트리밍하므로 사실상 크기 제한이 없습니다——수 기가바이트의 동영상과 프로젝트 아카이브도 괜찮습니다.",
-        "Firefox와 Safari는 아직 같은 스트리밍 다운로드를 제공하지 않아 브라우저가 파일을 메모리에 버퍼링합니다. 이런 전송은 원활한 경험을 위해 약 200 MB 이내로 유지하세요. 같은 네트워크에서는 실시간 전송에 계정이 필요 없습니다. 두 기기에서 relayium.com을 열고, 최대 1,000개 파일을 고르고, 코드를 대조한 뒤 보냅니다. 페어링 코드로 네트워크를 넘어 보낼 때는 보내는 쪽의 로그인이 필요합니다 — 받는 쪽은 어느 경우든 계정이 필요 없습니다. 도중에 연결이 끊겨도 전송은 처음부터가 아니라 이어서 재개됩니다. 직접 연결이 불가능할 때는 암호화된 TURN 릴레이로 폴백하며, 릴레이는 암호문만 봅니다.",
+        "Firefox와 Safari에는 같은 File System Access 스트리밍이 없어, 디스크로 흘려보낼 경로가 하나도 적용되지 않으면 브라우저가 파일을 메모리에 담습니다. Relayium은 약 256 MB를 넘으면 경고하는데, 이는 측정된 하드 한계가 아니라 일부러 보수적으로 잡은 추정치입니다. 같은 네트워크에서는 실시간 전송에 계정이 필요 없고 두 기기가 서로 직접 연결됩니다. 두 기기에서 relayium.com을 열고, 최대 1,000개 파일을 고르고, 코드를 대조한 뒤 보냅니다. 네트워크를 넘어 보낼 때는 페어링 코드를 쓰고, 그 코드를 만드는 쪽의 로그인이 필요하며, 설계상 암호화된 TURN 릴레이를 거칩니다 — 덕분에 네트워크 사이에서는 좀처럼 성공하지 않는 직접 연결 시도를 기다리지 않고 1~2초 만에 연결되며, 릴레이는 스스로 읽을 수 없는 암호문만 전달합니다. 받는 쪽은 어느 경우든 계정이 필요 없습니다. 도중에 연결이 끊겨도 전송은 처음부터가 아니라 이어서 재개됩니다.",
       ],
     },
     {
@@ -278,7 +278,7 @@ const ko = {
         "가장 중요한 차이를 나란히 정리하면:",
       ],
       bullets: [
-        "크기 제한: WeTransfer 무료 등급은 전송을 2 GB로 제한; Relayium 실시간은 서버 측 제한 없음(Chrome/Edge는 디스크로 스트리밍, Firefox/Safari는 약 200 MB 이내로).",
+        "크기 제한: WeTransfer 무료 등급은 전송을 2 GB로 제한; Relayium 실시간은 서버 측 제한 없음(Chrome/Edge는 디스크로 스트리밍하고, 브라우저가 메모리에 담을 수밖에 없을 때는 약 256 MB를 넘으면 경고).",
         "파일이 놓이는 곳: WeTransfer는 파일을 서버에 저장; Relayium 실시간은 파일을 서버에 전혀 두지 않음.",
         "암호화: WeTransfer는 전송 중과 저장 시 암호화하지만 키를 보유; Relayium은 6자리 SAS 코드가 있는 종단간 암호화이고, 저장 링크는 키가 URL 프래그먼트에만 있는 영지식.",
         "받는 쪽 오프라인: 둘 다 대응——WeTransfer는 저장 링크, Relayium은 만료나 다운로드 후 소각이 가능한 영지식 저장 다운로드 링크.",
@@ -292,7 +292,7 @@ const ko = {
     items: [
       {
         q: "정말 파일 크기 제한이 없나요?",
-        a: "실시간 모드에는 서버 측 제한이 없습니다. 파일이 서버에 전혀 닿지 않기 때문입니다. Chrome이나 Edge에서는 다운로드가 곧바로 디스크로 스트리밍되어 수 기가바이트 파일도 괜찮습니다. Firefox와 Safari는 메모리에 버퍼링하므로 이런 전송은 약 200 MB 이내로 유지하세요. 저장형 다운로드 링크에는 계정에 연결된 용량 한도가 있습니다.",
+        a: "실시간 모드에는 서버 측 제한이 없습니다. 파일이 서버에 전혀 닿지 않기 때문입니다. Chrome이나 Edge에서는 다운로드가 곧바로 디스크로 스트리밍되어 수 기가바이트 파일도 괜찮습니다. Firefox나 Safari에서는 디스크로 흘려보낼 경로가 하나도 적용되지 않을 때 메모리에 담게 되며, Relayium이 약 256 MB를 넘으면 경고합니다 — 일부러 보수적으로 잡은 추정치이지 하드 한계가 아닙니다. 저장형 다운로드 링크에는 계정에 연결된 용량 한도가 있습니다.",
       },
       {
         q: "받는 쪽이 접속해 있지 않으면요?",
@@ -339,7 +339,7 @@ const de = {
       heading: "Echtzeitübertragungen ohne Größenlimit",
       body: [
         "Da nichts auf einem Server gespeichert wird, kommt die praktische Dateigrößengrenze von deinem eigenen Browser. In Chrome oder Edge streamt Relayium eingehende Daten direkt auf die Festplatte, sodass es faktisch kein Größenlimit gibt — mehrere Gigabyte große Videos und Projektarchive sind kein Problem.",
-        "Firefox und Safari bieten denselben Streaming-Download noch nicht, dort puffert der Browser die Datei im Arbeitsspeicher; halte solche Übertragungen für ein flüssiges Erlebnis unter etwa 200 MB. Im selben Netz brauchen Echtzeitübertragungen kein Konto: Öffne relayium.com auf beiden Geräten, wähle bis zu 1.000 Dateien, prüfe den Code und sende. Beim Senden über Netzwerke hinweg per Pairing-Code muss sich der Absender anmelden — der Empfänger braucht in beiden Fällen kein Konto. Bricht eine Verbindung mittendrin ab, wird die Übertragung fortgesetzt statt neu gestartet, und ist eine Direktverbindung unmöglich, weicht sie auf ein verschlüsseltes TURN-Relay aus, das nur Chiffretext sieht.",
+        "Firefox und Safari bieten dasselbe Streaming über die File System Access API nicht, dort hält der Browser die Datei im Arbeitsspeicher, wenn kein Streaming-Weg greift; Relayium warnt oberhalb von rund 256 MB, einer bewusst konservativen Schätzung und keiner gemessenen harten Grenze. Im selben Netz brauchen Echtzeitübertragungen kein Konto, und die beiden Geräte verbinden sich direkt: Öffne relayium.com auf beiden Geräten, wähle bis zu 1.000 Dateien, prüfe den Code und sende. Das Senden über Netzwerke hinweg nutzt einen Pairing-Code, erfordert die Anmeldung derjenigen Person, die diesen Code erstellt, und läuft planmäßig über ein verschlüsseltes TURN-Relay — genau das bringt die Verbindung in ein bis zwei Sekunden zustande, statt auf Direktverbindungsversuche zu warten, die zwischen zwei Netzen selten gelingen, und das Relay leitet nur Chiffretext weiter, den es nicht lesen kann. Der Empfänger braucht in beiden Fällen kein Konto. Bricht eine Verbindung mittendrin ab, wird die Übertragung fortgesetzt statt neu gestartet.",
       ],
     },
     {
@@ -355,7 +355,7 @@ const de = {
         "Die wichtigsten Unterschiede nebeneinander:",
       ],
       bullets: [
-        "Größenlimit: WeTransfers kostenloser Tarif begrenzt Übertragungen auf 2 GB; Relayium-Echtzeit hat kein serverseitiges Limit (Chrome/Edge streamen auf die Festplatte; Firefox/Safari unter ~200 MB halten).",
+        "Größenlimit: WeTransfers kostenloser Tarif begrenzt Übertragungen auf 2 GB; Relayium-Echtzeit hat kein serverseitiges Limit (Chrome/Edge streamen auf die Festplatte; muss der Browser stattdessen im Speicher puffern, warnt Relayium oberhalb von rund 256 MB).",
         "Wo Dateien liegen: WeTransfer speichert deine Datei auf seinen Servern; Relayium-Echtzeit legt die Datei überhaupt nicht auf einem Server ab.",
         "Verschlüsselung: WeTransfer verschlüsselt beim Transport und im Ruhezustand, hält aber die Schlüssel; Relayium ist Ende-zu-Ende mit sechsstelligem SAS-Code, und Speicherlinks sind Zero-Knowledge mit dem Schlüssel nur im URL-Fragment.",
         "Empfänger offline: beide schaffen das — WeTransfer über seinen Speicherlink, Relayium über einen Zero-Knowledge-Download-Link mit Ablauf oder Vernichtung nach dem Download.",
@@ -369,7 +369,7 @@ const de = {
     items: [
       {
         q: "Gibt es wirklich kein Dateigrößenlimit?",
-        a: "Im Echtzeitmodus gibt es kein serverseitiges Limit, weil die Datei nie einen Server berührt. In Chrome oder Edge streamt der Download direkt auf die Festplatte, sodass mehrere Gigabyte große Dateien kein Problem sind. Firefox und Safari puffern stattdessen im Arbeitsspeicher, halte solche Übertragungen also unter etwa 200 MB. Gespeicherte Download-Links haben ein an dein Konto gebundenes Kontingent.",
+        a: "Im Echtzeitmodus gibt es kein serverseitiges Limit, weil die Datei nie einen Server berührt. In Chrome oder Edge streamt der Download direkt auf die Festplatte, sodass mehrere Gigabyte große Dateien kein Problem sind. In Firefox oder Safari puffert der Browser im Arbeitsspeicher, wenn kein Streaming-Weg greift, und Relayium warnt oberhalb von rund 256 MB — eine bewusst konservative Schätzung, keine harte Grenze. Gespeicherte Download-Links haben ein an dein Konto gebundenes Kontingent.",
       },
       {
         q: "Was, wenn der Empfänger nicht online ist?",
@@ -416,7 +416,7 @@ const fr = {
       heading: "Des transferts en temps réel sans limite de taille",
       body: [
         "Comme rien n'est stocké sur un serveur, la limite pratique de taille vient de votre propre navigateur. Dans Chrome ou Edge, Relayium diffuse les données entrantes directement sur le disque, il n'y a donc en pratique aucune limite de taille — des vidéos et archives de projet de plusieurs gigaoctets passent sans souci.",
-        "Firefox et Safari n'offrent pas encore le même téléchargement en flux, si bien que le navigateur y met le fichier en mémoire tampon ; gardez ces transferts sous environ 200 Mo pour une expérience fluide. Sur le même réseau, les transferts en temps réel ne demandent aucun compte : ouvrez relayium.com sur les deux appareils, choisissez jusqu'à 1 000 fichiers, vérifiez le code, et envoyez. Envoyer entre réseaux différents avec un code d'appairage exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte. Si une connexion tombe en cours de route, le transfert reprend au lieu de recommencer, et quand une liaison directe est impossible, il bascule vers un relais TURN chiffré qui ne voit que du texte chiffré.",
+        "Firefox et Safari n'offrent pas le même flux via l'API File System Access : quand aucun chemin d'écriture en flux ne s'applique, le navigateur garde le fichier en mémoire ; Relayium prévient au-delà d'environ 256 Mo, une estimation volontairement prudente et non une limite dure mesurée. Sur le même réseau, les transferts en temps réel ne demandent aucun compte et les deux appareils se connectent directement : ouvrez relayium.com sur les deux appareils, choisissez jusqu'à 1 000 fichiers, vérifiez le code, et envoyez. Envoyer entre réseaux différents utilise un code d'appairage, exige que la personne qui crée ce code se connecte, et passe par conception par un relais TURN chiffré — c'est précisément ce qui établit la connexion en une ou deux secondes au lieu d'attendre des tentatives de connexion directe qui aboutissent rarement entre deux réseaux, et le relais ne transporte que du texte chiffré qu'il ne peut pas lire. Le destinataire n'a jamais besoin de compte. Si une connexion tombe en cours de route, le transfert reprend au lieu de recommencer.",
       ],
     },
     {
@@ -432,7 +432,7 @@ const fr = {
         "Les différences qui comptent le plus, côte à côte :",
       ],
       bullets: [
-        "Limite de taille : l'offre gratuite de WeTransfer plafonne les transferts à 2 Go ; le temps réel de Relayium n'a aucune limite côté serveur (Chrome/Edge diffusent sur le disque ; gardez Firefox/Safari sous ~200 Mo).",
+        "Limite de taille : l'offre gratuite de WeTransfer plafonne les transferts à 2 Go ; le temps réel de Relayium n'a aucune limite côté serveur (Chrome/Edge écrivent sur le disque ; quand le navigateur doit mettre en mémoire tampon, Relayium prévient au-delà d'environ 256 Mo).",
         "Où résident les fichiers : WeTransfer stocke votre fichier sur ses serveurs ; le temps réel de Relayium ne met jamais le fichier sur un serveur.",
         "Chiffrement : WeTransfer chiffre en transit et au repos mais détient les clés ; Relayium est de bout en bout avec un code SAS à 6 chiffres, et les liens stockés sont à divulgation nulle avec la clé uniquement dans le fragment de l'URL.",
         "Destinataire hors ligne : les deux gèrent le cas — WeTransfer via son lien stocké, Relayium via un lien de téléchargement stocké à divulgation nulle avec expiration ou destruction après téléchargement.",
@@ -446,7 +446,7 @@ const fr = {
     items: [
       {
         q: "N'y a-t-il vraiment aucune limite de taille de fichier ?",
-        a: "En mode temps réel, il n'y a aucune limite côté serveur, car le fichier ne touche jamais un serveur. Dans Chrome ou Edge, le téléchargement se diffuse directement sur le disque, donc les fichiers de plusieurs gigaoctets passent sans souci. Firefox et Safari mettent en mémoire tampon à la place, gardez donc ces transferts sous environ 200 Mo. Les liens de téléchargement stockés ont un quota lié à votre compte.",
+        a: "En mode temps réel, il n'y a aucune limite côté serveur, car le fichier ne touche jamais un serveur. Dans Chrome ou Edge, le téléchargement s'écrit directement sur le disque, donc les fichiers de plusieurs gigaoctets passent sans souci. Dans Firefox ou Safari, quand aucun chemin d'écriture en flux ne s'applique, le navigateur met en mémoire tampon et Relayium prévient au-delà d'environ 256 Mo — une estimation volontairement prudente, pas une limite dure. Les liens de téléchargement stockés ont un quota lié à votre compte.",
       },
       {
         q: "Que faire si le destinataire n'est pas en ligne ?",
@@ -493,7 +493,7 @@ const ar = {
       heading: "نقلات فورية بلا سقف حجم",
       body: [
         "لأن لا شيء يُخزَّن على خادم، فإن حد حجم الملف العملي يأتي من متصفحك أنت. في Chrome أو Edge، يبثّ Relayium البيانات الواردة مباشرةً إلى القرص، فلا سقف حجم فعليًا — فمقاطع الفيديو وأرشيفات المشاريع بحجم عدة غيغابايت لا مشكلة فيها.",
-        "لا يقدّم Firefox وSafari بعدُ التنزيل بالبث نفسه، فيخزّن المتصفح هناك الملف في الذاكرة مؤقتًا؛ فأبقِ تلك النقلات دون نحو 200 MB لتجربة سلسة. على نفس الشبكة، لا تحتاج النقلات الفورية إلى حساب: افتح relayium.com على الجهازين، واختر حتى 1,000 ملف، وتحقق من الرمز، وأرسِل. والإرسال عبر الشبكات برمز اقتران يتطلب من المُرسِل تسجيل الدخول — أما المُستقبِل فلا يحتاج أبدًا إلى حساب. وإن سقط اتصال في منتصفه، يُستأنف النقل بدلًا من البدء من جديد، وعندما يتعذّر الرابط المباشر يتراجع إلى مُرحِّل TURN مُشفَّر لا يرى سوى نص مُشفَّر.",
+        "لا يقدّم Firefox وSafari البثّ نفسه عبر واجهة File System Access، فحين لا ينطبق أي مسار للكتابة التدفّقية يحتفظ المتصفح بالملف في الذاكرة؛ ويحذّر Relayium فوق نحو 256 MB، وهو تقدير متحفّظ عن قصد لا حدّ صلب مقيس. على نفس الشبكة، لا تحتاج النقلات الفورية إلى حساب ويتّصل الجهازان أحدهما بالآخر مباشرةً: افتح relayium.com على الجهازين، واختر حتى 1,000 ملف، وتحقق من الرمز، وأرسِل. أما الإرسال عبر الشبكات فيستخدم رمز اقتران، ويتطلب من مُنشئ الرمز تسجيل الدخول، ويمرّ بحكم التصميم عبر مُرحِّل TURN مشفّر — وهذا بالضبط ما يجعل الاتصال ينعقد خلال ثانية أو ثانيتين بدل انتظار محاولات اتصال مباشر نادرًا ما تنجح بين شبكتين، والمُرحِّل لا ينقل سوى نص مُشفَّر لا يستطيع قراءته. أما المُستقبِل فلا يحتاج أبدًا إلى حساب. وإن سقط اتصال في منتصفه، يُستأنف النقل بدلًا من البدء من جديد.",
       ],
     },
     {
@@ -509,7 +509,7 @@ const ar = {
         "أهم الفروق، جنبًا إلى جنب:",
       ],
       bullets: [
-        "حد الحجم: تحدّ الفئة المجانية في WeTransfer النقلات عند 2 GB؛ بينما لا سقف من جانب الخادم للوضع الفوري في Relayium (يبثّ Chrome/Edge إلى القرص؛ أبقِ Firefox/Safari دون ~200 MB).",
+        "حد الحجم: تحدّ الفئة المجانية في WeTransfer النقلات عند 2 GB؛ بينما لا سقف من جانب الخادم للوضع الفوري في Relayium (يبثّ Chrome/Edge إلى القرص؛ وحين يضطر المتصفح إلى التخزين في الذاكرة يحذّر Relayium فوق نحو 256 MB).",
         "أين تعيش الملفات: يخزّن WeTransfer ملفك على خوادمه؛ بينما لا يضع الوضع الفوري في Relayium الملف على خادم على الإطلاق.",
         "التشفير: يشفّر WeTransfer أثناء العبور وفي حالة السكون لكنه يحتفظ بالمفاتيح؛ بينما Relayium من الطرف إلى الطرف برمز SAS من 6 أرقام، والروابط المُخزَّنة بمعرفة صفرية والمفتاح في جزء الـ URL فقط.",
         "المُستقبِل غير متصل: كلاهما يتعامل معها — WeTransfer عبر رابطه المُخزَّن، وRelayium عبر رابط تنزيل مُخزَّن بمعرفة صفرية مع انتهاء صلاحية أو حرق بعد التنزيل.",
@@ -523,7 +523,7 @@ const ar = {
     items: [
       {
         q: "هل لا يوجد حقًا حد لحجم الملف؟",
-        a: "في الوضع الفوري لا يوجد سقف من جانب الخادم، لأن الملف لا يلمس خادمًا أبدًا. في Chrome أو Edge يُبثّ التنزيل مباشرةً إلى القرص، فالملفات بحجم عدة غيغابايت لا مشكلة فيها. أما Firefox وSafari فيخزّنان في الذاكرة مؤقتًا بدلًا من ذلك، فأبقِ تلك النقلات دون نحو 200 MB. أما روابط التنزيل المُخزَّنة فلها حصة مرتبطة بحسابك.",
+        a: "في الوضع الفوري لا يوجد سقف من جانب الخادم، لأن الملف لا يلمس خادمًا أبدًا. في Chrome أو Edge يُبثّ التنزيل مباشرةً إلى القرص، فالملفات بحجم عدة غيغابايت لا مشكلة فيها. وفي Firefox أو Safari، حين لا ينطبق أي مسار للكتابة التدفّقية، يخزّن المتصفح في الذاكرة، ويحذّر Relayium فوق نحو 256 MB — وهو تقدير متحفّظ عن قصد، لا حدّ صلب. أما روابط التنزيل المُخزَّنة فلها حصة مرتبطة بحسابك.",
       },
       {
         q: "ماذا لو لم يكن المُستقبِل متصلًا؟",
@@ -570,7 +570,7 @@ const es = {
       heading: "Transferencias en tiempo real sin límite de tamaño",
       body: [
         "Como nada se almacena en un servidor, el límite práctico de tamaño de archivo viene de tu propio navegador. En Chrome o Edge, Relayium transmite los datos entrantes directamente al disco, así que prácticamente no hay límite de tamaño: vídeos de varios gigabytes y archivos comprimidos de proyectos van bien.",
-        "Firefox y Safari todavía no ofrecen la misma descarga en flujo, así que allí el navegador almacena el archivo en memoria; mantén esas transferencias por debajo de unos 200 MB para una experiencia fluida. En la misma red, las transferencias en tiempo real no necesitan cuenta: abre relayium.com en ambos dispositivos, elige hasta 1.000 archivos, verifica el código y envía. Enviar entre redes con un código de emparejamiento exige que el remitente inicie sesión; el destinatario nunca necesita cuenta. Si una conexión se cae a mitad, la transferencia se reanuda en lugar de empezar de nuevo, y cuando un enlace directo es imposible recurre a un retransmisor TURN cifrado que solo ve texto cifrado.",
+        "Firefox y Safari no ofrecen ese mismo flujo mediante la API File System Access, así que cuando no se aplica ninguna vía de escritura en flujo el navegador guarda el archivo en memoria; Relayium avisa por encima de unos 256 MB, una estimación deliberadamente conservadora y no un límite duro medido. En la misma red, las transferencias en tiempo real no necesitan cuenta y los dos dispositivos se conectan directamente: abre relayium.com en ambos dispositivos, elige hasta 1.000 archivos, verifica el código y envía. Enviar entre redes usa un código de emparejamiento, exige que quien crea ese código inicie sesión y viaja por diseño sobre un retransmisor TURN cifrado: eso es justo lo que levanta la conexión en uno o dos segundos en vez de esperar intentos de conexión directa que rara vez prosperan entre dos redes, y el retransmisor solo reenvía texto cifrado que no puede leer. El destinatario nunca necesita cuenta. Si una conexión se cae a mitad, la transferencia se reanuda en lugar de empezar de nuevo.",
       ],
     },
     {
@@ -586,7 +586,7 @@ const es = {
         "Las diferencias que más importan, una al lado de la otra:",
       ],
       bullets: [
-        "Límite de tamaño: el nivel gratuito de WeTransfer limita las transferencias a 2 GB; el tiempo real de Relayium no tiene límite del lado del servidor (Chrome/Edge transmiten al disco; mantén Firefox/Safari por debajo de ~200 MB).",
+        "Límite de tamaño: el nivel gratuito de WeTransfer limita las transferencias a 2 GB; el tiempo real de Relayium no tiene límite del lado del servidor (Chrome/Edge escriben al disco; cuando el navegador tiene que almacenar en memoria, Relayium avisa por encima de unos 256 MB).",
         "Dónde viven los archivos: WeTransfer almacena tu archivo en sus servidores; el tiempo real de Relayium nunca pone el archivo en un servidor.",
         "Cifrado: WeTransfer cifra en tránsito y en reposo pero guarda las claves; Relayium es de extremo a extremo con un código SAS de 6 dígitos, y los enlaces almacenados son de conocimiento cero con la clave solo en el fragmento de la URL.",
         "Destinatario desconectado: ambos lo resuelven: WeTransfer con su enlace almacenado, Relayium con un enlace de descarga almacenado de conocimiento cero con caducidad o autodestrucción tras la descarga.",
@@ -600,7 +600,7 @@ const es = {
     items: [
       {
         q: "¿De verdad no hay límite de tamaño de archivo?",
-        a: "En modo en tiempo real no hay límite del lado del servidor, porque el archivo nunca toca un servidor. En Chrome o Edge la descarga se transmite directamente al disco, así que los archivos de varios gigabytes van bien. Firefox y Safari almacenan en memoria en su lugar, así que mantén esas transferencias por debajo de unos 200 MB. Los enlaces de descarga almacenados tienen una cuota ligada a tu cuenta.",
+        a: "En modo en tiempo real no hay límite del lado del servidor, porque el archivo nunca toca un servidor. En Chrome o Edge la descarga se escribe directamente al disco, así que los archivos de varios gigabytes van bien. En Firefox o Safari, cuando no se aplica ninguna vía de escritura en flujo, el navegador almacena en memoria y Relayium avisa por encima de unos 256 MB: una estimación deliberadamente conservadora, no un límite duro. Los enlaces de descarga almacenados tienen una cuota ligada a tu cuenta.",
       },
       {
         q: "¿Qué pasa si el destinatario no está en línea?",
@@ -647,7 +647,7 @@ const pt = {
       heading: "Transferências em tempo real sem limite de tamanho",
       body: [
         "Como nada é armazenado num servidor, o limite prático de tamanho de arquivo vem do seu próprio navegador. No Chrome ou no Edge, o Relayium transmite os dados recebidos direto para o disco, então praticamente não há limite de tamanho — vídeos de vários gigabytes e arquivos compactados de projetos vão bem.",
-        "Firefox e Safari ainda não oferecem o mesmo download em fluxo, então lá o navegador guarda o arquivo na memória; mantenha essas transferências abaixo de cerca de 200 MB para uma experiência fluida. Na mesma rede, as transferências em tempo real não precisam de conta: abra relayium.com nos dois dispositivos, escolha até 1.000 arquivos, verifique o código e envie. Enviar entre redes com um código de emparelhamento exige que o remetente entre; o destinatário nunca precisa de conta. Se uma conexão cai no meio, a transferência retoma em vez de começar de novo, e quando um link direto é impossível ela recorre a um retransmissor TURN criptografado que só vê texto cifrado.",
+        "Firefox e Safari não oferecem esse mesmo fluxo pela API File System Access, então, quando nenhum caminho de gravação em fluxo se aplica, o navegador guarda o arquivo na memória; o Relayium avisa acima de cerca de 256 MB, uma estimativa deliberadamente conservadora e não um limite duro medido. Na mesma rede, as transferências em tempo real não precisam de conta e os dois dispositivos se conectam diretamente: abra relayium.com nos dois dispositivos, escolha até 1.000 arquivos, verifique o código e envie. Enviar entre redes usa um código de emparelhamento, exige que quem cria esse código faça login e passa por design por um retransmissor TURN criptografado — é justamente isso que faz a conexão subir em um ou dois segundos em vez de esperar tentativas de conexão direta que raramente dão certo entre duas redes, e o retransmissor só encaminha texto cifrado que não consegue ler. O destinatário nunca precisa de conta. Se uma conexão cai no meio, a transferência retoma em vez de começar de novo.",
       ],
     },
     {
@@ -663,7 +663,7 @@ const pt = {
         "As diferenças que mais importam, lado a lado:",
       ],
       bullets: [
-        "Limite de tamanho: o nível gratuito do WeTransfer limita as transferências a 2 GB; o tempo real do Relayium não tem limite do lado do servidor (Chrome/Edge transmitem para o disco; mantenha Firefox/Safari abaixo de ~200 MB).",
+        "Limite de tamanho: o nível gratuito do WeTransfer limita as transferências a 2 GB; o tempo real do Relayium não tem limite do lado do servidor (Chrome/Edge gravam no disco; quando o navegador precisa armazenar na memória, o Relayium avisa acima de cerca de 256 MB).",
         "Onde os arquivos vivem: o WeTransfer armazena seu arquivo nos servidores dele; o tempo real do Relayium nunca coloca o arquivo num servidor.",
         "Criptografia: o WeTransfer criptografa em trânsito e em repouso, mas guarda as chaves; o Relayium é de ponta a ponta com um código SAS de 6 dígitos, e os links armazenados são de conhecimento zero com a chave só no fragmento da URL.",
         "Destinatário offline: os dois lidam com isso — o WeTransfer via seu link armazenado, o Relayium via um link de download armazenado de conhecimento zero com expiração ou autodestruição após o download.",
@@ -677,7 +677,7 @@ const pt = {
     items: [
       {
         q: "Realmente não há limite de tamanho de arquivo?",
-        a: "No modo em tempo real não há limite do lado do servidor, porque o arquivo nunca toca um servidor. No Chrome ou no Edge o download é transmitido direto para o disco, então arquivos de vários gigabytes vão bem. Firefox e Safari guardam na memória em vez disso, então mantenha essas transferências abaixo de cerca de 200 MB. Os links de download armazenados têm uma cota ligada à sua conta.",
+        a: "No modo em tempo real não há limite do lado do servidor, porque o arquivo nunca toca um servidor. No Chrome ou no Edge o download é gravado direto no disco, então arquivos de vários gigabytes vão bem. No Firefox ou no Safari, quando nenhum caminho de gravação em fluxo se aplica, o navegador guarda na memória e o Relayium avisa acima de cerca de 256 MB — uma estimativa deliberadamente conservadora, não um limite duro. Os links de download armazenados têm uma cota ligada à sua conta.",
       },
       {
         q: "E se o destinatário não estiver online?",

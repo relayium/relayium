@@ -52,7 +52,7 @@ const en = {
     {
       heading: "If a device is on a different network",
       body: [
-        "Same-network mode only works when the devices actually share a network — a phone on mobile data, a laptop on a different Wi-Fi, or a device behind a different router will not show up automatically. For that case, Relayium also supports connecting across networks with a short pairing code: the sender signs in to generate the code (or a QR code / link), the receiver never needs an account, and the transfer still connects directly, peer-to-peer, whenever the networks allow it — falling back to an encrypted relay only when a direct path is not possible.",
+        "Same-network mode only works when the devices actually share a network — a phone on mobile data, a laptop on a different Wi-Fi, or a device behind a different router will not show up automatically. For that case, Relayium also supports connecting across networks with a short pairing code: the sender signs in to generate the code (or a QR code / link), and the receiver never needs an account. Across networks the two browsers connect through an encrypted TURN relay rather than directly — that path is relay-only by design, so the connection comes up in a second or two instead of stalling on direct-candidate checks that would almost always fail between two NATs. It is no less private: the key stays on the two devices, so the relay only ever forwards ciphertext and cannot read the file.",
       ],
     },
   ],
@@ -77,7 +77,7 @@ const en = {
       },
       {
         q: "What if one device is on Wi-Fi and the other is on mobile data?",
-        a: "They are not on the same network, so automatic discovery will not connect them. Use a pairing code instead — the sender signs in to create it, the receiver does not need an account, and the two devices still connect directly.",
+        a: "They are not on the same network, so automatic discovery will not connect them. Use a pairing code instead — the sender signs in to create it, and the receiver does not need an account. Across networks the transfer runs over an encrypted TURN relay rather than a direct connection, and it stays end-to-end encrypted throughout: the relay only forwards ciphertext and cannot read the file.",
       },
     ],
   },
@@ -94,7 +94,7 @@ const zh = {
     "如何在同一 Wi-Fi 或局域网下的任意设备之间传文件——无需账号，无需配对码，两端都打开 relayium.com 即可直传，全程端到端加密。",
   updatedLabel: "最近更新",
   lead: [
-    "如果两台或多台设备在同一个 Wi-Fi 或局域网里，它们之间传文件本不该需要账号、验证码，或绕道云端。Relayium 能识别设备是否处于同一网络，并让它们在浏览器里直接互连，什么都不用注册。",
+    "如果两台或多台设备在同一个 Wi-Fi 或局域网里，它们之间传文件本不该需要账号、配对码，或绕道云端。Relayium 能识别设备是否处于同一网络，并让它们在浏览器里直接互连，什么都不用注册。",
     "本文讲的是通用的同网络场景——任意设备、任意操作系统，甚至可以同时超过两台。如果你心里想的是某个具体设备组合，可以看文末链接的专门指南：电脑传手机、Mac 传 Windows，或面向 Windows/Linux/Android 的 AirDrop 式方案。",
   ],
   sections: [
@@ -113,7 +113,7 @@ const zh = {
       bullets: [
         "把你要用到的每台设备都连接到同一个 Wi-Fi 或局域网。",
         "在每台设备上用现代浏览器（Chrome、Edge、Firefox 或 Safari）打开 relayium.com。",
-        "同网络下的设备会自动互相出现——两端都无需验证码，无需登录，无需账号。",
+        "同网络下的设备会自动互相出现——两端都无需配对码，无需登录，无需账号。",
         "选好文件或整个文件夹（每批最多 1,000 个文件），再从列表里选出要接收的那台设备。",
         "两台设备会显示同一段简短的校验码（SAS）。分别瞄一眼，确认一致，传输就开始了。",
         "文件直接从一台设备传到另一台；到达后保存即可。",
@@ -135,7 +135,7 @@ const zh = {
     {
       heading: "如果某台设备在别的网络上",
       body: [
-        "同网络模式只在设备真正共享同一网络时才生效——用移动数据的手机、连着另一个 Wi-Fi 的笔记本，或在另一台路由器后面的设备，都不会自动出现。这种情况下，Relayium 也支持用一个短配对码跨网络连接：发送方登录后生成配对码（或二维码/链接），接收方始终无需账号，只要网络条件允许，传输依然是点对点直连——只有在无法直连时才会退回到加密中继。",
+        "同网络模式只在设备真正共享同一网络时才生效——用移动数据的手机、连着另一个 Wi-Fi 的笔记本，或在另一台路由器后面的设备，都不会自动出现。这种情况下，Relayium 也支持用一个短配对码跨网络连接：发送方登录后生成配对码（或二维码 / 链接），接收方始终无需账号。跨网络时，两个浏览器之间不是直连，而是经一个加密的 TURN 中继转发——这条路径是刻意只走中继的，连接一两秒就能建立，不必卡在两层 NAT 之间几乎注定失败的直连候选探测上。这并不会让它变得不私密：密钥始终留在两台设备上，中继只负责转发密文，读不到文件内容。",
       ],
     },
   ],
@@ -148,7 +148,7 @@ const zh = {
       },
       {
         q: "Relayium 怎么知道哪些设备在我的网络里？",
-        a: "同网络下的设备通常共享同一个公网 IP，Relayium 会自动把公网 IP 相同的设备归到同一个房间里，无需任何验证码。",
+        a: "同网络下的设备通常共享同一个公网 IP，Relayium 会自动把公网 IP 相同的设备归到同一个房间里，无需任何配对码。",
       },
       {
         q: "能不能同时有两台以上的设备互相看见？",
@@ -160,12 +160,12 @@ const zh = {
       },
       {
         q: "如果一台设备用 Wi-Fi，另一台用移动数据怎么办？",
-        a: "那它们就不在同一网络，自动发现连不上。改用配对码：发送方登录后创建配对码，接收方无需账号，两台设备依然可以直接连接。",
+        a: "那它们就不在同一网络，自动发现连不上。改用配对码：发送方登录后创建配对码，接收方无需账号。跨网络时传输不走直连，而是经一个加密的 TURN 中继转发，但全程仍是端到端加密：中继只转发密文，读不到文件内容。",
       },
     ],
   },
   cta: {
-    text: "在同一 Wi-Fi 下的任意两台（或更多）设备上打开 Relayium，发出你的第一个文件——无需账号，无需验证码。",
+    text: "在同一 Wi-Fi 下的任意两台（或更多）设备上打开 Relayium，发出你的第一个文件——无需账号，无需配对码。",
     button: "立即试用 Relayium",
   },
   relatedHeading: "继续阅读",
@@ -218,7 +218,7 @@ const ja = {
     {
       heading: "端末が別のネットワークにある場合",
       body: [
-        "同一ネットワークモードは端末が実際にネットワークを共有しているときだけ働きます——モバイル通信のスマホ、別の Wi-Fi のノートPC、別のルーターの背後にある端末は自動的には現れません。その場合、Relayium は短いペアリングコードでネットワークをまたいで接続することもサポートしています。送信側がサインインしてコード（または QR コード／リンク）を生成し、受信側はアカウント不要で、ネットワークが許す限り転送は直接 P2P でつながります。直接の経路が不可能なときだけ暗号化リレーにフォールバックします。",
+        "同一ネットワークモードは端末が実際にネットワークを共有しているときだけ働きます——モバイル通信のスマホ、別の Wi-Fi のノートPC、別のルーターの背後にある端末は自動的には現れません。その場合、Relayium は短いペアリングコードでネットワークをまたいで接続することもサポートしています。送信側がサインインしてコード（または QR コード／リンク）を生成し、受信側はアカウント不要です。ネットワークをまたぐ場合、2 つのブラウザは直接ではなく暗号化された TURN リレー経由でつながります——この経路は意図的にリレー専用にしてあり、2 つの NAT の間でほぼ確実に失敗する直接候補のチェックを待たずに、1〜2 秒で接続が確立します。プライバシーが下がるわけではありません。鍵は 2 台の端末に留まるので、リレーが転送するのは常に暗号文だけで、ファイルの中身は読めません。",
       ],
     },
   ],
@@ -243,7 +243,7 @@ const ja = {
       },
       {
         q: "片方が Wi-Fi、もう片方がモバイル通信の場合は？",
-        a: "それは同じネットワークではないので、自動発見ではつながりません。代わりにペアリングコードを使ってください。送信側がサインインしてコードを作成し、受信側はアカウント不要で、2台は依然として直接つながります。",
+        a: "それは同じネットワークではないので、自動発見ではつながりません。代わりにペアリングコードを使ってください。送信側がサインインしてコードを作成し、受信側はアカウント不要です。ネットワークをまたぐ転送は直接接続ではなく暗号化された TURN リレー経由で行われますが、全体を通じてエンドツーエンド暗号化のままです。リレーが転送するのは暗号文だけで、ファイルの中身は読めません。",
       },
     ],
   },
@@ -301,7 +301,7 @@ const ko = {
     {
       heading: "기기가 다른 네트워크에 있다면",
       body: [
-        "같은 네트워크 모드는 기기들이 실제로 네트워크를 공유할 때만 작동합니다 — 모바일 데이터를 쓰는 휴대폰, 다른 Wi-Fi에 있는 노트북, 다른 공유기 뒤에 있는 기기는 자동으로 나타나지 않습니다. 이런 경우 Relayium은 짧은 페어링 코드로 네트워크를 넘나드는 연결도 지원합니다. 보내는 쪽이 로그인해 코드(또는 QR 코드/링크)를 생성하고, 받는 쪽은 계정이 필요 없으며, 네트워크가 허락하는 한 전송은 여전히 P2P로 직접 연결됩니다 — 직접 경로가 불가능할 때만 암호화된 릴레이로 폴백합니다.",
+        "같은 네트워크 모드는 기기들이 실제로 네트워크를 공유할 때만 작동합니다 — 모바일 데이터를 쓰는 휴대폰, 다른 Wi-Fi에 있는 노트북, 다른 공유기 뒤에 있는 기기는 자동으로 나타나지 않습니다. 이런 경우 Relayium은 짧은 페어링 코드로 네트워크를 넘나드는 연결도 지원합니다. 보내는 쪽이 로그인해 코드(또는 QR 코드/링크)를 생성하고, 받는 쪽은 계정이 필요 없습니다. 네트워크를 넘나드는 경우 두 브라우저는 직접이 아니라 암호화된 TURN 릴레이를 거쳐 연결됩니다 — 이 경로는 의도적으로 릴레이 전용이며, 두 NAT 사이에서 거의 반드시 실패할 직접 후보 검사를 기다리는 대신 1~2초 만에 연결이 맺어집니다. 그렇다고 덜 안전한 것은 아닙니다. 키는 두 기기에만 남으므로 릴레이는 암호문만 전달할 뿐 파일 내용을 읽을 수 없습니다.",
       ],
     },
   ],
@@ -326,7 +326,7 @@ const ko = {
       },
       {
         q: "한쪽은 Wi-Fi, 다른 쪽은 모바일 데이터라면 어떻게 하나요?",
-        a: "그러면 같은 네트워크가 아니므로 자동 탐색으로는 연결되지 않습니다. 대신 페어링 코드를 사용하세요 — 보내는 쪽이 로그인해 코드를 만들고, 받는 쪽은 계정이 필요 없으며, 두 기기는 여전히 직접 연결됩니다.",
+        a: "그러면 같은 네트워크가 아니므로 자동 탐색으로는 연결되지 않습니다. 대신 페어링 코드를 사용하세요 — 보내는 쪽이 로그인해 코드를 만들고, 받는 쪽은 계정이 필요 없습니다. 네트워크를 넘나드는 전송은 직접 연결이 아니라 암호화된 TURN 릴레이를 거치지만, 처음부터 끝까지 종단간 암호화가 유지됩니다. 릴레이는 암호문만 전달할 뿐 파일 내용을 읽을 수 없습니다.",
       },
     ],
   },
@@ -384,7 +384,7 @@ const de = {
     {
       heading: "Wenn ein Gerät in einem anderen Netz ist",
       body: [
-        "Der Modus für dasselbe Netz funktioniert nur, wenn die Geräte tatsächlich ein Netzwerk teilen — ein Handy im Mobilfunknetz, ein Laptop in einem anderen WLAN oder ein Gerät hinter einem anderen Router erscheint nicht automatisch. Für diesen Fall unterstützt Relayium auch die Verbindung über Netzwerke hinweg mit einem kurzen Pairing-Code: Der Absender meldet sich an, um den Code (oder einen QR-Code / Link) zu erzeugen, der Empfänger braucht dabei nie ein Konto, und die Übertragung verbindet sich weiterhin direkt Peer-to-Peer, sofern die Netzwerke es zulassen — nur wenn kein direkter Weg möglich ist, weicht sie auf ein verschlüsseltes Relay aus.",
+        "Der Modus für dasselbe Netz funktioniert nur, wenn die Geräte tatsächlich ein Netzwerk teilen — ein Handy im Mobilfunknetz, ein Laptop in einem anderen WLAN oder ein Gerät hinter einem anderen Router erscheint nicht automatisch. Für diesen Fall unterstützt Relayium auch die Verbindung über Netzwerke hinweg mit einem kurzen Pairing-Code: Der Absender meldet sich an, um den Code (oder einen QR-Code / Link) zu erzeugen, und der Empfänger braucht dabei nie ein Konto. Über Netzwerkgrenzen hinweg verbinden sich die beiden Browser nicht direkt, sondern über ein verschlüsseltes TURN-Relay — dieser Weg ist bewusst reines Relay, sodass die Verbindung in ein bis zwei Sekunden steht, statt auf Prüfungen direkter Kandidaten zu warten, die zwischen zwei NATs fast immer scheitern. Das ist nicht weniger privat: Der Schlüssel bleibt auf den beiden Geräten, das Relay leitet also immer nur Chiffretext weiter und kann die Datei nicht lesen.",
       ],
     },
   ],
@@ -409,7 +409,7 @@ const de = {
       },
       {
         q: "Was, wenn ein Gerät im WLAN und das andere im Mobilfunknetz ist?",
-        a: "Dann sind sie nicht im selben Netz, und die automatische Erkennung verbindet sie nicht. Nutze stattdessen einen Pairing-Code — der Absender meldet sich an, um ihn zu erstellen, der Empfänger braucht kein Konto, und die beiden Geräte verbinden sich weiterhin direkt.",
+        a: "Dann sind sie nicht im selben Netz, und die automatische Erkennung verbindet sie nicht. Nutze stattdessen einen Pairing-Code — der Absender meldet sich an, um ihn zu erstellen, und der Empfänger braucht kein Konto. Über Netzwerkgrenzen hinweg läuft die Übertragung nicht direkt, sondern über ein verschlüsseltes TURN-Relay, bleibt dabei aber durchgehend Ende-zu-Ende-verschlüsselt: Das Relay leitet nur Chiffretext weiter und kann die Datei nicht lesen.",
       },
     ],
   },
@@ -467,7 +467,7 @@ const fr = {
     {
       heading: "Si un appareil est sur un réseau différent",
       body: [
-        "Le mode même réseau ne fonctionne que quand les appareils partagent réellement un réseau — un téléphone en données mobiles, un ordinateur portable sur un autre Wi-Fi, ou un appareil derrière un autre routeur n'apparaîtra pas automatiquement. Dans ce cas, Relayium prend aussi en charge la connexion entre réseaux différents avec un court code d'appairage : l'expéditeur se connecte pour générer le code (ou un QR code / lien), le destinataire n'a jamais besoin de compte, et le transfert se connecte toujours directement, en pair-à-pair, chaque fois que les réseaux le permettent — ne basculant vers un relais chiffré que lorsqu'une voie directe est impossible.",
+        "Le mode même réseau ne fonctionne que quand les appareils partagent réellement un réseau — un téléphone en données mobiles, un ordinateur portable sur un autre Wi-Fi, ou un appareil derrière un autre routeur n'apparaîtra pas automatiquement. Dans ce cas, Relayium prend aussi en charge la connexion entre réseaux différents avec un court code d'appairage : l'expéditeur se connecte pour générer le code (ou un QR code / lien), et le destinataire n'a jamais besoin de compte. Entre réseaux différents, les deux navigateurs ne se connectent pas directement mais passent par un relais TURN chiffré — cette voie est délibérément réservée au relais, si bien que la connexion s'établit en une ou deux secondes au lieu d'attendre des tests de candidats directs qui échouent presque toujours entre deux NAT. Ce n'est pas moins privé : la clé reste sur les deux appareils, le relais ne transmet donc jamais que du texte chiffré et ne peut pas lire le fichier.",
       ],
     },
   ],
@@ -492,7 +492,7 @@ const fr = {
       },
       {
         q: "Et si un appareil est en Wi-Fi et l'autre en données mobiles ?",
-        a: "Ils ne sont alors pas sur le même réseau, et la découverte automatique ne les connectera pas. Utilisez plutôt un code d'appairage — l'expéditeur se connecte pour le créer, le destinataire n'a pas besoin de compte, et les deux appareils se connectent quand même directement.",
+        a: "Ils ne sont alors pas sur le même réseau, et la découverte automatique ne les connectera pas. Utilisez plutôt un code d'appairage — l'expéditeur se connecte pour le créer, et le destinataire n'a pas besoin de compte. Entre réseaux différents, le transfert passe par un relais TURN chiffré plutôt que par une connexion directe, tout en restant chiffré de bout en bout : le relais ne transmet que du texte chiffré et ne peut pas lire le fichier.",
       },
     ],
   },
@@ -550,7 +550,7 @@ const ar = {
     {
       heading: "إذا كان جهاز على شبكة مختلفة",
       body: [
-        "لا يعمل وضع نفس الشبكة إلا عندما تتشارك الأجهزة شبكةً بالفعل — فالهاتف على بيانات الجوال، أو الحاسوب المحمول على شبكة Wi-Fi مختلفة، أو جهاز خلف موجّه مختلف لن يظهر تلقائيًا. لتلك الحالة، يدعم Relayium أيضًا الاتصال عبر الشبكات برمز اقتران قصير: يسجّل المُرسِل الدخول لتوليد الرمز (أو رمز QR / رابط)، ولا يحتاج المُستقبِل أبدًا إلى حساب، ويبقى النقل متصلًا مباشرةً، من الند للند، متى سمحت الشبكات بذلك — ولا يعود إلى مُرحِّل مُشفَّر إلا عندما يتعذّر المسار المباشر.",
+        "لا يعمل وضع نفس الشبكة إلا عندما تتشارك الأجهزة شبكةً بالفعل — فالهاتف على بيانات الجوال، أو الحاسوب المحمول على شبكة Wi-Fi مختلفة، أو جهاز خلف موجّه مختلف لن يظهر تلقائيًا. لتلك الحالة، يدعم Relayium أيضًا الاتصال عبر الشبكات برمز اقتران قصير: يسجّل المُرسِل الدخول لتوليد الرمز (أو رمز QR / رابط)، ولا يحتاج المُستقبِل أبدًا إلى حساب. وعبر الشبكات، يتصل المتصفّحان عبر مُرحِّل TURN مُشفَّر بدلًا من الاتصال المباشر — فهذا المسار مُخصَّص للمُرحِّل عن قصد، بحيث ينعقد الاتصال خلال ثانية أو ثانيتين بدل انتظار فحوص المرشّحين المباشرين التي تفشل غالبًا بين شبكتَي NAT. وهذا لا يقلّل من الخصوصية: يبقى المفتاح على الجهازين، فلا يُمرِّر المُرحِّل سوى نصّ مُشفَّر ولا يستطيع قراءة الملف.",
       ],
     },
   ],
@@ -575,7 +575,7 @@ const ar = {
       },
       {
         q: "ماذا لو كان جهاز على Wi-Fi والآخر على بيانات الجوال؟",
-        a: "عندئذ لا يكونان على نفس الشبكة، فلن يربطهما الاكتشاف التلقائي. استخدم رمز اقتران بدلًا من ذلك — يسجّل المُرسِل الدخول لإنشائه، ولا يحتاج المُستقبِل إلى حساب، ويبقى الجهازان متصلين مباشرةً.",
+        a: "عندئذ لا يكونان على نفس الشبكة، فلن يربطهما الاكتشاف التلقائي. استخدم رمز اقتران بدلًا من ذلك — يسجّل المُرسِل الدخول لإنشائه، ولا يحتاج المُستقبِل إلى حساب. وعبر الشبكات يمرّ النقل عبر مُرحِّل TURN مُشفَّر بدل الاتصال المباشر، لكنه يبقى مُشفَّرًا من الطرف إلى الطرف طوال الوقت: لا يُمرِّر المُرحِّل سوى نصّ مُشفَّر ولا يستطيع قراءة الملف.",
       },
     ],
   },
@@ -633,7 +633,7 @@ const es = {
     {
       heading: "Si un dispositivo está en una red distinta",
       body: [
-        "El modo de la misma red solo funciona cuando los dispositivos comparten realmente una red — un teléfono con datos móviles, un portátil en otra Wi-Fi o un dispositivo detrás de otro router no aparecerán automáticamente. Para ese caso, Relayium también admite conectar entre redes con un código de emparejamiento corto: el remitente inicia sesión para generar el código (o un código QR / enlace), quien recibe nunca necesita una cuenta, y la transferencia sigue conectando directamente, de igual a igual, siempre que las redes lo permitan — recurriendo a un retransmisor cifrado solo cuando no es posible una ruta directa.",
+        "El modo de la misma red solo funciona cuando los dispositivos comparten realmente una red — un teléfono con datos móviles, un portátil en otra Wi-Fi o un dispositivo detrás de otro router no aparecerán automáticamente. Para ese caso, Relayium también admite conectar entre redes con un código de emparejamiento corto: el remitente inicia sesión para generar el código (o un código QR / enlace) y quien recibe nunca necesita una cuenta. Entre redes distintas, los dos navegadores no se conectan directamente, sino a través de un retransmisor TURN cifrado — esa vía es solo de retransmisión a propósito, así que la conexión se establece en uno o dos segundos en lugar de esperar comprobaciones de candidatos directos que casi siempre fallan entre dos NAT. No es menos privado: la clave se queda en los dos dispositivos, así que el retransmisor solo reenvía texto cifrado y no puede leer el archivo.",
       ],
     },
   ],
@@ -658,7 +658,7 @@ const es = {
       },
       {
         q: "¿Y si un dispositivo está en Wi-Fi y el otro en datos móviles?",
-        a: "No están en la misma red, así que el descubrimiento automático no los conectará. Usa en su lugar un código de emparejamiento — el remitente inicia sesión para crearlo, quien recibe no necesita cuenta, y los dos dispositivos aún se conectan directamente.",
+        a: "No están en la misma red, así que el descubrimiento automático no los conectará. Usa en su lugar un código de emparejamiento — el remitente inicia sesión para crearlo y quien recibe no necesita cuenta. Entre redes distintas la transferencia va por un retransmisor TURN cifrado en vez de una conexión directa, pero sigue cifrada de extremo a extremo en todo momento: el retransmisor solo reenvía texto cifrado y no puede leer el archivo.",
       },
     ],
   },
@@ -716,7 +716,7 @@ const pt = {
     {
       heading: "Se um dispositivo estiver em uma rede diferente",
       body: [
-        "O modo da mesma rede só funciona quando os dispositivos realmente compartilham uma rede — um celular no dados móveis, um notebook em outra Wi-Fi ou um dispositivo atrás de outro roteador não aparecerá automaticamente. Para esse caso, o Relayium também oferece conexão entre redes com um código de emparelhamento curto: o remetente faz login para gerar o código (ou um código QR / link), quem recebe nunca precisa de conta, e a transferência ainda se conecta diretamente, ponto a ponto, sempre que as redes permitirem — recorrendo a um retransmissor criptografado apenas quando um caminho direto não é possível.",
+        "O modo da mesma rede só funciona quando os dispositivos realmente compartilham uma rede — um celular no dados móveis, um notebook em outra Wi-Fi ou um dispositivo atrás de outro roteador não aparecerá automaticamente. Para esse caso, o Relayium também oferece conexão entre redes com um código de emparelhamento curto: o remetente faz login para gerar o código (ou um código QR / link) e quem recebe nunca precisa de conta. Entre redes diferentes, os dois navegadores não se conectam diretamente, e sim através de um retransmissor TURN criptografado — esse caminho é propositalmente só de retransmissão, então a conexão se estabelece em um ou dois segundos em vez de esperar por verificações de candidatos diretos que quase sempre falham entre dois NATs. Não é menos privado: a chave fica nos dois dispositivos, então o retransmissor só encaminha texto cifrado e não consegue ler o arquivo.",
       ],
     },
   ],
@@ -741,7 +741,7 @@ const pt = {
       },
       {
         q: "E se um dispositivo estiver na Wi-Fi e o outro no dados móveis?",
-        a: "Então eles não estão na mesma rede, e a descoberta automática não vai conectá-los. Use um código de emparelhamento em vez disso — o remetente faz login para criá-lo, quem recebe não precisa de conta, e os dois dispositivos ainda se conectam diretamente.",
+        a: "Então eles não estão na mesma rede, e a descoberta automática não vai conectá-los. Use um código de emparelhamento em vez disso — o remetente faz login para criá-lo e quem recebe não precisa de conta. Entre redes diferentes a transferência passa por um retransmissor TURN criptografado em vez de uma conexão direta, mas continua criptografada de ponta a ponta o tempo todo: o retransmissor só encaminha texto cifrado e não consegue ler o arquivo.",
       },
     ],
   },

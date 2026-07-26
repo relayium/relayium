@@ -81,7 +81,7 @@ const en = {
       },
       {
         q: "Is a code required?",
-        a: "Yes: a 6-character code (or its join link/QR), valid 5 minutes, pairs the two devices across networks.",
+        a: "Yes: a 6-character code (or its join link/QR), valid 5 minutes, pairs the two devices across networks. The server mints it from the alphabet ACDEFHJKMNPRTWXY23456789 — no 0 and no 1, so nothing is mistaken for O or I — which also means you cannot invent one: only a code the server handed out will pair.",
       },
       {
         q: "Do I need an account?",
@@ -100,19 +100,19 @@ const en = {
 const zh = {
   title: "跨网络文件传输——实时、端到端加密 | Relayium",
   description:
-    "用 6 位配对码，让两台设备跨网络互传文件。端到端加密：文件经由 Relayium 的快速中继转发，中继只经手无法解密的密文；并以 SAS 校验码验证，即便中继被入侵也无法窃听。",
+    "用 6 字符配对码，让两台设备跨网络互传文件。端到端加密：文件经由 Relayium 的快速中继转发，中继只经手无法解密的密文；并以 SAS 校验码验证，即便中继被入侵也无法窃听。",
   hero: {
     h1: "跨网络文件传输，端到端加密",
     pitch:
-      "两台设备身处不同网络，用 6 位配对码（或其加入链接/二维码）完成配对。文件通过加密通道流动，途经 Relayium 的快速中继转发——中继只能看到密文，密钥始终只留在两台设备之间。",
+      "两台设备身处不同网络，用 6 字符配对码（或其加入链接/二维码）完成配对。文件通过加密通道流动，途经 Relayium 的快速中继转发——中继只能看到密文，密钥始终只留在两台设备之间。",
     cta: "开始传输",
   },
   how: {
     heading: "四步完成一次传输",
     steps: [
-      "发送方登录后生成一个 6 位配对码（也可分享其加入链接/二维码）。",
+      "发送方登录后生成一个 6 字符配对码（也可分享其加入链接/二维码）。",
       "接收方打开链接或输入配对码即可——接收无需账号。",
-      "双方核对屏幕上同一段 6 位 SAS 校验码，确认一致以排除中间人。",
+      "双方核对屏幕上同一段 6 位数字 SAS 校验码（与配对码是两个不同的值），确认一致以排除中间人。",
       "文件端到端加密流式传输（逐块 AES-256-GCM），经由 Relayium 的快速中继转发；中继只经手它无法解密的密文。",
     ],
   },
@@ -125,7 +125,7 @@ const zh = {
       },
       {
         title: "SAS 防中间人",
-        desc: "两边屏幕显示同一段 6 位校验码，核对一致即可排除中间人——即便中继或信令服务器被入侵也无法得逞。",
+        desc: "两边屏幕显示同一段 6 位数字校验码，核对一致即可排除中间人——即便中继或信令服务器被入侵也无法得逞。",
       },
       {
         title: "中继只经手密文",
@@ -163,7 +163,7 @@ const zh = {
       },
       {
         q: "一定要用配对码吗？",
-        a: "是的：6 位配对码（或其加入链接/二维码）有效期 5 分钟，用于让两台设备跨网络配对。",
+        a: "是的：6 字符配对码（或其加入链接/二维码）有效期 5 分钟，用于让两台设备跨网络配对。配对码由服务器从字母表 ACDEFHJKMNPRTWXY23456789 中签发——不含 0 和 1，以免与 O、I 混淆——因此你无法自己编一个：只有服务器发出的码才能完成配对。",
       },
       {
         q: "需要注册账号吗？",
@@ -245,7 +245,7 @@ const ja = {
       },
       {
         q: "コードは必須ですか？",
-        a: "はい。6文字のコード（またはその参加リンク/QR）は5分間有効で、ネットワークをまたぐ2台の端末をペアリングします。",
+        a: "はい。6文字のコード（またはその参加リンク/QR）は5分間有効で、ネットワークをまたぐ2台の端末をペアリングします。コードはサーバーが文字集合 ACDEFHJKMNPRTWXY23456789 から発行します——0 と 1 は O・I と紛らわしいため含みません——ので、自分で考えて作ることはできません。サーバーが発行したコードだけがペアリングできます。",
       },
       {
         q: "アカウントは必要ですか？",
@@ -264,19 +264,19 @@ const ja = {
 const ko = {
   title: "네트워크를 넘는 파일 전송 — 실시간, 종단간 암호화 | Relayium",
   description:
-    "6자리 페어링 코드로 서로 다른 네트워크에 있는 두 기기가 파일을 주고받습니다. 종단간 암호화——파일은 Relayium의 빠른 중계를 거치지만, 중계는 복호화할 수 없는 암호문만 다룹니다. SAS 코드로 검증하므로 중계가 침해되어도 도청할 수 없습니다.",
+    "6자 페어링 코드로 서로 다른 네트워크에 있는 두 기기가 파일을 주고받습니다. 종단간 암호화——파일은 Relayium의 빠른 중계를 거치지만, 중계는 복호화할 수 없는 암호문만 다룹니다. SAS 코드로 검증하므로 중계가 침해되어도 도청할 수 없습니다.",
   hero: {
     h1: "네트워크를 넘는 파일 전송, 종단간 암호화",
     pitch:
-      "서로 다른 네트워크에 있는 두 기기가 6자리 코드(또는 참여 링크/QR)로 페어링합니다. 파일은 암호화된 채널을 통해 Relayium의 빠른 중계를 거쳐 전송됩니다——중계는 암호문만 볼 수 있으며, 키는 항상 두 기기 사이에만 머무릅니다.",
+      "서로 다른 네트워크에 있는 두 기기가 6자 코드(또는 참여 링크/QR)로 페어링합니다. 파일은 암호화된 채널을 통해 Relayium의 빠른 중계를 거쳐 전송됩니다——중계는 암호문만 볼 수 있으며, 키는 항상 두 기기 사이에만 머무릅니다.",
     cta: "전송 시작",
   },
   how: {
     heading: "4단계로 전송",
     steps: [
-      "보내는 쪽이 로그인한 뒤 6자리 페어링 코드를 생성합니다(참여 링크/QR 공유도 가능).",
+      "보내는 쪽이 로그인한 뒤 6자 페어링 코드를 생성합니다(참여 링크/QR 공유도 가능).",
       "받는 쪽은 링크를 열거나 코드를 입력하기만 하면 됩니다 — 받는 데는 계정이 필요 없습니다.",
-      "양쪽 화면에 표시되는 동일한 6자리 SAS 코드를 대조해 중간자가 없는지 확인합니다.",
+      "양쪽 화면에 표시되는 동일한 6자리 숫자 SAS 코드(페어링 코드와는 다른 값)를 대조해 중간자가 없는지 확인합니다.",
       "파일은 종단간 암호화되어(청크마다 AES-256-GCM) Relayium의 빠른 중계를 거쳐 스트리밍됩니다. 중계는 복호화할 수 없는 암호문만 전달합니다.",
     ],
   },
@@ -327,7 +327,7 @@ const ko = {
       },
       {
         q: "코드가 꼭 필요한가요?",
-        a: "네. 6자리 코드(또는 참여 링크/QR)는 5분간 유효하며 네트워크를 넘는 두 기기를 페어링합니다.",
+        a: "네. 6자 코드(또는 참여 링크/QR)는 5분간 유효하며 네트워크를 넘는 두 기기를 페어링합니다. 코드는 서버가 문자 집합 ACDEFHJKMNPRTWXY23456789에서 발급합니다 — O·I와 헷갈리지 않도록 0과 1은 없습니다 — 그래서 직접 지어낼 수 없고, 서버가 발급한 코드만 페어링됩니다.",
       },
       {
         q: "계정이 필요한가요?",
@@ -346,19 +346,19 @@ const ko = {
 const de = {
   title: "Netzwerkübergreifende Dateiübertragung — Echtzeit, Ende-zu-Ende-verschlüsselt | Relayium",
   description:
-    "Übertrage Dateien mit einem 6-stelligen Kopplungscode zwischen Geräten in unterschiedlichen Netzwerken. Ende-zu-Ende-verschlüsselt — die Übertragung läuft über Relayiums schnelles Relay, das ausschließlich Chiffretext transportiert, den es nicht lesen kann. Verifiziert per SAS-Code, sodass selbst ein kompromittiertes Relay nicht mithören kann.",
+    "Übertrage Dateien mit einem 6-Zeichen-Kopplungscode zwischen Geräten in unterschiedlichen Netzwerken. Ende-zu-Ende-verschlüsselt — die Übertragung läuft über Relayiums schnelles Relay, das ausschließlich Chiffretext transportiert, den es nicht lesen kann. Verifiziert per SAS-Code, sodass selbst ein kompromittiertes Relay nicht mithören kann.",
   hero: {
     h1: "Netzwerkübergreifende Dateiübertragung, Ende-zu-Ende-verschlüsselt",
     pitch:
-      "Zwei Geräte in unterschiedlichen Netzwerken koppeln sich mit einem 6-stelligen Code (oder dessen Beitrittslink/QR). Dateien fließen über einen verschlüsselten Kanal durch Relayiums schnelles Relay — das Relay sieht dabei ausschließlich Chiffretext, die Schlüssel verlassen nie die beiden Geräte.",
+      "Zwei Geräte in unterschiedlichen Netzwerken koppeln sich mit einem 6-Zeichen-Code (oder dessen Beitrittslink/QR). Dateien fließen über einen verschlüsselten Kanal durch Relayiums schnelles Relay — das Relay sieht dabei ausschließlich Chiffretext, die Schlüssel verlassen nie die beiden Geräte.",
     cta: "Übertragung starten",
   },
   how: {
     heading: "In vier Schritten übertragen",
     steps: [
-      "Der Absender meldet sich an und erzeugt einen 6-stelligen Kopplungscode (oder teilt dessen Beitrittslink/QR).",
+      "Der Absender meldet sich an und erzeugt einen 6-Zeichen-Kopplungscode (oder teilt dessen Beitrittslink/QR).",
       "Der Empfänger öffnet den Link oder gibt den Code ein — zum Empfangen ist kein Konto nötig.",
-      "Beide Seiten vergleichen denselben 6-stelligen SAS-Code auf dem Bildschirm, um einen Mittelsmann auszuschließen.",
+      "Beide Seiten vergleichen denselben 6-stelligen SAS-Code auf dem Bildschirm (ein anderer Wert als der Kopplungscode), um einen Mittelsmann auszuschließen.",
       "Dateien werden Ende-zu-Ende-verschlüsselt gestreamt (Chunk für Chunk mit AES-256-GCM) — über Relayiums schnelles Relay, das nur Chiffretext transportiert, den es nicht entschlüsseln kann.",
     ],
   },
@@ -409,7 +409,7 @@ const de = {
       },
       {
         q: "Ist ein Code erforderlich?",
-        a: "Ja: Ein 6-stelliger Code (oder dessen Beitrittslink/QR), 5 Minuten gültig, koppelt die beiden Geräte über Netzwerke hinweg.",
+        a: "Ja: Ein 6-Zeichen-Code (oder dessen Beitrittslink/QR), 5 Minuten gültig, koppelt die beiden Geräte über Netzwerke hinweg. Der Server erzeugt ihn aus dem Alphabet ACDEFHJKMNPRTWXY23456789 — ohne 0 und 1, damit nichts mit O oder I verwechselt wird — du kannst dir also keinen ausdenken: nur ein vom Server ausgegebener Code koppelt.",
       },
       {
         q: "Brauche ich ein Konto?",
@@ -491,7 +491,7 @@ const fr = {
       },
       {
         q: "Un code est-il obligatoire ?",
-        a: "Oui : un code à 6 caractères (ou son lien d'accès/QR), valable 5 minutes, appaire les deux appareils entre réseaux différents.",
+        a: "Oui : un code à 6 caractères (ou son lien d'accès/QR), valable 5 minutes, appaire les deux appareils entre réseaux différents. Le serveur le génère à partir de l'alphabet ACDEFHJKMNPRTWXY23456789 — ni 0 ni 1, pour éviter toute confusion avec O et I — vous ne pouvez donc pas en inventer un : seul un code délivré par le serveur appaire.",
       },
       {
         q: "Faut-il un compte ?",
@@ -573,7 +573,7 @@ const ar = {
       },
       {
         q: "هل الرمز إلزامي؟",
-        a: "نعم: رمز مكوّن من 6 خانات (أو رابط الانضمام/رمز QR الخاص به)، صالح لمدة 5 دقائق، يقرن الجهازين عبر شبكات مختلفة.",
+        a: "نعم: رمز مكوّن من 6 خانات (أو رابط الانضمام/رمز QR الخاص به)، صالح لمدة 5 دقائق، يقرن الجهازين عبر شبكات مختلفة. يُصدره الخادم من مجموعة الحروف ACDEFHJKMNPRTWXY23456789 — بلا 0 وبلا 1 حتى لا يختلطا بحرفَي O وI — لذلك لا يمكنك اختلاق رمز من عندك: لا يقرن إلا رمز أصدره الخادم.",
       },
       {
         q: "هل يلزم حساب؟",
@@ -655,7 +655,7 @@ const es = {
       },
       {
         q: "¿Es obligatorio un código?",
-        a: "Sí: un código de 6 caracteres (o su enlace de acceso/QR), válido 5 minutos, empareja los dos dispositivos entre redes distintas.",
+        a: "Sí: un código de 6 caracteres (o su enlace de acceso/QR), válido 5 minutos, empareja los dos dispositivos entre redes distintas. El servidor lo genera a partir del alfabeto ACDEFHJKMNPRTWXY23456789 — sin 0 ni 1, para que nada se confunda con O ni I — así que no puedes inventarte uno: solo empareja un código que haya emitido el servidor.",
       },
       {
         q: "¿Necesito una cuenta?",
@@ -737,7 +737,7 @@ const pt = {
       },
       {
         q: "Um código é obrigatório?",
-        a: "Sim: um código de 6 caracteres (ou seu link de acesso/QR), válido por 5 minutos, empareja os dois dispositivos entre redes diferentes.",
+        a: "Sim: um código de 6 caracteres (ou seu link de acesso/QR), válido por 5 minutos, empareja os dois dispositivos entre redes diferentes. O servidor o gera a partir do alfabeto ACDEFHJKMNPRTWXY23456789 — sem 0 e sem 1, para que nada se confunda com O ou I — então você não pode inventar um: só emparelha um código que o servidor tenha emitido.",
       },
       {
         q: "Preciso de uma conta?",

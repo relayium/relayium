@@ -73,7 +73,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="lead">両者にはかなりの重なりがあり、重ならない部分は正確に述べる価値があります——magic-wormhole が今日、実際に Relayium CLI より頑健な点も含めて。</p>
       <h2>両者の共通点</h2>
       <p>どちらのツールも同じ核心的な課題を、同じ誠実な方法で解決しています。あなたが管理できないサーバーにファイルが留まることはなく、両端がオフバンドで受け渡すのは短いコードだけです。magic-wormhole はアカウントが一切不要で、Relayium はサーバーがそのコードを発行できるよう送信側にのみサインインを求め、受信側は依然として不要です。</p>
-      <ul><li>エンドツーエンドで暗号化：magic-wormhole は PAKE（SPAKE2）を使って暗号コードそのものからセッション鍵を導出するため、自身のランデブーサーバーですらその鍵を知ることはありません。Relayium の send/receive は両端の間で直接 X25519 鍵交換を行い、バイトが動く前に双方が照合できる短い検証コード（SAS）を表示します。</li><li>どちらのツールも受信にアカウントは不要。magic-wormhole は一切不要です。</li><li>無料でオープンソース——ファイルに触れるコードを読むことができます。</li><li>クロスプラットフォーム：macOS、Linux、Windows。</li></ul>
+      <ul><li>エンドツーエンドで暗号化：magic-wormhole は PAKE（SPAKE2）を使って暗号コードそのものからセッション鍵を導出するため、自身のランデブーサーバーですらその鍵を知ることはありません。Relayium の send/receive は両端の間で直接 X25519 鍵交換を行い、バイトが動く前に双方が照合できる短い検証コード（SAS）を表示します。</li><li>どちらのツールも受信にアカウントは不要。magic-wormhole は一切不要です。</li><li>無料でオープンソース——ファイルに触れるソースコードを読むことができます。</li><li>クロスプラットフォーム：macOS、Linux、Windows。</li></ul>
       <h2>magic-wormhole がより頑健な1点：リレーを持っている</h2>
       <p>これは正直なトレードオフであり、ぼかさずはっきり述べる価値があります。magic-wormhole には Transit Relay が同梱されており、両端が互いに直接接続を開けない場合——たとえば両方とも厳格または対称 NAT の内側にいて経路を開通できない場合——にフォールバックできます。リレーが見るのは常に暗号文だけですが、それが存在するおかげで転送は完了します。</p>
       <p>Relayium の send/receive は直接接続専用です。ハンドシェイクの直後に数秒間だけ直接接続を試み、見つからなければリレーにフォールバックせずそのまま失敗します——設計上、Relayium のサーバーはネットワークをまたぐ CLI 転送のファイルバイトに一切触れません。実際にはこれは稀なケースです（ほとんどの家庭やオフィスのネットワークは直接経路を許可します）が、両方とも異常に厳格な NAT の内側にある2台のマシン間でファイルを移動する場合、magic-wormhole の方がそのまま動く可能性が高いです。直接経路が見つからず、リレーを避けることより確実性の方が重要なら、magic-wormhole を選ぶべき場面です——あるいは、直接 P2P ホップに依存しない Relayium の push/pull や、到達可能なサーバーへの daemon-direct を使うのも手です。</p>
@@ -83,8 +83,8 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>自分でファイルを選びたい、または Windows の場合は、リリースページからバイナリを取得してください——relayium.com/cli にすべてのインストール方法があります（Go があれば go build -o relayium ./cmd/relayium も可）。</li><li>relayium --version でインストールを確認できます。これをしないと以下のコマンドは「command not found」と出るだけです。</li></ul>
       <h2>SSH と daemon-direct：すでに運用しているサーバーと話す</h2>
       <p>Relayium CLI が本当に付加価値を持つのは、一回限りのペアリングコードのケースの外側です——すでに持っているインフラを活かす、magic-wormhole がカバーしようとしていない2つの方法があります。</p>
-      <p>relayium push / pull は既存の SSH アクセスを再利用するため、新しく信頼するものも共有するコードもありません。push は relayium がまったくインストールされていないサーバーに対しても動作し、SSH 接続上の単純な tar ストリームにフォールバックします——このフォールバックは push 専用です。pull は常にリモートに relayium が必要です。そこでは pull が送信側として動作するためです。</p>
-      <p>relayium serve は、所有する任意のマシンを daemon-direct のターゲットに変え、ピン留めされた TLS 1.3 経由で、SSH もコードもなしにアクセスできます——信頼は最初の接続時に成立し（対話的に承認するか、無人運用向けに事前承認しておく）、以後はピン留めされます。SSH のホスト鍵と同じ考え方です。</p>
+      <p>relayium push / pull は既存の SSH アクセスを再利用するため、新しく信頼するものも共有するペアリングコードもありません。push は relayium がまったくインストールされていないサーバーに対しても動作し、SSH 接続上の単純な tar ストリームにフォールバックします——このフォールバックは push 専用です。pull は常にリモートに relayium が必要です。そこでは pull が送信側として動作するためです。</p>
+      <p>relayium serve は、所有する任意のマシンを daemon-direct のターゲットに変え、ピン留めされた TLS 1.3 経由で、SSH もペアリングコードもなしにアクセスできます——信頼は最初の接続時に成立し（対話的に承認するか、無人運用向けに事前承認しておく）、以後はピン留めされます。SSH のホスト鍵と同じ考え方です。</p>
       <pre><code>relayium push ./photos user@your-server:backups/</code></pre>
       <pre><code>relayium serve --dir ~/incoming</code></pre>
       <pre><code>relayium push ./build relayium://your-server</code></pre>

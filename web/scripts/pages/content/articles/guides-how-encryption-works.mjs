@@ -58,7 +58,7 @@ const en = {
     {
       heading: "What the server can see — and what it can't",
       body: [
-        "It's worth spelling out exactly where the server sits in all of this, because \"end-to-end encrypted\" is a claim that's easy to make and harder to make precisely. In realtime mode, the file itself never touches Relayium's servers at all — it streams directly between the two browsers. The signaling server's job is limited to relaying connection-setup messages (the technical SDP/ICE information WebRTC needs to establish a direct link) so the two devices can find each other; it never sees file contents, filenames, or keys.",
+        "It's worth spelling out exactly where the server sits in all of this, because \"end-to-end encrypted\" is a claim that's easy to make and harder to make precisely. On the same network in realtime mode, the file itself never touches Relayium's servers at all — it streams directly between the two browsers. The signaling server's job is limited to relaying connection-setup messages (the technical SDP/ICE information WebRTC needs to establish a direct link) so the two devices can find each other; it never sees file contents, filenames, or keys.",
         "Across networks — where restrictive NATs and firewalls often rule out a direct path — the encrypted stream runs over a TURN relay server. The relay only ever forwards ciphertext; it has no key and cannot decrypt what passes through it. What it does do is count the bytes it relays against the sending account's monthly relay allowance, purely for metering and abuse prevention — never inspecting what's inside.",
       ],
     },
@@ -72,11 +72,11 @@ const en = {
       },
       {
         q: "What does the server actually see?",
-        a: "In realtime mode, only the connection-setup information needed to introduce two devices to each other — never file bytes. For stored links, it sees ciphertext plus bookkeeping like size and expiry time — never the plaintext, filenames, or the decryption key.",
+        a: "In realtime mode on the same network, only the connection-setup information needed to introduce two devices to each other — never file bytes. Across networks the TURN relay does carry the bytes, but only as ciphertext it holds no key for. For stored links, it sees ciphertext plus bookkeeping like size and expiry time — never the plaintext, filenames, or the decryption key.",
       },
       {
         q: "Is the TURN relay a weak point?",
-        a: "It's a fallback used only when a direct connection isn't possible, and it only ever handles ciphertext — it has no key, so it can't read what it's relaying. Relayium counts the bytes it relays against your account's monthly allowance, but never inspects their contents.",
+        a: "In the browser it carries every cross-network transfer by design, not only the ones where a direct path failed — but it only ever handles ciphertext, and it has no key, so it can't read what it's relaying. Relayium counts the bytes it relays against your account's monthly allowance, but never inspects their contents.",
       },
       {
         q: "Is Relayium open source?",
@@ -149,7 +149,7 @@ const zh = {
     {
       heading: "服务器能看到什么，又看不到什么",
       body: [
-        "有必要把服务器在其中扮演的角色说清楚，因为「端到端加密」这句话说起来容易，说准确却没那么简单。在实时模式下，文件本身完全不经过 Relayium 的服务器——它直接在两端浏览器之间流动。信令服务器的职责仅限于转发建立连接所需的消息（WebRTC 建立直连所需的 SDP/ICE 技术信息），帮两台设备互相找到对方；它从不看到文件内容、文件名或密钥。",
+        "有必要把服务器在其中扮演的角色说清楚，因为「端到端加密」这句话说起来容易，说准确却没那么简单。在同一网络的实时模式下，文件本身完全不经过 Relayium 的服务器——它直接在两端浏览器之间流动。信令服务器的职责仅限于转发建立连接所需的消息（WebRTC 建立直连所需的 SDP/ICE 技术信息），帮两台设备互相找到对方；它从不看到文件内容、文件名或密钥。",
         "跨网络传输的加密数据流经 TURN 中继服务器转发——在受限的 NAT 或防火墙之后，直连往往根本无从建立。中继只转发密文；它没有密钥，无法解密经过它的任何内容。它会做的是把中继的字节数计入发送方账号的每月中继额度，纯粹用于计量和防止滥用——从不检查里面的内容。",
       ],
     },
@@ -163,11 +163,11 @@ const zh = {
       },
       {
         q: "服务器到底能看到什么？",
-        a: "实时模式下，只能看到用来撮合两台设备的连接建立信息——从不涉及文件字节。对于存储链接，它能看到密文以及大小、过期时间等记账信息——从不涉及明文、文件名或解密密钥。",
+        a: "同一网络的实时模式下，只能看到用来撮合两台设备的连接建立信息——从不涉及文件字节。跨网络时 TURN 中继确实会经手文件字节，但那只是它没有密钥的密文。对于存储链接，它能看到密文以及大小、过期时间等记账信息——从不涉及明文、文件名或解密密钥。",
       },
       {
         q: "TURN 中继是不是一个薄弱环节？",
-        a: "它只是在无法直连时才启用的兜底方案，且始终只处理密文——它没有密钥，无法读取经它中继的内容。Relayium 会把中继的字节数计入你账号的每月额度，但从不检查内容本身。",
+        a: "在浏览器里，它按设计承载所有跨网络传输，而不只是直连失败时的兜底方案——但它始终只处理密文，且没有密钥，无法读取经它中继的内容。Relayium 会把中继的字节数计入你账号的每月额度，但从不检查内容本身。",
       },
       {
         q: "Relayium 是开源的吗？",
@@ -240,7 +240,7 @@ const ja = {
     {
       heading: "サーバーが見えるもの、見えないもの",
       body: [
-        "サーバーがこの仕組みのどこに位置しているのかを正確に説明しておく価値があります。「エンドツーエンドで暗号化されている」という主張は口にするのは簡単でも、正確に言うのは意外と難しいからです。リアルタイムモードでは、ファイル自体は Relayium のサーバーに一切触れません——2台のブラウザ間を直接ストリーミングされます。シグナリングサーバーの役割は、接続確立のためのメッセージ（WebRTC が直接リンクを確立するのに必要な SDP/ICE の技術情報)を中継し、2台のデバイスが互いを見つけられるようにすることに限られます。ファイルの内容やファイル名、鍵を目にすることは一切ありません。",
+        "サーバーがこの仕組みのどこに位置しているのかを正確に説明しておく価値があります。「エンドツーエンドで暗号化されている」という主張は口にするのは簡単でも、正確に言うのは意外と難しいからです。同一ネットワークでのリアルタイムモードでは、ファイル自体は Relayium のサーバーに一切触れません——2台のブラウザ間を直接ストリーミングされます。シグナリングサーバーの役割は、接続確立のためのメッセージ（WebRTC が直接リンクを確立するのに必要な SDP/ICE の技術情報)を中継し、2台のデバイスが互いを見つけられるようにすることに限られます。ファイルの内容やファイル名、鍵を目にすることは一切ありません。",
         "ネットワークをまたぐ転送では——制限の厳しい NAT やファイアウォールの内側では直接経路が成立しないことが多いため——暗号化ストリームは TURN 中継サーバーを経由します。中継が転送するのは暗号文だけです。鍵を持たないため、そこを通過する内容を復号することはできません。中継が行うのは、送信側アカウントの月間中継割り当てに対して中継したバイト数を数えることだけで、それは純粋に計量と不正利用防止のためであり、中身を検査することは決してありません。",
       ],
     },
@@ -254,11 +254,11 @@ const ja = {
       },
       {
         q: "サーバーは実際には何を見ているのですか？",
-        a: "リアルタイムモードでは、2台のデバイスを引き合わせるために必要な接続確立情報だけを見ます——ファイルのバイトは一切見ません。保存リンクの場合、暗号文とサイズ・有効期限といった管理情報を見ます——平文やファイル名、復号鍵を見ることは一切ありません。",
+        a: "同一ネットワークでのリアルタイムモードでは、2台のデバイスを引き合わせるために必要な接続確立情報だけを見ます——ファイルのバイトは一切見ません。ネットワークをまたぐ場合、TURN リレーは確かにファイルのバイトを運びますが、それは鍵を持たない暗号文としてだけです。保存リンクの場合、暗号文とサイズ・有効期限といった管理情報を見ます——平文やファイル名、復号鍵を見ることは一切ありません。",
       },
       {
         q: "TURN 中継は弱点になりませんか？",
-        a: "それは直接接続ができない場合にのみ使われるフォールバックであり、常に暗号文しか扱いません——鍵を持たないため、中継している内容を読むことはできません。Relayium は中継したバイト数をあなたのアカウントの月間割り当てに対して数えますが、中身を検査することはありません。",
+        a: "ブラウザでは、直接接続に失敗したときだけの手段ではなく、設計上ネットワークをまたぐ転送すべてを担います——ただし扱うのは常に暗号文だけで、鍵を持たないため、中継している内容を読むことはできません。Relayium は中継したバイト数をあなたのアカウントの月間割り当てに対して数えますが、中身を検査することはありません。",
       },
       {
         q: "Relayium はオープンソースですか？",
@@ -331,7 +331,7 @@ const ko = {
     {
       heading: "서버가 볼 수 있는 것, 그리고 볼 수 없는 것",
       body: [
-        "서버가 이 모든 과정에서 정확히 어디에 위치하는지 짚어볼 가치가 있습니다. \"종단간 암호화\"라는 말은 하기는 쉬워도 정확히 말하기는 어렵기 때문입니다. 실시간 모드에서는 파일 자체가 Relayium의 서버를 전혀 거치지 않습니다——두 브라우저 사이에서 직접 스트리밍됩니다. 시그널링 서버의 역할은 연결 설정 메시지(WebRTC가 직접 연결을 맺는 데 필요한 SDP/ICE 기술 정보)를 중계해 두 기기가 서로를 찾도록 돕는 데 국한됩니다. 파일 내용이나 파일 이름, 키를 보는 일은 전혀 없습니다.",
+        "서버가 이 모든 과정에서 정확히 어디에 위치하는지 짚어볼 가치가 있습니다. \"종단간 암호화\"라는 말은 하기는 쉬워도 정확히 말하기는 어렵기 때문입니다. 같은 네트워크의 실시간 모드에서는 파일 자체가 Relayium의 서버를 전혀 거치지 않습니다——두 브라우저 사이에서 직접 스트리밍됩니다. 시그널링 서버의 역할은 연결 설정 메시지(WebRTC가 직접 연결을 맺는 데 필요한 SDP/ICE 기술 정보)를 중계해 두 기기가 서로를 찾도록 돕는 데 국한됩니다. 파일 내용이나 파일 이름, 키를 보는 일은 전혀 없습니다.",
         "네트워크를 넘는 전송에서는——제한적인 NAT나 방화벽 뒤에서는 직접 경로가 열리지 않는 경우가 많기 때문에——암호화된 스트림이 TURN 중계 서버를 거칩니다. 중계 서버는 오직 암호문만 전달합니다. 키가 없으므로 그것을 통과하는 내용을 복호화할 수 없습니다. 중계 서버가 하는 일은 발신 계정의 월간 중계 허용량에 대해 중계한 바이트 수를 세는 것뿐이며, 이는 순전히 계량과 남용 방지를 위한 것으로, 내용을 검사하는 일은 결코 없습니다.",
       ],
     },
@@ -345,11 +345,11 @@ const ko = {
       },
       {
         q: "서버는 실제로 무엇을 보나요?",
-        a: "실시간 모드에서는 두 기기를 서로 소개하는 데 필요한 연결 설정 정보만 봅니다——파일 바이트는 전혀 보지 않습니다. 저장 링크의 경우 암호문과 크기·만료 시각 같은 관리 정보를 봅니다——평문, 파일 이름, 복호화 키는 전혀 보지 않습니다.",
+        a: "같은 네트워크의 실시간 모드에서는 두 기기를 서로 소개하는 데 필요한 연결 설정 정보만 봅니다——파일 바이트는 전혀 보지 않습니다. 네트워크를 넘을 때는 TURN 릴레이가 실제로 파일 바이트를 나르지만, 키가 없는 암호문으로서만 그렇습니다. 저장 링크의 경우 암호문과 크기·만료 시각 같은 관리 정보를 봅니다——평문, 파일 이름, 복호화 키는 전혀 보지 않습니다.",
       },
       {
         q: "TURN 중계가 약점이 되지 않나요?",
-        a: "직접 연결이 불가능할 때만 쓰이는 대체 수단이며, 항상 암호문만 다룹니다——키가 없으므로 중계하는 내용을 읽을 수 없습니다. Relayium은 중계한 바이트 수를 계정의 월간 허용량에 대해 집계하지만, 내용은 절대 검사하지 않습니다.",
+        a: "브라우저에서는 직접 연결이 실패했을 때만 쓰이는 것이 아니라 설계상 네트워크 간 전송 전부를 담당합니다——다만 항상 암호문만 다루고, 키가 없으므로 중계하는 내용을 읽을 수 없습니다. Relayium은 중계한 바이트 수를 계정의 월간 허용량에 대해 집계하지만, 내용은 절대 검사하지 않습니다.",
       },
       {
         q: "Relayium은 오픈 소스인가요?",
@@ -422,7 +422,7 @@ const de = {
     {
       heading: "Was der Server sehen kann — und was nicht",
       body: [
-        "Es lohnt sich, genau zu benennen, wo der Server bei alldem steht, denn „Ende-zu-Ende verschlüsselt“ ist eine Behauptung, die sich leicht aufstellen, aber schwerer präzise belegen lässt. Im Echtzeitmodus berührt die Datei selbst Relayiums Server überhaupt nicht — sie wird direkt zwischen den beiden Browsern gestreamt. Die Aufgabe des Signalisierungsservers beschränkt sich darauf, Nachrichten zum Verbindungsaufbau weiterzuleiten (die technischen SDP/ICE-Informationen, die WebRTC benötigt, um eine direkte Verbindung herzustellen), damit sich die beiden Geräte finden können; er sieht nie Dateiinhalte, Dateinamen oder Schlüssel.",
+        "Es lohnt sich, genau zu benennen, wo der Server bei alldem steht, denn „Ende-zu-Ende verschlüsselt“ ist eine Behauptung, die sich leicht aufstellen, aber schwerer präzise belegen lässt. Im Echtzeitmodus im selben Netzwerk berührt die Datei selbst Relayiums Server überhaupt nicht — sie wird direkt zwischen den beiden Browsern gestreamt. Die Aufgabe des Signalisierungsservers beschränkt sich darauf, Nachrichten zum Verbindungsaufbau weiterzuleiten (die technischen SDP/ICE-Informationen, die WebRTC benötigt, um eine direkte Verbindung herzustellen), damit sich die beiden Geräte finden können; er sieht nie Dateiinhalte, Dateinamen oder Schlüssel.",
         "Netzübergreifend — wo restriktive NATs oder Firewalls einen direkten Pfad ohnehin oft ausschließen — läuft der verschlüsselte Datenstrom über einen TURN-Relay-Server. Das Relay leitet ausschließlich Chiffretext weiter; es besitzt keinen Schlüssel und kann nicht entschlüsseln, was es durchleitet. Was es tut, ist die Anzahl der weitergeleiteten Bytes gegen das monatliche Weiterleitungskontingent des sendenden Kontos zu zählen, rein zur Abrechnung und Missbrauchsprävention — der Inhalt wird dabei nie eingesehen.",
       ],
     },
@@ -436,11 +436,11 @@ const de = {
       },
       {
         q: "Was sieht der Server tatsächlich?",
-        a: "Im Echtzeitmodus nur die Informationen zum Verbindungsaufbau, die nötig sind, um zwei Geräte einander vorzustellen — nie Dateidaten. Bei gespeicherten Links sieht er Chiffretext sowie Verwaltungsdaten wie Größe und Ablaufzeit — nie den Klartext, Dateinamen oder den Entschlüsselungsschlüssel.",
+        a: "Im Echtzeitmodus im selben Netzwerk nur die Informationen zum Verbindungsaufbau, die nötig sind, um zwei Geräte einander vorzustellen — nie Dateidaten. Netzübergreifend transportiert das TURN-Relay die Dateidaten sehr wohl, aber nur als Chiffretext, für den es keinen Schlüssel besitzt. Bei gespeicherten Links sieht er Chiffretext sowie Verwaltungsdaten wie Größe und Ablaufzeit — nie den Klartext, Dateinamen oder den Entschlüsselungsschlüssel.",
       },
       {
         q: "Ist das TURN-Relay eine Schwachstelle?",
-        a: "Es ist ein Rückfall, der nur genutzt wird, wenn eine direkte Verbindung nicht möglich ist, und es verarbeitet stets nur Chiffretext — es besitzt keinen Schlüssel und kann daher nicht lesen, was es weiterleitet. Relayium zählt die weitergeleiteten Bytes gegen das monatliche Kontingent Ihres Kontos, prüft aber nie deren Inhalt.",
+        a: "Im Browser trägt es konstruktionsbedingt jede netzwerkübergreifende Übertragung, nicht nur die, bei denen ein direkter Pfad scheiterte — es verarbeitet dabei aber stets nur Chiffretext und besitzt keinen Schlüssel, kann also nicht lesen, was es weiterleitet. Relayium zählt die weitergeleiteten Bytes gegen das monatliche Kontingent Ihres Kontos, prüft aber nie deren Inhalt.",
       },
       {
         q: "Ist Relayium Open Source?",
@@ -513,7 +513,7 @@ const fr = {
     {
       heading: "Ce que le serveur peut voir — et ce qu'il ne peut pas",
       body: [
-        "Il vaut la peine de préciser exactement où se situe le serveur dans tout cela, car « chiffré de bout en bout » est une affirmation facile à faire et plus difficile à faire avec précision. En mode temps réel, le fichier lui-même ne touche jamais les serveurs de Relayium — il circule directement entre les deux navigateurs. Le rôle du serveur de signalisation se limite à relayer les messages d'établissement de connexion (les informations techniques SDP/ICE dont WebRTC a besoin pour établir un lien direct) afin que les deux appareils puissent se trouver ; il ne voit jamais le contenu des fichiers, leurs noms, ni les clés.",
+        "Il vaut la peine de préciser exactement où se situe le serveur dans tout cela, car « chiffré de bout en bout » est une affirmation facile à faire et plus difficile à faire avec précision. En mode temps réel sur le même réseau, le fichier lui-même ne touche jamais les serveurs de Relayium — il circule directement entre les deux navigateurs. Le rôle du serveur de signalisation se limite à relayer les messages d'établissement de connexion (les informations techniques SDP/ICE dont WebRTC a besoin pour établir un lien direct) afin que les deux appareils puissent se trouver ; il ne voit jamais le contenu des fichiers, leurs noms, ni les clés.",
         "Entre réseaux — où des NAT ou des pare-feu restrictifs excluent souvent tout chemin direct —, le flux chiffré passe par un serveur relais TURN. Le relais ne transmet que du chiffré ; il n'a pas de clé et ne peut pas déchiffrer ce qui le traverse. Ce qu'il fait, c'est compter les octets qu'il relaie au titre du quota mensuel de relais du compte expéditeur, uniquement à des fins de mesure et de prévention des abus — sans jamais inspecter ce qu'il contient.",
       ],
     },
@@ -527,11 +527,11 @@ const fr = {
       },
       {
         q: "Que voit réellement le serveur ?",
-        a: "En mode temps réel, uniquement les informations d'établissement de connexion nécessaires pour présenter deux appareils l'un à l'autre — jamais les octets du fichier. Pour les liens stockés, il voit du chiffré ainsi que des informations de gestion comme la taille et la date d'expiration — jamais le contenu en clair, les noms de fichiers, ni la clé de déchiffrement.",
+        a: "En mode temps réel sur le même réseau, uniquement les informations d'établissement de connexion nécessaires pour présenter deux appareils l'un à l'autre — jamais les octets du fichier. Entre réseaux, le relais TURN transporte bien ces octets, mais uniquement sous forme de texte chiffré dont il n'a pas la clé. Pour les liens stockés, il voit du chiffré ainsi que des informations de gestion comme la taille et la date d'expiration — jamais le contenu en clair, les noms de fichiers, ni la clé de déchiffrement.",
       },
       {
         q: "Le relais TURN est-il un point faible ?",
-        a: "C'est un repli utilisé uniquement lorsqu'une connexion directe est impossible, et il ne traite toujours que du chiffré — il n'a pas de clé, donc il ne peut pas lire ce qu'il relaie. Relayium compte les octets relayés au titre du quota mensuel de votre compte, mais n'inspecte jamais leur contenu.",
+        a: "Dans le navigateur, il achemine par conception tous les transferts entre réseaux, et pas seulement ceux où une liaison directe a échoué — mais il ne traite toujours que du chiffré, et il n'a pas de clé, donc il ne peut pas lire ce qu'il relaie. Relayium compte les octets relayés au titre du quota mensuel de votre compte, mais n'inspecte jamais leur contenu.",
       },
       {
         q: "Relayium est-il open source ?",
@@ -604,7 +604,7 @@ const ar = {
     {
       heading: "ما يمكن للخادم رؤيته — وما لا يمكنه",
       body: [
-        "من المفيد أن نوضّح بالضبط أين يقف الخادم من كل هذا، لأن «التشفير من الطرف إلى الطرف» ادّعاء يسهل قوله ويصعب قوله بدقة. في الوضع الفوري، لا يلمس الملف نفسه خوادم Relayium إطلاقاً — بل يُبَثّ مباشرة بين المتصفحَين. تقتصر مهمة خادم الإشارة على تمرير رسائل إعداد الاتصال (معلومات SDP/ICE التقنية التي يحتاجها WebRTC لإنشاء رابط مباشر) حتى يتمكن الجهازان من إيجاد أحدهما الآخر؛ فهو لا يرى أبداً محتوى الملفات أو أسماءها أو المفاتيح.",
+        "من المفيد أن نوضّح بالضبط أين يقف الخادم من كل هذا، لأن «التشفير من الطرف إلى الطرف» ادّعاء يسهل قوله ويصعب قوله بدقة. في الوضع الفوري على نفس الشبكة، لا يلمس الملف نفسه خوادم Relayium إطلاقاً — بل يُبَثّ مباشرة بين المتصفحَين. تقتصر مهمة خادم الإشارة على تمرير رسائل إعداد الاتصال (معلومات SDP/ICE التقنية التي يحتاجها WebRTC لإنشاء رابط مباشر) حتى يتمكن الجهازان من إيجاد أحدهما الآخر؛ فهو لا يرى أبداً محتوى الملفات أو أسماءها أو المفاتيح.",
         "عبر الشبكات — حيث تستبعد أنظمة NAT وجدران الحماية المقيِّدة المسار المباشر في الغالب — يمرّ التدفق المُشفَّر على خادم مُرحِّل TURN. لا يمرّر المُرحِّل سوى النص المُشفَّر؛ فليس لديه مفتاح ولا يمكنه فك تشفير ما يمرّ عبره. أما ما يفعله فهو عدّ البايتات التي يُرحّلها ضمن حصة الترحيل الشهرية لحساب المُرسِل، لغرض القياس ومنع إساءة الاستخدام فقط — دون أن يفحص ما بداخلها أبداً.",
       ],
     },
@@ -618,11 +618,11 @@ const ar = {
       },
       {
         q: "ماذا يرى الخادم فعلاً؟",
-        a: "في الوضع الفوري، لا يرى سوى معلومات إعداد الاتصال اللازمة لتعريف الجهازين أحدهما بالآخر — ولا يرى بايتات الملف أبداً. أما بالنسبة للروابط المُخزَّنة، فيرى النص المُشفَّر إضافة إلى بيانات إدارية مثل الحجم ووقت انتهاء الصلاحية — دون أن يرى النص الصريح أو أسماء الملفات أو مفتاح فك التشفير أبداً.",
+        a: "في الوضع الفوري على نفس الشبكة، لا يرى سوى معلومات إعداد الاتصال اللازمة لتعريف الجهازين أحدهما بالآخر — ولا يرى بايتات الملف أبداً. أما عبر الشبكات فيَنقل مُرحِّل TURN بايتات الملف فعلاً، لكن كنص مُشفَّر لا يملك مفتاحه. أما بالنسبة للروابط المُخزَّنة، فيرى النص المُشفَّر إضافة إلى بيانات إدارية مثل الحجم ووقت انتهاء الصلاحية — دون أن يرى النص الصريح أو أسماء الملفات أو مفتاح فك التشفير أبداً.",
       },
       {
         q: "هل مُرحِّل TURN نقطة ضعف؟",
-        a: "إنه حلٌّ احتياطي لا يُستخدَم إلا حين يتعذّر الاتصال المباشر، ولا يتعامل إلا مع النص المُشفَّر — فليس لديه مفتاح، ولذلك لا يستطيع قراءة ما يُرحّله. يَعُدّ Relayium البايتات التي يُرحّلها ضمن الحصة الشهرية لحسابك، لكنه لا يفحص محتواها أبداً.",
+        a: "في المتصفح يحمل بحكم التصميم كل عمليات النقل عبر الشبكات، لا تلك التي فشل فيها المسار المباشر فحسب — لكنه لا يتعامل إلا مع النص المُشفَّر، وليس لديه مفتاح، ولذلك لا يستطيع قراءة ما يُرحّله. يَعُدّ Relayium البايتات التي يُرحّلها ضمن الحصة الشهرية لحسابك، لكنه لا يفحص محتواها أبداً.",
       },
       {
         q: "هل Relayium مفتوح المصدر؟",
@@ -695,7 +695,7 @@ const es = {
     {
       heading: "Lo que el servidor puede ver — y lo que no",
       body: [
-        "Vale la pena precisar exactamente dónde se sitúa el servidor en todo esto, porque «cifrado de extremo a extremo» es una afirmación fácil de hacer y más difícil de precisar. En modo tiempo real, el archivo en sí nunca toca los servidores de Relayium — se transmite directamente entre los dos navegadores. El trabajo del servidor de señalización se limita a retransmitir los mensajes de establecimiento de conexión (la información técnica SDP/ICE que WebRTC necesita para establecer un enlace directo) para que los dos dispositivos puedan encontrarse; nunca ve el contenido de los archivos, los nombres de archivo ni las claves.",
+        "Vale la pena precisar exactamente dónde se sitúa el servidor en todo esto, porque «cifrado de extremo a extremo» es una afirmación fácil de hacer y más difícil de precisar. En modo tiempo real en la misma red, el archivo en sí nunca toca los servidores de Relayium — se transmite directamente entre los dos navegadores. El trabajo del servidor de señalización se limita a retransmitir los mensajes de establecimiento de conexión (la información técnica SDP/ICE que WebRTC necesita para establecer un enlace directo) para que los dos dispositivos puedan encontrarse; nunca ve el contenido de los archivos, los nombres de archivo ni las claves.",
         "Entre redes —donde los NAT o cortafuegos restrictivos suelen descartar cualquier ruta directa— el flujo cifrado pasa por un servidor retransmisor TURN. El retransmisor solo reenvía texto cifrado; no tiene ninguna clave y no puede descifrar lo que pasa a través de él. Lo que sí hace es contabilizar los bytes que retransmite contra la asignación mensual de retransmisión de la cuenta que envía, puramente para medición y prevención de abusos — sin inspeccionar nunca lo que hay dentro.",
       ],
     },
@@ -709,11 +709,11 @@ const es = {
       },
       {
         q: "¿Qué ve realmente el servidor?",
-        a: "En modo tiempo real, solo la información de establecimiento de conexión necesaria para presentar dos dispositivos entre sí — nunca los bytes del archivo. Para los enlaces almacenados, ve texto cifrado más datos administrativos como el tamaño y la hora de caducidad — nunca el texto en claro, los nombres de archivo ni la clave de descifrado.",
+        a: "En modo tiempo real en la misma red, solo la información de establecimiento de conexión necesaria para presentar dos dispositivos entre sí — nunca los bytes del archivo. Entre redes, el retransmisor TURN sí transporta esos bytes, pero solo como texto cifrado del que no tiene la clave. Para los enlaces almacenados, ve texto cifrado más datos administrativos como el tamaño y la hora de caducidad — nunca el texto en claro, los nombres de archivo ni la clave de descifrado.",
       },
       {
         q: "¿Es el retransmisor TURN un punto débil?",
-        a: "Es un recurso de reserva que se usa solo cuando una conexión directa no es posible, y siempre maneja únicamente texto cifrado — no tiene ninguna clave, así que no puede leer lo que retransmite. Relayium contabiliza los bytes que retransmite contra la asignación mensual de tu cuenta, pero nunca inspecciona su contenido.",
+        a: "En el navegador transporta por diseño todas las transferencias entre redes, y no solo aquellas en las que falló un camino directo — pero siempre maneja únicamente texto cifrado, y no tiene ninguna clave, así que no puede leer lo que retransmite. Relayium contabiliza los bytes que retransmite contra la asignación mensual de tu cuenta, pero nunca inspecciona su contenido.",
       },
       {
         q: "¿Es Relayium de código abierto?",
@@ -786,7 +786,7 @@ const pt = {
     {
       heading: "O que o servidor pode ver — e o que ele não pode",
       body: [
-        "Vale a pena explicitar exatamente onde o servidor se situa em tudo isso, porque «criptografado de ponta a ponta» é uma afirmação fácil de fazer e mais difícil de fazer com precisão. No modo tempo real, o próprio arquivo nunca toca os servidores do Relayium — ele é transmitido diretamente entre os dois navegadores. O trabalho do servidor de sinalização se limita a retransmitir as mensagens de estabelecimento de conexão (as informações técnicas SDP/ICE de que o WebRTC precisa para estabelecer um link direto) para que os dois dispositivos possam se encontrar; ele nunca vê o conteúdo dos arquivos, os nomes dos arquivos ou as chaves.",
+        "Vale a pena explicitar exatamente onde o servidor se situa em tudo isso, porque «criptografado de ponta a ponta» é uma afirmação fácil de fazer e mais difícil de fazer com precisão. No modo tempo real na mesma rede, o próprio arquivo nunca toca os servidores do Relayium — ele é transmitido diretamente entre os dois navegadores. O trabalho do servidor de sinalização se limita a retransmitir as mensagens de estabelecimento de conexão (as informações técnicas SDP/ICE de que o WebRTC precisa para estabelecer um link direto) para que os dois dispositivos possam se encontrar; ele nunca vê o conteúdo dos arquivos, os nomes dos arquivos ou as chaves.",
         "Entre redes — onde NATs ou firewalls restritivos costumam descartar qualquer caminho direto — o fluxo criptografado passa por um servidor retransmissor TURN. O retransmissor só encaminha texto cifrado; ele não tem chave e não pode descriptografar o que passa por ele. O que ele faz é contar os bytes que retransmite em relação à cota mensal de retransmissão da conta que envia, puramente para medição e prevenção de abuso — sem nunca inspecionar o que há dentro.",
       ],
     },
@@ -800,11 +800,11 @@ const pt = {
       },
       {
         q: "O que o servidor realmente vê?",
-        a: "No modo tempo real, apenas as informações de estabelecimento de conexão necessárias para apresentar dois dispositivos um ao outro — nunca os bytes do arquivo. Para os links armazenados, ele vê texto cifrado mais dados administrativos como tamanho e hora de expiração — nunca o texto claro, os nomes dos arquivos ou a chave de descriptografia.",
+        a: "No modo tempo real na mesma rede, apenas as informações de estabelecimento de conexão necessárias para apresentar dois dispositivos um ao outro — nunca os bytes do arquivo. Entre redes, o retransmissor TURN de fato transporta esses bytes, mas apenas como texto cifrado do qual não tem a chave. Para os links armazenados, ele vê texto cifrado mais dados administrativos como tamanho e hora de expiração — nunca o texto claro, os nomes dos arquivos ou a chave de descriptografia.",
       },
       {
         q: "O retransmissor TURN é um ponto fraco?",
-        a: "É um recurso alternativo usado apenas quando uma conexão direta não é possível, e ele sempre lida somente com texto cifrado — não tem chave, então não pode ler o que retransmite. O Relayium conta os bytes que retransmite em relação à cota mensal da sua conta, mas nunca inspeciona o conteúdo deles.",
+        a: "No navegador ele transporta por projeto todas as transferências entre redes, e não apenas aquelas em que um caminho direto falhou — mas ele sempre lida somente com texto cifrado, e não tem chave, então não pode ler o que retransmite. O Relayium conta os bytes que retransmite em relação à cota mensal da sua conta, mas nunca inspeciona o conteúdo deles.",
       },
       {
         q: "O Relayium é de código aberto?",

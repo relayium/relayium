@@ -1,7 +1,7 @@
 // web/scripts/pages/content/articles/cli-cloud-async.mjs
 // Guide: async cloud transfer with the Relayium CLI — relayium login / up / down.
-// English is the master; zh/ja/ko/de/fr follow the same structure and facts.
-// Command blocks (code) stay English in every language.
+// English is the master; every other locale follows the same structure and facts.
+// Commands stay English in every language; the # comments around them are translated.
 
 const en = {
   title: "Push files to the cloud, pull them on another computer",
@@ -52,14 +52,15 @@ const en = {
       code: [
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
-        `# choose how long it lives (otherwise your account's default applies):
+        `# choose how long it lives (default: 24 hours):
 relayium up ./report.pdf --burn              # deleted after one download
 relayium up ./report.pdf --ttl 7d            # kept 7 days (your plan sets the cap)
 relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
       ],
       bullets: [
         "The link is the whole handoff — copy it to wherever the other machine can read it. Anyone with the link can download the file, so treat it like a password.",
-        "Retention: --burn removes the file after a single download; --ttl <duration> keeps it for a fixed time (e.g. 7d, 24h); --max-downloads <n> allows a fixed number of downloads. Give none and your account's default applies.",
+        "Retention: --burn removes the file after a single download; --ttl <duration> keeps it for a fixed time; --max-downloads <n> allows a fixed number of downloads. Give none of them and the link lives 24 hours, the default when --ttl is absent.",
+        "--ttl takes a duration with a unit — 30m, 12h, 7d, 2w — or a plain number of seconds, so --ttl 3600 and --ttl 1h are the same request. Your plan sets the ceiling: 1 day on Free, 3 days on Plus, 7 days on Pro, 14 days on Max. Ask for longer than your ceiling and the server silently keeps it for the ceiling instead — up prints a note afterwards telling you how long it actually kept it.",
         "up needs you to be logged in; if you're not, it tells you and does nothing.",
       ],
     },
@@ -108,7 +109,7 @@ relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
     items: [
       {
         q: "Do I need an account?",
-        a: "To upload, and to send. relayium up and relayium send both require relayium login — up to store under your account, send so the server can mint its pairing code. relayium down and relayium receive need no account, and push/pull, daemon-direct and sync work without one.",
+        a: "To upload, and to send when a code has to be minted. relayium up always requires relayium login, so the file can be stored under your account. relayium send requires it only when the server has to mint a fresh pairing code for you — run send with a code someone handed you and it mints nothing, so it needs no login. relayium down and relayium receive need no account, and push/pull, daemon-direct and sync work without one.",
       },
       {
         q: "Is my file encrypted?",
@@ -185,14 +186,15 @@ const zh = {
       code: [
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
-        `# 选择它能存活多久（不给则用你账号的默认策略）：
+        `# 选择它能存活多久（默认 24 小时）：
 relayium up ./report.pdf --burn              # 下载一次后即删除
 relayium up ./report.pdf --ttl 7d            # 保留 7 天（上限取决于套餐）
 relayium up ./report.pdf --max-downloads 5   # 允许下载 5 次，之后删除`,
       ],
       bullets: [
         "链接就是全部交接物——把它复制到另一台机器能读到的地方。任何拿到链接的人都能下载该文件，所以要像对待密码一样对待它。",
-        "保留策略：--burn 下载一次后即删；--ttl <时长> 保留固定时间（如 7d、24h）；--max-downloads <n> 允许固定下载次数。都不给则用你账号的默认。",
+        "保留策略：--burn 下载一次后即删；--ttl <时长> 保留固定时间；--max-downloads <n> 允许固定下载次数。三者都不给时，链接保留 24 小时——这就是不带 --ttl 时的默认值。",
+        "--ttl 接受带单位的时长——30m、12h、7d、2w——也接受纯秒数，所以 --ttl 3600 和 --ttl 1h 是同一个请求。上限由你的套餐决定：Free 1 天、Plus 3 天、Pro 7 天、Max 14 天。要求超过上限时，服务器会静默地只按上限保留——up 随后会打印一行提示，告诉你它实际保留了多久。",
         "up 需要你已登录；若未登录，它会提示你且不做任何事。",
       ],
     },
@@ -241,7 +243,7 @@ relayium up ./report.pdf --max-downloads 5   # 允许下载 5 次，之后删除
     items: [
       {
         q: "我需要账号吗？",
-        a: "上传和发送时需要。relayium up 和 relayium send 都需要 relayium login——up 是为了存到你的账号下，send 是为了让服务器签发配对码。relayium down 和 relayium receive 不需要账号，push/pull、daemon 直连、sync 也都不需要。",
+        a: "上传时需要；发送时，只在必须签发配对码的情况下需要。relayium up 始终需要 relayium login，这样文件才能存到你的账号下。relayium send 只在服务器必须为你签发一个新的配对码时才需要——用别人给你的配对码运行 send，它不会签发任何东西，因此也不需要登录。relayium down 和 relayium receive 不需要账号，push/pull、daemon 直连、sync 也都不需要。",
       },
       {
         q: "我的文件加密吗？",
@@ -318,14 +320,15 @@ const ja = {
       code: [
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
-        `# 保持期間を選ぶ（指定しなければアカウントの既定が適用）：
+        `# 保持期間を選ぶ（既定は24時間）：
 relayium up ./report.pdf --burn              # 一度ダウンロードすると削除
 relayium up ./report.pdf --ttl 7d            # 7日間保持（上限はプランによる）
 relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除`,
       ],
       bullets: [
         "リンクが受け渡しのすべてです——相手のマシンが読める場所にコピーしてください。リンクを持つ誰もがダウンロードできるので、パスワードのように扱ってください。",
-        "保持：--burn は一度のダウンロードで削除。--ttl <期間> は一定時間保持（例：7d、24h）。--max-downloads <n> は一定回数まで。いずれも指定しなければアカウントの既定が適用されます。",
+        "保持：--burn は一度のダウンロードで削除。--ttl <期間> は一定時間保持。--max-downloads <n> は一定回数まで。どれも指定しなければリンクは24時間保持されます——これが --ttl を付けないときの既定です。",
+        "--ttl は単位付きの期間——30m、12h、7d、2w——のほか、単なる秒数も受け取ります。つまり --ttl 3600 と --ttl 1h は同じ指定です。上限はプランで決まります：Free は1日、Plus は3日、Pro は7日、Max は14日。上限より長く要求すると、サーバーは黙って上限までしか保持しません——その場合 up が後から、実際に保持される期間を1行で知らせます。",
         "up はログインが必要です。していなければその旨を伝え、何もしません。",
       ],
     },
@@ -374,7 +377,7 @@ relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除`,
     items: [
       {
         q: "アカウントは必要ですか？",
-        a: "アップロードと送信のときに必要です。relayium up と relayium send はどちらも relayium login が必要で、up はあなたのアカウントに保存するため、send はサーバーがペアリングコードを発行するためです。relayium down と relayium receive にアカウントは不要で、push/pull、daemon 直結、sync もアカウントなしで動きます。",
+        a: "アップロードのときと、コードを発行しなければならない送信のときです。relayium up は常に relayium login が必要で、ファイルをあなたのアカウントに保存するためです。relayium send が必要なのは、サーバーが新しいペアリングコードを発行しなければならないときだけです——誰かから渡されたコードで send を実行する場合は何も発行されないため、ログインは要りません。relayium down と relayium receive にアカウントは不要で、push/pull、daemon 直結、sync もアカウントなしで動きます。",
       },
       {
         q: "ファイルは暗号化されますか？",
@@ -451,14 +454,15 @@ const ko = {
       code: [
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
-        `# 얼마나 살려둘지 고르기(없으면 계정 기본값 적용):
+        `# 얼마나 살려둘지 고르기(기본값 24시간):
 relayium up ./report.pdf --burn              # 한 번 다운로드 후 삭제
 relayium up ./report.pdf --ttl 7d            # 7일간 보관(상한은 요금제에 따라 다름)
 relayium up ./report.pdf --max-downloads 5   # 5회까지 허용 후 삭제`,
       ],
       bullets: [
         "링크가 전달의 전부입니다 — 다른 기기가 읽을 수 있는 곳에 복사하세요. 링크를 가진 누구나 파일을 다운로드할 수 있으니 비밀번호처럼 다루세요.",
-        "보관: --burn 은 한 번 다운로드하면 삭제, --ttl <기간> 은 정해진 시간(예: 7d, 24h) 보관, --max-downloads <n> 은 정해진 횟수 허용. 아무것도 주지 않으면 계정 기본값이 적용됩니다.",
+        "보관: --burn 은 한 번 다운로드하면 삭제, --ttl <기간> 은 정해진 시간 보관, --max-downloads <n> 은 정해진 횟수 허용. 셋 다 주지 않으면 링크는 24시간 살아 있습니다 — --ttl 이 없을 때의 기본값입니다.",
+        "--ttl 은 단위가 붙은 기간(30m, 12h, 7d, 2w)이나 초 단위 숫자를 받습니다. 그래서 --ttl 3600 과 --ttl 1h 는 같은 요청입니다. 상한은 요금제가 정합니다: Free 1일, Plus 3일, Pro 7일, Max 14일. 상한보다 길게 요청하면 서버는 조용히 상한까지만 보관하며, up 이 실제로 얼마나 보관되는지 한 줄로 알려줍니다.",
         "up 은 로그인이 필요합니다. 되어 있지 않으면 알려주고 아무 일도 하지 않습니다.",
       ],
     },
@@ -507,7 +511,7 @@ relayium up ./report.pdf --max-downloads 5   # 5회까지 허용 후 삭제`,
     items: [
       {
         q: "계정이 필요한가요?",
-        a: "업로드할 때와 보낼 때요. relayium up 과 relayium send 는 둘 다 relayium login 이 필요합니다 — up 은 당신의 계정에 저장하기 위해, send 는 서버가 페어링 코드를 발급할 수 있도록. relayium down 과 relayium receive 는 계정이 필요 없고, push/pull, daemon 직결, sync 도 계정 없이 동작합니다.",
+        a: "업로드할 때, 그리고 코드를 발급해야 하는 보내기일 때요. relayium up 은 파일을 당신의 계정에 저장해야 하므로 언제나 relayium login 이 필요합니다. relayium send 는 서버가 새 페어링 코드를 발급해야 할 때만 필요합니다 — 누군가 건네준 코드로 send 를 실행하면 아무것도 발급하지 않으므로 로그인이 필요 없습니다. relayium down 과 relayium receive 는 계정이 필요 없고, push/pull, daemon 직결, sync 도 계정 없이 동작합니다.",
       },
       {
         q: "파일은 암호화되나요?",
@@ -584,14 +588,15 @@ const de = {
       code: [
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
-        `# wähle, wie lange sie lebt (sonst gilt die Vorgabe deines Kontos):
+        `# wähle, wie lange sie lebt (Standard: 24 Stunden):
 relayium up ./report.pdf --burn              # nach einem Download gelöscht
 relayium up ./report.pdf --ttl 7d            # 7 Tage aufbewahrt (Obergrenze je nach Tarif)
 relayium up ./report.pdf --max-downloads 5   # 5 Downloads erlaubt, dann weg`,
       ],
       bullets: [
         "Der Link ist die ganze Übergabe — kopiere ihn dorthin, wo der andere Rechner ihn lesen kann. Jeder mit dem Link kann die Datei herunterladen, behandle ihn also wie ein Passwort.",
-        "Aufbewahrung: --burn entfernt die Datei nach einem einzigen Download; --ttl <Dauer> behält sie eine feste Zeit (z. B. 7d, 24h); --max-downloads <n> erlaubt eine feste Anzahl. Gibst du nichts an, gilt die Vorgabe deines Kontos.",
+        "Aufbewahrung: --burn entfernt die Datei nach einem einzigen Download; --ttl <Dauer> behält sie eine feste Zeit; --max-downloads <n> erlaubt eine feste Anzahl. Gibst du keines davon an, lebt der Link 24 Stunden — das ist der Standard ohne --ttl.",
+        "--ttl nimmt eine Dauer mit Einheit — 30m, 12h, 7d, 2w — oder schlicht eine Anzahl Sekunden, --ttl 3600 und --ttl 1h sind also dieselbe Anfrage. Die Obergrenze setzt dein Tarif: 1 Tag bei Free, 3 Tage bei Plus, 7 Tage bei Pro, 14 Tage bei Max. Forderst du mehr als deine Obergrenze, bewahrt der Server sie stillschweigend nur bis zur Obergrenze auf — up gibt danach einen Hinweis aus, wie lange sie tatsächlich bleibt.",
         "up erfordert, dass du angemeldet bist; bist du es nicht, sagt es dir das und tut nichts.",
       ],
     },
@@ -640,7 +645,7 @@ relayium up ./report.pdf --max-downloads 5   # 5 Downloads erlaubt, dann weg`,
     items: [
       {
         q: "Brauche ich ein Konto?",
-        a: "Zum Hochladen und zum Senden. relayium up und relayium send erfordern beide relayium login — up, um unter deinem Konto zu speichern, send, damit der Server seinen Pairing-Code erzeugen kann. relayium down und relayium receive brauchen kein Konto, und push/pull, Daemon-Direkt und sync laufen ohne eines.",
+        a: "Zum Hochladen — und zum Senden, wenn dabei ein Code erzeugt werden muss. relayium up erfordert immer relayium login, damit die Datei unter deinem Konto liegen kann. relayium send erfordert es nur, wenn der Server einen frischen Pairing-Code für dich erzeugen muss — führst du send mit einem Code aus, den dir jemand gegeben hat, wird keiner erzeugt und es braucht keine Anmeldung. relayium down und relayium receive brauchen kein Konto, und push/pull, Daemon-Direkt und sync laufen ohne eines.",
       },
       {
         q: "Ist meine Datei verschlüsselt?",
@@ -717,14 +722,15 @@ const fr = {
       code: [
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
-        `# choisissez sa durée de vie (sinon la valeur par défaut de votre compte s'applique) :
+        `# choisissez sa durée de vie (par défaut : 24 heures) :
 relayium up ./report.pdf --burn              # supprimé après un téléchargement
 relayium up ./report.pdf --ttl 7d            # conservé 7 jours (plafond selon l'offre)
 relayium up ./report.pdf --max-downloads 5   # 5 téléchargements autorisés, puis supprimé`,
       ],
       bullets: [
         "Le lien est toute la remise — copiez-le là où l'autre machine peut le lire. Quiconque a le lien peut télécharger le fichier, traitez-le donc comme un mot de passe.",
-        "Rétention : --burn supprime le fichier après un seul téléchargement ; --ttl <durée> le conserve un temps fixe (p. ex. 7d, 24h) ; --max-downloads <n> autorise un nombre fixe. Sans rien préciser, la valeur par défaut de votre compte s'applique.",
+        "Rétention : --burn supprime le fichier après un seul téléchargement ; --ttl <durée> le conserve un temps fixe ; --max-downloads <n> autorise un nombre fixe. Si vous n'en donnez aucun, le lien vit 24 heures — la valeur par défaut en l'absence de --ttl.",
+        "--ttl accepte une durée avec unité — 30m, 12h, 7d, 2w — ou un simple nombre de secondes : --ttl 3600 et --ttl 1h sont la même demande. Votre offre fixe le plafond : 1 jour en Free, 3 jours en Plus, 7 jours en Pro, 14 jours en Max. Demandez plus que votre plafond et le serveur ne le conserve silencieusement que jusqu'au plafond — up affiche ensuite une note indiquant la durée réellement retenue.",
         "up exige que vous soyez connecté ; sinon il vous le dit et ne fait rien.",
       ],
     },
@@ -773,7 +779,7 @@ relayium up ./report.pdf --max-downloads 5   # 5 téléchargements autorisés, p
     items: [
       {
         q: "Ai-je besoin d'un compte ?",
-        a: "Pour téléverser et pour envoyer. relayium up et relayium send exigent tous deux relayium login — up pour stocker sous votre compte, send pour que le serveur puisse générer son code d'appairage. relayium down et relayium receive ne demandent aucun compte, et push/pull, daemon direct et sync fonctionnent sans.",
+        a: "Pour téléverser, et pour envoyer quand un code doit être généré. relayium up exige toujours relayium login, afin que le fichier soit stocké sous votre compte. relayium send ne l'exige que lorsque le serveur doit générer un nouveau code d'appairage pour vous — lancez send avec un code qu'on vous a remis et il n'en génère aucun, donc il ne demande pas de connexion. relayium down et relayium receive ne demandent aucun compte, et push/pull, daemon direct et sync fonctionnent sans.",
       },
       {
         q: "Mon fichier est-il chiffré ?",
@@ -850,14 +856,15 @@ const ar = {
       code: [
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
-        `# choose how long it lives (otherwise your account's default applies):
-relayium up ./report.pdf --burn              # deleted after one download
-relayium up ./report.pdf --ttl 7d            # kept 7 days (your plan sets the cap)
-relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
+        `# اختر مدة بقائه (الافتراضي: 24 ساعة):
+relayium up ./report.pdf --burn              # يُحذف بعد تنزيل واحد
+relayium up ./report.pdf --ttl 7d            # يُحفظ 7 أيام (خطتك تحدّد السقف)
+relayium up ./report.pdf --max-downloads 5   # يسمح بـ 5 تنزيلات ثم يختفي`,
       ],
       bullets: [
         "الرابط هو كامل التسليم — انسخه إلى حيث يستطيع الجهاز الآخر قراءته. أي شخص يملك الرابط يستطيع تنزيل الملف، فعامله كأنه كلمة مرور.",
-        "الاحتفاظ: --burn يزيل الملف بعد تنزيل واحد؛ و --ttl <duration> يبقيه مدة ثابتة (مثل 7d، 24h)؛ و --max-downloads <n> يسمح بعدد ثابت من التنزيلات. لا تعطِ شيئًا وينطبق الإعداد الافتراضي لحسابك.",
+        "الاحتفاظ: --burn يزيل الملف بعد تنزيل واحد؛ و --ttl <duration> يبقيه مدة ثابتة؛ و --max-downloads <n> يسمح بعدد ثابت من التنزيلات. إن لم تعطِ أيًّا منها عاش الرابط 24 ساعة — وهذا هو الافتراضي عند غياب --ttl.",
+        "يقبل --ttl مدةً بوحدة — 30m أو 12h أو 7d أو 2w — كما يقبل عدد ثوانٍ مجردًا، فـ --ttl 3600 و --ttl 1h طلب واحد. وخطتك تحدّد السقف: يوم واحد في Free، و3 أيام في Plus، و7 أيام في Pro، و14 يومًا في Max. وإن طلبت أطول من سقفك، احتفظ الخادم به حتى السقف فقط وبصمت — ثم يطبع up سطرًا يخبرك بالمدة التي حُفِظ بها فعلًا.",
         "يحتاج up إلى أن تكون مسجّل الدخول؛ إن لم تكن، يخبرك ولا يفعل شيئًا.",
       ],
     },
@@ -906,7 +913,7 @@ relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
     items: [
       {
         q: "هل أحتاج إلى حساب؟",
-        a: "للرفع وللإرسال. يتطلب كلٌّ من relayium up و relayium send تسجيل relayium login — الأول ليخزّن تحت حسابك، والثاني كي يُصدر الخادم رمز الاقتران. أما relayium down و relayium receive فلا يحتاجان إلى حساب، وكذلك تعمل push/pull، وdaemon-direct، وsync بلا واحد.",
+        a: "للرفع، وللإرسال حين يلزم إصدار رمز. يتطلب relayium up دائمًا تسجيل relayium login كي يُخزَّن الملف تحت حسابك. أما relayium send فلا يتطلبه إلا حين يلزم الخادم أن يُصدر لك رمز اقتران جديدًا — فإن شغّلت send برمزٍ سلّمه إليك أحدهم، فهو لا يُصدر شيئًا ولا يلزمه تسجيل الدخول. أما relayium down و relayium receive فلا يحتاجان إلى حساب، وكذلك تعمل push/pull، وdaemon-direct، وsync بلا واحد.",
       },
       {
         q: "هل ملفي مشفّر؟",
@@ -983,14 +990,15 @@ const es = {
       code: [
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
-        `# choose how long it lives (otherwise your account's default applies):
-relayium up ./report.pdf --burn              # deleted after one download
-relayium up ./report.pdf --ttl 7d            # kept 7 days (your plan sets the cap)
-relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
+        `# elige cuánto vive (por defecto: 24 horas):
+relayium up ./report.pdf --burn              # borrado tras una descarga
+relayium up ./report.pdf --ttl 7d            # guardado 7 días (tu plan pone el tope)
+relayium up ./report.pdf --max-downloads 5   # 5 descargas y luego desaparece`,
       ],
       bullets: [
         "El enlace es toda la entrega — cópialo a donde la otra máquina pueda leerlo. Cualquiera con el enlace puede descargar el archivo, así que trátalo como una contraseña.",
-        "Retención: --burn elimina el archivo tras una sola descarga; --ttl <duración> lo conserva un tiempo fijo (p. ej. 7d, 24h); --max-downloads <n> permite un número fijo de descargas. Si no das ninguno, se aplica el valor por defecto de tu cuenta.",
+        "Retención: --burn elimina el archivo tras una sola descarga; --ttl <duración> lo conserva un tiempo fijo; --max-downloads <n> permite un número fijo de descargas. Si no das ninguno de los tres, el enlace vive 24 horas — el valor por defecto cuando falta --ttl.",
+        "--ttl acepta una duración con unidad —30m, 12h, 7d, 2w— o un simple número de segundos, así que --ttl 3600 y --ttl 1h son la misma petición. Tu plan pone el tope: 1 día en Free, 3 días en Plus, 7 días en Pro, 14 días en Max. Si pides más que tu tope, el servidor lo guarda en silencio solo hasta el tope, y up imprime después una nota diciéndote cuánto lo guardó en realidad.",
         "up necesita que hayas iniciado sesión; si no lo has hecho, te lo dice y no hace nada.",
       ],
     },
@@ -1039,7 +1047,7 @@ relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
     items: [
       {
         q: "¿Necesito una cuenta?",
-        a: "Para subir y para enviar. relayium up y relayium send requieren ambos relayium login — up para guardar bajo tu cuenta, send para que el servidor pueda generar su código de emparejamiento. relayium down y relayium receive no necesitan cuenta, y push/pull, daemon-direct y sync funcionan sin una.",
+        a: "Para subir, y para enviar cuando hay que generar un código. relayium up requiere siempre relayium login, para guardar el archivo bajo tu cuenta. relayium send lo requiere solo cuando el servidor tiene que generar un código de emparejamiento nuevo para ti — si ejecutas send con un código que te han dado, no genera ninguno, así que no hace falta iniciar sesión. relayium down y relayium receive no necesitan cuenta, y push/pull, daemon-direct y sync funcionan sin una.",
       },
       {
         q: "¿Está cifrado mi archivo?",
@@ -1116,14 +1124,15 @@ const pt = {
       code: [
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
-        `# choose how long it lives (otherwise your account's default applies):
-relayium up ./report.pdf --burn              # deleted after one download
-relayium up ./report.pdf --ttl 7d            # kept 7 days (your plan sets the cap)
-relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
+        `# escolha quanto tempo ele vive (padrão: 24 horas):
+relayium up ./report.pdf --burn              # apagado após um download
+relayium up ./report.pdf --ttl 7d            # guardado por 7 dias (seu plano define o teto)
+relayium up ./report.pdf --max-downloads 5   # 5 downloads permitidos, depois some`,
       ],
       bullets: [
         "O link é toda a entrega — copie-o para onde a outra máquina possa lê-lo. Qualquer pessoa com o link pode baixar o arquivo, então trate-o como uma senha.",
-        "Retenção: --burn remove o arquivo após um único download; --ttl <duração> o mantém por um tempo fixo (por exemplo, 7d, 24h); --max-downloads <n> permite um número fixo de downloads. Não informe nenhum e o padrão da sua conta se aplica.",
+        "Retenção: --burn remove o arquivo após um único download; --ttl <duração> o mantém por um tempo fixo; --max-downloads <n> permite um número fixo de downloads. Não informe nenhum dos três e o link vive 24 horas — o padrão quando --ttl está ausente.",
+        "O --ttl aceita uma duração com unidade — 30m, 12h, 7d, 2w — ou um simples número de segundos, então --ttl 3600 e --ttl 1h são o mesmo pedido. O seu plano define o teto: 1 dia no Free, 3 dias no Plus, 7 dias no Pro, 14 dias no Max. Peça mais do que o seu teto e o servidor o guarda em silêncio apenas até o teto — o up imprime depois um aviso dizendo por quanto tempo ele realmente ficou guardado.",
         "O up precisa que você esteja logado; se não estiver, ele avisa e não faz nada.",
       ],
     },
@@ -1172,7 +1181,7 @@ relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
     items: [
       {
         q: "Preciso de uma conta?",
-        a: "Para enviar ao servidor e para o send. O relayium up e o relayium send exigem os dois relayium login — o up para guardar sob a sua conta, o send para que o servidor possa gerar o seu código de emparelhamento. O relayium down e o relayium receive não precisam de conta, e push/pull, daemon-direct e sync funcionam sem uma.",
+        a: "Para enviar para a nuvem, e para o send quando um código precisa ser gerado. O relayium up sempre exige relayium login, para que o arquivo fique guardado sob a sua conta. O relayium send só exige quando o servidor precisa gerar um novo código de emparelhamento para você — se você executar send com um código que alguém lhe passou, nada é gerado, então nenhum login é necessário. O relayium down e o relayium receive não precisam de conta, e push/pull, daemon-direct e sync funcionam sem uma.",
       },
       {
         q: "Meu arquivo é criptografado?",

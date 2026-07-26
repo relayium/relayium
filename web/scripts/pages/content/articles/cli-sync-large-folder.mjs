@@ -1,8 +1,8 @@
 // web/scripts/pages/content/articles/cli-sync-large-folder.mjs
 // How-to: sync a large folder between two servers with relayium sync —
 // incremental, resumable, run unattended in the background via a retry loop + tmux.
-// English is the master; zh/ja/ko/de/fr follow the same structure and facts.
-// Command blocks (code) stay English in every language.
+// English is the master; every other locale follows the same structure and facts.
+// Commands stay English in every language; the # comments around them are translated.
 
 const en = {
   title: "Sync a large folder between two servers (resumable, in the background)",
@@ -115,7 +115,7 @@ pkill -f 'relayium serve'`,
         "SYN-SENT means the port is blocked. Open 9031/TCP to the sender on the receiver (cloud security group, or ufw allow 9031/tcp). This is the most common cause of a transfer that never starts.",
         "Prefer tmux plus a single-line loop over multi-line nohup. Pasting a multi-line command with quotes and a > redirect into a shell often breaks on the redirect or leaves you at a > continuation prompt.",
         "When cleaning up processes, match precisely (pkill -f 'relayium sync'), not pkill relayium — a broad match can kill an unrelated relayium process running on the same box.",
-        "venv and other regenerable directories are worth excluding. A Python virtualenv can hold gigabytes of libraries that pip recreates on the far side; skipping them saves a lot of transfer.",
+        "There is no exclude flag, so name your sources instead. sync takes -i and -p (SSH identity and port), --delete, --watch and --config-dir — nothing that filters a path out mid-tree. To leave a regenerable directory like a Python venv behind, sync the subdirectories you actually want: sync accepts several sources at once, and each one arrives under the receiver's --dir by its own name. relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 against serve --dir /root/workspace rebuilds them at /root/workspace/src and /root/workspace/data, and the venv is never walked.",
         "Symlinks and special files are skipped — sync transfers regular files only. Handle any important symlinks separately.",
       ],
     },
@@ -181,7 +181,7 @@ const zh = {
         "两端服务器都要装 relayium（sync 走原生协议，因此每一端都必须有）：",
       ],
       code: [
-        `# on BOTH servers
+        `# 两台服务器上都执行
 curl -fsSL https://relayium.com/install.sh | sh`,
       ],
       bullets: [
@@ -196,9 +196,9 @@ curl -fsSL https://relayium.com/install.sh | sh`,
         "当发送方首次连接时（见下一节），serve 会显示它的地址和指纹并请你批准；回答 y，它就会被永久记住：",
       ],
       code: [
-        `# on the RECEIVER (foreground, to approve interactively)
+        `# 在接收方（前台运行，以便交互式批准）
 relayium serve --dir /root --port 9031`,
-        `# on the RECEIVER, at the first connection:
+        `# 在接收方，首次连接时：
 Incoming push from 203.0.113.9:52140
   fingerprint: 9f2c41ab…
 Accept and remember this peer? [y/N] y`,
@@ -214,7 +214,7 @@ Accept and remember this peer? [y/N] y`,
         "指纹授权之后，停掉前台的 serve（Ctrl-C），再以脱离终端的方式重新启动，让它在你退出登录后依然存活。它会读回已保存的指纹并静默接受发送方——这次不再提示：",
       ],
       code: [
-        `# on the RECEIVER
+        `# 在接收方
 nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
       ],
       bullets: [
@@ -229,8 +229,8 @@ nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
         "开一个 tmux 会话，然后在 until 循环里运行镜像——它每 10 秒重试一次，直到 sync 成功返回，然后自己退出：",
       ],
       code: [
-        `# on the SENDER
-tmux new -s xfer      # apt install -y tmux if it's missing`,
+        `# 在发送方
+tmux new -s xfer      # 没有 tmux 就 apt install -y tmux`,
         `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
       ],
       bullets: [
@@ -245,9 +245,9 @@ tmux new -s xfer      # apt install -y tmux if it's missing`,
         "当 until 循环结束、你回到普通的 shell 提示符时，传输就完成了。确认两边一致，然后停掉监听端：",
       ],
       code: [
-        `# compare totals on BOTH servers
+        `# 在两台服务器上比较总量
 du -sh /root/workspace`,
-        `# on the RECEIVER, once verified
+        `# 在接收方，确认无误后
 pkill -f 'relayium serve'`,
       ],
       bullets: [
@@ -264,7 +264,7 @@ pkill -f 'relayium serve'`,
         "SYN-SENT 表示端口被挡。在接收方向发送方开放 9031/TCP（云安全组，或 ufw allow 9031/tcp）。这是「传输迟迟不开始」最常见的原因。",
         "优先用 tmux 加单行循环，而不是多行 nohup。把带引号和 > 重定向的多行命令粘进 shell，常常会在重定向处出错，或让你停在 > 续行提示符上。",
         "清理进程时要精确匹配（pkill -f 'relayium sync'），而不是 pkill relayium——宽泛匹配可能误杀同一台机器上无关的 relayium 进程。",
-        "venv 等可再生目录值得排除。一个 Python 虚拟环境可能装着几个 GB 的库，这些在对端 pip 就能重建；跳过它们能省下大量传输。",
+        "没有排除参数，所以要靠指定源目录来控制范围。sync 只接受 -i 和 -p（SSH 身份文件与端口）、--delete、--watch 和 --config-dir——没有任何能在目录树中间过滤某个路径的选项。想跳过 Python 虚拟环境这类可再生目录，就直接同步你真正需要的子目录：sync 一次可以接受多个源，每个源都会以自己的名字落到接收方的 --dir 下面。用 relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 配合 serve --dir /root/workspace，它们会被还原到 /root/workspace/src 和 /root/workspace/data，而 venv 根本不会被遍历。",
         "符号链接和特殊文件会被跳过——sync 只传常规文件。重要的软链请单独处理。",
       ],
     },
@@ -330,7 +330,7 @@ const ja = {
         "両方のサーバーに relayium をインストールします(sync はネイティブプロトコルを話すため、各端に必要です):",
       ],
       code: [
-        `# on BOTH servers
+        `# 両方のサーバーで
 curl -fsSL https://relayium.com/install.sh | sh`,
       ],
       bullets: [
@@ -345,9 +345,9 @@ curl -fsSL https://relayium.com/install.sh | sh`,
         "送信側の初回接続時(次節)、serve はその住所とフィンガープリントを表示して承認を求めます。y と答えれば永続的に記憶されます:",
       ],
       code: [
-        `# on the RECEIVER (foreground, to approve interactively)
+        `# 受信側で（フォアグラウンド、対話的に承認するため）
 relayium serve --dir /root --port 9031`,
-        `# on the RECEIVER, at the first connection:
+        `# 受信側で、初回接続時:
 Incoming push from 203.0.113.9:52140
   fingerprint: 9f2c41ab…
 Accept and remember this peer? [y/N] y`,
@@ -363,7 +363,7 @@ Accept and remember this peer? [y/N] y`,
         "フィンガープリントを承認したら、フォアグラウンドの serve を止め(Ctrl-C)、ログアウト後も生き残るようデタッチして再起動します。保存済みのフィンガープリントを読み込み、送信側を確認なしで受け入れます——今回はプロンプトは出ません:",
       ],
       code: [
-        `# on the RECEIVER
+        `# 受信側で
 nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
       ],
       bullets: [
@@ -378,8 +378,8 @@ nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
         "tmux セッションを開始し、until ループでミラーを実行します——10秒ごとに再試行し、sync が成功を返したら自分で終了します:",
       ],
       code: [
-        `# on the SENDER
-tmux new -s xfer      # apt install -y tmux if it's missing`,
+        `# 送信側で
+tmux new -s xfer      # tmux が無ければ apt install -y tmux`,
         `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
       ],
       bullets: [
@@ -394,9 +394,9 @@ tmux new -s xfer      # apt install -y tmux if it's missing`,
         "until ループが終わり、通常のシェルプロンプトに戻ったら転送は完了です。両側が一致することを確認してから、リスナーを停止します:",
       ],
       code: [
-        `# compare totals on BOTH servers
+        `# 両方のサーバーで合計を比較
 du -sh /root/workspace`,
-        `# on the RECEIVER, once verified
+        `# 受信側で、確認できたら
 pkill -f 'relayium serve'`,
       ],
       bullets: [
@@ -413,7 +413,7 @@ pkill -f 'relayium serve'`,
         "SYN-SENT はポートが遮断されている印です。受信側で送信側に向けて 9031/TCP を開放します(クラウドのセキュリティグループ、または ufw allow 9031/tcp)。「転送がいつまでも始まらない」最も一般的な原因です。",
         "複数行の nohup より、tmux と1行のループを優先します。引用符と > リダイレクトを含む複数行コマンドをシェルに貼り付けると、リダイレクトで壊れたり、> の継続プロンプトで止まったりしがちです。",
         "プロセスを片付けるときは正確に一致させます(pkill -f 'relayium sync')。pkill relayium ではありません——広い一致は同じマシンで動く無関係な relayium プロセスを巻き込みかねません。",
-        "venv などの再生成可能なディレクトリは除外する価値があります。Python の仮想環境は数 GB のライブラリを抱えることがあり、対向側で pip が作り直せます。除けば転送を大きく節約できます。",
+        "除外フラグはありません。代わりにソースを指定してください。sync が取るのは -i と -p(SSH の鍵とポート)、--delete、--watch、--config-dir だけで、ツリーの途中のパスを絞り込む手段はありません。Python の仮想環境のような再生成可能なディレクトリを置いていくには、本当に欲しいサブディレクトリを同期します: sync は複数のソースを一度に受け取り、それぞれが自分の名前で受信側の --dir の下に届きます。relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 を serve --dir /root/workspace に対して実行すれば /root/workspace/src と /root/workspace/data に復元され、venv は一度も走査されません。",
         "シンボリックリンクと特殊ファイルはスキップされます——sync が転送するのは通常ファイルだけです。重要なシンボリックリンクは別途扱ってください。",
       ],
     },
@@ -479,7 +479,7 @@ const ko = {
         "양쪽 서버에 relayium을 설치하세요(sync는 네이티브 프로토콜을 쓰므로 각 끝에 필요합니다):",
       ],
       code: [
-        `# on BOTH servers
+        `# 양쪽 서버 모두에서
 curl -fsSL https://relayium.com/install.sh | sh`,
       ],
       bullets: [
@@ -494,9 +494,9 @@ curl -fsSL https://relayium.com/install.sh | sh`,
         "보내는 쪽의 첫 연결 시(다음 절), serve가 그 주소와 핑거프린트를 보여주며 승인을 요청합니다. y라고 답하면 영구적으로 기억됩니다:",
       ],
       code: [
-        `# on the RECEIVER (foreground, to approve interactively)
+        `# 받는 쪽에서(포그라운드, 대화식으로 승인하기 위해)
 relayium serve --dir /root --port 9031`,
-        `# on the RECEIVER, at the first connection:
+        `# 받는 쪽에서, 첫 연결 시:
 Incoming push from 203.0.113.9:52140
   fingerprint: 9f2c41ab…
 Accept and remember this peer? [y/N] y`,
@@ -512,7 +512,7 @@ Accept and remember this peer? [y/N] y`,
         "핑거프린트를 승인했으면 포그라운드 serve를 멈추고(Ctrl-C), 로그아웃 후에도 살아남도록 분리해서 다시 실행하세요. 저장된 핑거프린트를 불러와 보내는 쪽을 조용히 받아들입니다——이번엔 프롬프트가 없습니다:",
       ],
       code: [
-        `# on the RECEIVER
+        `# 받는 쪽에서
 nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
       ],
       bullets: [
@@ -527,8 +527,8 @@ nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
         "tmux 세션을 시작한 뒤 until 루프로 미러를 실행하세요——10초마다 재시도하고 sync가 성공을 반환하면 스스로 종료합니다:",
       ],
       code: [
-        `# on the SENDER
-tmux new -s xfer      # apt install -y tmux if it's missing`,
+        `# 보내는 쪽에서
+tmux new -s xfer      # tmux 가 없으면 apt install -y tmux`,
         `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
       ],
       bullets: [
@@ -543,9 +543,9 @@ tmux new -s xfer      # apt install -y tmux if it's missing`,
         "until 루프가 끝나고 평범한 셸 프롬프트로 돌아오면 전송이 완료된 것입니다. 양쪽이 일치하는지 확인한 뒤 리스너를 멈추세요:",
       ],
       code: [
-        `# compare totals on BOTH servers
+        `# 양쪽 서버에서 합계 비교
 du -sh /root/workspace`,
-        `# on the RECEIVER, once verified
+        `# 받는 쪽에서, 확인이 끝나면
 pkill -f 'relayium serve'`,
       ],
       bullets: [
@@ -562,7 +562,7 @@ pkill -f 'relayium serve'`,
         "SYN-SENT은 포트가 막혔다는 신호입니다. 받는 쪽에서 보내는 쪽으로 9031/TCP를 여세요(클라우드 보안 그룹 또는 ufw allow 9031/tcp). 전송이 아예 시작되지 않는 가장 흔한 원인입니다.",
         "여러 줄 nohup보다 tmux와 한 줄 루프를 택하세요. 따옴표와 > 리다이렉트가 있는 여러 줄 명령을 셸에 붙여 넣으면 리다이렉트에서 깨지거나 > 연속 프롬프트에서 멈추기 쉽습니다.",
         "프로세스를 정리할 때는 정확히 일치시키세요(pkill -f 'relayium sync'). pkill relayium이 아닙니다——넓은 일치는 같은 기기에서 도는 무관한 relayium 프로세스를 잡을 수 있습니다.",
-        "venv 등 재생성 가능한 디렉터리는 제외할 가치가 있습니다. 파이썬 가상환경은 수 GB의 라이브러리를 담을 수 있고 반대편에서 pip가 다시 만들 수 있습니다. 건너뛰면 전송을 크게 아낍니다.",
+        "제외 플래그는 없으니 대신 소스를 골라서 지정하세요. sync가 받는 것은 -i와 -p(SSH 신원 파일과 포트), --delete, --watch, --config-dir뿐이고, 트리 중간의 경로를 걸러내는 수단은 없습니다. 파이썬 가상환경처럼 다시 만들 수 있는 디렉터리를 두고 가려면 정말 필요한 하위 디렉터리를 동기화하세요: sync는 소스를 여러 개 한꺼번에 받고, 각각은 자기 이름 그대로 받는 쪽 --dir 아래에 도착합니다. relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 을 serve --dir /root/workspace에 대고 실행하면 /root/workspace/src와 /root/workspace/data로 복원되고, venv는 아예 훑지 않습니다.",
         "심링크와 특수 파일은 건너뜁니다——sync는 일반 파일만 전송합니다. 중요한 심링크는 따로 처리하세요.",
       ],
     },
@@ -628,7 +628,7 @@ const de = {
         "Installiere relayium auf beiden Servern (sync spricht das native Protokoll, muss also an jedem Ende vorhanden sein):",
       ],
       code: [
-        `# on BOTH servers
+        `# auf BEIDEN Servern
 curl -fsSL https://relayium.com/install.sh | sh`,
       ],
       bullets: [
@@ -643,9 +643,9 @@ curl -fsSL https://relayium.com/install.sh | sh`,
         "Bei der ersten Verbindung des Senders (nächster Abschnitt) zeigt serve dessen Adresse und Fingerprint und bittet dich um Genehmigung; antworte mit y, und er wird dauerhaft gespeichert:",
       ],
       code: [
-        `# on the RECEIVER (foreground, to approve interactively)
+        `# auf dem EMPFÄNGER (im Vordergrund, zum interaktiven Genehmigen)
 relayium serve --dir /root --port 9031`,
-        `# on the RECEIVER, at the first connection:
+        `# auf dem EMPFÄNGER, bei der ersten Verbindung:
 Incoming push from 203.0.113.9:52140
   fingerprint: 9f2c41ab…
 Accept and remember this peer? [y/N] y`,
@@ -661,7 +661,7 @@ Accept and remember this peer? [y/N] y`,
         "Ist der Fingerprint genehmigt, beende das serve im Vordergrund (Ctrl-C) und starte es abgekoppelt neu, damit es dein Ausloggen übersteht. Es lädt den gespeicherten Fingerprint und akzeptiert den Sender stillschweigend — diesmal ohne Abfrage:",
       ],
       code: [
-        `# on the RECEIVER
+        `# auf dem EMPFÄNGER
 nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
       ],
       bullets: [
@@ -676,8 +676,8 @@ nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
         "Starte eine tmux-Sitzung und führe den Spiegel in einer until-Schleife aus — sie versucht es alle 10 Sekunden erneut, bis sync Erfolg meldet, und beendet sich dann von selbst:",
       ],
       code: [
-        `# on the SENDER
-tmux new -s xfer      # apt install -y tmux if it's missing`,
+        `# auf dem SENDER
+tmux new -s xfer      # apt install -y tmux, falls es fehlt`,
         `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
       ],
       bullets: [
@@ -692,9 +692,9 @@ tmux new -s xfer      # apt install -y tmux if it's missing`,
         "Die Übertragung ist abgeschlossen, wenn die until-Schleife endet und du wieder an einer normalen Shell-Eingabe bist. Prüfe, dass beide Seiten übereinstimmen, und stoppe dann den Listener:",
       ],
       code: [
-        `# compare totals on BOTH servers
+        `# Gesamtgrößen auf BEIDEN Servern vergleichen
 du -sh /root/workspace`,
-        `# on the RECEIVER, once verified
+        `# auf dem EMPFÄNGER, sobald geprüft
 pkill -f 'relayium serve'`,
       ],
       bullets: [
@@ -711,7 +711,7 @@ pkill -f 'relayium serve'`,
         "SYN-SENT heißt, der Port ist blockiert. Öffne 9031/TCP für den Sender auf dem Empfänger (Cloud-Security-Group oder ufw allow 9031/tcp). Das ist die häufigste Ursache für eine Übertragung, die nie startet.",
         "Bevorzuge tmux plus eine einzeilige Schleife gegenüber mehrzeiligem nohup. Fügt man einen mehrzeiligen Befehl mit Anführungszeichen und einer >-Umleitung in eine Shell ein, bricht das oft an der Umleitung oder lässt dich an einer >-Fortsetzungseingabe hängen.",
         "Beim Aufräumen von Prozessen genau abgleichen (pkill -f 'relayium sync'), nicht pkill relayium — ein breiter Abgleich kann einen unbeteiligten relayium-Prozess auf derselben Maschine mit erwischen.",
-        "venv und andere neu erzeugbare Verzeichnisse lohnt es auszuschließen. Ein Python-Virtualenv kann Gigabytes an Bibliotheken enthalten, die pip auf der Gegenseite neu erstellt; sie zu überspringen spart viel Übertragung.",
+        "Es gibt keinen Ausschluss-Schalter — benenne stattdessen deine Quellen. sync nimmt -i und -p (SSH-Schlüssel und Port), --delete, --watch und --config-dir, aber nichts, was einen Pfad mitten im Baum herausfiltert. Um ein neu erzeugbares Verzeichnis wie ein Python-Virtualenv liegen zu lassen, synchronisiere die Unterverzeichnisse, die du wirklich willst: sync nimmt mehrere Quellen auf einmal, und jede landet unter dem --dir des Empfängers unter ihrem eigenen Namen. relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 gegen serve --dir /root/workspace stellt sie unter /root/workspace/src und /root/workspace/data wieder her, und das venv wird nie durchlaufen.",
         "Symlinks und Spezialdateien werden übersprungen — sync überträgt nur reguläre Dateien. Wichtige Symlinks separat behandeln.",
       ],
     },
@@ -777,7 +777,7 @@ const fr = {
         "Installez relayium sur les deux serveurs (sync parle le protocole natif, il doit donc être présent à chaque bout) :",
       ],
       code: [
-        `# on BOTH servers
+        `# sur les DEUX serveurs
 curl -fsSL https://relayium.com/install.sh | sh`,
       ],
       bullets: [
@@ -792,9 +792,9 @@ curl -fsSL https://relayium.com/install.sh | sh`,
         "À la première connexion de l'émetteur (section suivante), serve affiche son adresse et son empreinte et vous demande de l'approuver ; répondez y et elle est mémorisée pour de bon :",
       ],
       code: [
-        `# on the RECEIVER (foreground, to approve interactively)
+        `# sur le RÉCEPTEUR (au premier plan, pour approuver de façon interactive)
 relayium serve --dir /root --port 9031`,
-        `# on the RECEIVER, at the first connection:
+        `# sur le RÉCEPTEUR, à la première connexion :
 Incoming push from 203.0.113.9:52140
   fingerprint: 9f2c41ab…
 Accept and remember this peer? [y/N] y`,
@@ -810,7 +810,7 @@ Accept and remember this peer? [y/N] y`,
         "Une fois l'empreinte autorisée, arrêtez le serve au premier plan (Ctrl-C) et relancez-le détaché pour qu'il survive à votre déconnexion. Il charge l'empreinte enregistrée et accepte l'émetteur silencieusement — pas d'invite cette fois :",
       ],
       code: [
-        `# on the RECEIVER
+        `# sur le RÉCEPTEUR
 nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
       ],
       bullets: [
@@ -825,8 +825,8 @@ nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
         "Démarrez une session tmux, puis exécutez le miroir dans une boucle until — elle réessaie toutes les 10 secondes jusqu'à ce que sync réussisse, puis se termine d'elle-même :",
       ],
       code: [
-        `# on the SENDER
-tmux new -s xfer      # apt install -y tmux if it's missing`,
+        `# sur l'ÉMETTEUR
+tmux new -s xfer      # apt install -y tmux s'il manque`,
         `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
       ],
       bullets: [
@@ -841,9 +841,9 @@ tmux new -s xfer      # apt install -y tmux if it's missing`,
         "Le transfert est terminé quand la boucle until s'achève et que vous revenez à une invite shell normale. Confirmez que les deux côtés correspondent, puis arrêtez l'écouteur :",
       ],
       code: [
-        `# compare totals on BOTH servers
+        `# comparez les totaux sur les DEUX serveurs
 du -sh /root/workspace`,
-        `# on the RECEIVER, once verified
+        `# sur le RÉCEPTEUR, une fois vérifié
 pkill -f 'relayium serve'`,
       ],
       bullets: [
@@ -860,7 +860,7 @@ pkill -f 'relayium serve'`,
         "SYN-SENT signifie que le port est bloqué. Ouvrez 9031/TCP à l'émetteur sur le récepteur (groupe de sécurité cloud, ou ufw allow 9031/tcp). C'est la cause la plus fréquente d'un transfert qui ne démarre jamais.",
         "Préférez tmux plus une boucle sur une seule ligne au nohup multi-lignes. Coller dans un shell une commande multi-lignes avec des guillemets et une redirection > casse souvent sur la redirection ou vous laisse à une invite de continuation >.",
         "En nettoyant les processus, faites une correspondance précise (pkill -f 'relayium sync'), pas pkill relayium — une correspondance large peut tuer un processus relayium sans rapport tournant sur la même machine.",
-        "venv et autres répertoires régénérables valent la peine d'être exclus. Un environnement virtuel Python peut contenir des gigaoctets de bibliothèques que pip recrée de l'autre côté ; les sauter économise beaucoup de transfert.",
+        "Il n'y a pas d'option d'exclusion : nommez plutôt vos sources. sync accepte -i et -p (clé et port SSH), --delete, --watch et --config-dir, et rien qui filtre un chemin au milieu de l'arborescence. Pour laisser de côté un répertoire régénérable comme un environnement virtuel Python, synchronisez les sous-répertoires qui vous intéressent vraiment : sync accepte plusieurs sources à la fois, et chacune arrive sous le --dir du récepteur sous son propre nom. relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 face à serve --dir /root/workspace les reconstitue dans /root/workspace/src et /root/workspace/data, et le venv n'est jamais parcouru.",
         "Les liens symboliques et fichiers spéciaux sont sautés — sync ne transfère que des fichiers réguliers. Traitez séparément les liens symboliques importants.",
       ],
     },
@@ -926,7 +926,7 @@ const ar = {
         "ثبّت relayium على كلا الخادمين (sync يتحدث البروتوكول الأصلي، فيجب أن يكون حاضراً على كل طرف):",
       ],
       code: [
-        `# on BOTH servers
+        `# على كلا الخادمين
 curl -fsSL https://relayium.com/install.sh | sh`,
       ],
       bullets: [
@@ -941,9 +941,9 @@ curl -fsSL https://relayium.com/install.sh | sh`,
         "عند أول اتصال للمُرسِل (القسم التالي)، يُظهِر serve عنوانه وبصمته ويطلب منك اعتماده؛ أجِب بـ y فيُحفَظ إلى الأبد:",
       ],
       code: [
-        `# on the RECEIVER (foreground, to approve interactively)
+        `# على المُستقبِل (في المقدمة، للاعتماد تفاعلياً)
 relayium serve --dir /root --port 9031`,
-        `# on the RECEIVER, at the first connection:
+        `# على المُستقبِل، عند أول اتصال:
 Incoming push from 203.0.113.9:52140
   fingerprint: 9f2c41ab…
 Accept and remember this peer? [y/N] y`,
@@ -959,7 +959,7 @@ Accept and remember this peer? [y/N] y`,
         "بمجرد اعتماد البصمة، أوقِف serve الذي في المقدمة (Ctrl-C) وأعِد تشغيله منفصلاً كي يصمد بعد خروجك من الجلسة. يحمّل البصمة المحفوظة ويقبل المُرسِل بصمت — لا مُطالبة هذه المرة:",
       ],
       code: [
-        `# on the RECEIVER
+        `# على المُستقبِل
 nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
       ],
       bullets: [
@@ -974,8 +974,8 @@ nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
         "ابدأ جلسة tmux، ثم شغّل المرآة في حلقة until — تعيد المحاولة كل 10 ثوانٍ حتى يُرجِع sync نجاحاً، ثم تخرج من تلقاء نفسها:",
       ],
       code: [
-        `# on the SENDER
-tmux new -s xfer      # apt install -y tmux if it's missing`,
+        `# على المُرسِل
+tmux new -s xfer      # نفّذ apt install -y tmux إن لم يكن موجوداً`,
         `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
       ],
       bullets: [
@@ -990,9 +990,9 @@ tmux new -s xfer      # apt install -y tmux if it's missing`,
         "يكتمل النقل حين تنتهي حلقة until وتعود إلى مُطالبة صدفة عادية. تأكد من تطابق الطرفين، ثم أوقِف المُنصِت:",
       ],
       code: [
-        `# compare totals on BOTH servers
+        `# قارِن الإجماليات على كلا الخادمين
 du -sh /root/workspace`,
-        `# on the RECEIVER, once verified
+        `# على المُستقبِل، بعد التحقق
 pkill -f 'relayium serve'`,
       ],
       bullets: [
@@ -1009,7 +1009,7 @@ pkill -f 'relayium serve'`,
         "‏SYN-SENT تعني أن المنفذ محجوب. افتح 9031/TCP للمُرسِل على المُستقبِل (مجموعة أمان سحابية، أو ufw allow 9031/tcp). هذا أشيع سبب لنقلٍ لا يبدأ أبداً.",
         "فضِّل tmux مع حلقة من سطر واحد على nohup متعدد الأسطر. لصق أمر متعدد الأسطر فيه علامات اقتباس وإعادة توجيه > في صدفة كثيراً ما ينكسر عند إعادة التوجيه أو يتركك عند مُطالبة استمرار >.",
         "عند تنظيف العمليات، طابِق بدقة (pkill -f 'relayium sync')، لا pkill relayium — فالمطابقة الواسعة قد تقتل عملية relayium غير ذات صلة تعمل على الجهاز نفسه.",
-        "الأدلة القابلة لإعادة التوليد مثل venv جديرة بالاستبعاد. قد تحتوي بيئة Python الافتراضية على غيغابايتات من المكتبات يعيد pip إنشاءها على الطرف الآخر؛ تخطيها يوفّر نقلاً كثيراً.",
+        "لا يوجد خيار استبعاد، فحدِّد مصادرك بدلاً من ذلك. لا يقبل sync سوى ‎-i و ‎-p (هوية SSH والمنفذ) و --delete و --watch و --config-dir — ولا شيء فيها يُرشِّح مساراً في وسط الشجرة. ولترك دليل قابل لإعادة التوليد مثل بيئة Python الافتراضية، زامِن الأدلة الفرعية التي تريدها فعلاً: يقبل sync عدة مصادر دفعةً واحدة، ويصل كل مصدر تحت ‎--dir لدى المُستقبِل باسمه هو. فتشغيل relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 مقابل serve --dir /root/workspace يعيد بناءهما في /root/workspace/src و /root/workspace/data، ولا يُمَرّ على venv أصلاً.",
         "تُتخطى الروابط الرمزية والملفات الخاصة — ينقل sync الملفات العادية فقط. عالِج أي روابط رمزية مهمة على حدة.",
       ],
     },
@@ -1075,7 +1075,7 @@ const es = {
         "Instala relayium en ambos servidores (sync habla el protocolo nativo, así que debe estar presente en cada extremo):",
       ],
       code: [
-        `# on BOTH servers
+        `# en AMBOS servidores
 curl -fsSL https://relayium.com/install.sh | sh`,
       ],
       bullets: [
@@ -1090,9 +1090,9 @@ curl -fsSL https://relayium.com/install.sh | sh`,
         "En la primera conexión del emisor (siguiente sección), serve muestra su dirección y su huella y te pide que lo apruebes; responde y y se recuerda para siempre:",
       ],
       code: [
-        `# on the RECEIVER (foreground, to approve interactively)
+        `# en el RECEPTOR (en primer plano, para aprobar de forma interactiva)
 relayium serve --dir /root --port 9031`,
-        `# on the RECEIVER, at the first connection:
+        `# en el RECEPTOR, en la primera conexión:
 Incoming push from 203.0.113.9:52140
   fingerprint: 9f2c41ab…
 Accept and remember this peer? [y/N] y`,
@@ -1108,7 +1108,7 @@ Accept and remember this peer? [y/N] y`,
         "Una vez autorizada la huella, detén el serve en primer plano (Ctrl-C) y relánzalo desacoplado para que sobreviva a tu cierre de sesión. Carga la huella guardada y acepta al emisor en silencio: esta vez no hay aviso:",
       ],
       code: [
-        `# on the RECEIVER
+        `# en el RECEPTOR
 nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
       ],
       bullets: [
@@ -1123,8 +1123,8 @@ nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
         "Inicia una sesión de tmux, luego ejecuta el espejo en un bucle until: reintenta cada 10 segundos hasta que sync devuelve éxito, y luego sale por sí solo:",
       ],
       code: [
-        `# on the SENDER
-tmux new -s xfer      # apt install -y tmux if it's missing`,
+        `# en el EMISOR
+tmux new -s xfer      # apt install -y tmux si falta`,
         `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
       ],
       bullets: [
@@ -1139,9 +1139,9 @@ tmux new -s xfer      # apt install -y tmux if it's missing`,
         "La transferencia está completa cuando el bucle until termina y vuelves a un prompt de shell normal. Confirma que ambos lados coinciden, y luego detén el escucha:",
       ],
       code: [
-        `# compare totals on BOTH servers
+        `# compara los totales en AMBOS servidores
 du -sh /root/workspace`,
-        `# on the RECEIVER, once verified
+        `# en el RECEPTOR, una vez verificado
 pkill -f 'relayium serve'`,
       ],
       bullets: [
@@ -1158,7 +1158,7 @@ pkill -f 'relayium serve'`,
         "SYN-SENT significa que el puerto está bloqueado. Abre 9031/TCP al emisor en el receptor (grupo de seguridad en la nube, o ufw allow 9031/tcp). Esta es la causa más común de una transferencia que nunca empieza.",
         "Prefiere tmux más un bucle de una sola línea antes que un nohup de varias líneas. Pegar en una shell un comando de varias líneas con comillas y una redirección > a menudo se rompe en la redirección o te deja en un prompt de continuación >.",
         "Al limpiar procesos, haz una coincidencia precisa (pkill -f 'relayium sync'), no pkill relayium — una coincidencia amplia puede matar un proceso relayium no relacionado que se ejecute en la misma máquina.",
-        "venv y otros directorios regenerables vale la pena excluirlos. Un virtualenv de Python puede contener gigabytes de bibliotecas que pip recrea en el otro extremo; saltárselos ahorra mucha transferencia.",
+        "No hay ninguna opción de exclusión: nombra tus orígenes en su lugar. sync acepta -i y -p (identidad y puerto SSH), --delete, --watch y --config-dir, y nada que filtre una ruta en medio del árbol. Para dejar atrás un directorio regenerable como un virtualenv de Python, sincroniza los subdirectorios que de verdad quieres: sync admite varios orígenes a la vez, y cada uno llega bajo el --dir del receptor con su propio nombre. relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 contra serve --dir /root/workspace los reconstruye en /root/workspace/src y /root/workspace/data, y el venv no se recorre nunca.",
         "Los enlaces simbólicos y los archivos especiales se saltan — sync solo transfiere archivos regulares. Maneja por separado cualquier enlace simbólico importante.",
       ],
     },
@@ -1224,7 +1224,7 @@ const pt = {
         "Instale relayium nos dois servidores (sync fala o protocolo nativo, então ele precisa estar presente em cada ponta):",
       ],
       code: [
-        `# on BOTH servers
+        `# nos DOIS servidores
 curl -fsSL https://relayium.com/install.sh | sh`,
       ],
       bullets: [
@@ -1239,9 +1239,9 @@ curl -fsSL https://relayium.com/install.sh | sh`,
         "Na primeira conexão do emissor (próxima seção), serve mostra seu endereço e sua impressão digital e pede que você o aprove; responda y e ele é lembrado para sempre:",
       ],
       code: [
-        `# on the RECEIVER (foreground, to approve interactively)
+        `# no RECEPTOR (em primeiro plano, para aprovar interativamente)
 relayium serve --dir /root --port 9031`,
-        `# on the RECEIVER, at the first connection:
+        `# no RECEPTOR, na primeira conexão:
 Incoming push from 203.0.113.9:52140
   fingerprint: 9f2c41ab…
 Accept and remember this peer? [y/N] y`,
@@ -1257,7 +1257,7 @@ Accept and remember this peer? [y/N] y`,
         "Uma vez autorizada a impressão digital, pare o serve em primeiro plano (Ctrl-C) e relance-o desacoplado para que sobreviva ao seu logout. Ele carrega a impressão digital salva e aceita o emissor em silêncio — sem prompt desta vez:",
       ],
       code: [
-        `# on the RECEIVER
+        `# no RECEPTOR
 nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
       ],
       bullets: [
@@ -1272,8 +1272,8 @@ nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
         "Inicie uma sessão do tmux, depois execute o espelho em um laço until — ele tenta de novo a cada 10 segundos até que sync retorne sucesso, e então sai sozinho:",
       ],
       code: [
-        `# on the SENDER
-tmux new -s xfer      # apt install -y tmux if it's missing`,
+        `# no EMISSOR
+tmux new -s xfer      # apt install -y tmux se estiver faltando`,
         `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
       ],
       bullets: [
@@ -1288,9 +1288,9 @@ tmux new -s xfer      # apt install -y tmux if it's missing`,
         "A transferência está completa quando o laço until termina e você volta a um prompt de shell normal. Confirme que os dois lados coincidem, depois pare o listener:",
       ],
       code: [
-        `# compare totals on BOTH servers
+        `# compare os totais nos DOIS servidores
 du -sh /root/workspace`,
-        `# on the RECEIVER, once verified
+        `# no RECEPTOR, depois de verificado
 pkill -f 'relayium serve'`,
       ],
       bullets: [
@@ -1307,7 +1307,7 @@ pkill -f 'relayium serve'`,
         "SYN-SENT significa que a porta está bloqueada. Abra 9031/TCP para o emissor no receptor (grupo de segurança na nuvem, ou ufw allow 9031/tcp). Esta é a causa mais comum de uma transferência que nunca começa.",
         "Prefira tmux mais um laço de uma única linha em vez de um nohup de várias linhas. Colar em uma shell um comando de várias linhas com aspas e um redirecionamento > frequentemente quebra no redirecionamento ou deixa você em um prompt de continuação >.",
         "Ao limpar processos, faça uma correspondência precisa (pkill -f 'relayium sync'), não pkill relayium — uma correspondência ampla pode matar um processo relayium não relacionado rodando na mesma máquina.",
-        "venv e outros diretórios regeneráveis valem a pena excluir. Um virtualenv de Python pode conter gigabytes de bibliotecas que o pip recria do outro lado; pulá-los economiza muita transferência.",
+        "Não existe opção de exclusão — em vez disso, escolha as origens. O sync aceita -i e -p (identidade e porta SSH), --delete, --watch e --config-dir, e nada que filtre um caminho no meio da árvore. Para deixar para trás um diretório regenerável como um virtualenv de Python, sincronize os subdiretórios que você realmente quer: o sync aceita várias origens de uma vez, e cada uma chega sob o --dir do receptor com o próprio nome. relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 contra serve --dir /root/workspace as reconstrói em /root/workspace/src e /root/workspace/data, e o venv nunca é percorrido.",
         "Links simbólicos e arquivos especiais são pulados — sync transfere apenas arquivos regulares. Trate separadamente quaisquer links simbólicos importantes.",
       ],
     },
