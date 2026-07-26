@@ -91,17 +91,34 @@ func mintCode(ctx context.Context, server string, stderr io.Writer) (string, err
 // another machine's SSH session: everything the recipient needs, no link to
 // follow (the CLI cannot consume a URL, and the recipient is at a terminal).
 func printHandoff(w io.Writer, p cloud.Pair, base string) {
-	// Derived from the server's expiry rather than hard-coded, so the copy
-	// follows a TTL change instead of lying about it.
-	mins := int(time.Until(time.Unix(p.ExpiresAt, 0)) / time.Minute)
-	if mins < 1 {
-		mins = 1
-	}
-	fmt.Fprintf(w, "Code: %s   (valid %d minutes)\n", p.Code, mins)
+	fmt.Fprintf(w, "Code: %s%s\n", p.Code, ttlClause(p.ExpiresAt))
 	fmt.Fprintf(w, "On the other machine:  relayium receive %s\n", p.Code)
 	// First-party only: a self-hosted origin has no install.sh to point at.
 	if sameServer(base, defaultCloudServer) {
 		fmt.Fprintf(w, "  not installed there?  curl -fsSL %s/install.sh | sh\n", defaultCloudServer)
 	}
 	fmt.Fprintln(w, "waiting for the receiver…")
+}
+
+// ttlClause renders " (valid N minutes)" for the hand-off block, derived from
+// the server's expiry rather than hard-coded so the copy follows a TTL change
+// instead of lying about it. Rounds rather than truncates: Unix() floors the
+// server's deadline and network latency eats a little more, so a plain
+// integer divide by time.Minute prints "4 minutes" for every 5-minute code.
+// expiresAt == 0 means an older server that doesn't report an expiry (see
+// cloud.go's truncatedTTLNotice) — there is nothing to derive, so the clause
+// is omitted rather than guessed.
+func ttlClause(expiresAt int64) string {
+	if expiresAt == 0 {
+		return ""
+	}
+	mins := int((time.Until(time.Unix(expiresAt, 0)) + 30*time.Second) / time.Minute)
+	if mins < 1 {
+		mins = 1
+	}
+	unit := "minutes"
+	if mins == 1 {
+		unit = "minute"
+	}
+	return fmt.Sprintf("   (valid %d %s)", mins, unit)
 }

@@ -76,6 +76,28 @@ func TestSplitSendArgs(t *testing.T) {
 	}
 }
 
+// runSendCross must check the sources (xfer.BuildManifest) before minting a
+// code: a code starts its 5-minute clock the instant it's minted, and a
+// mistyped path shouldn't burn one. With no credentials on disk, minting
+// would fail with the not-logged-in error — so if the mint moved ahead of
+// the manifest check, a missing-file send would report "needs an account"
+// instead of the missing file, and this test would catch it.
+func TestRunSendChecksSourceBeforeMinting(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // no stored credentials
+	var out, errb bytes.Buffer
+	code := Run([]string{"send", "/nope/nope.zip"}, &out, &errb)
+	if code == 0 {
+		t.Fatal("send of a missing file should exit non-zero")
+	}
+	got := errb.String()
+	if !strings.Contains(got, "no such file") {
+		t.Fatalf("want the missing-file error, got %q", got)
+	}
+	if strings.Contains(got, "needs an account") {
+		t.Fatalf("mint ran before the manifest check (not-logged-in error leaked through): %q", got)
+	}
+}
+
 // The user-visible bug that started this: a made-up numeric code must not
 // degrade into "no such file", it must explain what a code is.
 func TestSplitSendArgsExplainsAMadeUpCode(t *testing.T) {
