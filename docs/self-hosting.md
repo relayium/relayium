@@ -74,7 +74,11 @@ definitions in [`server/main.go`](../server/main.go). The essentials:
 
 `server/.env.example` also documents optional Google/Apple sign-in, Stripe
 billing, and multi-node fleet settings — none of those are required to run a
-basic instance; leave them unset.
+basic instance; leave them unset. If you do turn on `RELAYIUM_REDIS_ADDR`
+and/or `RELAYIUM_STRIPE_SECRET_KEY`, see
+[`docs/billing-transparency.md`](billing-transparency.md) for exactly what
+that starts recording and metering, and what stays off when you leave them
+unset.
 
 Secrets belong in `server/.env` with mode `0600` — never on the command line,
 where `ps` or `/proc/<pid>/environ` would expose them. `server/.env` is

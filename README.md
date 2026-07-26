@@ -135,6 +135,12 @@ two humans can compare out of band.
 - **Metadata minimization:** the server only ever sees room membership (public IP), a device nickname, presence,
   and signaling envelopes. File **contents and names** travel over the DTLS-encrypted DataChannel — never the server.
 
+That's what the server *can't* see. For what it *does* record — TURN relay bytes, stored-transfer
+sizes, quota bookkeeping — and exactly what that's billed against, see
+[`docs/billing-transparency.md`](docs/billing-transparency.md): a code-grounded, file-and-line-linked
+account of the metering and billing paths, so the privacy claim above is something you can verify
+rather than take on faith.
+
 > ⚠️ This is an early MVP and has **not** had an independent security audit. Don't rely on it for high-stakes
 > threats yet. Issues and review are very welcome.
 
@@ -185,8 +191,8 @@ TURN relay that only ever sees ciphertext; this requires the sender to sign in.
   time), directories & multi-file, resumable transfers, concurrent chunks.
 - **M2 — Cross-network relay:** TURN/relay and NAT traversal for pairing-code transfers across different
   networks. *(Shipped — cross-network pairing-code transfers go through STUN/TURN, gated by sender sign-in.
-  Encrypted temporary staging when the peer is offline is still ahead; TURN relay bandwidth is metered — the
-  cost model will be documented honestly.)*
+  Encrypted temporary staging when the peer is offline is still ahead; TURN relay bandwidth is metered — see
+  [`docs/billing-transparency.md`](docs/billing-transparency.md) for exactly how.)*
 - **M3 — Protocol spec + multi-client:** write the wire protocol down as a spec and reuse it from a CLI and mobile;
   extend `send` to stdin, Docker images, the clipboard — toward "TCP between developers." *(CLI shipped — see [Command-line client](#command-line-client-cli); stdin/Docker/clipboard still ahead.)*
 
