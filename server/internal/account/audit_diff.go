@@ -4,14 +4,14 @@ import (
 	"encoding/json"
 	"sort"
 
-	"github.com/relayium/relayium/internal/ext"
+	"github.com/relayium/relayium/ext"
 )
 
 // ChangeField 是一个字段的前后值。Old/New 用 any 是因为审计要覆盖 int64
 // （配额、价格）和 string（标签、price id）两类；具体动作各自决定放什么。
 //
 // This is a type alias, not a new type: the real definition lives in
-// internal/ext (see that package's doc comment for why), so that
+// ext (see that package's doc comment for why), so that
 // ext.AdminHost.WriteAudit's []ChangeField parameter and *Service.WriteAudit's
 // []ChangeField parameter are the identical type, letting *Service satisfy
 // ext.AdminHost without account importing anything back from ext for this

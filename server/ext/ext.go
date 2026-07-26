@@ -1,7 +1,7 @@
 // Package ext defines the extension-point boundary between the account
 // service (open layer: auth, passkey, session — self-hosters need all of it)
 // and the commercial admin/billing layer (currently still colocated in
-// internal/account, slated to move to a private repo).
+// account, slated to move to a private repo).
 //
 // AdminHost is deliberately small. It holds only the *Service methods the
 // commercial files (billing.go, admin.go, admin_rollout.go,
@@ -10,13 +10,13 @@
 // attempt to expose the account Store or any of its domain types (User,
 // Plan, RolloutTrack, UploadSessionRow, ...): that surface is ~90 methods
 // wide and pulling it through this interface would mean either duplicating
-// most of the account domain model here or importing internal/account from
+// most of the account domain model here or importing account from
 // ext, which would cycle back against account's own compile-time assertion
 // that *Service satisfies AdminHost. Store access is left for phase 3 to
 // resolve, most likely by having the commercial package hold its own store
 // reference rather than reaching through the host.
 //
-// ext must never import internal/account: the whole point of this package
+// ext must never import account: the whole point of this package
 // is a boundary the commercial layer can depend on without pulling in
 // account internals, and account internals must never depend on the
 // commercial layer. account imports ext (one direction only) to assert
@@ -32,9 +32,9 @@ import (
 // what a high-risk admin write actually changed. Old/New are `any` because
 // audited fields span int64 (quotas, prices) and string (labels, price ids).
 //
-// This type is defined here, not in internal/account, purely so AdminHost's
+// This type is defined here, not in account, purely so AdminHost's
 // WriteAudit signature can reference it without account depending on ext for
-// the type and ext depending on account for the method — internal/account's
+// the type and ext depending on account for the method — account's
 // ChangeField is a type alias to this one (see account/audit_diff.go).
 type ChangeField struct {
 	Field string `json:"field"`
@@ -46,7 +46,7 @@ type ChangeField struct {
 // admin/billing layer needs. The account package's *Service satisfies it
 // today (see account/ext_assert.go); once the commercial layer moves to a
 // private repo, it will depend on this interface instead of on
-// internal/account directly.
+// account directly.
 type AdminHost interface {
 	// CSRFGuard rejects state-changing requests whose Origin doesn't match
 	// the site's own origin. Used by RegisterAdmin to wrap every admin route.
