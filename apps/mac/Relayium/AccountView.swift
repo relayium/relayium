@@ -17,15 +17,19 @@ struct AccountView: View {
 
             HStack {
                 Text(usage.plan.name).font(.headline)
-                if usage.plan.subscriptionStatus != "active" && !usage.plan.subscriptionStatus.isEmpty {
-                    Text(usage.plan.subscriptionStatus)
+                // Both the "should this show at all" predicate and the wording live
+                // in UsagePresentation, where they are tested. A raw Stripe status
+                // must never reach this capsule.
+                if let badge = UsagePresentation.subscriptionBadge(for: usage.plan.subscriptionStatus) {
+                    Text(badge)
                         .font(.caption).padding(.horizontal, 6).padding(.vertical, 2)
                         .background(.quaternary, in: Capsule())
                 }
                 Spacer()
                 // macOS ships as a direct download, so billing is compliant on the web.
-                // The app shows the tier read-only and hands off.
-                Button("Manage plan") { NSWorkspace.shared.open(AppEnvironment.productionBaseURL) }
+                // The app shows the tier read-only and hands off — to the plans page,
+                // which is where a change of plan is actually made.
+                Button("Manage plan") { NSWorkspace.shared.open(AppEnvironment.plansWebURL) }
             }
 
             meter("Traffic", UsagePresentation.display(usage.traffic))
