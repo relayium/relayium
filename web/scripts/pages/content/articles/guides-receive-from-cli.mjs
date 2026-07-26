@@ -19,7 +19,7 @@ const en = {
         "Which command you run depends on who's starting the transfer and how the two machines know each other:",
       ],
       bullets: [
-        "relayium receive <code> [destdir] — someone sends to you across networks using a pairing code you agreed on out of band. Direct peer-to-peer, verified with a SAS code.",
+        "relayium receive <code> [destdir] — someone sends to you across networks using a pairing code their CLI minted and passed to you out of band. Direct peer-to-peer, verified with a SAS code.",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — this machine listens for daemon-direct relayium:// pushes, on port 9031 by default.",
         "relayium pull [user@]host:src <dest> — you reach out over SSH to a server you can already log into and fetch files back.",
       ],
@@ -27,20 +27,20 @@ const en = {
     {
       heading: "receive: someone sends you a file across networks",
       body: [
-        "This is the receiving half of relayium send. The other person picks a short code and tells you what it is over any channel you both trust — a call, a chat message — then runs relayium send <path> <code> on their end. You run receive with the same code:",
+        "This is the receiving half of relayium send. The other person runs relayium send <path> on their end (after relayium login); their CLI mints a 6-character code, good for 5 minutes, and prints it. They tell you what it is over any channel you both trust — a call, a chat message. You run receive with that code:",
       ],
       code: [
-        `relayium receive 428571
+        `relayium receive K7M4XR
 
 # or into a specific directory
-relayium receive 428571 ./downloads`,
+relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
         "The connection is direct, peer-to-peer, and end-to-end encrypted; both terminals print the same SAS (short authentication string) once connected — compare it with the sender to be sure no one is in the middle.",
         "No destination given: files land in the current directory.",
         "Same direct-only rule as send: if no direct path can be found between the two networks, the transfer fails rather than routing through a relay.",
-        "This is the CLI's own pairing-code protocol — it doesn't interoperate with the browser's pairing code or QR flow at relayium.com today; that's a possible future addition, not something you can rely on yet.",
-        "The receiver never needs an account, on any network.",
+        "This is the CLI's own pairing-code protocol — CLI codes pair CLI to CLI. It doesn't interoperate with the browser's pairing code or QR flow at relayium.com today; that's a possible future addition, not something you can rely on yet. If you only have a browser, ask the sender for a relayium up download link instead.",
+        "The receiver never needs an account, on any network. Only the sender signs in, so their CLI can mint the code.",
       ],
     },
     {
@@ -88,11 +88,11 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     items: [
       {
         q: "Do I need an account to receive files?",
-        a: "No. All three ways — receive, serve, and pull — are completely free and need no Relayium account, on either end.",
+        a: "No. All three ways — receive, serve, and pull — are completely free and need no Relayium account on your side. The one sign-in anywhere is the sender's in receive mode, so their CLI can mint the pairing code.",
       },
       {
         q: "Does relayium receive interoperate with the browser's pairing code?",
-        a: "No. The CLI's pairing-code protocol is separate from the browser's join-link and QR flow at relayium.com — they use different handshakes and don't talk to each other today. That's on the roadmap, not something you can rely on yet.",
+        a: "No. The CLI's pairing-code protocol is separate from the browser's join-link and QR flow at relayium.com — they use different handshakes and don't talk to each other today, so a CLI code only pairs with another CLI. That's on the roadmap, not something you can rely on yet. Until then, a browser recipient wants a relayium up link rather than a code.",
       },
       {
         q: "What happens if an unknown machine pushes to my serve listener?",
@@ -130,7 +130,7 @@ const zh = {
       heading: "三种接收方式，各自适用于什么场景",
       body: ["用哪个命令，取决于谁在发起传输，以及两台机器是怎么互相认识的："],
       bullets: [
-        "relayium receive <code> [destdir] ——对方用你们线下约定好的配对码跨网络发给你。直接点对点，用 SAS 码验证。",
+        "relayium receive <code> [destdir] ——对方用他那边 CLI 生成、再线下转告给你的配对码跨网络发给你。直接点对点，用 SAS 码验证。",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——这台机器监听守护进程直连的 relayium:// 推送，默认端口 9031。",
         "relayium pull [user@]host:src <dest> ——你主动通过 SSH 连接到一台你已能登录的服务器，把文件取回来。",
       ],
@@ -138,20 +138,20 @@ const zh = {
     {
       heading: "receive：对方跨网络把文件发给你",
       body: [
-        "这是 relayium send 的接收端。对方选一个简短的码，并通过你们都信任的渠道告诉你——打个电话、发条消息——然后在他那边运行 relayium send <path> <code>。你则用同一个码运行 receive：",
+        "这是 relayium send 的接收端。对方在他那边运行 relayium send <path>（事先 relayium login 过），他的 CLI 会生成一个 6 位、5 分钟内有效的码并打印出来。他再通过你们都信任的渠道告诉你——打个电话、发条消息。你则用这个码运行 receive：",
       ],
       code: [
-        `relayium receive 428571
+        `relayium receive K7M4XR
 
 # or into a specific directory
-relayium receive 428571 ./downloads`,
+relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
         "连接是直接点对点、端到端加密的；一旦连上，两边的终端会打印出同一个 SAS（简短认证串）——和发送方对一下，确保中间没有人。",
         "不指定目标目录时，文件会落到当前目录。",
         "和 send 一样只走直连：如果两个网络之间找不到直连路径，传输会失败，而不会经中继转发。",
-        "这是 CLI 自己的配对码协议——目前和 relayium.com 浏览器端的配对码或二维码流程互不通用；未来也许会支持，但现在还不能指望。",
-        "接收方无论在哪个网络上，都不需要账号。",
+        "这是 CLI 自己的配对码协议——CLI 的码只能和 CLI 配对。目前和 relayium.com 浏览器端的配对码或二维码流程互不通用；未来也许会支持，但现在还不能指望。如果你手上只有浏览器，请让发送方改用 relayium up 给你一个下载链接。",
+        "接收方无论在哪个网络上，都不需要账号。只有发送方需要登录，好让他的 CLI 生成配对码。",
       ],
     },
     {
@@ -199,11 +199,11 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     items: [
       {
         q: "接收文件需要账号吗？",
-        a: "不需要。三种方式——receive、serve、pull——都完全免费，两端都不需要 Relayium 账号。",
+        a: "不需要。三种方式——receive、serve、pull——都完全免费，你这一端不需要 Relayium 账号。整个过程里唯一需要登录的，是 receive 模式下的发送方，好让他的 CLI 生成配对码。",
       },
       {
         q: "relayium receive 和浏览器的配对码互通吗？",
-        a: "不互通。CLI 的配对码协议和 relayium.com 浏览器端的加入链接、二维码流程是分开的——它们的握手方式不同，目前也无法互相通信。这是路线图上的事，现在还不能指望。",
+        a: "不互通。CLI 的配对码协议和 relayium.com 浏览器端的加入链接、二维码流程是分开的——它们的握手方式不同，目前也无法互相通信，所以 CLI 的码只能和另一个 CLI 配对。这是路线图上的事，现在还不能指望。在此之前，用浏览器接收的人需要的是一个 relayium up 链接，而不是配对码。",
       },
       {
         q: "如果一台未知机器向我的 serve 监听端推送会怎样？",
@@ -243,7 +243,7 @@ const ja = {
         "どのコマンドを使うかは、誰が転送を始めるのか、そして2台のマシンがどう互いを知っているかによって決まります:",
       ],
       bullets: [
-        "relayium receive <code> [destdir] ——相手が、あなたたちが帯域外で決めたペアリングコードを使ってネットワークを越えて送ってきます。直接ピアツーピアで、SAS コードで検証します。",
+        "relayium receive <code> [destdir] ——相手の CLI が発行し、帯域外であなたに伝えられたペアリングコードを使って、相手がネットワークを越えて送ってきます。直接ピアツーピアで、SAS コードで検証します。",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——このマシンがデーモン直結の relayium:// プッシュを待ち受けます。デフォルトのポートは 9031 です。",
         "relayium pull [user@]host:src <dest> ——あなた自身がすでにログインできるサーバーへ SSH で出向き、ファイルを取り込みます。",
       ],
@@ -251,20 +251,20 @@ const ja = {
     {
       heading: "receive: 相手がネットワークを越えてファイルを送ってくる",
       body: [
-        "これは relayium send の受信側です。相手は短いコードを選び、通話やチャットなど二人が信頼できる手段でそれを伝え、自分の側で relayium send <path> <code> を実行します。あなたは同じコードで receive を実行します:",
+        "これは relayium send の受信側です。相手は自分の側で relayium send <path> を実行します(事前に relayium login 済み)。相手の CLI が5分間有効な6文字のコードを発行して表示するので、通話やチャットなど二人が信頼できる手段でそれを伝えてもらいます。あなたはそのコードで receive を実行します:",
       ],
       code: [
-        `relayium receive 428571
+        `relayium receive K7M4XR
 
 # or into a specific directory
-relayium receive 428571 ./downloads`,
+relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
         "接続は直接のピアツーピアでエンドツーエンドに暗号化されています。接続後、両方のターミナルに同じ SAS(short authentication string)が表示されます——送信側と見比べて、中間に誰もいないことを確認してください。",
         "宛先を指定しない場合、ファイルはカレントディレクトリに置かれます。",
         "send と同じく直接接続のみのルールです。2つのネットワークの間に直接の経路が見つからなければ、リレー経由で送るのではなく転送が失敗します。",
-        "これは CLI 独自のペアリングコード・プロトコルです——現時点では relayium.com のブラウザ側のペアリングコードや QR フローとは相互運用しません。将来追加される可能性はありますが、今はまだ頼れるものではありません。",
-        "受信側はどのネットワークにいても、アカウントは一切不要です。",
+        "これは CLI 独自のペアリングコード・プロトコルです——CLI のコードは CLI 同士でしかペアリングできません。現時点では relayium.com のブラウザ側のペアリングコードや QR フローとは相互運用しません。将来追加される可能性はありますが、今はまだ頼れるものではありません。ブラウザしかない場合は、代わりに relayium up のダウンロードリンクを送ってもらってください。",
+        "受信側はどのネットワークにいても、アカウントは一切不要です。サインインするのは送信側だけで、その CLI がコードを発行できるようにするためです。",
       ],
     },
     {
@@ -312,11 +312,11 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     items: [
       {
         q: "ファイルを受信するのにアカウントは必要ですか?",
-        a: "いいえ。receive、serve、pull の3つすべてが完全に無料で、どちら側にも Relayium アカウントは不要です。",
+        a: "いいえ。receive、serve、pull の3つすべてが完全に無料で、あなたの側に Relayium アカウントは不要です。どこかでサインインが要るのは receive モードの送信側だけで、その CLI がペアリングコードを発行できるようにするためです。",
       },
       {
         q: "relayium receive はブラウザのペアリングコードと相互運用しますか?",
-        a: "しません。CLI のペアリングコード・プロトコルは、relayium.com のブラウザ側の参加リンクや QR フローとは別物です——ハンドシェイクの方式が異なり、現時点では互いに通信しません。それはロードマップ上の話であり、今はまだ頼れるものではありません。",
+        a: "しません。CLI のペアリングコード・プロトコルは、relayium.com のブラウザ側の参加リンクや QR フローとは別物です——ハンドシェイクの方式が異なり、現時点では互いに通信しないので、CLI のコードは別の CLI としかペアリングできません。それはロードマップ上の話であり、今はまだ頼れるものではありません。それまでは、ブラウザで受け取る相手にはコードではなく relayium up のリンクを渡します。",
       },
       {
         q: "未知のマシンが自分の serve リスナーへプッシュしてきたらどうなりますか?",
@@ -354,7 +354,7 @@ const ko = {
       heading: "받는 세 가지 방법과 각각이 적용되는 상황",
       body: ["어떤 명령을 실행할지는 누가 전송을 시작하는지, 그리고 두 기기가 서로 어떻게 아는 사이인지에 따라 달라집니다:"],
       bullets: [
-        "relayium receive <code> [destdir] — 상대가 대역 외로 합의한 페어링 코드를 사용해 네트워크를 넘어 당신에게 보냅니다. 직접적인 피어투피어이며 SAS 코드로 검증됩니다.",
+        "relayium receive <code> [destdir] — 상대의 CLI가 발급해 대역 외로 알려준 페어링 코드를 사용해 상대가 네트워크를 넘어 당신에게 보냅니다. 직접적인 피어투피어이며 SAS 코드로 검증됩니다.",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — 이 기기가 데몬 다이렉트 relayium:// 푸시를 대기합니다. 기본 포트는 9031입니다.",
         "relayium pull [user@]host:src <dest> — 당신이 이미 로그인할 수 있는 서버로 SSH를 통해 직접 다가가 파일을 가져옵니다.",
       ],
@@ -362,20 +362,20 @@ const ko = {
     {
       heading: "receive: 상대가 네트워크를 넘어 파일을 보낼 때",
       body: [
-        "이것은 relayium send의 받는 쪽입니다. 상대는 짧은 코드를 정하고 통화나 채팅 등 서로 신뢰하는 채널로 알려준 뒤, 자기 쪽에서 relayium send <path> <code>를 실행합니다. 당신은 같은 코드로 receive를 실행합니다:",
+        "이것은 relayium send의 받는 쪽입니다. 상대는 자기 쪽에서 relayium send <path>를 실행합니다(미리 relayium login을 해 둔 상태로). 그러면 상대의 CLI가 5분간 유효한 6자 코드를 발급해 출력하고, 상대는 통화나 채팅 등 서로 신뢰하는 채널로 그것을 알려줍니다. 당신은 그 코드로 receive를 실행합니다:",
       ],
       code: [
-        `relayium receive 428571
+        `relayium receive K7M4XR
 
 # or into a specific directory
-relayium receive 428571 ./downloads`,
+relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
         "연결은 직접적인 피어투피어이며 종단간 암호화됩니다. 연결되면 양쪽 터미널에 동일한 SAS(짧은 인증 문자열)가 출력됩니다——발신자와 비교해 중간에 아무도 없는지 확인하세요.",
         "목적지를 지정하지 않으면 파일은 현재 디렉터리에 저장됩니다.",
         "send와 동일하게 직접 연결만 지원합니다. 두 네트워크 사이에 직접 경로를 찾을 수 없으면 릴레이를 거치는 대신 전송이 실패합니다.",
-        "이것은 CLI 자체의 페어링 코드 프로토콜입니다——현재 relayium.com 브라우저 쪽의 페어링 코드나 QR 흐름과는 상호 운용되지 않습니다. 향후 추가될 수는 있지만 지금은 기대할 수 없습니다.",
-        "받는 쪽은 어느 네트워크에 있든 계정이 전혀 필요하지 않습니다.",
+        "이것은 CLI 자체의 페어링 코드 프로토콜입니다——CLI 코드는 CLI끼리만 페어링됩니다. 현재 relayium.com 브라우저 쪽의 페어링 코드나 QR 흐름과는 상호 운용되지 않습니다. 향후 추가될 수는 있지만 지금은 기대할 수 없습니다. 브라우저밖에 없다면 보내는 쪽에 relayium up 다운로드 링크를 대신 요청하세요.",
+        "받는 쪽은 어느 네트워크에 있든 계정이 전혀 필요하지 않습니다. 로그인하는 쪽은 보내는 사람뿐이며, 그 CLI가 코드를 발급할 수 있도록 하기 위해서입니다.",
       ],
     },
     {
@@ -423,11 +423,11 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     items: [
       {
         q: "파일을 받는 데 계정이 필요한가요?",
-        a: "아니요. receive, serve, pull 세 가지 모두 완전히 무료이며 양쪽 다 Relayium 계정이 필요 없습니다.",
+        a: "아니요. receive, serve, pull 세 가지 모두 완전히 무료이며 당신 쪽에는 Relayium 계정이 필요 없습니다. 전체 과정에서 유일하게 로그인하는 쪽은 receive 모드의 보내는 사람이며, 그 CLI가 페어링 코드를 발급할 수 있도록 하기 위해서입니다.",
       },
       {
         q: "relayium receive는 브라우저의 페어링 코드와 상호 운용되나요?",
-        a: "아니요. CLI의 페어링 코드 프로토콜은 relayium.com 브라우저 쪽의 참여 링크 및 QR 흐름과 별개입니다——핸드셰이크 방식이 다르며 현재는 서로 통신하지 않습니다. 이는 로드맵에 있는 사항이며 지금은 기대할 수 없습니다.",
+        a: "아니요. CLI의 페어링 코드 프로토콜은 relayium.com 브라우저 쪽의 참여 링크 및 QR 흐름과 별개입니다——핸드셰이크 방식이 다르며 현재는 서로 통신하지 않으므로, CLI 코드는 다른 CLI와만 페어링됩니다. 이는 로드맵에 있는 사항이며 지금은 기대할 수 없습니다. 그때까지 브라우저로 받는 사람에게는 코드가 아니라 relayium up 링크를 주세요.",
       },
       {
         q: "알 수 없는 기기가 내 serve 리스너로 푸시하면 어떻게 되나요?",
@@ -467,7 +467,7 @@ const de = {
         "Welchen Befehl du nutzt, hängt davon ab, wer die Übertragung startet und wie sich die beiden Maschinen kennen:",
       ],
       bullets: [
-        "relayium receive <code> [destdir] — jemand sendet dir netzwerkübergreifend mit einem Pairing-Code, den ihr außerhalb des Kanals vereinbart habt. Direkt peer-to-peer, verifiziert mit einem SAS-Code.",
+        "relayium receive <code> [destdir] — jemand sendet dir netzwerkübergreifend mit einem Pairing-Code, den dessen CLI erzeugt und dir außerhalb des Kanals mitgeteilt hat. Direkt peer-to-peer, verifiziert mit einem SAS-Code.",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — diese Maschine lauscht auf Daemon-Direct-Pushes über relayium://, standardmäßig auf Port 9031.",
         "relayium pull [user@]host:src <dest> — du greifst per SSH auf einen Server zu, in den du dich schon einloggen kannst, und holst Dateien zurück.",
       ],
@@ -475,20 +475,20 @@ const de = {
     {
       heading: "receive: jemand sendet dir eine Datei über Netzwerke hinweg",
       body: [
-        "Das ist die Empfangsseite von relayium send. Die andere Person wählt einen kurzen Code und teilt ihn dir über einen Kanal mit, dem ihr beide vertraut — ein Anruf, eine Chatnachricht — und führt dann auf ihrer Seite relayium send <path> <code> aus. Du führst receive mit demselben Code aus:",
+        "Das ist die Empfangsseite von relayium send. Die andere Person führt auf ihrer Seite relayium send <path> aus (nach relayium login); ihre CLI erzeugt einen Code aus 6 Zeichen, gültig für 5 Minuten, und gibt ihn aus. Sie teilt ihn dir über einen Kanal mit, dem ihr beide vertraut — ein Anruf, eine Chatnachricht. Du führst receive mit diesem Code aus:",
       ],
       code: [
-        `relayium receive 428571
+        `relayium receive K7M4XR
 
 # or into a specific directory
-relayium receive 428571 ./downloads`,
+relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
         "Die Verbindung ist direkt, peer-to-peer und Ende-zu-Ende verschlüsselt; sobald sie steht, geben beide Terminals denselben SAS (Short Authentication String) aus — vergleiche ihn mit dem Sender, um sicherzugehen, dass niemand dazwischensitzt.",
         "Ohne angegebenes Ziel landen die Dateien im aktuellen Verzeichnis.",
         "Dieselbe Nur-direkt-Regel wie bei send: Findet sich kein direkter Pfad zwischen den beiden Netzwerken, schlägt die Übertragung fehl, statt über ein Relay geleitet zu werden.",
-        "Das ist das eigene Pairing-Code-Protokoll der CLI — es arbeitet heute nicht mit dem Pairing-Code oder QR-Ablauf des Browsers auf relayium.com zusammen. Das könnte irgendwann kommen, ist aber momentan nicht etwas, worauf du dich verlassen kannst.",
-        "Der Empfänger braucht auf keinem Netzwerk je ein Konto.",
+        "Das ist das eigene Pairing-Code-Protokoll der CLI — CLI-Codes koppeln CLI mit CLI. Es arbeitet heute nicht mit dem Pairing-Code oder QR-Ablauf des Browsers auf relayium.com zusammen. Das könnte irgendwann kommen, ist aber momentan nicht etwas, worauf du dich verlassen kannst. Hast du nur einen Browser, bitte den Absender stattdessen um einen relayium-up-Download-Link.",
+        "Der Empfänger braucht auf keinem Netzwerk je ein Konto. Nur der Absender meldet sich an, damit dessen CLI den Code erzeugen kann.",
       ],
     },
     {
@@ -536,11 +536,11 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     items: [
       {
         q: "Brauche ich ein Konto, um Dateien zu empfangen?",
-        a: "Nein. Alle drei Wege — receive, serve und pull — sind vollständig kostenlos und brauchen auf keiner Seite ein Relayium-Konto.",
+        a: "Nein. Alle drei Wege — receive, serve und pull — sind vollständig kostenlos und brauchen auf deiner Seite kein Relayium-Konto. Die einzige Anmeldung überhaupt ist die des Absenders im receive-Fall, damit dessen CLI den Pairing-Code erzeugen kann.",
       },
       {
         q: "Arbeitet relayium receive mit dem Pairing-Code des Browsers zusammen?",
-        a: "Nein. Das Pairing-Code-Protokoll der CLI ist getrennt vom Join-Link- und QR-Ablauf des Browsers auf relayium.com — sie verwenden unterschiedliche Handshakes und sprechen heute nicht miteinander. Das steht auf der Roadmap, ist aber noch nichts, worauf du dich verlassen kannst.",
+        a: "Nein. Das Pairing-Code-Protokoll der CLI ist getrennt vom Join-Link- und QR-Ablauf des Browsers auf relayium.com — sie verwenden unterschiedliche Handshakes und sprechen heute nicht miteinander, ein CLI-Code koppelt also nur mit einer anderen CLI. Das steht auf der Roadmap, ist aber noch nichts, worauf du dich verlassen kannst. Bis dahin will ein Empfänger im Browser einen relayium-up-Link statt eines Codes.",
       },
       {
         q: "Was passiert, wenn eine unbekannte Maschine zu meinem serve-Listener pusht?",
@@ -580,7 +580,7 @@ const fr = {
         "La commande à exécuter dépend de qui déclenche le transfert et de la façon dont les deux machines se connaissent :",
       ],
       bullets: [
-        "relayium receive <code> [destdir] — quelqu'un vous envoie à travers les réseaux avec un code de jumelage convenu hors bande. Pair-à-pair direct, vérifié par un code SAS.",
+        "relayium receive <code> [destdir] — quelqu'un vous envoie à travers les réseaux avec un code de jumelage que sa CLI a généré et vous a communiqué hors bande. Pair-à-pair direct, vérifié par un code SAS.",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — cette machine écoute les envois en daemon direct via relayium://, sur le port 9031 par défaut.",
         "relayium pull [user@]host:src <dest> — vous allez chercher, via SSH, sur un serveur où vous pouvez déjà vous connecter, et vous récupérez des fichiers.",
       ],
@@ -588,20 +588,20 @@ const fr = {
     {
       heading: "receive : quelqu'un vous envoie un fichier à travers les réseaux",
       body: [
-        "C'est le pendant côté réception de relayium send. L'autre personne choisit un code court et vous le communique par un canal auquel vous faites tous deux confiance — un appel, un message — puis exécute relayium send <path> <code> de son côté. Vous exécutez receive avec le même code :",
+        "C'est le pendant côté réception de relayium send. L'autre personne exécute relayium send <path> de son côté (après relayium login) ; sa CLI génère un code de 6 caractères, valable 5 minutes, et l'affiche. Elle vous le communique par un canal auquel vous faites tous deux confiance — un appel, un message. Vous exécutez receive avec ce code :",
       ],
       code: [
-        `relayium receive 428571
+        `relayium receive K7M4XR
 
 # or into a specific directory
-relayium receive 428571 ./downloads`,
+relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
         "La connexion est directe, pair-à-pair, et chiffrée de bout en bout ; une fois connectés, les deux terminaux affichent le même SAS (short authentication string) — comparez-le avec l'expéditeur pour être sûrs que personne n'est au milieu.",
         "Sans destination indiquée, les fichiers atterrissent dans le répertoire courant.",
         "Même règle de connexion directe uniquement que pour send : si aucun chemin direct n'est trouvé entre les deux réseaux, le transfert échoue plutôt que de transiter par un relais.",
-        "C'est le protocole de code de jumelage propre à la CLI — il ne s'interopère pas aujourd'hui avec le code de jumelage ou le flux QR du navigateur sur relayium.com ; c'est un ajout possible à l'avenir, pas encore quelque chose sur quoi compter.",
-        "Le destinataire n'a jamais besoin de compte, quel que soit le réseau.",
+        "C'est le protocole de code de jumelage propre à la CLI — un code CLI ne se jumelle qu'avec une autre CLI. Il ne s'interopère pas aujourd'hui avec le code de jumelage ou le flux QR du navigateur sur relayium.com ; c'est un ajout possible à l'avenir, pas encore quelque chose sur quoi compter. Si vous n'avez qu'un navigateur, demandez plutôt à l'expéditeur un lien de téléchargement relayium up.",
+        "Le destinataire n'a jamais besoin de compte, quel que soit le réseau. Seul l'expéditeur se connecte, pour que sa CLI puisse générer le code.",
       ],
     },
     {
@@ -649,11 +649,11 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     items: [
       {
         q: "Ai-je besoin d'un compte pour recevoir des fichiers ?",
-        a: "Non. Les trois méthodes — receive, serve et pull — sont entièrement gratuites et ne nécessitent aucun compte Relayium, d'aucun côté.",
+        a: "Non. Les trois méthodes — receive, serve et pull — sont entièrement gratuites et ne nécessitent aucun compte Relayium de votre côté. La seule connexion où que ce soit est celle de l'expéditeur en mode receive, pour que sa CLI puisse générer le code de jumelage.",
       },
       {
         q: "relayium receive s'interopère-t-il avec le code de jumelage du navigateur ?",
-        a: "Non. Le protocole de code de jumelage de la CLI est distinct du flux de lien de participation et de QR code du navigateur sur relayium.com — ils utilisent des poignées de main différentes et ne communiquent pas entre eux aujourd'hui. C'est sur la feuille de route, mais ce n'est pas encore quelque chose sur quoi compter.",
+        a: "Non. Le protocole de code de jumelage de la CLI est distinct du flux de lien de participation et de QR code du navigateur sur relayium.com — ils utilisent des poignées de main différentes et ne communiquent pas entre eux aujourd'hui, donc un code CLI ne se jumelle qu'avec une autre CLI. C'est sur la feuille de route, mais ce n'est pas encore quelque chose sur quoi compter. En attendant, un destinataire sur navigateur veut un lien relayium up plutôt qu'un code.",
       },
       {
         q: "Que se passe-t-il si une machine inconnue envoie vers mon écouteur serve ?",
@@ -693,7 +693,7 @@ const ar = {
         "الأمر الذي تشغّله يعتمد على من يبدأ النقل وكيف يعرف الجهازان أحدهما الآخر:",
       ],
       bullets: [
-        "relayium receive <code> [destdir] — يرسل إليك شخص عبر الشبكات باستخدام رمز اقتران اتفقتما عليه خارج القناة. من الند للند مباشرةً، مُتحقَّق منه برمز SAS.",
+        "relayium receive <code> [destdir] — يرسل إليك شخص عبر الشبكات باستخدام رمز اقتران أصدرته واجهة CLI لديه ثم أبلغك به خارج القناة. من الند للند مباشرةً، مُتحقَّق منه برمز SAS.",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — يستمع هذا الجهاز لعمليات الدفع المباشرة عبر الخدمة relayium://، على المنفذ 9031 افتراضيًا.",
         "relayium pull [user@]host:src <dest> — تمدّ يدك عبر SSH إلى خادم يمكنك أصلًا تسجيل الدخول إليه وتجلب الملفات.",
       ],
@@ -701,20 +701,20 @@ const ar = {
     {
       heading: "receive: شخص يرسل إليك ملفًا عبر الشبكات",
       body: [
-        "هذا هو نصف الاستقبال من relayium send. يختار الطرف الآخر رمزًا قصيرًا ويخبرك به عبر أي قناة تثقان بها كلاكما — مكالمة، رسالة محادثة — ثم يشغّل relayium send <path> <code> من جهته. تشغّل أنت receive بالرمز نفسه:",
+        "هذا هو نصف الاستقبال من relayium send. يشغّل الطرف الآخر relayium send <path> من جهته (بعد relayium login)، فتُصدر واجهة CLI لديه رمزًا من 6 محارف صالحًا لـ 5 دقائق وتطبعه. ثم يخبرك به عبر أي قناة تثقان بها كلاكما — مكالمة، رسالة محادثة. تشغّل أنت receive بذلك الرمز:",
       ],
       code: [
-        `relayium receive 428571
+        `relayium receive K7M4XR
 
 # or into a specific directory
-relayium receive 428571 ./downloads`,
+relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
         "الاتصال مباشر ومن الند للند ومشفَّر من الطرف إلى الطرف؛ يطبع الطرفان الرمز SAS نفسه (سلسلة المصادقة القصيرة) بمجرد الاتصال — قارنه مع المُرسِل لتتأكد ألا أحد في المنتصف.",
         "بلا وجهة محددة: تصل الملفات إلى المجلد الحالي.",
         "القاعدة نفسها كما في send، الاتصال المباشر فقط: إن لم يُعثر على مسار مباشر بين الشبكتين، يفشل النقل بدل توجيهه عبر مُرحِّل.",
-        "هذا هو بروتوكول رمز الاقتران الخاص بالـ CLI — لا يتوافق اليوم مع رمز اقتران المتصفح أو تدفق QR في relayium.com؛ ذلك إضافة مستقبلية محتملة، لا شيء تعتمد عليه بعد.",
-        "المُستقبِل لا يحتاج حسابًا أبدًا، على أي شبكة.",
+        "هذا هو بروتوكول رمز الاقتران الخاص بالـ CLI — ورموز CLI تقترن بـ CLI فقط. لا يتوافق اليوم مع رمز اقتران المتصفح أو تدفق QR في relayium.com؛ ذلك إضافة مستقبلية محتملة، لا شيء تعتمد عليه بعد. إن لم يكن لديك سوى متصفح، اطلب من المُرسِل رابط تنزيل عبر relayium up بدلًا من ذلك.",
+        "المُستقبِل لا يحتاج حسابًا أبدًا، على أي شبكة. المُرسِل وحده هو من يسجّل الدخول، كي تتمكن واجهة CLI لديه من إصدار الرمز.",
       ],
     },
     {
@@ -762,11 +762,11 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     items: [
       {
         q: "هل أحتاج حسابًا لاستقبال الملفات؟",
-        a: "لا. الطرق الثلاث جميعها — receive وserve وpull — مجانية تمامًا ولا تحتاج حساب Relayium على أي طرف.",
+        a: "لا. الطرق الثلاث جميعها — receive وserve وpull — مجانية تمامًا ولا تحتاج حساب Relayium من جهتك. وتسجيل الدخول الوحيد في كل هذا هو تسجيل المُرسِل في وضع receive، كي تتمكن واجهة CLI لديه من إصدار رمز الاقتران.",
       },
       {
         q: "هل يتوافق relayium receive مع رمز اقتران المتصفح؟",
-        a: "لا. بروتوكول رمز الاقتران في الـ CLI منفصل عن تدفق رابط الانضمام وQR في المتصفح على relayium.com — يستخدمان مصافحات مختلفة ولا يتحدثان أحدهما إلى الآخر اليوم. ذلك على خارطة الطريق، لا شيء تعتمد عليه بعد.",
+        a: "لا. بروتوكول رمز الاقتران في الـ CLI منفصل عن تدفق رابط الانضمام وQR في المتصفح على relayium.com — يستخدمان مصافحات مختلفة ولا يتحدثان أحدهما إلى الآخر اليوم، فرمز الـ CLI لا يقترن إلا بواجهة CLI أخرى. ذلك على خارطة الطريق، لا شيء تعتمد عليه بعد. وإلى أن يحدث ذلك، من يستقبل عبر متصفح يحتاج رابط relayium up لا رمزًا.",
       },
       {
         q: "ماذا يحدث إذا دفع جهاز غير معروف إلى مُستمِع serve الخاص بي؟",
@@ -806,7 +806,7 @@ const es = {
         "Qué comando ejecutas depende de quién inicia la transferencia y de cómo se conocen las dos máquinas:",
       ],
       bullets: [
-        "relayium receive <code> [destdir] — alguien te envía entre redes usando un código de emparejamiento que acordaron fuera de banda. Directo de igual a igual, verificado con un código SAS.",
+        "relayium receive <code> [destdir] — alguien te envía entre redes usando un código de emparejamiento que generó su CLI y te comunicó fuera de banda. Directo de igual a igual, verificado con un código SAS.",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — esta máquina escucha envíos daemon-direct por relayium://, en el puerto 9031 por defecto.",
         "relayium pull [user@]host:src <dest> — vas a buscar por SSH a un servidor al que ya puedes conectarte y recuperas archivos.",
       ],
@@ -814,20 +814,20 @@ const es = {
     {
       heading: "receive: alguien te envía un archivo entre redes",
       body: [
-        "Esta es la mitad receptora de relayium send. La otra persona elige un código corto y te dice cuál es por cualquier canal en el que ambos confíen — una llamada, un mensaje de chat — y luego ejecuta relayium send <path> <code> en su extremo. Tú ejecutas receive con el mismo código:",
+        "Esta es la mitad receptora de relayium send. La otra persona ejecuta relayium send <path> en su extremo (tras relayium login); su CLI genera un código de 6 caracteres, válido 5 minutos, y lo imprime. Te dice cuál es por cualquier canal en el que ambos confíen — una llamada, un mensaje de chat. Tú ejecutas receive con ese código:",
       ],
       code: [
-        `relayium receive 428571
+        `relayium receive K7M4XR
 
 # or into a specific directory
-relayium receive 428571 ./downloads`,
+relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
         "La conexión es directa, de igual a igual y cifrada de extremo a extremo; ambos terminales imprimen el mismo SAS (cadena de autenticación corta) una vez conectados — compáralo con el remitente para asegurarte de que nadie está en el medio.",
         "Sin destino indicado: los archivos caen en el directorio actual.",
         "La misma regla de solo directo que send: si no puede hallarse ninguna ruta directa entre las dos redes, la transferencia falla en lugar de enrutarse por un retransmisor.",
-        "Este es el propio protocolo de código de emparejamiento de la CLI — hoy no interopera con el código de emparejamiento del navegador ni con el flujo de QR en relayium.com; eso es una posible adición futura, no algo en lo que puedas confiar todavía.",
-        "El receptor nunca necesita una cuenta, en ninguna red.",
+        "Este es el propio protocolo de código de emparejamiento de la CLI — un código de la CLI solo se empareja con otra CLI. Hoy no interopera con el código de emparejamiento del navegador ni con el flujo de QR en relayium.com; eso es una posible adición futura, no algo en lo que puedas confiar todavía. Si solo tienes navegador, pídele al remitente un enlace de descarga de relayium up.",
+        "El receptor nunca necesita una cuenta, en ninguna red. Solo el remitente inicia sesión, para que su CLI pueda generar el código.",
       ],
     },
     {
@@ -875,11 +875,11 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     items: [
       {
         q: "¿Necesito una cuenta para recibir archivos?",
-        a: "No. Las tres formas — receive, serve y pull — son completamente gratis y no necesitan una cuenta de Relayium, en ninguno de los dos extremos.",
+        a: "No. Las tres formas — receive, serve y pull — son completamente gratis y no necesitan una cuenta de Relayium por tu parte. El único inicio de sesión en todo esto es el del remitente en modo receive, para que su CLI pueda generar el código de emparejamiento.",
       },
       {
         q: "¿relayium receive interopera con el código de emparejamiento del navegador?",
-        a: "No. El protocolo de código de emparejamiento de la CLI está separado del flujo de enlace de unión y QR del navegador en relayium.com — usan handshakes distintos y hoy no se hablan entre sí. Eso está en la hoja de ruta, no es algo en lo que puedas confiar todavía.",
+        a: "No. El protocolo de código de emparejamiento de la CLI está separado del flujo de enlace de unión y QR del navegador en relayium.com — usan handshakes distintos y hoy no se hablan entre sí, así que un código de la CLI solo se empareja con otra CLI. Eso está en la hoja de ruta, no es algo en lo que puedas confiar todavía. Hasta entonces, quien reciba desde un navegador quiere un enlace de relayium up, no un código.",
       },
       {
         q: "¿Qué pasa si una máquina desconocida envía a mi escucha serve?",
@@ -919,7 +919,7 @@ const pt = {
         "Qual comando você executa depende de quem inicia a transferência e de como as duas máquinas se conhecem:",
       ],
       bullets: [
-        "relayium receive <code> [destdir] — alguém envia para você entre redes usando um código de emparelhamento combinado fora de banda. Direto ponto a ponto, verificado com um código SAS.",
+        "relayium receive <code> [destdir] — alguém envia para você entre redes usando um código de emparelhamento que a CLI dessa pessoa gerou e repassou a você fora de banda. Direto ponto a ponto, verificado com um código SAS.",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — esta máquina fica à escuta de envios daemon-direct por relayium://, na porta 9031 por padrão.",
         "relayium pull [user@]host:src <dest> — você vai buscar por SSH em um servidor ao qual já consegue se conectar e recupera arquivos.",
       ],
@@ -927,20 +927,20 @@ const pt = {
     {
       heading: "receive: alguém envia um arquivo para você entre redes",
       body: [
-        "Esta é a metade receptora do relayium send. A outra pessoa escolhe um código curto e te diz qual é por qualquer canal em que vocês dois confiem — uma ligação, uma mensagem de chat — e então executa relayium send <path> <code> do lado dela. Você executa receive com o mesmo código:",
+        "Esta é a metade receptora do relayium send. A outra pessoa executa relayium send <path> do lado dela (depois de relayium login); a CLI dela gera um código de 6 caracteres, válido por 5 minutos, e o exibe. Ela te diz qual é por qualquer canal em que vocês dois confiem — uma ligação, uma mensagem de chat. Você executa receive com esse código:",
       ],
       code: [
-        `relayium receive 428571
+        `relayium receive K7M4XR
 
 # or into a specific directory
-relayium receive 428571 ./downloads`,
+relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
         "A conexão é direta, ponto a ponto e criptografada de ponta a ponta; ambos os terminais imprimem o mesmo SAS (cadeia de autenticação curta) assim que conectados — compare-o com o remetente para ter certeza de que ninguém está no meio.",
         "Sem destino indicado: os arquivos caem no diretório atual.",
         "A mesma regra de somente direto que o send: se nenhum caminho direto puder ser encontrado entre as duas redes, a transferência falha em vez de ser roteada por um retransmissor.",
-        "Este é o protocolo de código de emparelhamento próprio da CLI — hoje ele não interopera com o código de emparelhamento do navegador nem com o fluxo de QR em relayium.com; isso é uma possível adição futura, não algo com que você possa contar ainda.",
-        "O receptor nunca precisa de conta, em nenhuma rede.",
+        "Este é o protocolo de código de emparelhamento próprio da CLI — um código da CLI só emparelha com outra CLI. Hoje ele não interopera com o código de emparelhamento do navegador nem com o fluxo de QR em relayium.com; isso é uma possível adição futura, não algo com que você possa contar ainda. Se você só tem navegador, peça a quem envia um link de download do relayium up.",
+        "O receptor nunca precisa de conta, em nenhuma rede. Só quem envia faz login, para que a CLI dele possa gerar o código.",
       ],
     },
     {
@@ -988,11 +988,11 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     items: [
       {
         q: "Preciso de uma conta para receber arquivos?",
-        a: "Não. As três formas — receive, serve e pull — são completamente gratuitas e não precisam de conta do Relayium, em nenhuma das pontas.",
+        a: "Não. As três formas — receive, serve e pull — são completamente gratuitas e não precisam de conta do Relayium do seu lado. O único login em tudo isso é o de quem envia no modo receive, para que a CLI dele possa gerar o código de emparelhamento.",
       },
       {
         q: "O relayium receive interopera com o código de emparelhamento do navegador?",
-        a: "Não. O protocolo de código de emparelhamento da CLI é separado do fluxo de link de entrada e QR do navegador em relayium.com — eles usam handshakes diferentes e hoje não se comunicam entre si. Isso está no roteiro, não é algo com que você possa contar ainda.",
+        a: "Não. O protocolo de código de emparelhamento da CLI é separado do fluxo de link de entrada e QR do navegador em relayium.com — eles usam handshakes diferentes e hoje não se comunicam entre si, então um código da CLI só emparelha com outra CLI. Isso está no roteiro, não é algo com que você possa contar ainda. Até lá, quem recebe pelo navegador quer um link do relayium up, não um código.",
       },
       {
         q: "O que acontece se uma máquina desconhecida enviar para o meu ouvinte serve?",

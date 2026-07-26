@@ -18,11 +18,11 @@ const en = {
     {
       heading: "What they have in common",
       body: [
-        "Both tools solve the same core problem the same honest way: no account, no file staged on a server you don't control, and a short code as the only thing the two ends need to agree on out of band.",
+        "Both tools solve the same core problem the same honest way: no file staged on a server you don't control, and a short code as the only thing the two ends pass between them out of band. magic-wormhole needs no account at all; Relayium asks only the sender to sign in, so its server can mint that code, and the receiver still doesn't.",
       ],
       bullets: [
         "End-to-end encrypted: magic-wormhole derives a session key from the wormhole code itself using a PAKE (SPAKE2), so even its own rendezvous server never learns the key; Relayium's send/receive does an X25519 key exchange between the two ends directly and shows a short verification code (SAS) you can compare before any bytes move.",
-        "No account for a transfer, on either tool.",
+        "No account to receive, on either tool — and none at all for magic-wormhole.",
         "Free and open source — read the code that touches your files.",
         "Cross-platform: macOS, Linux and Windows.",
       ],
@@ -64,7 +64,7 @@ const en = {
         "Folder sync: relayium sync mirrors incrementally with --delete and --watch; magic-wormhole sends a batch (or a zipped folder) and exits, with no mirror or delete semantics.",
         "Verification: both are encrypted end to end; Relayium's send/receive additionally shows a short SAS code both sides compare before the transfer starts.",
         "Self-hosting: Relayium's server is a single Docker image you can run yourself, serving both the CLI and the browser app; the CLI's send/receive can point at it with --server.",
-        "License and cost: both free and open source, neither requires an account.",
+        "License and cost: both free and open source. magic-wormhole needs no account at all; Relayium needs one only for send, to mint the pairing code.",
       ],
     },
   ],
@@ -77,7 +77,7 @@ const en = {
       },
       {
         q: "Does it need an account?",
-        a: "No. push/pull uses your own SSH access, daemon-direct uses pinned-TLS certificate trust between your machines, and send/receive uses a short code you agree on out of band. None of it touches a Relayium account.",
+        a: "Only send does. push/pull uses your own SSH access and daemon-direct uses pinned-TLS certificate trust between your machines, so neither touches a Relayium account. send/receive is the exception: only the server can mint a pairing code, and only for a signed-in account, so the sender runs relayium login once. Receiving never needs an account.",
       },
       {
         q: "What if I'm behind a strict NAT and there's no direct path?",
@@ -94,7 +94,7 @@ const en = {
     ],
   },
   cta: {
-    text: "Install the free Relayium CLI and try push, sync or send — no account, and a code-based transfer as quick to start as magic-wormhole.",
+    text: "Install the free Relayium CLI and try push, sync or send — free, and a code-based transfer as quick to start as magic-wormhole.",
     button: "Get the CLI",
     href: "/cli",
   },
@@ -114,11 +114,11 @@ const zh = {
     {
       heading: "两者的共同点",
       body: [
-        "两个工具用同样老实的方式解决同一个核心问题：不需要账号，文件不会滞留在你无法掌控的服务器上，两端唯一需要线下约定的就是一段简短代码。",
+        "两个工具用同样老实的方式解决同一个核心问题：文件不会滞留在你无法掌控的服务器上，两端之间唯一需要线下传递的就是一段简短代码。magic-wormhole 完全不需要账号；Relayium 只要求发送方登录，好让服务器签发这个码，接收方依然不用。",
       ],
       bullets: [
         "端到端加密：magic-wormhole 用一种 PAKE（SPAKE2）算法直接从暗号代码本身推导出会话密钥，就连它自己的会合服务器也永远不会知道这个密钥；Relayium 的 send/receive 在两端之间直接做 X25519 密钥交换，并在任何字节移动之前展示一段简短的验证码（SAS）供双方核对。",
-        "两者传输都不需要账号。",
+        "两者接收都不需要账号——magic-wormhole 更是完全不需要。",
         "免费开源——你可以阅读接触你文件的每一行代码。",
         "跨平台：macOS、Linux 和 Windows。",
       ],
@@ -160,7 +160,7 @@ const zh = {
         "文件夹同步：relayium sync 支持 --delete 与 --watch 的增量镜像；magic-wormhole 发送一批（或打包的文件夹）后就退出，没有镜像或删除语义。",
         "验证：两者都端到端加密；Relayium 的 send/receive 额外会在传输开始前展示一段供双方核对的简短 SAS 验证码。",
         "自托管：Relayium 的服务器是一个可以自己运行的单一 Docker 镜像，同时服务 CLI 和浏览器版；CLI 的 send/receive 可以用 --server 指向它。",
-        "许可证与费用：两者都免费开源，都不需要账号。",
+        "许可证与费用：两者都免费开源。magic-wormhole 完全不需要账号；Relayium 只有 send 为了签发配对码才需要。",
       ],
     },
   ],
@@ -173,7 +173,7 @@ const zh = {
       },
       {
         q: "需要账号吗？",
-        a: "不需要。push/pull 用你自己的 SSH 权限，daemon-direct 用你机器之间锁定的 TLS 证书信任，send/receive 用你们线下约定的一段简短代码。三者都不涉及 Relayium 账号。",
+        a: "只有 send 需要。push/pull 用你自己的 SSH 权限，daemon-direct 用你机器之间锁定的 TLS 证书信任，这两者都不涉及 Relayium 账号。send/receive 是例外：配对码只能由服务器签发，而且只签发给已登录的账号，所以发送方要先运行一次 relayium login。接收方始终不需要账号。",
       },
       {
         q: "如果我处在严格 NAT 之后又打不通直连怎么办？",
@@ -190,7 +190,7 @@ const zh = {
     ],
   },
   cta: {
-    text: "安装免费的 Relayium CLI，试试 push、sync 或 send——无需账号，基于代码的传输上手速度不输 magic-wormhole。",
+    text: "安装免费的 Relayium CLI，试试 push、sync 或 send——完全免费，基于代码的传输上手速度不输 magic-wormhole。",
     button: "获取 CLI",
     href: "/cli",
   },
@@ -210,11 +210,11 @@ const ja = {
     {
       heading: "両者の共通点",
       body: [
-        "どちらのツールも同じ核心的な課題を、同じ誠実な方法で解決しています。アカウント不要、あなたが管理できないサーバーにファイルが留まることもなく、両端がオフバンドで合意する必要があるのは短いコードだけです。",
+        "どちらのツールも同じ核心的な課題を、同じ誠実な方法で解決しています。あなたが管理できないサーバーにファイルが留まることはなく、両端がオフバンドで受け渡すのは短いコードだけです。magic-wormhole はアカウントが一切不要で、Relayium はサーバーがそのコードを発行できるよう送信側にのみサインインを求め、受信側は依然として不要です。",
       ],
       bullets: [
         "エンドツーエンドで暗号化：magic-wormhole は PAKE（SPAKE2）を使って暗号コードそのものからセッション鍵を導出するため、自身のランデブーサーバーですらその鍵を知ることはありません。Relayium の send/receive は両端の間で直接 X25519 鍵交換を行い、バイトが動く前に双方が照合できる短い検証コード（SAS）を表示します。",
-        "どちらのツールも転送にアカウントは不要。",
+        "どちらのツールも受信にアカウントは不要。magic-wormhole は一切不要です。",
         "無料でオープンソース——ファイルに触れるコードを読むことができます。",
         "クロスプラットフォーム：macOS、Linux、Windows。",
       ],
@@ -256,7 +256,7 @@ const ja = {
         "フォルダ同期：relayium sync は --delete と --watch を伴う増分ミラーリングを行う；magic-wormhole はバッチ（または圧縮したフォルダ）を送って終了し、ミラーや削除の概念はありません。",
         "検証：どちらもエンドツーエンドで暗号化される；Relayium の send/receive はさらに、転送開始前に双方が照合する短い SAS コードを表示します。",
         "セルフホスト：Relayium のサーバーは自分で運用できる単一の Docker イメージで、CLI とブラウザ版の両方に対応します。CLI の send/receive も --server でそこを指定できます。",
-        "ライセンスと費用：どちらも無料でオープンソース、どちらもアカウント不要です。",
+        "ライセンスと費用：どちらも無料でオープンソースです。magic-wormhole はアカウントが一切不要、Relayium はペアリングコードを発行する send にだけ必要です。",
       ],
     },
   ],
@@ -286,7 +286,7 @@ const ja = {
     ],
   },
   cta: {
-    text: "無料の Relayium CLI をインストールして push、sync、send を試してみましょう——アカウント不要で、magic-wormhole と同じくらいすぐに始められるコードベースの転送です。",
+    text: "無料の Relayium CLI をインストールして push、sync、send を試してみましょう——完全無料で、magic-wormhole と同じくらいすぐに始められるコードベースの転送です。",
     button: "CLI を入手",
     href: "/cli",
   },
@@ -306,11 +306,11 @@ const ko = {
     {
       heading: "두 도구의 공통점",
       body: [
-        "두 도구 모두 같은 핵심 문제를 같은 정직한 방식으로 해결합니다. 계정이 필요 없고, 파일이 여러분이 통제할 수 없는 서버에 머물지 않으며, 양쪽이 별도 채널로 합의해야 하는 것은 짧은 코드 하나뿐입니다.",
+        "두 도구 모두 같은 핵심 문제를 같은 정직한 방식으로 해결합니다. 파일이 여러분이 통제할 수 없는 서버에 머물지 않으며, 양쪽이 별도 채널로 주고받는 것은 짧은 코드 하나뿐입니다. magic-wormhole은 계정이 전혀 필요 없고, Relayium은 서버가 그 코드를 발급할 수 있도록 보내는 쪽에만 로그인을 요구하며 받는 쪽은 여전히 필요 없습니다.",
       ],
       bullets: [
         "종단간 암호화: magic-wormhole은 PAKE(SPAKE2)를 사용해 워프홀 코드 자체에서 세션 키를 유도하므로, 자체 랑데부 서버조차 그 키를 알지 못합니다. Relayium의 send/receive는 양쪽 사이에서 직접 X25519 키 교환을 수행하고, 바이트가 움직이기 전에 양쪽이 대조할 수 있는 짧은 검증 코드(SAS)를 보여줍니다.",
-        "두 도구 모두 전송에 계정이 필요 없음.",
+        "두 도구 모두 받는 데 계정이 필요 없음 — magic-wormhole은 아예 필요 없습니다.",
         "무료 오픈소스 — 파일에 접근하는 코드를 직접 읽어볼 수 있습니다.",
         "크로스 플랫폼: macOS, Linux, Windows.",
       ],
@@ -352,7 +352,7 @@ const ko = {
         "폴더 동기화: relayium sync는 --delete와 --watch로 증분 미러링; magic-wormhole은 묶음(또는 압축된 폴더)을 보내고 종료하며 미러나 삭제 개념이 없음.",
         "검증: 둘 다 종단간 암호화됨; Relayium의 send/receive는 추가로 전송 시작 전 양쪽이 대조하는 짧은 SAS 코드를 표시함.",
         "자체 호스팅: Relayium의 서버는 직접 운영할 수 있는 단일 Docker 이미지로, CLI와 브라우저 앱 둘 다에 사용됨; CLI의 send/receive도 --server로 그곳을 가리킬 수 있음.",
-        "라이선스와 비용: 둘 다 무료 오픈소스, 둘 다 계정 불필요.",
+        "라이선스와 비용: 둘 다 무료 오픈소스. magic-wormhole은 계정이 전혀 필요 없고, Relayium은 페어링 코드를 발급하는 send에만 필요합니다.",
       ],
     },
   ],
@@ -365,7 +365,7 @@ const ko = {
       },
       {
         q: "계정이 필요한가요?",
-        a: "아니요. push/pull은 자신의 SSH 접근을 사용하고, daemon-direct는 기기 간 고정된 TLS 인증서 신뢰를 사용하며, send/receive는 별도 채널로 미리 합의한 짧은 코드를 사용합니다. 어느 것도 Relayium 계정을 필요로 하지 않습니다.",
+        a: "send만 그렇습니다. push/pull은 자신의 SSH 접근을 사용하고 daemon-direct는 기기 간 고정된 TLS 인증서 신뢰를 사용하므로 둘 다 Relayium 계정을 건드리지 않습니다. send/receive가 예외입니다. 페어링 코드는 서버만, 그것도 로그인된 계정에만 발급할 수 있으므로 보내는 쪽이 relayium login을 한 번 실행합니다. 받는 데는 계정이 전혀 필요 없습니다.",
       },
       {
         q: "엄격한 NAT 뒤에 있어 직접 경로가 없다면 어떻게 되나요?",
@@ -382,7 +382,7 @@ const ko = {
     ],
   },
   cta: {
-    text: "무료 Relayium CLI를 설치하고 push, sync, send를 써보세요 — 계정 없이, magic-wormhole만큼 빠르게 시작할 수 있는 코드 기반 전송입니다.",
+    text: "무료 Relayium CLI를 설치하고 push, sync, send를 써보세요 — 완전 무료로, magic-wormhole만큼 빠르게 시작할 수 있는 코드 기반 전송입니다.",
     button: "CLI 받기",
     href: "/cli",
   },
@@ -402,11 +402,11 @@ const de = {
     {
       heading: "Was beide gemeinsam haben",
       body: [
-        "Beide Tools lösen dasselbe Kernproblem auf dieselbe ehrliche Art: kein Konto, keine Datei, die auf einem Server liegen bleibt, den du nicht kontrollierst, und ein kurzer Code als einziges, worauf sich beide Enden außerhalb des Kanals einigen müssen.",
+        "Beide Tools lösen dasselbe Kernproblem auf dieselbe ehrliche Art: keine Datei, die auf einem Server liegen bleibt, den du nicht kontrollierst, und ein kurzer Code als einziges, was die beiden Enden außerhalb des Kanals austauschen. magic-wormhole braucht überhaupt kein Konto; Relayium verlangt nur vom Absender eine Anmeldung, damit sein Server diesen Code erzeugen kann — der Empfänger weiterhin nicht.",
       ],
       bullets: [
         "Ende-zu-Ende verschlüsselt: magic-wormhole leitet mit einem PAKE (SPAKE2) einen Sitzungsschlüssel direkt aus dem Wormhole-Code ab, sodass nicht einmal der eigene Rendezvous-Server je den Schlüssel erfährt. Relayiums send/receive führt einen direkten X25519-Schlüsselaustausch zwischen den beiden Enden durch und zeigt einen kurzen Prüfcode (SAS), den ihr vor der ersten übertragenen Bit vergleichen könnt.",
-        "Kein Konto für eine Übertragung, bei beiden Tools.",
+        "Kein Konto zum Empfangen, bei beiden Tools — und bei magic-wormhole überhaupt keines.",
         "Kostenlos und quelloffen — lies den Code, der deine Dateien berührt.",
         "Plattformübergreifend: macOS, Linux und Windows.",
       ],
@@ -448,7 +448,7 @@ const de = {
         "Ordner-Sync: relayium sync spiegelt inkrementell mit --delete und --watch; magic-wormhole sendet eine Reihe (oder einen gezippten Ordner) und beendet sich, ohne Spiegel- oder Löschsemantik.",
         "Verifikation: Beide sind Ende-zu-Ende verschlüsselt; Relayiums send/receive zeigt zusätzlich einen kurzen SAS-Code, den beide Seiten vor Übertragungsbeginn vergleichen.",
         "Selbst hosten: Relayiums Server ist ein einzelnes Docker-Image, das du selbst betreiben kannst und das sowohl der CLI als auch der Web-App dient; die send/receive-Funktion der CLI kann mit --server darauf zeigen.",
-        "Lizenz und Kosten: beide kostenlos und quelloffen, keines braucht ein Konto.",
+        "Lizenz und Kosten: beide kostenlos und quelloffen. magic-wormhole braucht überhaupt kein Konto; Relayium nur für send, um den Pairing-Code zu erzeugen.",
       ],
     },
   ],
@@ -461,7 +461,7 @@ const de = {
       },
       {
         q: "Braucht sie ein Konto?",
-        a: "Nein. push/pull nutzt deinen eigenen SSH-Zugang, daemon-direct nutzt gepinntes TLS-Zertifikatsvertrauen zwischen deinen Maschinen, und send/receive nutzt einen Code, den ihr außerhalb des Kanals vereinbart. Nichts davon berührt ein Relayium-Konto.",
+        a: "Nur send. push/pull nutzt deinen eigenen SSH-Zugang und daemon-direct nutzt gepinntes TLS-Zertifikatsvertrauen zwischen deinen Maschinen, beides berührt also kein Relayium-Konto. send/receive ist die Ausnahme: Einen Pairing-Code kann nur der Server erzeugen, und nur für ein angemeldetes Konto, also führt der Absender einmal relayium login aus. Zum Empfangen braucht es nie ein Konto.",
       },
       {
         q: "Was, wenn ich hinter strengem NAT sitze und es keinen direkten Pfad gibt?",
@@ -478,7 +478,7 @@ const de = {
     ],
   },
   cta: {
-    text: "Installiere die kostenlose Relayium CLI und probiere push, sync oder send — ohne Konto, und eine codebasierte Übertragung genauso schnell startklar wie magic-wormhole.",
+    text: "Installiere die kostenlose Relayium CLI und probiere push, sync oder send — kostenlos, und eine codebasierte Übertragung genauso schnell startklar wie magic-wormhole.",
     button: "CLI holen",
     href: "/cli",
   },
@@ -498,11 +498,11 @@ const fr = {
     {
       heading: "Ce que les deux ont en commun",
       body: [
-        "Les deux outils résolvent le même problème central de la même manière honnête : aucun compte, aucun fichier qui reste sur un serveur que vous ne contrôlez pas, et un court code comme seule chose que les deux extrémités doivent s'accorder par un autre canal.",
+        "Les deux outils résolvent le même problème central de la même manière honnête : aucun fichier qui reste sur un serveur que vous ne contrôlez pas, et un court code comme seule chose que les deux extrémités se transmettent par un autre canal. magic-wormhole ne demande aucun compte ; Relayium n'en demande un qu'à l'expéditeur, pour que son serveur puisse générer ce code, et le destinataire toujours pas.",
       ],
       bullets: [
         "Chiffré de bout en bout : magic-wormhole dérive une clé de session directement à partir du code wormhole via un PAKE (SPAKE2), si bien que même son propre serveur de rendez-vous n'apprend jamais la clé. Le send/receive de Relayium effectue un échange de clés X25519 directement entre les deux extrémités et affiche un court code de vérification (SAS) à comparer avant que le moindre octet ne bouge.",
-        "Aucun compte pour un transfert, sur les deux outils.",
+        "Aucun compte pour recevoir, sur les deux outils — et aucun du tout pour magic-wormhole.",
         "Gratuit et open source — lisez le code qui touche à vos fichiers.",
         "Multiplateforme : macOS, Linux et Windows.",
       ],
@@ -544,7 +544,7 @@ const fr = {
         "Synchronisation de dossiers : relayium sync fait un miroir incrémental avec --delete et --watch ; magic-wormhole envoie un lot (ou un dossier compressé) puis se termine, sans sémantique de miroir ni de suppression.",
         "Vérification : les deux sont chiffrés de bout en bout ; le send/receive de Relayium affiche en plus un court code SAS que les deux parties comparent avant le début du transfert.",
         "Auto-hébergement : le serveur de Relayium est une seule image Docker que vous pouvez exploiter vous-même, servant à la fois la CLI et l'application web ; le send/receive de la CLI peut pointer dessus avec --server.",
-        "Licence et coût : les deux sont gratuits et open source, aucun des deux ne nécessite de compte.",
+        "Licence et coût : les deux sont gratuits et open source. magic-wormhole ne nécessite aucun compte ; Relayium n'en demande un que pour send, afin de générer le code d'appairage.",
       ],
     },
   ],
@@ -557,7 +557,7 @@ const fr = {
       },
       {
         q: "A-t-elle besoin d'un compte ?",
-        a: "Non. push/pull utilise votre propre accès SSH, daemon-direct utilise une confiance par certificat TLS épinglé entre vos machines, et send/receive utilise un code que vous convenez par un autre canal. Rien de tout cela ne touche un compte Relayium.",
+        a: "Seul send. push/pull utilise votre propre accès SSH et daemon-direct utilise une confiance par certificat TLS épinglé entre vos machines, donc ni l'un ni l'autre ne touche un compte Relayium. send/receive fait exception : seul le serveur peut générer un code de jumelage, et seulement pour un compte connecté, donc l'expéditeur lance une fois relayium login. Recevoir ne nécessite jamais de compte.",
       },
       {
         q: "Que se passe-t-il si je suis derrière un NAT strict et qu'il n'y a aucun chemin direct ?",
@@ -574,7 +574,7 @@ const fr = {
     ],
   },
   cta: {
-    text: "Installez la CLI Relayium gratuite et essayez push, sync ou send — sans compte, avec un transfert à base de code tout aussi rapide à démarrer que magic-wormhole.",
+    text: "Installez la CLI Relayium gratuite et essayez push, sync ou send — gratuit, avec un transfert à base de code tout aussi rapide à démarrer que magic-wormhole.",
     button: "Obtenir la CLI",
     href: "/cli",
   },
@@ -594,11 +594,11 @@ const ar = {
     {
       heading: "ما هو مشترك بينهما",
       body: [
-        "تحلّ الأداتان المشكلة الجوهرية نفسها بالطريقة الصادقة نفسها: لا حساب، ولا ملف مُخزَّن على خادم لا تتحكم فيه، ورمز قصير هو الشيء الوحيد الذي يحتاج الطرفان للاتفاق عليه خارج القناة.",
+        "تحلّ الأداتان المشكلة الجوهرية نفسها بالطريقة الصادقة نفسها: لا ملف مُخزَّن على خادم لا تتحكم فيه، ورمز قصير هو الشيء الوحيد الذي يتناقله الطرفان خارج القناة. أما الحساب فلا تحتاجه magic-wormhole إطلاقاً، بينما يطلبه Relayium من المُرسِل وحده كي يُصدر خادمه ذلك الرمز، ويظل المُستقبِل بلا حاجة إليه.",
       ],
       bullets: [
         "مشفّر من الطرف إلى الطرف: يشتقّ magic-wormhole مفتاح الجلسة من رمز الـ wormhole نفسه باستخدام PAKE (SPAKE2)، بحيث لا يعرف المفتاح حتى خادم الالتقاء الخاص به؛ أما send/receive في Relayium فيجري تبادل مفاتيح X25519 مباشرة بين الطرفين ويعرض رمز تحقق قصير (SAS) يمكنك مقارنته قبل تحرّك أي بايت.",
-        "لا حساب لأي عملية نقل، في كلتا الأداتين.",
+        "لا حساب للاستقبال في كلتا الأداتين — ولا حساب إطلاقاً مع magic-wormhole.",
         "مجاني ومفتوح المصدر — اقرأ الشيفرة التي تلمس ملفاتك.",
         "متعدد المنصات: macOS و Linux و Windows.",
       ],
@@ -640,7 +640,7 @@ const ar = {
         "مزامنة المجلدات: يعكس relayium sync تزايدياً مع --delete و --watch؛ أما magic-wormhole فيرسل دفعة (أو مجلداً مضغوطاً) ثم يخرج، بلا دلالات مرآة أو حذف.",
         "التحقق: كلاهما مشفَّر من الطرف إلى الطرف؛ ويعرض send/receive في Relayium إضافةً رمز SAS قصيراً يقارنه الطرفان قبل بدء النقل.",
         "الاستضافة الذاتية: خادم Relayium صورة Docker واحدة تستطيع تشغيلها بنفسك، تخدم CLI وتطبيق المتصفح معاً؛ ويمكن لـ send/receive في CLI التوجّه إليه بـ --server.",
-        "الترخيص والتكلفة: كلاهما مجاني ومفتوح المصدر، ولا يتطلب أيٌّ منهما حساباً.",
+        "الترخيص والتكلفة: كلاهما مجاني ومفتوح المصدر. لا يحتاج magic-wormhole حساباً إطلاقاً، أما Relayium فيحتاجه لـ send فقط، كي يُصدر رمز الاقتران.",
       ],
     },
   ],
@@ -653,7 +653,7 @@ const ar = {
       },
       {
         q: "هل يحتاج إلى حساب؟",
-        a: "لا. يستخدم push/pull وصول SSH الخاص بك، ويستخدم daemon-direct ثقة شهادة TLS المثبَّتة بين أجهزتك، ويستخدم send/receive رمزاً قصيراً تتفقان عليه خارج القناة. لا شيء من ذلك يلمس حساب Relayium.",
+        a: "‏send وحده. يستخدم push/pull وصول SSH الخاص بك، ويستخدم daemon-direct ثقة شهادة TLS المثبَّتة بين أجهزتك، فلا يلمس أيٌّ منهما حساب Relayium. أما send/receive فهو الاستثناء: لا يستطيع إصدار رمز الاقتران إلا الخادم، ولحساب مسجَّل الدخول فقط، لذا يشغّل المُرسِل relayium login مرة واحدة. أما الاستقبال فلا يحتاج حساباً أبداً.",
       },
       {
         q: "ماذا لو كنت خلف NAT صارم ولا يوجد مسار مباشر؟",
@@ -670,7 +670,7 @@ const ar = {
     ],
   },
   cta: {
-    text: "ثبّت CLI المجاني الخاص بـ Relayium وجرّب push أو sync أو send — بلا حساب، ونقل قائم على رمز يبدأ بالسرعة نفسها مثل magic-wormhole.",
+    text: "ثبّت CLI المجاني الخاص بـ Relayium وجرّب push أو sync أو send — مجاناً تماماً، ونقل قائم على رمز يبدأ بالسرعة نفسها مثل magic-wormhole.",
     button: "احصل على CLI",
     href: "/cli",
   },
@@ -690,11 +690,11 @@ const es = {
     {
       heading: "Lo que tienen en común",
       body: [
-        "Ambas herramientas resuelven el mismo problema central de la misma forma honesta: sin cuenta, sin ningún archivo depositado en un servidor que no controlas, y un código corto como lo único en lo que los dos extremos necesitan ponerse de acuerdo por otro canal.",
+        "Ambas herramientas resuelven el mismo problema central de la misma forma honesta: sin ningún archivo depositado en un servidor que no controlas, y un código corto como lo único que los dos extremos se pasan por otro canal. magic-wormhole no necesita cuenta alguna; Relayium solo se la pide a quien envía, para que su servidor pueda generar ese código, y quien recibe sigue sin necesitarla.",
       ],
       bullets: [
         "Cifrado de extremo a extremo: magic-wormhole deriva una clave de sesión del propio código wormhole usando un PAKE (SPAKE2), de modo que ni siquiera su propio servidor de encuentro llega a conocer la clave; el send/receive de Relayium hace un intercambio de claves X25519 directamente entre los dos extremos y muestra un código de verificación corto (SAS) que puedes comparar antes de que se mueva ningún byte.",
-        "Sin cuenta para una transferencia, en ambas herramientas.",
+        "Sin cuenta para recibir, en ambas herramientas — y ninguna en absoluto para magic-wormhole.",
         "Gratis y de código abierto — lee el código que toca tus archivos.",
         "Multiplataforma: macOS, Linux y Windows.",
       ],
@@ -736,7 +736,7 @@ const es = {
         "Sincronización de carpetas: relayium sync hace un espejo incremental con --delete y --watch; magic-wormhole envía un lote (o una carpeta comprimida) y termina, sin semántica de espejo ni de eliminación.",
         "Verificación: ambos están cifrados de extremo a extremo; el send/receive de Relayium muestra además un código SAS corto que ambos lados comparan antes de que empiece la transferencia.",
         "Autoalojamiento: el servidor de Relayium es una única imagen Docker que puedes ejecutar tú mismo, sirviendo tanto la CLI como la aplicación web; el send/receive de la CLI puede apuntar hacia él con --server.",
-        "Licencia y coste: ambos gratis y de código abierto, ninguno requiere cuenta.",
+        "Licencia y coste: ambos gratis y de código abierto. magic-wormhole no requiere cuenta alguna; Relayium solo la requiere para send, para generar el código de emparejamiento.",
       ],
     },
   ],
@@ -749,7 +749,7 @@ const es = {
       },
       {
         q: "¿Necesita una cuenta?",
-        a: "No. push/pull usa tu propio acceso SSH, daemon-direct usa la confianza de certificado TLS fijado entre tus máquinas, y send/receive usa un código corto que acordáis por otro canal. Nada de esto toca una cuenta de Relayium.",
+        a: "Solo send. push/pull usa tu propio acceso SSH y daemon-direct usa la confianza de certificado TLS fijado entre tus máquinas, así que ninguno toca una cuenta de Relayium. send/receive es la excepción: solo el servidor puede generar un código de emparejamiento, y solo para una cuenta con sesión iniciada, así que quien envía ejecuta relayium login una vez. Recibir nunca necesita cuenta.",
       },
       {
         q: "¿Qué pasa si estoy detrás de un NAT estricto y no hay camino directo?",
@@ -766,7 +766,7 @@ const es = {
     ],
   },
   cta: {
-    text: "Instala la CLI gratuita de Relayium y prueba push, sync o send — sin cuenta, y una transferencia basada en código tan rápida de empezar como magic-wormhole.",
+    text: "Instala la CLI gratuita de Relayium y prueba push, sync o send — totalmente gratis, y una transferencia basada en código tan rápida de empezar como magic-wormhole.",
     button: "Obtener la CLI",
     href: "/cli",
   },
@@ -786,11 +786,11 @@ const pt = {
     {
       heading: "O que eles têm em comum",
       body: [
-        "Ambas as ferramentas resolvem o mesmo problema central da mesma forma honesta: sem conta, sem nenhum arquivo depositado em um servidor que você não controla, e um código curto como a única coisa que as duas pontas precisam combinar por outro canal.",
+        "Ambas as ferramentas resolvem o mesmo problema central da mesma forma honesta: sem nenhum arquivo depositado em um servidor que você não controla, e um código curto como a única coisa que as duas pontas trocam por outro canal. O magic-wormhole não precisa de conta nenhuma; o Relayium pede login só a quem envia, para que o servidor dele possa gerar esse código, e quem recebe continua sem precisar.",
       ],
       bullets: [
         "Criptografado de ponta a ponta: o magic-wormhole deriva uma chave de sessão do próprio código wormhole usando um PAKE (SPAKE2), de modo que nem seu próprio servidor de encontro chega a conhecer a chave; o send/receive do Relayium faz uma troca de chaves X25519 diretamente entre as duas pontas e mostra um código de verificação curto (SAS) que você pode comparar antes de qualquer byte se mover.",
-        "Sem conta para uma transferência, em ambas as ferramentas.",
+        "Sem conta para receber, em ambas as ferramentas — e nenhuma conta para o magic-wormhole.",
         "Gratuito e de código aberto — leia o código que toca seus arquivos.",
         "Multiplataforma: macOS, Linux e Windows.",
       ],
@@ -832,7 +832,7 @@ const pt = {
         "Sincronização de pastas: o relayium sync faz um espelho incremental com --delete e --watch; o magic-wormhole envia um lote (ou uma pasta compactada) e encerra, sem semântica de espelho nem de exclusão.",
         "Verificação: ambos são criptografados de ponta a ponta; o send/receive do Relayium mostra ainda um código SAS curto que os dois lados comparam antes de a transferência começar.",
         "Auto-hospedagem: o servidor do Relayium é uma única imagem Docker que você pode rodar por conta própria, servindo tanto a CLI quanto o aplicativo web; o send/receive da CLI pode apontar para ele com --server.",
-        "Licença e custo: ambos gratuitos e de código aberto, nenhum exige conta.",
+        "Licença e custo: ambos gratuitos e de código aberto. O magic-wormhole não exige conta nenhuma; o Relayium exige apenas para o send, para gerar o código de emparelhamento.",
       ],
     },
   ],
@@ -845,7 +845,7 @@ const pt = {
       },
       {
         q: "Ela precisa de conta?",
-        a: "Não. O push/pull usa seu próprio acesso SSH, o daemon-direct usa a confiança de certificado TLS fixado entre suas máquinas, e o send/receive usa um código curto que vocês combinam por outro canal. Nada disso toca uma conta do Relayium.",
+        a: "Só o send. O push/pull usa seu próprio acesso SSH e o daemon-direct usa a confiança de certificado TLS fixado entre suas máquinas, então nenhum dos dois toca uma conta do Relayium. O send/receive é a exceção: só o servidor pode gerar um código de emparelhamento, e apenas para uma conta com login feito, então quem envia roda relayium login uma vez. Receber nunca precisa de conta.",
       },
       {
         q: "E se eu estiver atrás de um NAT rígido e não houver caminho direto?",
@@ -862,7 +862,7 @@ const pt = {
     ],
   },
   cta: {
-    text: "Instale a CLI gratuita do Relayium e experimente push, sync ou send — sem conta, e uma transferência baseada em código tão rápida de começar quanto o magic-wormhole.",
+    text: "Instale a CLI gratuita do Relayium e experimente push, sync ou send — totalmente gratuita, e uma transferência baseada em código tão rápida de começar quanto o magic-wormhole.",
     button: "Obter a CLI",
     href: "/cli",
   },

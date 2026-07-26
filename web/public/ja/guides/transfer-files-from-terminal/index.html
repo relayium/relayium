@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Relayium CLI でターミナルからファイルを転送する · Relayium</title>
-    <meta name="description" content="無料でエンドツーエンド暗号化された Relayium CLI をインストールし、ターミナルから3つの方法でファイルを移動しましょう——自分の SSH 経由、ネットワークをまたぐペアリングコード、または2台のサーバー間の直接転送。アカウント不要で、ファイルのバイトが私たちのサーバーを通過することはありません。" />
+    <meta name="description" content="無料でエンドツーエンド暗号化された Relayium CLI をインストールし、ターミナルから3つの方法でファイルを移動しましょう——自分の SSH 経由、ネットワークをまたぐペアリングコード、または2台のサーバー間の直接転送。無料で、ファイルのバイトが私たちのサーバーを通過することはありません——アカウントが要るのはペアリングコードを発行する send だけです。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/guides/transfer-files-from-terminal/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/transfer-files-from-terminal/" />
@@ -23,7 +23,7 @@
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Relayium CLI でターミナルからファイルを転送する" />
-    <meta property="og:description" content="無料でエンドツーエンド暗号化された Relayium CLI をインストールし、ターミナルから3つの方法でファイルを移動しましょう——自分の SSH 経由、ネットワークをまたぐペアリングコード、または2台のサーバー間の直接転送。アカウント不要で、ファイルのバイトが私たちのサーバーを通過することはありません。" />
+    <meta property="og:description" content="無料でエンドツーエンド暗号化された Relayium CLI をインストールし、ターミナルから3つの方法でファイルを移動しましょう——自分の SSH 経由、ネットワークをまたぐペアリングコード、または2台のサーバー間の直接転送。無料で、ファイルのバイトが私たちのサーバーを通過することはありません——アカウントが要るのはペアリングコードを発行する send だけです。" />
     <meta property="og:url" content="https://relayium.com/ja/guides/transfer-files-from-terminal/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -33,9 +33,9 @@
     <meta property="og:locale" content="ja_JP" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Relayium CLI でターミナルからファイルを転送する" />
-    <meta name="twitter:description" content="無料でエンドツーエンド暗号化された Relayium CLI をインストールし、ターミナルから3つの方法でファイルを移動しましょう——自分の SSH 経由、ネットワークをまたぐペアリングコード、または2台のサーバー間の直接転送。アカウント不要で、ファイルのバイトが私たちのサーバーを通過することはありません。" />
+    <meta name="twitter:description" content="無料でエンドツーエンド暗号化された Relayium CLI をインストールし、ターミナルから3つの方法でファイルを移動しましょう——自分の SSH 経由、ネットワークをまたぐペアリングコード、または2台のサーバー間の直接転送。無料で、ファイルのバイトが私たちのサーバーを通過することはありません——アカウントが要るのはペアリングコードを発行する send だけです。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI でターミナルからファイルを転送する","description":"無料でエンドツーエンド暗号化された Relayium CLI をインストールし、ターミナルから3つの方法でファイルを移動しましょう——自分の SSH 経由、ネットワークをまたぐペアリングコード、または2台のサーバー間の直接転送。アカウント不要で、ファイルのバイトが私たちのサーバーを通過することはありません。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-07-08","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/transfer-files-from-terminal/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"CLI に料金はかかりますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。CLI は完全に無料です。マシン同士を直接つなぎ、ファイルのバイトを Relayium 経由でプロキシすることは決してないため、計測するものも支払うものもありません。"}},{"@type":"Question","name":"Relayium アカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。push / pull は自分の SSH を使い、daemon direct はサーバー間の公開鍵による信頼を使い、send / receive は事前に合意したコードを使います。いずれもアカウントは不要です。"}},{"@type":"Question","name":"どのオペレーティングシステムに対応していますか？","acceptedAnswer":{"@type":"Answer","text":"macOS、Linux、Windows 向けに、x86-64 と arm64 の両方でビルド済みバイナリが公開されています。インストールスクリプトは macOS と Linux に対応しています。Windows では、リリースページから .zip をダウンロードしてください。"}},{"@type":"Question","name":"自分のファイルは Relayium のサーバーを通過しますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。どのモードでも、ファイルのバイトは両端の間を直接移動します。私たちのサーバーに一切触れるのは send / receive だけで、それも小さなランデブーハンドシェイクのためだけです——ファイルの中身は決して含まれません。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI でターミナルからファイルを転送する","description":"無料でエンドツーエンド暗号化された Relayium CLI をインストールし、ターミナルから3つの方法でファイルを移動しましょう——自分の SSH 経由、ネットワークをまたぐペアリングコード、または2台のサーバー間の直接転送。無料で、ファイルのバイトが私たちのサーバーを通過することはありません——アカウントが要るのはペアリングコードを発行する send だけです。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-07-08","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/transfer-files-from-terminal/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"CLI に料金はかかりますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。CLI は完全に無料です。マシン同士を直接つなぎ、ファイルのバイトを Relayium 経由でプロキシすることは決してないため、計測するものも支払うものもありません。"}},{"@type":"Question","name":"Relayium アカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"send のときだけ必要です。push / pull は自分の SSH を使い、daemon direct はサーバー間の公開鍵による信頼を使うので、どちらもアカウントは不要です。send は違います。ペアリングコードを発行できるのはサーバーだけで、しかもサインイン済みのアカウントに対してだけなので、送信側は一度 relayium login を実行します。受信側がサインインすることはありません。"}},{"@type":"Question","name":"どのオペレーティングシステムに対応していますか？","acceptedAnswer":{"@type":"Answer","text":"macOS、Linux、Windows 向けに、x86-64 と arm64 の両方でビルド済みバイナリが公開されています。インストールスクリプトは macOS と Linux に対応しています。Windows では、リリースページから .zip をダウンロードしてください。"}},{"@type":"Question","name":"自分のファイルは Relayium のサーバーを通過しますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。どのモードでも、ファイルのバイトは両端の間を直接移動します。私たちのサーバーに一切触れるのは send / receive だけで、それも小さなランデブーハンドシェイクのためだけです——ファイルの中身は決して含まれません。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -77,25 +77,25 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>自分でファイルを選びたい場合は、リリースページからバイナリをダウンロードしてください。</li><li>Go がインストール済みなら、リポジトリを clone して次を実行します: go build -o relayium ./cmd/relayium（server ディレクトリから）。</li><li>その後 relayium --help を実行するとすべてのコマンドを確認でき、relayium version でビルドを確認できます。</li></ul>
       <h2>ファイルを移動する3つの方法</h2>
       <p>Relayium には3つの転送方法があります。3つの異なるツールを覚える必要はなく、相手先の場所に応じて選ぶだけです——いずれも同じ転送エンジンを共有し、ファイル単位の再開と SHA-256 検証を備えています。</p>
-      <ul><li>push / pull——すでに SSH でログインできるサーバーへ。バイトは SSH 接続上を流れます。Relayium アカウントは不要です。</li><li>send / receive——短いペアリングコードを使って、ネットワークをまたいで他の人へ。直接の P2P です。直接経路が見つからない場合、転送は私たちを経由する代わりに、そのまま失敗します。</li><li>serve + push relayium://（daemon direct）——自分が所有する2台のサーバー間で、ピン留めされた TLS 上を直接。リレーなし、SSH なし、コードなし。</li></ul>
+      <ul><li>push / pull——すでに SSH でログインできるサーバーへ。バイトは SSH 接続上を流れます。Relayium アカウントは不要です。</li><li>send / receive——送信側の CLI が発行する短いペアリングコードを使って、ネットワークをまたいで他の人へ（relayium login で一度サインインするだけ。受信側は不要です）。直接の P2P です。直接経路が見つからない場合、転送は私たちを経由する代わりに、そのまま失敗します。</li><li>serve + push relayium://（daemon direct）——自分が所有する2台のサーバー間で、ピン留めされた TLS 上を直接。リレーなし、SSH なし、コードなし。</li></ul>
       <h2>最初の転送</h2>
       <p>最も手早く試せるのは、SSH でログインできるサーバーへフォルダをコピーすることです。Relayium は既存の SSH アクセスを使うので、リモート側で設定することは何もなく、アカウント作成も不要です:</p>
       <pre><code>relayium push ./photos user@your-server:backups/</code></pre>
       <ul><li>リモートにも relayium がインストールされていれば、push はネイティブプロトコル（再開可能、ファイル単位の SHA-256）を使います。</li><li>リモートに relayium がなければ、push は単純な tar ストリームにフォールバックするため、裸のサーバーでも動作します——このフォールバックは push だけの機能です。</li><li>同じファイルを次のコマンドで取り戻せます: relayium pull user@your-server:backups/ ./restore——pull は常にリモートの relayium を必要とし（tar フォールバックはありません）、先にリモートへインストールしておいてください。</li></ul>
       <h2>無料、そして設計上プライベート</h2>
-      <p>支払うものは何もなく、保持するアカウントもありません。CLI は両端を直接つなぐため、ファイルが中間のサーバーにアップロードされることは決してありません——Relayium が触れるのは、send / receive モードでの小さなランデブーハンドシェイクだけで、両端を引き合わせるために使われ、ファイル自体は決して含まれません。</p>
+      <p>支払うものは何もありません。サインインが要るのは send / receive モードの送信側だけで、CLI がペアリングコードを発行できるようにするためです。CLI は両端を直接つなぐため、ファイルが中間のサーバーにアップロードされることは決してありません——Relayium が触れるのは、send / receive モードでの小さなランデブーハンドシェイクだけで、両端を引き合わせるために使われ、ファイル自体は決して含まれません。</p>
       <p>すべての転送はエンドツーエンドで暗号化され、すべてのファイルは到着時に SHA-256 ハッシュで検証され、中断した転送は最初からやり直すのではなく、止まった所から再開します。macOS、Linux、Windows で動作し、全体がオープンソースでセルフホスト可能です。</p>
       <h2>よくある質問</h2>
       <h3>CLI に料金はかかりますか？</h3>
       <p>いいえ。CLI は完全に無料です。マシン同士を直接つなぎ、ファイルのバイトを Relayium 経由でプロキシすることは決してないため、計測するものも支払うものもありません。</p>
       <h3>Relayium アカウントは必要ですか？</h3>
-      <p>いいえ。push / pull は自分の SSH を使い、daemon direct はサーバー間の公開鍵による信頼を使い、send / receive は事前に合意したコードを使います。いずれもアカウントは不要です。</p>
+      <p>send のときだけ必要です。push / pull は自分の SSH を使い、daemon direct はサーバー間の公開鍵による信頼を使うので、どちらもアカウントは不要です。send は違います。ペアリングコードを発行できるのはサーバーだけで、しかもサインイン済みのアカウントに対してだけなので、送信側は一度 relayium login を実行します。受信側がサインインすることはありません。</p>
       <h3>どのオペレーティングシステムに対応していますか？</h3>
       <p>macOS、Linux、Windows 向けに、x86-64 と arm64 の両方でビルド済みバイナリが公開されています。インストールスクリプトは macOS と Linux に対応しています。Windows では、リリースページから .zip をダウンロードしてください。</p>
       <h3>自分のファイルは Relayium のサーバーを通過しますか？</h3>
       <p>いいえ。どのモードでも、ファイルのバイトは両端の間を直接移動します。私たちのサーバーに一切触れるのは send / receive だけで、それも小さなランデブーハンドシェイクのためだけです——ファイルの中身は決して含まれません。</p>
       <div class="ctacard">
-        <p>Relayium CLI をインストールして最初の転送をしましょう——完全無料で、アカウントも不要です。</p>
+        <p>Relayium CLI をインストールして最初の転送をしましょう——完全無料です。</p>
         <a class="cta" href="/cli">CLI を入手</a>
       </div>
       <h2>続けて読む</h2>

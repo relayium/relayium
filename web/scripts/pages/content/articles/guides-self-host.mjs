@@ -55,10 +55,10 @@ const en = {
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
-        "relayium receive --server https://your-domain",
+        "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "The CLI is free and needs no account either way — --server just changes which rendezvous server it talks to for the pairing-code handshake.",
+        "The CLI is free either way — --server changes which rendezvous server it talks to for the pairing-code handshake. send mints its code against that same server, so sign in there first with relayium login --server https://your-domain; receive still needs no account.",
         "push/pull (over your own SSH) and serve + daemon-direct push relayium://host don't touch relayium.com at all, self-hosted or not — they connect straight to the remote you specify.",
       ],
     },
@@ -72,7 +72,7 @@ const en = {
       },
       {
         q: "Is the CLI still free if I self-host?",
-        a: "Yes. The CLI is completely free and needs no account whether it talks to relayium.com or a server you run yourself — --server just points it at your instance.",
+        a: "Yes. The CLI is completely free whether it talks to relayium.com or a server you run yourself — --server just points it at your instance. The one thing that needs an account is send, and it needs one on whichever server you point it at, so run relayium login --server https://your-domain first.",
       },
       {
         q: "Can I use my own domain and TLS certificate?",
@@ -142,10 +142,10 @@ const zh = {
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
-        "relayium receive --server https://your-domain",
+        "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "无论用哪个服务器，CLI 都是免费的，也都不需要账号——--server 只是改变了配对码握手所连接的会合服务器。",
+        "无论用哪个服务器，CLI 都是免费的——--server 只是改变了配对码握手所连接的会合服务器。send 的配对码也由同一台服务器签发，所以要先用 relayium login --server https://your-domain 在那边登录；receive 依然不需要账号。",
         "push/pull（走你自己的 SSH）以及 serve + daemon-direct 的 push relayium://host，无论是否自托管都完全不会接触 relayium.com——它们直接连到你指定的远程地址。",
       ],
     },
@@ -159,7 +159,7 @@ const zh = {
       },
       {
         q: "自托管之后 CLI 还免费吗？",
-        a: "是的。无论连接的是 relayium.com 还是你自己运行的服务器，CLI 完全免费，也都不需要账号——--server 只是让它指向你的实例。",
+        a: "是的。无论连接的是 relayium.com 还是你自己运行的服务器，CLI 都完全免费——--server 只是让它指向你的实例。唯一需要账号的是 send，而且账号要在你所指向的那台服务器上，所以请先运行 relayium login --server https://your-domain。",
       },
       {
         q: "我可以用自己的域名和 TLS 证书吗？",
@@ -229,10 +229,10 @@ const ja = {
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
-        "relayium receive --server https://your-domain",
+        "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "どちらのサーバーを使っても CLI は無料で、アカウントも不要です——--server はペアリングコードのハンドシェイクで話すランデブーサーバーを変更するだけです。",
+        "どちらのサーバーを使っても CLI は無料です——--server はペアリングコードのハンドシェイクで話すランデブーサーバーを変更するだけです。send のコードも同じサーバーが発行するので、先に relayium login --server https://your-domain でそちらにサインインしてください。receive は引き続きアカウント不要です。",
         "push/pull（自分の SSH 経由）や、serve と daemon-direct の push relayium://host は、セルフホストかどうかにかかわらず relayium.com に一切触れません——指定したリモートに直接接続します。",
       ],
     },
@@ -246,7 +246,7 @@ const ja = {
       },
       {
         q: "セルフホストしても CLI は無料のままですか？",
-        a: "はい。relayium.com に接続する場合でも自分で運用するサーバーに接続する場合でも、CLI は完全無料でアカウントも不要です——--server は単に自分のインスタンスを指すようにするだけです。",
+        a: "はい。relayium.com に接続する場合でも自分で運用するサーバーに接続する場合でも、CLI は完全無料です——--server は単に自分のインスタンスを指すようにするだけです。アカウントが要るのは send だけで、しかも指し先のサーバー上のアカウントが必要なので、先に relayium login --server https://your-domain を実行してください。",
       },
       {
         q: "自分のドメインと TLS 証明書を使えますか？",
@@ -316,10 +316,10 @@ const ko = {
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
-        "relayium receive --server https://your-domain",
+        "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "어느 서버를 쓰든 CLI는 무료이며 계정도 필요 없습니다 — --server는 페어링 코드 핸드셰이크가 대화하는 랑데부 서버만 바꿀 뿐입니다.",
+        "어느 서버를 쓰든 CLI는 무료입니다 — --server는 페어링 코드 핸드셰이크가 대화하는 랑데부 서버만 바꿀 뿐입니다. send의 코드도 같은 서버가 발급하므로 먼저 relayium login --server https://your-domain으로 그쪽에 로그인하세요. receive는 여전히 계정이 필요 없습니다.",
         "push/pull(자신의 SSH를 통한)과 serve + daemon-direct의 push relayium://host는 셀프 호스팅 여부와 무관하게 relayium.com에 전혀 닿지 않습니다 — 지정한 원격지에 직접 연결됩니다.",
       ],
     },
@@ -333,7 +333,7 @@ const ko = {
       },
       {
         q: "셀프 호스팅해도 CLI는 여전히 무료인가요?",
-        a: "네. relayium.com에 연결하든 직접 운영하는 서버에 연결하든 CLI는 완전히 무료이고 계정도 필요 없습니다 — --server는 단지 자신의 인스턴스를 가리키도록 할 뿐입니다.",
+        a: "네. relayium.com에 연결하든 직접 운영하는 서버에 연결하든 CLI는 완전히 무료입니다 — --server는 단지 자신의 인스턴스를 가리키도록 할 뿐입니다. 계정이 필요한 것은 send뿐이며, 그것도 가리키는 그 서버의 계정이어야 하므로 먼저 relayium login --server https://your-domain을 실행하세요.",
       },
       {
         q: "자신의 도메인과 TLS 인증서를 쓸 수 있나요?",
@@ -403,10 +403,10 @@ const de = {
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
-        "relayium receive --server https://your-domain",
+        "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "Egal welchen Server sie nutzt, die CLI ist kostenlos und braucht kein Konto — --server ändert nur, mit welchem Rendezvous-Server sie für den Pairing-Code-Handshake spricht.",
+        "Egal welchen Server sie nutzt, die CLI ist kostenlos — --server ändert nur, mit welchem Rendezvous-Server sie für den Pairing-Code-Handshake spricht. send lässt seinen Code von genau diesem Server erzeugen, melde dich dort also zuerst mit relayium login --server https://your-domain an; receive braucht weiterhin kein Konto.",
         "push/pull (über dein eigenes SSH) sowie serve + daemon-direct push relayium://host berühren relayium.com überhaupt nicht, selbst gehostet oder nicht — sie verbinden sich direkt mit der von dir angegebenen Gegenstelle.",
       ],
     },
@@ -420,7 +420,7 @@ const de = {
       },
       {
         q: "Ist die CLI beim Selbsthosten immer noch kostenlos?",
-        a: "Ja. Ob sie mit relayium.com oder einem selbst betriebenen Server spricht, die CLI ist völlig kostenlos und braucht kein Konto — --server richtet sie nur auf deine Instanz aus.",
+        a: "Ja. Ob sie mit relayium.com oder einem selbst betriebenen Server spricht, die CLI ist völlig kostenlos — --server richtet sie nur auf deine Instanz aus. Ein Konto braucht allein send, und zwar auf genau dem Server, auf den du sie richtest: führe zuerst relayium login --server https://your-domain aus.",
       },
       {
         q: "Kann ich meine eigene Domain und ein eigenes TLS-Zertifikat verwenden?",
@@ -490,10 +490,10 @@ const fr = {
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
-        "relayium receive --server https://your-domain",
+        "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "Quel que soit le serveur utilisé, la CLI est gratuite et ne nécessite aucun compte — --server change seulement le serveur de rendez-vous avec lequel elle communique pour la poignée de main du code d'appairage.",
+        "Quel que soit le serveur utilisé, la CLI est gratuite — --server change seulement le serveur de rendez-vous avec lequel elle communique pour la poignée de main du code d'appairage. send fait générer son code par ce même serveur, connectez-vous donc d'abord dessus avec relayium login --server https://your-domain ; receive ne nécessite toujours aucun compte.",
         "push/pull (via votre propre SSH) ainsi que serve + le push daemon-direct relayium://host ne touchent jamais relayium.com, auto-hébergé ou non — ils se connectent directement à la machine distante que vous indiquez.",
       ],
     },
@@ -507,7 +507,7 @@ const fr = {
       },
       {
         q: "La CLI reste-t-elle gratuite si je m'auto-héberge ?",
-        a: "Oui. Qu'elle parle à relayium.com ou à un serveur que vous exploitez vous-même, la CLI est entièrement gratuite et ne nécessite aucun compte — --server la fait simplement pointer vers votre instance.",
+        a: "Oui. Qu'elle parle à relayium.com ou à un serveur que vous exploitez vous-même, la CLI est entièrement gratuite — --server la fait simplement pointer vers votre instance. La seule chose qui nécessite un compte, c'est send, et il lui en faut un sur le serveur que vous visez : lancez d'abord relayium login --server https://your-domain.",
       },
       {
         q: "Puis-je utiliser mon propre domaine et mon propre certificat TLS ?",
@@ -577,10 +577,10 @@ const ar = {
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
-        "relayium receive --server https://your-domain",
+        "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "الـ CLI مجاني ولا يحتاج حسابًا في كلتا الحالتين — ‎--server‎ يغيّر فقط خادم الالتقاء الذي يتحدث إليه لمصافحة رمز الاقتران.",
+        "الـ CLI مجاني في كلتا الحالتين — ‎--server‎ يغيّر فقط خادم الالتقاء الذي يتحدث إليه لمصافحة رمز الاقتران. و send يستصدر رمزه من الخادم نفسه، لذا سجّل الدخول هناك أولًا بـ ‎relayium login --server https://your-domain‎؛ أما receive فلا يزال لا يحتاج حسابًا.",
         "‏push/pull (عبر SSH الخاص بك) وserve + الدفع المباشر عبر الخدمة push relayium://host لا يلمسان relayium.com إطلاقًا، سواء بالاستضافة الذاتية أم لا — يتصلان مباشرةً بالجهاز البعيد الذي تحدده.",
       ],
     },
@@ -594,7 +594,7 @@ const ar = {
       },
       {
         q: "هل يبقى الـ CLI مجانيًا إن استضفتُ ذاتيًا؟",
-        a: "نعم. الـ CLI مجاني تمامًا ولا يحتاج حسابًا سواء تحدّث إلى relayium.com أو إلى خادم تشغّله بنفسك — ‎--server‎ يوجّهه فقط إلى نسختك.",
+        a: "نعم. الـ CLI مجاني تمامًا سواء تحدّث إلى relayium.com أو إلى خادم تشغّله بنفسك — ‎--server‎ يوجّهه فقط إلى نسختك. والشيء الوحيد الذي يحتاج حسابًا هو send، ويحتاجه على الخادم الذي توجّهه إليه، فشغّل أولًا ‎relayium login --server https://your-domain‎.",
       },
       {
         q: "هل يمكنني استخدام نطاقي الخاص وشهادة TLS خاصة بي؟",
@@ -664,10 +664,10 @@ const es = {
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
-        "relayium receive --server https://your-domain",
+        "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "La CLI es gratis y no necesita cuenta en ningún caso — --server solo cambia con qué servidor de encuentro habla para el handshake del código de emparejamiento.",
+        "La CLI es gratis en cualquier caso — --server solo cambia con qué servidor de encuentro habla para el handshake del código de emparejamiento. send genera su código contra ese mismo servidor, así que inicia sesión allí primero con relayium login --server https://your-domain; receive sigue sin necesitar cuenta.",
         "push/pull (por tu propio SSH) y serve + el push daemon-direct relayium://host no tocan relayium.com en absoluto, con o sin alojamiento propio — se conectan directamente al remoto que indiques.",
       ],
     },
@@ -681,7 +681,7 @@ const es = {
       },
       {
         q: "¿La CLI sigue siendo gratis si alojo por mi cuenta?",
-        a: "Sí. Tanto si habla con relayium.com como con un servidor que ejecutas tú mismo, la CLI es completamente gratis y no necesita cuenta — --server solo la apunta hacia tu instancia.",
+        a: "Sí. Tanto si habla con relayium.com como con un servidor que ejecutas tú mismo, la CLI es completamente gratis — --server solo la apunta hacia tu instancia. Lo único que necesita cuenta es send, y la necesita en el servidor al que la apuntes: ejecuta primero relayium login --server https://your-domain.",
       },
       {
         q: "¿Puedo usar mi propio dominio y certificado TLS?",
@@ -751,10 +751,10 @@ const pt = {
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
-        "relayium receive --server https://your-domain",
+        "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "A CLI é gratuita e não precisa de conta em nenhum dos casos — --server apenas muda com qual servidor de encontro ela fala para o handshake do código de emparelhamento.",
+        "A CLI é gratuita em qualquer dos casos — --server apenas muda com qual servidor de encontro ela fala para o handshake do código de emparelhamento. O send gera o código nesse mesmo servidor, então faça login lá primeiro com relayium login --server https://your-domain; o receive continua sem precisar de conta.",
         "push/pull (pelo seu próprio SSH) e serve + o push daemon-direct relayium://host não tocam o relayium.com em nada, com ou sem auto-hospedagem — eles se conectam diretamente ao remoto que você especificar.",
       ],
     },
@@ -768,7 +768,7 @@ const pt = {
       },
       {
         q: "A CLI continua gratuita se eu hospedar por conta própria?",
-        a: "Sim. Quer ela fale com o relayium.com ou com um servidor que você mesmo opera, a CLI é completamente gratuita e não precisa de conta — --server apenas a aponta para a sua instância.",
+        a: "Sim. Quer ela fale com o relayium.com ou com um servidor que você mesmo opera, a CLI é completamente gratuita — --server apenas a aponta para a sua instância. A única coisa que precisa de conta é o send, e ele precisa de uma no servidor para o qual você apontá-lo: rode primeiro relayium login --server https://your-domain.",
       },
       {
         q: "Posso usar meu próprio domínio e certificado TLS?",

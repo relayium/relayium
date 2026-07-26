@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="用 Relayium CLI 跨网络把文件发给对方" />
     <meta name="twitter:description" content="使用 relayium send 和 receive，凭一个简短的配对码，把文件直接在两个不同网络上的人之间传输。端到端加密，用 SAS 码验证，而且免费——文件径直在你们之间传输，从不经过我们的服务器。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 跨网络把文件发给对方","description":"使用 relayium send 和 receive，凭一个简短的配对码，把文件直接在两个不同网络上的人之间传输。端到端加密，用 SAS 码验证，而且免费——文件径直在你们之间传输，从不经过我们的服务器。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/send-a-file-to-someone/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"配对码是从哪来的？","acceptedAnswer":{"@type":"Answer","text":"是你自己定的。任何一个双方都能输入的简短字符串都行——打电话或聊天时约定好。它只需要在两端一致即可。"}},{"@type":"Question","name":"文件会上传到什么地方吗？","acceptedAnswer":{"@type":"Answer","text":"不会。文件在你们两个之间直接流式传输，端到端加密。只有一次很小的会合握手会经过 Relayium 来介绍双方——文件本身从不经过。"}},{"@type":"Question","name":"如果连接不上怎么办？","acceptedAnswer":{"@type":"Answer","text":"如果两端都在严格 NAT 之后、没有可达地址，就无法建立直连，传输会失败——CLI 按设计没有中继兜底。当没有直连路径时，可以在两台可达的服务器之间用 daemon direct，或者用 SSH push。"}},{"@type":"Question","name":"我怎么知道对面真的是对的人？","acceptedAnswer":{"@type":"Answer","text":"两边的终端会打印出一个从会话密钥得出的相同的 6 位 SAS 码。用带外方式对比一下；如果一致，就说明中间没有人。加上 --verify 可以要求在任何字节移动之前先完成这个确认。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 跨网络把文件发给对方","description":"使用 relayium send 和 receive，凭一个简短的配对码，把文件直接在两个不同网络上的人之间传输。端到端加密，用 SAS 码验证，而且免费——文件径直在你们之间传输，从不经过我们的服务器。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/send-a-file-to-someone/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"配对码是从哪来的？","acceptedAnswer":{"@type":"Answer","text":"由 Relayium 生成。登录后运行 `relayium send ./release.zip`，CLI 会打印一个 6 位、5 分钟内有效的码，以及对面要执行的完整命令。这个码不能自己指定——服务器只认它自己签发的。"}},{"@type":"Question","name":"文件会上传到什么地方吗？","acceptedAnswer":{"@type":"Answer","text":"不会。文件在你们两个之间直接流式传输，端到端加密。只有一次很小的会合握手会经过 Relayium 来介绍双方——文件本身从不经过。"}},{"@type":"Question","name":"如果连接不上怎么办？","acceptedAnswer":{"@type":"Answer","text":"如果两端都在严格 NAT 之后、没有可达地址，就无法建立直连，传输会失败——CLI 按设计没有中继兜底。当没有直连路径时，可以在两台可达的服务器之间用 daemon direct，或者用 SSH push。"}},{"@type":"Question","name":"我怎么知道对面真的是对的人？","acceptedAnswer":{"@type":"Answer","text":"两边的终端会打印出一个从会话密钥得出的相同的 6 位 SAS 码。用带外方式对比一下；如果一致，就说明中间没有人。加上 --verify 可以要求在任何字节移动之前先完成这个确认。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -69,31 +69,33 @@ footer a{color:var(--text-h);text-decoration:none}
       <h1>用 Relayium CLI 跨网络把文件发给对方</h1>
       <p class="updated">最近更新: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/send-a-file-to-someone/">English</a><a href="/zh/guides/send-a-file-to-someone/" aria-current="true">中文</a><a href="/ja/guides/send-a-file-to-someone/">日本語</a><a href="/ko/guides/send-a-file-to-someone/">한국어</a><a href="/de/guides/send-a-file-to-someone/">Deutsch</a><a href="/fr/guides/send-a-file-to-someone/">Français</a><a href="/ar/guides/send-a-file-to-someone/">العربية</a><a href="/es/guides/send-a-file-to-someone/">Español</a><a href="/pt/guides/send-a-file-to-someone/">Português</a></nav>
-      <p class="lead">有时候对方的机器不是你的，你也没法用 SSH 登录进去——给另一个办公室的同事发个文件，给客户发个构建产物，给国外的朋友发个压缩包。relayium send 和 receive 会跨网络把文件直接送到你们两个之间，靠的只是你们事先约定好的一个简短的码。</p>
+      <p class="lead">有时候对方的机器不是你的，你也没法用 SSH 登录进去——给另一个办公室的同事发个文件，给客户发个构建产物，给国外的朋友发个压缩包。relayium send 和 receive 会跨网络把文件直接送到你们两个之间，靠的只是发送时 CLI 为你生成的一个简短配对码。</p>
       <p class="lead">连接是点对点、端到端加密的。只有一次极小的会合握手会经过 Relayium 来介绍双方；文件字节从不经过。</p>
       <h2>开始之前</h2>
       <p>下面用到的都是 relayium CLI，所以没装的话先装上。在 macOS 或 Linux 上，一条命令就能把预编译二进制放进你的 PATH：</p>
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul>
-      <h2>约定一个码，然后 send 和 receive</h2>
-      <p>随便选一个简短的码，用带外方式分享它——打电话说一下，或者丢进聊天里。一方 send，另一方用同一个码 receive：</p>
-      <pre><code># sender
-relayium send ./release.zip 428571
+      <h2>先 send，再把打印出来的码转告对方</h2>
+      <p>用 relayium login 登录一次，然后直接 send 就行。CLI 会生成一个配对码，连同对面要执行的完整命令一起打印出来，然后等待。把这个码用带外方式转告对方——打电话说一下，或者丢进聊天里：</p>
+      <pre><code># sender (once per machine: relayium login)
+relayium send ./release.zip
+# prints:  Code: K7M4XR   (valid 5 minutes)
+#          On the other machine:  relayium receive K7M4XR
 
-# receiver (in the folder where files should land)
-relayium receive 428571</code></pre>
-      <ul><li>这个码只是一个用来会合的共享密钥；除了会合服务器，它不会发给任何人，而且只用来介绍双方。</li><li>接收方可以指定目标目录：relayium receive 428571 ./downloads</li></ul>
+# receiver (in the folder where files should land) — no account needed
+relayium receive K7M4XR</code></pre>
+      <ul><li>这个码是 6 位，取自一个受限字母表——没有 0 和 1，也没有念出来会听混的字符——并且在生成 5 分钟后失效。</li><li>只有发送方需要登录。接收方只需要装好 CLI 和拿到这个码，完全不需要账号。</li><li>这个码只是一个用来会合的共享密钥；除了会合服务器，它不会发给任何人，而且只用来介绍双方。</li><li>接收方可以指定目标目录：relayium receive K7M4XR ./downloads</li><li>两端都必须是 CLI——浏览器无法加入 CLI 的配对码。如果对方只有浏览器，请改用 relayium up，它会给你一个下载链接。</li></ul>
       <h2>用 SAS 码验证</h2>
       <p>两端连接建立后，两边的终端会打印出同一个从会话密钥派生的 6 位 SAS（简短认证串）。对比一下——打电话时念出来——确保你们连接的是彼此，而不是中间人。</p>
       <p>要获得硬保证，加上 --verify：传输会等你确认两边的码一致后，才会移动哪怕一个字节。</p>
-      <pre><code>relayium send --verify ./release.zip 428571</code></pre>
+      <pre><code>relayium send --verify ./release.zip</code></pre>
       <h2>只走直连——免费，否则失败</h2>
       <p>传输会在两端之间竞速建立直连。一旦能建立——这是常见情况，只要至少一方有可达地址——文件就会直接、加密地全速传输，不收费。</p>
       <p>如果两端都在严格 NAT 之后，找不到直连路径，传输会干净地失败，而不会把你的文件路由经过中继。这样才能让 CLI 保持完全免费，也让你的文件字节远离我们的服务器。如果遇到这种情况，可靠的办法是在两台可达的服务器之间用 daemon direct，或者用 SSH push。</p>
       <ul><li>直连成功 → 免费、全速、端到端加密。</li><li>没有直连路径 → 传输失败；CLI 从不替你代理文件。</li><li>两端在地理上可以在任何地方——只需要各自用同一个码运行命令。</li></ul>
       <h2>常见问题</h2>
       <h3>配对码是从哪来的？</h3>
-      <p>是你自己定的。任何一个双方都能输入的简短字符串都行——打电话或聊天时约定好。它只需要在两端一致即可。</p>
+      <p>由 Relayium 生成。登录后运行 `relayium send ./release.zip`，CLI 会打印一个 6 位、5 分钟内有效的码，以及对面要执行的完整命令。这个码不能自己指定——服务器只认它自己签发的。</p>
       <h3>文件会上传到什么地方吗？</h3>
       <p>不会。文件在你们两个之间直接流式传输，端到端加密。只有一次很小的会合握手会经过 Relayium 来介绍双方——文件本身从不经过。</p>
       <h3>如果连接不上怎么办？</h3>

@@ -66,7 +66,7 @@ curl -fsSL https://relayium.com/install.sh | sh
 Three transfer modes:
 
 - **`push` / `pull` over your own SSH** — `relayium push ./photos user@host:backups/` (bytes travel over SSH; no Relayium account).
-- **`send` / `receive` by pairing code** — `relayium send ./file.zip 123456` / `relayium receive 123456` (cross-network; direct peer-to-peer — a small rendezvous handshake introduces the two ends, the file goes straight between them; no relay).
+- **`send` / `receive` by pairing code** — `relayium send ./file.zip` mints a code with your account (after `relayium login`) and prints what the other end runs: `relayium receive K7M4XR`. Codes are 6 characters and last 5 minutes; the receiver needs no account. Cross-network and direct peer-to-peer — a small rendezvous handshake introduces the two ends, the file goes straight between them, no relay. Sending to someone with a browser instead? Use `relayium up` for a download link.
 - **`serve` + `push relayium://` daemon direct** — `relayium serve --dir ~/inbox` then `relayium push ./file relayium://host` (server-to-server over pinned TLS; no relay, no SSH, no code — the listener approves each new pusher on its first push and remembers it).
 
 Keep a folder mirrored with **`sync`** — incremental (only changed files transfer), optionally `--delete` to mirror and `--watch` to re-sync in real time:

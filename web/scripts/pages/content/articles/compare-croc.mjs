@@ -11,7 +11,7 @@ const en = {
     "Relayium and croc are both free, open-source, encrypted CLI tools for peer-to-peer file transfer. A fair, honest comparison of where each one is the better fit.",
   updatedLabel: "Last updated",
   lead: [
-    "croc is one of the best-loved tools for sending a file from one terminal to another: a short, memorable code phrase, a PAKE key exchange, and it just works. Relayium's CLI sets out to do the same job and is built the same way — free, open source, and encrypted end to end, with no account required for any of it.",
+    "croc is one of the best-loved tools for sending a file from one terminal to another: a short, memorable code phrase, a PAKE key exchange, and it just works. Relayium's CLI sets out to do the same job and is built the same way — free, open source, and encrypted end to end, with an account needed only so send can mint its pairing code.",
     "This isn't a takedown; croc earned its reputation. It's a straight comparison of what the two share, where Relayium's CLI does more because it also talks to servers you already run, and the case where croc is honestly the simpler pick.",
   ],
   sections: [
@@ -21,7 +21,7 @@ const en = {
         "Start with the overlap, because it's substantial: both are single small binaries you install once, both are completely free with no paid tier, and both are open source under a permissive license so you can read every line that touches your files.",
       ],
       bullets: [
-        "No account for a transfer — a short code known only to the two ends is enough to find each other and agree on a key.",
+        "A short code known only to the two ends is enough for them to find each other and agree on a key. croc's code is made up on the spot; Relayium's is minted by its server for a signed-in sender, and the receiver still needs no account.",
         "Encrypted in transit end to end: the relay or rendezvous point in the middle never sees your file's contents.",
         "Interrupted transfers can pick back up instead of starting over, and both verify what arrived actually matches what was sent.",
         "Cross-platform: macOS, Linux and Windows.",
@@ -69,7 +69,7 @@ const en = {
         "No direct path available: croc's relay carries the encrypted stream so the transfer still completes; Relayium's send/receive is direct-only.",
         "Verification: both are encrypted end to end; Relayium's send/receive additionally prints a short code both sides compare before the transfer starts.",
         "Self-hosting: both are self-hostable — croc's relay is a small standalone binary; Relayium's server also runs the web app, and the CLI's send/receive can point at your own with --server.",
-        "License and cost: both AGPL-3.0-licensed, both completely free, neither requires an account.",
+        "License and cost: both AGPL-3.0-licensed and both completely free. croc needs no account at all; Relayium needs one only for send, to mint the pairing code.",
       ],
     },
   ],
@@ -82,7 +82,7 @@ const en = {
       },
       {
         q: "Does it need an account?",
-        a: "No. push/pull uses your own SSH access, daemon-direct uses pinned-TLS certificate trust between your machines, and send/receive uses a short code you agree on out of band. None of it touches a Relayium account.",
+        a: "Only send does. push/pull uses your own SSH access and daemon-direct uses pinned-TLS certificate trust between your machines, so neither touches a Relayium account. send/receive is the exception: only the server can mint a pairing code, and only for a signed-in account, so the sender runs relayium login once. Receiving never needs an account.",
       },
       {
         q: "Can I use the CLI's pairing code with Relayium's browser app?",
@@ -95,7 +95,7 @@ const en = {
     ],
   },
   cta: {
-    text: "Install the free Relayium CLI and try push, sync or send — no account, and just as quick to start as croc.",
+    text: "Install the free Relayium CLI and try push, sync or send — free, and just as quick to start as croc.",
     button: "Get the CLI",
     href: "/cli",
   },
@@ -108,7 +108,7 @@ const zh = {
     "Relayium 和 croc 都是免费、开源、加密的命令行点对点传输工具。本文客观对比两者，看看各自更适合什么场景。",
   updatedLabel: "最近更新",
   lead: [
-    "croc 是最受欢迎的终端间传输文件工具之一：一个简短好记的暗号短语、一次 PAKE 密钥交换，就能直接用。Relayium CLI 想做的是同一件事，实现方式也相似——免费、开源、端到端加密，任何模式都不需要账号。",
+    "croc 是最受欢迎的终端间传输文件工具之一：一个简短好记的暗号短语、一次 PAKE 密钥交换，就能直接用。Relayium CLI 想做的是同一件事，实现方式也相似——免费、开源、端到端加密，只有 send 为了签发配对码才需要账号。",
     "这不是一篇贬低文。croc 的口碑是实至名归的。本文客观对比两者的共同点、Relayium CLI 因为能对接你已有的服务器而多出的能力，以及 croc 老实说更简单的场景。",
   ],
   sections: [
@@ -118,7 +118,7 @@ const zh = {
         "先说重合的部分，其实不少：两者都是安装一次就好的小型单一二进制文件，都完全免费、没有付费档位，都以宽松许可证开源，文件相关的每一行代码你都能读到。",
       ],
       bullets: [
-        "传输无需账号——一个只有两端知道的简短暗号，就足以让彼此找到对方并协商出密钥。",
+        "一个只有两端知道的简短暗号，就足以让彼此找到对方并协商出密钥。croc 的暗号是当场随口定的；Relayium 的则由服务器签发给已登录的发送方，而接收方依然不需要账号。",
         "全程端到端加密：中间的中继或会合节点从不会看到你文件的内容。",
         "中断的传输可以接着传，而不必从头再来；两者也都会校验收到的内容确实和发出的一致。",
         "跨平台：macOS、Linux 和 Windows。",
@@ -164,7 +164,7 @@ const zh = {
         "无法直连时：croc 的中继会承载加密数据流，传输依然能完成；Relayium 的 send/receive 是纯直连的。",
         "验证：两者都端到端加密；Relayium 的 send/receive 额外会在传输开始前打印一段供双方核对的简短验证码。",
         "自托管：两者都可自托管——croc 的中继是一个小巧的独立二进制；Relayium 的服务器同时也运行着网页版，CLI 的 send/receive 也可以用 --server 指向你自己的实例。",
-        "许可证与费用：都是 AGPL-3.0 许可，都完全免费，都不需要账号。",
+        "许可证与费用：都是 AGPL-3.0 许可，都完全免费。croc 完全不需要账号；Relayium 只有 send 为了签发配对码才需要。",
       ],
     },
   ],
@@ -177,7 +177,7 @@ const zh = {
       },
       {
         q: "需要账号吗？",
-        a: "不需要。push/pull 用你自己的 SSH 权限，daemon-direct 用你机器之间锁定的 TLS 证书信任，send/receive 用你们线下约定的一段简短代码。三者都不涉及 Relayium 账号。",
+        a: "只有 send 需要。push/pull 用你自己的 SSH 权限，daemon-direct 用你机器之间锁定的 TLS 证书信任，这两者都不涉及 Relayium 账号。send/receive 是例外：配对码只能由服务器签发，而且只签发给已登录的账号，所以发送方要先运行一次 relayium login。接收方始终不需要账号。",
       },
       {
         q: "CLI 的配对码能和 Relayium 的浏览器版互通吗？",
@@ -190,7 +190,7 @@ const zh = {
     ],
   },
   cta: {
-    text: "安装免费的 Relayium CLI，试试 push、sync 或 send——无需账号，上手速度不输 croc。",
+    text: "安装免费的 Relayium CLI，试试 push、sync 或 send——完全免费，上手速度不输 croc。",
     button: "获取 CLI",
     href: "/cli",
   },
@@ -203,7 +203,7 @@ const ja = {
     "Relayium と croc はどちらも無料・オープンソースで暗号化された CLI の P2P 転送ツールです。それぞれどこで優れているかを公平に比較します。",
   updatedLabel: "最終更新",
   lead: [
-    "croc はターミナル間でファイルを送る、最も愛されているツールの一つです。短く覚えやすいコードフレーズ、PAKE による鍵交換、それだけでちゃんと動きます。Relayium CLI も同じ仕事を目指し、同じ考え方で作られています——無料、オープンソース、エンドツーエンドで暗号化され、どのモードでもアカウントは不要です。",
+    "croc はターミナル間でファイルを送る、最も愛されているツールの一つです。短く覚えやすいコードフレーズ、PAKE による鍵交換、それだけでちゃんと動きます。Relayium CLI も同じ仕事を目指し、同じ考え方で作られています——無料、オープンソース、エンドツーエンドで暗号化されており、アカウントが要るのは send がペアリングコードを発行するときだけです。",
     "これは批判の記事ではありません。croc の評判はふさわしいものです。両者の共通点、Relayium CLI がすでに運用しているサーバーとも話せるために持つ追加の力、そして croc の方が正直シンプルな場合を、率直に比較します。",
   ],
   sections: [
@@ -213,7 +213,7 @@ const ja = {
         "まず重なる部分から。実はかなり多いです。どちらも一度インストールすれば済む小さな単一バイナリで、完全無料で有料プランはなく、寛容なライセンスでオープンソース化されているため、ファイルに触れるコードをすべて読むことができます。",
       ],
       bullets: [
-        "転送にアカウントは不要——両端しか知らない短いコードだけで、互いを見つけ鍵に合意できます。",
+        "両端しか知らない短いコードだけで、互いを見つけ鍵に合意できます。croc のコードはその場で決めるもの、Relayium のコードはサインイン済みの送信者のためにサーバーが発行するもので、受信側は依然としてアカウント不要です。",
         "転送中はエンドツーエンドで暗号化：間にあるリレーやランデブーポイントがファイルの中身を見ることは決してありません。",
         "中断した転送は最初からではなく続きから再開でき、届いたものが送ったものと一致することも両者とも検証します。",
         "クロスプラットフォーム：macOS、Linux、Windows。",
@@ -259,7 +259,7 @@ const ja = {
         "直接経路がない場合：croc のリレーは暗号化ストリームを運ぶので転送は完了する；Relayium の send/receive は直接接続専用です。",
         "検証：どちらもエンドツーエンドで暗号化される；Relayium の send/receive はさらに、転送開始前に双方が照合する短いコードを表示します。",
         "セルフホスト：どちらもセルフホスト可能——croc のリレーは小さな単独バイナリ；Relayium のサーバーはウェブアプリも動かしており、CLI の send/receive も --server で自分のインスタンスを指定できます。",
-        "ライセンスと費用：どちらも AGPL-3.0 ライセンスで完全に無料、どちらもアカウント不要です。",
+        "ライセンスと費用：どちらも AGPL-3.0 ライセンスで完全に無料です。croc はアカウントが一切不要、Relayium はペアリングコードを発行する send にだけ必要です。",
       ],
     },
   ],
@@ -285,7 +285,7 @@ const ja = {
     ],
   },
   cta: {
-    text: "無料の Relayium CLI をインストールして push、sync、send を試してみましょう——アカウント不要で、croc と同じくらいすぐに始められます。",
+    text: "無料の Relayium CLI をインストールして push、sync、send を試してみましょう——完全無料で、croc と同じくらいすぐに始められます。",
     button: "CLI を入手",
     href: "/cli",
   },
@@ -298,7 +298,7 @@ const ko = {
     "Relayium과 croc은 둘 다 무료, 오픈소스, 암호화된 CLI P2P 전송 도구입니다. 각각 어디에서 더 나은지 공정하게 비교합니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "croc은 터미널 사이에서 파일을 보내는 가장 사랑받는 도구 중 하나입니다. 짧고 기억하기 쉬운 코드 문구, PAKE 키 교환, 그리고 그것만으로 잘 작동합니다. Relayium CLI도 같은 일을 하려 하며, 만들어진 방식도 비슷합니다 — 무료, 오픈소스, 종단간 암호화되어 있고 어떤 모드도 계정이 필요 없습니다.",
+    "croc은 터미널 사이에서 파일을 보내는 가장 사랑받는 도구 중 하나입니다. 짧고 기억하기 쉬운 코드 문구, PAKE 키 교환, 그리고 그것만으로 잘 작동합니다. Relayium CLI도 같은 일을 하려 하며, 만들어진 방식도 비슷합니다 — 무료, 오픈소스, 종단간 암호화되어 있으며 계정은 send가 페어링 코드를 발급할 때만 필요합니다.",
     "이 글은 깎아내리려는 것이 아닙니다. croc의 명성은 그럴 만합니다. 이 글은 두 도구가 공유하는 부분, Relayium CLI가 이미 운영 중인 서버와도 통신할 수 있어 더 갖춘 부분, 그리고 croc이 솔직히 더 단순한 선택인 경우를 있는 그대로 비교합니다.",
   ],
   sections: [
@@ -308,7 +308,7 @@ const ko = {
         "겹치는 부분부터 보면 상당히 많습니다. 둘 다 한 번만 설치하면 되는 작은 단일 바이너리이고, 둘 다 유료 등급 없이 완전히 무료이며, 둘 다 관대한 라이선스로 오픈소스이므로 파일과 관련된 모든 코드를 직접 읽어볼 수 있습니다.",
       ],
       bullets: [
-        "전송에 계정이 필요 없음 — 양쪽만 아는 짧은 코드만으로 서로를 찾고 키에 합의하기에 충분합니다.",
+        "양쪽만 아는 짧은 코드만으로 서로를 찾고 키에 합의하기에 충분합니다. croc의 코드는 그 자리에서 정하는 것이고, Relayium의 코드는 로그인한 보내는 쪽을 위해 서버가 발급하며, 받는 쪽은 여전히 계정이 필요 없습니다.",
         "전송 중 종단간 암호화: 중간의 릴레이나 랑데부 지점은 파일 내용을 절대 볼 수 없습니다.",
         "중단된 전송은 처음부터가 아니라 이어서 재개할 수 있고, 둘 다 도착한 내용이 보낸 것과 실제로 일치하는지 검증합니다.",
         "크로스 플랫폼: macOS, Linux, Windows.",
@@ -354,7 +354,7 @@ const ko = {
         "직접 경로가 없을 때: croc의 릴레이는 암호화된 스트림을 실어 날라 전송이 여전히 완료됨; Relayium의 send/receive는 직접 연결 전용임.",
         "검증: 둘 다 종단간 암호화됨; Relayium의 send/receive는 추가로 전송 시작 전 양쪽이 대조하는 짧은 코드를 표시함.",
         "자체 호스팅: 둘 다 자체 호스팅 가능 — croc의 릴레이는 작은 독립 바이너리; Relayium의 서버는 웹 앱도 함께 운영하며, CLI의 send/receive도 --server로 자신의 인스턴스를 가리킬 수 있음.",
-        "라이선스와 비용: 둘 다 AGPL-3.0 라이선스, 둘 다 완전 무료, 둘 다 계정 불필요.",
+        "라이선스와 비용: 둘 다 AGPL-3.0 라이선스에 둘 다 완전 무료. croc은 계정이 전혀 필요 없고, Relayium은 페어링 코드를 발급하는 send에만 필요합니다.",
       ],
     },
   ],
@@ -367,7 +367,7 @@ const ko = {
       },
       {
         q: "계정이 필요한가요?",
-        a: "아니요. push/pull은 자신의 SSH 접근을 사용하고, daemon-direct는 기기 간 고정된 TLS 인증서 신뢰를 사용하며, send/receive는 별도 채널로 미리 합의한 짧은 코드를 사용합니다. 어느 것도 Relayium 계정을 필요로 하지 않습니다.",
+        a: "send만 그렇습니다. push/pull은 자신의 SSH 접근을 사용하고 daemon-direct는 기기 간 고정된 TLS 인증서 신뢰를 사용하므로 둘 다 Relayium 계정을 건드리지 않습니다. send/receive가 예외입니다. 페어링 코드는 서버만, 그것도 로그인된 계정에만 발급할 수 있으므로 보내는 쪽이 relayium login을 한 번 실행합니다. 받는 데는 계정이 전혀 필요 없습니다.",
       },
       {
         q: "CLI의 페어링 코드를 Relayium 브라우저 앱과 함께 쓸 수 있나요?",
@@ -380,7 +380,7 @@ const ko = {
     ],
   },
   cta: {
-    text: "무료 Relayium CLI를 설치하고 push, sync, send를 써보세요 — 계정 없이, croc만큼 빠르게 시작할 수 있습니다.",
+    text: "무료 Relayium CLI를 설치하고 push, sync, send를 써보세요 — 완전 무료로, croc만큼 빠르게 시작할 수 있습니다.",
     button: "CLI 받기",
     href: "/cli",
   },
@@ -393,7 +393,7 @@ const de = {
     "Relayium und croc sind beide kostenlose, quelloffene, verschlüsselte CLI-Tools für Peer-to-Peer-Übertragung. Ein fairer, ehrlicher Vergleich, wo welches Tool besser passt.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
-    "croc ist eines der beliebtesten Werkzeuge, um eine Datei von einem Terminal zum anderen zu schicken: eine kurze, einprägsame Code-Phrase, ein PAKE-Schlüsselaustausch, und es funktioniert einfach. Die Relayium CLI setzt sich dieselbe Aufgabe und ist ähnlich gebaut — kostenlos, quelloffen und Ende-zu-Ende verschlüsselt, ohne dass irgendein Modus ein Konto braucht.",
+    "croc ist eines der beliebtesten Werkzeuge, um eine Datei von einem Terminal zum anderen zu schicken: eine kurze, einprägsame Code-Phrase, ein PAKE-Schlüsselaustausch, und es funktioniert einfach. Die Relayium CLI setzt sich dieselbe Aufgabe und ist ähnlich gebaut — kostenlos, quelloffen und Ende-zu-Ende verschlüsselt, wobei ein Konto nur nötig ist, damit send seinen Pairing-Code erzeugen kann.",
     "Das ist keine Abrechnung; croc hat sich seinen Ruf verdient. Dieser Artikel vergleicht ehrlich, was beide gemeinsam haben, wo die Relayium CLI mehr bietet, weil sie auch mit Servern spricht, die du bereits betreibst, und den Fall, in dem croc schlicht die einfachere Wahl ist.",
   ],
   sections: [
@@ -403,7 +403,7 @@ const de = {
         "Beginnen wir mit der Überschneidung, denn sie ist erheblich: Beide sind kleine, einmal zu installierende Binaries, beide sind völlig kostenlos ohne bezahlte Stufe, und beide sind unter einer freizügigen Lizenz quelloffen, sodass du jede Zeile lesen kannst, die deine Dateien berührt.",
       ],
       bullets: [
-        "Kein Konto für eine Übertragung — ein kurzer, nur den beiden Enden bekannter Code genügt, damit sie sich finden und auf einen Schlüssel einigen.",
+        "Ein kurzer, nur den beiden Enden bekannter Code genügt, damit sie sich finden und auf einen Schlüssel einigen. crocs Code wird spontan ausgedacht; Relayiums wird von dessen Server für einen angemeldeten Absender erzeugt, und der Empfänger braucht weiterhin kein Konto.",
         "Ende-zu-Ende während der Übertragung verschlüsselt: Das Relay oder der Rendezvous-Punkt in der Mitte sieht nie den Inhalt deiner Datei.",
         "Unterbrochene Übertragungen können fortgesetzt statt neu gestartet werden, und beide prüfen, dass das Angekommene wirklich dem Gesendeten entspricht.",
         "Plattformübergreifend: macOS, Linux und Windows.",
@@ -449,7 +449,7 @@ const de = {
         "Kein direkter Pfad verfügbar: crocs Relay trägt den verschlüsselten Datenstrom, sodass die Übertragung trotzdem abgeschlossen wird; Relayiums send/receive ist rein direkt.",
         "Verifikation: Beide sind Ende-zu-Ende verschlüsselt; Relayiums send/receive zeigt zusätzlich einen kurzen Code, den beide Seiten vor Übertragungsbeginn vergleichen.",
         "Selbst hosten: Beide sind selbst hostbar — crocs Relay ist ein kleines eigenständiges Binary; Relayiums Server betreibt auch die Web-App, und die send/receive-Funktion der CLI kann mit --server auf deine eigene Instanz zeigen.",
-        "Lizenz und Kosten: Beide AGPL-3.0-lizenziert, beide völlig kostenlos, keines braucht ein Konto.",
+        "Lizenz und Kosten: Beide AGPL-3.0-lizenziert und beide völlig kostenlos. croc braucht überhaupt kein Konto; Relayium nur für send, um den Pairing-Code zu erzeugen.",
       ],
     },
   ],
@@ -462,7 +462,7 @@ const de = {
       },
       {
         q: "Braucht sie ein Konto?",
-        a: "Nein. push/pull nutzt deinen eigenen SSH-Zugang, daemon-direct nutzt gepinntes TLS-Zertifikatsvertrauen zwischen deinen Maschinen, und send/receive nutzt einen Code, den ihr außerhalb des Kanals vereinbart. Nichts davon berührt ein Relayium-Konto.",
+        a: "Nur send. push/pull nutzt deinen eigenen SSH-Zugang und daemon-direct nutzt gepinntes TLS-Zertifikatsvertrauen zwischen deinen Maschinen, beides berührt also kein Relayium-Konto. send/receive ist die Ausnahme: Einen Pairing-Code kann nur der Server erzeugen, und nur für ein angemeldetes Konto, also führt der Absender einmal relayium login aus. Zum Empfangen braucht es nie ein Konto.",
       },
       {
         q: "Kann ich den Pairing-Code der CLI mit Relayiums Browser-App nutzen?",
@@ -475,7 +475,7 @@ const de = {
     ],
   },
   cta: {
-    text: "Installiere die kostenlose Relayium CLI und probiere push, sync oder send — ohne Konto, und genauso schnell startklar wie croc.",
+    text: "Installiere die kostenlose Relayium CLI und probiere push, sync oder send — kostenlos, und genauso schnell startklar wie croc.",
     button: "CLI holen",
     href: "/cli",
   },
@@ -488,7 +488,7 @@ const fr = {
     "Relayium et croc sont deux outils CLI gratuits, open source et chiffrés pour le transfert pair-à-pair. Un comparatif honnête de leurs forces respectives.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "croc est l'un des outils les plus appréciés pour envoyer un fichier d'un terminal à un autre : une courte phrase-code facile à retenir, un échange de clés PAKE, et ça marche tout simplement. La CLI Relayium vise le même objectif et est construite dans le même esprit — gratuite, open source, chiffrée de bout en bout, sans compte requis pour aucun mode.",
+    "croc est l'un des outils les plus appréciés pour envoyer un fichier d'un terminal à un autre : une courte phrase-code facile à retenir, un échange de clés PAKE, et ça marche tout simplement. La CLI Relayium vise le même objectif et est construite dans le même esprit — gratuite, open source, chiffrée de bout en bout, un compte n'étant requis que pour que send puisse générer son code d'appairage.",
     "Ceci n'est pas un dénigrement ; la réputation de croc est méritée. Cet article compare franchement ce que partagent les deux outils, là où la CLI Relayium fait plus parce qu'elle sait aussi parler à des serveurs que vous exploitez déjà, et le cas où croc est honnêtement le choix le plus simple.",
   ],
   sections: [
@@ -498,7 +498,7 @@ const fr = {
         "Commençons par ce qui se recoupe, et c'est substantiel : les deux sont de petits binaires uniques à installer une fois, tous deux entièrement gratuits sans palier payant, et tous deux open source sous une licence permissive, si bien que vous pouvez lire chaque ligne qui touche à vos fichiers.",
       ],
       bullets: [
-        "Aucun compte pour un transfert — un court code connu des deux seules extrémités suffit pour qu'elles se trouvent et s'accordent sur une clé.",
+        "Un court code connu des deux seules extrémités suffit pour qu'elles se trouvent et s'accordent sur une clé. Celui de croc s'invente sur le moment ; celui de Relayium est généré par son serveur pour un expéditeur connecté, et le destinataire n'a toujours besoin d'aucun compte.",
         "Chiffré de bout en bout pendant le transfert : le relais ou le point de rendez-vous au milieu ne voit jamais le contenu de votre fichier.",
         "Les transferts interrompus peuvent reprendre au lieu de repartir de zéro, et les deux vérifient que ce qui est arrivé correspond bien à ce qui a été envoyé.",
         "Multiplateforme : macOS, Linux et Windows.",
@@ -544,7 +544,7 @@ const fr = {
         "Aucun chemin direct disponible : le relais de croc transporte le flux chiffré, si bien que le transfert aboutit quand même ; le send/receive de Relayium est exclusivement direct.",
         "Vérification : les deux sont chiffrés de bout en bout ; le send/receive de Relayium affiche en plus un court code que les deux parties comparent avant le début du transfert.",
         "Auto-hébergement : les deux sont auto-hébergeables — le relais de croc est un petit binaire autonome ; le serveur de Relayium fait aussi tourner l'application web, et le send/receive de la CLI peut pointer vers votre propre instance avec --server.",
-        "Licence et coût : les deux sous licence AGPL-3.0, tous deux entièrement gratuits, aucun des deux ne nécessite de compte.",
+        "Licence et coût : les deux sous licence AGPL-3.0 et tous deux entièrement gratuits. croc ne nécessite aucun compte ; Relayium n'en demande un que pour send, afin de générer le code d'appairage.",
       ],
     },
   ],
@@ -557,7 +557,7 @@ const fr = {
       },
       {
         q: "A-t-elle besoin d'un compte ?",
-        a: "Non. push/pull utilise votre propre accès SSH, daemon-direct utilise une confiance par certificat TLS épinglé entre vos machines, et send/receive utilise un code que vous convenez par un autre canal. Rien de tout cela ne touche un compte Relayium.",
+        a: "Seul send. push/pull utilise votre propre accès SSH et daemon-direct utilise une confiance par certificat TLS épinglé entre vos machines, donc ni l'un ni l'autre ne touche un compte Relayium. send/receive fait exception : seul le serveur peut générer un code de jumelage, et seulement pour un compte connecté, donc l'expéditeur lance une fois relayium login. Recevoir ne nécessite jamais de compte.",
       },
       {
         q: "Puis-je utiliser le code d'appairage de la CLI avec l'application web de Relayium ?",
@@ -570,7 +570,7 @@ const fr = {
     ],
   },
   cta: {
-    text: "Installez la CLI Relayium gratuite et essayez push, sync ou send — sans compte, et tout aussi rapide à démarrer que croc.",
+    text: "Installez la CLI Relayium gratuite et essayez push, sync ou send — gratuit, et tout aussi rapide à démarrer que croc.",
     button: "Obtenir la CLI",
     href: "/cli",
   },
@@ -583,7 +583,7 @@ const ar = {
     "كلٌّ من Relayium وcroc أداتا سطر أوامر مجانيتان ومفتوحتا المصدر ومُشفَّرتان لنقل الملفات من الند للند. مقارنة منصفة وصادقة تُبيّن أين يكون كلٌّ منهما الأنسب.",
   updatedLabel: "آخر تحديث",
   lead: [
-    "croc من أحبّ الأدوات لإرسال ملف من طرفية إلى أخرى: عبارة رمزية قصيرة يسهل تذكّرها، وتبادل مفاتيح PAKE، ثم يعمل ببساطة. وتضع واجهة Relayium على سطر الأوامر لنفسها المهمّة ذاتها وهي مبنية بالطريقة نفسها — مجانية ومفتوحة المصدر ومُشفَّرة من الطرف إلى الطرف، دون الحاجة إلى حساب في أيٍّ منها.",
+    "croc من أحبّ الأدوات لإرسال ملف من طرفية إلى أخرى: عبارة رمزية قصيرة يسهل تذكّرها، وتبادل مفاتيح PAKE، ثم يعمل ببساطة. وتضع واجهة Relayium على سطر الأوامر لنفسها المهمّة ذاتها وهي مبنية بالطريقة نفسها — مجانية ومفتوحة المصدر ومُشفَّرة من الطرف إلى الطرف، ولا يلزم الحساب إلا كي يُصدر send رمز الاقتران الخاص به.",
     "هذه ليست محاولة إسقاط؛ فقد استحقّ croc سمعته. إنها مقارنة مباشرة لِما يشترك فيه الاثنان، وأين تفعل واجهة Relayium أكثر لأنها تتحدّث أيضًا إلى خوادم تُشغّلها أصلاً، والحالة التي يكون فيها croc بصدق الخيار الأبسط.",
   ],
   sections: [
@@ -593,7 +593,7 @@ const ar = {
         "لنبدأ بما يتقاطعان فيه، فهو كثير: كلاهما ملف تنفيذي صغير واحد تُثبّته مرّة واحدة، وكلاهما مجاني تمامًا بلا فئة مدفوعة، وكلاهما مفتوح المصدر برخصة متساهلة تتيح لك قراءة كل سطر يمسّ ملفاتك.",
       ],
       bullets: [
-        "لا حساب للنقل — رمز قصير لا يعرفه إلا الطرفان يكفي كي يجد كلٌّ منهما الآخر ويتّفقا على مفتاح.",
+        "رمز قصير لا يعرفه إلا الطرفان يكفي كي يجد كلٌّ منهما الآخر ويتّفقا على مفتاح. رمز croc يُبتكَر في حينه، أما رمز Relayium فيُصدره خادمه لمُرسِل مسجَّل الدخول، ويظل المُستقبِل بلا حاجة إلى حساب.",
         "مُشفَّر أثناء النقل من الطرف إلى الطرف: لا يرى المُرحِّل أو نقطة اللقاء في المنتصف محتوى ملفك أبدًا.",
         "يمكن لعمليات النقل المنقطعة أن تُستأنف بدلاً من البدء من جديد، وكلاهما يتحقّق من أنّ ما وصل يطابق فعلاً ما أُرسل.",
         "متعدّد المنصّات: macOS وLinux وWindows.",
@@ -641,7 +641,7 @@ const ar = {
         "لا مسار مباشر متاح: يحمل مُرحِّل croc التدفّق المُشفَّر فيكتمل النقل رغم ذلك؛ أمّا send/receive في Relayium فمباشر فقط.",
         "التحقّق: كلاهما مُشفَّر من الطرف إلى الطرف؛ ويطبع send/receive في Relayium إضافةً إلى ذلك رمزًا قصيرًا يقارنه الطرفان قبل بدء النقل.",
         "الاستضافة الذاتية: كلاهما قابل للاستضافة الذاتية — مُرحِّل croc ملف تنفيذي مستقلّ صغير؛ وخادم Relayium يُشغّل أيضًا تطبيق الويب، ويمكن لِـ send/receive في الواجهة أن يشير إلى نسختك الخاصة بـ --server.",
-        "الرخصة والتكلفة: كلاهما مرخّص بـ AGPL-3.0، وكلاهما مجاني تمامًا، ولا يتطلّب أيٌّ منهما حسابًا.",
+        "الرخصة والتكلفة: كلاهما مرخّص بـ AGPL-3.0، وكلاهما مجاني تمامًا. لا يحتاج croc حسابًا إطلاقًا، أما Relayium فيحتاجه لـ send فقط، كي يُصدر رمز الاقتران.",
       ],
     },
   ],
@@ -667,7 +667,7 @@ const ar = {
     ],
   },
   cta: {
-    text: "ثبّت واجهة Relayium المجانية على سطر الأوامر وجرّب push أو sync أو send — بلا حساب، وبسرعة بدء لا تقلّ عن croc.",
+    text: "ثبّت واجهة Relayium المجانية على سطر الأوامر وجرّب push أو sync أو send — مجاناً تماماً، وبسرعة بدء لا تقلّ عن croc.",
     button: "احصل على الأداة",
     href: "/cli",
   },
@@ -680,7 +680,7 @@ const es = {
     "Relayium y croc son herramientas CLI gratuitas, de código abierto y cifradas para la transferencia de archivos de igual a igual. Una comparación justa y honesta de dónde encaja mejor cada una.",
   updatedLabel: "Última actualización",
   lead: [
-    "croc es una de las herramientas más queridas para enviar un archivo de una terminal a otra: una frase-código corta y fácil de recordar, un intercambio de claves PAKE, y simplemente funciona. La CLI de Relayium se propone hacer el mismo trabajo y está construida de la misma manera — gratis, de código abierto y cifrada de extremo a extremo, sin cuenta requerida para nada de ello.",
+    "croc es una de las herramientas más queridas para enviar un archivo de una terminal a otra: una frase-código corta y fácil de recordar, un intercambio de claves PAKE, y simplemente funciona. La CLI de Relayium se propone hacer el mismo trabajo y está construida de la misma manera — gratis, de código abierto y cifrada de extremo a extremo, y solo hace falta cuenta para que send genere su código de emparejamiento.",
     "Esto no es un ataque; croc se ganó su reputación. Es una comparación directa de lo que ambas comparten, de dónde la CLI de Relayium hace más porque también habla con servidores que ya tienes en marcha, y del caso en que croc es, con honestidad, la opción más sencilla.",
   ],
   sections: [
@@ -690,7 +690,7 @@ const es = {
         "Empecemos por lo que se solapa, porque es considerable: ambas son un único binario pequeño que instalas una vez, ambas son completamente gratis sin ningún nivel de pago, y ambas son de código abierto bajo una licencia permisiva, así que puedes leer cada línea que toca tus archivos.",
       ],
       bullets: [
-        "Sin cuenta para una transferencia — un código corto que solo conocen los dos extremos basta para que se encuentren y acuerden una clave.",
+        "Un código corto que solo conocen los dos extremos basta para que se encuentren y acuerden una clave. El de croc se inventa en el momento; el de Relayium lo genera su servidor para un remitente con sesión iniciada, y el receptor sigue sin necesitar cuenta.",
         "Cifrado de extremo a extremo en tránsito: el retransmisor o punto de encuentro en medio nunca ve el contenido de tu archivo.",
         "Las transferencias interrumpidas pueden retomarse en lugar de empezar de nuevo, y ambas verifican que lo que llegó coincide realmente con lo que se envió.",
         "Multiplataforma: macOS, Linux y Windows.",
@@ -738,7 +738,7 @@ const es = {
         "Sin camino directo disponible: el retransmisor de croc lleva el flujo cifrado, así que la transferencia se completa igualmente; el send/receive de Relayium es solo directo.",
         "Verificación: ambas van cifradas de extremo a extremo; el send/receive de Relayium además imprime un código corto que ambos lados comparan antes de que empiece la transferencia.",
         "Autoalojamiento: ambas son autoalojables — el retransmisor de croc es un pequeño binario independiente; el servidor de Relayium también ejecuta la aplicación web, y el send/receive de la CLI puede apuntar al tuyo propio con --server.",
-        "Licencia y coste: ambas con licencia AGPL-3.0, ambas completamente gratis, ninguna requiere cuenta.",
+        "Licencia y coste: ambas con licencia AGPL-3.0 y ambas completamente gratis. croc no requiere cuenta alguna; Relayium solo la requiere para send, para generar el código de emparejamiento.",
       ],
     },
   ],
@@ -751,7 +751,7 @@ const es = {
       },
       {
         q: "¿Necesita cuenta?",
-        a: "No. push/pull usa tu propio acceso SSH, daemon-direct usa la confianza por certificado TLS fijado entre tus máquinas, y send/receive usa un código corto que acordáis por otro canal. Nada de ello toca una cuenta de Relayium.",
+        a: "Solo send. push/pull usa tu propio acceso SSH y daemon-direct usa la confianza por certificado TLS fijado entre tus máquinas, así que ninguno toca una cuenta de Relayium. send/receive es la excepción: solo el servidor puede generar un código de emparejamiento, y solo para una cuenta con sesión iniciada, así que quien envía ejecuta relayium login una vez. Recibir nunca necesita cuenta.",
       },
       {
         q: "¿Puedo usar el código de emparejamiento de la CLI con la aplicación de navegador de Relayium?",
@@ -764,7 +764,7 @@ const es = {
     ],
   },
   cta: {
-    text: "Instala la CLI gratuita de Relayium y prueba push, sync o send — sin cuenta, y tan rápida de empezar como croc.",
+    text: "Instala la CLI gratuita de Relayium y prueba push, sync o send — totalmente gratis, y tan rápida de empezar como croc.",
     button: "Consigue la CLI",
     href: "/cli",
   },
@@ -777,7 +777,7 @@ const pt = {
     "Relayium e croc são ferramentas de linha de comando gratuitas, de código aberto e criptografadas para transferência de arquivos ponto a ponto. Uma comparação justa e honesta de onde cada uma se encaixa melhor.",
   updatedLabel: "Última atualização",
   lead: [
-    "croc é uma das ferramentas mais queridas para enviar um arquivo de um terminal a outro: uma frase-código curta e fácil de lembrar, uma troca de chaves PAKE, e simplesmente funciona. A CLI do Relayium se propõe a fazer o mesmo trabalho e é construída da mesma forma — gratuita, de código aberto e criptografada de ponta a ponta, sem conta exigida para nada disso.",
+    "croc é uma das ferramentas mais queridas para enviar um arquivo de um terminal a outro: uma frase-código curta e fácil de lembrar, uma troca de chaves PAKE, e simplesmente funciona. A CLI do Relayium se propõe a fazer o mesmo trabalho e é construída da mesma forma — gratuita, de código aberto e criptografada de ponta a ponta, e só é preciso conta para que o send gere o seu código de emparelhamento.",
     "Isto não é um ataque; croc conquistou sua reputação. É uma comparação direta do que as duas compartilham, de onde a CLI do Relayium faz mais porque também conversa com servidores que você já mantém, e do caso em que croc é, sinceramente, a escolha mais simples.",
   ],
   sections: [
@@ -787,7 +787,7 @@ const pt = {
         "Comecemos pela sobreposição, porque ela é considerável: ambas são um único binário pequeno que você instala uma vez, ambas são completamente gratuitas sem nenhum nível pago, e ambas são de código aberto sob uma licença permissiva, então você pode ler cada linha que toca seus arquivos.",
       ],
       bullets: [
-        "Sem conta para uma transferência — um código curto conhecido apenas pelas duas pontas basta para que se encontrem e concordem em uma chave.",
+        "Um código curto conhecido apenas pelas duas pontas basta para que se encontrem e concordem em uma chave. O do croc é inventado na hora; o do Relayium é gerado pelo servidor dele para um remetente com login feito, e quem recebe continua sem precisar de conta.",
         "Criptografado de ponta a ponta em trânsito: o retransmissor ou ponto de encontro no meio nunca vê o conteúdo do seu arquivo.",
         "Transferências interrompidas podem retomar em vez de recomeçar, e ambas verificam que o que chegou realmente corresponde ao que foi enviado.",
         "Multiplataforma: macOS, Linux e Windows.",
@@ -835,7 +835,7 @@ const pt = {
         "Nenhum caminho direto disponível: o retransmissor do croc carrega o fluxo criptografado, então a transferência ainda se completa; o send/receive do Relayium é só direto.",
         "Verificação: ambas são criptografadas de ponta a ponta; o send/receive do Relayium ainda imprime um código curto que os dois lados comparam antes de a transferência começar.",
         "Auto-hospedagem: ambas são auto-hospedáveis — o retransmissor do croc é um pequeno binário independente; o servidor do Relayium também roda o aplicativo web, e o send/receive da CLI pode apontar para o seu próprio com --server.",
-        "Licença e custo: ambas licenciadas sob AGPL-3.0, ambas completamente gratuitas, nenhuma exige conta.",
+        "Licença e custo: ambas licenciadas sob AGPL-3.0 e ambas completamente gratuitas. O croc não exige conta nenhuma; o Relayium exige apenas para o send, para gerar o código de emparelhamento.",
       ],
     },
   ],
@@ -848,7 +848,7 @@ const pt = {
       },
       {
         q: "Ela precisa de conta?",
-        a: "Não. push/pull usa seu próprio acesso SSH, daemon-direct usa a confiança por certificado TLS fixado entre suas máquinas, e send/receive usa um código curto que vocês combinam por outro canal. Nada disso toca uma conta do Relayium.",
+        a: "Só o send. O push/pull usa seu próprio acesso SSH e o daemon-direct usa a confiança por certificado TLS fixado entre suas máquinas, então nenhum dos dois toca uma conta do Relayium. O send/receive é a exceção: só o servidor pode gerar um código de emparelhamento, e apenas para uma conta com login feito, então quem envia roda relayium login uma vez. Receber nunca precisa de conta.",
       },
       {
         q: "Posso usar o código de emparelhamento da CLI com o aplicativo de navegador do Relayium?",
@@ -861,7 +861,7 @@ const pt = {
     ],
   },
   cta: {
-    text: "Instale a CLI gratuita do Relayium e experimente push, sync ou send — sem conta, e tão rápida de começar quanto croc.",
+    text: "Instale a CLI gratuita do Relayium e experimente push, sync ou send — totalmente gratuita, e tão rápida de começar quanto croc.",
     button: "Baixe a CLI",
     href: "/cli",
   },
