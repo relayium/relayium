@@ -122,12 +122,11 @@ func runSendCross(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	if len(rest) < 2 {
-		fmt.Fprintln(stderr, "send needs <src...> <code>")
+	srcs, code, err := splitSendArgs(rest)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	code := rest[len(rest)-1]
-	srcs := rest[:len(rest)-1]
 	m, paths, err := xfer.BuildManifest(srcs)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -136,6 +135,14 @@ func runSendCross(args []string, stdout, stderr io.Writer) int {
 	xfer.WarnIfEmpty(m, stderr)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
+	// Mint only after the sources check out: a code starts its 5-minute clock
+	// the moment it is minted, and burning one on a typo'd path wastes it.
+	if code == "" {
+		if code, err = mintCode(ctx, f.server, stderr); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	}
 	conn, err := crossnetConn(ctx, code, "sender", f, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
