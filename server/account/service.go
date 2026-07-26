@@ -342,6 +342,20 @@ func (s *Service) Store() Store { return s.store }
 // stdlib type, so it could be added there too, and is (see AdminHost.Now).
 func (s *Service) Now() time.Time { return s.now() }
 
+// SetNow overrides the service's clock. In-package tests inject a fixed
+// clock by assigning s.now directly (e.g. admin_test.go, apple_test.go) and
+// keep doing so — that still works, and this doesn't replace it. SetNow
+// exists for code that will no longer be in-package: once the commercial
+// admin/billing tests move to relayium-cloud (see server/ext's package doc),
+// direct field assignment stops compiling, and this is the supported
+// alternative — a mechanical `svc.now = fn` -> `svc.SetNow(fn)` at that
+// point, nothing more.
+func (s *Service) SetNow(fn func() time.Time) {
+	if fn != nil {
+		s.now = fn
+	}
+}
+
 // Cfg returns the service's static configuration. Exported for the same
 // reason as Store. Deliberately NOT part of ext.AdminHost: Config is
 // defined here in account (like Store), so exposing it through AdminHost
@@ -349,10 +363,20 @@ func (s *Service) Now() time.Time { return s.now() }
 // Store is excluded — see Store's doc comment.
 func (s *Service) Cfg() Config { return s.cfg }
 
-// AdminLogins returns the admin login-lockout throttle. Exported for the
-// same reason as Store. Cannot be part of ext.AdminHost: *loginThrottle is
-// unexported, so ext could not even name the return type.
-func (s *Service) AdminLogins() *loginThrottle { return s.adminLogins }
+// AdminLoginLocked, AdminLoginRecordFail, and AdminLoginReset wrap the admin
+// login-lockout throttle (s.adminLogins, a *loginThrottle) for ip. They
+// replace a bare AdminLogins() accessor deliberately: *loginThrottle and its
+// locked/recordFail/reset methods are all unexported (throttle.go), so an
+// accessor returning the type would be exported in name only — nothing on
+// the far side of the returned value would be callable once the caller is
+// in a different package. Wrapping instead keeps the throttle itself
+// private and applies the clock internally, so callers don't separately
+// thread s.Now() through (matching how the unexported call sites read
+// before this file existed). All three are in ext.AdminHost: their
+// signatures are ip string / bool, no account-defined type to cycle on.
+func (s *Service) AdminLoginLocked(ip string) bool { return s.adminLogins.locked(ip, s.now()) }
+func (s *Service) AdminLoginRecordFail(ip string)  { s.adminLogins.recordFail(ip, s.now()) }
+func (s *Service) AdminLoginReset(ip string)       { s.adminLogins.reset(ip) }
 
 // passkeyBeginAllowed reports whether this IP may start another passkey ceremony,
 // writing a 429 and returning false when the per-IP begin budget is exhausted.

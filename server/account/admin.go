@@ -666,7 +666,7 @@ func (s *Service) verifyAdminCreds(user, pass, code string) (totpStep int64, ok 
 
 func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	ip := s.clientIP(r)
-	if s.AdminLogins().locked(ip, s.Now()) {
+	if s.AdminLoginLocked(ip) {
 		s.renderAdminLogin(w, r, http.StatusTooManyRequests, "尝试过于频繁，请稍后再试",
 			s.AdminPasskeyCount(r.Context()) > 0)
 		return
@@ -675,7 +675,7 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	totpStep, ok := s.verifyAdminCreds(
 		r.FormValue("username"), r.FormValue("password"), r.FormValue("totp"))
 	if !ok {
-		s.AdminLogins().recordFail(ip, s.Now())
+		s.AdminLoginRecordFail(ip)
 		s.renderAdminLogin(w, r, http.StatusUnauthorized, "账号、密码或验证码错误",
 			s.AdminPasskeyCount(r.Context()) > 0)
 		// 只记"有人试过且失败了"。绝不记录尝试的用户名或密码：
@@ -689,14 +689,14 @@ func (s *Service) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		// code was already used — on this or any instance — so treat it exactly
 		// like a bad credential: record the failure and show the generic error.
 		if claimed, cerr := s.Store().ClaimTOTPStep(r.Context(), totpStep); cerr != nil || !claimed {
-			s.AdminLogins().recordFail(ip, s.Now())
+			s.AdminLoginRecordFail(ip)
 			s.renderAdminLogin(w, r, http.StatusUnauthorized, "账号、密码或验证码错误",
 				s.AdminPasskeyCount(r.Context()) > 0)
 			s.WriteAudit(r, AuditLoginFail, "-", nil, StepUpNone)
 			return
 		}
 	}
-	s.AdminLogins().reset(ip)
+	s.AdminLoginReset(ip)
 	tok, err := s.newAdminSession(r.Context(), "password")
 	if err != nil {
 		s.renderAdminLogin(w, r, http.StatusInternalServerError, "服务器错误，请稍后再试",

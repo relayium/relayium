@@ -19,9 +19,12 @@
 // actually moves to a private repo (a later step, not this one — see
 // account/service.go's doc comments on Store/Cfg for the full reasoning)
 // it will hold its own account.Service (or account.Store) reference rather
-// than reaching through this interface for them. *loginThrottle
-// (AdminLogins' return type) is excluded for a simpler reason: it's
-// unexported, so ext could not even name it in a method signature.
+// than reaching through this interface for them. The admin login-lockout
+// throttle follows the same pattern for a different reason: *loginThrottle
+// is unexported, so ext could not even name it as a return type, which is
+// why AdminLoginLocked/AdminLoginRecordFail/AdminLoginReset below take and
+// return only plain types (string, bool) instead of a bare accessor
+// returning the throttle itself.
 //
 // ext must never import account: the whole point of this package
 // is a boundary the commercial layer can depend on without pulling in
@@ -115,4 +118,12 @@ type AdminHost interface {
 	HandleAdminPasskeyRegisterBegin(w http.ResponseWriter, r *http.Request)
 	HandleAdminPasskeyRegisterFinish(w http.ResponseWriter, r *http.Request)
 	HandleAdminStepUpPasskeyBegin(w http.ResponseWriter, r *http.Request)
+
+	// AdminLoginLocked, AdminLoginRecordFail, and AdminLoginReset drive the
+	// admin login-lockout throttle for ip (handleAdminLogin's password path).
+	// Wrapper methods, not a bare accessor: see the package doc for why a
+	// *loginThrottle-returning method isn't an option.
+	AdminLoginLocked(ip string) bool
+	AdminLoginRecordFail(ip string)
+	AdminLoginReset(ip string)
 }
