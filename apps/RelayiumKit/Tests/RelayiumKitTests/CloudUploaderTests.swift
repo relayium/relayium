@@ -19,13 +19,13 @@ final class StubTransport: ResumableTransport, @unchecked Sendable {
         return ("up1", chunkSize)
     }
 
-    func patchChunk(uploadId: String, bytes: [UInt8], from: Int, to: Int,
+    func patchChunk(uploadId: String, bytes: Data, from: Int, to: Int,
                     total: Int, token: String) async throws -> PatchOutcome {
         if failNextPatch { failNextPatch = false; throw CloudError.network }
         patches.append((from, bytes.count))
         var take = bytes.count
         if let p = partialCommitOnce { take = min(p, bytes.count); partialCommitOnce = nil }
-        committed += bytes.prefix(take)
+        committed += [UInt8](bytes.prefix(take))
         return .committed(received: committed.count)
     }
 
@@ -77,6 +77,11 @@ final class CloudUploaderTests: XCTestCase {
     }
 
     /// The guard the whole design rests on: memory must not track file size.
+    ///
+    /// `bufferPeak` counts the packing buffer *and* anything copied out of it on
+    /// the way to the transport. The earlier version counted only the packing
+    /// buffer, so three full copies per chunk sat outside the assertion and this
+    /// test stayed green while the process held four times what it claimed.
     func testPeakBufferIsBoundedByChunkNotFile() async throws {
         let t = StubTransport()
         t.chunkSize = 64 * 1024
@@ -85,6 +90,30 @@ final class CloudUploaderTests: XCTestCase {
         _ = try await u.upload(sources: sources(sizes), burnAfterRead: false,
                                ttl: 3600, token: "tok", onProgress: { _, _ in })
         XCTAssertLessThanOrEqual(u.bufferPeak, t.chunkSize + STORE_CHUNK_SIZE + FRAME_OVERHEAD + 16)
+    }
+
+    /// The chunk must reach the transport as a slice of the packing buffer, not
+    /// as a fresh allocation. This is the property the memory bound actually
+    /// depends on, and the one a peak-of-one-buffer assertion cannot see.
+    func testHandsTheChunkToTheTransportWithoutCopying() async throws {
+        let t = StubTransport()
+        let u = CloudUploader(transport: t)
+        _ = try await u.upload(sources: sources([STORE_CHUNK_SIZE * 4]), burnAfterRead: false,
+                               ttl: 3600, token: "tok", onProgress: { _, _ in })
+        XCTAssertEqual(u.bytesCopiedToTransport, 0,
+                       "the chunk was copied on its way to the transport")
+    }
+
+    /// Even the retry path replays a slice rather than a copy — that path runs
+    /// exactly when the network is already unhappy, the worst moment to double
+    /// the resident buffer.
+    func testRetryReplaysWithoutCopying() async throws {
+        let t = StubTransport()
+        t.failNextPatch = true
+        let u = CloudUploader(transport: t)
+        _ = try await u.upload(sources: sources([STORE_CHUNK_SIZE * 3]), burnAfterRead: false,
+                               ttl: 3600, token: "tok", onProgress: { _, _ in })
+        XCTAssertEqual(u.bytesCopiedToTransport, 0)
     }
 
     /// Progress must reach the declared total, or the UI stalls at 97%.

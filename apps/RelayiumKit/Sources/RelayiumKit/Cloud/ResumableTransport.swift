@@ -19,7 +19,9 @@ func contentRangeHeader(from: Int, to: Int, total: Int) -> String {
 public protocol ResumableTransport {
     func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
                     size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int)
-    func patchChunk(uploadId: String, bytes: [UInt8], from: Int, to: Int,
+    /// `bytes` is a slice of the caller's packing buffer and shares its storage.
+    /// Implementations must not copy it — that copy is the whole memory problem.
+    func patchChunk(uploadId: String, bytes: Data, from: Int, to: Int,
                     total: Int, token: String) async throws -> PatchOutcome
     func uploadOffset(uploadId: String, token: String) async throws -> Int
     func finalizeUpload(uploadId: String, token: String) async throws -> UploadResult
@@ -54,14 +56,16 @@ public struct HTTPResumableTransport: ResumableTransport {
         return (b.uploadId, b.chunkSize > 0 ? b.chunkSize : 8 << 20)
     }
 
-    public func patchChunk(uploadId: String, bytes: [UInt8], from: Int, to: Int,
+    public func patchChunk(uploadId: String, bytes: Data, from: Int, to: Int,
                            total: Int, token: String) async throws -> PatchOutcome {
         var req = URLRequest(url: baseURL.appendingPathComponent("api/uploads/\(uploadId)"))
         req.httpMethod = "PATCH"
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue(contentRangeHeader(from: from, to: to, total: total),
                      forHTTPHeaderField: "Content-Range")
-        req.httpBody = Data(bytes)
+        // Assigned, not re-wrapped: `Data(bytes)` here was one of three full
+        // copies of every chunk that the memory investigation found.
+        req.httpBody = bytes
         let (data, http) = try await send(req)
         struct Body: Decodable { let received: Int }
         switch http.statusCode {

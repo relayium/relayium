@@ -24,8 +24,20 @@ public struct UploadOutcome: Equatable {
 /// caught below.
 public final class CloudUploader {
     private let transport: ResumableTransport
-    /// Peak bytes encrypted but not yet acknowledged. The memory regression guard.
+
+    /// Peak bytes this uploader holds at once: the packing buffer plus anything
+    /// copied out of it on the way to the transport.
+    ///
+    /// The copies are the point. An earlier version counted only the packing
+    /// buffer, and stayed green while the process held four times what it
+    /// claimed — one buffer plus three full copies of every chunk, all of them
+    /// outside the assertion. A memory guard that cannot see copies is not a
+    /// memory guard.
     public private(set) var bufferPeak = 0
+
+    /// Bytes copied out of the packing buffer on the way to the transport during
+    /// the last upload. Must stay 0: the body is a slice sharing that storage.
+    public private(set) var bytesCopiedToTransport = 0
 
     public init(transport: ResumableTransport) { self.transport = transport }
 
@@ -48,11 +60,16 @@ public final class CloudUploader {
         let enc = ChunkEncryptor(key: raw, sources: sources)
         // Held bytes double as the replay buffer: the server can commit part of a
         // chunk, so the unacknowledged tail must survive until it is acked.
-        var pending = [UInt8]()
+        //
+        // `Data`, not `[UInt8]`: the transport takes a slice of this buffer, and
+        // a Data slice shares its storage while an Array slice has to be copied
+        // into a new allocation to cross the call.
+        var pending = Data()
         pending.reserveCapacity(chunkSize + STORE_CHUNK_SIZE + FRAME_OVERHEAD)
         var chunkStart = 0
         var offset = 0
         bufferPeak = 0
+        bytesCopiedToTransport = 0
 
         onProgress(0, total)
         while offset < total {
@@ -88,14 +105,20 @@ public final class CloudUploader {
 
     /// PATCH with resync-and-replay. A reset commits whatever landed, so the
     /// server's offset can fall inside the chunk we sent; replay from there.
-    private func patchWithRetry(uploadId: String, bytes: [UInt8], chunkStart: Int,
+    private func patchWithRetry(uploadId: String, bytes: Data, chunkStart: Int,
                                 total: Int, token: String) async throws -> Int {
         let end = chunkStart + bytes.count
         var from = chunkStart
         for attempt in 1...5 {
             do {
+                // A Data slice shares the packing buffer's storage — no copy,
+                // on the first attempt or on a replay. The replay path runs
+                // exactly when the network is already unhappy, which is the
+                // worst moment to double the resident buffer.
+                let body = bytes[(bytes.startIndex + (from - chunkStart))...]
+                bufferPeak = max(bufferPeak, bytes.count)
                 let outcome = try await transport.patchChunk(
-                    uploadId: uploadId, bytes: Array(bytes[(from - chunkStart)...]),
+                    uploadId: uploadId, bytes: body,
                     from: from, to: end, total: total, token: token)
                 switch outcome {
                 case .committed(let r), .serverAhead(let r): return r

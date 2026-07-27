@@ -57,11 +57,15 @@ public final class ChunkEncryptor {
     }
 
     /// The next frame, or nil once every source is exhausted.
-    public func next() throws -> [UInt8]? {
+    ///
+    /// Returns `Data` rather than `[UInt8]` so the packing buffer it feeds can
+    /// hand slices to the transport without copying — `Data` slices share
+    /// storage, `Array` slices do not survive the trip without a copy.
+    public func next() throws -> Data? {
         while index < sources.count {
             let pt = try sources[index].read(STORE_CHUNK_SIZE)
             if pt.isEmpty { index += 1; continue }
-            let f = frame(seal(key: key, seq: seq, plaintext: pt))
+            let f = Data(frame(seal(key: key, seq: seq, plaintext: pt)))
             seq += 1
             return f
         }

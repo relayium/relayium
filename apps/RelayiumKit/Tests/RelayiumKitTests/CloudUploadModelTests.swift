@@ -14,7 +14,7 @@ private final class NoopTransport: ResumableTransport, @unchecked Sendable {
                     size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
         ("u", 1 << 20)
     }
-    func patchChunk(uploadId: String, bytes: [UInt8], from: Int, to: Int,
+    func patchChunk(uploadId: String, bytes: Data, from: Int, to: Int,
                     total: Int, token: String) async throws -> PatchOutcome { .committed(received: to) }
     func uploadOffset(uploadId: String, token: String) async throws -> Int { 0 }
     func finalizeUpload(uploadId: String, token: String) async throws -> UploadResult {
