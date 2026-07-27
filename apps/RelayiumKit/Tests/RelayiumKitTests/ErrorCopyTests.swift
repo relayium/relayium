@@ -33,6 +33,20 @@ final class ErrorCopyTests: XCTestCase {
         XCTAssertTrue(rate.lowercased().contains("wait") || rate.lowercased().contains("too many"))
     }
 
+    /// The three 429s must read differently, and only one of them may suggest
+    /// waiting — the other two reset tomorrow and next month.
+    func testTheThree429sReadDifferently() {
+        let wait = ErrorCopy.message(for: CloudError.rateLimited)
+        let daily = ErrorCopy.message(for: CloudError.dailyQuota)
+        let monthly = ErrorCopy.message(for: CloudError.monthlyTraffic)
+        XCTAssertEqual(Set([wait, daily, monthly]).count, 3)
+        XCTAssertTrue(daily.lowercased().contains("tomorrow"))
+        XCTAssertTrue(monthly.lowercased().contains("month"))
+        // The gate is `used + this file > quota`, so one big file trips it with
+        // nothing else sent today. Copy that blames past usage would misdirect.
+        XCTAssertTrue(daily.lowercased().contains("single large file"))
+    }
+
     /// A missing link has three plausible causes and the copy must not assert one.
     func testNotFoundNamesAllThreeCauses() {
         let m = ErrorCopy.message(for: CloudError.notFound).lowercased()
@@ -50,8 +64,8 @@ final class ErrorCopyTests: XCTestCase {
 
     func testEveryCloudErrorHasCopy() {
         let cases: [CloudError] = [
-            .unauthorized, .quota, .rateLimited, .notFound,
-            .server(status: 500), .network, .decoding,
+            .unauthorized, .quota, .rateLimited, .dailyQuota, .monthlyTraffic,
+            .notFound, .server(status: 500), .network, .decoding,
         ]
         for e in cases {
             let m = ErrorCopy.message(for: e)

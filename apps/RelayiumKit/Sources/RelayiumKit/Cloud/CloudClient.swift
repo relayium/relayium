@@ -25,7 +25,12 @@ public struct CloudClient {
             return r
         case 401: throw CloudError.unauthorized
         case 413: throw CloudError.quota
-        case 429: throw CloudError.rateLimited
+        // The single-shot path meets the same three 429s as the chunked one
+        // (files.go:90 concurrency, :173 daily, :196 monthly), so it sorts them
+        // the same way rather than calling every limit a rate limit.
+        case 429: throw tooManyRequestsError(
+            retryAfter: http.value(forHTTPHeaderField: "Retry-After"),
+            body: String(data: data, encoding: .utf8) ?? "")
         default:  throw CloudError.server(status: http.statusCode)
         }
     }

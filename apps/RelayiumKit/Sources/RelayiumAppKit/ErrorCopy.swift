@@ -52,6 +52,13 @@ public enum ErrorCopy {
                 return "Not enough space or daily quota left for this file. Free up space or upgrade."
             case .rateLimited:
                 return "Too many uploads right now. Wait a minute, then try again."
+            case .dailyQuota:
+                // Not "you've used too much": the gate is used + this file >
+                // quota, so one large file can trip it on its own with nothing
+                // else sent today. The wording has to cover both.
+                return "This file needs more than your remaining daily upload allowance — a single large file can use it all on its own. Try again tomorrow, or upgrade for a bigger daily allowance."
+            case .monthlyTraffic:
+                return "Your account has reached its monthly traffic limit. Uploads resume next month, or upgrade to continue now."
             case .notFound:
                 return "This link has expired, was already downloaded, or was mistyped."
             case .server(let status):

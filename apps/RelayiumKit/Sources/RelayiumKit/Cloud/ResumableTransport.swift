@@ -14,6 +14,25 @@ func contentRangeHeader(from: Int, to: Int, total: Int) -> String {
     "bytes \(from)-\(to - 1)/\(total)"
 }
 
+/// Sort a 429 into the three the upload path can actually produce.
+///
+/// Only one of them means "wait": the per-account concurrency gate, which is the
+/// only one that sets `Retry-After` (`uploads_resumable.go:205`). The two quota
+/// gates (`:166` daily, `:188` monthly) set no such header, and telling someone
+/// to wait a minute for a limit that resets next month is worse than saying
+/// nothing.
+///
+/// So the header is the discriminator and the body only picks between the two
+/// quota wordings. Matching server prose is a wire contract that can drift, so an
+/// unrecognised body degrades to the generic wait rather than asserting a cause.
+func tooManyRequestsError(retryAfter: String?, body: String) -> CloudError {
+    if let r = retryAfter, !r.isEmpty { return .rateLimited }
+    let text = body.lowercased()
+    if text.contains("daily quota") { return .dailyQuota }
+    if text.contains("monthly traffic") { return .monthlyTraffic }
+    return .rateLimited
+}
+
 /// The four calls of the resumable upload protocol, behind a protocol so the
 /// chunk loop can be tested without a server.
 public protocol ResumableTransport {
@@ -49,7 +68,7 @@ public struct HTTPResumableTransport: ResumableTransport {
         req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         req.httpBody = Data(header)
         let (data, http) = try await send(req)
-        guard http.statusCode == 200 else { throw statusError(http.statusCode) }
+        guard http.statusCode == 200 else { throw statusError(http, data) }
         struct Body: Decodable { let uploadId: String; let chunkSize: Int }
         guard let b = try? JSONDecoder().decode(Body.self, from: data) else { throw CloudError.decoding }
         // The server may report 0 to mean "use your default" — same rule as web.
@@ -76,7 +95,7 @@ public struct HTTPResumableTransport: ResumableTransport {
             guard let b = try? JSONDecoder().decode(Body.self, from: data) else { throw CloudError.decoding }
             return .serverAhead(received: b.received)
         default:
-            throw statusError(http.statusCode)
+            throw statusError(http, data)
         }
     }
 
@@ -84,7 +103,7 @@ public struct HTTPResumableTransport: ResumableTransport {
         var req = URLRequest(url: baseURL.appendingPathComponent("api/uploads/\(uploadId)"))
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, http) = try await send(req)
-        guard http.statusCode == 200 else { throw statusError(http.statusCode) }
+        guard http.statusCode == 200 else { throw statusError(http, data) }
         struct Body: Decodable { let received: Int }
         guard let b = try? JSONDecoder().decode(Body.self, from: data) else { throw CloudError.decoding }
         return b.received
@@ -95,20 +114,23 @@ public struct HTTPResumableTransport: ResumableTransport {
         req.httpMethod = "POST"
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, http) = try await send(req)
-        guard http.statusCode == 200 else { throw statusError(http.statusCode) }
+        guard http.statusCode == 200 else { throw statusError(http, data) }
         guard let r = try? JSONDecoder().decode(UploadResult.self, from: data) else {
             throw CloudError.decoding
         }
         return r
     }
 
-    private func statusError(_ code: Int) -> CloudError {
-        switch code {
+    private func statusError(_ http: HTTPURLResponse, _ data: Data) -> CloudError {
+        switch http.statusCode {
         case 401: return .unauthorized
         case 413: return .quota
-        case 429: return .rateLimited
+        case 429:
+            return tooManyRequestsError(
+                retryAfter: http.value(forHTTPHeaderField: "Retry-After"),
+                body: String(data: data, encoding: .utf8) ?? "")
         case 404: return .notFound
-        default:  return .server(status: code)
+        default:  return .server(status: http.statusCode)
         }
     }
 
