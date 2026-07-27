@@ -75,7 +75,11 @@ public enum LoginOutcome: Equatable {
 }
 
 public enum AccountError: Error, Equatable {
-    case invalidCredentials      // 401
+    case invalidCredentials      // 401 from a credential exchange
+    /// 401 from an endpoint that needed an account, not a password — minting a
+    /// pairing code, chiefly. Distinct from `invalidCredentials` because the
+    /// copy for that one talks about an email and password the user never typed.
+    case notSignedIn
     case rateLimited             // 429
     case server(status: Int)     // other non-2xx
     case decoding                // body didn't match the expected shape

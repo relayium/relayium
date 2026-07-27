@@ -17,6 +17,12 @@ public enum ErrorCopy {
             switch e {
             case .invalidCredentials:
                 return "That email and password don't match an account."
+            case .notSignedIn:
+                // Says why rather than just refusing: the asymmetry is the
+                // server's billing policy — whoever creates a code pays for any
+                // traffic relayed through it — and a user who can receive fine
+                // deserves to know why sending is different.
+                return "Sign in to create a pairing code. You can still receive files with a code someone shares with you."
             case .rateLimited:
                 return "Too many attempts. Wait a minute, then try again."
             case .server(let status):
