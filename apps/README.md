@@ -49,10 +49,21 @@ Real Developer ID signing + notarization is a later round (R1-G5); for now
 
 ### Manual acceptance
 
-Sign-in, keychain persistence and sign-out are verified by hand — `KeychainTokenStore`
-is skipped under the SPM test host, which has no app bundle. Launch the app, sign in,
-check the plan and usage, quit and relaunch to confirm auto-login, then sign out and
-confirm the return to the login form.
+Sign-in, keychain persistence and sign-out are verified by hand. Launch the app, sign
+in, check the plan and usage, quit and relaunch to confirm auto-login, then sign out
+and confirm the return to the login form.
+
+`KeychainTokenStore`'s round-trip test skips by default, and the reason is worth
+knowing: a bare SPM test host *can* reach the login keychain, but whether it
+succeeds depends on ambient state — is the keychain unlocked, did an earlier run
+leave an ACL. Left to decide for itself the test both skipped and passed on one
+machine in one afternoon, which makes it worthless as a signal and unfit for CI.
+It now skips deterministically unless you ask for it:
+
+    RELAYIUM_KEYCHAIN_ROUNDTRIP=1 swift test --filter TokenStoreTests
+
+Enabled, it does not swallow failures. Use it as a hand-driven smoke check when
+the keychain configuration itself is what you are testing.
 
 When checking auto-login, quit and relaunch **the same build**. A sandboxed,
 ad-hoc-signed binary ties the keychain item's ACL to that binary's signature, so

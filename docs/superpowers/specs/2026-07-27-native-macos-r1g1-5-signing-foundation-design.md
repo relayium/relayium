@@ -216,17 +216,24 @@ secrets belongs in a relayium-ops runbook, following the precedent set by
 
 ## Testing
 
-**What CI covers:** `swift test` (141 tests, 1 skip), signature validity, and
-entitlement contents.
+**What CI covers:** `swift test` (0 failures), signature validity, and entitlement
+contents.
 
 **What CI cannot cover, stated so it is not mistaken for coverage:** the actual
 Keychain round trip. `testKeychainRoundTripIfAvailable`
-(`Tests/RelayiumKitTests/TokenStoreTests.swift`) catches a failing `SecItemAdd`
-and converts it to `XCTSkip` — it is the one skip in the current suite, because
-the SPM test host has no app bundle. After this round it still skips, and for a
-sharper reason: without an app bundle there is no entitlement, so a
-data-protection keychain write returns `errSecMissingEntitlement`. Read/write
-verification stays with the manual acceptance flow in `apps/README.md`.
+(`Tests/RelayiumKitTests/TokenStoreTests.swift`) skips deterministically unless
+`RELAYIUM_KEYCHAIN_ROUNDTRIP=1` is set, so read/write verification stays with the
+manual acceptance flow in `apps/README.md`.
+
+An earlier draft of this spec justified that skip with "the SPM test host has no
+app bundle, so it has no entitlement". **That is wrong, and it was disproved by
+running it:** a bare SPM test host does reach the login keychain, and the test
+passed. What it actually depends on is ambient state — whether the keychain is
+unlocked, whether an earlier run left an ACL — which is why the same test both
+skipped and passed on one machine within one afternoon. The test previously
+caught a failing `SecItemAdd` and converted it to a skip, which is what let an
+environmental coin-flip masquerade as a stable result. It is now opt-in, and when
+opted into it does not swallow failures.
 
 An app-hosted XCTest target would close that gap and is deliberately not built:
 it needs a GUI session on the runner, which costs more than the gap is worth for
@@ -241,8 +248,9 @@ than left to mislead.
 
 ## Done when
 
-- `swift test` passes with 0 failures, on CI and locally, with the Keychain round
-  trip as its only skip (141 tests at the time of writing).
+- `swift test` passes with 0 failures, on CI and locally. The Keychain round trip
+  skips deterministically by default; `RELAYIUM_KEYCHAIN_ROUNDTRIP=1` runs it.
+  Skip counts are not a pass criterion — they were, and they were wrong.
 - `xcodebuild -configuration Release build` produces an app that passes
   `codesign --verify --strict`.
 - `codesign -d --entitlements -` reports both `app-sandbox` and the
