@@ -7,6 +7,7 @@ public enum AppEnvironment {
     public static let productionBaseURL = URL(string: "https://relayium.com")!
     public static let keychainService = "com.relayium.mac"
     public static let keychainAccount = "bearer-token"
+    public static let keychainAccessGroup = "7PVYUG4YQS.com.relayium.shared"
 
     // MARK: - Web hand-off
     //
@@ -65,7 +66,9 @@ public enum AppEnvironment {
     public static func makeSession(baseURL: URL = productionBaseURL) -> AccountSession {
         AccountSession(
             client: AccountClient(baseURL: baseURL),
-            tokenStore: KeychainTokenStore(service: keychainService, account: keychainAccount),
+            tokenStore: KeychainTokenStore(service: keychainService,
+                                           account: keychainAccount,
+                                           accessGroup: keychainAccessGroup),
             deviceName: deviceName()
         )
     }

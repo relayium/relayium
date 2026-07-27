@@ -12,6 +12,26 @@ final class TokenStoreTests: XCTestCase {
         try s.clear()
         XCTAssertNil(try s.load())
     }
+    func testBaseQueryUsesDataProtectionKeychain() {
+        let s = KeychainTokenStore(service: "svc", account: "acct")
+        XCTAssertEqual(s.baseQuery[kSecUseDataProtectionKeychain as String] as? Bool, true)
+    }
+
+    func testBaseQueryCarriesTheAccessGroupWhenConfigured() {
+        let s = KeychainTokenStore(service: "svc", account: "acct",
+                                   accessGroup: "TEAMID.com.example.shared")
+        XCTAssertEqual(s.baseQuery[kSecAttrAccessGroup as String] as? String,
+                       "TEAMID.com.example.shared")
+        // The identifying attributes must survive the addition.
+        XCTAssertEqual(s.baseQuery[kSecAttrService as String] as? String, "svc")
+        XCTAssertEqual(s.baseQuery[kSecAttrAccount as String] as? String, "acct")
+    }
+
+    func testBaseQueryOmitsTheAccessGroupWhenNotConfigured() {
+        let s = KeychainTokenStore(service: "svc", account: "acct")
+        XCTAssertNil(s.baseQuery[kSecAttrAccessGroup as String])
+    }
+
     /// Exercises the real keychain, and is opt-in on purpose.
     ///
     /// This test used to decide for itself: it caught a failing `SecItemAdd` and

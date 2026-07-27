@@ -37,4 +37,11 @@ final class AppEnvironmentTests: XCTestCase {
         XCTAssertEqual(AppEnvironment.keychainService, "com.relayium.mac")
         XCTAssertEqual(AppEnvironment.keychainAccount, "bearer-token")
     }
+
+    func testKeychainAccessGroupIsTheSharedTeamGroup() {
+        // Shared, not the default per-app group: R3's iOS app reads the same
+        // credential, and changing this later would cost a data migration.
+        XCTAssertEqual(AppEnvironment.keychainAccessGroup,
+                       "7PVYUG4YQS.com.relayium.shared")
+    }
 }
