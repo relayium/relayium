@@ -53,17 +53,26 @@ Sign-in, keychain persistence and sign-out are verified by hand. Launch the app,
 in, check the plan and usage, quit and relaunch to confirm auto-login, then sign out
 and confirm the return to the login form.
 
-`KeychainTokenStore`'s round-trip test skips by default, and the reason is worth
-knowing: a bare SPM test host *can* reach the login keychain, but whether it
-succeeds depends on ambient state — is the keychain unlocked, did an earlier run
-leave an ACL. Left to decide for itself the test both skipped and passed on one
-machine in one afternoon, which makes it worthless as a signal and unfit for CI.
-It now skips deterministically unless you ask for it:
+`KeychainTokenStore`'s round-trip test skips by default, and the reason changed
+with the data-protection switch. It used to catch any failing `SecItemAdd` and
+turn it into a skip, which made its outcome track ambient state — is the keychain
+unlocked, did an earlier run leave an ACL — and it both skipped and passed on one
+machine in one afternoon. It now skips deterministically unless asked for:
 
     RELAYIUM_KEYCHAIN_ROUNDTRIP=1 swift test --filter TokenStoreTests
 
-Enabled, it does not swallow failures. Use it as a hand-driven smoke check when
-the keychain configuration itself is what you are testing.
+**Under `swift test` that opt-in run also skips, and will keep skipping.** The
+store now targets the data-protection keychain in the `keychain-access-groups`
+group, and a bare SPM test host is not a signed app bundle, so it cannot be a
+member of that group: `SecItemAdd` returns `errSecMissingEntitlement` (-34018).
+The test skips on that one status and fails on every other, so it still reports
+a real problem — it just cannot report success here, and no change to
+`KeychainTokenStore` would let it. The opt-in switch exists for hosts that *do*
+carry the entitlement: a signed app or a future app-hosted test target.
+
+**The round trip that matters is verified by hand, in the manual acceptance
+above** — sign in, quit, relaunch the same build, confirm auto-login. That is the
+only check that exercises the real keychain under the real entitlement.
 
 When checking auto-login, quit and relaunch **the same build**. A sandboxed,
 ad-hoc-signed binary ties the keychain item's ACL to that binary's signature, so
