@@ -4,6 +4,11 @@ import RelayiumAppKit
 @main
 struct RelayiumApp: App {
     @StateObject private var session = AppEnvironment.makeSession()
+    // App-scoped rather than view-scoped: a transfer must survive the window's
+    // view tree being rebuilt, and the quit guard has to be able to ask whether
+    // one is running.
+    @StateObject private var uploadModel = AppEnvironment.makeUploadModel()
+    @StateObject private var downloadModel = AppEnvironment.makeDownloadModel()
 
     var body: some Scene {
         // Identified so the menu bar can reopen it: closing the last window does
@@ -12,6 +17,8 @@ struct RelayiumApp: App {
         WindowGroup(id: "main") {
             ContentView()
                 .environmentObject(session)
+                .environmentObject(uploadModel)
+                .environmentObject(downloadModel)
                 .task { await session.restore() }
         }
         .defaultSize(width: 420, height: 460)

@@ -40,6 +40,14 @@ public final class AccountSession: ObservableObject {
     /// under it just because the store comes back empty on the next refresh.
     private var sessionToken: String?
 
+    /// The bearer token for callers that must authenticate their own requests —
+    /// G2's uploader, which needs it at `POST /api/uploads`.
+    ///
+    /// Deliberately not `@Published`: a credential has no business being part of
+    /// the view-update surface, and nothing should re-render because a token was
+    /// refreshed. Read it at the moment of use, never cache it.
+    public var bearerToken: String? { sessionToken }
+
     /// Operation identity. Being `@MainActor` serializes each *step*, not each
     /// operation: a load has two suspension points and `logOut()` is synchronous,
     /// so a sign-out lands *between* a load's awaits routinely — sign out while a

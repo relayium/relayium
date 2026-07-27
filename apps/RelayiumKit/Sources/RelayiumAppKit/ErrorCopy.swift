@@ -33,6 +33,17 @@ public enum ErrorCopy {
                 return "macOS wouldn't store your sign-in (keychain error \(s)). You'll stay signed in until you quit."
             }
         }
+        if let e = error as? DownloadDestinationError {
+            switch e {
+            case .directoryExists(let name):
+                // A bare "refused" reads as a bug. Say what it found and why it
+                // will not merge: it cannot tell a leftover partial download from
+                // files the user put there.
+                return "“\(name)” already exists here — this link was downloaded to this folder before. Choose another folder: the app won't merge into an existing one, because it can't tell a half-finished download from your own files."
+            case .unsafeName(let name):
+                return "The link describes a file named “\(name)” that would be written outside the folder you chose, so nothing was saved. Ask the sender for a new link."
+            }
+        }
         if let e = error as? CloudError {
             switch e {
             case .unauthorized:

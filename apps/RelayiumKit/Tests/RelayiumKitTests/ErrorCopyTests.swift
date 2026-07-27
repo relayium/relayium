@@ -60,6 +60,20 @@ final class ErrorCopyTests: XCTestCase {
         }
     }
 
+    /// The refusal has to explain itself — the spec calls a bare refusal a bug.
+    func testDirectoryExistsExplainsWhyItWontMerge() {
+        let m = ErrorCopy.message(for: DownloadDestinationError.directoryExists(name: "relayium-abc"))
+        XCTAssertTrue(m.contains("relayium-abc"))
+        XCTAssertTrue(m.lowercased().contains("merge"))
+    }
+
+    /// A manifest that tries to escape the destination is refused by name, so a
+    /// bug report can say which entry did it.
+    func testUnsafeNameIsReportedWithTheOffendingName() {
+        let m = ErrorCopy.message(for: DownloadDestinationError.unsafeName("../escape.txt"))
+        XCTAssertTrue(m.contains("../escape.txt"))
+    }
+
     // The realtime rounds route ConnectionError, HandshakeError, RealtimeError and bare
     // WebRTC NSErrors through one ((Error) -> Void). The fallback must already be total.
     func testUnknownErrorStillProducesActionableText() {
