@@ -115,3 +115,47 @@ public final class CloudUploader {
         throw CloudError.network
     }
 }
+
+/// Above this the single-shot path's ~2x peak is worse than reporting the
+/// error: a failed upload beats an app the OS kills mid-transfer.
+public let FALLBACK_MAX_CIPHER_BYTES = 64 << 20
+
+/// What the single-shot path hands back. It generates its own key, so it has to
+/// return it: the key is only ever in the link, and a fallback that dropped it
+/// would produce a link nobody can open.
+public struct SingleShotResult {
+    public let result: UploadResult
+    public let keyB64url: String
+
+    public init(result: UploadResult, keyB64url: String) {
+        self.result = result
+        self.keyB64url = keyB64url
+    }
+}
+
+extension CloudUploader {
+    /// The chunked flow with a safety net for a server too old to offer
+    /// `/api/uploads`. `singleShot` receives the same inputs and does the
+    /// whole-file upload; it is a closure so this type keeps no opinion about
+    /// where the plaintext comes from.
+    public func uploadResumable(
+        sources: [PlaintextSource],
+        singleShot: (_ burnAfterRead: Bool, _ ttl: Int, _ token: String) async throws -> SingleShotResult,
+        burnAfterRead: Bool, ttl: Int, token: String,
+        onProgress: (_ sent: Int, _ total: Int) -> Void
+    ) async throws -> UploadOutcome {
+        do {
+            return try await upload(sources: sources, burnAfterRead: burnAfterRead,
+                                    ttl: ttl, token: token, onProgress: onProgress)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let e as CloudError {
+            // Never mask a failure the user can act on, and never retry it.
+            if e == .unauthorized || e == .quota || e == .rateLimited { throw e }
+            if cipherSizeFor(sources.map(\.size)) > FALLBACK_MAX_CIPHER_BYTES { throw e }
+            let s = try await singleShot(burnAfterRead, ttl, token)
+            return UploadOutcome(id: s.result.id, expiresAt: s.result.expiresAt,
+                                 keyB64url: s.keyB64url)
+        }
+    }
+}
