@@ -23,6 +23,43 @@ final class ErrorCopyTests: XCTestCase {
     func testKeychainErrorNamesTheStatusCode() {
         XCTAssertTrue(ErrorCopy.message(for: KeychainError.status(-25300)).contains("-25300"))
     }
+    /// Quota and rate-limit are the only two an upload user can act on, so they
+    /// must not collapse into a generic message.
+    func testCloudQuotaAndRateLimitAreDistinctAndActionable() {
+        let quota = ErrorCopy.message(for: CloudError.quota)
+        let rate = ErrorCopy.message(for: CloudError.rateLimited)
+        XCTAssertNotEqual(quota, rate)
+        XCTAssertTrue(quota.lowercased().contains("space") || quota.lowercased().contains("quota"))
+        XCTAssertTrue(rate.lowercased().contains("wait") || rate.lowercased().contains("too many"))
+    }
+
+    /// A missing link has three plausible causes and the copy must not assert one.
+    func testNotFoundNamesAllThreeCauses() {
+        let m = ErrorCopy.message(for: CloudError.notFound).lowercased()
+        XCTAssertTrue(m.contains("expired"))
+        XCTAssertTrue(m.contains("downloaded") || m.contains("burn"))
+    }
+
+    /// Integrity failures must not invite a retry — they are not transient.
+    func testIntegrityFailuresDoNotInviteRetry() {
+        for e in [StoredWireError.lengthMismatch, .truncatedStream] {
+            let m = ErrorCopy.message(for: e).lowercased()
+            XCTAssertFalse(m.contains("try again"), "\(e) must not invite a retry")
+        }
+    }
+
+    func testEveryCloudErrorHasCopy() {
+        let cases: [CloudError] = [
+            .unauthorized, .quota, .rateLimited, .notFound,
+            .server(status: 500), .network, .decoding,
+        ]
+        for e in cases {
+            let m = ErrorCopy.message(for: e)
+            XCTAssertFalse(m.isEmpty, "no copy for \(e)")
+            XCTAssertFalse(m.contains("CloudError"), "\(e) fell through to the type-name fallback")
+        }
+    }
+
     // The realtime rounds route ConnectionError, HandshakeError, RealtimeError and bare
     // WebRTC NSErrors through one ((Error) -> Void). The fallback must already be total.
     func testUnknownErrorStillProducesActionableText() {

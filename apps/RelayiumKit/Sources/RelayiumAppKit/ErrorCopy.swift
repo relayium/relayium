@@ -33,6 +33,34 @@ public enum ErrorCopy {
                 return "macOS wouldn't store your sign-in (keychain error \(s)). You'll stay signed in until you quit."
             }
         }
+        if let e = error as? CloudError {
+            switch e {
+            case .unauthorized:
+                return "Your sign-in expired. Sign in again to send files."
+            case .quota:
+                return "Not enough space or daily quota left for this file. Free up space or upgrade."
+            case .rateLimited:
+                return "Too many uploads right now. Wait a minute, then try again."
+            case .notFound:
+                return "This link has expired, was already downloaded, or was mistyped."
+            case .server(let status):
+                return "The server returned an error (\(status)). Try again shortly."
+            case .network:
+                return "Couldn't reach the server. Check your internet connection."
+            case .decoding:
+                return "The server sent a response this version of the app doesn't understand. Updating may fix it."
+            }
+        }
+        if let e = error as? StoredWireError {
+            switch e {
+            case .invalidKey:
+                return "That link's key is malformed — it was probably copied incompletely."
+            case .frameTooLarge, .truncatedStream, .lengthMismatch:
+                // Not transient: the bytes did not match the manifest. Inviting a
+                // retry would send the user back for the same corrupt data.
+                return "The downloaded data didn't match what the link described, so it was discarded. Ask the sender for a new link."
+            }
+        }
         // Total by construction: name the type so a bug report is actionable.
         return "Something went wrong (\(type(of: error)))."
     }
