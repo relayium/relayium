@@ -33,6 +33,30 @@ final class StubTransport: ResumableTransport, @unchecked Sendable {
     func finalizeUpload(uploadId: String, token: String) async throws -> UploadResult { finalizeResult }
 }
 
+/// Holds every body it is handed, the way URLSession holds a request body for
+/// the life of the request — which on a slow link is tens of seconds, spanning
+/// the loop's next mutation of the packing buffer.
+final class RetainingTransport: ResumableTransport, @unchecked Sendable {
+    var chunkSize = 64 * 1024
+    var retained: [Data] = []
+    private var committedCount = 0
+
+    func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+                    size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
+        ("up1", chunkSize)
+    }
+    func patchChunk(uploadId: String, bytes: Data, from: Int, to: Int,
+                    total: Int, token: String) async throws -> PatchOutcome {
+        retained.append(bytes)          // the URLSession-shaped hazard
+        committedCount += bytes.count
+        return .committed(received: committedCount)
+    }
+    func uploadOffset(uploadId: String, token: String) async throws -> Int { committedCount }
+    func finalizeUpload(uploadId: String, token: String) async throws -> UploadResult {
+        UploadResult(id: "fid", expiresAt: 1)
+    }
+}
+
 final class CloudUploaderTests: XCTestCase {
     private func sources(_ sizes: [Int]) -> [PlaintextSource] {
         sizes.enumerated().map { DataSource(name: "f\($0.offset)",
@@ -102,6 +126,30 @@ final class CloudUploaderTests: XCTestCase {
                                ttl: 3600, token: "tok", onProgress: { _, _ in })
         XCTAssertEqual(u.bytesCopiedToTransport, 0,
                        "the chunk was copied on its way to the transport")
+    }
+
+    /// Baseline for the pair below: a transport that drops each body leaves the
+    /// packing buffer uniquely referenced, so mutating it cannot copy-on-write.
+    func testBufferIsNotReallocatedWhenTheTransportDropsTheBody() async throws {
+        let t = StubTransport()
+        let u = CloudUploader(transport: t)
+        _ = try await u.upload(sources: sources([STORE_CHUNK_SIZE * 12]), burnAfterRead: false,
+                               ttl: 3600, token: "tok", onProgress: { _, _ in })
+        XCTAssertEqual(u.packingBufferReallocations, 0)
+    }
+
+    /// The one that matters. A transport that holds the body — as URLSession
+    /// does for the life of a request — leaves the buffer's storage shared when
+    /// the loop mutates it for the next chunk. If that costs a fresh allocation
+    /// every chunk, this is where it shows.
+    func testBufferIsNotReallocatedWhenTheTransportRetainsTheBody() async throws {
+        let t = RetainingTransport()
+        let u = CloudUploader(transport: t)
+        _ = try await u.upload(sources: sources([STORE_CHUNK_SIZE * 12]), burnAfterRead: false,
+                               ttl: 3600, token: "tok", onProgress: { _, _ in })
+        XCTAssertGreaterThan(t.retained.count, 1, "the test needs several chunks to be meaningful")
+        XCTAssertEqual(u.packingBufferReallocations, 0,
+                       "the packing buffer was reallocated \(u.packingBufferReallocations) times across \(t.retained.count) chunks")
     }
 
     /// Even the retry path replays a slice rather than a copy — that path runs
