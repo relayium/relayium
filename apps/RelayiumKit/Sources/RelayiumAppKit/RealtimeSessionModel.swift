@@ -47,7 +47,10 @@ public final class RealtimeSessionModel: ObservableObject {
 
     private let pairClient: PairCodeClient
     private let iceClient: ICEConfigClient
-    private let makeConnection: (_ code: String, _ role: Role, _ iceServers: [ICEServerConfig]) -> RealtimePeerConnection
+    /// Async because building a real connection means connecting to signaling
+    /// and waiting for the other device to appear on the code — there is no peer
+    /// id to construct one with until then.
+    private let makeConnection: (_ code: String, _ role: Role, _ iceServers: [ICEServerConfig]) async throws -> RealtimePeerConnection
 
     private var connection: RealtimePeerConnection?
     private var writer: ManifestWriter?
@@ -59,7 +62,7 @@ public final class RealtimeSessionModel: ObservableObject {
 
     public init(pairClient: PairCodeClient,
                 iceClient: ICEConfigClient,
-                makeConnection: @escaping (String, Role, [ICEServerConfig]) -> RealtimePeerConnection) {
+                makeConnection: @escaping (String, Role, [ICEServerConfig]) async throws -> RealtimePeerConnection) {
         self.pairClient = pairClient
         self.iceClient = iceClient
         self.makeConnection = makeConnection
@@ -95,7 +98,8 @@ public final class RealtimeSessionModel: ObservableObject {
             // credentials.
             let servers = try await iceClient.fetch(code: code)
             guard g == generation else { return }
-            let c = makeConnection(code, role, servers)
+            let c = try await makeConnection(code, role, servers)
+            guard g == generation else { c.close(); return }
             wire(c, generation: g)
             connection = c
             state = .connecting
