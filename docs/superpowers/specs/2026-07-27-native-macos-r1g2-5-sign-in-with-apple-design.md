@@ -1,309 +1,295 @@
 # Native macOS R1-G2.5 — Sign in with Apple — design
 
-A short round between G2 and G3. The server side has been built and dormant
-since the web flow shipped; this wires the button, and pays the signing-config
-cost G2 refused to carry inside a transfer round.
+A short round between G2 and G3. The first draft of this spec designed the
+native `ASAuthorizationController` flow. **That flow is unavailable to a
+Developer ID app**, established by testing rather than by reading docs. What
+follows is the roadblock sign, and then the design that replaces it.
+
+## Why the native flow is unavailable
+
+Recorded in full because everything about it looks like it should work, and the
+next person to reach for `ASAuthorizationController` will need to be stopped by
+evidence rather than by an assertion.
+
+1. **The portal accepts the capability.** Sign in with Apple was enabled on the
+   App ID `com.relayium.mac` and correctly grouped under `com.relayium.app` as
+   primary — the same primary the `com.relayium.web` Services ID uses. The portal
+   reports success.
+2. **Developer ID profiles never carry the entitlement.** The `Relayium Mac`
+   provisioning profile was regenerated **three times** after enabling the
+   capability. None of them contained `com.apple.developer.applesignin`.
+3. **A binary signed with it is killed at launch.** A probe app signed with the
+   entitlement was terminated by `taskgated` with `Unsatisfied entitlements:
+   com.apple.developer.applesignin`. Embedding the freshly generated profile
+   changed nothing.
+4. **The same App ID works for development signing.** Xcode's automatically
+   managed *development* profile for `com.relayium.mac` **does** contain
+   `applesignin`, which proves the App ID's server-side provisioning is correct
+   and rules out a portal mistake.
+5. **Apple's backend refuses outright.** `xcodebuild -exportArchive` with
+   `method=developer-id` fails with *Cannot create a Developer ID provisioning
+   profile*.
+
+The conclusion is not "we configured it wrong". Apple does not issue Developer ID
+provisioning profiles carrying `com.apple.developer.applesignin`, so a macOS app
+distributed outside the App Store cannot use native Sign in with Apple. The
+entitlement is reachable only through development signing or App Store /
+TestFlight distribution.
+
+**What this does not block:** the native endpoint `POST /api/auth/apple/native`
+stays as it is, dormant and correct. It becomes usable the day an iOS build ships
+through the App Store, which is R3. Nothing about it is deleted or changed.
 
 ## Background
 
 G1 deferred Sign in with Apple to "the first sub-round that has a Team ID"
 (`2026-07-26-native-macos-r1g1-app-shell-account-design.md:55-57`). G2 declined
-it for a concrete reason rather than taste: the `com.apple.developer.applesignin`
-entitlement must be carried by the provisioning profile, and adding it reopens
-the App ID, the profile and a CI secret — signing work inside a round about
-transfer UI, where its failures would present as UI bugs
-(`…r1g2-cloud-transfer-ui-design.md`, Non-goals).
-
-That is exactly what this round is for.
+it because the entitlement work would reopen the App ID, the profile and a CI
+secret inside a round about transfer UI. This round exists to pay that cost —
+and the finding above is that the cost cannot be paid at all on this
+distribution channel, so the round changes shape rather than being cancelled:
+the user still gets a Sign in with Apple button, reached through the browser.
 
 ## What the server already does
 
-Verified by reading the code and by two read-only checks against production.
+Verified by reading the code and by read-only checks against production.
 
-`POST /api/auth/apple/native` (`server/account/apple.go:139`), mounted only when
-`EnableApple` is set (`server/account/handlers.go:113-114`).
+**The web flow is live.** `GET /api/auth/apple/web/start` returns 302 to
+`appleid.apple.com` with `client_id=com.relayium.web`, so the Services ID is
+`com.relayium.web` and web Sign in with Apple is configured, not merely enabled.
+`GET /api/auth/methods` reports `{"apple":true,…}`.
 
-**Request** — JSON, body capped at 16 KiB:
+**Web and native resolve the same user.** Both call
+`GetUserByIdentity("apple", claims.Sub)` and `LinkIdentity("apple", claims.Sub, …)`
+— `apple_web.go:126,154` and `apple.go:154,174`. There is no separate native
+user table and no merge step. Because `com.relayium.mac` is grouped under the
+same primary App ID as the `com.relayium.web` Services ID, Apple issues the same
+`sub` to both, which is what the acceptance criterion rests on.
 
-```json
-{ "idToken": "<Apple identity token>", "nonce": "<the nonce string>", "name": "<display name>" }
+**The web callback ends in a cookie, not a token.** `handleAppleWebCallback`
+finishes with `IssueSession` → `setSessionCookie` → redirect to `/`
+(`apple_web.go:173-178`). This is the fact that shapes the whole design: a
+browser-delegated login produces a *web session*, and the Mac app needs an
+`rlm_cli_` bearer. Something has to convert one into the other.
+
+**Something already does.** The CLI device-authorization flow exists and is
+mounted today:
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `POST /api/cli/device/start` | none, rate-limited | → `{user_code, device_code, verification_uri, interval, expires_in}` |
+| `GET /device?code=…` | cookie optional | approval page; `?code=` prefills and auto-loads details |
+| `POST /api/cli/device/approve` | `RequireSession` | mints `rlm_cli_` + device row, stashes it for one pickup |
+| `POST /api/cli/device/poll` | none | → `authorization_pending` / `denied` / `expired`, or `{status:"ok", access_token, account_email}` |
+
+`verification_uri` is `BaseURL + "/device"` (`deviceauth.go:78`). The token is
+handed out exactly once — `ConsumeDeviceAuth` blanks it in the same atomic
+transition (`deviceauth.go:125-126`). The approval page shows the requesting IP
+and user agent so a phished user has something to notice, and warns in as many
+words that approving grants full account access.
+
+## The design
+
+**The app delegates the whole login to the browser and collects a bearer through
+the device-authorization flow.** No new server code, and the bearer never travels
+in a URL.
+
+```
+app: POST /api/cli/device/start            → user_code, device_code, interval
+app: open  https://relayium.com/device?code=<user_code>   in ASWebAuthenticationSession
+user: signs in — Apple, password, whatever the web offers — and approves
+app: POST /api/cli/device/poll (device_code) every `interval`
+     → {status:"ok", access_token:"rlm_cli_…"}
+app: hands the token to AccountSession exactly as a password login would
 ```
 
-**Verification** (`apple.go:50`): RS256 against Apple's JWKS for the token's
-`kid`, then `iss == https://appleid.apple.com`, `aud ∈ cfg.AppleClientIDs`,
-`exp > now`, non-empty `sub`, and — only when the request supplied one — a nonce
-equal to the token's.
+The Apple button the user presses is the **web** one, on relayium.com's login
+page. This round adds no Apple-specific client code at all: it adds a browser
+login path, and Sign in with Apple arrives with it, along with every other method
+the web supports now or later.
 
-**Resolution** (`apple.go:154`): look the user up by `("apple", sub)`. If absent,
-this is the first authorization, which is the only time Apple sends the email; a
-request without one is refused with 400 `{"error":"no_email_first_signin"}`.
-Otherwise the account is created or matched by email, the identity is linked, and
-if Apple reports the email verified, any password planted on that address while
-unverified is dropped before the account is marked verified — the same
-pre-hijack defense `oauth.go` uses.
+### Why not a custom `relayium://` callback
 
-**Responses:**
+`ASWebAuthenticationSession` is built around a callback scheme, so it is the
+obvious shape and it is the wrong one here:
 
-| Case | Status | Body |
-|---|---|---|
-| Success | 200 | `{token, user{id, email, displayName, hasPassword, emailVerified, linkedMethods}}` |
-| Bad or unverifiable token | 401 | `{"error":"invalid_token"}` |
-| First sign-in with no email | 400 | `{"error":"no_email_first_signin"}` |
-| Account scheduled for deletion | 200 | `{"status":"pending_deletion", "purgeAfter", "reactivateToken"}` |
+- **It needs server work this round otherwise does not.** Nothing today mints a
+  bearer at the end of the web flow; a callback design requires a new endpoint
+  that does, plus a redirect target.
+- **It puts a bearer in a URL.** Query strings reach shell history, crash logs
+  and screen recordings, and this bearer never expires (`cli_tokens` has no
+  expiry column). The device flow delivers the same token in a TLS POST body.
+- **Custom schemes are not owned on macOS.** Any application can register
+  `relayium://`. `ASWebAuthenticationSession` scopes delivery to the initiating
+  session, which mitigates it, but the mitigation is the API's rather than ours,
+  and the device flow does not need it.
 
-The success body comes from `finishNativeLogin` (`server/account/native.go:89`) —
-the same function the password login returns through, so the shape the app
-already decodes is unchanged. The frozen-account body is the shape
-`AccountSession` already handles as `.pendingDeletion`.
+The device flow also inherits protections already built and reviewed: the
+approval page's phishing warning, the origin display, and the rate limit on
+`start`.
 
-**Production state**, checked read-only:
+### How the session is presented and dismissed
 
-- `GET /api/auth/methods` → `{"apple":true,"google":false,"magic":false,"password":true}`.
-  `EnableApple` is already on; **nothing has to be turned on to make the native
-  endpoint exist.**
-- `GET /api/auth/apple/web/start` → 302 to `appleid.apple.com` with
-  `client_id=com.relayium.web`. So the **web Services ID is `com.relayium.web`**,
-  and the web flow is fully configured and live, not merely enabled.
+`ASWebAuthenticationSession` is still the right container, for two reasons that
+have nothing to do with callbacks: it presents in-app rather than yanking the
+user into Safari, and with `prefersEphemeralWebBrowserSession = false` it shares
+Safari's cookie jar, so a user already signed into relayium.com approves in one
+click instead of signing in again.
 
-## The one thing that decides whether this works
+It is initialized with a callback scheme that is never reached. The app dismisses
+the sheet itself by calling `cancel()` the moment polling returns a token. The
+spec says this plainly because it reads like a bug otherwise: the session is a
+browser window with a Done button, not a callback pipeline.
 
-Web and native resolve the user through the **same** identity row: both call
-`GetUserByIdentity("apple", claims.Sub)` and `LinkIdentity("apple", claims.Sub, …)`
-— `apple.go:154,174` for native, `apple_web.go:126,154` for web. There is no
-separate native user table and no merge step to write.
+**If the user closes the sheet**, polling keeps running until `expires_in`
+elapses. The app stops polling when the sheet is dismissed without a token and
+reports nothing — a closed sheet is a cancelled login, not a failure.
 
-So the acceptance criterion — *a user who signed into the web with Apple must
-land on that same account in the Mac app* — reduces entirely to one question:
+### Where the code lives
 
-**Does Apple issue the same `sub` to `com.relayium.mac` that it issues to the
-`com.relayium.web` Services ID?**
+Following G1's split, and reusing what G2 built:
 
-Apple scopes that identifier to a *primary App ID*, not to the team. A Services
-ID is configured against a primary App ID, and an App ID enabling Sign in with
-Apple either becomes its own primary or is **grouped with** an existing one. If
-`com.relayium.mac` is enabled as its own primary, Apple mints a different `sub`
-for the same human, `GetUserByIdentity` misses, and the flow proceeds to create
-a *second account* by email — silently, with no error to notice.
+- **Kit** — `DeviceAuthClient` in `RelayiumKit/Account`: `start()`, `poll(deviceCode:)`,
+  modelling the four poll outcomes as an enum. Pure networking, fully testable,
+  and platform-neutral so R3's iOS build gets it free.
+- **AppKit** — `BrowserLoginModel`: drives start → poll loop → outcome, with the
+  same operation-identity guard `AccountSession` and both G2 models use. Owns the
+  polling `Task` and cancellation.
+- **App target** — the `ASWebAuthenticationSession` presentation and its
+  presentation anchor, which need a window and are therefore the only untestable
+  part. Kept to opening and dismissing.
+- **`AccountSession.adoptBearer(_:)`** — accepts a token obtained out of band,
+  persists it to the keychain, loads `/api/me` and `/api/me/usage`, and lands in
+  `.ready`. This is the one new session entry point; every existing transition,
+  including the frozen-account and superseded-callback paths, is reused
+  unchanged.
 
-That is the failure this round has to design against, and it is a portal setting,
-not code. See the operations checklist.
+### Sign-out and credential revocation
+
+Sign-out is unchanged: clear the keychain, drop the in-memory token.
+
+**Apple credential revocation cannot be observed by this app, and that is a
+consequence of the pivot worth stating.** `ASAuthorizationAppleIDProvider.getCredentialState`
+requires the Apple user identifier, which only the native flow returns; a
+browser-delegated login never sees it. Revoking the app under Apple Account
+settings therefore has no effect on an already-signed-in Mac app.
+
+The exposure is the same one the round would have had anyway: native sign-out
+revokes nothing server-side, because `issueBearer` mints a fresh device row per
+login and `DELETE /api/devices/{id}` is session-only
+(`server/account/handlers.go:139`) — the debt recorded in G1's handoff
+(`a50876a5`) and still open. Either way the only revocation route is the web
+devices page, which does work: deleting the device cascade-deletes its token.
 
 ## Scope
 
-**In:**
-
-- `Sign in with Apple` button on the login screen, and the `ASAuthorizationController`
-  flow behind it.
-- A Kit client that posts the identity token and decodes the existing outcome.
-- `AccountSession.logInWithApple(...)`, reusing the state machine unchanged.
-- Credential-revocation handling: a revoked Apple credential signs the app out.
-- The entitlement, the regenerated profile, and the CI secret rotation.
+**In:** `DeviceAuthClient`, `BrowserLoginModel`, `AccountSession.adoptBearer`,
+the `ASWebAuthenticationSession` presentation, a "Sign in with browser" button on
+the login screen, and error copy for the flow's failure modes.
 
 **Out:**
 
-- **iOS.** The Kit client and the session method are platform-neutral and R3
-  reuses them; the button and the delegate are macOS-only this round.
-- **Account linking UI.** A user with a password account who signs in with the
-  same Apple email gets linked by the server's existing rules. Surfacing "you now
-  have two ways to sign in" is an account-screen feature, not a login one.
-- **Server changes.** None are needed, and this round writes no Go.
-
-## Native flow
-
-The split follows G1's: everything testable in `RelayiumAppKit`, and only what
-needs a window in the app target. `ASAuthorizationController` needs a
-presentation anchor, so its delegate is app-target code; nothing else is.
-
-**App target** — `AppleSignInButton` in `LoginView`, under the password form:
-
-1. Generate a random raw nonce. Set `request.nonce` to its **SHA-256 hex**, which
-   is what Apple embeds in the token's `nonce` claim.
-2. `ASAuthorizationAppleIDProvider().createRequest()`, scopes `[.fullName, .email]`.
-3. On success, read `identityToken` (Data → UTF-8) and format `fullName`.
-4. Hand `(idToken, nonce, name)` to the session.
-
-**The nonce sent to the server is the hashed string**, not the raw one — the
-server compares it against the token's claim verbatim (`apple.go:116`), and the
-claim holds whatever was set on the request. Sending the raw nonce fails every
-sign-in with `invalid_token`, which looks like a signing problem and is not.
-
-**Kit** — `AppleSignInClient.signIn(idToken:nonce:name:) async throws -> LoginOutcome`,
-decoding the same three outcomes `AccountClient` already models
-(`success` / `pendingDeletion` / the error cases). `emailUnverified` cannot occur
-here: Apple's flow either verifies the address or the account was already
-resolved by `sub`.
-
-**Session** — `AccountSession.logInWithApple(idToken:nonce:name:)` runs the same
-operation-identity guard, the same keychain persistence, and the same state
-transitions as `logIn(email:password:)`. Nothing about `SessionState` changes,
-which is the point: the app's login screen gains a second button, not a second
-notion of being signed in.
-
-## Credential revocation
-
-A user can revoke the app in **Settings → Apple Account → Sign in with Apple**.
-The app should not keep acting signed in afterwards.
-
-`ASAuthorizationAppleIDProvider.getCredentialState(forUserID:)` answers this, and
-it needs the Apple user identifier — the `sub`. The app does not store it today.
-This round persists it beside the session (`UserDefaults`, not the keychain: it
-is an identifier, not a credential) and checks it on launch and on
-`credentialRevokedNotification`, signing out locally on `.revoked` or `.notFound`.
-
-**Local sign-out is all this can do**, and the reason is a debt this round does
-not pay: native sign-out revokes nothing server-side, because `issueBearer`
-mints a fresh device row per login and `DELETE /api/devices/{id}` is
-session-only (`server/account/handlers.go:139`). Recorded in G1's handoff
-(`a50876a5`), still open, and still out of scope here — but it means a revoked
-Apple credential leaves a live bearer token that only the web devices page can
-kill. The round states this rather than implying revocation is complete.
+- **Native `ASAuthorizationController`** — unavailable, see above. The server
+  endpoint stays dormant for R3's App Store build.
+- **Server changes.** None. This round writes no Go.
+- **Portal and CI changes.** None remain — see below.
+- **An in-app Apple button.** The Apple button lives on the web login page. A
+  native button that opens a browser would be a lie about what it does.
 
 ## Operations and portal changes
 
-Two of these differ from what the round's brief assumed, so they are spelled out
-exactly.
+**All portal work is done, and none of it is needed any more.** Recorded because
+the state exists and the next round should not redo it:
 
-**1. App ID capability — the step the acceptance criterion depends on.**
+- Sign in with Apple is enabled on `com.relayium.mac`, grouped under
+  `com.relayium.app` as primary, matching the `com.relayium.web` Services ID's
+  primary. Harmless and correct; it simply cannot be expressed in a Developer ID
+  profile.
+- The provisioning profile does **not** need regenerating, `Relayium.entitlements`
+  does **not** gain `com.apple.developer.applesignin` — a binary carrying it is
+  killed at launch — and `MACOS_PROVISIONING_PROFILE_BASE64` does **not** need
+  rotating. The G1.5 profile stands unchanged.
+- `RELAYIUM_APPLE_CLIENT_IDS` does **not** need `com.relayium.mac`. The `aud` in
+  play is the Services ID `com.relayium.web`, already allowlisted. Add the bundle
+  ID when R3 ships an App Store build that uses the native endpoint.
+- `RELAYIUM_ENABLE_APPLE` is already `true` in production.
 
-Identifiers → App IDs → `com.relayium.mac` → enable **Sign in with Apple** →
-**Configure**. Choose **Group with an existing primary App ID**, and pick the
-same primary that the `com.relayium.web` Services ID is configured against —
-read it first from Identifiers → Services IDs → `com.relayium.web` → Sign in
-with Apple → **Configure** → *Primary App ID*.
+Two corrections to how the round was originally framed, both checked rather than
+assumed: there is no `deploy/config-manifest` line for any of this — that
+manifest covers nginx, the systemd unit and logrotate, while `RELAYIUM_*` values
+live in a host-local `.env` (`docs/DEPLOYMENT.md`) — and nothing needs enabling
+because Apple is already on.
 
-**Do not choose "Enable as a primary App ID."** That is the default-looking
-option and it silently breaks the criterion: same person, different `sub`, second
-account created by email, no error anywhere.
-
-**2. Regenerate the provisioning profile.**
-
-The installed `Relayium Mac` profile carries exactly `application-identifier`,
-`team-identifier` and `keychain-access-groups` (verified in G1.5). A profile is
-a snapshot of the App ID's capabilities at generation time, so it must be
-regenerated after step 1 to carry `com.apple.developer.applesignin`.
-
-`keychain-access-groups` needs no special handling: Apple includes it as
-`7PVYUG4YQS.*` by default, which is why G1.5 found nothing to configure. Verify
-rather than assume:
-
-```bash
-security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/<uuid>.provisionprofile \
-  | plutil -convert xml1 -o - - \
-  | grep -A3 -E 'applesignin|keychain-access-groups'
-```
-
-Both keys must be present. If `keychain-access-groups` is missing, stop — the
-G1.5 keychain work depends on it and installing that profile would break
-sign-in persistence.
-
-**3. Rotate the CI secret.**
-
-```bash
-base64 -i <new>.provisionprofile | gh secret set MACOS_PROVISIONING_PROFILE_BASE64 --repo relayium/relayium
-```
-
-The `signed-build` job installs it before building and then asserts both
-entitlements, so a profile missing either fails CI rather than a user.
-
-**4. Entitlements file.**
-
-`apps/mac/Relayium/Relayium.entitlements` gains
-`com.apple.developer.applesignin` = `["Default"]`.
-
-**5. Server env — not a repository change.**
-
-`RELAYIUM_APPLE_CLIENT_IDS` is the `aud` allowlist and must gain
-`com.relayium.mac`; a macOS native identity token's `aud` is the app's bundle ID.
-Without it every native sign-in fails `apple: aud %q not in allowlist`
-(`apple.go:105`) — a 401 that looks like a token problem and is a config one.
-
-Two corrections to how the brief framed this:
-
-- **`EnableApple` is already true in production.** There is nothing to turn on.
-- **There is no `config-manifest` line for it.** `deploy/config-manifest` covers
-  only nginx configs, the systemd unit and logrotate. `RELAYIUM_*` values live in
-  a host-local `.env` in the server's working directory, mode 0600, deliberately
-  never in the repo (`docs/DEPLOYMENT.md`). So this is a host edit plus a service
-  restart, and pushing to relayium-ops will not do it.
-
-The existing operator guide is `docs/deploy/apple-signin.md` in relayium-ops; it
-should gain a line recording that the Mac bundle ID joins the allowlist and why.
+**So this round's operational footprint is zero.** No portal step, no secret
+rotation, no host edit, no deploy.
 
 ## Error handling
 
-`ErrorCopy` gains the two failures this endpoint can produce that no existing
-case covers:
+`ErrorCopy` gains the device flow's outcomes:
 
-- `invalid_token` — the token Apple issued was rejected. After a fresh install
-  the overwhelmingly likely cause is configuration, not the user, so the copy
-  must not tell them to try a different account.
-- `no_email_first_signin` — the user hid their email *and* Apple sent none,
-  which happens when the account was previously authorized against this App ID
-  and then the app was deleted. Apple only sends the email once. The copy has to
-  say the actionable thing: revoke the app under Apple Account settings, then
-  sign in again.
+- `denied` — the user pressed Deny on the approval page. Say that, and offer to
+  start over.
+- `expired` — the code timed out. Same, without implying anything went wrong.
+- A poll that keeps returning `authorization_pending` until expiry is the same
+  thing as expired; there is no separate state to report.
 
-`ASAuthorizationError.canceled` is not an error and must render nothing — a user
-dismissing the sheet has not failed at anything.
+Closing the sheet renders nothing, as with `ASAuthorizationError.canceled` in the
+abandoned design: a user who changed their mind has not failed at anything.
 
 ## Testing
 
-**Unit (`swift test`):** the nonce is sent hashed, not raw; each server response
-shape maps to the right `LoginOutcome`; `AccountSession.logInWithApple` drives the
-same transitions as the password path, including the superseded-callback guard;
-`ErrorCopy` covers both new failures and cancellation renders nothing.
+**Unit (`swift test`):** `DeviceAuthClient` decodes all four poll outcomes,
+including the success body's `access_token`; `BrowserLoginModel` drives
+start → pending → ok, stops on `denied` and `expired`, honours cancellation
+mid-poll, and ignores a superseded callback; `AccountSession.adoptBearer` reaches
+`.ready` and persists to the keychain, and handles a frozen account the same way
+the password path does; `ErrorCopy` covers denied and expired.
 
-`ASAuthorizationController` itself is not unit-testable — it needs a window and a
-live Apple session. The delegate is therefore kept to translation only: extract
-token, format name, hand off. Anything with a decision in it belongs below it.
+`ASWebAuthenticationSession` is not unit-testable — it needs a window and a live
+browser. The app-target code is therefore kept to presentation only.
 
-**Manual acceptance is where this round is actually verified**, and the first
-item is the whole point:
+**Manual acceptance**, with the first item unchanged from the original spec
+because the criterion did not change:
 
-1. **Sign into the web with Apple. Then sign into the Mac app with the same
-   Apple ID. The app must show that account's files and usage** — not an empty
-   account. This is the criterion; a second account here means step 1 of the
-   portal checklist was done wrong, and it is silent otherwise.
-2. First-ever Apple sign-in (an Apple ID never used with Relayium) creates an
-   account and lands signed in.
-3. Sign in with "Hide My Email" and confirm the relay address is what the
-   account screen shows.
-4. Cancel the Apple sheet — no error appears, the form stays usable.
-5. Revoke the app under Apple Account settings, return to the app, confirm it
-   signs out.
-6. Quit and relaunch after an Apple sign-in — auto-login still works, proving the
-   regenerated profile did not break the keychain access group.
+1. **Sign into the web with Apple. Then sign into the Mac app through the browser
+   flow with the same Apple ID. The app must show that account's files and
+   usage** — not an empty account. A second account here means the App ID
+   grouping is wrong, and nothing else reports it.
+2. A user already signed into relayium.com in Safari approves in one click,
+   without re-authenticating.
+3. Sign in with a password account through the same flow — the button is not
+   Apple-specific and must work for every method the web offers.
+4. Press Deny on the approval page; the app reports it and offers to retry.
+5. Close the sheet without approving; nothing is reported and the login screen
+   stays usable.
+6. Quit and relaunch after a browser sign-in; auto-login works, proving the
+   adopted bearer reached the keychain exactly as a password login's does.
 
 ## Done when
 
 - `swift test` passes with 0 failures.
-- CI's `signed-build` is green with the regenerated profile, and its entitlement
-  assertions still pass — including `keychain-access-groups`.
-- `codesign -d --entitlements -` on the built app reports both
-  `com.apple.developer.applesignin` and `7PVYUG4YQS.com.relayium.shared`.
+- CI is green with the **unchanged** G1.5 profile — this round must not perturb
+  the signing configuration at all.
 - All six manual acceptance items pass, item 1 above all.
-- `RELAYIUM_APPLE_CLIENT_IDS` on the host contains `com.relayium.mac`, confirmed
-  by a successful native sign-in rather than by reading the file.
+- No server, portal, CI-secret or host change was required to make it work.
 
-## Open question
+## Open questions
 
-**The native nonce is self-asserted.** The server compares the token's `nonce`
-claim against the value in the same request body (`apple.go:149` passing
-`in.Nonce`), so an attacker replaying a captured identity token simply replays
-its nonce alongside. The web flow does not have this shape: it mints the nonce
-server-side and binds it through a short-lived cookie (`apple_web.go:57,67`).
+**The device flow shows a code.** The user sees `/device?code=WDJB-MJHT`
+prefilled and presses Approve; they never type it, but they do see a screen whose
+copy was written for someone at a terminal ("Confirm the code shown in your
+terminal", `devicepage.go:53`). It is accurate for the CLI and slightly wrong for
+an app that just opened the page itself. Rewording it is a web change in a round
+that otherwise touches nothing — flagged rather than assumed either way.
 
-The exposure is bounded — Apple identity tokens are short-lived and the exchange
-is TLS-only — but the token it buys is a bearer credential that never expires
-(`cli_tokens` has no expiry column). Closing it means a server round trip to
-issue and store a nonce before the Apple request, which is server work this
-round declared out of scope.
-
-Flagged rather than fixed, and flagged here rather than in a commit message
-nobody will search: it is a pre-existing property of an endpoint written before
-there was a client, and this round is the first to actually use it.
+**The abandoned native path leaves the nonce question unanswered.** The native
+endpoint compares the token's `nonce` claim against a value from the same request
+body (`apple.go:116,149`), so it is not replay protection the way the web flow's
+cookie-bound nonce is (`apple_web.go:57,67`). It is dormant, so nothing is
+exposed today — but R3 will make it reachable, and that is the round that has to
+resolve it.
 
 ## Non-goals
 
-Account-linking UI, iOS, server changes, the native sign-out revocation debt
-(`a50876a5`), and Universal Links (G4).
+Native `ASAuthorizationController`, account-linking UI, iOS, server changes, the
+native sign-out revocation debt (`a50876a5`), and Universal Links (G4).
