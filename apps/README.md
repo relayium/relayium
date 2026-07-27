@@ -49,6 +49,41 @@ Launch the built app after a build:
 open ~/Library/Developer/Xcode/DerivedData/Relayium-*/Build/Products/Debug/Relayium.app
 ```
 
+### Cloud transfer
+
+Uploads are chunked against `/api/uploads`, with the single-shot `POST /api/files`
+kept as a fallback for a server too old to offer the chunked endpoints. Encryption
+and sending are interleaved, so what the uploader holds is one packing buffer —
+`chunkSize + STORE_CHUNK_SIZE + FRAME_OVERHEAD`, about **8.5 MiB** — regardless of
+file size. Three unit tests guard that: `bufferPeak` bounds the buffer plus
+anything copied out of it, `bytesCopiedToTransport` must stay 0, and
+`packingBufferReallocations` must stay 0.
+
+**Measure `phys_footprint`, not RSS.** RSS counts clean, shared and file-backed
+pages, and it has already caused one false alarm here: a 220 MB upload showed
+274 MB RSS while `footprint` peaked at 171 MB and `vmmap` reported the mapped
+file pages as 0 dirty. Use:
+
+    PID=$(pgrep -x Relayium)
+    footprint -p $PID | tail -3        # phys_footprint / phys_footprint_peak
+
+Acceptance numbers, all on a signed Debug build:
+
+| Case | Baseline | Peak | After |
+|---|---|---|---|
+| 220 MB, fast link | 47 MB | **48 MB** | back to baseline |
+| 400 MB, ~300 KB/s proxy, ~25 min | 47 MB | **171 MB** | 110 MB, decaying |
+
+The gate is **peak ≤ baseline + 40 MB**, checked at two file sizes so a result
+that tracks file size is visible. The 400 MB slow-link row predates the fix for
+`Data.removeFirst` dropping the buffer's allocation once per chunk; re-measure it
+before trusting that number again.
+
+What is not the uploader's to control: URLSession and TLS buffer for a slow
+consumer, and freed large blocks stay in the malloc zone rather than returning to
+the OS — `vmmap` showed 27 MB of `MALLOC_SMALL` empty after that run. Both are
+real memory and neither is a leak.
+
 ### Signing
 
 Builds are signed with a **Developer ID Application** identity under team
