@@ -74,6 +74,18 @@ public enum AppEnvironment {
     }
 
     @MainActor
+    public static func makeRealtimeModel(baseURL: URL = productionBaseURL) -> RealtimeSessionModel {
+        RealtimeSessionModel(
+            pairClient: HTTPPairClient(baseURL: baseURL),
+            iceClient: HTTPICEClient(baseURL: baseURL),
+            makeConnection: { code, role, servers in
+                try await RealtimeConnectionFactory.make(
+                    code: code, role: role, iceServers: servers,
+                    baseURL: baseURL, deviceName: deviceName())
+            })
+    }
+
+    @MainActor
     public static func makeBrowserLoginModel(baseURL: URL = productionBaseURL) -> BrowserLoginModel {
         BrowserLoginModel(client: HTTPDeviceAuthClient(baseURL: baseURL))
     }

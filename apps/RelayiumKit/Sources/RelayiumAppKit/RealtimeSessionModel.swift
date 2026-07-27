@@ -68,6 +68,14 @@ public final class RealtimeSessionModel: ObservableObject {
         self.makeConnection = makeConnection
     }
 
+    /// A live session the quit guard must not let die silently.
+    public var isBusy: Bool {
+        switch state {
+        case .idle, .failed, .completed: return false
+        default: return true
+        }
+    }
+
     // MARK: - starting a session
 
     /// Sender side: mint a code to show. Requires the bearer — the code's owner

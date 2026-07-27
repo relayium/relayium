@@ -6,6 +6,7 @@ struct ContentView: View {
     @EnvironmentObject private var session: AccountSession
     @EnvironmentObject private var uploadModel: CloudUploadModel
     @EnvironmentObject private var downloadModel: CloudDownloadModel
+    @EnvironmentObject private var realtimeModel: RealtimeSessionModel
     @State private var showDownload = false
 
     var body: some View {
@@ -62,21 +63,37 @@ struct ContentView: View {
                     url: AppEnvironment.reactivateWebURL(token: reactivateToken)
                 )
             case let .ready(user, usage):
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        AccountView(user: user, usage: usage)
-                        Divider()
-                        UploadPane(model: uploadModel, token: session.bearerToken ?? "")
-                        Divider()
-                        DownloadPane(model: downloadModel)
+                // Three tabs split by intent rather than transport: the
+                // distinction a user makes is whether the other person is there
+                // right now, and that is exactly the line between the two.
+                TabView {
+                    ScrollView {
+                        DirectPane(model: realtimeModel, token: session.bearerToken ?? "")
+                            .padding()
                     }
-                    // The retention cap decides which TTLs are offerable, and it
-                    // only exists once usage has loaded. `task(id:)` rather than
-                    // `onChange(of:initial:)`, which needs macOS 14 — this app
-                    // targets 13.0.
-                    .task(id: usage.plan.retentionSecs) {
-                        uploadModel.applyRetentionCap(usage.plan.retentionSecs)
+                    .tabItem { Label("Direct", systemImage: "bolt.horizontal") }
+
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 20) {
+                            UploadPane(model: uploadModel, token: session.bearerToken ?? "")
+                            Divider()
+                            DownloadPane(model: downloadModel)
+                        }
+                        .padding()
+                        // The retention cap decides which TTLs are offerable and
+                        // only exists once usage has loaded. `task(id:)` rather
+                        // than `onChange(of:initial:)`, which needs macOS 14
+                        // while this app targets 13.
+                        .task(id: usage.plan.retentionSecs) {
+                            uploadModel.applyRetentionCap(usage.plan.retentionSecs)
+                        }
                     }
+                    .tabItem { Label("Link", systemImage: "link") }
+
+                    ScrollView {
+                        AccountView(user: user, usage: usage).padding()
+                    }
+                    .tabItem { Label("Account", systemImage: "person.crop.circle") }
                 }
             }
         }
