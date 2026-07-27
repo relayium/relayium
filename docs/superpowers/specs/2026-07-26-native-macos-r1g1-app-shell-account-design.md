@@ -207,7 +207,10 @@ and usage, quit and relaunch to confirm auto-login, sign out and confirm the
 return to login. `KeychainTokenStore` is skipped under the SPM test host — R1-C
 recorded that gap and deferred verification to the round with a real app bundle
 (`plans/2026-07-24-native-macos-r1c-account.md:716`). This is that round; the
-manual pass closes it.
+manual pass closes it. Quit and relaunch *the same build* for the auto-login
+check: a sandboxed, ad-hoc-signed binary ties the keychain item's ACL to that
+binary's signature, so rebuilding in between can legitimately produce a keychain
+prompt or a failed auto-login and fail the acceptance test for the wrong reason.
 
 ## Prerequisites recorded for later rounds
 
@@ -219,6 +222,28 @@ manual pass closes it.
   current Go handlers. R1-C froze them from handlers that have since moved from
   `server/internal/account` to `server/account`; the shapes are believed
   unchanged, but "believed" is what fixtures exist to eliminate.
+- **Native sign-out revokes nothing server-side.** `server/account/native.go`
+  (`issueBearer`) calls `UpsertDevice` with a fresh `authx.NewID()`, so the
+  `ON CONFLICT(id)` in `server/account/sqlite.go` never fires: every login
+  creates a *new* device row and a *new* never-expiring `rlm_cli_…` token. The
+  only revocation route, `DELETE /api/devices/{id}`, is mounted behind
+  `RequireSession` (cookie-only, `server/account/handlers.go:139`), so a native
+  client cannot revoke its own token — `logOut()` can only forget it. From this
+  round onward every sign-out/sign-in cycle leaves a live credential and a
+  duplicate device-list entry behind. The fix is server-side: a `RequireAuth`-
+  mounted native logout that revokes the presented token.
+- **`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` is advisory in the shipped
+  configuration.** On macOS that attribute is only honored by the
+  data-protection keychain (`kSecUseDataProtectionKeychain: true`); against the
+  legacy login keychain, which is what `KeychainTokenStore` writes to today, it
+  is effectively a no-op. The intent is right; revisit in G5, when a real Team ID
+  and a keychain access group exist to make the data-protection keychain usable.
+- **WebRTC is sourced from a floating `branch: "latest"`.** `Package.swift`
+  depends on `github.com/stasel/WebRTC.git` by branch. The app's
+  `Package.resolved` now pins a revision
+  (`3bdb63fdd28982ef364e5a08f53c68730a8c87b3`), which is an improvement, but a
+  floating branch as the source of the WebRTC binary in an end-to-end-encrypted
+  product should become a tag before G5 ships signed builds.
 
 ## Non-goals
 
