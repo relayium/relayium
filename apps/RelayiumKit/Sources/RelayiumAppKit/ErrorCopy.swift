@@ -39,6 +39,39 @@ public enum ErrorCopy {
                 return "macOS wouldn't store your sign-in (keychain error \(s)). You'll stay signed in until you quit."
             }
         }
+        if let e = error as? HandshakeError {
+            switch e {
+            case .mitm:
+                // The sharpest wording in the app, and the only error here that
+                // means someone may be attacking the user. No retry, no
+                // reconnect: the instruction is to stop and pair again, because
+                // reconnecting means reconnecting to whoever that was.
+                return "The two devices could not agree on a shared secret. Someone may be interfering with this connection — stop, and pair again with a new code."
+            case .noCommitRecorded, .badBase64, .invalidKey:
+                return "The other device sent something this version of the app doesn't understand. Both sides may need updating."
+            }
+        }
+        if let e = error as? RealtimeError {
+            switch e {
+            case .tamper:
+                return "The data that arrived didn't match what the sender described, so it was discarded. Ask them to send it again."
+            case .outOfOrder, .malformed:
+                return "The connection dropped part of the transfer. Nothing was saved — try again."
+            case .legacyPeer:
+                return "The other device is running an older version that can't complete this transfer. It needs updating."
+            case .unknownKind:
+                return "The other device sent something this version of the app doesn't understand. Both sides may need updating."
+            }
+        }
+        if let e = error as? RealtimeSenderError {
+            switch e {
+            case .manifestTooLarge:
+                return "Too many files at once for a single transfer. Send them in smaller batches."
+            case .sourceShorterThanDeclared(let name):
+                // Almost always a file edited or deleted mid-send.
+                return "“\(name)” changed while it was being sent, so the transfer was stopped. Try again."
+            }
+        }
         if let e = error as? DeviceAuthOutcomeError {
             switch e {
             case .denied:
