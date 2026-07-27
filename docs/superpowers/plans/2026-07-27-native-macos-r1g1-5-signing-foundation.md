@@ -121,8 +121,11 @@ jobs:
 
 Run:
 
+macOS ships Ruby with a YAML parser at `/usr/bin/ruby`; PyYAML is not installed
+and is not worth installing for this.
+
 ```bash
-python3 -c "import yaml,sys; yaml.safe_load(open('.github/workflows/macos.yml')); print('yaml ok')"
+/usr/bin/ruby -ryaml -e 'YAML.load_file(".github/workflows/macos.yml"); puts "yaml ok"'
 ```
 
 Expected: `yaml ok`
@@ -135,7 +138,9 @@ Run:
 cd apps/RelayiumKit && swift test 2>&1 | tail -3
 ```
 
-Expected: `Executed 141 tests, with 1 test skipped and 0 failures`
+Expected: `Executed 141 tests, ... 0 failures`. The Keychain round trip skips
+deterministically unless `RELAYIUM_KEYCHAIN_ROUNDTRIP=1` is set. Do not treat the
+skip count as a criterion — 0 failures is the criterion.
 
 - [ ] **Step 4: Commit**
 
@@ -312,12 +317,16 @@ Run:
 cd apps/RelayiumKit && swift test 2>&1 | tail -3
 ```
 
-Expected: `Executed 145 tests, with 1 test skipped and 0 failures`.
+Expected: `Executed 145 tests, ... 0 failures`.
 
-The one skip is still `testKeychainRoundTripIfAvailable`, and now for a sharper
-reason: the SPM test host has no app bundle, so it has no entitlement, so a
-data-protection keychain write returns `errSecMissingEntitlement` and the test
-converts that to `XCTSkip`. This is expected. Do **not** try to make it pass.
+`testKeychainRoundTripIfAvailable` skips deterministically unless
+`RELAYIUM_KEYCHAIN_ROUNDTRIP=1` is set — that is expected, and the skip count is
+not a criterion. If you want to see the round trip attempted against the new
+data-protection query without a signed host, run
+`RELAYIUM_KEYCHAIN_ROUNDTRIP=1 swift test --filter TokenStoreTests` and treat
+whatever it does as information, not as a gate: an unsigned SPM host has no
+entitlement naming the access group, so a failure there says nothing about the
+app.
 
 - [ ] **Step 5: Verify the app still compiles**
 
@@ -562,7 +571,7 @@ Run:
 cd apps/RelayiumKit && swift test 2>&1 | tail -3
 ```
 
-Expected: `Executed 145 tests, with 1 test skipped and 0 failures`.
+Expected: `Executed 145 tests, ... 0 failures`. Skip count is not a criterion.
 
 - [ ] **Step 6: Commit**
 
@@ -689,24 +698,27 @@ secrets set in Task 3:
 Run:
 
 ```bash
-python3 -c "import yaml; w=yaml.safe_load(open('.github/workflows/macos.yml')); print(sorted(w['jobs']))"
+/usr/bin/ruby -ryaml -e 'puts YAML.load_file(".github/workflows/macos.yml")["jobs"].keys.sort.join(" ")'
 ```
 
-Expected: `['signed-build', 'test']`
+Expected: `signed-build test`
 
-Extract and syntax-check each `run:` block:
+Extract and syntax-check each `run:` block. `bash -n` parses without executing,
+which catches the unbalanced quote or missing `fi` that would otherwise only
+surface as a failed run minutes into a macOS job:
 
 ```bash
-python3 - <<'PY'
-import subprocess, yaml
-w = yaml.safe_load(open('.github/workflows/macos.yml'))
-for job, spec in w['jobs'].items():
-    for i, step in enumerate(spec['steps']):
-        if 'run' in step:
-            r = subprocess.run(['bash', '-n'], input=step['run'], text=True,
-                               capture_output=True)
-            print(job, i, 'ok' if r.returncode == 0 else 'SYNTAX ERROR: ' + r.stderr)
-PY
+/usr/bin/ruby -ryaml -e '
+  YAML.load_file(".github/workflows/macos.yml")["jobs"].each do |job, spec|
+    spec["steps"].each_with_index do |step, i|
+      next unless step["run"]
+      IO.popen(["bash", "-n"], "w+", :err => [:child, :out]) do |io|
+        io.write(step["run"]); io.close_write
+        out = io.read
+        puts "#{job} step #{i}: " + (out.empty? ? "ok" : "SYNTAX ERROR: #{out}")
+      end
+    end
+  end'
 ```
 
 Expected: every line reports `ok`.
