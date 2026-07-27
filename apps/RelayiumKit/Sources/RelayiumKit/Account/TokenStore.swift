@@ -17,16 +17,38 @@ public final class InMemoryTokenStore: TokenStore {
 
 public enum KeychainError: Error, Equatable { case status(OSStatus) }
 
-/// Bearer token persistence in the login keychain as a generic-password item.
+/// Bearer token persistence in the data-protection keychain as a generic-password
+/// item.
 public final class KeychainTokenStore: TokenStore {
     private let service: String
     private let account: String
-    public init(service: String, account: String) { self.service = service; self.account = account }
+    private let accessGroup: String?
 
-    private var baseQuery: [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: service,
-         kSecAttrAccount as String: account]
+    /// `accessGroup` is nil-able because this type also runs in hosts that have
+    /// no entitlement to name one — the SPM test host, chiefly. The app always
+    /// passes `AppEnvironment.keychainAccessGroup`.
+    public init(service: String, account: String, accessGroup: String? = nil) {
+        self.service = service
+        self.account = account
+        self.accessGroup = accessGroup
+    }
+
+    /// `kSecUseDataProtectionKeychain` is the load-bearing key: the legacy
+    /// file-based login keychain treats `kSecAttrAccessible` as advisory, so
+    /// without this the accessibility asked for in `save` is not enforced.
+    /// Internal rather than private so the shape can be asserted by tests that
+    /// have no entitlement to exercise the real keychain.
+    var baseQuery: [String: Any] {
+        var q: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecUseDataProtectionKeychain as String: true,
+        ]
+        if let accessGroup {
+            q[kSecAttrAccessGroup as String] = accessGroup
+        }
+        return q
     }
 
     public func save(_ token: String) throws {
