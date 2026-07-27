@@ -50,7 +50,7 @@ a{color:var(--a)}</style></head>
 {{if .SignedIn}}
 <h1>Approve CLI login</h1>
 <div class="card">
-<p>Signed in as <strong>{{.Email}}</strong>. Confirm the code shown in your terminal to bind this login to your account.</p>
+<p>Signed in as <strong>{{.Email}}</strong>. Confirm the code shown by the app or terminal that asked, to bind this login to your account.</p>
 <input id="user_code" type="text" value="{{.Code}}" placeholder="WDJB-MJHT" autocomplete="off" autocapitalize="characters" spellcheck="false">
 <div id="details" class="details" style="display:none"></div>
 <p class="warn">⚠️ Approving grants a device full CLI access to your account. Only approve if <b>you</b> just ran <code>relayium login</code> on your own device and this code matches your terminal. If someone sent you this link or code, do <b>not</b> approve.</p>
