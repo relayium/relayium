@@ -47,6 +47,18 @@ final class ErrorCopyTests: XCTestCase {
         XCTAssertTrue(daily.lowercased().contains("single large file"))
     }
 
+    /// Deny and expire are different events and must not share a message: one
+    /// says a person refused, the other says nobody answered in time.
+    func testDeviceAuthOutcomesReadDifferently() {
+        let denied = ErrorCopy.message(for: DeviceAuthOutcomeError.denied)
+        let expired = ErrorCopy.message(for: DeviceAuthOutcomeError.expired)
+        XCTAssertNotEqual(denied, expired)
+        XCTAssertFalse(denied.contains("DeviceAuthOutcomeError"), "fell through to the type-name fallback")
+        XCTAssertFalse(expired.contains("DeviceAuthOutcomeError"), "fell through to the type-name fallback")
+        // A timeout is nobody's mistake; it must not read as a rejection.
+        XCTAssertFalse(expired.lowercased().contains("declined"))
+    }
+
     /// A missing link has three plausible causes and the copy must not assert one.
     func testNotFoundNamesAllThreeCauses() {
         let m = ErrorCopy.message(for: CloudError.notFound).lowercased()

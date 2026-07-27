@@ -33,6 +33,16 @@ public enum ErrorCopy {
                 return "macOS wouldn't store your sign-in (keychain error \(s)). You'll stay signed in until you quit."
             }
         }
+        if let e = error as? DeviceAuthOutcomeError {
+            switch e {
+            case .denied:
+                return "That sign-in was declined in the browser. Try again if that wasn't you."
+            case .expired:
+                // Nobody's mistake — the request simply went unanswered. Copy
+                // that read as a rejection would send the user looking for one.
+                return "The sign-in request timed out. Start again to get a new one."
+            }
+        }
         if let e = error as? DownloadDestinationError {
             switch e {
             case .directoryExists(let name):
