@@ -53,6 +53,41 @@ final class AccountSessionTests: XCTestCase {
         XCTAssertEqual(try store.load(), "rlm_cli_TESTTOKEN")
     }
 
+    /// A token obtained out of band — the browser login's device flow — must
+    /// reach exactly the state a password login reaches: same fetch, same
+    /// keychain write, same .ready.
+    func testAdoptBearerReachesReadyAndPersists() async throws {
+        let store = InMemoryTokenStore()
+        try routeLoggedIn(loginBody: Data())     // the login body is never used here
+        let s = session(store: store)
+        await s.adoptBearer("rlm_cli_ADOPTED")
+        guard case let .ready(user, usage) = s.state else { return XCTFail("want ready, got \(s.state)") }
+        XCTAssertEqual(user.planId, "pro")       // proves /api/me ran, not the token alone
+        XCTAssertEqual(usage.plan.name, "Pro")
+        XCTAssertEqual(try store.load(), "rlm_cli_ADOPTED")
+    }
+
+    /// The adopted token must actually authenticate the follow-up fetch. Sending
+    /// the wrong one (or none) would still reach .ready in a stub that ignores
+    /// headers, so assert the header rather than the outcome.
+    func testAdoptBearerUsesTheAdoptedTokenForTheFetch() async throws {
+        try routeLoggedIn(loginBody: Data())
+        let s = session(store: InMemoryTokenStore())
+        await s.adoptBearer("rlm_cli_HEADERCHECK")
+        XCTAssertEqual(StubURLProtocol.lastRequest?.value(forHTTPHeaderField: "Authorization"),
+                       "Bearer rlm_cli_HEADERCHECK")
+    }
+
+    /// An unusable token must not leave the app looking signed in. The keychain
+    /// write happens first by design, so restore() would resurrect it — this is
+    /// the case that decides whether that matters.
+    func testAdoptBearerWithARejectedTokenDoesNotLandReady() async {
+        StubURLProtocol.router = { _ in .init(status: 401, body: Data("unauthorized".utf8)) }
+        let s = session(store: InMemoryTokenStore())
+        await s.adoptBearer("rlm_cli_STALE")
+        if case .ready = s.state { XCTFail("a rejected token reached .ready") }
+    }
+
     // 200 does not mean signed in. These two are the other halves of that.
     func testEmailUnverifiedIsItsOwnState() async throws {
         StubURLProtocol.stub = .init(status: 403, body: try fixture("login-unverified"))

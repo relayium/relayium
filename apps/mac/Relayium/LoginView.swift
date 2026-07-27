@@ -14,8 +14,18 @@ struct LoginView: View {
     @EnvironmentObject private var session: AccountSession
     @State private var email = ""
     @State private var password = ""
+    @StateObject private var browserLogin = AppEnvironment.makeBrowserLoginModel()
+    @State private var presenter = BrowserSignInPresenter()
 
     private var canSubmit: Bool { !email.isEmpty && !password.isEmpty && !isBusy }
+
+    /// The browser sheet is up, or its poll loop is running.
+    private var browserBusy: Bool {
+        switch browserLogin.state {
+        case .starting, .waiting: return true
+        default: return false
+        }
+    }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -50,16 +60,55 @@ struct LoginView: View {
                 if isBusy { ProgressView().controlSize(.small) }
             }
 
+            Divider().frame(maxWidth: 280)
+
+            // Named for what the user wants, not for how it is delivered: the
+            // password form is right above, so whoever presses this came for
+            // Apple, and the page it opens leads with the Apple button.
+            Button("Sign in with Apple") { startBrowserLogin() }
+                .disabled(isBusy || browserBusy)
+
+            if case let .failed(message) = browserLogin.state {
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Button("Create an account on relayium.com") {
                 NSWorkspace.shared.open(AppEnvironment.productionBaseURL)
             }
             .buttonStyle(.link)
             .disabled(isBusy)
         }
+        // Opens the sheet as soon as the model publishes an approval URL, and
+        // only then — the URL is not known until /api/cli/device/start returns.
+        // `task(id:)` rather than `onChange(of:initial:)`, which needs macOS 14
+        // while this app targets 13.
+        .task(id: browserLogin.lastApprovalURL) {
+            guard case let .waiting(url) = browserLogin.state else { return }
+            presenter.present(url) {
+                // The user closed the sheet: cancel the poll loop rather than
+                // leaving it running against a code nobody will approve.
+                browserLogin.cancel()
+            }
+        }
     }
 
     private func submit() {
         guard canSubmit else { return }
         Task { await session.logIn(email: email, password: password) }
+    }
+
+    private func startBrowserLogin() {
+        Task {
+            await browserLogin.begin { token in
+                // Close the sheet before adopting, so the window the user ends
+                // up looking at is the account screen, not a browser on /device.
+                presenter.dismiss()
+                Task { await session.adoptBearer(token) }
+            }
+        }
     }
 }

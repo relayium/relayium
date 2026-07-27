@@ -109,6 +109,22 @@ public final class AccountSession: ObservableObject {
         await loadAccount(token: token, generation: g)
     }
 
+    /// Adopt a bearer obtained outside this type — the browser login's device
+    /// flow hands one back after the user approves in a browser.
+    ///
+    /// Deliberately the same tail as `logIn`'s success branch: persist, then
+    /// fetch. The token alone carries no billing fields, so a session rendered
+    /// from it would show half an account screen. Every guard is the existing
+    /// one; this adds a way to arrive at a session, not a second kind of session.
+    public func adoptBearer(_ token: String) async {
+        let g = beginOperation()
+        state = .authenticating
+        guard !superseded(g) else { return }
+        sessionToken = token
+        try? tokenStore.save(token)
+        await loadAccount(token: token, generation: g)
+    }
+
     public func logIn(email: String, password: String) async {
         let g = beginOperation()
         state = .authenticating
