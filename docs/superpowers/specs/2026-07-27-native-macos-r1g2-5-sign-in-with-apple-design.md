@@ -181,11 +181,23 @@ login and `DELETE /api/devices/{id}` is session-only
 (`a50876a5`) and still open. Either way the only revocation route is the web
 devices page, which does work: deleting the device cascade-deletes its token.
 
+**Accepted, with no in-app explanation.** A token minted through the device flow
+has exactly the lifetime and revocation story of a CLI token minted the same way,
+and the CLI does not explain it either. Adding a note only to this one screen
+would imply the app is unusual when it is behaving like everything else that
+holds an `rlm_cli_` token.
+
 ## Scope
 
 **In:** `DeviceAuthClient`, `BrowserLoginModel`, `AccountSession.adoptBearer`,
-the `ASWebAuthenticationSession` presentation, a "Sign in with browser" button on
-the login screen, and error copy for the flow's failure modes.
+the `ASWebAuthenticationSession` presentation, a **Sign in with Apple** button on
+the login screen, the `/device` page's wording, and error copy for the flow's
+failure modes.
+
+The button says *Sign in with Apple* rather than *Sign in with browser*: the
+screen already has a password form, so someone pressing this button came for
+Apple, and the page it opens leads with the Apple button as its primary action.
+Button copy should name what the user wants, not the transport that delivers it.
 
 **Out:**
 
@@ -193,8 +205,9 @@ the login screen, and error copy for the flow's failure modes.
   endpoint stays dormant for R3's App Store build.
 - **Server changes.** None. This round writes no Go.
 - **Portal and CI changes.** None remain — see below.
-- **An in-app Apple button.** The Apple button lives on the web login page. A
-  native button that opens a browser would be a lie about what it does.
+- **A native Apple credential.** The in-app button opens the browser; the Apple
+  authorization itself happens on relayium.com, and nothing Apple-specific runs
+  in this process.
 
 ## Operations and portal changes
 
@@ -236,6 +249,18 @@ rotation, no host edit, no deploy.
 Closing the sheet renders nothing, as with `ASAuthorizationError.canceled` in the
 abandoned design: a user who changed their mind has not failed at anything.
 
+### The approval page's wording
+
+`/device` says *"Confirm the code shown in your terminal"* (`devicepage.go:53`),
+written when the CLI was its only caller. An app that just opened the page itself
+has no terminal, so the sentence is wrong for half its traffic. It becomes
+caller-neutral — naming the app or device that asked, which the page already
+displays from the stored origin, rather than assuming a terminal.
+
+This is the round's one web change, and it is worth the exception: the
+alternative is shipping a screen that visibly describes something the user is not
+doing, on the one screen in the flow where we are asking them to be suspicious.
+
 ## Testing
 
 **Unit (`swift test`):** `DeviceAuthClient` decodes all four poll outcomes,
@@ -274,13 +299,6 @@ because the criterion did not change:
 - No server, portal, CI-secret or host change was required to make it work.
 
 ## Open questions
-
-**The device flow shows a code.** The user sees `/device?code=WDJB-MJHT`
-prefilled and presses Approve; they never type it, but they do see a screen whose
-copy was written for someone at a terminal ("Confirm the code shown in your
-terminal", `devicepage.go:53`). It is accurate for the CLI and slightly wrong for
-an app that just opened the page itself. Rewording it is a web change in a round
-that otherwise touches nothing — flagged rather than assumed either way.
 
 **The abandoned native path leaves the nonce question unanswered.** The native
 endpoint compares the token's `nonce` claim against a value from the same request
