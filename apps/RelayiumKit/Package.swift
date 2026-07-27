@@ -6,8 +6,17 @@ let package = Package(
     platforms: [.macOS(.v13), .iOS(.v16)],
     products: [.library(name: "RelayiumKit", targets: ["RelayiumKit", "RelayiumAppKit"])],
     dependencies: [
-        .package(url: "https://github.com/jedisct1/swift-sodium.git", from: "0.9.1"),
-        .package(url: "https://github.com/stasel/WebRTC.git", branch: "latest"),
+        // Exact, not `from:` — this is the crypto the whole E2E guarantee rests
+        // on, so a resolve must never be able to move it on its own. 0.11.0 is
+        // what every build so far has actually used; bumping it is a deliberate
+        // edit that re-runs the vector tests, not a side effect of resolving.
+        .package(url: "https://github.com/jedisct1/swift-sodium.git", exact: "0.11.0"),
+        // Pinned to a tag, not the "latest" branch: this is the transport for an
+        // E2E-encrypted product, so what goes into a signed build has to be a
+        // named, immutable point — a branch silently moves under any resolve.
+        // The tag's Package.swift is a .binaryTarget with a release URL and a
+        // SHA256, so the XCFramework itself is checksum-verified on fetch.
+        .package(url: "https://github.com/stasel/WebRTC.git", exact: "150.0.0"),
     ],
     targets: [
         .target(
