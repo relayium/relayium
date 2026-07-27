@@ -384,6 +384,51 @@ public final class RealtimeConnection: NSObject {
         sendQueue.async { [weak self] in self?.sendOnSendQueue(files: files) }
     }
 
+    /// Streaming send: each file is read as it goes rather than taken whole up
+    /// front, so what this holds is one chunk instead of one transfer.
+    ///
+    /// `metas` is what the receiver sees in the manifest; `sources` must be in
+    /// the same order and declare the same sizes.
+    public func send(sources: [PlaintextSource], metas: [FileMeta]) {
+        let alreadyStarted = queue.sync { () -> Bool in
+            if self.sendStarted { return true }
+            self.sendStarted = true
+            return false
+        }
+        guard !alreadyStarted else {
+            queue.async { [weak self] in self?.onError?(ConnectionError.alreadySending) }
+            return
+        }
+        sendQueue.async { [weak self] in self?.streamOnSendQueue(sources: sources, metas: metas) }
+    }
+
+    /// The array path's twin. Everything except the frame loop is deliberately
+    /// identical: the accept wait, the closed checks and the error routing are
+    /// the parts a live peer exercises, and this round has no way to re-prove
+    /// them in a unit test.
+    private func streamOnSendQueue(sources: [PlaintextSource], metas: [FileMeta]) {
+        guard let sendKey = queue.sync(execute: { self.keys?.send }) else {
+            queue.async { [weak self] in self?.onError?(ConnectionError.notReady) }
+            return
+        }
+        let sender = RealtimeSender(sessionKey: sendKey)
+        do {
+            guard transmit(try sender.batchFrame(metas)) else { return }
+            guard waitForAccept() else { return }
+
+            // One sender for both halves: seq is global, so the producer must
+            // continue the counter batchFrame already advanced.
+            let producer = RealtimeFrameProducer(sender: sender, sources: sources,
+                                                 declaredSizes: metas.map(\.size))
+            while let frame = try producer.next() {
+                if queue.sync(execute: { self.closed }) { return }
+                guard transmit(frame) else { return }
+            }
+        } catch {
+            queue.async { [weak self] in self?.onError?(error) }
+        }
+    }
+
     private func sendOnSendQueue(files: [(meta: FileMeta, data: [UInt8])]) {
         guard let sendKey = queue.sync(execute: { self.keys?.send }) else {
             queue.async { [weak self] in self?.onError?(ConnectionError.notReady) }
