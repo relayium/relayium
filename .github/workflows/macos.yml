@@ -1,0 +1,33 @@
+name: macos
+# apps/ is the only tree this covers, so the path filter keeps a web or server
+# commit from starting a macOS runner. workflow_dispatch is the manual escape
+# hatch for testing the workflow itself.
+on:
+  push:
+    paths:
+      - 'apps/**'
+      - '.github/workflows/macos.yml'
+  pull_request:
+    paths:
+      - 'apps/**'
+      - '.github/workflows/macos.yml'
+  workflow_dispatch:
+
+jobs:
+  # No secrets, so this runs on pull requests from forks like any other check.
+  test:
+    runs-on: macos-15
+    steps:
+      # Third-party actions are pinned to a full commit SHA (with the
+      # human-readable version in a trailing comment) so a compromised or
+      # retagged upstream release can't silently change what runs here.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      # Recorded in the log so a future failure can be compared against the
+      # toolchain that produced the last green run.
+      - name: Toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+      - name: swift test
+        working-directory: apps/RelayiumKit
+        run: swift test
