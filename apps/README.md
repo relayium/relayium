@@ -72,12 +72,12 @@ Acceptance numbers, all on a signed Debug build:
 | Case | Baseline | Peak | After |
 |---|---|---|---|
 | 220 MB, fast link | 47 MB | **48 MB** | back to baseline |
-| 400 MB, ~300 KB/s proxy, ~25 min | 47 MB | **171 MB** | 110 MB, decaying |
+| 400 MB, ~300 KB/s proxy, ~9 min | 47 MB | **51 MB** | back to baseline |
 
 The gate is **peak ≤ baseline + 40 MB**, checked at two file sizes so a result
-that tracks file size is visible. The 400 MB slow-link row predates the fix for
-`Data.removeFirst` dropping the buffer's allocation once per chunk; re-measure it
-before trusting that number again.
+that tracks file size is visible. For scale: the same slow-link case peaked at
+171 MB before `Data.removeFirst` stopped throwing away the packing buffer's
+allocation once per chunk.
 
 What is not the uploader's to control: URLSession and TLS buffer for a slow
 consumer, and freed large blocks stay in the malloc zone rather than returning to
